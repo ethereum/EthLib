@@ -501,7 +501,7 @@ def discv5_derive_keys(ephemeral_key: bytes, dest_pubkey: bytes, node_id_a: byte
     ...
 
 def discv5_id_sign(static_key: bytes, challenge_data: bytes, ephemeral_pubkey: bytes, node_id_b: bytes) -> bytes:
-    """The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the hash."""
+    """The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the SHA-256 hash."""
     ...
 
 def discv5_id_verify(public_key: bytes, challenge_data: bytes, ephemeral_pubkey: bytes, node_id_b: bytes, signature: bytes) -> bool:

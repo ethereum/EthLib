@@ -15,13 +15,7 @@ A payload is the SSZ bytes of a message, sent as a varint length, then a Snappy 
 The stream follows the framing format of Snappy:
 <https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/framing_format.txt>
 
-A response chunk starts with a response code, then context bytes, then such a payload.
-
 These definitions take the whole message at once.
-
-The reader of a payload stops at the chunk that completes the declared length.
-
-Any byte after that chunk makes the payload invalid.
 
 A peer reads a stream and may stop at the first byte past a bound.
 
@@ -151,7 +145,11 @@ def ReqRespError.code : ReqRespError → UInt32
 
 /-- The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.
 
-The caller deserializes the bytes, since it knows their SSZ type. -/
+The caller deserializes the bytes, since it knows their SSZ type.
+
+The reader of a payload stops at the chunk that completes the declared length.
+
+Any byte after that chunk makes the payload invalid. -/
 def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
     Except ReqRespError ByteArray := do
   -- The header is the length `n` of the SSZ bytes, an unsigned varint of at most ten bytes.
@@ -208,7 +206,9 @@ structure ResponseChunk where
 
 A success carries that many context bytes, and its payload has the bounds of the message type.
 
-An error carries no context bytes, and its payload is an error message of at most 256 bytes. -/
+An error carries no context bytes, and its payload is an error message of at most 256 bytes.
+
+A chunk is a response code, then context bytes, then a payload. -/
 def decodeResponseChunk (contextBytes : Nat) (typeMin typeBound : UInt64)
     (bs : ByteArray) : Except ReqRespError ResponseChunk :=
   match bs.data.toList with

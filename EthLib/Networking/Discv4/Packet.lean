@@ -17,14 +17,6 @@ A packet is a header, then its data, an RLP list with one form for each packet t
 EIP-8 relaxes the reading of every packet.
 
 EIP-868 adds the record packets, and the record sequence number of Ping and Pong.
-
-EIP-8 says that its Ping of version 555 and its Pong should be accepted.
-
-In both, the first item after the fixed fields is a list.
-
-EIP-868 later put the sequence number at that place.
-
-EthLib reads that item as the sequence number, so it rejects both packets.
 -/
 
 @[expose] public section
@@ -196,6 +188,14 @@ def readEnrSeq : List Item → Except RlpError (Option UInt64)
   -- EIP-868: the first item after the fixed fields is `enr-seq`, the record sequence number.
   --
   -- EIP-778 makes that number a 64-bit unsigned integer, so it is below 2^64.
+  --
+  -- EIP-8 says that its Ping of version 555 and its Pong should be accepted.
+  --
+  -- In both, the first item after the fixed fields is a list.
+  --
+  -- EIP-868 later put the sequence number at that place.
+  --
+  -- EthLib reads that item as the sequence number, so it rejects both packets.
   --
   -- EIP-8: the reader ignores any additional list elements, here those after `enr-seq`.
   | item :: _ => some <$> Codec.ofItem item

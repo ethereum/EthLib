@@ -9,16 +9,6 @@ The messages of discv5, from the section Protocol Messages of `discv5-wire.md` i
 <https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md>
 
 A message is its type byte, then the RLP list of its fields.
-
-The first field of every message is the request ID, a byte string of at most 8 bytes.
-
-A node record in a message stays an RLP item, for the ENR decoder to read.
-
-The text gives `total` and `wait-time` no width; its WHOAREYOU packet types `enr-seq` as `uint64`.
-
-EthLib reads `total` and `wait-time` as 64-bit integers, so a larger value is refused.
-
-No count of responses or wait in milliseconds comes near `2^64`.
 -/
 
 @[expose] public section
@@ -27,13 +17,17 @@ namespace EthLib.Networking.Discv5
 
 open EthLib.Serialization.Rlp
 
-/-- The largest request ID, in bytes. -/
+/-- The largest request ID, in bytes.
+
+The first field of every message is the request ID, a byte string of at most 8 bytes. -/
 def MAX_REQUEST_ID_SIZE : Nat := 8
 
 /-- The largest logarithmic distance between two node IDs. -/
 def MAX_DISTANCE : Nat := 256
 
-/-- A message of discv5, one constructor for each message type. -/
+/-- A message of discv5, one constructor for each message type.
+
+A node record in a message stays an RLP item, for the ENR decoder to read. -/
 inductive Message where
   /-- Type 1: whether the recipient is alive, with the ENR sequence number of the sender. -/
   | ping (requestId : ByteArray) (enrSeq : UInt64)
@@ -135,6 +129,14 @@ def fields : Message → List Item
 
 /-- The message of a type, from its fields, without the checks on sizes and distances. -/
 def ofFields (type : UInt8) (items : List Item) : Except RlpError (Option Message) :=
+  -- The text gives `total` and `wait-time` no width.
+  --
+  -- Its WHOAREYOU packet types `enr-seq` as `uint64`.
+  --
+  -- EthLib reads `total` and `wait-time` as 64-bit integers, so a larger value is refused.
+  --
+  -- No count of responses or wait in milliseconds comes near `2^64`.
+  --
   -- Each type reads the fields of its `message-data`, in the order of the source.
   --
   -- A field count other than that of the type gives none.

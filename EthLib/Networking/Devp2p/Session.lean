@@ -21,13 +21,7 @@ The IDs from `0x10` on belong to the capabilities that both peers share.
 
 [mux]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#message-id-based-multiplexing
 
-The source leaves three points open, and this module reads them as follows.
-
-It reads a Disconnect before Hello uncompressed, as it reads Hello, since no Hello has passed yet.
-
-It never rejects a Hello for its version, since the source asks to ignore any difference.
-
-It does not check the identities that some reasons of Disconnect name.
+The source leaves three points open, and the comments of the session step say how EthLib reads them.
 -/
 
 @[expose] public section
@@ -199,13 +193,19 @@ def receive (length : Capability → Nat) (ours : Hello) (phase : Phase) (frameD
     if id != 0x00 && id != 0x01 then throw (.beforeHello id)
     -- EIP-706: the handshake message is never compressed.
     --
-    -- EthLib reads a Disconnect before Hello uncompressed, since the peer's version is unknown.
+    -- Open point: EthLib reads a Disconnect before Hello uncompressed, as it reads Hello.
+    --
+    -- No Hello has passed yet, so the peer's version is unknown.
     match ← (decodeBody false id rest).mapError .message with
     -- Upon receiving the Hello message a session is active.
     --
     -- Implementations must ignore any difference in protocol version, so no version fails.
+    --
+    -- Open point: EthLib never rejects a Hello for its version.
     | .hello theirs => return (.opened length ours theirs, some (.p2p (.hello theirs)), [])
     -- A Disconnect may come instead of Hello, and it closes the session.
+    --
+    -- Open point: EthLib does not check the identities that some reasons of Disconnect name.
     | .disconnect reason => return (.closed reason, some (.p2p (.disconnect reason)), [])
     -- Not reached, since the ID is that of Hello or of Disconnect.
     | _ => throw (.beforeHello id)
@@ -221,6 +221,8 @@ def receive (length : Capability → Nat) (ours : Hello) (phase : Phase) (frameD
       -- Ping requests an immediate reply of Pong from the peer.
       | .ping => return (phase, some (.p2p .ping), [.sendPong])
       -- At any time after protocol negotiation, a Disconnect message may be sent.
+      --
+      -- Open point: EthLib does not check the identities that some reasons of Disconnect name.
       | .disconnect reason => return (.closed reason, some (.p2p (.disconnect reason)), [])
       -- Pong is the reply to a Ping: EthLib keeps no record of the Pings it sent.
       | .pong => return (phase, some (.p2p .pong), [])

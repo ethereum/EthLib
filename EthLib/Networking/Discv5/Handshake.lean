@@ -14,15 +14,6 @@ The source is the section Handshake Steps of `discv5-theory.md` in `ethereum/dev
 Node A starts the handshake, and node B sent it the WHOAREYOU challenge.
 
 The challenge data, the node IDs and the public key of each peer are inputs here.
-
-The module also seals and opens the handshake message packet of node A.
-
-The section Handshake Message Packet of `discv5-wire.md` defines it:
-<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#handshake-message-packet-flag--2>
-
-Node B verifies the ID signature under a public key of node A that it already holds.
-
-It does not check the record of node A that the packet carries.
 -/
 
 @[expose] public section
@@ -149,6 +140,9 @@ structure HandshakeReceived where
   deriving DecidableEq
 
 /-- Node A's handshake message packet for node B, and the session keys of node A.
+
+The section Handshake Message Packet of `discv5-wire.md` defines the packet:
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#handshake-message-packet-flag--2>
 
 The caller chooses the masking IV, the nonce and whether to send the record.
 

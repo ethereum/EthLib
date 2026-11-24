@@ -12,23 +12,7 @@ The session states of a discv5 node.
 
 The sources are the sections Sessions to Session Cache of [the theory text].
 
-A node keeps session keys, the WHOAREYOU challenges it sent, and the requests it sent.
-
-The keys of a session are tied to the node ID and to the IP address and UDP port of the peer.
-
-So keys from one endpoint never open a packet from another, and the peer must handshake again.
-
-The counter of a session numbers its outgoing messages, and fills the first 4 bytes of each nonce.
-
-The other 8 bytes, the ID nonce, the masking IV and the ephemeral key are inputs.
-
-A packet that cannot be read, or a step that fails, leaves the state as it is and sends nothing.
-
 The text gives no lifetime for a challenge or a session, so they last until replaced.
-
-The counter wraps after `2^32` messages, a bound that the text leaves to the node.
-
-After a wrap, two nonces repeat only if their 8 random bytes repeat too.
 
 [the theory text]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#sessions
 -/
@@ -48,7 +32,11 @@ structure Endpoint where
   port : UInt16
   deriving DecidableEq
 
-/-- The key of the session cache: the node ID of the peer and its endpoint. -/
+/-- The key of the session cache: the node ID of the peer and its endpoint.
+
+The keys of a session are tied to the node ID and to the IP address and UDP port of the peer.
+
+So keys from one endpoint never open a packet from another, and the peer must handshake again. -/
 structure SessionKey where
   /-- The node ID of the peer. -/
   id : NodeId
@@ -96,6 +84,8 @@ structure Request where
 
 /-- What a node keeps: its sessions and challenges by session key, and its requests by endpoint.
 
+A packet that cannot be read, or a step that fails, leaves the state as it is and sends nothing.
+
 Each list holds at most one entry per key, the most recent first. -/
 structure NodeState where
   /-- The session cache. -/
@@ -139,7 +129,9 @@ structure Local where
   /-- The plaintext of the answer to a message, if the node answers it. -/
   answer : ByteArray → Option ByteArray
 
-/-- The random values of one step. -/
+/-- The random values of one step, which the caller supplies.
+
+They are the last 8 bytes of a nonce, the ID nonce, the masking IV and the ephemeral key. -/
 structure Randoms where
   /-- The masking IV of a packet that the node sends. -/
   maskingIv : Vector UInt8 16
@@ -153,6 +145,10 @@ structure Randoms where
 /-- The nonce of the message numbered `counter`: the counter in 4 big-endian bytes, then 8 bytes.
 
 The section Session Cache strongly recommends this layout, so that the nonces of a session differ.
+
+The counter wraps after `2^32` messages, a bound that the text leaves to the node.
+
+After a wrap, two nonces repeat only if their 8 random bytes repeat too.
 -/
 def counterNonce (counter : UInt32) (tail : Vector UInt8 8) : Vector UInt8 12 :=
   -- Session Cache: the outgoing message count in the first 32 bits of the 96-bit nonce.
