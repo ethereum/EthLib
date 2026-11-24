@@ -8,32 +8,11 @@ public import EthLib.Base.Proofs.ByteOrder
 /-!
 # DER reader checks
 
-A successful typed read has the requested tag and a complete read consumes its input.
+This module proves what the DER reader accepts, value by value and type by type.
 
 The reader is stated against X.690 itself, in terms of octets and numbers.
 
-- A read is exactly a low-number tag octet other than 0, the shortest length, the content, the rest.
-- So a tag and a content have a single encoding.
-- An INTEGER reads as `i` exactly when its content is `i` in two's complement on the fewest octets.
-- So an integer has a single content.
-- A nonnegative one is its big-endian octets, at least one, after a zero if the top bit is set.
-- A BOOLEAN is one octet, FF for TRUE and 00 for FALSE.
-- The BIT STRING reader accepts only an octet-aligned value: the octet 0, then its octets.
-- BIT STRING contents count at most 7 unused bits, all zero, and none when no octet follows.
-- BMPString and UniversalString pass when they write Unicode scalar values, two or four octets each.
-- An INTEGER passes validation exactly when its content is two's complement on the fewest octets.
-- An OCTET STRING always passes, and an IA5String passes when each octet is below 128.
-- An OBJECT IDENTIFIER is one or more subidentifiers, each on the fewest base-128 octets.
-- A SEQUENCE passes validation exactly when each value it holds passes.
-- A SET OF also needs the encodings of those values in ascending order.
-- No encoding that reads is a proper prefix of another, so zero padding never changes that order.
-- A value with under 128 content octets is its tag, one length octet, then its content.
-- A read of the values in a SEQUENCE reads each value in turn, and an empty input holds none.
-
 The ECDSA signature codec is checked against its own encoder, not against X.690.
-
-- A scalar below `2 ^ 256` is an INTEGER on the fewest bytes, the first with its top bit clear.
-- The ECDSA reader accepts exactly the encodings of r and s in [1, 2^256), and returns them.
 -/
 
 @[expose] public section
@@ -93,25 +72,22 @@ private theorem toList_extract (b : ByteArray) (x y : Nat) :
 
 /-- A read gives `value` and `rest` exactly when the input is the encoding of `value`, then `rest`.
 
-The identifier is one octet whose five low bits are not all set (X.690 §8.1.2).
-
-It is not zero, the identifier of the end-of-contents octets (X.690 §8.1.5).
-
-The length is definite and on the fewest octets (X.690 §§8.1.3, 10.1).
-
-A content of fewer than 128 octets has its length in one octet.
-
-A longer content has an octet `129 + k`, then its length on `k + 1` big-endian octets.
-
-Its length lies in `[256 ^ k, 256 ^ (k + 1))`, so the first of those octets is not zero.
-
-`k` is below 126, because the initial octet 255 is reserved. -/
+The length is definite and on the fewest octets (X.690 §§8.1.3, 10.1). -/
 theorem read_ok_iff {input rest : ByteArray} {value : Value} :
     read input = .ok (value, rest) ↔
+      -- The identifier is one octet whose five low bits are not all set (X.690 §8.1.2).
+      --
+      -- It is not zero, the identifier of the end-of-contents octets (X.690 §8.1.5).
       value.tag.toNat % 32 ≠ 31 ∧ value.tag ≠ 0 ∧
       input.data.toList = value.encoded.data.toList ++ rest.data.toList ∧
+      -- A content of fewer than 128 octets has its length in one octet.
       ((value.content.size < 128 ∧ value.encoded.data.toList =
           value.tag :: UInt8.ofNat value.content.size :: value.content.data.toList) ∨
+        -- A longer content has an octet `129 + k`, then its length on `k + 1` big-endian octets.
+        --
+        -- Its length lies in `[256 ^ k, 256 ^ (k + 1))`, so the first of those octets is not zero.
+        --
+        -- `k` is below 126, because the initial octet 255 is reserved.
         ∃ k, 256 ^ k ≤ value.content.size ∧ value.content.size < 256 ^ (k + 1) ∧ k < 126 ∧
           128 ≤ value.content.size ∧ value.encoded.data.toList =
             value.tag :: UInt8.ofNat (129 + k) ::
@@ -496,17 +472,16 @@ private theorem twos_complement_iff (first : UInt8) (rest : List UInt8) (i : Int
 
 /-- An INTEGER reads as `i` exactly when its tag is 2 and its content is `i` on the fewest octets.
 
-The octets are two's complement (X.690 §8.3.3).
-
-The content is `i` modulo `256 ^ (k + 1)` on `k + 1` big-endian octets.
-
-`i` lies in `[-(128 * 256 ^ k), 128 * 256 ^ k)`, the range of `k + 1` octets.
-
-No shorter content holds `i`, so a first octet 0 or 255 is never redundant (X.690 §8.3.2). -/
+The octets are two's complement (X.690 §8.3.3). -/
 theorem integer_ok_iff {value : Value} {i : Int} :
     integer value = .ok i ↔ value.tag = 2 ∧ ∃ k : Nat,
+      -- `i` lies in `[-(128 * 256 ^ k), 128 * 256 ^ k)`, the range of `k + 1` octets.
       -(128 * 256 ^ k : Int) ≤ i ∧ i < 128 * 256 ^ k ∧
+      -- No shorter content holds `i`.
+      --
+      -- So a first octet 0 or 255 is never redundant (X.690 §8.3.2).
       (∀ j < k, i < -(128 * 256 ^ j : Int) ∨ 128 * 256 ^ j ≤ i) ∧
+      -- The content is `i` modulo `256 ^ (k + 1)` on `k + 1` big-endian octets.
       value.content.data.toList = (ByteOrder.toBE (k + 1) (i % 256 ^ (k + 1)).toNat).toList := by
   unfold integer
   generalize hc : value.content.data.toList = c
@@ -660,16 +635,13 @@ private theorem mod_two_pow_eq_zero_iff (n u : Nat) :
 
 /-- BIT STRING contents pass exactly when the initial octet counts at most 7 unused bits, all zero.
 
-The initial octet is 0 when no octet follows it (X.690 §8.6.2.3).
-
-Otherwise the unused bits are the low bits of the final octet (X.690 §§8.6.2.1, 8.6.2.2).
-
-Each of them is zero (X.690 §11.2.1).
-
 The reader does not know the type, so it does not drop the trailing zero bits of §11.2.2. -/
 theorem validBits_ok_iff {content : ByteArray} :
+    -- The initial octet is 0 when no octet follows it (X.690 §8.6.2.3).
     validBits content = .ok () ↔ content.data.toList = [0] ∨
+      -- Otherwise the unused bits are the low bits of the final octet (X.690 §§8.6.2.1, 8.6.2.2).
       ∃ unused init last, content.data.toList = unused :: (init ++ [last]) ∧
+        -- At most 7 bits are unused, and each of them is zero (X.690 §11.2.1).
         unused.toNat ≤ 7 ∧ ∀ i < unused.toNat, last.toNat.testBit i = false := by
   unfold validBits
   generalize content.data.toList = c
@@ -961,17 +933,14 @@ private theorem foldlM_oidStep (c : List UInt8) :
 
 /-- An OBJECT IDENTIFIER reads as `bytes` exactly when its tag is 6 and `bytes` is its content.
 
-The content must be one or more subidentifiers (X.690 §8.19.2).
-
-Bit 8 is set on each octet of a subidentifier but the last, and clear on the last.
-
-The first octet of a subidentifier is not 80, so that it takes the fewest octets.
-
 The first subidentifier combines two arcs, and any value of it names a valid pair (§8.19.4). -/
 theorem oid_ok_iff {value : Value} {bytes : ByteArray} :
     oid value = .ok bytes ↔ value.tag = 6 ∧ bytes = value.content ∧
+      -- The content must be one or more subidentifiers (X.690 §8.19.2).
       ∃ parts : List (List UInt8), parts ≠ [] ∧ value.content.data.toList = parts.flatten ∧
+        -- The first octet of a subidentifier is not 80, so that it takes the fewest octets.
         ∀ p ∈ parts, p.head? ≠ some 0x80 ∧ ∃ init last, p = init ++ [last] ∧
+          -- Bit 8 is set on each octet of a subidentifier but the last, and clear on the last.
           (∀ b ∈ init, 0x80 ≤ b.toNat) ∧ last.toNat < 0x80 := by
   rw [oid_eq]
   change _ ↔ _ ∧ _ ∧ ∃ parts : List (List UInt8), parts ≠ [] ∧
@@ -1599,11 +1568,7 @@ Its content is the number on `k` big-endian bytes, for the `k` that meets two bo
 
 The number is below `2 ^ (8 * k - 1)`, and, for `k` above 1, at least `2 ^ (8 * (k - 1) - 1)`.
 
-These bounds pick the fewest bytes such that the first has its top bit clear.
-
-With them, the first content byte is below `0x80`, and it is `0x00` only before `0x80` or more.
-
-Zero is one content byte, `0x00`. -/
+These bounds pick the fewest bytes such that the first has its top bit clear. -/
 theorem ecdsaInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 1))
     (low : k = 1 ∨ 2 ^ (8 * (k - 1) - 1) ≤ n) :
     ecdsaInteger n = [0x02, UInt8.ofNat k] ++ (ByteOrder.toBE k n).toList := by
@@ -1613,6 +1578,7 @@ theorem ecdsaInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 
     rw [show 8 * (j + 1) - 1 = 7 + 8 * j by omega, Nat.pow_add, Nat.pow_mul] at high
     simpa using high
   have h256 : n < 256 ^ 32 := by simpa using hn
+  -- With the two bounds, the first content byte is below `0x80`.
   by_cases hj : 256 ^ j ≤ n
   · have hj32 : j < 32 := (Nat.pow_lt_pow_iff_right (a := 256) (by decide)).mp (by omega)
     have hdiv : n / 256 ^ j < 128 :=
@@ -1624,7 +1590,9 @@ theorem ecdsaInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 
     simp only [ecdsaInteger, hdrop]
     rw [ite_eq_right this]
     simp
+  -- It is `0x00` only before `0x80` or more.
   · obtain _ | i := j
+    -- Zero is one content byte, `0x00`.
     · have hzero : n = 0 := by simp at hj; omega
       subst hzero
       decide
@@ -1685,15 +1653,14 @@ private theorem exists_ecdsaInteger_eq {n : Nat} (hn : n < 2 ^ 256) :
 
 It returns those r and s.
 
-Its last check is that the encoder writes the same bytes back, so acceptance gives the encoding.
-
-The converse is the content: the reader parses back every encoding of scalars in that range.
-
 So each accepted pair r, s has exactly one byte encoding. -/
 theorem decodeEcdsaScalars_eq_some_iff {signature : ByteArray} {r s : Nat} :
     decodeEcdsaScalars signature = some (r, s) ↔
       0 < r ∧ r < 2 ^ 256 ∧ 0 < s ∧ s < 2 ^ 256 ∧ encodeEcdsaSignature r s = signature := by
   constructor
+  -- The last check of the reader is that the encoder writes the same bytes back.
+  --
+  -- So acceptance gives the encoding.
   · intro h
     unfold decodeEcdsaScalars at h
     split at h
@@ -1711,6 +1678,7 @@ theorem decodeEcdsaScalars_eq_some_iff {signature : ByteArray} {r s : Nat} :
             · simp at h
         · simp at h
     · simp at h
+  -- The converse is the content: the reader parses back every encoding of scalars in that range.
   · rintro ⟨hr, hr256, hs, hs256, rfl⟩
     obtain ⟨kr, hkr1, hkr, hrk, hder_r⟩ := exists_ecdsaInteger_eq hr256
     obtain ⟨ks, hks1, hks, hsk, hder_s⟩ := exists_ecdsaInteger_eq hs256

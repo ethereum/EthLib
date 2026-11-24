@@ -4,7 +4,7 @@ public import EthLib.Serialization.Rlp.Item
 public import EthLib.Base.Proofs.ByteOrder
 
 /-!
-# `Serialization.Proofs.Rlp.Item`
+# Proofs: `BE` of the Yellow Paper
 
 The big-endian bytes of the code are `BE` of the Yellow Paper.
 
@@ -14,10 +14,6 @@ The Yellow Paper defines `BE(x)` by two properties of its bytes `b`:
 - `x = sum_n b_n * 256^(k - 1 - n)`, where `k` is the number of bytes.
 
 The bytes of the code have both properties, and no other bytes have them.
-
-So `BE` is well defined, and the code computes it.
-
-A bound on the number of bytes keeps the first byte of a prefix below 256.
 -/
 
 @[expose] public section
@@ -42,14 +38,18 @@ theorem bigEndian_head_ne_zero (n : Nat) : ∀ b ∈ (bigEndian n).data.toList.h
   rw [bigEndian_data_toList]
   exact Base.ByteOrder.head_toBE_byteLength_ne_zero n
 
-/-- A number below `256^k` has at most `k` digits. -/
+/-- A number below `256^k` has at most `k` digits.
+
+This bound keeps the first byte of a prefix below 256. -/
 theorem bigEndian_size_le (n k : Nat) (h : n < 256 ^ k) : (bigEndian n).size ≤ k := by
   rw [size_bigEndian]
   exact Base.ByteOrder.byteLength_le_of_lt h
 
 /-- Bytes with no leading zero are `BE` of the number they write.
 
-So `BE(x)` is the only byte string with the two properties the Yellow Paper asks for. -/
+So `BE(x)` is the only byte string with the two properties the Yellow Paper asks for.
+
+`BE` is therefore well defined, and the code computes it. -/
 theorem bigEndian_unique (bytes : List UInt8) (h : ∀ b ∈ bytes.head?, b ≠ 0) :
     (bigEndian (Base.ByteOrder.ofBE bytes)).data.toList = bytes := by
   rw [bigEndian_data_toList, Base.ByteOrder.byteLength_ofBE h,

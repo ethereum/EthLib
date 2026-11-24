@@ -7,31 +7,13 @@ public import EthLib.Serialization.Ssz.Typed.Basic
 /-!
 # Proofs: two branches of one root in the random oracle model
 
-An adversary queries the oracle, then outputs one index and two leaves, each with a branch.
+This module bounds the probability that an adversary finds two different leaves with one root.
 
-The depth of the branches is fixed before the run.
+The two leaves sit at one index.
 
-The adversary wins when the leaves differ, both branches have that depth, and both reach one root.
+It also computes the roots of 32, 48 and 96 bytes, and of a 64-bit integer.
 
-The experiment climbs both branches as the branch check does, with the oracle as the node hash.
-
-Each win exposes two different queried inputs with one answer, so the birthday bound applies.
-
-The root of 48 bytes, the size of a commitment or a public key, is one call of the oracle.
-
-The root of a list of them makes at most one call per vector, per inner node and for the count.
-
-Two different lists of them with one root expose two different queried inputs with one answer.
-
-That result needs the limit of the list below `2^256`.
-
-The root of a vector of them is the tree over their roots, with no count mixed in.
-
-Two different vectors of them with one root do the same, at every length.
-
-The root of 96 bytes, the size of a signature, is three hashes.
-
-The roots of 32 bytes and of a 64-bit integer are their bytes padded to one node, with no hash.
+It computes the roots of lists and vectors of 48 bytes too.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
@@ -84,7 +66,9 @@ def extractBranches {m : Type → Type} [Monad m] (hash : ByteArray → m ByteAr
 
 /-- The adversary wins: two different leaves at one index climb to one root.
 
-A win also needs both branches to have `depth` nodes. -/
+A win also needs both branches to have `depth` nodes.
+
+The depth is fixed before the run. -/
 def BranchWins (depth : Nat) (outcome : BranchOutcome) : Prop :=
   outcome.claim.firstLeaf ≠ outcome.claim.secondLeaf ∧
     outcome.claim.firstBranch.length = depth ∧ outcome.claim.secondBranch.length = depth ∧
@@ -224,20 +208,21 @@ theorem experimentWith_extractBranches_queryBound (depth : Nat)
 
 A win needs both branches to have `depth` nodes, and `N` is the number of digests.
 
-The roots are computed with the oracle as the node hash.
-
 `Q` bounds the oracle calls of the whole experiment, repeats included.
-
-The extraction climbs each branch with one call per node, so it adds at most `2 * depth` calls.
 
 The oracle cache starts empty, and the adversary's private sampling is not counted. -/
 theorem prEvent_branchWins_le [SampleableType Hash32] (depth : Nat)
     (adversary : OracleComp (unifSpec + HashOracle) BranchClaim) {Q : Nat}
+    -- The extraction climbs each branch with one call per node.
+    --
+    -- So it adds at most `2 * depth` calls.
     (hQ : IsQueryBoundP (experimentWith (extractBranches queryHash depth) adversary)
       (fun t => t.isRight = true) Q) :
+    -- The roots are computed with the oracle as the node hash.
     Pr{let z ← (simulateQ HashOracle.romImpl
       (experimentWith (extractBranches queryHash depth) adversary)).run ∅}[BranchWins depth z.1] ≤
       Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  -- Each win exposes two different queried inputs with one answer, so the birthday bound applies.
   prEvent_experimentWith_le (extractBranches queryHash depth) (BranchWins depth)
     collision_of_extractBranches adversary hQ
 
@@ -348,7 +333,7 @@ theorem hashTreeRootM_bytes48 {m : Type → Type} [Monad m] [LawfulMonad m]
       return .ok (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) :=
   hashTreeRootAtM_bytes48 hasher 0 bytes
 
-/-- The root of 48 bytes makes one oracle call. -/
+/-- The root of 48 bytes, the size of a commitment or a public key, makes one oracle call. -/
 theorem hashTreeRootM_bytes48_queryBound (bytes : Vector UInt8 48) :
     IsQueryBoundP (hashTreeRootM (Hasher.ofHash queryHash) (SszType.desc (Vector UInt8 48))
       (SszType.toValue bytes)).run (fun _ => True) 1 := by
@@ -433,10 +418,6 @@ theorem hashTreeRootM_bytes48List {m : Type → Type} [Monad m] [LawfulMonad m]
 
 /-- The root of a vector of 48-byte vectors is the tree over their roots, with no count mixed in.
 
-Each vector is rooted with one hash.
-
-The width of the tree is the least power of two at least the length.
-
 It needs the sequence to have the length of the vector.
 
 It holds for a hasher in any lawful monad. -/
@@ -445,8 +426,10 @@ theorem hashTreeRootM_bytes48Vector {m : Type → Type} [Monad m] [LawfulMonad m
     (count : vectors.length = length) :
     (hashTreeRootM hasher (.vector (SszType.desc (Vector UInt8 48)) length)
         (.seq (vectors.map SszType.toValue))).run = (do
+      -- Each vector is rooted with one hash.
       let roots ← vectors.mapM fun bytes => do
         return (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data
+      -- The width of the tree is the least power of two at least the length.
       return .ok (← subtreeAtM hasher roots.toArray (depthFor length) 0)) := by
   subst count
   show (hashTreeRootAtM hasher 2 (.vector (.byteVector 48) vectors.length)
@@ -691,7 +674,7 @@ theorem collision_or_eq_of_hashTreeRootM_bytes48Vector {cache : HashOracle.Query
   exact collision_or_eq_of_subtreeAtM_bytes48 (firstCount.trans secondCount.symm)
     (firstCount ▸ le_two_pow_depthFor length) hfirstRoots hfirstNode hsecondRoots hsecondNode
 
-/-- The root of 96 bytes is three hashes.
+/-- The root of 96 bytes, the size of a signature, is three hashes.
 
 The first 64 bytes form one message, and the last 32 bytes with 32 zero bytes the other.
 

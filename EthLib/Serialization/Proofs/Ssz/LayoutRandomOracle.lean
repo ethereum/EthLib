@@ -162,13 +162,12 @@ theorem collision_of_extractLayouts {cache : HashOracle.QueryCache}
 
 `Q` bounds the oracle calls of the whole experiment, repeats included.
 
-The extraction computes each root twice, once whole and once up to its last hash.
-
-It then queries the input of each last hash once more.
-
 The oracle cache starts empty, and the adversary's private sampling is not counted. -/
 theorem prEvent_layoutWins_le [SampleableType Hash32]
     (adversary : OracleComp (unifSpec + HashOracle) ((Desc × Value) × (Desc × Value))) {Q : Nat}
+    -- The extraction computes each root twice, once whole and once up to its last hash.
+    --
+    -- It then queries the input of each last hash once more.
     (hQ : IsQueryBoundP (experimentWith extractLayouts adversary) (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashOracle.romImpl
       (experimentWith extractLayouts adversary)).run ∅}[LayoutWins z.1] ≤

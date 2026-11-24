@@ -105,15 +105,14 @@ theorem progressiveChunkGindex_level (level position : Nat) (inside : position <
 /--
 Levels a chunk sits below the value's own root, which is the node count of its proof.
 
-A chunk of level `level` sits three levels further down for each level along.
-
-Add to this the two levels that the spine root and the mixed-in word take.
-
 This is what fixes the cost of a proof about a progressive collection.
 
 It grows with the logarithm of the chunk number, at three hashes per factor of four.
 -/
 theorem progressiveChunkGindex_depth (level position : Nat) (inside : position < 4 ^ level) :
+    -- A chunk of level `level` sits three levels further down for each level along.
+    --
+    -- Add to this the two levels that the spine root and the mixed-in word take.
     Nat.log2 (progressiveChunkGindex (levelStart level + position)) = 3 * level + 2 := by
   -- Everything below is polynomial in one quantity: two to the level.
   have cube : (2:Nat) ^ (3 * level) = 2 ^ level * 2 ^ level * 2 ^ level := by

@@ -6,21 +6,13 @@ public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Serialization.E2store
 
 /-!
-# `Serialization.Proofs.E2store`
+# Proofs: the e2store records read back
 
-The e2store records read back.
-
-Writing records and reading the bytes back gives the same records.
-
-Reading bytes and writing the records back gives the same bytes.
-
-So the encoding is a bijection onto the bytes that decode.
+The encoding is a bijection onto the bytes that decode.
 
 Its domain is the record lists whose data each have fewer than `2^32` bytes.
 
-A file decodes exactly when its records start with a Version record, and no Version record has data.
-
-In bytes that decode, each record sits where the sizes of the records before it put it.
+This module also states which files decode, and where each record sits in the bytes.
 -/
 
 @[expose] public section
@@ -335,6 +327,8 @@ theorem decodeFile_eq_ok_iff {bytes : ByteArray} {records : List Record} :
         simp_all
 
 /-- In bytes that decode, each record sits at its position.
+
+That position is where the sizes of the records before it put it.
 
 Its header reads there, and its data follows the header. -/
 theorem record_at {bytes : ByteArray} {records : List Record} (h : decode bytes = .ok records)

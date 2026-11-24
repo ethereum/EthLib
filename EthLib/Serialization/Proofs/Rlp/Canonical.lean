@@ -4,25 +4,13 @@ import EthLib.Base.Proofs.Bytes
 public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 /-!
-# `Serialization.Proofs.Rlp.Canonical`
+# Proofs: RLP decoding is canonical
 
 The decoder accepts only canonical input: if `decode b = .ok x`, then `encode x = .ok b`.
 
 With the round trip, the encoding is a bijection between items and the accepted inputs.
 
 So no item has two accepted encodings, and two decoders that follow this specification agree.
-
-The decoder succeeds exactly on the encodings of items.
-
-The parser reads the same item from a longer input, as a stream decoder needs.
-
-The proof runs the decoder backwards:
-
-1. A prefix that the decoder accepts is the prefix that the encoding writes.
-   A length has no leading zero, and it is at least 56 in the long form.
-2. A byte string that the decoder reads is not one byte below `0x80`.
-   So the encoding writes it with that prefix.
-3. A list payload is shorter than its item, so induction on the number of bytes covers its items.
 -/
 
 @[expose] public section
@@ -177,6 +165,7 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop �
       ∃ e, joinEncodings xs = .ok e ∧ e.data.toList = (input.extract a b).data.toList)
     {x : Item} {next : Nat} (h : readItem input pos stop = .ok (x, next)) :
     ∃ e, encode x = .ok e ∧ (input.extract pos next).data.toList = e.data.toList := by
+  -- The proof runs the decoder backwards.
   unfold readItem at h
   rw [decodeItem_eq] at h
   by_cases hPos : pos < stop
@@ -206,6 +195,8 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop �
     rw [hRP] at h
     simp only [bind, Except.bind] at h
     -- The prefix the decoder read is the one the encoding writes.
+    --
+    -- A length has no leading zero, and it is at least 56 in the long form.
     obtain ⟨hk, hPreMap⟩ := readPrefix_ok hStop hLow hRP
     obtain ⟨pre, hPre, hPreBytes⟩ := except_map_ok _ _ _ hPreMap
     have hPreSize : pre.size = k + 1 := by
@@ -226,6 +217,9 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop �
     cases kind with
     | bytes =>
       simp only [exists_prop] at h
+      -- A byte string that the decoder reads is not one byte below `0x80`.
+      --
+      -- So the encoding writes it with that prefix.
       by_cases hOne : length = 1 ∧ pos + 1 + k < input.size ∧ input.get! (pos + 1 + k) < 0x80
       · simp [hOne, Except.map] at h
       simp only [hOne, dite_false, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
@@ -282,6 +276,7 @@ theorem canonical_upTo (n : Nat) :
     (∀ (input : ByteArray) (pos stop : Nat), ∀ hBound : stop ≤ input.size, stop - pos ≤ n →
       ∀ xs, decodeItems input pos stop = .ok xs →
       ∃ e, joinEncodings xs = .ok e ∧ e.data.toList = (input.extract pos stop).data.toList) := by
+  -- A list payload is shorter than its item, so induction on the number of bytes covers its items.
   induction n with
   | zero =>
     refine ⟨fun input pos stop hStop hLen x next h =>

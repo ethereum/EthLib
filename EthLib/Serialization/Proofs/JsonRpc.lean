@@ -14,65 +14,9 @@ import EthLib.Base.Proofs.Nat
 /-!
 # Proofs: the JSON form of the base types
 
-The readers read the value of a hex digit from its ASCII byte.
+This module proves that the JSON readers of the base types read back what the encoders write.
 
-They read back each digit that the hex encoder writes.
-
-Those digits are lowercase, so this holds whether or not the readers accept uppercase.
-
-The byte string readers read back the bytes of their hex encoding.
-
-That holds for byte strings of any length and of a given size.
-
-Whether the reader accepts uppercase digits does not matter there.
-
-The proofs rest on two facts about the encoding.
-
-Its characters are ASCII.
-
-It writes two digits for each byte.
-
-A number that the reader checks against `2^bits` is below `2^bits`.
-
-So the 64-bit reader returns the decoded number itself, without wrapping.
-
-A byte string decoded with a limit on its size has at most that many bytes.
-
-A field of an object decodes to the value that the object holds under its name.
-
-A list decodes exactly when the value is an array whose items each decode, in order.
-
-A byte string of a fixed size, such as an address, decodes exactly to the vector of its bytes.
-
-A number below the bound, written in lowercase hex without leading zeros, decodes to itself.
-
-No other text decodes to a number.
-
-The encoder of numbers writes exactly that text, so two numbers never share an encoding.
-
-The encoder of lists writes what the list reader reads back, item by item.
-
-A byte string without uppercase digits decodes exactly from `0x` and two lowercase digits per byte.
-
-So does a list of such byte strings of one size, from the array of their encodings.
-
-In general, a list decodes exactly from the array of its items when each item does.
-
-An address, whose digits may be uppercase, decodes exactly from `0x` and two digits per byte.
-
-Each of those digits is in either case, and their lowercase forms are the hex encoding.
-
-The 64-bit reader returns a number exactly when the reader with the bound `2^64` returns it.
-
-The bounded byte reader succeeds exactly when the byte reader succeeds within the limit.
-
-An object built from pairs with distinct names holds exactly those pairs.
-
-A number reads as an integer exactly when its value is a whole number.
-
-A value reads as an error object exactly when its only members are a code, a message and data.
-
-The data may be missing.
+It also states exactly which text each reader accepts.
 -/
 
 public section
@@ -85,7 +29,9 @@ open EthLib.Base
 @[simp] theorem reject_eq {α : Type} (reason : String) : (reject reason : Read α) = .error reason :=
   rfl
 
-/-- The decoders read the value of each digit that the hex encoder writes. -/
+/-- The decoders read the value of each digit that the hex encoder writes.
+
+Those digits are lowercase, so this holds whether or not the decoders accept uppercase. -/
 theorem hexValue_hexDigitChar (upper : Bool) (n : Fin 16) :
     hexValue upper (hexDigitChar n).toUInt8 = some n.val.toUInt8 := by
   decide +revert
@@ -307,6 +253,11 @@ private theorem bytesOf_of_hexDigits {what : String} {upper : Bool} {j : Lean.Js
 This holds whether or not it accepts uppercase digits. -/
 theorem bytesOf_hexString (what : String) (upper : Bool) (data : List UInt8) :
     bytesOf what upper (.str (hexString data)) = .ok data.toByteArray := by
+  -- The proof rests on two facts about the encoding.
+  --
+  -- Its characters are ASCII.
+  --
+  -- It writes two digits for each byte.
   refine bytesOf_of_hexDigits (hexDigits_hexString what data)
     (by rw [List.length_map, length_flatMap_byteHexDigits]) fun i hi => ?_
   obtain ⟨h0, h1⟩ := flatMap_byteHexDigits_getElem? data i
