@@ -14,17 +14,7 @@ This module covers Bellatrix to Heze.
 
 The proposer sends a forkchoice update with payload attributes.
 
-The head of the update is the parent of its payload.
-
-The execution layer then builds a payload on that head, with those attributes.
-
-The state is the state of the slot of the proposal, before its block.
-
-The safe and the finalized block of the update come from the fork choice, through the caller.
-
-The caller reads the finalized block from the store: the payload of the finalized beacon block.
-
-From Gloas it is the parent payload that the bid of that block builds on.
+The execution layer then builds a payload on the head of the update, with those attributes.
 
 The call to the execution layer, and the payload that it builds, are not specified here.
 -/
@@ -147,7 +137,9 @@ def prepareExecutionPayload (config : Config) (state : BeaconState preset fork)
     (safeBlockHash finalizedBlockHash : Hash32)
     (suggestedFeeRecipient : ExecutionAddress) (powChain : List PowBlock) :
     Except ProposerError (Option (ForkchoiceState × PayloadAttributes fork)) := do
-  -- The head of the update, the parent of the payload.
+  -- The state is the state of the slot of the proposal, before its block.
+  --
+  -- The head of the update is the parent of its payload.
   match ← payloadHeadBlockHash config state bellatrix powChain with
   | none => return none
   | some headBlockHash =>
@@ -160,6 +152,12 @@ def prepareExecutionPayload (config : Config) (state : BeaconState preset fork)
     -- From Deneb, the root of the latest block header of the state, the parent of the block.
     let parentBeaconBlockRoot ← payloadAttributesParentRoot state
     -- The head, then the safe and the finalized block that the caller gives.
+    --
+    -- The safe and the finalized block come from the fork choice, through the caller.
+    --
+    -- The caller reads the finalized block from the store.
+    --
+    -- The finalized block is the payload of the finalized beacon block.
     --
     -- The fee recipient is the one that the proposer suggests.
     return some (⟨headBlockHash, safeBlockHash, finalizedBlockHash⟩, {
@@ -228,6 +226,8 @@ def prepareExecutionPayloadGloas (config : Config) (checks : SignatureChecks)
     (gloas : .glamsterdam ≤ fork) (safeBlockHash finalizedBlockHash : Hash32)
     (suggestedFeeRecipient : ExecutionAddress) (targetGasLimit : UInt64) :
     Except ProposerError (ForkchoiceState × PayloadAttributes fork) := do
+  -- The state is the state of the slot of the proposal, before its block.
+  --
   -- The head and the withdrawals come from the parent on which the proposer builds.
   --
   -- From here the state is the one after the payload of the parent, when the proposer builds on it.
@@ -241,6 +241,12 @@ def prepareExecutionPayloadGloas (config : Config) (checks : SignatureChecks)
   -- From Heze, the transactions of the inclusion lists of the slot before.
   let inclusionListTransactions ← payloadInclusionListTransactions store state head.root
   -- The head, then the safe and the finalized block that the caller gives.
+  --
+  -- The safe and the finalized block come from the fork choice, through the caller.
+  --
+  -- The caller reads the finalized block from the store.
+  --
+  -- The finalized block is the parent payload that the bid of the finalized beacon block builds on.
   --
   -- The update may also name the columns that the node custodies, one bit per column.
   --
