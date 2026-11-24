@@ -14,6 +14,7 @@ Properties of the session states of a discv5 node.
 - Without a session and a challenge at an endpoint, a message gets a new WHOAREYOU there.
 - A WHOAREYOU that mirrors no pending request changes nothing and gets no answer.
 - A handshake packet with no stored challenge changes nothing.
+- A handshake that opens removes its challenge, so the same packet sent again at once is ignored.
 - After a handshake run by both nodes, each opens what the other seals.
 - Two packets sealed at two counters of a session carry two different nonces.
 -/
@@ -30,6 +31,22 @@ open EthLib.Cryptography.Secp256k1
 theorem lookupKey_setKey_self {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) (key : κ)
     (value : α) : lookupKey (setKey pairs key value) key = some value := by
   simp [lookupKey, setKey]
+
+/-- Setting a key leaves the value of every other key as it was. -/
+theorem lookupKey_setKey_of_ne {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) {key other : κ}
+    (value : α) (ne : other ≠ key) :
+    lookupKey (setKey pairs key value) other = lookupKey pairs other := by
+  simp only [lookupKey, setKey, List.find?_cons, decide_eq_true_eq, Ne.symm ne,
+    List.find?_filter, decide_false]
+  -- The filter removes only entries of the set key, never one of the other key.
+  congr 2
+  funext x
+  by_cases h : x.1 = other <;> simp [h, ne]
+
+/-- A key that was just erased has no value. -/
+theorem lookupKey_eraseKey_self {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) (key : κ) :
+    lookupKey (eraseKey pairs key) key = none := by
+  simp [lookupKey, eraseKey, List.find?_filter]
 
 /-- Sealing in a session gives the same session with its counter raised by one. -/
 theorem sealInSession_next {node : Local} {rand : Randoms} {peer : NodeId}
@@ -204,12 +221,46 @@ theorem receiveWhoareyou_other_nonce {node : Local} {rand : Randoms} {state : No
 
 /-- A handshake packet from a peer with no stored challenge changes nothing and gets no answer.
 
-So a handshake packet sent again, after its challenge was used, sets up nothing. -/
+So a handshake packet sent again, while no new challenge is stored, opens nothing. -/
 theorem receiveHandshake_unchallenged {node : Local} {rand : Randoms} {state : NodeState}
     {key : SessionKey} {record bytes : ByteArray}
     (noChallenge : lookupKey state.challenges key = none) :
     receiveHandshake node rand state key record bytes = (state, []) := by
   simp [receiveHandshake, noChallenge]
+
+/-- Answering in a session keeps the stored challenges. -/
+theorem answerIn_challenges (node : Local) (rand : Randoms) (state : NodeState) (key : SessionKey)
+    (session : Session) (plaintext : ByteArray) :
+    (answerIn node rand state key session plaintext).1.challenges = state.challenges := by
+  simp only [answerIn]
+  split <;> (try split) <;> rfl
+
+/-- A handshake that opens removes the challenge it answers from the store. -/
+theorem lookupKey_challenges_receiveHandshake {node : Local} {rand : Randoms}
+    {state : NodeState} {key : SessionKey} {record bytes : ByteArray}
+    {challenge : SentChallenge} {srcKey : Point} {received : HandshakeReceived}
+    (stored : lookupKey state.challenges key = some challenge)
+    (known : (node.publicKeyOf key.id <|> recordKey key.id record) = some srcKey)
+    (opens : openHandshake node.staticKey challenge.challengeData node.nodeId srcKey bytes =
+      .ok received) :
+    lookupKey (receiveHandshake node rand state key record bytes).1.challenges key = none := by
+  simp only [receiveHandshake, stored, known, opens]
+  rw [answerIn_challenges]
+  exact lookupKey_eraseKey_self _ _
+
+/-- In the state right after a handshake opens, any handshake packet under its key changes nothing.
+
+So the same packet, sent again at once, opens no second session and gets no answer. -/
+theorem receiveHandshake_replay {node : Local} {rand rand' : Randoms}
+    {state : NodeState} {key : SessionKey} {record bytes record' bytes' : ByteArray}
+    {challenge : SentChallenge} {srcKey : Point} {received : HandshakeReceived}
+    (stored : lookupKey state.challenges key = some challenge)
+    (known : (node.publicKeyOf key.id <|> recordKey key.id record) = some srcKey)
+    (opens : openHandshake node.staticKey challenge.challengeData node.nodeId srcKey bytes =
+      .ok received) :
+    let next := (receiveHandshake node rand state key record bytes).1
+    receiveHandshake node rand' next key record' bytes' = (next, []) :=
+  receiveHandshake_unchallenged (lookupKey_challenges_receiveHandshake stored known opens)
 
 /-! ## Steps -/
 
