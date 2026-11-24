@@ -6,11 +6,15 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.StackN`
 
-DUPN, SWAPN and EXCHANGE: the decoders of their immediate byte, and what each instruction does.
+This file proves what DUPN, SWAPN and EXCHANGE do, and how their immediate byte decodes.
 
 Each decoder is a bijection from the bytes it accepts onto its depths, inverse to its encoder.
 
-Each fails first on its gas, then on an immediate byte that encodes nothing, then on the stack.
+Each of the three instructions fails in this order:
+
+- first when it cannot pay its gas;
+- then with an invalid parameter when its immediate byte encodes no depth or pair;
+- last when the stack has no item at a depth, or when DUPN pushes onto a full stack.
 -/
 
 @[expose] public section

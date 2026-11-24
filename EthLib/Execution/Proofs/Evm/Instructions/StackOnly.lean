@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.StackOnly`
 
-The stack instructions, among them POP, PUSH, DUP, SWAP and EXP, and KECCAK256.
+This file covers the stack instructions, among them POP, PUSH, DUP, SWAP and EXP.
+
+It also covers KECCAK256.
 
 None of these instructions changes the message, the state or the substate of the frame.
 
@@ -146,7 +148,7 @@ theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm
 theorem keccak256Step_cons {evm : Evm fork Meter} {start size : U256} {rest : List U256}
     (h : evm.stack.val = start :: size :: rest) :
     keccak256Step evm =
-      -- It pays 30, 6 per hashed word and the growth of memory.
+      -- The step pays 30 gas, 6 gas per hashed word and the growth of memory.
       (GasMeter.charge evm.gas (keccak256Cost size +
         (extendMemory evm.memory.size [(start, size)]).cost)).map fun gas =>
         let memory :=

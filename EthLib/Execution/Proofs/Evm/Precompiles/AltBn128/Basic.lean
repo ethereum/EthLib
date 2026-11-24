@@ -8,7 +8,11 @@ public import EthLib.Base.Proofs.MapM
 /-!
 # Proofs: `Evm.Precompiles.AltBn128`
 
-It proves when ECADD, ECMUL and ECPAIRING fail or succeed, and the size of their outputs.
+This file proves when ECADD, ECMUL and ECPAIRING fail and when they succeed.
+
+Each output of ECADD and ECMUL has 64 bytes.
+
+Each output of ECPAIRING is the word 0 or 1.
 
 Each decoded point is on its curve: a point of `G_1` on the curve, a point of `G_2` on the twist.
 

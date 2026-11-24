@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.AccountData`
 
-The instructions that read another account, and the access to an address that they make.
+This file covers the instructions that read another account.
+
+It also covers the access to an address that they make.
 
 From Berlin, an access is cold exactly when the transaction has not yet accessed the address.
 
@@ -99,7 +101,7 @@ theorem extcodehashStep_cons [GasMeter Meter] {evm : Evm fork Meter} {word : U25
     extcodehashStep evm =
       let accessed := accessAddress { evm with stack := ⟨rest, by
         have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
-      -- It pays the cold or warm price of the access in the fork.
+      -- The step pays the cold or warm price of the access in the fork.
       (GasMeter.charge accessed.2.gas (extcodehashCost fork accessed.1)).map fun gas =>
         { accessed.2 with
           gas
@@ -131,7 +133,7 @@ theorem extcodesizeStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter} {
     extcodesizeStep evm =
       let accessed := accessAddress { evm with stack := ⟨rest, by
         have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
-      -- It pays the cold or warm price of the access in the fork.
+      -- The step pays the cold or warm price of the access in the fork.
       (GasMeter.charge accessed.2.gas (externalBaseCost fork accessed.1)).map fun gas =>
         { accessed.2 with
           gas
@@ -167,18 +169,18 @@ theorem extcodecopyStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter}
     -- The lookup of the code can fail with a state error, which this theorem excludes.
     (found : accountCode evm (toAddressMasked word) = .ok code) :
     extcodecopyStep evm =
-      -- It accesses the address.
+      -- The step accesses the address.
       let accessed := accessAddress { evm with stack := ⟨rest, by
         have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
       let growth := extendMemory evm.memory.size [(start, size)]
-      -- It pays the access, 3 gas a word and the growth of memory.
+      -- The step pays for the access, 3 gas a word and the growth of memory.
       (GasMeter.charge accessed.2.gas (externalBaseCost fork accessed.1 +
           GasCosts.OPCODE_COPY_PER_WORD * wordCount size.toNat + growth.cost)).map fun gas =>
         { accessed.2 with
           gas
-          -- It records the read of the account.
+          -- The step records the read of the account.
           state := accessed.2.state.recordAccountRead (toAddressMasked word)
-          -- It writes the bytes of the code from the offset, with zeros past its end.
+          -- The step writes the bytes of the code from the offset, with zeros past its end.
           --
           -- The write is made after memory has grown.
           memory := memoryWrite (memoryExtend evm.memory growth.expandBy) start.toNat

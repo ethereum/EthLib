@@ -9,11 +9,15 @@ public import EthLib.Base.Proofs.Except
 /-!
 # Proofs: changing state outside an instruction's read
 
-On frames whose states agree where it reads, an instruction fails alike, unless it aborts the run.
+Take two frames whose states agree on some sets.
 
-On success, it gives agreeing frames when the sets hold every read of the result.
+An instruction gives the same failure on both, unless the failure aborts the run.
 
-The file covers every instruction of the dispatch, which leaves out the calls and the creations.
+On success, it gives agreeing frames, when the sets hold every read of the result.
+
+The file covers every instruction of the dispatch.
+
+The calls and the creations are outside the dispatch.
 
 These are local steps toward the coverage of [EIP-7928, Scope and Inclusion][bal].
 
