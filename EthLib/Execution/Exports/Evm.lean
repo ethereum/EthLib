@@ -21,16 +21,6 @@ The word of an instruction, the price of memory and the CREATE address take type
 A word, a size or a price crosses as an `int`, so no value is truncated, and a word is below 2^256.
 
 An argument that is not of its type fails with code 0.
-
-An opcode outside the table of words fails with code 0, and so do more than three operands.
-
-So does an immediate byte that encodes no depth of DUPN, SWAPN or EXCHANGE.
-
-The immediate depths take the opcode and the immediate byte as integers, and return bytes.
-
-The CREATE2 address takes bytes, and a salt is 32 big-endian bytes.
-
-A sender or a salt of the wrong length fails with a code above every code of an RLP error.
 -/
 
 @[expose] public section
@@ -123,11 +113,14 @@ Each opcode is read at a fork that has it, and a missing operand is 0.
 An opcode outside the table fails with code 0, since no Lean error type covers it. -/
 def wordOpOf (args : UInt8 × List U256) : Result U256 := do
   let (opcode, operands) := args
+  -- More than three operands fail with code 0.
+  --
   -- The count comes first, so too many operands fail even with an opcode outside the table.
   if operands.length > 3 then rejectArgument none "an instruction takes at most 3 operands"
   let operand (i : Nat) := operands.getD i 0
   match (Op.decode opcode).bind fun op => wordOp op (operand 0) (operand 1) (operand 2) with
   | some w => .ok w
+  -- An opcode outside the table of words fails with code 0.
   | none => rejectArgument none s!"opcode {opcode} does not push a word of its operands alone"
 
 /-- The word that the instruction of an opcode pushes, for at most three operands.
@@ -148,12 +141,14 @@ Another opcode, or a byte that encodes no depth, fails with code 0.
 No Lean error type covers these failures. -/
 @[export eth_evm_immediate_depths]
 def immediateDepthsExport (opcode immediate : UInt8) : Result ByteArray :=
+  -- The opcode and the immediate byte cross as integers, and the depths come back as bytes.
   let depths := match Op.decode opcode with
     | some .dupn | some .swapn => (decodeSingle immediate).map fun n => [n]
     | some .exchange => (decodePair immediate).map fun (n, m) => [n, m]
     | _ => none
   match depths with
   | some ds => .ok ⟨(ds.map Nat.toUInt8).toArray⟩
+  -- An immediate byte that encodes no depth of DUPN, SWAPN or EXCHANGE fails with code 0.
   | none => rejectArgument none s!"byte {immediate} encodes no depth of opcode {opcode}"
 
 /-- The price of a memory of a given size in bytes. -/
@@ -200,7 +195,11 @@ def createAddressExport (args : PyValue) : Result PyValue :=
 The sender is an address of 20 bytes, and the salt is a word of 32 bytes. -/
 @[export eth_evm_create2_address]
 def create2AddressExport (sender salt initCode : ByteArray) : Result ByteArray := do
+  -- The sender crosses as bytes.
+  --
+  -- A sender of the wrong length fails with a code above every code of an RLP error.
   let sender ← readAddress sender
+  -- The salt is 32 big-endian bytes, and a salt of the wrong length fails the same way.
   let salt ← readWord .saltLength salt
   return ⟨(create2Address sender salt initCode).toArray⟩
 

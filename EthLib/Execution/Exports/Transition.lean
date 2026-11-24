@@ -14,20 +14,6 @@ The chain crosses the boundary as three inputs.
 - Its configuration is the typed value of its JSON, in the form of the chain configuration exports.
 - Its state takes the form of the state root export.
 - Its recent blocks, oldest first, are a list, each the fork name, the RLP header and RLP ommers.
-
-The block crosses it as the name of its fork and its RLP form.
-
-A block that fails a check comes back as the code and the message of its block error.
-
-So does a block or a transaction of its body that does not decode.
-
-An input of the chain that does not decode has code 0, since the export reads it itself.
-
-The transition holds up to Glamsterdam, and fails from Hegotá as not yet specified.
-
-The genesis export takes the name of a fork, the fields that the chain chooses and the state.
-
-The fields cross as a tuple of typed Python values, and the block comes back in RLP form.
 -/
 
 public section
@@ -57,6 +43,7 @@ The configuration is the typed value of its JSON, and the state takes the form o
 A state or a recent block that does not decode has code 0, since the export reads it itself. -/
 def chainOf (config : PyValue) (state : ByteArray)
     (recent : List (String × ByteArray × List ByteArray)) : Result BlockChain := do
+  -- An input of the chain that does not decode has code 0, since the export reads it itself.
   let config ← ChainConfig.Exports.configOfJson config.toJson
   let pre ← toResult none
     ((State.Exports.ofInput state).mapError fun e => UnreadArgument.mk e.message)
@@ -70,11 +57,14 @@ def accountsItem (state : Execution.State.State) : Item :=
 
 /-- A block from the name of its fork and its RLP form, with its transactions decoded.
 
+The block crosses the boundary in this form.
+
 Each ommer is at the fork of its own number on the chain `config`.
 
 A block or a transaction that does not decode has the code of its block error. -/
 def blockOf (config : ChainConfig) (fork : String) (block : ByteArray) :
     Result ((fork : Fork) × Block fork Transactions.Transaction) := do
+  -- The transition holds up to Glamsterdam, and fails from Hegotá as not yet specified.
   let fork ← forkUpTo .glamsterdam fork.toUTF8
   let raw : Block fork Item ← toResult none
     ((Block.decode (forkAtBlock config) block).mapError BlockError.encoding)
@@ -94,6 +84,7 @@ def stateTransitionOf
   let (config, state, recent, fork, block, checkSeal) := args
   let chain ← chainOf config state recent
   let ⟨_, block⟩ ← blockOf chain.config fork block
+  -- A block that fails a check comes back as the code and the message of its block error.
   let post ← toResult none (stateTransition chain block checkSeal)
   let root ← State.Exports.rootOf post
   toResult none ((encode (Item.list [Codec.toItem root, accountsItem post])).mapError
@@ -114,7 +105,9 @@ def stateTransitionExport (args : PyValue) : Result PyValue :=
 
 They are the beneficiary, difficulty, gas limit, time, extra data, mix hash and nonce.
 
-Then come the base fee, the excess blob gas and the slot number. -/
+Then come the base fee, the excess blob gas and the slot number.
+
+The fields cross as a tuple of typed Python values. -/
 abbrev GenesisFields :=
   Address × Nat × Nat × U256 × ByteArray × Bytes32 × Bytes8 × Nat × UInt64 × UInt64
 

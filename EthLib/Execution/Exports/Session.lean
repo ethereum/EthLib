@@ -15,16 +15,6 @@ C-ABI exports for the session of an RLPx connection, with the eth and snap capab
 The exports take the tuple of their arguments as typed Python values.
 
 A capability crosses the boundary as its name and version.
-
-An eth or snap capability takes the IDs its version needs, and any other capability takes none.
-
-A rejected frame has the code of its session error.
-
-A bad argument, such as our own Hello that does not decode, has code 0.
-
-The eth session takes its messages as events, each sent or received, in order.
-
-A rejected eth message has the code of its message error or of its session error.
 -/
 
 public section
@@ -45,6 +35,7 @@ def sessionMessage : SessionError → String
 
 /-- A rejected frame reaches Python with its code, and its message names the fault. -/
 instance : ExportError SessionError where
+  -- A rejected frame has the code of its session error.
   code := SessionError.code
   message := sessionMessage
 
@@ -56,6 +47,7 @@ def capabilitiesOf (capabilities : List (ByteArray × Nat)) : List Capability :=
 def routeOf (args : List (ByteArray × Nat) × List (ByteArray × Nat) × Nat) :
     Result (Option (ByteArray × Nat × Nat)) := do
   let (ours, theirs, id) := args
+  -- An eth or snap capability takes the IDs its version needs, and any other capability takes none.
   let offsets := negotiate capabilityLength (capabilitiesOf ours) (capabilitiesOf theirs)
   return (route capabilityLength offsets id).map fun (capability, relativeId) =>
     (capability.name, capability.version, relativeId)
@@ -94,6 +86,7 @@ def outcomeOf (phase : Phase) (event : Option Event) (actions : List Action) :
 def sessionOf (args : ByteArray × List ByteArray) :
     Result (List (String × String × ByteArray × Nat × Nat × ByteArray × Bool)) := do
   let (helloData, frames) := args
+  -- A bad argument, such as our own Hello that does not decode, has code 0.
   let .hello ours ← toResult none ((decodeMessage false helloData).mapError fun e =>
       UnreadArgument.mk s!"our Hello: {Networking.Devp2p.Exports.message e}")
     | rejectArgument none "our Hello is another message"
@@ -132,6 +125,7 @@ def ethSessionMessage : EthSessionError → String
 
 /-- A rejected eth message reaches Python with its code, and its message names the fault. -/
 instance : ExportError EthSessionError where
+  -- A rejected eth message has the code of its message error or of its session error.
   code := EthSessionError.code
   message := ethSessionMessage
 
@@ -148,6 +142,7 @@ def ethSessionOf (args : Nat × ByteArray × Nat × Nat × List (Bool × Nat × 
   let s ← Networking.Devp2p.Exports.readSchedule schedule
   let mut session := EthSession.init v
   let mut outcomes := #[]
+  -- The eth session takes its messages as events, each sent or received, in order.
   for ((sent, id, data), index) in events.zipIdx do
     let m ← toResult s!"event {index}" (Message.decode v id data)
     if sent then

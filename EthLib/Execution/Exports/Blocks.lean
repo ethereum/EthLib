@@ -19,27 +19,13 @@ Each operation decodes at the fork first, the ommers of a block too.
 
 A rejected input comes back as the code and the message of its RLP error.
 
-A receipt error has a code from 101, and a failed header check a code from 201.
+An unknown fork name has code 0, since no error type covers it.
 
-An unknown fork name, or forks out of order, has code 0, since no error type covers it.
-
-So does a transaction of a block that does not decode, and a trie with an empty value.
-
-So does a blob schedule whose bounds fail, or an argument that Lean cannot read.
-
-The header checks take and return typed Python values, and a blob schedule is four integers.
-
-A deposit log in another layout has a code from 301.
-
-A block access list that breaks a rule of its form has a code from 401.
+So does an argument that Lean cannot read.
 
 Every operation here holds up to Glamsterdam, and Hegotá is not yet specified.
 
 Glamsterdam adds two header fields, by EIP-7928 and EIP-7843.
-
-The encodings of the body and the receipt stay those of BPO2.
-
-So do the checks of a header against its parent.
 
 The receipts of a block hold up to BPO5, since Glamsterdam changes the gas that a block counts.
 -/
@@ -66,6 +52,7 @@ def headerHashExport (fork header : ByteArray) : Result ByteArray := do
 Each transaction stays the item that it is, so any transaction form passes. -/
 @[export eth_block_reencode]
 def reencodeExport (fork block : ByteArray) : Result ByteArray := do
+  -- At Glamsterdam the encoding of the body stays that of BPO2.
   let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← toResult "block rejected" (Block.decode (fun _ => fork) block)
   toResult "block has no encoding" b.encode
@@ -86,6 +73,7 @@ def chainOfForks (forks : ByteArray) : Result ChainConfig := do
   -- The chain ID and the deposit contract play no part in the order of the forks.
   let config : ChainConfig :=
     { chainId := 0, depositContractAddress := Vector.replicate 20 0, activations := activations }
+  -- Forks out of order have code 0, since no error type covers them.
   if !decide config.Ordered then
     rejectArgument none "the forks are not in the order of the timeline"
   match activations with
@@ -107,6 +95,7 @@ def blockOnChain (config : ChainConfig) (item : Item) :
 
 /-- A receipt error reaches Python with its code, and its message names the error. -/
 instance : ExportError ReceiptError where
+  -- A receipt error has a code from 101.
   code := ReceiptError.code
   message := reprStr
 
@@ -117,6 +106,7 @@ def decodeReceiptAt (fork : Fork) (receipt : ByteArray) : Result (UInt8 × Recei
 /-- The bytes of a receipt, decoded at the fork and encoded again with its transaction type. -/
 @[export eth_receipt_reencode]
 def receiptReencodeExport (fork receipt : ByteArray) : Result ByteArray := do
+  -- At Glamsterdam the encoding of the receipt stays that of BPO2.
   let fork ← forkUpTo .glamsterdam fork
   let (type, r) ← decodeReceiptAt fork receipt
   toResult "receipt has no encoding" (encodeReceipt type r)
@@ -153,7 +143,9 @@ def blobSchedulesOf (entries : List (Nat × Nat × Nat × Nat)) :
 
 They are the forks of the parent and of the header, then the parent and the header in RLP.
 
-Last come the blob schedules of the chain. -/
+Last come the blob schedules of the chain.
+
+The header checks take and return typed Python values, and a blob schedule is four integers. -/
 abbrev HeaderCheckArgs := String × String × ByteArray × ByteArray × List (Nat × Nat × Nat × Nat)
 
 /-- The parent and the header of a header check, decoded at their forks, and a blob schedule.
@@ -163,6 +155,7 @@ def headerCheckInputs (args : HeaderCheckArgs) :
     Result ((parentFork fork : Fork) × Header parentFork × Header fork ×
       Since .dencun fork BlobSchedule) := do
   let (parentFork, fork, parent, header, schedules) := args
+  -- At Glamsterdam the checks of a header against its parent stay those of BPO2.
   let parentFork ← forkUpTo .glamsterdam parentFork.toUTF8
   let fork ← forkUpTo .glamsterdam fork.toUTF8
   let parent : Header parentFork ← toResult "parent rejected" (Codec.decode parent)
@@ -181,6 +174,7 @@ The header's blob schedule is the last given one that it has reached, else that 
 def validateHeaderOf (args : HeaderCheckArgs) : Result Unit := do
   let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
+    -- A failed header check has a code from 201.
     toResult none (validateHeader hFork parent header schedule)
   else rejectArgument none "the parent's fork is after the fork"
 
@@ -201,6 +195,7 @@ The header's blob schedule is the last given one that it has reached, else that 
 def checkHeaderOf (args : HeaderCheckArgs) : Result Unit := do
   let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
+    -- A failed header check has a code from 201.
     toResult none (checkHeader hFork parent header schedule)
   else rejectArgument none "the parent's fork is after the fork"
 
@@ -231,6 +226,7 @@ def daoExtraDataValidExport (daoBlock : UInt64) (fork header : ByteArray) : Resu
 
 /-- The transaction that an item of a block holds at the fork. -/
 def transactionOfItem (fork : Fork) (item : Item) : Result Transactions.Transaction :=
+  -- A transaction of a block that does not decode has code 0, since no error type covers it.
   toResult none ((Transactions.decodeBodyTransaction fork item).mapError
     fun e => UnreadArgument.mk s!"transaction rejected: {reprStr e}")
 
@@ -240,6 +236,7 @@ def runTrie (act : Except Trie.TrieError Hash32) : Result ByteArray :=
   | .ok hash => return ⟨hash.toArray⟩
   -- An RLP error keeps its own code, and any other trie error has code 0.
   | .error (.rlp e) => toResult "no root" (.error e : Except RlpError ByteArray)
+  -- A trie with an empty value is such another error, with code 0.
   | .error e => rejectArgument "no root" (oneLine e)
 
 /-- The transactions root of the transactions of a block, decoded at the fork. -/
@@ -259,6 +256,7 @@ def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
 
 /-- A deposit log error reaches Python with its code, and its message names the error. -/
 instance : ExportError DepositError where
+  -- A deposit log in another layout has a code from 301.
   code := DepositError.code
   message := reprStr
 
@@ -288,6 +286,7 @@ def blockAccessListHashExport (bal : ByteArray) : Result ByteArray := do
 
 /-- A block access list error reaches Python with its code, and its message names the error. -/
 instance : ExportError BlockAccessList.Error where
+  -- A block access list that breaks a rule of its form has a code from 401.
   code := BlockAccessList.Error.code
   message := reprStr
 

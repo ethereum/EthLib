@@ -14,11 +14,7 @@ Their arguments and results are typed Python values, and a number crosses as an 
 
 A fork crosses as its name, and the blob exports read the blob schedule of that fork.
 
-A fork that is unknown, or that comes before Dencun and has no blobs, fails with code 0.
-
-So does Hegotá, whose blob schedule is not yet specified.
-
-So does a transaction that does not decode at the fork, or an argument that is not of its type.
+An argument that is not of its type fails with code 0.
 -/
 
 public section
@@ -32,10 +28,14 @@ open EthLib.Execution.Fees.BlobBaseFee
 
 /-- The blob schedule of a named fork, from Dencun on. -/
 def scheduleOfName (name : String) : Result (Fork × BlobSchedule) := do
+  -- An unknown fork fails with code 0.
+  --
+  -- So does Hegotá, whose blob schedule is not yet specified.
   let fork ← forkUpTo .glamsterdam name.toUTF8
   if h : .dencun ≤ fork then
     pure (fork, blobSchedule fork h)
   else
+    -- A fork before Dencun has no blobs, so it fails with code 0.
     rejectArgument none "a fork before dencun has no blob schedule"
 
 /-- The base fee per gas of a block, from its parent's gas limit, gas used and base fee. -/
@@ -82,6 +82,7 @@ def excessBlobGasExport (args : PyValue) : Result PyValue :=
 def blobDataFeeOf (args : String × Nat × ByteArray) : Result Nat := do
   let (fork, excess, tx) := args
   let (fork, schedule) ← scheduleOfName fork
+  -- A transaction that does not decode at the fork fails with code 0.
   let tx ← toResult none ((Transactions.decodeTransaction fork tx).mapError
     fun e => UnreadArgument.mk s!"transaction rejected: {reprStr e}")
   pure (calculateDataFee schedule excess tx)

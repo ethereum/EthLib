@@ -17,12 +17,6 @@ Both hash with Keccak-256.
 The Engine exports check an answer of `eth_getProof`, whose fields are JSON.
 
 The pairs of a trie and the nodes of a proof cross the boundary as RLP lists.
-
-The hex-prefix encoding takes typed Python values: a list of nibbles and a bool.
-
-A trie or proof error comes back with its code and a message.
-
-A malformed RLP input has code 0, since no error type of the specification covers that format.
 -/
 
 public section
@@ -43,12 +37,14 @@ def ofPairItem (item : Item) : Except RlpError (ByteArray × ByteArray) := do
 
 /-- The items of the RLP list that `input` encodes, or an error naming `what`. -/
 def readList (input : ByteArray) (what : String) : Result (List Item) := do
+  -- A malformed RLP input has code 0, since no error type of the specification covers that format.
   let .ok item := decode input | rejectArgument none s!"{what} is not one RLP item"
   let .ok items := item.toItems | rejectArgument none s!"{what} is not an RLP list"
   return items
 
 /-- In the trie exports, a trie with no root reaches Python with its code and a message. -/
 instance : ExportError TrieError where
+  -- A trie error comes back with its code and a message.
   code := TrieError.code
   message := fun e => s!"{repr e}"
 
@@ -70,6 +66,7 @@ def rootExport (secured : UInt8) (input : ByteArray) : Result ByteArray := do
 
 /-- A proof that does not verify reaches Python with its code, and its message is on one line. -/
 instance : ExportError ProofError where
+  -- A proof error comes back with its code and a message.
   code := ProofError.code
   message := oneLine
 
@@ -125,6 +122,7 @@ def verifyRangeExport (args : PyValue) : Result PyValue :=
 
 A value of 16 or more is not a nibble, and fails with code 0. -/
 def hexPrefixOf (args : List Nat × Bool) : Result ByteArray := do
+  -- The hex-prefix encoding takes typed Python values: a list of nibbles and a bool.
   let (nibbles, isLeaf) := args
   let path ← nibbles.mapM fun n =>
     if h : n < 16 then pure (⟨n, h⟩ : Nibble)
