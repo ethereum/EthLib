@@ -1028,6 +1028,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, SHA-256 and RIPEMD-160 pad through one shared Merkle-Damgård padding in `EthLib/Cryptography/Hash/Padding.lean`, which takes each hash's length bytes ([#4447](https://github.com/ethereum/EthLib/pull/4447)).
+  - `Sha256.paddingZeros` and `Ripemd160.paddingZeros` are `Padding.paddingZeros`, and `Sha256.LENGTH_SIZE_BYTES` is removed.
+    `Sha256.pad` and `Ripemd160.pad` are now `Padding.pad lengthBytes` of their own length bytes, and compute the same bytes.
+  - `pad_size`, `paddingZeros_lt`, `pad_size_mod` and `paddingZeros_minimal` of both hashes, and `pad_prefix`, `pad_delimiter`, `pad_zero` and `pad_length_suffix` of RIPEMD-160, are the lemmas of the same names in `Padding`.
+    `pad_size`, `pad_size_mod` and `pad_length_suffix` take the fact that the length bytes are 8, such as `Sha256.lengthBytes_size`; unfold `Sha256.pad` or `Ripemd160.pad` before applying them.
+    `Padding.size_pad` is new: the size of a padding for length bytes of any size.
+  - `lengthBytes_size`, `lengthBytes_digit` and `pad_eq_spec` of each hash keep their statements.
 - In Lean, the prefix and suffix readers of DNS discovery and the gossip topics are one generic pair in `EthLib/Base/List.lean` ([#4446](https://github.com/ethereum/EthLib/pull/4446)).
   - `DnsDisc.dropPrefix` and `Gossip.dropPrefix?` are `Base.dropPrefix?`, and `Gossip.dropSuffix?` is `Base.dropSuffix?`, for any element type with decidable equality.
   - `DnsDisc.dropPrefix_append` and the topic lemma `dropPrefix?_append` are `Base.dropPrefix?_append`, and `dropSuffix?_append` is `Base.dropSuffix?_append`.

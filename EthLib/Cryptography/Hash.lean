@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Hash.Padding
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Hash.Ripemd160

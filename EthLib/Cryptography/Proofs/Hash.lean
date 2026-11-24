@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Hash.Crc
 public import EthLib.Cryptography.Proofs.Hash.Blake2b
 public import EthLib.Cryptography.Proofs.Hash.Keccak
+public import EthLib.Cryptography.Proofs.Hash.Padding
 public import EthLib.Cryptography.Proofs.Hash.Sha256
 public import EthLib.Cryptography.Proofs.Hash.Ripemd160
 public import EthLib.Cryptography.Proofs.Hash.Hmac

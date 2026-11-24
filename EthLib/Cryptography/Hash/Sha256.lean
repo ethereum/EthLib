@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Cryptography.Hash.Padding
+
 /-!
 # SHA-256
 
@@ -79,17 +81,6 @@ def IV : Vector UInt32 8 := #v[
 /-- The size `m` of a message block, 512 bits, in bytes, FIPS 180-4 §1 and §2.2.1. -/
 def BLOCK_SIZE_BYTES : Nat := 64
 
-/-- The size of the block that holds the message length, 64 bits, in bytes, FIPS 180-4 §5.1.1. -/
-def LENGTH_SIZE_BYTES : Nat := 8
-
-/--
-The zero bytes between the `0b10000000` byte and the length, so that the blocks are whole.
-
-They are the fewest that bring the message, that byte, them and the length to whole blocks.
--/
-def paddingZeros (size : Nat) : Nat :=
-  (BLOCK_SIZE_BYTES - (size + 1 + LENGTH_SIZE_BYTES) % BLOCK_SIZE_BYTES) % BLOCK_SIZE_BYTES
-
 /--
 The length of a message in bits, as eight big-endian bytes.
 
@@ -110,8 +101,7 @@ It has four parts, in order:
 - The 64-bit block that holds `l`, big-endian, which completes the last 512-bit block.
 -/
 def pad (message : ByteArray) : ByteArray :=
-  message ++ ⟨#[0b10000000]⟩ ++ ⟨Array.replicate (paddingZeros message.size) 0⟩ ++
-    lengthBytes message.size
+  Padding.pad lengthBytes message
 
 /-! ## Words of four bytes -/
 
