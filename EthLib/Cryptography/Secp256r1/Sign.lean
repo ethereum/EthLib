@@ -8,11 +8,13 @@ public import EthLib.Cryptography.Rfc6979
 
 Signing follows SEC 1 v2 §4.1.3, with the deterministic nonce of RFC 6979 §3.2.
 
-The nonce generator is HMAC-SHA-256, keyed by the private key and the 32-byte hash.
-
 One key and one hash therefore give one signature, and no caller chooses the nonce.
 
+RFC 6979 is read with its verified [erratum 3812][eid3812].
+
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
+
+[eid3812]: https://www.rfc-editor.org/errata/eid3812
 -/
 
 @[expose] public section
@@ -54,7 +56,9 @@ def signWith (d e : Fn) : (fuel : Nat) → NonceState → Option (Fn × Fn)
         --
         -- Step 1 then takes the next candidate: RFC 6979 §3.2 step h.3 asks it for `r = 0`.
         --
-        -- For `s = 0` the next candidate is EthLib's choice.
+        -- For `s = 0`, erratum 3812 of RFC 6979 adds the same rule to §2.4.
+        --
+        -- It selects a new `k`, then computes `r` and `s` again.
         if r = 0 ∨ s = 0 then signWith d e fuel (nonceReject state)
         -- Step 7: output `S = (r, s)`.
         else some (r, s)
@@ -62,8 +66,6 @@ def signWith (d e : Fn) : (fuel : Nat) → NonceState → Option (Fn × Fn)
 
 /--
 The signature `(r, s)` of a 32-byte hash, by SEC 1 v2 §4.1.3 with the nonce of RFC 6979.
-
-The hash is read as a big-endian integer mod `n`; with SHA-256 no truncation is needed.
 
 The result is `none` for the zero key, or when no candidate nonce is usable.
 
@@ -75,10 +77,13 @@ def sign (d : Fn) (hash : Vector UInt8 32) : Option (Fn × Fn) :=
   else
     -- Step 4 is done by the caller: the input is the hash `H`, not the message.
     --
-    -- Step 5: `e` is `H` read as an integer; `E = H` keeps every bit.
+    -- Step 5: `e` is `H` read as a big-endian integer; `E = H` keeps every bit.
+    --
+    -- With SHA-256 no truncation is needed.
     --
     -- `e` is taken mod `n`, which leaves `s` of step 6 unchanged.
     signWith d (Fin.ofNat _ (Base.bytesToNat hash.toList)) MAX_NONCES
+      -- The nonce generator is HMAC-SHA-256, keyed by the private key and the 32-byte hash.
       (nonceSeed Fn.modulus d.val hash)
 
 end Ecdsa

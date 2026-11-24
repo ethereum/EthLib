@@ -8,11 +8,13 @@ public import EthLib.Cryptography.Rfc6979
 
 Signing follows SEC 1 v2 §4.1.3, with the deterministic nonce of RFC 6979 §3.2.
 
-The nonce generator is HMAC-SHA-256, keyed by the private key and the hash.
-
 The signature is in the low-s form of EIP-2, with the parity of `y_R` as its recovery bit.
 
+RFC 6979 is read with its verified [erratum 3812][eid3812].
+
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
+
+[eid3812]: https://www.rfc-editor.org/errata/eid3812
 -/
 
 @[expose] public section
@@ -29,6 +31,7 @@ Steps b to g of RFC 6979 §3.2 with the order `n`: the generator seeded with the
 The key is secret, and this function makes no constant-time claim.
 -/
 def nonceSeed (x : Fn) (hash : Vector UInt8 32) : NonceState :=
+  -- The nonce generator is HMAC-SHA-256, keyed by the private key and the hash.
   Rfc6979.nonceSeed Fn.modulus x.val hash
 
 /--
@@ -62,7 +65,9 @@ def signWith (d e : Fn) : (fuel : Nat) → NonceState → Except Secp256k1Error 
         --
         -- Step 1 then takes the next candidate: RFC 6979 §3.2 step h.3 asks it for `r = 0`.
         --
-        -- For `s = 0` the next candidate is EthLib's choice.
+        -- For `s = 0`, erratum 3812 of RFC 6979 adds the same rule to §2.4.
+        --
+        -- It selects a new `k`, then computes `r` and `s` again.
         if r = 0 ∨ s = 0 then signWith d e fuel (nonceReject state)
         -- Step 3 lets `r` meet a publicly verifiable criterion: here `x_R = r`.
         --
@@ -90,6 +95,10 @@ def sign (sk : Fn) (hash : Vector UInt8 32) : Except Secp256k1Error (Fn × Fn ×
     -- Step 5: `e` is `H` read as an integer, then taken mod `n`.
     let (r, s, odd) ← signWith sk (Fin.ofNat _ (hashToInt hash)) MAX_NONCES (nonceSeed sk hash)
     -- After step 7, SEC 1 lets the signer replace `(r, s)` by `(r, -s mod n)`, as EIP-2 asks.
+    --
+    -- The low-s rule of EIP-2 replaces `s` by `n - s` when `s > n / 2`.
+    --
+    -- That signature rebuilds `-R`, so the recovery bit flips with it.
     if isLowS s.val then .ok (r, s, odd) else .ok (r, -s, !odd)
 
 end Ecdsa
