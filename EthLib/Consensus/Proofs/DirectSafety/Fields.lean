@@ -260,16 +260,13 @@ def FinalizationRule {g a : ForkedBeaconState preset} {run : Run config checks g
 
 /-- The keys that a test of the run counts hold two thirds of the active stake at its state.
 
-The keys stay distinct along the run, so each counts once.
-
-The run starts at a genesis built from deposits.
-
-The target is at most `high`.
-
-The stake floor covers epoch calls through the epoch after `high`. -/
+The keys stay distinct along the run, so each counts once. -/
 theorem quorum_count {g a : ForkedBeaconState preset} (run : Run config checks g a)
+    -- The run starts at a genesis built from deposits.
     (genesis : Genesis config checks g)
+    -- The stake floor covers epoch calls through the epoch after `high`.
     {high : Nat} (enough : EnoughStake run high) (call : QuorumCall run)
+    -- The target is at most `high`.
     (within : call.target.epoch.toNat ≤ high) :
     2 * Models.stake (effectiveWeight call.cached) (activeKeys call.cached) ≤
       3 * Models.stake (effectiveWeight call.cached) call.voters :=
@@ -524,30 +521,25 @@ private def EpochCall.ofSlot {g before after : ForkedBeaconState preset}
   weighedOk := weighedOk
   later := later
 
-/-- A slot step keeps the justification of the cached state, or it runs an epoch call.
-
-The state after the step has the justification bits and checkpoints of `weighed`.
-
-Inside an epoch, `weighed` is the cached state and the epoch stays.
-
-At the end of an epoch the epoch moves on by one.
-
-There, in the first two epochs `weighed` is the cached state.
-
-Later, justification takes the cached state to `weighed`. -/
+/-- A slot step keeps the justification of the cached state, or it runs an epoch call. -/
 private theorem slot_step {before after : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks before = .ok after) :
     ∃ cached weighed : BeaconState preset before.fork,
       processSlot before.state = .ok cached ∧
+      -- The state after the step has the justification bits and checkpoints of `weighed`.
       after.state.justificationBits = weighed.justificationBits ∧
       after.state.previousJustifiedCheckpoint = weighed.previousJustifiedCheckpoint ∧
       after.state.currentJustifiedCheckpoint = weighed.currentJustifiedCheckpoint ∧
       after.state.finalizedCheckpoint = weighed.finalizedCheckpoint ∧
+      -- Inside an epoch, `weighed` is the cached state and the epoch stays.
       ((weighed = cached ∧
           (getCurrentEpoch after.state).toNat = (getCurrentEpoch before.state).toNat) ∨
+        -- At the end of an epoch the epoch moves on by one.
         ((before.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 ∧
           (getCurrentEpoch after.state).toNat = (getCurrentEpoch before.state).toNat + 1 ∧
+          -- There, in the first two epochs `weighed` is the cached state.
           ((getCurrentEpoch cached ≤ GENESIS_EPOCH + 1 ∧ weighed = cached) ∨
+            -- Later, justification takes the cached state to `weighed`.
             (GENESIS_EPOCH + 1 < getCurrentEpoch cached ∧
               processJustificationAndFinalization cached = .ok weighed)))) := by
   obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok

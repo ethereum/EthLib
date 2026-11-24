@@ -17,12 +17,6 @@ It is counted when the validator's unset exit epoch becomes assigned.
 
 Electra exits spend balance churn, and consolidations spend their own queue's churn.
 
-The Electra upgrade starts both queues with the churn of the upgraded state.
-
-Before Electra, the validator-count churn bounds the stake that joins a window.
-
-The boundary support is the unslashed cohort that exits at the current epoch.
-
 The balance queues are specified by [EIP-7251].
 
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
@@ -38,6 +32,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-- The pre-Electra churn limit, in validators, for `size` active validators. -/
 def cohortCap (config : Config) (size : Nat) : Nat :=
+  -- Before Electra, this validator-count churn bounds the stake that joins a window.
   max config.MIN_PER_EPOCH_CHURN_LIMIT.toNat (size / config.CHURN_LIMIT_QUOTIENT.toNat)
 
 /-- A departure: a validator, its new exit epoch and its effective balance before the step. -/
@@ -222,6 +217,7 @@ theorem _root_.EthLib.Consensus.Run.departure_baseline
 
 /-- Reference weights of the one inherited cohort, including the initial boundary. -/
 def inheritedCohort (x : ForkedBeaconState preset) (epoch : Nat) : Nat :=
+  -- The boundary support is the unslashed cohort that exits at the current epoch.
   (x.state.validators.data.toList.filter fun v =>
     v.activationEpoch.toNat < epoch && v.exitEpoch.toNat == epoch).foldl
       (fun n v => n + v.effectiveBalance.toNat) 0

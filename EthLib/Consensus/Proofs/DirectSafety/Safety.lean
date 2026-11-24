@@ -5,7 +5,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.Drift
 /-!
 # Direct accountable safety of two executions
 
-Two executions of the state transition start at one genesis and share a prefix up to a state `x`.
+Two runs from one genesis share a prefix up to `x`.
 
 Each then runs a tail of its own, and the two end in conflicting finalized checkpoints.
 
@@ -15,53 +15,11 @@ Two thirds of the larger drift of the two tails are subtracted from that third.
 
 Otherwise the hashes of the two runs show a collision or a zero root.
 
-A key is accountable when the runs accepted two of its votes that a slashing would punish.
-
-It is also accountable when a block of either tail applied a slashing that names it.
-
-That slashing may be a proposer slashing.
-
-The votes are the attestations that the blocks of the runs applied, read by public key.
-
-The weights are the effective balances at the states of the runs.
-
-A slashing in the shared prefix does not make a key accountable by itself.
-
-A key slashed by `x` is outside the reference set and outside the accountable keys.
-
-A prefix slashing can name a key without slashing it, so that key can stay in the reference set.
-
-Such a key is accountable only through double votes or through evidence in a tail.
-
-A key slashed by `x` stays out of the later drift only while its slashed flag stays set.
-
-The proofs do not need that fact, because the drift is observed, not bounded.
-
-The drift charges twice the stake that leaves or loses balance after `x`.
-
-It charges once the stake that joins or gains balance.
-
-It also charges twice the stake active only at the previous epoch.
-
-It is zero when the active validators and their effective balances stay the same.
-
-They must stay so from the epoch before `x` to one epoch past the later finalized epoch.
-
-It is the largest drift that the tails observe, not a bound in closed form.
-
 [Casper FFG] §2.1, Theorem 1, proves accountable safety for one set of validators.
 
 [Gasper] §8.6, Theorem 8.3, proves it for changing sets.
 
 These proofs do not go through those models.
-
-For each accountable key, a second theorem gives the checks that the runs executed.
-
-It assumes nothing about the signature checks.
-
-A third form reads one justification step on the last state of each run, as fork choice runs it.
-
-That step counts at the last state, which lies within the horizon of the drift.
 
 [Casper FFG]: https://arxiv.org/abs/1710.09437
 [Gasper]: https://arxiv.org/abs/2003.03052v3
@@ -80,21 +38,53 @@ noncomputable def accountableKeys {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) : Finset BLSPubkey := by
   classical
+  -- A key is accountable when the runs accepted two of its votes that a slashing would punish.
+  --
+  -- It is also accountable when a block of either tail applied a slashing that names it.
+  --
+  -- That slashing may be a proposer slashing.
+  --
+  -- The votes are the attestations that the blocks of the runs applied, read by public key.
+  --
+  -- A slashing in the shared prefix does not make a key accountable by itself.
+  --
+  -- A key slashed by `x` is outside the reference set and outside the accountable keys.
+  --
+  -- A prefix slashing can name a key without slashing it, so it can stay in the reference set.
+  --
+  -- Such a key is accountable only through double votes or through evidence in a tail.
   exact (unslashedKeys x.state).filter (Accountable shared left right)
 
-/-- The direct-safety bound on two tails, or hash evidence on the two runs.
-
-The bound says the unslashed stake at `x` is at most three times the accountable stake.
-
-Twice the larger drift of the two tails is added, each up to one epoch past `epoch`.
-
-The hash evidence is a SHA-256 collision or a zero root among the objects of the runs. -/
+/-- The direct-safety bound on two tails, or hash evidence on the two runs. -/
 def AccountableOrHashEvidence {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) (epoch : Nat) : Prop :=
+  -- The unslashed stake at `x` is at most three times the accountable stake.
+  --
+  -- The weights are the effective balances at the states of the runs.
   Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
       3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
+      -- Twice the larger drift of the two tails is added, each up to one epoch past `epoch`.
+      --
+      -- The drift charges twice the stake that leaves or loses balance after `x`.
+      --
+      -- It charges once the stake that joins or gains balance.
+      --
+      -- It also charges twice the stake active only at the previous epoch.
+      --
+      -- It is zero when the active validators and their effective balances stay the same.
+      --
+      -- They must stay so from the epoch before `x` to one epoch past `epoch`.
+      --
+      -- It is the largest drift that the tails observe, not a bound in closed form.
+      --
+      -- A key slashed by `x` stays out of the later drift only while its slashed flag stays set.
+      --
+      -- The proofs do not need that fact, because the drift is observed, not bounded.
       2 * max (derivedDrift epoch left) (derivedDrift epoch right) ∨
+    -- Otherwise SHA-256 collides in the root of a header of the runs.
+    --
+    -- Or a header or state of the runs has root zero.
     HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects)
 
 open Classical in
@@ -110,13 +100,7 @@ noncomputable def stateDriftOn (reference : Finset BLSPubkey)
 open Classical in
 /-- Two quorums with slashable common voters bound a subset of the unslashed stake at `x`.
 
-The bound is three times the accountable stake.
-
-The drift at the state of each quorum is added.
-
-Each quorum is a quorum call of its run, or the test of the step of its view.
-
-Both are in the tails: they target epoch `low` or later, and `x` is no later than its first slot.
+The bound is three times the accountable stake, plus the drift at the state of each quorum.
 
 A key slashed at a quorum and unslashed at `x` has slashing evidence in the tail of the quorum. -/
 private theorem view_pair_reference_bound {g x a b : ForkedBeaconState preset}
@@ -127,7 +111,11 @@ private theorem view_pair_reference_bound {g x a b : ForkedBeaconState preset}
     (enoughB : EnoughStake (shared.append right) high)
     {va : TerminalView a} {vb : TerminalView b} (terminalA : va.enough high)
     (terminalB : vb.enough high)
+    -- Each quorum is a quorum call of its run, or the test of the step of its view.
     (one : ViewQuorum (shared.append left) va) (two : ViewQuorum (shared.append right) vb)
+    -- Both are in the tails: they target epoch `low` or later.
+    --
+    -- The state `x` is no later than the first slot of epoch `low`.
     (lowerOne : low ≤ one.target.epoch.toNat) (lowerTwo : low ≤ two.target.epoch.toNat)
     (withinOne : one.target.epoch.toNat ≤ high) (withinTwo : two.target.epoch.toNat ≤ high)
     (overlap : ∀ key ∈ one.voters ∩ two.voters,
@@ -320,36 +308,33 @@ theorem accountable_safety_at_calls_reference {g x a b : ForkedBeaconState prese
 
 /-- A finalized field of the left run conflicts with a field of the right run at its epoch or later.
 
-The field of the right run is justified or finalized.
-
-Then two quorum calls of the runs have target epochs between the two epochs.
-
-The unslashed active stake at `x` is at most three times the accountable stake at `x`.
-
-The drift at the state of each call is added.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters.
-
-Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 through `j.epoch + 1`.
--/
+Then two quorum calls between the two epochs bound the stake at `x`, or there is hash evidence. -/
 theorem accountable_safety_at_calls {g x a b : ForkedBeaconState preset}
+    -- The runs start at one genesis built from deposits, and the preset meets the parameters.
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     (j : Checkpoint)
+    -- Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1.
+    --
+    -- This holds through epoch `j.epoch + 1`.
     (enoughA : EnoughStake (shared.append left) j.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) j.epoch.toNat)
+    -- The field of the right run is justified or finalized.
     (field : j = b.state.previousJustifiedCheckpoint ∨ j = b.state.currentJustifiedCheckpoint ∨
       j = b.state.finalizedCheckpoint)
     (ordered : a.state.finalizedCheckpoint.epoch ≤ j.epoch)
     (conflict : Conflict (shared.append left) (shared.append right) a.state.finalizedCheckpoint j) :
+    -- Two quorum calls of the runs have target epochs between the two epochs.
     (∃ one two : EitherCall (shared.append left) (shared.append right),
       a.state.finalizedCheckpoint.epoch.toNat ≤ one.targetEpoch ∧ one.targetEpoch ≤ j.epoch.toNat ∧
       a.state.finalizedCheckpoint.epoch.toNat ≤ two.targetEpoch ∧ two.targetEpoch ≤ j.epoch.toNat ∧
+      -- The unslashed active stake at `x` is at most three times the accountable stake at `x`.
+      --
+      -- The drift at the state of each call is added.
       Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
         3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
         stateDrift x one.state + stateDrift x two.state) ∨
+      -- Otherwise SHA-256 collides in the root of a header of the runs, or a root is zero.
       HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
   exact accountable_safety_at_calls_reference shared left right parameters genesis j enoughA enoughB
     field ordered conflict (fun _ _ => unslashedKeys x.state) (fun _ _ => Finset.Subset.refl _)
@@ -451,31 +436,21 @@ private theorem either_call_drift_le {g x a b : ForkedBeaconState preset}
   | inr c => exact (selected_call_drift_le shared right parameters low high starts c lower
       upper).trans (Nat.le_max_right _ _)
 
-/-- The finalized fields of the two runs conflict.
+/-- Conflicting finalized fields of the two runs give the direct-safety bound or hash evidence.
 
-The left finalized epoch is at most the right one.
-
-The conflict puts `x` no later than the first slot of the earlier finalized epoch.
-
-Then the unslashed active stake at `x` is at most three times the accountable stake at `x`.
-
-Twice the larger drift of the two tails is added.
-
-The drift of a tail is the largest over its states up to one epoch past the right finalized epoch.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters.
-
-The floor covers epoch calls after epoch 1 through one epoch past the right finalized epoch.
-
-Each run has active stake above 1.5 increments at each covered call. -/
+A tail's drift is the largest over its states up to one epoch past the right finalized epoch. -/
 theorem accountable_safety {g x a b : ForkedBeaconState preset}
+    -- The runs start at one genesis built from deposits, and the preset meets the parameters.
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
+    -- The floor covers epoch calls after epoch 1 through one epoch past the right finalized epoch.
+    --
+    -- Each run has active stake above 1.5 increments at each covered call.
     (enoughA : EnoughStake (shared.append left) b.state.finalizedCheckpoint.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) b.state.finalizedCheckpoint.epoch.toNat)
+    -- The left finalized epoch is at most the right one.
     (ordered : a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch)
+    -- The conflict puts `x` no later than the first slot of the earlier finalized epoch.
     (conflict : Conflict (shared.append left) (shared.append right)
       a.state.finalizedCheckpoint b.state.finalizedCheckpoint) :
     AccountableOrHashEvidence shared left right b.state.finalizedCheckpoint.epoch.toNat := by
@@ -507,19 +482,12 @@ theorem epoch_le_of_conflict {g x a b : ForkedBeaconState preset}
 
 /-- Direct accountable safety in its one-third form, for a stable set of unslashed active keys.
 
-The hypotheses are those of direct accountable safety.
-
-Moreover, each state of either tail up to one epoch past the later finalized epoch keeps the keys.
-
-Each such state has as unslashed active keys those of `x` not slashed since, with their balances.
-
-Its recent keys are all active, and the same holds at `x`.
-
-Then the accountable keys hold at least a third of the unslashed active stake at `x`.
+The accountable keys hold at least a third of the unslashed active stake at `x`.
 
 Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
 -/
 theorem accountable_safety_third {g x a b : ForkedBeaconState preset}
+    -- The hypotheses are those of direct accountable safety.
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     (enoughA : EnoughStake (shared.append left) b.state.finalizedCheckpoint.epoch.toNat)
@@ -527,6 +495,13 @@ theorem accountable_safety_third {g x a b : ForkedBeaconState preset}
     (ordered : a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch)
     (conflict : Conflict (shared.append left) (shared.append right)
       a.state.finalizedCheckpoint b.state.finalizedCheckpoint)
+    -- Moreover, each state of either tail keeps the keys.
+    --
+    -- This holds for its states up to one epoch past the later finalized epoch.
+    --
+    -- Each such state keeps as unslashed active keys those of `x` not slashed since, with balances.
+    --
+    -- Its recent keys are all active, and the same holds at `x`.
     (stableA : ∀ {u : ForkedBeaconState preset} (pre : Run config checks x u)
       (post : Run config checks u a), pre.append post = left →
         (getCurrentEpoch u.state).toNat ≤ b.state.finalizedCheckpoint.epoch.toNat + 1 →
@@ -572,37 +547,35 @@ private theorem view_drift {g x a : ForkedBeaconState preset}
 
 /-- A finalized field of the left view conflicts with a justified field of the right view.
 
-A view is the last state of a run, or one justification step on that state.
-
 The justified field is at the finalized epoch or later.
 
-Then the unslashed active stake at `x` is at most three times the accountable stake at `x`.
+Then the direct-safety bound holds up to one epoch past the justified epoch.
 
-Twice the larger drift of the two tails is added.
-
-The drift of a tail is the largest over its states up to one epoch past the justified epoch.
-
-It covers the test of a step, which counts at the last state within that horizon.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters.
-
-After epoch 1, active stake exceeds 1.5 increments through one epoch past `j.epoch`.
-
-This holds at the epoch calls of each run, and at the step of each view. -/
+Otherwise the hashes of the runs show evidence. -/
 theorem accountable_safety_justified_terminal {g x a b : ForkedBeaconState preset}
+    -- The runs start at one genesis built from deposits, and the preset meets the parameters.
+    --
+    -- A view is the last state of a run, or one justification step on it, as fork choice runs it.
+    --
+    -- That step counts at the last state, which lies within the horizon of the drift.
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) (va : TerminalView a) (vb : TerminalView b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     (j : Checkpoint)
+    -- After epoch 1, active stake exceeds 1.5 increments through one epoch past `j.epoch`.
+    --
+    -- This holds at the epoch calls of each run, and at the step of each view.
     (enoughA : EnoughStake (shared.append left) j.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) j.epoch.toNat)
     (terminalA : va.enough j.epoch.toNat) (terminalB : vb.enough j.epoch.toNat)
+    -- The justified field is at the finalized epoch or later.
     (field : j = vb.state.previousJustifiedCheckpoint ∨ j = vb.state.currentJustifiedCheckpoint)
     (ordered : va.state.finalizedCheckpoint.epoch ≤ j.epoch)
     (conflict : Conflict (shared.append left) (shared.append right)
       va.state.finalizedCheckpoint j) :
+    -- The drift of a tail is the largest over its states up to one epoch past the justified epoch.
+    --
+    -- It covers the test of a step, which counts at the last state within that horizon.
     AccountableOrHashEvidence shared left right j.epoch.toNat := by
   rcases view_conflicting_fields_quorums (shared.append left) (shared.append right)
       parameters genesis va vb j (field.imp_right Or.inl) ordered conflict with
@@ -619,29 +592,25 @@ theorem accountable_safety_justified_terminal {g x a b : ForkedBeaconState prese
 
 The justified field is at the finalized epoch or later.
 
-With that order, the conflict puts `x` no later than the first slot of the finalized epoch.
+Then the direct-safety bound holds up to one epoch past the justified epoch.
 
-Then the unslashed active stake at `x` is at most three times the accountable stake at `x`.
-
-Twice the larger drift of the two tails is added.
-
-The drift of a tail is the largest over its states up to one epoch past the justified epoch.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters.
-
-Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 through `j.epoch + 1`.
--/
+Otherwise the hashes of the runs show evidence. -/
 theorem accountable_safety_justified {g x a b : ForkedBeaconState preset}
+    -- The runs start at one genesis built from deposits, and the preset meets the parameters.
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     (j : Checkpoint)
+    -- Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1.
+    --
+    -- This holds through epoch `j.epoch + 1`.
     (enoughA : EnoughStake (shared.append left) j.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) j.epoch.toNat)
+    -- The justified field is at the finalized epoch or later.
     (field : j = b.state.previousJustifiedCheckpoint ∨ j = b.state.currentJustifiedCheckpoint)
     (ordered : a.state.finalizedCheckpoint.epoch ≤ j.epoch)
+    -- With that order, the conflict puts `x` no later than the first slot of the finalized epoch.
     (conflict : Conflict (shared.append left) (shared.append right) a.state.finalizedCheckpoint j) :
+    -- The drift of a tail is the largest over its states up to one epoch past the justified epoch.
     AccountableOrHashEvidence shared left right j.epoch.toNat :=
   accountable_safety_justified_terminal shared left right .realized .realized parameters genesis
     j enoughA enoughB trivial trivial field ordered conflict
@@ -705,30 +674,22 @@ theorem accountable_justified_unique_terminal {g x a b : ForkedBeaconState prese
 
 /-- Two justified fields of the runs at one epoch are equal, or they bound the accountable stake.
 
-`x` is no later than the first slot of that epoch.
-
-The unslashed active stake at `x` is then at most three times the accountable stake at `x`.
-
-Twice the larger drift of the two tails is added.
-
-The drift of a tail is the largest over its states up to one epoch past that epoch.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters.
-
-Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1 through `j.epoch + 1`.
--/
+The drift of a tail is the largest over its states up to one epoch past that epoch. -/
 theorem accountable_justified_unique {g x a b : ForkedBeaconState preset}
+    -- The runs start at one genesis built from deposits, and the preset meets the parameters.
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) (parameters : Parameters preset)
     (genesis : Genesis config checks g)
     (j k : Checkpoint)
+    -- Each run's active stake exceeds 1.5 increments at epoch calls after epoch 1.
+    --
+    -- This holds through epoch `j.epoch + 1`.
     (enoughA : EnoughStake (shared.append left) j.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) j.epoch.toNat)
     (fieldA : j = a.state.previousJustifiedCheckpoint ∨ j = a.state.currentJustifiedCheckpoint)
     (fieldB : k = b.state.previousJustifiedCheckpoint ∨ k = b.state.currentJustifiedCheckpoint)
     (epoch : j.epoch = k.epoch)
+    -- `x` is no later than the first slot of that epoch.
     (starts : x.state.slot.toNat ≤ j.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat) :
     j = k ∨ AccountableOrHashEvidence shared left right j.epoch.toNat :=
   accountable_justified_unique_terminal shared left right .realized .realized parameters genesis

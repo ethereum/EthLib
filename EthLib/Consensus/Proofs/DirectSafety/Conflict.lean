@@ -34,16 +34,14 @@ def Slashable {g a b : ForkedBeaconState preset} (left : Run config checks g a)
 
 /-- A key is accountable when the runs accepted two of its votes that a slashing would punish.
 
-The votes may come from the shared prefix or from either tail.
-
-It is also accountable when a block of either tail applied a slashing that names it.
-
-That slashing may be a proposer slashing.
-
-A slashing in the shared prefix does not make a key accountable by itself. -/
+It is also accountable when a block of either tail applied a slashing that names it. -/
 def Accountable {g x a b : ForkedBeaconState preset} (shared : Run config checks g x)
     (left : Run config checks x a) (right : Run config checks x b) (key : BLSPubkey) : Prop :=
+  -- The votes may come from the shared prefix or from either tail.
   Slashable (shared.append left) (shared.append right) key ∨
+    -- That slashing may be a proposer slashing.
+    --
+    -- A slashing in the shared prefix does not make a key accountable by itself.
     left.SlashingEvidence key ∨ right.SlashingEvidence key
 
 /-- A quorum call of either run.
@@ -144,33 +142,31 @@ private theorem checkpointPath_zero {g a : ForkedBeaconState preset}
 
 /-- A finalized field of the left view conflicts with a right field at its epoch or later.
 
-A view is the last state of a run, or one justification step on it.
-
-The field of the right view is justified or finalized.
-
-Then two quorums, one of each run, have target epochs between the two epochs.
-
-Each quorum is a quorum call of its run, or the test of the step of its view.
-
-The common voters of the two quorums are slashable.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters. -/
+Then two quorums between the two epochs have slashable common voters, or there is hash evidence. -/
 theorem view_conflicting_fields_quorums {g a b : ForkedBeaconState preset}
+    -- The runs start at one genesis built from deposits, and the preset meets the parameters.
     (left : Run config checks g a) (right : Run config checks g b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
+    -- A view is the last state of a run, or one justification step on it.
     (va : TerminalView a) (vb : TerminalView b) (j : Checkpoint)
+    -- The field of the right view is justified or finalized.
     (field : j = vb.state.previousJustifiedCheckpoint ∨ j = vb.state.currentJustifiedCheckpoint ∨
       j = vb.state.finalizedCheckpoint)
     (ordered : va.state.finalizedCheckpoint.epoch ≤ j.epoch)
     (conflict : Conflict left right va.state.finalizedCheckpoint j) :
+    -- Two quorums, one of each run, have target epochs between the two epochs.
+    --
+    -- Each quorum is a quorum call of its run, or the test of the step of its view.
     (∃ (one : ViewQuorum left va) (two : ViewQuorum right vb),
       va.state.finalizedCheckpoint.epoch.toNat ≤ one.target.epoch.toNat ∧
       one.target.epoch.toNat ≤ j.epoch.toNat ∧
       va.state.finalizedCheckpoint.epoch.toNat ≤ two.target.epoch.toNat ∧
       two.target.epoch.toNat ≤ j.epoch.toNat ∧
+      -- The common voters of the two quorums are slashable.
       ∀ key ∈ one.voters ∩ two.voters, Slashable left right key) ∨
+      -- Otherwise SHA-256 collides in the root of a header of the runs, or a root is zero.
+      --
+      -- That root is the root of a header or a state.
       HashEvidence (left.hashObjects ++ right.hashObjects) := by
   classical
   let f := va.state.finalizedCheckpoint
@@ -250,27 +246,28 @@ theorem view_conflicting_fields_quorums {g a b : ForkedBeaconState preset}
 
 /-- A finalized field of the left run conflicts with a field of the right run at its epoch or later.
 
-The field of the right run is justified or finalized.
+Then two quorum calls between the two epochs have slashable common voters.
 
-Then two quorum calls of the runs have target epochs between the two epochs.
-
-The common voters of the two calls are slashable.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters. -/
+Otherwise the hashes of the runs show evidence. -/
 theorem conflicting_fields_quorums {g a b : ForkedBeaconState preset}
+    -- The runs start at one genesis built from deposits, and the preset meets the parameters.
     (left : Run config checks g a) (right : Run config checks g b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     (j : Checkpoint)
+    -- The field of the right run is justified or finalized.
     (field : j = b.state.previousJustifiedCheckpoint ∨ j = b.state.currentJustifiedCheckpoint ∨
       j = b.state.finalizedCheckpoint)
     (ordered : a.state.finalizedCheckpoint.epoch ≤ j.epoch)
     (conflict : Conflict left right a.state.finalizedCheckpoint j) :
+    -- Two quorum calls of the runs have target epochs between the two epochs.
     (∃ one two : EitherCall left right,
       a.state.finalizedCheckpoint.epoch.toNat ≤ one.targetEpoch ∧ one.targetEpoch ≤ j.epoch.toNat ∧
       a.state.finalizedCheckpoint.epoch.toNat ≤ two.targetEpoch ∧ two.targetEpoch ≤ j.epoch.toNat ∧
+      -- The common voters of the two calls are slashable.
       ∀ key ∈ one.voters ∩ two.voters, Slashable left right key) ∨
+      -- Otherwise SHA-256 collides in the root of a header of the runs, or a root is zero.
+      --
+      -- That root is the root of a header or a state.
       HashEvidence (left.hashObjects ++ right.hashObjects) := by
   rcases view_conflicting_fields_quorums left right parameters genesis .realized .realized j field
       ordered conflict with ⟨one, two, lowerOne, upperOne, lowerTwo, upperTwo, overlap⟩ | hashes

@@ -1068,23 +1068,20 @@ namespace DirectSafety
 
 /-- Before Electra, the validators assigned an activation epoch over a window are few.
 
-They are counted at the end `z` of a run from `x`, without those already exited at `x`.
-
-A validator exited at `x` has an assigned activation epoch and an exit epoch not after `x`.
-
-The count is at most `bound k`, where `k` is the number of epochs from `x` to `z`.
-
-`bound 0` must hold the active and the scheduled validators at `x`.
-
-Each epoch may add the count churn of `bound`.
-
-The count churn is that of the active validators, which are all counted. -/
+The count is at most `bound k`, where `k` is the number of epochs from `x` to `z`. -/
 theorem windowActivations_le {x z : ForkedBeaconState preset}
     (tail : Run config checks x z) (early : z.fork < .pectra) (bound : Nat → Nat)
+    -- `bound 0` must hold the active and the scheduled validators at `x`.
     (start : activeCount x.state + x.state.validators.data.toList.countP (fun v =>
       decide (getCurrentEpoch x.state < v.activationEpoch) &&
         v.activationEpoch != FAR_FUTURE_EPOCH) ≤ bound 0)
+    -- Each epoch may add the count churn of `bound`.
+    --
+    -- The count churn is that of the active validators, which are all counted.
     (grows : ∀ t, bound t + cohortCap config (bound t) ≤ bound (t + 1)) :
+    -- They are counted at the end `z` of a run from `x`, without those already exited at `x`.
+    --
+    -- A validator exited at `x` has an assigned activation epoch and an exit epoch not after `x`.
     ((Finset.range z.state.validators.data.size).filter fun i =>
       (z.state.validators.data[i]?).any (·.activationEpoch != FAR_FUTURE_EPOCH) &&
         (x.state.validators.data[i]?).all fun w => w.activationEpoch == FAR_FUTURE_EPOCH ||

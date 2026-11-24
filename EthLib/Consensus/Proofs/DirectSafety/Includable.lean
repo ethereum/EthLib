@@ -17,49 +17,9 @@ import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 
 Signed direct safety finds keys that signed two conflicting attestation data.
 
-It does not show that a state could slash them, for three reasons.
+It does not show that a state could slash them.
 
-An aggregate names all its signers, and its signature cannot drop one.
-
-So an aggregate of one run may not verify against the registry of the other.
-
-A validator may already be withdrawable, and then no slashing touches it.
-
-A state checks a signature only under its previous or current fork version.
-
-The simplest sufficient case is a signature by the key alone on each data.
-
-Given two such signatures, the slashing that names the validator of the key alone is built here.
-
-A state returns, on it, what slashing that validator returns.
-
-The state must read the fork version of each signature at the target epoch of its data.
-
-It must have the genesis validators root of the signatures, as each state of the runs does.
-
-The validator must be slashable at the epoch of the state.
-
-At a state where the facts of a chain hold, take a key of a validator there.
-
-The validator is activated and not yet withdrawable at the epoch of that state.
-
-Take a block within the limits, at a later slot in the same epoch or in the next.
-
-The block is at the fork of that state.
-
-Its body holds the slashing.
-
-In the next epoch the slots cross one epoch end.
-
-The theorem then takes the three assumptions that its statement lists for that case.
-
-Suppose the steps before that slashing succeed; the count checks of the operations are not read.
-
-Then at the state they reach the slashing meets these and succeeds.
-
-Otherwise its validator is already slashed there.
-
-Both cases are under that inclusion and that success; nothing is said when either fails.
+This module builds that slashing for a key that signed each data alone.
 -/
 
 @[expose] public section
@@ -78,47 +38,52 @@ The preset must allow one attester or more, so that one index fits the list befo
 def singleAttesterSlashing (index : ValidatorIndex) (first second : AttestationData)
     (firstSignature secondSignature : BLSSignature) (attesters : 1 ≤ maxAttesters preset fork) :
     AttesterSlashing preset fork :=
+  -- An aggregate names all its signers, and its signature cannot drop one.
+  --
+  -- So an aggregate of one run may not verify against the registry of the other.
+  --
+  -- So a signature by the key alone on each data is the simplest case that suffices.
   let indices : ForkList .glamsterdam fork ValidatorIndex (maxAttesters preset fork) :=
     ⟨#[index], fun _ => attesters⟩
   ⟨⟨indices, first, firstSignature⟩, ⟨indices, second, secondSignature⟩⟩
 
 /-- A state returns, on the slashing of a key by two signed conflicting data, what slashing returns.
 
-The two data are a double or surround vote, each with the domain and signing root of a signature.
-
-Each domain is that of a fork version and of a genesis validators root.
-
-The two signatures are by the key alone, and each verifies on its signing root.
-
-The state reads the fork version of each signature at the target epoch of its data.
-
-It has the genesis validators root of the signatures.
-
-The validator of the key is slashable at the epoch of the state.
-
-Then the state returns what slashing the validator returns: it accepts exactly when it can slash. -/
+So it accepts exactly when it can slash. -/
 theorem processAttesterSlashing_single_eq_slashValidator {config : Config}
     {checks : SignatureChecks} {state : BeaconState preset fork} {genesisRoot : Root}
     {key : BLSPubkey} {first second : AttestationData} {firstFork secondFork : Fork}
     {firstDomain secondDomain : Domain} {firstRoot secondRoot : Root}
+    -- The two data are a double or surround vote.
     (conflict : isSlashableAttestationData first second = true)
+    -- Each data has the domain and signing root of a signature.
+    --
+    -- Each domain is that of a fork version and of a genesis validators root.
     (firstDomained : computeDomain config DOMAIN_BEACON_ATTESTER (config.forkVersion firstFork)
       genesisRoot = .ok firstDomain)
     (firstRooted : computeSigningRoot first firstDomain = .ok firstRoot)
     (secondDomained : computeDomain config DOMAIN_BEACON_ATTESTER
       (config.forkVersion secondFork) genesisRoot = .ok secondDomain)
     (secondRooted : computeSigningRoot second secondDomain = .ok secondRoot)
+    -- The two signatures are by the key alone, and each verifies on its signing root.
     (firstSignature secondSignature : BLSSignature)
     (firstVerified :
       checks.fastAggregateVerify #[key] (packBytes firstRoot) firstSignature = true)
     (secondVerified :
       checks.fastAggregateVerify #[key] (packBytes secondRoot) secondSignature = true)
+    -- The state has the genesis validators root of the signatures.
     (rooted : state.genesisValidatorsRoot = genesisRoot)
+    -- The state reads the fork version of each signature at the target epoch of its data.
+    --
+    -- It checks a signature only under its previous or current fork version.
     (windowFirst : state.forkVersions.versionAt first.target.epoch = config.forkVersion firstFork)
     (windowSecond :
       state.forkVersions.versionAt second.target.epoch = config.forkVersion secondFork)
     {index : ValidatorIndex} {validator : Validator}
     (found : getValidator state index = .ok validator) (keyEq : validator.pubkey = key)
+    -- The validator of the key is slashable at the epoch of the state.
+    --
+    -- A withdrawable validator is not, and no slashing touches it.
     (slashable : isSlashableValidator validator (getCurrentEpoch state) = true)
     (attesters : 1 ≤ maxAttesters preset fork) :
     processAttesterSlashing config checks state
@@ -134,7 +99,9 @@ theorem processAttesterSlashing_single_eq_slashValidator {config : Config}
 
 /-- The same, at a state that a run reaches from the genesis of the signatures.
 
-Such a state has that genesis validators root, so only the fork versions remain to check. -/
+Such a state has that genesis validators root, as each state of the runs does.
+
+So only the fork versions remain to check. -/
 theorem processAttesterSlashing_single_eq_slashValidator_run {config : Config}
     {checks : SignatureChecks} {g y : ForkedBeaconState preset} (run : Run config checks g y)
     {key : BLSPubkey} {first second : AttestationData} {firstFork secondFork : Fork}
@@ -351,31 +318,29 @@ private theorem slashable_of_active {config : Config} {checks : SignatureChecks}
     Bool.and_eq_true, decide_eq_true_eq]
   exact ⟨currentActive.1, UInt64.lt_of_lt_of_le currentActive.2 exitLe⟩
 
-/-- Take the record of a validator at position `i` of `x`, activated by the epoch of `x`.
+/-- A validator of `x`, activated by the epoch of `x`, is slashable at a turn in the next epoch.
 
-The state `x` is reached by a run from a genesis of deposits.
-
-The withdrawal delay must be positive.
-
-A run from `x` reaches a state at the fork of `x`, in the epoch after `x`.
-
-The steps of a block from there reach its turn, at the same epoch, where exits are ordered.
-
-If that record at `x` is unslashed, the epoch after `x` must be below its withdrawable epoch at `x`.
-
-Then the validator at position `i` of the turn, if unslashed there, is slashable there. -/
+This holds for the validator at its position in the turn, if it is unslashed there. -/
 private theorem slashable_of_nextEpoch {config : Config} {checks : SignatureChecks}
+    -- The state `x` is reached by a run from a genesis of deposits.
     {g x : ForkedBeaconState preset} (shared : Run config checks g x)
     (genesis : Genesis config checks g)
+    -- The withdrawal delay must be positive.
     (withdrawableDelay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    -- The validator at position `i` of `x` is activated by the epoch of `x`.
     {i : Nat} {validator : Validator} (found : x.state.validators.data[i]? = some validator)
     (activation : validator.activationEpoch ≤ getCurrentEpoch x.state)
     {advanced turn : BeaconState preset x.fork}
     {engine : ExecutionEngine preset x.fork} {block : BeaconBlock preset x.fork} {j : Nat}
+    -- A run from `x` reaches a state at the fork of `x`, in the epoch after `x`.
     (slots : Run config checks x ⟨x.fork, advanced⟩)
     (next : (getCurrentEpoch advanced).toNat = (getCurrentEpoch x.state).toNat + 1)
+    -- If that record at `x` is unslashed, the epoch after `x` is below its withdrawable epoch.
+    --
+    -- That withdrawable epoch is the one recorded at `x`.
     (withdrawableNext : validator.slashed = false →
       (getCurrentEpoch advanced).toNat < validator.withdrawableEpoch.toNat)
+    -- The steps of a block from there reach its turn, at the same epoch, where exits are ordered.
     (turned : SlashingTurn config checks engine advanced block j turn)
     (ordered : ExitsOrdered turn)
     (epochTurn : getCurrentEpoch turn = getCurrentEpoch advanced)
@@ -454,49 +419,7 @@ private theorem slashable_of_nextEpoch {config : Config} {checks : SignatureChec
 
 /-- At the turn of its slashing, a validator of `x` keeps its key.
 
-It is activated and not yet withdrawable at the epoch of `x`.
-
-A pair of votes has a signature on each signing root that verifies for its key alone.
-
-Take a block within the limits, applied at `x` at a later slot, at the fork of `x`.
-
-The block is in the epoch of `x` or in the next epoch.
-
-In the next epoch, the theorem takes three assumptions.
-
-The block's epoch is at most the first epoch of the chain plus its number of epochs.
-
-The signers condition reads the last slot of the epoch of `x`, once its roots are cached.
-
-Its signer epoch is the epoch before that of `x`, or epoch 0 itself when `x` is in epoch 0.
-
-The signers of that epoch hold at most the current total active balance of the cached state.
-
-That balance is the total active balance of the epoch of `x`.
-
-Before Altair, the signers are the unslashed attesters of the signer epoch's pending attestations.
-
-Only those attestations that match the source count.
-
-From Altair, the bound holds for each participation flag, not for the union of the flags.
-
-For a flag, the signers are the unslashed validators active in the signer epoch that set it.
-
-The comparison is required only when the reads of those balances and indices succeed.
-
-No fact of a chain gives it: signers of that epoch may be inactive in the epoch of `x`.
-
-If the chosen validator is unslashed at `x`, take its withdrawable epoch recorded at `x`.
-
-The block's epoch is below it.
-
-Its body contains the slashing of the validator by those votes, at a position.
-
-The steps before that slashing succeed, and reach a state.
-
-The slashing succeeds there.
-
-Otherwise the validator is already slashed there. -/
+The slashing succeeds there, or the validator is already slashed there. -/
 private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks : SignatureChecks}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     {g x : ForkedBeaconState preset} (shared : Run config checks g x)
@@ -510,30 +433,61 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
     (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
     (holds : ChainHolds config start step budget startEpoch blocks x.state)
     (within : (getCurrentEpoch x.state).toNat ≤ startEpoch + epochs)
+    -- The validator is a validator of `x`, activated and not yet withdrawable at its epoch.
     {i : Nat} {validator : Validator} (found : x.state.validators.data[i]? = some validator)
     (lifetime : validator.activationEpoch ≤ getCurrentEpoch x.state ∧
       getCurrentEpoch x.state < validator.withdrawableEpoch)
     {d1 d2 : AttestationData} {f1 f2 : Fork} {r1 r2 : Root} {z1 z2 : ForkedBeaconState preset}
     (pair : VotePairAt config checks g d1 d2 f1 f2 r1 r2 z1 z2)
     (sameFork1 : z1.fork = x.fork) (sameFork2 : z2.fork = x.fork)
+    -- A pair of votes has a signature on each signing root that verifies for its key alone.
     (s1 s2 : BLSSignature)
     (verified1 : checks.fastAggregateVerify #[validator.pubkey] (packBytes r1) s1 = true)
     (verified2 : checks.fastAggregateVerify #[validator.pubkey] (packBytes r2) s2 = true)
     (attesters : 1 ≤ maxAttesters preset x.fork)
+    -- The block is applied at `x` at a later slot, at the fork of `x`.
     {engine : ExecutionEngine preset x.fork} {block : BeaconBlock preset x.fork}
     {advanced turn : BeaconState preset x.fork} {j : Nat}
     (advancedOk : advanceSlotsAcross config checks (block.slot.toNat - x.state.slot.toNat) x =
       .ok ⟨x.fork, advanced⟩)
     (later : x.state.slot.toNat < block.slot.toNat)
+    -- The block is in the epoch of `x` or in the next epoch.
     (nextAtMost : block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
       (getCurrentEpoch x.state).toNat + 1)
+    -- In the next epoch, the theorem takes three assumptions.
     (crossing : (getCurrentEpoch x.state).toNat < block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat →
+      -- The block's epoch is at most the first epoch of the chain plus its number of epochs.
       block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs ∧
+      -- The signers condition reads the last slot of the epoch of `x`, once its roots are cached.
+      --
+      -- Its signer epoch is the epoch before that of `x`, or epoch 0 itself when `x` is in epoch 0.
+      --
+      -- Its signers hold at most the current total active balance of the cached state.
+      --
+      -- That balance is the total active balance of the epoch of `x`.
+      --
+      -- Before Altair, the signers are unslashed attesters of the epoch's pending attestations.
+      --
+      -- Only those pending attestations that match the source count.
+      --
+      -- From Altair, the bound holds for each participation flag, not for the union of the flags.
+      --
+      -- For a flag, the signers are the unslashed validators active in that epoch that set it.
+      --
+      -- The comparison is required only when the reads of those balances and indices succeed.
+      --
+      -- No fact of a chain gives it: signers of that epoch may be inactive in the epoch of `x`.
       SignersAtEnds config checks x (block.slot.toNat - x.state.slot.toNat) ∧
+      -- If the chosen validator is unslashed at `x`, take its withdrawable epoch recorded at `x`.
+      --
+      -- The block's epoch is below it.
       (validator.slashed = false →
         block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat < validator.withdrawableEpoch.toNat))
+    -- The steps before the slashing in its body succeed, and reach a state.
     (turned : SlashingTurn config checks engine advanced block j turn)
+    -- The block is within the limits.
     (bounded : BlockBounded limits block.body)
+    -- Its body contains the slashing of the validator by those votes, at a position.
     (atJ : block.body.attesterSlashings.data.toList[j]? =
       some (singleAttesterSlashing i.toUInt64 d1 d2 s1 s2 attesters)) :
     ∃ later, turn.validators.data[i]? = some later ∧ later.pubkey = validator.pubkey ∧
@@ -689,135 +643,122 @@ private theorem processAttesterSlashing_single_slashed {config : Config}
   have read : getValidator after named = .ok current := getValidator_eq_ok_iff.mpr currentFound
   exact ⟨current, read, currentKey, by simpa [slashedFlag, read, Except.map] using flag⟩
 
-/-- A key names a validator of `x` that is activated and not yet withdrawable at the epoch of `x`.
+/-- A block can slash a key of a validator of `x` that is activated and not yet withdrawable there.
 
-The validator is chosen before the block.
-
-Unlike an active validator, it may have exited; as with an active one, it may already be slashed.
-
-The state `x` lies on a run from a genesis of deposits.
-
-A pair of votes has a signature on each signing root that verifies for that key alone.
-
-Take any block within the limits, applied at `x` at a later slot, at the fork of `x`.
-
-The block is in the epoch of `x` or in the next epoch.
-
-In the next epoch, the theorem takes three assumptions.
-
-The block's epoch is at most the first epoch of the chain plus its number of epochs.
-
-The signers condition reads the last slot of the epoch of `x`, once its roots are cached.
-
-Its signer epoch is the epoch before that of `x`, or epoch 0 itself when `x` is in epoch 0.
-
-The signers of that epoch hold at most the current total active balance of the cached state.
-
-That balance is the total active balance of the epoch of `x`.
-
-Before Altair, the signers are the unslashed attesters of the signer epoch's pending attestations.
-
-Only those attestations that match the source count.
-
-From Altair, the bound holds for each participation flag, not for the union of the flags.
-
-For a flag, the signers are the unslashed validators active in the signer epoch that set it.
-
-The comparison is required only when the reads of those balances and indices succeed.
-
-No fact of a chain gives it: signers of that epoch may be inactive in the epoch of `x`.
-
-If the chosen validator is unslashed at `x`, take its withdrawable epoch recorded at `x`.
-
-The block's epoch is below it.
-
-So a block at the first slot of an epoch is covered from any state `x` in the epoch before it.
-
-A block two or more epochs after `x` is not covered.
-
-Its body contains the slashing of that validator by those votes, at a position.
-
-The steps before its operations and the slashings before that position succeed, and reach a state.
-
-There the validator still has the key.
-
-The slashing succeeds there.
-
-Otherwise the validator is already slashed there.
-
-After a slashing that succeeds, that validator still has the key and is slashed.
-
-This holds in the state right after that operation.
+At the state before its slashing, the slashing succeeds, or the validator is already slashed.
 
 The theorem says nothing about the state after the block.
 
-Both cases hold under that inclusion and that success; nothing is said when either fails.
-
-The signatures and the states that read each vote are assumptions, not facts of the run.
-
-The pair is a double or surround vote.
-
-Each vote is read at a state of a run from the genesis at the fork of `x`.
-
-Reading each vote at the fork of `x` suffices but is not necessary.
-
-A slashing at the next fork can still read a vote whose target is before that fork's epoch.
-
-An attester slashing of one validator fits at the fork of `x`.
-
-The facts of a chain hold at `x`, and the epoch of `x` is within the epochs of the chain.
-
-The step covers the limits.
-
-The withdrawal delay is positive.
-
-An increment is at most the least balance to activate.
-
-The slashings vector has a nonzero length. -/
+Nothing is said when that inclusion or that success fails. -/
 theorem processAttesterSlashing_single_slashed_or_accepted_at {config : Config}
     {checks : SignatureChecks}
+    -- The slashings vector has a nonzero length.
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
+    -- The state `x` lies on a run from a genesis of deposits.
     {g x : ForkedBeaconState preset} (shared : Run config checks g x)
     (genesis : Genesis config checks g)
     {start : RunStart} {step : BlockStep} {limits : BlockLimits}
     {budget epochs lastEpoch startEpoch blocks : Nat}
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
     (fits : startEpoch + epochs ≤ lastEpoch)
+    -- The step covers the limits.
     (covers : step.Covers preset limits start budget epochs)
+    -- The withdrawal delay is positive.
     (withdrawable : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    -- An increment is at most the least balance to activate.
     (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
+    -- The facts of a chain hold at `x`, and the epoch of `x` is within the epochs of the chain.
     (holds : ChainHolds config start step budget startEpoch blocks x.state)
     (within : (getCurrentEpoch x.state).toNat ≤ startEpoch + epochs)
+    -- A key names a validator of `x` that is activated and not yet withdrawable at its epoch.
+    --
+    -- Unlike an active validator, it may have exited.
+    --
+    -- As with an active one, it may already be slashed.
     {key : BLSPubkey}
     (lifetime : ∃ (i : Nat) (v : Validator), x.state.validators.data[i]? = some v ∧
       v.pubkey = key ∧ v.activationEpoch ≤ getCurrentEpoch x.state ∧
       getCurrentEpoch x.state < v.withdrawableEpoch)
+    -- The pair is a double or surround vote.
+    --
+    -- The signatures and the states that read each vote are assumptions, not facts of the run.
     {d1 d2 : AttestationData} {f1 f2 : Fork} {r1 r2 : Root} {z1 z2 : ForkedBeaconState preset}
     (pair : VotePairAt config checks g d1 d2 f1 f2 r1 r2 z1 z2)
+    -- Each vote is read at a state of a run from the genesis at the fork of `x`.
+    --
+    -- Reading each vote at the fork of `x` suffices but is not necessary.
+    --
+    -- A slashing at the next fork can still read a vote whose target is before that fork's epoch.
     (sameFork1 : z1.fork = x.fork) (sameFork2 : z2.fork = x.fork)
+    -- A pair of votes has a signature on each signing root that verifies for that key alone.
     (s1 s2 : BLSSignature)
     (verified1 : checks.fastAggregateVerify #[key] (packBytes r1) s1 = true)
     (verified2 : checks.fastAggregateVerify #[key] (packBytes r2) s2 = true)
+    -- An attester slashing of one validator fits at the fork of `x`.
     (attesters : 1 ≤ maxAttesters preset x.fork) :
+    -- The validator is chosen before the block.
     ∃ index validator, (getValidator x.state index = .ok validator ∧ validator.pubkey = key) ∧
+      -- Take any block within the limits, applied at `x` at a later slot, at the fork of `x`.
       ∀ {engine : ExecutionEngine preset x.fork} {block : BeaconBlock preset x.fork}
         {advanced turn : BeaconState preset x.fork} {j : Nat},
         advanceSlotsAcross config checks (block.slot.toNat - x.state.slot.toNat) x =
           .ok ⟨x.fork, advanced⟩ →
         x.state.slot.toNat < block.slot.toNat →
+        -- The block is in the epoch of `x` or in the next epoch.
+        --
+        -- So a block at the first slot of an epoch is covered from any `x` in the epoch before.
+        --
+        -- A block two or more epochs after `x` is not covered.
         block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ (getCurrentEpoch x.state).toNat + 1 →
+        -- In the next epoch, the slots cross one epoch end.
+        --
+        -- The theorem then takes three assumptions.
         ((getCurrentEpoch x.state).toNat < block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat →
+          -- The block's epoch is at most the first epoch of the chain plus its number of epochs.
           block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs ∧
+          -- The signers condition reads the last slot of the epoch of `x`.
+          --
+          -- It reads that slot once its roots are cached.
+          --
+          -- Its signer epoch is the epoch before that of `x`, or epoch 0 when `x` is in epoch 0.
+          --
+          -- Its signers hold at most the current total active balance of the cached state.
+          --
+          -- That balance is the total active balance of the epoch of `x`.
+          --
+          -- Before Altair, the signers are unslashed attesters of the epoch's pending attestations.
+          --
+          -- Only those pending attestations that match the source count.
+          --
+          -- From Altair, the bound holds for each participation flag, not for their union.
+          --
+          -- For a flag, the signers are the unslashed validators active in that epoch that set it.
+          --
+          -- The comparison is required only when the reads of those balances and indices succeed.
+          --
+          -- No fact of a chain gives it: signers of that epoch may be inactive in the epoch of `x`.
           SignersAtEnds config checks x (block.slot.toNat - x.state.slot.toNat) ∧
+          -- If the chosen validator is unslashed at `x`, take its withdrawable epoch at `x`.
+          --
+          -- The block's epoch is below it.
           (validator.slashed = false →
             block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat < validator.withdrawableEpoch.toNat)) →
+        -- The steps before its operations succeed.
+        --
+        -- So do the slashings before the position of the slashing in its body.
+        --
+        -- The count checks of the operations are not read.
         SlashingTurn config checks engine advanced block j turn →
         BlockBounded limits block.body →
+        -- Its body contains the slashing of that validator by those votes, at a position.
         block.body.attesterSlashings.data.toList[j]? =
           some (singleAttesterSlashing index d1 d2 s1 s2 attesters) →
+        -- At the state that those steps reach, the validator still has the key.
         ∃ later, getValidator turn index = .ok later ∧ later.pubkey = key ∧
+          -- The slashing succeeds there, or else the validator is already slashed there.
           (later.slashed = true ∨ ∃ after slashed, processAttesterSlashing config checks turn
             (singleAttesterSlashing index d1 d2 s1 s2 attesters) = .ok after ∧
+              -- Right after that operation, the validator still has the key and is slashed.
               getValidator after index = .ok slashed ∧ slashed.pubkey = key ∧
                 slashed.slashed = true) := by
   -- The key names a validator of `x`, activated and not yet withdrawable at its epoch.

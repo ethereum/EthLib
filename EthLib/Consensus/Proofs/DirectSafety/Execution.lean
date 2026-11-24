@@ -71,15 +71,14 @@ theorem _root_.EthLib.Consensus.Run.checkpointPath_restrict {g a : ForkedBeaconS
 
 /-- Two checkpoints conflict on two runs when the block headers of the runs differ.
 
-The headers are compared up to the first slot of the earlier of the two epochs.
-
-Only the epochs of the checkpoints are read, not their roots.
-
-So, unless the roots of their headers collide, the runs disagree on the checkpoint of that epoch.
+Unless the roots of their headers collide, the runs disagree on the checkpoint of the earlier epoch.
 
 That holds even when one finalized block is an ancestor of the other. -/
 def Conflict {g a b : ForkedBeaconState preset} (left : Run config checks g a)
     (right : Run config checks g b) (f j : Checkpoint) : Prop :=
+  -- The headers are compared up to the first slot of the earlier of the two epochs.
+  --
+  -- Only the epochs of the checkpoints are read, not their roots.
   left.checkpointPath (min f.epoch j.epoch) ≠ right.checkpointPath (min f.epoch j.epoch)
 
 end EthLib.Consensus.DirectSafety

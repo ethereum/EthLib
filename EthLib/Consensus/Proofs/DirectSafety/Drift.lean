@@ -129,17 +129,14 @@ theorem call_after_reference {g x a : ForkedBeaconState preset}
 
 /-- The unslashed active keys of a state are those of `x`, with the same effective balances.
 
-The unslashed keys active at the current epoch are those of `x` that are not slashed since.
-
-Every unslashed key active at the previous epoch is active at the current epoch.
-
-Each unslashed active key has at this state the effective balance that it has at `x`.
-
 A slashing keeps the set stable: a slashed key leaves both the support and the reference. -/
 def StableKeys (x y : ForkedBeaconState preset) : Prop := by
   classical
+  -- The unslashed keys active at the current epoch are those of `x` that are not slashed since.
   exact unslashedKeys y.state = (unslashedKeys x.state).filter (¬ SlashedAt y.state ·) ∧
+    -- Every unslashed key active at the previous epoch is active at the current epoch.
     recentKeys y.state ⊆ activeKeys y.state ∧
+    -- Each unslashed active key has at this state the effective balance that it has at `x`.
     ∀ key ∈ unslashedKeys y.state, effectiveWeight y.state key = effectiveWeight x.state key
 
 /-- A state at the genesis epoch has stable unslashed active keys against itself.
