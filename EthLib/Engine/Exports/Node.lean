@@ -101,8 +101,6 @@ The arguments are the chain configuration, the state after the block, and the bl
 
 The block is the fork name, the header and its ommers, the header and each ommer in RLP form.
 
-Its header must commit to its ommers, to no transaction and, from Shapella, to no withdrawal.
-
 Then come the terminal total difficulty, the total difficulty of the block and the requests. -/
 def runNodeOf (args : PyValue × ByteArray × (String × ByteArray × List ByteArray) × Nat × Nat ×
     PyValue) : Result PyValue := do
@@ -121,6 +119,8 @@ def runNodeOf (args : PyValue × ByteArray × (String × ByteArray × List ByteA
   -- The block crosses without its body, so its header must commit to an empty body.
   --
   -- Its header must also commit to its ommers.
+  --
+  -- An empty body is no transaction and, from Shapella, no withdrawal.
   let some node := Node.start chain.config transition block chain.state totalDifficulty
     | rejectArgument none
         "anchor: no hash, a body that is not empty, or a total below the difficulty"

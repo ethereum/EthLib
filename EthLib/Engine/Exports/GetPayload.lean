@@ -12,24 +12,6 @@ public import EthLib.Execution.Exports.Transition
 
 The C export of `engine_getPayloadV1` through `engine_getPayloadV6`.
 
-The supplied store is a snapshot of completed builds, with no payload ID twice.
-
-An entry holds an ID, a fork name, and the four results of the payload build export.
-
-They are the block in RLP form, the accounts after it, the requests and the block value in wei.
-
-Then come the network blob transactions, the override flag and the block access list.
-
-Lean decodes the network transactions and joins their sidecars in order.
-
-The method checks this bundle against the block, using the embedded trusted setup.
-
-The configuration determines the fork at the block's number and timestamp.
-
-A malformed store or method name has code 0.
-
-A parameter or request error has code 32602, 38001 or 38005.
-
 A second export reads a result of the method at a fork, and writes it back as JSON.
 -/
 
@@ -50,6 +32,11 @@ abbrev PayloadEntry := PayloadId × String × ByteArray × ByteArray × List Byt
 
 /-- Decode one snapshot entry; the block access list must be given exactly from Glamsterdam. -/
 def storedPayloadOf (entry : PayloadEntry) : Result (PayloadId × StoredPayload) := do
+  -- An entry holds an ID, a fork name, and the four results of the payload build export.
+  --
+  -- They are the block in RLP form, the accounts after it, the requests and the block value in wei.
+  --
+  -- Then come the network blob transactions, the override flag and the block access list.
   let (id, forkName, block, accounts, requests, blockValue, sidecars, shouldOverrideBuilder,
     accessList) := entry
   let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
@@ -63,6 +50,7 @@ def storedPayloadOf (entry : PayloadEntry) : Result (PayloadId × StoredPayload)
     fun e => UnreadArgument.mk s!"store: {e.message}")
   let blockAccessList ← storeField (f := .glamsterdam) (fork := fork) "block access list"
     accessList
+  -- Lean decodes the network transactions and joins their sidecars in order.
   let network ← sidecars.mapM fun bytes =>
     toResult none ((decodeNetwork fork bytes).mapError fun e =>
       UnreadArgument.mk s!"store: network error {e.code}")
@@ -97,16 +85,23 @@ instance : ExportError GetPayloadError where
 /-- The answer to a get-payload request, from a snapshot of build processes. -/
 def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyValue := do
   let (config, entries, request) := args
+  -- The configuration determines the fork at the block's number and timestamp.
   let config ← configOfJson config.toJson
+  -- A malformed store has code 0.
   let entries ← entries.mapM storedPayloadOf
+  -- The supplied store is a snapshot of completed builds, with no payload ID twice.
   unless (entries.map (·.1)).Nodup do rejectArgument none "store: two entries with one payload ID"
   let request := request.toJson
+  -- A request without a method, or with a malformed method name, has code 0.
   let some method := (request.getObjValAs? String "method").toOption
     | rejectArgument none "request: no method"
   let some version := getPayloadVersion method | rejectArgument none s!"no method {method}"
+  -- A parameter error has code 32602.
   let id ← toResult "engine error" (getPayloadParams (request.getObjValD "params"))
+  -- The method checks the bundle against the block, using the embedded trusted setup.
   let setup ← toResult none ((Cryptography.Kzg.Exports.embeddedSetup ()).mapError
     fun e => UnreadArgument.mk s!"setup: {e.message}")
+  -- A request error has code 38001 or 38005, and a store that fails a check has code 0.
   let r ← toResult none (getPayload config setup (fun id => entries.lookup id) version id)
   return .ofJson (getPayloadResultJson (r.result version))
 

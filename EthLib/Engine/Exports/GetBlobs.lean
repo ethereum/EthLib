@@ -14,15 +14,7 @@ The blob pool crosses as a list of entries, one per versioned hash.
 
 Whether the pool serves, its request limit and the active fork of the node cross beside it.
 
-The request is a JSON-RPC request object, with its method and its parameters.
-
-The result is the JSON answer, as a Python value.
-
-A JSON-RPC error has the code of its Engine API error, without the sign: 32602, 38004 or 38005.
-
-A malformed pool, limit or fork has code 0.
-
-So do an unknown method and an argument that Lean cannot read.
+An argument that Lean cannot read has code 0.
 
 A second export reads the JSON result of any version, and writes it back.
 -/
@@ -61,26 +53,34 @@ def getBlobsVersion (method : String) : Option Nat := methodVersion "getBlobs" m
 The arguments are the pool's entries, whether it serves, its limit, the fork and the request. -/
 def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Result PyValue := do
   let (entries, serving, maxRequest, forkName, request) := args
+  -- A malformed pool has code 0.
   let entries ← entries.mapM pooledOf
   -- A pool holds each blob once, so two entries with one hash are malformed input.
   unless (entries.map (·.1)).Nodup do
     rejectArgument none "pool: two entries with one versioned hash"
   -- The method is specified up to Glamsterdam, the fork of its version 4.
+  --
+  -- Another fork has code 0.
   let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
-  -- The limit must be at least 128.
+  -- The limit must be at least 128, or the export raises with code 0.
   if below : maxRequest < MIN_BLOBS_REQUEST_LIMIT then
     rejectArgument none s!"pool: a limit of {maxRequest}, below {MIN_BLOBS_REQUEST_LIMIT}"
   else
   let pool : BlobPool := {
     lookup := fun hash => (entries.find? (·.1 == hash)).map (·.2)
     serving, maxRequest, le_maxRequest := Nat.not_lt.1 below }
+  -- The request is a JSON-RPC request object, with its method and its parameters.
   let request := request.toJson
+  -- An unknown method has code 0.
   let some method := (request.getObjValAs? String "method").toOption
     | rejectArgument none "request: no method"
   let some version := getBlobsVersion method | rejectArgument none s!"no method {method}"
+  -- A parameter error has the code of its Engine API error, without the sign: 32602.
+  --
   -- The parameters are decoded first, before any check of the fork or of the request size.
   let (hashes, bits) ← toResult "engine error"
     (getBlobsParams version (request.getObjValD "params"))
+  -- A request error has code 38004 or 38005.
   let answer : Json ← match version, bits with
     | 1, _ =>
       let blobs ← toResult "engine error" (getBlobsV1 pool fork hashes)
@@ -96,6 +96,7 @@ def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Res
       pure (getBlobsV4Json cells)
     -- The parameters of version 4 always hold a bitarray, so this case never happens.
     | _, none => rejectArgument none "params: no bitarray"
+  -- The result is the JSON answer, as a Python value.
   return .ofJson answer
 
 /-- The answer to an `engine_getBlobs` request, from a blob pool.

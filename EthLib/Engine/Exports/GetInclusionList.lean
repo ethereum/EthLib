@@ -13,10 +13,6 @@ The candidates of the node cross as a list of byte strings, in the order that th
 The request is a JSON-RPC request object, with its method and its parameters.
 
 The result is the JSON answer, an array of byte strings, as a Python value.
-
-A JSON-RPC error has the code of its Engine API error, without the sign: 32602.
-
-A request without a method, or with another method, has code 0.
 -/
 
 public section
@@ -29,7 +25,9 @@ open EthLib.Exports (Result PyValue pyExport toResult)
 /-- The answer to the request, from the candidates of the node. -/
 def getInclusionListOf (args : List ByteArray × PyValue) : Result PyValue := do
   let (candidates, request) := args
+  -- A request without a method, or with another method, has code 0.
   let params ← paramsOfMethod (· == "engine_getInclusionListV1") request
+  -- A JSON-RPC error has the code of its Engine API error, without the sign: 32602.
   let answer ← toResult "engine error" (getInclusionList candidates params)
   return .ofJson (Json.inclusionListJson answer)
 

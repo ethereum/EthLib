@@ -19,21 +19,7 @@ Each is the value of its JSON, as `json.loads` gives it.
 
 Python refuses a value that cannot cross, such as a `float`, before Lean runs.
 
-The configuration is an object with the chain ID and the activations.
-
-Each activation is a list of a fork name, `block` or `time`, and a number.
-
-The request is a JSON-RPC request object, with its method and its parameters.
-
-The result is the value of the JSON of the payload status.
-
-Its validation error starts with the code of the reason, then a colon.
-
-From version 6 the status has version 2, with a `null` inclusion list verdict.
-
-A JSON-RPC error has the code of its Engine API error: 32602 or 38005.
-
-An unknown method, or an argument that Lean cannot read, has code 0.
+An argument that Lean cannot read has code 0.
 -/
 
 public section
@@ -72,6 +58,7 @@ The verdict of a valid payload needs the execution rules of Bogota, so that case
 No payload of Hegotá is valid here yet, since its block does not run. -/
 def statusJson (version : Nat) (status : PayloadStatus) (reason : Option PayloadError) :
     Result Json := do
+  -- The validation error starts with the code of the reason, then a colon.
   let error := reason.map fun e => s!"{e.code}: {reasonMessage e}"
   if version < 6 then return Json.payloadStatusJson status error
   if status.status = .valid then
@@ -102,13 +89,20 @@ def newPayloadVersion (method : String) : Option Nat := methodVersion "newPayloa
 The arguments are the chain configuration and the request. -/
 def newPayloadOf (args : PyValue × PyValue) : Result PyValue := do
   let (config, request) := args
+  -- The configuration is an object with the chain ID and the activations.
+  --
+  -- Each activation is a list of a fork name, `block` or `time`, and a number.
   let config ← configOfJson config.toJson
+  -- The request is a JSON-RPC request object, with its method and its parameters.
   let request := request.toJson
+  -- A request without a method, or with an unknown method, has code 0.
   let some method := (request.getObjValAs? String "method").toOption
     | rejectArgument none "request: no method"
   let some version := newPayloadVersion method | rejectArgument none s!"no method {method}"
   let params := request.getObjValD "params"
+  -- A JSON-RPC error has the code of its Engine API error: 32602 or 38005.
   let (status, reason) ← toResult "engine error" (newPayloadWithoutState config version params)
+  -- The result is the value of the JSON of the payload status.
   return .ofJson (← statusJson version status reason)
 
 /-- The payload status of an `engine_newPayload` request, without the parent's state.
@@ -122,17 +116,7 @@ def newPayloadExport (args : PyValue) : Result PyValue :=
 
 The arguments are the chain configuration, the state, the recent blocks, two totals and the request.
 
-The state takes the form of the state root export.
-
-The recent blocks are a list, each the fork name, the header and its ommers.
-
-The header and each ommer are in RLP form.
-
 The totals are the terminal total difficulty, and the total difficulty of the last recent block.
-
-The terminal total difficulty must be below `2^256`, or the export raises with code 0.
-
-The terminal block hash and number are zero, since the check of the method does not read them.
 
 A valid payload also gives the RLP forms of its header and of the accounts after it. -/
 def newPayloadOnChainOf
@@ -140,13 +124,20 @@ def newPayloadOnChainOf
       PyValue) :
     Result (PyValue × Option ByteArray × Option ByteArray) := do
   let (config, state, recent, terminalTotalDifficulty, totalDifficulty, request) := args
+  -- The terminal total difficulty must be below `2^256`, or the export raises with code 0.
   unless terminalTotalDifficulty < 2 ^ 256 do
     rejectArgument none
       s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256"
+  -- The terminal block hash and number are zero, since the check of the method does not read them.
   let transition : TransitionConfiguration := {
     terminalTotalDifficulty := BitVec.ofNat 256 terminalTotalDifficulty
     terminalBlockHash := 0
     terminalBlockNumber := 0 }
+  -- The state takes the form of the state root export.
+  --
+  -- The recent blocks are a list, each the fork name, the header and its ommers.
+  --
+  -- The header and each ommer are in RLP form.
   let chain ← Execution.Blocks.Exports.chainOf config state recent
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption

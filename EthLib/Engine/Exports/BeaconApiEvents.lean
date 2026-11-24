@@ -18,8 +18,6 @@ Each first computes the forkchoice update of the proposer, as the exports of tha
 The event is the name of its topic and the text of its JSON data.
 
 A step of the proposer that fails gives the code of its error.
-
-An input that does not decode, an unknown name or a fork that the export does not cover has code 0.
 -/
 
 public section
@@ -38,10 +36,13 @@ def payloadAttributesEventOf (args : String × String × ByteArray × Option PyV
     ByteArray × ByteArray × List ByteArray × UInt64) : Result (Option (String × String)) := do
   let (name, fork, state, replacements, safe, finalized, feeRecipient, powChain,
     terminalNumber) := args
+  -- An unknown name has code 0.
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
+  -- A fork that the export does not cover has code 0.
   let ⟨bellatrix⟩ ← holds (.bellatrix ≤ fork ∧ fork < .glamsterdam)
     s!"no payload preparation at {fork.name}"
+  -- An input that does not decode has code 0.
   let state ← decodeInput (BeaconState preset fork) state
   let safe ← decodeInput Root safe
   let finalized ← decodeInput Root finalized
