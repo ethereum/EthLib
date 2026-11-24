@@ -1007,6 +1007,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Ssz.readUintBytes` and its lemma `readUintBytes_eq` are removed ([#4303](https://github.com/ethereum/EthLib/issues/4303)).
+  The function had the body of `Ssz.readUint`, and the lemma proved the two equal.
+  Migration: call `readUint data.data start width` in place of `readUintBytes data start width`.
+
 - Four theorems take new names, with unchanged statements ([#4245](https://github.com/ethereum/EthLib/issues/4245)).
   `initiateValidatorExit_exists_ok` (`Totality/Registry.lean`) is now `initiateValidatorExit_total_of_lt_electra`.
   `slashValidator_ok_of_room` (`Totality/SlashValidator.lean`) is now `slashValidator_total_of_room`.

@@ -45,19 +45,6 @@ class LawfulSszType (α : Type) [SszType α] : Prop where
       decode data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data.data)) := by
     intro; rfl
 
-/-- A byte of a byte array is the byte at the same place of its data. -/
-private theorem getElem?_data (data : ByteArray) (i : Nat) : data[i]? = data.data[i]? := by
-  by_cases h : i < data.size
-  · simp [h, ByteArray.size_data]
-    rfl
-  · simp [h, ByteArray.size_data]
-
-/-- An integer read from a byte array is the one read from its bytes. -/
-theorem readUintBytes_eq (data : ByteArray) (start width : Nat) :
-    readUintBytes data start width = readUint data.data start width := by
-  unfold readUintBytes readUint
-  simp only [getElem?_data]
-
 namespace SszType
 
 variable {α : Type} [SszType α]

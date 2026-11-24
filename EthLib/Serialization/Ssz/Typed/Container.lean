@@ -5,23 +5,11 @@ public import EthLib.Serialization.Ssz.Typed.Class
 /-!
 # Typed SSZ values: containers
 
-A container is a Lean structure whose fields are SSZ types.
-
-Its fields, in declaration order, form a tuple nested to the right, such as `α × (β × γ)`.
-
-The tuple gives the field types and values, and the structure converts to and from it.
-
-A progressive container also places its fields on a layout of active positions and gaps.
-
-That layout follows [EIP-7495][eip7495].
-
-A container reads and writes its bytes as byte arrays, field by field.
-
-Its slicing repeats the steps of the untyped codec in the same order, so it refuses the same input.
-
-Its root is that of the untyped container, computed from the roots of its fields.
+A container is a Lean structure whose fields are SSZ types, read and written as byte arrays.
 
 The rules are stated in EthLib's own terms, one step per comment.
+
+Source: [EIP-7495][eip7495] for the layout of a progressive container.
 
 [eip7495]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-7495.md#progressivecontaineractive_fields
 -/
@@ -57,15 +45,13 @@ def readByteSlots : List Desc → ByteArray → Nat → Except Err (List ByteSlo
       if position + bytesPerOffset > data.size then
         throw (.truncated (position + bytesPerOffset) data.size)
       let (rest, ending) ← readByteSlots fields data (position + bytesPerOffset)
-      return (.body (readUintBytes data position bytesPerOffset) :: rest, ending)
+      return (.body (readUint data.data position bytesPerOffset) :: rest, ending)
 
-/--
-The slots of a struct's fixed part, and where that part ends.
-
-The budget is settled first, so no slot is read past the input.
--/
+/-- The slots of a struct's fixed part, and where that part ends. -/
 def byteStructSlots (fields : List Desc) (data : ByteArray) :
     Except Err (List ByteSlot × Nat) := do
+  -- The budget is settled first, so no slot is read past the input.
+  --
   -- EthLib's own bound: an input of `2^32` bytes or more is refused.
   --
   -- Serialization never writes one, since four-byte offsets could not address it.
@@ -148,6 +134,9 @@ def assembleBytes (inline : List Bool) (parts : List ByteArray) : Except Err Byt
 
 /-- The fields of a container, as a tuple of SSZ types nested to the right. -/
 class SszFields (β : Type) where
+  -- The fields, in declaration order, form a tuple such as `α × (β × γ)`.
+  --
+  -- The tuple gives the field types and values, and the structure converts to and from it.
   /-- The field types, in order. -/
   descs : List Desc
   /-- The untyped field values, in order. -/
@@ -233,14 +222,14 @@ def encodeStruct {β : Type} [SszFields β] (b : β) : Except Err ByteArray := d
 /--
 The tuple of fields that the bytes of a struct encode.
 
-The steps run in the order of the untyped codec, so a refusal names the same rule.
-
-The fixed fields are decoded before any offset is trusted, if there are offsets at all.
-
 It is compiled once for all containers, since a copy for each one would hold all its fields.
 -/
 @[noinline, nospecialize]
 def decodeStruct {β : Type} [SszFields β] (data : ByteArray) : Except Err β := do
+  -- The steps run in the order of the untyped codec, so the decoder refuses the same input.
+  --
+  -- So a refusal names the same rule.
+  --
   -- EthLib's step 1, the budget, then step 2, the fixed part, read in place.
   let (slots, leading) ← byteStructSlots (SszFields.descs β) data
   -- With no offsets, step 3 checks that the fixed part is the whole input, then fields decode.
@@ -248,6 +237,8 @@ def decodeStruct {β : Type} [SszFields β] (data : ByteArray) : Except Err β :
     let bodies ← byteBodies data slots leading
     (← SszFields.decodeSlots slots) bodies
   -- With offsets, the fixed fields decode first, then step 3 checks the offsets as a whole.
+  --
+  -- So the fixed fields are decoded before any offset is trusted.
   --
   -- Step 4 then decodes each body, in declaration order.
   else
@@ -267,6 +258,8 @@ def SszType.container {σ β : Type} [SszFields β] (names : List String) (field
   ofValue
     | .seq values => build <$> SszFields.ofValues values
     | _ => .error .typeMismatch
+  -- The root is that of the untyped container, computed from the roots of its fields.
+  --
   -- Container: merkleize the roots of the fields, one chunk per field, with no mix-in.
   root s := do summaryRoot (.container names) (← SszFields.roots (fields s))
   -- Container: the fields in declaration order, fixed parts and offsets, then the bodies.
@@ -276,18 +269,21 @@ def SszType.container {σ β : Type} [SszFields β] (names : List String) (field
 /--
 The progressive container with the given layout and field names.
 
-The layout holds one bit per position: a set bit holds the next field, a clear bit is a gap.
-
 The two conversions must undo each other, which the proofs of the instance check.
 -/
 @[instance_reducible]
 def SszType.progressiveContainer {σ β : Type} [SszFields β] (active : List Bool)
     (names : List String) (fields : σ → β) (build : β → σ) : SszType σ where
+  -- EIP-7495: the layout places the fields on a list of active positions and gaps.
+  --
+  -- It holds one bit per position: a set bit holds the next field, a clear bit is a gap.
   desc := .progressiveContainer active names (SszFields.descs β)
   toValue s := .seq (SszFields.toValues (fields s))
   ofValue
     | .seq values => build <$> SszFields.ofValues values
     | _ => .error .typeMismatch
+  -- The root is that of the untyped container, computed from the roots of its fields.
+  --
   -- EIP-7495: `H(r || layout)`, `r` the progressive root of one chunk per layout position.
   --
   -- Here `H` is SHA-256, and the layout is packed as bits into one chunk.

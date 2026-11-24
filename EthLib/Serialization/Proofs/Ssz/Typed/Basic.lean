@@ -32,7 +32,7 @@ theorem SszType.decodeUint_eq {α : Type} (width : Nat) (make : Nat → α) (dat
   unfold decodeUint
   by_cases size : data.size = width
   · have below := readUint_lt data.data 0 width
-    simp [Ssz.deserialize, ByteArray.size_data, size, readUintBytes_eq, ofUint, below]
+    simp [Ssz.deserialize, ByteArray.size_data, size, ofUint, below]
   · simp [Ssz.deserialize, ByteArray.size_data, size]
     rfl
 
