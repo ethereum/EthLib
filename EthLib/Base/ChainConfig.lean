@@ -115,19 +115,32 @@ def reached : Activation → (number timestamp : Nat) → Bool
 
 /-- One activation comes no later than another along a chain.
 
-Blocks of a chain grow in number and in timestamp, and activations by number come first. -/
+A block number and a timestamp are different units, so a rule orders the two kinds.
+
+Forks by timestamp come at or after forks by block, by the additional rules of [EIP-6122][eip-6122].
+
+[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#additional-rules -/
 def le : Activation → Activation → Prop
+  -- Two forks by block: block numbers grow along a chain, so the lower number comes first.
   | block m, block n => m ≤ n
+  -- A fork by block comes before every fork by timestamp, as EIP-6122 requires.
   | block _, time _ => True
+  -- So a fork by timestamp never comes before a fork by block.
   | time _, block _ => False
+  -- Two forks by timestamp: timestamps grow along a chain, so the earlier one comes first.
   | time s, time t => s ≤ t
 
 instance : LE Activation := ⟨le⟩
 
+/-- Whether one activation comes no later than another, decided case by case as the order is. -/
 instance : (a b : Activation) → Decidable (a ≤ b)
+  -- Two forks by block compare their numbers.
   | block m, block n => Nat.decLe m n
+  -- A fork by block always comes first, by EIP-6122.
   | block _, time _ => isTrue trivial
+  -- A fork by timestamp never comes before a fork by block.
   | time _, block _ => isFalse id
+  -- Two forks by timestamp compare their timestamps.
   | time s, time t => Nat.decLe s t
 
 end Activation
