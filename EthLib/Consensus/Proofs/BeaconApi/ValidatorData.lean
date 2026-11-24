@@ -733,16 +733,18 @@ theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset
       inRangeFault]
     simp
 
-/-- Before Electra, the first match is among the attestations that the construction joins. -/
-theorem aggregateAttestation_first_mem_of_lt_electra
+/-- The first match is among the attestations with its data, which the construction joins. -/
+theorem mem_filter_data_of_find?_matchesRequest
     {attestations : List (Attestation preset fork)} {dataRoot : Root} {slot : Slot}
     {committeeIndex : CommitteeIndex} {first : Attestation preset fork}
     (found : attestations.find? (matchesRequest · dataRoot slot committeeIndex) = some first) :
     first ∈ attestations.filter (·.data = first.data) :=
   List.mem_filter.mpr ⟨List.mem_of_find?_eq_some found, by simp⟩
 
-/-- From Electra, the first match is among the single attestations that the construction joins. -/
-theorem aggregateAttestation_first_mem_of_electra {singles : List SingleAttestation}
+/-- The first match is among the single attestations of the committee with its data.
+
+The construction from Electra joins exactly those. -/
+theorem mem_filter_data_committee_of_find?_singleMatchesRequest {singles : List SingleAttestation}
     {dataRoot : Root} {slot : Slot} {committeeIndex : CommitteeIndex} {first : SingleAttestation}
     (found : singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first) :
     first ∈ singles.filter (fun single =>
@@ -753,7 +755,7 @@ theorem aggregateAttestation_first_mem_of_electra {singles : List SingleAttestat
 
 /-- Before Electra, code 500 of the aggregate answer comes exactly when one of three faults occurs.
 
-That refusal needs a first match whose block is verified.
+That refusal also needs a first match whose block is verified.
 
 The committee has no value, or an attestation with the data of that match has bits of another size.
 
@@ -782,13 +784,13 @@ theorem aggregateAttestation_internal_iff_faults_of_lt_electra {state : BeaconSt
   simp only [matchesRequest, Bool.and_eq_true, beq_iff_eq] at matched
   rw [exists_constructAggregate_eq_error_iff, matched.1.2, matched.2, getAggregateSignature,
     Signatures.exists_aggregate_map_eq_error_iff
-      (aggregateAttestation_first_mem_of_lt_electra found)]
+      (mem_filter_data_of_find?_matchesRequest found)]
 
 /-- From Electra, code 500 of the aggregate answer comes exactly when one of four faults occurs.
 
-That refusal needs a first match whose block is verified, and a committee index in range.
+That refusal also needs a verified first match, and an index below the most committees of a slot.
 
-The committee has no value, an attester is outside it, or before Gloas it exceeds `maxAttesters`.
+The committee has no value, an attester is outside it, or before Gloas it is too large.
 
 The fourth is that the signature of a joined single attestation does not decode. -/
 theorem aggregateAttestation_internal_iff_faults_of_electra {state : BeaconState preset fork}
@@ -821,7 +823,8 @@ theorem aggregateAttestation_internal_iff_faults_of_electra {state : BeaconState
   have matched := List.find?_some found
   simp only [singleMatchesRequest, Bool.and_eq_true, beq_iff_eq] at matched
   rw [exists_constructAggregateOfSingleAttestations_eq_error_iff, matched.1.2,
-    Signatures.exists_aggregate_map_eq_error_iff (aggregateAttestation_first_mem_of_electra found)]
+    Signatures.exists_aggregate_map_eq_error_iff
+      (mem_filter_data_committee_of_find?_singleMatchesRequest found)]
   -- An index in range is not a fault.
   simp only [UInt64.not_le.mpr inside, false_or]
 

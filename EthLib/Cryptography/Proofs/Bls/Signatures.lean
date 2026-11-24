@@ -77,9 +77,9 @@ theorem exists_aggregate_eq_error_iff {sigs : Array BLSSignature} :
       rw [bad] at step
       cases step
 
-/-- Aggregating the signatures of a list with a member fails exactly on one that does not decode. -/
-theorem exists_aggregate_map_eq_error_iff {α : Type} {entries : List α} {entry : α}
-    (member : entry ∈ entries) (signature : α → BLSSignature) :
+/-- Aggregating the signatures of a nonempty list fails exactly when one does not decode (§2.8). -/
+theorem exists_aggregate_map_eq_error_iff {α : Type} {entries : List α} {witness : α}
+    {signature : α → BLSSignature} (member : witness ∈ entries) :
     (∃ error, aggregate (entries.map signature).toArray = .error error) ↔
       ∃ entry ∈ entries, ∃ error, G2.uncompress (signature entry) = .error error := by
   have nonempty : (entries.map signature).toArray ≠ #[] :=
