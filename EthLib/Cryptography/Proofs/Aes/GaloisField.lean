@@ -202,7 +202,7 @@ private theorem ofBE_zipWith_xor {a b : List UInt8} (h : a.length = b.length) :
 /-- The integer of the XOR of two blocks is the XOR of their integers. -/
 theorem blockToNat_xorBlock (A B : Block) :
     blockToNat (xorBlock A B) = blockToNat A ^^^ blockToNat B := by
-  simp only [blockToNat, xorBlock, Vector.toList_zipWith]
+  simp only [blockToNat, xorBlock, Base.xorBytes, Vector.toList_zipWith]
   exact ofBE_zipWith_xor (by simp)
 
 /-! ## The ring of blocks -/

@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Bytes
+
 /-!
 # `Aes.Block`
 
@@ -209,7 +211,7 @@ def mixColumns (s : Block) : Block :=
 The round key is the words `w[4 round .. 4 round + 3]`, laid out as the state. -/
 def addRoundKey (s roundKey : Block) : Block :=
   -- (5.9): each column `[s'[0, c], ..., s'[3, c]] = [s[0, c], ..., s[3, c]] XOR w[4 round + c]`.
-  Vector.zipWith (· ^^^ ·) s roundKey
+  Base.xorBytes s roundKey
 
 /-! ## The transformations of the inverse cipher -/
 
@@ -234,7 +236,7 @@ def invMixColumns (s : Block) : Block :=
 
 /-- The word XOR of FIPS 197 §5.1.4, byte by byte. -/
 def xorWord (a b : Word) : Word :=
-  Vector.zipWith (· ^^^ ·) a b
+  Base.xorBytes a b
 
 /-- ROTWORD of FIPS 197 §5.2 (5.10): `[a0, a1, a2, a3]` to `[a1, a2, a3, a0]`. -/
 def rotWord (a : Word) : Word :=
