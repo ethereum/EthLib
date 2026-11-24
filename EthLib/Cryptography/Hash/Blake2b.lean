@@ -22,9 +22,15 @@ namespace EthLib.Cryptography.Hash.Blake2b
 
 /-! ## Parameters
 
-RFC 7693 §2.1 fixes the parameters of BLAKE2b: a word has `w = 64` bits, and F runs `r = 12` rounds.
+RFC 7693 §2.1 fixes the parameters of BLAKE2b:
 
-G rotates by `(R1, R2, R3, R4) = (32, 24, 16, 63)`. -/
+- A word has `w = 64` bits.
+- F runs `r = 12` rounds.
+- G rotates by `(R1, R2, R3, R4) = (32, 24, 16, 63)`.
+
+A word is a `UInt64`, so `+` is the addition modulo `2^64` of §3.1.
+
+The RFC's `^` is exclusive-or (§2.3), which Lean writes `^^^`. -/
 
 /-- The initialization vector, RFC 7693 §2.6.
 
@@ -64,8 +70,6 @@ The RFC defines it as `(x >> n) ^ (x << (w - n))`.
 
 Lean's `>>>` is the RFC's shift `>>`, so the rotation is spelled out. -/
 @[inline] def rotr (x : UInt64) (n : UInt64) : UInt64 :=
-  -- The RFC's `^` is exclusive-or (§2.3), which Lean writes `^^^`.
-  --
   -- RFC: `x >>> n = (x >> n) ^ (x << (w - n))`, with `w = 64`.
   (x >>> n) ^^^ (x <<< (64 - n))
 
@@ -74,8 +78,6 @@ Lean's `>>>` is the RFC's shift `>>`, so the rotation is spelled out. -/
 It mixes the message words `x` and `y` into the words `a`, `b`, `c` and `d` of the work vector.
 -/
 def mix (v : Vector UInt64 16) (a b c d : Fin 16) (x y : UInt64) : Vector UInt64 16 :=
-  -- A word is a `UInt64`, so `+` is the addition modulo `2^64` of §3.1.
-  --
   -- `v[a] := (v[a] + v[b] + x) mod 2**w`.
   let v := v.set a (v[a] + v[b] + x)
   -- `v[d] := (v[d] ^ v[a]) >>> R1`, with `R1 = 32`.
@@ -133,23 +135,24 @@ def roundsFrom (m : Vector UInt64 16) (start : Nat) : Nat → Vector UInt64 16 �
   | 0, v => v
   | count + 1, v => roundsFrom m (start + 1) count (round m start v)
 
-/-- The compression function F, RFC 7693 §3.2, with `rounds` rounds: it returns the new state.
+/-- The compression function F, RFC 7693 §3.2, with `rounds` rounds.
+
+- `h` is the state, 8 words.
+- `m` is the message block, 16 words.
+- `t0` and `t1` are the low and high words of the 128-bit offset counter `t`.
+- `f` is the final block flag.
+
+It returns the new state.
 
 With 12 rounds it is the F of BLAKE2b. -/
 def compress (rounds : Nat) (h : Vector UInt64 8) (m : Vector UInt64 16) (t0 t1 : UInt64)
     (f : Bool) : Vector UInt64 8 :=
-  -- The state `h` is 8 words, and the message block `m` is 16 words.
-  --
   -- `v[0..7] := h[0..7]` and `v[8..15] := IV[0..7]`.
   let v : Vector UInt64 16 := h ++ IV
-  -- `t0` and `t1` are the low and high words of the 128-bit offset counter `t`.
-  --
   -- `v[12] := v[12] ^ (t mod 2**w)`, the low word of the offset, given as `t0`.
   let v := v.set 12 (v[12] ^^^ t0)
   -- `v[13] := v[13] ^ (t >> w)`, the high word, given as `t1`.
   let v := v.set 13 (v[13] ^^^ t1)
-  -- `f` is the final block flag.
-  --
   -- `IF f = TRUE THEN v[14] := v[14] ^ 0xFF..FF`.
   let v := if f then v.set 14 (v[14] ^^^ 0xFFFFFFFFFFFFFFFF) else v
   -- `FOR i = 0 TO r - 1 DO`, with `r` the given number of rounds.

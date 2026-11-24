@@ -41,7 +41,9 @@ def ROUNDS : Nat := 24
 
 /-- The Keccak-f[1600] state: 25 lanes of 64 bits.
 
-The field with the number `x + 5y` holds lane `(x, y)`, so each step mapping names its lanes.
+The field with the number `x + 5y` holds lane `(x, y)`.
+
+So each step mapping names its lanes.
 
 Each step mapping is written out lane by lane, so compiled code keeps the lanes in machine words.
 
@@ -259,25 +261,20 @@ A lane holds its `w` bits `z` in one word, so each step runs on whole lanes. -/
    A.a15 ^^^ d0, A.a16 ^^^ d1, A.a17 ^^^ d2, A.a18 ^^^ d3, A.a19 ^^^ d4,
    A.a20 ^^^ d0, A.a21 ^^^ d1, A.a22 ^^^ d2, A.a23 ^^^ d3, A.a24 ^^^ d4⟩
 
-/-- Rho, FIPS 202 §3.2.2, Algorithm 2, for all `z < w`.
+/-- Rho, FIPS 202 §3.2.2, Algorithm 2, for all `z < w`:
+
+1. Let `A'[0, 0, z] = A[0, 0, z]`.
+2. Let `(x, y) = (1, 0)`.
+3. For `t` from 0 to 23:
+   - let `A'[x, y, z] = A[x, y, (z - (t + 1)(t + 2)/2) mod w]`;
+   - let `(x, y) = (y, (2x + 3y) mod 5)`.
+4. Return `A'`.
 
 The offsets are written as numbers, so that each rotation is by a constant.
 
 The kernel checks that these numbers are the offset table, lane by lane. -/
 @[inline] def rho (A : State) : State :=
-  -- Step 1: let A'[0, 0, z] = A[0, 0, z].
-  --
-  -- Step 2: let (x, y) = (1, 0).
-  --
-  -- Step 3, for t from 0 to 23: let A'[x, y, z] = A[x, y, (z - (t + 1)(t + 2)/2) mod w].
-  --
-  -- Then, in the same step 3: let (x, y) = (y, (2x + 3y) mod 5).
-  --
-  -- Step 4: return A'.
-  --
   -- Reading bit (z - d) mod w for bit z is a rotation of the lane by d towards the high bits.
-  --
-  -- So A'[x, y] = rotl(A[x, y], d), with d the offset of lane (x, y) in the offset table.
   --
   -- A'[x, y] = rotl(A[x, y], d), with d = (t + 1)(t + 2)/2 mod w for the step t reaching (x, y).
   -- y = 0
@@ -423,7 +420,8 @@ FIPS 202 §5.2 defines the Keccak family on bit strings `N` and output lengths `
     Keccak[c](N, d) = SPONGE[Keccak-p[1600, 24], pad10*1, 1600 - c](N, d)
 ```
 
-Keccak-256 is `Keccak[512](N, 256)`, and Keccak-512 is `Keccak[1024](N, 512)`.
+- Keccak-256 is `Keccak[512](N, 256)`.
+- Keccak-512 is `Keccak[1024](N, 512)`.
 
 The padding and the absorbing below take the rate `r` in bytes. -/
 
@@ -764,7 +762,16 @@ def Lanes4.read (bytes : ByteArray) (offset : Nat) : Lanes4 :=
   ⟨Internal.laneAt bytes offset, Internal.laneAt bytes (offset + 8),
     Internal.laneAt bytes (offset + 16), Internal.laneAt bytes (offset + 24)⟩
 
-/-- Steps 1 to 6 of FIPS 202 §4, Algorithm 8, except that the last block is XORed in, not permuted.
+/-- The absorbing phase of FIPS 202 §4, Algorithm 8, up to its last permutation.
+
+It is steps 1 to 6, except that the last block is XORed into the state but not permuted:
+
+- every block `P_i` with `i < n - 1` goes through `S = f(S ^ (P_i || 0^c))`;
+- the last block gives `S ^ (P_{n-1} || 0^c)`.
+
+The state after the absorbing phase is `f` of this state.
+
+A caller that hashes many messages differing only in their last block can share all the rest.
 
 The rate must be positive, below 200 bytes and a multiple of 8 bytes, as for the absorbing phase.
 
@@ -773,12 +780,6 @@ The message `N` has `len` bytes, and `read p` is its lane of bytes `p` to `p + 7
 Its bytes from `len` on must read as zero, as `P` holds the padding there. -/
 @[specialize] def Internal.stateBeforeLastPermutation (f : State → State) (rate len : Nat)
     (read : Nat → UInt64) : State :=
-  -- This is the absorbing phase up to its last permutation.
-  --
-  -- The state after the absorbing phase is f of this state.
-  --
-  -- A caller that hashes many messages differing only in their last block can share all the rest.
-  --
   -- There are n - 1 = len(N) / r blocks before the last one, since n = len(N) / r + 1.
   --
   -- Steps 1 and 2: the k = n - 1 blocks of P = N || pad(r, len(N)) before the last are in N.
@@ -794,36 +795,31 @@ Its bytes from `len` on must read as zero, as `P` holds the padding there. -/
   -- The final 1 bit is bit 7 of byte r - 1; with one padding byte, both bits share it.
   Internal.xorBlockByte rate S (rate - 1) 0x80
 
-/-- The absorbing phase, FIPS 202 §4, Algorithm 8, steps 1 to 6, at a rate of `rate` bytes.
+/-- The absorbing phase, FIPS 202 §4, Algorithm 8, steps 1 to 6, at a rate of `rate` bytes:
 
-The rate must be positive and below 200 bytes: FIPS 202 §4 asks `0 < r < b`, and no other.
+1. Let `P = N || pad(r, len(N))`.
+2. Let `n = len(P) / r`.
+3. Let `c = b - r`.
+4. Let `P_0, ..., P_{n-1}` be the unique strings of length `r` with `P = P_0 || ... || P_{n-1}`.
+5. Let `S = 0^b`.
+6. For `i` from 0 to `n - 1`, let `S = f(S ^ (P_i || 0^c))`.
 
-It must also be a multiple of 8 bytes, so that each lane lies wholly in `P_i` or in `0^c`.
+Here `N` is the message, `b = 1600`, and `pad` is pad10*1.
+
+The rate must be positive and below 200 bytes, since FIPS 202 §4 asks `0 < r < b`.
+
+FIPS 202 defines no sponge at other rates.
+
+The rate must also be a multiple of 8 bytes, so that each lane lies wholly in `P_i` or in `0^c`.
+
+FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument.
 
 The message `N` has `len` bytes, read a lane at a time, with zero bytes from `len` on. -/
 @[specialize] def Internal.spongeAbsorb (f : State → State) (rate len : Nat)
     (read : Nat → UInt64) : State :=
-  -- FIPS 202 §4 defines the sponge for any permutation f, so the permutation is an argument.
-  --
-  -- Here N is the message, b = 1600, and pad is pad10*1.
-  --
-  -- Step 1: let P = N || pad(r, len(N)).
-  --
-  -- Step 2: let n = len(P) / r.
-  --
-  -- Step 3: let c = b - r.
-  --
-  -- Step 4: let P_0, ..., P_{n-1} be the unique strings of length r with P = P_0 || ... || P_{n-1}.
-  --
-  -- Step 5: let S = 0^b.
-  --
-  -- Step 6: for i from 0 to n - 1, let S = f(S ^ (P_i || 0^c)).
-  --
   -- The absorbing phase ends with the last permutation of step 6.
   --
   -- So it is that permutation applied to the state just before it.
-  --
-  -- Steps 1 to 6, up to the last block XORed in, then the last application of f.
   f (Internal.stateBeforeLastPermutation f rate len read)
 
 /-- Keccak-256 of a message read a lane at a time, `KECCAK[512](N, 256)` of FIPS 202 §5.2.
@@ -849,7 +845,9 @@ A reader that breaks those conditions gives no Keccak-256 digest, so this is int
 
 /-- Keccak-256 of a string of lanes: the message of 8 bytes a lane, and its digest as lanes.
 
-The sponge reads its message a lane at a time, so a message held as lanes moves no byte. -/
+The sponge reads its message a lane at a time.
+
+So a message held as lanes is hashed with no byte moved. -/
 @[inline] def keccak256Lanes (lanes : Array UInt64) : Lanes4 :=
   Internal.keccak256Read (8 * lanes.size) (Internal.laneOfArray lanes)
 

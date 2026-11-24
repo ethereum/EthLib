@@ -9,6 +9,13 @@ public import EthLib.Cryptography.Xmss.Address
 
 The hash every other definition is built from: `Th(P, A, M)` is the first half of `H(P | A | M)`.
 
+Every definition that hashes takes `H` as an argument, in a monad.
+
+- EthLib computes Keccak-256, in the identity monad.
+- A proof in the random oracle model passes a query to the oracle.
+
+So the definitions that run are the ones the security proof is about.
+
 Source: the leanXMSS specification draft, sections "Hashing and parameters" and "Security".
 
 It is a tweakable hash of [ePrint 2025/055][hbms], §3.1, with the address `A` as the tweak.
@@ -56,14 +63,6 @@ abbrev hashId : Array UInt64 → Id Lanes4 :=
 /-- `Th(P, A, M)`: hash a payload at one address, encoded as `A`, with one call of `H`. -/
 @[inline] def th {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
     (publicParam : PublicParam) (address : Address) (payload : Array UInt64) : m Digest := do
-  -- Every definition that hashes takes `H` as an argument, in a monad.
-  --
-  -- EthLib computes Keccak-256, in the identity monad.
-  --
-  -- A proof in the random oracle model passes a query to the oracle.
-  --
-  -- So the definitions that run are the ones the security proof is about.
-  --
   -- `Th(P, A, M) = H_0(P | A | M)`.
   return halfOf 0 (← H (thInput publicParam address payload))
 
@@ -71,7 +70,9 @@ abbrev hashId : Array UInt64 → Id Lanes4 :=
 
 /-- A source of derived values: the derivation at a parameter, an address and a suffix.
 
-The signer derives the public parameter and every secret through it, so a proof can swap it whole.
+The signer derives the public parameter and every secret through one source.
+
+So a proof can replace the derivations as a whole.
 
 It takes the parameter, because the public parameter is itself a derivation.
 

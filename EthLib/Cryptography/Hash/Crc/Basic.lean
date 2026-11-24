@@ -9,7 +9,17 @@ CRC-32 and CRC-32C are this CRC with two generators.
 
 It detects errors and authenticates nothing: anyone can recompute it.
 
+A message of n bits is a polynomial M(x) over GF(2), whose coefficients are bits.
+
+The CRC is the complemented remainder of a division by the generator G(x).
+
+A polynomial of degree below 32 is a `UInt32`, with bit i holding the coefficient of x^i.
+
+The division runs one coefficient at a time, to be read against its sources, not for speed.
+
 The process is the one of [RFC 3720 §12.1][rfc3720], which CRC-32 shares.
+
+Each step of the process is marked on its line.
 
 [rfc3720]: https://www.rfc-editor.org/rfc/rfc3720#section-12.1
 -/
@@ -26,13 +36,7 @@ The generator `g` is G(x) without its x^32 term.
 If `r` is the remainder of A(x) * x^32, the result is the remainder of (x * A(x) + c) * x^32.
 -/
 def shift (g : UInt32) (r : UInt32) (c : Bool) : UInt32 :=
-  -- A message of n bits is a polynomial M(x) over GF(2), whose coefficients are bits.
-  --
-  -- A polynomial of degree below 32 is a `UInt32`, with bit i holding the coefficient of x^i.
-  --
   -- The polynomial is multiplied by x^32, then divided by G(x), one coefficient at a time.
-  --
-  -- That is to be read against its sources, not for speed.
   --
   -- No zeros are appended: `c` joins the term of x^32 directly.
   --
@@ -65,8 +69,6 @@ A shorter message also starts from `0xffffffff`, as the CRC catalogue does:
 <https://reveng.sourceforge.io/crc-catalogue/17plus.htm>
 -/
 def remainder (g : UInt32) (data : ByteArray) : UInt32 :=
-  -- Each step of the process of the RFC is marked on its line, here and in the digest.
-  --
   -- The most significant 32 bits are complemented.
   --
   -- The division starts from `0xffffffff` instead of 0, which has the same effect.
@@ -80,9 +82,7 @@ def remainder (g : UInt32) (data : ByteArray) : UInt32 :=
 def reverseBits (byte : UInt8) : UInt8 :=
   (List.range 8).foldl (fun acc i => acc ||| (((byte >>> i.toUInt8) &&& 1) <<< (7 - i).toUInt8)) 0
 
-/-- The four digest bytes: the CRC, which is R(x) complemented.
-
-The CRC is the complemented remainder of a division by the generator G(x). -/
+/-- The four digest bytes: the CRC, which is R(x) complemented. -/
 def digest (g : UInt32) (data : ByteArray) : Vector UInt8 4 :=
   -- The coefficients of R(x) are a 32-bit sequence, which the `UInt32` already is.
   --

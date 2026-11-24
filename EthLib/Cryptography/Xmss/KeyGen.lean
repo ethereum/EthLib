@@ -57,19 +57,18 @@ structure CachedTree where
 
 In the note, the secret key is `S_0` alone, and signing rebuilds every tree it reads.
 
+- `S` is secret for the key's whole life, and so is every one-time secret derived from it.
+- The tree nodes are not secret: a signature reveals some of them.
+
 A key from key generation and signing holds exactly what the note's signer rebuilds from `S`.
 
 With other trees, a top key could sign two different roots. -/
 structure SecretKey where
-  /-- The scheme seed `S`, which every secret derives from.
-
-  It is secret for the key's whole life, and so is every one-time secret derived from it. -/
+  /-- The scheme seed `S`, which every secret derives from. -/
   schemeSeed : Seed
   /-- The public parameter `P`. -/
   publicParam : PublicParam
-  /-- Every node of the top tree, which key generation builds anyway to compute the root.
-
-  The tree nodes, here and in the kept trees, are not secret: a signature reveals some of them. -/
+  /-- Every node of the top tree, which key generation builds anyway to compute the root. -/
   top : Merkle.Built Digest
   /-- The bottom trees the key signed in last, the latest first.
 

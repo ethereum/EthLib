@@ -39,6 +39,12 @@ def chainStarts (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e
 
 A step of the hash chains of Construction 2 of [ePrint 2025/055][hbms], §4.2.
 
+- `publicParam`: the 16-byte public parameter `P`.
+- `layer` and `e`: the layer, bottom or top, and the index of the one-time key on it.
+- `i`: the chain, from 0 to 57.
+- `mu`: the current position, from 0 to 2, so the step reaches position `mu + 1`.
+- `value`: the 16-byte chain value `C_{i,mu}`.
+
 [hbms]: https://eprint.iacr.org/2025/055
 -/
 def chainStep (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
@@ -46,22 +52,12 @@ def chainStep (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin 
   -- `C_{i,mu+1} = Th(P, A_chain(l, e, mu), C_{i,mu} | LE_128(i))`.
   --
   -- `Th(P, A, M)` is the first 16 bytes of `H(P | A | M)`, with `H` Keccak-256.
-  --
-  -- `P` is the 16-byte public parameter.
   th H publicParam
     -- `A_chain(l, e, mu)` names the key and the step, so the 58 chains share it.
-    --
-    -- `l` is the layer, bottom or top, and `e` the index of the one-time key on it.
-    --
-    -- `mu` is the current position, from 0 to 2, so the step reaches position `mu + 1`.
     (.chain layer e mu)
     -- `M`: the two lanes of `C_{i,mu}`, then the two lanes of `LE_128(i)`.
-    --
-    -- `C_{i,mu}` is the 16-byte chain value.
     #[value.lo, value.hi,
       -- `LE_128(i)`: `i` in the first lane, zero in the second.
-      --
-      -- `i` is the chain, from 0 to 57.
       --
       -- The index keeps the 58 chains apart, where Construction 2 uses the tweak.
       i.val.toUInt64, 0]
@@ -132,15 +128,15 @@ def trialRandomizer (base : Randomizer) (c : Nat) : Randomizer :=
 
 /-- The trials of one search: whether the digest of a randomizer is a codeword, and which.
 
+Every trial hashes the same lanes `P | A_msg(l, e) | M`, followed by its own randomizer.
+
 It is a structure, not a function, so a source does its per-search work once.
 
 The compiler merges a function that returns a function into one function of all the arguments.
 
 That merged function would redo, on every trial, the work meant for once per search. -/
 structure Trials (m : Type → Type) where
-  /-- The codeword the digest of a randomizer is, if any.
-
-  Every trial hashes the same lanes `P | A_msg(l, e) | M`, followed by its own randomizer. -/
+  /-- The codeword the digest of a randomizer is, if any. -/
   codeword : Randomizer → m (Option (Vector (Fin CHAIN_LENGTH) V))
 
 /-- The trials of every search, from the fixed lanes that start each trial's input.

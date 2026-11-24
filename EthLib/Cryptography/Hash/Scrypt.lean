@@ -14,6 +14,8 @@ The bounds on the parameters come from [RFC 7914 §2][params].
 
 Passwords are secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
 
+ROMix reads its table at indices that depend on the password.
+
 SOUNDNESS.md D1 says what a caller must bound.
 
 [scrypt]: https://www.rfc-editor.org/rfc/rfc7914#section-3
@@ -270,8 +272,6 @@ def romixCore (r : Nat) (positive : 0 < r) (n : Nat) (nonzero : 0 < n)
   -- Steps 1 and 2: `X = B`, then `N` rounds that fill `V`; step 2 overwrites each slot first.
   let (table, x) := romixFill r positive n 0 (by omega) (Vector.replicate n input) input
   -- Steps 3 and 4: `N` rounds that read `V`, and `B' = X`.
-  --
-  -- The reads of `V` are at indices that depend on the password.
   romixRead r positive n nonzero table n x
 
 /-- The cost bound of RFC 7914 §§2 and 5, without constructing `2^(16 * r)`. -/

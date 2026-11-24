@@ -100,16 +100,16 @@ def lengthBytes (size : Nat) : ByteArray :=
   ⟨Array.ofFn fun i : Fin 8 => (bits >>> (56 - 8 * UInt64.ofNat i.val)).toUInt8⟩
 
 /--
-The padded message, FIPS 180-4 §5.1.1: the message, a set bit, zeros, then its length.
+The padded message, FIPS 180-4 §5.1.1.
+
+It has four parts, in order:
+
+- The message itself, of `l` bits.
+- The byte `0b10000000`: the bit 1, then seven zero bits, since `l` is a multiple of 8.
+- The fewest zero bits that bring the size to 448 modulo 512.
+- The 64-bit block that holds `l`, big-endian, which completes the last 512-bit block.
 -/
 def pad (message : ByteArray) : ByteArray :=
-  -- First the message itself, of `l` bits.
-  --
-  -- Then the byte `0b10000000`: the bit 1, then seven zero bits, since `l` is a multiple of 8.
-  --
-  -- Then the fewest zero bits that bring the size to 448 modulo 512.
-  --
-  -- Last the 64-bit block that holds `l`, big-endian, which completes the last 512-bit block.
   message ++ ⟨#[0b10000000]⟩ ++ ⟨Array.replicate (paddingZeros message.size) 0⟩ ++
     lengthBytes message.size
 

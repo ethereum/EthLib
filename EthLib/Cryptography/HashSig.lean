@@ -22,7 +22,9 @@ open EthLib.Base (readBytes)
 
 Every definition of the two schemes that hashes takes the hash `H` as an argument, in a monad.
 
-EthLib passes the concrete hash in the identity monad, and a random-oracle proof passes a query.
+EthLib passes the concrete hash in the identity monad.
+
+A proof in the random oracle model passes a query to the oracle.
 -/
 
 /-- A hash function, as a computation in the identity monad.
@@ -36,19 +38,17 @@ def pureHash {α β : Type} (f : α → β) (input : α) : Id β :=
 /-- Read a fixed-size object out of a buffer at an offset.
 
 Returns nothing when the buffer has no room for the object.
+
+It never pads and never truncates.
+
+With `b = ByteArray.mk #[10, 20, 30, 40]`:
+
+- 4 bytes at offset 0 read as `some #v[10, 20, 30, 40]`.
+- 2 bytes at offset 1 read as `some #v[20, 30]`.
+- 2 bytes at offset 3 read as `none`.
 -/
 def unpackBytes? (n : Nat) (b : ByteArray) (offset : Nat := 0) :
     Option (Vector UInt8 n) :=
-  -- Take `b = ByteArray.mk #[10, 20, 30, 40]` as an example.
-  --
-  -- Then 4 bytes at offset 0 read as `some #v[10, 20, 30, 40]`.
-  --
-  -- 2 bytes at offset 1 read as `some #v[20, 30]`.
-  --
-  -- 2 bytes at offset 3 read as `none`.
-  --
-  -- The read never pads and never truncates.
-  --
   -- The guard is the whole validation: a buffer without room is rejected.
   if h : offset + n ≤ b.size then some (readBytes b offset n h) else none
 
