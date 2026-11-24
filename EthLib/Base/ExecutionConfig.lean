@@ -24,9 +24,14 @@ open Lean (Json ToJson toJson)
 
 /-- Each fork that activates by time, with the name that a configuration file gives it.
 
-Names from [EIP-6953][eip-6953], [EIP-7569][eip-7569], [EIP-7600][eip-7600], [EIP-7607][eip-7607].
+Sources:
 
-BPO and Glamsterdam names: [EIP-7892][eip-7892] and the [Hoodi genesis file][hoodi].
+- [EIP-6953][eip-6953]: the name of Shanghai.
+- [EIP-7569][eip-7569]: Dencun as Deneb/Cancun, hence `cancun`.
+- [EIP-7600][eip-7600]: the name of Prague.
+- [EIP-7607][eip-7607]: the name of Osaka.
+- [EIP-7892][eip-7892]: the BPO forks, `bpo1`, `bpo2` and so on.
+- The [Hoodi genesis file][hoodi]: `amsterdam`, from the key `amsterdamTime` that it once gave.
 
 Hegotá is missing, since no source gives the key of its time yet.
 
@@ -38,15 +43,9 @@ Hegotá is missing, since no source gives the key of its time yet.
 [hoodi]: https://github.com/eth-clients/hoodi/blob/ef8998901c1350f41a0bcc0a2a8d4baad973abcf/metadata/genesis.json#L23
 -/
 def forkNames : List (Fork × String) :=
-  -- EIP-6953 names Shanghai, and EIP-7569 calls Dencun Deneb/Cancun, so its key is `cancun`.
-  --
-  -- EIP-7600 names Prague, and EIP-7607 names Osaka.
   [(.shapella, "shanghai"), (.dencun, "cancun"), (.pectra, "prague"), (.fusaka, "osaka"),
-    -- The BPO forks follow the convention of EIP-7892: `bpo1`, `bpo2` and so on.
     (.bpo1, "bpo1"), (.bpo2, "bpo2"), (.bpo3, "bpo3"), (.bpo4, "bpo4"), (.bpo5, "bpo5"),
     -- No EIP names the execution side of Glamsterdam.
-    --
-    -- The Hoodi genesis file keyed its time as `amsterdamTime` before it unscheduled it.
     (.glamsterdam, "amsterdam")]
 
 /-- Why a configuration file cannot be read. -/
@@ -63,7 +62,9 @@ inductive ConfigError where
   | scheduleMalformed (fork : Fork)
   /-- The entry of a fork has a target above its maximum, or a maximum or fraction of 0.
 
-  Or the blob gas of the maximum reaches `2^64`, so a target or maximum of `2^64` or more fails. -/
+  It is also this error when the blob gas of the maximum reaches `2^64`.
+
+  So a target or a maximum of `2^64` or more is refused. -/
   | scheduleOutOfBounds (fork : Fork)
   /-- A fork has an entry, but the file gives it no time. -/
   | scheduleWithoutTime (fork : Fork)
@@ -142,7 +143,9 @@ def readFork (base : ChainConfig) (j schedules : Json) (fork : Fork) (name : Str
 
 The file is the object that holds these keys, which a genesis file nests under `config`.
 
-The base gives the chain ID, the deposit contract, the forks by block number and missing times. -/
+The base gives the chain ID, the deposit contract and the forks by block number.
+
+It also gives the time of a fork that the file does not time. -/
 def readExecutionConfig (base : ChainConfig) (j : Json) : Except ConfigError ChainConfig := do
   unless j matches .obj _ do throw .notObject
   -- An absent schedule object reads as null, which holds no entry.

@@ -9,9 +9,11 @@ Forks are ordered by their position in the type, and the order is linear.
 
 The timeline pins each position, so a fork moved in the type fails the build.
 
-Each fork reads back from its name.
+Each fork reads back from its name, and no two forks share a name.
 
-A field holds values from the fork that adds it to the fork that removes it.
+A field that appears at a fork holds nothing before it, and one value from it on.
+
+A field that a fork removes holds one value before it, and nothing from it on.
 -/
 
 @[expose] public section

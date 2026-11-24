@@ -5,7 +5,11 @@ module
 
 Facts about natural numbers that Lean core does not prove and that several layers use.
 
-Lean states each case of a hex digit as a lemma, and this module gathers them in one equation.
+They cover remainders, repeated steps, hex digits, rounded quotients and the shares of a total.
+
+Lean writes a digit `0` to `9` or `a` to `f` for a number below sixteen, and `*` from sixteen on.
+
+Lean states each case as a public lemma, and this module gathers them into one equation.
 -/
 
 @[expose] public section

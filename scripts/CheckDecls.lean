@@ -7,6 +7,16 @@ Checks the compiled declarations of EthLib for axioms, opaque constants and comp
 
 It reads what the kernel accepted, not the source, so no source formatting can hide a finding.
 
+Every declaration in scope is checked for:
+
+* an axiom beyond `propext`, `Classical.choice` and `Quot.sound`, followed through every dependency;
+* an `axiom` declaration;
+* an `unsafe`, `partial` or `opaque` constant, which the kernel cannot unfold;
+* `@[extern]` or `@[implemented_by]`, whose compiled code is not the definition;
+* a `@[csimp]` theorem that replaces a function in scope.
+
+A definition of the specification is also checked for an opaque constant reached by unfolding.
+
 The baseline lists the findings that exist today, each one to be removed.
 -/
 

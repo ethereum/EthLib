@@ -24,7 +24,9 @@ def GAS_PER_BLOB : Nat := 2 ^ 17
 
 Source: [EIP-7892](https://eips.ethereum.org/EIPS/eip-7892#blob-base-fee-computations).
 
-[EIP-7892][eip-7892] makes them chain configuration, which a chain can change at its own activation.
+[EIP-7892][eip-7892] makes them chain configuration.
+
+So a chain can change them at an activation of its own.
 
 [EIP-7840][eip-7840] names them in the configuration file of a client.
 
@@ -293,9 +295,11 @@ def mainnet : ChainConfig where
 
 The [genesis file][hoodi] gives every value.
 
-No fork follows BPO2: neither it nor the Hoodi row of [EIP-7773][eip-7773] gives one.
+No fork follows BPO2: neither the genesis file nor the Hoodi row of [EIP-7773][eip-7773] gives one.
 
-Hoodi sets no blob schedule: Fusaka keeps the schedule of Pectra, each other fork that of its EIPs.
+Hoodi sets no blob schedule of its own.
+
+Fusaka keeps the schedule of Pectra, and each other fork keeps that of its EIPs.
 
 [hoodi]: https://github.com/eth-clients/hoodi/blob/2a7efb3c530cce7c71702cc98d0f965df2411c11/metadata/genesis.json
 [eip-7773]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-7773.md#activation
