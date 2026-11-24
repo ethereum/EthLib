@@ -92,7 +92,7 @@ def compute (data : ByteArray) (l : Lengths) : ByteArray :=
   -- EIP-198: the output is a byte array with the same length as the modulus.
   --
   -- The result is below the modulus, so it fits in `length_of_MODULUS` bytes.
-  ByteArray.mk (natToBytes l.modulus result).toArray
+  ByteArray.mk (ByteOrder.toBE l.modulus result).toArray
 
 /-- The gas a call is charged, or the reason it fails before gas is charged. -/
 def chargedGas (fork : Fork) (data : ByteArray) : Except ModexpError Nat :=

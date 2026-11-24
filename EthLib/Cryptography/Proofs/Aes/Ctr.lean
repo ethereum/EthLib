@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Aes.Ctr
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Nat
 
 /-!
@@ -22,18 +22,18 @@ namespace EthLib.Cryptography.Aes
 
 /-- A block is worth less than `2^128`. -/
 theorem blockToNat_lt (A : Block) : blockToNat A < 2 ^ 128 := by
-  have h := Base.bytesToNat_lt A.toList
+  have h := Base.ByteOrder.ofBE_lt A.toList
   rw [Vector.length_toList] at h
   exact lt_of_lt_of_eq h (by decide)
 
 /-- Two blocks with the same integer are equal. -/
 theorem blockToNat_injective : Function.Injective blockToNat := by
   intro A B h
-  exact Vector.toList_inj.mp (Base.bytesToNat_inj (by simp) h)
+  exact Vector.toList_inj.mp (Base.ByteOrder.ofBE_inj (by simp) h)
 
 /-- An integer below `2^128` survives the round trip through a block. -/
 theorem blockToNat_blockOfNat {z : Nat} (hz : z < 2 ^ 128) : blockToNat (blockOfNat z) = z :=
-  Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_eq hz (by decide))
+  Base.ByteOrder.ofBE_toBE_of_lt (lt_of_lt_of_eq hz (by decide))
 
 /-! ## The mode -/
 

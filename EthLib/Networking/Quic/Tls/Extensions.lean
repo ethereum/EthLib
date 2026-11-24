@@ -96,14 +96,15 @@ def readKeyShare : Reader KeyShareEntry := do
 /-- Encode one key share without checking its group element (§4.3.8). -/
 def encodeKeyShare (share : KeyShareEntry) : Except Error (List UInt8) := do
   -- `NamedGroup group;` in two bytes, then `opaque key_exchange<1..2^16-1>;`.
-  return Base.natToBytes 2 share.group.val ++ (← encodeBlob 2 1 65535 share.keyExchange.data.toList)
+  return (Base.ByteOrder.toBE 2 share.group.val).toList
+    ++ (← encodeBlob 2 1 65535 share.keyExchange.data.toList)
 
 /-- Encode the selected presentation-language form with its specified length bounds. -/
 def encodePayloadBody : Payload → Except Error (List UInt8)
   -- RFC 9846 §4.3.1, in a ClientHello: `ProtocolVersion versions<2..254>;`.
   | .supportedVersions versions => encodeCodePoints 1 2 254 versions
   -- RFC 9846 §4.3.1, in a ServerHello or HelloRetryRequest: `ProtocolVersion selected_version;`.
-  | .selectedVersion version => .ok (Base.natToBytes 2 version.val)
+  | .selectedVersion version => .ok ((Base.ByteOrder.toBE 2 version.val).toList)
   -- RFC 9846 §4.3.7: `NamedGroup named_group_list<2..2^16-1>;`.
   | .supportedGroups groups => encodeCodePoints 2 2 65535 groups
   -- RFC 9846 §4.3.3: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`.
@@ -113,7 +114,7 @@ def encodePayloadBody : Payload → Except Error (List UInt8)
   -- RFC 9846 §4.3.8, KeyShareServerHello: `KeyShareEntry server_share;`.
   | .serverKeyShare share => encodeKeyShare share
   -- RFC 9846 §4.3.8, KeyShareHelloRetryRequest: `NamedGroup selected_group;`.
-  | .retryKeyShare group => .ok (Base.natToBytes 2 group.val)
+  | .retryKeyShare group => .ok ((Base.ByteOrder.toBE 2 group.val).toList)
   -- RFC 7301 §3.1: `ProtocolName protocol_name_list<2..2^16-1>`.
   --
   -- Each name is `opaque ProtocolName<1..2^8-1>;`.

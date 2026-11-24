@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `Networking.Discv5.Distance`
@@ -23,7 +23,7 @@ abbrev NodeId := Vector UInt8 32
 /-- The distance between two node IDs: the XOR of their big-endian values. -/
 def distance (a b : NodeId) : Nat :=
   -- `distance(n₁, n₂) = n₁ XOR n₂`, the IDs taken as big-endian numbers.
-  Base.bytesToNat a.toList ^^^ Base.bytesToNat b.toList
+  Base.ByteOrder.ofBE a.toList ^^^ Base.ByteOrder.ofBE b.toList
 
 /-- The logarithmic distance: the number of bits of the distance, and 0 for equal IDs. -/
 def logDistance (a b : NodeId) : Nat :=

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Except
 public import EthLib.Execution.Evm.Machine.Frame
 public import EthLib.Execution.Evm.Gas.Memory
@@ -22,7 +22,7 @@ A step gives the next frame, or a message to run first, for a call.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 bytesToNat)
+open EthLib.Base (Fork U256 ByteOrder.ofBE)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 

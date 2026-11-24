@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Execution.Evm.Precompiles.Bls12381.Errors
 
@@ -18,7 +18,7 @@ A point takes its coordinates in order, and the point at infinity is all zeros.
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (bytesToNat natToBytes)
+open EthLib.Base (ByteOrder.ofBE ByteOrder.toBE)
 open EthLib.Cryptography.Bls (Fp Fp2 G1 G2 G2.zero)
 
 /-- The size of a field element without its padding. -/
@@ -67,8 +67,8 @@ def padG2 (raw : List UInt8) : List UInt8 :=
 
 /-- The big-endian integer of the bytes, if it is below the field modulus. -/
 def bytesToFieldElement (raw : List UInt8) : Except Bls12381Error Fp :=
-  -- Field elements encoding: the BigEndian integer must be less than the field modulus.
-  let value := bytesToNat raw
+  -- Field elements encoding: the big-endian integer must be less than the field modulus.
+  let value := ByteOrder.ofBE raw
   if value < Fp.modulus then .ok (Fp.ofNat value) else .error (.invalidFieldElement value)
 
 /-- An element of `Fp2`: `c0` from the first 48 bytes, then `c1` from the next 48. -/
@@ -127,13 +127,13 @@ def bytesToG2 (raw : List UInt8) (subgroupCheck : Bool) : Except Bls12381Error G
 /-- The 96 raw bytes of the affine coordinates, and all zeros for the point at infinity. -/
 def g1ToBytes (point : G1) : List UInt8 :=
   let (x, y) := point.toAffine
-  natToBytes 48 x.val ++ natToBytes 48 y.val
+  (ByteOrder.toBE 48 x.val).toList ++ (ByteOrder.toBE 48 y.val).toList
 
 /-- The 192 raw bytes of the affine coordinates, `c0` before `c1`. -/
 def g2ToBytes (point : G2) : List UInt8 :=
   let (x, y) := point.toAffine
-  natToBytes 48 x.c0.val ++ natToBytes 48 x.c1.val ++
-    natToBytes 48 y.c0.val ++ natToBytes 48 y.c1.val
+  (ByteOrder.toBE 48 x.c0.val).toList ++ (ByteOrder.toBE 48 x.c1.val).toList ++
+    (ByteOrder.toBE 48 y.c0.val).toList ++ (ByteOrder.toBE 48 y.c1.val).toList
 
 /-- `MULTIPLIER`: the discounts of the multi-scalar multiplications are in thousandths. -/
 def MULTIPLIER : Nat := 1000

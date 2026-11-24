@@ -94,9 +94,10 @@ theorem readBigEndian_eq (input : ByteArray) (pos k acc : Nat) (hStop : pos + k 
 
 /-- Reading `k` bytes in base 256 from zero is the number they write. -/
 theorem readBigEndian_zero (input : ByteArray) (pos k : Nat) (hStop : pos + k ≤ input.size) :
-    readBigEndian input pos k 0 = ofBigEndian (input.extract pos (pos + k)).data.toList := by
-  rw [readBigEndian_eq input pos k 0 hStop, ofBigEndian, Base.bytesToNat]
-  -- The two folds differ only in the order of one product.
-  simp only [Nat.mul_comm 256]
+    readBigEndian input pos k 0
+      = Base.ByteOrder.ofBE (input.extract pos (pos + k)).data.toList := by
+  -- Both are the same left fold of Horner's rule, from zero.
+  rw [readBigEndian_eq input pos k 0 hStop]
+  rfl
 
 end EthLib.Serialization.Rlp

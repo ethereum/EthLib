@@ -3,7 +3,7 @@ module
 public import EthLib.Serialization.Der
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # DER reader checks
@@ -114,7 +114,8 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
         ∃ k, 256 ^ k ≤ value.content.size ∧ value.content.size < 256 ^ (k + 1) ∧ k < 126 ∧
           128 ≤ value.content.size ∧ value.encoded.data.toList =
             value.tag :: UInt8.ofNat (129 + k) ::
-              (natToBytes (k + 1) value.content.size ++ value.content.data.toList)) := by
+              ((ByteOrder.toBE (k + 1) value.content.size).toList
+                ++ value.content.data.toList)) := by
   constructor
   · intro h
     have hsz : input.size = input.data.toList.length := by rw [Array.length_toList]; rfl
@@ -175,14 +176,14 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
       -- The length octets: `c` bytes, the first nonzero, worth `n`.
       have hlen : (head :: tail).length = first.toNat - 128 := by
         rw [← htake, List.length_take]; omega
-      have hlo := bytesToNat_cons head tail
-      have hhi := bytesToNat_lt (head :: tail)
+      have hlo := ByteOrder.ofBE_cons head tail
+      have hhi := ByteOrder.ofBE_lt (head :: tail)
       have hh : 1 ≤ head.toNat := by
         have : head.toNat ≠ 0 := fun h => hhead (UInt8.toNat_inj.mp h)
         omega
       have hpow : 256 ^ tail.length ≤ head.toNat * 256 ^ tail.length :=
         Nat.le_mul_of_pos_left _ hh
-      generalize hnb : bytesToNat (head :: tail) = n at *
+      generalize hnb : ByteOrder.ofBE (head :: tail) = n at *
       obtain ⟨k, hk⟩ : ∃ k, first.toNat - 128 = k + 1 := ⟨first.toNat - 129, by omega⟩
       rw [hk] at hlen htake hin ⊢
       have hm : min (2 + (k + 1) + n) (more.length + 1 + 1) - (2 + (k + 1)) = n := by omega
@@ -196,8 +197,8 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
         apply UInt8.toNat_inj.mp
         simp only [UInt8.toNat_ofNat']
         omega
-      have hbytes : natToBytes (k + 1) n = List.take (k + 1) more := by
-        rw [htake, ← hnb, ← hlen, natToBytes_bytesToNat]
+      have hbytes : (ByteOrder.toBE (k + 1) n).toList = List.take (k + 1) more := by
+        rw [htake, ← hnb, ← hlen, ByteOrder.toList_toBE_ofBE]
       refine ⟨fun h => ht (.inl h), fun h => ht (.inr h), ?_,
         .inr ⟨k, ?_, ?_, ?_, by omega, ?_⟩⟩
       · rw [List.take_of_length_le (l := List.drop (k + 1 + n) more) (by
@@ -240,9 +241,10 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
       have hq1 : 1 ≤ content.size / 256 ^ k := (Nat.le_div_iff_mul_le hpos).mpr (by omega)
       have hq2 : content.size / 256 ^ k < 256 :=
         (Nat.div_lt_iff_lt_mul hpos).mpr (by rw [Nat.pow_succ] at hhi; omega)
-      have hsplit : natToBytes (k + 1) content.size =
-          UInt8.ofNat (content.size / 256 ^ k) :: natToBytes k content.size := by
-        rw [Nat.add_comm, natToBytes_add, natToBytes_succ, natToBytes_zero, List.nil_append,
+      have hsplit : (ByteOrder.toBE (k + 1) content.size).toList =
+          UInt8.ofNat (content.size / 256 ^ k) :: (ByteOrder.toBE k content.size).toList := by
+        rw [Nat.add_comm, ByteOrder.toList_toBE_add, ByteOrder.toList_toBE_succ,
+          ByteOrder.toList_toBE_zero, List.nil_append,
           Nat.mod_eq_of_lt hq2]
         rfl
       have hhead : UInt8.ofNat (content.size / 256 ^ k) ≠ 0 := by
@@ -251,12 +253,12 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
         simp only [UInt8.toNat_ofNat'] at this
         simp at this
         omega
-      have hval : bytesToNat (natToBytes (k + 1) content.size) = content.size :=
-        bytesToNat_natToBytes_of_lt hhi
+      have hval : ByteOrder.ofBE ((ByteOrder.toBE (k + 1) content.size).toList) = content.size :=
+        ByteOrder.ofBE_toBE_of_lt hhi
       rw [hsplit] at hin he hval
       have hnot : ¬ input.size < 2 + (k + 1) + content.size := by
         rw [hsz, hin]
-        simp [natToBytes_length, ← hcs]
+        simp [← hcs]
         omega
       unfold EthLib.Serialization.Der.read
       rw [hin]
@@ -264,28 +266,27 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
       simp [ht1, ht0, throw, throwThe, MonadExceptOf.throw, bind, Except.bind, pure,
         Except.pure]
       have htk : List.take (k + 1) (UInt8.ofNat (content.size / 256 ^ k) ::
-          (natToBytes k content.size ++ (C ++ R))) =
-          UInt8.ofNat (content.size / 256 ^ k) :: natToBytes k content.size := by
-        rw [List.take_succ_cons, List.take_left' (natToBytes_length k _)]
+          ((ByteOrder.toBE k content.size).toList ++ (C ++ R))) =
+          UInt8.ofNat (content.size / 256 ^ k) :: (ByteOrder.toBE k content.size).toList := by
+        rw [List.take_succ_cons, List.take_left' (ByteOrder.length_toList_toBE k _)]
       simp only [show (129 + k) % 256 = 129 + k by omega, show 129 + k - 128 = k + 1 by omega,
         htk, hhead, hval, hnot]
-      have a3 : ¬ (natToBytes k content.size).length + (C.length + R.length) + 1 < k + 1 := by
-        rw [natToBytes_length]; omega
+      have a3 : ¬ k + (C.length + R.length) + 1 < k + 1 := by omega
       simp only [show ¬ 129 + k < 128 by omega, show ¬ (k + 1 = 0 ∨ k + 1 = 127) by omega, a3,
         show ¬ content.size < 128 by omega, ite_false]
       simp only [Except.ok.injEq, Prod.mk.injEq, Value.mk.injEq, true_and]
       have e : 2 + (k + 1) = k + 1 + 1 + 1 := by omega
       rw [e]
       refine ⟨⟨?_, ?_⟩, ?_⟩ <;> apply byteArray_eq_of_toList <;> rw [hext, hin]
-      · simp [hC, hcs, List.drop_left' (natToBytes_length k _)]
+      · simp [hC, hcs, List.drop_left' (ByteOrder.length_toList_toBE k _)]
       · have e2 : k + 1 + 1 + 1 + content.size = k + content.size + 1 + 1 + 1 := by omega
-        have hl : (natToBytes k content.size ++ C).length = k + content.size := by
-          simp [natToBytes_length, hcs]
+        have hl : ((ByteOrder.toBE k content.size).toList ++ C).length = k + content.size := by
+          simp [hcs]
         simp only [Nat.sub_zero, List.drop_zero, he, e2, List.take_succ_cons, List.cons_append,
           ← hl, List.take_left']
       · have e2 : k + 1 + 1 + 1 + content.size = k + content.size + 1 + 1 + 1 := by omega
-        have hl : (natToBytes k content.size ++ C).length = k + content.size := by
-          simp [natToBytes_length, hcs]
+        have hl : ((ByteOrder.toBE k content.size).toList ++ C).length = k + content.size := by
+          simp [hcs]
         rw [hR, hsz, hin, e2]
         simp only [List.drop_succ_cons, List.cons_append, ← hl,
           List.drop_left']
@@ -333,23 +334,23 @@ private theorem emod_cases {i M : Int} (lo : -M ≤ 2 * i) (hi : 2 * i < M) :
 private theorem twos_complement_iff (first : UInt8) (rest : List UInt8) (i : Int) :
     ((∀ next tail, rest = next :: tail →
         ¬ ((first = 0 ∧ next.toNat < 128) ∨ (first = 255 ∧ 128 ≤ next.toNat))) ∧
-      i = if first.toNat < 128 then (bytesToNat (first :: rest) : Int)
-        else bytesToNat (first :: rest) - 256 ^ (rest.length + 1)) ↔
+      i = if first.toNat < 128 then (ByteOrder.ofBE (first :: rest) : Int)
+        else ByteOrder.ofBE (first :: rest) - 256 ^ (rest.length + 1)) ↔
     ∃ k : Nat, -(128 * 256 ^ k : Int) ≤ i ∧ i < 128 * 256 ^ k ∧
       (∀ j < k, i < -(128 * 256 ^ j : Int) ∨ 128 * 256 ^ j ≤ i) ∧
-      first :: rest = natToBytes (k + 1) (i % 256 ^ (k + 1)).toNat := by
-  have hN := bytesToNat_cons first rest
-  have hR := bytesToNat_lt rest
+      first :: rest = (ByteOrder.toBE (k + 1) (i % 256 ^ (k + 1)).toNat).toList := by
+  have hN := ByteOrder.ofBE_cons first rest
+  have hR := ByteOrder.ofBE_lt rest
   have hf : first.toNat < 256 := first.toNat_lt
   have mulQ : ∀ a b, a ≤ b → a * 256 ^ rest.length ≤ b * 256 ^ rest.length :=
     fun a b h => Nat.mul_le_mul_right _ h
   -- The second byte, when there is one, is worth `256 ^ (k - 1)` per unit.
   have hsecond : ∀ next tail, rest = next :: tail →
-      bytesToNat rest = next.toNat * 256 ^ tail.length + bytesToNat tail ∧
-      bytesToNat tail < 256 ^ tail.length ∧ 256 ^ rest.length = 256 * 256 ^ tail.length ∧
+      ByteOrder.ofBE rest = next.toNat * 256 ^ tail.length + ByteOrder.ofBE tail ∧
+      ByteOrder.ofBE tail < 256 ^ tail.length ∧ 256 ^ rest.length = 256 * 256 ^ tail.length ∧
       (∀ a b, a ≤ b → a * 256 ^ tail.length ≤ b * 256 ^ tail.length) := by
     rintro next tail rfl
-    exact ⟨bytesToNat_cons next tail, bytesToNat_lt tail, by
+    exact ⟨ByteOrder.ofBE_cons next tail, ByteOrder.ofBE_lt tail, by
       rw [List.length_cons, Nat.pow_succ, Nat.mul_comm], fun a b h => Nat.mul_le_mul_right _ h⟩
   have hsmall : ∀ j < rest.length, ∀ tail : List UInt8, rest.length = tail.length + 1 →
       256 ^ j ≤ 256 ^ tail.length := fun j hj tail ht =>
@@ -367,7 +368,7 @@ private theorem twos_complement_iff (first : UInt8) (rest : List UInt8) (i : Int
         have := mulQ first.toNat 255 (by omega)
         omega
     have hmod : (i % ((256 ^ rest.length * 256 : Nat) : Int)).toNat =
-        bytesToNat (first :: rest) := by
+        ByteOrder.ofBE (first :: rest) := by
       have := mulQ first.toNat 255 (by omega)
       rcases emod_cases (i := i) (M := ((256 ^ rest.length * 256 : Nat) : Int))
         (by omega) (by omega) with ⟨h0, h⟩ | ⟨h0, h⟩ <;> rw [h] <;> split at hi <;> omega
@@ -400,17 +401,17 @@ private theorem twos_complement_iff (first : UInt8) (rest : List UInt8) (i : Int
             have := mulQ first.toNat 254 (by omega)
             omega
     · rw [hmod]
-      exact (natToBytes_bytesToNat (first :: rest)).symm
+      exact (ByteOrder.toList_toBE_ofBE (first :: rest)).symm
   · rintro ⟨k, lo, hi, hmin, hc⟩
     have hk : k = rest.length := by
       have := congrArg List.length hc
-      rw [natToBytes_length, List.length_cons] at this
+      rw [ByteOrder.length_toList_toBE, List.length_cons] at this
       omega
     subst hk
     -- The bytes hold `i` modulo `256 ^ (k + 1)`, which is `i` or `i + 256 ^ (k + 1)`.
     have hval :
-        bytesToNat (first :: rest) = (i % ((256 ^ rest.length * 256 : Nat) : Int)).toNat := by
-      rw [hc, bytesToNat_natToBytes_of_lt]
+        ByteOrder.ofBE (first :: rest) = (i % ((256 ^ rest.length * 256 : Nat) : Int)).toNat := by
+      rw [hc, ByteOrder.ofBE_toBE_of_lt]
       rcases emod_cases (i := i) (M := ((256 ^ rest.length * 256 : Nat) : Int))
         (by omega) (by omega) with ⟨h0, h⟩ | ⟨h0, h⟩ <;> rw [h, Nat.pow_succ] <;> omega
     have hcase := emod_cases (i := i) (M := ((256 ^ rest.length * 256 : Nat) : Int))
@@ -445,7 +446,7 @@ theorem integer_ok_iff {value : Value} {i : Int} :
     integer value = .ok i ↔ value.tag = 2 ∧ ∃ k : Nat,
       -(128 * 256 ^ k : Int) ≤ i ∧ i < 128 * 256 ^ k ∧
       (∀ j < k, i < -(128 * 256 ^ j : Int) ∨ 128 * 256 ^ j ≤ i) ∧
-      value.content.data.toList = natToBytes (k + 1) (i % 256 ^ (k + 1)).toNat := by
+      value.content.data.toList = (ByteOrder.toBE (k + 1) (i % 256 ^ (k + 1)).toNat).toList := by
   unfold integer
   generalize hc : value.content.data.toList = c
   have hsize : value.content.size = c.length := by
@@ -459,7 +460,7 @@ theorem integer_ok_iff {value : Value} {i : Int} :
         not_and]
       intro k _ _ _ h
       have := congrArg List.length h
-      simp [natToBytes_length] at this
+      simp at this
     rw [← twos_complement_iff]
     rcases rest with _ | ⟨next, tail⟩
     · simp [pure, Except.pure, eq_comm]
@@ -500,7 +501,8 @@ The content has `k + 1` octets, and `n` is below `128 * 256 ^ k`.
 No shorter content holds `n`. -/
 theorem natural_ok_iff {value : Value} {n : Nat} :
     natural value = .ok n ↔ value.tag = 2 ∧ ∃ k : Nat, n < 128 * 256 ^ k ∧
-      (∀ j < k, 128 * 256 ^ j ≤ n) ∧ value.content.data.toList = natToBytes (k + 1) n := by
+      (∀ j < k, 128 * 256 ^ j ≤ n) ∧ value.content.data.toList
+        = (ByteOrder.toBE (k + 1) n).toList := by
   have hnat : natural value = .ok n ↔ integer value = .ok (n : Int) := by
     unfold natural
     cases h : integer value with
@@ -662,14 +664,14 @@ private theorem fixedString_eq (width : Nat) (bytes : List UInt8) :
 private theorem foldl_step_partial {width : Nat} (bytes : List UInt8) (i acc : Nat) (ok : Bool)
     (h : i + bytes.length < width) :
     bytes.foldl (step width) (i, acc, ok) =
-      (i + bytes.length, acc * 256 ^ bytes.length + bytesToNat bytes, ok) := by
+      (i + bytes.length, acc * 256 ^ bytes.length + ByteOrder.ofBE bytes, ok) := by
   induction bytes generalizing i acc with
-  | nil => simp [bytesToNat]
+  | nil => simp [ByteOrder.ofBE]
   | cons x xs ih =>
     simp only [List.length_cons] at h
     have hne : ¬ i + 1 = width := by omega
     simp only [List.foldl_cons, step, hne, ite_false]
-    rw [ih (i + 1) (acc * 256 + x.toNat) (by omega), bytesToNat_cons]
+    rw [ih (i + 1) (acc * 256 + x.toNat) (by omega), ByteOrder.ofBE_cons]
     simp only [List.length_cons, Prod.mk.injEq, and_true]
     refine ⟨by omega, ?_⟩
     rw [Nat.pow_succ, Nat.add_mul, Nat.mul_assoc, Nat.mul_comm 256, Nat.add_assoc]
@@ -677,13 +679,13 @@ private theorem foldl_step_partial {width : Nat} (bytes : List UInt8) (i acc : N
 /-- A complete code unit resets the count and adds its scalar check to the verdict. -/
 private theorem foldl_step_chunk {width : Nat} (chunk : List UInt8) (ok : Bool)
     (pos : 0 < width) (h : chunk.length = width) :
-    chunk.foldl (step width) (0, 0, ok) = (0, 0, ok && unicodeScalar (bytesToNat chunk)) := by
+    chunk.foldl (step width) (0, 0, ok) = (0, 0, ok && unicodeScalar (ByteOrder.ofBE chunk)) := by
   rcases List.eq_nil_or_concat chunk with rfl | ⟨init, last, rfl⟩
   · simp at h
     omega
   · simp only [List.concat_eq_append, List.length_append, List.length_singleton] at h ⊢
     rw [List.foldl_append, foldl_step_partial init 0 0 ok (by omega)]
-    simp [step, h, bytesToNat]
+    simp [step, h, ByteOrder.ofBE, Nat.mul_comm]
 
 /-- A Unicode scalar value is at most 10FFFF and is not a surrogate, D800 to DFFF. -/
 private theorem unicodeScalar_iff (n : Nat) :
@@ -699,7 +701,7 @@ private theorem finish_foldl_iff {width : Nat} (pos : 0 < width) (bytes : List U
     (ok : Bool) :
     finish (bytes.foldl (step width) (0, 0, ok)) = true ↔ ok = true ∧ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ width ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      bytes = chars.flatMap (natToBytes width) := by
+      bytes = chars.flatMap (fun x => (ByteOrder.toBE width x).toList) := by
   induction h : bytes.length using Nat.strongRecOn generalizing bytes ok with
   | _ n ih =>
     by_cases hw : width ≤ bytes.length
@@ -710,16 +712,16 @@ private theorem finish_foldl_iff {width : Nat} (pos : 0 < width) (bytes : List U
       constructor
       · rintro ⟨hok, chars, hc, he⟩
         rw [Bool.and_eq_true, unicodeScalar_iff] at hok
-        refine ⟨hok.1, bytesToNat (bytes.take width) :: chars, ?_, ?_⟩
+        refine ⟨hok.1, ByteOrder.ofBE (bytes.take width) :: chars, ?_, ?_⟩
         · intro c hc'
           rcases List.mem_cons.mp hc' with rfl | hc'
           · refine ⟨?_, hok.2⟩
-            have := bytesToNat_lt (bytes.take width)
+            have := ByteOrder.ofBE_lt (bytes.take width)
             simpa [Nat.min_eq_left hw] using this
           · exact hc c hc'
         · have hl : (bytes.take width).length = width := by simp; omega
           rw [List.flatMap_cons, ← he]
-          conv => lhs; rw [← natToBytes_bytesToNat (bytes.take width)]
+          conv => lhs; rw [← ByteOrder.toList_toBE_ofBE (bytes.take width)]
           rw [hl]
       · rintro ⟨hok, chars, hc, he⟩
         rcases chars with _ | ⟨c, chars⟩
@@ -729,11 +731,12 @@ private theorem finish_foldl_iff {width : Nat} (pos : 0 < width) (bytes : List U
           omega
         · rw [List.take_append_drop, List.flatMap_cons] at he
           have hc0 := hc c (by simp)
-          have ht : bytes.take width = natToBytes width c := by
-            rw [he, List.take_left' (natToBytes_length width c)]
-          have hd : bytes.drop width = chars.flatMap (natToBytes width) := by
-            rw [he, List.drop_left' (natToBytes_length width c)]
-          rw [Bool.and_eq_true, unicodeScalar_iff, ht, bytesToNat_natToBytes_of_lt hc0.1]
+          have ht : bytes.take width = (ByteOrder.toBE width c).toList := by
+            rw [he, List.take_left' (ByteOrder.length_toList_toBE width c)]
+          have hd : bytes.drop width
+              = chars.flatMap (fun x => (ByteOrder.toBE width x).toList) := by
+            rw [he, List.drop_left' (ByteOrder.length_toList_toBE width c)]
+          rw [Bool.and_eq_true, unicodeScalar_iff, ht, ByteOrder.ofBE_toBE_of_lt hc0.1]
           exact ⟨⟨hok, hc0.2⟩, chars, fun c' h' => hc c' (by simp [h']), hd⟩
     · -- Fewer than `width` octets pass only when there are none.
       rw [foldl_step_partial bytes 0 0 ok (by omega)]
@@ -749,7 +752,7 @@ private theorem finish_foldl_iff {width : Nat} (pos : 0 < width) (bytes : List U
         rcases chars with _ | ⟨c, chars⟩
         · simp at he
         · have := congrArg List.length he
-          simp [natToBytes_length] at this
+          simp at this
           simp at hw
           omega
 
@@ -763,7 +766,7 @@ A UniversalString has four octets per character and a BMPString two (X.690 §§8
 theorem fixedString_eq_true_iff {width : Nat} (pos : 0 < width) {bytes : List UInt8} :
     fixedString width bytes = true ↔ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ width ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      bytes = chars.flatMap (natToBytes width) := by
+      bytes = chars.flatMap (fun x => (ByteOrder.toBE width x).toList) := by
   rw [fixedString_eq, finish_foldl_iff pos]
   simp
 
@@ -988,7 +991,7 @@ Each takes two octets. -/
 theorem validate_go_bmpString_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 30) :
     validate.go (fuel + 1) value = .ok () ↔ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ 2 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      value.content.data.toList = chars.flatMap (natToBytes 2) := by
+      value.content.data.toList = chars.flatMap (fun x => (ByteOrder.toBE 2 x).toList) := by
   rw [← fixedString_eq_true_iff (by decide), validate.go, tag]
   dsimp only
   split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
@@ -999,7 +1002,7 @@ Each takes four octets. -/
 theorem validate_go_universalString_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 28) :
     validate.go (fuel + 1) value = .ok () ↔ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ 4 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      value.content.data.toList = chars.flatMap (natToBytes 4) := by
+      value.content.data.toList = chars.flatMap (fun x => (ByteOrder.toBE 4 x).toList) := by
   rw [← fixedString_eq_true_iff (by decide), validate.go, tag]
   dsimp only
   split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
@@ -1019,14 +1022,14 @@ theorem validate_bitString {value : Value} (tag : value.tag = 3) :
 theorem validate_bmpString_ok_iff {value : Value} (tag : value.tag = 30) :
     validate value = .ok () ↔ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ 2 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      value.content.data.toList = chars.flatMap (natToBytes 2) :=
+      value.content.data.toList = chars.flatMap (fun x => (ByteOrder.toBE 2 x).toList) :=
   validate_go_bmpString_ok_iff _ tag
 
 /-- A UniversalString passes validation exactly when it writes scalar values, four octets each. -/
 theorem validate_universalString_ok_iff {value : Value} (tag : value.tag = 28) :
     validate value = .ok () ↔ ∃ chars : List Nat,
       (∀ c ∈ chars, c < 256 ^ 4 ∧ c ≤ 0x10FFFF ∧ (c < 0xD800 ∨ 0xDFFF < c)) ∧
-      value.content.data.toList = chars.flatMap (natToBytes 4) :=
+      value.content.data.toList = chars.flatMap (fun x => (ByteOrder.toBE 4 x).toList) :=
   validate_go_universalString_ok_iff _ tag
 
 /-- With positive fuel, a value of tag 6 passes validation exactly when it is subidentifiers.
@@ -1485,17 +1488,18 @@ The decoder accepts a signature only when the encoder writes the same bytes back
 -/
 
 /-- On `i + 1` bytes, the first byte is `n / 256 ^ i` modulo 256, then `n` follows on `i` bytes. -/
-private theorem natToBytes_succ_eq_cons (i n : Nat) :
-    natToBytes (i + 1) n = UInt8.ofNat (n / 256 ^ i) :: natToBytes i n := by
-  rw [Nat.add_comm, natToBytes_add]
+private theorem toBE_succ_eq_cons (i n : Nat) :
+    (ByteOrder.toBE (i + 1) n).toList
+      = UInt8.ofNat (n / 256 ^ i) :: (ByteOrder.toBE i n).toList := by
+  rw [Nat.add_comm, ByteOrder.toList_toBE_add]
   rfl
 
 /-- On 32 bytes, a number with `i + 1` significant bytes keeps them once its leading zeros go. -/
-private theorem dropWhile_natToBytes {n i : Nat} (hi : i < 32) (low : 256 ^ i ≤ n)
+private theorem dropWhile_toBE {n i : Nat} (hi : i < 32) (low : 256 ^ i ≤ n)
     (high : n < 256 ^ (i + 1)) :
-    (natToBytes 32 n).dropWhile (· == 0) = natToBytes (i + 1) n := by
-  have hsplit := natToBytes_add (31 - i) (i + 1) n
-  rw [show 31 - i + (i + 1) = 32 by omega, Nat.div_eq_of_lt high, natToBytes_zero_right]
+    ((ByteOrder.toBE 32 n).toList).dropWhile (· == 0) = (ByteOrder.toBE (i + 1) n).toList := by
+  have hsplit := ByteOrder.toList_toBE_add (31 - i) (i + 1) n
+  rw [show 31 - i + (i + 1) = 32 by omega, Nat.div_eq_of_lt high, ByteOrder.toList_toBE_zero_right]
     at hsplit
   have hpos : 0 < 256 ^ i := Nat.pow_pos (by decide)
   have hlow : 1 ≤ n / 256 ^ i := (Nat.le_div_iff_mul_le hpos).mpr (by omega)
@@ -1507,7 +1511,7 @@ private theorem dropWhile_natToBytes {n i : Nat} (hi : i < 32) (low : 256 ^ i �
     rw [UInt8.toNat_ofNat_of_lt' hhigh] at this
     simp at this
     omega
-  rw [hsplit, natToBytes_succ_eq_cons, List.dropWhile_append_of_pos (by simp)]
+  rw [hsplit, toBE_succ_eq_cons, List.dropWhile_append_of_pos (by simp)]
   simp [nonzero]
 
 /-- The DER INTEGER of a number below `2 ^ 256`, as BIP 62 spells out strict DER.
@@ -1523,7 +1527,7 @@ With them, the first content byte is below `0x80`, and it is `0x00` only before 
 Zero is one content byte, `0x00`. -/
 theorem ecdsaInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 1))
     (low : k = 1 ∨ 2 ^ (8 * (k - 1) - 1) ≤ n) :
-    ecdsaInteger n = [0x02, UInt8.ofNat k] ++ natToBytes k n := by
+    ecdsaInteger n = [0x02, UInt8.ofNat k] ++ (ByteOrder.toBE k n).toList := by
   obtain _ | j := k
   · simp at high low; omega
   have hhigh : n < 128 * 256 ^ j := by
@@ -1534,13 +1538,13 @@ theorem ecdsaInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 
   · have hj32 : j < 32 := (Nat.pow_lt_pow_iff_right (a := 256) (by decide)).mp (by omega)
     have hdiv : n / 256 ^ j < 128 :=
       (Nat.div_lt_iff_lt_mul (Nat.pow_pos (by decide))).mpr (by omega)
-    have hdrop := dropWhile_natToBytes hj32 hj (by rw [Nat.pow_succ]; omega)
-    rw [natToBytes_succ_eq_cons j n] at hdrop ⊢
+    have hdrop := dropWhile_toBE hj32 hj (by rw [Nat.pow_succ]; omega)
+    rw [toBE_succ_eq_cons j n] at hdrop ⊢
     have : ¬ (UInt8.ofNat (n / 256 ^ j)).toNat ≥ 128 := by
       rw [UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)]; omega
     simp only [ecdsaInteger, hdrop]
     rw [ite_eq_right this]
-    simp [natToBytes_length]
+    simp
   · obtain _ | i := j
     · have hzero : n = 0 := by simp at hj; omega
       subst hzero
@@ -1551,20 +1555,20 @@ theorem ecdsaInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 
         · rw [show 8 * (i + 1 + 1 - 1) - 1 = 7 + 8 * i by omega, Nat.pow_add, Nat.pow_mul] at h
           simpa using h
       have hi32 : i < 32 := (Nat.pow_lt_pow_iff_right (a := 256) (by decide)).mp (by omega)
-      have hdrop := dropWhile_natToBytes (n := n) hi32 (by omega) (by omega)
+      have hdrop := dropWhile_toBE (n := n) hi32 (by omega) (by omega)
       have hdiv : 128 ≤ n / 256 ^ i :=
         (Nat.le_div_iff_mul_le (Nat.pow_pos (by decide))).mpr (by omega)
       have hdiv256 : n / 256 ^ i < 256 :=
         (Nat.div_lt_iff_lt_mul (Nat.pow_pos (by decide))).mpr
           (by rw [Nat.pow_succ] at hj; omega)
-      rw [natToBytes_succ_eq_cons i n] at hdrop
-      rw [natToBytes_succ_eq_cons (i + 1) n, Nat.div_eq_of_lt (by omega),
-        natToBytes_succ_eq_cons i n]
+      rw [toBE_succ_eq_cons i n] at hdrop
+      rw [toBE_succ_eq_cons (i + 1) n, Nat.div_eq_of_lt (by omega),
+        toBE_succ_eq_cons i n]
       have : (UInt8.ofNat (n / 256 ^ i)).toNat ≥ 128 := by
         rw [UInt8.toNat_ofNat_of_lt' hdiv256]; omega
       simp only [ecdsaInteger, hdrop]
       rw [ite_eq_left this]
-      simp [natToBytes_length]
+      simp
 
 -- The bound for 33 bytes is `2 ^ 263`, above the default threshold for evaluating a power.
 set_option exponentiation.threshold 263 in
@@ -1591,7 +1595,7 @@ theorem exists_derByteCount {n : Nat} (hn : n < 2 ^ 256) :
 /-- Every number below `2 ^ 256` has its DER INTEGER on at most 33 content bytes. -/
 private theorem exists_ecdsaInteger_eq {n : Nat} (hn : n < 2 ^ 256) :
     ∃ k, 1 ≤ k ∧ k ≤ 33 ∧ n < 256 ^ k ∧
-      ecdsaInteger n = [0x02, UInt8.ofNat k] ++ natToBytes k n := by
+      ecdsaInteger n = [0x02, UInt8.ofNat k] ++ (ByteOrder.toBE k n).toList := by
   obtain ⟨k, h1, h33, high, low⟩ := exists_derByteCount hn
   refine ⟨k, h1, h33, ?_, ecdsaInteger_eq hn high low⟩
   have : 2 ^ (8 * k - 1) ≤ 256 ^ k := by
@@ -1634,14 +1638,15 @@ theorem decodeEcdsaScalars_eq_some_iff {signature : ByteArray} {r s : Nat} :
     obtain ⟨ks, hks1, hks, hsk, hder_s⟩ := exists_ecdsaInteger_eq hs256
     have hdata : (encodeEcdsaSignature r s).data.toList =
         0x30 :: UInt8.ofNat (kr + ks + 4) :: 0x02 :: UInt8.ofNat kr ::
-          (natToBytes kr r ++ 0x02 :: UInt8.ofNat ks :: natToBytes ks s) := by
-      simp [encodeEcdsaSignature, hder_r, hder_s, natToBytes_length]
+          ((ByteOrder.toBE kr r).toList
+            ++ 0x02 :: UInt8.ofNat ks :: (ByteOrder.toBE ks s).toList) := by
+      simp [encodeEcdsaSignature, hder_r, hder_s]
       apply UInt8.toNat_inj.mp
       simp
       omega
     have hsize : (encodeEcdsaSignature r s).size = kr + ks + 6 := by
       rw [ByteArray.size, ← Array.length_toList, hdata]
-      simp [natToBytes_length]
+      simp
       omega
     have hkr8 : (UInt8.ofNat kr).toNat = kr := UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)
     have hks8 : (UInt8.ofNat ks).toNat = ks := UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)
@@ -1651,9 +1656,9 @@ theorem decodeEcdsaScalars_eq_some_iff {signature : ByteArray} {r s : Nat} :
         encodeEcdsaSignature r s = encodeEcdsaSignature r s := ⟨hr, hr256, hs, hs256, rfl⟩
     unfold decodeEcdsaScalars
     rw [hdata]
-    simp only [hsize, htotal, hkr8, hks8, List.take_left' (natToBytes_length kr r),
-      List.drop_left' (natToBytes_length kr r), natToBytes_length,
-      bytesToNat_natToBytes_of_lt hrk, bytesToNat_natToBytes_of_lt hsk]
+    simp only [hsize, htotal, hkr8, hks8, List.take_left' (ByteOrder.length_toList_toBE kr r),
+      List.drop_left' (ByteOrder.length_toList_toBE kr r), ByteOrder.length_toList_toBE,
+      ByteOrder.ofBE_toBE_of_lt hrk, ByteOrder.ofBE_toBE_of_lt hsk]
     simp only [hcond, and_self, ite_true]
     simp
 

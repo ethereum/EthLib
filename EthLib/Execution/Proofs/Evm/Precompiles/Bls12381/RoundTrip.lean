@@ -26,7 +26,7 @@ The group and the curve are those of Mathlib, so this file imports Mathlib.
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (natToBytes)
+open EthLib.Base (ByteOrder.toBE)
 open EthLib.Cryptography.Bls (Fp Fp2 G1 G2 G2.zero)
 
 /-- Decoding the encoding of a G1 point on the curve gives the same group element.
@@ -48,7 +48,8 @@ theorem bytesToG1_g1ToBytes {p : G1} (hp : G1.Valid p) {subgroupCheck : Bool}
       rwa [hpa] at this
     have hvalid := G1.valid_of_affine_eq heq
     refine ⟨⟨x, y, Fp.one⟩, ?_, hq⟩
-    have henc : g1ToBytes p = natToBytes 48 x.val ++ natToBytes 48 y.val := by
+    have henc : g1ToBytes p = (ByteOrder.toBE 48 x.val).toList
+        ++ (ByteOrder.toBE 48 y.val).toList := by
       simp [g1ToBytes, hpa]
     rw [henc]
     refine bytesToG1_affine (Fp.beq_iff.mpr heq) fun hc => ?_
@@ -77,8 +78,9 @@ theorem bytesToG2_g2ToBytes {p : G2} (hp : G2.Valid p) {subgroupCheck : Bool}
       rw [hpa] at this
       exact (G2.projectiveEq_eq_true_iff_toPoint_eq hvalid hp).mp this
     refine ⟨⟨x, y, Fp2.one⟩, ?_, hq⟩
-    have henc : g2ToBytes p = (natToBytes 48 x.c0.val ++ natToBytes 48 x.c1.val) ++
-        (natToBytes 48 y.c0.val ++ natToBytes 48 y.c1.val) := by
+    have henc : g2ToBytes p
+        = ((ByteOrder.toBE 48 x.c0.val).toList ++ (ByteOrder.toBE 48 x.c1.val).toList) ++
+        ((ByteOrder.toBE 48 y.c0.val).toList ++ (ByteOrder.toBE 48 y.c1.val).toList) := by
       simp [g2ToBytes, hpa]
     rw [henc]
     refine bytesToG2_affine (Fp2.beq_iff_eq.mpr heq) fun hc => ?_
@@ -93,8 +95,8 @@ set_option maxRecDepth 8000 in
 theorem g2ToBytes_bytesToG2 {raw : List UInt8} (hlength : raw.length = 192) {subgroupCheck : Bool}
     {p : G2} (h : bytesToG2 raw subgroupCheck = .ok p) : g2ToBytes p = raw := by
   obtain ⟨x, y, hx, hy, hcase⟩ := bytesToG2_eq_ok_iff.mp h
-  have hxb := natToBytes_bytesToFq2 (by simp [hlength]) hx
-  have hyb := natToBytes_bytesToFq2 (by simp [hlength]) hy
+  have hxb := toBE_bytesToFq2 (by simp [hlength]) hx
+  have hyb := toBE_bytesToFq2 (by simp [hlength]) hy
   rcases hcase with ⟨h0, h1, h2, h3, rfl⟩ | ⟨-, -, rfl⟩
   · -- Every coordinate is zero: the point at infinity, and the bytes are all zero.
     rw [g2ToBytes_of_isZero (p := G2.zero) G2.isInfinity_zero, ← List.take_append_drop 96 raw,

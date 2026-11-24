@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Execution.Evm.Machine.Memory
 public import EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
@@ -24,6 +24,6 @@ open EthLib.Execution.Evm (bufferRead)
 /-- The big-endian integer held by `size` bytes of the call data from `start`. -/
 def readNat (data : ByteArray) (start size : Nat) : Nat :=
   -- EIP-198: the call data is read as infinitely right-padded with zero bytes.
-  bytesToNat (bufferRead data start size)
+  ByteOrder.ofBE (bufferRead data start size)
 
 end EthLib.Execution.Evm.Precompiles.Modexp

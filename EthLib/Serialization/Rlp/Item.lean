@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `Serialization.Rlp.Item`
@@ -171,15 +171,6 @@ For example, `BE(127)` is the byte `7f`, and `BE(1024)` is the bytes `04 00`.
 def bigEndian (n : Nat) : ByteArray :=
   -- `BE(n)` of Appendix B, with a budget of `n` bytes.
   bigEndianAux n n
-
-/-- The number that `bytes` writes in base 256, most significant byte first.
-
-It inverts `BE` on the byte strings with no leading zero. -/
-def ofBigEndian (bytes : List UInt8) : Nat :=
-  -- The equation for `BE`: `x = sum_{n=0}^{k-1} b_n * 256^(k - 1 - n)`, for the `k` bytes `b`.
-  --
-  -- The big-endian reading of the base layer computes that sum.
-  Base.bytesToNat bytes
 
 /-- The item of a scalar `n`: the byte string `BE(n)`, so 0 is the empty byte string. -/
 def Item.scalar (n : Nat) : Item :=

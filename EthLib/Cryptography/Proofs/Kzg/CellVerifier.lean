@@ -395,7 +395,7 @@ theorem blsFieldToBytes_of_bytesToBlsField {b : Base.Bytes32} {f : Fr}
   have hval' := (bytesToBlsField_ok (bytesToBlsField_blsFieldToBytes f)).1
   -- Both byte strings have 32 bytes and decode to the value of `f`.
   apply Vector.toList_inj.mp
-  exact Base.bytesToNat_inj (by simp) (hval'.symm.trans hval)
+  exact Base.ByteOrder.ofBE_inj (by simp) (hval'.symm.trans hval)
 
 /-- Two byte strings with the same field-element chunks are equal. -/
 theorem eq_of_fieldElementBytes {k : Nat} {x y : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)}

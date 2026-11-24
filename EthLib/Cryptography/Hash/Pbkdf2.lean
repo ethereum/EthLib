@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Hmac
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
 
 /-!
@@ -63,7 +63,7 @@ def iterate (password : ByteArray) : Nat → Vector UInt8 32 → Vector UInt8 32
 A derivation has a positive iteration count, and zero iterations give the block of one. -/
 def block (password salt : ByteArray) (iterations : Nat) (index : UInt32) : Vector UInt8 32 :=
   -- `U_1 = PRF (P, S || INT (i))`, with `INT (i)` four octets, most significant first.
-  let first := prf password (salt ++ Base.natToBytes4 index.toNat)
+  let first := prf password (salt ++ ⟨(Base.ByteOrder.toBE 4 index.toNat).toArray⟩)
   -- `F (P, S, c, i) = U_1 \xor U_2 \xor ... \xor U_c`.
   iterate password (iterations - 1) first first
 

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.ErrorFormat
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Fork
 public import EthLib.Cryptography.AltBn128.Pairing
 public import EthLib.Execution.Evm.Gas.Prices
@@ -21,7 +21,7 @@ EIP-1108 lowers their prices from Istanbul, so each call takes the fork.
 
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
-open EthLib.Base (Fork bytesToNat natToBytes)
+open EthLib.Base (Fork ByteOrder.ofBE ByteOrder.toBE)
 open EthLib.Execution.Evm (bufferRead)
 open EthLib.Cryptography.AltBn128
 
@@ -95,8 +95,8 @@ def ecpairingGas (fork : Fork) (size : Nat) : Nat :=
 /-- A point of `G_1` from 64 bytes, with `(0, 0)` for the point at infinity. -/
 def bytesToG1 (raw : List UInt8) : Except AltBn128Error Point := do
   -- EIP-196, Encoding: field elements are 32 byte big-endian numbers, a point is `(x, y)`.
-  let x := bytesToNat (raw.take 32)
-  let y := bytesToNat (raw.drop 32)
+  let x := ByteOrder.ofBE (raw.take 32)
+  let y := ByteOrder.ofBE (raw.drop 32)
   -- Invalid input: a coordinate equal or larger than the field modulus `p`.
   if hx : x < Fp.modulus then
     if hy : y < Fp.modulus then
@@ -113,7 +113,7 @@ def bytesToG1 (raw : List UInt8) : Except AltBn128Error Point := do
 def g1ToBytes : Point → List UInt8
   -- EIP-196, Encoding: the length of the returned data is always as specified, 64 bytes.
   | .infinity => List.replicate 64 0
-  | .affine x y => natToBytes 32 x.val ++ natToBytes 32 y.val
+  | .affine x y => (ByteOrder.toBE 32 x.val).toList ++ (ByteOrder.toBE 32 y.val).toList
 
 /-- ECADD: the sum of the two points in the call data, once the gas is charged. -/
 def ecadd (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
@@ -136,7 +136,7 @@ def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error By
   -- MUL input: a curve point and a scalar `(x, s)`; a short input is padded with zeros.
   let p0 ← bytesToG1 (bufferRead data 0 64)
   -- The scalar can be any number between `0` and `2^256 - 1`.
-  let n := bytesToNat (bufferRead data 64 32)
+  let n := ByteOrder.ofBE (bufferRead data 64 32)
   -- Output: the curve point `s * x`.
   --
   -- A 32-byte scalar is below `2^256`, so 256 bits cover it.
@@ -145,7 +145,7 @@ def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error By
 /-- An element of `Fp` from 32 bytes. -/
 def bytesToFp (raw : List UInt8) : Except AltBn128Error Fp :=
   -- EIP-197, Encoding: 32 byte big-endian numbers; an encoding value of `p` or larger is invalid.
-  let value := bytesToNat raw
+  let value := ByteOrder.ofBE raw
   if h : value < Fp.modulus then .ok ⟨value, h⟩ else .error (.invalidFieldElement value)
 
 /-- A point of the twist from 128 bytes, with zeros for the point at infinity.
@@ -174,8 +174,8 @@ No precompile returns a point of the twist; this encoding is the inverse of the 
 def g2ToBytes : Point2 → List UInt8
   | .infinity => List.replicate 128 0
   | .affine x y =>
-    natToBytes 32 x.c1.val ++ natToBytes 32 x.c0.val ++
-      natToBytes 32 y.c1.val ++ natToBytes 32 y.c0.val
+    (ByteOrder.toBE 32 x.c1.val).toList ++ (ByteOrder.toBE 32 x.c0.val).toList ++
+      (ByteOrder.toBE 32 y.c1.val).toList ++ (ByteOrder.toBE 32 y.c0.val).toList
 
 /-- One pair of the call data, decoded and checked to be in the groups of order `q`.
 

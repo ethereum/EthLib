@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Proofs.Montgomery.Core
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.Tactic.LinearCombination
@@ -334,9 +334,9 @@ theorem toZMod_inv [Fact M.p.Prime] (a : Montgomery M) : toZMod a⁻¹ = (toZMod
 open EthLib.Base
 
 /-- The four bytes of a limb read back as the limb. -/
-theorem bytesToNat_limbBytes (x : UInt32) : bytesToNat (limbBytes x) = x.toNat := by
+theorem ofBE_limbBytes (x : UInt32) : ByteOrder.ofBE (limbBytes x) = x.toNat := by
   have := x.toNat_lt
-  simp only [limbBytes, bytesToNat, List.foldl, UInt32.toNat_toUInt8, UInt32.toNat_shiftRight,
+  simp only [limbBytes, ByteOrder.ofBE, List.foldl, UInt32.toNat_toUInt8, UInt32.toNat_shiftRight,
     UInt32.reduceToNat, Nat.reduceMod, Nat.shiftRight_eq_div_pow, Nat.reducePow]
   omega
 
@@ -352,14 +352,14 @@ theorem bytesBE_length (k : ℕ) (f : ℕ → UInt64) : (bytesBE k f).length = 4
     omega
 
 /-- The bytes of fitting limbs read back as their integer. -/
-theorem bytesToNat_bytesBE {k : ℕ} {f : ℕ → UInt64} (h : Fits k f 0) :
-    bytesToNat (bytesBE k f) = num k f 0 := by
+theorem ofBE_bytesBE {k : ℕ} {f : ℕ → UInt64} (h : Fits k f 0) :
+    ByteOrder.ofBE (bytesBE k f) = num k f 0 := by
   induction k with
   | zero => rfl
   | succ k ih =>
     have hk := lt_of_fits h k (by omega)
     rw [Nat.zero_add] at hk
-    rw [bytesBE, bytesToNat_append, bytesToNat_limbBytes, bytesBE_length, ih (fits_snoc.mp h).1,
+    rw [bytesBE, ByteOrder.ofBE_append, ofBE_limbBytes, bytesBE_length, ih (fits_snoc.mp h).1,
       num_snoc, Nat.zero_add, UInt64.toNat_toUInt32, Nat.mod_eq_of_lt hk,
       show (256 : ℕ) ^ (4 * k) = 2 ^ (32 * k) by rw [Nat.pow_mul, Nat.pow_mul]]
     ring
@@ -375,14 +375,14 @@ theorem pushLimbs_toList (f : ℕ → UInt64) (k : ℕ) (acc : ByteArray) :
 
 /-- An element as `4 n` bytes is its integer, big-endian. -/
 theorem toBytesBE_eq (a : Montgomery M) :
-    (toBytesBE a).data.toList = natToBytes (4 * n) a.toNat := by
+    (toBytesBE a).data.toList = (ByteOrder.toBE (4 * n) a.toNat).toList := by
   unfold toBytesBE
   rw [pushLimbs_toList]
   have he : (ByteArray.emptyWithCapacity (4 * n)).data.toList = [] := by
     rfl
   rw [he, List.nil_append]
-  conv_lhs => rw [← natToBytes_bytesToNat (bytesBE _ _)]
-  rw [bytesBE_length, bytesToNat_bytesBE (Limbs.fits _ 0), toNat_eq_val]
+  conv_lhs => rw [← ByteOrder.toList_toBE_ofBE (bytesBE _ _)]
+  rw [bytesBE_length, ofBE_bytesBE (Limbs.fits _ 0), toNat_eq_val]
   rfl
 
 /-- Reading a byte past the end with `!` gives the default `0`, as `getD` does. -/
@@ -432,11 +432,12 @@ private theorem ofFn_succ_bytes (b : ByteArray) (m off : ℕ) :
 
 /-- The limbs read from `off` hold the integer of the `4 m` bytes from `off`, big-endian. -/
 theorem num_limbBE (b : ByteArray) (m off : ℕ) :
-    num m (limbBE m b off) 0 = bytesToNat (List.ofFn (n := 4 * m) fun k => b[off + k.val]!) := by
+    num m (limbBE m b off) 0
+      = ByteOrder.ofBE (List.ofFn (n := 4 * m) fun k => b[off + k.val]!) := by
   induction m generalizing off with
   | zero => rfl
   | succ m ih =>
-    rw [num_snoc, ofFn_succ_bytes, bytesToNat_append, List.length_ofFn, ← ih (off + 4)]
+    rw [num_snoc, ofFn_succ_bytes, ByteOrder.ofBE_append, List.length_ofFn, ← ih (off + 4)]
     have hc : num m (limbBE (m + 1) b off) 0 = num m (limbBE m b (off + 4)) 0 :=
       num_congr fun i hi => by
         simp only [limbBE]
@@ -448,14 +449,14 @@ theorem num_limbBE (b : ByteArray) (m off : ℕ) :
       omega
     rw [hc, ht, UInt32.toNat_toUInt64, wordBE_toNat,
       show (256 : ℕ) ^ (4 * m) = 2 ^ (32 * m) by rw [Nat.pow_mul, Nat.pow_mul]]
-    simp only [bytesToNat, List.foldl]
+    simp only [ByteOrder.ofBE, List.foldl]
     ring
 
 /-- Reading `4 n` bytes gives the element of their integer, or `none` from `p` on. -/
 theorem ofBytesBE_eq (b : ByteArray) (off : ℕ) :
     (ofBytesBE b off : Option (Montgomery M)) =
-      if bytesToNat (List.ofFn (n := 4 * n) fun k => b[off + k.val]!) < M.p then
-        some (ofNat (bytesToNat (List.ofFn (n := 4 * n) fun k => b[off + k.val]!)))
+      if ByteOrder.ofBE (List.ofFn (n := 4 * n) fun k => b[off + k.val]!) < M.p then
+        some (ofNat (ByteOrder.ofBE (List.ofFn (n := 4 * n) fun k => b[off + k.val]!)))
       else none := by
   rw [← num_limbBE]
   unfold ofBytesBE
@@ -492,8 +493,8 @@ theorem ofBytesBE_toBytesBE (a : Montgomery M) : ofBytesBE (toBytesBE a) 0 = som
     simp only [List.getElem_ofFn, Nat.zero_add, Array.getElem_toList]
     rw [getElem!_pos (toBytesBE a) i (by simp at h1; omega)]
     rfl
-  have hv : bytesToNat (toBytesBE a).data.toList = a.toNat := by
-    rw [toBytesBE_eq, bytesToNat_natToBytes, Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le
+  have hv : ByteOrder.ofBE (toBytesBE a).data.toList = a.toNat := by
+    rw [toBytesBE_eq, ByteOrder.ofBE_toBE, Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le
       (Nat.lt_trans (toNat_lt a) M.lt_radix) (Nat.le_of_eq (by rw [Nat.pow_mul, Nat.pow_mul])))]
   rw [ofBytesBE_eq, hl, hv]
   simp only [toNat_lt a, ↓reduceIte, ofNat_toNat]

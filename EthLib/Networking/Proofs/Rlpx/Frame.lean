@@ -3,7 +3,7 @@ module
 public import EthLib.Networking.Rlpx.Frame
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Hasher
-import EthLib.Base.Proofs.BigEndian
+import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # Proofs: RLPx frames
@@ -39,14 +39,15 @@ theorem crypt_crypt (aesKey : Aes.Key .aes256) (counter : Aes.Block) (data : Byt
   Aes.ctr_ctr _ _ _ _
 
 theorem size_header (size : Nat) : (header size).size = BLOCK_SIZE := by
-  simp [header, HEADER_DATA, ByteArray.size, BLOCK_SIZE, Base.natToBytes_length]
+  simp [header, HEADER_DATA, ByteArray.size, BLOCK_SIZE]
 
 theorem readSize_header {size : Nat} (h : size < 2 ^ 24) :
     readSize (header size).data.toList = size := by
   -- The first 3 bytes of the header are the size, written on 3 bytes.
   rw [readSize, header, Array.toList_append, Array.toList_append, List.toList_toArray,
-    List.append_assoc, List.take_left' (Base.natToBytes_length 3 size)]
-  exact Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_eq h (by decide))
+    List.append_assoc,
+    List.take_left' (by simp : (Base.ByteOrder.toBE 3 size).toArray.toList.length = 3)]
+  exact Base.ByteOrder.ofBE_toBE_of_lt (lt_of_lt_of_eq h (by decide))
 
 theorem size_macBytes (h : Hasher256) : (macBytes h).size = BLOCK_SIZE := by
   simp [macBytes, ByteArray.size, BLOCK_SIZE]

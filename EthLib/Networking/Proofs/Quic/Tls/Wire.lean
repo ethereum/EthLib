@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.Quic.Tls.Wire
 public import EthLib.Base.Proofs.Bytes
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Networking.Proofs.Encoding.ByteReader
 
 /-!
@@ -25,14 +25,14 @@ open EthLib.Networking.Encoding.ByteReader (bytes_append uint_encode require_tru
 /-- A one-byte integer is the value of that byte. -/
 @[simp] theorem uint_byte (value : UInt8) (rest : List UInt8) :
     uint 1 (value :: rest) = .ok (value.toNat, rest) := by
-  simp [uint, Encoding.ByteReader.uint, Encoding.ByteReader.bytes, Base.bytesToNat, StateT.bind,
+  simp [uint, Encoding.ByteReader.uint, Encoding.ByteReader.bytes, Base.ByteOrder.ofBE, StateT.bind,
     StateT.pure, bind, Except.bind, pure, Except.pure]
 
 /-- Reading a bounded vector recovers all its bytes and leaves the following bytes. -/
 theorem blob_encode (width minimum maximum : Nat) (data rest : List UInt8)
     (lower : minimum ≤ data.length) (upper : data.length ≤ maximum)
     (capacity : data.length < 256 ^ width) :
-    blob width minimum maximum (Base.natToBytes width data.length ++ (data ++ rest)) =
+    blob width minimum maximum ((Base.ByteOrder.toBE width data.length).toList ++ (data ++ rest)) =
       .ok (data, rest) := by
   simp [blob, Nat.mod_eq_of_lt capacity, lower, upper,
     StateT.bind, bind, Except.bind]
@@ -41,7 +41,7 @@ theorem blob_encode (width minimum maximum : Nat) (data rest : List UInt8)
 theorem encodeBlob_eq_ok_iff (width minimum maximum : Nat) (data encoded : List UInt8) :
     encodeBlob width minimum maximum data = .ok encoded ↔
       minimum ≤ data.length ∧ data.length ≤ maximum ∧ data.length < 256 ^ width ∧
-      encoded = Base.natToBytes width data.length ++ data := by
+      encoded = (Base.ByteOrder.toBE width data.length).toList ++ data := by
   simp only [encodeBlob]
   split <;> simp_all [eq_comm] <;> omega
 
@@ -53,7 +53,7 @@ theorem encodeBlob_length_overflow (width minimum maximum : Nat) (data : List UI
 
 /-- Two-byte identifiers round trip, including values that no registry assigns. -/
 @[simp] theorem codePoint_encode (value : CodePoint) (rest : List UInt8) :
-    codePoint (Base.natToBytes 2 value.val ++ rest) = .ok (value, rest) := by
+    codePoint ((Base.ByteOrder.toBE 2 value.val).toList ++ rest) = .ok (value, rest) := by
   have bound : value.val < 256 ^ 2 := value.isLt
   simp [codePoint, Nat.mod_eq_of_lt bound, value.isLt,
     StateT.bind, StateT.pure, bind, Except.bind, pure, Except.pure]
@@ -76,7 +76,7 @@ theorem length_encodeBlob {width minimum maximum : Nat} {data encoded : List UIn
     (written : encodeBlob width minimum maximum data = .ok encoded) :
     encoded.length = width + data.length := by
   obtain ⟨_, _, _, rfl⟩ := (encodeBlob_eq_ok_iff ..).mp written
-  simp [Base.natToBytes_length]
+  simp
 
 /-- Lists of nonempty entry encodings fit the parser's fuel and recover each entry in order. -/
 theorem many_encodeEntries (encoder : α → Except Error (List UInt8)) (reader : Reader α)
@@ -182,9 +182,9 @@ theorem encodeEntries_of_entries (encoder : α → Except Error (List UInt8)) (r
   encodeEntries_of_many encoder reader reconstructs parsed
 
 /-- An accepted identifier occupies exactly its two-byte big-endian encoding. -/
-theorem eq_natToBytes_of_codePoint {input rest : List UInt8} {value : CodePoint}
+theorem eq_toBE_of_codePoint {input rest : List UInt8} {value : CodePoint}
     (parsed : codePoint input = .ok (value, rest)) :
-    input = Base.natToBytes 2 value.val ++ rest := by
+    input = (Base.ByteOrder.toBE 2 value.val).toList ++ rest := by
   cases numberRead : uint 2 input with
   | error error => simp [codePoint, numberRead, bind, StateT.bind, Except.bind] at parsed
   | ok result =>
@@ -216,7 +216,7 @@ theorem encodeBlob_of_blob {width minimum maximum : Nat} {input data rest : List
   obtain ⟨bounds, same⟩ := (Encoding.ByteReader.require_ok_iff ..).mp checked
   obtain ⟨length, suffix⟩ := (Encoding.ByteReader.bytes_ok_iff ..).mp dataRead
   obtain ⟨capacity, before⟩ := (Encoding.ByteReader.uint_ok_iff ..).mp sizeRead
-  refine ⟨Base.natToBytes width data.length ++ data, ?_, ?_⟩
+  refine ⟨(Base.ByteOrder.toBE width data.length).toList ++ data, ?_, ?_⟩
   · apply (encodeBlob_eq_ok_iff ..).mpr
     exact ⟨by omega, by omega, by omega, rfl⟩
   · have after : afterLength = data ++ rest := same.trans suffix

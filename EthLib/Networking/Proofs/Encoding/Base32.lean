@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Networking.Encoding.Base32
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # Proofs: base32 is a bijection between byte strings and accepted texts
@@ -112,18 +112,18 @@ theorem pow_charCount (size : Nat) (h : size ≤ 5) :
 /-- The decoder undoes the encoder on a group of at most five bytes. -/
 theorem decodeGroup_encodeGroup (start : Nat) {group : List UInt8} (h : group.length ≤ 5) :
     decodeGroup start (encodeGroup group) = .ok group := by
-  have bound := bytesToNat_lt group
+  have bound := ByteOrder.ofBE_lt group
   have fits := pow_charCount group.length h
   generalize hpad : 5 * charCount group.length - 8 * group.length = pad at fits
   have positive : 0 < 2 ^ pad := Nat.two_pow_pos pad
   -- The number of the group is below `32 ^ count`, so its characters read it back whole.
-  have below : bytesToNat group * 2 ^ pad < 32 ^ charCount group.length := by
+  have below : ByteOrder.ofBE group * 2 ^ pad < 32 ^ charCount group.length := by
     rw [← fits]
     exact Nat.mul_lt_mul_of_pos_right bound positive
   simp only [decodeGroup, encodeGroup, Nat.shiftLeft_eq, Nat.shiftRight_eq_div_pow,
     length_digits, byteCount_charCount h, hpad,
     value_digits, Nat.zero_mul, Nat.zero_add, Nat.mod_eq_of_lt below, Nat.mul_mod_left,
-    Nat.mul_div_cancel _ positive, natToBytes_bytesToNat, bind, Except.bind, pure, Except.pure]
+    Nat.mul_div_cancel _ positive, ByteOrder.toList_toBE_ofBE, bind, Except.bind, pure, Except.pure]
   rfl
 
 /-- The encoder writes back a group that the decoder accepts. -/
@@ -158,8 +158,9 @@ theorem encodeGroup_of_decodeGroup {start : Nat} {cs : List Char} {group : List 
     rw [Nat.div_lt_iff_lt_mul positive, fits]
     exact below
   have whole : n / 2 ^ pad * 2 ^ pad = n := Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero zero)
-  simp only [encodeGroup, Nat.shiftLeft_eq, Nat.shiftRight_eq_div_pow, natToBytes_length, count,
-    hpad, bytesToNat_natToBytes_of_lt quotient, whole, chars]
+  simp only [encodeGroup, Nat.shiftLeft_eq, Nat.shiftRight_eq_div_pow,
+    ByteOrder.length_toList_toBE, count,
+    hpad, ByteOrder.ofBE_toBE_of_lt quotient, whole, chars]
 
 /-- A group that the decoder accepts has the size that its number of characters gives. -/
 theorem byteCount_of_decodeGroup {start : Nat} {cs : List Char} {group : List UInt8}
@@ -175,7 +176,7 @@ theorem byteCount_of_decodeGroup {start : Nat} {cs : List Char} {group : List UI
     simp [hsize, hv, z, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
   simp only [hsize, hv, zero, bind, Except.bind, ↓reduceIte, pure, Except.pure,
     Except.ok.injEq] at h
-  rw [← h, natToBytes_length]
+  rw [← h, ByteOrder.length_toList_toBE]
 
 /-! ## Whole texts -/
 

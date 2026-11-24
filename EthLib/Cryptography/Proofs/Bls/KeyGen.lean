@@ -48,7 +48,7 @@ The key is `OS2IP(OKM) mod r`, where `OKM` is the expansion under the hashed sal
 theorem keyGenLoop_succ_of_ne_zero {ikm keyInfo salt okm : ByteArray} (attempts : Nat)
     (hokm : Hkdf.expand (Hkdf.extract (Sha256.hash salt) (ikm ++ HashToCurve.i2osp 0 1))
       (keyInfo ++ HashToCurve.i2osp KEYGEN_L 2) KEYGEN_L = .ok okm)
-    (h : Fr.ofNat (Base.bytesToNat okm.data.toList) ≠ 0) :
+    (h : Fr.ofNat (Base.ByteOrder.ofBE okm.data.toList) ≠ 0) :
     keyGenLoop ikm keyInfo salt (attempts + 1) = .ok ⟨_, h⟩ := by
   rw [keyGenLoop, hokm, Base.mapError_ok_bind]
   dsimp only
@@ -64,7 +64,7 @@ So the remaining attempts start from `SHA-256(salt)`, the salt this attempt used
 theorem keyGenLoop_succ_of_eq_zero {ikm keyInfo salt okm : ByteArray} (attempts : Nat)
     (hokm : Hkdf.expand (Hkdf.extract (Sha256.hash salt) (ikm ++ HashToCurve.i2osp 0 1))
       (keyInfo ++ HashToCurve.i2osp KEYGEN_L 2) KEYGEN_L = .ok okm)
-    (h : Fr.ofNat (Base.bytesToNat okm.data.toList) = 0) :
+    (h : Fr.ofNat (Base.ByteOrder.ofBE okm.data.toList) = 0) :
     keyGenLoop ikm keyInfo salt (attempts + 1) =
       keyGenLoop ikm keyInfo (Sha256.hash salt) attempts := by
   rw [keyGenLoop, hokm, Base.mapError_ok_bind]
@@ -83,7 +83,7 @@ theorem keyGenLoop_eq_ok_or_noKey (ikm keyInfo salt : ByteArray) (attempts : Nat
   | zero => exact Or.inr rfl
   | succ attempts ih =>
     obtain ⟨okm, hokm⟩ := keyGenLoop_expand_ok ikm keyInfo salt
-    by_cases h : Fr.ofNat (Base.bytesToNat okm.data.toList) = 0
+    by_cases h : Fr.ofNat (Base.ByteOrder.ofBE okm.data.toList) = 0
     · rw [keyGenLoop_succ_of_eq_zero attempts hokm h]
       exact ih _
     · exact Or.inl ⟨_, keyGenLoop_succ_of_ne_zero attempts hokm h⟩

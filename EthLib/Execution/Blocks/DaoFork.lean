@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.ChainConfig
 public import EthLib.Execution.Blocks.Header
 public import EthLib.Execution.State.Tracker
@@ -34,7 +34,7 @@ open EthLib.Execution.State
 
 /-- The address that a 160-bit number spells, the most significant byte first. -/
 def addressOfNat (n : Nat) : Address :=
-  ⟨(natToBytes 20 n).toArray, by simp [natToBytes_length]⟩
+  ByteOrder.toBE 20 n
 
 /-- The 116 accounts whose ether the DAO Fork moves: the list `L` of EIP-779, in its order. -/
 def DAO_ACCOUNTS : List Address := [

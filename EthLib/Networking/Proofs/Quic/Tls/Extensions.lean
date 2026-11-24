@@ -37,7 +37,7 @@ theorem length_encodeKeyShare {share : KeyShareEntry} {encoded : List UInt8}
     (written : encodeKeyShare share = .ok encoded) : 0 < encoded.length := by
   simp only [encodeKeyShare, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
   obtain ⟨data, _, rfl⟩ := written
-  simp only [List.length_append, Base.natToBytes_length]
+  simp only [List.length_append, Base.ByteOrder.length_toList_toBE]
   omega
 
 /-- A vector of client key shares preserves their order and may be empty. -/
@@ -128,9 +128,9 @@ theorem encodeKeyShare_of_readKeyShare {input rest : List UInt8} {share : KeySha
   obtain ⟨⟨group, suffix⟩, groupRead, ⟨data, trailing⟩, dataRead, rfl, rfl⟩ := parsed
   dsimp only at dataRead ⊢
   obtain ⟨encoded, written, same⟩ := encodeBlob_of_blob dataRead
-  refine ⟨Base.natToBytes 2 group.val ++ encoded, ?_, ?_⟩
+  refine ⟨(Base.ByteOrder.toBE 2 group.val).toList ++ encoded, ?_, ?_⟩
   · simp [encodeKeyShare, written]
-  · rw [eq_natToBytes_of_codePoint groupRead, same]
+  · rw [eq_toBE_of_codePoint groupRead, same]
     simp only [List.append_assoc]
 
 /-- An accepted packed ALPN name reconstructs every byte of its length-prefixed encoding. -/
@@ -161,7 +161,7 @@ theorem encodePayloadBody_of_readPayload {form : PayloadForm} {input : List UInt
       .ok (payload, []) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨value, suffix⟩, valueRead, rfl, rfl⟩ := parsed
-    have same := eq_natToBytes_of_codePoint valueRead
+    have same := eq_toBE_of_codePoint valueRead
     simp only [List.append_nil] at same
     exact ⟨rfl, by simp [encodePayloadBody, same]⟩
   | supportedGroups =>
@@ -202,7 +202,7 @@ theorem encodePayloadBody_of_readPayload {form : PayloadForm} {input : List UInt
       .ok (payload, []) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨group, suffix⟩, groupRead, rfl, rfl⟩ := parsed
-    have same := eq_natToBytes_of_codePoint groupRead
+    have same := eq_toBE_of_codePoint groupRead
     simp only [List.append_nil] at same
     exact ⟨rfl, by simp [encodePayloadBody, same]⟩
   | alpn =>

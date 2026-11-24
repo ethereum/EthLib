@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Exports
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Secp256r1.Curve
 public import EthLib.Cryptography.Secp256r1.Errors
 public import EthLib.Cryptography.Ecdsa.Encoding
@@ -41,7 +41,7 @@ instance : ExportError Secp256r1Error where
 
 /-- A coordinate below `p`, or an error. -/
 def readCoordinate (bytes : List UInt8) : Except Secp256r1Error Fp :=
-  let v := Base.bytesToNat bytes
+  let v := Base.ByteOrder.ofBE bytes
   if h : v < Fp.modulus then .ok ⟨v, h⟩ else .error (.coordinateTooLarge v)
 
 /-- The affine point of a 64-byte public key, or an error for any other length. -/
@@ -54,7 +54,7 @@ def readPublicKey (bytes : ByteArray) : Except Secp256r1Error Point := do
 
 /-- The integer of a 32-byte hash, or an error for any other length. -/
 def readHash (bytes : ByteArray) : Except Secp256r1Error Nat :=
-  if bytes.size = HASH_LEN then .ok (Base.bytesToNat bytes.data.toList)
+  if bytes.size = HASH_LEN then .ok (Base.ByteOrder.ofBE bytes.data.toList)
   else .error (.badHashSize bytes.size)
 
 /-! ## Sizes

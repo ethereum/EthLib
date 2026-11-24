@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.HashToCurve
 public import EthLib.Cryptography.Proofs.Hash.Sha256
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder.Digits
 public import EthLib.Cryptography.Proofs.Bls.FpZMod
 public import Mathlib.Data.Nat.Digits.Defs
 public import Mathlib.Data.Nat.Log
@@ -47,7 +47,7 @@ def sha256 (bytes : List UInt8) : List UInt8 :=
 /-- I2OSP of RFC 8017 §4.1: `x` as `len` bytes, the most significant first.
 
 RFC 9380 calls it only for `x < 256 ^ len`. -/
-def i2osp (x len : Nat) : List UInt8 := Base.natToBytes len x
+def i2osp (x len : Nat) : List UInt8 := (Base.ByteOrder.toBE len x).toList
 
 /-- OS2IP of RFC 8017 §4.2: the bytes as digits in base 256, the first one the most significant. -/
 def os2ip (bytes : List UInt8) : Nat := Nat.ofDigits 256 (bytes.reverse.map UInt8.toNat)
@@ -116,7 +116,7 @@ private theorem hash_toList {x : ByteArray} (admitted : x.size < 2 ^ 61) :
 private theorem i2osp_toList (n len : Nat) : (i2osp n len).data.toList = Spec.i2osp n len := rfl
 
 @[simp] private theorem i2osp_size (n len : Nat) : (i2osp n len).size = len := by
-  simp [i2osp, ByteArray.size, Base.natToBytes_length]
+  simp [i2osp, ByteArray.size]
 
 private theorem strxor_toList (a b : ByteArray) :
     (strxor a b).data.toList = Spec.strxor a.data.toList b.data.toList :=
@@ -249,7 +249,7 @@ theorem expandMessageXmd_eq_spec (msg dst : ByteArray) (lenInBytes : Nat)
   rw [← hD, hlenD]
   have hpad : Spec.i2osp 0 64 =
       (⟨Array.replicate Hash.Sha256.BLOCK_SIZE_BYTES 0⟩ : ByteArray).data.toList := by
-    rw [Spec.i2osp, Base.natToBytes_zero_right, Array.toList_replicate]
+    rw [Spec.i2osp, Base.ByteOrder.toList_toBE_zero_right, Array.toList_replicate]
     rfl
   set dp := D ++ i2osp D.size 1 with hdp_def
   set mp := (⟨Array.replicate Hash.Sha256.BLOCK_SIZE_BYTES 0⟩ : ByteArray) ++ msg
@@ -293,14 +293,10 @@ theorem expandMessageXmd_eq_spec (msg dst : ByteArray) (lenInBytes : Nat)
 /-! ## The hash to the field -/
 
 /-- The big-endian reading of the code is OS2IP. -/
-private theorem bytesToNat_eq_os2ip (bytes : List UInt8) :
-    Base.bytesToNat bytes = Spec.os2ip bytes := by
-  induction bytes using List.reverseRecOn with
-  | nil => rfl
-  | append_singleton l b ih =>
-    rw [Base.bytesToNat_append, ih]
-    simp [Spec.os2ip, Base.bytesToNat, Nat.ofDigits, Nat.mul_comm]
-    omega
+private theorem ofBE_eq_os2ip (bytes : List UInt8) :
+    Base.ByteOrder.ofBE bytes = Spec.os2ip bytes :=
+  -- OS2IP is the value of the bytes as base-256 digits, the first one the most significant.
+  Base.ByteOrder.ofBE_eq_ofDigits bytes
 
 /-- The bytes per element are 64, since `p` has 381 bits. -/
 theorem fieldBytes_eq : Spec.fieldBytes = 64 := by
@@ -315,7 +311,7 @@ theorem fieldBytes_eq : Spec.fieldBytes = 64 := by
 private theorem toZMod_fpFromBytesL (uniform : ByteArray) (off : Nat) :
     Fp.toZMod (fpFromBytesL (uniform.extract off (off + 64)) : Fp)
       = (Spec.os2ip ((uniform.data.toList.drop off).take 64) : ZMod Fp.modulus) := by
-  rw [fpFromBytesL, ← bytesToNat_eq_os2ip, ByteArray.data_extract, Array.toList_extract,
+  rw [fpFromBytesL, ← ofBE_eq_os2ip, ByteArray.data_extract, Array.toList_extract,
     List.extract_eq_take_drop, Nat.add_sub_cancel_left]
   exact Fp.toZMod_ofNat _
 

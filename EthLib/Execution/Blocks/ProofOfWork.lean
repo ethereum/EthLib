@@ -116,8 +116,8 @@ def checkPowOutput {fork : Fork} (h : Header fork) (out : PowOutput) : Except Po
   if out.mixDigest ≠ ⟨h.prevRandao.toArray⟩ then
     .error (.wrongMixDigest out.mixDigest h.prevRandao)
   -- And `n ≤ 2^256 / H_d`, with `n` read as a big-endian integer, which §4.3.4 leaves implicit.
-  else if powTarget h.difficulty < bytesToNat out.result.toList then
-    .error (.resultAboveTarget (bytesToNat out.result.toList) (powTarget h.difficulty))
+  else if powTarget h.difficulty < ByteOrder.ofBE out.result.toList then
+    .error (.resultAboveTarget (ByteOrder.ofBE out.result.toList) (powTarget h.difficulty))
   else .ok ()
 
 /-- Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks. -/

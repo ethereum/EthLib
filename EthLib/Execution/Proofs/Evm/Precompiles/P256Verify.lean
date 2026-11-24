@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.P256Verify
-import EthLib.Base.Proofs.BigEndian
+import EthLib.Base.Proofs.ByteOrder
 import EthLib.Cryptography.Proofs.Secp256r1.Ecdsa
 
 /-!
@@ -18,8 +18,8 @@ On the call data of EIP-7951, the input check gives the result of ECDSA verifica
 
 namespace EthLib.Execution.Evm.Precompiles.P256Verify
 
-open EthLib.Base (bytesToNat bytesToNat_natToBytes bytesToNat_natToBytes_of_lt natToBytes
-  natToBytes_length)
+open EthLib.Base (ByteOrder.ofBE ByteOrder.ofBE_toBE ByteOrder.ofBE_toBE_of_lt ByteOrder.toBE
+  ByteOrder.length_toList_toBE)
 open EthLib.Cryptography.Secp256r1
 
 /-- The call fails exactly when the gas is below the price, 6900. -/
@@ -70,12 +70,13 @@ It concatenates `e`, `r`, `s`, `qx` and `qy` as 32-byte big-endian words.
 
 Each value is written modulo 2^256. -/
 def callData (e r s qx qy : Nat) : ByteArray :=
-  ⟨(natToBytes 32 e ++ natToBytes 32 r ++ natToBytes 32 s ++ natToBytes 32 qx
-    ++ natToBytes 32 qy).toArray⟩
+  ⟨((ByteOrder.toBE 32 e).toList ++ (ByteOrder.toBE 32 r).toList ++ (ByteOrder.toBE 32 s).toList
+    ++ (ByteOrder.toBE 32 qx).toList
+    ++ (ByteOrder.toBE 32 qy).toList).toArray⟩
 
 /-- The call data of a signature has 160 bytes. -/
 theorem callData_size (e r s qx qy : Nat) : (callData e r s qx qy).size = INPUT_BYTES := by
-  simp [callData, INPUT_BYTES, ByteArray.size, natToBytes_length]
+  simp [callData, INPUT_BYTES, ByteArray.size]
 
 /-- A key that verifies passes the check of the input against `(0, 0)`. -/
 private theorem not_zero_of_verify {qx qy : Fp} {e r s : Nat}
@@ -91,11 +92,11 @@ The signature verifies under that key.
 A key that verifies is never `(0, 0)`, since that point is off the curve. -/
 theorem isValid_eq_true_iff (bytes : List UInt8) :
     isValid bytes = true ↔
-      ∃ (hx : bytesToNat ((bytes.drop 96).take 32) < Fp.modulus)
-        (hy : bytesToNat (bytes.drop 128) < Fp.modulus),
-        verify (.affine ⟨_, hx⟩ ⟨_, hy⟩) (bytesToNat (bytes.take 32))
-          (bytesToNat ((bytes.drop 32).take 32))
-          (bytesToNat ((bytes.drop 64).take 32)) = true := by
+      ∃ (hx : ByteOrder.ofBE ((bytes.drop 96).take 32) < Fp.modulus)
+        (hy : ByteOrder.ofBE (bytes.drop 128) < Fp.modulus),
+        verify (.affine ⟨_, hx⟩ ⟨_, hy⟩) (ByteOrder.ofBE (bytes.take 32))
+          (ByteOrder.ofBE ((bytes.drop 32).take 32))
+          (ByteOrder.ofBE ((bytes.drop 64).take 32)) = true := by
   unfold isValid
   dsimp only
   split_ifs with hx hy
@@ -156,9 +157,10 @@ theorem p256Verify_eq_ok_empty_iff (data : ByteArray) (gas : Nat) :
 
 private theorem callData_list (e r s qx qy : Nat) :
     (callData e r s qx qy).data.toList =
-      natToBytes 32 e ++ (natToBytes 32 r ++ (natToBytes 32 s ++
-        (natToBytes 32 qx ++ natToBytes 32 qy))) := by
-  simp [callData, List.append_assoc]
+      (ByteOrder.toBE 32 e).toList
+        ++ ((ByteOrder.toBE 32 r).toList ++ ((ByteOrder.toBE 32 s).toList ++
+        ((ByteOrder.toBE 32 qx).toList ++ (ByteOrder.toBE 32 qy).toList))) := by
+  simp [callData]
 
 private theorem isValid_callData_mod (e r s qx qy : Nat) :
     isValid (callData e r s qx qy).data.toList =
@@ -171,7 +173,7 @@ private theorem isValid_callData_mod (e r s qx qy : Nat) :
       else false := by
   rw [callData_list]
   unfold isValid
-  simp [List.drop_append, natToBytes_length, List.drop_eq_nil_of_le, bytesToNat_natToBytes]
+  simp [List.drop_append, List.drop_eq_nil_of_le, ByteOrder.ofBE_toBE]
 
 /-- On call data with an affine key, the input check gives the result of ECDSA verification.
 

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Bls12381.Encoding
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Proofs.Inverse
 public import EthLib.Cryptography.Proofs.Bls.Fp2
@@ -21,7 +21,7 @@ public import EthLib.Base.Proofs.Except
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (bytesToNat natToBytes)
+open EthLib.Base (ByteOrder.ofBE ByteOrder.toBE)
 open EthLib.Cryptography.Bls (Fp Fp2 G1 G2 G2.zero)
 
 /-! ## Padding -/
@@ -79,18 +79,19 @@ Amsterdam first rejects nonzero padding, then reads the 48 bytes.
 
 Nonzero padding makes the 64-byte integer at least `2^384`, above the modulus, so both reject the same inputs. -/
 theorem unpadFp_bytesToFieldElement_isOk {padded : List UInt8} (hlength : padded.length = 64) :
-    ((unpadFp padded) >>= bytesToFieldElement).toOption.isSome ↔ bytesToNat padded < Fp.modulus := by
+    ((unpadFp padded) >>= bytesToFieldElement).toOption.isSome ↔
+      ByteOrder.ofBE padded < Fp.modulus := by
   -- The 64 bytes are 16 high bytes, then 48 low bytes.
-  have hsplit := EthLib.Base.bytesToNat_append (padded.take 16) (padded.drop 16)
+  have hsplit := EthLib.Base.ByteOrder.ofBE_append (padded.take 16) (padded.drop 16)
   rw [List.take_append_drop] at hsplit
   have hlow : (padded.drop 16).length = 48 := by simp [hlength]
   have hhigh : (padded.take 16).length = 16 := by simp [hlength]
-  have hlt := EthLib.Base.bytesToNat_lt (padded.drop 16)
+  have hlt := EthLib.Base.ByteOrder.ofBE_lt (padded.drop 16)
   rw [hlow] at hlt
   have hmodulus : Fp.modulus < 256 ^ 48 := by decide
   by_cases hpad : padded.take 16 = List.replicate 16 0
   · -- Zero padding: the 64-byte integer is the 48-byte integer.
-    have hzero : bytesToNat (padded.take 16) = 0 := by
+    have hzero : ByteOrder.ofBE (padded.take 16) = 0 := by
       rw [hpad]
       rfl
     simp only [unpadFp, PAD_BYTES, hpad, ↓reduceIte, bind, Except.bind, bytesToFieldElement]
@@ -101,11 +102,11 @@ theorem unpadFp_bytesToFieldElement_isOk {padded : List UInt8} (hlength : padded
     · rename_i hge
       simp [Except.toOption, hge]
   · -- Nonzero padding: the 64-byte integer is at least `2^384`.
-    have hpos : 0 < bytesToNat (padded.take 16) := by
-      rcases Nat.eq_zero_or_pos (bytesToNat (padded.take 16)) with h | h
+    have hpos : 0 < ByteOrder.ofBE (padded.take 16) := by
+      rcases Nat.eq_zero_or_pos (ByteOrder.ofBE (padded.take 16)) with h | h
       · exfalso
         apply hpad
-        have hround := EthLib.Base.natToBytes_bytesToNat (padded.take 16)
+        have hround := EthLib.Base.ByteOrder.toList_toBE_ofBE (padded.take 16)
         rw [hhigh, h] at hround
         rw [← hround]
         decide
@@ -114,45 +115,47 @@ theorem unpadFp_bytesToFieldElement_isOk {padded : List UInt8} (hlength : padded
       Bool.false_eq_true, false_iff, Nat.not_lt]
     rw [hsplit, hlow]
     calc Fp.modulus ≤ 256 ^ 48 := Nat.le_of_lt hmodulus
-      _ ≤ bytesToNat (padded.take 16) * 256 ^ 48 := Nat.le_mul_of_pos_left _ hpos
+      _ ≤ ByteOrder.ofBE (padded.take 16) * 256 ^ 48 := Nat.le_mul_of_pos_left _ hpos
       _ ≤ _ := Nat.le_add_right _ _
 
 /-! ## Field elements -/
 
 /-- The 48 bytes of a field element decode back to it. -/
-theorem bytesToFieldElement_natToBytes (x : Fp) :
-    bytesToFieldElement (natToBytes 48 x.val) = .ok x := by
+theorem bytesToFieldElement_toBE (x : Fp) :
+    bytesToFieldElement ((ByteOrder.toBE 48 x.val).toList) = .ok x := by
   have hlt : x.val < 256 ^ 48 := Nat.lt_trans (Fp.val_lt x) (by decide)
   have hx : Fp.ofNat x.val = x := Fp.ext (Fp.val_ofNat_of_lt (Fp.val_lt x))
-  simp [bytesToFieldElement, EthLib.Base.bytesToNat_natToBytes_of_lt hlt, Fp.val_lt x, hx]
+  simp [bytesToFieldElement, EthLib.Base.ByteOrder.ofBE_toBE_of_lt hlt, Fp.val_lt x, hx]
 
 /-- A padded field element decodes back to it. -/
 theorem unpadFp_bytesToFieldElement_pad (x : Fp) :
-    (unpadFp (zeroPad ++ natToBytes 48 x.val) >>= bytesToFieldElement) = .ok x :=
-  EthLib.Base.bind_ok_iff.mpr ⟨_, unpadFp_pad _, bytesToFieldElement_natToBytes x⟩
+    (unpadFp (zeroPad ++ (ByteOrder.toBE 48 x.val).toList) >>= bytesToFieldElement) = .ok x :=
+  EthLib.Base.bind_ok_iff.mpr ⟨_, unpadFp_pad _, bytesToFieldElement_toBE x⟩
 
 /-- A decoded field element encodes back to the 48 bytes it came from. -/
-theorem natToBytes_bytesToFieldElement {raw : List UInt8} (hlength : raw.length = 48) {x : Fp}
-    (h : bytesToFieldElement raw = .ok x) : natToBytes 48 x.val = raw := by
+theorem toBE_bytesToFieldElement {raw : List UInt8} (hlength : raw.length = 48) {x : Fp}
+    (h : bytesToFieldElement raw = .ok x) : (ByteOrder.toBE 48 x.val).toList = raw := by
   simp only [bytesToFieldElement] at h
   split at h
   next hlt =>
     cases h
     rw [Fp.val_ofNat_of_lt hlt, ← hlength]
-    exact EthLib.Base.natToBytes_bytesToNat raw
+    exact EthLib.Base.ByteOrder.toList_toBE_ofBE raw
   · cases h
 
 /-- The 96 bytes of an element of `Fp2` decode back to it, `c0` first. -/
-theorem bytesToFq2_natToBytes (a : Fp2) :
-    bytesToFq2 (natToBytes 48 a.c0.val ++ natToBytes 48 a.c1.val) = .ok a := by
-  have hlen := EthLib.Base.natToBytes_length 48 a.c0.val
-  rw [bytesToFq2, List.take_left' hlen, List.drop_left' hlen, bytesToFieldElement_natToBytes,
-    bytesToFieldElement_natToBytes]
+theorem bytesToFq2_toBE (a : Fp2) :
+    bytesToFq2 ((ByteOrder.toBE 48 a.c0.val).toList ++ (ByteOrder.toBE 48 a.c1.val).toList)
+      = .ok a := by
+  have hlen := EthLib.Base.ByteOrder.length_toList_toBE 48 a.c0.val
+  rw [bytesToFq2, List.take_left' hlen, List.drop_left' hlen, bytesToFieldElement_toBE,
+    bytesToFieldElement_toBE]
   rfl
 
 /-- A decoded element of `Fp2` encodes back to the 96 bytes it came from. -/
-theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a : Fp2}
-    (h : bytesToFq2 raw = .ok a) : natToBytes 48 a.c0.val ++ natToBytes 48 a.c1.val = raw := by
+theorem toBE_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a : Fp2}
+    (h : bytesToFq2 raw = .ok a) : (ByteOrder.toBE 48 a.c0.val).toList
+      ++ (ByteOrder.toBE 48 a.c1.val).toList = raw := by
   simp only [bytesToFq2, bind, Except.bind, pure, Except.pure] at h
   cases h0 : bytesToFieldElement (raw.take 48) with
   | error => simp [h0] at h
@@ -162,8 +165,8 @@ theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a 
     | ok c1 =>
       simp only [h0, h1, Except.ok.injEq] at h
       subst h
-      rw [natToBytes_bytesToFieldElement (by simp [hlength]) h0,
-        natToBytes_bytesToFieldElement (by simp [hlength]) h1, List.take_append_drop]
+      rw [toBE_bytesToFieldElement (by simp [hlength]) h0,
+        toBE_bytesToFieldElement (by simp [hlength]) h1, List.take_append_drop]
 
 /-! ## G1 points -/
 
@@ -240,14 +243,14 @@ set_option maxRecDepth 4000 in
 theorem bytesToG1_zeros (subgroupCheck : Bool) :
     bytesToG1 (List.replicate 96 0) subgroupCheck = .ok G1.zero := by
   have hb : List.replicate 96 (0 : UInt8) =
-      natToBytes 48 (0 : Fp).val ++ natToBytes 48 (0 : Fp).val := by
+      (ByteOrder.toBE 48 (0 : Fp).val).toList ++ (ByteOrder.toBE 48 (0 : Fp).val).toList := by
     rw [Fp.val_zero]
     rfl
-  have hlen := EthLib.Base.natToBytes_length 48 (0 : Fp).val
+  have hlen := EthLib.Base.ByteOrder.length_toList_toBE 48 (0 : Fp).val
   rw [hb]
   exact bytesToG1_eq_ok_iff.mpr ⟨0, 0,
-    by rw [List.take_left' hlen]; exact bytesToFieldElement_natToBytes 0,
-    by rw [List.drop_left' hlen]; exact bytesToFieldElement_natToBytes 0,
+    by rw [List.take_left' hlen]; exact bytesToFieldElement_toBE 0,
+    by rw [List.drop_left' hlen]; exact bytesToFieldElement_toBE 0,
     .inl ⟨Fp.val_zero, Fp.val_zero, rfl⟩⟩
 
 /-- An affine point on the curve decodes back to itself, with `z = 1`.
@@ -255,17 +258,18 @@ theorem bytesToG1_zeros (subgroupCheck : Bool) :
 With the subgroup check, the point must also be in the subgroup. -/
 theorem bytesToG1_affine {x y : Fp} (hon : onCurveG1 x y = true) {subgroupCheck : Bool}
     (hsub : subgroupCheck = true → G1.inSubgroup ⟨x, y, Fp.one⟩ = true) :
-    bytesToG1 (natToBytes 48 x.val ++ natToBytes 48 y.val) subgroupCheck = .ok ⟨x, y, Fp.one⟩ := by
-  have hlen := EthLib.Base.natToBytes_length 48 x.val
-  exact bytesToG1_eq_ok_iff.mpr ⟨x, y, by rw [List.take_left' hlen, bytesToFieldElement_natToBytes],
-    by rw [List.drop_left' hlen, bytesToFieldElement_natToBytes], .inr ⟨hon, hsub, rfl⟩⟩
+    bytesToG1 ((ByteOrder.toBE 48 x.val).toList ++ (ByteOrder.toBE 48 y.val).toList) subgroupCheck
+      = .ok ⟨x, y, Fp.one⟩ := by
+  have hlen := EthLib.Base.ByteOrder.length_toList_toBE 48 x.val
+  exact bytesToG1_eq_ok_iff.mpr ⟨x, y, by rw [List.take_left' hlen, bytesToFieldElement_toBE],
+    by rw [List.drop_left' hlen, bytesToFieldElement_toBE], .inr ⟨hon, hsub, rfl⟩⟩
 
 /-- A decoded point encodes back to the 96 bytes it came from: the encoding is canonical. -/
 theorem g1ToBytes_bytesToG1 {raw : List UInt8} (hlength : raw.length = 96) {subgroupCheck : Bool}
     {p : G1} (h : bytesToG1 raw subgroupCheck = .ok p) : g1ToBytes p = raw := by
   obtain ⟨x, y, hx, hy, hcase⟩ := bytesToG1_eq_ok_iff.mp h
-  have hxb := natToBytes_bytesToFieldElement (by simp [hlength]) hx
-  have hyb := natToBytes_bytesToFieldElement (by simp [hlength]) hy
+  have hxb := toBE_bytesToFieldElement (by simp [hlength]) hx
+  have hyb := toBE_bytesToFieldElement (by simp [hlength]) hy
   rcases hcase with ⟨hx0, hy0, rfl⟩ | ⟨-, -, rfl⟩
   · -- Both coordinates are zero: the point at infinity, and the bytes are all zero.
     rw [g1ToBytes_of_isZero G1.isInfinity_zero, ← List.take_append_drop 48 raw, ← hxb, ← hyb]
@@ -347,18 +351,21 @@ set_option maxRecDepth 8000 in
 theorem bytesToG2_zeros (subgroupCheck : Bool) :
     bytesToG2 (List.replicate 192 0) subgroupCheck = .ok G2.zero := by
   have hb : List.replicate 192 (0 : UInt8) =
-      (natToBytes 48 (0 : Fp2).c0.val ++ natToBytes 48 (0 : Fp2).c1.val) ++
-        (natToBytes 48 (0 : Fp2).c0.val ++ natToBytes 48 (0 : Fp2).c1.val) := by
+      ((ByteOrder.toBE 48 (0 : Fp2).c0.val).toList
+        ++ (ByteOrder.toBE 48 (0 : Fp2).c1.val).toList) ++
+        ((ByteOrder.toBE 48 (0 : Fp2).c0.val).toList
+          ++ (ByteOrder.toBE 48 (0 : Fp2).c1.val).toList) := by
     rw [Fp2.zero_c0, Fp2.zero_c1, Fp.val_zero]
     rfl
-  have hlen : (natToBytes 48 (0 : Fp2).c0.val ++ natToBytes 48 (0 : Fp2).c1.val).length = 96 := by
-    simp only [List.length_append, EthLib.Base.natToBytes_length]
+  have hlen : ((ByteOrder.toBE 48 (0 : Fp2).c0.val).toList
+      ++ (ByteOrder.toBE 48 (0 : Fp2).c1.val).toList).length = 96 := by
+    simp only [List.length_append, EthLib.Base.ByteOrder.length_toList_toBE]
   have h0 : (0 : Fp2).c0.val = 0 := by rw [Fp2.zero_c0, Fp.val_zero]
   have h1 : (0 : Fp2).c1.val = 0 := by rw [Fp2.zero_c1, Fp.val_zero]
   rw [hb]
   exact bytesToG2_eq_ok_iff.mpr ⟨0, 0,
-    by rw [List.take_left' hlen]; exact bytesToFq2_natToBytes 0,
-    by rw [List.drop_left' hlen]; exact bytesToFq2_natToBytes 0,
+    by rw [List.take_left' hlen]; exact bytesToFq2_toBE 0,
+    by rw [List.drop_left' hlen]; exact bytesToFq2_toBE 0,
     .inl ⟨h0, h1, h0, h1, rfl⟩⟩
 
 /-- An affine point on the twist decodes back to itself, with `z = 1`.
@@ -366,11 +373,13 @@ theorem bytesToG2_zeros (subgroupCheck : Bool) :
 With the subgroup check, the point must also be in the subgroup. -/
 theorem bytesToG2_affine {x y : Fp2} (hon : onCurveG2 x y = true) {subgroupCheck : Bool}
     (hsub : subgroupCheck = true → G2.inSubgroup ⟨x, y, Fp2.one⟩ = true) :
-    bytesToG2 ((natToBytes 48 x.c0.val ++ natToBytes 48 x.c1.val) ++
-      (natToBytes 48 y.c0.val ++ natToBytes 48 y.c1.val)) subgroupCheck = .ok ⟨x, y, Fp2.one⟩ := by
-  have hlen : (natToBytes 48 x.c0.val ++ natToBytes 48 x.c1.val).length = 96 := by
-    simp [EthLib.Base.natToBytes_length]
-  exact bytesToG2_eq_ok_iff.mpr ⟨x, y, by rw [List.take_left' hlen, bytesToFq2_natToBytes],
-    by rw [List.drop_left' hlen, bytesToFq2_natToBytes], .inr ⟨hon, hsub, rfl⟩⟩
+    bytesToG2 (((ByteOrder.toBE 48 x.c0.val).toList ++ (ByteOrder.toBE 48 x.c1.val).toList) ++
+      ((ByteOrder.toBE 48 y.c0.val).toList ++ (ByteOrder.toBE 48 y.c1.val).toList)) subgroupCheck
+        = .ok ⟨x, y, Fp2.one⟩ := by
+  have hlen : ((ByteOrder.toBE 48 x.c0.val).toList ++ (ByteOrder.toBE 48 x.c1.val).toList).length
+      = 96 := by
+    simp
+  exact bytesToG2_eq_ok_iff.mpr ⟨x, y, by rw [List.take_left' hlen, bytesToFq2_toBE],
+    by rw [List.drop_left' hlen, bytesToFq2_toBE], .inr ⟨hon, hsub, rfl⟩⟩
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

@@ -230,7 +230,7 @@ def ascending : List Nat → Bool
   | _ => true
 
 /-- An address as a number, so that numbers order addresses as their bytes do. -/
-def addressKey (address : Address) : Nat := bytesToNat address.toList
+def addressKey (address : Address) : Nat := ByteOrder.ofBE address.toList
 
 /-- The gas that each item of the list stands for.
 

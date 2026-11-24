@@ -174,8 +174,9 @@ private theorem xor_two_pow_mul_add {p q r s k : Nat} (hr : r < 2 ^ k) (hs : s <
   split <;> simp [Nat.testBit_xor]
 
 /-- XOR on bytes of one length is XOR on the numbers they write. -/
-private theorem bytesToNat_zipWith_xor {a b : List UInt8} (h : a.length = b.length) :
-    Base.bytesToNat (List.zipWith (· ^^^ ·) a b) = Base.bytesToNat a ^^^ Base.bytesToNat b := by
+private theorem ofBE_zipWith_xor {a b : List UInt8} (h : a.length = b.length) :
+    Base.ByteOrder.ofBE (List.zipWith (· ^^^ ·) a b)
+      = Base.ByteOrder.ofBE a ^^^ Base.ByteOrder.ofBE b := by
   induction a generalizing b with
   | nil =>
     cases b with
@@ -186,13 +187,14 @@ private theorem bytesToNat_zipWith_xor {a b : List UInt8} (h : a.length = b.leng
     | nil => simp at h
     | cons y b =>
       simp only [List.length_cons, Nat.add_right_cancel_iff] at h
-      have ha := Base.bytesToNat_lt a
-      have hb := Base.bytesToNat_lt b
+      have ha := Base.ByteOrder.ofBE_lt a
+      have hb := Base.ByteOrder.ofBE_lt b
       rw [h] at ha
       have hpow : (256 : Nat) ^ b.length = 2 ^ (8 * b.length) := by rw [Nat.pow_mul]
       rw [hpow] at ha hb
       -- The first byte sits above `8 * length` bits, where both rests stay below.
-      rw [List.zipWith_cons_cons, Base.bytesToNat_cons, Base.bytesToNat_cons, Base.bytesToNat_cons,
+      rw [List.zipWith_cons_cons, Base.ByteOrder.ofBE_cons, Base.ByteOrder.ofBE_cons,
+        Base.ByteOrder.ofBE_cons,
         List.length_zipWith, h, Nat.min_self, ih h, UInt8.toNat_xor, hpow, Nat.mul_comm x.toNat,
         Nat.mul_comm y.toNat, Nat.mul_comm _ (2 ^ _)]
       exact (xor_two_pow_mul_add ha hb).symm
@@ -201,7 +203,7 @@ private theorem bytesToNat_zipWith_xor {a b : List UInt8} (h : a.length = b.leng
 theorem blockToNat_xorBlock (A B : Block) :
     blockToNat (xorBlock A B) = blockToNat A ^^^ blockToNat B := by
   simp only [blockToNat, xorBlock, Vector.toList_zipWith]
-  exact bytesToNat_zipWith_xor (by simp)
+  exact ofBE_zipWith_xor (by simp)
 
 /-! ## The ring of blocks -/
 

@@ -41,7 +41,7 @@ theorem distance_lt_two_pow_iff {a b : NodeId} {k : Nat} :
 theorem distance_xor_distance (a b c : NodeId) :
     distance a b ^^^ distance b c = distance a c := by
   -- The value of `b` appears twice, and cancels.
-  simp only [distance, Nat.xor_assoc, ← Nat.xor_assoc (Base.bytesToNat b.toList), Nat.xor_self,
+  simp only [distance, Nat.xor_assoc, ← Nat.xor_assoc (Base.ByteOrder.ofBE b.toList), Nat.xor_self,
     Nat.zero_xor]
 
 /-- The logarithmic distance is an ultrametric.

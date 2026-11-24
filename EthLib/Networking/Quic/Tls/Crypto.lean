@@ -70,7 +70,7 @@ def supportedSignatureScheme (algorithm : Wire.CodePoint) : Bool :=
 
 /-- A nonzero P-256 scalar, read without reduction from a big-endian private input. -/
 def readScalar (bytes : Vector UInt8 32) (error : Error) : Except Error Secp256r1.Fn :=
-  let value := bytesToNat bytes.toList
+  let value := ByteOrder.ofBE bytes.toList
   -- SEC 1 v2 §3.2.1: a private key `d` is an integer in `[1, n - 1]`.
   --
   -- EthLib rejects a value of `n` or more, rather than reduce it mod `n`.
@@ -80,7 +80,7 @@ def readScalar (bytes : Vector UInt8 32) (error : Error) : Except Error Secp256r
 /-- A field coordinate as 32 big-endian octets, with leading zeros, RFC 9846 §7.4.2. -/
 def coordinate (value : Secp256r1.Fp) : Vector UInt8 32 :=
   -- §7.4.2: the octet string Z has constant length, and its leading zeros stay.
-  ⟨value.toBytes.toArray, by simp [Secp256r1.Fp.toBytes, natToBytes_length]⟩
+  ⟨value.toBytes.toArray, by simp [Secp256r1.Fp.toBytes]⟩
 
 /-- Read an uncompressed P-256 key share, RFC 9846 §4.3.8.2 and SEC 1 v2 §2.3.4. -/
 def readP256Share (peer : ByteArray) : Except Error Secp256r1.Point :=

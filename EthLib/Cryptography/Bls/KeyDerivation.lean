@@ -73,7 +73,7 @@ def hashLamportSk (key : Vector ByteArray 255) : ByteArray :=
 /-- The compressed Lamport public key of a parent key and an index, ERC-2333. -/
 def parentSkToLamportPk (parent : SecretKey) (index : UInt32) : ByteArray :=
   -- Step 0: `salt = I2OSP(index, 4)`.
-  let salt := Base.natToBytes4 index.toNat
+  let salt := ⟨(Base.ByteOrder.toBE 4 index.toNat).toArray⟩
   -- Step 1: `IKM` is the parent key as 32 big-endian bytes.
   let ikm := Fr.toBytesBE parent.val
   -- Step 2: the first Lamport secret key comes from `IKM` under `salt`.

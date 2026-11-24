@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Bls.G2
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Hash.Sha256
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `HashToCurve`
@@ -63,7 +63,7 @@ Every caller passes `n < 256^len`, so the two agree:
 [utils]: https://www.rfc-editor.org/rfc/rfc9380#section-4
 -/
 def i2osp (n : Nat) (len : Nat) : ByteArray :=
-  ⟨(Base.natToBytes len n).toArray⟩
+  ⟨(Base.ByteOrder.toBE len n).toArray⟩
 
 /-- `strxor(a, b)` of [RFC 9380 §4][utils]: the bitwise XOR of two byte strings.
 
@@ -157,7 +157,7 @@ OS2IP of [RFC 8017 §4.2][os2ip] reads the bytes as a big-endian integer.
 -/
 def fpFromBytesL (b : ByteArray) : F :=
   -- The big-endian integer of the bytes, reduced mod `p` by the field.
-  BaseField.ofNat (Base.bytesToNat b.data.toList)
+  BaseField.ofNat (Base.ByteOrder.ofBE b.data.toList)
 
 /-- The hash to the field of [RFC 9380 §5.2][h2f]: `count` elements of `Fp2` from the message.
 

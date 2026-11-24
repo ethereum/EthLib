@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Serialization.E2store
@@ -34,13 +34,13 @@ open EthLib.Base
 /-- A header is eight bytes. -/
 @[simp] theorem size_encodeHeader (type : UInt16) (length : Nat) :
     (encodeHeader type length).size = 8 := by
-  simp [encodeHeader, ByteArray.size, natToBytes_length]
+  simp [encodeHeader, ByteArray.size]
 
 /-- The header at the start of eight bytes, read from their values. -/
 private theorem readHeader_mk (b0 b1 b2 b3 b4 b5 b6 b7 : UInt8) :
     readHeader ⟨#[b0, b1, b2, b3, b4, b5, b6, b7]⟩ 0 =
       if b6 ≠ 0 ∨ b7 ≠ 0 then .error (.reservedNotZero b6 b7)
-      else .ok ⟨UInt16.ofNat (bytesToNat [b0, b1]), ByteOrder.ofLE #v[b2, b3, b4, b5]⟩ :=
+      else .ok ⟨UInt16.ofNat (ByteOrder.ofBE [b0, b1]), ByteOrder.ofLE #v[b2, b3, b4, b5]⟩ :=
   rfl
 
 /-- Eight bytes are the array of their values. -/
@@ -70,12 +70,12 @@ private theorem vector_four (v : Vector UInt8 4) : v = #v[v[0], v[1], v[2], v[3]
 /-- The header of a type and a length that fits reads back as that type and length. -/
 private theorem readHeader_encodeHeader (type : UInt16) (length : Nat) (h : length < 2 ^ 32) :
     readHeader (encodeHeader type length) 0 = .ok ⟨type, length⟩ := by
-  have ht : bytesToNat (natToBytes 2 type.toNat) = type.toNat :=
-    bytesToNat_natToBytes_of_lt type.toNat_lt
+  have ht : ByteOrder.ofBE (ByteOrder.toBE 2 type.toNat).toList = type.toNat :=
+    ByteOrder.ofBE_toBE_of_lt type.toNat_lt
   have hl : ByteOrder.ofLE (ByteOrder.toLE 4 length) = length := by
     rw [ByteOrder.ofLE_toLE, Nat.mod_eq_of_lt h]
-  obtain ⟨a, b, hab⟩ : ∃ a b, natToBytes 2 type.toNat = [a, b] :=
-    match natToBytes 2 type.toNat, natToBytes_length 2 type.toNat with
+  obtain ⟨a, b, hab⟩ : ∃ a b, (ByteOrder.toBE 2 type.toNat).toList = [a, b] :=
+    match (ByteOrder.toBE 2 type.toNat).toList, ByteOrder.length_toList_toBE 2 type.toNat with
     | [a, b], _ => ⟨a, b, rfl⟩
   generalize hv : ByteOrder.toLE 4 length = v at hl
   rw [vector_four v] at hv hl
@@ -100,11 +100,12 @@ private theorem eq_encodeHeader_of_readHeader {b0 b1 b2 b3 b4 b5 b6 b7 : UInt8} 
   obtain ⟨h6, h7⟩ := not_or.mp hr
   rw [Decidable.not_not] at h6 h7
   subst h6 h7
-  have h01 : bytesToNat [b0, b1] % 2 ^ 16 = bytesToNat [b0, b1] := by
-    have := bytesToNat_lt [b0, b1]
+  have h01 : ByteOrder.ofBE [b0, b1] % 2 ^ 16 = ByteOrder.ofBE [b0, b1] := by
+    have := ByteOrder.ofBE_lt [b0, b1]
     rw [List.length_cons, List.length_cons, List.length_nil] at this
     exact Nat.mod_eq_of_lt (by omega)
-  have hn : natToBytes 2 (bytesToNat [b0, b1]) = [b0, b1] := natToBytes_bytesToNat [b0, b1]
+  have hn : (ByteOrder.toBE 2 (ByteOrder.ofBE [b0, b1])).toList = [b0, b1] :=
+    ByteOrder.toList_toBE_ofBE [b0, b1]
   have hl := ByteOrder.ofLE_lt #v[b2, b3, b4, b5]
   refine ⟨by omega, ?_⟩
   rw [encodeHeader]

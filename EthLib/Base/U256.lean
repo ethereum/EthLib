@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
 
 /-!
@@ -41,7 +41,7 @@ def fromSigned (v : Int) : U256 := BitVec.ofInt 256 v
 /-- The word that 32 bytes write, the first byte the most significant.
 
 Any 32 bytes write a value below 2^256, so the reduction modulo 2^256 never applies. -/
-def fromBeBytes (bytes : Vector UInt8 32) : U256 := BitVec.ofNat 256 (bytesToNat bytes.toList)
+def fromBeBytes (bytes : Vector UInt8 32) : U256 := BitVec.ofNat 256 (ByteOrder.ofBE bytes.toList)
 
 /-- The word as 32 bytes, the first byte the most significant.
 
@@ -49,7 +49,7 @@ The opening of Appendix H of the Yellow Paper reads a word as a big-endian integ
 
 A word is below 2^256, so it always fits in 32 bytes. -/
 def toBeBytes (w : U256) : Bytes32 :=
-  ⟨(natToBytes 32 w.toNat).toArray, by simp [natToBytes_length]⟩
+  ByteOrder.toBE 32 w.toNat
 
 end U256
 

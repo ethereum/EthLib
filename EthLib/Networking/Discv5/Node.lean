@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Discv5.Session
 public import EthLib.Networking.Enr.V4
@@ -154,7 +154,7 @@ def counterNonce (counter : UInt32) (tail : Vector UInt8 8) : Vector UInt8 12 :=
   -- Session Cache: the outgoing message count in the first 32 bits of the 96-bit nonce.
   --
   -- The remaining 64 bits are random; the source gives no byte order, and EthLib takes big-endian.
-  (⟨(Base.natToBytes 4 counter.toNat).toArray, by simp [Base.natToBytes_length]⟩ : Vector UInt8 4)
+  (Base.ByteOrder.toBE 4 counter.toNat : Vector UInt8 4)
     ++ tail
 
 /-- An ordinary message packet sealed in a session, and the session with its counter raised. -/

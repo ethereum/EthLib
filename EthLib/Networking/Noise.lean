@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
@@ -408,14 +408,14 @@ def frame (message : ByteArray) : Except NoiseError ByteArray :=
   -- A Noise message has a maximum length of 65535 bytes.
   if message.size ≤ 65535 then
     -- The length field, a 16-bit big-endian unsigned integer in 2 bytes, then the message.
-    .ok (⟨(natToBytes 2 message.size).toArray⟩ ++ message)
+    .ok (⟨(ByteOrder.toBE 2 message.size).toArray⟩ ++ message)
   else .error (.messageTooLong message.size)
 
 /-- Decode exactly one complete frame, from the section Wire Format of noise-libp2p. -/
 def unframe (bytes : ByteArray) : Except NoiseError ByteArray := do
   -- The length field: the first 2 bytes, a 16-bit big-endian unsigned integer.
   if h : 2 ≤ bytes.size then
-    let size := bytesToNat (readBytes bytes 0 2 h).toList
+    let size := ByteOrder.ofBE (readBytes bytes 0 2 h).toList
     -- The message is the rest; EthLib reads one frame, so no byte may follow it.
     if size + 2 = bytes.size then return bytes.extract 2 bytes.size
     else throw (.frameLength size (bytes.size - 2))

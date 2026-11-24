@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # QUIC variable-length integers
@@ -75,7 +75,7 @@ def encodeWithList (width : Width) (value : Varint) (_ : value.val < capacity wi
   -- So the low 6 bits of the first byte hold its high bits, below `2^6` by the bound on the value.
   UInt8.ofNat (width.val * 64 + value.val / 256 ^ tailLength width) ::
     -- The bytes after the first hold the low bits of the value, big-endian.
-    natToBytes (tailLength width) value.val
+    (ByteOrder.toBE (tailLength width) value.val).toList
 
 /-- The shortest width that holds a value, required for frame types by RFC 9000 §12.4. -/
 def minWidth (value : Varint) : Width :=
@@ -115,12 +115,12 @@ def valueOf (head : UInt8) (tail : List UInt8) : Nat :=
   -- Appendix A.1: `v = v & 0x3f`, then `v = (v << 8) + data.next_byte()` for each byte after it.
   --
   -- EthLib folds that loop into one sum: `(v mod 2^6) * 256^(length - 1)` plus the tail.
-  head.toNat % 64 * 256 ^ tailLength (selector head) + bytesToNat tail
+  head.toNat % 64 * 256 ^ tailLength (selector head) + ByteOrder.ofBE tail
 
 /-- A first byte and as many tail bytes as it selects give a value below `2^62`. -/
 theorem valueOf_lt (head : UInt8) (tail : List UInt8)
     (h : tail.length = tailLength (selector head)) : valueOf head tail < 2 ^ 62 := by
-  have hbytes := bytesToNat_lt tail
+  have hbytes := ByteOrder.ofBE_lt tail
   rw [h] at hbytes
   have hhead : head.toNat % 64 + 1 ≤ 64 := by omega
   have hv : valueOf head tail < capacity (selector head) := by

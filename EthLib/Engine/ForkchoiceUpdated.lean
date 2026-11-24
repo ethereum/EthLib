@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.ChainConfig
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Engine.Json
@@ -630,7 +630,7 @@ def inclusionListEntryBytes (transaction : ByteArray) : List UInt8 :=
 The source leaves the form of the ID to the client, so this layout is EthLib's own. -/
 def payloadIdInput (head : Hash32) (attributes : PayloadAttributes fork) : ByteArray :=
   -- Each number takes 8 big-endian bytes.
-  let word (n : UInt64) : List UInt8 := Base.natToBytes 8 n.toNat
+  let word (n : UInt64) : List UInt8 := (Base.ByteOrder.toBE 8 n.toNat).toList
   -- From Shapella, each withdrawal gives its four fields in turn.
   let withdrawals : List UInt8 := if h : .shapella ≤ fork then
       (attributes.withdrawals h).flatMap fun w =>

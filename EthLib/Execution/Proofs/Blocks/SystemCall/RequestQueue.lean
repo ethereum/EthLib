@@ -641,7 +641,8 @@ end Frames
 section LogBytes
 
 open EthLib.Execution.Evm EthLib.Execution.Evm.Logic
-open EthLib.Base (byteAtOrZero byteAtOrZero_append byteAtOrZero_extract natToBytes natToBytes_length natToBytes_mod)
+open EthLib.Base (byteAtOrZero byteAtOrZero_append byteAtOrZero_extract ByteOrder.toBE
+  ByteOrder.length_toList_toBE ByteOrder.toBE_mod)
 
 /-- A word shifted up by 96 bits starts with the last 20 bytes of the word. -/
 theorem byteAtOrZero_wordBytes_shl (c : U256) {i : Nat} (hi : i < 20) :
@@ -652,11 +653,11 @@ theorem byteAtOrZero_wordBytes_shl (c : U256) {i : Nat} (hi : i < 20) :
       show (2 : Nat) ^ 256 = 256 ^ 12 * 256 ^ 20 from rfl, Nat.mod_mul_right_div_self,
       show (2 : Nat) ^ 96 = 256 ^ 12 from rfl, Nat.mul_div_cancel _ (by decide)]
   rw [wordBytes_eq_append _ (show 20 + 12 = 32 from rfl), wordBytes_eq_append c
-    (show 12 + 20 = 32 from rfl), byteAtOrZero_append, byteAtOrZero_append, hw, natToBytes_mod]
-  have h1 : (⟨(natToBytes 20 c.toNat).toArray⟩ : ByteArray).size = 20 := by
-    simp [ByteArray.size, natToBytes_length]
-  have h2 : (⟨(natToBytes 12 (c.toNat / 256 ^ 20)).toArray⟩ : ByteArray).size = 12 := by
-    simp [ByteArray.size, natToBytes_length]
+    (show 12 + 20 = 32 from rfl), byteAtOrZero_append, byteAtOrZero_append, hw, ByteOrder.toBE_mod]
+  have h1 : (⟨(ByteOrder.toBE 20 c.toNat).toArray⟩ : ByteArray).size = 20 := by
+    simp [ByteArray.size]
+  have h2 : (⟨(ByteOrder.toBE 12 (c.toNat / 256 ^ 20)).toArray⟩ : ByteArray).size = 12 := by
+    simp [ByteArray.size]
   rw [h1, h2, ite_eq_left hi, ite_eq_right (by omega), Nat.add_sub_cancel_left]
 
 /-- The mask of the code keeps the first 16 bytes of a word. -/

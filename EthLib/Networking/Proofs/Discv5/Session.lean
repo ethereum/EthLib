@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Networking.Discv5.Session
 public import EthLib.Networking.Proofs.Discv5.Packet
 
@@ -57,8 +57,7 @@ theorem readWhoareyou_makeWhoareyou {nodeIdA : NodeId} {maskingIv : Vector UInt8
         have hlen := Header.length_encode hh
         have hsize := Packet.size_messageAd_add hb ha
         subst hp
-        simp only [Authdata.encode, List.length_append, Vector.length_toList,
-          Base.natToBytes_length] at hlen
+        simp only [Authdata.encode, List.length_append, Vector.length_toList] at hlen
         have hadSize := ha
         simp only [Packet.messageAd, hh, bind, Except.bind, pure, Except.pure,
           Except.ok.injEq] at hadSize

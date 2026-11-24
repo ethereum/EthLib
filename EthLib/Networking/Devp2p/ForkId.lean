@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.ChainConfig
 public import EthLib.Base.Hash32
 public import EthLib.Cryptography.Hash.Crc.Crc32
@@ -133,7 +133,8 @@ def checksumInput (genesisHash : Hash32) (forks : List Activation) : ByteArray :
   -- `<genesis-hash> || uint64(f_1) || ... || uint64(f_k)`, each value big endian.
   --
   -- A value of 2^64 or more loses its high bytes, so only a bounded schedule checksums exactly.
-  ⟨(genesisHash.toList ++ forks.flatMap fun a => natToBytes 8 (activationValue a)).toArray⟩
+  ⟨(genesisHash.toList
+    ++ forks.flatMap fun a => (ByteOrder.toBE 8 (activationValue a)).toList).toArray⟩
 
 /-- `FORK_HASH` after some forks: the CRC-32 of the genesis hash and of those forks. -/
 def checksum (genesisHash : Hash32) (forks : List Activation) : Vector UInt8 4 :=
@@ -142,8 +143,7 @@ def checksum (genesisHash : Hash32) (forks : List Activation) : Vector UInt8 4 :
   -- EIP-2124 writes `[4]byte` with no byte order.
   --
   -- Its RLP test vectors write the CRC big endian, so EthLib does too.
-  ⟨(natToBytes 4 (Crc32.crc32 (checksumInput genesisHash forks)).toNat).toArray,
-    by simp [natToBytes_length]⟩
+  ByteOrder.toBE 4 (Crc32.crc32 (checksumInput genesisHash forks)).toNat
 
 /-- The passed forks at a head with a block number and a timestamp. -/
 def passed (s : Schedule) (number timestamp : Nat) : List Activation :=

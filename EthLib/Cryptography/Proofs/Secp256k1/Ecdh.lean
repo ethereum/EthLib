@@ -105,7 +105,7 @@ theorem ecdh_eq_ok_iff {sk : Fn} {pk : Point} {z : Vector UInt8 32} :
       pk ≠ .infinity ∧ pk.isOnCurve = true ∧ sk ≠ 0 ∧
         ∃ x y : Fp, (Point.affine x y).isOnCurve = true ∧
           toPoint (.affine x y) = Fn.toZMod sk • toPoint pk ∧
-          z.toList = Base.natToBytes 32 x.val := by
+          z.toList = (Base.ByteOrder.toBE 32 x.val).toList := by
   constructor
   · intro h
     unfold ecdh at h

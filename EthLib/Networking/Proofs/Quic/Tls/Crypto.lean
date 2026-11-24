@@ -26,7 +26,7 @@ open EthLib.Serialization
 /-- A parsed private scalar is nonzero and retains its exact input integer. -/
 theorem readScalar_eq_ok_iff (bytes : Vector UInt8 32) (error : Error) (scalar : Secp256r1.Fn) :
     readScalar bytes error = .ok scalar ↔
-      scalar.val = bytesToNat bytes.toList ∧ scalar ≠ 0 := by
+      scalar.val = ByteOrder.ofBE bytes.toList ∧ scalar ≠ 0 := by
   unfold readScalar
   dsimp only
   split

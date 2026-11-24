@@ -5,7 +5,7 @@ public import EthLib.Networking.Quic.Packet
 public import EthLib.Cryptography.Aes.Gcm
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Base.Except
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Word32
 
 /-!
@@ -199,7 +199,7 @@ def removeHeaderProtection (suite : CipherSuite) (hp : Vector UInt8 suite.keyLen
     return ⟨bytes.extract 0 endHeader, bytes.extract endHeader (bytes.size - 16),
       bytes.extract (bytes.size - 16) bytes.size,
       -- The truncated packet number, in network byte order.
-      bytesToNat (bytes.extract offset endHeader).data.toList, width⟩
+      ByteOrder.ofBE (bytes.extract offset endHeader).data.toList, width⟩
   else throw .header
 
 /-- Check the fixed bit and the reserved bits after authentication, RFC 9000 §§17.2, 17.3.1. -/
@@ -282,7 +282,7 @@ def protect (suite : CipherSuite) (keys : PacketKeys suite) (number : PacketNumb
     -- The Packet Number field starts at the given offset and ends the header.
     ensure (0 < offset ∧ header.size = offset + width.val + 1) .header
     -- RFC 9000 §17.1: it holds the least significant bytes of the full packet number.
-    ensure (bytesToNat (header.extract offset header.size).data.toList =
+    ensure (ByteOrder.ofBE (header.extract offset header.size).data.toList =
       number.val % 256 ^ (width.val + 1)) .packetNumber
     -- §5.3: the AEAD is applied prior to applying header protection.
     let (ciphertext, tag) ← encryptPayload suite keys number header plaintext

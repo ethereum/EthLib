@@ -5,11 +5,13 @@ public import EthLib.Base.ByteOrder
 /-!
 # Proofs: `ByteOrder`
 
-Writing and reading little-endian bytes undo each other.
+Writing and reading bytes undo each other, in either byte order.
 
 A number below `256 ^ k` survives the trip through `k` bytes.
 
 A vector of `k` bytes survives the trip through its value.
+
+The big-endian bytes are the little-endian bytes in reverse order.
 -/
 
 @[expose] public section
@@ -146,5 +148,251 @@ theorem ofLE_ofFn_succ {k : Nat} (f : Fin (k + 1) → UInt8) :
     ofLE (Vector.ofFn f)
       = (f 0).toNat + 256 * ofLE (Vector.ofFn fun i => f i.succ) := by
   simp [ofLE_eq_foldr, Vector.toList_ofFn, List.ofFn_succ]
+
+/-! ## Big-endian reading -/
+
+/-- No bytes read as 0. -/
+@[simp] theorem ofBE_nil : ofBE [] = 0 := rfl
+
+/-- Bytes appended on the right are the lower digits of a big-endian number. -/
+theorem ofBE_append (a b : List UInt8) :
+    ofBE (a ++ b) = ofBE a * 256 ^ b.length + ofBE b := by
+  rw [ofBE, List.foldl_append, foldl_ofBE, Nat.mul_comm]
+  rfl
+
+/-- A first byte of a big-endian number is worth `256 ^ k`, where `k` bytes follow it. -/
+theorem ofBE_cons (b : UInt8) (bytes : List UInt8) :
+    ofBE (b :: bytes) = b.toNat * 256 ^ bytes.length + ofBE bytes := by
+  rw [← List.singleton_append, ofBE_append]
+  simp [ofBE]
+
+/-- A last byte is the low digit of a big-endian number. -/
+@[simp] theorem ofBE_append_singleton (bytes : List UInt8) (b : UInt8) :
+    ofBE (bytes ++ [b]) = 256 * ofBE bytes + b.toNat := by
+  rw [ofBE, List.foldl_append]
+  rfl
+
+/-- A vector reads big-endian as its reversal reads little-endian. -/
+theorem ofBE_toList_eq_ofLE_reverse {n : Nat} (v : Vector UInt8 n) :
+    ofBE v.toList = ofLE v.reverse := by
+  -- A left fold is a right fold over the reversed list.
+  rw [ofLE_eq_foldr, Vector.toList_reverse, List.foldr_reverse, ofBE]
+  simp only [Nat.add_comm]
+
+/-! ## Big-endian writing -/
+
+/-- The big-endian bytes, as a list, are the bytes that the loop writes. -/
+theorem toList_toBE_eq_go (n x : Nat) : (toBE n x).toList = toBE.go n x [] := rfl
+
+/-- Bytes written before the loop starts stay at the end. -/
+theorem toBE.go_append (n x : Nat) (written : List UInt8) :
+    toBE.go n x written = toBE.go n x [] ++ written := by
+  induction n generalizing x written with
+  | zero => rfl
+  | succ n ih =>
+    rw [toBE.go, toBE.go, ih, ih (written := [_]), List.append_assoc]
+    rfl
+
+/-- On `n + 1` bytes, the higher bytes come first and the lowest byte last. -/
+theorem toList_toBE_succ (n x : Nat) :
+    (toBE (n + 1) x).toList = (toBE n (x / 256)).toList ++ [UInt8.ofNat (x % 256)] := by
+  rw [toList_toBE_eq_go, toBE.go, toBE.go_append, ← toList_toBE_eq_go]
+  exact congrArg ((toBE n (x / 256)).toList ++ [·]) UInt8.ofNat_mod_size.symm
+
+/-- The big-endian bytes, as a list, are the little-endian bytes in reverse order. -/
+theorem toList_toBE (n x : Nat) : (toBE n x).toList = (toLE n x).toList.reverse := by
+  induction n generalizing x with
+  | zero => rfl
+  | succ n ih =>
+    -- The last big-endian byte is the first little-endian byte, the low byte of `x`.
+    rw [toList_toLE_succ, List.reverse_cons, ← ih, toList_toBE_succ]
+    exact congrArg ((toBE n (x / 256)).toList ++ [·]) UInt8.ofNat_mod_size
+
+/-- The big-endian bytes are the little-endian bytes in reverse order. -/
+theorem toBE_eq_reverse_toLE (n x : Nat) : toBE n x = (toLE n x).reverse := by
+  apply Vector.toList_inj.mp
+  rw [toList_toBE, Vector.toList_reverse]
+
+/-- Writing a number on `n` bytes and reading it back big-endian keeps its low `8n` bits. -/
+@[simp] theorem ofBE_toBE (n x : Nat) : ofBE (toBE n x).toList = x % 256 ^ n := by
+  rw [toBE_eq_reverse_toLE, ofBE_toList_eq_ofLE_reverse, Vector.reverse_reverse, ofLE_toLE]
+
+/-- A number below `256 ^ n` survives the round trip through `n` big-endian bytes. -/
+theorem ofBE_toBE_of_lt {n x : Nat} (h : x < 256 ^ n) : ofBE (toBE n x).toList = x := by
+  rw [ofBE_toBE, Nat.mod_eq_of_lt h]
+
+/-- A list of bytes survives the trip through its big-endian number, written on as many bytes. -/
+theorem toList_toBE_ofBE (bytes : List UInt8) :
+    (toBE bytes.length (ofBE bytes)).toList = bytes := by
+  generalize hn : bytes.length = n
+  induction n generalizing bytes with
+  | zero => simp [List.length_eq_zero_iff.mp hn]
+  | succ n ih =>
+    -- Split off the last byte, the lowest digit.
+    obtain ⟨front, b, rfl⟩ := (List.eq_nil_or_concat bytes).resolve_left (by rintro rfl; simp at hn)
+    rw [List.concat_eq_append] at hn ⊢
+    have hf : front.length = n := by simpa using hn
+    have hb : b.toNat < 256 := b.toNat_lt
+    -- The front is the value divided by 256, and the last byte its remainder.
+    have hdiv : (256 * ofBE front + b.toNat) / 256 = ofBE front := by omega
+    have hmod : (256 * ofBE front + b.toNat) % 256 = b.toNat := by omega
+    rw [ofBE_append_singleton, toList_toBE_succ, hdiv, hmod, ih front hf]
+    simp
+
+/-- A list of `n` bytes survives the trip through its big-endian number, written on `n` bytes. -/
+theorem toList_toBE_ofBE_of_length {bytes : List UInt8} {n : Nat} (h : bytes.length = n) :
+    (toBE n (ofBE bytes)).toList = bytes := by
+  subst h
+  exact toList_toBE_ofBE bytes
+
+/-- Reading `n` bytes big-endian and writing the number back on `n` bytes returns the bytes. -/
+@[simp] theorem toBE_ofBE {n : Nat} (v : Vector UInt8 n) : toBE n (ofBE v.toList) = v :=
+  Vector.toList_inj.mp (toList_toBE_ofBE_of_length (by simp))
+
+/-- Two numbers below `256 ^ n` with the same `n` big-endian bytes are equal. -/
+theorem toBE_inj {n x y : Nat} (hx : x < 256 ^ n) (hy : y < 256 ^ n)
+    (h : toBE n x = toBE n y) : x = y := by
+  rw [← ofBE_toBE_of_lt hx, ← ofBE_toBE_of_lt hy, h]
+
+/-- Two byte lists of one length that read as the same big-endian number are equal. -/
+theorem ofBE_inj {a b : List UInt8} (length : a.length = b.length) (same : ofBE a = ofBE b) :
+    a = b := by
+  rw [← toList_toBE_ofBE a, ← toList_toBE_ofBE b, length, same]
+
+/-! ## Big-endian bytes as a list
+
+Many encodings concatenate big-endian fields, so these lemmas state the bytes as a list.
+-/
+
+/-- Writing on `n` bytes gives exactly `n` bytes. -/
+theorem length_toList_toBE (n x : Nat) : (toBE n x).toList.length = n := by
+  simp
+
+/-- Zero bytes write nothing. -/
+@[simp] theorem toList_toBE_zero (x : Nat) : (toBE 0 x).toList = [] := rfl
+
+/-- Writing on `a + b` bytes puts `x / 256 ^ b` on the first `a` bytes and `x` on the last `b`. -/
+theorem toList_toBE_add (a b x : Nat) :
+    (toBE (a + b) x).toList = (toBE a (x / 256 ^ b)).toList ++ (toBE b x).toList := by
+  induction b generalizing x with
+  | zero => simp [toBE, toBE.go]
+  | succ b ih =>
+    -- Both sides end with the lowest byte, and the higher bytes are `x / 256` written on `a + b`.
+    rw [← Nat.add_assoc, toList_toBE_succ, ih, toList_toBE_succ, List.append_assoc,
+      Nat.div_div_eq_div_mul, Nat.pow_succ, Nat.mul_comm 256]
+
+/-- Byte `i` of a number written on `n` bytes is its digit worth `256 ^ (n - 1 - i)`. -/
+theorem getElem_toBE {n x i : Nat} (hi : i < n) :
+    (toBE n x)[i] = UInt8.ofNat (x / 256 ^ (n - 1 - i) % 256) := by
+  -- Byte `i` from the start is little-endian byte `n - 1 - i`.
+  rw [UInt8.ofNat_mod_size, toBE_eq_reverse_toLE, Vector.getElem_reverse, toLE_eq_div,
+    Vector.getElem_ofFn]
+
+/-- A number written on `n` bytes keeps only its remainder modulo `256 ^ n`. -/
+theorem toBE_mod (n x : Nat) : toBE n (x % 256 ^ n) = toBE n x := by
+  -- Both write `n` bytes that read back as `x % 256 ^ n`.
+  apply Vector.toList_inj.mp
+  apply ofBE_inj (by simp)
+  simp
+
+/-- Zero on `n` bytes is `n` zero bytes. -/
+theorem toList_toBE_zero_right (n : Nat) : (toBE n 0).toList = List.replicate n 0 := by
+  induction n with
+  | zero => rfl
+  | succ n ih => rw [toList_toBE_succ, Nat.zero_div, ih, List.replicate_succ']; rfl
+
+/-- Two bytes compare as the numbers they hold. -/
+theorem _root_.UInt8.compare_eq_compare_toNat (a b : UInt8) :
+    compare a b = compare a.toNat b.toNat := by
+  simp only [compare, compareOfLessAndEq, UInt8.lt_iff_toNat_lt, ← UInt8.toNat_inj]
+
+/-- Two lists of bytes of one length compare, byte after byte, as their big-endian numbers. -/
+theorem compare_eq_compare_ofBE {a b : List UInt8} (h : a.length = b.length) :
+    compare a b = compare (ofBE a) (ofBE b) := by
+  induction a generalizing b with
+  | nil =>
+    rw [List.length_nil, eq_comm, List.length_eq_zero_iff] at h
+    subst h
+    rfl
+  | cons x a ih =>
+    obtain ⟨y, b, rfl⟩ := List.exists_cons_of_length_eq_add_one h.symm
+    have hlen : a.length = b.length := by simpa using h
+    have ha := ofBE_lt a
+    have hb := ofBE_lt b
+    rw [← hlen] at hb
+    rw [List.compare_cons_cons, ih hlen, ofBE_cons, ofBE_cons, ← hlen,
+      UInt8.compare_eq_compare_toNat]
+    -- The first bytes decide, since each tail is worth less than one unit of the first byte.
+    generalize 256 ^ a.length = unit at ha hb ⊢
+    rcases Nat.lt_trichotomy x.toNat y.toNat with hxy | hxy | hxy
+    · have : x.toNat * unit + ofBE a < y.toNat * unit + ofBE b := by
+        have := Nat.mul_le_mul_right unit (Nat.succ_le_of_lt hxy)
+        rw [Nat.succ_mul] at this
+        omega
+      rw [Nat.compare_eq_lt.mpr hxy, Nat.compare_eq_lt.mpr this]
+      rfl
+    · rw [hxy, Nat.compare_eq_eq.mpr rfl]
+      simp only [Ordering.then, Nat.compare_eq_ite_lt, Nat.add_lt_add_iff_left]
+    · have : y.toNat * unit + ofBE b < x.toNat * unit + ofBE a := by
+        have := Nat.mul_le_mul_right unit (Nat.succ_le_of_lt hxy)
+        rw [Nat.succ_mul] at this
+        omega
+      rw [Nat.compare_eq_gt.mpr hxy, Nat.compare_eq_gt.mpr this]
+      rfl
+
+/-- Numbers written on `w` bytes each, one after the other, take `w` bytes each. -/
+theorem length_flatMap_toBE (w : Nat) (xs : List Nat) :
+    (xs.flatMap fun x => (toBE w x).toList).length = w * xs.length := by
+  induction xs with
+  | nil => simp
+  | cons x xs ih =>
+    rw [List.flatMap_cons, List.length_append, length_toList_toBE, ih, List.length_cons,
+      Nat.mul_succ, Nat.add_comm]
+
+/-- Numbers below `256 ^ w`, written on `w` bytes each, read back from their blocks of `w` bytes.
+
+Block `i` is the `w` bytes after the first `i * w`. -/
+theorem map_range_ofBE_flatMap_toBE {w : Nat} {xs : List Nat}
+    (hlt : ∀ x ∈ xs, x < 256 ^ w) :
+    (List.range xs.length).map
+      (fun i => ofBE (((xs.flatMap fun x => (toBE w x).toList).drop (i * w)).take w)) = xs := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    have hx : (toBE w x).toList.length = w := length_toList_toBE w x
+    -- Past the first block, block `i + 1` of the list is block `i` of the rest.
+    have hshift : ∀ i,
+        (((toBE w x).toList ++ xs.flatMap fun x => (toBE w x).toList).drop ((i + 1) * w)).take w =
+          ((xs.flatMap fun x => (toBE w x).toList).drop (i * w)).take w := fun i => by
+      rw [Nat.add_one_mul, Nat.add_comm (i * w) w, ← List.drop_drop, List.drop_left' hx]
+    rw [List.length_cons, List.range_succ_eq_map, List.map_cons, List.map_map, List.flatMap_cons]
+    simp only [Function.comp_def, hshift, Nat.zero_mul, List.drop_zero]
+    rw [ih fun y hy => hlt y (List.mem_cons_of_mem x hy), List.take_left' hx,
+      ofBE_toBE_of_lt (hlt x List.mem_cons_self)]
+
+/-- Bytes of length `w * n`, read as `n` blocks of `w` bytes and written back, are unchanged. -/
+theorem flatMap_toBE_map_range_ofBE {w n : Nat} {bytes : List UInt8}
+    (hlen : bytes.length = w * n) :
+    ((List.range n).map fun i => ofBE ((bytes.drop (i * w)).take w)).flatMap
+      (fun x => (toBE w x).toList) = bytes := by
+  induction n generalizing bytes with
+  | zero =>
+    rw [Nat.mul_zero, List.length_eq_zero_iff] at hlen
+    simp [hlen]
+  | succ n ih =>
+    have htake : (bytes.take w).length = w := by
+      rw [List.length_take, hlen, Nat.mul_succ]
+      omega
+    have hdrop : (bytes.drop w).length = w * n := by
+      rw [List.length_drop, hlen, Nat.mul_succ]
+      omega
+    -- Past the first block, block `i + 1` of the bytes is block `i` of the rest.
+    have hshift : ∀ i, (bytes.drop ((i + 1) * w)).take w = ((bytes.drop w).drop (i * w)).take w :=
+      fun i => by rw [List.drop_drop, Nat.add_one_mul, Nat.add_comm (i * w) w]
+    rw [List.range_succ_eq_map, List.map_cons, List.map_map, List.flatMap_cons]
+    simp only [Function.comp_def, hshift, Nat.zero_mul, List.drop_zero]
+    have hfirst := toList_toBE_ofBE (bytes.take w)
+    rw [htake] at hfirst
+    rw [ih hdrop, hfirst, List.take_append_drop]
 
 end EthLib.Base.ByteOrder

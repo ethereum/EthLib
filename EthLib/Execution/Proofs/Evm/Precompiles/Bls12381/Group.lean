@@ -23,7 +23,7 @@ Neither precompile checks that its inputs lie in the subgroup.
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (natToBytes_length)
+open EthLib.Base (ByteOrder.length_toList_toBE)
 open EthLib.Cryptography.Bls (Fp Fp2 G1 G2 G2.add)
 
 /-! ## Validity of decoded points -/
@@ -99,7 +99,7 @@ theorem bls12G1Add_g1ToBytes {p0 p1 : G1} (h0 : G1.Valid p0) (h1 : G1.Valid p1) 
     unfold g1ToBytes
     rw [h]
   have hlen : (padG1 (g1ToBytes p0)).length = 128 := length_padG1_g1ToBytes p0
-  have hraw (p : G1) : (g1ToBytes p).length = 96 := by simp [g1ToBytes, natToBytes_length]
+  have hraw (p : G1) : (g1ToBytes p).length = 96 := by simp [g1ToBytes]
   rw [← hsum]
   refine (bls12G1Add_eq_ok_iff _ _ _).mpr ⟨?_, hgas, g1ToBytes p0, g1ToBytes p1, q0, q1,
     ?_, ?_, hq0, hq1, rfl⟩
@@ -125,7 +125,7 @@ theorem bls12G2Add_g2ToBytes {p0 p1 : G2} (h0 : G2.Valid p0) (h1 : G2.Valid p1) 
     unfold g2ToBytes
     rw [h]
   have hlen : (padG2 (g2ToBytes p0)).length = 256 := length_padG2_g2ToBytes p0
-  have hraw (p : G2) : (g2ToBytes p).length = 192 := by simp [g2ToBytes, natToBytes_length]
+  have hraw (p : G2) : (g2ToBytes p).length = 192 := by simp [g2ToBytes]
   rw [← hsum]
   refine (bls12G2Add_eq_ok_iff _ _ _).mpr ⟨?_, hgas, g2ToBytes p0, g2ToBytes p1, q0, q1,
     ?_, ?_, hq0, hq1, rfl⟩
@@ -151,7 +151,7 @@ theorem exists_bls12G1Add_ok :
   obtain ⟨q, hq, hqt⟩ := bytesToG1_g1ToBytes hsum (subgroupCheck := false) (fun h => by cases h)
   refine ⟨_, g1ToBytes (G1.add G1.generator G1.generator), q,
     bls12G1Add_g1ToBytes hg hg (Nat.le_refl _), ?_, hq, ?_⟩
-  · exact unpadG1_padG1 (by simp [g1ToBytes, natToBytes_length])
+  · exact unpadG1_padG1 (by simp [g1ToBytes])
   · rw [hqt, G1.toPoint_add hg hg]
 
 /-- G2ADD succeeds on two copies of the G2 generator, with gas equal to its price.
@@ -170,7 +170,7 @@ theorem exists_bls12G2Add_ok :
   obtain ⟨q, hq, hqt⟩ := bytesToG2_g2ToBytes hsum (subgroupCheck := false) (fun h => by cases h)
   refine ⟨_, g2ToBytes (G2.add G2.generator G2.generator), q,
     bls12G2Add_g2ToBytes hg hg (Nat.le_refl _), ?_, hq, ?_⟩
-  · exact unpadG2_padG2 (by simp [g2ToBytes, natToBytes_length])
+  · exact unpadG2_padG2 (by simp [g2ToBytes])
   · rw [hqt, G2.toPoint_add hg hg]
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

@@ -126,16 +126,16 @@ The decoder reads them back, and it rejects an integer of at least `p`. -/
 
 /-- The bytes of an element are those of its integer. -/
 private theorem toBytesBE_data (x : Fp) :
-    (Fp.toBytesBE x).data.toList = Base.natToBytes 48 x.val := by
+    (Fp.toBytesBE x).data.toList = (Base.ByteOrder.toBE 48 x.val).toList := by
   rw [show Fp.toBytesBE x = Montgomery.toBytesBE x from rfl, Montgomery.toBytesBE_eq]
   unfold Fp.val
   rfl
 
 /-- Decoding the encoding of a field element recovers its value. -/
-private theorem bytesToNat_toBytesBE (x : Fp) :
-    Base.bytesToNat (Fp.toBytesBE x).data.toList = x.val := by
+private theorem ofBE_toBytesBE (x : Fp) :
+    Base.ByteOrder.ofBE (Fp.toBytesBE x).data.toList = x.val := by
   rw [toBytesBE_data]
-  exact Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_le (val_lt x) (by decide))
+  exact Base.ByteOrder.ofBE_toBE_of_lt (lt_of_lt_of_le (val_lt x) (by decide))
 
 set_option exponentiation.threshold 400 in
 /-- The most significant byte of a canonical field element has its top three bits clear (`< 0x20`).
@@ -146,24 +146,24 @@ theorem toBytesBE_head_lt (x : Fp) : ((Fp.toBytesBE x).get! 0).toNat < 0x20 := b
   -- Split the 48 bytes into the head byte and the 47 after it.
   obtain ⟨b, rest, hbr⟩ : ∃ b rest, (Fp.toBytesBE x).data.toList = b :: rest := by
     rw [toBytesBE_data]
-    cases h : Base.natToBytes 48 x.val with
+    cases h : (Base.ByteOrder.toBE 48 x.val).toList with
     | nil =>
       have := congrArg List.length h
-      rw [Base.natToBytes_length] at this
+      rw [Base.ByteOrder.length_toList_toBE] at this
       simp at this
     | cons b rest => exact ⟨b, rest, rfl⟩
   have hlen : rest.length = 47 := by
     have := congrArg List.length hbr
-    rw [toBytesBE_data, Base.natToBytes_length] at this
+    rw [toBytesBE_data, Base.ByteOrder.length_toList_toBE] at this
     simp at this
     omega
   have hget : (Fp.toBytesBE x).get! 0 = b := by
     show (Fp.toBytesBE x).data[0]! = b
     rw [← Array.getElem!_toList, hbr]
     rfl
-  have hval : b.toNat * 256 ^ 47 + Base.bytesToNat rest = x.val := by
-    rw [← hlen, ← Base.bytesToNat_cons, ← hbr, toBytesBE_data,
-      Base.bytesToNat_natToBytes_of_lt hv]
+  have hval : b.toNat * 256 ^ 47 + Base.ByteOrder.ofBE rest = x.val := by
+    rw [← hlen, ← Base.ByteOrder.ofBE_cons, ← hbr, toBytesBE_data,
+      Base.ByteOrder.ofBE_toBE_of_lt hv]
   have hlt : x.val < 32 * 256 ^ 47 := lt_of_lt_of_le (val_lt x) (by decide)
   rw [hget]
   have : b.toNat * 256 ^ 47 < 32 * 256 ^ 47 := by omega
@@ -198,28 +198,29 @@ theorem toBytesBE_fromBytesBE {b : ByteArray} {x : Fp}
       rw [getElem!_pos b i (by simp at h1; omega)]
       rfl
     rw [Montgomery.ofBytesBE_eq, hl] at h
-    by_cases hlt : Base.bytesToNat b.data.toList < params.p
+    by_cases hlt : Base.ByteOrder.ofBE b.data.toList < params.p
     -- An in-range value is the decoded element itself, and it writes the same bytes.
     · simp only [hlt, ↓reduceIte] at h
       cases h
-      have hv : Montgomery.toNat (Montgomery.ofNat (M := params) (Base.bytesToNat b.data.toList)) =
-          Base.bytesToNat b.data.toList := by
-        have := val_ofNat_of_lt (n := Base.bytesToNat b.data.toList) hlt
+      have hv :
+          Montgomery.toNat (Montgomery.ofNat (M := params) (Base.ByteOrder.ofBE b.data.toList)) =
+          Base.ByteOrder.ofBE b.data.toList := by
+        have := val_ofNat_of_lt (n := Base.ByteOrder.ofBE b.data.toList) hlt
         unfold Fp.val at this
         exact this
       have hlen : b.data.toList.length = 4 * 12 := by simp [hs]
       apply ByteArray.ext
       apply Array.toList_inj.mp
       show (Montgomery.toBytesBE _).data.toList = _
-      rw [Montgomery.toBytesBE_eq, hv, ← hlen, Base.natToBytes_bytesToNat]
+      rw [Montgomery.toBytesBE_eq, hv, ← hlen, Base.ByteOrder.toList_toBE_ofBE]
     -- A value at or above p is rejected.
     · simp only [hlt, ↓reduceIte] at h
       cases h
 
 /-- A decoded field element has the integer of the input bytes. -/
 theorem val_of_fromBytesBE {b : ByteArray} {x : Fp} (h : Fp.fromBytesBE b = .ok x) :
-    x.val = Base.bytesToNat b.data.toList := by
-  rw [← toBytesBE_fromBytesBE h, bytesToNat_toBytesBE]
+    x.val = Base.ByteOrder.ofBE b.data.toList := by
+  rw [← toBytesBE_fromBytesBE h, ofBE_toBytesBE]
 
 end EthLib.Cryptography.Bls.Fp
 

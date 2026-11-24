@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Execution.Blocks.Bloom
 
 /-!
@@ -122,10 +122,10 @@ theorem mayContain_topic {logs : List Log} {log : Log} (hLog : log ∈ logs) {to
 -- The bound compares `2 ^ 2048` with `256 ^ 256`, which needs a higher threshold.
 set_option exponentiation.threshold 2048 in
 /-- The bytes of a filter, read most significant first, give back the number of the filter. -/
-theorem bytesToNat_toBytes (bloom : BitVec 2048) :
-    bytesToNat (toBytes bloom).toList = bloom.toNat := by
-  simp only [toBytes, Vector.toList_mk]
-  apply bytesToNat_natToBytes_of_lt
+theorem ofBE_toBytes (bloom : BitVec 2048) :
+    ByteOrder.ofBE (toBytes bloom).toList = bloom.toNat := by
+  simp only [toBytes]
+  apply ByteOrder.ofBE_toBE_of_lt
   -- 256 bytes hold 2048 bits.
   have hpow : (256 : Nat) ^ 256 = 2 ^ 2048 := (Nat.pow_mul 2 8 256).symm
   rw [hpow]
@@ -134,6 +134,6 @@ theorem bytesToNat_toBytes (bloom : BitVec 2048) :
 /-- Two filters with the same 256 bytes are the same filter. -/
 theorem toBytes_injective : Function.Injective toBytes := fun a b h => by
   apply BitVec.eq_of_toNat_eq
-  rw [← bytesToNat_toBytes a, ← bytesToNat_toBytes b, h]
+  rw [← ofBE_toBytes a, ← ofBE_toBytes b, h]
 
 end EthLib.Execution.Blocks.Bloom

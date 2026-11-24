@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
 public import EthLib.Base.ByteOrder
 public import EthLib.Serialization.Ssz.Codec.Deserialize
@@ -79,7 +79,7 @@ def encodeHeader (type : UInt16) (length : Nat) : ByteArray :=
   -- EthLib's header layout: the type in 2 bytes, in the order that the type list writes them.
   --
   -- Then the length of the data in 4 bytes, little-endian, then 2 reserved zero bytes.
-  ⟨(natToBytes 2 type.toNat ++ (ByteOrder.toLE 4 length).toList ++ [0, 0]).toArray⟩
+  ⟨((ByteOrder.toBE 2 type.toNat).toList ++ (ByteOrder.toLE 4 length).toList ++ [0, 0]).toArray⟩
 
 /-- The bytes of the records, one after the other.
 
@@ -116,7 +116,7 @@ def readHeader (bytes : ByteArray) (offset : Nat) : Except E2storeError Header :
       .error (.reservedNotZero (byte 6) (byte 7))
     else
       -- Bytes 0 and 1 are the type, in order, and bytes 2 to 5 the length, little-endian.
-      .ok ⟨UInt16.ofNat (bytesToNat [byte 0, byte 1]),
+      .ok ⟨UInt16.ofNat (ByteOrder.ofBE [byte 0, byte 1]),
         ByteOrder.ofLE #v[byte 2, byte 3, byte 4, byte 5]⟩
 
 /-- The records of `bytes` from the position `offset`, after the records `acc`. -/

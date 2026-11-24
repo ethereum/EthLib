@@ -25,8 +25,9 @@ Source: [EIP-197][eip197], section Specification.
 
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
-open EthLib.Base (Fork bytesToNat natToBytes natToBytes_length bytesToNat_natToBytes_of_lt
-  natToBytes_zero_right mapM_eq_ok_map mapM_ok_getElem mapM_ok_length)
+open EthLib.Base (Fork ByteOrder.ofBE ByteOrder.toBE ByteOrder.length_toList_toBE
+  ByteOrder.ofBE_toBE_of_lt ByteOrder.toList_toBE_zero_right mapM_eq_ok_map mapM_ok_getElem
+  mapM_ok_length)
 open EthLib.Cryptography.AltBn128
 open EthLib.Execution.Evm (bufferRead)
 
@@ -151,15 +152,15 @@ theorem ecpairing_eq_zero_iff {fork : Fork} {data : ByteArray} {gas : Nat} {out 
 /-- The 128 bytes of a point of the twist. -/
 theorem length_g2ToBytes : (q : Point2) → (g2ToBytes q).length = 128
   | .infinity => by simp [g2ToBytes]
-  | .affine _ _ => by simp [g2ToBytes, natToBytes_length]
+  | .affine _ _ => by simp [g2ToBytes]
 
 /-- A coordinate fits in 32 bytes, since `p < 2^256`. -/
 private theorem fp_lt_two_pow (x : Fp) : x.val < 256 ^ 32 :=
   Nat.lt_trans x.isLt (by decide)
 
 /-- The 32 bytes of an element of `Fp` decode back to it. -/
-theorem bytesToFp_natToBytes (x : Fp) : bytesToFp (natToBytes 32 x.val) = .ok x := by
-  simp [bytesToFp, bytesToNat_natToBytes_of_lt (fp_lt_two_pow x), x.isLt]
+theorem bytesToFp_toBE (x : Fp) : bytesToFp ((ByteOrder.toBE 32 x.val).toList) = .ok x := by
+  simp [bytesToFp, ByteOrder.ofBE_toBE_of_lt (fp_lt_two_pow x), x.isLt]
 
 /-- The point `(0, 0)` is not on the twist, since `b2 ≠ 0`. -/
 theorem isOnCurve_point2_zero : (Point2.affine ⟨0, 0⟩ ⟨0, 0⟩).isOnCurve = false := by
@@ -188,23 +189,30 @@ theorem bytesToG2_g2ToBytes {q : Point2} (hq : q.isOnCurve = true) :
     bytesToG2 (g2ToBytes q) = .ok q := by
   cases q with
   | infinity =>
-    have h0 : natToBytes 32 0 = List.replicate 32 0 := natToBytes_zero_right 32
+    have h0 : (ByteOrder.toBE 32 0).toList
+        = List.replicate 32 0 := ByteOrder.toList_toBE_zero_right 32
     have hbytes : g2ToBytes .infinity =
-        natToBytes 32 0 ++ (natToBytes 32 0 ++ (natToBytes 32 0 ++ natToBytes 32 0)) := by
+        (ByteOrder.toBE 32 0).toList
+          ++ ((ByteOrder.toBE 32 0).toList
+            ++ ((ByteOrder.toBE 32 0).toList ++ (ByteOrder.toBE 32 0).toList)) := by
       simp [g2ToBytes, h0]
-    have hl0 : (natToBytes 32 0).length = 32 := natToBytes_length 32 0
-    have hzero : bytesToFp (natToBytes 32 0) = .ok 0 := bytesToFp_natToBytes 0
+    have hl0 : ((ByteOrder.toBE 32 0).toList).length = 32 := ByteOrder.length_toList_toBE 32 0
+    have hzero : bytesToFp ((ByteOrder.toBE 32 0).toList) = .ok 0 := bytesToFp_toBE 0
     rw [bytesToG2, hbytes, List.take_left' hl0, List.drop_left' hl0, List.take_left' hl0,
       drop_64_of_four hl0 hl0, List.take_left' hl0, drop_96_of_four hl0 hl0 hl0]
     simp [hzero, bind, Except.bind, pure, Except.pure]
   | affine x y =>
     have hassoc : g2ToBytes (.affine x y) =
-        natToBytes 32 x.c1.val ++
-          (natToBytes 32 x.c0.val ++ (natToBytes 32 y.c1.val ++ natToBytes 32 y.c0.val)) := by
+        (ByteOrder.toBE 32 x.c1.val).toList ++
+          ((ByteOrder.toBE 32 x.c0.val).toList
+            ++ ((ByteOrder.toBE 32 y.c1.val).toList ++ (ByteOrder.toBE 32 y.c0.val).toList)) := by
       simp [g2ToBytes, List.append_assoc]
-    have hx1 : (natToBytes 32 x.c1.val).length = 32 := natToBytes_length 32 x.c1.val
-    have hx0 : (natToBytes 32 x.c0.val).length = 32 := natToBytes_length 32 x.c0.val
-    have hy1 : (natToBytes 32 y.c1.val).length = 32 := natToBytes_length 32 y.c1.val
+    have hx1 : ((ByteOrder.toBE 32 x.c1.val).toList).length
+        = 32 := ByteOrder.length_toList_toBE 32 x.c1.val
+    have hx0 : ((ByteOrder.toBE 32 x.c0.val).toList).length
+        = 32 := ByteOrder.length_toList_toBE 32 x.c0.val
+    have hy1 : ((ByteOrder.toBE 32 y.c1.val).toList).length
+        = 32 := ByteOrder.length_toList_toBE 32 y.c1.val
     have hnz : ¬(x.c0 = 0 ∧ x.c1 = 0 ∧ y.c0 = 0 ∧ y.c1 = 0) := by
       rintro ⟨hc0, hc1, hd0, hd1⟩
       have hx : x = ⟨0, 0⟩ := Fp2.ext hc0 hc1
@@ -213,7 +221,7 @@ theorem bytesToG2_g2ToBytes {q : Point2} (hq : q.isOnCurve = true) :
       cases hq
     rw [bytesToG2, hassoc, List.take_left' hx1, List.drop_left' hx1, List.take_left' hx0,
       drop_64_of_four hx1 hx0, List.take_left' hy1, drop_96_of_four hx1 hx0 hy1]
-    simp only [bytesToFp_natToBytes, hq, bind, Except.bind, pure, Except.pure, ↓reduceIte]
+    simp only [bytesToFp_toBE, hq, bind, Except.bind, pure, Except.pure, ↓reduceIte]
     split
     · rename_i hzero
       exact absurd ⟨congrArg Cryptography.Fp2.c0 hzero.1, congrArg Cryptography.Fp2.c1 hzero.1,

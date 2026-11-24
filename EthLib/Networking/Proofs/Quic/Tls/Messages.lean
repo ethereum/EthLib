@@ -41,7 +41,7 @@ theorem length_encodeExtension {extension : Extension} {encoded : List UInt8}
     (written : encodeExtension extension = .ok encoded) : 0 < encoded.length := by
   simp only [encodeExtension, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
   obtain ⟨data, hd, rfl⟩ := written
-  simp only [List.length_append, Base.natToBytes_length]
+  simp only [List.length_append, Base.ByteOrder.length_toList_toBE]
   omega
 
 /-- Every successful extension block round trips with its original order and trailing bytes. -/
@@ -62,14 +62,14 @@ theorem codePoints_encode {width minimum maximum : Nat} {values : List CodePoint
     (rest : List UInt8) :
     items width minimum maximum codePoint (encoded ++ rest) = .ok (values, rest) := by
   unfold encodeCodePoints at written
-  apply items_encodeItems (fun (n : CodePoint) => .ok (Base.natToBytes 2 n.val))
+  apply items_encodeItems (fun (n : CodePoint) => .ok ((Base.ByteOrder.toBE 2 n.val).toList))
     codePoint _ _ written rest
   · intro value data rest h
     cases h
     exact codePoint_encode value rest
   · intro value data h
     cases h
-    simp [Base.natToBytes_length]
+    simp
 
 /-- A certificate entry preserves its certificate bytes and per-certificate extension order. -/
 theorem readCertificateEntry_encode {entry : CertificateEntry} {encoded : List UInt8}
@@ -100,7 +100,7 @@ theorem certificateEntries_encode {values : List CertificateEntry} {encoded : Li
 
 /-- A body within the uint24 bound gets its exact four-byte handshake header. -/
 theorem frameList_eq_ok (kind : UInt8) (body : List UInt8) (bound : body.length < 2 ^ 24) :
-    frameList kind body = .ok (kind :: (Base.natToBytes 3 body.length ++ body)) := by
+    frameList kind body = .ok (kind :: ((Base.ByteOrder.toBE 3 body.length).toList ++ body)) := by
   have upper : body.length ≤ 2 ^ 24 - 1 := by omega
   have capacity : body.length < 256 ^ 3 := bound
   simp [frameList, encodeBlob, upper, capacity, bind, Except.bind, pure, Except.pure]
@@ -122,7 +122,7 @@ theorem length_frameList {kind : UInt8} {body encoded : List UInt8}
   simp only [frameList, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
   obtain ⟨data, written, rfl⟩ := accepted
   obtain ⟨_, _, _, rfl⟩ := (encodeBlob_eq_ok_iff ..).mp written
-  simp only [List.length_cons, List.length_append, Base.natToBytes_length]
+  simp only [List.length_cons, List.length_append, Base.ByteOrder.length_toList_toBE]
   omega
 
 /-- A duplicate extension type cannot be emitted in a handshake block (§4.3). -/
@@ -227,9 +227,9 @@ theorem encodeExtension_of_readExtension {input rest : List UInt8} {extension : 
   obtain ⟨⟨kind, suffix⟩, kindRead, ⟨data, trailing⟩, dataRead, rfl, rfl⟩ := parsed
   dsimp only at dataRead ⊢
   obtain ⟨encoded, written, same⟩ := encodeBlob_of_blob dataRead
-  refine ⟨Base.natToBytes 2 kind.val ++ encoded, ?_, ?_⟩
+  refine ⟨(Base.ByteOrder.toBE 2 kind.val).toList ++ encoded, ?_, ?_⟩
   · simp [encodeExtension, written]
-  · rw [eq_natToBytes_of_codePoint kindRead, same]
+  · rw [eq_toBE_of_codePoint kindRead, same]
     simp only [List.append_assoc]
 
 /-- An accepted extension block has the exact encoding of its returned ordered extensions. -/
@@ -255,10 +255,11 @@ theorem encodeCodePoints_of_items {width minimum maximum : Nat} {input rest : Li
     (parsed : items width minimum maximum codePoint input = .ok (values, rest)) :
     ∃ encoded, encodeCodePoints width minimum maximum values = .ok encoded ∧
       input = encoded ++ rest := by
-  apply encodeItems_of_items (fun value : CodePoint => .ok (Base.natToBytes 2 value.val))
+  apply encodeItems_of_items
+    (fun value : CodePoint => .ok ((Base.ByteOrder.toBE 2 value.val).toList))
     codePoint _ parsed
   intro data value trailing read
-  exact ⟨Base.natToBytes 2 value.val, rfl, eq_natToBytes_of_codePoint read⟩
+  exact ⟨(Base.ByteOrder.toBE 2 value.val).toList, rfl, eq_toBE_of_codePoint read⟩
 
 /-- An accepted certificate entry re-encodes its opaque bytes and extensions without change. -/
 theorem encodeCertificateEntry_of_readCertificateEntry {input rest : List UInt8}
@@ -360,12 +361,13 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     obtain ⟨encodedSession, sessionWritten, sessionSame⟩ := encodeBlob_of_blob sessionRead
     obtain ⟨encodedExtensions, extensionsWritten, extensionsSame⟩ :=
       encodeExtensions_of_readExtensions extensionsRead
-    refine ⟨rfl, [3, 3] ++ random.toList ++ encodedSession ++ Base.natToBytes 2 suite.val ++
+    refine ⟨rfl, [3, 3] ++ random.toList ++ encodedSession
+      ++ (Base.ByteOrder.toBE 2 suite.val).toList ++
       [0] ++ encodedExtensions, ?_, ?_⟩
     · simp [encodeBody, sessionWritten, extensionsWritten]
     · rw [(Encoding.ByteReader.uint_ok_iff ..).mp versionRead |>.2,
         eq_toList_append_of_vector randomRead, sessionSame,
-        eq_natToBytes_of_codePoint suiteRead,
+        eq_toBE_of_codePoint suiteRead,
         (Encoding.ByteReader.uint_ok_iff ..).mp compressionRead |>.2, extensionsSame]
       simp only [List.append_assoc]
       rfl
@@ -424,9 +426,9 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
       rfl, rfl⟩ := parsed
     dsimp only at signatureRead ⊢
     obtain ⟨encodedSignature, signatureWritten, signatureSame⟩ := encodeBlob_of_blob signatureRead
-    refine ⟨rfl, Base.natToBytes 2 algorithm.val ++ encodedSignature, ?_, ?_⟩
+    refine ⟨rfl, (Base.ByteOrder.toBE 2 algorithm.val).toList ++ encodedSignature, ?_, ?_⟩
     · simp [encodeBody, signatureWritten]
-    · rw [eq_natToBytes_of_codePoint algorithmRead, signatureSame]
+    · rw [eq_toBE_of_codePoint algorithmRead, signatureSame]
       simp only [List.append_assoc]
   ·
     have sameKind : kind = 20 := UInt8.toNat_inj.mp tag
@@ -475,7 +477,8 @@ theorem decodeList_eq_ok_iff {hashLength : Nat} {input rest : List UInt8} {messa
 /-- A packed body within the uint24 bound gets its exact four-byte handshake header. -/
 theorem frame_eq_ok (kind : UInt8) (body : ByteArray) (bound : body.size < 2 ^ 24) :
     frame kind body =
-      .ok ((kind :: (Base.natToBytes 3 body.size ++ body.data.toList)).toByteArray) := by
+      .ok ((kind :: ((Base.ByteOrder.toBE 3 body.size).toList
+        ++ body.data.toList)).toByteArray) := by
   have capacity : body.data.toList.length < 2 ^ 24 := by simpa using bound
   simp [frame, frameList_eq_ok kind body.data.toList capacity, Except.map]
 

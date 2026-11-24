@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `Networking.Encoding.Base32`
@@ -78,7 +78,7 @@ def encodeGroup (group : List UInt8) : List Char :=
   -- Shift the bits of the group up past the zero bits that complete the last character.
   -- Example, RFC 4648 §10: the byte `f` = `01100110` takes two characters, 10 bits.
   -- Two zero bits complete them: `01100 11000` = 12, 24 = `M`, `Y`.
-  digits count (bytesToNat group <<< (5 * count - 8 * group.length))
+  digits count (ByteOrder.ofBE group <<< (5 * count - 8 * group.length))
 
 /-- The characters of a byte string, five bytes at a time.
 
@@ -127,7 +127,7 @@ def decodeGroup (start : Nat) (group : List Char) : Except Base32Error (List UIn
   -- RFC 4648 §3.5 lets a decoder reject nonzero padding bits, so that each text is canonical.
   unless n % 2 ^ pad = 0 do throw (.nonZeroPadBits (start + group.length - 1))
   -- Drop the padding bits and write the rest as `size` big-endian bytes.
-  return natToBytes size (n >>> pad)
+  return (ByteOrder.toBE size (n >>> pad)).toList
 
 /-- The bytes of a list of characters, eight characters at a time.
 

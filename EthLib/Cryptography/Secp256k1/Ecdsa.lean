@@ -20,7 +20,7 @@ def hashToInt (hash : Vector UInt8 32) : Nat :=
   -- Step 3.2: `E = H`, since `ceil(log2 n) = 256 = 8 hashlen` keeps every bit.
   --
   -- Steps 3.1, 3.3 and 3.4: the octets of `H`, read as a big-endian integer by SEC 1 v2 §2.3.8.
-  Base.bytesToNat hash.toList
+  Base.ByteOrder.ofBE hash.toList
 
 /-- Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.
 

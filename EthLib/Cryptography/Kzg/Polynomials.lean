@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Cryptography.Kzg.BitReversal
 public import EthLib.Cryptography.Kzg.Errors
 public import EthLib.Cryptography.Kzg.Fft
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `Polynomials`

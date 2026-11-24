@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Sphincs.Fors
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # Proofs: leanSPHINCS addresses
@@ -26,23 +26,24 @@ open EthLib.Cryptography.Sphincs.Constants
 /-! ## Big-endian words -/
 
 /-- The bytes of `toByte(x, k)` are `x` written on `k` big-endian bytes. -/
-@[simp] theorem toList_toByte (k x : Nat) : (toByte k x).toList = Base.natToBytes k x := by
+@[simp] theorem toList_toByte (k x : Nat) : (toByte k x).toList
+    = (Base.ByteOrder.toBE k x).toList := by
   simp [toByte]
 
 /-- Writing `x` on `k` bytes and reading it back gives `x mod 256^k`. -/
 @[simp] theorem toInt_toByte (k x : Nat) : toInt (toByte k x) = x % 256 ^ k := by
-  rw [toInt, toList_toByte, Base.bytesToNat_natToBytes]
+  rw [toInt, toList_toByte, Base.ByteOrder.ofBE_toBE]
 
 /-- Reading `k` bytes and writing the value back on `k` bytes gives the same bytes. -/
 @[simp] theorem toByte_toInt {k : Nat} (v : Vector UInt8 k) : toByte k (toInt v) = v := by
   apply Vector.toList_inj.mp
-  have h := Base.natToBytes_bytesToNat v.toList
+  have h := Base.ByteOrder.toList_toBE_ofBE v.toList
   rw [Vector.length_toList] at h
   rw [toList_toByte, toInt, h]
 
 /-- `k` bytes hold a value below `256^k`. -/
 theorem toInt_lt {k : Nat} (v : Vector UInt8 k) : toInt v < 256 ^ k := by
-  have h := Base.bytesToNat_lt v.toList
+  have h := Base.ByteOrder.ofBE_lt v.toList
   rwa [Vector.length_toList] at h
 
 /-- Two values below `256^k` with the same `k` bytes are equal. -/
@@ -72,9 +73,10 @@ theorem toByte_uint64_inj {x y : UInt64} (h : toByte 12 x.toNat = toByte 12 y.to
 /-- The 32 bytes of an address are its six words, each big-endian, the tree on 12 bytes. -/
 theorem toList_encodeAdrs (layer : UInt32) (tree : UInt64) (type keyPair word2 word3 : UInt32) :
     (encodeAdrs layer tree type keyPair word2 word3).toList
-      = Base.natToBytes 4 layer.toNat ++ Base.natToBytes 12 tree.toNat
-        ++ Base.natToBytes 4 type.toNat ++ Base.natToBytes 4 keyPair.toNat
-        ++ Base.natToBytes 4 word2.toNat ++ Base.natToBytes 4 word3.toNat := by
+      = (Base.ByteOrder.toBE 4 layer.toNat).toList ++ (Base.ByteOrder.toBE 12 tree.toNat).toList
+        ++ (Base.ByteOrder.toBE 4 type.toNat).toList ++ (Base.ByteOrder.toBE 4 keyPair.toNat).toList
+        ++ (Base.ByteOrder.toBE 4 word2.toNat).toList
+          ++ (Base.ByteOrder.toBE 4 word3.toNat).toList := by
   -- The six words have 32 bytes in all, so the address is their concatenation.
   show (toByte 4 layer.toNat ++ toByte 12 tree.toNat ++ toByte 4 type.toNat
       ++ toByte 4 keyPair.toNat ++ toByte 4 word2.toNat ++ toByte 4 word3.toNat

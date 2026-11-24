@@ -22,13 +22,15 @@ The price of an authorization of EIP-8037 is the sum of its parts, ECRECOVER amo
 
 namespace EthLib.Execution.Evm.Precompiles.Ecrecover
 
-open EthLib.Base (byteAtOrZero byteAtOrZero_eq_getD bytesToNat_natToBytes natToBytes natToBytes_length)
+open EthLib.Base (byteAtOrZero byteAtOrZero_eq_getD ByteOrder.ofBE_toBE ByteOrder.toBE
+  ByteOrder.length_toList_toBE)
 open EthLib.Cryptography.Secp256k1
 open EthLib.Cryptography.Secp256k1.Ecdsa
 
 /-- The call data of a signature: the hash, then `v`, `r` and `s` as 32-byte big-endian integers. -/
 def callData (hash : Vector UInt8 32) (v r s : Nat) : ByteArray :=
-  ⟨(hash.toList ++ natToBytes 32 v ++ natToBytes 32 r ++ natToBytes 32 s).toArray⟩
+  ⟨(hash.toList ++ (ByteOrder.toBE 32 v).toList ++ (ByteOrder.toBE 32 r).toList
+    ++ (ByteOrder.toBE 32 s).toList).toArray⟩
 
 /-- The 32 bytes a word reads from a list are its slice. -/
 private theorem word_toList (l : List UInt8) (start : Nat) (h : start + 32 ≤ l.length) :
@@ -42,12 +44,16 @@ private theorem word_toList (l : List UInt8) (start : Nat) (h : start + 32 ≤ l
     rfl
 
 private theorem callData_length (hash : Vector UInt8 32) (v r s : Nat) :
-    (hash.toList ++ natToBytes 32 v ++ natToBytes 32 r ++ natToBytes 32 s).length = 128 := by
-  simp [natToBytes_length]
+    (hash.toList ++ (ByteOrder.toBE 32 v).toList ++ (ByteOrder.toBE 32 r).toList
+      ++ (ByteOrder.toBE 32 s).toList).length = 128 := by
+  simp
 
 private theorem callData_list (hash : Vector UInt8 32) (v r s : Nat) :
-    hash.toList ++ natToBytes 32 v ++ natToBytes 32 r ++ natToBytes 32 s
-      = hash.toList ++ (natToBytes 32 v ++ (natToBytes 32 r ++ natToBytes 32 s)) := by
+    hash.toList ++ (ByteOrder.toBE 32 v).toList ++ (ByteOrder.toBE 32 r).toList
+      ++ (ByteOrder.toBE 32 s).toList
+      = hash.toList
+        ++ ((ByteOrder.toBE 32 v).toList
+          ++ ((ByteOrder.toBE 32 r).toList ++ (ByteOrder.toBE 32 s).toList)) := by
   simp only [List.append_assoc]
 
 theorem word_callData_hash (hash : Vector UInt8 32) (v r s : Nat) :
@@ -57,23 +63,25 @@ theorem word_callData_hash (hash : Vector UInt8 32) (v r s : Nat) :
     List.take_left' (by simp)]
 
 private theorem word_callData_v (hash : Vector UInt8 32) (v r s : Nat) :
-    (word (callData hash v r s) 32).toList = natToBytes 32 v := by
+    (word (callData hash v r s) 32).toList = (ByteOrder.toBE 32 v).toList := by
   rw [callData, word_toList _ _ (by rw [callData_length]; omega), callData_list,
-    List.drop_left' (by simp), List.take_left' (natToBytes_length 32 v)]
+    List.drop_left' (by simp), List.take_left' (ByteOrder.length_toList_toBE 32 v)]
 
 private theorem word_callData_r (hash : Vector UInt8 32) (v r s : Nat) :
-    (word (callData hash v r s) 64).toList = natToBytes 32 r := by
+    (word (callData hash v r s) 64).toList = (ByteOrder.toBE 32 r).toList := by
   rw [callData, word_toList _ _ (by rw [callData_length]; omega), callData_list,
     show (64 : Nat) = 32 + 32 from rfl, ← List.drop_drop, List.drop_left' (by simp),
-    List.drop_left' (natToBytes_length 32 v), List.take_left' (natToBytes_length 32 r)]
+    List.drop_left' (ByteOrder.length_toList_toBE 32 v),
+      List.take_left' (ByteOrder.length_toList_toBE 32 r)]
 
 private theorem word_callData_s (hash : Vector UInt8 32) (v r s : Nat) :
-    (word (callData hash v r s) 96).toList = natToBytes 32 s := by
+    (word (callData hash v r s) 96).toList = (ByteOrder.toBE 32 s).toList := by
   rw [callData, word_toList _ _ (by rw [callData_length]), callData_list,
     show (96 : Nat) = 32 + 32 + 32 from rfl, ← List.drop_drop, ← List.drop_drop,
     List.drop_left' (by simp),
-    List.drop_left' (natToBytes_length 32 v), List.drop_left' (natToBytes_length 32 r),
-    List.take_of_length_le (by rw [natToBytes_length])]
+    List.drop_left' (ByteOrder.length_toList_toBE 32 v),
+      List.drop_left' (ByteOrder.length_toList_toBE 32 r),
+    List.take_of_length_le (by rw [ByteOrder.length_toList_toBE])]
 
 /-- The call data of a signature reads back as that signature.
 
@@ -82,8 +90,8 @@ theorem compute_callData (hash : Vector UInt8 32) {v r s : Nat} (hv : v < 2 ^ 25
     (hr : r < 2 ^ 256)
     (hs : s < 2 ^ 256) : compute (callData hash v r s) = output hash v r s := by
   unfold compute
-  rw [word_callData_hash, word_callData_v, word_callData_r, word_callData_s, bytesToNat_natToBytes,
-    bytesToNat_natToBytes, bytesToNat_natToBytes, Nat.mod_eq_of_lt (by simpa using hv),
+  rw [word_callData_hash, word_callData_v, word_callData_r, word_callData_s, ByteOrder.ofBE_toBE,
+    ByteOrder.ofBE_toBE, ByteOrder.ofBE_toBE, Nat.mod_eq_of_lt (by simpa using hv),
     Nat.mod_eq_of_lt (by simpa using hr), Nat.mod_eq_of_lt (by simpa using hs)]
 
 /-- The output is empty or 32 bytes. -/

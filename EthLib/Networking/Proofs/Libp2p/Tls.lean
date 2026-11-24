@@ -694,7 +694,7 @@ private theorem length_of_decodeUncompressed {key : List UInt8}
     (h : Cryptography.Secp256r1.decodeUncompressed key = some point) : key.length = 65 := by
   obtain ⟨x, y, -, -, rfl⟩ := Cryptography.Secp256r1.decodeUncompressed_eq_some_iff.mp h
   simp [Cryptography.Secp256r1.encodeUncompressed, Cryptography.Secp256r1.Fp.toBytes,
-    natToBytes_length]
+    ]
 
 /-- The content octets of the algorithm id-ecPublicKey with the curve secp256r1. -/
 private abbrev p256Algorithm : List UInt8 :=

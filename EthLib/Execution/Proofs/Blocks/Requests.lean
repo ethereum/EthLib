@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Requests
 
@@ -48,13 +48,14 @@ The head gives the offset of each field.
 Each field follows its 32-byte size, padded with zeros to a multiple of 32 bytes. -/
 def depositEvent (pubkey : Vector UInt8 48) (credentials : Bytes32) (amount : Bytes8)
     (signature : Vector UInt8 96) (index : Bytes8) : List UInt8 :=
-  natToBytes 32 160 ++ natToBytes 32 256 ++ natToBytes 32 320 ++ natToBytes 32 384
-    ++ natToBytes 32 512
-    ++ natToBytes 32 48 ++ pubkey.toList ++ List.replicate 16 0
-    ++ natToBytes 32 32 ++ credentials.toList
-    ++ natToBytes 32 8 ++ amount.toList ++ List.replicate 24 0
-    ++ natToBytes 32 96 ++ signature.toList
-    ++ natToBytes 32 8 ++ index.toList ++ List.replicate 24 0
+  (ByteOrder.toBE 32 160).toList ++ (ByteOrder.toBE 32 256).toList
+    ++ (ByteOrder.toBE 32 320).toList ++ (ByteOrder.toBE 32 384).toList
+    ++ (ByteOrder.toBE 32 512).toList
+    ++ (ByteOrder.toBE 32 48).toList ++ pubkey.toList ++ List.replicate 16 0
+    ++ (ByteOrder.toBE 32 32).toList ++ credentials.toList
+    ++ (ByteOrder.toBE 32 8).toList ++ amount.toList ++ List.replicate 24 0
+    ++ (ByteOrder.toBE 32 96).toList ++ signature.toList
+    ++ (ByteOrder.toBE 32 8).toList ++ index.toList ++ List.replicate 24 0
 
 /-- A deposit log in the layout of the Solidity ABI gives its five fields, one after the other. -/
 theorem depositRequestOfEvent_depositEvent (pubkey : Vector UInt8 48) (credentials : Bytes32)
@@ -63,8 +64,8 @@ theorem depositRequestOfEvent_depositEvent (pubkey : Vector UInt8 48) (credentia
       .ok ⟨(pubkey.toList ++ credentials.toList ++ amount.toList ++ signature.toList
         ++ index.toList).toArray⟩ := by
   simp [depositRequestOfEvent, depositEvent, DEPOSIT_EVENT_FIELDS, DEPOSIT_EVENT_LENGTH, wordAt,
-    fieldAt, List.drop_append, List.take_append, natToBytes_length, List.zipIdx,
-    bytesToNat_natToBytes_of_lt, List.take_of_length_le, List.drop_of_length_le]
+    fieldAt, List.drop_append, List.take_append, List.zipIdx,
+    List.take_of_length_le, List.drop_of_length_le]
   rfl
 
 /-- One check succeeds exactly when its condition holds. -/

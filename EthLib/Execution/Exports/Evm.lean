@@ -37,7 +37,7 @@ A sender or a salt of the wrong length fails with a code above every code of an 
 
 namespace EthLib.Execution.Evm.Exports
 
-open EthLib.Base (Address U256 bytesToNat)
+open EthLib.Base (Address U256 ByteOrder.ofBE)
 open EthLib.Exports (ExportError Result PyValue pyExport rejectArgument toResult)
 
 /-- Why an export rejects an argument: the argument has the wrong length. -/
@@ -75,7 +75,7 @@ def ArgumentError.toResult (e : ArgumentError) : UInt32 × String :=
 
 /-- The word of big-endian bytes, reduced modulo `2^256`. -/
 def wordOf (bytes : ByteArray) : U256 :=
-  BitVec.ofNat 256 (bytesToNat bytes.toList)
+  BitVec.ofNat 256 (ByteOrder.ofBE bytes.toList)
 
 /-- The word of exactly 32 big-endian bytes, or the given error for any other length. -/
 def readWord (error : Nat → ArgumentError) (bytes : ByteArray) : Result U256 :=

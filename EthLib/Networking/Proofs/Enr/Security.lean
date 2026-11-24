@@ -67,17 +67,18 @@ open EthLib.Serialization.Rlp
 /-! ## The scalars of a signature -/
 
 /-- The scalar `r` of a record's signature: its first 32 bytes, big-endian. -/
-def sigR (rec : Enr) : Nat := Base.bytesToNat (rec.signature.data.toList.take 32)
+def sigR (rec : Enr) : Nat := Base.ByteOrder.ofBE (rec.signature.data.toList.take 32)
 
 /-- The scalar `s` of a record's signature: the bytes after the first 32, big-endian. -/
-def sigS (rec : Enr) : Nat := Base.bytesToNat (rec.signature.data.toList.drop 32)
+def sigS (rec : Enr) : Nat := Base.ByteOrder.ofBE (rec.signature.data.toList.drop 32)
 
 /-- For a 64-byte signature, the record with `s` replaced by `n - s`, in 32 big-endian bytes.
 
 The sequence number, the pairs and the bytes of `r` stay. -/
 def negS (rec : Enr) : Enr :=
   { rec with signature :=
-      ⟨(rec.signature.data.toList.take 32 ++ Base.natToBytes 32 (Fn.modulus - sigS rec)).toArray⟩ }
+      ⟨(rec.signature.data.toList.take 32
+        ++ (Base.ByteOrder.toBE 32 (Fn.modulus - sigS rec)).toList).toArray⟩ }
 
 /-! ## Malleability -/
 
@@ -88,7 +89,8 @@ private theorem verify_eq_false_of_s {q : Point} {h : Vector UInt8 32} {r s : Na
 
 /-- The bytes of the copy with `n - s`. -/
 private theorem negS_data (rec : Enr) : (negS rec).signature.data.toList =
-    rec.signature.data.toList.take 32 ++ Base.natToBytes 32 (Fn.modulus - sigS rec) := rfl
+    rec.signature.data.toList.take 32
+      ++ (Base.ByteOrder.toBE 32 (Fn.modulus - sigS rec)).toList := rfl
 
 /-- The first 32 bytes of a 64-byte signature. -/
 private theorem length_take_of_size {rec : Enr} (hsize : rec.signature.size = 64) :
@@ -101,13 +103,13 @@ private theorem length_take_of_size {rec : Enr} (hsize : rec.signature.size = 64
 private theorem negS_scalars {rec : Enr} (hsize : rec.signature.size = 64) :
     (negS rec).signature.size = 64 ∧
       (negS rec).signature.data.toList.take 32 = rec.signature.data.toList.take 32 ∧
-      Base.bytesToNat ((negS rec).signature.data.toList.drop 32) = Fn.modulus - sigS rec := by
+      Base.ByteOrder.ofBE ((negS rec).signature.data.toList.drop 32) = Fn.modulus - sigS rec := by
   have ht := length_take_of_size hsize
-  have hl := Base.natToBytes_length 32 (Fn.modulus - sigS rec)
+  have hl := Base.ByteOrder.length_toList_toBE 32 (Fn.modulus - sigS rec)
   refine ⟨?_, ?_, ?_⟩
   · simp only [ByteArray.size, ← Array.length_toList, negS_data, List.length_append, ht, hl]
   · rw [negS_data, List.take_left' ht]
-  · rw [negS_data, List.drop_left' ht, Base.bytesToNat_natToBytes_of_lt]
+  · rw [negS_data, List.drop_left' ht, Base.ByteOrder.ofBE_toBE_of_lt]
     exact lt_of_le_of_lt (Nat.sub_le _ _) (by decide : Fn.modulus < 256 ^ 32)
 
 /-- A record with a 64-byte signature verifies exactly when its copy with `n - s` does. -/

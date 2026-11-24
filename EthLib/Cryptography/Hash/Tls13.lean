@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Hkdf
 
@@ -67,7 +67,7 @@ def hkdfLabel (label context : ByteArray) (length : Nat) : Except Error ByteArra
   -- The fields in order: `length` in two big-endian bytes, by RFC 9846 §3.3.
   --
   -- Then each vector after its one-byte length, by §3.4, since each holds at most 255 bytes.
-  return ⟨(natToBytes 2 length).toArray⟩ ++ ⟨#[UInt8.ofNat fullLabel.size]⟩ ++
+  return ⟨(ByteOrder.toBE 2 length).toArray⟩ ++ ⟨#[UInt8.ofNat fullLabel.size]⟩ ++
     fullLabel ++ ⟨#[UInt8.ofNat context.size]⟩ ++ context
 
 /-- `HKDF-Expand-Label` with SHA-256, RFC 9846 §7.1.

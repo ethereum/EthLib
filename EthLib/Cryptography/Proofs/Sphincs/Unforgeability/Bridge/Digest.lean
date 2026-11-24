@@ -154,7 +154,7 @@ theorem digestIndex_ofOutputs (outs : SphincsSecurity.DigestCall → HashSig.Has
     rw [toList_ofOutputs, List.drop_take, List.take_take]
     rfl
   simp only [digestIndex, digestTree, digestLeaf, SphincsSecurity.digestIndexValue, htree, hleaf,
-    beInt_eq_bytesToNat]
+    beInt_eq_ofBE]
   rfl
 
 /-- EthLib's leaves are the model's leaves of the same calls. -/

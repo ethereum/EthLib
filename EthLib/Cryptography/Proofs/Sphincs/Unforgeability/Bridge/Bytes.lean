@@ -121,12 +121,13 @@ private theorem toNat_byte_ofNat (w a n : Nat) :
     Nat.shiftRight_eq_div_pow]
 
 /-- EthLib's `len` big-endian bytes of `n` are the model's, of `n` as a `8 len`-bit vector. -/
-theorem natToBytes_eq_bytesBE (len n : Nat) :
-    Base.natToBytes len n = SphincsSecurity.bytesBE len (BitVec.ofNat (8 * len) n) := by
+theorem toBE_eq_bytesBE (len n : Nat) :
+    (Base.ByteOrder.toBE len n).toList
+      = SphincsSecurity.bytesBE len (BitVec.ofNat (8 * len) n) := by
   induction len generalizing n with
   | zero => rfl
   | succ len ih =>
-    rw [Base.natToBytes_succ, ih, SphincsSecurity.bytesBE, SphincsSecurity.bytesBE,
+    rw [Base.ByteOrder.toList_toBE_succ, ih, SphincsSecurity.bytesBE, SphincsSecurity.bytesBE,
       List.ofFn_succ', List.concat_eq_append]
     congr 1
     · -- A higher byte of `n` is the byte one place lower of `n / 256`.
@@ -153,12 +154,12 @@ theorem natToBytes_eq_bytesBE (len n : Nat) :
 /-- `toByte k n`, as a list, is the model's big-endian bytes of `n` on `8 k` bits. -/
 @[simp] theorem toList_toByte_bytesBE (k n : Nat) :
     (toByte k n).toList = SphincsSecurity.bytesBE k (BitVec.ofNat (8 * k) n) := by
-  rw [← natToBytes_eq_bytesBE]
+  rw [← toBE_eq_bytesBE]
   rfl
 
 /-- The model's big-endian integer of a byte string is EthLib's. -/
-theorem beInt_eq_bytesToNat (bytes : List UInt8) :
-    SphincsSecurity.beInt bytes = Base.bytesToNat bytes := by
-  simp only [SphincsSecurity.beInt, Base.bytesToNat, Nat.mul_comm 256]
+theorem beInt_eq_ofBE (bytes : List UInt8) :
+    SphincsSecurity.beInt bytes = Base.ByteOrder.ofBE bytes := by
+  simp only [SphincsSecurity.beInt, Base.ByteOrder.ofBE, Nat.mul_comm 256]
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge

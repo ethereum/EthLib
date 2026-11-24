@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Except
 public import EthLib.Cryptography.Secp256k1.Encoding
 public import EthLib.Cryptography.Proofs.Secp256k1.Sqrt
@@ -23,8 +23,8 @@ namespace EthLib.Cryptography.Secp256k1
 /-! ## Coordinates -/
 
 theorem Fp.ofBytes_toBytes (x : Fp) : Fp.ofBytes x.toBytes = .ok x := by
-  have h : Base.bytesToNat x.toBytes = x.val := by
-    rw [Fp.toBytes, Base.bytesToNat_natToBytes, Nat.mod_eq_of_lt (Nat.lt_trans x.isLt (by decide))]
+  have h : Base.ByteOrder.ofBE x.toBytes = x.val := by
+    rw [Fp.toBytes, Base.ByteOrder.ofBE_toBE, Nat.mod_eq_of_lt (Nat.lt_trans x.isLt (by decide))]
   simp only [Fp.ofBytes, h, x.isLt, dite_true]
 
 /-- 32 bytes that read as a coordinate are that coordinate's bytes. -/
@@ -34,7 +34,7 @@ theorem Fp.toBytes_of_ofBytes {l : List UInt8} {x : Fp} (hl : l.length = 32) (h 
   split at h
   · cases h
     rw [Fp.toBytes, ← hl]
-    exact Base.natToBytes_bytesToNat l
+    exact Base.ByteOrder.toList_toBE_ofBE l
   · cases h
 
 /-! ## Decompression -/

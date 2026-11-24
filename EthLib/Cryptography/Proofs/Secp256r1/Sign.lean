@@ -51,7 +51,7 @@ theorem signWith_spec {d e r s : Fn} :
 /-- A signature from signing verifies under the public key `d G`, for the hash read mod `n`. -/
 theorem verify_sign_of_sign {d r s : Fn} {hash : Vector UInt8 32}
     (signed : sign d hash = some (r, s)) :
-    verify (mul d generator) (Base.bytesToNat hash.toList) r.val s.val = true := by
+    verify (mul d generator) (Base.ByteOrder.ofBE hash.toList) r.val s.val = true := by
   unfold sign at signed
   split at signed
   · cases signed
@@ -61,7 +61,7 @@ theorem verify_sign_of_sign {d r s : Fn} {hash : Vector UInt8 32}
   have hmod : (Fin.ofNat Fn.modulus (x.val % Fn.modulus) : Fn) = Fin.ofNat _ x.val :=
     Fin.ext (by simp)
   -- The loop's signature is the one of SEC 1 v2 §4.1.3, whose verification is proved.
-  have hv := verify_sign d k (Base.bytesToNat hash.toList) hd hR
+  have hv := verify_sign d k (Base.ByteOrder.ofBE hash.toList) hd hR
     (by rw [← hrv]; exact fun h0 => hr0 (Fin.ext h0)) (by rw [hmod]; exact hs0)
   rw [hmod, ← hrv] at hv
   exact hv

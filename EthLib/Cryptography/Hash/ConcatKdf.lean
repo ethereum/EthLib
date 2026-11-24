@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Hash.Sha256
 
 /-!
@@ -50,7 +50,8 @@ def blocks (z fixedInfo : ByteArray) (i : Nat) : (count : Nat) → ByteArray
     -- Step 6.2: `K(i) = H(counter || Z || FixedInfo)`, with the 4-byte big-endian `counter = i`.
     --
     -- Step 6.3: `Result(i) = Result(i - 1) || K(i)`.
-    Sha256.hash (Base.natToBytes4 i ++ z ++ fixedInfo) ++ blocks z fixedInfo (i + 1) count
+    Sha256.hash (⟨(Base.ByteOrder.toBE 4 i).toArray⟩ ++ z ++ fixedInfo)
+      ++ blocks z fixedInfo (i + 1) count
 
 /--
 The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1.

@@ -43,7 +43,8 @@ def Item.toScalar : Item → Except RlpError Nat
       .error .leadingZeroInScalar
     -- Otherwise the bytes are `BE(i)` for the scalar `i` that their base-256 sum gives.
     else
-      .ok (ofBigEndian data.data.toList)
+      -- The big-endian reading inverts `BE` on the byte strings with no leading zero.
+      .ok (Base.ByteOrder.ofBE data.data.toList)
   -- `RLP(i) = RLP(BE(i))` is a byte string, never a list.
   | .list _ => .error .listAsScalar
 

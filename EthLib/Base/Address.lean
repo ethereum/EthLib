@@ -26,7 +26,7 @@ abbrev Address := Vector UInt8 20
 The opening of Appendix H of the Yellow Paper converts an address to a word this way.
 
 Twenty bytes write a value below 2^160, so the reduction modulo 2^256 never applies. -/
-def Address.toU256 (a : Address) : U256 := BitVec.ofNat 256 (bytesToNat a.toList)
+def Address.toU256 (a : Address) : U256 := BitVec.ofNat 256 (ByteOrder.ofBE a.toList)
 
 /-- The address in a word: the last 20 of its 32 big-endian bytes.
 
