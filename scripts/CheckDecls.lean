@@ -3,42 +3,11 @@ import Lean
 /-!
 # `CheckDecls`
 
-Checks the compiled declarations of EthLib.
+Checks the compiled declarations of EthLib for axioms, opaque constants and compiler overrides.
 
-It reads what the kernel accepted, not the source, so no formatting of the source can hide a finding.
-
-Every declaration in scope is checked for:
-
-* an axiom beyond `propext`, `Classical.choice` and `Quot.sound`, followed through every dependency, so `sorry`, `native_decide`, `bv_decide` and `decide +native` are all caught;
-* an `axiom` declaration;
-* an `unsafe`, `partial` or `opaque` constant, which the kernel cannot unfold;
-* `@[extern]` or `@[implemented_by]`, which make the compiled code run something other than the definition;
-* a `@[csimp]` theorem that replaces a function in scope.
-
-A definition of the specification is also checked for reaching an opaque constant through the definitions it unfolds to.
-
-`while` compiles to `Loop.forIn`, which reaches `repeatM.impl`, a `partial` definition of Lean core.
-
-`IO` reaches the runtime's primitives.
-
-A definition that reaches either one cannot be unfolded either.
-
-Proofs are exempt, because nothing unfolds them.
-
-The C exports are exempt, because IO belongs there.
-
-Lean v4.36.0 compiles the constructor index `T.ctorIdx` of a type through `T.ctorIdx._impl`.
-
-That unsafe constant reads the runtime tag, and the kernel still checks `T.ctorIdx` itself.
-
-This pair is exempt, and only when `T` is an inductive type.
-
-A finding is reported once, at the declaration in scope that first brings it in.
-A theorem proved by `native_decide` is reported, and the theorems that use it are not.
+It reads what the kernel accepted, not the source, so no source formatting can hide a finding.
 
 The baseline lists the findings that exist today, each one to be removed.
-Every other finding fails the check.
-A baseline entry that is no longer found also fails the check, so the baseline stays an exact list of the findings that exist.
 -/
 
 open Lean
@@ -154,24 +123,23 @@ def inductiveGroup (env : Environment) (c : ConstantInfo) : Array Name :=
 
 /-- Every axiom that `n` depends on, memoized.
 
-`Lean.collectAxioms` of Lean v4.36.0 is not used.
-
-It can reach an inductive type from a constructor.
-
-It then caches the type without the axioms that only its constructors carry.
-
-The same happens to a type of a mutual declaration reached from another type of it.
-
-Each module records these results when it is compiled.
-
-So a declaration that uses the type, in any module that imports it, hides the axiom too.
-
-Here an inductive type and its constructors are walked together.
-
-All of them get the axioms of the whole group. -/
+`Lean.collectAxioms` of Lean v4.36.0 is not used: it can lose the axioms of a constructor. -/
 partial def axiomsOf (env : Environment) (n : Name) : StateM (NameMap NameSet) NameSet := do
   if let some s := (← get).find? n then return s
   let some c := env.find? n | return {}
+  -- `Lean.collectAxioms` can reach an inductive type from a constructor.
+  --
+  -- It then caches the type without the axioms that only its constructors carry.
+  --
+  -- The same happens to a type of a mutual declaration reached from another type of it.
+  --
+  -- Each module records these results when it is compiled.
+  --
+  -- So a declaration that uses the type, in any module that imports it, hides the axiom too.
+  --
+  -- Here an inductive type and its constructors are walked together.
+  --
+  -- All of them get the axioms of the whole group.
   let group := inductiveGroup env c
   let members := if group.isEmpty then #[n] else group
   -- A member reached again from inside the group adds nothing: the group is being walked.
@@ -272,21 +240,40 @@ def inductiveOwner? (env : Environment) (scope : Name) : Name → Option Name
 def check (env : Environment) (scope : Name) : Array Finding := Id.run do
   let decls := env.constants.toList.filter fun (n, _) => inScope env scope n
   let mut out : Array Finding := #[]
+  -- Every declaration in scope is checked.
   for (n, c) in decls do
+    -- An `axiom` declaration.
     if let .axiomInfo _ := c then
       unless isNativeAxiom env n do
         out := out.push ⟨"axiom", n, "an axiom declaration"⟩
+    -- An `unsafe` constant, which the kernel cannot unfold.
+    --
+    -- Lean v4.36.0 compiles the constructor index `T.ctorIdx` of a type through `T.ctorIdx._impl`.
+    --
+    -- That unsafe constant reads the runtime tag, and the kernel still checks `T.ctorIdx` itself.
+    --
+    -- This pair is exempt, and only when `T` is an inductive type.
     if c.isUnsafe && !isUnsafeRec env n && !isCtorIdxImpl env n then
       out := out.push ⟨"unsafe", n, "an unsafe declaration"⟩
+    -- A `partial` or `opaque` constant, which the kernel cannot unfold.
     if let .opaqueInfo _ := c then
       unless isExtern env n do
         let kind := if env.contains (n ++ `_unsafe_rec) then "partial" else "opaque"
         out := out.push ⟨kind, n, s!"a {kind} constant, which the kernel cannot unfold"⟩
+    -- `@[extern]` or `@[implemented_by]` make the compiled code run other code than the definition.
     if isExtern env n then
       out := out.push ⟨"extern", n, "an @[extern] declaration"⟩
     if let some impl := Compiler.getImplementedBy? env n then
       unless isGeneratedCtorIdx env n do
         out := out.push ⟨"implemented_by", n, s!"compiled as {impl}"⟩
+  -- An axiom beyond `propext`, `Classical.choice` and `Quot.sound`, through every dependency.
+  --
+  -- So `sorry`, `native_decide`, `bv_decide` and `decide +native` are all caught.
+  --
+  -- A finding is reported once, at the declaration in scope that first brings it in.
+  --
+  -- A theorem proved by `native_decide` is reported, and the theorems that use it are not.
+  --
   -- Axioms are reported where they enter the scope, not at every declaration that inherits them.
   -- An unsafe declaration is a finding already, and the kernel never relies on what it depends on.
   let decls := decls.filter fun (_, c) => !c.isUnsafe
@@ -330,6 +317,18 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
           out := out.push ⟨"axioms", a, "reached from this scope, but no declaration could be named"⟩
         for n in at_ do
           out := out.push ⟨"axioms", n, s!"depends on {a}, from a dependency"⟩
+  -- `while` compiles to `Loop.forIn`, which reaches `repeatM.impl`.
+  --
+  -- That is a `partial` definition of Lean core.
+  --
+  -- `IO` reaches the runtime's primitives.
+  --
+  -- A definition that reaches either one cannot be unfolded either.
+  --
+  -- Proofs are exempt, because nothing unfolds them.
+  --
+  -- The C exports are exempt, because IO belongs there.
+  --
   -- A definition of the specification must unfold, unless it is a C export or formatting.
   -- The function `initialize` generates is reported through the constant it initializes.
   let initFns : NameSet := decls.foldl (init := {}) fun s (n, _) =>
@@ -346,6 +345,7 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
       let fresh := frontier env scope opaqueMemo (dropPanicMessages v.value).getUsedConstants reached
       unless fresh.isEmpty do
         out := out.push ⟨"reaches-opaque", n, s!"unfolds to {fresh.take 3}"⟩
+  -- A `@[csimp]` theorem that replaces a function in scope.
   for (thm, target) in csimpTheorems env do
     if inScope env scope thm || target.any (inScope env scope) then
       out := out.push ⟨"csimp", thm, s!"a @[csimp] theorem replacing {target.getD thm}"⟩
@@ -394,9 +394,13 @@ unsafe def run (args : List String) : IO UInt32 := do
   let baseline ← readBaseline baselinePath
   let findings := check env scope
   let isListed (f : Finding) := baseline.contains (f.kind, f.decl)
+  -- Every finding outside the baseline fails the check.
   let fresh := findings.filter (!isListed ·)
   for f in fresh do
     IO.println s!"{f.kind} {f.decl}: {f.detail}"
+  -- A baseline entry that is no longer found also fails the check.
+  --
+  -- So the baseline stays an exact list of the findings that exist.
   let stale := baseline.filter fun (kind, decl) => !findings.any (fun f => f.kind == kind && f.decl == decl)
   for (kind, decl) in stale do
     IO.println s!"stale baseline entry, no longer found: {kind} {decl}"

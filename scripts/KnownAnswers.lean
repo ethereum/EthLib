@@ -15,15 +15,7 @@ This program calls the definitions that the theorems are about, compiled.
 
 So a disagreement lies in the specification, in the compiler or in how this program reads files.
 
-Both families also run in the Python suite: here they check the specification without the bindings.
-
 Each family reads its vectors from `tests/`, whose pinned origins `tests/sources.toml` records.
-
-It prints one line per family, and the paths of up to five cases that disagree.
-
-It fails when any case disagrees, or when a family finds no case.
-
-Run it as `lake exe known-answers`, optionally followed by the repository root.
 -/
 
 open EthLib
@@ -135,14 +127,20 @@ def report (name : String) (family : IO Tally) : IO Bool := do
   let tally ← family
   let stop ← IO.monoNanosNow
   let millis := (stop - start).toFloat / 1000000
+  -- One line per family, then the paths of up to five cases that disagree.
   IO.println s!"{name}: {tally.run} cases, {tally.failed} disagree, {millis} ms"
   for n in tally.names do IO.println s!"  disagrees: {n}"
+  -- A family fails when any case disagrees, or when it finds no case.
   return tally.failed == 0 && tally.run > 0
 
 end KnownAnswers
 
 public def main (args : List String) : IO UInt32 := do
+  -- Run it as `lake exe known-answers`, optionally followed by the repository root.
   let root : System.FilePath := args.headD "."
+  -- Both families also run in the Python suite.
+  --
+  -- Here they check the specification without the bindings.
   let a ← KnownAnswers.report "shuffling" (KnownAnswers.shuffling root)
   let b ← KnownAnswers.report "sha256" (KnownAnswers.sha256 root)
   return if a && b then 0 else 1

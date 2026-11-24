@@ -7,73 +7,34 @@ Writes the value of each fork-indexed rule at each fork, so that a change at an 
 
 `tests/execution/history/README.md` says why the file exists and how a pull request changes it.
 
-A rule here is a definition of the execution layer or of `Base`.
-
-Its value depends only on the fork.
-
-The tool finds the rules by their type, so a new rule is listed without editing this file.
-
-- A constant of type `Nat` gives one value for every fork.
-- A rule from the fork to `Nat` gives one value per fork.
-- A rule from the fork and a `Bool` to `Nat` gives two values per fork, one per `Bool`.
-- A rule from the fork to `Option Nat` gives one value per fork, or none.
-- A rule from the fork to a structure gives one value per field of type `Nat` or `UInt64`.
-- A rule whose structure is given from a fork on gives those values from that fork, and none before.
-
-It skips every other type, such as a list of addresses or an opcode table.
-
-It also skips a rule that takes another argument, such as a preset or a chain configuration.
-
-It reads the declarations that the two modules of the execution layer and of `Base` import.
-
-It reads the forks from the constructors of `Fork`, in order, so it never names the last fork.
-
-It reads the values from compiled code, so it runs after `lake build EthLib`.
-
-- `lake exe rule-history` writes `tests/execution/history/rules.tsv`.
-- `lake exe rule-history --check` fails if that file differs, and prints the changed lines.
-
-A file can also differ only in the order or count of its lines, or by a blank line.
-
-Then no line with text is new or gone, so the check prints the first line that differs.
-
-It prints that line as the file holds it and as the code computes it.
-
-When the file lacks only its final line end, which an editor can remove, the check says so.
-
-It exits with 1 when the file differs, 2 on an unknown argument, and 3 when it finds no rule.
-
-It also exits with 3 when it finds no fork type.
-
-It exits with 4 on any other error, such as a module that is not built.
-
-A file that exists but cannot be read is such an error.
-
-So once the tool runs, an error never reads as a changed value.
-
-A missing file is not an error: the check exits with 1 and lists every line with text as new.
-
-Four options replace the defaults, for the fixtures of `scripts/test_rule_history.sh`.
-
-- `--module M` reads the rules of module `M`, in place of the two default modules.
-- `--scope N` reads only the declarations under the namespace `N`.
-- `--base B` reads the fork type and its from-a-fork wrapper under `B`, in place of `Base`.
-- `--file F` writes or checks the file `F`.
+A rule is a definition of the execution layer or of `Base` whose value depends only on the fork.
 -/
 
 open Lean Meta
 
 namespace RuleHistory
 
-/-- What the tool reads, and the file it writes. -/
+/-- What the tool reads, and the file it writes.
+
+Four options replace the defaults, for the fixtures of `scripts/test_rule_history.sh`. -/
 structure Config where
-  /-- The modules whose rules are read. -/
+  /-- The modules whose rules are read, with the declarations that they import.
+
+  By default, the two modules of the execution layer and of `Base`.
+
+  `--module M` reads the rules of module `M`, in place of the two default modules. -/
   modules : Array Name := #[`EthLib.Execution, `EthLib.Base]
-  /-- The namespaces in which a rule is looked for. -/
+  /-- The namespaces in which a rule is looked for.
+
+  `--scope N` reads only the declarations under the namespace `N`. -/
   scopes : List Name := [`EthLib.Execution, `EthLib.Base]
-  /-- The namespace of the fork type `Fork` and of `Since`, which gives a value from a fork on. -/
+  /-- The namespace of the fork type `Fork` and of `Since`, which gives a value from a fork on.
+
+  `--base B` reads them under `B`, in place of `Base`. -/
   base : Name := `EthLib.Base
-  /-- The snapshot, relative to the repository root. -/
+  /-- The snapshot, relative to the repository root.
+
+  `--file F` writes or checks the file `F`. -/
   file : System.FilePath := "tests/execution/history/rules.tsv"
   /-- Whether to compare with the file instead of writing it. -/
   check : Bool := false
@@ -130,21 +91,36 @@ def isBoolToNat : Expr → Bool
   | .forallE _ (.const ``Bool []) (.const ``Nat []) _ => true
   | _ => false
 
-/-- The ways to read a declaration of type `ty`, or none if it is not a rule. -/
+/-- The ways to read a declaration of type `ty`, or none if it is not a rule.
+
+The rules are found by their type, so a new rule is listed without editing this file.
+
+Every other type, and a rule that takes another argument, gives no shape.
+
+Examples: a list of addresses, an opcode table, a rule that takes a preset or a chain config. -/
 def shapesOf (c : Config) (env : Environment) (ty : Expr) : List Shape :=
+  -- A constant of type `Nat` gives one value for every fork.
   if ty == natE then [.const] else
   match ty with
   | .forallE _ (.const d []) body _ =>
     if d != c.forkType then [] else
     if !body.hasLooseBVars then
+      -- A rule from the fork to `Nat` gives one value per fork.
       if body == natE then [.nat]
+      -- A rule from the fork and a `Bool` to `Nat` gives two values per fork, one per `Bool`.
       else if isBoolToNat body then [.bool false, .bool true]
+      -- A rule from the fork to `Option Nat` gives one value per fork, or none.
       else if body == optNatE then [.option]
       else match body with
+        -- A rule from the fork to a structure gives one value per field of type `Nat` or `UInt64`.
         | .const s [] => (natFields env s).map .field
         | _ => []
     else
       -- `Since first fork S`, where `fork` is the bound variable.
+      --
+      -- A rule whose structure is given from a fork on gives those values from that fork on.
+      --
+      -- It gives none before that fork.
       match body.getAppFn.constName?, body.getAppArgs with
       | some k, #[.const first [], .bvar 0, .const s []] =>
         if k == c.sinceType then (natFields env s).map (.since first) else []
@@ -175,7 +151,9 @@ def rules (c : Config) (env : Environment) : Array Rule := Id.run do
     a.decl.toString < b.decl.toString ||
       (a.decl == b.decl && shapeKey a.shape < shapeKey b.shape)
 
-/-- The constructors of the fork type, in the order of the type, or none if it is missing. -/
+/-- The constructors of the fork type, in the order of the type, or none if it is missing.
+
+The tool reads the forks from the type, so it never names the last fork. -/
 def forks (c : Config) (env : Environment) : Option (List Name) :=
   match env.find? c.forkType with
   | some (.inductInfo info) => some info.ctors
@@ -206,7 +184,9 @@ def valueTerm (fs : List Name) (r : Rule) (fork : Name) : MetaM Expr := do
     else
       return mkApp (mkConst ``Option.none [Level.zero]) natE
 
-/-- The values of a rule at every fork, in the order of the forks. -/
+/-- The values of a rule at every fork, in the order of the forks.
+
+They are read from compiled code, so the tool runs after `lake build EthLib`. -/
 unsafe def values (fs : List Name) (r : Rule) : MetaM (List (Option Nat)) := do
   let terms ← fs.mapM (valueTerm fs r)
   let list ← mkListLit optNatE terms
@@ -290,6 +270,7 @@ def shownLine (lines : List String) (i : Nat) : String :=
   | none => "(past the last line)"
 
 unsafe def run (args : List String) : IO UInt32 := do
+  -- An unknown argument exits with 2.
   if let .error e := parse {} args then
     IO.eprintln e
     IO.eprintln usage
@@ -299,10 +280,12 @@ unsafe def run (args : List String) : IO UInt32 := do
   enableInitializersExecution
   let env ← importModules (c.modules.map fun m => { module := m }) {} (loadExts := true)
   let ctx : Core.Context := { fileName := "<rule-history>", fileMap := default }
+  -- No fork type exits with 3.
   let some fs := forks c env | do
     IO.eprintln s!"rule-history: no inductive type {c.forkType} in the loaded modules"
     return 3
   let rs := rules c env
+  -- No rule exits with 3.
   if rs.isEmpty then
     IO.eprintln s!"rule-history: no rule under {c.scopes} in the loaded modules"
     return 3
@@ -310,7 +293,11 @@ unsafe def run (args : List String) : IO UInt32 := do
     return (r, ← values fs r)
   let (vals, _) ← (act.run' {} |>.toIO ctx { env })
   let text := snapshotText fs vals
+  -- `lake exe rule-history --check` fails with 1 if the file differs, and prints the changed lines.
   if c.check then
+    -- A missing file is not an error: the check exits with 1 and lists every line with text as new.
+    --
+    -- A file that exists but cannot be read is an error, which exits with 4.
     let old ← if ← c.file.pathExists then IO.FS.readFile c.file else pure ""
     if old == text then
       IO.println s!"rule-history: {vals.size} rules at {fs.length} forks agree with {c.file}"
@@ -322,12 +309,20 @@ unsafe def run (args : List String) : IO UInt32 := do
     let added := newLines.filter fun l => !l.isEmpty && !oldLines.contains l
     if oldLines == newLines then
       -- The code ends its text with a line end, so the file lacks only that one.
+      --
+      -- An editor can remove it, and the check says so.
       IO.println s!"- line {oldLines.length}: {shownLine oldLines (oldLines.length - 1)}"
       IO.eprintln s!"rule-history: {c.file} has no line end after its last line"
       IO.eprintln "Run `lake exe rule-history` to rewrite the file."
       return 1
     if gone.isEmpty && added.isEmpty then
       -- Both hold the same lines with text, so they differ in order or in the count of a line.
+      --
+      -- They can also differ by a blank line.
+      --
+      -- No line with text is new or gone, so the check prints the first line that differs.
+      --
+      -- It prints that line as the file holds it and as the code computes it.
       let i := ((oldLines.zip newLines).takeWhile fun (a, b) => a == b).length
       IO.println s!"- line {i + 1}: {shownLine oldLines i}"
       IO.println s!"+ line {i + 1}: {shownLine newLines i}"
@@ -340,6 +335,7 @@ unsafe def run (args : List String) : IO UInt32 := do
     IO.eprintln "If the change is intended, run `lake exe rule-history` to rewrite the file."
     IO.eprintln "Then name the source of each changed line in the pull request."
     return 1
+  -- `lake exe rule-history` writes `tests/execution/history/rules.tsv`.
   if let some d := c.file.parent then IO.FS.createDirAll d
   IO.FS.writeFile c.file text
   IO.println s!"rule-history: wrote {vals.size} rules at {fs.length} forks to {c.file}"
@@ -347,7 +343,9 @@ unsafe def run (args : List String) : IO UInt32 := do
 
 end RuleHistory
 
-/-- Runs the tool, and exits with 4 on an error, so that an error never reads as a changed value. -/
+/-- Runs the tool, and exits with 4 on an error, so that an error never reads as a changed value.
+
+Such an error is, for instance, a module that is not built. -/
 unsafe def main (args : List String) : IO UInt32 := do
   try
     RuleHistory.run args

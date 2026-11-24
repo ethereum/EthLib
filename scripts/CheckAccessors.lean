@@ -5,46 +5,11 @@ import Lean
 
 Lists every defaulting accessor that the specification's elaborated declarations use.
 
-A defaulting accessor returns a value instead of failing.
-
-It does so on an index out of range, or on an empty collection.
-
-- `xs[i]!` and `xs.get! i` return the `Inhabited` default when the index is out of range.
-- `xs.set! i v` returns `xs` unchanged when the index is out of range.
-- `xs.back!` returns the `Inhabited` default on an empty collection.
-- `panic! msg` always returns the `Inhabited` default.
-
-The kernel and the compiled code give the same value.
-
-Compiled code also prints a message to stderr, which nothing checks.
-
-So an input that reaches one is accepted silently, in proofs and in the bindings alike.
-
-The check reads what the kernel accepted, not the source.
-
-A comment or a string that spells `]!` is no finding, and a macro that hides one still is.
-
-A site is named by the accessor it calls and its declaration, with a count.
-
-For example, `GetElem?.getElem! EthLib.Serialization.Ssz.Desc.resolveStep 1` is one entry.
-
-A line number would change with every edit above the site, so the list uses names.
+A defaulting accessor returns a value instead of failing, on a bad index or an empty collection.
 
 The exact list in `scripts/check_accessors_baseline.txt` may only shrink.
 
-A new site fails the check, and so does an entry that does not match.
-
-The check does not see some ways to fall back to a default.
-
-Each one is covered elsewhere or outside the scope of this check:
-
-- The body of a `partial def` is only in its compiled copy, `foo._unsafe_rec`, which is skipped.
-  `lake exe check-decls` rejects `partial` in the specification.
-- A wrapper whose name has no `!` is counted once, in its own body.
-  Its callers are not counted.
-- The explicit defaults, such as `getD`, `headD` and `setIfInBounds`, have no `!` in their names.
-  Nor does the deprecated `String.get`, which returns a default character at a bad position.
-  They are not in the scope of this check.
+Some ways to fall back to a default escape the check; each is covered elsewhere or out of scope.
 -/
 
 open Lean
@@ -55,18 +20,38 @@ namespace CheckAccessors
 def panicFamily : NameSet :=
   .ofList [``panicCore, ``panic, ``panicWithPos, ``panicWithPosWithDecl]
 
-/-- Whether calling `n` can return a default in place of failing.
-
-Lean names every such accessor with `!`, such as `getElem!`, `Array.set!` and `Option.get!`.
-
-The panic functions are the exception, and they are listed by name.
-
-A theorem about one, such as `getElem!_pos`, computes nothing, so it is no accessor. -/
+/-- Whether calling `n` can return a default in place of failing. -/
 def isDefaulting (env : Environment) (n : Name) : Bool :=
+  -- The accessors and what they return:
+  --
+  -- - `xs[i]!` and `xs.get! i` return the `Inhabited` default when the index is out of range.
+  -- - `xs.set! i v` returns `xs` unchanged when the index is out of range.
+  -- - `xs.back!` returns the `Inhabited` default on an empty collection.
+  -- - `panic! msg` always returns the `Inhabited` default.
+  --
+  -- The kernel and the compiled code give the same value.
+  --
+  -- Compiled code also prints a message to stderr, which nothing checks.
+  --
+  -- So an input that reaches one is accepted silently, in proofs and in the bindings alike.
+  --
+  -- The panic functions are the exception to the naming below, and they are listed by name.
   panicFamily.contains n ||
+    -- Lean names each other one with `!`, such as `getElem!`, `Array.set!` and `Option.get!`.
+    --
+    -- Explicit defaults, such as `getD`, `headD` and `setIfInBounds`, have no `!` in their names.
+    --
+    -- Nor does the deprecated `String.get`, which returns a default character at a bad position.
+    --
+    -- They are not in the scope of this check.
+    --
+    -- A wrapper whose name has no `!` is counted once, in its own body.
+    --
+    -- Its callers are not counted.
     ((n.components.any fun c => match c with
         | .str _ s => s.contains '!'
         | _ => false) &&
+      -- A theorem about one, such as `getElem!_pos`, computes nothing, so it is no accessor.
       !(env.find? n |>.any (· matches .thmInfo _)))
 
 /-- The binder kinds of a constant's arguments, read from its type. -/
@@ -80,19 +65,7 @@ where
 
 /-- Each occurrence of a defaulting accessor in `e`, counted with multiplicity.
 
-Only explicit arguments are searched.
-
-The elaborator copies a term into implicit and instance arguments.
-
-Counting those would count one site several times.
-
-For example, `if xs[i]! ≠ 0 then a else b` elaborates to an `ite` with `xs[i]!` in two places.
-
-One is the explicit condition, and the other is the instance that decides it.
-
-Only the explicit occurrence is counted.
-
-An accessor that appears only inside an implicit argument is missed. -/
+Only explicit arguments are searched, so an accessor only inside an implicit argument is missed. -/
 partial def occurrences (env : Environment) (e : Expr) (acc : NameMap Nat) : NameMap Nat :=
   match e with
   | .const n _ => if isDefaulting env n then acc.insert n ((acc.getD n 0) + 1) else acc
@@ -103,6 +76,15 @@ partial def occurrences (env : Environment) (e : Expr) (acc : NameMap Nat) : Nam
       | .const n _ => binderInfos env n
       | _ => #[]
     let acc := occurrences env f acc
+    -- The elaborator copies a term into implicit and instance arguments.
+    --
+    -- Counting those would count one site several times.
+    --
+    -- For example, `if xs[i]! ≠ 0 then a else b` elaborates to an `ite` with `xs[i]!` twice.
+    --
+    -- One is the explicit condition, and the other is the instance that decides it.
+    --
+    -- Only the explicit occurrence is counted.
     (args.zipIdx).foldl (init := acc) fun acc (a, i) =>
       if (infos[i]?.getD .default).isExplicit then occurrences env a acc else acc
   -- A binder type of `∀` is part of a statement, as in `(h : xs[i]! = 0) → ...`.
@@ -127,21 +109,26 @@ def isSpecModule (scope m : Name) : Bool :=
 
 /-- Whether `n` is a declaration Lean generates from another one, which repeats its source.
 
-- `foo._unsafe_rec` is the compiled copy of a recursive definition.
-- `foo._sunfold` is the one-step unfolding of a structural recursion.
-- `foo.eq_def`, `foo.eq_unfold` and `foo.eq_1`, `foo.eq_2`, ... are equation lemmas.
-- `foo._proof_3` is a proof obligation, stated over the source's terms.
-- `foo.match_2` is a matcher, and `foo.match_2.splitter` its splitter.
-
 The kernel's copy of a recursion, `foo._f`, `foo._unary` or `foo._mutual`, is kept.
 
 It holds each site once. -/
 def isGenerated (n : Name) : Bool :=
   match n with
   | .str _ s =>
+    -- `foo._unsafe_rec` is the compiled copy of a recursive definition.
+    --
+    -- The body of a `partial def` is only there, so the check does not see it.
+    --
+    -- `lake exe check-decls` rejects `partial` in the specification.
+    --
+    -- `foo._sunfold` is the one-step unfolding of a structural recursion.
+    --
+    -- `foo.eq_def`, `foo.eq_unfold` and `foo.eq_1`, `foo.eq_2`, ... are equation lemmas.
     s == "_unsafe_rec" || s == "_sunfold" || s == "eq_def" || s == "eq_unfold" ||
       (s.startsWith "eq_" && (s.drop 3).all Char.isDigit) ||
+      -- `foo._proof_3` is a proof obligation, stated over the source's terms.
       (s.startsWith "_proof_" && (s.drop 7).all Char.isDigit) ||
+      -- `foo.match_2` is a matcher, and `foo.match_2.splitter` its splitter.
       (s.startsWith "match_" && (s.drop 6).all Char.isDigit) ||
       s == "splitter"
   | _ => false
@@ -159,36 +146,37 @@ def larger (a b : NameMap Nat) : NameMap Nat :=
 
 /-- Every site in a declaration of the specification.
 
-A definition is searched in its type and its value.
+It reads what the kernel accepted, not the source.
 
-Lean can copy a site of the type into the value, as an explicit argument it fills from the type.
-
-For example, take a definition of type `Decidable (b.get! 0 = 1)` whose source value is `decEq _ _`.
-
-Lean elaborates its value to `decEq (b.get! 0) 1`, which holds the site of the type again.
-
-So a definition counts each accessor once over its type and value.
-
-It takes the larger of the two counts, not their sum.
-
-Two different sites, one in the type and one in the value, then count as one.
-
-A copy that Lean makes inside the value, from an expected type there, still counts again.
-
-A theorem is searched in its statement only: its proof computes nothing.
-
-Generated declarations, such as equation lemmas, repeat their source and are skipped. -/
+A comment or a string that spells `]!` is no finding, and a macro that hides one still is. -/
 def sites (env : Environment) (scope : Name) : Array (Name × Site) := Id.run do
   let mut out := #[]
   for (n, c) in env.constants.toList do
     let some m := moduleOf? env n | continue
     unless isSpecModule scope m do continue
+    -- Generated declarations, such as equation lemmas, repeat their source and are skipped.
     if isGenerated n then continue
     let found : Option (String × NameMap Nat) := match c with
+      -- A definition is searched in its type and its value.
+      --
+      -- Lean can copy a site of the type into the value, filling an explicit argument from it.
+      --
+      -- For example, take a definition of type `Decidable (b.get! 0 = 1)`.
+      --
+      -- Its source value `decEq _ _` elaborates to `decEq (b.get! 0) 1`, with the site again.
+      --
+      -- So a definition counts each accessor once over its type and value.
+      --
+      -- It takes the larger of the two counts, not their sum.
+      --
+      -- Two different sites, one in the type and one in the value, then count as one.
+      --
+      -- A copy that Lean makes inside the value, from an expected type there, still counts again.
       | .defnInfo v =>
         some ("definition", larger (occurrences env v.type {}) (occurrences env v.value {}))
       | .opaqueInfo v =>
         some ("definition", larger (occurrences env v.type {}) (occurrences env v.value {}))
+      -- A theorem is searched in its statement only: its proof computes nothing.
       | .thmInfo v => some ("statement", occurrences env v.type {})
       | _ => none
     let some (part, counts) := found | continue
@@ -219,13 +207,14 @@ def displayName (n : Name) : Name :=
 
 /-- The modules of the specification under the root directory.
 
-They are the `.lean` files under the root directory, outside the proof and export trees.
-
-The directory is read, not the imports of the root file of the library.
-
-So a module that the library does not import is not skipped: the build leaves it out, and its import fails. -/
+They are the `.lean` files under the root directory, outside the proof and export trees. -/
 partial def specModules (scope : Name) (dir : System.FilePath) (pre : Name) : IO (Array Name) := do
   let mut out := #[]
+  -- The directory is read, not the imports of the root file of the library.
+  --
+  -- So a module that the library does not import is not skipped.
+  --
+  -- The build leaves it out, and its import fails.
   for entry in ← dir.readDir do
     let path := entry.path
     if ← path.isDir then
@@ -247,23 +236,22 @@ def readBaseline (path : System.FilePath) : IO (List (Name × Name × Nat)) := d
 
 /-- Entry point: `check-accessors [--list | --print] [--baseline FILE] [--root DIR]`.
 
-- `--list` prints every site as `module part accessor declaration count first-line last-line`.
-- `--print` prints the sites in the format of the baseline, to create it once.
-- Otherwise the sites, summed over each declaration, must match the baseline exactly.
-- `--root` reads the modules under `DIR` in place of `EthLib`.
-  The last part of `DIR` is the prefix of their names.
-  A `DIR` with no last part, such as `dir/`, exits with 2.
-  `scripts/test_check_accessors.sh` points it at the fixtures in `scripts/CheckAccessorsTest`.
-
 It is `unsafe` because loading the environment extensions runs their initializers. -/
 unsafe def run (args : List String) : IO UInt32 := do
   let baselinePath : System.FilePath := match args.dropWhile (· != "--baseline") with
     | _ :: p :: _ => p
     | _ => "scripts/check_accessors_baseline.txt"
+  -- `--root` reads the modules under `DIR` in place of `EthLib`.
+  --
+  -- The last part of `DIR` is the prefix of their names.
+  --
+  -- `scripts/test_check_accessors.sh` points it at the fixtures in `scripts/CheckAccessorsTest`.
   let root : System.FilePath := match args.dropWhile (· != "--root") with
     | _ :: p :: _ => p
     | _ => "EthLib"
   -- A root such as `dir/` has no last part, and would scan under a wrong prefix.
+  --
+  -- So it exits with 2.
   let some last := root.fileName
     | IO.eprintln s!"check-accessors: the root {root} has no last part to name its modules"
       return 2
@@ -281,22 +269,33 @@ unsafe def run (args : List String) : IO UInt32 := do
     IO.eprintln "check-accessors: no definition of the specification was loaded"
     return 3
   let found := sites env scope
+  -- `--list` prints every site as `module part accessor declaration count first-line last-line`.
   if args.contains "--list" then
     for (m, s) in found do
       let (a, b) := (lines? env s.decl).getD (0, 0)
       IO.println s!"{m}\t{s.part}\t{s.accessor}\t{s.decl}\t{s.count}\t{a}\t{b}"
     return 0
   -- Sum over the parts of a declaration: the list names call sites, not where Lean stores them.
+  --
+  -- A site is named by the accessor it calls and its declaration, with a count.
+  --
+  -- For example, `GetElem?.getElem! EthLib.Serialization.Ssz.Desc.resolveStep 1` is one entry.
+  --
+  -- A line number would change with every edit above the site, so the list uses names.
   let mut totals : Std.HashMap (Name × Name) Nat := {}
   for (_, s) in found do
     let key := (s.accessor, displayName s.decl)
     totals := totals.insert key (totals.getD key 0 + s.count)
   let entries := totals.toArray.qsort fun ((a, d), _) ((a', d'), _) =>
     d.toString < d'.toString || (d == d' && a.toString < a'.toString)
+  -- `--print` prints the sites in the format of the baseline, to create it once.
   if args.contains "--print" then
     for ((a, d), k) in entries do
       IO.println s!"{a} {d} {k}"
     return 0
+  -- Otherwise the sites, summed over each declaration, must match the baseline exactly.
+  --
+  -- A new site fails the check, and so does an entry that does not match.
   let baseline ← readBaseline baselinePath
   let mut failed := false
   for ((a, d), k) in entries do
