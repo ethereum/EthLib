@@ -1252,6 +1252,57 @@ theorem attestationRewardsResponse_ok {config : Config} {epoch : Epoch}
     exact ⟨unknown.1, unknown.2.1, unknown.2.2, rewarded, ideal, entries, rewardedOk, idealOk,
       entriesOk, fit.1, fit.2, rfl⟩
 
+/-- The answer gets the error of an amount out of range, code 500, exactly when:
+
+- the state is at the last slot of an epoch past the first, for the epoch before,
+- the ideal and the total rewards compute on the state that the rewards step reads,
+- and an amount of one of them does not fit the signed 64-bit range. -/
+theorem attestationRewardsResponse_eq_rewardOutOfRange_iff {config : Config} {epoch : Epoch}
+    {ids : List ValidatorId} :
+    attestationRewardsResponse config state epoch ids = .error rewardOutOfRange ↔
+      getCurrentEpoch state ≠ GENESIS_EPOCH ∧ getPreviousEpoch state = epoch ∧
+        (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 ∧
+        ∃ rewarded ideal entries, stateBeforeRewards config state = .ok rewarded ∧
+          idealAttestationRewards rewarded = .ok ideal ∧
+          attestationRewards config rewarded ids = .ok entries ∧
+          (ideal.all (·.fits) = false ∨ entries.all (·.fits) = false) := by
+  unfold attestationRewardsResponse
+  by_cases unknown : getCurrentEpoch state = GENESIS_EPOCH ∨ getPreviousEpoch state ≠ epoch ∨
+      (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat ≠ 0
+  · -- Such a state gets the error of an epoch not known, with code 404.
+    simp only [unknown, ↓reduceIte]
+    refine iff_of_false ?_ ?_
+    · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, epochNotKnown,
+        rewardOutOfRange, internalError]
+    · rintro ⟨genesis, previous, last, -⟩
+      rcases unknown with same | other | other
+      · exact genesis same
+      · exact other previous
+      · exact other last
+  · simp only [unknown, ↓reduceIte]
+    simp only [not_or, not_not] at unknown
+    obtain ⟨genesis, previous, last⟩ := unknown
+    simp only [ne_eq, genesis, not_false_eq_true, previous, last, true_and]
+    -- A failed computation gets the error that names no attestation rewards.
+    cases rewardedOk : stateBeforeRewards config state with
+    | error fault =>
+      simp [Except.mapError, bind, Except.bind, rewardOutOfRange, internalError, toString]
+    | ok rewarded =>
+    cases idealOk : idealAttestationRewards rewarded with
+    | error fault =>
+      simp [idealOk, Except.mapError, bind, Except.bind, rewardOutOfRange, internalError,
+        toString]
+    | ok ideal =>
+    cases entriesOk : attestationRewards config rewarded ids with
+    | error fault =>
+      simp [idealOk, entriesOk, Except.mapError, bind, Except.bind, rewardOutOfRange,
+        internalError, toString]
+    | ok entries =>
+    -- Both lists compute, so the answer is the check of the range, or the JSON after it.
+    simp only [idealOk, entriesOk, Except.mapError, bind, Except.bind, Except.ok.injEq,
+      exists_and_left, exists_eq_left']
+    cases ideal.all (·.fits) <;> cases entries.all (·.fits) <;> simp [ensure, pure, Except.pure]
+
 /-! ## Sync committee rewards
 
 The sync committee rewards name each requested member once, in order of index.
@@ -1264,6 +1315,15 @@ When the balance covers each seat of the member, it moves by that sum.
 
 The proposer also earns a share of the reward of each seat that signed.
 -/
+
+/-- A seat in front adds its reward to the net reward of the validator that holds it. -/
+private theorem seatsReward_cons (reward : Gwei) (member index : ValidatorIndex) (signed : Bool)
+    (rest : List (ValidatorIndex × Bool)) :
+    seatsReward reward ((member, signed) :: rest) index =
+      (if member = index then seatReward reward signed else 0) +
+        seatsReward reward rest index := by
+  unfold seatsReward
+  by_cases same : member = index <;> simp [same]
 
 /-- The sync aggregate steps move one balance by the net rewards of the seats it holds.
 
@@ -1286,11 +1346,7 @@ private theorem foldl_seats_balance (reward : Gwei) (proposerReward : Nat)
   | nil => simp [seatsReward]
   | cons seat rest ih =>
     obtain ⟨member, signed⟩ := seat
-    have step : seatsReward reward ((member, signed) :: rest) index =
-        (if member = index then seatReward reward signed else 0) +
-          seatsReward reward rest index := by
-      unfold seatsReward
-      by_cases same : member = index <;> simp [same]
+    have step := seatsReward_cons reward member index signed rest
     have lenStep : (((member, signed) :: rest).filter (·.1 == index)).length =
         (rest.filter (·.1 == index)).length + if member = index then 1 else 0 := by
       by_cases same : member = index <;> simp [same]
@@ -1499,6 +1555,87 @@ theorem syncCommitteeRewardsResponse_of_lt_altair (before : fork < .altair)
   have not : ¬.altair ≤ fork := Nat.not_le_of_lt before
   simp [syncCommitteeRewardsResponse, not]
   rfl
+
+/-- The sync committee has at most as many seats as the committee size. -/
+private theorem syncRewardSeats_length_le {altair : .altair ≤ fork}
+    {aggregate : SyncAggregate preset} {seats : List (ValidatorIndex × Bool)}
+    (seated : syncRewardSeats state altair aggregate = .ok seats) :
+    seats.length ≤ preset.SYNC_COMMITTEE_SIZE.toNat := by
+  unfold syncRewardSeats at seated
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at seated
+  obtain ⟨members, -, rfl⟩ := seated
+  -- The seats pair the members with the bits of the aggregate, one bit per seat.
+  simp only [Array.length_toList, Array.size_zip, Vector.size_toArray]
+  exact Nat.min_le_right _ _
+
+/-- In absolute value, a net reward is at most the participant reward times the number of seats. -/
+private theorem seatsReward_le (reward : Gwei) (seats : List (ValidatorIndex × Bool))
+    (index : ValidatorIndex) :
+    -((seats.length * reward.toNat : Nat) : Int) ≤ seatsReward reward seats index ∧
+      seatsReward reward seats index ≤ ((seats.length * reward.toNat : Nat) : Int) := by
+  induction seats with
+  | nil => simp [seatsReward]
+  | cons seat rest ih =>
+    obtain ⟨member, signed⟩ := seat
+    rw [seatsReward_cons, List.length_cons, Nat.succ_mul]
+    -- The first seat moves the sum by the participant reward at most.
+    by_cases same : member = index
+    · cases signed
+      · simp only [same, ↓reduceIte, seatReward, Bool.false_eq_true]
+        omega
+      · simp only [same, ↓reduceIte, seatReward]
+        omega
+    · simp only [same, ↓reduceIte]
+      omega
+
+/-- Each computed sync committee reward lies strictly between `-2^58` and `2^58`. -/
+theorem syncCommitteeRewards_reward_lt {altair : .altair ≤ fork}
+    {aggregate : SyncAggregate preset} {ids : List ValidatorId}
+    {entries : List SyncCommitteeReward}
+    (answered : syncCommitteeRewards state altair aggregate ids = .ok entries)
+    {entry : SyncCommitteeReward} (member : entry ∈ entries) :
+    -2 ^ 58 < entry.reward ∧ entry.reward < 2 ^ 58 := by
+  obtain ⟨seats, reward, seatsOk, rewardOk, rewardEq⟩ :=
+    syncCommitteeRewards_reward answered member
+  -- A member holds at most every seat, and each seat moves its reward by the participant reward.
+  have seatsLe := syncRewardSeats_length_le seatsOk
+  have bound := seatsReward_le reward seats entry.validatorIndex
+  have mono : seats.length * reward.toNat ≤ preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat :=
+    Nat.mul_le_mul_right _ seatsLe
+  -- The committee size times the participant reward is below `2^58`.
+  have rewardLt := syncParticipantReward_mul_lt rewardOk
+  rw [rewardEq]
+  omega
+
+/-- When the sync committee rewards of a state from Altair compute, the answer is their JSON. -/
+theorem syncCommitteeRewardsResponse_of_syncCommitteeRewards {altair : .altair ≤ fork}
+    {aggregate : SyncAggregate preset} {ids : List ValidatorId}
+    {entries : List SyncCommitteeReward}
+    (computed : syncCommitteeRewards state altair aggregate ids = .ok entries) :
+    syncCommitteeRewardsResponse state aggregate ids =
+      .ok { data := .arr (entries.map (·.toJson)).toArray } := by
+  -- Each reward fits 64 bits, so the check of the range passes.
+  have fit : entries.all (·.fits) = true := List.all_eq_true.mpr fun entry member => by
+    have := syncCommitteeRewards_reward_lt computed member
+    simp only [SyncCommitteeReward.fits, int64Fits, decide_eq_true_eq]
+    omega
+  simp [syncCommitteeRewardsResponse, altair, computed, Except.mapError, bind, Except.bind,
+    ensure, fit, pure, Except.pure]
+
+/-- The answer never gets the error of an amount out of range. -/
+theorem syncCommitteeRewardsResponse_ne_rewardOutOfRange (aggregate : SyncAggregate preset)
+    (ids : List ValidatorId) :
+    syncCommitteeRewardsResponse state aggregate ids ≠ .error rewardOutOfRange := by
+  by_cases altair : .altair ≤ fork
+  · cases computed : syncCommitteeRewards state altair aggregate ids with
+    | ok entries => simp [syncCommitteeRewardsResponse_of_syncCommitteeRewards computed]
+    -- A failed computation gets the error that names no sync committee rewards.
+    | error fault =>
+      simp [syncCommitteeRewardsResponse, altair, computed, Except.mapError, bind, Except.bind,
+        rewardOutOfRange, internalError, toString]
+  -- Before Altair the answer is the error with code 400.
+  · rw [syncCommitteeRewardsResponse_of_lt_altair (Nat.lt_of_not_le altair)]
+    simp [invalidSyncRewardsRequest, rewardOutOfRange, internalError]
 
 /-! ## Block rewards
 

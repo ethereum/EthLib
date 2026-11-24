@@ -133,6 +133,29 @@ theorem syncParticipantReward_ok {reward : Gwei}
   · rw [rootOk.2, scaledOk.2, toNat_integerSquareroot]
   · rw [rewardOk.2, perSlotOk.2, perEpochOk.2, weightedOk.2, baseOk.2, incrementsOk.2]
 
+/-- The reward of a sync committee member that signs, times the committee size, is below `2^58`. -/
+theorem syncParticipantReward_mul_lt {reward : Gwei}
+    (computed : syncParticipantReward state = .ok reward) :
+    preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat < 2 ^ 58 := by
+  simp only [syncParticipantReward, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff] at computed
+  obtain ⟨total, -, perIncrement, -, computed⟩ := computed
+  obtain ⟨increments, -, base, -, weighted, -, perEpoch, perEpochOk, perSlot, perSlotOk,
+    rewardOk⟩ := computed
+  rw [divChecked_ok_iff] at perEpochOk perSlotOk rewardOk
+  -- The reward of each seat splits the reward of a slot, which is at most that of an epoch.
+  have share : preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat ≤ perSlot.toNat := by
+    rw [rewardOk.2, Nat.mul_comm]
+    exact Nat.div_mul_le_self _ _
+  have slot : perSlot.toNat ≤ perEpoch.toNat := by
+    rw [perSlotOk.2]
+    exact Nat.div_le_self _ _
+  -- The reward of an epoch is a 64-bit product divided by the weight denominator, 64.
+  have epoch : perEpoch.toNat = weighted.toNat / 64 := perEpochOk.2
+  have wide := weighted.toNat_lt_size
+  simp only [UInt64.size] at wide
+  omega
+
 /-- The sync aggregate step, from Altair, at each balance.
 
 No addition overflows. -/
