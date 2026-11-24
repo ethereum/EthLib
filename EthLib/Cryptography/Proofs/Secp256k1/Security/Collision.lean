@@ -5,37 +5,11 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 /-!
 # Proofs: a forgery on an old hash, charged to a collision of the hash
 
-A forgery may be on a new message whose hash is the hash of a signed message.
+A forgery on a new message with the hash of a signed message exhibits a collision of `H`.
 
-The game counts such a forgery, but it exhibits a collision of the hash `H`.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Theorem 1, Figure 4, Games G0 to G1.
 
-The game without those forgeries counts a win only when the final signing cache has no such message.
-
-The forger's advantage is at most its chance to win that game, plus the advantage of a finder.
-
-The finder runs the game with `Π` sampled lazily and returns the collision the cache exhibits.
-
-Its advantage is the chance that it returns two different messages with the same hash.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-This is the step from Game G0 to Game G1 of their Figure 4, in the proof of their Theorem 1.
-
-The game without those forgeries is their Game G1: this game with lines 18 and 19 of Figure 4.
-
-Here `H` is fixed, while their §2.3 draws a key for it.
-
-So an adversary that knows a collision of `H` always wins the game of collisions.
-
-The bound therefore charges the named finder, and no adversary against collisions in general.
-
-The finder samples `Π` lazily, as a reduction can.
-
-No theorem states its running time.
-
-It tries up to `fuel` nonces for each request, where their `τ_cr = τ + O(Q_s)` counts one.
-
-The chance to win with no collision is also the chance in the lazy game, where the next steps start.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -65,8 +39,14 @@ It returns a signed message other than the forged one with the same hash, if the
 It returns it with the forged message. -/
 def collisionFinder (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     ProbComp (Option (M × M)) :=
+  -- The collision that the final signing cache exhibits, paired with the forged message.
   (fun z : (M × F × F) × Bool × Cache F M =>
       (collisionOf scheme z.2.2 z.1.1).map fun m' => (m', z.1.1)) <$>
+    -- The game, with `Π` sampled lazily, as a reduction can.
+    --
+    -- No theorem states the running time of the finder.
+    --
+    -- It tries up to `fuel` nonces for each request, where their `τ_cr = τ + O(Q_s)` counts one.
     (simulateQ lazyPermImpl (experimentViewQ scheme fuel adversary)).run' []
 
 /-- The chance to win the game when no signed message other than the forged one has its hash.
@@ -92,6 +72,9 @@ theorem forgeAdvantage_le_noCollisionAdvantage_add_collisionAdvantage (scheme : 
   have h1 : forgeAdvantage scheme fuel adversary =
       Pr{let z ← experimentView scheme fuel adversary}[z.2.1 = true] := by
     rw [forgeAdvantage, ← result_map_experimentView, prEvent_map]
+  -- The game counts a forgery on a new message whose hash is the hash of a signed message.
+  --
+  -- Such a forgery exhibits a collision of `H`, so split the wins on one.
   have h2 : Pr{let z ← experimentView scheme fuel adversary}[z.2.1 = true] ≤
       Pr{let z ← experimentView scheme fuel adversary}[
         (z.2.1 = true ∧ collisionOf scheme z.2.2.1 z.1.1 = none) ∨
@@ -100,6 +83,13 @@ theorem forgeAdvantage_le_noCollisionAdvantage_add_collisionAdvantage (scheme : 
     by_cases h : collisionOf scheme z.2.2.1 z.1.1 = none
     · exact Or.inl ⟨hz, h⟩
     · exact Or.inr h
+  -- A collision in the cache is a win of the finder.
+  --
+  -- Here `H` is fixed, while their §2.3 draws a key for it.
+  --
+  -- So an adversary that knows a collision of `H` always wins the game of collisions.
+  --
+  -- The bound therefore charges the named finder, and no adversary against collisions in general.
   have h3 : Pr{let z ← experimentView scheme fuel adversary}[
       collisionOf scheme z.2.2.1 z.1.1 ≠ none] ≤
       collisionAdvantage scheme (collisionFinder scheme fuel adversary) := by
@@ -120,7 +110,9 @@ theorem forgeAdvantage_le_noCollisionAdvantage_add_collisionAdvantage (scheme : 
       unfold noCollisionAdvantage
       gcongr
 
-/-- The chance to win with no collision is the same in the game with `Π` sampled lazily. -/
+/-- The chance to win with no collision is the same in the game with `Π` sampled lazily.
+
+The next steps of the proof start from that lazy game. -/
 theorem noCollisionAdvantage_eq_lazy (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
     noCollisionAdvantage scheme fuel adversary =

@@ -7,37 +7,19 @@ public import VCVio.OracleComp.SimSemantics.StateT.UntilBad
 /-!
 # Proofs: the ECDSA game over the joint state of its oracles
 
-The game as a program asks a permutation oracle for `Π`.
-
-Its signing oracle keeps a cache of answers, and the permutation oracle keeps a state of its own.
+The game with a signing oracle that reads and writes the state of the permutation oracle too.
 
 A signer that only asks for `Π` cannot set it.
 
 Theorem 1 of the source needs one that does: it signs without the key and sets `Π` to match.
 
-So here the signing oracle reads and writes both states at once.
-
-The permutation oracle and the signer of new messages are parameters.
-
-The signing oracle answers a repeated message from its cache, and records each new answer.
-
-With the real signer, run against the permutation oracle, this is the game as a program.
-
-The run also returns the forgery and both final states.
-
-The lazy permutation is one such oracle.
-
-With it and the real signer, keeping only the result, this is the lazy game.
-
-Then draw `Π` uniformly among the permutations that agree with the final cache of `Π`.
-
-The forgery, the result, the signing cache and `Π` then have the joint law of the game.
-
-The source is [Fersch, Kiltz, Poettering](https://doi.org/10.1145/2976749.2978413).
-
-The signer that sets `Π` is the one in the proof of their Theorem 1.
+The signer that sets `Π` is the one in the proof of Theorem 1 of the source.
 
 The joint state is the challenger's side of the games of that proof.
+
+Source: [Fersch, Kiltz, Poettering][fkp], Theorem 1.
+
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -67,27 +49,25 @@ variable [DecidableEq M]
 
 /-- The oracles of the game over the joint state, with a permutation oracle and a signer.
 
-Coins leave both states unchanged.
-
-`Π` and its inverse go to the permutation oracle on the second state.
-
-They leave the signing cache unchanged.
-
-A repeated message gets the answer it got first.
-
-A new message goes to the signer, and its answer joins the signing cache.
+The permutation oracle and the signer of new messages are parameters.
 
 The base monad lifts the coins, so the oracles may themselves ask an outer oracle for `Π`. -/
 def jointImpl {μ : Type → Type} [Monad μ] [MonadLiftT ProbComp μ]
     (perm : QueryImpl (PermSpec A) (StateT σ μ)) (fresh : FreshSigner F M σ μ) :
     QueryImpl (Spec F A M) (StateT (JointState F M σ) μ)
+  -- Coins leave both states unchanged.
   | .inl n => fun s =>
     (·, s) <$> (liftM (query (spec := unifSpec) n : ProbComp (Fin (n + 1))) : μ _)
+  -- `Π` and its inverse go to the permutation oracle on the second state.
+  --
+  -- They leave the signing cache unchanged.
   | .inr (.inl α) => fun s => (fun z => (z.1, (s.1, z.2))) <$> (perm (.inl α)).run s.2
   | .inr (.inr (.inl β)) => fun s => (fun z => (z.1, (s.1, z.2))) <$> (perm (.inr β)).run s.2
   | .inr (.inr (.inr m)) => fun s =>
     match s.1.lookup m with
+    -- A repeated message gets the answer it got first, from the signing cache.
     | some a => pure (a, s)
+    -- A new message goes to the signer, and its answer joins the signing cache.
     | none => (fun z => (z.1, (s.1 ++ [(m, z.1)], z.2))) <$> (fresh m).run s.2
 
 /-- A signer of new messages that asks for `Π`, run against the permutation oracle.

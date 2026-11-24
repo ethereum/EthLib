@@ -5,41 +5,13 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.KeyOnlyOutside
 /-!
 # Proofs: a key-only forgery on a new forward answer of `Π`
 
-Run the key-only forger on the key `X`, with new forward answers asked of the outside oracle.
+What the check of a key-only forgery reads, with new forward answers asked of the outside oracle.
 
-Say the check of its forgery `(m, t, s)` passes.
+It is the fact behind the forward case of the proof of Theorem 2 of the source.
 
-Then `X`, `t`, `s` and `U = H(m) g + t X` are nonzero.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Theorem 2, Figures 7 and 8.
 
-Let `R* = s⁻¹ U`; the forgery's point is its encoding `φ(R*)`.
-
-The cache holds a pair at that point whose answer `β` has `ψ(β) = t`.
-
-Say also that no flag was raised, and that the forgery's point is in the log of new forward pairs.
-
-The pair of the log at that point is then the pair the check read.
-
-So `ψ(β_j) = t`, where `β_j` is the answer of the pair at the fork index `j`.
-
-The log lists the first query first, and its positions count from `0`.
-
-The fork returns two such runs, at the same fork index.
-
-Their forgeries share their point, their answers there differ, and `ψ` maps each to its own `t`.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-This is the fact behind the forward case of the proof of their Theorem 2.
-
-In their Game G3 of Figure 7, lines 11, 13 and 14, the answer `β*` with `ψ(β*) = t` is some `β_j`.
-
-Their Figure 8, line 12, finds `j` by that answer, counted from `1`.
-
-The fork index here finds it by the point; with no flag raised, both give the same pair.
-
-Their Game G1 stops with `0` when a new answer repeats, in lines 20 and 29.
-
-Here the flag rises instead.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -116,6 +88,7 @@ theorem of_verified_of_mem_support_keyOnlyOutsideRun (scheme : Scheme F G A M)
     X ≠ 0 ∧ tr.forgery.2.1 ≠ 0 ∧ tr.forgery.2.2 ≠ 0 ∧
       scheme.hash tr.forgery.1 • scheme.g + tr.forgery.2.1 • X ≠ 0 ∧
       ∃ β, (forgeryPoint scheme X tr.forgery, β) ∈ tr.cache ∧ scheme.reduce β = tr.forgery.2.1 := by
+  -- Let `R* = s⁻¹ U`; the forgery's point is its encoding `φ(R*)`.
   simp only [keyOnlyOutsideRun, support_map, Set.mem_image] at htr
   obtain ⟨r, hr, rfl⟩ := htr
   obtain ⟨w, s₁, -, h | ⟨hX, ht, hs, hU, y, hy, rfl⟩⟩ :=
@@ -137,11 +110,26 @@ theorem reduce_forward_eq_of_forkIndex_eq_some (scheme : Scheme F G A M)
     ∃ h : (j : ℕ) < tr.forward.length,
       tr.forward[j].1 = forgeryPoint scheme X tr.forgery ∧
         scheme.reduce tr.forward[j].2 = tr.forgery.2.1 := by
+  -- A fork index needs a passing check, no flag raised, and the forgery's point in the log.
+  --
+  -- The log lists the first query first, and its positions count from `0`.
   obtain ⟨hv, hbad, hlt, hpt⟩ := verified_and_forward_of_forkIndex_eq_some hj
   obtain ⟨-, -, -, -, β, hβ, hr⟩ :=
     of_verified_of_mem_support_keyOnlyOutsideRun scheme adversary X htr hv
+  -- With no flag raised, the cache is a partial bijection.
+  --
+  -- Their Game G1 stops with `0` when a new answer repeats, in lines 20 and 29.
+  --
+  -- Here the flag rises instead.
   obtain ⟨hlog, hpb⟩ := outsideInv_of_mem_support_keyOnlyOutsideRun scheme adversary X htr
   have hmem : tr.forward[(j : ℕ)] ∈ tr.cache := hlog _ (List.getElem_mem hlt)
+  -- So the pair of the log at that point is the pair that the check read: `ψ(β_j) = t`.
+  --
+  -- In their Game G3 of Figure 7, lines 11, 13 and 14, `β*` with `ψ(β*) = t` is some `β_j`.
+  --
+  -- Their Figure 8, line 12, finds `j` by that answer, counted from `1`.
+  --
+  -- The fork index here finds it by the point; with no flag raised, both give the same pair.
   have heq : tr.forward[(j : ℕ)] = (forgeryPoint scheme X tr.forgery, β) :=
     List.inj_on_of_nodup_map (hpb hbad).1 hmem hβ (by simpa using hpt)
   refine ⟨hlt, hpt, ?_⟩
