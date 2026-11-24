@@ -1148,6 +1148,16 @@ Not yet released.
   `getBlobParameters_sharedEpoch` shows two entries at one epoch whose order sets the limit.
   `latestStarted_perm` gives the order-free result for any schedule with distinct first epochs, and `getScheduledGasLimit_perm` now follows from it.
 
+- The gossip RPC decoder takes the payload cap of the network first.
+  It rejects an encoded RPC longer than the largest gossip message of that cap, with the new code 106.
+  The phase 0 networking specification says that clients must reject such a message, framing included.
+  The largest message is `32 + n + n / 6 + 1024` bytes for the payload cap `n`, and at least 1 MiB, so 12234442 bytes on mainnet.
+  The decoder took an RPC of any length, so a payload at its compressed bound could come with any amount of topics and control messages.
+  In Python, `gossip.rpc.decode` takes `max_payload_size` first.
+  In Lean, `decodeRpc` takes the cap first, and `decodeRpc_encode` asks that the encoding fit that bound, in place of `2^64` bytes.
+  `withinMessageSize` in `EthLib.Networking.Gossip` is the check.
+  `withinMessageSize_iff` and `decodeRpc_tooLong` in `EthLib.Networking.Proofs.Gossip.Rpc` state the sizes that it accepts and that a longer RPC is rejected.
+
 - In Lean, `phase0PeriodEpochs` (`Consensus/WeakSubjectivity.lean`), and so the Phase 0 to Deneb weak subjectivity period, takes the epochs for the churn of validators alone when balances are large, no longer the longer of those and the epochs for top-ups ([consensus-specs#5866](https://github.com/ethereum/consensus-specs/issues/5866)).
   The period is shorter only where the epochs for top-ups were the longer, for instance beyond about 4.39 million validators of 32 ether.
   `phase0PeriodEpochs_eq_ok` gives the new closed form, and `churn_le_of_phase0PeriodEpochs_eq_ok` and `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` lose their hypothesis on the top-ups.

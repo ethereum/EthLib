@@ -101,7 +101,7 @@ py_gossip_rpc_decode(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_gossip_rpc_decode, args, 1, GOSSIP_ERROR);
+  return call_pyvalue_export(eth_gossip_rpc_decode, args, 2, GOSSIP_ERROR);
 }
 
 PyObject*

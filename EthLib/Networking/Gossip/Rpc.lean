@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Encoding.Protobuf
+public import EthLib.Networking.ReqResp.Encoding
 
 /-!
 # `Networking.Gossip.Rpc`
@@ -27,6 +28,7 @@ The consensus layer applies the `StrictNoSign` [signature policy][policy].
 namespace EthLib.Networking.Gossip
 
 open EthLib.Networking.Encoding.Protobuf
+open EthLib.Networking.ReqResp (maxMessageSize)
 
 /-- A subscription change: subscribe to a topic, or unsubscribe from it. -/
 structure SubOpts where
@@ -132,6 +134,8 @@ inductive RpcError where
   | wireType (field wire : Nat)
   /-- A topic is not valid UTF-8. -/
   | utf8 (field : Nat)
+  /-- The RPC is longer than the largest gossip message. -/
+  | tooLong (size : Nat)
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -145,6 +149,7 @@ def RpcError.code : RpcError → UInt32
   | .missingTopic => 103
   | .wireType .. => 104
   | .utf8 _ => 105
+  | .tooLong _ => 106
 
 /-- The field numbers that `StrictNoSign` forbids in a message, even with an empty value.
 
@@ -322,10 +327,24 @@ def decodePartial (bytes : ByteArray) : Except RpcError PartialMessagesExtension
     partialMessage := (← repeated bytesOf rs 3).getLast?
     partsMetadata := (← repeated bytesOf rs 4).getLast? }
 
-/-- An RPC.
+/-- Whether an encoded RPC fits the largest gossip message, for the payload cap of the network.
+
+Clients must reject a longer one, by the gossip size limits of the phase 0 p2p interface. -/
+def withinMessageSize (maxPayloadSize : UInt64) (bytes : ByteArray) : Bool :=
+  -- The largest message is the worst-case compression of the cap plus 1024 bytes, at least 1 MiB.
+  --
+  -- A bound that overflows 64 bits admits no RPC.
+  match maxMessageSize maxPayloadSize with
+  -- The whole encoded RPC counts, with its control messages, framing and topics.
+  | .ok limit => bytes.size ≤ limit.toNat
+  | .error _ => false
+
+/-- An RPC, for the payload cap of the network.
 
 The control field is singular: each occurrence is decoded alone, then they merge. -/
-def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
+def decodeRpc (maxPayloadSize : UInt64) (bytes : ByteArray) : Except RpcError Rpc := do
+  -- Clients "MUST reject" a message whose encoded RPC exceeds the largest gossip message.
+  unless withinMessageSize maxPayloadSize bytes do throw (.tooLong bytes.size)
   let rs ← recordsOf bytes
   -- The RPC: `subscriptions = 1` and `publish = 2`, repeated.
   let subscriptions ← (← repeated bytesOf rs 1).mapM decodeSubOpts

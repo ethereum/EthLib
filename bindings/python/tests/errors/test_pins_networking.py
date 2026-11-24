@@ -424,7 +424,7 @@ GENERATOR = bytes.fromhex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f
                 "(EthLib.Networking.Encoding.Protobuf.ProtobufError.varint\n    "
                 "(EthLib.Networking.Encoding.Varint.VarintError.unterminated))"
             ),
-            lambda: rpc.decode(b"\xff"),
+            lambda: rpc.decode(10 * 2**20, b"\xff"),
             id="gossip-rpc",
         ),
         # A record of a signature and a sequence number has no id.

@@ -85,11 +85,11 @@ def decodePayloadExport (maxPayloadSize typeBound : UInt64) (data : ByteArray) :
     Result ByteArray :=
   toResult "gossip payload rejected" (decodePayload maxPayloadSize typeBound data)
 
-/-- The RPC that the bytes encode, under the `StrictNoSign` policy. -/
+/-- The RPC that the bytes encode, under the `StrictNoSign` policy, given the payload cap. -/
 @[export eth_gossip_rpc_decode]
 def rpcDecodeExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (data : ByteArray) =>
-    toResult "gossip RPC rejected" (decodeRpc data)) args
+  pyExport (fun ((maxPayloadSize, data) : UInt64 × ByteArray) =>
+    toResult "gossip RPC rejected" (decodeRpc maxPayloadSize data)) args
 
 /-- The bytes of an RPC. -/
 @[export eth_gossip_rpc_encode]

@@ -2990,6 +2990,17 @@ The consensus layer names only Noise for TCP, and does not say whether a node ma
 The profile proposes Noise alone.
 Which messages share a packet is not modelled; the recommendation to send the header with the first proposal or answer changes no message.
 
+### The size of a gossip RPC
+
+The phase 0 networking specification of the consensus layer says that clients must reject a gossip message larger than `max_message_size()`.
+That size is the worst-case compression of the payload cap of the network plus 1024 bytes, and at least 1 MiB.
+On mainnet it is 12234442 bytes.
+It bounds the whole encoded RPC, with its topics and control messages.
+`decodeRpc` (`Networking/Gossip/Rpc.lean`) takes the cap and rejects a longer RPC with `RpcError.tooLong`, before it reads any record.
+`withinMessageSize_iff` (`Networking/Proofs/Gossip/Rpc.lean`) states which sizes the check accepts, and `decodeRpc_tooLong` that a longer RPC is rejected whatever its bytes.
+`decodeRpc_encode` returns every RPC whose encoding fits the bound, so the check rejects no such encoding.
+The same section says that a client must not emit or propagate a larger message, which the encoder leaves to its caller.
+
 ### The gossip RPC and the partial message extension
 
 The gossip RPC (`Networking/Gossip/Rpc.lean`) carries the fields of the partial message extension, from the [gossipsub v1.3 schema](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.3.md#protobuf) and the [partial messages schema](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/partial-messages.md#protobuf).

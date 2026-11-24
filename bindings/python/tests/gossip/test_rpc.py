@@ -25,6 +25,8 @@ from raising import raises
 
 TOPIC = "/eth2/b5303f2a/data_column_sidecar_3/ssz_snappy"
 PREFIX = "gossip RPC rejected: EthLib.Networking.Gossip.RpcError."
+# The payload cap of the mainnet configuration: 10 MiB.
+MAX_PAYLOAD_SIZE = 10 * 1024 * 1024
 PROTOBUF = PREFIX + "protobuf (EthLib.Networking.Encoding.Protobuf.ProtobufError."
 
 
@@ -187,7 +189,7 @@ def test_reference_writes_full() -> None:
 
 
 def test_decode_every_field() -> None:
-    assert rpc.decode(FULL_BYTES) == FULL
+    assert rpc.decode(MAX_PAYLOAD_SIZE, FULL_BYTES) == FULL
 
 
 def test_encode_every_field() -> None:
@@ -195,7 +197,7 @@ def test_encode_every_field() -> None:
 
 
 def test_empty_rpc() -> None:
-    assert rpc.decode(b"") == rpc.Rpc()
+    assert rpc.decode(MAX_PAYLOAD_SIZE, b"") == rpc.Rpc()
     assert rpc.encode(rpc.Rpc()) == b""
 
 
@@ -233,7 +235,7 @@ def test_encode_omits_an_empty_control() -> None:
     ],
 )
 def test_missing_fields_read_as_defaults(data: bytes, expected: rpc.Rpc) -> None:
-    assert rpc.decode(data) == expected
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == expected
 
 
 @pytest.mark.parametrize("field", [1, 3, 5, 6])
@@ -249,13 +251,13 @@ def test_strict_no_sign_forbids_a_field(field: int, record: Callable[[int], byte
     # StrictNoSign forbids from (1), seqno (3), signature (5) and key (6), whatever their form.
     data = _message(_str(4, "t"), record(field))
     with raises(rpc.GossipError, PREFIX + f"signed {field}") as info:
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 102
 
 
 def test_the_first_forbidden_field_is_reported() -> None:
     with raises(rpc.GossipError, PREFIX + "signed 5"):
-        rpc.decode(_message(_len(5, b""), _str(4, "t"), _len(1, b"")))
+        rpc.decode(MAX_PAYLOAD_SIZE, _message(_len(5, b""), _str(4, "t"), _len(1, b"")))
 
 
 @pytest.mark.parametrize(
@@ -269,7 +271,7 @@ def test_the_first_forbidden_field_is_reported() -> None:
 )
 def test_message_without_topic(data: bytes) -> None:
     with raises(rpc.GossipError, PREFIX + "missingTopic") as info:
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 103
 
 
@@ -289,13 +291,13 @@ def test_message_without_topic(data: bytes) -> None:
 )
 def test_topic_that_is_not_utf8(data: bytes, field: int) -> None:
     with raises(rpc.GossipError, PREFIX + f"utf8 {field}") as info:
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 105
 
 
 def test_topic_is_unicode() -> None:
     data = _message(_str(4, "é/中"))
-    assert rpc.decode(data) == rpc.Rpc(publish=(rpc.Message(topic="é/中"),))
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == rpc.Rpc(publish=(rpc.Message(topic="é/中"),))
 
 
 # One record of each wire type with field number 9, which no schema here names.
@@ -345,7 +347,7 @@ UNKNOWN = (
     ],
 )
 def test_unknown_fields_are_skipped(data: bytes, expected: rpc.Rpc) -> None:
-    assert rpc.decode(data) == expected
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == expected
 
 
 @pytest.mark.parametrize(
@@ -390,7 +392,7 @@ def test_unknown_fields_are_skipped(data: bytes, expected: rpc.Rpc) -> None:
 )
 def test_known_field_with_another_wire_type(data: bytes, fault: str) -> None:
     with raises(rpc.GossipError, PREFIX + "wireType " + fault) as info:
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 104
 
 
@@ -424,24 +426,26 @@ def test_known_field_with_another_wire_type(data: bytes, fault: str) -> None:
     ],
 )
 def test_last_value_wins(data: bytes, expected: rpc.Rpc) -> None:
-    assert rpc.decode(data) == expected
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == expected
 
 
 def test_a_forbidden_field_wins_over_other_faults() -> None:
     with raises(rpc.GossipError, PREFIX + "signed 1"):
-        rpc.decode(_message(_len(4, b"\xff"), _len(1, b"")))
+        rpc.decode(MAX_PAYLOAD_SIZE, _message(_len(4, b"\xff"), _len(1, b"")))
 
 
 def test_subscriptions_are_checked_before_control() -> None:
     # The control record comes first in the bytes, but the subscriptions are read first.
     data = _control(_len(3, _len(1, b"\xff"))) + _len(1, _len(2, b"\xff"))
     with raises(rpc.GossipError, PREFIX + "utf8 2"):
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
 
 
 def test_non_minimal_varints_are_accepted() -> None:
     # The key 8a 00 is field 1 with wire type 2, and the length 80 00 is 0.
-    assert rpc.decode(b"\x8a\x00\x80\x00") == rpc.Rpc(subscriptions=(rpc.SubOpts(),))
+    assert rpc.decode(MAX_PAYLOAD_SIZE, b"\x8a\x00\x80\x00") == rpc.Rpc(
+        subscriptions=(rpc.SubOpts(),)
+    )
 
 
 def test_backoff_of_two_to_the_64_overflows() -> None:
@@ -452,13 +456,13 @@ def test_backoff_of_two_to_the_64_overflows() -> None:
         "    (EthLib.Networking.Encoding.Varint.VarintError.overflow 18446744073709551616))"
     )
     with raises(rpc.GossipError, message):
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
 
 
 def test_earlier_values_must_still_be_well_formed() -> None:
     # The second topic is valid, but the first is still read, and it is not UTF-8.
     with raises(rpc.GossipError, PREFIX + "utf8 4"):
-        rpc.decode(_message(_len(4, b"\xff"), _str(4, "t")))
+        rpc.decode(MAX_PAYLOAD_SIZE, _message(_len(4, b"\xff"), _str(4, "t")))
 
 
 def test_control_records_merge_in_order() -> None:
@@ -467,7 +471,7 @@ def test_control_records_merge_in_order() -> None:
         + _len(1, _str(2, "s"))
         + _control(_len(3, _str(1, "b")), _len(5, _len(1, b"2")))
     )
-    assert rpc.decode(data) == rpc.Rpc(
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == rpc.Rpc(
         subscriptions=(rpc.SubOpts(topic_id="s"),),
         control=rpc.Control(
             iwant=(rpc.IWant(message_ids=(b"1",)),),
@@ -483,7 +487,7 @@ def test_control_split_across_two_records_is_rejected() -> None:
     graft = _len(3, _str(1, "a"))
     data = _control(graft[:2]) + _control(graft[2:])
     with raises(rpc.GossipError, PROTOBUF + "truncated 3 0)") as info:
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 101
 
 
@@ -512,7 +516,7 @@ def test_control_split_across_two_records_is_rejected() -> None:
 )
 def test_bytes_that_are_not_protobuf(data: bytes, fault: str) -> None:
     with raises(rpc.GossipError, PROTOBUF + fault) as info:
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 101
 
 
@@ -523,7 +527,7 @@ def test_key_cut_inside_its_varint() -> None:
         "    (EthLib.Networking.Encoding.Varint.VarintError.unterminated))"
     )
     with raises(rpc.GossipError, message) as info:
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 101
 
 
@@ -610,7 +614,7 @@ def test_encode_matches_the_reference(value: rpc.Rpc) -> None:
 
 @given(RPCS)
 def test_decode_reads_the_reference(value: rpc.Rpc) -> None:
-    assert rpc.decode(_reference(value)) == value
+    assert rpc.decode(MAX_PAYLOAD_SIZE, _reference(value)) == value
 
 
 @pytest.mark.parametrize(
@@ -669,7 +673,7 @@ def test_decode_reads_the_reference(value: rpc.Rpc) -> None:
     ],
 )
 def test_partial_message_fields(data: bytes, value: rpc.Rpc) -> None:
-    assert rpc.decode(data) == value
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == value
     assert rpc.encode(value) == data
 
 
@@ -708,7 +712,7 @@ def test_encode_writes_the_optional_fields_only_when_present(
 
 
 def test_partial_message_fields_default_when_missing() -> None:
-    value = rpc.decode(_len(10, b""))
+    value = rpc.decode(MAX_PAYLOAD_SIZE, _len(10, b""))
     assert value == rpc.Rpc(partial_message=rpc.PartialMessagesExtension())
 
 
@@ -739,7 +743,7 @@ def test_partial_message_fields_default_when_missing() -> None:
 )
 def test_any_nonzero_flag_reads_as_true(data: bytes, expected: rpc.Rpc) -> None:
     # A bool is written as 0 or 1; EthLib reads any other value as true.
-    assert rpc.decode(data) == expected
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == expected
 
 
 @pytest.mark.parametrize(
@@ -777,7 +781,7 @@ def test_any_nonzero_flag_reads_as_true(data: bytes, expected: rpc.Rpc) -> None:
     ],
 )
 def test_last_occurrence_wins_for_the_partial_fields(data: bytes, expected: rpc.Rpc) -> None:
-    assert rpc.decode(data) == expected
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == expected
 
 
 @pytest.mark.parametrize(
@@ -797,18 +801,20 @@ def test_last_occurrence_wins_for_the_partial_fields(data: bytes, expected: rpc.
 )
 def test_an_earlier_partial_field_must_still_be_well_formed(data: bytes, fault: str) -> None:
     with raises(rpc.GossipError, PREFIX + "wireType " + fault) as info:
-        rpc.decode(data)
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 104
 
 
 def test_last_extensions_win_across_control_records() -> None:
     data = _control(_len(6, _uint(10, 1))) + _control(_len(6, b""))
-    assert rpc.decode(data) == rpc.Rpc(control=rpc.Control(extensions=rpc.ControlExtensions()))
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == rpc.Rpc(
+        control=rpc.Control(extensions=rpc.ControlExtensions())
+    )
 
 
 def test_extensions_kept_when_a_later_control_record_has_none() -> None:
     data = _control(_len(6, _uint(10, 1))) + _control(_len(3, _str(1, "g")))
-    assert rpc.decode(data) == rpc.Rpc(
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == rpc.Rpc(
         control=rpc.Control(
             graft=(rpc.Graft(topic_id="g"),),
             extensions=rpc.ControlExtensions(partial_messages=True),
@@ -819,6 +825,81 @@ def test_extensions_kept_when_a_later_control_record_has_none() -> None:
 def test_experimental_extension_fields_are_skipped() -> None:
     # testExtension is field 6492434: a bool in ControlExtensions, a message in RPC.
     data = _control(_len(6, _uint(10, 1) + _uint(6492434, 1))) + _len(6492434, b"")
-    assert rpc.decode(data) == rpc.Rpc(
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data) == rpc.Rpc(
         control=rpc.Control(extensions=rpc.ControlExtensions(partial_messages=True))
     )
+
+
+# The consensus-specs pin is v1.7.0-beta.4, file specs/phase0/p2p-interface.md.
+# Its section "Gossipsub size limits" says that clients MUST reject a larger message.
+# That covers an encoded RPC larger than `max_message_size()`, framing included.
+# Its section "Maximum message sizes" defines that size and `max_compressed_len`.
+MAX_COMPRESSED_LEN = 32 + MAX_PAYLOAD_SIZE + MAX_PAYLOAD_SIZE // 6
+MAX_MESSAGE_SIZE = max(MAX_COMPRESSED_LEN + 1024, 1024 * 1024)
+
+
+def _padded(size: int) -> bytes:
+    """An RPC of the given size: one record of field 15, which the schema does not name."""
+    # The key is one byte, and a length from 2^21 to 2^28 - 1 is a varint of four bytes.
+    data = _len(15, bytes(size - 5))
+    assert len(data) == size
+    return data
+
+
+def _largest_payload(topic_length: int) -> bytes:
+    """An RPC that publishes data of the largest compressed size, on a topic of that length."""
+    value = rpc.Rpc(
+        publish=(rpc.Message(data=bytes(MAX_COMPRESSED_LEN), topic="t" * topic_length),)
+    )
+    return rpc.encode(value)
+
+
+def test_largest_message_of_mainnet() -> None:
+    assert MAX_MESSAGE_SIZE == 12234442
+
+
+@pytest.mark.parametrize("size", [MAX_MESSAGE_SIZE - 1, MAX_MESSAGE_SIZE])
+def test_rpc_within_the_largest_message_is_accepted(size: int) -> None:
+    assert rpc.decode(MAX_PAYLOAD_SIZE, _padded(size)) == rpc.Rpc()
+
+
+@pytest.mark.parametrize("size", [MAX_MESSAGE_SIZE + 1, MAX_MESSAGE_SIZE + 4096])
+def test_rpc_above_the_largest_message_is_rejected(size: int) -> None:
+    with raises(rpc.GossipError, PREFIX + f"tooLong {size}") as info:
+        rpc.decode(MAX_PAYLOAD_SIZE, _padded(size))
+    assert info.value.code == 106
+
+
+def test_largest_payload_with_a_topic_that_fills_the_room_is_accepted() -> None:
+    # The framing takes 13 bytes, so a topic of 1011 bytes fills the 1024 bytes of room.
+    data = _largest_payload(1011)
+    assert len(data) == MAX_MESSAGE_SIZE
+    assert rpc.decode(MAX_PAYLOAD_SIZE, data).publish[0].topic == "t" * 1011
+
+
+def test_largest_payload_with_a_longer_topic_is_rejected() -> None:
+    data = _largest_payload(1012)
+    assert len(data) == MAX_MESSAGE_SIZE + 1
+    with raises(rpc.GossipError, PREFIX + f"tooLong {len(data)}") as info:
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
+    assert info.value.code == 106
+
+
+def test_size_is_checked_before_the_records() -> None:
+    # One byte too many, and the bytes are not protobuf records, but the size is reported.
+    data = b"\xff" * (MAX_MESSAGE_SIZE + 1)
+    with raises(rpc.GossipError, PREFIX + f"tooLong {len(data)}"):
+        rpc.decode(MAX_PAYLOAD_SIZE, data)
+
+
+@pytest.mark.parametrize(("size", "accepted"), [(1024 * 1024, True), (1024 * 1024 + 1, False)])
+def test_small_cap_keeps_the_floor_of_one_mebibyte(size: int, accepted: bool) -> None:
+    # A cap of 31 bytes gives 32 + 31 + 5 + 1024 bytes, below the floor of 1 MiB.
+    # Here the length of the record of field 15 is a varint of three bytes.
+    data = _len(15, bytes(size - 4))
+    assert len(data) == size
+    if accepted:
+        assert rpc.decode(31, data) == rpc.Rpc()
+    else:
+        with raises(rpc.GossipError, PREFIX + f"tooLong {size}"):
+            rpc.decode(31, data)
