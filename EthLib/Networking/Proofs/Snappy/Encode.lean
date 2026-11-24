@@ -28,7 +28,7 @@ It then reaches the end of `e` with the output `o'`.
 
 namespace EthLib.Networking.Proofs.Snappy.Encode
 
-open EthLib.Base (uintToBytes)
+open EthLib.Base (ByteOrder.toLE)
 open EthLib.Networking.Snappy
 open EthLib.Networking.Proofs.Snappy.Block
 
@@ -145,7 +145,7 @@ theorem reads_copyElement {declared : Nat} {L : List UInt8} {p offset len : Nat}
     simp [show (1 + (len - 4) * 4 + offset / 256 * 32) % 4 = 1 by omega,
       show (1 + (len - 4) * 4 + offset / 256 * 32) / 4 % 8 = len - 4 by omega,
       show (1 + (len - 4) * 4 + offset / 256 * 32) / 4 / 8 = offset / 256 by omega,
-      EthLib.Base.bytesToUint_toVector, hb, show 4 + (len - 4) = len by omega,
+      EthLib.Base.ByteOrder.ofLE_toVector, hb, show 4 + (len - 4) = len by omega,
       show offset / 256 * 256 + offset % 256 = offset by omega,
       Nat.min_eq_left (show p ≤ L.length by omega), show offset ≠ 0 by omega,
       show ¬ declared < p + len by omega, hr]
@@ -159,7 +159,7 @@ theorem reads_copyElement {declared : Nat} {L : List UInt8} {p offset len : Nat}
     simp only [hc, ↓reduceIte, copyTwo, List.cons_append, List.nil_append, decompressElements, ht]
     simp [show (2 + (len - 1) * 4) % 4 = 2 by omega,
       show (2 + (len - 1) * 4) / 4 = len - 1 by omega,
-      EthLib.Base.bytesToUint_toVector, hb0, hb1, show len - 1 + 1 = len by omega,
+      EthLib.Base.ByteOrder.ofLE_toVector, hb0, hb1, show len - 1 + 1 = len by omega,
       show offset % 256 + 256 * (offset / 256) = offset by omega,
       Nat.min_eq_left (show p ≤ L.length by omega), show offset ≠ 0 by omega,
       show ¬ declared < p + len by omega, show ¬ s.length + 1 + 1 < 2 by omega, hr]

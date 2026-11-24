@@ -77,8 +77,8 @@ theorem digits_eq_digits4 : Internal.digits = fun d => Wots.digits4 d.bytes := b
   refine Vector.ext fun i hi => Fin.ext ?_
   have h := Vector.getElem_ofFn (i := i) (by simpa only [DIGITS] using hi)
     (f := fun k : Fin 64 =>
-      (⟨bytesToUint d.bytes / 4 ^ k.val % 4, Nat.mod_lt _ (by decide)⟩ : Fin 4))
-  rw [digits_getElem_val, ← Hash.Keccak.Lanes2.bytesToUint_bytes]
+      (⟨Base.ByteOrder.ofLE d.bytes / 4 ^ k.val % 4, Nat.mod_lt _ (by decide)⟩ : Fin 4))
+  rw [digits_getElem_val, ← Hash.Keccak.Lanes2.ofLE_bytes]
   exact (congrArg Fin.val h).symm
 
 /-- The codeword test is the form that builds all 64 digits, then tests the tail and the sum. -/

@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.HashSig
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Cryptography.Xmss.Types
 
 /-!

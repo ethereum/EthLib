@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Serialization.Ssz.Packing
 
 /-! The widths and bit positions of the byte encodings shared by SSZ codecs and trees. -/
@@ -17,7 +17,7 @@ theorem uintBytes_succ (width value : Nat) :
     uintBytes (width + 1) value
       = #[UInt8.ofNat (value % 256)] ++ uintBytes width (value / 256) := by
   -- A byte keeps only the value modulo 256 anyway.
-  rw [uintBytes, uintBytes, Base.uintToBytes_toArray_succ, ← UInt8.ofNat_mod_size (x := value)]
+  rw [uintBytes, uintBytes, Base.ByteOrder.toArray_toLE_succ, ← UInt8.ofNat_mod_size (x := value)]
 
 /-- An integer takes exactly the width it was written at. -/
 theorem uintBytes_size (width value : Nat) : (uintBytes width value).size = width := by

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # X25519
@@ -37,7 +37,7 @@ def decodeScalar (key : Key) : Nat :=
   -- Clear the three low bits of byte 0 and bit 7 of byte 31, and set bit 6 of byte 31.
   --
   -- Then decode the 32 bytes in little-endian order.
-  bytesToUint (Vector.ofFn fun i : Fin 32 =>
+  ByteOrder.ofLE (Vector.ofFn fun i : Fin 32 =>
     if i.val = 0 then key[i] &&& 248
     else if i.val = 31 then (key[i] &&& 127) ||| 64
     else key[i])
@@ -49,7 +49,7 @@ def decodeUCoordinate (u : Key) : Fp :=
   -- Then decode the 32 bytes in little-endian order.
   --
   -- §5 asks to accept a non-canonical value as if reduced modulo `p`, so it is reduced here.
-  Fin.ofNat modulus (bytesToUint (Vector.ofFn fun i : Fin 32 =>
+  Fin.ofNat modulus (ByteOrder.ofLE (Vector.ofFn fun i : Fin 32 =>
     if i.val = 31 then u[i] &&& 127 else u[i]))
 
 /-- Encode a reduced coordinate as 32 little-endian bytes, RFC 7748 §5. -/
@@ -57,7 +57,7 @@ def encodeUCoordinate (u : Fp) : Key :=
   -- Reduce `u` modulo `p`, then write 32 bytes in little-endian order.
   --
   -- The element is already below `p`.
-  uintToBytes 32 u.val
+  ByteOrder.toLE 32 u.val
 
 /-- The two projective points of the ladder and its pending swap, RFC 7748 §5. -/
 structure LadderState where
@@ -122,6 +122,6 @@ def x25519 (scalar u : Key) : Key :=
 /-- The public key at Montgomery base point 9, RFC 7748 §6.1. -/
 def publicKey (scalar : Key) : Key :=
   -- §6.1: `X25519(a, 9)`, the u-coordinate of the base point being 9.
-  x25519 scalar (uintToBytes 32 9)
+  x25519 scalar (ByteOrder.toLE 32 9)
 
 end EthLib.Cryptography.X25519

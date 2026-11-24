@@ -126,7 +126,7 @@ def computePtcOf (state : BeaconState preset fork) (slot : Slot) (epochSeed : By
     Except AccessorError (PayloadTimelinessCommittee preset) := do
   -- The seed `SHA-256(epoch seed || s as 8 bytes, little-endian)`, for the slot `s`.
   let seed :=
-    Cryptography.Hash.Sha256.hash32 ⟨epochSeed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
+    Cryptography.Hash.Sha256.hash32 ⟨epochSeed.toArray ++ (ByteOrder.toLE 8 slot.toNat).toArray⟩
   -- `PTC_SIZE` members, weighted by effective balance, from the slot's committees.
   --
   -- EIP-7732 specifies that sampling.

@@ -134,24 +134,25 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
   rw [decodeSignature, dite_eq_left (size_encodeSignature sig)]
   -- The leaf index is the first four bytes, as a little-endian word.
   have idx := HashSig.readBytes_middle (b := encodeSignature sig) (a := ByteArray.empty)
-    (v := uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat)
+    (v := Base.ByteOrder.toLE LEAF_INDEX_SIZE sig.leafIndex.toNat)
     (c := encodeLayerSignature sig.bottom ++ encodeLayerSignature sig.top) (offset := 0)
     (by simp [encodeSignature, ByteArray.append_assoc, ByteArray.empty_append]) (by simp)
     (by simp [SIG_SIZE])
   -- The bottom layer follows the index, and the top layer follows the bottom.
   have bottom := decodeLayerSignature_middle (b := encodeSignature sig) (sig := sig.bottom)
-    (a := packBytes (uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat))
+    (a := packBytes (Base.ByteOrder.toLE LEAF_INDEX_SIZE sig.leafIndex.toNat))
     (c := encodeLayerSignature sig.top) (offset := LEAF_INDEX_SIZE) (by simp [encodeSignature])
     (by simp) (by simp [SIG_SIZE]; omega)
   have top := decodeLayerSignature_middle (b := encodeSignature sig) (sig := sig.top)
-    (a := packBytes (uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat)
+    (a := packBytes (Base.ByteOrder.toLE LEAF_INDEX_SIZE sig.leafIndex.toNat)
       ++ encodeLayerSignature sig.bottom)
     (c := ByteArray.empty) (offset := LEAF_INDEX_SIZE + LAYER_SIG_SIZE)
     (by simp [encodeSignature, ByteArray.append_empty]) (by simp) (by simp [SIG_SIZE]; omega)
   -- A 32-bit word survives its four bytes.
-  have word : UInt32.ofNat (bytesToUint (uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat))
+  have word :
+      UInt32.ofNat (Base.ByteOrder.ofLE (Base.ByteOrder.toLE LEAF_INDEX_SIZE sig.leafIndex.toNat))
       = sig.leafIndex := by
-    rw [Base.bytesToUint_uintToBytes, Nat.mod_eq_of_lt (by
+    rw [Base.ByteOrder.ofLE_toLE, Nat.mod_eq_of_lt (by
       have := sig.leafIndex.toNat_lt_size
       simpa [LEAF_INDEX_SIZE, UInt32.size] using this), UInt32.ofNat_toNat]
   simp only [decodeLeafIndex, idx, bottom, top, word]
@@ -210,12 +211,12 @@ theorem encodeSignature_decodeSignature {bytes : ByteArray} (sized : bytes.size 
     encodeLayerSignature_decodeLayerSignature bytes (LEAF_INDEX_SIZE + LAYER_SIG_SIZE)
       (by simp only [sized, SIG_SIZE]; omega)]
   -- Four bytes read as a word, and written back, are the same four bytes.
-  have hword : bytesToUint (readBytes bytes 0 LEAF_INDEX_SIZE
+  have hword : Base.ByteOrder.ofLE (readBytes bytes 0 LEAF_INDEX_SIZE
       (by simp only [sized, SIG_SIZE]; omega)) < 2 ^ 32 := by
-    have := Base.bytesToUint_lt (readBytes bytes 0 LEAF_INDEX_SIZE
+    have := Base.ByteOrder.ofLE_lt (readBytes bytes 0 LEAF_INDEX_SIZE
       (by simp only [sized, SIG_SIZE]; omega))
     simpa [LEAF_INDEX_SIZE] using this
-  rw [decodeLeafIndex, UInt32.toNat_ofNat_of_lt' hword, Base.uintToBytes_bytesToUint,
+  rw [decodeLeafIndex, UInt32.toNat_ofNat_of_lt' hword, Base.ByteOrder.toLE_ofLE,
     HashSig.packBytes_readBytes, Nat.zero_add, slice_append _ (by omega) (by omega),
     slice_append _ (by omega) (by omega)]
   -- The slice from 0 to the end is the whole buffer.
@@ -250,7 +251,7 @@ theorem signatureIndex_eq_bytes {bytes : ByteArray} (sized : bytes.size = SIG_SI
         + 2 ^ 24 * bytes[3]!.toNat)) := by
   -- The 4 bytes exist, so each checked read is a plain read.
   have room : 4 ≤ bytes.size := by rw [sized]; decide
-  rw [signatureIndex, dite_eq_left sized, decodeLeafIndex, Base.bytesToUint_eq_foldr]
+  rw [signatureIndex, dite_eq_left sized, decodeLeafIndex, Base.ByteOrder.ofLE_eq_foldr]
   -- Both sides convert the same integer, so compare the integers.
   congr 2
   -- Unroll Horner's rule over the 4 bytes: b_0 + 256 (b_1 + 256 (b_2 + 256 b_3)).

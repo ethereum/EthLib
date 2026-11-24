@@ -3,7 +3,7 @@ module
 public import EthLib.Consensus.BeaconApi.LightClient
 public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.Proofs.LightClient.Containers
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
 import EthLib.Base.Proofs.MapM
 import EthLib.Consensus.Proofs.BeaconApi.Encoding
@@ -279,7 +279,7 @@ private theorem encodeUpdateChunk_ok {config : Config} {genesisValidatorsRoot : 
     ∃ digest payload, .altair ≤ fork ∧ fork = config.forkAtEpoch (contextEpoch update) ∧
       computeForkDigest config genesisValidatorsRoot (contextEpoch update) = .ok digest ∧
       SszType.serialize update = .ok payload ∧ 4 + payload.size < 2 ^ 64 ∧
-      chunk = ⟨(uintToBytes 8 (4 + payload.size)).toArray⟩ ++ ⟨digest.toArray⟩ ++ payload := by
+      chunk = ⟨(ByteOrder.toLE 8 (4 + payload.size)).toArray⟩ ++ ⟨digest.toArray⟩ ++ payload := by
   by_cases altair : .altair ≤ fork
   · by_cases same : fork = config.forkAtEpoch (contextEpoch update)
     · cases digested : computeForkDigest config genesisValidatorsRoot (contextEpoch update) with
@@ -348,31 +348,31 @@ private theorem decodeUpdateChunksFrom_chunk {config : Config} {genesisValidator
     rw [same]
     simpa using recovers
   subst fork_eq
-  have eight : (⟨(uintToBytes 8 (4 + payload.size)).toArray⟩ : ByteArray).size = 8 :=
+  have eight : (⟨(ByteOrder.toLE 8 (4 + payload.size)).toArray⟩ : ByteArray).size = 8 :=
     Vector.size_toArray _
   have four : (⟨digest.toArray⟩ : ByteArray).size = 4 := Vector.size_toArray _
   have position : pre.size + 8 + (4 + payload.size) = pre.size +
-      (⟨(uintToBytes 8 (4 + payload.size)).toArray⟩ ++ ⟨digest.toArray⟩ ++ payload).size := by
+      (⟨(ByteOrder.toLE 8 (4 + payload.size)).toArray⟩ ++ ⟨digest.toArray⟩ ++ payload).size := by
     rw [ByteArray.size_append, ByteArray.size_append, eight, four]
     omega
   rw [← position] at next
-  generalize split : pre ++ (⟨(uintToBytes 8 (4 + payload.size)).toArray⟩ ++ ⟨digest.toArray⟩ ++
+  generalize split : pre ++ (⟨(ByteOrder.toLE 8 (4 + payload.size)).toArray⟩ ++ ⟨digest.toArray⟩ ++
       payload) ++ rest = data at next ⊢
   have total : data.size = pre.size + 8 + (4 + payload.size) + rest.size := by
     rw [← split]
     simp only [ByteArray.size_append, eight, four]
     omega
   have length : ∀ bound : ∀ i : Fin 8, pre.size + i < data.size,
-      bytesToUint (Vector.ofFn fun i : Fin 8 => data[pre.size + i]'(bound i)) =
+      ByteOrder.ofLE (Vector.ofFn fun i : Fin 8 => data[pre.size + i]'(bound i)) =
         4 + payload.size := by
     intro bound
-    rw [ofFn_getElem_append (piece := uintToBytes 8 (4 + payload.size))
+    rw [ofFn_getElem_append (piece := ByteOrder.toLE 8 (4 + payload.size))
       (tail := ⟨digest.toArray⟩ ++ payload ++ rest)
-      (by rw [← split]; simp only [ByteArray.append_assoc]) rfl, bytesToUint_uintToBytes,
+      (by rw [← split]; simp only [ByteArray.append_assoc]) rfl, ByteOrder.ofLE_toLE,
       Nat.mod_eq_of_lt small]
   have digest_read : ∀ bound : ∀ i : Fin 4, pre.size + 8 + i < data.size,
       (Vector.ofFn fun i : Fin 4 => data[pre.size + 8 + i]'(bound i)) = digest := fun bound =>
-    ofFn_getElem_append (pre := pre ++ ⟨(uintToBytes 8 (4 + payload.size)).toArray⟩)
+    ofFn_getElem_append (pre := pre ++ ⟨(ByteOrder.toLE 8 (4 + payload.size)).toArray⟩)
       (tail := payload ++ rest) (by rw [← split]; simp only [ByteArray.append_assoc])
       (by simp [eight]) bound
   have payload_read :
@@ -445,7 +445,8 @@ private theorem encodeUpdateChunk_of_read [NeZero preset.BYTES_PER_LOGS_BLOOM.to
     {update : LightClientUpdate preset (config.forkAtEpoch epoch)}
     (identify : digestsIdentify config genesisValidatorsRoot = true)
     (bound8 : ∀ i : Fin 8, start + i < data.size)
-    (read_length : bytesToUint (Vector.ofFn fun i : Fin 8 => data[start + i]'(bound8 i)) = length)
+    (read_length :
+      ByteOrder.ofLE (Vector.ofFn fun i : Fin 8 => data[start + i]'(bound8 i)) = length)
     (bound4 : ∀ i : Fin 4, start + 8 + i < data.size)
     (found : forkOfDigest config genesisValidatorsRoot
       (Vector.ofFn fun i : Fin 4 => data[start + 8 + i]'(bound4 i)) = some epoch)
@@ -462,7 +463,7 @@ private theorem encodeUpdateChunk_of_read [NeZero preset.BYTES_PER_LOGS_BLOOM.to
   have same : config.forkAtEpoch epoch = config.forkAtEpoch (contextEpoch update) := by
     simpa using recovers
   have wrote := SszType.serialize_deserialize read
-  have small : length < 2 ^ 64 := read_length ▸ bytesToUint_lt _
+  have small : length < 2 ^ 64 := read_length ▸ ByteOrder.ofLE_lt _
   have rest_size : ((⟨(Vector.ofFn fun i : Fin 4 => data[start + 8 + i]'(bound4 i)).toArray⟩ :
       ByteArray) ++ data.extract (start + 12) (start + 8 + length)).size = length := by
     have four : (⟨(Vector.ofFn fun i : Fin 4 => data[start + 8 + i]'(bound4 i)).toArray⟩ :
@@ -471,9 +472,9 @@ private theorem encodeUpdateChunk_of_read [NeZero preset.BYTES_PER_LOGS_BLOOM.to
     omega
   simp only [encodeUpdateChunk, checkUpdateFork, eq_true altair, eq_true same, digested, wrote,
     Except.mapError, bind, Except.bind, pure, Except.pure, rest_size, small, ↓reduceIte]
-  have length_bytes : (⟨(uintToBytes 8 length).toArray⟩ : ByteArray) =
+  have length_bytes : (⟨(ByteOrder.toLE 8 length).toArray⟩ : ByteArray) =
       data.extract start (start + 8) := by
-    rw [← read_length, uintToBytes_bytesToUint, ofFn_getElem_eq_extract (by omega) bound8]
+    rw [← read_length, ByteOrder.toLE_ofLE, ofFn_getElem_eq_extract (by omega) bound8]
   rw [length_bytes, ofFn_getElem_eq_extract (by omega) bound4, ByteArray.extract_append_extract,
     Nat.min_eq_left (by omega), Nat.max_eq_right (by omega), ByteArray.extract_append_extract,
     Nat.min_eq_left (by omega), Nat.max_eq_right (by omega)]
@@ -510,7 +511,7 @@ private theorem foldlM_of_decodeUpdateChunksFrom [NeZero preset.BYTES_PER_LOGS_B
     rw [dite_eq_left header] at decoded
     have bound8 : ∀ i : Fin 8, start + i < data.size := fun i => by omega
     obtain ⟨length, read_length⟩ : ∃ length,
-        bytesToUint (Vector.ofFn fun i : Fin 8 => data[start + i]'(bound8 i)) = length :=
+        ByteOrder.ofLE (Vector.ofFn fun i : Fin 8 => data[start + i]'(bound8 i)) = length :=
       ⟨_, rfl⟩
     simp only [read_length] at decoded
     by_cases short : length < 4

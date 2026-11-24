@@ -91,10 +91,10 @@ def toDigest (d : Digest) : XmssSecurity.Digest :=
 
 @[simp] theorem ofDigest_toDigest (d : Digest) : ofDigest (toDigest d) = d := by
   apply Hash.Keccak.Lanes2.bytes_injective
-  rw [HashSig.bytes_ofDigestLanes, toDigest, Hash.Keccak.Lanes2.bytes_eq_uintToBytes,
-    ← ofBV_ofNat_bytesToUint (uintToBytes 16 (d.toNat)) (w := XmssSecurity.digestBits)
+  rw [HashSig.bytes_ofDigestLanes, toDigest, Hash.Keccak.Lanes2.bytes_eq_toLE,
+    ← ofBV_ofNat_ofLE (Base.ByteOrder.toLE 16 (d.toNat)) (w := XmssSecurity.digestBits)
       (by simp [XmssSecurity.digestBits]),
-    Base.bytesToUint_uintToBytes, Nat.mod_eq_of_lt (by simpa using Hash.Keccak.Lanes2.toNat_lt d)]
+    Base.ByteOrder.ofLE_toLE, Nat.mod_eq_of_lt (by simpa using Hash.Keccak.Lanes2.toNat_lt d)]
 
 @[simp] theorem toDigest_ofDigest (d : XmssSecurity.Digest) : toDigest (ofDigest d) = d :=
   HashSig.ofDigestLanes_injective (ofDigest_toDigest _)

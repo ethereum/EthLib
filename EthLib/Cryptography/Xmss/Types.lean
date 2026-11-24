@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.HashSig
 public import EthLib.Cryptography.Xmss.Constants
@@ -73,13 +73,6 @@ inductive Layer where
 def Layer.toNat : Layer → Nat
   | .bottom => 0
   | .top => 1
-
-/-! ## Little-endian integers
-
-The conversions `LE_{8k}` and `LE^-1` of the paper are the shared little-endian ones.
--/
-
-export EthLib.Base (uintToBytes bytesToUint)
 
 /-! ## Hash inputs
 

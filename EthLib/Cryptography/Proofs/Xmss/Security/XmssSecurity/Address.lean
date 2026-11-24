@@ -21,7 +21,7 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
-open EthLib.Cryptography.HashSig (toList_uintToBytes append_ofNat)
+open EthLib.Cryptography.HashSig (toList_toLE append_ofNat)
 
 /-! ## The encoding -/
 
@@ -33,7 +33,7 @@ theorem toList_encode (address : Address) :
             address.lo.toNat) := by
   -- The address is a concatenation of 4 + 3 + 1 + 8 bytes, which is its length constant.
   rw [Hash.Keccak.lanesBytes_lanes2, Address.bytes_encode]
-  simp only [toList_uintToBytes, XmssSecurity.fieldBytes,
+  simp only [toList_toLE, XmssSecurity.fieldBytes,
     XmssSecurity.tweakFields,
     append_ofNat address.tau.val address.mu.val address.tau.isLt address.mu.isLt]
   rfl

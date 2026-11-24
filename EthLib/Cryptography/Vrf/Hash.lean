@@ -59,7 +59,7 @@ def nodeInput (left right : Digest) : ByteArray :=
 
 The index is `LE32(i)`, its four bytes least significant first. -/
 def outputInput (i : UInt32) (secret : Digest) : ByteArray :=
-  packBytes VRF_OUTPUT_DST ++ packBytes (uintToBytes 4 i.toNat) ++ packBytes secret
+  packBytes VRF_OUTPUT_DST ++ packBytes (Base.ByteOrder.toLE 4 i.toNat) ++ packBytes secret
 
 /-- The bytes a mixed value reads: the mix prefix, the output, then the randomness. -/
 def mixInput (output randomness : Digest) : ByteArray :=

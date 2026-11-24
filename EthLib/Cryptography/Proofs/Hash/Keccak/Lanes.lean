@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Basic
 public import EthLib.Base.Proofs.Bytes
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import Mathlib.Data.FinEnum
 import Mathlib.Tactic
 
@@ -244,21 +244,21 @@ theorem Lanes2.toNat_getElem_bytes (w : Lanes2) (j : Nat) (hj : j < 16) :
       Nat.shiftRight_eq_div_pow]
 
 /-- The bytes of two lanes are the little-endian bytes of their integer. -/
-theorem Lanes2.bytes_eq_uintToBytes (w : Lanes2) : w.bytes = Base.uintToBytes 16 w.toNat := by
+theorem Lanes2.bytes_eq_toLE (w : Lanes2) : w.bytes = Base.ByteOrder.toLE 16 w.toNat := by
   have := w.lo.toNat_lt
   apply Vector.ext
   intro j hj
   apply UInt8.toNat_inj.mp
   rw [Lanes2.toNat_getElem_bytes _ _ hj]
-  simp only [Base.uintToBytes, Lanes2.toNat, Vector.getElem_ofFn, UInt8.toNat_ofNat',
+  simp only [Base.ByteOrder.toLE, Lanes2.toNat, Vector.getElem_ofFn, UInt8.toNat_ofNat',
     Nat.shiftRight_eq_div_pow]
   interval_cases j <;>
     simp only [Nat.reducePow, Nat.reduceMul, Nat.reduceLT, Nat.reduceSub, ite_true, ite_false] <;>
     omega
 
 /-- The little-endian integer of the bytes of two lanes is the integer of the lanes. -/
-theorem Lanes2.bytesToUint_bytes (w : Lanes2) : Base.bytesToUint w.bytes = w.toNat := by
-  rw [w.bytes_eq_uintToBytes, Base.bytesToUint_uintToBytes,
+theorem Lanes2.ofLE_bytes (w : Lanes2) : Base.ByteOrder.ofLE w.bytes = w.toNat := by
+  rw [w.bytes_eq_toLE, Base.ByteOrder.ofLE_toLE,
     Nat.mod_eq_of_lt (by simpa using w.toNat_lt)]
 
 /-- The bytes of the two lanes read at an offset are the 16 bytes there. -/
@@ -282,8 +282,8 @@ theorem Lanes2.bytes_read (b : ByteArray) (offset : Nat) (h : offset + 16 ≤ b.
 /-- Two lanes with the same bytes are the same lanes. -/
 theorem Lanes2.bytes_injective : Function.Injective Lanes2.bytes := by
   intro a b h
-  have := congrArg Base.bytesToUint h
-  rw [Lanes2.bytesToUint_bytes, Lanes2.bytesToUint_bytes] at this
+  have := congrArg Base.ByteOrder.ofLE h
+  rw [Lanes2.ofLE_bytes, Lanes2.ofLE_bytes] at this
   exact Lanes2.toNat_injective this
 
 /-- The bytes of the four lanes read at an offset are the 32 bytes there. -/

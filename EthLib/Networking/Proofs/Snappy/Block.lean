@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.Snappy.Block
 public import EthLib.Base.Proofs.ByteList
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Networking.Encoding.Varint
 public import EthLib.Networking.Proofs.Encoding.Varint
 
@@ -25,7 +25,7 @@ Properties of Snappy block decompression, against `format_description.txt` of `g
 
 namespace EthLib.Networking.Proofs.Snappy.Block
 
-open EthLib.Base (bytesToUint uintToBytes)
+open EthLib.Base (ByteOrder.ofLE ByteOrder.toLE)
 open EthLib.Networking.Snappy
 
 /-! ## The preamble (§1) -/
@@ -195,7 +195,7 @@ theorem decompressElements_fuel (declared : Nat) (input : List UInt8) (out : Byt
 theorem decompressElements_copy_first {declared : Nat} {tag : UInt8} {rest : List UInt8}
     {fuel : Nat} (hcopy : tag.toNat % 4 ≠ 0) :
     ∃ e, decompressElements declared (tag :: rest) ByteArray.empty (fuel + 1) = .error e := by
-  simp only [decompressElements, beq_iff_eq, hcopy, ↓reduceIte, EthLib.Base.bytesToUint_toVector]
+  simp only [decompressElements, beq_iff_eq, hcopy, ↓reduceIte, EthLib.Base.ByteOrder.ofLE_toVector]
   repeat' split
   -- Every branch is an error, since a copy of at least 1 byte cannot read an empty output.
   all_goals first
@@ -307,12 +307,12 @@ theorem decompressElements_literal_append {declared : Nat} {o data s : List UInt
     generalize literalLengthBytes (data.length - 1) = k at *
     have ht : (UInt8.ofNat ((59 + k) * 4)).toNat = (59 + k) * 4 := by
       rw [UInt8.toNat_ofNat']; omega
-    have hv : (uintToBytes k (data.length - 1)).toList.foldr
+    have hv : (ByteOrder.toLE k (data.length - 1)).toList.foldr
         (fun byte acc => byte.toNat + 256 * acc) 0 = data.length - 1 := by
-      simpa using EthLib.Base.foldr_uintToBytes_of_lt hlt
-    have hk' : (uintToBytes k (data.length - 1)).toList.length = k := by simp
+      simpa using EthLib.Base.ByteOrder.foldr_toLE_of_lt hlt
+    have hk' : (ByteOrder.toLE k (data.length - 1)).toList.length = k := by simp
     simp only [List.cons_append, List.append_assoc]
-    simp only [decompressElements, ht, EthLib.Base.bytesToUint_toVector]
+    simp only [decompressElements, ht, EthLib.Base.ByteOrder.ofLE_toVector]
     simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv, hk',
       show data.length - 1 + 1 = data.length by omega,
       show ¬ declared < o.length + data.length by omega,

@@ -45,7 +45,7 @@ theorem secretInput_inj {seed seed' : Seed} {i i' : UInt32} :
     -- The seed starts at byte 13 on both sides.
     obtain ⟨-, hs⟩ := Array.append_inj hps (by simp)
     -- Both indices are below `2^32 = 256^4`, so their four little-endian bytes are exact.
-    exact ⟨Vector.toArray_inj.mp hs, UInt32.toNat_inj.mp (Base.uintToBytes_inj
+    exact ⟨Vector.toArray_inj.mp hs, UInt32.toNat_inj.mp (Base.ByteOrder.toLE_inj
       (lt_of_lt_of_eq i.toNat_lt (by decide)) (lt_of_lt_of_eq i'.toNat_lt (by decide))
       (Vector.toArray_inj.mp hi))⟩
   · rintro ⟨rfl, rfl⟩

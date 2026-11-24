@@ -36,9 +36,9 @@ variable {f : Array UInt64 → Lanes4} {publicParam : PublicParam} {layer : Laye
 /-- The randomizer of trial `c` is the little-endian bytes of `R_0 + c` modulo `2^128`. -/
 theorem trialRandomizer_eq (base : Randomizer) (c : Nat) :
     (trialRandomizer base c).bytes =
-      uintToBytes RANDOMIZER_LEN ((bytesToUint base.bytes + c) % 2 ^ 128) := by
-  rw [Hash.Keccak.Lanes2.bytes_eq_uintToBytes, toNat_trialRandomizer,
-    Hash.Keccak.Lanes2.bytesToUint_bytes]
+      Base.ByteOrder.toLE RANDOMIZER_LEN ((Base.ByteOrder.ofLE base.bytes + c) % 2 ^ 128) := by
+  rw [Hash.Keccak.Lanes2.bytes_eq_toLE, toNat_trialRandomizer,
+    Hash.Keccak.Lanes2.ofLE_bytes]
   rfl
 
 /-- The search tests trial `c` on the digest of its randomizer `rho_c`, in any monad.

@@ -39,7 +39,7 @@ instance : ExportError ForkChoiceError where
 
 /-- The little-endian bytes of a number, in a given width. -/
 def littleEndian (width value : Nat) : ByteArray :=
-  Base.packBytes (uintToBytes width value)
+  Base.packBytes (ByteOrder.toLE width value)
 
 /-- The leaves of the filtered tree, which the vectors check with their weights.
 

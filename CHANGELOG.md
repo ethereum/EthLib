@@ -1007,6 +1007,35 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the little-endian integers move to the new module `EthLib.Base.ByteOrder`, and their names say the byte order ([#4368](https://github.com/ethereum/EthLib/pull/4368)).
+  `EthLib.Base.LittleEndian` and `EthLib.Base.Proofs.LittleEndian` become `EthLib.Base.ByteOrder` and `EthLib.Base.Proofs.ByteOrder`.
+  `rotl32`, `uint32OfBytes` and `uint32Byte` move to `EthLib.Base.Word32`, with unchanged names and bodies.
+  The functions keep their types and bodies under new names, and their arguments are now `n` and `x`:
+  - `Base.uintToBytes` is `Base.ByteOrder.toLE`.
+  - `Base.bytesToUint` is `Base.ByteOrder.ofLE`.
+  `Base.bytesToUint64 v h` is removed: write `UInt64.ofNat (ByteOrder.ofLE v)`.
+  The lemmas `bytesToUint64_uintToBytes` and `uintToBytes_bytesToUint64` are removed with it; `ByteOrder.ofLE_toLE`, `ByteOrder.toLE_ofLE` and `ByteOrder.toNat_ofNat_ofLE` give both round trips.
+  The re-exports `Xmss.uintToBytes`, `Xmss.bytesToUint` and `Vrf.uintToBytes` are removed.
+  The lemmas keep their statements under new names in `EthLib.Base.Proofs.ByteOrder`:
+  - `uintToBytes_eq_div` is `ByteOrder.toLE_eq_div`, and `uintToBytes_toList_succ` is `ByteOrder.toList_toLE_succ`.
+  - `uintToBytes_toArray_succ` is `ByteOrder.toArray_toLE_succ`, and `bytesToUint_ofFn_succ` is `ByteOrder.ofLE_ofFn_succ`.
+  - `bytesToUint_uintToBytes` is `ByteOrder.ofLE_toLE`, and `uintToBytes_bytesToUint` is `ByteOrder.toLE_ofLE`.
+  - `uintToBytes_inj` is `ByteOrder.toLE_inj`, and `bytesToUint_lt` is `ByteOrder.ofLE_lt`.
+  - `bytesToUint_eq_foldr` is `ByteOrder.ofLE_eq_foldr`, and `bytesToUint_toVector` is `ByteOrder.ofLE_toVector`.
+  - `foldr_uintToBytes` is `ByteOrder.foldr_toLE`, and `foldr_uintToBytes_of_lt` is `ByteOrder.foldr_toLE_of_lt`.
+  `toNat_bytesToUint64` becomes `ByteOrder.toNat_ofNat_ofLE`, now stated as `(UInt64.ofNat (ofLE v)).toNat = ofLE v` for a vector `v` of `k ≤ 8` bytes.
+  The lemmas named after the old functions take the new names, with unchanged statements:
+  - `Hash.Keccak.Lanes2.bytes_eq_uintToBytes` is `Hash.Keccak.Lanes2.bytes_eq_toLE`.
+  - `Hash.Keccak.Lanes2.bytesToUint_bytes` is `Hash.Keccak.Lanes2.ofLE_bytes`.
+  - `HashSig.ofBV_eq_uintToBytes` is `HashSig.ofBV_eq_toLE`, and `HashSig.toList_uintToBytes` is `HashSig.toList_toLE`.
+  - `HashSig.bytesToUint_ofBV` is `HashSig.ofLE_ofBV`, and `HashSig.ofBV_ofNat_bytesToUint` is `HashSig.ofBV_ofNat_ofLE`.
+  - `Sphincs.digits_getElem_val_bytesToUint` is `Sphincs.digits_getElem_val_ofLE`.
+  - `Sphincs.Unforgeability.Bridge.bytesToUint_ofDigest` is `Sphincs.Unforgeability.Bridge.ofLE_ofDigest`.
+  - `Wots.bytesToUint_eq_sum_digits4` is `Wots.ofLE_eq_sum_digits4`.
+  - `Networking.Proofs.Snappy.Frame.uintToBytes_three` is `Networking.Proofs.Snappy.Frame.toLE_three`.
+  Scrypt's Integerify reads the last 64 bytes of its value through `ByteOrder.ofLE`, in place of a fold of its own, and `Hash.Scrypt.integerify_eq` keeps its statement.
+  Migration: replace each old name with the new one.
+
 - In Lean, `Base.byteAt` is renamed `Base.byteAtOrZero`, so that its zero past the end of the buffer is visible at each call ([#4347](https://github.com/ethereum/EthLib/pull/4347)).
   Every lemma about it follows: `byteAt_X` is now `byteAtOrZero_X`, and `eq_of_byteAt` and `Holds.of_byteAt` are now `eq_of_byteAtOrZero` and `Holds.of_byteAtOrZero`.
   The statements are unchanged.

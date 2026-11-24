@@ -17,7 +17,7 @@ Consensus-layer peers compress request and response messages with it.
 
 namespace EthLib.Networking.Snappy
 
-open EthLib.Base (bytesToUint uintToBytes)
+open EthLib.Base (ByteOrder.ofLE ByteOrder.toLE)
 open EthLib.Cryptography.Hash.Crc32c (crc32c)
 
 /-- The ten bytes every stream starts with (§4.1).
@@ -99,7 +99,7 @@ def FrameError.code : FrameError → UInt32
 /-- The uncompressed data of a chunk, if the stored checksum matches it (§3). -/
 def verifyChecksum (checksum data : List UInt8) : Except FrameError (List UInt8) :=
   -- §3: the checksum is always stored as a four bytes long integer, in little-endian.
-  let stored := UInt32.ofNat (bytesToUint checksum.toArray.toVector)
+  let stored := UInt32.ofNat (ByteOrder.ofLE checksum.toArray.toVector)
   -- §4.2 and §4.3: it is the masked CRC-32C of the uncompressed data.
   let computed := maskedCrc ⟨data.toArray⟩
   if stored == computed then .ok data else .error (.checksumMismatch stored computed)
@@ -162,7 +162,7 @@ def readChunk : List UInt8 → Except FrameError (List UInt8 × List UInt8)
   -- §1: a chunk is first a single byte of chunk identifier, then a three-byte length.
   | type :: l0 :: l1 :: l2 :: rest =>
       -- §1: the length is little-endian, from 0 to 16777215, and excludes the four header bytes.
-      let len := bytesToUint #v[l0, l1, l2]
+      let len := ByteOrder.ofLE #v[l0, l1, l2]
       -- §1: then the data, of that length.
       if rest.length < len then
         .error (.chunkPastEnd len rest.length)
@@ -245,9 +245,9 @@ def uncompressedChunk (data : List UInt8) : List UInt8 :=
   -- §1 and §4.3: the type 0x01, then the length of the chunk data in three bytes, little-endian.
   --
   -- §4.3: that data is the four checksum bytes, then the raw bytes.
-  uncompressedType :: (uintToBytes 3 (data.length + 4)).toList ++
+  uncompressedType :: (ByteOrder.toLE 3 (data.length + 4)).toList ++
     -- §3: the masked CRC-32C, as a four bytes long integer in little-endian.
-    (uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data
+    (ByteOrder.toLE 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data
 
 /-- The data cut into pieces of 65536 bytes, the last one shorter, each written by `chunk`.
 

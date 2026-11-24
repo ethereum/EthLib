@@ -21,7 +21,7 @@ So a chunk of data that does not compress takes eight bytes more than the data.
 
 namespace EthLib.Networking.Snappy
 
-open EthLib.Base (uintToBytes)
+open EthLib.Base (ByteOrder.toLE)
 
 /-- One compressed data chunk that holds `data`, at most 65536 bytes (§4.2). -/
 def compressedChunk (data : List UInt8) : List UInt8 :=
@@ -30,9 +30,9 @@ def compressedChunk (data : List UInt8) : List UInt8 :=
   -- §1 and §4.2: the type 0x00, then the length of the chunk data in three bytes, little-endian.
   --
   -- §4.2: that data is the four checksum bytes, then the block.
-  compressedType :: (uintToBytes 3 (block.length + 4)).toList ++
+  compressedType :: (ByteOrder.toLE 3 (block.length + 4)).toList ++
     -- §4.2: the masked CRC-32C of the uncompressed data, four bytes little-endian (§3).
-    (uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ block
+    (ByteOrder.toLE 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ block
 
 /-- The shorter of the compressed and the uncompressed chunk of `data`, at most 65536 bytes.
 

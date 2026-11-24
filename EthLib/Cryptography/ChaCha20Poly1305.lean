@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
+public import EthLib.Base.Word32
 
 /-!
 # ChaCha20 and Poly1305
@@ -148,7 +149,7 @@ def clampR (key : Key) : Nat :=
   -- §2.5.1: `r` is bytes 0 to 15 of the key, read as a little-endian number.
   --
   -- The clamp keeps the bits of `r` set in `0x0ffffffc0ffffffc0ffffffc0fffffff`.
-  bytesToUint (Vector.ofFn fun i : Fin 16 => key[i.val]'(by omega)) &&&
+  ByteOrder.ofLE (Vector.ofFn fun i : Fin 16 => key[i.val]'(by omega)) &&&
     0x0ffffffc0ffffffc0ffffffc0fffffff
 
 /-- Accumulate 16-byte blocks with their appended one bit, RFC 8439 §2.5. -/
@@ -159,16 +160,16 @@ def poly1305Accumulator (r : Nat) (message : ByteArray) : Nat :=
     -- `n` is chunk `i` of up to 16 bytes, then the byte `0x01`, read as a little-endian number.
     --
     -- For a chunk of `k` bytes, the byte `0x01` adds `256^k`.
-    let n := bytesToUint (⟨chunk.data, rfl⟩ : Vector UInt8 chunk.size) + 256 ^ chunk.size
+    let n := ByteOrder.ofLE (⟨chunk.data, rfl⟩ : Vector UInt8 chunk.size) + 256 ^ chunk.size
     -- `a := (r * (a + n)) mod p`.
     ((acc + n) * r) % (2 ^ 130 - 5)) 0
 
 /-- The low 128 bits of the accumulator plus the key's high half, RFC 8439 §2.5. -/
 def poly1305 (key : Key) (message : ByteArray) : Tag :=
   -- §2.5.1: `s` is bytes 16 to 31 of the key, read as a little-endian number.
-  let s := bytesToUint (Vector.ofFn fun i : Fin 16 => key[16 + i.val]'(by omega))
+  let s := ByteOrder.ofLE (Vector.ofFn fun i : Fin 16 => key[16 + i.val]'(by omega))
   -- The tag is `(a + s) mod 2^128`, as 16 little-endian bytes.
-  uintToBytes 16 (poly1305Accumulator (clampR key) message + s)
+  ByteOrder.toLE 16 (poly1305Accumulator (clampR key) message + s)
 
 /-- The first 32 bytes of ChaCha20 block zero, RFC 8439 §2.6. -/
 def poly1305Key (key : Key) (nonce : Nonce) : Key :=
@@ -192,7 +193,7 @@ def macData (aad ciphertext : ByteArray) : ByteArray :=
   --
   -- Then come the byte lengths of the AAD and of the ciphertext, as 8 little-endian bytes each.
   aad ++ pad16 aad ++ ciphertext ++ pad16 ciphertext ++
-    packBytes (uintToBytes 8 aad.size) ++ packBytes (uintToBytes 8 ciphertext.size)
+    packBytes (ByteOrder.toLE 8 aad.size) ++ packBytes (ByteOrder.toLE 8 ciphertext.size)
 
 /-- AEAD admits at most `2^32 - 1` blocks and `2^64 - 1` AAD bytes, RFC 8439 §2.8. -/
 def checkLengths (aadLength textLength : Nat) : Except ChaCha20Poly1305Error Unit :=

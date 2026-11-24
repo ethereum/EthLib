@@ -28,8 +28,8 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 
-export EthLib.Cryptography.HashSig (ofBV getElem_ofBV toList_ofBV ofBV_ofNat ofBV_eq_uintToBytes
-  ofBV_ofNat_bytesToUint ofBV_inj)
+export EthLib.Cryptography.HashSig (ofBV getElem_ofBV toList_ofBV ofBV_ofNat ofBV_eq_toLE
+  ofBV_ofNat_ofLE ofBV_inj)
 
 /-! ## The lanes of each object
 

@@ -55,9 +55,10 @@ theorem Address.toNat_encode_lo (address : Address) :
 /-- The bytes of an address's lanes are its four fields, each in its own little-endian bytes. -/
 theorem Address.bytes_encode (address : Address) :
     address.encode.bytes.toList =
-      (uintToBytes 4 address.lo.toNat).toList ++ (uintToBytes 3 address.hi.val).toList
-        ++ (uintToBytes 1 (address.tau.val + 32 * address.mu.val)).toList
-        ++ (uintToBytes 8 0).toList := by
+      (Base.ByteOrder.toLE 4 address.lo.toNat).toList
+        ++ (Base.ByteOrder.toLE 3 address.hi.val).toList
+        ++ (Base.ByteOrder.toLE 1 (address.tau.val + 32 * address.mu.val)).toList
+        ++ (Base.ByteOrder.toLE 8 0).toList := by
   have hlo : address.lo.toNat < 2 ^ 32 := address.lo.toNat_lt_size
   have hhi := address.hi.isLt
   have ht : address.tau.val + 32 * address.mu.val < 2 ^ 8 := by
@@ -68,7 +69,7 @@ theorem Address.bytes_encode (address : Address) :
         + 2 ^ 56 * (address.tau.val + 32 * address.mu.val) := by
     rw [Hash.Keccak.Lanes2.toNat, Address.toNat_encode_lo]
     simp [Address.encode]
-  rw [Hash.Keccak.Lanes2.bytes_eq_uintToBytes, hn]
+  rw [Hash.Keccak.Lanes2.bytes_eq_toLE, hn]
   generalize address.lo.toNat = a at *
   generalize address.hi.val = b at *
   generalize address.tau.val + 32 * address.mu.val = c at *
@@ -76,7 +77,7 @@ theorem Address.bytes_encode (address : Address) :
   intro j h1 h2
   simp only [Vector.length_toList] at h1
   apply UInt8.toNat_inj.mp
-  simp only [Vector.getElem_toList, Base.uintToBytes_eq_div, Vector.getElem_ofFn]
+  simp only [Vector.getElem_toList, Base.ByteOrder.toLE_eq_div, Vector.getElem_ofFn]
   interval_cases j <;> simp [UInt8.toNat_ofNat'] <;> omega
 
 /-! ## The two layers -/

@@ -5,7 +5,7 @@ public import EthLib.Consensus.Accessors
 public import Mathlib.Data.Finset.Card
 public import Mathlib.Data.Finset.Prod
 
-import EthLib.Base.Proofs.LittleEndian
+import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # Proofs: acceptance and inputs of balance-weighted draws
@@ -191,7 +191,7 @@ theorem drawAccepts_eq_of_pectra (preset : Preset) (fork : Base.Fork)
 /-- A draw input has 32 seed bytes and eight bytes for its block number. -/
 @[simp] theorem size_drawInput (seed : Bytes32) (block : Nat) :
     (drawInput seed block).size = 40 := by
-  change (seed.toArray ++ (uintToBytes 8 block).toArray).size = 40
+  change (seed.toArray ++ (ByteOrder.toLE 8 block).toArray).size = 40
   simp
 
 /-- A shuffle pivot input has 32 seed bytes and one byte for its round. -/
@@ -203,7 +203,7 @@ theorem drawAccepts_eq_of_pectra (preset : Preset) (fork : Base.Fork)
 /-- A shuffle bucket input has the 33 bytes of its round and four bytes for its bucket. -/
 @[simp] theorem Shuffle.size_bucketInput (seed : Bytes32) (round bucket : Nat) :
     (Shuffle.bucketInput seed round bucket).size = 37 := by
-  change (seed.toArray.push (UInt8.ofNat round) ++ (uintToBytes 4 bucket).toArray).size = 37
+  change (seed.toArray.push (UInt8.ofNat round) ++ (ByteOrder.toLE 4 bucket).toArray).size = 37
   simp
 
 /-- Two draw inputs are equal exactly when their seeds and their block numbers are equal.
@@ -216,7 +216,7 @@ theorem drawInput_eq_iff {seed other : Bytes32} {block block' : Nat}
   · intro same
     obtain ⟨seeds, bytes⟩ := Array.append_inj (ByteArray.mk.inj same) (by simp)
     exact ⟨Vector.toArray_inj.mp seeds,
-      uintToBytes_inj leftFits rightFits (Vector.toArray_inj.mp bytes)⟩
+      ByteOrder.toLE_inj leftFits rightFits (Vector.toArray_inj.mp bytes)⟩
   · rintro ⟨rfl, rfl⟩
     rfl
 

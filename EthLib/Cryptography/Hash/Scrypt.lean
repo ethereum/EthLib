@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
+public import EthLib.Base.Word32
 public import EthLib.Cryptography.Hash.Pbkdf2
 
 /-!
@@ -238,7 +239,7 @@ def blockMix (input : ByteArray) (r : Nat) : Except ScryptError ByteArray :=
 /-- `Integerify`: the last 64 bytes of a ROMix value as a little-endian integer, RFC 7914 §5. -/
 def integerify (r : Nat) (x : MixBlock r) : Nat :=
   -- `B[2 * r - 1]`, as the RFC defines `Integerify`.
-  (x.val.extract (128 * r - 64) (128 * r)).data.foldr (fun byte acc => 256 * acc + byte.toNat) 0
+  Base.ByteOrder.ofLE (x.val.extract (128 * r - 64) (128 * r)).data.toVector
 
 /-- Store each `X` before its BlockMix step, RFC 7914 §5, step 2. -/
 def romixFill (r : Nat) (positive : 0 < r) {n : Nat} : (count i : Nat) → i + count = n →

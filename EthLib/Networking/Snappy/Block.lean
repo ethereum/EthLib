@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Networking.Encoding.Varint
 
 /-!
@@ -17,7 +17,7 @@ Source: [`format_description.txt`][format] of `google/snappy`, §1 and §2.
 
 namespace EthLib.Networking.Snappy
 
-open EthLib.Base (bytesToUint uintToBytes)
+open EthLib.Base (ByteOrder.ofLE ByteOrder.toLE)
 
 /-- The most bytes the preamble may occupy.
 
@@ -215,7 +215,7 @@ def decompressElements (declared : Nat) :
             .error (.literalPastEnd extra rest.length)
           else
             -- §2.1: len - 1 is stored after the tag byte, little-endian.
-            let len := bytesToUint (rest.take extra).toArray.toVector + 1
+            let len := ByteOrder.ofLE (rest.take extra).toArray.toVector + 1
             let rest := rest.drop extra
             -- §2.1: the literal itself follows after the length.
             if rest.length < len then
@@ -241,8 +241,8 @@ def decompressElements (declared : Nat) :
           --
           -- §2.2.2 and §2.2.3: the offset is a little-endian 16-bit or 32-bit integer.
           let offset :=
-            if t == 1 then upper / 8 * 256 + bytesToUint (rest.take 1).toArray.toVector
-            else bytesToUint (rest.take width).toArray.toVector
+            if t == 1 then upper / 8 * 256 + ByteOrder.ofLE (rest.take 1).toArray.toVector
+            else ByteOrder.ofLE (rest.take width).toArray.toVector
           -- §2.2: offsets of zero can be encoded, but are not legal.
           if offset == 0 then
             .error (.copyOffsetZero out.size)
@@ -301,7 +301,7 @@ def literalHeader (n : Nat) : List UInt8 :=
   else
     let k := literalLengthBytes (n - 1)
     -- §2.1: the upper six bits of the tag are 60, 61, 62 or 63 for 1 to 4 bytes, so 59 + k.
-    UInt8.ofNat ((59 + k) * 4) :: (uintToBytes k (n - 1)).toList
+    UInt8.ofNat ((59 + k) * 4) :: (ByteOrder.toLE k (n - 1)).toList
 
 /-- One literal element that holds `data`, of 1 to 2^32 bytes (§2.1).
 

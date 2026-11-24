@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Consensus.Preset
 public import EthLib.Cryptography.Hash.Sha256
 
@@ -67,12 +67,12 @@ def roundInput (seed : Bytes32) (round : Nat) : ByteArray :=
 /-- The pivot of a round: the first eight bytes of a hash, little-endian, modulo the count. -/
 def pivot (seed : Bytes32) (round count : Nat) : Nat :=
   -- The round key `K_i` of round `i` of the cipher, in `Z_N` for the count `N`.
-  bytesToUint ((Cryptography.Hash.Sha256.hash32 (roundInput seed round)).take 8) % count
+  ByteOrder.ofLE ((Cryptography.Hash.Sha256.hash32 (roundInput seed round)).take 8) % count
 
 /-- The seed and the round number, followed by the bucket number as four bytes. -/
 def bucketInput (seed : Bytes32) (round bucket : Nat) : ByteArray :=
   -- `seed || r || b`, with the bucket number `b` as 4 bytes, little-endian.
-  ⟨(roundInput seed round).data ++ (uintToBytes 4 bucket).toArray⟩
+  ⟨(roundInput seed round).data ++ (ByteOrder.toLE 4 bucket).toArray⟩
 
 /-- The 256 bits of a round that decide the positions of one bucket of 256 positions. -/
 def bucketBits (seed : Bytes32) (round bucket : Nat) : Bytes32 :=

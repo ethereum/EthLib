@@ -26,19 +26,19 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 open XmssSecurity.TargetSum (decodeDigest digestEncoding digestTop digitOffset zeroBits)
-open EthLib.Cryptography.HashSig (bytesToUint_ofBV)
+open EthLib.Cryptography.HashSig (ofLE_ofBV)
 
 /-- A digest's integer is its bit vector's. -/
 @[simp] theorem toNat_ofDigest (x : XmssSecurity.Digest) :
     Hash.Keccak.Lanes2.toNat (ofDigest x) = x.toNat := by
-  rw [← Hash.Keccak.Lanes2.bytesToUint_bytes, HashSig.bytes_ofDigestLanes]
-  exact bytesToUint_ofBV 16 x
+  rw [← Hash.Keccak.Lanes2.ofLE_bytes, HashSig.bytes_ofDigestLanes]
+  exact ofLE_ofBV 16 x
 
 /-- A randomizer's integer is its bit vector's. -/
 @[simp] theorem toNat_ofRandomizer (x : XmssSecurity.Randomness) :
     Hash.Keccak.Lanes2.toNat (ofRandomizer x) = x.toNat := by
-  rw [← Hash.Keccak.Lanes2.bytesToUint_bytes, HashSig.bytes_ofDigestLanes]
-  exact bytesToUint_ofBV 16 x
+  rw [← Hash.Keccak.Lanes2.ofLE_bytes, HashSig.bytes_ofDigestLanes]
+  exact ofLE_ofBV 16 x
 
 /-! ## The digits -/
 

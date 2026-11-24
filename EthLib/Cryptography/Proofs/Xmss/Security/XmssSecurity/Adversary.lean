@@ -102,10 +102,10 @@ private theorem toNat_pieces (x : BitVec 256) :
 @[simp] theorem ofRandomizer_toRandomness (r : Randomizer) :
     ofRandomizer (toRandomness r) = r := by
   apply Hash.Keccak.Lanes2.bytes_injective
-  rw [HashSig.bytes_ofDigestLanes, toRandomness, Hash.Keccak.Lanes2.bytes_eq_uintToBytes,
-    ← ofBV_ofNat_bytesToUint (uintToBytes 16 (r.toNat)) (w := XmssSecurity.randomnessBits)
+  rw [HashSig.bytes_ofDigestLanes, toRandomness, Hash.Keccak.Lanes2.bytes_eq_toLE,
+    ← ofBV_ofNat_ofLE (Base.ByteOrder.toLE 16 (r.toNat)) (w := XmssSecurity.randomnessBits)
       (by simp [XmssSecurity.randomnessBits]),
-    Base.bytesToUint_uintToBytes, Nat.mod_eq_of_lt (by simpa using Hash.Keccak.Lanes2.toNat_lt r)]
+    Base.ByteOrder.ofLE_toLE, Nat.mod_eq_of_lt (by simpa using Hash.Keccak.Lanes2.toNat_lt r)]
 
 @[simp] theorem toRandomness_ofRandomizer (r : XmssSecurity.Randomness) :
     toRandomness (ofRandomizer r) = r :=

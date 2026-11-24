@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Cryptography.Hash.Sha256
@@ -75,8 +75,8 @@ def computeForkDigest (config : Config) (genesisValidatorsRoot : Root) (epoch : 
   -- Each is 8 bytes, little-endian.
   let parameters := config.getBlobParameters epoch
   let mask := Cryptography.Hash.Sha256.hash32
-    ⟨(uintToBytes 8 parameters.epoch.toNat).toArray ++
-      (uintToBytes 8 parameters.maxBlobsPerBlock.toNat).toArray⟩
+    ⟨(ByteOrder.toLE 8 parameters.epoch.toNat).toArray ++
+      (ByteOrder.toLE 8 parameters.maxBlobsPerBlock.toNat).toArray⟩
   -- Byte `i < 4` of the digest is byte `i` of the root XOR byte `i` of that hash.
   return Vector.ofFn fun i => base[i.val] ^^^ mask[i.val]
 

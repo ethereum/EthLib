@@ -38,7 +38,7 @@ variable {preset : Preset} {fork : Base.Fork}
 /-- The seed of the proposer draw of a slot: the hash of the epoch's seed and the slot. -/
 def proposerSlotSeed (seed : Bytes32) (slot : Slot) : Bytes32 :=
   -- `SHA-256(seed || s as 8 bytes, little-endian)`, for the slot `s`, as EIP-7917 specifies.
-  Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
+  Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (ByteOrder.toLE 8 slot.toNat).toArray⟩
 
 /-- The proposer of a slot, drawn from candidates with the seed of the slot.
 

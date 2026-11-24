@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Serialization.Ssz.Error
 
 /-! Byte encodings shared by SSZ serialization and merkleization. -/
@@ -16,7 +16,7 @@ A value wider than the given width is truncated.
 
 A caller needing exact recovery has to check the range itself.
 -/
-def uintBytes (width value : Nat) : Bytes := (Base.uintToBytes width value).toArray
+def uintBytes (width value : Nat) : Bytes := (Base.ByteOrder.toLE width value).toArray
 
 /-- The eight bits that land in one byte, gathered into it. -/
 def packByte (bits : Array Bool) (byteIndex : Nat) : UInt8 :=

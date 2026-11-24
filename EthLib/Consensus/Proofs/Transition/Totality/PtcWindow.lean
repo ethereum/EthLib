@@ -36,7 +36,7 @@ def PtcDrawsEnd (state : BeaconState preset fork) (epoch : Epoch) : Prop :=
     ∀ slot, computeEpochAtSlot preset slot = epoch → ∀ members,
       slotCommitteeMembers state slot = .ok members →
         ∃ committee, computeBalanceWeightedSelection state members
-          (Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩)
+          (Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (ByteOrder.toLE 8 slot.toNat).toArray⟩)
           preset.PTC_SIZE false = .ok committee
 
 /-- The assumptions under which the payload timeliness committees of an epoch can be drawn.

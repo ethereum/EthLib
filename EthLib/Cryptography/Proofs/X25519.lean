@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.X25519
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # Proofs: the X25519 clamp and coordinate encoding
@@ -37,16 +37,16 @@ The clamp and the mask change only the first and the last byte, so the proofs sp
 -/
 
 /-- A number read from `k + 1` bytes is the number of the first `k`, plus the last at `256 ^ k`. -/
-private theorem bytesToUint_ofFn_castSucc : ∀ {k : Nat} (f : Fin (k + 1) → UInt8),
-    bytesToUint (Vector.ofFn f)
-      = bytesToUint (Vector.ofFn fun i : Fin k => f i.castSucc)
+private theorem ofLE_ofFn_castSucc : ∀ {k : Nat} (f : Fin (k + 1) → UInt8),
+    ByteOrder.ofLE (Vector.ofFn f)
+      = ByteOrder.ofLE (Vector.ofFn fun i : Fin k => f i.castSucc)
         + (f (Fin.last k)).toNat * 256 ^ k := by
   intro k
   induction k with
-  | zero => intro f; simp [bytesToUint_eq_foldr, Vector.toList_ofFn]
+  | zero => intro f; simp [ByteOrder.ofLE_eq_foldr, Vector.toList_ofFn]
   | succ k ih =>
     intro f
-    rw [bytesToUint_ofFn_succ, bytesToUint_ofFn_succ (fun i : Fin (k + 1) => f i.castSucc),
+    rw [ByteOrder.ofLE_ofFn_succ, ByteOrder.ofLE_ofFn_succ (fun i : Fin (k + 1) => f i.castSucc),
       ih (fun i => f i.succ)]
     simp only [Fin.succ_last, Fin.castSucc_zero, Nat.pow_succ]
     rw [show (fun i : Fin k => f i.castSucc.succ) = fun i => f i.succ.castSucc from rfl]
@@ -55,19 +55,19 @@ private theorem bytesToUint_ofFn_castSucc : ∀ {k : Nat} (f : Fin (k + 1) → U
     rw [Nat.mul_left_comm, Nat.mul_comm (256 ^ k) 256]
 
 /-- A number read from 32 bytes splits into its first byte, the 30 middle ones and its last. -/
-private theorem bytesToUint_ofFn_32 (f : Fin 32 → UInt8) :
-    bytesToUint (Vector.ofFn f) = (f 0).toNat
-      + 256 * bytesToUint (Vector.ofFn fun i : Fin 30 => f i.succ.castSucc)
+private theorem ofLE_ofFn_32 (f : Fin 32 → UInt8) :
+    ByteOrder.ofLE (Vector.ofFn f) = (f 0).toNat
+      + 256 * ByteOrder.ofLE (Vector.ofFn fun i : Fin 30 => f i.succ.castSucc)
       + (f 31).toNat * 256 ^ 31 := by
-  rw [bytesToUint_ofFn_castSucc, bytesToUint_ofFn_succ]
+  rw [ofLE_ofFn_castSucc, ByteOrder.ofLE_ofFn_succ]
   rfl
 
 /-- The bytes of a key split in the same way. -/
-private theorem bytesToUint_key (key : Key) :
-    bytesToUint key = key[0].toNat
-      + 256 * bytesToUint (Vector.ofFn fun i : Fin 30 => key[i.succ.castSucc])
+private theorem ofLE_key (key : Key) :
+    ByteOrder.ofLE key = key[0].toNat
+      + 256 * ByteOrder.ofLE (Vector.ofFn fun i : Fin 30 => key[i.succ.castSucc])
       + key[31].toNat * 256 ^ 31 := by
-  have h := bytesToUint_ofFn_32 fun i => key[i]
+  have h := ofLE_ofFn_32 fun i => key[i]
   rwa [show (Vector.ofFn fun i : Fin 32 => key[i]) = key from
     Vector.ext fun i hi => by simp] at h
 
@@ -132,7 +132,7 @@ private theorem mask_arith {l c : Nat} (hl : l < 256 ^ 31) :
 
 Bits above bit 255 do not occur, since the key has 32 bytes. -/
 theorem decodeScalar_eq (key : Key) :
-    decodeScalar key = 2 ^ 254 + bytesToUint key % 2 ^ 254 / 8 * 8 := by
+    decodeScalar key = 2 ^ 254 + ByteOrder.ofLE key % 2 ^ 254 / 8 * 8 := by
   have hmid : (Vector.ofFn fun i : Fin 30 =>
       (fun i : Fin 32 => if i.val = 0 then key[i] &&& 248
         else if i.val = 31 then (key[i] &&& 127) ||| 64 else key[i]) i.succ.castSucc)
@@ -141,12 +141,12 @@ theorem decodeScalar_eq (key : Key) :
     intro i hi
     simp [show i ≠ 30 by omega]
   have hd : decodeScalar key = (key[0] &&& 248).toNat
-      + 256 * bytesToUint (Vector.ofFn fun i : Fin 30 => key[i.succ.castSucc])
+      + 256 * ByteOrder.ofLE (Vector.ofFn fun i : Fin 30 => key[i.succ.castSucc])
       + ((key[31] &&& 127) ||| 64).toNat * 256 ^ 31 := by
-    rw [decodeScalar, bytesToUint_ofFn_32, hmid]
+    rw [decodeScalar, ofLE_ofFn_32, hmid]
     rfl
-  rw [hd, bytesToUint_key, toNat_and_248 key[0], toNat_clamp_high key[31]]
-  exact clamp_arith key[0].toNat_lt (bytesToUint_lt _)
+  rw [hd, ofLE_key, toNat_and_248 key[0], toNat_clamp_high key[31]]
+  exact clamp_arith key[0].toNat_lt (ByteOrder.ofLE_lt _)
 
 /-- A clamped scalar is a multiple of eight, the cofactor of Curve25519, RFC 7748 §5. -/
 theorem decodeScalar_mod_eight (key : Key) : decodeScalar key % 8 = 0 := by
@@ -157,7 +157,7 @@ theorem decodeScalar_mod_eight (key : Key) : decodeScalar key % 8 = 0 := by
 
 So bit 255 of the scalar is clear. -/
 theorem decodeScalar_lt (key : Key) : decodeScalar key < 2 ^ 255 := by
-  have := Nat.mod_lt (bytesToUint key) (Nat.two_pow_pos 254)
+  have := Nat.mod_lt (ByteOrder.ofLE key) (Nat.two_pow_pos 254)
   rw [decodeScalar_eq]
   omega
 
@@ -174,26 +174,26 @@ theorem le_decodeScalar (key : Key) : 2 ^ 254 ≤ decodeScalar key := by
 
 So a noncanonical value, from the prime up to `2 ^ 255`, is accepted and reduced. -/
 theorem val_decodeUCoordinate (u : Key) :
-    (decodeUCoordinate u).val = bytesToUint u % 2 ^ 255 % modulus := by
+    (decodeUCoordinate u).val = ByteOrder.ofLE u % 2 ^ 255 % modulus := by
   have hlow : (Vector.ofFn fun i : Fin 31 =>
       (fun i : Fin 32 => if i.val = 31 then u[i] &&& 127 else u[i]) i.castSucc)
       = Vector.ofFn fun i : Fin 31 => u[i.castSucc] := by
     apply Vector.ext
     intro i hi
     simp [show i ≠ 31 by omega]
-  have hd : bytesToUint (Vector.ofFn fun i : Fin 32 =>
+  have hd : ByteOrder.ofLE (Vector.ofFn fun i : Fin 32 =>
         if i.val = 31 then u[i] &&& 127 else u[i])
-      = bytesToUint (Vector.ofFn fun i : Fin 31 => u[i.castSucc])
+      = ByteOrder.ofLE (Vector.ofFn fun i : Fin 31 => u[i.castSucc])
         + (u[31] &&& 127).toNat * 256 ^ 31 := by
-    rw [bytesToUint_ofFn_castSucc, hlow]
+    rw [ofLE_ofFn_castSucc, hlow]
     rfl
-  have hu : bytesToUint u
-      = bytesToUint (Vector.ofFn fun i : Fin 31 => u[i.castSucc]) + u[31].toNat * 256 ^ 31 := by
-    have h := bytesToUint_ofFn_castSucc fun i : Fin 32 => u[i]
+  have hu : ByteOrder.ofLE u
+      = ByteOrder.ofLE (Vector.ofFn fun i : Fin 31 => u[i.castSucc]) + u[31].toNat * 256 ^ 31 := by
+    have h := ofLE_ofFn_castSucc fun i : Fin 32 => u[i]
     rwa [show (Vector.ofFn fun i : Fin 32 => u[i]) = u from
       Vector.ext fun i hi => by simp] at h
   rw [decodeUCoordinate, Fin.val_ofNat, hd, hu, toNat_and_127 u[31],
-    mask_arith (bytesToUint_lt _)]
+    mask_arith (ByteOrder.ofLE_lt _)]
 
 /-- Decoding the bytes of a reduced coordinate returns that coordinate, RFC 7748 §5. -/
 @[simp] theorem decodeUCoordinate_encodeUCoordinate (u : Fp) :
@@ -204,7 +204,7 @@ theorem val_decodeUCoordinate (u : Key) :
       rw [show (256 : Nat) = 2 ^ 8 from rfl, ← Nat.pow_mul]]
     omega
   apply Fin.ext
-  rw [val_decodeUCoordinate, encodeUCoordinate, bytesToUint_uintToBytes, Nat.mod_eq_of_lt h32,
+  rw [val_decodeUCoordinate, encodeUCoordinate, ByteOrder.ofLE_toLE, Nat.mod_eq_of_lt h32,
     Nat.mod_eq_of_lt (show u.val < 2 ^ 255 by omega), Nat.mod_eq_of_lt u.isLt]
 
 /-! ## The bits that the ladder reads -/

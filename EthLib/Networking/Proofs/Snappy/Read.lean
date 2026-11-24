@@ -21,7 +21,7 @@ namespace EthLib.Networking.Proofs.Snappy.Read
 
 open EthLib.Networking.Snappy
 open EthLib.Networking.Proofs.Snappy.Frame
-open EthLib.Base (bytesToUint uintToBytes)
+open EthLib.Base (ByteOrder.ofLE ByteOrder.toLE)
 
 /-! ## One chunk -/
 
@@ -48,7 +48,7 @@ Otherwise the reader goes on after it, for the bytes that remain. -/
 theorem readChunks_chunk_ok {type : UInt8} {body out : List UInt8} (need : Nat)
     (rest : List UInt8) (fuel : Nat) (h : body.length < 2 ^ 24)
     (hc : decodeChunk type body = .ok out) :
-    readChunks need (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) (fuel + 1) =
+    readChunks need (type :: (ByteOrder.toLE 3 body.length).toList ++ body ++ rest) (fuel + 1) =
       if need ≤ out.length then .ok (out, rest)
       else (readChunks (need - out.length) rest fuel).map
         fun read => (out ++ read.1, read.2) := by
@@ -227,7 +227,7 @@ That body must be shorter than 2^24 bytes. -/
 theorem readChunks_encodeChunks {chunk : List UInt8 → List UInt8}
     (hchunk : ∀ piece : List UInt8, piece.length ≤ maxChunkLength →
       ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
-        chunk piece = type :: (uintToBytes 3 body.length).toList ++ body ∧
+        chunk piece = type :: (ByteOrder.toLE 3 body.length).toList ++ body ∧
         decodeChunk type body = .ok piece)
     (data : List UInt8) {n fuel : Nat}
     (hn : data.length ≤ n) (hfuel : (encodeChunks chunk data n).length ≤ fuel) :
@@ -283,13 +283,13 @@ The fuel of the encoder must be at least the data length.
 theorem readFrames_streamIdentifier_encodeChunks {chunk : List UInt8 → List UInt8}
     (hchunk : ∀ piece : List UInt8, piece.length ≤ maxChunkLength →
       ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
-        chunk piece = type :: (uintToBytes 3 body.length).toList ++ body ∧
+        chunk piece = type :: (ByteOrder.toLE 3 body.length).toList ++ body ∧
         decodeChunk type body = .ok piece)
     (data : List UInt8) {n : Nat} (hn : data.length ≤ n) :
     readFrames data.length (streamIdentifier ++ encodeChunks chunk data n) =
       .ok (data, []) := by
   have hid : streamIdentifier ++ encodeChunks chunk data n =
-      streamIdentifierType :: (uintToBytes 3 (streamIdentifier.drop 4).length).toList ++
+      streamIdentifierType :: (ByteOrder.toLE 3 (streamIdentifier.drop 4).length).toList ++
         streamIdentifier.drop 4 ++ encodeChunks chunk data n := rfl
   have hc : decodeChunk streamIdentifierType (streamIdentifier.drop 4) = .ok [] := rfl
   -- The stream starts with the identifier, so the reader reads chunks, with its length as fuel.

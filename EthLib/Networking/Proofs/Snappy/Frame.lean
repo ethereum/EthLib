@@ -25,35 +25,36 @@ Properties of the Snappy framing format, against `framing_format.txt` of `google
 namespace EthLib.Networking.Proofs.Snappy.Frame
 
 open EthLib.Networking.Snappy
-open EthLib.Base (bytesToUint uintToBytes)
+open EthLib.Base (ByteOrder.ofLE ByteOrder.toLE)
 
 /-! ## One chunk -/
 
 /-- The three length bytes of a length below 2^24, as a list, and their value. -/
-theorem uintToBytes_three {n : Nat} (h : n < 2 ^ 24) :
-    ∃ a b c, (uintToBytes 3 n).toList = [a, b, c] ∧ bytesToUint #v[a, b, c] = n := by
-  have hv : uintToBytes 3 n =
-      #v[(uintToBytes 3 n)[0], (uintToBytes 3 n)[1], (uintToBytes 3 n)[2]] := by
+theorem toLE_three {n : Nat} (h : n < 2 ^ 24) :
+    ∃ a b c, (ByteOrder.toLE 3 n).toList = [a, b, c] ∧ ByteOrder.ofLE #v[a, b, c] = n := by
+  have hv : ByteOrder.toLE 3 n =
+      #v[(ByteOrder.toLE 3 n)[0], (ByteOrder.toLE 3 n)[1], (ByteOrder.toLE 3 n)[2]] := by
     ext i hi
     match i, hi with
     | 0, _ | 1, _ | 2, _ => rfl
   refine ⟨_, _, _, by rw [hv]; rfl, ?_⟩
-  rw [← hv, EthLib.Base.bytesToUint_uintToBytes]
+  rw [← hv, EthLib.Base.ByteOrder.ofLE_toLE]
   exact Nat.mod_eq_of_lt (by simpa using h)
 
 /-- A chunk that decodes is read whole, and the bytes after it are left. -/
 theorem readChunk_chunk_ok {type : UInt8} {body out : List UInt8} (rest : List UInt8)
     (h : body.length < 2 ^ 24) (hc : decodeChunk type body = .ok out) :
-    readChunk (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) = .ok (out, rest) := by
-  obtain ⟨a, b, c, habc, hv⟩ := uintToBytes_three h
+    readChunk (type :: (ByteOrder.toLE 3 body.length).toList ++ body ++ rest)
+      = .ok (out, rest) := by
+  obtain ⟨a, b, c, habc, hv⟩ := toLE_three h
   rw [habc]
   simp [readChunk, hv, hc, Except.map, show ¬ body.length + rest.length < body.length by omega]
 
 /-- A chunk that fails to decode makes the read fail with its error. -/
 theorem readChunk_chunk_error {type : UInt8} {body : List UInt8} {e : FrameError}
     (rest : List UInt8) (h : body.length < 2 ^ 24) (hc : decodeChunk type body = .error e) :
-    readChunk (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) = .error e := by
-  obtain ⟨a, b, c, habc, hv⟩ := uintToBytes_three h
+    readChunk (type :: (ByteOrder.toLE 3 body.length).toList ++ body ++ rest) = .error e := by
+  obtain ⟨a, b, c, habc, hv⟩ := toLE_three h
   rw [habc]
   simp [readChunk, hv, hc, Except.map, show ¬ body.length + rest.length < body.length by omega]
 
@@ -70,14 +71,16 @@ theorem readChunk_ok_split {bs out rest : List UInt8} (h : readChunk bs = .ok (o
       split at h
       · simp at h
       · rename_i hl
-        have hlen : (r.take (bytesToUint #v[l0, l1, l2])).length = bytesToUint #v[l0, l1, l2] :=
+        have hlen :
+            (r.take (ByteOrder.ofLE #v[l0, l1, l2])).length = ByteOrder.ofLE #v[l0, l1, l2] :=
           List.length_take_of_le (by omega)
-        cases hc : decodeChunk type (r.take (bytesToUint #v[l0, l1, l2])) with
+        cases hc : decodeChunk type (r.take (ByteOrder.ofLE #v[l0, l1, l2])) with
         | error e => simp [hc, Except.map] at h
         | ok o =>
           simp only [hc, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
-          refine ⟨type :: l0 :: l1 :: l2 :: r.take (bytesToUint #v[l0, l1, l2]), by simp, by simp,
+          refine ⟨type :: l0 :: l1 :: l2 :: r.take (ByteOrder.ofLE #v[l0, l1, l2]), by simp,
+            by simp,
             ?_⟩
           simp [readChunk, hlen, List.take_of_length_le, hc, Except.map]
   | [], h | [_], h | [_, _], h | [_, _, _], h => simp [readChunk] at h
@@ -91,7 +94,7 @@ theorem decodeChunks_cons_succ (b : UInt8) (l : List UInt8) (fuel : Nat) :
 /-- A chunk that decodes adds its output, and the loop goes on after it. -/
 theorem decodeChunks_chunk_ok {type : UInt8} {body out : List UInt8} (rest : List UInt8)
     (fuel : Nat) (h : body.length < 2 ^ 24) (hc : decodeChunk type body = .ok out) :
-    decodeChunks (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) (fuel + 1) =
+    decodeChunks (type :: (ByteOrder.toLE 3 body.length).toList ++ body ++ rest) (fuel + 1) =
       (decodeChunks rest fuel).map (out ++ ·) := by
   have := readChunk_chunk_ok rest h hc
   simp only [List.cons_append] at this ⊢
@@ -102,7 +105,7 @@ theorem decodeChunks_chunk_ok {type : UInt8} {body out : List UInt8} (rest : Lis
 theorem decodeChunks_chunk_error {type : UInt8} {body : List UInt8} {e : FrameError}
     (rest : List UInt8) (fuel : Nat) (h : body.length < 2 ^ 24)
     (hc : decodeChunk type body = .error e) :
-    decodeChunks (type :: (uintToBytes 3 body.length).toList ++ body ++ rest) (fuel + 1) =
+    decodeChunks (type :: (ByteOrder.toLE 3 body.length).toList ++ body ++ rest) (fuel + 1) =
       .error e := by
   have := readChunk_chunk_error rest h hc
   simp only [List.cons_append] at this ⊢
@@ -110,16 +113,16 @@ theorem decodeChunks_chunk_error {type : UInt8} {body : List UInt8} {e : FrameEr
   rfl
 
 /-- The four bytes of a 32-bit value, such as a checksum, read back as that value. -/
-private theorem foldr_uintToBytes_uint32 (c : UInt32) :
-    Vector.foldr (fun byte acc => byte.toNat + 256 * acc) 0 (uintToBytes 4 c.toNat) = c.toNat :=
-  EthLib.Base.foldr_uintToBytes_of_lt (UInt32.toNat_lt _)
+private theorem foldr_toLE_uint32 (c : UInt32) :
+    Vector.foldr (fun byte acc => byte.toNat + 256 * acc) 0 (ByteOrder.toLE 4 c.toNat) = c.toNat :=
+  EthLib.Base.ByteOrder.foldr_toLE_of_lt (UInt32.toNat_lt _)
 
 /-- An uncompressed chunk of at most 65536 bytes with its own checksum decodes to its data. -/
 theorem decodeChunk_uncompressed {data : List UInt8} (h : data.length ≤ maxChunkLength) :
     decodeChunk uncompressedType
-        ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data) = .ok data := by
+        ((ByteOrder.toLE 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data) = .ok data := by
   simp [decodeChunk, verifyChecksum, compressedType, uncompressedType,
-    EthLib.Base.bytesToUint_toVector, foldr_uintToBytes_uint32,
+    EthLib.Base.ByteOrder.ofLE_toVector, foldr_toLE_uint32,
     show ¬ maxChunkLength < data.length by omega]
 
 /-- A compressed chunk decodes to its data (§4.2).
@@ -131,11 +134,11 @@ Its checksum is the one of the decompressed data.
 theorem decodeChunk_compressed {block data : List UInt8}
     (hb : decompressList block = .ok data) (hd : data.length ≤ maxChunkLength) :
     decodeChunk compressedType
-        ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ block) = .ok data := by
+        ((ByteOrder.toLE 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ block) = .ok data := by
   -- The preamble of a block that decompresses declares the length of its output.
   obtain ⟨rest, hpre⟩ := Block.decompressList_length_eq_declared hb
-  simp [decodeChunk, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector,
-    foldr_uintToBytes_uint32, show ¬ maxChunkLength < data.length by omega]
+  simp [decodeChunk, hpre, hb, verifyChecksum, EthLib.Base.ByteOrder.ofLE_toVector,
+    foldr_toLE_uint32, show ¬ maxChunkLength < data.length by omega]
 
 /-- A compressed chunk whose block is the compressor's output decodes to its data.
 
@@ -144,7 +147,7 @@ So some compressed chunk of each length up to 65536 bytes decodes.
 theorem decodeChunk_compressed_compress {data : List UInt8}
     (h : data.length ≤ maxChunkLength) :
     decodeChunk compressedType
-        ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++
+        ((ByteOrder.toLE 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++
           (compress ⟨data.toArray⟩).data.toList) = .ok data :=
   decodeChunk_compressed
     (Compress.decompressList_compress (src := ⟨data.toArray⟩)
@@ -155,15 +158,15 @@ theorem decodeChunk_compressed_compress {data : List UInt8}
 /-- An uncompressed chunk is a chunk header followed by its checksum and data. -/
 theorem uncompressedChunk_eq (data : List UInt8) :
     uncompressedChunk data =
-      let body := (uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data
-      uncompressedType :: (uintToBytes 3 body.length).toList ++ body := by
+      let body := (ByteOrder.toLE 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data
+      uncompressedType :: (ByteOrder.toLE 3 body.length).toList ++ body := by
   simp [uncompressedChunk, Nat.add_comm]
 
 /-- An uncompressed chunk of at most 65536 bytes is a header and a body that decodes to its data.
 -/
 theorem uncompressedChunk_spec {data : List UInt8} (h : data.length ≤ maxChunkLength) :
     ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
-      uncompressedChunk data = type :: (uintToBytes 3 body.length).toList ++ body ∧
+      uncompressedChunk data = type :: (ByteOrder.toLE 3 body.length).toList ++ body ∧
       decodeChunk type body = .ok data := by
   refine ⟨uncompressedType, _, ?_, ?_, decodeChunk_uncompressed h⟩
   · simp only [maxChunkLength] at h
@@ -178,7 +181,7 @@ Each chunk of at most 65536 bytes must be a header and a body that decodes to th
 theorem decodeChunks_encodeChunks {chunk : List UInt8 → List UInt8}
     (hchunk : ∀ piece : List UInt8, piece.length ≤ maxChunkLength →
       ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
-        chunk piece = type :: (uintToBytes 3 body.length).toList ++ body ∧
+        chunk piece = type :: (ByteOrder.toLE 3 body.length).toList ++ body ∧
         decodeChunk type body = .ok piece)
     (data : List UInt8) {n fuel : Nat}
     (hn : data.length ≤ n) (hfuel : (encodeChunks chunk data n).length ≤ fuel) :
@@ -208,7 +211,7 @@ theorem decodeChunks_encodeChunks {chunk : List UInt8 → List UInt8}
 theorem decodeFramesList_streamIdentifier (rest : List UInt8) :
     decodeFramesList (streamIdentifier ++ rest) = decodeChunks rest (rest.length + 9) := by
   have hid : streamIdentifier ++ rest =
-      streamIdentifierType :: (uintToBytes 3 (streamIdentifier.drop 4).length).toList ++
+      streamIdentifierType :: (ByteOrder.toLE 3 (streamIdentifier.drop 4).length).toList ++
         streamIdentifier.drop 4 ++ rest := rfl
   have hc : decodeChunk streamIdentifierType (streamIdentifier.drop 4) = .ok [] := rfl
   have hlen : (streamIdentifier ++ rest).length = rest.length + 9 + 1 := by
@@ -248,14 +251,14 @@ theorem readChunk_append {bs out rest : List UInt8} (t : List UInt8)
       split at h
       · simp at h
       · rename_i hl
-        have hl' : ¬ (r ++ t).length < bytesToUint #v[l0, l1, l2] := by
+        have hl' : ¬ (r ++ t).length < ByteOrder.ofLE #v[l0, l1, l2] := by
           simp only [List.length_append]
           omega
-        have htake : (r ++ t).take (bytesToUint #v[l0, l1, l2]) =
-            r.take (bytesToUint #v[l0, l1, l2]) := List.take_append_of_le_length (by omega)
-        have hdrop : (r ++ t).drop (bytesToUint #v[l0, l1, l2]) =
-            r.drop (bytesToUint #v[l0, l1, l2]) ++ t := List.drop_append_of_le_length (by omega)
-        cases hc : decodeChunk type (r.take (bytesToUint #v[l0, l1, l2])) with
+        have htake : (r ++ t).take (ByteOrder.ofLE #v[l0, l1, l2]) =
+            r.take (ByteOrder.ofLE #v[l0, l1, l2]) := List.take_append_of_le_length (by omega)
+        have hdrop : (r ++ t).drop (ByteOrder.ofLE #v[l0, l1, l2]) =
+            r.drop (ByteOrder.ofLE #v[l0, l1, l2]) ++ t := List.drop_append_of_le_length (by omega)
+        cases hc : decodeChunk type (r.take (ByteOrder.ofLE #v[l0, l1, l2])) with
         | error e => simp [hc, Except.map] at h
         | ok o =>
           simp only [hc, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
@@ -375,8 +378,8 @@ theorem decodeFramesList_ok_prefix {bs out : List UInt8} (h : decodeFramesList b
         have ht : t = 0xff := by simpa [streamIdentifierType] using ht
         subst ht
         -- The three length bytes, read as a number.
-        have hb : bytesToUint #v[l0, l1, l2] = l0.toNat + 256 * (l1.toNat + 256 * l2.toNat) := by
-          simp [EthLib.Base.bytesToUint_eq_foldr]
+        have hb : ByteOrder.ofLE #v[l0, l1, l2] = l0.toNat + 256 * (l1.toNat + 256 * l2.toNat) := by
+          simp [EthLib.Base.ByteOrder.ofLE_eq_foldr]
         rw [List.length_cons, decodeChunks_cons_succ] at h
         cases hr : readChunk (255 :: l0 :: l1 :: l2 :: rest) with
         | error e => simp [hr, bind, Except.bind] at h
@@ -421,7 +424,7 @@ theorem decodeFramesList_ok_prefix {bs out : List UInt8} (h : decodeFramesList b
 theorem decodeFramesList_chunk_error {type : UInt8} {body : List UInt8} {e : FrameError}
     (rest : List UInt8) (h : body.length < 2 ^ 24) (hc : decodeChunk type body = .error e) :
     decodeFramesList
-        (streamIdentifier ++ (type :: (uintToBytes 3 body.length).toList ++ body ++ rest)) =
+        (streamIdentifier ++ (type :: (ByteOrder.toLE 3 body.length).toList ++ body ++ rest)) =
       .error e := by
   rw [decodeFramesList_streamIdentifier]
   exact decodeChunks_chunk_error rest _ h hc
@@ -468,26 +471,26 @@ theorem decodeChunk_compressed_tooLarge {body rest : List UInt8} {declared : Nat
 /-- An uncompressed chunk is rejected if its checksum is not the masked CRC-32C of its data (§3). -/
 theorem decodeChunk_uncompressed_checksumMismatch {checksum data : List UInt8}
     (hcs : checksum.length = 4) (hd : data.length ≤ maxChunkLength)
-    (hne : UInt32.ofNat (bytesToUint checksum.toArray.toVector) ≠ maskedCrc ⟨data.toArray⟩) :
+    (hne : UInt32.ofNat (ByteOrder.ofLE checksum.toArray.toVector) ≠ maskedCrc ⟨data.toArray⟩) :
     decodeChunk uncompressedType (checksum ++ data) =
-      .error (.checksumMismatch (UInt32.ofNat (bytesToUint checksum.toArray.toVector))
+      .error (.checksumMismatch (UInt32.ofNat (ByteOrder.ofLE checksum.toArray.toVector))
         (maskedCrc ⟨data.toArray⟩)) := by
-  simp only [EthLib.Base.bytesToUint_toVector] at hne
+  simp only [EthLib.Base.ByteOrder.ofLE_toVector] at hne
   simp [decodeChunk, compressedType, uncompressedType, hcs, verifyChecksum,
-    EthLib.Base.bytesToUint_toVector, hne,
+    EthLib.Base.ByteOrder.ofLE_toVector, hne,
     show ¬ maxChunkLength < data.length by omega]
 
 /-- A compressed chunk is rejected if its checksum does not match its decompressed data (§3). -/
 theorem decodeChunk_compressed_checksumMismatch {checksum block data : List UInt8}
     (hcs : checksum.length = 4) (hb : decompressList block = .ok data)
     (hd : data.length ≤ maxChunkLength)
-    (hne : UInt32.ofNat (bytesToUint checksum.toArray.toVector) ≠ maskedCrc ⟨data.toArray⟩) :
+    (hne : UInt32.ofNat (ByteOrder.ofLE checksum.toArray.toVector) ≠ maskedCrc ⟨data.toArray⟩) :
     decodeChunk compressedType (checksum ++ block) =
-      .error (.checksumMismatch (UInt32.ofNat (bytesToUint checksum.toArray.toVector))
+      .error (.checksumMismatch (UInt32.ofNat (ByteOrder.ofLE checksum.toArray.toVector))
         (maskedCrc ⟨data.toArray⟩)) := by
   obtain ⟨rest, hpre⟩ := Block.decompressList_length_eq_declared hb
-  simp only [EthLib.Base.bytesToUint_toVector] at hne
-  simp [decodeChunk, hcs, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector, hne,
+  simp only [EthLib.Base.ByteOrder.ofLE_toVector] at hne
+  simp [decodeChunk, hcs, hpre, hb, verifyChecksum, EthLib.Base.ByteOrder.ofLE_toVector, hne,
     show ¬ maxChunkLength < data.length by omega]
 
 /-! ## Error codes -/

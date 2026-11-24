@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.U256
 public import EthLib.Base.Uint64
 public import EthLib.Cryptography.Hash.Sha256
@@ -103,7 +103,7 @@ def computeShuffledPrefix (config : SubnetParameters)
   -- The period is `floor((epoch + offset) / E)`.
   let period := shifted / config.EPOCHS_PER_SUBNET_SUBSCRIPTION
   -- The seed is SHA-256 of the period as eight little-endian bytes.
-  let seed := Cryptography.Hash.Sha256.hash32 ⟨(Base.uintToBytes 8 period.toNat).toArray⟩
+  let seed := Cryptography.Hash.Sha256.hash32 ⟨(Base.ByteOrder.toLE 8 period.toNat).toArray⟩
   -- The `2^b` prefixes are counted by a 64-bit integer, so `b >= 64` is an error.
   --
   -- It is checked after the seed, where the count `2^b` is first needed.

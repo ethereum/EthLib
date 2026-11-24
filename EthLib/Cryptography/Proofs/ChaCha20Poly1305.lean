@@ -158,7 +158,7 @@ It clears bits 0 and 1 of every word but the first: the bottom two bits of bytes
 Every other bit below 128 is the bit of the key's low half, and no bit from 128 up is set. -/
 theorem testBit_clampR (key : Key) (i : Nat) :
     (clampR key).testBit i
-      = ((Base.bytesToUint (Vector.ofFn fun j : Fin 16 => key[j.val]'(by omega))).testBit i
+      = ((Base.ByteOrder.ofLE (Vector.ofFn fun j : Fin 16 => key[j.val]'(by omega))).testBit i
           && (decide (i < 128) && decide (i % 32 < 28)
             && (decide (i < 32) || decide (2 ≤ i % 32)))) := by
   rw [← testBit_clampMask]
@@ -385,8 +385,8 @@ theorem encrypt_eq_ok_iff (key : Key) (nonce : Nonce) (aad plaintext ciphertext 
           (block key (1 + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide))) ∧
         tag = poly1305 (Vector.ofFn fun i : Fin 32 => (block key 0 nonce)[i.val]'(by omega))
           (aad ++ pad16 aad ++ ciphertext ++ pad16 ciphertext ++
-            Base.packBytes (Base.uintToBytes 8 aad.size) ++
-            Base.packBytes (Base.uintToBytes 8 ciphertext.size)) := by
+            Base.packBytes (Base.ByteOrder.toLE 8 aad.size) ++
+            Base.packBytes (Base.ByteOrder.toLE 8 ciphertext.size)) := by
   unfold encrypt checkLengths
   by_cases ha : aad.size ≥ 2 ^ 64
   · simp only [ha, ite_true, bind, Except.bind, reduceCtorEq, false_iff]
