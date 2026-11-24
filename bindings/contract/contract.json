@@ -944,7 +944,7 @@
    "docstring":
    "The public key grown from a seed.\n\nIt builds the whole top tree, `2^16` one-time keys."},
   {"summary":
-   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.",
+   "`Sig(sk, idx, m)` over a hash `H`: a message's signature at a leaf index, and the updated key.",
    "signature": "(seed: bytes, leaf_index: int, message: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Xmss.signWith",
    "method": "xmss_sign",
@@ -958,7 +958,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\nIt returns the signature and the updated key.\n\nA key that key generation and signing give signs as the note's signer does, by a theorem.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nTheir two codewords would reveal every chain at the smaller of their two positions.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
+   "`Sig(sk, idx, m)` over a hash `H`: a message's signature at a leaf index, and the updated key.\n\nWarning: never sign two different messages at one leaf index with one secret key.\n\nTheir two codewords would reveal every chain at the smaller of their two positions.\n\nIt fails when either layer's one-time signature finds no codeword."},
   {"summary":
    "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
@@ -974,7 +974,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no consensus meaning.\n\nIt costs 186 permutations of Keccak-f[1600], whatever the message.\n\nThat fixed count keeps the aggregation circuit a fixed size."},
+   "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no consensus meaning.\n\nIt costs a fixed 186 permutations of Keccak-f[1600], so the aggregation circuit has a fixed size."},
   {"summary":
    "The leaf index that a 2404-byte signature claims, read without verifying the signature.",
    "signature": "(signature: bytes) -> int",
@@ -1072,7 +1072,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.\n\nThe search starts one hash below the linear size."},
+   "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2."},
   {"summary":
    "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.",
    "signature": "(block_number: int) -> int",
@@ -1081,7 +1081,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.\n\nThe search starts one mix below the linear size."},
+   "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2."},
   {"summary":
    "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.",
    "signature": "(block_number: int) -> bytes",
@@ -1090,7 +1090,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.\n\nIt is 32 zero bytes at epoch 0, and the Keccak-256 digest of the previous seed after."},
+   "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1."},
   {"summary":
    "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.",
    "signature": "(block_number: int) -> bytes",
@@ -1099,7 +1099,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.\n\nIt has one item per 64 bytes of the cache size, after three rounds over the initial cache."},
+   "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2."},
   {"summary":
    "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.",
    "signature": "(cache: bytes, index: int) -> bytes",
@@ -1108,7 +1108,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.\n\nThe mix starts as the Keccak-512 digest of a cache item whose first word is XORed with the index.\n\nEach of 256 parents is a cache item that the index and the mix choose, and FNV folds it in.\n\nThe item is the Keccak-512 digest of the last mix.\n\nThe appendix reads the cache by its size in bytes, and the specification by its count of items.\n\nThe definition follows the specification.\n\nThe index is below `2^32` while the dataset has fewer than `2^32` items."},
+   "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3."},
   {"summary":
    "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.",
    "signature":
@@ -1498,7 +1498,7 @@
       {"constructor": "pbkdf2", "code": 7}]}],
    "error_class": "ScryptError",
    "docstring":
-   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.\n\nIt holds `128 * r * N` bytes of table, `128 * r * p` bytes per buffer and `length` bytes of key.\n\nSo a caller must bound `r * N`, `r * p` and `length` first, as a keystore gives them."},
+   "Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.\n\nParameters within the bounds can still ask for more memory or time than a machine has.\n\nIt holds `128 * r * N` bytes of table, `128 * r * p` bytes per buffer and `length` bytes of key.\n\nSo a caller must bound `r * N`, `r * p` and `length` first, as a keystore gives them."},
   {"summary":
    "X25519 scalar multiplication of two 32-byte inputs, RFC 7748 §5.",
    "signature": "(scalar: bytes, u: bytes) -> bytes",
@@ -1866,7 +1866,7 @@
    "errors": [],
    "error_class": "NoiseError",
    "docstring":
-   "Initialize the raw XX state with explicit private keys and prologue, Noise §5.3."},
+   "Initialize the raw XX state with explicit private keys and prologue, Noise §5.3.\n\nUse a fresh ephemeral private key for each handshake."},
   {"summary":
    "Write the next raw XX message and return the updated state, Noise §5.3.",
    "signature":
@@ -1966,7 +1966,7 @@
       {"constructor": "savedRemote", "code": 13}]}],
    "error_class": "NoiseError",
    "docstring":
-   "Encrypt with a cipher state and associated data, returning its next state, Noise §5.1."},
+   "Encrypt with a cipher state and associated data, returning its next state, Noise §5.1.\n\nDo not reuse a cipher state after a successful operation; use its returned state instead."},
   {"summary":
    "Authenticate and decrypt, advancing the nonce only on success, Noise §5.1.",
    "signature":
@@ -2121,7 +2121,7 @@
       {"constructor": "savedRemote", "code": 13}]}],
    "error_class": "NoiseError",
    "docstring":
-   "Return the authenticated peer and transport keys only after completion."},
+   "Return the authenticated peer and transport keys only after completion.\n\nIt does not verify the signature of the remote again.\n\nThe state carries the remote's extensions; use them only from this result."},
   {"summary": "The sequence number of a record.",
    "signature": "(record: bytes) -> int",
    "operation": "EthLib.Networking.Enr.Exports.seqExport",
@@ -12679,7 +12679,7 @@
       {"constructor": "rlp", "code": 7}]}],
    "error_class": "Discv4Error",
    "docstring":
-   "What a node knows of the sender of a packet after it receives it, and what it sends back.\n\nThe arguments are the time, the sender's IP and UDP port, and what the node knows of it.\n\nThat is the hash of the node's last Ping there, and the time of the last Pong that carried it.\n\nThen come the packet and the expiration of the answers.\n\nLast come the node's record sequence number, its record and the nodes it gives for any target.\n\nThe record and the list of nodes are RLP bytes.\n\nThe result is the new hash and time, and the content of each packet that the node sends."},
+   "What a node knows of the sender of a packet after it receives it, and what it sends back.\n\nThe result is the new hash and time, and the content of each packet that the node sends."},
   {"summary":
    "Whether an ENRResponse packet answers an ENRRequest packet that the node sent.",
    "signature": "(request: bytes, response: bytes) -> bool",
@@ -12867,7 +12867,7 @@
    "errors": [],
    "error_class": "ForkIdError",
    "docstring":
-   "The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain.\n\nThe arguments are the genesis hash, the genesis time, the merge fork block or `None`, and the forks.\n\nEach fork is its name, its kind, 0 for a block and 1 for a time, and its block or time."},
+   "The RLP schedule `[genesis-hash, genesis-time, merge-fork, forks]` of a chain.\n\nThe arguments are the genesis hash, the genesis time, the merge fork block or `None`, and the forks.\n\nEach fork is its name, its kind, 0 for a block and 1 for a time, and its block or time.\n\nIt and the encoder of a fork identifier write RLP from typed Python values."},
   {"summary":
    "The RLP fork identifier `[FORK_HASH, FORK_NEXT]`, from its 4-byte hash and its next fork.",
    "signature": "(fork_hash: bytes, fork_next: int) -> bytes",
@@ -13307,7 +13307,7 @@
       {"constructor": "reservedUnskippable", "code": 109}]}],
    "error_class": "SnappyError",
    "docstring":
-   "The bytes a framed stream decodes to, or why it is not a valid stream."},
+   "The bytes a framed stream decodes to, or why it is not a valid stream.\n\nThe decoder reads the whole stream at once."},
   {"summary":
    "A framed stream that decodes to `data`: the stream identifier, then uncompressed chunks.",
    "signature": "(data: bytes) -> bytes",
@@ -13316,7 +13316,7 @@
    "errors": [],
    "error_class": null,
    "docstring":
-   "A framed stream that decodes to `data`: the stream identifier, then uncompressed chunks.\n\nIt is the inverse that proofs, tests and bindings use, not a compressor."},
+   "A framed stream that decodes to `data`: the stream identifier, then uncompressed chunks.\n\nIt is the inverse that proofs, tests and bindings use, not a compressor.\n\nThe encoder writes uncompressed chunks only."},
   {"summary":
    "A framed stream that decodes to `data`: the stream identifier, then its chunks.",
    "signature": "(data: bytes) -> bytes",
@@ -13326,13 +13326,14 @@
    "error_class": null,
    "docstring":
    "A framed stream that decodes to `data`: the stream identifier, then its chunks.\n\nA chunk is compressed when that makes it shorter."},
-  {"summary": "The masked CRC-32C that a data chunk stores (§3).",
+  {"summary": "The masked CRC-32C that a data chunk stores (§3), at its start.",
    "signature": "(data: bytes) -> int",
    "operation": "EthLib.Networking.Snappy.maskedCrc",
    "method": "snappy_masked_crc",
    "errors": [],
    "error_class": null,
-   "docstring": "The masked CRC-32C that a data chunk stores (§3)."},
+   "docstring":
+   "The masked CRC-32C that a data chunk stores (§3), at its start."},
   {"summary": "A 64-bit value as an unsigned protobuf varint.",
    "signature": "(value: int) -> bytes",
    "operation": "EthLib.Networking.Encoding.Varint.encode",
@@ -13830,7 +13831,7 @@
       {"constructor": "rangeTooLarge", "code": 11}]}],
    "error_class": "QuicError",
    "docstring":
-   "Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1.\n\nAny acknowledgement must be for this sender in the same connection and packet-number space.\n\nWith no acknowledgement, the selected bytes hold the full number.\n\nOtherwise the byte window exceeds twice the gap from the largest acknowledged number.\n\nAn acknowledged number that is not earlier raises code 10.\n\nA range needing more than four bytes raises code 11."},
+   "Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1.\n\nAny acknowledgement must be for this sender in the same connection and packet-number space."},
   {"summary": "Write the low packet-number bytes (RFC 9000 §17.1).",
    "signature": "(width: int, number: int) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.packetNumberEncodeExport",
@@ -13923,7 +13924,7 @@
       {"constructor": "missingNewline", "code": 4}]}],
    "error_class": "MultistreamError",
    "docstring":
-   "What a dialer does with the bytes it receives, from its start.\n\nIt proposes the protocols in order.\n\nIt returns its state, its protocol, the bytes it sent, and the unread bytes.\n\nThe protocol is the agreed one, or an answer that is neither its proposal nor `na`, else empty.\n\nA message that does not decode raises its error, and names its index."},
+   "What a dialer does with the bytes it receives, from its start.\n\nIt returns its state, its protocol, the bytes it sent, and the unread bytes.\n\nA message that does not decode raises its error, and names its index."},
   {"summary":
    "The security protocol and the multiplexer of a TCP connection between consensus nodes.",
    "signature":
@@ -13980,7 +13981,7 @@
       {"constructor": "writeAfterClose", "code": 103}]}],
    "error_class": "MplexError",
    "docstring":
-   "The streams of one side after the frames it receives and sends, from an empty table.\n\nEach event says whether this side receives its bytes, and holds whole frames.\n\nThe streams come as their ID, whether this side opened them, and their state.\n\nA frame that does not decode, or that the side refuses, raises its error.\n\nThe error names the index of the event."},
+   "The streams of one side after the frames it receives and sends, from an empty table.\n\nA frame that does not decode, or that the side refuses, raises an error naming its event."},
   {"summary": "The bytes of a valid yamux frame.",
    "signature": "(frame: dict[str, Any]) -> bytes",
    "operation": "EthLib.Networking.Libp2p.Exports.yamuxEncodeExport",
@@ -14029,7 +14030,7 @@
       {"constructor": "windowExceeded", "code": 108}]}],
    "error_class": "YamuxError",
    "docstring":
-   "One side of a yamux session after the frames it receives and sends, from no stream.\n\nThe first argument says whether this side is the client.\n\nEach event says whether this side receives its bytes, and holds whole frames.\n\nThe streams come as their ID, their state, and the windows to send and to receive.\n\nThen come whether the side received Go Away, and the bytes of the frames it sends back.\n\nA frame that does not decode, or that the side refuses, raises its error.\n\nThe error names the index of the event."},
+   "One side of a yamux session after the frames it receives and sends, from no stream.\n\nA frame that does not decode, or that the side refuses, raises an error naming its event."},
   {"summary": "The certificate's signed bytes, SPKI, validity and extensions.",
    "signature": "(data: bytes) -> tuple[Any, ...]",
    "operation": "EthLib.Networking.Libp2p.Tls.Exports.readExport",
@@ -14179,7 +14180,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.\n\nA missing topic or data field of the protobuf message is the empty byte string."},
+   "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.\n\nA missing topic or data field of the protobuf message is the empty byte string.\n\nGossipsub, the consensus publish-subscribe protocol, drops a message whose ID is in its seen cache.\n\nSo a second copy of the same data on one topic gets the same ID and is dropped."},
   {"summary":
    "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.",
    "signature": "(type_bound: int, data: bytes) -> bytes",
@@ -14236,7 +14237,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "What the router does with one RPC, with its client choices given as tables.\n\nThe arguments come in this order.\n\n- The name of a fork, whose rule gives the ID of every message, whatever the digest of its topic.\n- The gossipsub parameters, then the two durations in milliseconds that the router takes.\n- The standing of some peers; any other peer has every flag false.\n- The validation result of some message IDs; any other message is ignored.\n- The time in milliseconds, the peer that sent the RPC, the RPC and the state.\n\nIn each table, the first entry for a key counts.\n\nOne rule for every message fits a router whose topics all carry digests of forks with that rule.\n\nPhase 0 has one rule, and every fork from Altair on has another."},
+   "What the router does with one RPC, with its client choices given as tables.\n\nIn each table, the first entry for a key counts."},
   {"summary":
    "The router after this node joins a topic, and the GRAFTs it sends.",
    "signature":
@@ -14246,7 +14247,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The router after this node joins a topic, and the GRAFTs it sends.\n\nThe arguments are the parameters, some standings, the time in milliseconds, the topic and the state.\n\nThe mesh takes the first peers of each candidate list."},
+   "The router after this node joins a topic, and the GRAFTs it sends.\n\nThe arguments are the parameters, some standings, the time in milliseconds, the topic and the state."},
   {"summary":
    "The router after this node leaves a topic, and the PRUNEs it sends.",
    "signature":
@@ -14266,7 +14267,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The router after this node publishes a message, and where the message goes.\n\nThe arguments come in this order.\n\n- The name of a fork, whose rule gives the ID of the message, whatever the digest of its topic.\n- The parameters, the client choices and the standing of some peers.\n- The time in milliseconds, the message and the state.\n\nOn a topic not joined, without flood publishing, an empty fanout takes the first peers.\n\nThey are peers of the topic, neither explicit nor below the publish threshold.\n\nClient choices outside the bounds of gossipsub v1.1 are rejected."},
+   "The router after this node publishes a message, and where the message goes.\n\nClient choices outside the bounds of gossipsub v1.1 are rejected."},
   {"summary":
    "The router after one heartbeat, and the control messages it sends.",
    "signature":
@@ -14276,7 +14277,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The router after one heartbeat, and the control messages it sends.\n\nThe arguments come in this order.\n\n- The parameters and the client choices.\n- The peers in the order of their score, the best first; the others come after them.\n- The standing of some peers, the time in milliseconds and the state.\n\nEvery choice among candidate peers takes the first ones, in the order of the candidates.\n\nClient choices outside the bounds of gossipsub v1.1 are rejected."},
+   "The router after one heartbeat, and the control messages it sends.\n\nClient choices outside the bounds of gossipsub v1.1 are rejected."},
   {"summary":
    "The bytes of a receipt, decoded at the fork and encoded again with its transaction type.",
    "signature": "(fork: str, receipt: bytes) -> bytes",
