@@ -148,9 +148,15 @@ structure ChainConfig where
   activations : List (Fork × Activation)
   /-- The blob schedules that the chain sets itself, each with its fork and activation, in order.
 
-  Each holds from its activation to the next, by [EIP-7892][eip-7892]; before, a fork's EIPs hold.
+  [EIP-7892][eip-7892] lets a chain set its own blob parameters from an activation.
 
-  Each is keyed by its fork's name, as in [EIP-7840][eip-7840], so two forks at one time stay apart.
+  A schedule holds from its activation until the activation of the next one.
+
+  Before the first one, each fork keeps the schedule that its EIPs give.
+
+  A configuration file keys each schedule by the name of its fork, as [EIP-7840][eip-7840] does.
+
+  So two forks that activate at one time keep their schedules apart.
 
   A schedule that a chain sets at an activation of no fork of the timeline has no fork.
 
@@ -203,7 +209,9 @@ def activeFork (config : ChainConfig) (number timestamp : Nat) : Option Fork :=
       | none => some fork
     else later
 
-/-- The blob schedule that a chain sets itself at a block: the last one in the list it has reached.
+/-- The blob schedule that a chain sets itself at a block.
+
+It is the last one in the list whose activation the block has reached.
 
 None holds at a block that has reached no activation of a blob schedule. -/
 def blobScheduleAt (config : ChainConfig) (number timestamp : Nat) : Option BlobSchedule :=
@@ -217,9 +225,14 @@ def blobScheduleAt (config : ChainConfig) (number timestamp : Nat) : Option Blob
 
 Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EIPs.
 
-Sources: [EIP-155][eip-155], [EIP-6110][eip-6110], [EIP-6953][eip-6953-pow], [EIP-3675][eip-3675].
+Sources:
 
-Also [EIP-7643][eip-7643], [EIP-6953][eip-6953-pos], and the meta EIP of each later fork.
+- [EIP-155][eip-155]: the chain ID.
+- [EIP-6110][eip-6110]: the deposit contract.
+- [EIP-6953][eip-6953-pow]: the blocks from Homestead to Gray Glacier.
+- [EIP-3675][eip-3675] and [EIP-7643][eip-7643]: the block of Paris.
+- [EIP-6953][eip-6953-pos]: the time of Shapella.
+- The meta EIP of each later fork: EIP-7569, EIP-7600, EIP-7607, EIP-8134 and EIP-8135.
 
 [eip-155]: https://eips.ethereum.org/EIPS/eip-155#list-of-chain-ids
 [eip-6110]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6110.md#configuration
@@ -253,14 +266,10 @@ def mainnet : ChainConfig where
     (.arrowGlacier, .block 13773000),
     (.grayGlacier, .block 15050000),
     -- The first block whose parent reaches the terminal total difficulty of EIP-3675.
-    --
-    -- EIP-7643 gives this block of Paris too.
     (.paris, .block 15537394),
     -- Shapella activates at the time of EIP-6953.
     (.shapella, .time 1681338455),
     -- Each later fork activates at the time of its meta EIP.
-    --
-    -- They are EIP-7569, EIP-7600, EIP-7607, EIP-8134 and EIP-8135.
     (.dencun, .time 1710338135),
     (.pectra, .time 1746612311),
     (.fusaka, .time 1764798551),
