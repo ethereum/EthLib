@@ -14,17 +14,7 @@ public import Std.Data.String.ToNat
 
 The text of an entry and the entry determine each other.
 
-So a resolver that changes the text of an entry changes the entry, and its hash name with it.
-
-The name of an entry has 26 characters.
-
-A root signed with a private key verifies under the compressed public key of that key.
-
 Two resolvers that serve one root, and whose lists both resolve, give the same list.
-
-Otherwise the code finds two texts with one truncated hash, which is a collision of Keccak-256.
-
-A list resolves only from a root that the key signed, with a sequence number not below the last.
 -/
 
 @[expose] public section
@@ -398,7 +388,9 @@ theorem Entry.parse_toText {e : Entry} {text : String} (h : e.toText = .ok text)
       dropPrefix_url_enr, dropPrefix?_append, back]
     rfl
 
-/-- The text of an entry is the only text that reads as that entry. -/
+/-- The text of an entry is the only text that reads as that entry.
+
+So a resolver that changes the text of an entry changes the entry, and its hash name with it. -/
 theorem Entry.toText_of_parse {text : String} {e : Entry} (h : Entry.parse text = .ok e) :
     e.toText = .ok text := by
   unfold Entry.parse at h
@@ -478,7 +470,12 @@ theorem DnsError.code_injective (e₁ e₂ : DnsError) (h : e₁.code = e₂.cod
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [DnsError.code] at h; exact absurd h (by decide))
 
-/-! ## Resolving a list -/
+/-! ## Resolving a list
+
+Where two resolvers of one root disagree, the code finds two texts with one truncated hash.
+
+That pair is a collision of Keccak-256.
+-/
 
 /-- Two walks from one state find the same, or the search finds a collision on their way. -/
 theorem walk_binds {lookup1 lookup2 : String → Option String} {domain : String} :

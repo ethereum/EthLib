@@ -7,19 +7,11 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 /-!
 # Proofs: the decoder of node records
 
-The decoder rejects a record over 300 bytes.
+Every record that the decoder accepts came from its own encoding.
 
-The keys of every record it accepts strictly increase, so they are sorted and unique.
+So a record has one accepted encoding.
 
-Every record it accepts has the key `id`, and it rejects a record without it.
-
-It undoes the encoder on every record that fits, has increasing keys and has the key `id`.
-
-Every record it accepts came from its own encoding, so a record has one accepted encoding.
-
-The same holds for the text form.
-
-Two errors with one code come from one constructor.
+The same holds for its text form.
 -/
 
 @[expose] public section

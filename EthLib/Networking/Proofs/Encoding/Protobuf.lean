@@ -7,17 +7,11 @@ public import EthLib.Networking.Proofs.Encoding.ByteReader
 /-!
 # Proofs: the protobuf wire format
 
-- Reading a varint, a key or a record back from its encoding returns it, whatever bytes follow.
-- Reading the records of an encoded sequence returns the sequence.
-- The key needs a field number in range; a record also needs a value shorter than `2^64` bytes.
-- A key reads exactly when the input starts with a varint of value 8 times its field plus its type.
-- That field number is from 1 to `2^29 - 1`, and that wire type is below 8.
-- A group with a field number in range reads whole when it holds well-formed records.
-- Empty groups may be among those records.
-- Reading a serialized message returns its records, for fields in range and a short message.
-- Short means fewer than `2^64` bytes.
-- The values of one field follow the order of the records, and so do its length-delimited values.
-- Two errors with one code come from one constructor.
+Reading a varint, a key or a record back from its encoding returns it, whatever bytes follow.
+
+Reading a serialized message returns its records.
+
+The values of one field follow the order of the records.
 -/
 
 @[expose] public section
@@ -81,7 +75,9 @@ theorem readKey_eq_ok_iff {bytes rest : List UInt8} {field wire : Nat} :
         have hn := toNat_ofNat_key h29 hw
         refine ⟨?_, ?_, rfl⟩ <;> rw [hn] <;> omega
 
-/-- Reading a key back from its encoding returns its field number and its wire type below 8. -/
+/-- Reading a key back from its encoding returns its field number and its wire type below 8.
+
+The field number must be in range, from 1 to `2^29 - 1`. -/
 theorem readKey_encodeKey {field wire : Nat} (h0 : 0 < field) (hmax : field ≤ maxField)
     (hw : wire < 8) (rest : List UInt8) :
     readKey (encodeKey field wire ++ rest) = .ok (field, wire, rest) :=
@@ -246,7 +242,9 @@ theorem readRecord_group {field : Nat} (h0 : 0 < field) (h29 : field < 2 ^ 29)
   rw [readKey_encodeKey h0 hmax (by decide)]
   simp [bind, Except.bind, hlen, skipGroup_add_of_ok k hs, pure, Except.pure]
 
-/-- Reading a well-formed record back from its encoding returns it. -/
+/-- Reading a well-formed record back from its encoding returns it.
+
+Its key needs a field number in range, and a length-delimited value is shorter than `2^64` bytes. -/
 theorem readRecord_encodeRecord {r : Record} (h : r.WellFormed) (rest : List UInt8) :
     readRecord (encodeRecord r ++ rest) = .ok (r, rest) := by
   obtain ⟨field, value⟩ := r

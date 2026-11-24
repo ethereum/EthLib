@@ -9,49 +9,15 @@ public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 The "v4" identity scheme of EIP-778 signs the Keccak-256 hash of the RLP content with ECDSA.
 
-Source: [EIP-778][eip-778], section "v4" identity scheme.
+A forged record gives the forgery half of a reduction to the chosen-message security of that ECDSA.
 
-## Malleability
-
-ECDSA accepts `(r, s)` exactly when it accepts `(r, n - s)`, and EIP-778 adds no low-s rule.
-
-So a record with a 64-byte signature verifies exactly when its copy with `n - s` verifies.
-
-When it verifies, the two records differ and have one content.
-
-So one content has two valid records: the scheme is not strongly unforgeable.
-
-## Forgeries
-
-A signer holds the key of a public key `Q` and has signed some list of contents.
-
-A forgery is a record that verifies under `Q`, whose content the signer never signed.
-
-The forger chooses the sequence number and every pair of that content.
-
-Its content has an RLP encoding, and the signer never signed that encoding.
-
-The RLP encoder is injective, so two different contents have two different encodings.
-
-So the encoding and the record's pair `(r, s)` form an ECDSA forgery on a fresh message.
-
-That ECDSA hashes the message with Keccak-256, as the scheme does.
-
-The forgery is computed from the record, and the theorem needs no cryptographic assumption.
-
-The security of records then rests on the chosen-message security of that ECDSA, an assumption.
-
-This is the forgery half of a reduction to the chosen-message security of ECDSA with Keccak-256.
-
-Each signed record is one ECDSA signature on its encoding, by the signing lemma of the scheme.
+That half needs no cryptographic assumption.
 
 No game with an adversary and oracles is stated here.
 
-The signed messages are the encodings of the signed contents.
+The security of records then rests on the chosen-message security of that ECDSA, an assumption.
 
-The notion is per key: a record under another key with the same node ID is out of scope.
-
-The model also assumes that the key signs only records.
+Source: [EIP-778][eip-778], section "v4" identity scheme.
 
 [eip-778]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md
 -/
@@ -80,7 +46,12 @@ def negS (rec : Enr) : Enr :=
       ⟨(rec.signature.data.toList.take 32
         ++ (Base.ByteOrder.toBE 32 (Fn.modulus - sigS rec)).toList).toArray⟩ }
 
-/-! ## Malleability -/
+/-! ## Malleability
+
+ECDSA accepts `(r, s)` exactly when it accepts `(r, n - s)`, and EIP-778 adds no low-s rule.
+
+So one content has two valid records: the scheme is not strongly unforgeable.
+-/
 
 /-- ECDSA rejects a scalar `s` outside `[1, n - 1]`. -/
 private theorem verify_eq_false_of_s {q : Point} {h : Vector UInt8 32} {r s : Nat}
@@ -124,6 +95,7 @@ theorem verifyV4_negS {rec : Enr} (hsize : rec.signature.size = 64) :
   · simp only [Cryptography.Ecdsa.read?_eq, Cryptography.Ecdsa.SIGNATURE_LEN, hsize, hsize',
       ↓reduceIte, htake, hdrop]
     by_cases hs : 0 < sigS rec ∧ sigS rec < Fn.modulus
+    -- For `s` in `[1, n - 1]`, ECDSA accepts `(r, s)` exactly when it accepts `(r, n - s)`.
     · exact Ecdsa.verify_neg_s _ _ _ hs
     · exact (verify_eq_false_of_s (by omega)).trans (verify_eq_false_of_s hs).symm
   · rfl
@@ -146,11 +118,22 @@ theorem negS_ne_of_verifyV4 {rec : Enr} (h : verifyV4 rec = true) : negS rec ≠
 /-- The copy with `n - s` has the content of the record. -/
 theorem content_negS (rec : Enr) : (negS rec).content = rec.content := rfl
 
-/-! ## Forgeries -/
+/-! ## Forgeries
+
+A forgery is a record that verifies under a key `Q`, whose content the signer of `Q` never signed.
+
+The forger chooses the sequence number and every pair of that content.
+
+The notion is per key: a record under another key with the same node ID is out of scope.
+-/
 
 /-- The messages that a signer signs for a list of contents: their RLP encodings.
 
-A content whose RLP encoding fails is not signed. -/
+A content whose RLP encoding fails is not signed.
+
+Each signed record is one ECDSA signature on its encoding, by the signing lemma of the scheme.
+
+The model assumes that the key signs only records. -/
 def signedMessages (log : List Item) : List ByteArray :=
   log.filterMap fun c => (Serialization.Rlp.encode c).toOption
 
@@ -172,6 +155,9 @@ theorem ecdsaForgery_of_forgery {q : Point} {log : List Item} {rec : Enr}
     cases hq'
     rfl
   subst hqq
+  -- The ECDSA forgery is computed from the record: its RLP encoding `b` and its pair `(r, s)`.
+  --
+  -- That ECDSA hashes the message with Keccak-256, as the scheme does.
   refine ⟨b, hb, ?_, hv⟩
   -- A signed content with the encoding `b` is the content itself, against freshness.
   intro hmem
@@ -180,6 +166,9 @@ theorem ecdsaForgery_of_forgery {q : Point} {log : List Item} {rec : Enr}
     cases he : Serialization.Rlp.encode c' with
     | error e => rw [he] at hc'; cases hc'
     | ok b' => rw [he] at hc'; cases hc'; rfl
+  -- The RLP encoder is injective, so two different contents have two different encodings.
+  --
+  -- So the signer never signed the encoding `b`.
   exact hfresh (encode_injective _ _ _ hb' hb ▸ hc'log)
 
 end EthLib.Networking.Enr

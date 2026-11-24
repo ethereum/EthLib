@@ -7,12 +7,6 @@ public import EthLib.Networking.Proofs.Discv5.Identity
 # `Networking.Proofs.Discv5.Exchange`
 
 Properties of the rules that relate a discv5 answer to its request.
-
-- With distance 0 alone, a matching NODES answer holds only the record of the recipient.
-- Two parts of a NODES answer match exactly when each part matches, so it is checked piece by piece.
-- A node keeps only answers to its request, at most its limit, and at most the first `total`.
-- A TALKREQ for an unknown protocol gets a TALKRESP with its request ID and an empty response.
-- The TALKRESP that a node sends answers the TALKREQ.
 -/
 
 @[expose] public section
@@ -35,7 +29,9 @@ theorem nodesMatch_zero {recipient : NodeId} {records : List Item}
     rw [hid, logDistance_eq_zero_iff.mp hitem]
   · cases hitem
 
-/-- Two parts of a NODES answer match exactly when each part matches. -/
+/-- Two parts of a NODES answer match exactly when each part matches.
+
+So an answer is checked piece by piece. -/
 theorem nodesMatch_append (recipient : NodeId) (distances : List Nat) (first second : List Item) :
     nodesMatch recipient distances (first ++ second) =
       (nodesMatch recipient distances first && nodesMatch recipient distances second) := by
