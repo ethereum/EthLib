@@ -1020,7 +1020,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "SphincsError",
    "docstring":
-   "`Sign(SK, M)`: sign a message.\n\n# Warning\n\nNever sign more than `2^30` messages with one secret key.\n\nThe digest picks the FORS instance at random, and each reuse weakens it.\n\n# Errors\n\n- A one-time signature finds no codeword."},
+   "`Sign(SK, M)`: sign a message.\n\n1. The randomizer and the message give the digest: the index and one leaf per FORS tree.\n2. The FORS instance at that index opens those leaves.\n3. Each layer's key signs what the layer below gives, with its path.\n\n# Warning\n\nNever sign more than `2^30` messages with one secret key.\n\nThe digest picks the FORS instance at random, and each reuse weakens it.\n\n# Errors\n\n- A one-time signature finds no codeword."},
   {"summary":
    "`Ver(PK, M, sigma)`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
@@ -1072,7 +1072,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2."},
+   "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.\n\nThe search for a prime count of items starts one hash, 64 bytes, below the linear size."},
   {"summary":
    "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.",
    "signature": "(block_number: int) -> int",
@@ -1081,7 +1081,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2."},
+   "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.\n\nThe search for a prime count of items starts one mix, 128 bytes, below the linear size."},
   {"summary":
    "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.",
    "signature": "(block_number: int) -> bytes",
@@ -1090,7 +1090,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1."},
+   "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.\n\nIt is 32 zero bytes at epoch 0, and the Keccak-256 digest of the previous seed after."},
   {"summary":
    "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.",
    "signature": "(block_number: int) -> bytes",
@@ -1099,7 +1099,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2."},
+   "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.\n\nIt has one item per 64 bytes of the cache size, after three rounds over the initial cache."},
   {"summary":
    "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.",
    "signature": "(cache: bytes, index: int) -> bytes",
@@ -1108,7 +1108,7 @@
    "errors": [],
    "error_class": "EthashError",
    "docstring":
-   "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3."},
+   "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.\n\nThe mix starts as the Keccak-512 digest of a cache item whose first word is XORed with the index.\n\nEach of 256 parents is a cache item that the index and the mix choose, and FNV folds it in.\n\nThe item is the Keccak-512 digest of the last mix.\n\nThe appendix reads the cache by its size in bytes, and the specification by its count of items.\n\nThe definition follows the Ethash specification of the Ethereum Foundation.\n\nThe index is below `2^32` while the dataset has fewer than `2^32` items."},
   {"summary":
    "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.",
    "signature":
@@ -12679,7 +12679,7 @@
       {"constructor": "rlp", "code": 7}]}],
    "error_class": "Discv4Error",
    "docstring":
-   "What a node knows of the sender of a packet after it receives it, and what it sends back.\n\nThe result is the new hash and time, and the content of each packet that the node sends."},
+   "What a node knows of the sender of a packet after it receives it, and what it sends back.\n\nThe arguments are the time, the sender's IP and UDP port, and what the node knows of it.\n\nThat is the hash of the node's last Ping to it, and the time of the last Pong that carried it.\n\nThen come the packet and the expiration of the answers.\n\nLast come the node's record sequence number, its record and the nodes it gives for any target.\n\nThe record and the list of nodes are RLP bytes.\n\nThe result is the new hash and time, and the content of each packet that the node sends."},
   {"summary":
    "Whether an ENRResponse packet answers an ENRRequest packet that the node sent.",
    "signature": "(request: bytes, response: bytes) -> bool",
@@ -13831,7 +13831,7 @@
       {"constructor": "rangeTooLarge", "code": 11}]}],
    "error_class": "QuicError",
    "docstring":
-   "Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1.\n\nAny acknowledgement must be for this sender in the same connection and packet-number space."},
+   "Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1.\n\nAny acknowledgement must be for this sender in the same connection and packet-number space.\n\nWith no acknowledgement, the selected bytes hold the full number.\n\nOtherwise the selected bytes hold more than twice the gap from the largest acknowledged number.\n\nAn acknowledged number that is not earlier raises code 10.\n\nA range needing more than four bytes raises code 11."},
   {"summary": "Write the low packet-number bytes (RFC 9000 §17.1).",
    "signature": "(width: int, number: int) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.packetNumberEncodeExport",
@@ -13924,7 +13924,7 @@
       {"constructor": "missingNewline", "code": 4}]}],
    "error_class": "MultistreamError",
    "docstring":
-   "What a dialer does with the bytes it receives, from its start.\n\nIt returns its state, its protocol, the bytes it sent, and the unread bytes.\n\nA message that does not decode raises its error, and names its index."},
+   "What a dialer does with the bytes it receives, from its start.\n\nIt proposes the protocols in order.\n\nIt returns its state, its protocol, the bytes it sent, and the unread bytes.\n\nThe protocol is the agreed one, or an answer that is neither its proposal nor `na`, else empty.\n\nA message that does not decode raises its error, and names its index."},
   {"summary":
    "The security protocol and the multiplexer of a TCP connection between consensus nodes.",
    "signature":
@@ -13981,7 +13981,7 @@
       {"constructor": "writeAfterClose", "code": 103}]}],
    "error_class": "MplexError",
    "docstring":
-   "The streams of one side after the frames it receives and sends, from an empty table.\n\nA frame that does not decode, or that the side refuses, raises its error.\n\nThe error names the index of the event."},
+   "The streams of one side after the frames it receives and sends, from an empty table.\n\nEach event says whether this side receives its bytes, and holds whole frames.\n\nThe streams come as their ID, whether this side opened them, and their state.\n\nA frame that does not decode, or that the side refuses, raises its error.\n\nThe error names the index of the event."},
   {"summary": "The bytes of a valid yamux frame.",
    "signature": "(frame: dict[str, Any]) -> bytes",
    "operation": "EthLib.Networking.Libp2p.Exports.yamuxEncodeExport",
@@ -14030,7 +14030,7 @@
       {"constructor": "windowExceeded", "code": 108}]}],
    "error_class": "YamuxError",
    "docstring":
-   "One side of a yamux session after the frames it receives and sends, from no stream.\n\nA frame that does not decode, or that the side refuses, raises its error.\n\nThe error names the index of the event."},
+   "One side of a yamux session after the frames it receives and sends, from no stream.\n\nThe first argument says whether this side is the client.\n\nEach event says whether this side receives its bytes, and holds whole frames.\n\nThe streams come as their ID, their state, and the windows to send and to receive.\n\nThen come whether the side received Go Away, and the bytes of the frames it sends back.\n\nA frame that does not decode, or that the side refuses, raises its error.\n\nThe error names the index of the event."},
   {"summary": "The certificate's signed bytes, SPKI, validity and extensions.",
    "signature": "(data: bytes) -> tuple[Any, ...]",
    "operation": "EthLib.Networking.Libp2p.Tls.Exports.readExport",
@@ -14247,7 +14247,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The router after this node joins a topic, and the GRAFTs it sends.\n\nThe arguments are the parameters, some standings, the time in milliseconds, the topic and the state."},
+   "The router after this node joins a topic, and the GRAFTs it sends.\n\nThe arguments are the parameters, some standings, the time in milliseconds, the topic and the state.\n\nThe mesh takes the first peers of each candidate list."},
   {"summary":
    "The router after this node leaves a topic, and the PRUNEs it sends.",
    "signature":

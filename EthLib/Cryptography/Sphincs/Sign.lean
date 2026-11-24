@@ -117,6 +117,10 @@ def signWith (sk : SecretKey) (msg : Message) : m (Except SphincsError Signature
 
 /-- `Sign(SK, M)`: sign a message.
 
+1. The randomizer and the message give the digest: the index and one leaf per FORS tree.
+2. The FORS instance at that index opens those leaves.
+3. Each layer's key signs what the layer below gives, with its path.
+
 # Warning
 
 Never sign more than `2^30` messages with one secret key.

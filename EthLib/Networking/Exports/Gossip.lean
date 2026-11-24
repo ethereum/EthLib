@@ -179,11 +179,11 @@ def checkChoices (p : GossipsubParameters) (c : ClientChoices) : Result ClientCh
 /-- The router after this node joins a topic, and the GRAFTs it sends.
 
 The arguments are the parameters, some standings, the time in milliseconds, the topic and the state.
--/
+
+The mesh takes the first peers of each candidate list. -/
 def joinOf (args : GossipsubParameters × List (PeerId × Standing) × Nat × String × RouterState) :
     Result (RouterState × Out) := do
   let (p, standings, now, topic, s) := args
-  -- The mesh takes the first peers of each candidate list.
   return join p Select.first (standingOf standings) now topic s
 
 /-- The router after this node joins a topic, given the parameters and some standings. -/

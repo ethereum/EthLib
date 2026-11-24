@@ -148,14 +148,15 @@ def multistreamListenExport (args : PyValue) : Result PyValue :=
 
 /-- What a dialer does with the bytes it receives, from its start.
 
+It proposes the protocols in order.
+
 It returns its state, its protocol, the bytes it sent, and the unread bytes.
+
+The protocol is the agreed one, or an answer that is neither its proposal nor `na`, else empty.
 
 A message that does not decode raises its error, and names its index. -/
 @[export eth_multistream_dial]
 def multistreamDialExport (args : PyValue) : Result PyValue :=
-  -- The dialer proposes the protocols in order.
-  --
-  -- Its protocol is the agreed one, or an answer that is neither its proposal nor `na`, else empty.
   pyExport (fun ((proposals, data) : List ByteArray × ByteArray) =>
     runPeer Multistream.dial
       (fun | .awaitHeader _ _ | .awaitAnswer _ _ => true | _ => false)
@@ -226,6 +227,10 @@ def mplexFrames (data : List UInt8) : Except Mplex.MplexError (List Mplex.Frame)
 
 /-- The streams of one side after the frames it receives and sends, from an empty table.
 
+Each event says whether this side receives its bytes, and holds whole frames.
+
+The streams come as their ID, whether this side opened them, and their state.
+
 A frame that does not decode, or that the side refuses, raises its error.
 
 The error names the index of the event. -/
@@ -233,7 +238,6 @@ The error names the index of the event. -/
 def mplexSessionExport (args : PyValue) : Result PyValue :=
   pyExport (fun (events : List (Bool × ByteArray)) => do
     let mut streams : Mplex.Streams := []
-    -- Each event says whether this side receives its bytes, and holds whole frames.
     for ((received, data), index) in events.zipIdx do
       let frames ← toResult s!"event {index}: mplex frame rejected" (mplexFrames data.data.toList)
       for frame in frames do
@@ -299,16 +303,22 @@ def yamuxFrames (data : List UInt8) : Except Yamux.YamuxError (List Yamux.Frame)
 
 /-- One side of a yamux session after the frames it receives and sends, from no stream.
 
+The first argument says whether this side is the client.
+
+Each event says whether this side receives its bytes, and holds whole frames.
+
+The streams come as their ID, their state, and the windows to send and to receive.
+
+Then come whether the side received Go Away, and the bytes of the frames it sends back.
+
 A frame that does not decode, or that the side refuses, raises its error.
 
 The error names the index of the event. -/
 @[export eth_yamux_session]
 def yamuxSessionExport (args : PyValue) : Result PyValue :=
-  -- The first argument says whether this side is the client.
   pyExport (fun ((isClient, events) : Bool × List (Bool × ByteArray)) => do
     let mut session : Yamux.Session := { isClient }
     let mut replies : Array ByteArray := #[]
-    -- Each event says whether this side receives its bytes, and holds whole frames.
     for ((received, data), index) in events.zipIdx do
       let frames ← toResult s!"event {index}: yamux frame rejected" (yamuxFrames data.data.toList)
       for frame in frames do

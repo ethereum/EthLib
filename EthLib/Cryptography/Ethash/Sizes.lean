@@ -89,7 +89,9 @@ where
     -- Each step lowers the quotient by 2, so it keeps its parity.
     | fuel + 1, x => if isPrime (x / unit) then x else go fuel (x - 2 * unit)
 
-/-- The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2. -/
+/-- The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.
+
+The search for a prime count of items starts one hash, 64 bytes, below the linear size. -/
 def cacheSize (number : Nat) : Nat :=
   -- The linear size is `2^24 + 2^17 · floor(number / 30000)` bytes.
   --
@@ -98,7 +100,9 @@ def cacheSize (number : Nat) : Nat :=
   -- One hash, 64 bytes, comes off it, so the prime search starts one hash below it.
   primeSize (CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * epoch number - HASH_BYTES) HASH_BYTES
 
-/-- The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2. -/
+/-- The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.
+
+The search for a prime count of items starts one mix, 128 bytes, below the linear size. -/
 def datasetSize (number : Nat) : Nat :=
   -- The linear size is `2^30 + 2^23 · floor(number / 30000)` bytes.
   --
