@@ -34,7 +34,9 @@ open EthLib.Cryptography.Secp256k1 (Fn)
 --
 -- The keys of a frame `dict` are the field names of its Lean structure, in snake case.
 --
--- An mplex flag crosses as its name in snake case, such as `new_stream`.
+-- An mplex flag crosses as its name in snake case.
+--
+-- So the flag that opens a stream crosses as new and stream, joined by an underscore.
 derive_py Mplex.Flag
 derive_py_laws Mplex.Flag
 -- An mplex frame crosses as a `dict` of its stream ID, its flag and its data.
