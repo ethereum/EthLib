@@ -22,51 +22,9 @@ Each signature of an honest validator passes the check of its receivers.
 
 They check it under the same domain type and epoch, against the public key of the secret key.
 
-A committee assignment is a committee of the epoch that holds the validator.
+The module also covers the committee assignment, the proposer check and the sync committee duties.
 
-It is the only one under two bounds.
-
-The registry stays within its limit, and its active validators times the committees fit in 64 bits.
-
-The search for an assignment shares the shuffle of the epoch among its committees.
-
-It gives the same result as computing each committee alone, errors included.
-
-A committee assignment fails for an overflow, or for a shuffle or a committee without a value.
-
-Its only other error is that of an epoch after the next one.
-
-It succeeds for an epoch at most the next one, under bounds on the epoch and the registry.
-
-The proposer check and the sync committee seat check have their outcomes characterized.
-
-The sync committee subnets of a validator come once each, in increasing order.
-
-From Gloas, a payload timeliness assignment is the first slot of the epoch that has the validator.
-
-A validator without one is in no committee of the epoch, when an epoch has a slot.
-
-A payload timeliness assignment fails for an overflow, or for a committee without a value.
-
-Its only other error is that of an epoch past the seed lookahead, which it always gives there.
-
-It succeeds for an epoch of the window, under bounds on the lookahead, the window and the epoch.
-
-The upcoming proposal slots are the later slots of the lookahead that the validator proposes.
-
-A signed payload attestation message passes the wire checks.
-
-These checks of the fork choice read only its slot, which must be current, and its signature.
-
-The validator must have the public key of the secret key.
-
-Signed preferences pass the check of their signature.
-
-They name the dependent root of the head and the slot, validator and values they were made for.
-
-From Heze, a signed inclusion list passes the check of its signature.
-
-A bid whose bits cover the proposer's view of the inclusion lists is inclusive for it.
+From Gloas and Heze, the module covers payload timeliness, proposer preferences and inclusion lists.
 -/
 
 @[expose] public section

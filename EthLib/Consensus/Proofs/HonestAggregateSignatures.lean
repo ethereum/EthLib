@@ -10,15 +10,9 @@ import Mathlib.Data.List.Sort
 /-!
 # Proofs: honest attestation aggregates pass their signature check
 
-The indexed attestation sorts its validator indices before reading their keys.
-
-Read in that order, the keys are a permutation of the signers' keys in the order of their votes.
-
-Fast aggregate verification does not depend on that order.
+An aggregate of distinct honest attesters passes the indexed attestation check.
 
 Their secret keys must not sum to zero.
-
-From Gloas, the number of signers must also fit the bound of the check.
 
 The aggregate topic runs this same indexed attestation check.
 -/
@@ -89,6 +83,7 @@ theorem isValidIndexedAttestation_of_fastAggregateVerify {config : Config}
       isValidIndexedAttestation config .bls state indexed = .ok true := by
   obtain ⟨indexed, indexedOf, sameIndices, indexedData, indexedSignature⟩ :=
     getIndexedAttestation_of_getAttestingIndices computed
+  -- The indexed attestation sorts its validator indices before reading their keys.
   have ordered := getAttestingIndices_sorted computed
   have fixed : indices = sortedSet indices :=
     ordered.eq_of_mem_iff (sortedSet_sorted _) fun _ => mem_sortedSet.symm
@@ -109,6 +104,9 @@ theorem isValidIndexedAttestation_of_fastAggregateVerify {config : Config}
           owned]
     rw [mapped]
     rfl
+  -- In that order, the keys are a permutation of the signers' keys in the order of their votes.
+  --
+  -- Fast aggregate verification does not depend on that order.
   have permutes := Signatures.fastAggregateVerify_skToPk_perm (permuted.map key)
     (Base.packBytes root) attestation.signature
   have verifiesSorted : Signatures.fastAggregateVerify

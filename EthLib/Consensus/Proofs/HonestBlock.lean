@@ -12,31 +12,11 @@ import EthLib.Consensus.Proofs.Transition.SyncAggregate
 /-!
 # Proofs: the block of an honest proposer passes its step in a run
 
-An honest proposer builds its block on the state at its slot.
-
-It includes the honest attestations of some committees, built on that same state.
-
-The steps before the operations keep every value that those attestations read.
-
-So the attestation steps of the block accept them, as on the state before the block.
-
-It carries the deposits that are due, each with a Merkle proof to the deposit root.
-
-The deposit steps accept them, and keep the flags that the attestations set.
-
-The other operations are empty, and an empty sync aggregate passes.
-
-That needs each key of the sync committee to be the key of a validator.
-
-The proposer then sets the root of the state after the block, and signs the block.
-
 From Altair until Gloas, the block passes, with its signature and its state root checked.
 
-Each honest member of each committee then holds the timely target flag of its target epoch.
+It carries honest attestations of some committees, or from Electra honest aggregates of slots.
 
 On mainnet a block holds at most 128 attestations before Electra, and 8 from Electra.
-
-From Electra the block may instead carry honest aggregates, each covering the committees of a slot.
 -/
 
 @[expose] public section
@@ -603,47 +583,33 @@ private theorem processBlock_honestBlock_of_attested [LawfulSszType (BeaconBlock
 
 The block is that of the proposer of the slot, built with its key on the state at the slot.
 
-The proposer and each validator of the honest set hold the public keys of their secret keys.
-
-The proposer must not be slashed, and the state must hold no block at its slot yet.
-
-Before Heze the votes on the deposit contract must leave room for one more in the period.
-
-The block carries as many deposits as the state expects.
-
-Each comes with a Merkle proof to the deposit root of the state, at its index; this is an input.
-
-The registry, and from Electra the pending deposits, must have room for each deposit.
-
-Before Electra the budget must leave room for the amounts after the rewards of the proposer.
-
-From Altair the inactivity scores hold one entry for each validator.
-
-The execution part of the block must pass on the state after its header, an assumption.
-
-Each key of the current sync committee must be the key of a validator.
-
-The attestations are built on the state at the slot, with the checks of the attestation step.
-
-The secret keys of the honest members of each committee must not sum to zero.
-
-The state must be within a budget, with room for the rewards of the proposer.
-
-The buffer of block roots must reach the previous epoch, and the slot plus its length must fit.
-
-The voting period on the deposit contract must fit in 64 bits.
-
-One increment must be at most the largest effective balance, so that the sync reward fits.
-
-The sync committee must not be empty.
-
 Each honest member of each committee then holds the timely target flag of its target epoch.
 
 That needs the state to hold the target root for the first slot of that epoch.
 
-The mixes must span more than the seed lookahead plus two epochs.
+It needs these facts:
 
-The encoding of a block body must be lawful, so that the body has a root. -/
+- The proposer and each validator of the honest set hold the public keys of their secret keys.
+- The proposer must not be slashed, and the state must hold no block at its slot yet.
+- Before Heze the votes on the deposit contract must leave room for one more in the period.
+- The block carries as many deposits as the state expects.
+- Each comes with a Merkle proof to the deposit root of the state, at its index.
+  That proof is an input.
+- The registry, and from Electra the pending deposits, must have room for each deposit.
+- Before Electra the budget must leave room for the amounts after the rewards of the proposer.
+- From Altair the inactivity scores hold one entry for each validator.
+- The execution part of the block must pass on the state after its header, an assumption.
+- Each key of the current sync committee must be the key of a validator.
+- The attestations are built on the state at the slot, with the checks of the attestation step.
+- The secret keys of the honest members of each committee must not sum to zero.
+- The state must be within a budget, with room for the rewards of the proposer.
+- The buffer of block roots must reach the previous epoch, and the slot plus its length must fit.
+- The voting period on the deposit contract must fit in 64 bits.
+- One increment must be at most the largest effective balance, so that the sync reward fits.
+- The sync committee must not be empty.
+- The mixes must span more than the seed lookahead plus two epochs.
+- The encoding of a block body must be lawful, so that the body has a root.
+-/
 theorem processBlock_honestBlock [LawfulSszType (BeaconBlockBody preset fork)]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {budget scoreBound : Nat}
     (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
@@ -730,6 +696,7 @@ theorem processBlock_honestBlock [LawfulSszType (BeaconBlockBody preset fork)]
         ∀ committee, getBeaconCommittee state vote.1.slot vote.2 = .ok committee →
           ∀ index ∈ committee, index ∈ honest → TargetFlagAt (recentParticipation attested altair
             (vote.1.target.epoch == getCurrentEpoch state)) index.toNat)
+    -- The steps before the operations keep every value that the attestations read.
     fun input kept proposerI => by
       have holdsI := kept.budget _ _ holds
       have slotI := kept.slot
@@ -803,6 +770,7 @@ theorem processBlock_honestBlock [LawfulSszType (BeaconBlockBody preset fork)]
         committee (by rw [committeesI vote member]; exact committeeOk) index inside honestIndex
       rw [currentI] at flag
       exact flag
+  -- The deposit steps accept the deposits, and keep the flags that the attestations set.
   exact ⟨after, processed, fun vote member rooted committee committeeOk index inside honestIndex =>
     carried _ _ (marked vote member rooted committee committeeOk index inside honestIndex)⟩
 
@@ -814,7 +782,9 @@ The block and the state meet the conditions of an honest block, except those on 
 
 The execution part of the block must pass on the state after its header, an assumption.
 
-Each deposit has a Merkle proof to the deposit root of the state, at its index; this is an input.
+Each deposit has a Merkle proof to the deposit root of the state, at its index.
+
+That proof is an input.
 
 The data of each aggregate meet the checks of the attestation step, with committee index zero.
 

@@ -16,29 +16,7 @@ import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 /-!
 # Proofs: the block of an honest proposer passes the steps before its operations
 
-An honest proposer builds its block at the slot of the state, on the latest block.
-
-It signs the epoch with its key for the RANDAO reveal.
-
-It repeats the vote on the deposit contract that the state holds.
-
-It carries as many deposits as the state expects.
-
-It carries no slashing, exit, change of credentials or request.
-
-Its sync aggregate is empty, and its payload, deposits and attestations are given.
-
-These are choices that an honest proposer may make.
-
-The content of the deposits is not fixed here.
-
-Before Gloas, the steps of such a block before its operations pass.
-
-That needs the execution part of the block to pass on the state after its header.
-
-That part checks the payload against the state and asks the execution layer to accept it.
-
-Both are assumptions of this file, since the execution layer builds the payload.
+Before Gloas, the steps of a block that an honest proposer may build pass, up to its operations.
 
 From Altair, the state they reach agrees with the first on what the attestations read.
 -/
@@ -53,25 +31,15 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config}
 
 /-- A block that an honest proposer may build at the slot of a state, with its secret key.
 
+Each of its fields is a choice that an honest proposer may make.
+
 It carries as many deposits as are due, and leaves out each operation it need not carry.
-
-It is at the slot of the state and names the proposer of that slot.
-
-Its parent is the latest block header of the state.
-
-Its RANDAO reveal is the signature of the epoch of its slot by the key.
-
-Before Heze it repeats the vote on the deposit contract that the state already holds.
-
-Before Heze it carries as many deposits as the state expects.
-
-It carries no slashing, exit, change of credentials or request of the execution layer.
-
-From Altair its sync aggregate sets no bit and carries the signature of the point at infinity.
 
 Its graffiti, its payload, its blob commitments and its attestations are free.
 
-So are the fields that only Gloas has, since the definition is for the blocks before Gloas. -/
+So are the fields that only Gloas has, since the definition is for the blocks before Gloas.
+
+The content of its deposits is not fixed here either. -/
 structure HonestBlock (config : Config) (state : BeaconState preset fork)
     (key : Signatures.SecretKey) (block : BeaconBlock preset fork) : Prop where
   /-- The block is at the slot of the state. -/
@@ -80,9 +48,9 @@ structure HonestBlock (config : Config) (state : BeaconState preset fork)
   proposer : getBeaconProposerIndex state = .ok block.proposerIndex
   /-- Its parent is the latest block header of the state. -/
   parent : hashTreeRoot state.latestBlockHeader = .ok block.parentRoot
-  /-- Its RANDAO reveal is the signature of its epoch by the key. -/
+  /-- Its RANDAO reveal is the signature of the epoch of its slot by the key. -/
   reveal : getEpochSignature config state block key = .ok block.body.randaoReveal
-  /-- Before Heze it votes for the deposit contract data of the state. -/
+  /-- Before Heze it repeats the vote on the deposit contract that the state already holds. -/
   eth1 : ∀ before : fork < .hegota, block.body.eth1Data before = state.eth1Data before
   /-- It carries no proposer slashing. -/
   proposerSlashings : block.body.proposerSlashings.data = #[]
@@ -108,14 +76,6 @@ structure HonestBlock (config : Config) (state : BeaconState preset fork)
     (block.body.syncAggregate altair).syncCommitteeSignature = Signatures.G2_POINT_AT_INFINITY
 
 /-- Two states agree on what the attestations of a block read from Altair, and on its deposits.
-
-They have the same slot, registry, justified checkpoints and buffer of block roots.
-
-They have the same flags of participation, fork versions and genesis validators root.
-
-They have the same committees in the previous and the current epoch.
-
-They expect the same number of deposits, and hold the same current sync committee.
 
 Every budget that bounds the first state bounds the second. -/
 structure AttestationReadsKept (state input : BeaconState preset fork) : Prop where
@@ -325,25 +285,22 @@ private theorem withinBudget_kept {state input : BeaconState preset fork} {budge
 
 /-- Before Gloas, the steps of an honest block before its operations pass, and keep deposit reads.
 
-The proposer must hold the public key of the secret key, and must not be slashed.
+They need these facts:
 
-The state must hold no block at its slot yet.
+- The proposer must hold the public key of the secret key, and must not be slashed.
+- The state must hold no block at its slot yet.
+- Before Heze the votes on the deposit contract must leave room for one more in the period.
+- The execution part of the block must pass on the state after its header, an assumption.
+- The mixes must span more than the seed lookahead plus two epochs.
+- The encoding of a block body must be lawful, so that the body has a root.
 
-Before Heze the votes on the deposit contract must leave room for one more in the period.
+The state they reach then has these properties:
 
-The execution part of the block must pass on the state after its header, an assumption.
-
-The mixes must span more than the seed lookahead plus two epochs.
-
-The encoding of a block body must be lawful, so that the body has a root.
-
-The state they reach names the proposer, and agrees with the first on what attestations read.
-
-They also keep the next deposit index and the pending deposits.
-
-Before Heze the vote repeats the deposit contract data of the state, so that data stays too.
-
-They keep the inactivity scores. -/
+- It names the proposer, and agrees with the first on what attestations read.
+- It keeps the next deposit index and the pending deposits.
+- Before Heze the vote repeats the deposit contract data of the state, so that data stays too.
+- It keeps the inactivity scores.
+-/
 theorem stateBeforeOperations_honestBlock_deposits [LawfulSszType (BeaconBlockBody preset fork)]
     (beforeGloas : fork < .glamsterdam)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -500,27 +457,23 @@ theorem stateBeforeOperations_honestBlock_deposits [LawfulSszType (BeaconBlockBo
 
 /-- Before Gloas, the steps of an honest block before its operations pass.
 
-The proposer must hold the public key of the secret key, and must not be slashed.
+They need these facts:
 
-The state must hold no block at its slot yet.
-
-Before Heze the votes on the deposit contract must leave room for one more in the period.
-
-That holds on every state reached from genesis, since the votes restart with each period.
-
-The execution part of the block must pass on the state after its header, an assumption.
-
-It checks the withdrawals and the payload against the state, and asks the execution layer.
+- The proposer must hold the public key of the secret key, and must not be slashed.
+- The state must hold no block at its slot yet.
+- Before Heze the votes on the deposit contract must leave room for one more in the period.
+  That holds on every state reached from genesis, since the votes restart with each period.
+- The execution part of the block must pass on the state after its header, an assumption.
+  It checks the withdrawals and the payload against the state, and asks the execution layer.
+  It is an assumption because the execution layer builds the payload.
+- The mixes must span more than the seed lookahead plus two epochs.
+- The encoding of a block body must be lawful, so that the body has a root.
+  It is lawful for every preset whose sizes of lists and vectors are not zero.
 
 The state that the steps reach names the proposer of the block.
 
 From Altair it agrees with the state before the block on what the attestations read.
-
-The mixes must span more than the seed lookahead plus two epochs.
-
-The encoding of a block body must be lawful, so that the body has a root.
-
-It is lawful for every preset whose sizes of lists and vectors are not zero. -/
+-/
 theorem stateBeforeOperations_honestBlock [LawfulSszType (BeaconBlockBody preset fork)]
     (beforeGloas : fork < .glamsterdam)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)

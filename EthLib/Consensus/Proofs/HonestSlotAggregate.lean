@@ -11,21 +11,9 @@ import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 /-!
 # Proofs: from Electra, the honest aggregate of a slot is accepted, and flags its honest members
 
-From Electra an attestation in a block may cover several committees of one slot, as [EIP-7549] says.
-
-Its committee bits name the committees, and its bits run over each of them in turn.
-
 The honest aggregate of a slot covers each committee of the slot that has an honest member.
 
-It joins the honest attestation of each such committee, as an honest proposer joins aggregates.
-
 From Electra until Gloas, the attestation step of a block in the inclusion window accepts it.
-
-Its signature check needs the secret keys of all honest members of the slot not to sum to zero.
-
-Each honest member of each committee of the slot then holds the timely target flag.
-
-[EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
 -/
 
 @[expose] public section
@@ -47,19 +35,23 @@ def honestCommittees (state : BeaconState preset fork) (honest : Finset Validato
 
 /-- From Electra: the honest aggregate of a slot, one attestation over its committees.
 
-It covers each committee of the slot of the data that has an honest member.
-
-It is built from the honest attestation of each of them, joined as an honest proposer joins them.
+From Electra an attestation in a block may cover several committees of one slot, as [EIP-7549] says.
 
 It assumes that every honest member of the slot votes for the same data.
 
-It also assumes that the aggregate of each committee reaches the proposer in time. -/
+It also assumes that the aggregate of each committee reaches the proposer in time.
+
+[EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
+-/
 def honestSlotAggregate (electra : .pectra ≤ fork) (config : Config)
     (state : BeaconState preset fork) (honest : Finset ValidatorIndex)
     (key : ValidatorIndex → Signatures.SecretKey) (data : AttestationData) :
     Except ProposerError (Attestation preset fork) := do
+  -- It covers each committee of the slot of the data that has an honest member.
   let committees ← (honestCommittees state honest data.slot).mapError .accessor
+  -- It is built from the honest attestation of each of them.
   let aggregates ← (committees.mapM (honestAttestation config state honest key data)).mapError .duty
+  -- They are joined as an honest proposer joins them.
   computeOnChainAggregate electra aggregates
 
 /-! ## Bits that follow the honest members of committees -/

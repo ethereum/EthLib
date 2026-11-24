@@ -11,29 +11,9 @@ public import EthLib.Consensus.Proofs.Containers.Requests
 /-!
 # Proofs: what an honest proposer computes
 
-Before Heze, the Eth1 vote of a proposer is the data of the state or the data of a candidate block.
+It covers the Eth1 vote of a proposer before Heze, the pending deposits and the new state root.
 
-So it never moves the deposit count of the state back.
-
-When the votes of the state hold a candidate, the vote is one of them with the most copies there.
-
-In Electra, the pending deposit count is the number of deposits that block processing expects.
-
-With a signature that passes its check, a block that carries the new state root is valid.
-
-The state after it then has that root.
-
-The on-chain aggregate joins the network aggregates in the order of their committees.
-
-From Altair, the sync aggregate sets the bits that the contributions set, each in its subcommittee.
-
-Reading the requests of the execution layer inverts the list that the execution layer receives.
-
-The total effective balance of some validators is their sum, with a repeated index counted again.
-
-The custody requirement of a node is at most the number of custody groups.
-
-It is at least the minimum for a node with validators, when that minimum is at most that number.
+It also covers the on-chain and sync aggregates, the execution requests and the custody requirement.
 -/
 
 @[expose] public section
@@ -371,8 +351,6 @@ theorem committee_le_total (a b : CommitteeIndex × Attestation preset fork) :
   rcases UInt64.le_total a.1 b.1 with le | le <;> simp [le]
 
 /-- The on-chain aggregate joins the network aggregates in the order of their committees.
-
-From Altair, the sync aggregate sets the bits that the contributions set, each in its subcommittee.
 
 There is an order of the aggregates, each with its first committee, sorted by that committee.
 
