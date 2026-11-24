@@ -29,7 +29,7 @@ open EthLib.Execution.State (TransactionState)
 open EthLib.Execution.Blocks.SystemContract
 open EthLib.Execution.Blocks.RequestQueue
 open GasCosts
-open EthLib.Base (byteAt_extract)
+open EthLib.Base (byteAtOrZero_extract)
 open EthLib.Execution.Fees.BlobBaseFee (fakeExponential)
 
 /-! ## The contract -/
@@ -567,9 +567,9 @@ theorem holds_record {M M₁ M₂ M₃ M₄ pre : ByteArray} {off e₁ e₂ e₃
       have := hw.1
       simp only [s, ByteArray.size_extract] at this ⊢
       omega
-    refine Holds.of_byteAt hfit fun i hi => ?_
+    refine Holds.of_byteAtOrZero hfit fun i hi => ?_
     simp only [ByteArray.size_extract, s] at hi
-    rw [hw.byteAt_eq (by rw [s]; omega), byteAt_wordBytes_shl v₀ (by omega), byteAt_extract, s,
+    rw [hw.byteAtOrZero_eq (by rw [s]; omega), byteAtOrZero_wordBytes_shl v₀ (by omega), byteAtOrZero_extract, s,
       ite_eq_left (by omega)]
   have hsA : ((wordBytes v₀).extract 12 32).size = 20 := by simp [s]
   have hA₂ : Holds M₂ off ((wordBytes v₀).extract 12 32) :=

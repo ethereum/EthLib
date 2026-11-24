@@ -45,25 +45,21 @@ private theorem readHeader_mk (b0 b1 b2 b3 b4 b5 b6 b7 : UInt8) :
 
 /-- Eight bytes are the array of their values. -/
 private theorem eq_mk_of_size (x : ByteArray) (h : x.size = 8) :
-    x = ⟨#[byteAt x 0, byteAt x 1, byteAt x 2, byteAt x 3, byteAt x 4, byteAt x 5, byteAt x 6,
-      byteAt x 7]⟩ := by
-  refine eq_of_byteAt h fun i => ?_
+    x = ⟨#[byteAtOrZero x 0, byteAtOrZero x 1, byteAtOrZero x 2, byteAtOrZero x 3, byteAtOrZero x 4, byteAtOrZero x 5, byteAtOrZero x 6,
+      byteAtOrZero x 7]⟩ := by
+  refine eq_of_byteAtOrZero h fun i => ?_
   match i with
   | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 => rfl
-  | i + 8 => rw [byteAt_of_size_le (by omega), byteAt_of_size_le (Nat.le_add_left 8 i)]
+  | i + 8 => rw [byteAtOrZero_of_size_le (by omega), byteAtOrZero_of_size_le (Nat.le_add_left 8 i)]
 
 /-- The header at a position is the header at the start of the eight bytes there. -/
 private theorem readHeader_extract (bytes : ByteArray) (offset : Nat)
     (h : offset + 8 ≤ bytes.size) :
     readHeader (bytes.extract offset (offset + 8)) 0 = readHeader bytes offset := by
-  have hb (i : Nat) (hi : i < 8) :
-      byteAt (bytes.extract offset (offset + 8)) (0 + i) = byteAt bytes (offset + i) := by
-    rw [Nat.zero_add, byteAt_extract, ite_eq_left (by omega)]
-  simp only [readHeader, ByteArray.size_extract, hb 0 (by omega), hb 1 (by omega),
-    hb 2 (by omega), hb 3 (by omega), hb 4 (by omega), hb 5 (by omega), hb 6 (by omega),
-    hb 7 (by omega)]
-  rw [ite_eq_right (show ¬bytes.size < offset + 8 by omega),
-    ite_eq_right (show ¬min (offset + 8) bytes.size - offset < 0 + 8 by omega)]
+  -- Byte `i` of the eight extracted bytes is byte `offset + i` of the buffer.
+  simp only [readHeader, ByteArray.size_extract, ByteArray.getElem_extract, Nat.zero_add,
+    dite_eq_right (show ¬bytes.size < offset + 8 by omega),
+    dite_eq_right (show ¬min (offset + 8) bytes.size - offset < 0 + 8 by omega)]
 
 /-- A vector of four bytes is the vector of its four entries. -/
 private theorem vector_four (v : Vector UInt8 4) : v = #v[v[0], v[1], v[2], v[3]] := by
@@ -136,7 +132,7 @@ theorem readHeader_eq_ok {bytes : ByteArray} {offset : Nat} {header : Header}
     offset + 8 ≤ bytes.size ∧ header.length < 2 ^ 32 ∧
       bytes.extract offset (offset + 8) = encodeHeader header.type header.length := by
   have hs : offset + 8 ≤ bytes.size := Nat.le_of_not_lt fun hc => by
-    rw [readHeader, ite_eq_left hc] at h
+    rw [readHeader, dite_eq_left hc] at h
     cases h
   rw [← readHeader_extract _ _ hs] at h
   have hx : (bytes.extract offset (offset + 8)).size = 8 := by

@@ -15,7 +15,7 @@ Source: [EIP-8024](https://eips.ethereum.org/EIPS/eip-8024#specification).
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 byteAt)
+open EthLib.Base (Fork U256 byteAtOrZero)
 open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -70,7 +70,7 @@ def immediateByte (code : ByteArray) (pc : Nat) : UInt8 :=
   -- So a JUMPDEST byte right after one of these opcodes stays a valid destination.
   --
   -- Its byte `0x5b` encodes no depth or pair, so the opcode before it halts at step 3.
-  byteAt code (pc + 1)
+  byteAtOrZero code (pc + 1)
 
 /-- DUPN: push a copy of the `n`th item from the top, counted from 1. -/
 def dupnStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do

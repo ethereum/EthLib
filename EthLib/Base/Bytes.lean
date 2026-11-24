@@ -94,8 +94,12 @@ def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
 
 /-- The byte at index `i` of the buffer, or `0` past its end.
 
+Use it only where the specification reads zeros past the end, and cite that rule at the call.
+
+A decoder checks the length first, then reads with a proof that the byte exists.
+
 It reads the byte in place, since the array of all the bytes would cost a copy of the buffer. -/
-@[inline] def byteAt (data : ByteArray) (i : Nat) : UInt8 :=
+@[inline] def byteAtOrZero (data : ByteArray) (i : Nat) : UInt8 :=
   if h : i < data.size then data[i] else 0
 
 /-! ## Bitwise operations -/
@@ -114,7 +118,7 @@ def xorByteArray (a b : ByteArray) : ByteArray :=
 where
   /-- Each byte from the index on is XORed with the byte of the second string. -/
   go (i : Nat) (acc : ByteArray) : ByteArray :=
-    if h : i < acc.size then go (i + 1) (acc.set i (acc[i] ^^^ byteAt b i)) else acc
+    if h : i < acc.size then go (i + 1) (acc.set i (acc[i] ^^^ byteAtOrZero b i)) else acc
   termination_by acc.size - i
   decreasing_by simp only [ByteArray.set, ByteArray.size, Array.size_set] at h ⊢; omega
 

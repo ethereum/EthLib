@@ -32,7 +32,7 @@ theorem readNat_zero_size (data : ByteArray) (start : Nat) : readNat data start 
 
 /-- A read depends only on the bytes it covers. -/
 theorem readNat_congr {d₁ d₂ : ByteArray} {start size : Nat}
-    (h : ∀ i, start ≤ i → i < start + size → byteAt d₁ i = byteAt d₂ i) :
+    (h : ∀ i, start ≤ i → i < start + size → byteAtOrZero d₁ i = byteAtOrZero d₂ i) :
     readNat d₁ start size = readNat d₂ start size := by
   unfold readNat
   rw [bufferRead_eq, bufferRead_eq]
@@ -45,6 +45,6 @@ theorem readNat_congr {d₁ d₂ : ByteArray} {start size : Nat}
 /-- Padding the call data with zero bytes changes no read. -/
 theorem readNat_append_zeros (data : ByteArray) (n start size : Nat) :
     readNat (data ++ ByteArray.mk (Array.replicate n 0)) start size = readNat data start size :=
-  readNat_congr fun i _ _ => byteAt_append_zeros data n i
+  readNat_congr fun i _ _ => byteAtOrZero_append_zeros data n i
 
 end EthLib.Execution.Evm.Precompiles.Modexp

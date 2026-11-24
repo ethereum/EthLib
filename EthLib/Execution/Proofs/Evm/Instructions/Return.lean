@@ -24,7 +24,7 @@ Both keep the size of memory a multiple of 32.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 byteAt byteAt_of_size_le)
+open EthLib.Base (Fork U256 byteAtOrZero byteAtOrZero_of_size_le)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
@@ -99,11 +99,11 @@ theorem size_output_haltWithOutput {evm after : Evm fork Meter} {start size : U2
 /-- RETURN and REVERT output the bytes of memory from their start, with zero past the size.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_output_haltWithOutput {evm after : Evm fork Meter} {start size : U256}
+theorem byteAtOrZero_output_haltWithOutput {evm after : Evm fork Meter} {start size : U256}
     {rest : List U256} (hstack : evm.stack.val = start :: size :: rest)
     (hmod : evm.memory.size % 32 = 0)
     (h : haltWithOutput evm = .ok after) (i : Nat) :
-    byteAt after.output i = if i < size.toNat then byteAt evm.memory (start.toNat + i) else 0 := by
+    byteAtOrZero after.output i = if i < size.toNat then byteAtOrZero evm.memory (start.toNat + i) else 0 := by
   unfold haltWithOutput at h
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -115,13 +115,13 @@ theorem byteAt_output_haltWithOutput {evm after : Evm fork Meter} {start size : 
   by_cases hz : size = 0
   · subst hz
     simp only [memoryReadBytes]
-    exact byteAt_of_size_le (by simp)
+    exact byteAtOrZero_of_size_le (by simp)
   · have hmod2 : e2.memory.size % 32 = 0 := by rw [m2, m1]; exact hmod
     have fit := le_size_chargeGasAndMemory hmod2 h3 (start, size) (by simp) hz
     simp only at fit
-    rw [byteAt_memoryReadBytes fit]
+    rw [byteAtOrZero_memoryReadBytes fit]
     split
-    · rw [byteAt_chargeGasAndMemory h3, m2, m1]
+    · rw [byteAtOrZero_chargeGasAndMemory h3, m2, m1]
     · rfl
 
 /-- RETURN outputs as many bytes as its size.
@@ -136,12 +136,12 @@ theorem size_output_returnStep {evm after : Evm fork Meter} {start size : U256}
 /-- RETURN outputs the bytes of memory from its start, with zero past the size.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_output_returnStep {evm after : Evm fork Meter} {start size : U256}
+theorem byteAtOrZero_output_returnStep {evm after : Evm fork Meter} {start size : U256}
     {rest : List U256} (hstack : evm.stack.val = start :: size :: rest)
     (hmod : evm.memory.size % 32 = 0)
     (h : returnStep evm = .ok after) (i : Nat) :
-    byteAt after.output i = if i < size.toNat then byteAt evm.memory (start.toNat + i) else 0 :=
-  byteAt_output_haltWithOutput hstack hmod h i
+    byteAtOrZero after.output i = if i < size.toNat then byteAtOrZero evm.memory (start.toNat + i) else 0 :=
+  byteAtOrZero_output_haltWithOutput hstack hmod h i
 
 /-- REVERT outputs as many bytes as its size.
 
@@ -159,16 +159,16 @@ theorem size_output_revertStep {evm after : Evm fork Meter} {start size : U256}
 /-- REVERT outputs the bytes of memory from its start, with zero past the size.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_output_revertStep {evm after : Evm fork Meter} {start size : U256}
+theorem byteAtOrZero_output_revertStep {evm after : Evm fork Meter} {start size : U256}
     {rest : List U256} (hstack : evm.stack.val = start :: size :: rest)
     (hmod : evm.memory.size % 32 = 0)
     (h : revertStep evm = .ok after) (i : Nat) :
-    byteAt after.output i = if i < size.toNat then byteAt evm.memory (start.toNat + i) else 0 := by
+    byteAtOrZero after.output i = if i < size.toNat then byteAtOrZero evm.memory (start.toNat + i) else 0 := by
   unfold revertStep at h
   obtain ⟨mid, hmid, h⟩ := Base.bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
-  exact byteAt_output_haltWithOutput (after := mid) hstack hmod hmid i
+  exact byteAtOrZero_output_haltWithOutput (after := mid) hstack hmod hmid i
 
 /-- A halt with output keeps the size of memory a multiple of 32. -/
 theorem size_haltWithOutput_mod {evm after : Evm fork Meter} (hmod : evm.memory.size % 32 = 0)

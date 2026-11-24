@@ -89,7 +89,7 @@ def stepErrorText : EvmError → String
 def memoryWords (memory : ByteArray) : List Json :=
   -- Chunks of 32 bytes, chunk `i` from offset `32 i`, each written as a 32-byte word.
   (List.range ((memory.size + 31) / 32)).map fun i =>
-    dataJson ((List.range 32).map fun j => byteAt memory (32 * i + j))
+    dataJson ((List.range 32).map fun j => byteAtOrZero memory (32 * i + j))
 
 /-- The JSON of an entry of the opcode logger.
 

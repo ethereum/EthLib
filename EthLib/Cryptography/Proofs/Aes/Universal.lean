@@ -307,7 +307,7 @@ So the blocks read in place are the blocks read from the array. -/
 theorem blocksOf_eq_getD (data : ByteArray) :
     blocksOf data = (List.range ((data.size + 15) / 16)).map fun j =>
       Vector.ofFn fun i : Fin 16 => data.data.getD (16 * j + i.val) 0 := by
-  simp only [blocksOf, EthLib.Base.byteAt_eq_getD]
+  simp only [blocksOf, EthLib.Base.byteAtOrZero_eq_getD]
 
 /-- A byte string of `n` bytes has `(n + 15) / 16` blocks. -/
 theorem length_blocksOf (data : ByteArray) : (blocksOf data).length = (data.size + 15) / 16 := by

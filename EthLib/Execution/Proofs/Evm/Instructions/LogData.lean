@@ -24,7 +24,7 @@ A LOG instruction keeps the size of memory a multiple of 32.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork Hash32 U256 byteAt byteAt_of_size_le)
+open EthLib.Base (Fork Hash32 U256 byteAtOrZero byteAtOrZero_of_size_le)
 open EthLib.Execution.Blocks (Log)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -104,7 +104,7 @@ theorem logStep_data {n : Nat} {evm after : Evm fork Meter} {start size : U256}
     (hmod : evm.memory.size % 32 = 0) (h : logStep n evm = .ok after) :
     ∃ log : Log, after.substate.logs = evm.substate.logs.push log ∧
       log.data.size = size.toNat ∧ ∀ i,
-        byteAt log.data i = if i < size.toNat then byteAt evm.memory (start.toNat + i) else 0 := by
+        byteAtOrZero log.data i = if i < size.toNat then byteAtOrZero evm.memory (start.toNat + i) else 0 := by
   obtain ⟨⟨st, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨sz, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨topics, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
@@ -129,12 +129,12 @@ theorem logStep_data {n : Nat} {evm after : Evm fork Meter} {start size : U256}
         simp [memoryReadBytes]
       simp only [he]
       refine ⟨rfl, fun i => ?_⟩
-      rw [byteAt_of_size_le (by simp), ite_eq_right_iff.mpr (fun hi => absurd hi (by simp))]
+      rw [byteAtOrZero_of_size_le (by simp), ite_eq_right_iff.mpr (fun hi => absurd hi (by simp))]
     · have fit := le_size_chargeGasAndMemory (by rw [hm3]; exact hmod) h4 (start, size)
         (by simp) hz
       simp only at fit
       refine ⟨size_memoryReadBytes fit, fun i => ?_⟩
-      rw [byteAt_memoryReadBytes fit, byteAt_chargeGasAndMemory h4, hm3]
+      rw [byteAtOrZero_memoryReadBytes fit, byteAtOrZero_chargeGasAndMemory h4, hm3]
 
 /-- LOGn keeps the size of memory a multiple of 32. -/
 theorem size_logStep_mod {n : Nat} {evm after : Evm fork Meter}

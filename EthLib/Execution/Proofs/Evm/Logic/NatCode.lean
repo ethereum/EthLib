@@ -38,7 +38,7 @@ It takes at most one step per opcode before the position, and `decide +kernel` c
 
 namespace EthLib.Execution.Evm.Logic.NatCode
 
-open EthLib.Base (byteAt bytesToNat)
+open EthLib.Base (byteAtOrZero bytesToNat)
 
 /-- The byte at index `i` of the code of `size` bytes stored in `n`, or 0 past its end.
 
@@ -64,8 +64,8 @@ theorem getElem_ofNat (n size i : Nat) (h : i < (ofNat n size).size) :
     simpa [ofNat, ByteArray.size] using h) = _ from Array.getElem_ofFn ..
 
 /-- The byte at any index, 0 past the end, is the byte of the number at that index. -/
-theorem byteAt_ofNat (n size i : Nat) : byteAt (ofNat n size) i = natByte n size i := by
-  unfold byteAt
+theorem byteAtOrZero_ofNat (n size i : Nat) : byteAtOrZero (ofNat n size) i = natByte n size i := by
+  unfold byteAtOrZero
   split
   · exact getElem_ofNat n size i _
   · rename_i h
@@ -86,7 +86,7 @@ theorem pushData_ofNat (n size pc k : Nat) (h : pc + k < size) :
   | succ k ih =>
     rw [List.range_succ, List.map_append, bytesToNat, List.foldl_append, ← bytesToNat,
       ih (by omega)]
-    simp only [List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil, byteAt_ofNat,
+    simp only [List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil, byteAtOrZero_ofNat,
       natByte, show pc + 1 + k < size by omega, ↓reduceIte, UInt8.toNat_ofNat']
     -- The data before the last byte is the number shifted one byte further.
     have hs : 8 * (size - 1 - (pc + k)) = 8 * (size - 1 - (pc + 1 + k)) + 8 := by omega
@@ -105,7 +105,7 @@ def nextPc (n size pc : Nat) : Nat :=
 
 /-- The opcode after the one at `pc` sits where the number puts it. -/
 theorem nextOpcode_ofNat (n size pc : Nat) : nextOpcode (ofNat n size) pc = nextPc n size pc := by
-  rw [nextOpcode_eq, byteAt_ofNat, nextPc]
+  rw [nextOpcode_eq, byteAtOrZero_ofNat, nextPc]
 
 /-- Whether the opcodes from `pc` reach `target`, in at most `fuel` opcodes.
 
@@ -141,14 +141,14 @@ theorem valid_of_walk {n size d : Nat} (hw : walk n size size 0 d = true)
   have ht : d < size := Nat.lt_of_not_le fun h => by
     simp [natByte, Nat.not_lt.mpr h] at hb
   exact isValidJumpDest_iff_boundaryFrom.mpr
-    ⟨boundaryFrom_of_walk n size d ht _ _ hw, by rw [byteAt_ofNat, hb]; rfl⟩
+    ⟨boundaryFrom_of_walk n size d ht _ _ hw, by rw [byteAtOrZero_ofNat, hb]; rfl⟩
 
 /-- A position whose byte is not JUMPDEST is not a valid jump destination. -/
 theorem not_valid_of_natByte {n size d : Nat} (hb : natByte n size d ≠ 0x5b) :
     isValidJumpDest (validJumpDestinations (ofNat n size)) d = false := by
   cases h : isValidJumpDest (validJumpDestinations (ofNat n size)) d with
   | false => rfl
-  | true => exact absurd (by rw [← byteAt_ofNat]; exact byteAt_of_isValidJumpDest h) hb
+  | true => exact absurd (by rw [← byteAtOrZero_ofNat]; exact byteAtOrZero_of_isValidJumpDest h) hb
 
 /-- The `w` bits of a number from bit `s` depend only on its bits below bit `W`.
 

@@ -175,7 +175,7 @@ theorem padded_blockCount_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray) :
 
 /-- The bits of the block of `rate` bytes from byte `start`, as an `8 * rate`-bit block. -/
 def blockBits (rate : Nat) (bytes : ByteArray) (start : Nat) : Block (8 * rate) :=
-  Vector.ofFn fun i => (EthLib.Base.byteAt bytes (start + i.val / 8)).toNat.testBit (i.val % 8)
+  Vector.ofFn fun i => (EthLib.Base.byteAtOrZero bytes (start + i.val / 8)).toNat.testBit (i.val % 8)
 
 /-- After absorbing a block, lane `(x, y)` is XORed with block lane `x + 5 * y`. -/
 theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.absorbBlock_lane {rate : Nat}
@@ -259,7 +259,7 @@ theorem paddedBlock_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray)
   have bitIndex : (8 * rate * i.val + j) % 8 = j % 8 := by
     rw [heq, Nat.add_mul_mod_self_left]
   simp only [byteIndex, bitIndex] at bit
-  simp only [paddedBlock, blockBits, Vector.getElem_ofFn, EthLib.Base.byteAt,
+  simp only [paddedBlock, blockBits, Vector.getElem_ofFn, EthLib.Base.byteAtOrZero,
     dite_eq_left inside, ByteArray.getElem_eq_getElem_data]
   exact bit
 

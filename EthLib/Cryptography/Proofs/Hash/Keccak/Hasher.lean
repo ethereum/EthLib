@@ -15,14 +15,14 @@ The pieces can be cut anywhere, since a block that two pieces share is absorbed 
 
 namespace EthLib.Cryptography.Hash.Keccak
 
-open EthLib.Base (byteAt byteAt_append byteAt_extract eq_of_byteAt)
+open EthLib.Base (byteAtOrZero byteAtOrZero_append byteAtOrZero_extract eq_of_byteAtOrZero)
 open Internal
 
 /-! ## Blocks -/
 
 /-- A block reads only its own `rate` bytes, when the rate is a whole number of lanes. -/
 theorem absorbBlock_congr {rate : Nat} (lanes : 8 ∣ rate) (S : State) {a b : ByteArray}
-    {s t : Nat} (h : ∀ j < rate, byteAt a (s + j) = byteAt b (t + j)) :
+    {s t : Nat} (h : ∀ j < rate, byteAtOrZero a (s + j) = byteAtOrZero b (t + j)) :
     absorbBlock rate S (laneAt a) s = absorbBlock rate S (laneAt b) t := by
   have hlane : blockLane rate (laneAt a) s = blockLane rate (laneAt b) t := by
     funext i
@@ -39,7 +39,7 @@ theorem absorbBlock_congr {rate : Nat} (lanes : 8 ∣ rate) (S : State) {a b : B
 /-- Absorbing `n` blocks reads only their `rate * n` bytes. -/
 theorem absorbBlocks_congr (f : State → State) {rate : Nat} (lanes : 8 ∣ rate) (n : Nat)
     (S : State) {a b : ByteArray} {s t : Nat}
-    (h : ∀ j < rate * n, byteAt a (s + j) = byteAt b (t + j)) :
+    (h : ∀ j < rate * n, byteAtOrZero a (s + j) = byteAtOrZero b (t + j)) :
     absorbBlocks f rate (laneAt a) n s S = absorbBlocks f rate (laneAt b) n t S := by
   induction n generalizing s t S with
   | zero => rfl
@@ -85,10 +85,10 @@ theorem absorb_absorb (h : Hasher256) (a b : ByteArray) :
   -- The first piece leaves `q` whole blocks, then `r` bytes, which the second piece follows.
   generalize hq : bytes.size / RATE_256 = q
   have hle : RATE_256 * q ≤ bytes.size := hq ▸ Nat.mul_div_le _ _
-  have hrest : ∀ k, byteAt (bytes.extract (RATE_256 * q) bytes.size ++ b) k
-      = byteAt (bytes ++ b) (RATE_256 * q + k) := by
+  have hrest : ∀ k, byteAtOrZero (bytes.extract (RATE_256 * q) bytes.size ++ b) k
+      = byteAtOrZero (bytes ++ b) (RATE_256 * q + k) := by
     intro k
-    rw [byteAt_append, byteAt_append, ByteArray.size_extract, byteAt_extract, Nat.min_self]
+    rw [byteAtOrZero_append, byteAtOrZero_append, ByteArray.size_extract, byteAtOrZero_extract, Nat.min_self]
     by_cases hk : RATE_256 * q + k < bytes.size
     · rw [ite_eq_left (by omega), ite_eq_left hk, ite_eq_left hk]
     · rw [ite_eq_right (by omega), ite_eq_right hk,
@@ -117,15 +117,15 @@ theorem absorb_absorb (h : Hasher256) (a b : ByteArray) :
     have hfirst : absorbBlocks keccakF RATE_256 (laneAt bytes) q 0 h.state
         = absorbBlocks keccakF RATE_256 (laneAt (bytes ++ b)) q 0 h.state :=
       absorbBlocks_congr _ lanes_rate _ _ fun j hj => by
-        rw [Nat.zero_add, byteAt_append, ite_eq_left (by omega)]
+        rw [Nat.zero_add, byteAtOrZero_append, ite_eq_left (by omega)]
     rw [absorbBlocks_add, Nat.zero_add, hfirst]
     exact absorbBlocks_congr _ lanes_rate _ _ fun j _ => by rw [Nat.zero_add, hrest]
   · -- Both keep the bytes after the last whole block.
-    apply eq_of_byteAt
+    apply eq_of_byteAtOrZero
     · simp only [ByteArray.size_extract, Nat.min_self, hsize, Nat.mul_add]
       omega
     · intro j
-      rw [byteAt_extract, byteAt_extract, Nat.min_self, Nat.min_self, hsize, hrest, Nat.mul_add,
+      rw [byteAtOrZero_extract, byteAtOrZero_extract, Nat.min_self, Nat.min_self, hsize, hrest, Nat.mul_add,
         Nat.add_assoc]
       by_cases hj : RATE_256 * q + (RATE_256 * n + j) < (bytes ++ b).size
       · rw [ite_eq_left (by omega), ite_eq_left hj]
@@ -150,7 +150,7 @@ theorem digest_absorb_empty (msg : ByteArray) :
   rw [hpend, padding_mod, absorbBlocks_add, Nat.zero_add, hfirst]
   -- The last block is the bytes after them, then the padding.
   refine congrArg squeeze256 (absorbBlocks_congr _ lanes_rate _ _ fun j _ => ?_)
-  rw [pad, byteAt_append, byteAt_append, ByteArray.size_extract, Nat.min_self, byteAt_extract,
+  rw [pad, byteAtOrZero_append, byteAtOrZero_append, ByteArray.size_extract, Nat.min_self, byteAtOrZero_extract,
     Nat.min_self, Nat.zero_add]
   by_cases hj : RATE_256 * q + j < msg.size
   · rw [ite_eq_left (by omega), ite_eq_left hj, ite_eq_left hj]

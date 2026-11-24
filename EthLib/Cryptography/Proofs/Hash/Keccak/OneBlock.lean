@@ -134,8 +134,8 @@ theorem oneBlockState_injective {m₁ m₂ : ByteArray} (h₁ : m₁.size < RATE
     rw [size_pad hr, blockCount, Nat.div_eq_of_lt hm]
     rfl
   -- Each byte of the block is read back from its lane.
-  have hbyte : ∀ j < 136, EthLib.Base.byteAt (pad RATE_256 m₁) j =
-      EthLib.Base.byteAt (pad RATE_256 m₂) j := by
+  have hbyte : ∀ j < 136, EthLib.Base.byteAtOrZero (pad RATE_256 m₁) j =
+      EthLib.Base.byteAtOrZero (pad RATE_256 m₂) j := by
     intro j hj
     have hx : j / 8 % 5 < 5 := Nat.mod_lt _ (by decide)
     have hy : j / 8 / 5 < 5 := by omega
@@ -156,7 +156,7 @@ theorem oneBlockState_injective {m₁ m₂ : ByteArray} (h₁ : m₁.size < RATE
         (by decide) (by omega))), Nat.testBit_lt_two_pow (lt_of_lt_of_le (UInt8.toNat_lt _)
         (Nat.pow_le_pow_right (by decide) (by omega)))]
   have hat (m : ByteArray) (i : Nat) (hi : i < m.data.size) :
-      EthLib.Base.byteAt m i = m.data[i] :=
+      EthLib.Base.byteAtOrZero m i = m.data[i] :=
     dite_eq_left_of_eq_true (eq_true hi)
   refine pad_injective hr (ByteArray.ext (Array.ext ((hsize m₁ h₁).trans (hsize m₂ h₂).symm)
     fun j hj₁ hj₂ => ?_))

@@ -19,7 +19,7 @@ The code check reads only opcode positions, skipping the data of PUSH instructio
 
 namespace EthLib.Execution.Evm.Logic
 
-open EthLib.Base (Fork U256 byteAt)
+open EthLib.Base (Fork U256 byteAtOrZero)
 
 variable {fork : Fork}
 
@@ -146,7 +146,7 @@ theorem instruction_followsMeter {op : Op}
 /-- An opcode decoded at a listed position passes the code check. -/
 theorem meterSupported_of_supportedCode {code : ByteArray} {pc : Nat} {op : Op}
     (supported : SupportedCode code = true) (boundary : pc ∈ opcodePositions code)
-    (decoded : Op.ofByte fork (byteAt code pc) = some op) : meterSupported op = true := by
+    (decoded : Op.ofByte fork (byteAtOrZero code pc) = some op) : meterSupported op = true := by
   have h := List.all_eq_true.mp supported pc boundary
   have hd := (Option.filter_eq_some_iff.mp decoded).1
   simpa only [hd, Option.all_some] using h
@@ -167,7 +167,7 @@ theorem Step.followsMeter {low after : Evm fork Nat} {meter : StateGasMeter}
       | none => rw [step_of_ofByte_eq_none inside decoded] at hs; cases hs
       | some op =>
         have supportedOp := meterSupported_of_supportedCode supported boundary
-          (by simpa only [byteAt, dite_eq_left inside] using decoded)
+          (by simpa only [byteAtOrZero, dite_eq_left inside] using decoded)
         have since := since_le_of_ofByte_eq_some decoded
         obtain ⟨run, dispatch⟩ := Option.isSome_iff_exists.mp
           (instruction_isSome_of_meterSupported supportedOp since)
@@ -214,8 +214,8 @@ private theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low af
       cases decoded : Op.ofByte fork low.code[low.pc] with
       | none => rw [step_of_ofByte_eq_none inside decoded] at hs; cases hs
       | some op =>
-        have decodedAt : Op.ofByte fork (byteAt low.code low.pc) = some op := by
-          simpa only [byteAt, dite_eq_left inside] using decoded
+        have decodedAt : Op.ofByte fork (byteAtOrZero low.code low.pc) = some op := by
+          simpa only [byteAtOrZero, dite_eq_left inside] using decoded
         have supportedOp := meterSupported_of_supportedCode supported boundary decodedAt
         have since := since_le_of_ofByte_eq_some decoded
         obtain ⟨run, dispatch⟩ := Option.isSome_iff_exists.mp

@@ -284,21 +284,21 @@ private theorem shiftedByte (b : UInt8) (m i : Nat) (hm : m < 8) (hi : i < 64) :
 /-- A lane read from a byte string is its eight bytes from the start, each shifted to its place. -/
 private theorem laneAt_eq (bytes : ByteArray) (s : Nat) :
     Internal.laneAt bytes s =
-      (EthLib.Base.byteAt bytes s).toUInt64 |||
-      (EthLib.Base.byteAt bytes (s + 1)).toUInt64 <<< UInt64.ofNat (8 * 1) |||
-      (EthLib.Base.byteAt bytes (s + 2)).toUInt64 <<< UInt64.ofNat (8 * 2) |||
-      (EthLib.Base.byteAt bytes (s + 3)).toUInt64 <<< UInt64.ofNat (8 * 3) |||
-      (EthLib.Base.byteAt bytes (s + 4)).toUInt64 <<< UInt64.ofNat (8 * 4) |||
-      (EthLib.Base.byteAt bytes (s + 5)).toUInt64 <<< UInt64.ofNat (8 * 5) |||
-      (EthLib.Base.byteAt bytes (s + 6)).toUInt64 <<< UInt64.ofNat (8 * 6) |||
-      (EthLib.Base.byteAt bytes (s + 7)).toUInt64 <<< UInt64.ofNat (8 * 7) :=
+      (EthLib.Base.byteAtOrZero bytes s).toUInt64 |||
+      (EthLib.Base.byteAtOrZero bytes (s + 1)).toUInt64 <<< UInt64.ofNat (8 * 1) |||
+      (EthLib.Base.byteAtOrZero bytes (s + 2)).toUInt64 <<< UInt64.ofNat (8 * 2) |||
+      (EthLib.Base.byteAtOrZero bytes (s + 3)).toUInt64 <<< UInt64.ofNat (8 * 3) |||
+      (EthLib.Base.byteAtOrZero bytes (s + 4)).toUInt64 <<< UInt64.ofNat (8 * 4) |||
+      (EthLib.Base.byteAtOrZero bytes (s + 5)).toUInt64 <<< UInt64.ofNat (8 * 5) |||
+      (EthLib.Base.byteAtOrZero bytes (s + 6)).toUInt64 <<< UInt64.ofNat (8 * 6) |||
+      (EthLib.Base.byteAtOrZero bytes (s + 7)).toUInt64 <<< UInt64.ofNat (8 * 7) :=
   rfl
 
 /-- Bit `i` of the lane at byte `s` is bit `i % 8` of byte `s + i / 8`, as in FIPS 202 §3.1.2. -/
 theorem Internal.laneAt_testBit (bytes : ByteArray)
     (s i : Nat) (hi : i < 64) :
     (Internal.laneAt bytes s).toBitVec.getLsbD i =
-      (EthLib.Base.byteAt bytes (s + i / 8)).toNat.testBit (i % 8) := by
+      (EthLib.Base.byteAtOrZero bytes (s + i / 8)).toNat.testBit (i % 8) := by
   rw [laneAt_eq]
   simp only [UInt64.toBitVec_or, BitVec.getLsbD_or, byteExtend _ _ hi,
     shiftedByte _ 1 _ (by decide) hi, shiftedByte _ 2 _ (by decide) hi,
@@ -327,9 +327,9 @@ So the sponge absorbs the same blocks as the padded message `P` of FIPS 202 §4,
 
 /-- A lane reads only its own 8 bytes. -/
 theorem laneAt_congr {a b : ByteArray} {s t : Nat}
-    (h : ∀ k < 8, EthLib.Base.byteAt a (s + k) = EthLib.Base.byteAt b (t + k)) :
+    (h : ∀ k < 8, EthLib.Base.byteAtOrZero a (s + k) = EthLib.Base.byteAtOrZero b (t + k)) :
     Internal.laneAt a s = Internal.laneAt b t := by
-  have h0 : EthLib.Base.byteAt a s = EthLib.Base.byteAt b t := by simpa using h 0 (by omega)
+  have h0 : EthLib.Base.byteAtOrZero a s = EthLib.Base.byteAtOrZero b t := by simpa using h 0 (by omega)
   unfold Internal.laneAt
   rw [h0, h 1 (by omega), h 2 (by omega), h 3 (by omega), h 4 (by omega), h 5 (by omega),
     h 6 (by omega), h 7 (by omega)]
@@ -344,16 +344,16 @@ theorem Internal.blockLane_of_dvd {rate : Nat} (lanes : 8 ∣ rate) (read : Nat 
   simp only [blockLane, show (8 * i + 8 ≤ 8 * m) = (8 * i < 8 * m) from propext (by omega)]
 
 /-- Below the length of the message, the padded message holds the message's own bytes. -/
-theorem byteAt_pad_of_lt (rate : Nat) {msg : ByteArray} {j : Nat} (h : j < msg.size) :
-    EthLib.Base.byteAt (pad rate msg) j = EthLib.Base.byteAt msg j := by
-  rw [pad, EthLib.Base.byteAt_append, ite_eq_left h]
+theorem byteAtOrZero_pad_of_lt (rate : Nat) {msg : ByteArray} {j : Nat} (h : j < msg.size) :
+    EthLib.Base.byteAtOrZero (pad rate msg) j = EthLib.Base.byteAtOrZero msg j := by
+  rw [pad, EthLib.Base.byteAtOrZero_append, ite_eq_left h]
 
 /-- From the length of the message on, the padded message holds padding bytes, then zeros. -/
-theorem byteAt_pad_of_le (rate : Nat) {msg : ByteArray} {j : Nat} (h : msg.size ≤ j) :
-    EthLib.Base.byteAt (pad rate msg) j =
+theorem byteAtOrZero_pad_of_le (rate : Nat) {msg : ByteArray} {j : Nat} (h : msg.size ≤ j) :
+    EthLib.Base.byteAtOrZero (pad rate msg) j =
       if j - msg.size < rate - msg.size % rate then paddingByte rate msg.size (j - msg.size)
       else 0 := by
-  rw [pad, EthLib.Base.byteAt_append, ite_eq_right (by omega), EthLib.Base.byteAt_eq_getD]
+  rw [pad, EthLib.Base.byteAtOrZero_append, ite_eq_right (by omega), EthLib.Base.byteAtOrZero_eq_getD]
   split
   · next inside =>
     simp only [Array.getD_eq_getD_getElem?, padding_data, Array.getElem?_ofFn, inside,
@@ -384,7 +384,7 @@ theorem blockLane_pad_of_le {rate : Nat} {msg : ByteArray} {start : Nat}
     blockLane rate (laneAt (pad rate msg)) start i = blockLane rate (laneAt msg) start i := by
   unfold blockLane
   split
-  · exact laneAt_congr fun k hk => byteAt_pad_of_lt rate (by omega)
+  · exact laneAt_congr fun k hk => byteAtOrZero_pad_of_lt rate (by omega)
   · rfl
 
 open Internal in
@@ -462,11 +462,11 @@ theorem blockLane_pad_last (rate : Nat) (msg : ByteArray) (i : Nat) :
   rw [first, last]
   -- Byte `8i + z / 8` of the block is a message byte, or a padding byte past the message.
   by_cases inMsg : rate * (msg.size / rate) + 8 * i + z / 8 < msg.size
-  · rw [byteAt_pad_of_lt rate inMsg]
+  · rw [byteAtOrZero_pad_of_lt rate inMsg]
     have : ¬ (8 * i + z / 8 = msg.size % rate ∧ z % 8 = 0) := by omega
     have : ¬ (8 * i + z / 8 = rate - 1 ∧ z % 8 = 7) := by omega
     simp [*]
-  · rw [byteAt_pad_of_le rate (by omega), EthLib.Base.byteAt_of_size_le (by omega),
+  · rw [byteAtOrZero_pad_of_le rate (by omega), EthLib.Base.byteAtOrZero_of_size_le (by omega),
       ite_eq_left (by omega), paddingByte_testBit _ _ _ _ hb]
     have hpos : rate * (msg.size / rate) + 8 * i + z / 8 - msg.size =
         8 * i + z / 8 - msg.size % rate := by

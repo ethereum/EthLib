@@ -118,11 +118,11 @@ A byte past the end counts as zero.
 This covers excess data, which EIP-198 says "is ignored", and short input. -/
 theorem modexp_congr (fork : Fork) {d₁ d₂ : ByteArray} (gas : Nat)
     (h : ∀ i, i < BASE_OFFSET + (parseLengths d₁).base + (parseLengths d₁).exponent
-                + (parseLengths d₁).modulus → byteAt d₁ i = byteAt d₂ i) :
+                + (parseLengths d₁).modulus → byteAtOrZero d₁ i = byteAtOrZero d₂ i) :
     modexp fork d₁ gas = modexp fork d₂ gas := by
   -- The lengths come from the first 96 bytes, which lie inside the covered range.
   have hl : parseLengths d₁ = parseLengths d₂ := by
-    have hh : ∀ i, i < 96 → byteAt d₁ i = byteAt d₂ i := fun i hi => h i (by
+    have hh : ∀ i, i < 96 → byteAtOrZero d₁ i = byteAtOrZero d₂ i := fun i hi => h i (by
       unfold BASE_OFFSET LENGTH_HEADER_BYTES; omega)
     simp only [parseLengths, LENGTH_HEADER_BYTES]
     have e : ∀ s, s + 32 ≤ 96 → readNat d₁ s 32 = readNat d₂ s 32 := fun s hs =>
@@ -164,7 +164,7 @@ theorem modexp_append_excess (fork : Fork) (data extra : ByteArray) (gas : Nat)
   intro i hi
   -- Every covered byte lies inside the original data, before the excess.
   have hi' : i < data.size := Nat.lt_of_lt_of_le hi h
-  simp [byteAt_eq_getD, ByteArray.data_append, Array.getD_eq_getD_getElem?,
+  simp [byteAtOrZero_eq_getD, ByteArray.data_append, Array.getD_eq_getD_getElem?,
     Array.getElem?_append_left hi']
 
 /-! ## Bounds and gas -/

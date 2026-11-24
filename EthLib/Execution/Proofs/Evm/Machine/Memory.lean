@@ -24,8 +24,8 @@ public import EthLib.Execution.Proofs.Evm.Gas.Memory
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (U256 byteAt byteAt_append byteAt_append_zeros byteAt_extract byteAt_of_size_le
-  eq_of_byteAt)
+open EthLib.Base (U256 byteAtOrZero byteAtOrZero_append byteAtOrZero_append_zeros byteAtOrZero_extract byteAtOrZero_of_size_le
+  eq_of_byteAtOrZero)
 
 /-- A read into a byte array is its block, then the zeros it lacks, which may be none. -/
 private theorem bufferBytes_eq_append (data : ByteArray) (start size : Nat) :
@@ -53,37 +53,37 @@ theorem size_bufferBytes (data : ByteArray) (start size : Nat) :
     omega
 
 /-- A read into a byte array holds the bytes of the buffer, zero past its end and past `size`. -/
-theorem byteAt_bufferBytes (data : ByteArray) (start size j : Nat) :
-    byteAt (bufferBytes data start size) j =
-      if j < size then byteAt data (start + j) else 0 := by
+theorem byteAtOrZero_bufferBytes (data : ByteArray) (start size j : Nat) :
+    byteAtOrZero (bufferBytes data start size) j =
+      if j < size then byteAtOrZero data (start + j) else 0 := by
   rw [bufferBytes_eq_append]
   dsimp only
   -- A byte past the end of the buffer reads as zero on both sides.
-  have past : data.size ≤ start + j → byteAt data (start + j) = 0 := byteAt_of_size_le
+  have past : data.size ≤ start + j → byteAtOrZero data (start + j) = 0 := byteAtOrZero_of_size_le
   split
-  · rw [byteAt_append_zeros, byteAt_extract]
+  · rw [byteAtOrZero_append_zeros, byteAtOrZero_extract]
     by_cases hj : j < size
     · by_cases hd : start + j < data.size
       · simp [hj, hd, Nat.lt_min]
       · simp [hj, hd, Nat.lt_min, past (by omega)]
     · simp [hj, Nat.lt_min]
-  · rw [byteAt_append_zeros, byteAt_of_size_le (by simp)]
+  · rw [byteAtOrZero_append_zeros, byteAtOrZero_of_size_le (by simp)]
     by_cases hj : j < size <;> simp [hj, past (by omega)]
 
 /-- A read is the byte of the buffer at each position, zero past its end. -/
 theorem bufferRead_eq (data : ByteArray) (start size : Nat) :
-    bufferRead data start size = (List.range size).map fun i => byteAt data (start + i) := by
+    bufferRead data start size = (List.range size).map fun i => byteAtOrZero data (start + i) := by
   apply List.ext_getElem
   · simp only [bufferRead, Array.length_toList, List.length_map, List.length_range]
     exact size_bufferBytes data start size
   · intro i h1 h2
     have hi : i < size := by simpa using h2
     have hb : i < (bufferBytes data start size).size := by rw [size_bufferBytes]; exact hi
-    have h := byteAt_bufferBytes data start size i
+    have h := byteAtOrZero_bufferBytes data start size i
     simp only [hi, ite_true] at h
     simp only [bufferRead, Array.getElem_toList, List.getElem_map, List.getElem_range]
     rw [← h]
-    simp [byteAt, hb, ByteArray.getElem_eq_getElem_data]
+    simp [byteAtOrZero, hb, ByteArray.getElem_eq_getElem_data]
 
 /-- A read into a byte array is the bytes of the read as a list. -/
 theorem bufferBytes_eq (data : ByteArray) (start size : Nat) :
@@ -102,7 +102,7 @@ theorem bufferRead_zero_size (data : ByteArray) :
   · simp [bufferRead_eq]
   · intro i _ h
     have hi : i < data.data.size := by simpa using h
-    simp [bufferRead_eq, EthLib.Base.byteAt_eq_getD, Array.getD_eq_getD_getElem?,
+    simp [bufferRead_eq, EthLib.Base.byteAtOrZero_eq_getD, Array.getD_eq_getD_getElem?,
       Array.getElem?_eq_getElem hi]
 
 /-- A write is the bytes before the range, then the value, then the bytes after the range. -/
@@ -224,17 +224,17 @@ theorem size_memoryExtend_mod {memory : ByteArray} (h : memory.size % 32 = 0)
 /-- A write within memory sets each byte of its range to the byte of the value.
 
 It keeps every other byte. -/
-theorem byteAt_memoryWrite {memory value : ByteArray} {start : Nat}
+theorem byteAtOrZero_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) (i : Nat) :
-    byteAt (memoryWrite memory start value) i =
-      if start ≤ i ∧ i < start + value.size then byteAt value (i - start)
-      else byteAt memory i := by
+    byteAtOrZero (memoryWrite memory start value) i =
+      if start ≤ i ∧ i < start + value.size then byteAtOrZero value (i - start)
+      else byteAtOrZero memory i := by
   rw [memoryWrite_eq]
   split
   · rw [ite_eq_right_iff.mpr (fun hc => absurd hc (by omega))]
   · have hp : (memory.extract 0 start).size = start := by simp; omega
-    rw [byteAt_append, ByteArray.size_append, hp, byteAt_append, hp, byteAt_extract,
-      byteAt_extract]
+    rw [byteAtOrZero_append, ByteArray.size_append, hp, byteAtOrZero_append, hp, byteAtOrZero_extract,
+      byteAtOrZero_extract]
     by_cases h1 : i < start
     · simp [h1, show i < start + value.size by omega, show i < min start memory.size by omega,
         Nat.not_le.mpr h1]
@@ -246,45 +246,45 @@ theorem byteAt_memoryWrite {memory value : ByteArray} {start : Nat}
       show start + value.size + (i - (start + value.size)) = i by omega]
     split
     · rfl
-    · exact (byteAt_of_size_le (by omega)).symm
+    · exact (byteAtOrZero_of_size_le (by omega)).symm
 
 /-- Growth keeps every byte of memory. -/
-theorem byteAt_memoryExtend (memory : ByteArray) (n i : Nat) :
-    byteAt (memoryExtend memory n) i = byteAt memory i := by
+theorem byteAtOrZero_memoryExtend (memory : ByteArray) (n i : Nat) :
+    byteAtOrZero (memoryExtend memory n) i = byteAtOrZero memory i := by
   rw [memoryExtend_eq]
-  exact byteAt_append_zeros memory n i
+  exact byteAtOrZero_append_zeros memory n i
 
 /-- A read within memory gives the bytes of memory from its start, and zero past its size. -/
-theorem byteAt_memoryReadBytes {memory : ByteArray} {start size : Nat}
+theorem byteAtOrZero_memoryReadBytes {memory : ByteArray} {start size : Nat}
     (h : start + size ≤ memory.size) (i : Nat) :
-    byteAt (memoryReadBytes memory start size) i =
-      if i < size then byteAt memory (start + i) else 0 := by
+    byteAtOrZero (memoryReadBytes memory start size) i =
+      if i < size then byteAtOrZero memory (start + i) else 0 := by
   unfold memoryReadBytes
   split
   · rw [ite_eq_right_iff.mpr (fun hi => absurd hi (by omega))]
-    exact byteAt_of_size_le (by simp)
-  · rw [byteAt_extract, Nat.min_eq_left h]
+    exact byteAtOrZero_of_size_le (by simp)
+  · rw [byteAtOrZero_extract, Nat.min_eq_left h]
     split <;> split <;> first | rfl | omega
 
 /-- A buffer of a read holds the bytes of the read, and zero past its size. -/
-theorem byteAt_bufferRead (data : ByteArray) (offset size j : Nat) :
-    byteAt ⟨(bufferRead data offset size).toArray⟩ j =
-      if j < size then byteAt data (offset + j) else 0 := by
-  unfold byteAt
+theorem byteAtOrZero_bufferRead (data : ByteArray) (offset size j : Nat) :
+    byteAtOrZero ⟨(bufferRead data offset size).toArray⟩ j =
+      if j < size then byteAtOrZero data (offset + j) else 0 := by
+  unfold byteAtOrZero
   by_cases hj : j < size
   · have hlen : j < (bufferRead data offset size).toArray.size := by simp [bufferRead_length, hj]
     rw [dite_eq_left_of_eq_true (eq_true (by simpa [ByteArray.size] using hlen)),
       ite_eq_left_of_eq_true _ _ (eq_true hj), ByteArray.getElem_eq_getElem_data]
-    simp [bufferRead_eq, byteAt]
+    simp [bufferRead_eq, byteAtOrZero]
   · rw [dite_eq_right_of_eq_false
       (eq_false (by simpa [ByteArray.size, bufferRead_length] using hj)),
       ite_eq_right_of_eq_false _ _ (eq_false hj)]
 
 /-- Growth by no byte leaves memory as it is. -/
 theorem memoryExtend_zero (memory : ByteArray) : memoryExtend memory 0 = memory := by
-  apply eq_of_byteAt (by simp [size_memoryExtend])
+  apply eq_of_byteAtOrZero (by simp [size_memoryExtend])
   intro i
-  exact byteAt_memoryExtend memory 0 i
+  exact byteAtOrZero_memoryExtend memory 0 i
 
 /-- A write of a whole memory from offset 0 gives the written bytes. -/
 theorem memoryWrite_whole {memory value : ByteArray} (h : memory.size = value.size) :
@@ -292,13 +292,13 @@ theorem memoryWrite_whole {memory value : ByteArray} (h : memory.size = value.si
   have hs : (memoryWrite memory 0 value).size = value.size := by
     rw [size_memoryWrite (by omega)]
     omega
-  apply eq_of_byteAt hs
+  apply eq_of_byteAtOrZero hs
   intro i
-  rw [byteAt_memoryWrite (by omega)]
+  rw [byteAtOrZero_memoryWrite (by omega)]
   split
   · simp
   · rename_i hi
-    rw [Base.byteAt_of_size_le (by omega), Base.byteAt_of_size_le (by omega)]
+    rw [Base.byteAtOrZero_of_size_le (by omega), Base.byteAtOrZero_of_size_le (by omega)]
 
 /-- A write past the end of a memory, into bytes that it grew by, appends the written bytes. -/
 theorem memoryWrite_extend_end {memory value : ByteArray} :
@@ -307,29 +307,29 @@ theorem memoryWrite_extend_end {memory value : ByteArray} :
       (memory ++ value).size := by
     rw [size_memoryWrite (by simp [size_memoryExtend])]
     simp [size_memoryExtend]
-  apply eq_of_byteAt hs
+  apply eq_of_byteAtOrZero hs
   intro i
-  rw [byteAt_memoryWrite (by simp [size_memoryExtend]), byteAt_append]
+  rw [byteAtOrZero_memoryWrite (by simp [size_memoryExtend]), byteAtOrZero_append]
   split
   · rename_i hi
     rw [ite_eq_right (by omega)]
   · rename_i hi
     by_cases hlt : i < memory.size
-    · rw [ite_eq_left hlt, byteAt_memoryExtend]
+    · rw [ite_eq_left hlt, byteAtOrZero_memoryExtend]
     · rw [ite_eq_right hlt]
-      rw [Base.byteAt_of_size_le (by simp [size_memoryExtend]; omega),
-        Base.byteAt_of_size_le (by omega)]
+      rw [Base.byteAtOrZero_of_size_le (by simp [size_memoryExtend]; omega),
+        Base.byteAtOrZero_of_size_le (by omega)]
 
 /-- A read of a whole memory from offset 0 gives the memory. -/
 theorem memoryReadBytes_whole {memory : ByteArray} :
     memoryReadBytes memory 0 memory.size = memory := by
-  apply eq_of_byteAt (by rw [size_memoryReadBytes (by omega)])
+  apply eq_of_byteAtOrZero (by rw [size_memoryReadBytes (by omega)])
   intro i
-  rw [byteAt_memoryReadBytes (by omega)]
+  rw [byteAtOrZero_memoryReadBytes (by omega)]
   split
   · simp
   · rename_i hi
-    rw [Base.byteAt_of_size_le (by omega)]
+    rw [Base.byteAtOrZero_of_size_le (by omega)]
 
 /-- A read of a range that a write within memory does not touch gives the bytes before the write.
 
@@ -342,11 +342,11 @@ theorem memoryReadBytes_memoryWrite_of_disjoint {memory value : ByteArray} {star
   unfold memoryReadBytes
   split
   · rfl
-  apply eq_of_byteAt (by simp [hs])
+  apply eq_of_byteAtOrZero (by simp [hs])
   intro i
-  rw [byteAt_extract, byteAt_extract, hs]
+  rw [byteAtOrZero_extract, byteAtOrZero_extract, hs]
   split
-  · rw [byteAt_memoryWrite hw, ite_eq_right (by omega)]
+  · rw [byteAtOrZero_memoryWrite hw, ite_eq_right (by omega)]
   · rfl
 
 /-- A read across two adjacent writes within memory gives the two values in order. -/
@@ -357,11 +357,11 @@ theorem memoryReadBytes_memoryWrite_memoryWrite {memory a b : ByteArray} {s : Na
   have h1 : (memoryWrite memory s a).size = memory.size := size_memoryWrite (by omega)
   have h2 : (memoryWrite (memoryWrite memory s a) (s + a.size) b).size = memory.size := by
     rw [size_memoryWrite (by omega), h1]
-  apply eq_of_byteAt
+  apply eq_of_byteAtOrZero
   · rw [size_memoryReadBytes (by omega), ByteArray.size_append]
   intro i
-  rw [byteAt_memoryReadBytes (by omega), byteAt_memoryWrite (by omega),
-    byteAt_memoryWrite (by omega), byteAt_append]
+  rw [byteAtOrZero_memoryReadBytes (by omega), byteAtOrZero_memoryWrite (by omega),
+    byteAtOrZero_memoryWrite (by omega), byteAtOrZero_append]
   by_cases hi : i < a.size
   · rw [ite_eq_left (by omega), ite_eq_right (by omega), ite_eq_left (by omega), ite_eq_left hi]
     congr 1
@@ -370,7 +370,7 @@ theorem memoryReadBytes_memoryWrite_memoryWrite {memory a b : ByteArray} {s : Na
     · rw [ite_eq_left hj, ite_eq_left (by omega), ite_eq_right hi]
       congr 1
       omega
-    · rw [ite_eq_right hj, ite_eq_right hi, byteAt_of_size_le (by omega)]
+    · rw [ite_eq_right hj, ite_eq_right hi, byteAtOrZero_of_size_le (by omega)]
 
 /-- A read from `k` bytes before a write to its end gives those bytes, then the value.
 
@@ -380,20 +380,20 @@ theorem memoryReadBytes_memoryWrite_eq_append {memory value : ByteArray} {s k : 
     memoryReadBytes (memoryWrite memory (s + k) value) s (k + value.size) =
       memoryReadBytes memory s k ++ value := by
   have hs : (memoryWrite memory (s + k) value).size = memory.size := size_memoryWrite hw
-  apply eq_of_byteAt
+  apply eq_of_byteAtOrZero
   · rw [size_memoryReadBytes (by omega), ByteArray.size_append, size_memoryReadBytes (by omega)]
   · intro i
-    rw [byteAt_memoryReadBytes (by omega), byteAt_memoryWrite hw, byteAt_append,
+    rw [byteAtOrZero_memoryReadBytes (by omega), byteAtOrZero_memoryWrite hw, byteAtOrZero_append,
       size_memoryReadBytes (by omega)]
     by_cases hi : i < k
-    · rw [ite_eq_left (by omega), ite_eq_left hi, byteAt_memoryReadBytes (by omega),
+    · rw [ite_eq_left (by omega), ite_eq_left hi, byteAtOrZero_memoryReadBytes (by omega),
         ite_eq_right (by omega), ite_eq_left hi]
     · rw [ite_eq_right hi]
       by_cases hj : i < k + value.size
       · rw [ite_eq_left hj, ite_eq_left (by omega)]
         congr 1
         omega
-      · rw [ite_eq_right hj, byteAt_of_size_le (by omega)]
+      · rw [ite_eq_right hj, byteAtOrZero_of_size_le (by omega)]
 
 /-- Two writes within memory to disjoint ranges give the same memory in either order. -/
 theorem memoryWrite_comm_of_disjoint {memory a b : ByteArray} {s t : Nat}
@@ -402,11 +402,11 @@ theorem memoryWrite_comm_of_disjoint {memory a b : ByteArray} {s t : Nat}
     memoryWrite (memoryWrite memory s a) t b = memoryWrite (memoryWrite memory t b) s a := by
   have hsa : (memoryWrite memory s a).size = memory.size := size_memoryWrite ha
   have htb : (memoryWrite memory t b).size = memory.size := size_memoryWrite hb
-  apply eq_of_byteAt
+  apply eq_of_byteAtOrZero
   · rw [size_memoryWrite (by omega), hsa, size_memoryWrite (by omega), htb]
   intro i
-  rw [byteAt_memoryWrite (by omega), byteAt_memoryWrite ha, byteAt_memoryWrite (by omega),
-    byteAt_memoryWrite hb]
+  rw [byteAtOrZero_memoryWrite (by omega), byteAtOrZero_memoryWrite ha, byteAtOrZero_memoryWrite (by omega),
+    byteAtOrZero_memoryWrite hb]
   by_cases hi : t ≤ i ∧ i < t + b.size
   · rw [ite_eq_left hi, ite_eq_right (by omega), ite_eq_left hi]
   · rw [ite_eq_right hi, ite_eq_right hi]

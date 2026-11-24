@@ -18,7 +18,7 @@ A running result advances past one opcode or reaches a valid jump destination.
 
 namespace EthLib.Execution.Evm.Logic
 
-open EthLib.Base (Fork U256 byteAt)
+open EthLib.Base (Fork U256 byteAtOrZero)
 
 variable {fork : Fork}
 
@@ -33,7 +33,7 @@ def meterSupported : Op → Bool
 
 /-- Every opcode position contains a supported instruction, or an invalid opcode. -/
 def SupportedCode (code : ByteArray) : Bool :=
-  (opcodePositions code).all fun pc => (Op.decode (byteAt code pc)).all meterSupported
+  (opcodePositions code).all fun pc => (Op.decode (byteAtOrZero code pc)).all meterSupported
 
 /-- The code and flags stay, and a running result advances or reaches a valid jump destination.
 
@@ -362,7 +362,7 @@ theorem instruction_meterFields {op : Op}
     {run : Evm fork Nat → Except EvmError (Evm fork Nat)} {low after : Evm fork Nat}
     (supported : meterSupported op = true) (since : op.since ≤ fork)
     (dispatch : instruction fork op = some run)
-    (decoded : Op.decode (byteAt low.code low.pc) = some op) (ok : run low = .ok after) :
+    (decoded : Op.decode (byteAtOrZero low.code low.pc) = some op) (ok : run low = .ok after) :
     MeterFields low after (nextOpcode low.code low.pc) := by
   cases op <;> simp only [meterSupported] at supported <;> try contradiction
   all_goals

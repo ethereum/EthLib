@@ -35,7 +35,7 @@ Each instruction keeps the size of memory a multiple of 32.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Address Fork U256 byteAt toAddressMasked)
+open EthLib.Base (Address Fork U256 byteAtOrZero toAddressMasked)
 open EthLib.Execution.State (EMPTY_ACCOUNT)
 
 variable {fork : Fork} {Meter : Type}
@@ -247,15 +247,15 @@ It keeps every other byte.
 The code is the one that the step reads for the account, in the frame before the step.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_extcodecopyStep [GasMeter Meter] {evm after : Evm fork Meter}
+theorem byteAtOrZero_extcodecopyStep [GasMeter Meter] {evm after : Evm fork Meter}
     {word start offset size : U256} {rest : List U256}
     (hstack : evm.stack.val = word :: start :: offset :: size :: rest)
     (hmod : evm.memory.size % 32 = 0) (h : extcodecopyStep evm = .ok after) :
     ∃ code, accountCode evm (toAddressMasked word) = .ok code ∧ ∀ i,
-      byteAt after.memory i =
+      byteAtOrZero after.memory i =
         if start.toNat ≤ i ∧ i < start.toNat + size.toNat then
-          byteAt code (offset.toNat + (i - start.toNat))
-        else byteAt evm.memory i := by
+          byteAtOrZero code (offset.toNat + (i - start.toNat))
+        else byteAtOrZero evm.memory i := by
   unfold extcodecopyStep at h
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -292,9 +292,9 @@ theorem byteAt_extcodecopyStep [GasMeter Meter] {evm after : Evm fork Meter}
     rfl
   refine ⟨code, hcode, fun i => ?_⟩
   have hm4 : e4.memory = evm.memory := by rw [m4, m3, m2, m1]
-  have hmem : ∀ j, byteAt e5.memory j = byteAt evm.memory j := fun j => by
-    rw [byteAt_chargeGasAndMemory h5]
-    exact congrArg (byteAt · j) hm4
+  have hmem : ∀ j, byteAtOrZero e5.memory j = byteAtOrZero evm.memory j := fun j => by
+    rw [byteAtOrZero_chargeGasAndMemory h5]
+    exact congrArg (byteAtOrZero · j) hm4
   have hlen : ({ data := (bufferRead code offset.toNat size.toNat).toArray } : ByteArray).size =
       size.toNat := by simp [ByteArray.size, bufferRead_length]
   simp only [advance, recordAccountRead, bufferBytes_eq]
@@ -310,10 +310,10 @@ theorem byteAt_extcodecopyStep [GasMeter Meter] {evm after : Evm fork Meter}
       substate := { e4.substate with accessedAddresses := accessed } }) hmod4 h5 (start, size)
       (by simp) hz
     simp only at fit
-    rw [byteAt_memoryWrite (by rw [hlen]; exact fit), hlen]
+    rw [byteAtOrZero_memoryWrite (by rw [hlen]; exact fit), hlen]
     split
     · rename_i hin
-      rw [byteAt_bufferRead, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc)]
+      rw [byteAtOrZero_bufferRead, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc)]
     · exact hmem i
 
 /-- EXTCODEHASH keeps the size of memory a multiple of 32. -/

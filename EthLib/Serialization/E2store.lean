@@ -120,10 +120,11 @@ structure Header where
 An index of an era1 or era file points at such a position. -/
 def readHeader (bytes : ByteArray) (offset : Nat) : Except E2storeError Header :=
   -- A header is 8 bytes, as the Version and SlotIndex documents say; the layout is EthLib's.
-  if bytes.size < offset + 8 then
+  if h : bytes.size < offset + 8 then
     .error (.truncatedHeader offset bytes.size)
   else
-    let byte (i : Nat) := byteAt bytes (offset + i)
+    -- The length check above proves that each of the 8 bytes exists.
+    let byte (i : Nat) (hi : i < 8 := by decide) := bytes[offset + i]'(by omega)
     -- Bytes 6 and 7 are reserved, and zero.
     if byte 6 ≠ 0 ∨ byte 7 ≠ 0 then
       .error (.reservedNotZero (byte 6) (byte 7))

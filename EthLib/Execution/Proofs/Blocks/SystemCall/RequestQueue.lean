@@ -633,18 +633,18 @@ end Frames
 section LogBytes
 
 open EthLib.Execution.Evm EthLib.Execution.Evm.Logic
-open EthLib.Base (byteAt byteAt_append byteAt_extract natToBytes natToBytes_length natToBytes_mod)
+open EthLib.Base (byteAtOrZero byteAtOrZero_append byteAtOrZero_extract natToBytes natToBytes_length natToBytes_mod)
 
 /-- A word shifted up by 96 bits starts with the last 20 bytes of the word. -/
-theorem byteAt_wordBytes_shl (c : U256) {i : Nat} (hi : i < 20) :
-    byteAt (wordBytes (bitwiseShl 96#256 c)) i = byteAt (wordBytes c) (12 + i) := by
+theorem byteAtOrZero_wordBytes_shl (c : U256) {i : Nat} (hi : i < 20) :
+    byteAtOrZero (wordBytes (bitwiseShl 96#256 c)) i = byteAtOrZero (wordBytes c) (12 + i) := by
   have hw : (bitwiseShl 96#256 c).toNat / 256 ^ 12 = c.toNat % 256 ^ 20 := by
     simp only [bitwiseShl, BitVec.reduceToNat]
     rw [ite_eq_left (by decide), BitVec.toNat_shiftLeft, Nat.shiftLeft_eq,
       show (2 : Nat) ^ 256 = 256 ^ 12 * 256 ^ 20 from rfl, Nat.mod_mul_right_div_self,
       show (2 : Nat) ^ 96 = 256 ^ 12 from rfl, Nat.mul_div_cancel _ (by decide)]
   rw [wordBytes_eq_append _ (show 20 + 12 = 32 from rfl), wordBytes_eq_append c
-    (show 12 + 20 = 32 from rfl), byteAt_append, byteAt_append, hw, natToBytes_mod]
+    (show 12 + 20 = 32 from rfl), byteAtOrZero_append, byteAtOrZero_append, hw, natToBytes_mod]
   have h1 : (⟨(natToBytes 20 c.toNat).toArray⟩ : ByteArray).size = 20 := by
     simp [ByteArray.size, natToBytes_length]
   have h2 : (⟨(natToBytes 12 (c.toNat / 256 ^ 20)).toArray⟩ : ByteArray).size = 12 := by
@@ -652,10 +652,10 @@ theorem byteAt_wordBytes_shl (c : U256) {i : Nat} (hi : i < 20) :
   rw [h1, h2, ite_eq_left hi, ite_eq_right (by omega), Nat.add_sub_cancel_left]
 
 /-- The mask of the code keeps the first 16 bytes of a word. -/
-theorem byteAt_wordBytes_and (v : U256) {i : Nat} (hi : i < 16) :
-    EthLib.Base.byteAt (wordBytes (bitwiseAnd
+theorem byteAtOrZero_wordBytes_and (v : U256) {i : Nat} (hi : i < 16) :
+    EthLib.Base.byteAtOrZero (wordBytes (bitwiseAnd
       0xffffffffffffffffffffffffffffffff00000000000000000000000000000000#256 v)) i =
-      EthLib.Base.byteAt (wordBytes v) i := by
+      EthLib.Base.byteAtOrZero (wordBytes v) i := by
   have key : (bitwiseAnd
       0xffffffffffffffffffffffffffffffff00000000000000000000000000000000#256 v).toNat / 2 ^ 128 =
       v.toNat / 2 ^ 128 := by
@@ -663,7 +663,7 @@ theorem byteAt_wordBytes_and (v : U256) {i : Nat} (hi : i < 16) :
       show (0xffffffffffffffffffffffffffffffff00000000000000000000000000000000#256 : U256).toNat /
         2 ^ 128 = 2 ^ 128 - 1 from rfl, Nat.and_comm, Nat.and_two_pow_sub_one_eq_mod]
     exact Nat.mod_eq_of_lt (Nat.div_lt_of_lt_mul (by have := v.isLt; omega))
-  rw [byteAt_wordBytes _ (by omega), byteAt_wordBytes _ (by omega),
+  rw [byteAtOrZero_wordBytes _ (by omega), byteAtOrZero_wordBytes _ (by omega),
     show 256 ^ (31 - i) = 2 ^ 128 * 256 ^ (15 - i) by
       rw [show 31 - i = 16 + (15 - i) by omega, Nat.pow_add],
     ← Nat.div_div_eq_div_mul, ← Nat.div_div_eq_div_mul, key]
@@ -685,9 +685,9 @@ theorem log_memory {c : U256} {data : ByteArray} {n e : Nat}
     rw [size_memoryExtend, size_wordBytes]
   have hA : Holds (memoryExtend (wordBytes (bitwiseShl 96#256 c)) e) 0
       ((wordBytes c).extract 12 32) := by
-    refine Holds.of_byteAt (by simp [hs]; omega) fun i hi => ?_
+    refine Holds.of_byteAtOrZero (by simp [hs]; omega) fun i hi => ?_
     simp only [ByteArray.size_extract, size_wordBytes] at hi
-    rw [Nat.zero_add, byteAt_memoryExtend, byteAt_wordBytes_shl c (by omega), byteAt_extract,
+    rw [Nat.zero_add, byteAtOrZero_memoryExtend, byteAtOrZero_wordBytes_shl c (by omega), byteAtOrZero_extract,
       size_wordBytes, ite_eq_left (by omega)]
   have hw : 20 + data.size ≤ (memoryExtend (wordBytes (bitwiseShl 96#256 c)) e).size := by
     rw [hs]; omega
