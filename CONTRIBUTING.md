@@ -402,6 +402,12 @@ Each piece of documentation has one place:
 When you shorten a header or a doc comment, move each fact that it held to the line that it describes, and delete none.
 A fact about the declaration as a whole, such as what it does not verify, stays in its doc comment, in a few words.
 
+Shortening never makes a comment harder to read.
+A list stays a list: each source keeps its bullet with what it gives, and each case or field keeps its own line.
+Two sentences are never joined with a semicolon or a comma to save a line.
+A list of sources or cases can run past the line count of the writing check.
+That count is advice, not a target.
+
 The rules of form are these:
 
 - Write one sentence per line.
