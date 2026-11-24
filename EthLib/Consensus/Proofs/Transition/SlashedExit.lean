@@ -312,21 +312,14 @@ private theorem slot_slashedFlag {m n : ForkedBeaconState preset}
 
 /-- From Electra, a key that a step newly slashes was activated by the epoch of its start.
 
-The key is unslashed at the start, or absent from the registry there.
-
-A step can assign an exit only to a key already activated by its starting epoch.
-
-A key that has begun to exit at the start is activated there, by `exited`.
-
-A block appends its new keys unassigned, so it does not append a slashed key.
-
-A slot step sets no flag. -/
+The key is unslashed at the start, or absent from the registry there. -/
 theorem Step.slashed_activated {a b : ForkedBeaconState preset} (step : Step config checks a b)
     (electra : .pectra ≤ a.fork) (early : b.fork < .glamsterdam)
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (finite : getCurrentEpoch a.state < FAR_FUTURE_EPOCH) (i : Nat)
+    -- A key that has begun to exit at the start is activated there.
     (exited : ∀ v, a.state.validators.data[i]? = some v → v.exitEpoch ≠ FAR_FUTURE_EPOCH →
       v.activationEpoch ≤ getCurrentEpoch a.state)
     (flip : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
@@ -343,12 +336,14 @@ theorem Step.slashed_activated {a b : ForkedBeaconState preset} (step : Step con
     | none => simp [found] at after
     | some w => exact ⟨w, rfl, by simpa [found] using after⟩
   cases step with
+  -- A slot step sets no flag.
   | slot ok =>
     have := slot_slashedFlag ok i
     simp only [slashedFlagAt, before, after] at this
     cases this
   | @block fork s t engine signed due ok =>
     cases found : s.validators.data[i]? with
+    -- A block appends its new keys unassigned, so it does not append a slashed key.
     | none =>
       have outside := Array.getElem?_eq_none_iff.mp found
       have assigned := capped.appended delay i w outside later slashed
@@ -368,7 +363,9 @@ theorem Step.slashed_activated {a b : ForkedBeaconState preset} (step : Step con
       have set := ((capped.withdrawal i v w found later).2 delay unslashed slashed).1
       have reached : v.activationEpoch ≤ getCurrentEpoch s := by
         by_cases unset : v.exitEpoch = FAR_FUTURE_EPOCH
+        -- A step can assign an exit only to a key already activated by its starting epoch.
         · exact chain.exit_assigned_activated electra found later unset set
+        -- A key that has begun to exit at the start is activated there, by the hypothesis.
         · exact exited v found unset
       have bound : (getCurrentEpoch s).toNat < FAR_FUTURE_EPOCH.toNat :=
         UInt64.lt_iff_toNat_lt.mp finite

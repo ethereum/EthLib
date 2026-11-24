@@ -10,35 +10,9 @@ A chain of beacon states runs from the genesis state, one step at a time.
 
 A step never overwrites the public key of a validator.
 
-A deposit to a key that a validator has adds no validator.
-
-A deposit to a key that no validator has adds at most one validator.
-
-That validator goes at the end of the registry, with that key.
-
-A deposit with an invalid signature adds none.
-
-From Heze, a pending deposit to a new key with BLS withdrawal credentials adds none.
-
-Before Electra a block credits a deposit at once.
-
-From Electra a block registers a new key with no balance and queues the deposit.
-
-A pending deposit, applied at an epoch, then raises a balance or adds a validator.
-
 So the public keys before a step are a prefix of the keys after it.
 
 Keys that are distinct before a step are distinct after it.
-
-That holds at every fork the specification covers, for slots, epochs, blocks and upgrades.
-
-The genesis state has distinct keys, since it is built from the empty registry by deposits.
-
-So along a chain from genesis the keys of the validators stay distinct.
-
-The specification defines genesis only before Altair.
-
-A chain from a later state keeps its keys distinct when they are distinct in that state.
 -/
 
 @[expose] public section
@@ -67,23 +41,22 @@ theorem validators_getElem?_of_validatorKeys_prefix {post : Fork}
 
 /-- An indexed attestation valid in one state is valid in another state.
 
-The check reads the keys of the signers, the fork versions and the genesis validators root.
-
-It reads nothing else of the state.
+The check reads only the keys of the signers, the fork versions and the genesis validators root.
 
 So it is enough that both registries are prefixes of the keys of a common state.
 
-The signers must be in the other registry.
-
-The two states must agree on the fork versions and the genesis validators root. -/
+The signers must be in the other registry, whose state agrees on those versions and that root. -/
 theorem isValidIndexedAttestation_of_keys {post : Fork} {one other : BeaconState preset fork}
     {common : BeaconState preset post}
     {indexed : IndexedAttestation preset fork}
     (valid : isValidIndexedAttestation config checks one indexed = .ok true)
     (oneKeys : validatorKeys one <+: validatorKeys common)
     (otherKeys : validatorKeys other <+: validatorKeys common)
+    -- The two states must agree on the fork versions.
     (forkVersions : other.forkVersions = one.forkVersions)
+    -- They must also agree on the genesis validators root.
     (genesisValidatorsRoot : other.genesisValidatorsRoot = one.genesisValidatorsRoot)
+    -- The signers must be in the other registry.
     (inside : ∀ index ∈ indexed.attestingIndices.data.toList,
       index.toNat < other.validators.data.size) :
     isValidIndexedAttestation config checks other indexed = .ok true := by
@@ -154,6 +127,9 @@ private theorem keys_chainStep {forked after : ForkedBeaconState preset}
     (step : ChainStep config checks forked after) :
     validatorKeys forked.state <+: validatorKeys after.state ∧
       (PubkeysDistinct forked.state → PubkeysDistinct after.state) := by
+  -- The prefix and the distinct keys hold at every fork that the specification covers.
+  --
+  -- They hold for slots, epochs, blocks and upgrades.
   cases step with
   | slot computed =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
@@ -170,12 +146,29 @@ private theorem keys_chainStep {forked after : ForkedBeaconState preset}
     exact ⟨first.trans kept, distinct ∘ firstDistinct⟩
   | block engine signed validateResult computed =>
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok computed
+    -- A deposit to a key that a validator has adds no validator.
+    --
+    -- A deposit to a key that no validator has adds at most one validator.
+    --
+    -- That validator goes at the end of the registry, with that key.
+    --
+    -- A deposit with an invalid signature adds none.
+    --
+    -- From Heze, a pending deposit to a new key with BLS withdrawal credentials adds none.
+    --
+    -- Before Electra a block credits a deposit at once.
+    --
+    -- From Electra a block registers a new key with no balance and queues the deposit.
+    --
+    -- A pending deposit, applied at an epoch, then raises a balance or adds a validator.
     have frame := frame_processBlock blockOk
     exact ⟨frame.pubkeysPrefix, frame.pubkeysDistinct⟩
 
 /-- Along a run of steps of a chain, the public keys of the first state are a prefix of the last.
 
-Keys that are distinct in the first state are distinct in the last. -/
+Keys that are distinct in the first state are distinct in the last.
+
+So a chain from a later state keeps its keys distinct when they are distinct in that state. -/
 theorem validatorKeys_prefix_and_distinct_of_chainSteps {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last) :
     validatorKeys first.state <+: validatorKeys last.state ∧
@@ -190,7 +183,9 @@ theorem validatorKeys_prefix_and_distinct_of_chainSteps {first last : ForkedBeac
 
 The keys of the genesis state, built from deposits, are a prefix of the keys of every state.
 
-The keys of every state of the chain are distinct. -/
+The keys of every state of the chain are distinct.
+
+The specification defines genesis only before Altair. -/
 theorem validatorKeys_prefix_and_distinct_of_genesis_chainSteps
     {eth1BlockHash : Hash32} {eth1Timestamp : UInt64} {deposits : Array Deposit}
     {genesis : BeaconState preset fork} {last : ForkedBeaconState preset}
@@ -205,6 +200,7 @@ theorem validatorKeys_prefix_and_distinct_of_genesis_chainSteps
   have empty : PubkeysDistinct (emptyGenesisState (preset := preset) config before genesisTime
       eth1BlockHash deposits.size.toUInt64 bodyRoot) := by
     simp [PubkeysDistinct, validatorKeys, emptyGenesisState]
+  -- The genesis state has distinct keys, since it is built from the empty registry by deposits.
   have distinct := frame.pubkeysDistinct empty
   obtain ⟨kept, carried⟩ := validatorKeys_prefix_and_distinct_of_chainSteps steps
   exact ⟨kept, carried distinct⟩

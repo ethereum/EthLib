@@ -961,26 +961,24 @@ end WithdrawalKept
 
 /-- A queued consolidation assigns its source an exit epoch and pushes one entry on the queue.
 
-That exit epoch is after the current epoch.
+The exit epoch is assigned when the withdrawal delay is positive.
 
-The exit epoch comes from the consolidation churn.
-
-It is assigned when the withdrawal delay is positive.
-
-The reason is that the withdrawal epoch is the exit epoch plus that delay, and fits in 64 bits.
-
-The source is written over the state the churn returns, and the new state keeps its validators. -/
+The reason is that the withdrawal epoch is the exit epoch plus that delay, and fits in 64 bits. -/
 theorem queueConsolidation_queued {electra : .pectra ≤ fork}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     ∃ (churned written : BeaconState preset fork) (epoch withdrawal : Epoch),
+      -- The exit epoch comes from the consolidation churn.
       computeConsolidationEpochAndUpdateChurn config state electra source.effectiveBalance =
         .ok (churned, epoch) ∧
+      -- That exit epoch is after the current epoch.
       epoch ≠ FAR_FUTURE_EPOCH ∧ getCurrentEpoch state < epoch ∧
       withdrawal.toNat = epoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ∧
+      -- The source is written over the state the churn returns.
       churned.setValidator sourceIndex
         { source with exitEpoch := epoch, withdrawableEpoch := withdrawal } = .ok written ∧
+      -- The new state keeps the validators of the written state.
       after.validators = written.validators ∧
       (after.pendingConsolidations electra).data.toList =
         (state.pendingConsolidations electra).data.toList ++ [⟨sourceIndex, targetIndex⟩] := by
@@ -1198,23 +1196,22 @@ end PendingConsolidationInvariant
 
 /-- From Electra, the pending consolidations are in the order of their sources' exits.
 
-It adds four facts about each source to `PendingConsolidationInvariant`.
-
-- It exits no earlier than each source before it in the queue.
-- It exits no later than the earliest consolidation epoch.
-- If it is unslashed, it can withdraw exactly the withdrawal delay after its exit.
-- It can withdraw only after the epoch `bound`. -/
+It adds four facts about each source to the invariant of the pending consolidations. -/
 def PendingConsolidationsOrdered (config : Config) (bound : Nat) {fork : Fork}
     (s : BeaconState preset fork) : Prop :=
   PendingConsolidationInvariant config s ∧ ∀ electra : .pectra ≤ fork,
+    -- Each source exits no earlier than each source before it in the queue.
     (s.pendingConsolidations electra).data.toList.Pairwise (fun a b => ∀ v w,
       s.validators.data[a.sourceIndex.toNat]? = some v →
         s.validators.data[b.sourceIndex.toNat]? = some w → v.exitEpoch ≤ w.exitEpoch) ∧
     ∀ c ∈ (s.pendingConsolidations electra).data.toList, ∀ v,
       s.validators.data[c.sourceIndex.toNat]? = some v →
+        -- It exits no later than the earliest consolidation epoch.
         v.exitEpoch ≤ s.earliestConsolidationEpoch electra ∧
+        -- If it is unslashed, it can withdraw exactly the withdrawal delay after its exit.
         (v.slashed = false → v.withdrawableEpoch.toNat ≤
           v.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) ∧
+        -- It can withdraw only after the epoch `bound`.
         bound < v.withdrawableEpoch.toNat
 
 /-- Each pending consolidation names two different validators, and its target is in the registry. -/

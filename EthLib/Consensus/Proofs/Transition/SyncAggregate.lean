@@ -8,14 +8,6 @@ public import EthLib.Consensus.Transition.SyncAggregate
 
 A successful sync aggregate step means that the wrapper of the configured check accepted the keys.
 
-That wrapper accepts an empty key list with the signature of the point at infinity.
-
-In every other case the configured check decides.
-
-Suppose that the configured checks reject empty key lists.
-
-Then with no key, only the signature of the point at infinity passes.
-
 The step keeps the sizes of the registry and the balances.
 
 A reward changes only balances, so it keeps the proposer of the slot.
@@ -39,6 +31,9 @@ theorem syncAggregateVerify_empty {message : ByteArray} {signature : BLSSignatur
     (rejectsEmpty : checks.fastAggregateVerify #[] message signature = false) :
     syncAggregateVerify checks #[] message signature = true ↔
       signature = Signatures.G2_POINT_AT_INFINITY := by
+  -- The wrapper accepts an empty key list with the signature of the point at infinity.
+  --
+  -- In every other case the configured check decides.
   simp [syncAggregateVerify, rejectsEmpty]
 
 /-- The checks of BLS reject an empty key list. -/
@@ -49,26 +44,25 @@ theorem bls_fastAggregateVerify_empty (message : ByteArray) (signature : BLSSign
 
 /-- What a successful sync aggregate step checked.
 
-The key list is the stored aggregate key, that key less the absent keys, or the signing keys.
-
-Only the middle case decodes keys while it computes the list.
-
-The computed root is the signing root of the block root at the slot before the state's.
-
-Its domain is the sync committee domain at the epoch of that slot.
-
-The wrapper of the configured check accepted the computed key list and that root.
-
 This does not show that the signature is valid, or that each member key decodes. -/
 theorem processSyncAggregate_signed {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
     ∃ pubkeys domain root signingRoot,
+      -- The key list is the stored aggregate key, or that key less the absent keys.
+      --
+      -- Otherwise it is the signing keys.
+      --
+      -- Only the case without the absent keys decodes keys while it computes the list.
       syncParticipantPubkeys (state.currentSyncCommittee altair).value aggregate.syncCommitteeBits =
         .ok pubkeys ∧
+      -- The computed root is the signing root of the block root at the slot before the state's.
+      --
+      -- Its domain is the sync committee domain at the epoch of that slot.
       getDomain config state DOMAIN_SYNC_COMMITTEE
         (some (computeEpochAtSlot preset (saturatingSub state.slot 1))) = .ok domain ∧
       getBlockRootAtSlot state (saturatingSub state.slot 1) = .ok root ∧
       computeSigningRoot root domain = .ok signingRoot ∧
+      -- The wrapper of the configured check accepted the computed key list and that root.
       syncAggregateVerify checks pubkeys (packBytes signingRoot)
         aggregate.syncCommitteeSignature = true := by
   unfold processSyncAggregate at computed

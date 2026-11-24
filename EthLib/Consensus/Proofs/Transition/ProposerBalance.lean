@@ -12,10 +12,6 @@ The slashings and the attestations of a block never lower the balance of a valid
 
 The later operations keep that balance exactly, unless they pay it a deposit or switch it.
 
-Only a deposit to its key, before Electra, raises it at once.
-
-Only a request to switch it to compounding credentials, from Electra, lowers it at once.
-
 From Altair the sync aggregate pays the proposer one share for each member that signs.
 
 That holds when the proposer has no seat in the committee.
@@ -190,21 +186,25 @@ The proposer slashings, the attester slashings and the attestations each keep it
 
 The operations after them keep it.
 
-Before Electra, no deposit of the block may carry its key.
-
-From Electra to Fulu, no consolidation request may come from its key either.
-
-The slashings must spare it. -/
+It needs the slashings to spare it, and no deposit or consolidation request to use its key. -/
 theorem processOperations_balance {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)
+    -- The proposer slashings must spare it.
     (unslashedByProposers : ∀ slashing ∈ body.proposerSlashings.data,
       slashing.signedHeader1.message.proposerIndex.toNat ≠ index)
+    -- The attester slashings must spare it.
     (unslashedByAttesters : ∀ slashing ∈ body.attesterSlashings.data,
       ∀ slashed ∈ slashingIndices slashing, slashed.toNat ≠ index)
+    -- Before Electra, no deposit of the block may carry its key.
+    --
+    -- Only a deposit to its key, before Electra, raises its balance at once.
     (undeposited : ∀ before : fork < .pectra,
       ∀ deposit ∈ (body.deposits (Nat.lt_trans before (by decide))).data,
         deposit.data.pubkey ≠ validator.pubkey)
+    -- From Electra to Fulu, no consolidation request may come from its key either.
+    --
+    -- Only a request to switch it to compounding credentials, from Electra, lowers it at once.
     (unswitched : ∀ electra : .pectra ≤ fork ∧ fork < .glamsterdam,
       ∀ request ∈ (body.executionRequests electra).consolidations.data,
         request.sourcePubkey ≠ validator.pubkey) :

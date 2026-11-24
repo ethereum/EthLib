@@ -10,39 +10,13 @@ public import EthLib.Consensus.Proofs.Transition.Slot
 
 A state records the root of its latest block header at each slot that it passes.
 
-The first slot after a block fills the state root of that header.
+One transition records the parent root of its block at each slot from the slot of the state.
 
-So it records the root of the block, when the block step checks its state root.
+The exception is a state before the transition that hashes to the zero root.
 
-The header check of the next block makes its parent root the root recorded at the slot before it.
-
-So one transition records the parent root of its block at each slot from the slot of the state.
-
-There is one exception.
-
-When the state before hashes to the zero root, the first slot leaves the header unfilled.
-
-That slot then records the root of the header as it was.
+The first slot then leaves the header unfilled.
 
 The same holds along a run of a chain, where blocks and upgrades come between the slots.
-
-Two consecutive slots record the same root, or the parent root and the root of a block step.
-
-The other cases are a pair that the first state records, the first pair, and a zero preimage.
-
-The first pair is the pair that the first slot of the run adds.
-
-Its second root is that of the first header, filled with the root of the first state.
-
-Its first root is the root at the slot before the first state, or the zero root at slot zero.
-
-A zero preimage is a state of the run that hashes to the zero root.
-
-Without a zero preimage, the pairs of the last state are in order for a map from roots.
-
-The map must order each block step after its parent.
-
-It must also order the pairs of the first state and the first pair.
 -/
 
 @[expose] public section
@@ -161,12 +135,23 @@ private theorem getBlockRootAtSlot_stateTransition {signed : SignedBeaconBlock p
     at read
   simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
   obtain ⟨-, -, slotsOk⟩ := slotsOk
+  -- The first slot after a block fills the state root of the header of that block.
+  --
+  -- So it records the root of the block, when the block step checks its state root.
   rcases getBlockRootAtSlot_advanceSlots _ slotsOk read with older | ⟨later, rooted | zero⟩
   · exact .inl older
   · refine .inr ⟨later, .inl ?_⟩
+    -- Then comes the header check of the next block.
+    --
+    -- It makes the parent root of that block the root recorded at the slot before it.
     have parent := (processBlock_parentRoot blockOk).2.2
     rw [rooted] at parent
     exact Except.ok.inj parent
+  -- There is one exception.
+  --
+  -- When the state before hashes to the zero root, the first slot leaves the header unfilled.
+  --
+  -- That slot then records the root of the header as it was.
   · exact .inr ⟨later, .inr zero⟩
 
 /-- A root that a transition records from the slot of the state is the parent root of its block.
@@ -248,7 +233,9 @@ private def ZeroPreimage (config : Config) (checks : SignatureChecks)
 /-- The ways in which a pair of roots that a state of a run records can arise. -/
 private def LinkCases (config : Config) (checks : SignatureChecks)
     (first last : ForkedBeaconState preset) (link : Root × Root) : Prop :=
+  -- Two consecutive slots record the same root.
   link.1 = link.2 ∨
+    -- Or they record the parent root and the root of a block step.
     (∃ (fork : Fork) (engine : ExecutionEngine preset fork) (pre post : BeaconState preset fork)
         (signed : SignedBeaconBlock preset fork) (validateResult : Bool) (stateRoot : Root),
       Relation.ReflTransGen (ChainStep config checks) first ⟨fork, pre⟩ ∧
@@ -256,47 +243,57 @@ private def LinkCases (config : Config) (checks : SignatureChecks)
       Relation.ReflTransGen (ChainStep config checks) ⟨fork, post⟩ last ∧
       signed.message.parentRoot = link.1 ∧ hashTreeRoot post = .ok stateRoot ∧
       hashTreeRoot { signed.message with stateRoot := stateRoot } = .ok link.2) ∨
+    -- Or the pair is one that the first state records.
     link ∈ rootLinks first.state ∨
+    -- Or it is the first pair, which is the pair that the first slot of the run adds.
+    --
+    -- Its second root is that of the first header, filled with the root of the first state.
+    --
+    -- Its first root is the root at the slot before the first state.
+    --
+    -- At slot zero, it is the zero root instead.
     ((if first.state.slot = 0 then link.1 = Vector.replicate 32 0 else
         readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok link.1) ∧
       ∃ stateRoot, hashTreeRoot first.state = .ok stateRoot ∧
       hashTreeRoot (if first.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
         { first.state.latestBlockHeader with stateRoot := stateRoot }
       else first.state.latestBlockHeader) = .ok link.2) ∨
+    -- Or there is a zero preimage, a state of the run that hashes to the zero root.
     ZeroPreimage config checks first last
 
-/-- What a state of a run says about the root that the next slot records.
-
-In the first case the state records the root of its latest header at the slot before it.
-
-The next slot then records the same root, unless it fills the header.
-
-It fills the header when its state root is zero.
-
-Such a header stays unfilled through a slot only if the state before that slot hashed to zero.
-
-So such a header comes only from a state of the run that hashes to zero, a zero preimage.
-
-In the second case the state has just taken a block.
-
-Its header is that of the block, and the next slot fills it with the root of the state.
-
-The next slot then records the root of the block, next to the root of the parent.
-
-In the third case the state is the first one, and its next slot gives the first pair. -/
+/-- What a state of a run says about the root that the next slot records. -/
 private def HeaderCases (config : Config) (checks : SignatureChecks)
     (first last forked : ForkedBeaconState preset) : Prop :=
+  -- In the first case the state records the root of its latest header at the slot before it.
+  --
+  -- The next slot then records the same root, unless it fills the header.
+  --
+  -- It fills the header when its state root is zero.
+  --
+  -- Such a header stays unfilled through a slot only if the state before that slot hashed to zero.
+  --
+  -- So such a header comes only from a state of the run that hashes to zero, a zero preimage.
   (forked.state.slot = 0 ∨ ∃ root,
       readCircular forked.state.blockRoots.elements (forked.state.slot - 1) = .ok root ∧
         hashTreeRoot forked.state.latestBlockHeader = .ok root ∧
         (forked.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 →
           ZeroPreimage config checks first last)) ∨
+    -- In the second case the state has just taken a block.
+    --
+    -- Its header is that of the block.
+    --
+    -- The next slot fills it with the root of the state.
+    --
+    -- The next slot then records the root of the block, next to the root of the parent.
     (forked.state.slot ≠ 0 ∧ forked.state.latestBlockHeader.slot = forked.state.slot ∧
       forked.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 ∧
       ∃ parent, readCircular forked.state.blockRoots.elements (forked.state.slot - 1) = .ok parent ∧
         ∀ stateRoot root, hashTreeRoot forked.state = .ok stateRoot →
           hashTreeRoot { forked.state.latestBlockHeader with stateRoot := stateRoot } = .ok root →
             LinkCases config checks first last (parent, root)) ∨
+    -- In the third case the state is the first one.
+    --
+    -- Its next slot gives the first pair.
     (forked = first ∧ forked.state.slot ≠ 0 ∧
       (forked.state.latestBlockHeader.slot = forked.state.slot ∨ ∃ root,
         readCircular forked.state.blockRoots.elements (forked.state.slot - 1) = .ok root ∧
@@ -461,45 +458,36 @@ private theorem rootLinks_cases_aux {first last : ForkedBeaconState preset}
         exact .inr (.inl ⟨fork, engine, pre, post, signed, validateResult, stateRoot, reach,
           applied, toLast, isParent, hashed, block.symm.trans rooted⟩)
 
-/-- The roots that a state records at consecutive slots, along a run of a chain.
-
-Two consecutive slots record the same root, or the parent root and the root of a block step.
-
-The block step lies on a run between the first and the last state.
-
-It may skip the check of the state root.
-
-So the root of the block is that of the block with another state root.
-
-That state root is the root of the state after the step.
-
-A step that checks the state root has that root in its block already, so the block is unchanged.
-
-The pair may also be one that the first state records.
-
-It may be the first pair, which the first slot of the run adds.
-
-Its second root is that of the first header, filled with the root of the first state.
-
-Its first root is the root at the slot before the first state, or the zero root at slot zero.
-
-Or a state of the run hashes to the zero root, which leaves the latest header unfilled at its slot.
-
-The first state is at slot zero, or its latest header is at its own slot, as after a block.
-
-Or it records the root of its latest header at the slot before it.
-
-Every state that a block or a slot produces meets this.
-
-Otherwise a block on the first state could name a parent that the state does not record. -/
+/-- The roots that a state records at consecutive slots, along a run of a chain. -/
 theorem rootLinks_cases_of_chainSteps {first last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) first last)
+    -- The first state is at slot zero, or its latest header is at its own slot, as after a block.
+    --
+    -- Or it records the root of its latest header at the slot before it.
+    --
+    -- Every state that a block or a slot produces meets this.
+    --
+    -- Otherwise a block on the first state could name a parent that the state does not record.
     (recorded : first.state.slot = 0 ∨ first.state.latestBlockHeader.slot = first.state.slot ∨
       ∃ root,
         readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok root ∧
           hashTreeRoot first.state.latestBlockHeader = .ok root)
     {root₁ root₂ : Root} (member : (root₁, root₂) ∈ rootLinks last.state) :
+    -- Two consecutive slots record the same root.
     root₁ = root₂ ∨
+      -- Or they record the parent root and the root of a block step.
+      --
+      -- The block step lies on a run between the first and the last state.
+      --
+      -- It may skip the check of the state root.
+      --
+      -- So the root of the block is that of the block with another state root.
+      --
+      -- That state root is the root of the state after the step.
+      --
+      -- A step that checks the state root has that root in its block already.
+      --
+      -- So the block is unchanged.
       (∃ (fork : Fork) (engine : ExecutionEngine preset fork) (pre post : BeaconState preset fork)
           (signed : SignedBeaconBlock preset fork) (validateResult : Bool) (stateRoot : Root),
         Relation.ReflTransGen (ChainStep config checks) first ⟨fork, pre⟩ ∧
@@ -507,13 +495,24 @@ theorem rootLinks_cases_of_chainSteps {first last : ForkedBeaconState preset}
         Relation.ReflTransGen (ChainStep config checks) ⟨fork, post⟩ last ∧
         signed.message.parentRoot = root₁ ∧ hashTreeRoot post = .ok stateRoot ∧
         hashTreeRoot { signed.message with stateRoot := stateRoot } = .ok root₂) ∨
+      -- The pair may also be one that the first state records.
       (root₁, root₂) ∈ rootLinks first.state ∨
+      -- It may be the first pair, which the first slot of the run adds.
+      --
+      -- Its second root is that of the first header, filled with the root of the first state.
+      --
+      -- Its first root is the root at the slot before the first state.
+      --
+      -- At slot zero, it is the zero root instead.
       ((if first.state.slot = 0 then root₁ = Vector.replicate 32 0 else
           readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok root₁) ∧
         ∃ stateRoot, hashTreeRoot first.state = .ok stateRoot ∧
           hashTreeRoot (if first.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
             { first.state.latestBlockHeader with stateRoot := stateRoot }
           else first.state.latestBlockHeader) = .ok root₂) ∨
+      -- Or a state of the run hashes to the zero root.
+      --
+      -- That leaves the latest header unfilled at its slot.
       ∃ forked : ForkedBeaconState preset,
         Relation.ReflTransGen (ChainStep config checks) first forked ∧
         Relation.ReflTransGen (ChainStep config checks) forked last ∧
@@ -522,19 +521,9 @@ theorem rootLinks_cases_of_chainSteps {first last : ForkedBeaconState preset}
 
 /-- Along a run, a map from roots that orders each block step after its parent orders the links.
 
-The map goes to a preorder.
-
-It orders the parent root of each block step before the root of its block.
-
-The step is on any run between the first and the last state.
-
-The root of its block takes the root of the state after the step as its state root.
-
-The map must also order the pairs of the first state, and the first pair.
+The map goes to a preorder and must also order the pairs of the first state and the first pair.
 
 The links of the last state are then in order, unless a state of the run hashes to the zero root.
-
-So it gives the order of the links that a step of the justified roots asks of the last state.
 
 Each state of the run is the last state of a shorter run, which gives the order at every step. -/
 theorem zeroPreimage_or_rootLinks_le_of_chainSteps {β : Type*} [Preorder β] {block : Root → β}
@@ -544,7 +533,9 @@ theorem zeroPreimage_or_rootLinks_le_of_chainSteps {β : Type*} [Preorder β] {b
       ∃ root,
         readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok root ∧
           hashTreeRoot first.state.latestBlockHeader = .ok root)
+    -- The map must order the pairs of the first state.
     (start : ∀ link ∈ rootLinks first.state, block link.1 ≤ block link.2)
+    -- It must also order the first pair.
     (opening : ∀ before stateRoot root : Root,
       (if first.state.slot = 0 then before = Vector.replicate 32 0 else
         readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok before) →
@@ -552,6 +543,11 @@ theorem zeroPreimage_or_rootLinks_le_of_chainSteps {β : Type*} [Preorder β] {b
       hashTreeRoot (if first.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
         { first.state.latestBlockHeader with stateRoot := stateRoot }
       else first.state.latestBlockHeader) = .ok root → block before ≤ block root)
+    -- It must also order the parent root of each block step before the root of its block.
+    --
+    -- The step is on any run between the first and the last state.
+    --
+    -- The root of its block takes the root of the state after the step as its state root.
     (ordered : ∀ (fork : Fork) (engine : ExecutionEngine preset fork)
       (pre post : BeaconState preset fork) (signed : SignedBeaconBlock preset fork)
       (validateResult : Bool) (stateRoot root : Root),
@@ -561,6 +557,7 @@ theorem zeroPreimage_or_rootLinks_le_of_chainSteps {β : Type*} [Preorder β] {b
       hashTreeRoot post = .ok stateRoot →
       hashTreeRoot { signed.message with stateRoot := stateRoot } = .ok root →
       block signed.message.parentRoot ≤ block root) :
+    -- This gives the order of the links that a step of the justified roots asks of the last state.
     (∃ forked : ForkedBeaconState preset,
       Relation.ReflTransGen (ChainStep config checks) first forked ∧
       Relation.ReflTransGen (ChainStep config checks) forked last ∧

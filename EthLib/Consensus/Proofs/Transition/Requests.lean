@@ -10,25 +10,9 @@ public import EthLib.Consensus.Transition.Requests
 
 A withdrawal request and a consolidation request keep one balance for each validator.
 
-So the operations of a block, with the requests from Electra, keep one balance for each validator.
-
-The pending consolidations of an epoch keep the registry.
-
-They move balance from one validator to another, so the sum of the balances stays.
-
-From Electra, they drop the front of the queue before the first source that must wait.
-
-A source must wait when it is unslashed and cannot withdraw in the next epoch.
-
-They lower no balance of a validator that is slashed or cannot withdraw in the next epoch.
-
-A source that is slashable in the next epoch keeps its consolidation and at least its balance.
+The pending consolidations of an epoch keep the registry and the sum of the balances.
 
 From Electra, a request that meets every condition computes as the queueing of its source.
-
-Otherwise a request with two different keys that succeeds returns its state.
-
-With different keys, it returns its state while the churn is at most the activation balance.
 -/
 
 @[expose] public section
@@ -140,6 +124,7 @@ theorem processPendingConsolidations_kept {electra : .pectra ≤ fork}
   · cases computed
   rename_i passed
   cases computed
+  -- The pass moves balance from one validator to another, so the sum of the balances stays.
   exact passPendingConsolidations_kept passed
 
 /-- Processing pending consolidations leaves the cached proposers unchanged. -/
@@ -353,7 +338,11 @@ theorem processPendingConsolidations_pass {electra : .pectra ≤ fork}
 
 /-- From Electra, take a step of the pending consolidations that succeeds.
 
-The queue loses its longest front where each source is slashed or can withdraw in the next epoch. -/
+The queue loses its longest front where each source is slashed or can withdraw in the next epoch.
+
+So the step drops the front of the queue before the first source that must wait.
+
+A source must wait when it is unslashed and cannot withdraw in the next epoch. -/
 theorem processPendingConsolidations_queue {electra : .pectra ≤ fork}
     (computed : processPendingConsolidations state electra = .ok after) :
     (after.pendingConsolidations electra).data.toList =
@@ -520,45 +509,42 @@ theorem sameSizes_processConsolidationRequest {electra : .pectra ≤ fork}
 
 /-! ## The consolidation request -/
 
-/-- From Electra: when a request queues its source to consolidate into a target.
-
-The two keys differ, and the pending consolidations are not at their limit.
-
-The churn of consolidations is more than the activation balance.
-
-The source and the target are the first validators with their keys.
-
-The request comes from the address of the execution credentials of the source.
-
-The target has compounding credentials.
-
-Both are active in the current epoch, and neither has an exit epoch set.
-
-The source has been active for at least the shard committee period.
-
-The source has no pending balance to withdraw. -/
+/-- From Electra: when a request queues its source to consolidate into a target. -/
 structure ConsolidationAccepted (config : Config) (state : BeaconState preset fork)
     (electra : .pectra ≤ fork) (request : ConsolidationRequest) (sourceIndex : ValidatorIndex)
     (source : Validator) (targetIndex : ValidatorIndex) (target : Validator) : Prop where
+  -- The two keys differ.
   different : request.sourcePubkey ≠ request.targetPubkey
+  -- The pending consolidations are not at their limit.
   room : (state.pendingConsolidations electra).data.size ≠ preset.PENDING_CONSOLIDATIONS_LIMIT.toNat
+  -- The churn of consolidations is more than the activation balance.
   churn : ∃ churn, getConsolidationChurnLimit config state = .ok churn ∧
     preset.MIN_ACTIVATION_BALANCE < churn
+  -- The source is the first validator with its key.
   sourceFirst :
     (findValidatorByPubkey state request.sourcePubkey).map (·.val) = some sourceIndex.toNat
   sourceAt : state.validators.data[sourceIndex.toNat]? = some source
+  -- The target is the first validator with its key.
   targetFirst :
     (findValidatorByPubkey state request.targetPubkey).map (·.val) = some targetIndex.toNat
   targetAt : state.validators.data[targetIndex.toNat]? = some target
+  -- The request comes from the address of the execution credentials of the source.
   execution : hasExecutionWithdrawalCredential source = true
   address : credentialAddress source.withdrawalCredentials = request.sourceAddress
+  -- The target has compounding credentials.
   compounding : hasCompoundingWithdrawalCredential target = true
+  -- The source is active in the current epoch.
   sourceActive : isActiveValidator source (getCurrentEpoch state) = true
+  -- The target is active in the current epoch.
   targetActive : isActiveValidator target (getCurrentEpoch state) = true
+  -- The source has no exit epoch set.
   sourceStays : source.exitEpoch = FAR_FUTURE_EPOCH
+  -- The target has no exit epoch set.
   targetStays : target.exitEpoch = FAR_FUTURE_EPOCH
+  -- The source has been active for at least the shard committee period.
   served : source.activationEpoch.toNat + config.SHARD_COMMITTEE_PERIOD.toNat ≤
     (getCurrentEpoch state).toNat
+  -- The source has no pending balance to withdraw.
   owed : getPendingBalanceToWithdraw state electra sourceIndex = .ok 0
 
 /-- From Electra: when a request switches a validator to compounding credentials.
@@ -711,7 +697,9 @@ theorem sameSizes_processOperationsGloas {body : BeaconBlockBody preset fork}
     (keep (fun _ _ _ ok => sameSizes_processBlsToExecutionChange ok) changesOk).trans <|
     keep (fun _ _ _ ok => processPayloadAttestation_eq ok ▸ SameSizes.refl _) paid
 
-/-- The operations of a block keep one balance for each validator. -/
+/-- The operations of a block keep one balance for each validator.
+
+From Electra, those operations include the requests. -/
 theorem balancesMatch_processOperations {checks : SignatureChecks}
     {body : BeaconBlockBody preset fork}
     {parentSlot : Slot}
