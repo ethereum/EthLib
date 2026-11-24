@@ -7,33 +7,11 @@ import EthLib.Base.Proofs.FilterM
 /-!
 # Proofs: justification and finalization of an epoch succeed
 
-The step sums the active balance and the balances that vote for the previous and current targets.
-
-It triples each target balance and doubles the active balance, with checked products.
-
-It reads the root of the first block of a recent epoch, to match targets or to justify it.
-
-It adds a gap to a checkpoint epoch.
-
-Each of these can fail, so the step succeeds only under bounds.
-
 The step runs at the last slot of an epoch.
 
-The first slot of the current epoch is then before the slot of the state, given two slots an epoch.
+It sums balances, multiplies them, reads block roots and adds epochs, and each of these can fail.
 
-The first slot of the previous epoch is within the buffer of block roots, if it is long enough.
-
-The invariant keeps the justified epochs at most the previous epoch, so the sums of epochs fit.
-
-From Altair the votes are flags, one per validator, so the lists of flags must match the registry.
-
-Before Altair the votes are pending attestations, whose signers come from committees.
-
-The theorem takes as a hypothesis that the committee and the signers of each one succeed.
-
-Its signers are then members of a committee, so validators of the registry.
-
-The invariant of the state transition does not carry it yet, nor the one on the lists of flags.
+So it succeeds only under bounds on the preset and the state.
 -/
 
 @[expose] public section
@@ -311,28 +289,27 @@ theorem getMatchingTargetAttestations_exists_ok (before : fork < .altair) {epoch
       fun attestation member => Array.mem_of_mem_filter member⟩
     simp [empty, read, liftAccessor, Except.mapError, bind, Except.bind, pure, Except.pure]
 
-/-- Justification and finalization succeed at the last slot of an epoch, under bounds.
-
-An epoch of the preset must have two slots at least.
-
-Its buffer of block roots must reach the epoch before.
-
-The slot plus the length of that buffer must be below 2^64.
-
-The registry must stay within its limit.
-
-The checkpoints must be in order, and the current justified one at most the previous epoch.
-
-Three times the sum of one increment and all effective balances must be below 2^64.
+/-- Justification and finalization succeed at the last slot of an epoch, under bounds on the state.
 
 From Altair each list of participation flags must have one entry for each validator.
 
-Before Altair the committee and the signers of each recent pending attestation must succeed. -/
-theorem processJustificationAndFinalization_total (roots : preset.RootsReachPreviousEpoch)
+Before Altair the committee and the signers of each recent pending attestation must succeed.
+
+The invariant of the state transition does not carry either of these two yet. -/
+theorem processJustificationAndFinalization_total
+    -- An epoch of the preset must have two slots at least.
+    --
+    -- Its buffer of block roots must reach the epoch before.
+    (roots : preset.RootsReachPreviousEpoch)
+    -- The step runs at the last slot of an epoch.
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0)
+    -- The slot plus the length of that buffer must be below 2^64.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    -- The registry must stay within its limit, and the checkpoints must be in order.
     (within : state.RegistryWithinLimit) (ordered : CheckpointsOrdered state)
+    -- The current justified checkpoint must be at most the previous epoch.
     (settled : JustifiedSettled state)
+    -- Three times the sum of one increment and all effective balances must be below 2^64.
     (summed : 3 * (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state) < 2 ^ 64)
     (sized : ParticipationMatches state) (resolved : PendingResolved state) :
     ∃ after, processJustificationAndFinalization state = .ok after := by
@@ -340,16 +317,27 @@ theorem processJustificationAndFinalization_total (roots : preset.RootsReachPrev
   · by_cases altair : .altair ≤ fork
     · exact ⟨state, processJustificationAndFinalization_early_altair altair early⟩
     · exact ⟨state, processJustificationAndFinalization_early (Nat.lt_of_not_le altair) early⟩
+  -- The step reads the root of the first block of a recent epoch.
+  --
+  -- It matches targets against that root, or justifies that epoch.
+  --
+  -- With two slots an epoch, the first slot of the current epoch is before the slot of the state.
+  --
+  -- The first slot of the previous epoch is within the buffer of block roots.
   have previousRoot := getBlockRoot_exists_ok roots last room (.inl rfl)
   have currentRoot := getBlockRoot_exists_ok roots last room (.inr rfl)
   have fitsSum : effectiveBalanceSum state < 2 ^ 64 := by omega
   have capped : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) ≤
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state :=
     Nat.max_le.mpr ⟨Nat.le_add_right _ _, Nat.le_add_left _ _⟩
+  -- The step sums the active balance, which needs the registry within its limit.
   obtain ⟨total, totalOk, -, totalHigh⟩ := getTotalActiveBalance_exists_ok within fitsSum
   have totalLe : total.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
       effectiveBalanceSum state := by
     rcases totalHigh with rfl | le <;> omega
+  -- The step adds a gap to a checkpoint epoch.
+  --
+  -- The invariant keeps the justified epochs at most the previous epoch, so the sums of epochs fit.
   have epochs : state.previousJustifiedCheckpoint.epoch.toNat + 3 < 2 ^ 64 ∧
       state.currentJustifiedCheckpoint.epoch.toNat + 2 < 2 ^ 64 := by
     have half := Nat.div_le_div_left (a := state.slot.toNat) roots.twoSlots (by decide)
@@ -359,6 +347,7 @@ theorem processJustificationAndFinalization_total (roots : preset.RootsReachPrev
     have orderedNat := ordered.2
     simp only [JustifiedSettled, UInt64.le_iff_toNat_le, UInt64.size] at *
     omega
+  -- The step triples each target balance and doubles the active balance, with checked products.
   have weighed : ∀ previous current : Gwei,
       previous.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state →
       current.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state →
@@ -371,6 +360,11 @@ theorem processJustificationAndFinalization_total (roots : preset.RootsReachPrev
   · simp only [altair, ↓reduceDIte]
     unfold processJustificationAndFinalizationAltair
     simp only [early, ↓reduceIte]
+    -- From Altair the votes are flags, one per validator.
+    --
+    -- So the lists of flags must match the registry.
+    --
+    -- The step sums the balances that vote for the previous and the current targets.
     obtain ⟨previous, previousOk, previousIn⟩ := getUnslashedParticipatingIndices_exists_ok
       within altair TIMELY_TARGET_FLAG_INDEX (.inl rfl) sized
     obtain ⟨current, currentOk, currentIn⟩ := getUnslashedParticipatingIndices_exists_ok
@@ -387,6 +381,11 @@ theorem processJustificationAndFinalization_total (roots : preset.RootsReachPrev
       bind_ok_iff.mpr ⟨_, liftAccessor_ok.mpr currentBalanceOk, weighOk⟩⟩⟩⟩⟩⟩
   · simp only [altair, early, ↓reduceDIte, ↓reduceIte]
     have before : fork < .altair := Nat.lt_of_not_le altair
+    -- Before Altair the votes are pending attestations, whose signers come from committees.
+    --
+    -- The committee and the signers of each one are taken to succeed.
+    --
+    -- Its signers are then members of a committee, so validators of the registry.
     obtain ⟨previous, previousOk, previousIn⟩ :=
       getMatchingTargetAttestations_exists_ok before (.inl rfl) previousRoot
     obtain ⟨current, currentOk, currentIn⟩ :=

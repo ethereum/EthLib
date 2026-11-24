@@ -8,23 +8,9 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 
 From Electra, one pass over the registry queues, ejects or activates each validator in turn.
 
-An ejection starts an exit, which takes its place in a queue of balance.
+An ejection starts an exit, which takes its place in a queue of balance under a ceiling.
 
-The queue spends a churn of balance each epoch, which is at least one increment.
-
-The queue opens no earlier than the first epoch an exit may take, which a ceiling bounds.
-
-So an exit raises that ceiling by at most its effective balance in increments, plus one.
-
-Only a validator that has not started to exit can start, and its cost then leaves the total.
-
-So the end of the queue plus the cost still owed does not grow, and the same holds for each exit.
-
-The churn left over stays at most the larger of its value at the start and a bound on one churn.
-
-Room for these bounds, with a positive churn, excludes every checked error.
-
-The step keeps the slot, the balances and every effective balance.
+Room above that ceiling, with a positive churn, excludes every checked error.
 -/
 
 @[expose] public section
@@ -593,48 +579,41 @@ private theorem foldlM_updateRegistryEntryElectra_kept {config : Config}
 
 /-- From Electra, registry updates succeed under a ceiling on the exit queue and room above it.
 
-The registry must be within its limit, and the sum of its effective balances below `2^64`.
+Afterwards the end of the queue plus the cost still owed is within the ceiling plus the old cost.
 
-The increment must be positive.
-
-The least churn and the largest shared churn must each be at least one increment.
-
-A ceiling bounds the first epoch an exit may take, the end of the exit queue, and each exit epoch.
-
-Add to the ceiling the cost of the exits not yet started, and the withdrawability delay.
-
-The sum must stay below the far future epoch, so that no new exit lands on it.
-
-The churn left over plus three churn bounds must fit too.
-
-After the step, the end of the queue plus the cost still owed is at most a sum.
-
-That sum is the ceiling plus the cost before the step.
-
-The same holds for each exit epoch.
-
-After the step, the churn left over is at most the larger of the one before and one churn bound.
+The churn left over stays at most the larger of its old value and one churn bound.
 
 The step keeps the slot, the balances and every effective balance. -/
 theorem processRegistryUpdates_total_of_electra {config : Config}
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    -- The registry must be within its limit, and the sum of its effective balances below `2^64`.
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64)
+    -- The increment must be positive.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    -- The least churn and the largest shared churn must each be at least one increment.
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
     (maximum :
       preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
     (ceiling : Nat)
+    -- The ceiling bounds the first epoch an exit may take.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    -- It bounds the end of the exit queue.
     (queued : (state.earliestExitEpoch electra).toNat ≤ ceiling)
+    -- It bounds each exit epoch.
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
+    -- Add to the ceiling the cost of the exits not yet started, and the withdrawability delay.
+    --
+    -- The sum must stay below the far future epoch, so that no new exit lands on it.
     (room : ceiling + exitCost preset state + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat <
       2 ^ 64 - 1)
+    -- The churn left over plus three churn bounds must fit too.
     (carried : (state.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config state <
       2 ^ 64) :
     ∃ after, processRegistryUpdates config state = .ok after ∧
       (after.earliestExitEpoch electra).toNat + exitCost preset after ≤
         ceiling + exitCost preset state ∧
+      -- The same holds for each exit epoch.
       (∀ validator ∈ after.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
         validator.exitEpoch.toNat + exitCost preset after ≤ ceiling + exitCost preset state) ∧
       (after.exitBalanceToConsume electra).toNat ≤
@@ -652,6 +631,15 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
   have kept : Kept config electra state state ceiling :=
     ⟨rfl, rfl, rfl, queued, exits, Nat.le_max_left _ _⟩
   rw [exitCost_eq_exitCostAt] at room
+  -- The queue spends a churn of balance each epoch, which is at least one increment.
+  --
+  -- The queue opens no earlier than the first epoch an exit may take, which the ceiling bounds.
+  --
+  -- So an exit raises the ceiling by at most its effective balance in increments, plus one.
+  --
+  -- Only a validator that has not started to exit can start, and its cost then leaves the total.
+  --
+  -- So the end of the queue plus the cost still owed does not grow, nor does each exit epoch.
   obtain ⟨after, folded, later, afterKept, potential⟩ :=
     foldlM_updateRegistryEntryElectra_kept (activationEpoch := activationEpoch)
       List.nodup_range within summed increment minimum maximum carried
@@ -662,6 +650,7 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
   have owed : exitCost preset after = exitCostAt after (List.range state.validators.data.size) :=
     by rw [exitCost_eq_exitCostAt after, size]
   rw [exitCost_eq_exitCostAt state]
+  -- Afterwards the churn left over is at most the larger of the old one and one churn bound.
   refine ⟨after, ?_, by omega, fun validator member finite => ?_, left, slot, balances,
     effective⟩
   · simp only [processRegistryUpdates, electra, ↓reduceIte, liftAccessor, liftArith,
@@ -672,19 +661,15 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
 
 /-- From Electra, starting the exit of a validator in the registry succeeds.
 
-The registry is within its limit, and its effective balances sum below `2^64`.
-
-The increment is positive, and at most the least churn and the largest churn.
-
 A bound covers the first epoch of a new exit, the end of the exit queue and each set exit epoch.
-
-The churn carried plus three times the exit churn ceiling is below `2^64`.
 
 The bound plus the cost still owed plus the withdrawal delay is below `2^64 - 1`. -/
 theorem initiateValidatorExit_total_of_electra {config : Config}
     {state : BeaconState preset fork} {index : ValidatorIndex} {bound : Nat}
+    -- The registry is within its limit, and its effective balances sum below `2^64`.
     (electra : .pectra ≤ fork) (within : state.RegistryWithinLimit)
     (summed : effectiveBalanceSum state < 2 ^ 64)
+    -- The increment is positive, and at most the least churn and the largest churn.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
     (maximum :
@@ -693,6 +678,7 @@ theorem initiateValidatorExit_total_of_electra {config : Config}
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ bound)
     (queue : (state.earliestExitEpoch electra).toNat ≤ bound)
     (exits : ExitsBelow state bound)
+    -- The churn carried plus three times the exit churn ceiling is below `2^64`.
     (carried : (state.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config state <
       2 ^ 64)
     (room : bound + exitCost preset state + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat <

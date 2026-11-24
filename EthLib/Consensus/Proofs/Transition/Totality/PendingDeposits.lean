@@ -10,23 +10,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
 
 From Electra the epoch step reads the queue of pending deposits from its front.
 
-A deposit to a known key adds its amount to a balance.
-
-A deposit to a new key with a valid signature adds a validator.
-
-Every amount it credits comes from the queue, and leaves it.
-
-So the sum of the balances plus the amounts in the queue below `2^64` leaves room for each credit.
-
-The same bound keeps the running total of the amounts that the pass reads below `2^64`.
-
-Each new validator takes the place of a deposit that leaves the queue.
-
-So the validators plus the pending deposits within the limit of the registry leave room for it.
-
-The churn is at most a cap of the configuration, which Gloas changes.
-
-So the carried churn plus that cap must fit in 64 bits.
+It succeeds under bounds on the registry, the amounts and the churn.
 
 The step after it, the pending consolidations, then succeeds too.
 -/
@@ -439,55 +423,45 @@ private theorem applyPendingDeposit_capped {config : Config} {checks : Signature
 
 /-- From Electra, the pending deposits succeed under bounds on the registry and the amounts.
 
-The validators plus the pending deposits must be within the limit of the registry.
-
-The registry has one balance for each validator, and each effective balance is within its cap.
-
-From Altair, each list of scores and of participation flags has one entry for each validator.
-
-The sum of the balances plus the amounts in the queue must be below `2^64`.
-
-So must the sum of the effective balances, which the churn reads.
-
-The churn carried from the last epoch plus the cap on the churn of deposits must fit too.
-
-The current epoch plus one, and the first slot of the finalized epoch, must fit in 64 bits.
-
 Afterwards the validators plus the pending deposits stay within the limit of the registry.
 
-There is still one balance for each validator.
-
-The sum of the balances plus the amounts in the queue does not grow.
-
-The registry does not shrink, and the pending consolidations and the current epoch stay.
-
-From Altair each list of scores and of flags still has one entry for each validator.
-
-The churn carried to the next epoch is at most the churn carried before plus the cap.
-
-Each effective balance stays at most the largest one of its validator. -/
+There is still one balance for each validator, and the balances plus the queue do not grow. -/
 theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    -- The validators plus the pending deposits must be within the limit of the registry.
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
-    (matched : BalancesMatch state) (sized : ParticipationMatches state)
+    -- The registry has one balance for each validator.
+    (matched : BalancesMatch state)
+    -- From Altair, each list of scores and of participation flags has one entry for each validator.
+    (sized : ParticipationMatches state)
     (scored : InactivityScoresMatch state)
+    -- Each effective balance is within its cap.
     (capped : ∀ validator ∈ state.validators.data,
       validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
+    -- The sum of the balances plus the amounts in the queue must be below `2^64`.
     (funded : balanceSum state + pendingDepositSum state < 2 ^ 64)
+    -- So must the sum of the effective balances, which the churn reads.
     (summed : effectiveBalanceSum state < 2 ^ 64)
+    -- The churn carried from the last epoch plus the cap on the churn of deposits must fit too.
     (churned : (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork < 2 ^ 64)
+    -- The current epoch plus one must fit in 64 bits.
     (fits : (getCurrentEpoch state).toNat + 1 < 2 ^ 64)
+    -- The first slot of the finalized epoch must fit in 64 bits.
     (finalized : state.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
     ∃ after, processPendingDeposits config checks state electra = .ok after ∧
       registryLoad after ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat ∧
       BalancesMatch after ∧
       balanceSum after + pendingDepositSum after ≤ balanceSum state + pendingDepositSum state ∧
+      -- The registry does not shrink, and the pending consolidations and the current epoch stay.
       state.validators.data.size ≤ after.validators.data.size ∧
       after.pendingConsolidations electra = state.pendingConsolidations electra ∧
       getCurrentEpoch after = getCurrentEpoch state ∧
+      -- From Altair each list of scores and of flags still has one entry for each validator.
       ParticipationMatches after ∧ InactivityScoresMatch after ∧
+      -- The churn carried to the next epoch is at most the churn carried before plus the cap.
       (after.depositBalanceToConsume electra).toNat ≤
         (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork ∧
+      -- Each effective balance stays at most the largest one of its validator.
       ∀ validator ∈ after.validators.data,
         validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator := by
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
@@ -508,6 +482,7 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
     simp [added, liftAccessor, liftArith, Except.mapError]
   have churnOk' : liftAccessor (depositChurnLimit config state) = .ok churn := by
     simp [churnOk, liftAccessor, Except.mapError]
+  -- The churn is at most a cap of the configuration, which Gloas changes.
   have availableOk : liftAccessor (liftArith (addChecked (state.depositBalanceToConsume electra)
       churn)) = .ok (state.depositBalanceToConsume electra + churn) := by
     have added : addChecked (state.depositBalanceToConsume electra) churn =
@@ -518,6 +493,21 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
       .ok (state.finalizedCheckpoint.epoch * preset.SLOTS_PER_EPOCH) := by
     simp [computeStartSlotAtEpoch, mulChecked_of_lt finalized, liftAccessor, liftArith,
       Except.mapError]
+  -- The pass reads the queue from its front.
+  --
+  -- A deposit to a known key adds its amount to a balance.
+  --
+  -- A deposit to a new key with a valid signature adds a validator.
+  --
+  -- Every amount it credits comes from the queue, and leaves it.
+  --
+  -- So the bound on the balances plus the queue leaves room for each credit.
+  --
+  -- The same bound keeps the running total of the amounts that the pass reads below `2^64`.
+  --
+  -- Each new validator takes the place of a deposit that leaves the queue.
+  --
+  -- So the bound on the validators plus the pending deposits leaves room for it.
   obtain ⟨pass, passOk⟩ := passPendingDeposits_exists_ok config checks
     (depositWaits state (state.finalizedCheckpoint.epoch * preset.SLOTS_PER_EPOCH))
     (getCurrentEpoch state + 1) (state.depositBalanceToConsume electra + churn)
@@ -541,6 +531,7 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
   obtain ⟨_, _, applied, _, next, _, _, _, _, _, _, _, _, applies, rest⟩ :=
     processPendingDeposits_applied computed
   have flags := processPendingDeposits_matches computed sized scored
+  -- Each effective balance is within its cap before, and each deposit keeps it so.
   have bounded := foldlM_ok_invariant
     (fun s : BeaconState preset fork => ∀ validator ∈ s.validators.data,
       validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
@@ -560,21 +551,11 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
 
 /-- From Electra, the pending deposits and then the pending consolidations succeed under bounds.
 
-The bounds are those of the pending deposits.
-
-Both indices of every queued consolidation must also be in the registry.
+The bounds are those of the pending deposits, with both indices of each consolidation in range.
 
 Before Electra the step returns the state unchanged.
 
-The state after it keeps the registry within its limit and one balance for each validator.
-
-From Altair each list of scores and of flags keeps one entry for each validator.
-
-The sum of the balances plus the amounts in the queue does not grow.
-
-The churn carried to the next epoch is at most the churn carried before plus the cap.
-
-Each effective balance stays at most the largest one of its validator. -/
+The state after it keeps the bounds that the pending deposits keep. -/
 theorem processPendingBalances_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork)
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
@@ -593,11 +574,16 @@ theorem processPendingBalances_total (config : Config) (checks : SignatureChecks
     (fits : (getCurrentEpoch state).toNat + 1 < 2 ^ 64)
     (finalized : state.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
     ∃ after, processPendingBalances config checks state = .ok after ∧
+      -- The state after it keeps the registry within its limit and one balance for each validator.
       registryLoad after ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat ∧ BalancesMatch after ∧
+      -- From Altair each list of scores and of flags keeps one entry for each validator.
       ParticipationMatches after ∧ InactivityScoresMatch after ∧
+      -- The sum of the balances plus the amounts in the queue does not grow.
       balanceSum after + pendingDepositSum after ≤ balanceSum state + pendingDepositSum state ∧
+      -- The churn carried to the next epoch is at most the churn carried before plus the cap.
       (∀ electra : .pectra ≤ fork, (after.depositBalanceToConsume electra).toNat ≤
         (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork) ∧
+      -- Each effective balance stays at most the largest one of its validator.
       ∀ validator ∈ after.validators.data,
         validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator := by
   unfold processPendingBalances
