@@ -6,25 +6,11 @@ public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 /-!
 # Proofs: each known block of a reachable store has its entries
 
-The anchor store gives the anchor an unrealized justification.
+Each known block has its unrealized justification, its timeliness and its payload committee votes.
 
-From Gloas it also gives the anchor its timeliness and its timeliness for the payload committee.
-
-It also gives the anchor an empty entry in each of the two votes of that committee.
+The timeliness of a new block reads the clock of the store.
 
 Before Gloas the anchor has no timeliness, so the late test returns an error on the anchor.
-
-The block handler gives a new block each of these entries.
-
-No handler of a reachable store removes an entry.
-
-So in a reachable store each known block has them, with that one exception.
-
-The late test then answers for each known head other than the anchor before Gloas.
-
-The test on justification answers for any two known blocks.
-
-From Heze, each verified payload of a reachable store has an answer on its inclusion lists.
 -/
 
 @[expose] public section
@@ -50,6 +36,8 @@ private abbrev KeepsAnswers (gloas : .glamsterdam ≤ fork) (a b : Store preset 
       (a.payloads gloas).contains r ∨ ((b.payloadInclusionListSatisfaction heze)[r]?).isSome)
 
 /-- Each key of the five maps of the first store is a key of the same map of the second store.
+
+No handler of a reachable store removes an entry.
 
 From Heze each root with an answer on inclusion lists still has one.
 
@@ -389,6 +377,7 @@ private theorem addBlock_entries {checks : SignatureChecks} {sources : BlockSour
   · rw [tail.2.1, o2 r ne, k1.2.1]
   · exact ((tail.2.2 g).trans (s2 g)).trans (k1.2.2 g)
 
+/-- The block handler keeps the store, or gives the new block each of its entries. -/
 private theorem onBlock_entries {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
     (added : a.onBlock config checks sources signed = .ok after) :
@@ -495,8 +484,14 @@ private theorem Reachable.entries_aux {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
     (reachable : Reachable config anchorState anchorBlock store) {root : Root}
     (known : store.blocks.contains root = true) : Entries anchorBlock store root := by
+  -- So in a reachable store each known block has them, but the anchor's timeliness before Gloas.
   induction reachable generalizing root with
   | anchor made =>
+    -- The anchor store gives the anchor an unrealized justification.
+    --
+    -- From Gloas it also gives the anchor its timeliness and its timeliness for the committee.
+    --
+    -- It also gives the anchor an empty entry in each of the two votes of that committee.
     obtain ⟨anchorRoot, hashed, blocks, -⟩ := getForkchoiceStore_maps made
     obtain ⟨anchorRoot', hashed', -, timeliness, fields⟩ := getForkchoiceStore_fields made
     rw [hashed] at hashed'
@@ -664,6 +659,110 @@ theorem onAttesterSlashing_payloads {checks : SignatureChecks}
     (slashed : store.onAttesterSlashing config checks slashing = .ok after)
     (gloas : .glamsterdam ≤ fork) : after.payloads gloas = store.payloads gloas :=
   (onAttesterSlashing_keeps slashed).2.2 gloas
+
+/-- Recording the timeliness of a held block reads the clock of the store.
+
+The block is timely when the clock is in its slot, before the attestations are due. -/
+theorem recordBlockTimeliness_blockTimeliness {root : Root} {after : Store preset fork}
+    (recorded : store.recordBlockTimeliness config root = .ok after) :
+    ∃ block current time due, store.blocks[root]? = some block ∧
+      store.getCurrentSlot config = .ok current ∧ store.getTimeIntoSlotMs config = .ok time ∧
+      getAttestationDueMs config fork = .ok due ∧
+      after.blockTimeliness[root]? = some (decide (current = block.slot ∧ time < due)) := by
+  unfold recordBlockTimeliness at recorded
+  simp only [bind_ok_iff, pure, Except.pure] at recorded
+  obtain ⟨block, found, time, timeOk, due, dueOk, current, currentOk, recorded⟩ := recorded
+  refine ⟨block, current, time, due, block_ok_iff.mp found, currentOk, timeOk,
+    mapError_ok_iff.mp dueOk, ?_⟩
+  -- From Gloas the step also records the timeliness for the payload committee, which is apart.
+  split at recorded
+  · simp only [bind_ok_iff, Except.ok.injEq] at recorded
+    obtain ⟨_, _, rfl⟩ := recorded
+    simp
+  · cases recorded
+    simp
+
+/-- A new block gets its timeliness from the clock of the store.
+
+It is timely when the clock is in the slot of the block, before the attestations are due. -/
+theorem addBlock_blockTimeliness {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork} {blockRoot : Root} {after : Store preset fork}
+    (added : store.addBlock config checks sources signed blockRoot = .ok after) :
+    ∃ current time due, store.getCurrentSlot config = .ok current ∧
+      store.getTimeIntoSlotMs config = .ok time ∧ getAttestationDueMs config fork = .ok due ∧
+      after.blockTimeliness[blockRoot]? =
+        some (decide (current = signed.message.slot ∧ time < due)) := by
+  unfold addBlock at added
+  simp only [bind_ok_iff] at added
+  obtain ⟨state, -, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
+  -- The steps after the record keep the timeliness.
+  have tail := (updateProposerBoostRoot_keeps boost).trans
+    ((updateCheckpoints_keeps _ _).trans (computePulledUpTip_entries added).1)
+  rw [tail.2.1]
+  -- The record reads the clock of the store, and the block that the store has just taken.
+  obtain ⟨_, _, rfl⟩ := recordBlockPtcVotes_onlyPtcVotes vote
+  obtain ⟨block, current, time, due, found, currentOk, timeOk, dueOk, timely⟩ :=
+    recordBlockTimeliness_blockTimeliness record
+  simp only [getElem?_insert_root, ↓reduceIte, Option.some.injEq] at found
+  subst found
+  exact ⟨current, time, due, currentOk, timeOk, dueOk, timely⟩
+
+/-- A block keeps the timeliness of each block that the store holds. -/
+theorem onBlock_blockTimeliness_of_contains {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
+    {after : Store preset fork} (added : store.onBlock config checks sources signed = .ok after)
+    {root : Root} (held : store.blocks.contains root) :
+    after.blockTimeliness[root]? = store.blockTimeliness[root]? := by
+  rcases onBlock_entries added with same | ⟨blockRoot, -, -, -, -, -, other, fresh, -⟩
+  · rw [same]
+  · exact other root fun same => fresh (same ▸ held)
+
+/-- A tick keeps the timeliness of every block. -/
+theorem onTick_blockTimeliness {timeMs : UInt64} {after : Store preset fork}
+    (ticked : store.onTick config timeMs = .ok after) :
+    after.blockTimeliness = store.blockTimeliness :=
+  (onTick_keeps ticked).2.1
+
+/-- An attestation keeps the timeliness of every block. -/
+theorem onAttestation_blockTimeliness {checks : SignatureChecks}
+    {attestation : Attestation preset fork} {isFromBlock : Bool} {after : Store preset fork}
+    (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
+    after.blockTimeliness = store.blockTimeliness :=
+  (onAttestation_keeps attested).2.1
+
+/-- An attester slashing keeps the timeliness of every block. -/
+theorem onAttesterSlashing_blockTimeliness {checks : SignatureChecks}
+    {slashing : AttesterSlashing preset fork} {after : Store preset fork}
+    (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
+    after.blockTimeliness = store.blockTimeliness :=
+  (onAttesterSlashing_keeps slashed).2.1
+
+/-- From Gloas, a vote of the payload committee keeps the timeliness of every block. -/
+theorem onPayloadAttestationMessage_blockTimeliness {checks : SignatureChecks}
+    {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool}
+    {after : Store preset fork}
+    (accepted : store.onPayloadAttestationMessage config checks gloas message isFromBlock =
+      .ok after) :
+    after.blockTimeliness = store.blockTimeliness :=
+  (onPayloadAttestationMessage_keeps accepted).2.1
+
+/-- From Gloas, an envelope keeps the timeliness of every block. -/
+theorem onExecutionPayloadEnvelope_blockTimeliness {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    after.blockTimeliness = store.blockTimeliness := by
+  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  rfl
+
+/-- From Heze, an inclusion list keeps the timeliness of every block. -/
+theorem onInclusionList_blockTimeliness {checks : SignatureChecks} {heze : .hegota ≤ fork}
+    {signed : SignedInclusionList} {after : Store preset fork}
+    (accepted : store.onInclusionList config checks heze signed = .ok after) :
+    after.blockTimeliness = store.blockTimeliness := by
+  obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
+  rfl
 
 end Store
 

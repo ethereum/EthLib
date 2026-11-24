@@ -3681,6 +3681,25 @@ Their `anchorSlot` equality gives it, so they gain no hypothesis.
 From Gloas they assume that the anchor's registry leaves room for the pending deposits of each epoch up to their horizon.
 Before Gloas that assumption is vacuous.
 
+`Consensus/Proofs/ForkChoice/HonestProposal.lean` states the duty of an honest proposer and what a store records of a timely block, at every fork.
+`ProposalAt` is a new block that an honest validator sends at the start of a slot, from an up-to-date store that names it as the proposer of the slot (`IsProposer`), whose head is older than the slot.
+The block builds on the head node of that store, and the block handler of that store accepts it.
+The duty fixes the head as the parent; the honest validator guide also lets a proposer build on the parent of a late head, which `ProposalAt` does not cover.
+`Proposes` assumes that the execution gives each honest validator an up-to-date store at the start of each slot of a range, whether or not it proposes; that is an assumption on the schedule.
+It asks a proposal at the first such event when that store names the validator.
+When the head of that store is already a block of the slot, the duty asks nothing; the honest validator guide has no such condition.
+It also asks that an honest validator send a block only as such a proposal, and in every slot, inside the range or not, at most one.
+The model signs no block, so a Byzantine validator may still send a block that names an honest proposer; `UnforgedProposals` lets only the named proposer send such a block first, and any validator send it again once it was sent, as an assumption on the adversary in place of the signature.
+A store whose head state cannot be advanced to the slot, or whose head is unknown, names no proposer and asks no proposal.
+No execution yet witnesses a proposal, which needs a block that the state transition accepts.
+So `Proposes` is shown satisfiable only where no honest store names its validator, as with checks or sources that refuse every block.
+Under synchrony, `ProposalAt.mem_view` puts the block in the view of every honest validator `Δ` after the start of the slot.
+`Execution.blockTimeliness_eq_true` shows that a store whose clock is in the slot of a held block, before the attestations are due, has recorded that block as timely; the store must not hold the block at the start.
+`Store.addBlock_proposerBoostRoot` shows that such a timely block takes the boost when no block holds it, the head of the store is its parent, and the store holds that parent at an earlier slot; and `Execution.proposerBoostRoot_of_le` keeps a nonzero boost while the clock stays in one slot.
+`Store.ForwardReachable.not_parentRoot_of_current` shows that no held block builds on a block of the current slot, which is the leaf condition of `Store.getHead_eq_of_boost`.
+That lemma is about one store: no theorem yet shows that the head of an honest receiver is the parent of the block when it receives the block, or that no other block of the slot took the boost first.
+So no theorem yet gives the head of every up-to-date honest store at the attestation deadline.
+
 `Execution.finalized_prefix_or_accountable` proves the narrower historical family used by those duty proofs: one honest store's later justified checkpoint reads back its earlier finalized checkpoint, or accountable-safety evidence exists.
 `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` compose this family with the duty proofs, leaving the original statements unchanged.
 The companions retain the other network, duty, stake, ancestry and held-block nonzero conditions.
