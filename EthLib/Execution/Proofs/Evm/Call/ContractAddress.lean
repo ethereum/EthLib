@@ -12,9 +12,7 @@ public import EthLib.Serialization.Proofs.Rlp.Scalar
 /-!
 # Proofs: `Evm.Call.ContractAddress`
 
-Two pairs of a sender and a nonce with one CREATE preimage are the same pair.
-
-Two triples of a sender, a salt and a code hash with one CREATE2 preimage are the same triple.
+Each CREATE or CREATE2 preimage determines its inputs.
 
 The CREATE2 preimage has 85 bytes, and a CREATE preimage of a nonce below `2^256` at most 55.
 

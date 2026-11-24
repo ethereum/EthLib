@@ -7,23 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Gas.StateGas
 /-!
 # Proofs: `Evm.Call.Create`
 
-From Glamsterdam, a creation costs 12000 execution gas, and a dead new address 183600 state gas.
+The prices, the first checks, the refill, the deployed code and the memory of a creation.
 
-No creation pays state gas before Glamsterdam.
-
-A creation that fails its first checks leaves the state and the accessed addresses as they were.
-
-A creation whose init code fails gives back the state gas of the new account.
-
-From Glamsterdam, the code of a creation costs 1530 state gas a byte.
-
-No creation deploys code longer than 65536 bytes from Glamsterdam.
-
-A creation keeps the size of memory a multiple of 32, and so does the creator once it ends.
-
-So does every instruction that may send a message.
-
-A successful CREATE or CREATE2 reads its operands from the stack, grows memory, then launches.
+Every instruction that may send a message keeps the size of memory a multiple of 32.
 -/
 
 @[expose] public section
@@ -59,6 +45,7 @@ theorem createNewAccountStateGas_of_lt (h : fork < .glamsterdam) (state : Transa
 theorem createNewAccountStateGas_of_glamsterdam (h : fork ≥ .glamsterdam)
     (state : TransactionState) (address : Address) :
     createNewAccountStateGas fork state address =
+      -- A dead new address costs 183600 state gas.
       if state.isAccountAlive address then 0 else NEW_ACCOUNT_STATE_GAS := by
   by_cases alive : state.isAccountAlive address <;>
     simp [createNewAccountStateGas, h, alive]

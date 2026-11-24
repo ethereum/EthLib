@@ -9,15 +9,7 @@ public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 
 The potential of a frame is four times the weight of its logs, plus the gas it holds.
 
-A LOG step adds a log and pays at least four times its weight.
-
-From Glamsterdam, SELFDESTRUCT may add a transfer log, and its price of at least 5000 covers it.
-
-Every other step keeps the logs, and holds no more gas than before.
-
-A call or a creation pays at least the gas of its message, plus the allowance of that message.
-
-So the caller that resumes has at most its potential before.
+No step raises it, and the caller that resumes has at most its potential before.
 
 That needs the child to end with at most its gas, plus its allowance.
 -/
@@ -313,9 +305,11 @@ theorem logsPotential_selfdestructStep [LawfulGasMeter Meter] {evm after : Evm f
     · cases h
     · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
       cases h
+      -- From Glamsterdam, SELFDESTRUCT may add a transfer log.
       have hw := logsWeight_pushTransferLog (fork := fork) e4.substate.logs
         e4.message.currentTarget (toAddressMasked w)
         (e4.state.getAccount e4.message.currentTarget).balance
+      -- Its price of at least 5000 covers that log.
       have hc := transferAllowance_le_selfdestructCost (fork := fork) cold
         (selfdestructCreatesAccount fork (recordAccountRead e2 (toAddressMasked w)).state
           (recordAccountRead e2 (toAddressMasked w)).message.currentTarget (toAddressMasked w))
@@ -333,6 +327,7 @@ theorem logsPotential_instruction [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
     (hrun : instruction fork op = some run) (h : run evm = .ok after)
     (running : evm.running = true) : logsPotential after ≤ logsPotential evm := by
+  -- Every step but LOG and SELFDESTRUCT keeps the logs, and holds no more gas than before.
   unfold instruction at hrun
   rcases orElse_eq_some hrun with hf | hrun
   · exact logsPotential_le_of_logs (stackOnlyStep_sameContext hf h).logs
@@ -361,12 +356,15 @@ theorem logsPotential_instruction [LawfulGasMeter Meter] {op : Op}
   rcases orElse_eq_some hrun with hf | hf
   · cases op <;> simp only [logOpStep, Option.some.injEq, reduceCtorEq] at hf
     subst hf
+    -- A LOG step adds a log and pays at least four times its weight.
     exact logsPotential_logStep h
   · cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hf
     subst hf
     exact logsPotential_selfdestructStep h
 
-/-! ## The calls and the creations -/
+/-! ## The calls and the creations
+
+A call or a creation pays at least the gas of its message, plus the allowance of that message. -/
 
 /-- The price of sending value covers the stipend and the allowance of one transfer log. -/
 theorem stipend_add_transferAllowance_le {value : U256} (h : value ≠ 0) :

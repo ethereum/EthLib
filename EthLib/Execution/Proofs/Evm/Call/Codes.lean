@@ -8,15 +8,7 @@ public import EthLib.Execution.Proofs.State.CodeAvailability
 
 The code of an account is available when the state holds the code under its code hash.
 
-A step writes storage, moves a balance or raises a nonce, and each keeps every code hash.
-
-So every step keeps the code of each account available, and so does a run of a frame.
-
-A creation then stores its code under the hash that the account receives.
-
-A rollback goes back to a snapshot with the same block, which held its codes.
-
-Every call and creation then keeps the codes, by induction on the gas of the message.
+Every call and creation keeps the code of each account available, by induction on its gas.
 
 The same holds for the accounts before the transaction, whose code hashes stay.
 -/
@@ -95,13 +87,16 @@ theorem stepRules_hasCodes :
   static h := ⟨h.tracker.parent,
     hasCodes_of_getCode h.tracker.getCode fun address => .inl (by rw [getAccount_of_staticStep h]),
     hasPreCodes_of_getCode h.tracker.getCode h.tracker.parent⟩
+  -- A write of storage keeps every code hash.
   sstore _ _ _ _ _ _ h := ⟨TransactionState.parent_setStorage h, hasCodes_setStorage h,
     hasPreCodes_setStorage h⟩
   tstore _ _ _ _ := ⟨rfl, fun h => h, fun h => h⟩
   log _ hs _ _ _ := by
     rw [hs]
     exact ⟨rfl, fun h => h, fun h => h⟩
+  -- A move of a balance keeps every code hash.
   selfdestruct _ _ h := ⟨parent_finishSelfdestruct h, hasCodes_finishSelfdestruct h⟩
+  -- A rise of a nonce keeps every code hash.
   incrementNonce _ _ _ _ h := ⟨TransactionState.parent_incrementNonce h,
     hasCodes_incrementNonce h, hasPreCodes_modifyState h⟩
   incorporate h := by
@@ -162,6 +157,7 @@ private theorem hasCodes_rollback {snapshot after : TransactionState} {evm : Evm
     after.parent = snapshot.parent ∧ (HasCodes snapshot → HasCodes after) ∧
       (HasPreCodes snapshot → HasPreCodes after) := by
   rcases h with rfl | rfl
+  -- A rollback goes back to a snapshot with the same block, which held its codes.
   · exact ⟨parent, hasCodes_restoreTxState parent, hasPreCodes_restoreTxState parent⟩
   · exact ⟨parent, codes, preCodes⟩
 
@@ -181,6 +177,7 @@ theorem processMessage_hasCodes [LawfulGasMeter Meter] (n : Nat) :
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         (HasCodes state → HasCodes ended.val.state) ∧
           (HasPreCodes state → HasPreCodes ended.val.state)) := by
+  -- Every step keeps the code of each account available, and so does a run of a frame.
   have keeps := (stepRules_hasCodes (fork := fork) (Meter := Meter)).processMessage
     (M := fun _ state _ _ ended => ended.state.parent = state.parent ∧
       (HasCodes state → HasCodes ended.state) ∧ (HasPreCodes state → HasPreCodes ended.state))
@@ -201,6 +198,7 @@ theorem processMessage_hasCodes [LawfulGasMeter Meter] (n : Nat) :
           (fun h => hm.2.2 (preCodes h))
       · exact hasCodes_rollback parent (.inr hs) (fun h => hm.2.1 (codes h))
           (fun h => hm.2.2 (preCodes h))
+      -- A creation stores its code under the hash that the account receives.
       · exact ⟨(TransactionState.parent_setCode hs).trans parent,
           fun h => hasCodes_setCode hs (hm.2.1 (codes h)),
           fun h => hasPreCodes_setCode hs (hm.2.2 (preCodes h))⟩)

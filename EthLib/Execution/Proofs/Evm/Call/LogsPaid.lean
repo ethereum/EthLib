@@ -9,17 +9,7 @@ public import EthLib.Execution.Proofs.Evm.Call.MeterRules
 
 The potential of a frame is four times the weight of its logs, plus the gas it holds.
 
-A LOG step adds a log and charges at least four times its weight, so it raises no potential.
-
-Every other step adds no log, and raises the gas held only by taking back gas it gave a child.
-
-A child that succeeds passes on its logs, and gives back the gas it holds.
-
-From Glamsterdam, a message that moves ether to another account writes a transfer log of EIP-7708.
-
-When an instruction sends the message, it pays for that log with gas the message never receives.
-
-So no message raises the potential above its start, plus the allowance of its own transfer log.
+No message raises the potential above its start, plus the allowance of its own transfer log.
 
 That holds at every fork and for every lawful meter, whether or not the message ends with an error.
 -/
@@ -79,6 +69,7 @@ private theorem keeps_child [LawfulGasMeter Meter] {evm caller : Evm fork Meter}
       logsPotential after ≤ logsPotential caller + logsPotential child) :
     StepResult.Keeps LogsRel ChildPaid evm (.child caller message resume) := by
   refine ⟨logsPotential_le_of_logs logs (by omega), fun child after hres hc => ?_⟩
+  -- A child that succeeds passes on its logs, and gives back the gas it holds.
   have := resumes child after hres
   unfold ChildPaid at hc
   unfold LogsRel logsPotential at *
@@ -116,6 +107,7 @@ private theorem keeps_finishCall [LawfulGasMeter Meter] {kind : CallKind} {call 
       rw [logs]
       split at gas <;> omega
     · cases h
+      -- The sending instruction pays for the transfer log with gas the message never receives.
       refine keeps_child logs ?_ (fun _ _ hres => logsPotential_resumeCall hres)
       simp only [gas_callerFrame, gas_callMessage, LawfulGasMeter.gasHeld_drain]
       refine Nat.le_trans (Nat.add_le_add_left ?_ _) gas
@@ -299,8 +291,14 @@ private theorem keeps_step [LawfulGasMeter Meter] {evm : Evm fork Meter}
     · split at h
       · rename_i hrun
         obtain ⟨after, hr, rfl⟩ := Base.map_ok_iff.mp h
+        -- A LOG step adds a log and charges at least four times its weight.
+        --
+        -- From Glamsterdam, SELFDESTRUCT may add a transfer log, and its price covers it.
+        --
+        -- Every other instruction adds no log.
         exact logsPotential_instruction hrun hr running
       · split at h
+        -- A step raises the gas held only by taking back gas it gave a child.
         · exact keeps_messageInstruction ‹_› h
         · cases h
   · obtain ⟨after, hr, rfl⟩ := Base.map_ok_iff.mp h
@@ -390,6 +388,7 @@ private theorem logsWeight_entered {message : Message fork} {state entry : Trans
       4 * logsWeight substate.logs.toList + messageAllowance message := by
   rcases h with ⟨-, -, rfl⟩ | ⟨ht, -, rfl⟩
   · omega
+  -- From Glamsterdam, a message moving ether to another account writes a transfer log of EIP-7708.
   · refine Nat.le_trans (logsWeight_pushTransferLog _ _ _ _) (Nat.add_le_add_left ?_ _)
     exact ite_le_ite (fun hc => ⟨ht.1, hc⟩) _
 
@@ -465,8 +464,6 @@ theorem processCreateMessage_logsWeight_messageAllowance [LawfulGasMeter Meter]
 
 /-- A call that returns a frame raises its potential by at most the allowance of a transfer log.
 
-The potential is four times the weight of the logs, plus the gas held.
-
 That holds at every fork and for every lawful meter, whether or not the frame ends with an error.
 
 For a frame that ends with an error, the bound holds for the frame as returned.
@@ -482,8 +479,6 @@ theorem processMessage_logsWeight [LawfulGasMeter Meter] {message : Message fork
     (Nat.add_le_add_left (messageAllowance_le message) _)
 
 /-- A creation that returns a frame raises its potential by at most the allowance of a transfer log.
-
-The potential is four times the weight of the logs, plus the gas held.
 
 That holds at every fork and for every lawful meter, whether or not the frame ends with an error.
 

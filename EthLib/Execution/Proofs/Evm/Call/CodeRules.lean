@@ -11,11 +11,7 @@ From Spurious Dragon, a creation deploys at most the code-size cap of its fork (
 
 From London, a creation never deploys code that starts with the byte `0xEF`, by [EIP-3541][eip3541].
 
-A message writes code only when a creation deploys it, and the deposit checks the rules first.
-
-A rollback puts back the written codes of a snapshot, so it writes no new code.
-
-So each code that a call or a creation writes was written before it, or meets the rules of its fork.
+Each code that a call or a creation writes was written before it, or meets the rules of its fork.
 
 [eip170]: https://eips.ethereum.org/EIPS/eip-170#specification
 [eip3541]: https://eips.ethereum.org/EIPS/eip-3541#specification
@@ -150,6 +146,7 @@ private theorem keepsCodeRules_rollbackOnError {P : ByteArray → Prop}
     KeepsCodeRules P snapshot (rollbackOnError snapshot ended).state := by
   unfold rollbackOnError
   split
+  -- A rollback puts back the written codes of a snapshot, so it writes no new code.
   · exact .of_codeWrites (sameWrites_restoreTxState ended.state snapshot).codeWrites
   · exact hk
 
@@ -217,6 +214,7 @@ private theorem keepsCodeRules_depositCode {state prepared : TransactionState}
     exact .of_codeWrites (sameWrites_restoreTxState evm.state state).codeWrites
   · rw [hs]
     exact hprep.trans hk
+  -- A message writes code only when a creation deploys it, and the deposit checks the rules first.
   · exact (hprep.trans hk).trans (.setCode hrules hs)
 
 /-- By induction on gas, calls and creations keep the rules of the written codes. -/

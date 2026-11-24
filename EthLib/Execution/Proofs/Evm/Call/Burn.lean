@@ -11,21 +11,9 @@ From Cancun, only an account created in the transaction burns, by [EIP-6780][e67
 
 From Glamsterdam, none does, by [EIP-8246][e8246].
 
-A log of burns records each such burn, in the order of the run.
+A log of burns records them.
 
-It also holds the log of each frame that rolls back, which counts for nothing.
-
-The total of a log is the wei of its burns that no rollback discards.
-
-The log of a step of SELFDESTRUCT reads the beneficiary on the stack and the balance of the account.
-
-A step that runs any other opcode burns nothing.
-
-So the next frame of a step has the supply of the frame before, less the burn of the step.
-
-A step that sends a message gives a caller frame with the supply of the frame before.
-
-Each burn that a log counts comes from a step of SELFDESTRUCT, with the burn of that step.
+A step that gives the next frame lowers the supply by its burn; one that sends a message keeps it.
 
 [e6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
 [e8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
@@ -42,13 +30,15 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-! ## The log of burns -/
 
-/-- A log of the ether that a run burns.
-
-It is empty, one burn of SELFDESTRUCT, two logs in order, or the log of a frame that rolls back. -/
+/-- A log of the ether that a run burns, in the order of the run. -/
 inductive BurnLog where
+  -- No burn.
   | empty
+  -- One burn of SELFDESTRUCT.
   | selfdestruct (originator beneficiary : Address) (amount : Nat)
+  -- Two logs, in order.
   | append (first second : BurnLog)
+  -- The log of a frame that rolls back, which counts for nothing.
   | rollback (discarded : BurnLog)
 
 /-- The wei of the burns of the log that no rollback discards. -/
@@ -167,6 +157,7 @@ theorem supply_selfdestructStep {evm after : Evm fork Meter}
 /-- The log of a step from `evm` to `after`: that of SELFDESTRUCT when the step runs it, else none.
 -/
 def stepBurnLog (evm after : Evm fork Meter) : BurnLog :=
+  -- A step that runs any other opcode burns nothing.
   if RunsSelfdestruct evm then selfdestructStepLog evm after else .empty
 
 omit [GasMeter Meter] in

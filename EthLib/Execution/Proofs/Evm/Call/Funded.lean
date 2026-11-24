@@ -5,21 +5,7 @@ public import EthLib.Execution.Proofs.Evm.Call.StateErrors
 /-!
 # Proofs: a funded call or creation never fails for a balance below an amount
 
-A message moves its value from its caller to its target when it starts.
-
-That move fails when the caller holds less than the value.
-
-CALL and CALLCODE send a message only when the caller holds the value.
-
-So does a creation, and the rise of the caller's nonce that follows keeps its balance.
-
-DELEGATECALL moves no value, and STATICCALL moves the value 0.
-
-A creation prepares its new address, and that keeps every balance.
-
-No step fails for a balance below the amount it takes.
-
-So a message whose caller holds its value never fails for a balance below an amount.
+A message whose caller holds its value never fails for a balance below an amount.
 -/
 
 @[expose] public section
@@ -50,6 +36,7 @@ private theorem funded_finishCall {kind : CallKind} {call : CallOperands} {calle
   split at h
   · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h
     cases hc
+  -- CALL and CALLCODE send a message only when the caller holds the value.
   · rename_i hfunds
     unfold Evm.genericCall at h
     split at h
@@ -57,6 +44,7 @@ private theorem funded_finishCall {kind : CallKind} {call : CallOperands} {calle
       cases hc
     · cases h
       intro transfers
+      -- DELEGATECALL moves no value, and STATICCALL moves the value 0.
       by_cases hk : kind = .delegatecall
       · simp [hk] at transfers
       · simp only [value_callMessage, caller_callMessage, hk, ↓reduceIte]
@@ -206,6 +194,7 @@ private theorem runFrame_ne_insufficientBalance [LawfulGasMeter Meter] {bound : 
   case case1 _ _ hstep _ =>
     intro h
     cases h
+    -- No step fails for a balance below the amount it takes.
     exact step_ne_insufficientBalance _ address hstep
   case case3 hstep _ ih => exact ih
   case case4 hstep _ _ ran =>
@@ -265,6 +254,7 @@ private theorem moveEther_ne_insufficientBalance {message : Message fork}
     state.moveEther fork message.caller message.currentTarget message.value ≠
       .error (.insufficientBalance address) := by
   intro h
+  -- The move fails for a lack of balance exactly when the caller holds less than the value.
   have hle := funded transfers
   by_cases same : message.caller = message.currentTarget
   · rw [← same] at h
@@ -321,6 +311,7 @@ theorem processMessage_ne_insufficientBalance_of_gas [LawfulGasMeter Meter] (n :
           subst he
           exact runFrame_ne_insufficientBalance
             (fun caller child lt => never caller child (hn ▸ lt)) address hrun
+        -- A message that transfers value moves it from its caller to its target when it starts.
         split at hdo
         · rename_i transfers
           rcases Base.bind_eq_error hdo with hm | ⟨entry, -, hdo⟩
@@ -349,6 +340,7 @@ theorem processMessage_ne_insufficientBalance_of_gas [LawfulGasMeter Meter] (n :
       split at hp
       · exact mapError_ne_of_isOk (State.TransactionState.incrementNonce_isOk _ _ _) _ hp
       · cases hp
+    -- A creation prepares its new address, and that keeps every balance.
     have ready : Funded message prepared := fun transfers => by
       rw [balance_prepareCreation hprep]
       exact funded transfers

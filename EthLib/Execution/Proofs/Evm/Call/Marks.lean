@@ -10,17 +10,7 @@ SELFDESTRUCT can mark the account that runs it for deletion, in the substate of 
 
 From Cancun, it marks that account only when the transaction created it.
 
-No write removes an account from that set, so a frame keeps its marks until it ends.
-
-A child starts with the marks of its caller.
-
-A child that ends without an error passes its marks to its caller.
-
-By definition, a child that ends with an error passes none, and its caller keeps its own.
-
-A call to code starts its frame from the state and the substate that it enters.
-
-A creation does so once it prepares its account.
+A frame keeps its marks until it ends, and a child without an error passes them to its caller.
 
 These facts hold at every fork.
 -/
@@ -40,7 +30,9 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 def ToDeleteLe (evm after : Evm fork Meter) : Prop :=
   ∀ address ∈ evm.substate.accountsToDelete, address ∈ after.substate.accountsToDelete
 
-/-- Each write of a step keeps every account to delete. -/
+/-- Each write of a step keeps every account to delete.
+
+No write removes an account from that set, so a frame keeps its marks until it ends. -/
 theorem stepRules_toDeleteLe : StepRules fork (ToDeleteLe (fork := fork) (Meter := Meter)) where
   trans hab hbc x hx := hbc x (hab x hx)
   static h x hx := h.toDelete ▸ hx
@@ -83,6 +75,7 @@ theorem toDeleteLe_processMessage_induction [LawfulGasMeter Meter] (n : Nat) :
     (fun {message state _ substate _ _ ended} hentry hd x hx => by
       rw [(createdAccounts_rollbackOnError state ended).2]
       refine hd x ?_
+      -- A child starts with the marks of its caller.
       rcases hentry with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩
       · exact hx
       · exact hx)
@@ -93,7 +86,9 @@ theorem toDeleteLe_processMessage_induction [LawfulGasMeter Meter] (n : Nat) :
 
 /-! ## A child that ends without an error -/
 
-/-- A caller that takes in a child without an error marks every account that the child marks. -/
+/-- A caller that takes in a child without an error marks every account that the child marks.
+
+By definition, a child that ends with an error passes none, and its caller keeps its own. -/
 theorem toDeleteLe_incorporateChild {caller child : Evm fork Meter} (ok : child.error = none) :
     ToDeleteLe child (incorporateChild fork caller child) := by
   intro _ hx

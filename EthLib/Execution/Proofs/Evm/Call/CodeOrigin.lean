@@ -14,12 +14,6 @@ Take a state where each account has no code, a written code, or its code hash in
 
 Every call and every creation keeps that, whether its frame ends with an error or not.
 
-A step changes no code hash, and a rollback restores a snapshot with the same block.
-
-A creation gives its address the hash of a code that it writes first.
-
-The written codes never shrink, since a rollback restores those of its snapshot.
-
 Source: [EIP-7928, Scope and Inclusion][eip7928].
 
 [eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
@@ -232,6 +226,7 @@ theorem KeepsCodeOrigin.setCode {tx tx' : TransactionState} {address : Address}
 private theorem KeepsCodeOrigin.restoreTxState {tx snapshot : TransactionState}
     (hp : tx.parent = snapshot.parent) :
     KeepsCodeOrigin snapshot (tx.restoreTxState snapshot) := by
+  -- The written codes never shrink, since a rollback restores those of its snapshot.
   have hs := sameWrites_restoreTxState tx snapshot
   refine ⟨hp, fun _ hc => hs.codeWrites ▸ hc, fun x => .inr (.inr ?_)⟩
   rw [hs.getAccount hp x]
@@ -261,7 +256,9 @@ private theorem keepsCodeOrigin_finishSelfdestruct {beneficiary : Address} {refu
 
 /-! ## Steps of a frame -/
 
-/-- Each write of a step keeps the origin of the code hashes, in any frame. -/
+/-- Each write of a step keeps the origin of the code hashes, in any frame.
+
+A step changes no code hash. -/
 theorem stepRules_keepsCodeOrigin :
     StepRules fork (fun a b : Evm fork Meter => KeepsCodeOrigin a.state b.state) where
   trans := KeepsCodeOrigin.trans
@@ -299,6 +296,7 @@ private theorem keepsCodeOrigin_rollbackOnError {snapshot : TransactionState}
     KeepsCodeOrigin snapshot (rollbackOnError snapshot ended).state := by
   unfold rollbackOnError
   split
+  -- A rollback restores a snapshot with the same block.
   · exact .restoreTxState hk.1
   · exact hk
 
@@ -327,6 +325,7 @@ private theorem keepsCodeOrigin_depositCode {state prepared : TransactionState}
     exact .restoreTxState (hk.1.trans hprep.1)
   · rw [hs]
     exact hprep.trans hk
+  -- A creation gives its address the hash of a code that it writes first.
   · exact (hprep.trans hk).trans (.setCode hs)
 
 /-- By induction on gas, calls and creations keep the origin of the code hashes. -/
