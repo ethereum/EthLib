@@ -17,12 +17,6 @@ This file shows that the cells the code computes for a blob are that codeword.
 - A blob holds 4096 values, one at each point of the blob domain.
 - One polynomial of degree below 4096 takes these values: the polynomial of the blob.
 - Each of the 128 cells of the blob is the symbol of the codeword of that polynomial.
-
-So no adversary wins code-binding with cells that the code computes for one blob.
-
-That fact is about the cells only.
-
-The commitment and the proofs are arbitrary, so it says nothing about whether the openings verify.
 -/
 
 @[expose] public section
@@ -100,11 +94,15 @@ theorem computeCells_eq_codewordCell {blob : Blob} {poly : Kzg.Polynomial}
 
 Take any openings at cell indices below 128, whose cells are those of one blob.
 
-The bound makes each index name one of the 128 cells; an accepted opening satisfies it.
+The bound makes each index name one of the 128 cells.
+
+An accepted opening satisfies it.
 
 Then the polynomial of the blob agrees with every opened cell.
 
 So the openings fail the winning condition of code-binding, whatever the setup.
+
+This fact is about the cells only.
 
 The commitment and the proofs are arbitrary: nothing follows about whether the openings verify. -/
 theorem not_codeBindingWins_of_computeCells {blob : Blob} {cells : Array Cell}

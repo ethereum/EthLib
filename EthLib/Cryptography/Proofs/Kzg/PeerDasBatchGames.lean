@@ -15,31 +15,7 @@ The hash is a random oracle into `Fr` on the inputs of the core check.
 
 That idealises SHA-256 reduced modulo `r`, the order of `Fr`, whose values are not exactly uniform.
 
-The adversary may query the oracle, then outputs a commitment and openings at distinct cell indices.
-
-The verifier queries the oracle on the inputs of the batch, and gets the challenge `x`.
-
-It accepts when the batch check returns a verdict and `x` is a root of the error polynomial.
-
-For a well-formed setup, this is the batch check of cells at the challenge of the hash.
-
-No theorem relates the two at another challenge.
-
-The verifier accepts valid openings with every challenge.
-
 The bound is the sum of the bound of Lemma 4 and `(q + 1) 127 / r`.
-
-Here `q` counts the queries of the adversary.
-
-The added term bounds the event that `x` is a root of a nonzero error polynomial.
-
-Otherwise every opened cell is valid and verifies alone, and Lemma 4 applies.
-
-A client that samples a column checks it in its own batch, with many commitments at one cell index.
-
-So the cells of one commitment reach it through several batches, each with its own challenge.
-
-The game does not model that shape; another file states the games with such columns.
 -/
 
 @[expose] public section
@@ -146,7 +122,16 @@ theorem prEvent_bind_le_of_forall {S O : Type} (sample : ProbComp S) (run : S �
     _ = ε * 𝒟[sample] Set.univ := lintegral_const ε
     _ ≤ ε := mul_le_of_le_one_right' (evalDist_apply_univ_le_one sample)
 
-/-! ## The game -/
+/-! ## The game
+
+A client that samples a column checks it in its own batch, with many commitments at one cell index.
+
+So the cells of one commitment reach it through several batches, each with its own challenge.
+
+The game does not model that shape.
+
+Another file states the games with such columns.
+-/
 
 /-- Entry `k` of the array of a mapped list. -/
 theorem getElem!_toArray_map {α β : Type} [Inhabited β] (l : List α) (f : α → β) {k : Nat}
@@ -174,7 +159,11 @@ def BatchCodeBindingWins (s : TrustedSetup) (τ : Fr)
     ¬∃ f : Fr[X], f.natDegree < FIELD_ELEMENTS_PER_BLOB ∧
       ∀ o ∈ p.1.2, o.cell = codewordCell f o.cellIndex
 
-/-- The experiment of the batch game: the adversary, then the query of the verifier. -/
+/-- The experiment of the batch game: the adversary, then the query of the verifier.
+
+The adversary may query the oracle, then outputs a commitment and openings at distinct cell indices.
+
+The verifier queries the oracle on the inputs of the batch, and gets the challenge `x`. -/
 def batchCodeExperiment
     (adversary : SetupPowers → OracleComp (CellBatch →ₒ Fr) (Bytes48 × List CellOpening))
     (pw : SetupPowers) : OracleComp (CellBatch →ₒ Fr) ((Bytes48 × List CellOpening) × Fr) := do
@@ -241,7 +230,7 @@ theorem batchCodeBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
   obtain ⟨⟨com, os⟩, r⟩ := p
   obtain ⟨hnd, ⟨⟨b, hb⟩, hr⟩, hno⟩ := hw
   by_cases hz : (openingsInput (com, os)).toCellBatch.errorPoly τ scalarOf scalarOf = 0
-  · -- Every opened cell is valid, so it verifies alone.
+  · -- Every opened cell is valid, so it verifies alone, and Lemma 4 applies.
     have hwin : CodeBindingWins s (com, os) := by
       refine ⟨hnd, fun o ho => ?_, hno⟩
       obtain ⟨k, hk, rfl⟩ := List.mem_iff_getElem.mp ho

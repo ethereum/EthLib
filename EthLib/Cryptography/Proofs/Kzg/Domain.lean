@@ -11,15 +11,9 @@ public import Batteries.Data.Array.Lemmas
 
 Take a power of two `n` that divides `r - 1`.
 
-Entry `i` of the bit-reversed domain is `ω^(rev(i))`, for a primitive `n`-th root `ω`.
+The bit-reversed domain lists the `n`-th roots of unity, each once.
 
-The entries are pairwise distinct, and they are exactly the `n`-th roots of unity.
-
-Evaluation looks `z` up in the domain.
-
-A hit makes `z` a domain point.
-
-A miss gives `z^n ≠ 1`, so no barycentric denominator `z - D[i]` vanishes.
+Evaluation looks `z` up in the domain, and the last lemmas cover a hit and a miss.
 
 It uses the scoped field instance on `Fr` of the BLS proofs.
 -/
@@ -68,6 +62,8 @@ theorem getElem_computeRootsOfUnity (order i : Nat)
   exact Bls.Fr.powNat_eq_pow _ _
 
 /-- Element `i` of the bit-reversed domain is `ω ^ reverseBits i n`.
+
+Here `ω` is a primitive `n`-th root of unity.
 
 The power-of-two hypothesis is an equation, so the lemma applies directly to width constants.
 
@@ -146,15 +142,18 @@ theorem idxOf?_rootsOfUnityBrp_eq_some {n : Nat} {z : Fr} {i : Nat}
   rw [getElem!_pos (rootsOfUnityBrp n) i hsize]
   simpa using heq
 
-/-- A domain miss means `z` is not an `n`-th root of unity. -/
+/-- A domain miss means `z` is not an `n`-th root of unity: `z^n ≠ 1`. -/
 theorem pow_ne_one_of_idxOf?_eq_none {n k : Nat} (hnk : n = 2 ^ k)
     (hdvd : n ∣ BLS_MODULUS - 1) {z : Fr}
     (h : (rootsOfUnityBrp n).idxOf? z = none) :
     z ^ n ≠ 1 := fun hpow =>
   Array.idxOf?_eq_none_iff.mp h ((mem_rootsOfUnityBrp hnk hdvd z).mpr hpow)
 
-/-- On a domain miss, no barycentric denominator vanishes:
-`z - D[i] ≠ 0` for every in-range `i`. Generic in the domain size. -/
+/-- On a domain miss, no barycentric denominator vanishes.
+
+That is `z - D[i] ≠ 0` for every in-range `i`.
+
+The lemma is generic in the domain size. -/
 theorem sub_getElem_ne_zero_of_idxOf?_eq_none {n : Nat} {z : Fr}
     (h : (rootsOfUnityBrp n).idxOf? z = none) {i : Nat} (hi : i < n) :
     z - (rootsOfUnityBrp n)[i]! ≠ 0 := by

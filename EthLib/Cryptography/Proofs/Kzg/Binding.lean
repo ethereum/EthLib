@@ -6,16 +6,6 @@ public import EthLib.Cryptography.Proofs.Bls.KeyValidate
 /-!
 # Proofs: two openings to different values give a strong Diffie–Hellman solution
 
-Let two proofs open one commitment at `z` to values `y ≠ y'`, and let both checks pass.
-
-Then `(π - π') / (y' - y)` represents `1 / (τ - z)`.
-
-So `(-z, (π - π') / (y' - y))` solves the strong Diffie–Hellman problem for the secret `τ`.
-
-The setup also holds `[τ]_2`, so the instance is the asymmetric variant of the problem.
-
-The scalar of 48 bytes is the scalar that their point represents, if there is one.
-
 The search reads only the two openings, as in Appendix C.1 of the paper below.
 
 It is the extended version of Kate, Zaverucha and Goldberg, CACR 2010-10:
@@ -36,7 +26,9 @@ open scoped EthLib.Cryptography.Bls.Fr
 
 The point `P` represents `1 / (τ + c)` times the generator, and `τ + c ≠ 0`.
 
-The problem is Definition 2.3 of the extended KZG paper. -/
+The problem is Definition 2.3 of the extended KZG paper.
+
+The setup also holds `[τ]_2`, so the instance is the asymmetric variant of the problem. -/
 def IsSdhSolution (τ : Fr) (sol : Fr × G1) : Prop :=
   τ + sol.1 ≠ 0 ∧ G1.Represents sol.2 (τ + sol.1)⁻¹
 
@@ -75,7 +67,9 @@ theorem findSdh_valid_of_identity {τ c w w' z y y' : Fr} {P P' : G1}
     (hP : G1.Represents P w) (hP' : G1.Represents P' w') (hne : y ≠ y')
     (hid : c - y = w * (τ - z)) (hid' : c - y' = w' * (τ - z)) :
     ∃ sol, findSdh z y y' P P' = some sol ∧ IsSdhSolution τ sol := by
+  -- The point `(π - π') / (y' - y)` represents `1 / (τ - z)`.
   obtain ⟨htz, hinv⟩ := sdh_scalar c y y' w w' τ z hne hid hid'
+  -- So `(-z, (π - π') / (y' - y))` solves the strong Diffie–Hellman problem for the secret `τ`.
   refine ⟨(-z, G1.mul (G1.add P (G1.neg P')) (y' - y).inverse), by simp [findSdh, hne], htz, ?_⟩
   have hscalar : (y' - y).inverse * (w + -w') = (τ + -z)⁻¹ := by
     rw [Bls.Fr.inverse_eq_inv]

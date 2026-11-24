@@ -13,15 +13,9 @@ Here the hash is a random oracle, and the adversary may query it.
 
 It may hash many batches and keep one whose challenge is a root of its error polynomial.
 
-A nonzero polynomial of degree at most `d` has at most `d` roots in `Fr`.
+Let the nonzero error polynomials have degree at most `d`.
 
-So each new query lands on a root with probability at most `d / |Fr|`.
-
-The adversary makes at most `q` queries, and the verifier makes one more.
-
-So the adversary wins with probability at most `(q + 1) d / |Fr|`.
-
-For a batch of at most `n` openings, `d` is `n - 1`.
+The adversary of `q` queries then wins with probability at most `(q + 1) d / |Fr|`.
 -/
 
 @[expose] public section
@@ -98,6 +92,7 @@ theorem prEvent_batchRomRoot_le {X : Type} [DecidableEq X] (errorPoly : X → Fr
     Pr{let p ← (simulateQ randomOracle (batchRomExperiment adversary)).run' ∅}[
         admissible p.1 ∧ errorPoly p.1 ≠ 0 ∧ (errorPoly p.1).eval p.2 = 0] ≤
       (q + 1) * (d / Fr.modulus) := by
+  -- The adversary makes at most `q` queries, and the verifier makes one more.
   have hbound : IsTotalQueryBound (batchRomExperiment adversary) (q + 1) :=
     isTotalQueryBound_bind hq fun _ =>
       isTotalQueryBound_query_bind_iff.mpr ⟨Nat.one_pos, fun _ => trivial⟩
@@ -106,7 +101,9 @@ theorem prEvent_batchRomRoot_le {X : Type} [DecidableEq X] (errorPoly : X → Fr
     (fun x g => admissible x ∧ errorPoly x ≠ 0 ∧ (errorPoly x).eval (g x) = 0)
     (d / Fr.modulus) ?_ ?_
   · simpa using h
-  · -- A new query is uniform, so it is a root with probability at most `d / r`.
+  · -- A nonzero polynomial of degree at most `d` has at most `d` roots in `Fr`.
+    --
+    -- A new query is uniform, so it is a root with probability at most `d / r`.
     intro x g
     classical
     simp only [Function.update_self]
@@ -155,6 +152,7 @@ theorem prEvent_batchErrorPoly_root_le (τ : Fr) (c w : OpeningBatch → Nat →
   prEvent_batchRomRoot_le
     (fun x => batchErrorPoly τ (c x) (x.ys[·]!) (w x) (x.zs[·]!) x.commitments.size)
     (fun x => x.commitments.size ≤ n)
+    -- For a batch of at most `n` openings, `d` is `n - 1`.
     (fun _ hx => (natDegree_batchErrorPoly_le τ _ _ _ _ _).trans (Nat.sub_le_sub_right hx 1))
     adversary hq
 

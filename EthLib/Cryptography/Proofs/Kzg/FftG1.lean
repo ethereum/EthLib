@@ -12,10 +12,6 @@ Field products become scalar multiplications in the subgroup of prime order `r`.
 
 There `r * P = 0`.
 
-The butterfly gives `even[q] + [roots[q]] odd[q]` at `j = q`, and the difference at `j = q + 2^k`.
-
-Each butterfly product runs as its own task, and reading the task gives its value by definition.
-
 - The FFT keeps the length of its input.
 - It keeps valid points, and points of order dividing `r`.
 - Entry `j` is the point `sum_{i < 2^k} omega^(i j) * vals[i]`.
@@ -123,7 +119,10 @@ theorem toArray_everyOther_Fr {k : Nat} (xs : Vector Fr (2 ^ (k + 1))) (start : 
   rw [getElem_fftHalve, getElem!_pos _ _ (by have := start.isLt; simp; omega)]
   simp [everyOther]
 
-/-- Single-element unfolding of `fftG1` on `2 * 2^k` points and as many roots. -/
+/-- Single-element unfolding of `fftG1` on `2 * 2^k` points and as many roots.
+
+The butterfly gives `even[q] + [roots[q]] odd[q]` at `j = q`, and the difference at `j = q + 2^k`.
+-/
 theorem getElem!_fftG1_step {k : Nat} (vals : Array G1) (roots : Array Fr)
     (hsz : vals.size = 2 * 2 ^ k) (hrs : roots.size = 2 * 2 ^ k) (p : Nat) (hp : p < 2 * 2 ^ k) :
     (fftG1 vals roots)[p]! =
@@ -145,6 +144,9 @@ theorem getElem!_fftG1_step {k : Nat} (vals : Array G1) (roots : Array Fr)
     fftG1_eq_fftG1Vector (k := k) _ _ (by simp) (by simp),
     getElem!_pos _ p (by simp; omega)]
   simp only [Vector.mk_toArray, Vector.getElem_toArray]
+  -- Each butterfly product runs as its own task.
+  --
+  -- Reading the task gives its value by definition.
   rw [fftG1Vector]
   simp only [Vector.getElem_ofFn, Vector.getElem_map]
   split

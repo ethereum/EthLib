@@ -380,8 +380,6 @@ theorem fftField_fftField_inv {k : Nat} {ω : Fr}
 
 Applying the forward transform after the inverse transform is also the identity.
 
-Same ingredients as `fftField_fftField_inv`, with the two directions swapped.
-
 The inverse transform (root `ω⁻¹`, scaled by `1 / n`) runs first.
 
 The forward transform (root `ω`) runs second. -/
@@ -390,6 +388,7 @@ theorem fftField_inv_fftField {k : Nat} {ω : Fr}
     (vals roots : Array Fr) (hn : vals.size = 2 ^ k) (hrs : roots.size = 2 ^ k)
     (hroots : ∀ i, i < 2 ^ k → roots[i]! = ω ^ i) :
     fftField (fftField vals roots true) roots false = vals := by
+  -- The proof has the same ingredients as the first round trip, with the two directions swapped.
   have hωinv : IsPrimitiveRoot ω⁻¹ (2 ^ k) := hω.inv
   have hnz : Fr.ofNat (2 ^ k) ≠ 0 := by
     rw [Bls.Fr.ofNat_eq_natCast, Nat.cast_pow, Nat.cast_two]
