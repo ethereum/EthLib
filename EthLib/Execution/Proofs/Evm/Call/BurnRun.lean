@@ -7,27 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Call.Burn
 
 A certificate of a run gives its log of burns, and follows the interpreter.
 
-Each rule of a frame takes one step of the interpreter from a running frame, or stops the run.
-
-A step that gives the next frame adds the log of the step.
-
-A step that sends a message adds the log of the run of that message, once the caller resumes.
-
-A step that halts with an error adds nothing.
-
-A message runs its code, or a precompile, from the state that it enters.
-
-A call that ends with an error rolls back, and so does a creation that fails to deposit its code.
-
-Their logs then count for nothing.
-
 The supply at the end plus the total of the log is the supply at the start.
 
 A run from a given start has one end, so every certificate from that start has the same total.
-
-Each burn that a log counts comes from a step of SELFDESTRUCT that the run takes, with its burn.
-
-From Glamsterdam, no step burns, so the total is 0.
 
 Every successful call and creation has a certificate.
 -/
@@ -75,40 +57,24 @@ theorem BurnStart.state_child (caller : Evm fork Meter) (message : Message fork)
 
 /-- A certificate that a run from `start` ends in a frame, with a log of its burns.
 
-A frame that is not running ends the run.
-
-A running frame takes a step, and halts when the step fails with an error that does not abort.
-
-A step that gives the next frame adds its log, and the run goes on from that frame.
-
-A step that sends a message adds the log of the run of the message, and the caller resumes.
-
-A resume that fails with an error that does not abort halts the frame, and rolls back that log.
-
-A message that selects no precompile runs its frame.
-
-A precompile runs unless the message disables precompiles, and the frame stops when none runs.
-
-A call starts from the state it enters, and rolls back when it ends with an error.
-
-A creation prepares its account, runs as a call, and deposits its code.
-
-A creation whose deposit rolls back the state counts nothing of its log.
-
-When that rollback leaves the state as it was, the rule that keeps the log applies too.
-
-That log then has a total of 0, as the supply is unchanged. -/
+Each rule takes one step of the interpreter from a running frame, or stops the run. -/
 inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
     BurnStart fork Meter → Evm fork Meter → BurnLog → Prop
+  -- A frame that is not running ends the run.
   | stopped (evm : Evm fork Meter) (h : evm.running = false) :
       RunBurns fork Meter (.frame evm) evm .empty
+  -- A running frame halts when its step fails with an error that does not abort.
+  --
+  -- A step that halts with an error adds nothing.
   | halt {evm : Evm fork Meter} {error : EvmError} (running : evm.running = true)
       (h : step fork evm = .error error) (notAborts : error.aborts = false) :
       RunBurns fork Meter (.frame evm) (exceptionalHalt evm error) .empty
+  -- A step that gives the next frame adds its log, and the run goes on from that frame.
   | next {evm after ended : Evm fork Meter} {rest : BurnLog} (running : evm.running = true)
       (h : step fork evm = .ok (.next after))
       (tail : RunBurns fork Meter (.frame after) ended rest) :
       RunBurns fork Meter (.frame evm) ended (.append (stepBurnLog evm after) rest)
+  -- A step that sends a message adds the log of the run of the message, once the caller resumes.
   | child {evm caller child after ended : Evm fork Meter} {message : Message fork}
       {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} {middle rest : BurnLog}
       (running : evm.running = true) (h : step fork evm = .ok (.child caller message resume))
@@ -116,6 +82,7 @@ inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
       (resumed : resume child = .ok after)
       (tail : RunBurns fork Meter (.frame after) ended rest) :
       RunBurns fork Meter (.frame evm) ended (.append middle rest)
+  -- A resume that fails with an error that does not abort halts the frame, and rolls back that log.
   | failedResume {evm caller child : Evm fork Meter} {message : Message fork}
       {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} {middle : BurnLog}
       {error : EvmError}
@@ -123,19 +90,25 @@ inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
       (run : RunBurns fork Meter (BurnStart.child caller message) child middle)
       (resumed : resume child = .error error) (notAborts : error.aborts = false) :
       RunBurns fork Meter (.frame evm) (exceptionalHalt evm error) (.rollback middle)
+  -- A message that selects no precompile runs its frame.
   | bodyFrame {evm ended : Evm fork Meter} {log : BurnLog}
       (selected : precompileAddress fork evm.message = none)
       (run : RunBurns fork Meter (.frame evm) ended log) :
       RunBurns fork Meter (.body evm) ended log
+  -- The frame stops when the message disables precompiles, or when no precompile runs.
   | skipPrecompile (evm : Evm fork Meter) (address : Nat)
       (selected : precompileAddress fork evm.message = some address)
       (skipped : evm.message.disablePrecompiles = true ∨ runPrecompile fork address evm = none) :
       RunBurns fork Meter (.body evm) { evm with running := false } .empty
+  -- A precompile runs when the message does not disable precompiles.
   | precompile {address : Nat} {evm after : Evm fork Meter}
       (selected : precompileAddress fork evm.message = some address)
       (enabled : evm.message.disablePrecompiles = false)
       (h : runPrecompile fork address evm = some after) :
       RunBurns fork Meter (.body evm) after .empty
+  -- A call runs its code, or a precompile, from the state it enters.
+  --
+  -- It rolls back when it ends with an error, and its log then counts for nothing.
   | call {message : Message fork} {state entry : TransactionState}
       {substate entrySubstate : Substate} {meter : Meter} {ended : Evm fork Meter} {log : BurnLog}
       (entered : Entered fork message state substate entry entrySubstate)
@@ -143,6 +116,9 @@ inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
       (parent : ended.state.parent = state.parent) :
       RunBurns fork Meter (.call message state substate meter) (rollbackOnError state ended)
         (if ended.error.isSome then .rollback log else log)
+  -- A creation prepares its account, runs as a call, and deposits its code.
+  --
+  -- A creation whose deposit rolls back the state, as when it fails, counts nothing of its log.
   | createRollback {message : Message fork} {state prepared : TransactionState}
       {substate : Substate} {meter : Meter} {evm after : Evm fork Meter} {log : BurnLog}
       (preparation : prepareCreation fork state message.currentTarget = .ok prepared)
@@ -151,6 +127,9 @@ inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
       (rolled : after.state = evm.state.restoreTxState state)
       (parent : evm.state.parent = state.parent) :
       RunBurns fork Meter (.create message state substate meter) after (.rollback log)
+  -- When that rollback leaves the state as it was, this rule, which keeps the log, applies too.
+  --
+  -- That log then has a total of 0, as the supply is unchanged.
   | createKeep {message : Message fork} {state prepared : TransactionState}
       {substate : Substate} {meter : Meter} {evm after : Evm fork Meter} {log : BurnLog}
       (preparation : prepareCreation fork state message.currentTarget = .ok prepared)
@@ -160,47 +139,40 @@ inductive RunBurns (fork : Fork) (Meter : Type) [GasMeter Meter] :
         evm.state.setCode fork evm.message.currentTarget evm.output = .ok after.state) :
       RunBurns fork Meter (.create message state substate meter) after log
 
-/-- The frames that a run from `start` reaches, by the same steps as a certificate.
-
-A run of a frame reaches that frame.
-
-It reaches what the next frame of a running step reaches.
-
-A step that sends a message reaches what the run of that message reaches.
-
-When a certified run of the message ends and the caller resumes, it reaches what that frame does.
-
-A message that selects no precompile reaches what its frame reaches.
-
-A call reaches what the frame of the state it enters reaches.
-
-A creation reaches what the call of its init code reaches, after the account is prepared. -/
+/-- The frames that a run from `start` reaches, by the same steps as a certificate. -/
 inductive RunReaches (fork : Fork) (Meter : Type) [GasMeter Meter] :
     BurnStart fork Meter → Evm fork Meter → Prop
+  -- A run of a frame reaches that frame.
   | here (evm : Evm fork Meter) : RunReaches fork Meter (.frame evm) evm
+  -- A running frame reaches what the frame after its step reaches.
   | next {evm after reached : Evm fork Meter} (running : evm.running = true)
       (h : step fork evm = .ok (.next after))
       (tail : RunReaches fork Meter (.frame after) reached) :
       RunReaches fork Meter (.frame evm) reached
+  -- A step that sends a message reaches what the run of that message reaches.
   | childRun {evm caller reached : Evm fork Meter} {message : Message fork}
       {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} (running : evm.running = true)
       (h : step fork evm = .ok (.child caller message resume))
       (run : RunReaches fork Meter (BurnStart.child caller message) reached) :
       RunReaches fork Meter (.frame evm) reached
+  -- If a certified run of the message ends and the caller resumes, it reaches what that frame does.
   | childTail {evm caller child after reached : Evm fork Meter} {message : Message fork}
       {resume : Evm fork Meter → Except EvmError (Evm fork Meter)} {middle : BurnLog}
       (running : evm.running = true) (h : step fork evm = .ok (.child caller message resume))
       (run : RunBurns fork Meter (BurnStart.child caller message) child middle)
       (resumed : resume child = .ok after) (tail : RunReaches fork Meter (.frame after) reached) :
       RunReaches fork Meter (.frame evm) reached
+  -- A message that selects no precompile reaches what its frame reaches.
   | body {evm reached : Evm fork Meter} (selected : precompileAddress fork evm.message = none)
       (run : RunReaches fork Meter (.frame evm) reached) :
       RunReaches fork Meter (.body evm) reached
+  -- A call reaches what the frame of the state it enters reaches.
   | call {message : Message fork} {state entry : TransactionState}
       {substate entrySubstate : Substate} {meter : Meter} {reached : Evm fork Meter}
       (entered : Entered fork message state substate entry entrySubstate)
       (run : RunReaches fork Meter (.body (startFrame message entry entrySubstate meter)) reached) :
       RunReaches fork Meter (.call message state substate meter) reached
+  -- A creation reaches what the call of its init code reaches, after the account is prepared.
   | create {message : Message fork} {state prepared : TransactionState}
       {substate : Substate} {meter : Meter} {reached : Evm fork Meter}
       (preparation : prepareCreation fork state message.currentTarget = .ok prepared)

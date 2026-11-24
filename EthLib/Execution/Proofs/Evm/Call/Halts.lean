@@ -10,16 +10,6 @@ A frame records the error that stopped it, or none when it succeeded.
 
 An error that aborts the whole execution never stops one frame: the run fails with it instead.
 
-A step that fails with any other error halts its frame with that error.
-
-REVERT halts its frame with its own error, which does not abort.
-
-A failed precompile halts its frame with its own error.
-
-A lawful meter that cannot charge halts it for lack of gas.
-
-A creation that cannot deposit its code halts for lack of gas, or for code that starts with 0xEF.
-
 So the error of every frame that a call or a creation returns does not abort.
 -/
 
@@ -433,6 +423,7 @@ private theorem noAbort_runFrame [LawfulGasMeter Meter] {bound : Nat}
     ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
   all_goals (intros; rename_i start h)
   case case1 => cases h
+  -- A step that fails with an error that does not abort halts its frame with that error.
   case case2 =>
     cases h
     rename_i hab
@@ -459,6 +450,7 @@ private theorem noAbort_runFrame [LawfulGasMeter Meter] {bound : Nat}
 private theorem noAbort_runPrecompile [LawfulGasMeter Meter] {address : Nat}
     {evm after : Evm fork Meter} (h : runPrecompile fork address evm = some after)
     (start : NoAbort evm) : NoAbort after := by
+  -- A failed precompile halts its frame with its own error.
   unfold runPrecompile at h
   split at h
   · cases h
@@ -471,6 +463,7 @@ private theorem noAbort_runPrecompile [LawfulGasMeter Meter] {address : Nat}
       cases h
       intro e he
       cases he
+      -- A lawful meter that cannot charge halts the frame for lack of gas.
       rw [LawfulGasMeter.charge_error hc]
       rfl
     · cases h
@@ -503,6 +496,7 @@ private theorem chargeCodeDeposit_error [LawfulGasMeter Meter] {meter : Meter} {
 private theorem noAbort_depositCode [LawfulGasMeter Meter] {snapshot : TransactionState}
     {evm after : Evm fork Meter} (start : NoAbort evm)
     (h : depositCode fork snapshot evm = .ok after) : NoAbort after := by
+  -- A creation whose deposit fails halts for lack of gas, or for code that starts with 0xEF.
   unfold depositCode at h
   dsimp only at h
   split at h

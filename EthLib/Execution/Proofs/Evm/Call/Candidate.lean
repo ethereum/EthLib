@@ -15,16 +15,6 @@ Take a transaction state where every candidate was one in the block, or had its 
 
 Every call and every creation keeps that, whether its frame ends with an error or not.
 
-A step never lowers a nonce, and gives code only to the address of a creation.
-
-That address had its storage wiped when the creation started, and a rollback restores a snapshot.
-
-So each write of a step keeps the candidates.
-
-The shared rules for steps carry that to every step.
-
-A call also keeps its message, so the deposit of code knows the address of its creation.
-
 Source: [EIP-7928, Scope and Inclusion][eip7928].
 
 [eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
@@ -214,6 +204,7 @@ private theorem keepsCandidates_rollbackOnError {snapshot : TransactionState}
     KeepsCandidates snapshot (rollbackOnError snapshot ended).state := by
   unfold rollbackOnError
   split
+  -- A rollback restores a snapshot.
   · exact .restoreTxState hk.1
   · exact hk
 
@@ -257,6 +248,7 @@ private theorem keepsCandidates_depositCode {state prepared : TransactionState} 
     exact .restoreTxState (hk.1.trans hprep.1)
   · rw [hs]
     exact hprep.trans hk
+  -- Only the creation's address gets code, and its storage was wiped when the creation started.
   · exact (hprep.trans hk).trans (keepsCandidates_setCode (ht ▸ hk.2.1 _ hmem) hs)
 
 omit [GasMeter Meter] in
@@ -283,6 +275,7 @@ theorem stepRules_keepsCandidates :
   tstore _ _ _ _ := ⟨rfl, fun _ hx => hx, fun _ hn hc => .inr ⟨hn, hc⟩⟩
   log _ hs _ _ _ := by rw [hs]; exact .refl _
   selfdestruct _ _ h := keepsCandidates_finishSelfdestruct h
+  -- A step never lowers a nonce.
   incrementNonce _ _ _ _ h := .incrementNonce h
   incorporate h := by rw [state_incorporateChild]; exact h
 
@@ -305,6 +298,7 @@ private theorem stepRules_candidateStep :
 That needs the child it sends to keep the candidates. -/
 theorem step_keepsCandidates {evm : Evm fork Meter} {result : StepResult fork Meter}
     (h : step fork evm = .ok result) : result.Keeps CandidateStep CandidateChild evm := by
+  -- The shared rules for steps carry each write that keeps the candidates to every step.
   have r := stepRules_candidateStep.step h
   cases result with
   | next after => exact r
@@ -333,7 +327,7 @@ private def CreateKeeps (_message : Message fork) (state : TransactionState)
 
 /-- By induction on gas, calls and creations keep the candidates of the state they start from.
 
-A call also keeps its message, so a creation knows where its init code ran. -/
+A call also keeps its message, so the deposit of code knows the address of its creation. -/
 private theorem keepsCandidates_induction [LawfulGasMeter Meter] (n : Nat) :
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →

@@ -10,39 +10,9 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Call.Instructions`
 
-From Glamsterdam, sending value with a call costs 11300 execution gas.
+The prices, the refill, the output, the failures and the memory of a call.
 
-A new account then costs no execution gas, and CALL pays 183600 state gas for it instead.
-
-Only CALL with value to a dead account pays that state gas, and no call pays it before Glamsterdam.
-
-A callee that fails gives the caller back that state gas, and so does a call that runs no message.
-
-With the meter of EIP-8037, the caller then has the net state gas it had before the call.
-
-That holds when the failed callee has rolled back, as every failed message does.
-
-After a call, the caller's memory holds the start of the output in its output range.
-
-A call fails with an error that does not abort the run in three cases only, in this order:
-
-- The stack holds fewer words than the call pops.
-- From Glamsterdam, the call is CALL with value in a static frame.
-- From Glamsterdam, the frame holds less gas than the price that the call knows before it reads.
-
-A static CALL with value runs no message at any fork.
-
-A call that lacks the value, or that the depth limit stops, runs no message and pushes 0.
-
-It gets back the gas it would pass on.
-
-A message that fails leaves the caller a rollback to its state from before the call.
-
-That rollback keeps the reads of the state it rolls back.
-
-The caller then pushes 0, and the output of the callee becomes its return data.
-
-A call keeps the size of memory a multiple of 32, and so does the caller once the callee ends.
+From Glamsterdam, CALL with value to a dead account pays state gas instead of execution gas.
 -/
 
 @[expose] public section
@@ -60,7 +30,7 @@ variable {fork : Fork} {Meter : Type}
 /-- The state gas of a new account is 120 bytes at 1530 gas each. -/
 theorem newAccountStateGas_eq : NEW_ACCOUNT_STATE_GAS = 183600 := rfl
 
-/-- From Glamsterdam, sending value with a call costs 11300. -/
+/-- From Glamsterdam, sending value with a call costs 11300 execution gas. -/
 theorem callValueCost_of_glamsterdam (h : fork ≥ .glamsterdam) {value : U256} (hv : value ≠ 0) :
     callValueCost fork value = 11300 := by
   simp only [callValueCost, hv, h, ite_false, ite_true]
@@ -157,6 +127,7 @@ The callee then fails, and rolls back to the reservoir it got, with no spill.
 The caller absorbs it and refills `amount`. -/
 theorem stateGasUsed_call_of_error {meter charged paid child : StateGasMeter} {amount gas : Nat}
     (hc : meter.chargeState amount = .ok charged) (hp : charged.charge gas = .ok paid)
+    -- The failed callee has rolled back, as every failed message does.
     (reservoir : child.reservoir = paid.reservoir) (spill : child.spill = 0) :
     ((paid.drain.absorb child false).refill amount).stateGasUsed = meter.stateGasUsed := by
   have hu := stateGasUsed_chargeState hc
@@ -435,28 +406,24 @@ theorem payCall_message {kind : CallKind} {call : CallOperands}
     cases h
     exact (chargeGas_sameContext h1).message
 
-/-- A call fails with an error that does not abort the run in three cases only.
-
-The cases come in the order of the code.
-
-First, the stack holds fewer words than the call pops, and the error is an underflow.
-
-Second, from Glamsterdam, the call is CALL with value in a static frame.
-
-Third, from Glamsterdam, the frame holds less gas than the price that the call knows.
-
-That price is the access to the address, the price of the value and the growth of memory.
+/-- A call fails with an error that does not abort the run in three cases only, in this order.
 
 Each later error that does not abort the run gives a halted frame, not an error. -/
 theorem callStep_eq_error_iff {kind : CallKind} {evm : Evm fork Meter} {e : EvmError}
     (halts : e.aborts = false) :
     callStep kind evm = .error e ↔
+      -- First, the stack holds fewer words than the call pops, and the error is an underflow.
       (evm.stack.val.length < (if kind.sendsValue then 7 else 6) ∧ e = .stackUnderflow) ∨
       ∃ call after, popCallOperands kind evm = .ok (call, after) ∧
+        -- Second, from Glamsterdam, the call is CALL with value in a static frame.
         ((fork ≥ .glamsterdam ∧ kind = .call ∧ evm.message.isStatic ∧ call.value ≠ 0 ∧
             e = .writeInStaticContext) ∨
+          -- Third, from Glamsterdam, the frame holds less gas than the price the call knows.
+          --
+          -- The call knows that price before it reads.
           (¬(kind = .call ∧ evm.message.isStatic ∧ call.value ≠ 0) ∧ fork ≥ .glamsterdam ∧
             GasMeter.gasLeft evm.gas <
+              -- It is the access to the address, the price of the value and the growth of memory.
               callBaseCost fork (accessAddress evm call.address).1 +
                 callValueCost fork call.value +
                 (extendMemory evm.memory.size

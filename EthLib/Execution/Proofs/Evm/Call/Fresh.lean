@@ -6,21 +6,9 @@ public import EthLib.Execution.Proofs.Evm.Call.ToDelete
 /-!
 # Proofs: a message creates only accounts with nonce 0, and gives code only to those
 
-Each write of a step keeps the created accounts of its transaction.
-
-No step gives code to an account without code.
-
-A creation adds its own address to the created accounts.
-
-The step that sends a creation checks first that its address has nonce 0 and no code.
-
-The deposit of code then gives code to that address only.
-
-So an account that a message creates had nonce 0 when the message started.
+An account that a message creates had nonce 0 when the message started.
 
 The one exception is the address of a creation itself, which its sender checked before.
-
-An account that a message does not create keeps an empty code.
 
 No nonce drops, so an account with a nonce is never created by a message.
 
@@ -132,7 +120,9 @@ private theorem noNewCode_finishSelfdestruct {beneficiary : Address} {refund : N
     cases h
     exact noNewCode_selfdestructTransfer (Base.mapError_ok_iff.mp hst)
 
-/-- Each write of a step keeps the created accounts, and gives code to no account. -/
+/-- Each write of a step keeps the created accounts of its transaction.
+
+No step gives code to an account without code. -/
 theorem stepRules_noNewCode :
     StepRules fork (fun a b : Evm fork Meter => NoNewCode a.state b.state) where
   trans := NoNewCode.trans
@@ -332,6 +322,7 @@ theorem createsFresh_depositCode {state prepared : TransactionState} {address : 
     exact hcode
   · rw [hs]
     exact h.code x hx hcode
+  -- The deposit of code gives code to the address of the creation only.
   · have hne : x ≠ evm.message.currentTarget := by
       rintro rfl
       apply hx
@@ -363,6 +354,7 @@ theorem createsFresh_resume {evm caller child after : Evm fork Meter} {message :
   · simp only [ht] at hchild
     refine hcaller.trans hchild fun address heq => .inl ?_
     subst heq
+    -- The step that sends a creation checks first that its address has nonce 0 and no code.
     exact TransactionState.nonce_eq_zero_of_accountDeployable (step_eq_child_deployable h ht)
   · simp only [ht] at hchild
     exact hcaller.trans hchild fun _ h => h.elim

@@ -6,29 +6,15 @@ public import EthLib.Execution.Proofs.Evm.Call.ToDelete
 /-!
 # Proofs: every account that a call or a creation created is among its reads
 
-A creation marks its address as created, and that mark survives a rollback.
-
-The step that sends a creation first reads the new address.
-
-A creation sent from outside a frame must have read its address first.
-
-Reads never shrink, and a rollback keeps them too.
-
-So a call keeps every created account among the account reads.
-
-So does a creation whose address was read at its start.
-
-From Cancun, SELFDESTRUCT marks an account for deletion only if the transaction created it.
-
-[EIP-6780][e6780] sets that rule.
+From Cancun, SELFDESTRUCT marks for deletion only an account that the transaction created.
 
 From Glamsterdam, the deletion at the end of a transaction reads the account to keep its balance.
 
-So that deletion needs each created account among the recorded reads.
+The block access list names every accessed account, so that deletion needs each created one read.
 
 The end of a transaction is not covered here.
 
-[EIP-7928, Scope and Inclusion][bal] asks the block access list to name every accessed account.
+Sources: [EIP-6780][e6780], [EIP-7928, Scope and Inclusion][bal].
 
 [e6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
 [bal]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
@@ -61,6 +47,7 @@ private theorem CreatedRead.of_readsLe {tx tx' : TransactionState} (hr : tx.Read
 private theorem CreatedRead.prepareCreation {tx tx' : TransactionState} {address : Address}
     (hp : prepareCreation fork tx address = .ok tx') (h : CreatedRead tx)
     (hread : address ∈ tx.accountReads) : CreatedRead tx' := by
+  -- A creation marks its address as created.
   have hc : tx'.createdAccounts = tx.createdAccounts.insert address := by
     unfold Evm.prepareCreation at hp
     split at hp
@@ -152,6 +139,7 @@ private theorem processMessage_createdRead [LawfulGasMeter Meter] (n : Nat) :
     | next after => exact k
     | child caller message resume =>
       refine ⟨k.1, fun child after hres p => k.2 child after hres ?_⟩
+      -- The step that sends a creation first reads the new address.
       have hcur := step_eq_child_currentRead h
       revert p
       unfold ChildRelByKind ChildRel
@@ -160,8 +148,10 @@ private theorem processMessage_createdRead [LawfulGasMeter Meter] (n : Nat) :
       · exact fun p => ⟨p.1, fun hc => p.2 hc hcur⟩
   · intro message state entry substate entrySubstate meter ended hentry hrun
     have r := hrun trivial
+    -- Reads never shrink, and a rollback keeps them too.
     refine ⟨((readsLe_entered hentry).trans r.1).trans (readsLe_rollbackOnError _ _),
       fun hc => ?_⟩
+    -- The mark of a created account survives a rollback.
     exact CreatedRead.of_readsLe (readsLe_rollbackOnError _ _)
       (createdAccounts_rollbackOnError _ _).1
       (r.2 (CreatedRead.of_readsLe (readsLe_entered hentry) (createdAccounts_entered hentry) hc))
@@ -183,7 +173,7 @@ theorem createdRead_processMessage [LawfulGasMeter Meter] {message : Message for
 
 /-- A creation that returns a frame keeps every created account among the reads.
 
-The state it is sent from must already have read the address it creates. -/
+The state it is sent from must have read its address, as a frame does before it sends one. -/
 theorem createdRead_processCreateMessage [LawfulGasMeter Meter] {message : Message fork}
     {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas}

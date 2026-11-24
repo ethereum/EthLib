@@ -23,18 +23,19 @@ open EthLib.Base (Address Fork U256)
 open EthLib.Execution.Blocks (Log)
 open EthLib.Serialization.Rlp (Codec)
 
-/-- An upper bound on the length of the RLP encoding of a log.
-
-The constant 48 is 21 bytes for the address, and at most 9 bytes for each of three prefixes.
-
-Those prefixes are of the list of topics, of the data and of the log itself.
-
-A prefix of a payload below `2^64` bytes has at most 9 bytes: one byte, then at most 8 of length.
-
-Each topic takes 33 bytes: one prefix byte, then the 32 bytes of the topic.
-
-Each byte of data takes one byte. -/
+/-- An upper bound on the length of the RLP encoding of a log. -/
 def logWeight (l : Log) : Nat :=
+  -- The constant 48 is 21 bytes for the address, and at most 9 bytes for each of three prefixes.
+  --
+  -- Those prefixes are of the list of topics, of the data and of the log itself.
+  --
+  -- A prefix of a payload below `2^64` bytes has at most 9 bytes.
+  --
+  -- That is one byte, then at most 8 bytes of length.
+  --
+  -- Each topic takes 33 bytes: one prefix byte, then the 32 bytes of the topic.
+  --
+  -- Each byte of data takes one byte.
   48 + 33 * l.topics.length + l.data.size
 
 /-- The total weight of a list of logs. -/
