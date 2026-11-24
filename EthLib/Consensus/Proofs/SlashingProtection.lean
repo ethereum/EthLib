@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Except
+public import EthLib.Base.Proofs.Json.Document
 public import EthLib.Consensus.SlashingProtection
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
@@ -283,6 +284,178 @@ theorem ofJson_toJson (interchange : Interchange) :
     readBytes_bytesJson, readArray_arr _ readEntry entryJson readEntry_entryJson,
     bind, Except.bind, pure, Except.pure]
   -- The version is the one of the format, and the rebuilt file is the file.
+  simp
+
+end Interchange
+
+/-! ## Reading back the text of the file
+
+The text of a file reads back as a rebuilt document, whose objects can differ in shape.
+
+A name looked up in it gives the rebuilt value, so each reader gives what it gave before.
+-/
+
+namespace Interchange
+
+open Base.Json (canonical Distinct)
+
+/-- No object of the file as written repeats a name. -/
+theorem distinct_toJson (interchange : Interchange) : Distinct interchange.toJson := by
+  have root : ∀ root : Option Root, ∀ pair ∈ signingRootFields root, Distinct pair.2 := by
+    intro root
+    cases root <;> simp [signingRootFields, bytesJson, Distinct.str]
+  have block (block : SignedBlockRecord) : Distinct (blockJson block) := by
+    refine Base.Json.distinct_mkObj
+      (by cases block.signingRoot <;> simp [signingRootFields]) fun pair mem => ?_
+    rcases List.mem_append.mp mem with mem | mem
+    · simp only [List.mem_singleton] at mem
+      subst mem
+      exact .str _
+    · exact root _ pair mem
+  have vote (attestation : SignedAttestationRecord) : Distinct (attestationJson attestation) := by
+    refine Base.Json.distinct_mkObj
+      (by cases attestation.signingRoot <;> simp [signingRootFields]) fun pair mem => ?_
+    rcases List.mem_append.mp mem with mem | mem
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at mem
+      rcases mem with rfl | rfl <;> exact .str _
+    · exact root _ pair mem
+  have entry (entry : InterchangeEntry) : Distinct (entryJson entry) := by
+    refine Base.Json.distinct_mkObj (by simp) fun pair mem => ?_
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at mem
+    rcases mem with rfl | rfl | rfl
+    · exact .str _
+    · exact .arr fun item mem => by
+        obtain ⟨b, -, rfl⟩ := List.mem_map.mp (by simpa using mem)
+        exact block b
+    · exact .arr fun item mem => by
+        obtain ⟨a, -, rfl⟩ := List.mem_map.mp (by simpa using mem)
+        exact vote a
+  refine Base.Json.distinct_mkObj (by simp) fun pair mem => ?_
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at mem
+  rcases mem with rfl | rfl
+  · refine Base.Json.distinct_mkObj (by simp) fun pair mem => ?_
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at mem
+    rcases mem with rfl | rfl <;> exact .str _
+  · exact .arr fun item mem => by
+      obtain ⟨e, -, rfl⟩ := List.mem_map.mp (by simpa using mem)
+      exact entry e
+
+/-- An integer as the file writes it is its own rebuilt document. -/
+@[simp] theorem canonical_uint64Json (value : UInt64) :
+    canonical (uint64Json value) = uint64Json value := by
+  simp [uint64Json, Serialization.Ssz.decimal]
+
+/-- Bytes as the file writes them are their own rebuilt document. -/
+@[simp] theorem canonical_bytesJson {size : Nat} (bytes : Vector UInt8 size) :
+    canonical (bytesJson bytes) = bytesJson bytes := by
+  simp [bytesJson]
+
+/-- The signing root of a record reads back from the rebuilt document of the record. -/
+theorem readSigningRoot_canonical (path : String) (base : List (String × Json))
+    (root : Option Root) (named : ∀ pair ∈ base, pair.1 ≠ "signing_root")
+    (distinct : base.Pairwise fun a b => a.1 ≠ b.1) :
+    readSigningRoot path (canonical (Json.mkObj (base ++ signingRootFields root))) =
+      .ok root := by
+  cases root with
+  | none =>
+    have absent := Base.Json.getObjVal?_canonical_mkObj_of_not_mem
+      (pairs := base ++ signingRootFields none) (name := "signing_root") (by
+        simp only [signingRootFields, List.append_nil, List.mem_map, not_exists, not_and]
+        exact fun pair mem eq => named pair mem eq)
+    simp [readSigningRoot, absent]
+  | some root =>
+    have found := Base.Json.getObjVal?_canonical_mkObj
+      (pairs := base ++ signingRootFields (some root)) (name := "signing_root")
+      (value := bytesJson root) (by
+        simp only [signingRootFields, List.pairwise_append, distinct, List.mem_singleton,
+          forall_eq, ne_eq, List.pairwise_singleton, true_and]
+        exact fun a mem => named a mem) (by simp [signingRootFields])
+    simp [readSigningRoot, found, readBytes_bytesJson, bind, Except.bind, pure, Except.pure]
+
+/-- A block reads back from its rebuilt document. -/
+theorem readBlock_canonical (path : String) (block : SignedBlockRecord) :
+    readBlock path (canonical (blockJson block)) = .ok block := by
+  have slot := Base.Json.getObjVal?_canonical_mkObj
+    (pairs := [("slot", uint64Json block.slot)] ++ signingRootFields block.signingRoot)
+    (name := "slot") (value := uint64Json block.slot)
+    (by cases block.signingRoot <;> simp [signingRootFields]) (by simp)
+  have root := readSigningRoot_canonical path [("slot", uint64Json block.slot)]
+    block.signingRoot (by simp) (by simp)
+  simp only [readBlock, blockJson, field, slot, canonical_uint64Json, readUInt64_uint64Json,
+    root, bind, Except.bind, pure, Except.pure]
+
+/-- A vote reads back from its rebuilt document. -/
+theorem readAttestation_canonical (path : String) (attestation : SignedAttestationRecord) :
+    readAttestation path (canonical (attestationJson attestation)) = .ok attestation := by
+  have distinct : ∀ root : Option Root, ([("source_epoch", uint64Json attestation.sourceEpoch),
+      ("target_epoch", uint64Json attestation.targetEpoch)] ++ signingRootFields root).Pairwise
+        fun a b => a.1 ≠ b.1 := by
+    intro root
+    cases root <;> simp [signingRootFields]
+  have source := Base.Json.getObjVal?_canonical_mkObj (distinct attestation.signingRoot)
+    (name := "source_epoch") (value := uint64Json attestation.sourceEpoch) (by simp)
+  have target := Base.Json.getObjVal?_canonical_mkObj (distinct attestation.signingRoot)
+    (name := "target_epoch") (value := uint64Json attestation.targetEpoch) (by simp)
+  have root := readSigningRoot_canonical path
+    [("source_epoch", uint64Json attestation.sourceEpoch),
+      ("target_epoch", uint64Json attestation.targetEpoch)]
+    attestation.signingRoot (by simp) (by simp)
+  simp only [readAttestation, attestationJson, field, source, target, canonical_uint64Json,
+    readUInt64_uint64Json, root, bind, Except.bind, pure, Except.pure]
+
+/-- The rebuilt document of an array that the file writes holds the rebuilt elements. -/
+private theorem canonical_arr_map {α : Type} (write : α → Json) (xs : List α) :
+    canonical (.arr (xs.map write).toArray) = .arr (xs.map fun x => canonical (write x)).toArray :=
+  by simp
+
+/-- What one key signed reads back from its rebuilt document. -/
+theorem readEntry_canonical (path : String) (entry : InterchangeEntry) :
+    readEntry path (canonical (entryJson entry)) = .ok entry := by
+  have distinct : ([("pubkey", bytesJson entry.pubkey),
+      ("signed_blocks", Json.arr (entry.signedBlocks.map blockJson).toArray),
+      ("signed_attestations", Json.arr (entry.signedAttestations.map attestationJson).toArray)] :
+        List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
+  have pubkey := Base.Json.getObjVal?_canonical_mkObj distinct
+    (name := "pubkey") (value := bytesJson entry.pubkey) (by simp)
+  have blocks := Base.Json.getObjVal?_canonical_mkObj distinct (name := "signed_blocks")
+    (value := Json.arr (entry.signedBlocks.map blockJson).toArray) (by simp)
+  have attestations := Base.Json.getObjVal?_canonical_mkObj distinct
+    (name := "signed_attestations")
+    (value := Json.arr (entry.signedAttestations.map attestationJson).toArray) (by simp)
+  simp only [readEntry, entryJson, field, pubkey, blocks, attestations, canonical_bytesJson,
+    readBytes_bytesJson, canonical_arr_map,
+    readArray_arr _ readBlock (fun b => canonical (blockJson b)) readBlock_canonical,
+    readArray_arr _ readAttestation (fun a => canonical (attestationJson a))
+      readAttestation_canonical,
+    bind, Except.bind, pure, Except.pure]
+
+/-- An interchange file reads back from the rebuilt document of the file that it writes. -/
+theorem ofJson_canonical (interchange : Interchange) :
+    ofJson (canonical interchange.toJson) = .ok interchange := by
+  have metadataDistinct : ([("interchange_format_version", Json.str INTERCHANGE_FORMAT_VERSION),
+      ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)] :
+        List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
+  have version := Base.Json.getObjVal?_canonical_mkObj metadataDistinct
+    (name := "interchange_format_version") (value := Json.str INTERCHANGE_FORMAT_VERSION)
+    (by simp)
+  have root := Base.Json.getObjVal?_canonical_mkObj metadataDistinct
+    (name := "genesis_validators_root") (value := bytesJson interchange.genesisValidatorsRoot)
+    (by simp)
+  have distinct : ([("metadata", Json.mkObj [
+      ("interchange_format_version", Json.str INTERCHANGE_FORMAT_VERSION),
+      ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)]),
+      ("data", Json.arr (interchange.data.map entryJson).toArray)] :
+        List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
+  have metadata := Base.Json.getObjVal?_canonical_mkObj distinct (name := "metadata")
+    (value := Json.mkObj [
+      ("interchange_format_version", Json.str INTERCHANGE_FORMAT_VERSION),
+      ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)]) (by simp)
+  have data := Base.Json.getObjVal?_canonical_mkObj distinct (name := "data")
+    (value := Json.arr (interchange.data.map entryJson).toArray) (by simp)
+  simp only [ofJson, toJson, field, metadata, data, version, root, Base.Json.canonical_str,
+    readString, canonical_bytesJson, readBytes_bytesJson, canonical_arr_map,
+    readArray_arr _ readEntry (fun e => canonical (entryJson e)) readEntry_canonical,
+    bind, Except.bind, pure, Except.pure]
   simp
 
 end Interchange

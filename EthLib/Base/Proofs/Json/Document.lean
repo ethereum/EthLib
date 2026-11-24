@@ -1056,4 +1056,21 @@ theorem getObjVal?_canonical {members : Std.TreeMap.Raw String Lean.Json} (wf : 
   simp only [Std.TreeMap.Raw.get?_eq_getElem?, key]
   cases (⟨⟨t⟩⟩ : Std.TreeMap.Raw String Lean.Json)[name]? <;> rfl
 
+/-- A name of an object built from pairs of distinct names gives its rebuilt value. -/
+theorem getObjVal?_canonical_mkObj {pairs : List (String × Lean.Json)} {name : String}
+    {value : Lean.Json} (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1)
+    (member : (name, value) ∈ pairs) :
+    (canonical (Json.mkObj pairs)).getObjVal? name = .ok (canonical value) := by
+  rw [Toolchain.Json.mkObj_eq, getObjVal?_canonical Std.TreeMap.Raw.WF.ofList,
+    ← Toolchain.Json.mkObj_eq, getObjVal?_mkObj distinct member]
+  rfl
+
+/-- A name that the pairs of an object do not hold is not found in its rebuilt object. -/
+theorem getObjVal?_canonical_mkObj_of_not_mem {pairs : List (String × Lean.Json)}
+    {name : String} (absent : name ∉ pairs.map Prod.fst) :
+    (canonical (Json.mkObj pairs)).getObjVal? name = .error s!"property not found: {name}" := by
+  rw [Toolchain.Json.mkObj_eq, getObjVal?_canonical Std.TreeMap.Raw.WF.ofList,
+    ← Toolchain.Json.mkObj_eq, getObjVal?_mkObj_of_not_mem absent]
+  rfl
+
 end EthLib.Base.Json

@@ -268,7 +268,7 @@ from raising import raises
         pytest.param(
             KeystoreError,
             1,
-            ('EthLib.Cryptography.Keystore.KeystoreError.invalidJson "offset 0: expected: null"'),
+            ('EthLib.Cryptography.Keystore.KeystoreError.invalidJson "the text is not JSON"'),
             lambda: keystore.decrypt("not json", "password"),
             id="keystore-json",
         ),

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Base.Json.Document
 public import EthLib.Cryptography.Keystore
 
 /-!
@@ -120,7 +121,7 @@ instance : ExportError KeystoreError where
 /-- JSON text read at the boundary, with the parser's bounds checked first. -/
 def jsonOf (text : String) : Result Lean.Json := do
   toResult none ((screen text).mapError KeystoreError.invalidJson)
-  toResult none ((Lean.Json.parse text).mapError KeystoreError.invalidJson)
+  toResult none ((Base.Json.ofText text).mapError KeystoreError.invalidJson)
 
 /-- Read JSON text at the boundary, then run the specified keystore decryption.
 
