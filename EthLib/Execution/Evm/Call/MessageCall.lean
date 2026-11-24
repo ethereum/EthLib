@@ -10,56 +10,6 @@ public import EthLib.Execution.Evm.TransferLog
 
 The execution of a message: move its value, then run its code or a precompile.
 
-A message that fails leaves the state as it was before the message.
-
-Only the record of the accounts that the transaction created stays.
-
-An exceptional halt also leaves no gas, while a revert keeps it.
-
-From Glamsterdam, both roll the state gas of the frame back, by [EIP-8037][eip8037].
-
-From Glamsterdam, a message that moves ether to another account starts with a transfer log.
-
-That is the first log of the frame, by [EIP-7708][eip7708].
-
-A message starts with the reservoir that its caller passes on.
-
-A message runs each message of its code in the same way, with less gas than it has.
-
-So the recursion of messages ends, by the gas of the message.
-
-Before Paris, a message gives its target an empty account when it has none.
-
-From Spurious Dragon, the transaction deletes such an account at its end, by EIP-161.
-
-From Paris, EIP-7523 forbids empty accounts, so the message creates none.
-
-A precompile charges its price, and its failure is an exceptional halt.
-
-The caller checks the depth of the message and the balance it sends before the message runs.
-
-A creation first wipes the storage of the new account and records it as created.
-
-A creation runs only at an address whose storage reads zero, by EIP-7610.
-
-So the wipe changes no word.
-
-From Spurious Dragon, the new account starts with nonce 1, by EIP-161.
-
-Once the init code succeeds, its output is the code of the new account, at 200 gas a byte.
-
-From Homestead, a creation that cannot pay for its code fails, by EIP-2.
-
-Before, it succeeds and deploys no code.
-
-From Spurious Dragon, code longer than the limit fails, by EIP-170.
-
-From London, code that starts with `0xef` fails, by EIP-3541.
-
-From Glamsterdam, the code pays 6 gas a word to hash it, and 1530 state gas a byte, by EIP-8037.
-
-Code longer than the limit then fails before the code pays.
-
 The section Message Call of the Yellow Paper, Shanghai version, defines the execution of a message.
 
 Its section Contract Creation defines the creation.
@@ -68,7 +18,7 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 [EIP-2][eip2], [EIP-161][eip161], [EIP-170][eip170] and [EIP-3541][eip3541] change the creation.
 
-[EIP-8037][eip8037-code], in Last Call, changes the price of the code.
+[EIP-7708][eip7708] adds the transfer log of a move of value.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip2]: https://eips.ethereum.org/EIPS/eip-2#specification
@@ -76,8 +26,6 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 [eip170]: https://eips.ethereum.org/EIPS/eip-170#specification
 [eip3541]: https://eips.ethereum.org/EIPS/eip-3541#specification
 [eip7708]: https://eips.ethereum.org/EIPS/eip-7708#specification
-[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-halts-and-reverts
-[eip8037-code]: https://eips.ethereum.org/EIPS/eip-8037#parameter-changes
 -/
 
 @[expose] public section
@@ -111,6 +59,7 @@ def startFrame (message : Message fork) (state : TransactionState) (substate : S
   memory := .empty
   code := message.code
   validJumpDestinations := validJumpDestinations message.code
+  -- A message starts with the reservoir that its caller passes on.
   gas := meter
   running := true
   message := message
@@ -167,11 +116,18 @@ def precompileAddress (fork : Fork) (message : Message fork) : Option Nat :=
 
 /-- The frame that ends a message, with the writes of `snapshot` back when the message failed.
 
-A revert also rolls back the state gas of the frame.
+From Glamsterdam, a revert also rolls back the state gas of the frame, by [EIP-8037][eip8037].
 
-An exceptional halt has already rolled it back. -/
+An exceptional halt has already rolled it back.
+
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-halts-and-reverts
+-/
 def rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) : Evm fork Meter :=
   -- A frame that fails puts back the state from before the message.
+  --
+  -- Only the record of the accounts that the transaction created stays.
+  --
+  -- An exceptional halt has already lost its gas, while a revert keeps it.
   --
   -- From Glamsterdam, a revert refills the state gas of the frame, by EIP-8037.
   if evm.error.isSome then
@@ -184,14 +140,14 @@ def rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) : Evm f
 
 Its storage is wiped, and it is recorded as created.
 
-Its callers create only at an address whose storage reads zero, by EIP-7610.
-
-So the wipe changes no word.
-
 From Spurious Dragon, its nonce grows from 0 to 1. -/
 def prepareCreation (fork : Fork) (state : TransactionState) (address : Address) :
     Except EvmError TransactionState :=
   -- The storage of the new account is wiped, and the account is recorded as created.
+  --
+  -- Its callers create only at an address whose storage reads zero, by EIP-7610.
+  --
+  -- So the wipe changes no word.
   let state := (state.destroyStorage address).markAccountCreated address
   -- From Spurious Dragon, by EIP-161, its nonce grows by one.
   if fork ≥ .spuriousDragon then (state.incrementNonce fork address).mapError .state
@@ -201,7 +157,12 @@ def prepareCreation (fork : Fork) (state : TransactionState) (address : Address)
 
 Up to BPO5, it pays 200 gas a byte.
 
-From Glamsterdam, it pays 6 gas a word to hash the code, then 1530 state gas a byte. -/
+From Glamsterdam, it pays 6 gas a word to hash the code, then 1530 state gas a byte.
+
+That price is from [EIP-8037][eip8037-code], in Last Call.
+
+[eip8037-code]: https://eips.ethereum.org/EIPS/eip-8037#parameter-changes
+-/
 def chargeCodeDeposit (fork : Fork) (meter : Meter) (size : Nat) : Except EvmError Meter :=
   if fork ≥ .glamsterdam then do
     -- First the hash cost, 6 gas per 32-byte word of code, by EIP-8037.
@@ -228,9 +189,7 @@ A creation that fails puts back the state `snapshot` from before it.
 
 A creation whose init code succeeds pays for the output and deploys it as code.
 
-When it cannot, it fails with no gas left, and from Byzantium with no output.
-
-From Glamsterdam, code longer than the limit fails before it pays. -/
+When it cannot, it fails with no gas left, and from Byzantium with no output. -/
 def depositCode (fork : Fork) (snapshot : TransactionState) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) :=
   -- An init code that failed puts back the state from before the creation.
@@ -269,7 +228,7 @@ def depositCode (fork : Fork) (snapshot : TransactionState) (evm : Evm fork Mete
         -- From Glamsterdam, the check above already rejected such code.
         if (maxCodeSize fork).any (· < code.size) then .ok (fail .outOfGas)
         else do
-          -- The code becomes the code of the new account.
+          -- The code becomes the code of the new account, once the init code succeeds.
           let state ← (evm.state.setCode fork evm.message.currentTarget code).mapError .state
           return { evm with gas, state }
 
@@ -309,7 +268,13 @@ theorem gasHeld_depositCode_le [LawfulGasMeter Meter] {snapshot : TransactionSta
 /-- The state that a message starts its frame from: before Paris, its target is touched. -/
 def startState (fork : Fork) (message : Message fork) (state : TransactionState) :
     TransactionState :=
-  -- Before Paris, the target is touched, for the deletion of EIP-161.
+  -- Before Paris, a message gives its target an empty account when it has none.
+  --
+  -- From Spurious Dragon, the transaction deletes such an account at its end if it is still empty.
+  --
+  -- That is the rule of EIP-161.
+  --
+  -- From Paris, EIP-7523 forbids empty accounts, so the message creates none.
   if fork < .paris then state.touchAccount message.currentTarget else state
 
 mutual
@@ -345,7 +310,7 @@ def processMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
     let state := startState fork message state
     -- A message that transfers a nonzero value moves it from the caller to the target.
     --
-    -- The depth check sits in the caller, which runs no message past it.
+    -- The caller checks the depth of the message and the balance it sends before the message runs.
     let transfers := message.shouldTransferValue ∧ message.value ≠ 0
     let state ←
       if transfers then
@@ -354,6 +319,8 @@ def processMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
             EvmError.state)
       else pure state
     -- From Glamsterdam, the move emits a transfer log from the caller to the target, by EIP-7708.
+    --
+    -- That is the first log of the frame, by EIP-7708.
     --
     -- EIP-7708 logs only a move to a different account, which the push checks.
     --
@@ -381,6 +348,9 @@ def processMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
         | none => pure ⟨{ evm with running := false }, held⟩
     -- Otherwise the frame steps through its code until it halts or its program counter leaves it.
     | none =>
+      -- A message runs each message of its code in the same way, with less gas than it has.
+      --
+      -- So the recursion of messages ends, by the gas of the message.
       runFrameWith observe (step fork) (step_decreases fork) message.gas
         (fun caller child _ =>
           match child.target with

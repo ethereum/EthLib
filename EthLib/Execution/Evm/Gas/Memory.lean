@@ -8,12 +8,6 @@ public import EthLib.Execution.Evm.Words
 
 The price of memory, and the growth of memory that an instruction pays for.
 
-Memory costs 3 gas per 32-byte word plus the square of the words over 512.
-
-So a large memory costs quadratic gas.
-
-An instruction that grows memory pays the price of the new size minus the price of the old size.
-
 Appendix H.1 of the Yellow Paper, Shanghai version, defines the price and the growth of memory.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -40,6 +34,7 @@ def memoryGasCost (sizeInBytes : Nat) : Nat :=
   let sizeInWords := wordCount sizeInBytes
   -- `C_mem(a) = G_memory · a + floor(a^2 / 512)`, with `G_memory = 3`.
   let linearCost := sizeInWords * MEMORY_PER_WORD
+  -- The square term makes a large memory cost quadratic gas.
   let quadraticCost := sizeInWords ^ 2 / 512
   linearCost + quadraticCost
 
@@ -55,23 +50,19 @@ structure ExtendMemory where
 
 Each range is a start and a size, read in order.
 
-A range of size 0 never grows memory.
-
-A range that ends past the rounded memory grows it to the rounded end of the range.
-
-It pays the price of the new size minus the price of the old size.
-
 Source: the memory growth `M` of Appendix H.1 of the Yellow Paper. -/
 def extendMemory (currentSize : Nat) : List (U256 × U256) → ExtendMemory
   | [] => ⟨0, 0⟩
   | (startPosition, size) :: extensions =>
-    -- `M(s, f, l) = s` for `l = 0`.
+    -- `M(s, f, l) = s` for `l = 0`: a range of size 0 never grows memory.
     if size = 0 then
       extendMemory currentSize extensions
     else
       -- Else `M(s, f, l) = max(s, ceil((f + l) / 32))`, in bytes, so 32 times `M`.
       --
       -- The `if` below takes the max.
+      --
+      -- A range that ends past the rounded memory grows it to the rounded end of the range.
       let beforeSize := ceil32 currentSize
       let afterSize := ceil32 (startPosition.toNat + size.toNat)
       if afterSize ≤ beforeSize then
@@ -79,6 +70,8 @@ def extendMemory (currentSize : Nat) : List (U256 × U256) → ExtendMemory
       else
         -- The next range starts from the grown size, as in `M(M(s, f_1, l_1), f_2, l_2)`.
         let rest := extendMemory afterSize extensions
+        -- The growth pays the price of the new size minus the price of the old size.
+        --
         -- Appendix H.1: `C_mem(mu'_i) - C_mem(mu_i)`, as a sum of one difference per growing range.
         ⟨memoryGasCost afterSize - memoryGasCost beforeSize + rest.cost,
           afterSize - beforeSize + rest.expandBy⟩

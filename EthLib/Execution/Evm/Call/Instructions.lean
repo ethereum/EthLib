@@ -10,38 +10,6 @@ public import EthLib.Execution.Evm.Measure
 
 The four instructions that call an account: CALL, CALLCODE, DELEGATECALL and STATICCALL.
 
-A call pops its operands, pays, and grows memory for its input and its output.
-
-It then runs a message, unless the depth limit or the balance of the frame forbids it.
-
-A call that runs no message gets back the gas it would pass on, and pushes 0.
-
-After the message, the caller gets back the gas left of the callee and keeps its output.
-
-It pushes 1 when the callee succeeded, and copies the output to memory.
-
-CALLCODE runs the code of another account on the current account, so it creates no account.
-
-DELEGATECALL also keeps the sender and the value of the current message, and moves no value.
-
-STATICCALL sends no value, and its callee must not change the state.
-
-From Pectra, a callee whose code is a delegation indicator runs the code of its delegate.
-
-The call then pays for the access to the delegate too.
-
-From Glamsterdam, CALL with value to a dead account pays the state gas of a new account.
-
-It pays its execution gas first, then that state gas, then the gas it passes on.
-
-So state gas that spills into execution gas lowers the gas passed on.
-
-The state gas comes back when the call runs no message, or when its callee fails.
-
-CALL with value in a frame that must not change the state then fails right after its pops.
-
-A callee gets less gas than the call pays, so each call lowers the measure of the frame.
-
 Appendix H.2 of the Yellow Paper, Shanghai version, defines these instructions.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -80,7 +48,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 inductive CallKind where
   /-- CALL: run the code of an account on that account. -/
   | call
-  /-- CALLCODE: run the code of an account on the current account. -/
+  /-- CALLCODE: run the code of an account on the current account, so it creates no account. -/
   | callcode
   /-- DELEGATECALL: as CALLCODE, with the sender and the value of the current message. -/
   | delegatecall
@@ -108,17 +76,9 @@ structure Callee where
 
 From Pectra, the code of a delegated account is a delegation indicator.
 
-The call then runs the code of the delegate, and pays a cold or a warm access to it.
+The call then runs the code of the delegate.
 
-It follows one delegation only, even when the delegate has an indicator too.
-
-From Glamsterdam, the frame must hold `known` gas and the access to the delegate first.
-
-`known` is the price that the call knows before it reads the state.
-
-Only then does it read the delegate, which EIP-7928 records.
-
-Before Pectra, the call runs the code of the account at `address`. -/
+`known` is the price that the call knows before it reads the state. -/
 def accessDelegation (evm : Evm fork Meter) (address : Address) (known : Nat) :
     Except EvmError (Callee × Evm fork Meter) := do
   -- The code of the account at the address.
@@ -130,16 +90,19 @@ def accessDelegation (evm : Evm fork Meter) (address : Address) (known : Nat) :
     -- The access to the delegate costs a warm access if the delegate is accessed, else a cold one.
     let (cold, evm) := accessAddress evm delegate
     let cost := accountAccessCost fork cold
-    -- The frame must hold the known price and that access, before the read of the delegate.
+    -- From Glamsterdam, the frame must hold the known price and that access first.
+    --
+    -- Only then does it read the delegate, which EIP-7928 records.
     --
     -- Before Glamsterdam the check is new here; the later charge is at least as large.
     --
     -- The delegate joins the accessed set before the check; a halt discards the set either way.
     checkGas evm (known + cost)
     let evm := recordAccountRead evm delegate
-    -- The code of the delegate, one delegation deep only.
+    -- The code of the delegate, one delegation deep only, even when that code is an indicator too.
     let code ← accountCode evm delegate
     return (⟨delegate, code, true, cost⟩, evm)
+  -- With no delegation, and before Pectra, the call runs the code of the account at the address.
   | none => return (⟨address, code, false, 0⟩, evm)
 
 /-- The frame after a call that runs no message: it gets back `gas` and `reservoir`, and pushes 0.
@@ -155,24 +118,22 @@ def skipCall (evm : Evm fork Meter) (gas reservoir : Nat) : Except EvmError (Evm
 
 /-- The calling frame `caller` once its callee ends with the frame `child`.
 
-It pushes 1 when the callee succeeded, and 0 when it failed or reverted.
-
-A callee that failed creates no account, so the caller gets back `newAccount` state gas.
-
-The output of the callee becomes the return data.
-
-The start of that output fills the output range of memory, as far as either goes. -/
+It pushes 1 when the callee succeeded, and 0 when it failed or reverted. -/
 def resumeCall (fork : Fork) (caller : Evm fork Meter) (newAccount : Nat)
     (outputStart outputSize : U256) (child : Evm fork Meter) :
     Except EvmError (Evm fork Meter) := do
   -- The caller takes back the gas of the callee, the paper's `mu'_g = mu_g - C_CALLGAS + g'`.
   let evm := incorporateChild fork caller child
+  -- A callee that failed creates no account, so the caller gets back the state gas it paid.
+  --
   -- EIP-8037: if the child frame reverts or halts exceptionally, the state gas is refilled.
   let evm := if child.error.isNone then evm else refillStateGas evm newAccount
   -- The output of the callee becomes the return data, the paper's `mu'_o = o`.
   let evm := { evm with returnData := child.output }
   -- `mu'_s[0] = x`: 1 when the callee succeeded, 0 when it failed.
   let evm ← pushWord evm (if child.error.isNone then 1 else 0)
+  -- The start of the output fills the output range of memory, as far as either goes.
+  --
   -- `n = min(mu_s[6], ||o||)` and `mu'_m[mu_s[5] .. mu_s[5] + n - 1] = o[0 .. n - 1]`.
   let output := child.output.extract 0 (min outputSize.toNat child.output.size)
   return advance { evm with memory := memoryWrite evm.memory outputStart.toNat output }
@@ -277,13 +238,7 @@ def callNewAccountStateGas (fork : Fork) (kind : CallKind) (state : State.Transa
 
 It carries `subCall` gas, the reservoir `reservoir`, and the bytes of the input range as data.
 
-CALL and STATICCALL run on the address, and CALLCODE and DELEGATECALL on the current account.
-
-DELEGATECALL keeps the sender and the value of the current message, and moves no value.
-
-The message is static for STATICCALL, and otherwise when the frame is.
-
-It runs no precompile when its code is that of a delegate. -/
+CALL and STATICCALL run on the address, and CALLCODE and DELEGATECALL on the current account. -/
 def callMessage (kind : CallKind) (call : CallOperands) (callee : Callee) (subCall reservoir : Nat)
     (evm : Evm fork Meter) : Message fork :=
   -- The arguments of `Theta`: CALL and STATICCALL run on `t`, CALLCODE and DELEGATECALL on `I_a`.
@@ -297,29 +252,28 @@ def callMessage (kind : CallKind) (call : CallOperands) (callee : Callee) (subCa
   let to := if kind = .call ∨ kind = .staticcall then call.address else current
   { blockEnv := evm.message.blockEnv
     txEnv := evm.message.txEnv
+    -- DELEGATECALL keeps the sender of the current message.
     caller := if kind = .delegatecall then evm.message.caller else current
     target := some to
     currentTarget := to
     gas := subCall
     reservoir
+    -- DELEGATECALL keeps the value of the current message.
     value := if kind = .delegatecall then evm.message.value else call.value
     data := memoryReadBytes evm.memory call.inputStart.toNat call.inputSize.toNat
     codeAddress := some callee.codeAddress
     code := callee.code
     depth := evm.message.depth + 1
+    -- DELEGATECALL moves no value.
     shouldTransferValue := kind != .delegatecall
+    -- The message is static for STATICCALL, and otherwise when the frame is.
     isStatic := kind == .staticcall || evm.message.isStatic
+    -- The message runs no precompile when its code is that of a delegate.
     disablePrecompiles := callee.delegated }
 
 /-- The step of a call once it has paid `evm`, which passes on `subCall` gas.
 
-CALL with a value fails in a frame that must not change the state.
-
-Then memory grows by `expandBy` bytes, and the frame passes on its whole reservoir.
-
-A frame that lacks the value runs no message.
-
-It gets back the gas, the reservoir, and the `newAccount` state gas it paid. -/
+CALL with a value fails in a frame that must not change the state. -/
 def finishCall (kind : CallKind) (call : CallOperands) (callee : Callee)
     (subCall newAccount expandBy : Nat) (evm : Evm fork Meter) :
     Except EvmError (StepResult fork Meter) :=
@@ -328,9 +282,13 @@ def finishCall (kind : CallKind) (call : CallOperands) (callee : Callee)
   else
     -- The message takes the whole state gas reservoir of the frame.
     let reservoir := GasMeter.reservoir evm.gas
-    -- Memory grows by the bytes that the call paid for.
+    -- Memory grows by the `expandBy` bytes that the call paid for.
     let evm := callerFrame evm expandBy
     -- The paper runs `Theta` only if `mu_s[2] <= sigma[I_a]_b`.
+    --
+    -- A frame that lacks the value runs no message.
+    --
+    -- It gets back the gas, the reservoir, and the state gas of a new account that it paid.
     if (evm.state.getAccount evm.message.currentTarget).balance < call.value then
       .next <$> skipCall (refillStateGas evm newAccount) subCall reservoir
     else
@@ -358,6 +316,8 @@ def payCall (kind : CallKind) (call : CallOperands) (memoryCost extraGas newAcco
     -- Then the gas of the message, from the execution gas left.
     --
     -- Its memory cost and extra gas are 0, since both are paid already.
+    --
+    -- So state gas that spills into execution gas lowers the gas passed on.
     let callGas := messageCallGas fork call.value call.gas.toNat (GasMeter.gasLeft evm.gas) 0 0
     -- The frame pays that gas.
     let evm ← chargeGas evm callGas.cost
@@ -374,20 +334,14 @@ def payCall (kind : CallKind) (call : CallOperands) (memoryCost extraGas newAcco
 
 It pops its operands, accesses the address and a delegate, and pays.
 
-It pays its extra price, the gas it passes on, and the growth of memory for both ranges.
-
-From Glamsterdam, CALL with value in a frame that must not change the state fails first.
-
-From Glamsterdam, the frame must then hold the price it knows before it reads the address.
-
-That price is the access, the price of the value and the growth of memory, by EIP-7928.
-
-The reads of the address and of a delegate stay even when the call then halts. -/
+It pays its extra price, the gas it passes on, and the growth of memory for both ranges. -/
 def callStep (kind : CallKind) (evm : Evm fork Meter) :
     Except EvmError (StepResult fork Meter) := do
   -- The operands, from the stack.
   let (call, evm) ← popCallOperands kind evm
   -- From Glamsterdam, first, CALL with a nonzero value in a static frame fails.
+  --
+  -- It fails right after its pops.
   if fork ≥ .glamsterdam ∧ kind = .call ∧ evm.message.isStatic ∧ call.value ≠ 0 then
     throw .writeInStaticContext
   -- The growth of memory for the input and the output ranges, which needs no state.
@@ -397,13 +351,16 @@ def callStep (kind : CallKind) (evm : Evm fork Meter) :
   --
   -- The address joins the accessed set before the check; a halt discards the set either way.
   let (cold, evm) := accessAddress evm call.address
-  -- The frame must hold the access, the price of the value and the growth of memory.
+  -- From Glamsterdam, the frame must hold the price it knows before it reads the address.
+  --
+  -- That price is the access, the price of the value and the growth of memory, by EIP-7928.
   --
   -- Before Glamsterdam the check is new here; the later charge is at least as large.
   let known := callBaseCost fork cold + callValueCost fork call.value + growth.cost
   checkGas evm known
   -- The read of `t`, which EIP-7928 records.
   let evm := recordAccountRead evm call.address
+  -- The reads of the address and of a delegate stay even when the call then halts.
   keepReads evm .next do
     let (callee, evm) ← accessDelegation evm call.address known
     keepReads evm .next do
@@ -424,7 +381,9 @@ def callInstruction (fork : Fork) :
   | .staticcall => if .byzantium ≤ fork then some (callStep .staticcall) else none
   | _ => none
 
-/-! ## Each call lowers the measure of the frame -/
+/-! ## Each call lowers the measure of the frame
+
+A callee gets less gas than the call pays, so each call lowers the measure of the frame. -/
 
 /-- The pops of the operands of a call pay nothing. -/
 theorem popCallOperands_pays {kind : CallKind} {evm after : Evm fork Meter}

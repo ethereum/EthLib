@@ -7,24 +7,6 @@ public import EthLib.Execution.Evm.Errors
 
 The gas meter of Glamsterdam, which meters state gas beside execution gas, by EIP-8037.
 
-A state creation pays state gas: a new account, a new storage slot, code, a delegation.
-
-Every other charge pays execution gas.
-
-The state gas of a frame comes from its reservoir first, then from its execution gas.
-
-The meter records that second part as a spill, and credits it back first on a refill.
-
-A call passes on its whole reservoir, and the reservoir comes back when the call ends.
-
-A frame that reverts or halts rolls its state gas back to a baseline.
-
-The baseline is the reservoir at the start of the frame, or at the last commit.
-
-A commit marks the state gas so far as kept by a rollback.
-
-Only the top frame commits, for the delegations that a transaction applies before its code.
-
 Source: [EIP-8037][eip8037], its reservoir model and its accounting for halts and reverts.
 
 EIP-8037 has the status Last Call.
@@ -59,13 +41,19 @@ def SYSTEM_MAX_SSTORES_PER_CALL : Nat := 16
 
 end GasCosts
 
-/-- The gas meter of a frame from Glamsterdam: execution gas and state gas, by EIP-8037. -/
+/-- The gas meter of a frame from Glamsterdam: execution gas and state gas, by EIP-8037.
+
+A state creation pays state gas: a new account, a new storage slot, code, a delegation.
+
+Every other charge pays execution gas. -/
 structure StateGasMeter where
   /-- The execution gas left, which the GAS instruction pushes. -/
   gasLeft : Nat
   /-- The state gas left in the reservoir. -/
   reservoir : Nat
-  /-- The reservoir that a rollback puts back. -/
+  /-- The reservoir that a rollback puts back, when the frame reverts or halts.
+
+  It is the reservoir at the start of the frame, or at the last commit. -/
   baseline : Nat
   /-- The state gas paid from execution gas and not yet credited back.
 
@@ -123,7 +111,9 @@ def refill (meter : StateGasMeter) (amount : Nat) : StateGasMeter :=
 
 /-- The meter after a commit: a rollback keeps the state gas paid so far.
 
-The spill moves to the committed part, and the baseline becomes the reservoir. -/
+The spill moves to the committed part, and the baseline becomes the reservoir.
+
+Only the top frame commits, for the delegations that a transaction applies before its code. -/
 def commit (meter : StateGasMeter) : StateGasMeter :=
   -- The spill adds to the committed part.
   --
@@ -172,7 +162,9 @@ def repay (meter : StateGasMeter) : StateGasMeter :=
     reservoir := meter.reservoir - back
     spill := meter.spill - back }
 
-/-- The meter of a frame that passes on its whole reservoir to a message. -/
+/-- The meter of a frame that passes on its whole reservoir to a message.
+
+The reservoir comes back when the message ends. -/
 def drain (meter : StateGasMeter) : StateGasMeter :=
   -- EIP-8037: the reservoir passes to a child frame in full, and the parent keeps none of it.
   { meter with reservoir := 0 }

@@ -9,20 +9,6 @@ public import EthLib.Serialization.Rlp.Item
 
 The ways in which the execution of EVM code can stop before its end.
 
-A revert keeps the gas left and returns data.
-
-A state that lacks data it must hold stops the whole execution, and is no halt.
-
-So does a nonce too large for the address of a creation.
-
-So does an opcode whose instruction is not yet specified.
-
-So does a transaction at a fork whose rules are not yet specified.
-
-So does a value of the block or the transaction of `2^256` or more, which no word holds.
-
-Every other error is an exceptional halt, which consumes all the gas of the frame.
-
 The subsection Exceptional Halting of the Yellow Paper, Shanghai version, lists most of them.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -60,7 +46,7 @@ inductive EvmError where
   | addressCollision (address : Base.Address)
   /-- The precompile `address`, which the message runs, rejects its input, or lacks gas. -/
   | precompile (address : Nat)
-  /-- REVERT stops the frame, which keeps its gas left. -/
+  /-- REVERT stops the frame, which keeps its gas left and returns data. -/
   | revert
   /-- The state lacks data that it must hold, such as the code of a code hash. -/
   | state (e : State.StateError)
@@ -119,6 +105,9 @@ So does a transaction at a fork whose rules are not yet specified.
 So does a value of the environment that no word holds. -/
 def EvmError.aborts : EvmError → Bool
   | .state _ | .unspecifiedOpcode _ | .encoding _ | .forkNotYetSpecified _ | .wordOverflow _ => true
+  -- Every other error is a halt of one frame.
+  --
+  -- Each of them but a revert is an exceptional halt, which consumes all the gas of the frame.
   | _ => false
 
 end EthLib.Execution.Evm

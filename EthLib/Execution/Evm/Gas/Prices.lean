@@ -9,21 +9,7 @@ public import EthLib.Execution.Evm.Words
 /-!
 # `Evm.Gas.Prices`
 
-The gas prices of the EVM.
-
-A value that a fork changed and that depends only on the fork is a field of the gas schedule.
-
-One function of the fork computes the schedule.
-
-A price that a fork changed and that also depends on an access or an input is its own function.
-
-The prices of SLOAD, BALANCE, EXTCODESIZE, EXTCODEHASH and CALL depend on the access.
-
-The other prices are constants.
-
-The schedule also holds the other values of the execution layer that change at forks.
-
-They are the limits of code, the reservoir of a system call, and the reward and the bomb of a block.
+The gas prices of the EVM, and the other values of the execution layer that change at forks.
 
 Appendix G, Fee Schedule, of the Yellow Paper, Shanghai version, lists most prices.
 
@@ -34,8 +20,6 @@ Appendix G of its Berlin version, at [`beacfbd`][yp-berlin], gives the refunds b
 Each price that Appendix G lists names its symbol, such as `G_verylow`.
 
 The price of an instruction in a set of Appendix G names that set `W_*` instead.
-
-Each price of the schedule names its symbol, then each change with its fork and its EIP.
 
 A price that an EIP adds or changes names that EIP:
 
@@ -73,10 +57,6 @@ A price that an EIP adds or changes names that EIP:
 - [EIP-8038][eip-8038], accounts, calls and access lists
 
 The last six are in Last Call, so their prices may still change.
-
-The prices of the addition and the scalar multiplication on the alt_bn128 curve are in the schedule.
-
-The other precompiles keep their prices with their own definitions.
 
 The blob prices are with the blob fees.
 
@@ -362,6 +342,14 @@ end GasCosts
 open EthLib.Base (Fork U256 WEI_PER_ETHER)
 open GasCosts
 
+-- A price that a fork changed and that depends only on the fork is a field of the gas schedule.
+--
+-- A price that a fork changed and that also depends on an access or an input is its own function.
+--
+-- The prices of SLOAD, BALANCE, EXTCODESIZE, EXTCODEHASH and CALL depend on the access.
+--
+-- The prices that no fork changed are the constants above.
+
 /-- The price of SLOAD.
 
 From Berlin, it is the price of a cold or a warm access to the slot.
@@ -381,7 +369,9 @@ def sloadCost (fork : Fork) (cold : Bool) : Nat :=
 
 /-- The parameters of the execution layer that a fork changed, and that depend only on the fork.
 
-They are gas prices and refunds, the limits of code, and the reward and the bomb of a block. -/
+They are gas prices and refunds, the limits of code and the reservoir of a system call.
+
+They are also the reward and the bomb of a block. -/
 structure GasSchedule where
   /-- The price per byte of the exponent of EXP. -/
   OPCODE_EXP_PER_BYTE : Nat
@@ -419,6 +409,9 @@ structure GasSchedule where
   CREATE_BASE : Nat
   /-- The price of each authorization of a transaction, from Pectra. -/
   TX_AUTHORIZATION : Nat
+  -- The prices of the addition and the scalar multiplication on the alt_bn128 curve are here.
+  --
+  -- The other precompiles keep their prices with their own definitions.
   /-- The price of the addition precompile of the alt_bn128 curve. -/
   PRECOMPILE_ECADD : Nat
   /-- The price of the scalar multiplication precompile of the alt_bn128 curve. -/
@@ -443,15 +436,11 @@ From Glamsterdam, the prices of an access list and the refund to clear a slot de
 
 The section Conversion to gas costs of [EIP-8038][eip-8038] gives their formulas.
 
-It gives the refund as `(STORAGE_WRITE + COLD_STORAGE_ACCESS) * (4800/5000)`.
-
-The code multiplies before it divides, so the division in `Nat` is exact.
-
-It is exact since `12100 * 4800 = 11616 * 5000`.
-
 [eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#conversion-to-gas-costs
 -/
 def gasSchedule (fork : Fork) : GasSchedule :=
+  -- Each value names its symbol, then each change with its fork and its EIP.
+  --
   -- `G_coldaccountaccess`: 2600 from Berlin by EIP-2929, 3000 from Glamsterdam by EIP-8038.
   let coldAccountAccess := if fork ≥ .glamsterdam then 3000 else 2600
   { -- `G_expbyte`: 10, then 50 from Spurious Dragon by EIP-160.
@@ -484,6 +473,12 @@ def gasSchedule (fork : Fork) : GasSchedule :=
     -- `R_sclear`: 15000 in the Berlin paper, 4800 from London by EIP-3529.
     --
     -- From Glamsterdam, 11616 by EIP-8038.
+    --
+    -- EIP-8038 gives it as `(STORAGE_WRITE + COLD_STORAGE_ACCESS) * (4800/5000)`.
+    --
+    -- The code multiplies before it divides, so the division in `Nat` is exact.
+    --
+    -- It is exact since `12100 * 4800 = 11616 * 5000`.
     REFUND_STORAGE_CLEAR :=
       if fork ≥ .glamsterdam then (STORAGE_WRITE + COLD_STORAGE_ACCESS) * 4800 / 5000
       else if fork ≥ .london then 4800 else 15000
@@ -677,13 +672,10 @@ It defines the limit as twice the code limit, and only from Shapella on.
 
 [EIP-7954][eip-7954] raises it to 131072 at Glamsterdam, and keeps that ratio.
 
-No limit of init code exists before Shapella, so each rule that reads this one checks the fork.
-
-The definition keeps its own numbers, since no code limit exists before Spurious Dragon.
-
 [eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification
 -/
 def maxInitCodeSize (fork : Fork) : Nat :=
+  -- No limit of init code exists before Shapella, so each rule that reads this one checks the fork.
   (gasSchedule fork).MAX_INIT_CODE_SIZE
 
 end EthLib.Execution.Evm
