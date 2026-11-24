@@ -1049,7 +1049,9 @@ A SET OF also needs the encodings of those values in ascending order, compared o
 Both hold for a value whose encoding is longer than its content.
 Every value that the reader returns is one (`size_lt_of_read_ok`, `children_go_sizes`).
 The comparison puts a proper prefix first, where X.690 pads the shorter encoding with zero octets.
-No theorem states that one sibling encoding is never a proper prefix of another.
+`encoded_eq_of_prefix` states that no encoding that reads is a proper prefix of another one, since its header fixes its length.
+`encoded_le_iff_padded` follows: two such encodings compare alike with or without the zero padding.
+`pairwise_le_iff_padded` lifts it to the siblings in a SET OF, so the check is the order of §11.6.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
