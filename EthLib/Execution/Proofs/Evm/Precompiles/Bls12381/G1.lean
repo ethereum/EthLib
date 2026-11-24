@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Bls12381.G1
+public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Gas
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 
 /-!
@@ -151,25 +152,16 @@ theorem bls12G1Msm_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bl
 theorem G1_K_DISCOUNT_le : ∀ i : Fin 128, G1_K_DISCOUNT[i] ≤ 1000 := by decide
 
 /-- Every discount is at most 1000 thousandths. -/
-theorem discountG1_le (k : Nat) : discountG1 k ≤ MULTIPLIER := by
-  unfold discountG1
-  split
-  · rename_i h
-    exact G1_K_DISCOUNT_le ⟨k - 1, by omega⟩
-  · decide
+theorem discountG1_le (k : Nat) : discountG1 k ≤ MULTIPLIER :=
+  msmDiscount_le G1_K_DISCOUNT_le (by decide) k
 
 /-- The price of `k` pairs is at most the price of `k` separate products. -/
-theorem bls12G1MsmGas_le (k : Nat) : bls12G1MsmGas k ≤ k * GAS_G1MUL := by
-  unfold bls12G1MsmGas
-  have := discountG1_le k
-  calc k * GAS_G1MUL * discountG1 k / MULTIPLIER
-      ≤ k * GAS_G1MUL * MULTIPLIER / MULTIPLIER := Nat.div_le_div_right (Nat.mul_le_mul_left _ this)
-    _ = k * GAS_G1MUL := by simp [MULTIPLIER]
+theorem bls12G1MsmGas_le (k : Nat) : bls12G1MsmGas k ≤ k * GAS_G1MUL :=
+  msmGas_le G1_K_DISCOUNT_le (by decide) GAS_G1MUL k
 
 /-- Past 128 pairs, the discount stays at 519 thousandths. -/
-theorem discountG1_of_lt {k : Nat} (hk : 128 < k) : discountG1 k = 519 := by
-  simp [discountG1, G1_MAX_DISCOUNT]
-  omega
+theorem discountG1_of_lt {k : Nat} (hk : 128 < k) : discountG1 k = 519 :=
+  msmDiscount_of_lt G1_K_DISCOUNT G1_MAX_DISCOUNT hk
 
 /-! ## MAP_FP_TO_G1 -/
 

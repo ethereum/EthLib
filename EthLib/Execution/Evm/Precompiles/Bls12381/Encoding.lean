@@ -135,9 +135,6 @@ def g2ToBytes (point : G2) : List UInt8 :=
   (ByteOrder.toBE 48 x.c0.val).toList ++ (ByteOrder.toBE 48 x.c1.val).toList ++
     (ByteOrder.toBE 48 y.c0.val).toList ++ (ByteOrder.toBE 48 y.c1.val).toList
 
-/-- `MULTIPLIER`: the discounts of the multi-scalar multiplications are in thousandths. -/
-def MULTIPLIER : Nat := 1000
-
 /-- The call data cut into `count` pieces of `size` bytes, in order. -/
 def chunks (size : Nat) : Nat → List UInt8 → List (List UInt8)
   | 0, _ => []
