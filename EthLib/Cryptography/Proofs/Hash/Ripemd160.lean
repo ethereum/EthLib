@@ -7,29 +7,9 @@ public import Mathlib.Logic.Function.Defs
 /-!
 # Proofs: `Hash.Ripemd160`
 
-What is proved about RIPEMD-160:
+The constants, the steps and the padding of RIPEMD-160, against the authors' pseudo-code.
 
-- The added constants are the ones the authors derive from square and cube roots.
-- Each group of sixteen steps of `r` and `r'` lists sixteen indices that include every message word, so it reads each once.
-- Rotating a word left by `n` bits with `0 < n < 32` has left rotation by `32 - n` as its inverse.
-- Each step with a rotation of 1 to 31 bits permutes the five-word state, and so do both lines.
-- Padding fills whole blocks, with the least zeros that do, and keeps the message and the `0x80` byte in place.
-- One block's compression, read as 32-bit vectors, is the compression of a model of the pseudo-code.
-- The hash of every message is the hash of the model, with no bound on the length of the message.
-
-The model follows the authors' pseudo-code over 32-bit vectors.
-
-It runs both lines in one loop, as the pseudo-code does, and rotates bit vectors.
-
-It reads each message word with its least significant byte first, as MD4 does (RFC 1320 §2).
-
-It shares only the constants `K` and `K'`, the word orders and the rotation amounts with the code.
-
-The model pads the message as MD4 does (RFC 1320 §3.1 and §3.2).
-
-It runs the blocks from its own initial value.
-
-Its digest puts the least significant byte of each word first.
+The hash of every message is the hash of the model, with no bound on the length of the message.
 
 The Python tests of the bindings check the hash against the published test vectors.
 -/
@@ -38,7 +18,14 @@ The Python tests of the bindings check the hash against the published test vecto
 
 namespace EthLib.Cryptography.Hash.Ripemd160
 
-/-! ## The model -/
+/-! ## The model
+
+The model follows the authors' pseudo-code over 32-bit vectors.
+
+It runs both lines in one loop, as the pseudo-code does, and rotates bit vectors.
+
+It shares only the constants `K` and `K'`, the word orders and the rotation amounts with the code.
+-/
 
 namespace Spec
 
@@ -150,6 +137,7 @@ def digest (h : Vector Word 5) : Vector UInt8 20 :=
 /-- RIPEMD-160 of a message: pad it, run every block from the initial value, and read the digest. -/
 def hash (message : ByteArray) : Vector UInt8 20 :=
   let input := padded message
+  -- The model runs the blocks from its own initial value.
   digest (blocks input initial (input.size / 64) (Nat.mul_div_le input.size 64))
 
 end Spec

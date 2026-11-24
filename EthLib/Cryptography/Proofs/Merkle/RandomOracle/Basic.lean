@@ -10,15 +10,15 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
 A random oracle is a uniformly random function, chosen once for every party.
 
-Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
-
-<https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
+Source: Bellare and Rogaway, ["Random Oracles are Practical"][ro], CCS 1993, section 2, "Oracles".
 
 Each oracle input is a node position with its two children, so the oracle is a node hash.
 
 The file counts the oracle calls of a tree, a climb and the two searches.
 
 It also replays a tree, a climb or a search from a cache of answers.
+
+[ro]: https://cseweb.ucsd.edu/~mihir/papers/ro.pdf
 -/
 
 @[expose] public section
@@ -132,8 +132,6 @@ theorem node_queryBound (leaves : Nat → R) : ∀ p : Position,
 
 /-- Worst-case calls of the second-preimage search, including honest recomputation.
 
-At each level it hashes the candidate and computes the two honest children and parent.
-
 Repeated honest calls still count, even though the oracle answers them from its cache.
 
 From level `l` over `n` siblings, the budget is `2^(l+n+2) - 2^(l+2) - 2n`.
@@ -146,6 +144,7 @@ It nears four only for long paths.
 -/
 def secondPreimageQueries : Nat → Nat → Nat
   | _, 0 => 0
+  -- At each level it hashes the candidate and computes the two honest children and parent.
   | level, n + 1 =>
     1 + 2 * (2 ^ level - 1) + (2 ^ (level + 1) - 1) + secondPreimageQueries (level + 1) n
 

@@ -15,15 +15,9 @@ Here `Q` counts its oracle calls, not its private randomness, and `N` is the num
 
 Each oracle input carries its position, so a query can hit only the honest node there.
 
-This is analogous to the tweaks of SPHINCS+ (Bernstein et al., CCS 2019, section 2).
+This is analogous to the tweaks of [SPHINCS+][sphincs] (Bernstein et al., CCS 2019, section 2).
 
-<https://eprint.iacr.org/2019/1086>
-
-The bound is tight: retrying random leaves with the honest path wins with probability about `Q / N`.
-
-Limits: one tree, as the oracle input has no tree address; `T` trees give about `T * Q / N`.
-
-The leaves are fixed values independent of the oracle, so leaf hashing is outside the model.
+[sphincs]: https://eprint.iacr.org/2019/1086
 -/
 
 @[expose] public section
@@ -146,7 +140,15 @@ theorem prEvent_hitsHonest_cacheQuery_le [DecidableEq R] [SampleableType R] (lea
 
 /-- A forger opens a leaf with a wrong value or path with probability at most `(Q + h) / N`.
 
-For example, `Q = 2^64` and `h = 32` with 32-byte digests give about `2^(-192)`. -/
+For example, `Q = 2^64` and `h = 32` with 32-byte digests give about `2^(-192)`.
+
+The bound is tight: retrying random leaves with the honest path wins with probability about `Q / N`.
+
+It covers one tree, as the oracle input has no tree address.
+
+`T` trees give about `T * Q / N`.
+
+The leaves are fixed values independent of the oracle, so leaf hashing is outside the model. -/
 theorem prEvent_secondPreimageGame_le [DecidableEq R] [SampleableType R] (leaves : Nat → R)
     (h : Nat)
     (adversary : R → List (Vector R h) →

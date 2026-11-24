@@ -9,22 +9,6 @@ public import Mathlib.Tactic
 FIPS 202 §3 builds Keccak-f[1600] from five step mappings, each invertible.
 
 This file proves each of them injective, then the whole permutation bijective.
-
-Rho, pi, chi and iota act on single lanes or rows, so a check per bit settles them.
-
-Theta is the hard case: it adds to each lane the parities of two columns.
-
-On column parities it is the map `c ↦ c + T c + R T⁻¹ c` over GF(2).
-
-Here `T` moves each column parity to the next column, and `R` rotates a lane by one bit.
-
-The letters `x`, `y` and `z` stay the coordinates of FIPS 202 §3.1.
-
-Squaring is additive over GF(2), so 64 applications give `1 + T^64 + R^64 T^(-64)`.
-
-As `R^64 = 1` and `T^5 = 1`, that is `1 + T + T^4`, which mixes columns without rotating.
-
-It is injective, so theta is too.
 -/
 
 @[expose] public section
@@ -146,7 +130,10 @@ theorem ofLanes_inj {f g : Fin 5 → Fin 5 → UInt64} (h : State.ofLanes f = St
     (x y : Fin 5) : f x y = g x y := by
   rw [← lane_ofLanes f, ← lane_ofLanes g, h]
 
-/-! ## Rho, pi, chi and iota -/
+/-! ## Rho, pi, chi and iota
+
+Rho, pi, chi and iota act on single lanes or rows, so a check per bit settles them.
+-/
 
 /-- Each rotation offset is at most 64. -/
 theorem RHO_le (k : Nat) (hk : k < LANES) : (RHO[k]'hk).toNat ≤ 64 := by
@@ -201,11 +188,20 @@ theorem iota_injective (ir : Fin ROUNDS) : Function.Injective (iota ir) := by
   · exact (UInt64.xor_left_inj _).1 this
   · exact this
 
-/-! ## Theta -/
+/-! ## Theta
+
+Theta is the hard case: it adds to each lane the parities of two columns.
+
+On column parities it is the map `c ↦ c + T c + R T⁻¹ c` over GF(2).
+
+Here `T` moves each column parity to the next column, and `R` rotates a lane by one bit.
+-/
 
 /-- A map on column parities: `c[x] + c[x + α] + rot(c[x + β], s)`.
 
-Theta acts on column parities as the case `α = -1`, `β = 1`, `s = 1`. -/
+Theta acts on column parities as the case `α = -1`, `β = 1`, `s = 1`.
+
+The letters `x`, `y` and `z` stay the coordinates of FIPS 202 §3.1. -/
 def columnStep (α β : Fin 5) (s : UInt64) (c : Fin 5 → UInt64) : Fin 5 → UInt64 :=
   fun x => c x ^^^ c (x + α) ^^^ rotl (c (x + β)) s
 
@@ -244,6 +240,11 @@ theorem columnStep_sixtyFour_injective : Function.Injective (columnStep 1 4 64) 
 
 /-- Theta's map on column parities is injective, through six squarings. -/
 theorem columnStep_theta_injective : Function.Injective (columnStep 4 1 1) :=
+  -- Squaring is additive over GF(2), so 64 applications give `1 + T^64 + R^64 T^(-64)`.
+  --
+  -- As `R^64 = 1` and `T^5 = 1`, that is `1 + T + T^4`, which mixes columns without rotating.
+  --
+  -- It is injective, so theta is too.
   columnStep_injective_of_sq (by decide) <| columnStep_injective_of_sq (by decide) <|
     columnStep_injective_of_sq (by decide) <| columnStep_injective_of_sq (by decide) <|
     columnStep_injective_of_sq (by decide) <| columnStep_injective_of_sq (by decide) <|

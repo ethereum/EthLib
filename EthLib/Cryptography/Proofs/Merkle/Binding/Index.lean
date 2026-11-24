@@ -13,16 +13,6 @@ Two attacks change the index or the length of a path instead of its leaf:
 
 If the hash reads the position, a climb that reaches the root of height `h` has the honest shape.
 
-It starts below `2^h` with `h` siblings, or the search finds a collision across two positions.
-
-With the second-preimage search, a climb that reaches the root is the honest opening.
-
-Otherwise one of the two searches succeeds.
-
-If the hash ignores the position, that collision is free and both attacks succeed.
-
-The verifier must then check `j < 2^h` and the length.
-
 Separating leaves from nodes, as [RFC 6962][rfc] does, also stops the second attack.
 
 A climb with no hash call is not covered: an empty path, or a tree of height 0.
@@ -57,7 +47,12 @@ theorem climb_eq_hash_getLast :
       · rw [climb_cons, hclimb, Position.ancestor_parent]
         rfl
 
-/-! ## With the position in the hash -/
+/-! ## With the position in the hash
+
+If the hash reads the position, a climb that reaches the root of height `h` has the honest shape.
+
+It starts below `2^h` with `h` siblings, or the search finds a collision across two positions.
+-/
 
 /-- Two inputs of the node hash, each a position and a pair: a candidate collision. -/
 structure PositionCollision (α : Type) where
@@ -168,7 +163,12 @@ theorem climb_root_honest [DecidableEq α] (leaves : Nat → Id α) {h j : Nat} 
     · exact .inr (.inl hsecond)
   · exact .inr (.inr hsome)
 
-/-! ## Without the position in the hash -/
+/-! ## Without the position in the hash
+
+If the hash ignores the position, the collision across positions is free and both attacks succeed.
+
+The verifier must then check `j < 2^h` and the length.
+-/
 
 /-- With a hash that ignores the position, a climb reads only its index modulo `2^n`. -/
 theorem climb_const_congr (combine : α → α → Id α) :

@@ -9,21 +9,9 @@ public import VCVio.OracleComp.Constructions.SampleableType.Measure
 
 A random oracle is a uniformly random function, chosen once for every party.
 
-Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
-
-<https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
+Source: Bellare and Rogaway, ["Random Oracles are Practical"][ro], CCS 1993, section 2, "Oracles".
 
 The oracle here samples each new input uniformly and remembers its answer.
-
-Repeated inputs are not collisions, but still count towards the query budget.
-
-The birthday bound here is the loose bound `q^2 / N`, for `N` possible answers.
-
-It exceeds the standard bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`.
-
-That factor is at most 4 for `q >= 2`, and close to 2 for large `q`.
-
-The proof charges each fresh answer at most `q / N`, and private uniform sampling is not counted.
 
 These are ideal-oracle statements, not claims about the structure of a concrete hash.
 
@@ -34,14 +22,7 @@ These are ideal-oracle statements, not claims about the structure of a concrete 
 - Private uniform sampling is the computation's own randomness, which makes no oracle call.
 - A witness is covered when both inputs it names are in the cache, with the oracle's answers.
 
-## The chain of the argument
-
-- A run of `q` queries puts a collision in its cache with probability at most `q^2 / N`.
-- The Merkle searches run against the oracle only make queries.
-- A search that succeeds on covered inputs puts a collision in the cache.
-- So a forged path is found with probability at most the birthday bound of the whole budget.
-
-An experiment whose extraction has no winning replay is won with probability zero.
+[ro]: https://cseweb.ucsd.edu/~mihir/papers/ro.pdf
 -/
 
 @[expose] public section
@@ -90,6 +71,12 @@ theorem collision_cacheQuery {c : (D →ₒ R).QueryCache} {t : D} {u : R}
 The computation is adaptive: each query may depend on the answers before it.
 
 Here `N = Nat.card R`, private uniform sampling is not counted, and the initial cache is empty.
+
+This is the loose bound `q^2 / N`, for `N` possible answers.
+
+It exceeds the standard bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`.
+
+That factor is at most 4 for `q >= 2`, and close to 2 for large `q`.
 -/
 theorem prEvent_collision_le [SampleableType R]
     (oa : OracleComp (unifSpec + (D →ₒ R)) α) {q : Nat}
@@ -97,6 +84,8 @@ theorem prEvent_collision_le [SampleableType R]
     Pr{let z ← (simulateQ (D →ₒ R).romImpl oa).run ∅}[Collision z.2] ≤
       q * ((q : ℝ≥0∞) / Nat.card R) := by
   classical
+  -- The proof charges each fresh answer at most `q / N`.
+  --
   -- The budget bounds the cache only on reachable runs, so include it in the bad predicate.
   let P := fun c : (D →ₒ R).QueryCache => Collision c ∧ QueryCache.enncard c ≤ q
   have hfresh (t : D) (c : (D →ₒ R).QueryCache) (hc : ¬ P c) (ht : c t = none) :
@@ -267,7 +256,9 @@ theorem collision_of_partial_findCollision [DecidableEq R]
       · -- The search went on, so the collision is in the replay of the rest.
         exact ih t _ x y w hw
 
-/-- The birthday bound for a computation that only calls the oracle. -/
+/-- The birthday bound for a computation that only calls the oracle.
+
+The Merkle searches run against the oracle only make queries. -/
 theorem prEvent_collision_le_total [SampleableType R]
     (oa : OracleComp (D →ₒ R) α) {q : Nat} (hq : IsTotalQueryBound oa q) :
     Pr{let z ← (simulateQ (D →ₒ R).randomOracle oa).run ∅}[Collision z.2] ≤
