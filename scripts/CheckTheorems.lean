@@ -7,17 +7,9 @@ import CheckTheoremAttributes
 
 The check keeps the theorems that specification definitions and instances use.
 
-A persistent simplification attribute also exempts a theorem.
-
-The dependencies of every retained theorem stay with it.
-
-Other explicit persistent theorem attributes stop the check until they have a placement rule.
-
 All other theorems belong in the property library.
 
 The check reads declaration types, private bodies and elaborated references from build artifacts.
-
-Generated declarations belong to their source declaration rather than to the migration baseline.
 
 An exact baseline permits existing findings, and rejects new and stale entries.
 -/
@@ -106,6 +98,7 @@ def sourceDependencies (env : Environment) (root : System.FilePath) (scope : Nam
       throw <| IO.userError s!"{path}: unexpected reference metadata module or version"
     let components := m.components.drop scope.components.length
     let source := (components.foldl (fun p n => p / n.toString) root).addExtension "lean"
+    -- Any other persistent theorem attribute stops the check until it has a placement rule.
     let diagnostics ← unsupportedAttributes env source refs
     unless diagnostics.isEmpty do
       throw <| IO.userError (String.intercalate "\n" diagnostics.toList)
@@ -182,14 +175,17 @@ def findings (env : Environment) (source : SourceDependencies) (scope : Name) :
       names := names.insert key ((names[key]?.getD #[]).push n)
   let simp := simpNames env
   let instances := instanceNames env
+  -- A persistent simplification attribute also exempts a theorem.
   let roots := declarations.filterMap fun (n, c) =>
     if simp.contains n || instances.contains n ||
         ((c matches .defnInfo _ | .opaqueInfo _ | .inductInfo _ | .ctorInfo _) &&
           !isProofSupport env names n) then some n
     else none
+  -- The dependencies of every retained theorem stay with it.
   let kept := reachable env source scope roots
   let out := declarations.filterMap fun (n, c) => do
     guard (c matches .thmInfo _)
+    -- Generated declarations belong to their source declaration, not to the migration baseline.
     guard (!kept.contains n && !simp.contains n && (owner? env names n).isNone)
     let m ← moduleOf? env n
     return { moduleName := m, decl := privateToUserName n, original := n : Finding }
