@@ -582,26 +582,12 @@ theorem Run.withdrawableKept_of_same_epoch {x y : ForkedBeaconState preset}
 
 /-- Along a run inside one epoch, from Fulu, balances move by bounded amounts.
 
-Read at the last state of the run:
-
-- Off the debited validators, a balance falls by at most its slashing and sync penalties.
-- A withdrawal or a conversion debits a validator, at most the payload limits per block.
-- Off the debited validators, the largest effective balance stays.
-- A balance rises by at most the sync rewards of the blocks and its other credits.
-- The other credits are zero off the credited validators, the proposers and deposit recipients.
-- From Electra, a block credits no deposit to a balance.
-- The credits apart from deposits sum to at most the proposer credit and whistleblower rewards.
-- The proposer credit covers attestation rewards and the proposer share of sync aggregates.
-- The whistleblower rewards are those of the validators slashed at the last state.
-- The bound also holds with only the validators slashed within the run.
-- Those validators were slashable at the first state, whose exits must be ordered.
-- A validator whose largest effective balance changed was converted.
-- A converted balance ends within the activation balance above its later credits.
-- Effective balances stay. -/
+The bounds are read at the last state of the run. -/
 theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
     (tail : Run config checks x y)
     (fulu : .fusaka ≤ y.fork)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
+    -- The exits of the first state must be ordered.
     (matched : BalancesMatch x.state) (exits : ExitsOrdered x.state) :
     let state := y.state
     let slots := preset.SLOTS_PER_EPOCH.toNat
@@ -640,15 +626,27 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
       (if proposerCredit = 0 ∧ seatReward = 0 ∧ positions.filter (slashed ·) = ∅ then 0
         else blocks) + blockDeposits
     ∃ (debitedKeys creditedKeys : Finset ValidatorIndex) (pc deposit : ValidatorIndex → ℕ),
+      -- A withdrawal or a conversion debits a validator, at most the payload limits per block.
       debitedKeys.card ≤ debited ∧ creditedKeys.card ≤ creditedP ∧
+      -- Off the debited validators, a balance falls by at most its slashing and sync penalties.
       (∀ v, v ∉ debitedKeys → actualBalanceAt x v.toNat ≤
         actualBalanceAt y v.toNat + slashBack v.toNat + blocks * sync v.toNat) ∧
+      -- A balance rises by at most the sync rewards of the blocks and its other credits.
       (∀ v, actualBalanceAt y v.toNat ≤
         actualBalanceAt x v.toNat + blocks * sync v.toNat + pc v + deposit v) ∧
+      -- The other credits are zero off the credited validators.
       (∀ v, v ∉ creditedKeys → pc v = 0 ∧ deposit v = 0) ∧
+      -- From Electra, a block credits no deposit to a balance.
       (.pectra ≤ y.fork → ∀ v, deposit v = 0) ∧
+      -- Credits apart from deposits sum to at most the proposer credit and whistleblower rewards.
+      --
+      -- The proposer credit covers attestation rewards and the proposer share of sync aggregates.
+      --
+      -- The whistleblower rewards are those of the validators slashed at the last state.
       ∑ v ∈ creditedKeys, pc v ≤ proposerCredit + whistleblowerP ∧
+      -- The bound also holds with only the validators slashed within the run.
       (∃ slashedNow : Finset ValidatorIndex,
+        -- Those validators were slashable at the first state.
         (∀ v ∈ slashedNow, (∀ validator, x.state.validators.data[v.toNat]? = some validator →
             validator.slashed = false) ∧ slashed v.toNat = true ∧
           ∃ validator, x.state.validators.data[v.toNat]? = some validator ∧
@@ -656,22 +654,28 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
             getCurrentEpoch x.state < validator.withdrawableEpoch) ∧
         ∑ v ∈ creditedKeys, pc v ≤ (∑ i ∈ positions with recent i, base i) + syncProposer +
           (∑ v ∈ slashedNow, effective v.toNat) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ∧
+      -- A validator whose largest effective balance changed was converted.
+      --
+      -- A converted balance ends within the activation balance above its later credits.
       (∀ v validator later, x.state.validators.data[v.toNat]? = some validator →
         y.state.validators.data[v.toNat]? = some later →
         withdrawalMaxEffectiveBalance preset y.fork later ≠
           withdrawalMaxEffectiveBalance preset x.fork validator →
         actualBalanceAt y v.toNat ≤ preset.MIN_ACTIVATION_BALANCE.toNat +
           blocks * sync v.toNat + pc v + deposit v) ∧
+      -- The credited validators are the proposers and the deposit recipients.
       (∃ proposerKeys depositKeys : Finset ValidatorIndex,
         creditedKeys = proposerKeys ∪ depositKeys ∧
         proposerKeys.card ≤ (if proposerCredit = 0 ∧ seatReward = 0 ∧
           positions.filter (slashed ·) = ∅ then 0 else blocks) ∧
         depositKeys.card ≤ blockDeposits ∧
         (∀ v, v ∉ proposerKeys → pc v = 0) ∧ (∀ v, v ∉ depositKeys → deposit v = 0)) ∧
+      -- Off the debited validators, the largest effective balance stays.
       (∀ v validator, v ∉ debitedKeys → x.state.validators.data[v.toNat]? = some validator →
         ∃ later, y.state.validators.data[v.toNat]? = some later ∧
           withdrawalMaxEffectiveBalance preset y.fork later =
             withdrawalMaxEffectiveBalance preset x.fork validator) ∧
+      -- Effective balances stay.
       x.fork = y.fork ∧ EffectiveKept x.state y.state := by
   obtain ⟨F, a⟩ := x
   obtain ⟨b, rfl, tallied⟩ := Run.tally tail same matched

@@ -447,15 +447,7 @@ abbrev proposerDenominator : ℕ :=
   (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) * WEIGHT_DENOMINATOR.toNat /
     PROPOSER_WEIGHT.toNat
 
-/-- What some operations of a block do to the balances.
-
-The credits other than sync go to the proposer of the slot, from attestations and slashings.
-
-Before Electra, they also go to the recipients of deposits.
-
-The slashed validators were not slashed before, and pay their initial penalty.
-
-The proposer reward of the attestations is bounded by the flags they set. -/
+/-- What some operations of a block do to the balances. -/
 structure Credited {fork : Fork} (o t : BeaconState preset fork)
     (proposer : ValidatorIndex) (credit : ℕ) (slashed conv : Finset ValidatorIndex)
     (other slash : ValidatorIndex → ℕ) : Prop where
@@ -463,14 +455,20 @@ structure Credited {fork : Fork} (o t : BeaconState preset fork)
   kept : Kept o t
   grow : FlagKeeps o t
   read : 0 < credit ∨ slashed.Nonempty → getBeaconProposerIndex o = .ok proposer
+  -- The credits other than sync go to the proposer of the slot, from attestations and slashings.
+  --
+  -- Before Electra, they also go to the recipients of deposits.
   credited : ∀ v, other v ≤ if v = proposer then
     credit + ∑ x ∈ slashed, effectiveAt ⟨fork, t⟩ x.toNat /
       (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat else 0
+  -- The slashed validators pay their initial penalty.
   penalized : ∀ v, slash v ≤ if v ∈ slashed then effectiveAt ⟨fork, t⟩ v.toNat /
     (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat else 0
+  -- The slashed validators were not slashed before.
   newly : ∀ v ∈ slashed, (∀ validator, o.validators.data[v.toNat]? = some validator →
       validator.slashed = false) ∧
     ∃ later, t.validators.data[v.toNat]? = some later ∧ later.slashed = true
+  -- The proposer reward of the attestations is bounded by the flags they set.
   potential : ∀ (altair : .altair ≤ fork) (base : ℕ → ℕ) (count : ℕ), 2 ^ 64 ≤ count →
     Reads o base → (∀ i, o.validators.data.size ≤ i → base i = 0) →
     credit * proposerDenominator + recentFlagSum o altair base count ≤
@@ -910,21 +908,16 @@ end CreditedSteps
 
 /-- From Fulu, take a validator that stays unslashed through the operations of a block.
 
-Its effective balance is within its largest.
-
 The operations keep its balance at least the smaller of two amounts.
 
-They are its balance and its effective balance before the operations.
-
-A conversion to compounding credentials only lowers a balance to the activation balance.
-
-That is the largest effective balance before the conversion. -/
+They are its balance and its effective balance before the operations. -/
 theorem _root_.EthLib.Consensus.processOperations_floor {fork : Fork}
     {s t : BeaconState preset fork}
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
     (computed : processOperations config checks s body parentSlot = .ok t)
     {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
+    -- Its effective balance is within its largest.
     (capped : val.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork val)
     (unslashed : ∀ w, t.validators.data[v.toNat]? = some w → w.slashed = false) :
     min (actualBalanceAt ⟨fork, s⟩ v.toNat) val.effectiveBalance.toNat ≤
@@ -941,8 +934,13 @@ theorem _root_.EthLib.Consensus.processOperations_floor {fork : Fork}
       cases marked
     · omega
   by_cases converted : v ∈ conv
-  · -- A converted validator did not compound, so its effective balance is within the
-    -- activation balance, where the conversion leaves its balance.
+  · -- A conversion to compounding credentials only lowers a balance to the activation balance.
+    --
+    -- That is the largest effective balance before the conversion.
+    --
+    -- A converted validator did not compound.
+    --
+    -- So its effective balance is within the activation balance, where its balance is left.
     have lowered := ops.ledger.lowered v converted (Finset.notMem_empty v)
     have fresh := ops.ledger.fresh v converted val found
     have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
@@ -1000,39 +998,39 @@ private theorem kept_processSyncAggregate {altair : .altair ≤ fork}
 
 /-- The balances of a block from Fulu, read at each validator.
 
-Withdrawals pay at most the preset's `MAX_WITHDRAWALS_PER_PAYLOAD` validators.
-
-Consolidation requests convert at most `MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD` validators.
-
-From Gloas those requests run in the payload of the parent, before the header.
-
-The sync committee pays and charges each member at most its seats times the participant reward.
-
-The other credits go to the proposer of the slot.
-
-They are the proposer rewards of attestations and the whistleblower rewards of slashings.
-
-They also include the proposer share of the sync aggregate, which no participant amount counts.
-
-From Electra, deposits credit no balance in the block.
-
-The slashed validators were not slashed before, and pay their initial penalty. -/
+From Gloas the consolidation requests run in the payload of the parent, before the header. -/
 theorem block_balances {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork} (fulu : .fusaka ≤ fork)
     (matched : BalancesMatch s) (computed : processBlock config checks engine s block = .ok t) :
     ∃ (paid conv slashed : Finset ValidatorIndex) (sync other slash : ValidatorIndex → ℕ)
       (proposer : ValidatorIndex) (credit share : ℕ),
       Ledger s t paid conv sync other slash ∧
+      -- Withdrawals pay at most the preset's `MAX_WITHDRAWALS_PER_PAYLOAD` validators.
       paid.card ≤ preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat ∧
+      -- Consolidation requests convert at most `MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD` validators.
       conv.card ≤ preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat ∧
+      -- The other credits go to the proposer of the slot.
+      --
+      -- They are the proposer rewards of attestations and the whistleblower rewards of slashings.
+      --
+      -- They also include the proposer share of the sync aggregate.
+      --
+      -- No participant amount counts that share.
+      --
+      -- From Electra, deposits credit no balance in the block.
       (∀ v, other v ≤ if v = proposer then credit + share +
         ∑ x ∈ slashed, effectiveAt ⟨fork, t⟩ x.toNat /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat else 0) ∧
+      -- The slashed validators pay their initial penalty.
       (∀ v, slash v ≤ if v ∈ slashed then effectiveAt ⟨fork, t⟩ v.toNat /
         (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat else 0) ∧
+      -- The slashed validators were not slashed before.
       (∀ v ∈ slashed, (∀ validator, s.validators.data[v.toNat]? = some validator →
           validator.slashed = false) ∧
         ∃ later, t.validators.data[v.toNat]? = some later ∧ later.slashed = true) ∧
+      -- The sync committee pays and charges each member a bounded amount.
+      --
+      -- That amount is at most its seats times the participant reward.
       (∀ altair : .altair ≤ fork, (∀ v, sync v ≤ syncSeats t altair v.toNat * syncRewardAt s) ∧
         share ≤ preset.SYNC_COMMITTEE_SIZE.toNat * (syncRewardAt s * PROPOSER_WEIGHT.toNat /
           (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))) ∧

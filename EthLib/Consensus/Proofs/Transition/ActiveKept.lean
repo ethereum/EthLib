@@ -7,33 +7,13 @@ public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 /-!
 # Proofs: activity up to the current epoch plus `MAX_SEED_LOOKAHEAD` stays fixed along a chain
 
-A validator is active in an epoch from its activation epoch, up to its exit epoch.
+The current epoch plus `MAX_SEED_LOOKAHEAD` is a bound.
 
-The state transition sets an activation or an exit epoch only after a bound.
-
-That bound is the current epoch plus `MAX_SEED_LOOKAHEAD`.
-
-An activation lands at the first epoch an activation may take, `MAX_SEED_LOOKAHEAD + 1` epochs on.
-
-An exit lands there or later, by the exit queue or the consolidation queue.
-
-From Electra, the exit and consolidation queues of [EIP-7251] give no epoch before that one.
-
-A new validator has no activation epoch yet, so it is active in no epoch.
+The state transition sets an activation or an exit epoch only after it.
 
 So each step of a chain keeps which validators are active in each epoch up to that bound.
 
 That holds at every fork, for slots, epochs, blocks and upgrades.
-
-From Electra, a step also assigns an exit only to a validator that is already activated.
-
-The current epoch never decreases along a chain.
-
-So that bound never decreases either.
-
-So along a run of steps, the active sets stay fixed in each epoch up to the bound of its start.
-
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#specification
 -/
 
 @[expose] public section
@@ -45,7 +25,9 @@ open Base Uint64
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
 
-/-! ## Steps that keep activity -/
+/-! ## Steps that keep activity
+
+A validator is active in an epoch from its activation epoch, up to its exit epoch. -/
 
 /-- A step that never shrinks the registry.
 
@@ -77,7 +59,9 @@ theorem StepKeeps.of_validators
   ⟨Nat.le_of_eq (congrArg Array.size validators).symm,
     ActiveStep.of_validators validators slot⟩
 
-/-! ## Exits start from activity -/
+/-! ## Exits start from activity
+
+From Electra, a step also assigns an exit only to a validator that is already activated. -/
 
 /-- Each exit that a step assigns is of a validator whose activation epoch has come at its start. -/
 private def ExitsStart {f g : Fork} (state : BeaconState preset f) (after : BeaconState preset g) :
@@ -214,6 +198,11 @@ theorem stepKeeps_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
 
 theorem stepKeeps_initiateValidatorExit {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) : StepKeeps state after :=
+  -- An exit lands at the first epoch an activation may take or later, by the exit queue.
+  --
+  -- From Electra, the exit queue of [EIP-7251] gives no epoch before that one.
+  --
+  -- [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#specification
   StepKeeps.of_step (frame_initiateValidatorExit computed).registryGrows
     (activeStep_initiateValidatorExit computed)
 
@@ -228,6 +217,7 @@ private theorem stepKeeps_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSP
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     StepKeeps state after :=
+  -- A new validator has no activation epoch yet, so it is active in no epoch.
   StepKeeps.of_step (by rw [addValidatorToRegistry_validators_eq_push computed]; simp)
     (activeStep_addValidatorToRegistry computed)
 
@@ -468,6 +458,9 @@ private theorem consolidationEpoch_lt {electra : .pectra ≤ fork} {balance : Gw
     (computed :
       computeConsolidationEpochAndUpdateChurn config state electra balance = .ok (churned, epoch)) :
     (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < epoch.toNat := by
+  -- The consolidation queue of [EIP-7251] gives no epoch before the first one of an activation.
+  --
+  -- [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#specification
   cases first : computeActivationExitEpoch preset (getCurrentEpoch state) with
   | error =>
     simp [computeConsolidationEpochAndUpdateChurn, first, liftArith, Except.mapError, bind,
@@ -928,6 +921,7 @@ private theorem blockKeeps_processRegistryUpdates
     simp only [electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
       mapError_ok_iff] at computed
     obtain ⟨activationEpoch, activationOk, computed⟩ := computed
+    -- An activation lands at the first epoch it may take, `MAX_SEED_LOOKAHEAD + 1` epochs on.
     have activationEq := (computeActivationExitEpoch_ok_iff.mp activationOk).2
     -- Each step keeps the slot, so the activation epoch stays after the fixed epoch.
     refine (foldlM_ok_invariant (fun middle => BlockKeeps state middle ∧ middle.slot = state.slot)
@@ -1444,6 +1438,7 @@ private theorem chainSteps_kept {first last : ForkedBeaconState preset}
   | refl => exact ⟨Nat.le_refl _, ActiveKept.refl _ _⟩
   | head step _ more =>
     obtain ⟨grows, active, later⟩ := chainStep_kept step
+    -- The current epoch never decreases along a chain, so neither does the bound.
     exact ⟨Nat.le_trans grows more.1,
       active.trans (more.2.mono (activityFixedEpoch_mono later))⟩
 

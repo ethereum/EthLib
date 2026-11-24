@@ -16,31 +16,11 @@ import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 A block credits a balance in a few ways.
 
-Its proposer earns the rewards of the attestations, of the slashings and of the sync aggregate.
-
-Each member of the sync committee that signs earns a reward.
-
-Before Electra a deposit adds its amount to the validator with its key.
-
-Every other step of a block lowers a balance or keeps it, at every fork.
-
-So the balance of a validator that is not the proposer does not rise in the block.
-
-From Altair this also needs the validator to sign no sync aggregate.
-
-Before Electra it also needs no deposit to carry its key.
+Every other step of a block lowers a balance or keeps it.
 
 A block also keeps the inactivity score at each position of the registry before it.
 
-A new validator takes a position at the end of the registry, so no earlier score moves.
-
 The bounds on an inactivity leak assume that a balance does not rise between two epochs.
-
-The proposer is read at several steps of the block, and each read gives the same validator.
-
-That holds when the mixes span more than the seed lookahead plus two epochs.
-
-This holds on mainnet and on the minimal preset.
 -/
 
 @[expose] public section
@@ -1398,29 +1378,39 @@ private theorem down_processBlock
 
 This holds when the block succeeds, at every fork.
 
-The validator has a balance, and it is not the proposer of the block.
-
-From Altair, no member that signs the sync aggregate has its key.
-
-No deposit of the block carries its key; there are none from Heze.
-
-Only the deposits before Electra credit a balance at once.
-
 The mixes must span more than the seed lookahead plus two epochs. -/
 theorem balanceNotRaised_processBlock
+    -- The proposer is read at several steps of the block, and each read gives the same validator.
+    --
+    -- That holds when the mixes span more than the seed lookahead plus two epochs.
+    --
+    -- The mixes span that much on mainnet and on the minimal preset.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)
+    -- The validator has a balance.
     (held : index < state.balances.data.size)
+    -- The proposer earns the rewards of the attestations, the slashings and the sync aggregate.
+    --
+    -- So the validator is not the proposer of the block.
     (notProposer : block.proposerIndex.toNat ≠ index)
+    -- From Altair, each member of the sync committee that signs earns a reward.
+    --
+    -- So no member that signs the sync aggregate has its key.
     (unsigned : ∀ altair : .altair ≤ fork,
       ∀ member ∈ ((state.currentSyncCommittee altair).value.pubkeys.toArray.zip
         (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray).toList,
         member.2 = true → member.1 ≠ validator.pubkey)
+    -- Before Electra a deposit adds its amount to the validator with its key at once.
+    --
+    -- So no deposit of the block carries its key.
+    --
+    -- There are none from Heze.
     (undeposited : ∀ before : fork < .hegota, ∀ deposit ∈ (block.body.deposits before).data,
       deposit.data.pubkey ≠ validator.pubkey) :
     BalanceNotRaised index state after :=
+  -- Every other step of a block lowers a balance or keeps it, at every fork.
   (down_processBlock apart computed found notProposer unsigned undeposited).balanceNotRaised held
 
 /-- A block keeps a balance at the position of a validator that it does not credit.

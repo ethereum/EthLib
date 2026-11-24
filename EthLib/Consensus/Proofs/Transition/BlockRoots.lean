@@ -6,31 +6,11 @@ public import EthLib.Consensus.Proofs.Transition.StateTransition
 /-!
 # Proofs: the slots keep the root of the latest block
 
-Each slot step writes the root of the latest block header into the buffer of block roots.
-
-It fills the state root of the header when that root is zero.
-
-So it writes the root of the new header.
-
-The epoch transition changes neither the buffer of block roots nor the latest block header.
-
-So after the slots up to a later slot, the root at the slot before it is the root of the header.
+After the slots up to a later slot, the root at the slot before it is the root of the header.
 
 The block handler uses this to show which parent a block it accepts names.
 
 The block, and from Gloas its bid, names that root as its parent.
-
-A root that is readable after one slot was readable before it, or is the root of the new header.
-
-The new header is the one before it, with its state root filled by the root of the state before.
-
-After several slots such a root was readable before them, or is the root of the final header.
-
-Or the state before hashes to the zero root, and it is the root of the header before.
-
-From Gloas the slots and the epoch transition also keep the latest block hash and the latest bid.
-
-The slots and the transition keep the genesis time.
 -/
 
 @[expose] public section
@@ -60,6 +40,9 @@ theorem advanceSlot_cachedRoots
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   refine ⟨cached, cachedOk, ?_⟩
   obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
+  -- The epoch transition changes neither the buffer of block roots nor the latest block header.
+  --
+  -- From Gloas it also keeps the latest block hash and the latest bid.
   · obtain ⟨_, justifiedOk, frame⟩ := processEpoch_frame epochedOk
     obtain ⟨genesis, roots, header, hash, bid, -⟩ :=
       processJustificationAndFinalization_keeps justifiedOk
@@ -431,6 +414,11 @@ theorem advanceSlot_latestBlockRoot
     ∃ root, SszType.hashTreeRoot after.latestBlockHeader = .ok root ∧
       readCircular after.blockRoots.elements (after.slot - 1) = .ok root := by
   obtain ⟨cached, cachedOk, -, roots, header, -, -, slot⟩ := advanceSlot_cachedRoots computed
+  -- The slot step fills the state root of the latest block header when that root is zero.
+  --
+  -- It then writes the root of that header into the buffer of block roots.
+  --
+  -- So it writes the root of the new header.
   obtain ⟨root, hashed, written⟩ := processSlot_blockRoots cachedOk
   have previous : after.slot - 1 = state.slot := by
     apply UInt64.toNat_inj.mp

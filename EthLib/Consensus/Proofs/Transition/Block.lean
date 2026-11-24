@@ -13,13 +13,7 @@ Each step keeps the number of validators and the number of balances.
 
 The header step stores the header of the block, and the RANDAO and vote steps change one field.
 
-A valid proposer slashing slashes its proposer.
-
-A valid attester slashing slashes a validator that signed both attestations.
-
-Casper FFG never forbids a vote together with itself.
-
-A valid indexed attestation has strictly increasing indices.
+The module also proves the checks of the slashings and of an indexed attestation.
 -/
 
 @[expose] public section
