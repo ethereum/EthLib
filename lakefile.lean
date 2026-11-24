@@ -46,23 +46,20 @@ lean_lib «EthLib» where
 
 /-- Proofs about the specification.
 
-The executable specification never depends on this library.
-
-`precompileModules` is off, since default targets need no native proof objects.
-
-The Python extension links only the runtime imports of `EthLib.Exports`.
-
-`platformIndependent` keeps the specification's shared library out of each proof's trace.
-
-A proof then rebuilds only when a module it imports changes.
-
-Each domain's proof tree is a root, so its modules belong here and not to `EthLib`. -/
+The executable specification never depends on this library. -/
 @[default_target]
 lean_lib «Proofs» where
   requiresModuleSystem := true
+  -- Each domain's proof tree is a root, so its modules belong here and not to `EthLib`.
   roots := #[`EthLib.Proofs, `EthLib.Serialization.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs,
     `EthLib.Execution.Proofs, `EthLib.Consensus.Proofs, `EthLib.Base.Proofs, `EthLib.Engine.Proofs]
+  -- This library builds no native objects, since default targets need no native proof objects.
+  --
+  -- The Python extension links only the runtime imports of `EthLib.Exports`.
   precompileModules := false
+  -- This keeps the specification's shared library out of each proof's trace.
+  --
+  -- A proof then rebuilds only when a module it imports changes.
   platformIndependent := true
   -- Mathlib's concrete-instances linter flags an instance assumption without variables.
   --
@@ -79,20 +76,19 @@ lean_lib «Proofs» where
 
 It is a separate library, so that the specification never imports an `@[export]` symbol.
 
-`precompileModules` builds the objects that `setup.py` links.
-
-One root and its initializer name make this a plugin, so the specification's plugin loads first.
-
 The extension initializes only runtime imports.
 
-The linker discards EthLib's unused compile-time and legacy initializers.
-
-The globs assign each domain's export tree to this library. -/
+The linker discards EthLib's unused compile-time and legacy initializers. -/
 @[default_target]
 lean_lib «Exports» where
   requiresModuleSystem := true
+  -- One root and its initializer name make this library a plugin.
+  --
+  -- The specification's plugin then loads first.
   roots := #[`EthLib.Exports]
   libName := "EthLib_EthLib_Exports"
+  -- The globs assign each domain's export tree to this library.
+  --
   -- The conversion core and its laws belong to `PythonConversions` below.
   globs := #[.one `EthLib.Exports, .one `EthLib.Base.Exports,
     .one `EthLib.Base.Exports.Bindings, .one `EthLib.Base.Exports.ChainConfig,
@@ -102,25 +98,24 @@ lean_lib «Exports» where
     .andSubmodules `EthLib.Cryptography.Exports, .andSubmodules `EthLib.Networking.Exports,
     .andSubmodules `EthLib.Execution.Exports, .andSubmodules `EthLib.Consensus.Exports,
     .andSubmodules `EthLib.Serialization.Exports, .andSubmodules `EthLib.Engine.Exports]
+  -- This builds the objects that `setup.py` links.
   precompileModules := true
   defaultFacets := #[LeanLib.leanArtsFacet, LeanLib.staticExportFacet]
 
 /-- Python conversion types and the proofs of their laws.
 
-The core imports only the Lean toolchain, and the law module imports only the core.
-
 These modules belong to neither `Exports` nor `Proofs`.
 
 Lake assigns a module to the last library whose globs match it, so this block stays after `Proofs`.
 
-A downstream project can then precompile the exports without a native library cycle.
-
-The bindings link the core's runtime objects, but not the meta-imported law module. -/
+A downstream project can then precompile the exports without a native library cycle. -/
 lean_lib «PythonConversions» where
   requiresModuleSystem := true
+  -- The core imports only the Lean toolchain, and the law module imports only the core.
   roots := #[`EthLib.Base.Exports.Result, `EthLib.Base.Exports.PyValueCore,
     `EthLib.Base.Proofs.Exports.PyValue]
   libName := "EthLib_PythonConversions"
+  -- The bindings link the core's runtime objects, but not the meta-imported law module.
   precompileModules := true
 
 /-- Checks the compiled declarations of every library.
