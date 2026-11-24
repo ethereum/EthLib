@@ -9,55 +9,9 @@ public import EthLib.Execution.Transactions.Process
 /-!
 # Proofs: the start of a transaction, and its gas used
 
-From Berlin, a transaction starts with these addresses accessed:
+What a transaction starts with, its first frame, and the gas its run uses and adds to its block.
 
-- every precompile of its fork;
-- its sender, and its recipient or the address it creates;
-- each address of its access list;
-- from Shapella, the beneficiary of its block.
-
-From Berlin, it starts with a slot accessed exactly when an entry of its access list lists it.
-
-That entry must name the address of the slot.
-
-When two entries name one address, the slots of both count.
-
-Before Berlin, it starts with no access.
-
-A first frame that fails to start halts the message with the state from before it.
-
-The sender then keeps its higher nonce and its fee, and gets back the whole reservoir.
-
-Up to BPO5, a transaction runs with one counter of the gas left.
-
-At Glamsterdam, it runs with the meter of EIP-8037.
-
-From Hegotá, a run fails as not yet specified, so no caller gets the rules of Glamsterdam there.
-
-Before Hegotá, a run uses its gas limit minus the gas left, less a refund.
-
-Up to BPO5, the gas left is the gas that the message leaves.
-
-At Glamsterdam, the gas left holds both the execution gas left and the reservoir left.
-
-Before London, the refund is the refund counter, at most half of the gas used before it.
-
-From London, the refund is at most a fifth of the gas used before it, by [EIP-3529][e3529].
-
-From Pectra, the gas used is never below the call data floor, by [EIP-7623][e7623].
-
-Up to BPO5, the block counts the gas used of the transaction, its blob gas, and no state gas.
-
-At Glamsterdam, the block counts two amounts of gas, by [EIP-7778][e7778] and [EIP-8037][e8037]:
-
-- the state gas used of the message, or 0 when it is negative, a case that the EIPs leave open;
-- the gas used before the refund minus that state gas, and at least the call data floor.
-
-At every fork, the block counts the blob gas of the transaction.
-
-Up to BPO5, the block counts at most the gas limit, when that limit covers the least gas.
-
-At every fork, a transaction uses at most the execution gas plus the state gas it adds to its block.
+Sources: [EIP-3529][e3529], [EIP-7623][e7623], [EIP-7778][e7778] and [EIP-8037][e8037].
 
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [e7623]: https://eips.ethereum.org/EIPS/eip-7623#specification
@@ -179,6 +133,7 @@ theorem startAccessedStorageKeys_of_lt_berlin (h : fork < .berlin) :
 /-- From Hegotá, a transaction fails to run, since the rules of that fork are not here yet. -/
 theorem processTransaction_of_hegota_le {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} (h : .hegota ≤ fork) :
+    -- So from Hegotá, no caller gets the rules of Glamsterdam.
     processTransaction env block included tx = .error (.forkNotYetSpecified fork) := by
   simp only [processTransaction_unfold, h, ↓reduceIte]
 
@@ -207,7 +162,7 @@ variable {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] {chainId : Nat}
 
 /-- A message whose first frame fails to start halts with the state from before it.
 
-So a transaction keeps the nonce and the fee of its sender, which come before its message.
+So a transaction keeps the higher nonce and the fee of its sender, which come before its message.
 
 The halt keeps only the reads of the preparation, from the state `read`.
 
@@ -221,29 +176,24 @@ theorem processMessageCall_of_halt {e : EvmError} {read : State.TransactionState
   simp only [processMessageCall_unfold, h, halts, Bool.false_eq_true, ↓reduceIte]
 
 omit [LawfulGasMeter Meter] in
-/-- The first frame of a call that moves no ether, after its authorizations end with `done`.
-
-The recipient `target` holds the code `c` in the state of `done`.
-
-From Pectra, `c` must not be a delegation indicator.
-
-The meter of the frame is the meter of `done`, committed.
-
-The frame runs `c` with the gas that this meter holds.
-
-Its state is the state of `done` with the read of the recipient.
-
-Its accessed addresses and its refund are those of `done`. -/
+/-- The first frame of a call that moves no ether, after its authorizations end with `done`. -/
 theorem prepareFirstFrame_of_applyAuthorizations {target : Address} {c : ByteArray}
     {done : Delegations Meter} (htarget : message.target = some target)
     (hvalue : message.value = 0)
     (hdone : applyAuthorizations fork chainId state substate.accessedAddresses
       (GasMeter.start message.gas message.reservoir) paid auths = .ok done)
+    -- The recipient `target` holds the code `c` in the state of `done`.
     (hcode : done.state.getCode (done.state.getAccount target).codeHash = .ok c)
+    -- From Pectra, `c` must not be a delegation indicator.
     (hdelegate : fork ≥ .pectra → delegatedAddress c = none) :
     prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
+      -- The frame runs `c` with the gas that its meter holds.
+      --
+      -- Its state is the state of `done` with the read of the recipient.
       .ok (.ofMeter { message with code := c } (done.state.recordAccountRead target)
+        -- Its accessed addresses and its refund are those of `done`.
         { substate with accessedAddresses := done.accessed } done.refund
+        -- The meter of the frame is the meter of `done`, committed.
         (GasMeter.commit done.meter)) := by
   have hcode' : (done.state.recordAccountRead target).getCode
       ((done.state.recordAccountRead target).getAccount target).codeHash = .ok c := hcode
@@ -305,21 +255,21 @@ theorem aborts_of_prepareFirstFrame_of_lt_glamsterdam (hfork : fork < .glamsterd
   · cases h
 
 omit [LawfulGasMeter Meter] in
-/-- The first frame of a call that moves no ether and applies no authorization.
-
-The recipient `target` holds the code `c`, which from Pectra is no delegation indicator.
-
-Its meter is the fresh meter of the message, committed.
-
-The frame runs `c` with the gas that this meter holds.
-
-Its state records the read of the recipient, its substate is the one given, and it has no refund. -/
+/-- The first frame of a call that moves no ether and applies no authorization. -/
 theorem prepareFirstFrame_of_value_eq_zero {target : Address} {c : ByteArray}
     (htarget : message.target = some target) (hvalue : message.value = 0)
+    -- The recipient `target` holds the code `c`.
     (hcode : state.getCode (state.getAccount target).codeHash = .ok c)
+    -- From Pectra, `c` is no delegation indicator.
     (hdelegate : fork ≥ .pectra → delegatedAddress c = none) :
     prepareFirstFrame (Meter := Meter) chainId message state substate [] paid =
+      -- The frame runs `c` with the gas that its meter holds.
+      --
+      -- Its state records the read of the recipient, and its substate is the one given.
+      --
+      -- It has no refund.
       .ok (.ofMeter { message with code := c } (state.recordAccountRead target) substate 0
+        -- Its meter is the fresh meter of the message, committed.
         (GasMeter.commit (GasMeter.start message.gas message.reservoir : Meter))) :=
   prepareFirstFrame_of_applyAuthorizations (done := ⟨state, substate.accessedAddresses, 0,
     GasMeter.start message.gas message.reservoir, paid, ∅⟩) htarget hvalue rfl hcode hdelegate
@@ -483,41 +433,38 @@ private theorem processMessageCall_reservoir {chainId : Nat} {message : Message 
       unfold CallOutput.ofFrame
       split <;> rfl
 
-/-- The steps of a run of a transaction, in order, with the values that they give.
-
-The message goes to `target`, and the sender buys the gas, which gives the state `bought`.
-
-The gas past the intrinsic gas splits into the execution gas and the reservoir of `message`.
-
-The message call gives `output`.
-
-The gas left of the run is the execution gas left plus the reservoir left.
-
-The block counts the gas of the transaction.
-
-The gas is then settled on the state that the message leaves, which gives the state `settled`.
-
-Then the accounts to delete and the empty touched accounts are deleted. -/
+/-- The steps of a run of a transaction, in order, with the values that they give. -/
 def TransactionRun (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
     (env : BlockEnvironment fork) (block : State.BlockState) (included : Included)
     (tx : Transaction) (out : TransactionOutput) (target : Address)
     (bought : State.TransactionState) (message : Message fork) (output : CallOutput)
     (settled : State.TransactionState) : Prop :=
+  -- The gas past the intrinsic gas splits into the execution gas and the reservoir of `message`.
   let gas := allocateGas fork tx included.intrinsicGas
+  -- The message goes to `target`.
   messageTarget included.sender
       ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx = .ok target ∧
+    -- The sender buys the gas, which gives the state `bought`.
     buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
     transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
         bought included.sender target gas.execution tx = .ok message ∧
+    -- The message call gives `output`.
     processMessageCall (Meter := Meter) env.chainId.toNat
         { message with reservoir := gas.reservoir } bought
         (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
         (paidWrites included.sender target tx) = .ok output ∧
+    -- The block counts the gas of the transaction.
+    --
+    -- The gas left of the run is the execution gas left plus the reservoir left.
     out.blockGas =
       transactionBlockGas fork included.sender tx (output.gasLeft + output.reservoir)
         output.refund output.stateGasUsed ∧
+    -- The gas is then settled on the state that the message leaves.
+    --
+    -- That gives the state `settled`.
     settleGas env output.state included.sender tx (output.gasLeft + output.reservoir)
         output.refund = .ok (settled, out.gasUsed) ∧
+    -- Then the accounts to delete and the empty touched accounts are deleted.
     deleteAccounts fork settled output = .ok out.state
 
 /-- A transaction that runs takes each step of the run, in order, with any gas meter. -/
@@ -601,32 +548,29 @@ private theorem processTransaction_eq_ok_of_lt {env : BlockEnvironment fork}
   exact ⟨target, bought, message, output, settled, hTarget, hBought, hMessage, hOutput, hBlock,
     hSettle, hDeleted⟩
 
-/-- Before London, the gas used of a transaction that runs follows from its message.
-
-The message goes to the recipient, or to the address that the creation makes.
-
-It runs on the state after the sender buys the gas, with the gas limit minus the intrinsic gas.
-
-The gas used is the gas limit minus the gas left and the refund.
-
-The refund is the refund counter of the message, at most half of the gas used before it.
-
-The block counts that gas used, no state gas, and the blob gas of the transaction. -/
+/-- Before London, the gas used of a transaction that runs follows from its message. -/
 theorem processTransaction_gasUsed_of_lt_london {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
     (hlt : fork < .london) (h : processTransaction env block included tx = .ok out) :
     ∃ target bought message output,
+      -- The message goes to the recipient, or to the address that the creation makes.
       messageTarget included.sender
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
+      -- It gets the gas limit minus the intrinsic gas.
       transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
           bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      -- It runs on the state after the sender buys the gas.
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
+      -- The gas used is the gas limit minus the gas left and the refund.
+      --
+      -- The refund is the refund counter of the message, at most half of the gas used before it.
       out.gasUsed = tx.gas.toNat - output.gasLeft -
         min ((tx.gas.toNat - output.gasLeft) / 2) output.refund ∧
+      -- The block counts that gas used, no state gas, and the blob gas of the transaction.
       out.blockGas = ⟨out.gasUsed, 0, Fees.BlobBaseFee.calculateTotalBlobGas tx⟩ := by
   have hGlam : fork < .glamsterdam := Nat.lt_trans hlt (by decide)
   obtain ⟨target, bought, message, output, _, hTarget, hBought, hMessage, hOutput, hBlock,
@@ -644,17 +588,7 @@ theorem processTransaction_gasUsed_of_lt_london {env : BlockEnvironment fork}
 
 /-- From London to Dencun, the gas used of a transaction that runs follows from its message.
 
-The message goes to the recipient, or to the address that the creation makes.
-
-It runs on the state after the sender buys the gas, with the gas limit minus the intrinsic gas.
-
-The gas used is the gas limit minus the gas left and the refund.
-
-The refund is the refund counter of the message, at most a fifth of the gas used before it.
-
-[EIP-3529][e3529] sets that fifth at London.
-
-The block counts that gas used, no state gas, and the blob gas of the transaction.
+[EIP-3529][e3529] sets at London the cap of a fifth on the refund.
 
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification -/
 theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironment fork}
@@ -662,17 +596,24 @@ theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironmen
     (hLondon : .london ≤ fork) (hlt : fork < .pectra)
     (h : processTransaction env block included tx = .ok out) :
     ∃ target bought message output,
+      -- The message goes to the recipient, or to the address that the creation makes.
       messageTarget included.sender
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
+      -- It gets the gas limit minus the intrinsic gas.
       transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
           bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      -- It runs on the state after the sender buys the gas.
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
+      -- The gas used is the gas limit minus the gas left and the refund.
+      --
+      -- The refund is the refund counter of the message, at most a fifth of the gas used before it.
       out.gasUsed = tx.gas.toNat - output.gasLeft -
         min ((tx.gas.toNat - output.gasLeft) / 5) output.refund ∧
+      -- The block counts that gas used, no state gas, and the blob gas of the transaction.
       out.blockGas = ⟨out.gasUsed, 0, Fees.BlobBaseFee.calculateTotalBlobGas tx⟩ := by
   have hGlam : fork < .glamsterdam := Nat.lt_trans hlt (by decide)
   obtain ⟨target, bought, message, output, _, hTarget, hBought, hMessage, hOutput, hBlock,
@@ -688,19 +629,9 @@ theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironmen
 
 /-- From Pectra to BPO5, the gas used of a transaction that runs follows from its message.
 
-The message goes to the recipient, or to the address that the creation makes.
+[EIP-7623][e7623] sets the call data floor from Pectra.
 
-It runs on the state after the sender buys the gas, with the gas limit minus the intrinsic gas.
-
-The gas used is the gas limit minus the gas left and the refund.
-
-It is the call data floor instead, when that floor is larger, by [EIP-7623][e7623] from Pectra.
-
-The refund is the refund counter of the message, at most a fifth of the gas used before it.
-
-That fifth holds from London, by [EIP-3529][e3529].
-
-The block counts that gas used, no state gas, and the blob gas of the transaction.
+[EIP-3529][e3529] sets the cap of a fifth on the refund from London.
 
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [e7623]: https://eips.ethereum.org/EIPS/eip-7623#specification -/
@@ -708,18 +639,27 @@ theorem processTransaction_gasUsed {env : BlockEnvironment fork} {block : State.
     {included : Included} {out : TransactionOutput} (hPectra : .pectra ≤ fork)
     (hlt : fork < .glamsterdam) (h : processTransaction env block included tx = .ok out) :
     ∃ target bought message output,
+      -- The message goes to the recipient, or to the address that the creation makes.
       messageTarget included.sender
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
+      -- It gets the gas limit minus the intrinsic gas.
       transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
           bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      -- It runs on the state after the sender buys the gas.
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
+      -- The gas used is the gas limit minus the gas left and the refund.
+      --
+      -- It is the call data floor instead, when that floor is larger.
+      --
+      -- The refund is the refund counter of the message, at most a fifth of the gas used before it.
       out.gasUsed = max (tx.gas.toNat - output.gasLeft -
           min ((tx.gas.toNat - output.gasLeft) / 5) output.refund)
         (calldataFloor fork included.sender tx) ∧
+      -- The block counts that gas used, no state gas, and the blob gas of the transaction.
       out.blockGas = ⟨out.gasUsed, 0, Fees.BlobBaseFee.calculateTotalBlobGas tx⟩ := by
   obtain ⟨target, bought, message, output, _, hTarget, hBought, hMessage, hOutput, hBlock,
       hSettle, -⟩ :=
@@ -734,23 +674,9 @@ theorem processTransaction_gasUsed {env : BlockEnvironment fork} {block : State.
 
 /-- At Glamsterdam, the gas used and the block gas of a run follow from its message.
 
-The gas past the intrinsic gas splits into the execution gas and the reservoir of [EIP-8037][e8037].
+The reservoir is that of [EIP-8037][e8037].
 
-The gas left of the run is the execution gas left plus the reservoir left.
-
-The gas used is the gas limit minus that gas left and the refund, or the call data floor if larger.
-
-The refund is the refund counter of the message, at most a fifth of the gas used before it.
-
-The block counts the state gas used of the message, by [EIP-8037][e8037b].
-
-A negative state gas used counts as 0, a case that the EIP leaves open.
-
-Its execution gas is the gas used before the refund minus that state gas, by [EIP-7778][e7778].
-
-That execution gas is never below the call data floor.
-
-The block also counts the blob gas of the transaction.
+The block gas follows [EIP-8037][e8037b] and [EIP-7778][e7778].
 
 [e7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
 [e8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-level-gas-accounting-reservoir-model
@@ -759,6 +685,7 @@ theorem processTransaction_gasUsed_of_glamsterdam {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
     (hGlam : .glamsterdam ≤ fork) (hlt : fork < .hegota)
     (h : processTransaction env block included tx = .ok out) :
+    -- The gas past the intrinsic gas splits into the execution gas and the reservoir.
     let gas := allocateGas fork tx included.intrinsicGas
     ∃ target bought message output,
       messageTarget included.sender
@@ -771,14 +698,27 @@ theorem processTransaction_gasUsed_of_glamsterdam {env : BlockEnvironment fork}
           { message with reservoir := gas.reservoir } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
+      -- The gas left of the run is the execution gas left plus the reservoir left.
       let gasLeft := output.gasLeft + output.reservoir
+      -- The gas used is the gas limit minus that gas left and the refund.
+      --
+      -- It is the call data floor instead, when that floor is larger.
+      --
+      -- The refund is the refund counter of the message, at most a fifth of the gas used before it.
       out.gasUsed = max (tx.gas.toNat - gasLeft -
           min ((tx.gas.toNat - gasLeft) / 5) output.refund)
         (calldataFloor fork included.sender tx) ∧
       out.blockGas =
+        -- By EIP-7778, the block counts as execution gas the gas used before the refund.
+        --
+        -- It subtracts the state gas, and is never below the call data floor.
         ⟨max (tx.gas.toNat - gasLeft - output.stateGasUsed.toNat)
             (calldataFloor fork included.sender tx),
+          -- The block counts the state gas used of the message, by EIP-8037.
+          --
+          -- A negative state gas used counts as 0, a case that the EIP leaves open.
           output.stateGasUsed.toNat,
+          -- The block also counts the blob gas of the transaction.
           Fees.BlobBaseFee.calculateTotalBlobGas tx⟩ := by
   obtain ⟨target, bought, message, output, _, hTarget, hBought, hMessage, hOutput, hBlock,
       hSettle, -⟩ :=

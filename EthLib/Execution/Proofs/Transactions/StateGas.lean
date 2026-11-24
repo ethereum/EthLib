@@ -12,17 +12,9 @@ From Glamsterdam, a transaction splits its gas into execution gas and a reservoi
 
 The block then counts the execution gas and the state gas of the transaction apart.
 
-The message of a transaction keeps its starting reservoir, so that reservoir counts as state gas.
-
-The gas left, the reservoir left and the net state gas used add up to at most the gas given.
-
-For a valid transaction, the execution gas that the block counts is at most the gas limit.
-
-It is also at most `2^24`, the cap of [EIP-7825][eip7825] that EIP-8037 keeps for execution gas.
-
-The state gas that the block counts is at most the gas limit of the transaction.
-
 [EIP-8037][eip8037] defines the reservoir and the two counts.
+
+[EIP-7825][eip7825] sets the cap of `2^24` that EIP-8037 keeps for execution gas.
 
 [eip7825]: https://eips.ethereum.org/EIPS/eip-7825#specification
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-level-gas-accounting-reservoir-model
@@ -140,6 +132,7 @@ theorem processMessageCall_reservoir_le {chainId : Nat} {message : Message fork}
     {paid : Std.ExtTreeSet Address} {output : CallOutput}
     (h : processMessageCall (Meter := StateGasMeter) chainId message state substate auths paid =
       .ok output) :
+    -- The message keeps its starting reservoir, so that reservoir counts as state gas.
     (message.reservoir : Int) ≤ output.reservoir + output.stateGasUsed :=
   (processMessageCall_gas h).1
 
@@ -161,7 +154,7 @@ theorem processMessageCall_spent_le {chainId : Nat} {message : Message fork}
 
 /-- From Glamsterdam, a valid transaction adds at most its capped gas limit to the execution gas.
 
-That cap is `2^24`. -/
+That cap is `2^24`, the cap of EIP-7825 that EIP-8037 keeps for execution gas. -/
 theorem processTransaction_blockGas_execution_le_of_glamsterdam {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
     (hGlam : .glamsterdam ≤ fork)
@@ -201,21 +194,12 @@ theorem processTransaction_blockGas_state_le_of_glamsterdam {env : BlockEnvironm
   dsimp only
   omega
 
-/-- From Glamsterdam, a transaction adds at most the gas it used before its refund as state gas.
-
-That gas used is the gas limit minus the execution gas left and the reservoir left.
-
-So subtracting the state gas from it, for the execution gas of the block, never floors at zero.
-
-A net state gas below zero counts as 0, so the bound holds for it too.
-
-Another theorem proves that the gas left and the reservoir left never exceed the gas limit.
-
-The run named here is the transaction's: its target, its paid state, its message and its call. -/
+/-- From Glamsterdam, a transaction adds as state gas at most its gas used before its refund. -/
 theorem processTransaction_stateGas_le_of_glamsterdam {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
     (hGlam : .glamsterdam ≤ fork) (h : processTransaction env block included tx = .ok out) :
     let gas := allocateGas fork tx included.intrinsicGas
+    -- The run named here is that of the transaction: its target, paid state, message and call.
     ∃ target bought message output,
       messageTarget included.sender
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
@@ -227,7 +211,13 @@ theorem processTransaction_stateGas_le_of_glamsterdam {env : BlockEnvironment fo
           { message with reservoir := gas.reservoir } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
+      -- A net state gas below zero counts as 0, so the bound holds for it too.
       out.blockGas.state = output.stateGasUsed.toNat ∧
+      -- Before the refund, the gas used is the gas limit less the execution gas and reservoir left.
+      --
+      -- So the execution gas of the block, that gas used minus the state gas, never floors at zero.
+      --
+      -- Another theorem proves that the gas left and the reservoir left never exceed the gas limit.
       out.blockGas.state ≤ tx.gas.toNat - (output.gasLeft + output.reservoir) := by
   obtain ⟨target, bought, message, output, hTarget, hBought, hMessage, hOutput, -, hBlock⟩ :=
     processTransaction_gasUsed_of_glamsterdam hGlam (processTransaction_lt_hegota h) h

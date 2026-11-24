@@ -8,35 +8,7 @@ public import EthLib.Serialization.Proofs.Rlp.Scalar
 /-!
 # Proofs: the sender of a transaction
 
-A signature names no sender when `r` or `s` is out of range.
-
-From Homestead, a high `s` names no sender either.
-
-The `v` of a legacy transaction gives the chain and the recovery id, as EIP-155 lays them out.
-
-A recovered sender is the address of a key that verifies the signature on the signing hash.
-
-An honest signer is the sender of the transaction that it signs.
-
-The signature of a transaction is not part of what it signs.
-
-So changing the signature of a transaction leaves its signing hash as it was.
-
-A legacy transaction that reports a chain signs a hash that covers that chain.
-
-So one that passes the chain check of a network signs a hash with no chain or the network's chain.
-
-A typed transaction carries its recovery id as a parity, which must be 0 or 1.
-
-An accepted parity is the recovery id itself, so each recovery id has one accepted parity.
-
-A typed transaction signs the hash of its fields before the signature, with its parity as the id.
-
-A parity above 1 names no sender, whatever the other fields, `r` and `s`.
-
-A typed hash with a type below `0xc0` that equals a legacy hash names a collision of Keccak-256.
-
-So do equal legacy hashes for two different chains, or for no chain and a chain.
+When a signature names a sender, which sender it names, and what each signing hash covers.
 -/
 
 @[expose] public section
@@ -82,7 +54,10 @@ theorem recoverSender_high_s {fork : Fork} {tx : Transaction} (hFork : fork ≥ 
     omega
   simp only [recoverSender, hs, ↓reduceIte]
 
-/-! ## The `v` of a legacy transaction -/
+/-! ## The `v` of a legacy transaction
+
+The `v` gives the chain and the recovery id, as EIP-155 lays them out.
+-/
 
 /-- A `v` of 27 signs no chain, with the recovery id 0. -/
 theorem legacyRecovery_27 (fork : Fork) : legacyRecovery fork 27 = .ok (none, 0) := by
@@ -287,7 +262,10 @@ theorem signingInput_legacy_of_checkChainId {fork : Fork} {chainId : UInt64}
         rw [heq, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by have := chainId.toNat_lt; omega)]
       exact .inr (hc' ▸ signingInput_legacy_chain h hc)
 
-/-! ## The signing hashes -/
+/-! ## The signing hashes
+
+The signature of a transaction is not part of what it signs.
+-/
 
 /-- The signing hash of a legacy transaction that signs no chain ignores `v`, `r` and `s`. -/
 theorem signingHashPre155_signature (tx : LegacyTransaction) (v r s : U256) :
@@ -313,7 +291,10 @@ theorem signingHash4844_signature (tx : BlobTransaction) (yParity r s : U256) :
 theorem signingHash7702_signature (tx : SetCodeTransaction) (yParity r s : U256) :
     signingHash7702 { tx with yParity := yParity, r := r, s := s } = signingHash7702 tx := rfl
 
-/-! ## The parity of a typed transaction -/
+/-! ## The parity of a typed transaction
+
+A typed transaction carries its recovery id as a parity, which must be 0 or 1.
+-/
 
 /-- A parity is accepted exactly when it is the recovery id itself.
 

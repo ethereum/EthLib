@@ -8,17 +8,9 @@ import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 /-!
 # Proofs: a transaction aborts only with an error of the state
 
-A transaction that creates encodes its sender and nonce to find the address of the new account.
+Before Hegotá, a transaction aborts only with an error of the state.
 
-The inclusion check keeps that nonce below `2^64 - 1`, so the encoding succeeds.
-
-Let every nonce of its block be at most `2^64 - 1`.
-
-Its message then aborts only with an error of the state.
-
-From Hegotá on, a transaction aborts because its fork is not yet specified.
-
-So before Hegotá, such a transaction aborts only with an error of the state.
+Every nonce of its block must be at most `2^64 - 1`.
 -/
 
 @[expose] public section
@@ -138,6 +130,7 @@ private theorem env_prepareFirstFrame {chainId : Nat} {message : Message fork}
 The numbers that its environment pushes as words must fit them. -/
 theorem processMessageCall_eq_error {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
+    -- Every nonce of the state is at most `2^64 - 1`.
     {paid : Std.ExtTreeSet Base.Address} {e : EvmError} (hfit : state.NoncesFit)
     (hwords : WordsFit message.blockEnv message.txEnv)
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
@@ -186,6 +179,9 @@ private theorem runTransaction_eq_error {env : BlockEnvironment fork} {block : B
   · unfold messageTarget at h
     split at h
     · cases h
+    -- A transaction that creates encodes its sender and nonce to find the address of its account.
+    --
+    -- That nonce is below `2^64 - 1`, so the encoding succeeds.
     · obtain ⟨address, ha⟩ := createAddress_ok included.sender
         (Nat.lt_trans hsender (by decide))
       rw [ha] at h
@@ -253,6 +249,7 @@ theorem processTransaction_eq_error {env : BlockEnvironment fork} {block : Block
       tx.nonce.toNat = ((TransactionState.ofBlock block).getAccount included.sender).nonce := by
     obtain ⟨-, hv, -, -, -, -, -, -, hn, -⟩ := checkInclusion_ok hcheck
     exact ⟨hv, hn⟩
+  -- The inclusion check keeps the nonce of the sender below `2^64 - 1`.
   have hsender : ((TransactionState.ofBlock block).getAccount included.sender).nonce <
       MAX_NONCE := by
     rw [← hnonce]
@@ -263,6 +260,7 @@ theorem processTransaction_eq_error {env : BlockEnvironment fork} {block : Block
     rw [hgas]
     refine Nat.lt_of_le_of_lt (effectiveGasPrice_le_maxFeePerGas hfee) ?_
     cases tx <;> exact BitVec.isLt _
+  -- From Hegotá on, a transaction aborts because its fork is not yet specified.
   have hhegota : ¬.hegota ≤ fork := Nat.not_le_of_lt before
   rw [processTransaction_unfold] at h
   simp only [hhegota, ↓reduceIte] at h

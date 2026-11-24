@@ -6,23 +6,7 @@ public import EthLib.Execution.Proofs.Transactions.StateGas
 /-!
 # Proofs: the gas left of a transaction from Glamsterdam is at most its gas limit
 
-A refill of state gas can raise what a frame holds above what it started with.
-
-Each refill of a run still follows a charge of the same transaction.
-
-The fresh slots of the accounts with a nonce or code count those charges.
-
-A transaction with no write has none, and its authorizations write no storage.
-
-The first frame starts with a meter whose net state gas is not negative.
-
-Its run pays state gas for each slot that it makes fresh.
-
-So the net state gas of the message is at least zero.
-
-Its gas left and its reservoir left are then at most the gas limit less the intrinsic gas.
-
-So the gas used before the refund, the gas limit less both, never floors at zero.
+The net state gas of the message is at least zero, so the gas left fits in the gas limit.
 
 Source: [EIP-8037][eip8037], its reservoir model and its accounting for halts and reverts.
 
@@ -247,6 +231,14 @@ theorem processMessageCall_stateGasUsed_nonneg
   have hfloor : 0 ≤ min first.meter.stateGasUsed first.meter.restore.stateGasUsed := by
     simp only [StateGasMeter.stateGasUsed, StateGasMeter.restore]
     omega
+  -- A refill of state gas can raise what a frame holds above what it started with.
+  --
+  -- Each refill of a run still follows a charge of the same transaction.
+  --
+  -- The fresh slots of the accounts with a nonce or code count those charges.
+  --
+  -- A transaction with no write has none, and its authorizations write no storage.
+  --
   -- The state of the first frame counts no slot.
   obtain ⟨hslots, hcur, hcreate, hcall⟩ := prepareFirstFrame_slots hfirst
   have hzero : (nonceOrCodeFreshSlots first.state).card = 0 := by
@@ -268,6 +260,7 @@ theorem processMessageCall_stateGasUsed_nonneg
         (((nonceOrCodeFreshSlots evm.state).card : Int) - ((0 : Nat) : Int)) :=
       Int.mul_nonneg (Int.natCast_nonneg _) (by omega)
     omega
+  -- Its run pays state gas for each slot that it makes fresh.
   split at h
   · -- A creation runs at an address with no nonce or code.
     rename_i htgt

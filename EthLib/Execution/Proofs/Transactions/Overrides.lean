@@ -6,25 +6,7 @@ public import EthLib.Execution.Evm.Call.MessageCall
 /-!
 # Proofs: what the simulation overrides change
 
-By default, a call runs the precompile at the address of its code.
-
-A known sender that the signature names changes the check only by skipping the rule on its code.
-
-That rule says the sender has no code, or from Pectra only a delegation indicator.
-
-So a sender that the signature names, and that passes that rule, gives the same check.
-
-Without a price that a simulation sets, the excess blob gas gives the base fee per blob gas.
-
-Without the gas caps lifted, the gas of a transaction keeps the caps of Glamsterdam.
-
-With the nonce check skipped, a sender at the nonce limit still fails.
-
-Lifting them makes all the gas past the intrinsic gas execution gas.
-
-Unless a simulation lowers its base fee, a transaction pays at the base fee of its block.
-
-Once it does, a transaction with a fee cap of 0 pays at a base fee of 0.
+What the checks and the run of a transaction give with each override of a simulation, and without.
 -/
 
 @[expose] public section
@@ -50,6 +32,7 @@ theorem precompileAddress_of_default {fork : Fork} {message : Message fork}
 -/
 theorem checkSender_unsigned {fork : Fork} {state : TransactionState} {sender : Address}
     {tx : Transaction}
+    -- The rule on its code: the sender has no code, or from Pectra only a delegation indicator.
     (hCode : ∃ code, state.getCode (state.getAccount sender).codeHash = .ok code ∧
       ((state.getAccount sender).codeHash = State.EMPTY_CODE_HASH ∨
         (fork ≥ .pectra ∧ Evm.isValidDelegation code = true))) :
@@ -75,11 +58,13 @@ theorem checkInclusion_of_knownSender {fork : Fork} {chainId : UInt64}
     {env : BlockEnvironment fork} {used : BlockGas} {state : TransactionState}
     {tx : Transaction} {sender : Address} (hChain : checkChainId fork chainId tx = .ok ())
     (hSender : recoverSender fork tx = .ok sender)
+    -- The rule on its code: the sender has no code, or from Pectra only a delegation indicator.
     (hCode : ∃ code, state.getCode (state.getAccount sender).codeHash = .ok code ∧
       ((state.getAccount sender).codeHash = State.EMPTY_CODE_HASH ∨
         (fork ≥ .pectra ∧ Evm.isValidDelegation code = true))) :
     checkInclusion chainId env used state tx (some sender) =
       checkInclusion chainId env used state tx := by
+  -- A known sender changes the check only by skipping the rule on its code.
   unfold checkInclusion
   by_cases hg : fork ≥ .glamsterdam <;>
     simp [hg, bind, Except.bind, pure, Except.pure, hChain, hSender, Except.mapError,

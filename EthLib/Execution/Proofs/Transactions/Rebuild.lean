@@ -12,29 +12,7 @@ A transaction buys its gas, applies its authorizations, runs its message and set
 
 Each of these keeps the rebuild property of the state on its block.
 
-An authorization sets the code of its authority and then raises its nonce, by [EIP-7702][eip7702].
-
-From Paris, setting the code deletes an account that it leaves empty, with its storage.
-
-That can happen only to an account with nonce 0 and balance 0, whose code is empty or a delegation.
-
-An empty account holds no storage, and no account with nonce 0 holds a delegation.
-
-So setting the code wipes no nonzero word.
-
-At the end, the transaction deletes the accounts that destroyed themselves, by [EIP-6780][eip6780].
-
-Each was created in the same transaction.
-
-Each held no storage in the block, so their deletion wipes no nonzero word either.
-
-From Paris, its message touches no account, so the transaction deletes no other account.
-
-The deletion keeps less than the rebuild property, since an account it deletes may lose its balance.
-
-It keeps the block, each code under its hash, and no nonzero word at an empty or wiped account.
-
-It also keeps every account with nonce 0 off delegations.
+Sources: [EIP-7702][eip7702] and [EIP-6780][eip6780].
 
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
 [eip6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
@@ -182,8 +160,12 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
       · have hn := congrArg Account.nonce (Except.ok.inj hf)
         simp [EMPTY_ACCOUNT] at hn
     rw [hbump.1, hbump.2]
+    -- From Paris, setting the code deletes an account that it leaves empty, with its storage.
     rcases storage_setCode hcode with hs | ⟨he, hs⟩
     · exact .inl hs
+    -- That can happen only to an account with nonce 0 and balance 0.
+    --
+    -- Its code is then empty or a delegation.
     · exact .inr ⟨eq_empty_of_setCodeHash hn0 hc0 he, hs⟩
   have hstore' : (bumped.storageWrites = tx.storageWrites ∧
         bumped.storageClears = tx.storageClears) ∨
@@ -206,6 +188,9 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
     · exact valid.clears other (hc ▸ hmem) key
     · rw [hc, Std.ExtTreeSet.mem_insert, Std.compare_eq_iff_eq] at hmem
       rcases hmem with rfl | hmem
+      -- An empty account holds no storage.
+      --
+      -- So setting the code wipes no nonzero word.
       · exact valid.blockStorage_of_empty hempty key
       · exact valid.clears other hmem key
   · intro other code hn hc hv
@@ -252,6 +237,7 @@ private theorem not_hasNonceOrCode_of_authorityAccepts {block : BlockState}
         rfl
       subst hempty
       exact hc hhash.symm
+    -- No account with nonce 0 holds a delegation.
     · exact valid.delegations authority code hn0 hc hdel hhash
 
 /-- One authorization keeps the rebuild property, lowers no nonce and keeps each nonce or code. -/
@@ -272,6 +258,7 @@ private theorem applyAuthorization_rebuildState {block : BlockState} {chainId : 
       valid.of_sameWrites (SameWrites.recordAccountRead _ _) rfl rfl
     have krec : KeepsNonceOrCode done.state (done.state.recordAccountRead authority) :=
       (SameWrites.recordAccountRead _ _).keepsNonceOrCode rfl
+    -- The authorization sets the code of its authority and then raises its nonce, by EIP-7702.
     by_cases hn : 1 ≤ ((done.state.recordAccountRead authority).getAccount authority).nonce
     · obtain ⟨coded, hcode, h2⟩ := bind_ok_iff.mp hdelegate
       obtain ⟨bumped, hnonce, h3⟩ := bind_ok_iff.mp h2
@@ -579,12 +566,22 @@ theorem deleteAccounts_rebuildEnd {block : BlockState}
     (hcreated : ∀ address ∈ output.accountsToDelete, address ∈ state.createdAccounts)
     (htouched : ∀ address, address ∉ output.touchedAccounts)
     (h : deleteAccounts fork state output = .ok state') :
+    -- This is less than the rebuild property, since an account it deletes may lose its balance.
+    --
+    -- It keeps the block and each code under its hash.
+    --
+    -- An empty or wiped account still holds no nonzero word.
+    --
+    -- It also keeps every account with nonce 0 off delegations.
     RebuildEnd block state' := by
   unfold deleteAccounts at h
   obtain ⟨deleted, hdeleted, h⟩ := bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
   rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at hdeleted
+  -- Each account to delete held no storage in the block.
+  --
+  -- So its deletion wipes no nonzero word.
   have hblock : ∀ address ∈ output.accountsToDelete.toList, ∀ key,
       (TransactionState.ofBlock block).getStorage address key = 0 :=
     fun address hmem => valid.created address (hcreated address (Std.ExtTreeSet.mem_toList.mp hmem))
@@ -625,6 +622,7 @@ private theorem runTransaction_rebuildEnd [LawfulGasMeter Meter] (hfork : .dencu
     RebuildEnd block output.state := by
   obtain ⟨target, bought, message, out, settled, hTarget, hBought, hMessage, hOutput, -,
     hSettle, hDeleted⟩ := runTransaction_eq_ok h
+  -- Buying the gas keeps the rebuild property of the state on its block.
   obtain ⟨vb, -, hnonce⟩ := buyGas_rebuildState (RebuildState.ofBlock valid delegations) hBought
   have hcaller : HasNonceOrCode bought message.caller := by
     rw [caller_transactionMessage hMessage]
@@ -637,15 +635,23 @@ private theorem runTransaction_rebuildEnd [LawfulGasMeter Meter] (hfork : .dencu
     unfold messageTarget at hTarget
     rw [ht] at hTarget
     exact (Except.ok.inj hTarget).symm
+  -- So do its authorizations and its message.
   have vout := processMessageCall_rebuildState (Nat.le_trans (by decide) hfork)
     (message := { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir })
     vb hcaller htarget hOutput
+  -- So does the settlement of the gas.
   obtain ⟨vs, -⟩ := settleGas_rebuildState (Nat.le_trans (by decide) hfork) vout hSettle
   refine deleteAccounts_rebuildEnd vs (fun address hmem => ?_) (fun address hmem => ?_)
     hDeleted
+  -- At the end, the transaction deletes the accounts that destroyed themselves, by EIP-6780.
+  --
+  -- Each was created in the same transaction.
   · rw [createdAccounts_settleGas hSettle]
     exact accountsToDelete_processMessageCall hfork hOutput
       (fun _ hm => by simp at hm) address hmem
+  -- From Paris, the message touches no account.
+  --
+  -- So the transaction deletes no other account.
   · have hstart := touchedAccounts_processMessageCall (Nat.le_trans (by decide) hfork) hOutput
       address hmem
     simp at hstart

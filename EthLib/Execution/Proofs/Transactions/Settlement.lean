@@ -7,47 +7,9 @@ public import EthLib.Execution.Transactions.Settlement
 /-!
 # Proofs: the settlement of the gas of a transaction
 
-A transaction whose gas limit covers its least gas limit never uses more gas than that limit.
+The refund, the gas used, the price per gas and the payments of a transaction.
 
-From Pectra, it uses at least the call data floor.
-
-The refund is at most half of the gas used, and from London at most a fifth.
-
-The price per gas of a transaction with a maximum fee never exceeds that maximum fee.
-
-The wei of the gas limit split exactly into the refund, the priority fee and the burned fee.
-
-Before London the base fee is 0, so nothing is burned.
-
-From Spurious Dragon to Paris, a fee of 0 creates no beneficiary and deletes an empty one.
-
-From Glamsterdam, the execution gas and the reservoir split the gas past the intrinsic gas.
-
-The execution gas is at most `2^24` minus the intrinsic gas.
-
-The reservoir is the gas limit past `2^24`.
-
-The execution gas that a block counts for a transaction is at least the call data floor.
-
-It is also at least the gas used before the refund, minus the state gas.
-
-So it is at least the gas that the sender pays, minus the state gas.
-
-Before Glamsterdam, a block counts the gas that the sender pays.
-
-So the gas used in the header is the sum of the gas of the transactions.
-
-Crediting an amount below `2^256` creates that ether at the address.
-
-Crediting at least `2^256` fails as an overflow of the balance.
-
-Settling the gas reports the gas used that the settlement counts.
-
-With no rule lifted, a transaction pays at the base fee of its block.
-
-Buying the gas takes exactly the fee from the sender and adds one to its nonce.
-
-It fails if the sender does not hold the fee.
+The gas that a block counts for it, and the purchase of its gas.
 -/
 
 @[expose] public section
@@ -144,7 +106,7 @@ theorem le_effectiveGasPrice {baseFee : Nat} {tx : Transaction}
 
 /-! ## The payments -/
 
-/-- The wei of the gas limit split into the refund, the priority fee and the burned fee.
+/-- The wei of the gas limit split exactly into the refund, the priority fee and the burned fee.
 
 The gas limit must cover the least gas limit, and the price per gas must cover the base fee. -/
 theorem settlement_conserves {fork : Fork} {sender : Address} {tx : Transaction} {baseFee : Nat}

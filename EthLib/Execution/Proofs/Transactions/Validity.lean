@@ -6,29 +6,7 @@ public import EthLib.Execution.Transactions.Validity
 /-!
 # Proofs: the intrinsic gas and the rules of a transaction
 
-The intrinsic gas is at least 12000 at every fork, and 21000 before Glamsterdam.
-
-Before Glamsterdam, it does not depend on the sender.
-
-The price of call data and of an access list adds up over concatenation, so it only grows.
-
-A transaction that passes the rules has a gas limit that covers its least gas limit.
-
-Its nonce is below `2^64 - 1`, and from Fusaka to BPO5 its gas limit is at most `2^24`.
-
-From Shapella the init code of a creation has at most the size that the fork allows.
-
-From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at most `2^24`.
-
-A transaction passes the rules exactly when it meets these bounds and its fees are not inverted.
-
-Its fees are inverted when its priority fee per gas is above its maximum fee per gas.
-
-From Glamsterdam the rules also check its blobs and its authorizations.
-
-Before Glamsterdam the rules give the same result for every sender.
-
-Exact conditions also state when the chain check, the contents check and the whole check pass.
+Bounds on the intrinsic gas, and exact conditions for a transaction to pass each of its rules.
 -/
 
 @[expose] public section
@@ -141,32 +119,30 @@ theorem calldataFloor_le_minimumGas {fork : Fork} (hFork : fork ≥ .pectra) (se
 /-! ## A valid transaction -/
 
 /-- A transaction passes the type, gas, nonce and fee rules exactly when it satisfies each of them.
-
-It then returns its intrinsic gas.
-
-Its gas limit covers the least gas limit of the fork, and its nonce is below `2^64 - 1`.
-
-From Shapella its init code has at most the size that the fork allows.
-
-From Fusaka to BPO5 its gas limit is at most `2^24`.
-
-From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at most `2^24`.
-
-From Glamsterdam its blobs and its authorizations pass their rules.
-
-Its priority fee per gas is at most its maximum fee per gas.
-
-Its type exists at the fork. -/
+-/
 theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Transaction}
     {gas : Nat} :
     validateTransaction fork sender tx = .ok gas ↔
+      -- It then returns its intrinsic gas.
+      --
+      -- Its gas limit covers the least gas limit of the fork.
       gas = intrinsicGas fork sender tx ∧ minimumGas fork sender tx ≤ tx.gas.toNat ∧
+        -- Its nonce is below `2^64 - 1`.
         tx.nonce.toNat < 2 ^ 64 - 1 ∧
+        -- From Shapella its init code has at most the size that the fork allows.
         (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork) ∧
+        -- From Fusaka to BPO5 its gas limit is at most `2^24`.
         (fork ≥ .fusaka → fork < .glamsterdam → tx.gas.toNat ≤ TX_MAX_GAS_LIMIT) ∧
         (fork ≥ .glamsterdam →
+          -- From Glamsterdam its gas limit is at most `2^32 - 1`.
+          --
+          -- Its least gas limit is then at most `2^24`.
           tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT ∧
+            -- From Glamsterdam its blobs and its authorizations pass their rules.
             checkContents fork tx = .ok ()) ∧
+        -- Its fees are not inverted: its priority fee per gas is at most its maximum fee per gas.
+        --
+        -- Its type exists at the fork.
         validateTransaction.feesInverted tx = false ∧ tx.fork ≤ fork := by
   unfold validateTransaction
   by_cases hg : fork ≥ .glamsterdam
@@ -196,24 +172,21 @@ theorem validateTransaction_sender_of_lt_glamsterdam {fork : Fork} (h : fork < .
   rw [minimumGas_sender_of_lt_glamsterdam h sender sender' tx,
     intrinsicGas_sender_of_lt_glamsterdam h sender sender' tx]
 
-/-- What a transaction that passes the gas, nonce and fee rules satisfies.
-
-It returns its intrinsic gas, and its gas limit covers the least gas limit of the fork.
-
-Its nonce is below `2^64 - 1`.
-
-From Shapella its init code has at most the size that the fork allows.
-
-From Fusaka to BPO5 its gas limit is at most `2^24`.
-
-From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at most `2^24`. -/
+/-- What a transaction that passes the gas, nonce and fee rules satisfies. -/
 theorem validateTransaction_ok {fork : Fork} {sender : Address} {tx : Transaction} {gas : Nat}
     (h : validateTransaction fork sender tx = .ok gas) :
+    -- It returns its intrinsic gas, and its gas limit covers the least gas limit of the fork.
     gas = intrinsicGas fork sender tx ∧ minimumGas fork sender tx ≤ tx.gas.toNat ∧
+      -- Its nonce is below `2^64 - 1`.
       tx.nonce.toNat < 2 ^ 64 - 1 ∧
+      -- From Shapella its init code has at most the size that the fork allows.
       (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork) ∧
+      -- From Fusaka to BPO5 its gas limit is at most `2^24`.
       (fork ≥ .fusaka → fork < .glamsterdam → tx.gas.toNat ≤ TX_MAX_GAS_LIMIT) ∧
       (fork ≥ .glamsterdam →
+        -- From Glamsterdam its gas limit is at most `2^32 - 1`.
+        --
+        -- Its least gas limit is then at most `2^24`.
         tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT) := by
   obtain ⟨hGas, hMin, hNonce, hInit, hCap, hAfter, -⟩ := validateTransaction_eq_ok_iff.mp h
   exact ⟨hGas, hMin, hNonce, hInit, hCap, fun hg => ⟨(hAfter hg).1, (hAfter hg).2.1⟩⟩
@@ -286,18 +259,16 @@ theorem checkChainId_eq_ok_iff {fork : Fork} {chainId : UInt64} {tx : Transactio
 
 /-- The blobs and authorizations of a transaction pass exactly when three rules hold.
 
-A blob transaction has at least one blob, and at most 6 from Fusaka.
-
-Each of its versioned hashes starts with the KZG version byte.
-
-A set code transaction has at least one authorization.
-
 Every other transaction passes. -/
 theorem checkContents_eq_ok_iff {fork : Fork} {tx : Transaction} :
     checkContents fork tx = .ok () ↔
+      -- A blob transaction has at least one blob.
       (∀ b, tx = .blob b → b.blobVersionedHashes ≠ [] ∧
+        -- It has at most 6 blobs from Fusaka.
         (fork ≥ .fusaka → b.blobVersionedHashes.length ≤ MAX_BLOBS_PER_TRANSACTION) ∧
+        -- Each of its versioned hashes starts with the KZG version byte.
         ∀ h ∈ b.blobVersionedHashes, h[0] = Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) ∧
+      -- A set code transaction has at least one authorization.
       ∀ a, tx = .setCode a → a.authorizations ≠ [] := by
   cases tx with
   | blob b =>
