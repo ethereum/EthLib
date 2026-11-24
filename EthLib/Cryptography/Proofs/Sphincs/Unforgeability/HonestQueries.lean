@@ -14,12 +14,6 @@ public import EthLib.Cryptography.Proofs.Sphincs.Sign
 
 Key generation and signing under a map of monads, and the inputs they never hash.
 
-A map of monads that keeps `pure` and `bind` sends key generation and signing to themselves.
-
-The mapped algorithms take the mapped hash and the mapped secrets.
-
-The random-oracle proof uses this to move the algorithms between oracle worlds.
-
 The honest algorithms make five kinds of call.
 
 - The key expansion, of `"leanSPHINCS" | SK.seed | domain`, 44 bytes.
@@ -29,14 +23,6 @@ The honest algorithms make five kinds of call.
 - A hash at an address of another type, with a payload of at least 16 bytes.
 
 So a query that no call of the other four kinds makes is made only through a `PRF` call.
-
-The encodings are a kind of their own because a key's counter search queries them.
-
-A hypothesis on each key's encodings then shows which calls avoid another key's search inputs.
-
-Every addressed input has the 48 bytes of `PK.seed | ADRS` before a payload of at least 16.
-
-So in the game, the honest algorithms query a 44-byte input only to expand `SK.seed`.
 -/
 
 @[expose] public section
@@ -46,7 +32,12 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability
 open EthLib.Cryptography.Sphincs.Constants
 open OracleSpec OracleComp
 
-/-! ## Key generation and signing under a map of monads -/
+/-! ## Key generation and signing under a map of monads
+
+A map of monads that keeps `pure` and `bind` sends key generation and signing to themselves.
+
+The random-oracle proof uses this to move the algorithms between oracle worlds.
+-/
 
 section Map
 
@@ -56,7 +47,9 @@ variable {m n : Type → Type} [Monad m] [Monad n]
   (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
   (H : ByteArray → m (Vector UInt8 32)) (prf : Prf m)
 
-/-- The source of secrets mapped one call at a time. -/
+/-- The source of secrets mapped one call at a time.
+
+The mapped algorithms take the mapped hash and these mapped secrets. -/
 abbrev mapPrf : Prf n := fun adrs => φ (prf adrs)
 
 include map_pure map_bind
@@ -484,19 +477,13 @@ theorem size_digestInput (rho : Randomizer) (pkSeed : PkSeed) (pkRoot : Digest) 
 
 A predicate `p` on queries that no allowed call satisfies is never queried.
 
-An allowed call at an address is one of three kinds.
-
-- A derivation, at a derivation address.
-- An encoding of a key, with a payload of 20 bytes.
-- A hash at an address of another type, with a payload of at least 16 bytes.
-
-The encodings are asked of each key apart, since a key's counter search queries its own.
-
-The calls without an address are asked of the lemmas that make them. -/
+The encodings are asked of each key apart, since a key's counter search queries its own. -/
 
 /-- A key's encodings query `p` nowhere.
 
-This holds for every `PK.seed` and every payload of 20 bytes, a digest and a counter. -/
+This holds for every `PK.seed` and every payload of 20 bytes, a digest and a counter.
+
+A hypothesis on each key's encodings shows which calls avoid another key's search inputs. -/
 def EncodingAvoids {ι : Type} {spec : OracleSpec ι} (p : spec.Domain → Prop) [DecidablePred p]
     (H : ByteArray → OracleComp spec (Vector UInt8 32)) (key : OtsKey) : Prop :=
   ∀ pkSeed payload, payload.size = N + COUNTER_LEN →
@@ -506,6 +493,13 @@ section Avoid
 
 variable {ι : Type} {spec : OracleSpec ι} {p : spec.Domain → Prop} [DecidablePred p]
 
+-- An allowed call at an address is one of three kinds.
+--
+-- - A derivation, at a derivation address.
+-- - An encoding of a key, with a payload of 20 bytes.
+-- - A hash at an address of another type, with a payload of at least 16 bytes.
+--
+-- The calls without an address are asked of the lemmas that make them.
 variable (H : ByteArray → OracleComp spec (Vector UInt8 32)) (prf : Prf (OracleComp spec))
   (hH : ∀ pkSeed A payload, ¬IsDerivationAddress A → (∀ key, A ≠ adrsEnc key) →
     16 ≤ payload.size → IsQueryBoundP (H (thInput pkSeed A payload)) p 0)
@@ -909,7 +903,12 @@ theorem signWith_isQueryBoundP {k : Nat} (sk : SecretKey) (msg : Message)
 
 end Expansion
 
-/-! ## In the game -/
+/-! ## In the game
+
+Every addressed input has the 48 bytes of `PK.seed | ADRS` before a payload of at least 16.
+
+So in the game, the honest algorithms query a 44-byte input only to expand `SK.seed`.
+-/
 
 /-- A query of the game's oracle at an input of 44 bytes, the length of the key expansion's. -/
 def IsSeedLengthQuery : HashSig.OracleWorld.Domain → Prop

@@ -11,19 +11,9 @@ A signature signs on three layers, and each layer's key searches for a counter.
 
 Signing fails when any search finds none.
 
-A key's search hashes at the key's encoding address, with a 20-byte payload.
+Take a cache that holds no trial input of any key.
 
-So every trial input has `48 + 20 = 68` bytes.
-
-Before a search, the signer hashes no trial input of that layer.
-
-- Its addressed calls are derivations, encodings on lower layers and hashes of other address types.
-- Its calls without an address have other lengths.
-  The key expansion hashes 44 bytes, `PRF_msg` 93 and `H_msg` 84.
-
-So a cache that holds no trial input of any key keeps none of a layer until its search starts.
-
-Each search then fails with probability at most `exp(-2^18)`, and signing at most thrice that.
+From it, each search fails with probability at most `exp(-2^18)`, and signing at most thrice that.
 -/
 
 @[expose] public section
@@ -33,7 +23,12 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability
 open EthLib.Cryptography.Sphincs.Constants
 open OracleSpec OracleComp ENNReal
 
-/-! ## Trial inputs -/
+/-! ## Trial inputs
+
+A key's search hashes at the key's encoding address, with a 20-byte payload.
+
+So every trial input has `48 + 20 = 68` bytes.
+-/
 
 /-- The payload of a search trial: the 16-byte digest the key signs, then the 4-byte counter.
 
@@ -282,15 +277,21 @@ The hash is a lazily sampled random oracle, and signing starts from any cache.
 
 The cache must hold no trial input of any key.
 
-A trial input is at a key's encoding address, with a 20-byte payload: a digest and a counter.
-
-Each layer's search then fails with probability at most `exp(-2^18)`. -/
+A trial input is at a key's encoding address, with a 20-byte payload: a digest and a counter. -/
 theorem prEvent_signWith_error_le (sk : SecretKey) (msg : Message)
     (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery fun _ => True) cache) :
     Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
       (signWith H sk msg)).run' cache}[z.isOk = false]
       ≤ 3 * ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
+  -- Before a search, the signer hashes no trial input of that layer:
+  --
+  -- - Its addressed calls are derivations and encodings on lower layers.
+  --   Its other addressed calls hash at other address types.
+  -- - Its calls without an address have other lengths.
+  --   The key expansion hashes 44 bytes, `PRF_msg` 93 and `H_msg` 84.
+  --
+  -- So a cache that holds no trial input of any key keeps none of a layer until its search starts.
   unfold signWith
   -- The key expansion hashes 44 bytes, too short to be a trial input.
   refine prEvent_run'_romImpl_bind_le _ _ _ _ (fun z hz =>
@@ -305,6 +306,7 @@ theorem prEvent_signWith_error_le (sk : SecretKey) (msg : Message)
     cache_eq_none_of_mem_support_run_romImpl (prfMsg_isQueryBoundP_zero H _ _ _
       (H_isQueryBoundP_trial_of_size (by rw [size_randomizerInput]; decide))) hc hz)
     fun rho c hc => ?_
+  -- Each layer's search then fails with probability at most `exp(-2^18)`.
   exact prEvent_signDerived_error_le _ (fun S => prf_isQueryBoundP_trial S key.pkSeed sk.seed)
     key.pkSeed top rho msg c hc
 

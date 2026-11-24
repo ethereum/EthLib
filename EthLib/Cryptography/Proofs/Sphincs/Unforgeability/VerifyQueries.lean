@@ -13,27 +13,7 @@ public import EthLib.Cryptography.Proofs.HashSig.Calls
 
 Verification makes at most 491 hash calls, whatever the key, the message and the signature.
 
-- The digest: 2 calls.
-- FORS: a leaf and 10 nodes in each of the 24 trees, then `T_k` over the roots, 265 calls.
-- Each of the 3 layers: an encoding, 64 chain steps and a leaf, 66 calls.
-- The paths: one call per height, `8 + 8 + 10 = 26` calls.
-
-That is `2 + 265 + 3 * 66 + 26 = 491`.
-
-A layer walks `3 * 64 - 128 = 64` chain steps, because the digits of a codeword sum to 128.
-
-Verification stops at the first layer whose encoding is not a codeword, so it can make fewer calls.
-
-A signature that verifies passes every layer, so it takes exactly 491 calls.
-
-The count holds for every hash that makes at most one oracle call, and the game's `H` is one.
-
 Verification also reads nothing but the answers to its own calls.
-
-- Let a fixed function answer every call.
-  Verification then computes EthLib's verification, with that function as its hash.
-- Take two functions that agree on the inputs that verification hashes under the first.
-  They give the same verdict.
 -/
 
 @[expose] public section
@@ -316,7 +296,14 @@ theorem layerRoot_isTotalQueryBound (pkSeed : PkSeed) (layer : Layer) (idx : Nat
       ⟨0, (OtsKey.ofIndex layer idx).leaf⟩ leaf
     rwa [Vector.length_toList] at this
 
-/-- The most hash calls verification makes: the digest, FORS, three layers and their paths. -/
+/-- The most hash calls verification makes: the digest, FORS, three layers and their paths.
+
+- The digest: 2 calls.
+- FORS: a leaf and 10 nodes in each of the 24 trees, then `T_k` over the roots, 265 calls.
+- Each of the 3 layers: an encoding, 64 chain steps and a leaf, 66 calls.
+- The paths: one call per height, `8 + 8 + 10 = 26` calls.
+
+That is `2 + 265 + 3 * 66 + 26 = 491`. -/
 def verifyCalls : Nat :=
   DIGEST_CALLS + (FORS_TREES * (1 + FORS_HEIGHT) + 1) + LAYERS * (CHAIN_HASHES + 2) + HEIGHT
 
@@ -331,6 +318,9 @@ theorem verifyWith_isTotalQueryBound (pk : PublicKey) (msg : Message) (sig : Sig
     (hMsg_isTotalQueryBound H hH _ _ _ _) fun _ =>
     isTotalQueryBound_bind (forsRecover_isTotalQueryBound H hH _ _ _ _) fun _ =>
     isTotalQueryBound_bind (layerRoot_isTotalQueryBound H hH _ _ _ _ _) fun r₀ => ?_).mono ?_
+  -- Verification stops at the first layer whose encoding is not a codeword.
+  --
+  -- So it can make fewer calls.
   · cases r₀ with
     | none => exact isQueryBound_pure _ _ _ _
     | some r₀ =>

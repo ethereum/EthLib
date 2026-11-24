@@ -8,12 +8,6 @@ public import EthLib.Cryptography.Proofs.Wots.TargetSum
 # Proofs: the WOTS+C target-sum code
 
 What a codeword is, and what it guarantees.
-
-- Digit `i` of a digest is digit `63 - i` of its big-endian number in base 4, as `base_2b` reads it.
-- Every string of 64 digits from 0 to 3 is the digits of exactly one digest.
-- A codeword's 64 digits sum to the target `T = 128`.
-- Its digits determine the digest: no two digests share a codeword.
-- Two distinct codewords are incomparable: each has a digit below the other's.
 -/
 
 @[expose] public section
@@ -193,7 +187,7 @@ theorem digitSum_eq_sum (x : Codeword) : Internal.digitSum x = ∑ i : Fin V, (x
     rfl
   rw [Internal.digitSum, h1, h2, h3]
 
-/-- A codeword's digits sum to the target, so the verifier's step count is fixed. -/
+/-- A codeword's 64 digits sum to the target `T = 128`, so the verifier's step count is fixed. -/
 theorem sum_of_codeword (h : codeword? d = some x) : ∑ i : Fin V, (x[i] : Nat) = TARGET_SUM := by
   rw [← digitSum_eq_sum]
   exact (codeword?_eq_some h).2

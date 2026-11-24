@@ -9,22 +9,6 @@ public import EthLib.Cryptography.Proofs.Wots.TargetSum
 The code is every string of 64 digits, each from 0 to 3, summing to 128.
 
 Its size fixes how often one counter lands in the code.
-
-```text
-|C| = [z^128] (1 + z + z^2 + z^3)^64
-    = sum over b of (-1)^b * C(64, b) * C(128 - 4b + 63, 63)
-|C| / 2^128 = 2^-13.84...,  about one counter in 14,670
-```
-
-A digest is a codeword only through its digits, and no two digests share one.
-
-So at most `|C|` of the `2^128` digests are codewords.
-
-If digests were uniform, all `2^32` counters would fail with probability below `exp(-2^18)`.
-
-That bound on the number is proved here.
-
-In the random-oracle model, the search proofs derive that bound for the search itself.
 -/
 
 @[expose] public section
@@ -33,7 +17,12 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
-/-- The number of codewords. -/
+/-- The number of codewords.
+
+It is the coefficient of `z^128` in `(1 + z + z^2 + z^3)^64`.
+
+By inclusion-exclusion, it is the sum over `b` of `(-1)^b C(64, b) C(191 - 4b, 63)`.
+-/
 def CODE_SIZE : ℕ := 23195210617839120199658819909693679
 
 /-- The number of codewords, counted by the dynamic program over digit strings. -/
@@ -55,7 +44,11 @@ theorem inclusion_exclusion_code :
   simp only [Nat.choose_eq_descFactorial_div_factorial]
   decide +kernel
 
-/-- Codewords as the specification stores them: digit vectors summing to the target. -/
+/-- Codewords as the specification stores them: digit vectors summing to the target.
+
+A digest is a codeword only through its digits, and no two digests share one.
+
+So at most `|C|` of the `2^128` digests are codewords. -/
 theorem card_onTarget :
     Nat.card {x : Codeword // Internal.digitSum x = TARGET_SUM} = CODE_SIZE := by
   -- A vector is a function from positions to digits.
@@ -72,7 +65,9 @@ theorem card_onTarget :
       right_inv := fun y => by ext; simp }
   rw [Nat.card_congr e, Nat.card_eq_fintype_card, card_digitStrings_code]
 
-/-- One counter lands in the code with probability `2^-13.84`, between `2^-14` and `2^-13`. -/
+/-- One counter lands in the code with probability `2^-13.84`, between `2^-14` and `2^-13`.
+
+That is about one counter in 14,670. -/
 theorem code_probability :
     (1 : ℚ) / 2 ^ 14 ≤ (CODE_SIZE : ℚ) / 2 ^ 128 ∧ (CODE_SIZE : ℚ) / 2 ^ 128 ≤ 1 / 2 ^ 13 := by
   rw [CODE_SIZE]
@@ -83,6 +78,10 @@ theorem code_probability :
 ```text
     (1 - p)^(2^32) <= exp(-p)^(2^32) = exp(-2^32 p),   and  2^32 p >= 2^18
 ```
+
+This theorem bounds the number alone.
+
+In the random-oracle model, the search proofs derive that bound for the search itself.
 -/
 theorem all_counters_fail_probability :
     (1 - (CODE_SIZE : ℝ) / 2 ^ 128) ^ MAX_COUNTER_TRIALS ≤ Real.exp (-(2 ^ 18)) := by

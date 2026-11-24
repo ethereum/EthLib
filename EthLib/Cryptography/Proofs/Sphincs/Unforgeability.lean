@@ -13,38 +13,11 @@ Take an adversary whose experiment makes at most `q >= 1` hash calls.
 
 It forges a signature with probability at most `q / 2^127`.
 
-`q` counts every hash call of the experiment, the signer's and key generation's included.
+The bound is the model's theorem in `Security/`.
 
-The game runs EthLib's key generation, signing and verification.
+The bridge in `Unforgeability/Bridge/` carries it to EthLib.
 
-Their hash `H` is a query to the oracle.
-
-The security proof in `Security/` reasons over a model of the scheme with the same calls.
-
-The bridge in `Unforgeability/Bridge/` compares EthLib with it:
-
-- EthLib's bytes, addresses, keys and signatures are the model's.
-- Each hashing routine of EthLib is the model's, call for call or under every answer function.
-- An EthLib forgery is a model forgery of a translated adversary.
-- A signing request costs the model at most what it costs EthLib, so the budget `q` carries over.
-
-A second theorem charges only the adversary's own hash calls, and takes a bound on its requests.
-
-The scheme's calls then add a constant: 264193 for key generation and 491 for verification.
-
-Each signing request adds at most `470595 + 3 * 2^32`, when every counter search runs to its end.
-
-At the model's cap of 1,182,000,000 requests, the constant is about `2^63.7`.
-
-A third theorem charges each request its counter searches only up to `2^22` counters.
-
-The adversary is wrapped to stop once an answer shows a longer search.
-
-The request that shows it is charged all `3 * 2^32` counters.
-
-A longer search leaves `2^22` missed counters in the oracle's cache, which is unlikely.
-
-At `2^30` requests, the constant is about `2^53.6`.
+Two more theorems charge only the adversary's own hash calls, and take a bound on its requests.
 -/
 
 @[expose] public section
@@ -61,6 +34,19 @@ It forges with probability at most `q / 2^127`.
 
 `q` counts the calls of key generation and of every signing request too. -/
 theorem unforgeable : HasClassicalSecurityBits 127 := fun q hq adversary hbound =>
+  -- The game runs EthLib's key generation, signing and verification.
+  --
+  -- Their hash `H` is a query to the oracle.
+  --
+  -- The security proof in `Security/` reasons over a model of the scheme with the same calls.
+  --
+  -- The bridge in `Unforgeability/Bridge/` compares EthLib with it:
+  --
+  -- - EthLib's bytes, addresses, keys and signatures are the model's.
+  -- - Each hashing routine of EthLib is the model's, call for call or under every answer function.
+  -- - An EthLib forgery is a model forgery of a translated adversary.
+  -- - A signing request costs the model at most what it costs EthLib.
+  --   So the budget `q` carries over.
   (forgeAdvantage_le adversary).trans
     (SphincsSecurity.h26_layered q hq (translate adversary)
       (hasHashQueryBound_translate_self adversary q hbound))
@@ -71,8 +57,15 @@ Take an adversary with at most `q` hash calls of its own and `r` signing request
 
 It forges with probability at most `(q + C) / 2^127`, where `C` bounds the scheme's calls.
 
-At 1,182,000,000 requests, `C` is about `2^63.7`, so the bound is never below about `2^-63.3`. -/
+At the model's cap of 1,182,000,000 requests, `C` is about `2^63.7`.
+
+So the bound is never below about `2^-63.3`. -/
 theorem unforgeable_adversary : HasAdversarySecurityBits 127 := fun q r adversary hbound =>
+  -- The scheme's calls add a constant: 264193 for key generation and 491 for verification.
+  --
+  -- Each signing request adds at most `470595 + 3 * 2^32`.
+  --
+  -- That holds when every counter search runs to its end.
   unforgeable (q + schemeCalls r) (by unfold schemeCalls keyGenCalls; omega) adversary
     (hasHashQueryBound_of_adversary adversary q r hbound)
 
@@ -172,6 +165,12 @@ theorem unforgeable_capped : HasCappedSecurityBits 127 := by
   have hT : searchCap ≤ MAX_COUNTER_TRIALS := by unfold searchCap MAX_COUNTER_TRIALS; norm_num
   by_cases hN : q + schemeCalls r ≤ 2 ^ 200
   · -- Below `2^200` calls, the long searches add at most `1 / 2^127`.
+    --
+    -- The adversary is wrapped to stop once an answer shows a search longer than `2^22` counters.
+    --
+    -- The request that shows it is charged all `3 * 2^32` counters.
+    --
+    -- A longer search leaves `2^22` missed counters in the oracle's cache, which is unlikely.
     refine (forgeAdvantage_le_capped searchCap hT₁ hT q r adversary h).trans ?_
     refine (add_le_add le_rfl (longSearches_le _ hN)).trans ?_
     rw [ENNReal.div_add_div_same, Nat.cast_add (q + cappedCalls searchCap r) 1, Nat.cast_one]

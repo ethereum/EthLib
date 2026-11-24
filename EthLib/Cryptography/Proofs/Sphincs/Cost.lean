@@ -9,14 +9,6 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.VerifyQueries
 The calls are counted under a fixed answer function, as in the signing cost of the security proof.
 
 Each call of `H` makes exactly one query under that function, as the game's hash does.
-
-- Key generation makes exactly `264193` calls.
-- Signing makes at most `470595 + 3 * 2^32 = 12885372483` calls.
-- Verification makes at most `491` calls, and exactly `491` when it accepts.
-
-The counter search of a layer tries at most `2^32` counters, one call each.
-
-The signing bound charges each of the three searches all `2^32` counters.
 -/
 
 @[expose] public section
@@ -56,7 +48,9 @@ include hH
 theorem hashCalls_keyGenWith_eq (seed : Seed) : hashCalls f (keyGenWith H seed) = 264193 :=
   (Bridge.hashCalls_keyGenWith f H hH seed).trans keyGenCalls_eq
 
-/-- The counter search of a one-time signature makes at most `2^32` calls. -/
+/-- The counter search of a one-time signature makes at most `2^32` calls.
+
+It tries at most `2^32` counters, one call each. -/
 theorem hashCalls_findCounter_le (pkSeed : PkSeed) (key : OtsKey) (msg : Digest) :
     hashCalls f (Internal.findCounter H pkSeed key msg 0 MAX_COUNTER_TRIALS) ≤
       MAX_COUNTER_TRIALS := by
@@ -75,6 +69,8 @@ theorem hashCalls_signWith_le (sk : SecretKey) (msg : Message) :
   have hsecrets : ∀ adrs, hashCalls f (prf H key.pkSeed sk.seed adrs) = 1 :=
     hashCalls_prf f H hH _ _
   -- A layer makes at most its build, all counters and its chains.
+  --
+  -- So the signing bound charges each of the three searches all `2^32` counters.
   let bound : Layer → Nat := fun layer => buildCalls layer + MAX_COUNTER_TRIALS + (V + TARGET_SUM)
   have hlayer : ∀ layer, layerCalls f H (prf H key.pkSeed sk.seed) key.pkSeed idx layer ≤
       bound layer := by

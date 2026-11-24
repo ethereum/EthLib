@@ -8,13 +8,6 @@ public import EthLib.Base.Proofs.ByteOrder
 # Proofs: leanSPHINCS addresses
 
 Distinct call sites have distinct addresses.
-
-- A big-endian word of `k` bytes determines its value below `256^k`.
-- The 32 bytes of an address determine all six of its words.
-- The eight address types have the eight codes 0 to 7, so two address types never share an address.
-- Each address of a key determines its own arguments, the layer and the tree included.
-- A FORS address determines its instance, its height and its tree index.
-- A FORS tree index at height `z` determines its tree and its node, below `2^(10 - z)` nodes a tree.
 -/
 
 @[expose] public section
