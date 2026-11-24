@@ -143,15 +143,7 @@ private theorem slot_events_nil {u w : ForkedBeaconState preset}
     simp only [dvd, ↓reduceIte] at sameNat
     omega
 
-/-- Within one epoch, a key has no consolidation credit and no deposit credit.
-
-A block step records no consolidation, and a deposit of a block credits no balance.
-
-A slot step inside the epoch records no event.
-
-Each consolidation and deposit event of the run lies in a slot step that crosses an epoch.
-
-So the run has none. -/
+/-- Within one epoch, a key has no consolidation credit and no deposit credit. -/
 private theorem same_epoch_no_epoch_credits (v : ValidatorIndex) (high : ℕ)
     {c a : ForkedBeaconState preset}
     (r : Run config checks c a) (electra : .pectra ≤ c.fork) (early : a.fork < .glamsterdam)
@@ -161,6 +153,13 @@ private theorem same_epoch_no_epoch_credits (v : ValidatorIndex) (high : ℕ)
         v.toNat high r) = 0 ∧
       (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high r) = 0 :=
         by
+  -- A block step records no consolidation, and a deposit of a block credits no balance.
+  --
+  -- A slot step inside the epoch records no event.
+  --
+  -- Each consolidation and deposit event of the run lies in a slot step that crosses an epoch.
+  --
+  -- So the run has none.
   obtain ⟨events, replayed⟩ := r.balanceEvents_ok early high
   obtain ⟨deposits, consolidations⟩ := Internal.run_located r electra early high replayed
   -- a slot step of the run starts and ends in the epoch of the run, so it records no event
@@ -197,21 +196,19 @@ private theorem same_epoch_no_epoch_credits (v : ValidatorIndex) (high : ℕ)
       omega
     · simp [quiet u w ok es contained replayedEs] at inStep
 
-/-- A state that starts its epoch on a run from genesis is within the bands of hysteresis.
-
-The steps of the run before it are all in earlier epochs.
-
-So the last one is a slot step that crossed into the epoch of `b`.
-
-The epoch transition of that step sets the bands, and the upgrades of the slot keep them.
-
-A run with no step ends at genesis, which is a Phase 0 state, so it ends before Fulu. -/
+/-- A state that starts its epoch on a run from genesis is within the bands of hysteresis. -/
 private theorem hysteresis_at_epoch_start
     (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    -- The steps of the run before it are all in earlier epochs.
     (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       toB.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat) :
     Hysteresis b := by
+  -- The last step is then a slot step that crossed into the epoch of `b`.
+  --
+  -- The epoch transition of that step sets the bands, and the upgrades of the slot keep them.
+  --
+  -- A run with no step ends at genesis, which is a Phase 0 state, so it ends before Fulu.
   have crossed : ∀ {x : ForkedBeaconState preset} (run : Run config checks g x),
       x = ⟨fork, b⟩ → (∀ {u w : ForkedBeaconState preset} (st : Step config checks u w),
         run.Contains st → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat) →
@@ -241,31 +238,26 @@ private theorem hysteresis_at_epoch_start
         first
   exact crossed toB rfl earlier
 
-/-- A key charged at a step is in the registry at any state of the epoch that it started.
-
-The state `n` has the bands of hysteresis.
-
-A run leads from `n` to the step's start `a`, inside one epoch.
-
-There the key's balance is within the upward band of its effective balance.
-
-The effective balance stays to the charge.
-
-Over the rest of that epoch the balance rises at most by the key's block credits.
-
-The key is active at the charge step, so it is in the registry at `n`. -/
+/-- A key charged at a step is in the registry at any state of the epoch that it started. -/
 private theorem charge_start_at (h : Setting config checks g split fin pulled anc counted V)
+    -- A run leads from `n` to the step's start `a`, inside one epoch.
     (highC : ℕ) {n a b : ForkedBeaconState preset} (rest : Run config checks n a)
     (step : Step config checks a b) (i : ℕ) (inside : i < a.state.validators.data.size)
     (unset : ∀ w, a.state.validators.data[i]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH)
     (aFulu : .fusaka ≤ a.fork)
+    -- The state `n` has the bands of hysteresis.
     (same : getCurrentEpoch n.state = getCurrentEpoch a.state) (hyst : Hysteresis n.state)
     (endEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1)
     (charged : step.departureCharges.any (·.index == i) = true) :
+    -- The key is active at the charge step, so it is in the registry at `n`.
+    --
+    -- The effective balance stays to the charge.
     i < n.state.validators.data.size ∧ effectiveAt n i = effectiveAt a i ∧
+      -- At `n` the key's balance is within the upward band of its effective balance.
       min (actualBalanceAt n i) (PinTerms.capAt n i) ≤ effectiveAt n i + preset.upwardBand ∧
       (effectiveAt n i < PinTerms.capAt n i →
         actualBalanceAt n i ≤ effectiveAt n i + preset.upwardBand) ∧
+      -- Over the rest of that epoch the balance rises at most by the key's block credits.
       actualBalanceAt a i ≤ actualBalanceAt n i + Internal.netScan i highC rest +
         (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC rest) := by
   -- the key is active at the charge, so it is in the registry at the start of the epoch
@@ -309,21 +301,7 @@ private theorem charge_start_at (h : Setting config checks g split fin pulled an
   · exact (Nat.min_le_left _ _).trans (up lt)
   · exact (Nat.min_le_right _ _).trans (by omega)
 
-/-- The start-of-epoch half of the charge arm, for a charge after the split's epoch.
-
-The run to the charge crosses an epoch boundary, at the state `c`.
-
-There the key's balance is within the upward band of its effective balance.
-
-The effective balance stays to the charge.
-
-Over the rest of that epoch the balance rises at most by the key's block credits.
-
-The key is active at the charge step, so it is in the registry at `c`.
-
-The fork of `a` is before Gloas, since `post` runs on to C.
-
-The epoch of `a` is at most `highC + 1`, since `post` runs on to C. -/
+/-- The start-of-epoch half of the charge arm, for a charge after the split's epoch. -/
 private theorem charge_epoch_start (h : Setting config checks g split fin pulled anc counted V)
     (highC : ℕ) {y : ForkedBeaconState preset} (yFork : y.fork = fork)
     {a b : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ a)
@@ -333,14 +311,22 @@ private theorem charge_epoch_start (h : Setting config checks g split fin pulled
     (started : (getCurrentEpoch split).toNat < (getCurrentEpoch a.state).toNat)
     (endEpochC : (getCurrentEpoch y.state).toNat ≤ highC + 1)
     (charged : step.departureCharges.any (·.index == i) = true) :
+    -- The run to the charge crosses an epoch boundary, at the state `c`.
     ∃ (c : ForkedBeaconState preset) (before : Run config checks ⟨fork, split⟩ c)
+      -- The key is active at the charge step, so it is in the registry at `c`.
       (r : Run config checks c a), before.append r = pre ∧ i < c.state.validators.data.size ∧
+      -- The effective balance stays to the charge.
       getCurrentEpoch c.state = getCurrentEpoch a.state ∧ effectiveAt c i = effectiveAt a i ∧
+      -- At `c` the key's balance is within the upward band of its effective balance.
       min (actualBalanceAt c i) (PinTerms.capAt c i) ≤ effectiveAt c i + preset.upwardBand ∧
       (effectiveAt c i < PinTerms.capAt c i →
         actualBalanceAt c i ≤ effectiveAt c i + preset.upwardBand) ∧
+      -- Over the rest of that epoch the balance rises at most by the key's block credits.
       actualBalanceAt a i ≤ actualBalanceAt c i + Internal.netScan i highC r +
         (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r) := by
+  -- The fork of `a` is before Gloas, since `post` runs on to C.
+  --
+  -- The epoch of `a` is at most `highC + 1`, since `post` runs on to C.
   have aFork : a.fork = fork := Internal.fork_eq_of_run pre ((Run.nil.snoc step).append post)
     (by rw [yFork]; exact Nat.le_refl _)
   have aEarly : a.fork < .glamsterdam := by rw [aFork]; exact h.early
@@ -360,15 +346,7 @@ private theorem charge_epoch_start (h : Setting config checks g split fin pulled
     aFulu same hyst (by omega) charged
   exact ⟨n, pre0.snoc (Step.slot ok), rest, cut.symm, insideN, same, effEq, floor, up, rise⟩
 
-/-- The switch case of the start of the epoch.
-
-A key at its cap that switches to compounding in the epoch keeps at most the old cap of balance.
-
-The switch moves the balance beyond the old cap into the pending deposits.
-
-The step that switches also takes the block credits that follow the switch in it.
-
-So the credits are the gross ones: the net rise of that step can be zero while a credit is not. -/
+/-- The switch case of the start of the epoch. -/
 private theorem charge_flip (h : Setting config checks g split fin pulled anc counted V)
     (highC : ℕ) {c a : ForkedBeaconState preset}
     (toC : Run config checks g c) (r : Run config checks c a) (i : ℕ)
@@ -376,11 +354,20 @@ private theorem charge_flip (h : Setting config checks g split fin pulled anc co
     (same : getCurrentEpoch c.state = getCurrentEpoch a.state)
     (sameFork : a.fork = fork) (cFork : c.fork = fork)
     (endEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1)
+    -- A key at its cap may switch to compounding in the epoch.
+    --
+    -- It then keeps at most the old cap of balance.
     (flipped : PinTerms.capAt c i ≠ PinTerms.capAt a i)
     (atCap : ¬ effectiveAt c i < PinTerms.capAt c i) :
+    -- The step that switches also takes the block credits that follow the switch in it.
+    --
+    -- So the credits are the gross ones.
+    --
+    -- The net rise of that step can be zero while a credit is not.
     min (actualBalanceAt a i) (PinTerms.capAt a i) ≤ effectiveAt c i + Internal.grossScan i highC r
       +
       (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r) := by
+  -- The switch moves the balance beyond the old cap into the pending deposits.
   classical
   have sameC : fork = c.fork := cFork.symm
   obtain ⟨cf, cs⟩ := c
@@ -514,17 +501,7 @@ private theorem capAt_le_of_exit {x z : ForkedBeaconState preset} (r : Run confi
   cases hz : hasCompoundingWithdrawalCredential wz <;>
     cases hb : hasCompoundingWithdrawalCredential w <;> simp_all
 
-/-- The exact rise of a charged key's balance after its charge.
-
-The cap is fixed from the state `b` after the step that starts the exit.
-
-The step itself can switch the key to compounding: one payload can switch it, then start its exit.
-
-The cap just after the exit starts therefore bounds it throughout the run.
-
-From `a` the balance can rise by the epoch rewards after the charge and by other credits.
-
-From `b` it rises by the same rewards and the credits of `post`. -/
+/-- The exact rise of a charged key's balance after its charge. -/
 private theorem charge_rise_fold (h : Setting config checks g split fin pulled anc counted V)
     {xs : BeaconState preset fork}
     (highC : ℕ) {y : ForkedBeaconState preset} (yFork : y.fork = fork)
@@ -532,14 +509,23 @@ private theorem charge_rise_fold (h : Setting config checks g split fin pulled a
     {a b : ForkedBeaconState preset} (pre : Run config checks ⟨fork, xs⟩ a)
     (step : Step config checks a b) (post : Run config checks b y) (i : ℕ)
     (charged : step.departureCharges.any (·.index == i) = true) :
+    -- The cap is fixed from the state `b` after the step that starts the exit.
+    --
+    -- The step itself can switch the key to compounding.
+    --
+    -- One payload can switch it, then start its exit.
+    --
+    -- The cap just after the exit starts therefore bounds it throughout the run.
     (∀ z ∈ ((Run.nil.snoc step).append post).balancePath,
       PinTerms.capAt z i ≤ PinTerms.capAt b i) ∧
     (∀ z ∈ post.balancePath, PinTerms.capAt z i ≤ PinTerms.capAt b i) ∧
+    -- From `a` the balance can rise by the epoch rewards after the charge and by other credits.
     (∀ z ∈ ((Run.nil.snoc step).append post).balancePath, actualBalanceAt z i ≤
       actualBalanceAt a i + (Internal.riseScan i highC ((pre.snoc step).append post)).2 +
         Internal.netScan i highC ((Run.nil.snoc step).append post) +
         (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC
           ((Run.nil.snoc step).append post))) ∧
+    -- From `b` it rises by the same rewards and the credits of `post`.
     ∀ z ∈ post.balancePath, actualBalanceAt z i ≤
       actualBalanceAt b i + (Internal.riseScan i highC ((pre.snoc step).append post)).2 +
         Internal.netScan i highC post +
@@ -646,19 +632,7 @@ private theorem charge_rise_fold (h : Setting config checks g split fin pulled a
 
 /-- The credits of a charged key from the epoch's start to a state `y`.
 
-Proposer, consolidation, whistleblower and sync credits bound them.
-
-The key is not yet withdrawable at `y` (`held`), so its deposits from the charge on are postponed.
-
-The credits before the charge are the gross ones, which bound the net ones.
-
-The first bound adds the credits of the run from the charge on, read net.
-
-The second bound adds the whole credits of the charge step, then those of `post`, read net.
-
-It needs the charge step to be a block step.
-
-A slot step's whole credits hold its epoch rewards, which none of the three sources pays. -/
+Proposer, consolidation, whistleblower and sync credits bound them. -/
 private theorem charge_credits_to (h : Setting config checks g split fin pulled anc counted V)
     {xs : BeaconState preset fork} (toX : Run config checks g ⟨fork, xs⟩)
     {y : ForkedBeaconState preset} (yFork : y.fork = fork)
@@ -672,16 +646,24 @@ private theorem charge_credits_to (h : Setting config checks g split fin pulled 
     (charged : step.departureCharges.any (·.index == v.toNat) = true)
     (before : Run config checks ⟨fork, xs⟩ c) (r : Run config checks c a)
     (cut : before.append r = pre) (same : getCurrentEpoch c.state = getCurrentEpoch a.state)
+    -- The key is not yet withdrawable at `y`, so its deposits from the charge on are postponed.
     (held : ∀ w, b.state.validators.data[v.toNat]? = some w →
       (getCurrentEpoch y.state).toNat < w.withdrawableEpoch.toNat) :
+    -- The credits before the charge are the gross ones, which bound the net ones.
     (Internal.grossScan v.toNat highC r + (Internal.creditScan (fun _ => false) (fun s => decide (s
       ≠ .rewards))
         v.toNat highC r) +
+      -- The first bound adds the credits of the run from the charge on, read net.
       (Internal.netScan v.toNat highC ((Run.nil.snoc step).append post) +
         (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC
           ((Run.nil.snoc step).append post))) ≤
       Internal.propC tailY highC v.toNat + Internal.whistC tailY highC v.toNat + Internal.syncCr
         eventsY v.toNat) ∧
+    -- The second bound adds the whole credits of the charge step, then those of `post`, read net.
+    --
+    -- It needs the charge step to be a block step.
+    --
+    -- A slot step's whole credits hold its epoch rewards, which none of the three sources pays.
     ((∀ ok, step ≠ Step.slot ok) →
       Internal.grossScan v.toNat highC r + (Internal.creditScan (fun _ => false) (fun s => decide (s
         ≠ .rewards))
@@ -788,17 +770,10 @@ It is the key's effective balance before the charge step, plus the upward band.
 
 It adds the key's credits since the epoch's start.
 
-It also adds the exact epoch rewards of the steps from the charge on.
-
-The run starts at any state `xs` with a run `toX` from genesis.
-
-The epoch's start is given as data.
-
-It is the state `c`, the run `r` from it to the charge, and the hysteresis there.
-
-The key is not yet withdrawable at `y` (`held`). -/
+It also adds the exact epoch rewards of the steps from the charge on. -/
 private theorem charge_effective_bound_of
     (h : Setting config checks g split fin pulled anc counted V)
+    -- The run starts at any state `xs`, reached by a run from genesis.
     {xs : BeaconState preset fork} (toX : Run config checks g ⟨fork, xs⟩)
     {y : ForkedBeaconState preset} (yFork : y.fork = fork)
     (tailY : Run config checks ⟨fork, xs⟩ y) (highC : ℕ)
@@ -808,6 +783,9 @@ private theorem charge_effective_bound_of
     (pre : Run config checks ⟨fork, xs⟩ a) (step : Step config checks a b)
     (post : Run config checks b y) (site : (pre.snoc step).append post = tailY)
     (hcharge : step.departureCharges.any (·.index == v.toNat) = true)
+    -- The epoch's start is given as data.
+    --
+    -- It is the state `c`, the run `r` from it to the charge, and the hysteresis there.
     (start : ∃ (c : ForkedBeaconState preset) (before : Run config checks ⟨fork, xs⟩ c)
       (r : Run config checks c a), before.append r = pre ∧
       v.toNat < c.state.validators.data.size ∧ getCurrentEpoch c.state = getCurrentEpoch a.state ∧
@@ -818,6 +796,7 @@ private theorem charge_effective_bound_of
         actualBalanceAt c v.toNat ≤ effectiveAt c v.toNat + preset.upwardBand) ∧
       actualBalanceAt a v.toNat ≤ actualBalanceAt c v.toNat + Internal.netScan v.toNat highC r +
         (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r))
+    -- The key is not yet withdrawable at `y`.
     (held : ∀ w, b.state.validators.data[v.toNat]? = some w →
       (getCurrentEpoch y.state).toNat < w.withdrawableEpoch.toNat) :
     effectiveAt y v.toNat ≤ effectiveAt a v.toNat + preset.upwardBand +
@@ -932,11 +911,7 @@ It is the key's effective balance before the charge step, plus the upward band.
 
 It adds the key's credits since the epoch's start.
 
-It also adds the exact epoch rewards of the steps from the charge on.
-
-The charge is in an epoch after the split's.
-
-The key is not yet withdrawable at `y` (`held`). -/
+It also adds the exact epoch rewards of the steps from the charge on. -/
 private theorem charge_effective_bound (h : Setting config checks g split fin pulled anc counted V)
     {y : ForkedBeaconState preset} (yFork : y.fork = fork)
     (tailY : Run config checks ⟨fork, split⟩ y) (highC : ℕ)
@@ -946,7 +921,9 @@ private theorem charge_effective_bound (h : Setting config checks g split fin pu
     (pre : Run config checks ⟨fork, split⟩ a) (step : Step config checks a b)
     (post : Run config checks b y) (site : (pre.snoc step).append post = tailY)
     (hcharge : step.departureCharges.any (·.index == v.toNat) = true)
+    -- The charge is in an epoch after the split's.
     (started : (getCurrentEpoch split).toNat < (getCurrentEpoch a.state).toNat)
+    -- The key is not yet withdrawable at `y`.
     (held : ∀ w, b.state.validators.data[v.toNat]? = some w →
       (getCurrentEpoch y.state).toNat < w.withdrawableEpoch.toNat) :
     effectiveAt y v.toNat ≤ effectiveAt a v.toNat + preset.upwardBand +
@@ -1054,16 +1031,9 @@ private theorem prefix_append_credits (v : ValidatorIndex) (highC : ℕ)
   exact ⟨by omega, Internal.creditScan_append _ _ _ _ pre rest,
     riseScan_append_of_none v.toNat highC pre rest noneBefore⟩
 
-/-- The data at the start of the split's epoch that bounds a key charged in that epoch.
-
-The key's charge step starts in the split's epoch, whose first state `t` is on the shared run.
-
-The run from `t` to the charge is `pre` and the front of C's run.
-
-Its balance at the charge is within the upward band of its effective balance at `t`.
-
-From `t` it rises at most by the credits of the run. -/
+/-- The data at the start of the split's epoch that bounds a key charged in that epoch. -/
 private theorem split_epoch_start_data (h : Setting config checks g split fin pulled anc counted V)
+    -- The first state `t` of the split's epoch is on the shared run.
     (highC : ℕ) {t : BeaconState preset fork} (toT : Run config checks g ⟨fork, t⟩)
     (pre : Run config checks ⟨fork, t⟩ ⟨fork, split⟩)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch t)
@@ -1072,12 +1042,17 @@ private theorem split_epoch_start_data (h : Setting config checks g split fin pu
     {p q : ForkedBeaconState preset} (cf : Run config checks ⟨fork, split⟩ p)
     (step : Step config checks p q) (rest : Run config checks q ⟨fork, counted⟩)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1) {v : ValidatorIndex}
+    -- The key's charge step starts in the split's epoch.
     (inSplitEpoch : ¬ (getCurrentEpoch split).toNat < (getCurrentEpoch p.state).toNat)
     (charged : step.departureCharges.any (·.index == v.toNat) = true) :
+    -- The run from `t` to the charge is `pre` and the front of C's run.
     ∃ (c : ForkedBeaconState preset) (before : Run config checks ⟨fork, t⟩ c)
       (r : Run config checks c p), before.append r = pre.append cf ∧
       v.toNat < c.state.validators.data.size ∧ getCurrentEpoch c.state = getCurrentEpoch p.state ∧
       effectiveAt c v.toNat = effectiveAt p v.toNat ∧
+      -- The key's balance at the charge is within the upward band of its effective balance at `t`.
+      --
+      -- From `t` it rises at most by the credits of the run.
       min (actualBalanceAt c v.toNat) (PinTerms.capAt c v.toNat) ≤
         effectiveAt c v.toNat + preset.upwardBand ∧
       (effectiveAt c v.toNat < PinTerms.capAt c v.toNat →
@@ -1135,23 +1110,12 @@ private theorem charge_site_start {x y p q cp cq : ForkedBeaconState preset}
     · obtain ⟨later, foundLater, life⟩ := r'.registryLifecycle.validators i w foundQ
       exact absurd (by rw [← life.exitEpoch assigned]; exact cUnset later foundLater) assigned
 
-/-- The effective balance at its slashing of a charged key of the split's registry.
-
-The run `pre` is the shared run from a state `t` of the split's epoch, or the empty run.
-
-The bound at the charge is given as `bound`, from the charge step and the run to it.
-
-If the slashing step assigns the exit, that step is the charge.
-
-If an earlier step assigned it, the balance before the slashing is bounded by the charge step.
-
-The key is not withdrawable at the slashing, since it is still slashable there.
-
-The credits are at most the slack's credits, at eleven tenths. -/
+/-- The effective balance at its slashing of a charged key of the split's registry. -/
 private theorem registry_charge_of (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {eventsF events : List (BalanceEvent preset)} (high : ℕ)
+    -- This run is the shared run from a state `t` of the split's epoch, or the empty run.
     {t : BeaconState preset fork} (pre : Run config checks ⟨fork, t⟩ ⟨fork, split⟩)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch t)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
@@ -1163,6 +1127,7 @@ private theorem registry_charge_of (h : Setting config checks g split fin pulled
     (flag : (!(a.state.validators.data[v.toNat]?.map (·.slashed)).getD false &&
       (b.state.validators.data[v.toNat]?.map (·.slashed)).getD false) = true)
     (charged : (tailC.departureCharges.any fun c => c.index == v.toNat) = true)
+    -- This gives the bound at the charge, from the charge step and the run to it.
     (bound : ∀ {front : Run config checks ⟨fork, split⟩ a}
         {post : Run config checks b ⟨fork, counted⟩} {p q : ForkedBeaconState preset}
         {eventsY : List (BalanceEvent preset)}
@@ -1185,6 +1150,13 @@ private theorem registry_charge_of (h : Setting config checks g split fin pulled
         eventsP v.toNat) +
       Internal.whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
         eventsC eventsF events fin v.toNat := by
+  -- If the slashing step assigns the exit, that step is the charge.
+  --
+  -- If an earlier step assigned it, the balance before the slashing is bounded by the charge step.
+  --
+  -- The key is not withdrawable at the slashing, since it is still slashable there.
+  --
+  -- The credits are at most the slack's credits, at eleven tenths.
   classical
   obtain ⟨shared⟩ := h.toFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -1346,25 +1318,21 @@ private theorem registry_charge (h : Setting config checks g split fin pulled an
 
 /-- The effective balance at its slashing of a charged key whose charge is in the split's epoch.
 
-The epoch's start `t` is on the shared run, before the split.
-
-The key's credits from `t` come through the shared suffix `pre`, and then through C's run.
-
-`pre` holds no consolidation or deposit credit, since it is inside one epoch.
-
-So its credits are the proposer, whistleblower and sync credits.
-
-The bands of hysteresis at `t` come from the slot step that crossed into its epoch.
-
 This bound includes the credits from the start of the split epoch. -/
 private theorem registry_charge_split_epoch
     (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {eventsF events : List (BalanceEvent preset)} (high : ℕ)
+    -- The epoch's start `t` is on the shared run, before the split.
     {t : BeaconState preset fork} (toT : Run config checks g ⟨fork, t⟩)
+    -- The key's credits from `t` come through the shared suffix `pre`, and then through C's run.
     (pre : Run config checks ⟨fork, t⟩ ⟨fork, split⟩)
+    -- This suffix holds no consolidation or deposit credit, since it is inside one epoch.
+    --
+    -- So its credits are the proposer, whistleblower and sync credits.
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch t)
+    -- The bands of hysteresis at `t` come from the slot step that crossed into its epoch.
     (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       toT.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch t).toNat)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
@@ -1518,23 +1486,20 @@ theorem registry_bounds (h : Setting config checks g split fin pulled anc counte
         endEpochC replayedC replayedP step member i inside flag charged cfront cstep cpost csite
         charge started
 
-/-- A charged previous-only key whose charge is in the split's epoch.
-
-The epoch's start `b` is on the shared run, before the split.
-
-The key's credits from `b` come through the shared suffix `pre` of the split's epoch.
-
-Then they come through C's run.
-
-The bands of hysteresis at `b` come from the slot step that crossed into its epoch. -/
+/-- A charged previous-only key whose charge is in the split's epoch. -/
 private theorem previousOnlyKeys_charged_split_epoch
     (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {events : List (BalanceEvent preset)}
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    -- The epoch's start `b` is on the shared run, before the split.
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    -- The key's credits from `b` come through the shared suffix `pre` of the split's epoch.
+    --
+    -- Then they come through C's run.
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
+    -- The bands of hysteresis at `b` come from the slot step that crossed into its epoch.
     (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       toB.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat)
     {eventsF : List (BalanceEvent preset)}
@@ -1672,27 +1637,14 @@ private theorem previousOnlyKeys_uncharged_key
   simp only [countedBalance, pulledBalance]
   omega
 
-/-- The other keys that are previous-epoch-only in C, and their exits.
-
-A key with a departure charge on C's run is at its charge plus its rise after that.
-
-Any other key has its exit assigned before the split, so it is at its balance at R plus its rise.
-
-Both add C's proposer credits and sync seats.
-
-The credit term counts proposer and consolidation credits because deposits are postponed.
-
-The run `pre` is the shared run from the start of the split's epoch.
-
-A charge in that epoch reads the balance before the credits of `pre`.
-
-So the key's proposer, whistleblower and sync credits over `pre` are read too. -/
+/-- The other keys that are previous-epoch-only in C, and their exits. -/
 theorem previousOnlyCost_le (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    -- This run is the shared run from the start of the split's epoch.
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
     (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
@@ -1702,11 +1654,22 @@ theorem previousOnlyCost_le (h : Setting config checks g split fin pulled anc co
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     {eventsP : List (BalanceEvent preset)} (replayedP : pre.balanceEvents highC = .ok eventsP) :
+    -- A key with no departure charge on C's run has its exit assigned before the split.
+    --
+    -- It is then at its balance at R plus its rise.
     previousOnlyCost pulled counted V ≤ ((∑ v ∈ (previousOnlyKeys counted V) with
         ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         (pulledBalance pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      -- A key with a departure charge on C's run is at its charge plus its rise after that.
       (∑ v ∈ (previousOnlyKeys counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         (Internal.exitQ tailC v.toNat + Internal.riseQ tailC highC v.toNat)) +
+      -- Both kinds of key add C's proposer credits and sync seats.
+      --
+      -- The credit term counts proposer and consolidation credits because deposits are postponed.
+      --
+      -- A charge in the split's epoch reads the balance before the credits of `pre`.
+      --
+      -- So the key's proposer, whistleblower and sync credits over `pre` are read too.
       (∑ v ∈ (previousOnlyKeys counted V), ((Internal.propN pre highC v.toNat + Internal.whistC pre
           highC
         v.toNat +
@@ -2415,11 +2378,7 @@ They also take the surplus of the slash charge over R's slashed keys.
 
 They take a tenth of the keys' credits too.
 
-The bound is scaled by ten, so the tenth is exact.
-
-One floor of all of a key's flows bounds its gain, and each split by kind costs one step.
-
-`registry` and `registryCharge` are the bounds of the registry keys at their slashing. -/
+The bound is scaled by ten, so the tenth is exact. -/
 theorem flow_split_of (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2433,6 +2392,7 @@ theorem flow_split_of (h : Setting config checks g split fin pulled anc counted 
     (highLe : highC ≤ (getCurrentEpoch pulled).toNat)
     {b : BeaconState preset fork} (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     {eventsP : List (BalanceEvent preset)}
+    -- This bound and the next are the bounds of the registry keys at their slashing.
     (registry : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
       tailC.Contains step → ∀ i, i < split.validators.data.size →
         (split.validators.data[i]?.map (·.slashed)).getD false = false →
@@ -2471,6 +2431,7 @@ theorem flow_split_of (h : Setting config checks g split fin pulled anc counted 
           (∑ v ∈ (joinedKeys pulled counted), Internal.credN tailC highC v.toNat) +
           (∑ v ∈ (previousOnlyKeys counted V), Internal.propN tailC highC v.toNat)) +
           2 * (∑ v ∈ (previousOnlyKeys counted V), Internal.propN tailC highC v.toNat)) := by
+  -- One floor of all of a key's flows bounds its gain, and each split by kind costs one step.
   classical
   have incPos := h.bands.1
   obtain ⟨d45, d46, d56, -, -, -⟩ := Internal.classes_disjoint h
@@ -2632,15 +2593,7 @@ theorem flow_split_of (h : Setting config checks g split fin pulled anc counted 
   rw [rateEq, creditLow]
   linarith
 
-/-- The joined keys beyond R's registry are paid by the credits.
-
-At a high rate these keys share the cap budget for new keys.
-
-They joined the registry on C's branch, so their stake is the credits that reach them.
-
-At a low gain rate the reserve charges for compounding credits.
-
-Otherwise it charges each key up to the cap. -/
+/-- The joined keys beyond R's registry are paid by the credits. -/
 private theorem beyond_keys (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2652,6 +2605,9 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     ∑ v ∈ (joinedKeys pulled counted) with pulled.validators.data.size ≤ v.toNat, countedBalance
       counted v ≤
+      -- These keys joined the registry on C's branch.
+      --
+      -- So their stake is the credits that reach them.
       (∑ v ∈ (joinedKeys pulled counted) with pulled.validators.data.size ≤ v.toNat,
         (((Internal.credC tailC highC v.toNat +
             Internal.keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
@@ -2661,6 +2617,11 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
           (Internal.slashR (pinTerms config pulled anc fin) v.toNat + Internal.bandC tailC highC
             v.toNat +
             Internal.bandR (eventsF ++ events) v.toNat) + Internal.bandX fin highC v.toNat)) +
+        -- At a high rate these keys share the cap budget for new keys.
+        --
+        -- At a low gain rate the reserve charges for compounding credits.
+        --
+        -- Otherwise it charges each key up to the cap.
         Internal.capUse config pulled anc fin counted := by
   classical
   by_cases low : 11 * (pinTerms config pulled anc fin).depth *
@@ -2687,15 +2648,7 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
     rw [ite_eq_left highGain]
     exact Nat.le_trans total (Nat.le_add_left _ _)
 
-/-- The keys counted in C and not active at R.
-
-A key whose exit started on R's branch after the split is inactive at R and active in C.
-
-The reserve charges that exit on R's branch.
-
-Its stake in C is at most its stake at R and its rise.
-
-The same bound applies to keys whose scheduled exits R can see. -/
+/-- The keys counted in C and not active at R. -/
 theorem joinedCost_le (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2713,9 +2666,15 @@ theorem joinedCost_le (h : Setting config checks g split fin pulled anc counted 
       (∑ v ∈ (joinedKeys pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat =
         true,
         (3 * pulledBalance pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      -- A key whose exit started on R's branch after the split is inactive at R and active in C.
+      --
+      -- The reserve charges that exit on R's branch.
+      --
+      -- Its stake in C is at most its stake at R and its rise.
       (∑ v ∈ (joinedKeys pulled counted) with (pinTerms config pulled anc fin).exitedRB v.toNat =
         true,
         (pulledBalance pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      -- The same bound applies to keys whose scheduled exits R can see.
       (∑ v ∈ (joinedKeys pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat =
         true,
         (pulledBalance pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +

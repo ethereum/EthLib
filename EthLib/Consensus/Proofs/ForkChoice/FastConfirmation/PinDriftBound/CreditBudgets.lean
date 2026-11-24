@@ -24,29 +24,26 @@ variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconSt
 
 namespace Internal
 
-/-- The low bound of an existing key is covered by its exit charge and its sync debits.
-
-The key is activated at the finalized state, charged on the run, and exits by C.
-
-The charge is its effective balance at the exit call.
-
-The bound reads the floor of its balance from the finalized state.
-
-The lower bound accounts separately for penalties and due partial withdrawals.
-
-The hysteresis is covered by the activation balance. -/
+/-- The low bound of an existing key is covered by its exit charge and its sync debits. -/
 private theorem existing_low_le_charge (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {events : List (BalanceEvent preset)}
     (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (v : ValidatorIndex)
+    -- The key is activated at the finalized state, charged on the run, and exits by C.
     (epochLe : ∀ c ∈ tailC.departureCharges, c.index = v.toNat →
       c.epoch ≤ (getCurrentEpoch counted).toNat) (val : Validator)
     (initial : fin.validators.data[v.toNat]? = some val)
     (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat) :
     (pinTerms config pulled anc fin).lowEB v.toNat ≤
+      -- The charge is its effective balance at the exit call.
       Internal.exitQ tailC v.toNat + (events.map (Internal.syncDebit v.toNat)).sum := by
+  -- The bound reads the floor of its balance from the finalized state.
+  --
+  -- The lower bound accounts separately for penalties and due partial withdrawals.
+  --
+  -- The hysteresis is covered by the activation balance.
   have bound := Internal.existing_low_explicit h fromFin tailC replayed v epochLe val initial
     charged
   have drop : (pinTerms config pulled anc fin).drop v.toNat =
@@ -85,17 +82,7 @@ private theorem exitFloor_add_slack (h : Setting config checks g split fin pulle
         (pinTerms config pulled anc fin).exitFloor := rfl
   omega
 
-/-- A key that is not yet activated at the finalized state and has a small charge loses seats.
-
-The key is missing at the finalized state, or its activation there is unassigned.
-
-It activates on the run from the finalized state.
-
-So it keeps at least the new-key balance floor less its sync debits.
-
-A charge below the minimum implies sync debits above the allowance for a new key.
-
-It has no partial withdrawals queued, since a request needs an active key. -/
+/-- A key that is not yet activated at the finalized state and has a small charge loses seats. -/
 private theorem pending_key_claim (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -105,11 +92,19 @@ private theorem pending_key_claim (h : Setting config checks g split fin pulled 
     (epochLe : ∀ c ∈ tailC.departureCharges, c.index = v.toNat →
       c.epoch ≤ (getCurrentEpoch counted).toNat)
     (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+    -- A charge below the minimum implies sync debits above the allowance for a new key.
     (small : Internal.exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor)
+    -- The key is missing at the finalized state, or its activation there is unassigned.
     (fresh : fin.validators.data[v.toNat]? = none ∨
       ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH) :
     (pinTerms config pulled anc fin).newKeySlack < (events.map (Internal.syncDebit v.toNat)).sum :=
       by
+  -- The key activates on the run from the finalized state.
+  --
+  -- So it keeps at least the new-key balance floor less its sync debits.
+  --
+  -- It has no partial withdrawals queued, since a request needs an active key.
+  --
   -- The charge splits C's run at the step that exits the key.
   --
   -- The key is activated there, by `charge_activated`.
@@ -224,23 +219,12 @@ private theorem pending_key_claim (h : Setting config checks g split fin pulled 
     omega
   omega
 
-/-- A previous-only key not exiting at the call, with a small charge, is low or loses seats.
-
-A small charge is below the minimum used to count departures.
-
-The key is then a low key, or its sync debits from finality exceed the new-key allowance.
-
-The debits are those of the replay of the run from the finalized state to C's state.
-
-A key that is not activated at the finalized state can lose committee seats.
-
-For an activated key, R reads the assigned activation and an epoch before withdrawal.
-
-Its departure charge and debits cover the lower bound. -/
+/-- A previous-only key not exiting at the call, with a small charge, is low or loses seats. -/
 private theorem small_charge_claim (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {events : List (BalanceEvent preset)}
+    -- The debits are those of the replay of the run from the finalized state to C's state.
     (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (v : ValidatorIndex)
     (activatedBy : ∀ c, counted.validators.data[v.toNat]? = some c →
@@ -248,10 +232,17 @@ private theorem small_charge_claim (h : Setting config checks g split fin pulled
     (epochLe : ∀ c ∈ tailC.departureCharges, c.index = v.toNat →
       c.epoch ≤ (getCurrentEpoch counted).toNat)
     (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+    -- A small charge is below the minimum used to count departures.
     (small : Internal.exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor) :
+    -- The key is then a low key, or its sync debits from finality exceed the new-key allowance.
     (pinTerms config pulled anc fin).lowB v.toNat = true ∨
       (pinTerms config pulled anc fin).newKeySlack < (events.map (Internal.syncDebit v.toNat)).sum
         := by
+  -- A key that is not activated at the finalized state can lose committee seats.
+  --
+  -- For an activated key, R reads the assigned activation and an epoch before withdrawal.
+  --
+  -- Its departure charge and debits cover the lower bound.
   classical
   by_cases fresh : fin.validators.data[v.toNat]? = none ∨
       ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH
@@ -317,15 +308,7 @@ theorem syncDebits_window_le (h : Setting config checks g split fin pulled anc c
   rw [Finset.sum_image fun _ _ _ _ same => UInt64.toNat_inj.mp same] at debits
   rwa [pulledOk]
 
-/-- The seat count bounds how many keys can exceed the new-key sync-debit allowance.
-
-The sync debits of any keys over the run from the finalized state to C's state fit one envelope.
-
-The envelope is for each seat and slot of the window.
-
-A key over the slack has at least one more than the slack.
-
-So the keys number at most the debits over the slack. -/
+/-- The seat count bounds how many keys can exceed the new-key sync-debit allowance. -/
 private theorem card_seat_keys_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -335,6 +318,15 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
     (seats : ∀ v ∈ B, (pinTerms config pulled anc fin).newKeySlack <
       (events.map (Internal.syncDebit v.toNat)).sum) :
     B.card ≤ (pinTerms config pulled anc fin).newKeySeats := by
+  -- Take the sync debits of any keys over the run from the finalized state to C's state.
+  --
+  -- They fit one envelope.
+  --
+  -- The envelope is for each seat and slot of the window.
+  --
+  -- A key over the slack has at least one more than the slack.
+  --
+  -- So the keys number at most the debits over the slack.
   classical
   have debits := Internal.syncDebits_window_le h (fromFin.append tailC) h.near replayed B
   have each : B.card * ((pinTerms config pulled anc fin).newKeySlack + 1) ≤
@@ -363,25 +355,22 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
     _ ≤ _ := debits
     _ ≤ _ := by simpa [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm] using window
 
-/-- The keys that C's branch charges are few, if each is activated by R's epoch and exits by C.
-
-A key is charged if the run has a departure charge at its position.
-
-Large charges spend at least the minimum departure charge per key.
-
-Small charges can be counted without reading R's exit flag.
-
-The queue count bounds the number of charged keys.
-
-Those are the keys with a large charge, the low keys and the keys that lose seats. -/
+/-- The keys that C's branch charges are few, if each is activated by R's epoch and exits by C. -/
 theorem charged_count_of (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (S : Finset ValidatorIndex)
+    -- A key is charged if the run has a departure charge at its position.
     (keys : ∀ v ∈ S, (∀ c, counted.validators.data[v.toNat]? = some c →
         c.activationEpoch.toNat ≤ (getCurrentEpoch pulled).toNat) ∧
       (∀ c ∈ tailC.departureCharges, c.index = v.toNat →
         c.epoch ≤ (getCurrentEpoch counted).toNat) ∧
       ∃ c ∈ tailC.departureCharges, c.index = v.toNat) :
+    -- The queue count bounds the number of charged keys.
+    --
+    -- Those are the keys with a large charge, the low keys and the keys that lose seats.
     S.card ≤ (pinTerms config pulled anc fin).queueKeys := by
+  -- Large charges spend at least the minimum departure charge per key.
+  --
+  -- Small charges can be counted without reading R's exit flag.
   classical
   obtain ⟨fromFin⟩ := h.fromFin
   obtain ⟨events, replayed⟩ := (fromFin.append tailC).balanceEvents_ok h.early
@@ -727,21 +716,14 @@ private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc
     (propN_arith incPos credits prev curr band)
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The proposer credits of a set of keys over a one-epoch segment of C's branch are bounded.
-
-The segment may follow a run `head` of its own epoch, whose credits it adds to.
-
-The bound is the pin's rate on the pulled total, with `896` times the credits on the left.
-
-The slot that ends the segment adds no block credit.
-
-So the segment fits as its run before that slot does. -/
+/-- The proposer credits of a set of keys over a one-epoch segment of C's branch are bounded. -/
 private theorem propN_segment_le (h : Setting config checks g split fin pulled anc counted V)
     (highC : ℕ) (S : Finset ValidatorIndex) {T : Gwei}
     (pulledOk : getTotalActiveBalance pulled = .ok T) {s0 : BeaconState preset fork}
     {m n : ForkedBeaconState preset} (toS : Run config checks g ⟨fork, s0⟩)
     (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, s0⟩) ∨
       ∃ _ : Run config checks ⟨fork, s0⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch s0)
+    -- The segment may follow a run `head` of its own epoch, whose credits it adds to.
     (head : Run config checks ⟨fork, s0⟩ m) (mid : Run config checks m n)
     (rest : Run config checks n ⟨fork, counted⟩)
     (sameStart : getCurrentEpoch m.state = getCurrentEpoch s0)
@@ -751,9 +733,13 @@ private theorem propN_segment_le (h : Setting config checks g split fin pulled a
       head)) + ∑ v ∈ S, (Internal.creditScan (fun s => decide (s = .rewards)) (fun _ => false)
         v.toNat
         highC mid)) * 896 ≤
+      -- The bound is the pin's rate on the pulled total, with `896` times the credits on the left.
       324 * ((pinTerms config pulled anc fin).perIncrement *
         (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
         216 * (pinTerms config pulled anc fin).perIncrement := by
+  -- The slot that ends the segment adds no block credit.
+  --
+  -- So the segment fits as its run before that slot does.
   have mFork : m.fork = fork := Internal.fork_eq_of_run head (mid.append rest) (Nat.le_refl _)
   obtain ⟨mf, ms⟩ := m
   obtain rfl : mf = fork := mFork
@@ -808,26 +794,25 @@ private theorem credit_arith {inc pi E T P A : ℕ} (incPos : 0 < inc) (hT : T =
   nlinarith
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- C's proposer credits to any set of keys, with the sync part of the bound, are bounded.
-
-The credits start at a state `b` of the split's epoch, so they include the run `pre` from `b`.
-
-The bound is the proposer credit of each epoch of the window.
-
-The credits of each epoch are cut over the blocks, and the split's epoch is cut once from `b`.
-
-So the flag rewards of its epoch pass are not read. -/
+/-- C's proposer credits to any set of keys, with the sync part of the bound, are bounded. -/
 theorem proposer_rewards_le (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
       ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch b)
+    -- The credits start at a state `b` of the split's epoch.
+    --
+    -- So they include the run `pre` from `b`.
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (S : Finset ValidatorIndex) :
     (∑ v ∈ S, Internal.propN (pre.append tailC) highC v.toNat) +
         (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer ≤
+      -- The bound is the proposer credit of each epoch of the window.
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit := by
+  -- The credits of each epoch are cut over the blocks, and the split's epoch is cut once from `b`.
+  --
+  -- So the flag rewards of its epoch pass are not read.
   obtain ⟨T, pulledOk⟩ := h.pulledTotal
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
@@ -1359,10 +1344,6 @@ theorem credited_slots_le (h : Setting config checks g split fin pulled anc coun
 The classes are the staying, the previous-only and the joined keys.
 
 The slashed keys are the newly slashed and the created slashed keys.
-
-The slots are the proposers, the seats and the deposit recipients of the window.
-
-A credited created slashed key is a credited key of C's run, in C's registry, like the others.
 -/
 theorem credited_classes_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
@@ -1376,11 +1357,13 @@ theorem credited_classes_le (h : Setting config checks g split fin pulled anc co
         Internal.creditedKey tailC highC v = true).card +
       ((createdSlashed counted split).filter fun v =>
         Internal.creditedKey tailC highC v = true).card ≤
+    -- The slots are the proposers, the seats and the deposit recipients of the window.
     (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
       ((pinTerms config pulled anc fin).depth /
         max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
           preset.SYNC_COMMITTEE_SIZE.toNat +
       (pinTerms config pulled anc fin).depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
+  -- A credited created slashed key is a credited key of C's run, in C's registry, like the others.
   classical
   obtain ⟨d45, d46, d56, -, -, -⟩ := Internal.classes_disjoint h
   obtain ⟨dSC, -⟩ := newlySlashed_disjoint h
@@ -1512,36 +1495,31 @@ theorem credit_parts_le {x y : ForkedBeaconState preset} (tail : Run config chec
   have p := Internal.propC_split tail high v.toNat
   exact ⟨by unfold Internal.consAmt; omega, by unfold Internal.consAmt; omega⟩
 
-/-- C's proposer credits to counted but inactive keys outside the voter set count at weight three.
-
-The bound adds the amounts transferred by consolidation.
-
-The reserve accounts separately for the proposer's sync rewards.
-
-The bound uses a factor of ten to account for compounding and rounding the extra exit charge.
-
-The compounding of the credits, an exact tenth of the keys' total, is in the bound.
-
-The reserve also accounts separately for two more bands per credited key in this group.
-
-The run `pre` starts at the split's epoch, so its credits are proposer credits only.
-
-Consolidations and deposits credit at epoch processing, so none falls inside `pre`. -/
+/-- C's proposer credits to inactive counted keys outside the voter set count at weight three. -/
 theorem budget_exitingCredits (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
       ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch b)
+    -- This run starts at the split's epoch, so its credits are proposer credits only.
+    --
+    -- Consolidations and deposits credit at epoch processing, so none falls inside `pre`.
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    -- The bound uses a factor of ten to account for compounding and rounding the extra exit charge.
+    --
+    -- The compounding of the credits, an exact tenth of the keys' total, is in the bound.
     10 * (2 * ((∑ v ∈ (previousOnlyKeys counted V), Internal.propN pre highC v.toNat) +
         ∑ v ∈ (previousOnlyKeys counted V), Internal.propC tailC highC v.toNat)) +
+      -- The reserve also accounts separately for two more bands per credited key in this group.
       2 * ((∑ v ∈ (previousOnlyKeys counted V), Internal.propN pre highC v.toNat) +
         ∑ v ∈ (previousOnlyKeys counted V), Internal.propN tailC highC v.toNat) +
+        -- The reserve accounts separately for the proposer's sync rewards.
         22 * ((pinTerms config pulled anc fin).depth *
           (pinTerms config pulled anc fin).syncProposer) ≤
       10 * (pinTerms config pulled anc fin).exitingCredits +
+        -- The bound adds the amounts transferred by consolidation.
         20 * (∑ v ∈ (previousOnlyKeys counted V), Internal.consAmt eventsC v.toNat) := by
   -- The proposer credits fit the pin's per-epoch bound, and their consolidation part is `consAmt`.
   have rewards := Internal.proposer_rewards_le h toB link pre sameEpoch tailC highC
@@ -1619,21 +1597,12 @@ private theorem deposits_union_le (h : Setting config checks g split fin pulled 
       · exact (Finset.mem_filter.mp m).2.2
     simpa [slashedFlagAt, Option.map_eq_some_iff] using flag
 
-/-- The credits bound, from the proposer rewards, the deposits and the credited keys of its classes.
-
-The reserve charges consolidation transfers and sync rewards separately.
-
-The deposits of a key slashed at C count only those before its slashing, in its share.
-
-The proposer budget covers the five classes' proposer rewards and the sync proposer share.
-
-`deposits` is the deposits of the classes against the deposit queue, at weight three.
-
-`cards` is the credited keys of the classes against the credited-key slots. -/
+/-- The credits bound, from the proposer rewards, the deposits and the classes' credited keys. -/
 private theorem budget_credits_of (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    -- The proposer budget covers the five classes' proposer rewards and the sync proposer share.
     (rewards : (∑ v ∈ stayingKeys pulled counted V, Internal.propN tailC highC v.toNat) +
       (∑ v ∈ previousOnlyKeys counted V, Internal.propN pre highC v.toNat) +
       (∑ v ∈ previousOnlyKeys counted V, Internal.propN tailC highC v.toNat) +
@@ -1643,12 +1612,16 @@ private theorem budget_credits_of (h : Setting config checks g split fin pulled 
       (∑ v ∈ createdSlashed counted split, Internal.propN tailC highC v.toNat) +
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer ≤
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit)
+    -- This compares the deposits of the classes with the deposit queue, at weight three.
+    --
+    -- The deposits of a key slashed at C count only those before its slashing, in its share.
     (deposits : 3 * ((∑ v ∈ stayingKeys pulled counted V ∪ joinedKeys pulled counted,
         (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
           tailC)) +
       (∑ v ∈ newlySlashed pulled counted split ∪ createdSlashed counted split,
         Internal.depPre eventsC v.toNat)) ≤
       (pinTerms config pulled anc fin).queueDep)
+    -- This compares the credited keys of the classes with the credited-key slots.
     (cards :
       ((stayingKeys pulled counted V).filter fun v =>
         Internal.creditedKey tailC highC v = true).card +
@@ -1692,6 +1665,7 @@ private theorem budget_credits_of (h : Setting config checks g split fin pulled 
         10 * ((∑ v ∈ (stayingKeys pulled counted V), Internal.consAmt eventsC v.toNat) +
           (∑ v ∈ (joinedKeys pulled counted), Internal.consAmt eventsC v.toNat) +
           (∑ v ∈ (previousOnlyKeys counted V), Internal.consAmt eventsC v.toNat)) := by
+  -- The reserve charges consolidation transfers and sync rewards separately.
   classical
   obtain ⟨carry, churn, wb, ck, queue, credits, slots⟩ := credits_budget config pulled anc fin
   obtain ⟨-, d46, -, -, -, -⟩ := Internal.classes_disjoint h
@@ -1745,34 +1719,27 @@ private theorem budget_credits_of (h : Setting config checks g split fin pulled 
     exact Nat.mul_le_mul_right _ (cards.trans slots)
   omega
 
-/-- C's non-attestation credits to keys counted once.
-
-The reserve also charges consolidation transfers separately.
-
-The proposer's sync rewards belong to the sync budget instead.
-
-The bound uses a factor of ten to account for compounding and rounding the credit charge.
-
-The compounding of the credits, an exact tenth of the keys' total, is in the bound.
-
-Each credited staying or previous-only key uses one rounding slot.
-
-A previous-only key also reads the proposer credits of `pre`.
-
-That run leads to the split from the start of its epoch. -/
+/-- C's non-attestation credits to keys counted once. -/
 theorem budget_credits (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
       ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch b)
+    -- A previous-only key also reads the proposer credits of `pre`.
+    --
+    -- That run leads to the split from the start of its epoch.
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    -- The bound uses a factor of ten to account for compounding and rounding the credit charge.
+    --
+    -- The compounding of the credits, an exact tenth of the keys' total, is in the bound.
     10 * ((∑ v ∈ (stayingKeys pulled counted V), Internal.credC tailC highC v.toNat) +
       (∑ v ∈ (joinedKeys pulled counted), Internal.credC tailC highC v.toNat) +
       (∑ v ∈ (previousOnlyKeys counted V), Internal.propN pre highC v.toNat) +
       (∑ v ∈ (previousOnlyKeys counted V), Internal.propC tailC highC v.toNat) +
+      -- Each credited staying or previous-only key uses one rounding slot.
       (∑ v ∈ (stayingKeys pulled counted V), Internal.bandC tailC highC v.toNat) +
       (∑ v ∈ (previousOnlyKeys counted V), Internal.bandC tailC highC v.toNat) +
       (∑ v ∈ (joinedKeys pulled counted), Internal.bandC tailC highC v.toNat) +
@@ -1790,9 +1757,11 @@ theorem budget_credits (h : Setting config checks g split fin pulled anc counted
         (∑ v ∈ (joinedKeys pulled counted), Internal.credN tailC highC v.toNat) +
         (∑ v ∈ (previousOnlyKeys counted V), Internal.propN pre highC v.toNat) +
         (∑ v ∈ (previousOnlyKeys counted V), Internal.propN tailC highC v.toNat)) +
+        -- The proposer's sync rewards belong to the sync budget instead.
         11 * ((pinTerms config pulled anc fin).depth *
           (pinTerms config pulled anc fin).syncProposer) ≤
       10 * (pinTerms config pulled anc fin).credits +
+        -- The reserve also charges consolidation transfers separately.
         10 * ((∑ v ∈ (stayingKeys pulled counted V), Internal.consAmt eventsC v.toNat) +
           (∑ v ∈ (joinedKeys pulled counted), Internal.consAmt eventsC v.toNat) +
           (∑ v ∈ (previousOnlyKeys counted V), Internal.consAmt eventsC v.toNat)) :=
@@ -1937,25 +1906,21 @@ private theorem block_idle_step {g : ForkedBeaconState preset}
     · have bound : w.activationEpoch.toNat ≤ (getCurrentEpoch t).toNat + 1 := late
       omega
 
-/-- A key that is idle along a prefix of C's run has a balance at most its credits there.
-
-The key is two epochs from its activation at the end of the run.
-
-It is absent at the start.
-
-No block step gives it a gross credit, since it is neither a proposer nor on a seat.
-
-A slot step credits it the credits of deposits and consolidations, since it is idle. -/
+/-- A key that is idle along a prefix of C's run has a balance at most its credits there. -/
 private theorem key_idle_walk (h : Setting config checks g split fin pulled anc counted V)
     {z : ForkedBeaconState preset} (v : ℕ) (small : v < 2 ^ 64) (highC : ℕ)
     (zEarly : z.fork < .glamsterdam)
     (zHigh : (getCurrentEpoch z.state).toNat ≤ highC + 1)
+    -- The key is two epochs from its activation at the end of the run.
     (ahead : ∀ m : ForkedBeaconState preset, Run config checks m z → ∀ w : Validator,
       m.state.validators.data[v]? = some w → w.activationEpoch ≠ FAR_FUTURE_EPOCH →
         (getCurrentEpoch m.state).toNat + 1 < w.activationEpoch.toNat)
+    -- The key is absent at the start.
     (start : actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v = 0) :
     ∀ {m : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m),
+      -- No block step gives it a gross credit, since it is neither a proposer nor on a seat.
       Run config checks m z → Internal.grossScan v highC pre = 0 ∧ actualBalanceAt m v ≤
+        -- A slot step credits it the credits of deposits and consolidations, since it is idle.
         (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v highC pre) +
         (Internal.creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v highC pre)
           := by
@@ -2077,31 +2042,28 @@ private theorem activated_ordered (h : Setting config checks g split fin pulled 
       found exit
     omega
 
-/-- A key activated by C and absent at the split holds the activation reserve at a state of C's run.
-
-The run from the split reaches that state first, and then C.
-
-The key is activated by C, before it exits, and absent at the split.
-
-At that state its balance is at least `MAX_EFFECTIVE_BALANCE`.
-
-Its effective balance is within the downward band of its balance, and at least that.
-
-The key is idle before that state, so its balance is at most the credits that the scans count. -/
+/-- A key activated by C and absent at the split holds the activation reserve on C's run. -/
 theorem created_start (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    -- The key is activated by C, before it exits, and absent at the split.
     {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
       w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
     (absent : split.validators.data.size ≤ v.toNat) :
+    -- The run from the split reaches that state first, and then C.
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
       (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧
       z.fork < .glamsterdam ∧ z.fork ≤ fork ∧
       (getCurrentEpoch z.state).toNat ≤ (getCurrentEpoch counted).toNat ∧
       v.toNat < z.state.validators.data.size ∧
+      -- At that state the key's balance is at least `MAX_EFFECTIVE_BALANCE`.
       preset.MAX_EFFECTIVE_BALANCE.toNat ≤ actualBalanceAt z v.toNat ∧
+      -- Its effective balance is within the downward band of its balance, and at least that bound.
       effectiveAt z v.toNat ≤ actualBalanceAt z v.toNat + preset.downwardBand ∧
       preset.MAX_EFFECTIVE_BALANCE.toNat ≤ effectiveAt z v.toNat ∧
+      -- The key is idle before that state.
+      --
+      -- So its balance is at most the credits that the scans count.
       actualBalanceAt z v.toNat ≤ Internal.grossScan v.toNat highC pre +
         (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre) +
         (Internal.creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat highC
@@ -2343,50 +2305,6 @@ theorem sum_eq_costKeys {M : Type*} [AddCommMonoid M] {S W : Finset ValidatorInd
 
 /-- The consolidation credits of C's branch fit the caps of due entries at the finalized state.
 
-The run from the finalized block's state X to C's state has the run from the split as its tail.
-
-The credit bound sums the consolidation amounts for the selected targets.
-
-The bound is the caps at X of the due entries of X's queue that name them.
-
-It is over the whole run from X.
-
-The run to R's state bounds the credits to V the same way.
-
-`V` and the staying, previous-only and joined keys are disjoint.
-
-So the sum over their union is at most the sum of the source caps for the due entries.
-
-This holds as `high ≤` the epoch of the call and X is within the withdrawal delay.
-
-The newly slashed keys are slashed at C.
-
-So they are not staying, previous-only or joined keys, and not in `V`.
-
-Their credits join those of the staying, previous-only and joined keys in the bound.
-
-The created slashed keys are created after R's registry and slashed at C.
-
-So they are in none of those sets either.
-
-Their credits join the bound with the same share and bands.
-
-A whistleblower's share of the amounts of the newly and created slashed keys is at most them.
-
-A due entry that names one of them adds its band.
-
-A key of `V` and a previous-only key weigh three, and the others one.
-
-The target's rise includes the rounding from each applied entry.
-
-Each due entry in X's queue adds one upward rounding band.
-
-An entry is charged its cap at X, which is at least `MAX_EFFECTIVE_BALANCE`.
-
-So three bands are at most three tenths of it.
-
-The reserve rounds the consolidation charge `3.3 · X` up to `(33 · X + 9) / 10`.
-
 The consolidation charge is zero beyond the withdrawal delay, so this bound needs a shallow call. -/
 theorem budget_consolidations_base
     (h : Setting config checks g split fin pulled anc counted V)
@@ -2395,18 +2313,48 @@ theorem budget_consolidations_base
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    -- The bound below needs `high` to be at most the epoch of the call.
+    --
+    -- It also needs X, the finalized block's state, to be within the withdrawal delay.
     (highLeR : high ≤ (getCurrentEpoch pulled).toNat)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (highLe : highC ≤ (getCurrentEpoch pulled).toNat) :
+    -- The credit bound sums the consolidation amounts for the selected targets.
+    --
+    -- The bound is the caps at X of the due entries of X's queue that name them.
+    --
+    -- It is over the whole run from X.
+    --
+    -- The run to R's state bounds the credits to V the same way.
+    --
+    -- `V` and the staying, previous-only and joined keys are disjoint.
+    --
+    -- So the sum over their union is at most the sum of the source caps for the due entries.
     (((∑ v ∈ (stayingKeys pulled counted V), Internal.consAmt eventsC v.toNat) +
       (∑ v ∈ (joinedKeys pulled counted), Internal.consAmt eventsC v.toNat) +
+      -- A key of `V` and a previous-only key weigh three, and the others one.
       3 * (∑ v ∈ (previousOnlyKeys counted V), Internal.consAmt eventsC v.toNat) +
       3 * (∑ v ∈ V, Internal.consAmt events v.toNat) +
+      -- The newly slashed keys are slashed at C.
+      --
+      -- So they are not staying, previous-only or joined keys, and not in `V`.
+      --
+      -- Their credits join those of the staying, previous-only and joined keys in the bound.
+      --
+      -- Take a whistleblower's share of the amounts of the newly and created slashed keys.
+      --
+      -- That share is at most the amounts.
       Internal.wShare preset fork (∑ v ∈ newlySlashed pulled counted split, Internal.consAmt eventsC
         v.toNat) +
+      -- A due entry that names a newly or created slashed key adds its band.
       (∑ v ∈ newlySlashed pulled counted split, Internal.bandX fin highC v.toNat) +
+      -- The created slashed keys are created after R's registry and slashed at C.
+      --
+      -- So they are in none of those sets either.
+      --
+      -- Their credits join the bound with the same share and bands.
       Internal.wShare preset fork (∑ v ∈ createdSlashed counted split, Internal.consAmt eventsC
         v.toNat) +
       (∑ v ∈ createdSlashed counted split, Internal.bandX fin highC v.toNat) +
@@ -2416,15 +2364,24 @@ theorem budget_consolidations_base
       (∑ v ∈ newlySlashed pulled counted split with
         (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, Internal.bandX fin high
           v.toNat)) +
+      -- The target's rise includes the rounding from each applied entry.
+      --
+      -- Each due entry in X's queue adds one upward rounding band.
       preset.upwardBand * (Internal.dueAt fin highC (stayingKeys pulled counted V) +
         Internal.dueAt fin highC (joinedKeys pulled counted) + 3 * Internal.dueAt fin highC
           (previousOnlyKeys counted V) +
         3 * Internal.dueAt fin high V) ≤
+        -- An entry is charged its cap at X, which is at least `MAX_EFFECTIVE_BALANCE`.
+        --
+        -- So three bands are at most three tenths of it.
+        --
+        -- The reserve rounds the consolidation charge `3.3 · X` up to `(33 · X + 9) / 10`.
         (33 * (pinTerms config pulled anc fin).consolidationsX + 9) / 10) ∧
       (∑ v ∈ (stayingKeys pulled counted V), Internal.consAmt eventsC v.toNat) +
         (∑ v ∈ (joinedKeys pulled counted), Internal.consAmt eventsC v.toNat) +
         3 * (∑ v ∈ (previousOnlyKeys counted V), Internal.consAmt eventsC v.toNat) ≤
       3 * (pinTerms config pulled anc fin).consolidationsX := by
+  -- The run from the finalized block's state X to C's state has the run from the split as its tail.
   classical
   have shallow := h.shallow
   have early := h.early
@@ -2951,23 +2908,15 @@ theorem late_of_withdrawable (h : Setting config checks g split fin pulled anc c
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The floor of a key slashed at R, from a state of R's run, across the step that slashes it.
 
-The key is unslashed at `c`, and the pin counts it as slashed on R's branch.
-
-The run from the state splits at the step that slashes the key.
-
-Before the step the key is unslashed, and its withdrawable epoch is beyond the epoch of that step.
-
-After it the key is slashed, so its withdrawable epoch is beyond R's horizon.
-
-The floor allows for the run's debits and the maximum initial slashing penalty against R's balance.
-
 If the key is already slashed, the floor starts at that state. -/
 theorem slash_floor_across (h : Setting config checks g split fin pulled anc counted V)
     (v : ValidatorIndex) {c : BeaconState preset fork}
     (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩) (inside : v.toNat < c.validators.data.size)
+    -- The key is unslashed at `c`.
     (clean : ∀ u, c.validators.data[v.toNat]? = some u → u.slashed = false)
     (wP : Validator) (foundP : pulled.validators.data[v.toNat]? = some wP)
     (slashedP : wP.slashed = true)
+    -- The pin counts the key as slashed on R's branch.
     (rb : (pinTerms config pulled anc fin).slashedRB v.toNat = true)
     {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, c⟩ ⟨fork, zs⟩)
     (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩)
@@ -2978,7 +2927,17 @@ theorem slash_floor_across (h : Setting config checks g split fin pulled anc cou
       actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
         (evs.map (penaltyDebit v.toNat)).sum + (evs.map (Internal.syncDebit v.toNat)).sum +
         (evs.map (floorPartialDebit v)).sum +
+          -- The floor allows for the run's debits against R's balance.
+          --
+          -- It also allows for the maximum initial slashing penalty.
           Internal.slashW (pinTerms config pulled anc fin) v.toNat := by
+  -- The run from the state splits at the step that slashes the key.
+  --
+  -- Before the step the key is unslashed.
+  --
+  -- Its withdrawable epoch is then beyond the epoch of that step.
+  --
+  -- After it the key is slashed, so its withdrawable epoch is beyond R's horizon.
   classical
   obtain ⟨shared⟩ := h.toFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -3142,29 +3101,7 @@ theorem slash_floor_across (h : Setting config checks g split fin pulled anc cou
     omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The floor of a key unslashed at `c` at each state of R's run from `c`.
-
-The run from `c` is the rest of the run from the finalized state to R's, cut at `c`.
-
-The floor starts from the smaller of the voter's balance there and its cap there.
-
-The cap there is the cap at R if it is frozen, and less if the voter switches to compounding on R.
-
-It is R's balance, the debits of the rest of R's run, and the slack of a slashing on R.
-
-A voter unslashed at R uses the floor without a slashing deduction.
-
-A voter slashed at R uses the floor with an allowance for the slashing loss.
-
-The key is unslashed at `c`.
-
-A key slashed on R is not withdrawable until at least a slashings vector past finality.
-
-The pin allows for the initial penalty at the largest effective-balance cap.
-
-The exit of the key at R is late for the whole run.
-
-The same exit-epoch restriction holds for a finalized key. -/
+/-- The floor of a key unslashed at `c` at each state of R's run from `c`. -/
 theorem voter_floorAt (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -3172,12 +3109,18 @@ theorem voter_floorAt (h : Setting config checks g split fin pulled anc counted 
     {c : BeaconState preset fork}
     (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (rest : Run config checks ⟨fork, c⟩ ⟨fork, pulled⟩)
+    -- The run from `c` is the rest of the run from the finalized state to R's, cut at `c`.
     (cutC : toC.append rest = fromFin.append tail)
+    -- The key is unslashed at `c`.
     (clean : ∀ u, c.validators.data[v.toNat]? = some u → u.slashed = false)
+    -- A key slashed on R is not withdrawable until at least a slashings vector past finality.
     (slashedLate : ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = true →
       anc.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
         w.withdrawableEpoch.toNat)
     (inside : v.toNat < c.validators.data.size)
+    -- The exit of the key at R is late for the whole run.
+    --
+    -- The same exit-epoch restriction holds for a finalized key.
     (late : ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = false →
       (getCurrentEpoch pulled).toNat + 1 <
         w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
@@ -3185,11 +3128,24 @@ theorem voter_floorAt (h : Setting config checks g split fin pulled anc counted 
     (after : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append after = rest →
     ∀ {evs : List (BalanceEvent preset)},
     after.balanceEvents (getCurrentEpoch pulled).toNat = .ok evs →
+    -- The floor starts from the smaller of the voter's balance there and its cap there.
+    --
+    -- The cap there is the cap at R if it is frozen.
+    --
+    -- It is less if the voter switches to compounding on R.
     min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
         (PinTerms.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
+      -- The floor is R's balance, plus the debits of the rest of R's run.
+      --
+      -- It also adds the slack of a slashing on R.
       actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
         (evs.map (penaltyDebit v.toNat)).sum + (evs.map (Internal.syncDebit v.toNat)).sum +
         (evs.map (floorPartialDebit v)).sum +
+          -- A voter unslashed at R uses the floor without a slashing deduction.
+          --
+          -- A voter slashed at R uses the floor with an allowance for the slashing loss.
+          --
+          -- The pin allows for the initial penalty at the largest effective-balance cap.
           Internal.slashW (pinTerms config pulled anc fin) v.toNat := by
   classical
   have calledNat := UInt64.le_iff_toNat_le.mp (Internal.Setting.called h)
@@ -3322,19 +3278,7 @@ theorem slash_floor_from_slashed
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The effective balance of a finalized key slashed at the split stays in its envelope on R's run.
-
-A key unslashed at the finalized state is slashed on the shared segment or on R's run.
-
-The floor starts at the finalized state.
-
-A key slashed at the finalized state keeps its withdrawable epoch along every run.
-
-Its withdrawable epoch at R is the slashings vector past the finalized epoch, and past R's horizon.
-
-The floor at each state needs no further allowance for slashing.
-
-That actual-balance floor gives a lower bound on effective balance. -/
+/-- A finalized key slashed at the split keeps its effective balance in its envelope on R's run. -/
 theorem kc_envelope (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -3342,11 +3286,14 @@ theorem kc_envelope (h : Setting config checks g split fin pulled anc counted V)
     (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
     (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (v : ValidatorIndex) (inFin : v.toNat < fin.validators.data.size)
+    -- A key unslashed at the finalized state is slashed on the shared segment or on R's run.
     (slashedSplit : ∃ u, split.validators.data[v.toNat]? = some u ∧ u.slashed = true)
     (rb : (pinTerms config pulled anc fin).slashedRB v.toNat = true)
+    -- Its withdrawable epoch at R is the slashings vector past the finalized epoch.
     (frozen : ∀ w, pulled.validators.data[v.toNat]? = some w →
       (getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
         w.withdrawableEpoch.toNat)
+    -- Its withdrawable epoch is also past R's horizon.
     (late : ∀ w, pulled.validators.data[v.toNat]? = some w →
       (getCurrentEpoch pulled).toNat + 1 < w.withdrawableEpoch.toNat) :
     ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
@@ -3354,6 +3301,13 @@ theorem kc_envelope (h : Setting config checks g split fin pulled anc counted V)
         ((Internal.syncD eventsF v.toNat + Internal.syncD events v.toNat +
             Internal.slashW (pinTerms config pulled anc fin) v.toNat) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  -- The floor starts at the finalized state.
+  --
+  -- A key slashed at the finalized state keeps its withdrawable epoch along every run.
+  --
+  -- The floor at each state needs no further allowance for slashing.
+  --
+  -- That actual-balance floor gives a lower bound on effective balance.
   classical
   obtain ⟨toPulled⟩ := h.toPulled
   obtain ⟨uF, foundF⟩ : ∃ uF, fin.validators.data[v.toNat]? = some uF :=
@@ -3391,17 +3345,9 @@ theorem kc_envelope (h : Setting config checks g split fin pulled anc counted V)
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key unslashed at `c` at each state of R's run from `c`.
 
-The run from `c` is the rest of the run from the finalized state to R's, cut at `c`.
-
 If it starts below the reserve's ceiling, it stays within that ceiling plus the allowed increments.
 
-It may start within the floor of its balance at `c` instead.
-
-The increments are the whole ones of its sync debits and its slashing slack.
-
-The actual-balance floor holds at each state of that run.
-
-It gives a lower bound on effective balance. -/
+The increments are the whole ones of its sync debits and its slashing slack. -/
 theorem envelope_of_voter (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -3412,12 +3358,14 @@ theorem envelope_of_voter (h : Setting config checks g split fin pulled anc coun
     {c : BeaconState preset fork}
     (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (rest : Run config checks ⟨fork, c⟩ ⟨fork, pulled⟩)
+    -- The run from `c` is the rest of the run from the finalized state to R's, cut at `c`.
     (cutC : toC.append rest = fromFin.append tail)
     (clean : ∀ u, c.validators.data[v.toNat]? = some u → u.slashed = false)
     (slashedLate : ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = true →
       anc.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
         w.withdrawableEpoch.toNat)
     (inside : v.toNat < c.validators.data.size)
+    -- The key may instead start within the floor of its balance at `c`.
     (start : (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         (pinTerms config pulled anc fin).ebUp v.toNat ∧
         effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤ balanceAt fin v.toNat) ∨
@@ -3434,6 +3382,9 @@ theorem envelope_of_voter (h : Setting config checks g split fin pulled anc coun
           ((Internal.syncD eventsF v.toNat + Internal.syncD events v.toNat +
               Internal.slashW (pinTerms config pulled anc fin) v.toNat) /
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  -- The actual-balance floor holds at each state of that run.
+  --
+  -- It gives a lower bound on effective balance.
   exact Internal.prefix_envelope h fromFin tail (getCurrentEpoch pulled).toNat (Nat.le_succ _)
     replayedF
     replayed v toC rest cutC inside (Internal.slashW (pinTerms config pulled anc fin) v.toNat) start
@@ -3586,24 +3537,22 @@ def chargedNewlySlashed (pulled counted split : BeaconState preset fork)
 
 /-- The keys of R's registry that are slashed at the split and that R's call reads as slashed.
 
-They are the keys that the shared run slashes in its last epoch, and some before it.
-
-The withdrawable epoch at R is a slashing vector past the finalized state's epoch.
-
-The anchor's finalized epoch can lag that of the finalized state.
-
-So this leaves out a key slashed before the finalized state's epoch.
-
-Its correlation penalty can fall in the window.
-
-None is a newly slashed key, which is unslashed at the split.
-
-None is in C's quorum, since a flag set at the split persists to C. -/
+They are the keys that the shared run slashes in its last epoch, and some before it. -/
 def cutKeys (config : Config) (pulled anc fin split : BeaconState preset fork) :
     Finset ValidatorIndex :=
   ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter fun v =>
+    -- None is a newly slashed key, which is unslashed at the split.
+    --
+    -- None is in C's quorum, since a flag set at the split persists to C.
     ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
       (pinTerms config pulled anc fin).slashedRB v.toNat = true ∧
+      -- The withdrawable epoch at R is a slashing vector past the finalized state's epoch.
+      --
+      -- The anchor's finalized epoch can lag that of the finalized state.
+      --
+      -- So this leaves out a key slashed before the finalized state's epoch.
+      --
+      -- Its correlation penalty can fall in the window.
       ((pulled.validators.data[v.toNat]?).any fun w =>
         decide ((getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
           w.withdrawableEpoch.toNat)) = true
@@ -3734,19 +3683,18 @@ private theorem bands_arith (UP β cc SPE seats nV n4 n5 n6 nS nE nQ nB nU nK : 
   have bandK : 3 * cc * nK ≤ β * nK := Nat.mul_le_mul_right nK ceil
   nlinarith
 
-/-- The cut keys are disjoint from the other classes in the sync budget.
-
-A cut key is slashed at the split, and the flag persists to C.
-
-So it is not in `V` or a quorum class.
-
-It is not a newly slashed key either, which is unslashed at the split.
-
-It is in the split's registry, so it is not a created slashed key. -/
+/-- The cut keys are disjoint from the other classes in the sync budget. -/
 theorem cut_disjoint (h : Setting config checks g split fin pulled anc counted V) :
     Disjoint (Internal.cutKeys config pulled anc fin split)
       (V ∪ stayingKeys pulled counted V ∪ previousOnlyKeys counted V ∪ joinedKeys pulled counted ∪
         newlySlashed pulled counted split ∪ createdSlashed counted split) := by
+  -- A cut key is slashed at the split, and the flag persists to C.
+  --
+  -- So it is not in `V` or a quorum class.
+  --
+  -- It is not a newly slashed key either, which is unslashed at the split.
+  --
+  -- It is in the split's registry, so it is not a created slashed key.
   rw [Finset.disjoint_left]
   intro v cut member
   simp only [Internal.cutKeys, Finset.mem_filter] at cut
@@ -3772,33 +3720,19 @@ theorem cut_disjoint (h : Setting config checks g split fin pulled anc counted V
     have := (Array.getElem?_eq_some_iff.mp found).1
     omega
 
-/-- The bands of the classes, the charged newly slashed and the cut keys fit the seats and slots.
-
-Keys slashed and charged to depart on C's branch also use a band if credited on `pre`.
-
-A key that proposed in `pre` pays it from a slot of the epoch.
-
-The bound adds the slots of an epoch to the seats.
-
-The run `pre` starts at a state of the split's epoch, so its proposers fill the slots of one epoch.
-
-Any other key holds a seat, by its sync credit, and pays it from the spare of its seat.
-
-A cut key with a sync debit holds a seat and pays the rounding of an increment's reward there.
-
-C's run is read at `highC`, and the shared segment and R's run at `high`.
-
-The end epochs of R and C are at most `high + 1` and `highC + 1`, respectively. -/
+/-- The bands of the classes, the charged newly slashed and the cut keys fit the seats and slots. -/
 theorem bands_seats (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high highC : ℕ)
+    -- The end epoch of R is at most `high + 1`, and that of C at most `highC + 1`.
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
     {events eventsF eventsC eventsP : List (BalanceEvent preset)}
+    -- C's run is read at `highC`, and the shared segment and R's run at `high`.
     (replayed : tail.balanceEvents high = .ok events)
     (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (replayedC : tailC.balanceEvents highC = .ok eventsC)
@@ -3811,10 +3745,22 @@ theorem bands_seats (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ newlySlashed pulled counted split,
           if (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true then
             (if 0 < Internal.syncCr eventsF v.toNat then preset.upwardBand else 0) else 0) +
+        -- Keys slashed and charged to depart on C's branch also use a band if credited on `pre`.
+        --
+        -- A key that proposed in `pre` pays it from a slot of the epoch.
+        --
+        -- The run `pre` starts at a state of the split's epoch.
+        --
+        -- So its proposers fill the slots of one epoch.
+        --
+        -- Any other key holds a seat, by its sync credit, and pays it from the spare of its seat.
         (∑ v ∈ chargedNewlySlashed pulled counted split tailC,
           if 0 < Internal.propN pre highC v.toNat + Internal.whistC pre highC v.toNat +
             Internal.syncCr eventsP v.toNat then
             preset.upwardBand else 0) +
+        -- A cut key with a sync debit holds a seat.
+        --
+        -- It pays the rounding of an increment's reward there.
         3 * (∑ v ∈ Internal.cutKeys config pulled anc fin split,
           if 0 < Internal.syncD eventsF v.toNat + Internal.syncD events v.toNat then
             (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
@@ -3827,6 +3773,7 @@ theorem bands_seats (h : Setting config checks g split fin pulled anc counted V)
             (getCurrentEpoch fin).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
           ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) /
             max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) +
+          -- The bound adds the slots of an epoch to the seats.
           preset.SLOTS_PER_EPOCH.toNat)) := by
   classical
   obtain ⟨d45, d46, d56, d4v, d5v, d6v⟩ := Internal.classes_disjoint h
@@ -4110,22 +4057,13 @@ private theorem floor_aux {A : Finset ValidatorIndex} {S : Finset ℕ} {P : ℕ 
       Finset.mem_filter.mpr (inside v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2))
       (Nat.le_add_right _ _)))
 
-/-- R's branch budget covers whistleblower rewards, slashings, proposer rewards and rounding.
-
-The slashed, proposer and rounding charges have weight three.
-
-So has the whistleblower charge `Wh`.
-
-The slashed charge covers the flag gain of two windows and the leak of one increment.
-
-The remainder `W` holds those and the unit gain.
-
-`Wh` pays the whistleblower reward of any set of keys that R's call reads as slashed on its branch.
-
-Each reward is at the key's effective balance and rise, or at its balance at the finalized state. -/
+/-- R's branch budget covers whistleblower rewards, slashings, proposer rewards and rounding. -/
 theorem branchR_split (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     ∃ Wh W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
+      -- The slashed, proposer and rounding charges have weight three.
+      --
+      -- So has the whistleblower charge `Wh`.
       3 * (Wh + W + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
           (pinTerms config state ancestor finalizedState).slashedR +
         (pinTerms config state ancestor finalizedState).depth *
@@ -4141,6 +4079,9 @@ theorem branchR_split (config : Config)
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
                 (pinTerms config state ancestor finalizedState).depth /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) ∧
+      -- The slashed charge covers the flag gain of two windows and the leak of one increment.
+      --
+      -- The remainder `W` holds those and the unit gain.
       (pinTerms config state ancestor finalizedState).slashedR *
           (2 * (pinTerms config state ancestor finalizedState).depthFin *
             (pinTerms config state ancestor finalizedState).flagRate) +
@@ -4148,6 +4089,13 @@ theorem branchR_split (config : Config)
           (pinTerms config state ancestor finalizedState).slashLeak +
         (pinTerms config state ancestor finalizedState).unitGain *
           (pinTerms config state ancestor finalizedState).slashedR ≤ W ∧
+      -- `Wh` pays the whistleblower reward of any set of keys.
+      --
+      -- The keys are those that R's call reads as slashed on its branch.
+      --
+      -- Each reward is the larger of two amounts.
+      --
+      -- One is at the key's effective balance and rise, the other at its finalized balance.
       ∀ A : Finset ValidatorIndex,
         ∑ v ∈ A.filter (fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat
           = true), max (balanceAt state v.toNat +

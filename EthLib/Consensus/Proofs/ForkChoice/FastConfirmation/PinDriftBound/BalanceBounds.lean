@@ -200,15 +200,7 @@ theorem rate_per_increment (I WD F P e0 D : ℕ) (hI : 0 < I) (hWD : 0 < WD)
         _ = (WD * I) * m := by rw [hm]; ring
     exact Nat.lt_of_mul_lt_mul_right f
 
-/-- The base reward per increment is at least four.
-
-The root of a quarter total is below `2 ^ 31`.
-
-The base reward factor times the balance increment is at least `2 ^ 35`.
-
-Below the small total the root is at most a fifth of an increment, which the factor covers.
-
-The read succeeds, since the quarter total is positive and `fits` bounds the scaled factor. -/
+/-- The base reward per increment is at least four. -/
 theorem four_le_perIncrement (h : Setting config checks g split fin pulled anc counted V) :
     4 ≤ (pinTerms config pulled anc fin).perIncrement := by
   have definition : (pinTerms config pulled anc fin).perIncrement =
@@ -235,6 +227,7 @@ theorem four_le_perIncrement (h : Setting config checks g split fin pulled anc c
       rw [UInt64.toNat_div]
       simp only [UInt64.reduceToNat]
       omega
+  -- The base reward factor times the balance increment is at least `2 ^ 35`.
   have room := h.facts.rewardScale
   have reward := (Internal.PinPresetFacts.reward h.facts)
   have positive : 0 < q.toNat := by
@@ -247,6 +240,9 @@ theorem four_le_perIncrement (h : Setting config checks g split fin pulled anc c
     · rw [UInt64.toNat_div]
       simp only [UInt64.reduceToNat]
       omega
+  -- The read succeeds, since the quarter total is positive.
+  --
+  -- A preset fact also bounds the scaled factor.
   obtain ⟨per, computed⟩ :=
     DirectSafety.Apriori.Internal.perIncrement_exists positive h.facts.fits
   rw [computed] at definition
@@ -256,8 +252,12 @@ theorem four_le_perIncrement (h : Setting config checks g split fin pulled anc c
   have rootSmall : 4 * q.toNat.sqrt ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
       preset.BASE_REWARD_FACTOR.toNat := by
     rcases small with low | tiny
+    -- The root of a quarter total is below `2 ^ 31`.
     · have : q.toNat.sqrt < 2 ^ 31 := Nat.sqrt_lt'.mpr (by norm_num at low ⊢; omega)
       omega
+    -- Below the small total the root is at most a fifth of an increment.
+    --
+    -- The factor covers it.
     · have : q.toNat.sqrt ≤ q.toNat := Nat.sqrt_le_self _
       have : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat :=
@@ -414,25 +414,22 @@ theorem flow_gain_split (I WD F P D Dt Df q Zk Z' : ℕ)
     simp only [posZ, ↓reduceIte]
     omega
 
-/-- The closure test of the credit ceiling with the credits rounded down to increments.
-
-The stake above `e0` is the credits, the slack `W` and the gain at the base stake.
-
-The gain on the rounded credits is at most an eleventh of them.
-
-Rounding down leaves less than an increment of that stake unrounded.
-
-The increment of the bound covers it. -/
+/-- The closure test of the credit ceiling with the credits rounded down to increments. -/
 private theorem ceiling_closed_floor (I WD F P e0 D Cr Cr' S W C q : ℕ)
     (hq : q = e0 / I * P * F / WD) (hI : 0 < I) (key : 11 * D * (P * F) < WD * I)
+    -- The stake above `e0` is the credits, the slack `W` and the gain at the base stake.
     (hC : C = I * (11 * (Cr' + W + D * q + D) / (10 * I))) (start : S + Cr ≤ e0 + Cr' + W) :
     S + Cr + (D * ((C + I - 1) / I * P * F / WD) + (D * q + D)) < e0 + C + I := by
   subst hq
   have alignedC : C % I = 0 := by
     rw [hC]
     exact Nat.mul_mod_right _ _
+  -- The gain on the rounded credits is at most an eleventh of them.
   have credit := gain_credit_le I WD F P D C hI alignedC key
   have div := Nat.div_add_mod (11 * (Cr' + W + D * (e0 / I * P * F / WD) + D)) (10 * I)
+  -- Rounding down leaves less than an increment of the stake above `e0` unrounded.
+  --
+  -- The increment of the bound covers it.
   have lt := Nat.mod_lt (11 * (Cr' + W + D * (e0 / I * P * F / WD) + D)) (show 0 < 10 * I by omega)
   have times : 10 * I * (11 * (Cr' + W + D * (e0 / I * P * F / WD) + D) / (10 * I)) = 10 * C := by
     rw [hC]
@@ -498,15 +495,7 @@ private theorem ceiling_arith (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.t
   · unfold Internal.gainOn
     omega
 
-/-- A key's balance along a run is at most a stake bound, its credits and the gain at the bound.
-
-The bound `e0` on the effective balance, with the credits rounded down to increments, is closed.
-
-The stake above `e0` is the credits, the slack `W` and the gain at the base stake.
-
-The rate premise is that of the low regime, at the depth of the call.
-
-The gain on the rounded credits is at most a tenth of that stake. -/
+/-- A key's balance along a run is at most a stake bound, its credits and the gain at the bound. -/
 theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     (post : Run config checks n y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ n.fork)
     (i : ℕ) (inside : i < n.state.validators.data.size) (high P capHigh : ℕ)
@@ -526,6 +515,7 @@ theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     (hF : F = (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum)
     (hq : q = e0 / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P * F / WEIGHT_DENOMINATOR.toNat)
     (alignedE0 : e0 % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    -- The stake above `e0` is the credits, the slack `W` and the gain at the base stake.
     (hC : C = preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
       (11 * (Cr' + W + depth * q + depth) / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)))
     (epochs : (getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat ≤ depth)
@@ -533,15 +523,18 @@ theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     (startEff : effectiveAt n i ≤ e0 + C)
     (credits : Internal.netScan i high post +
       (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high post) ≤ Cr)
+    -- The rate premise is that of the low regime, at the depth of the call.
     (key : 11 * depth * (P * F) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (start : S + Cr ≤ e0 + Cr' + W) :
     ∃ gc, gc = depth * (11 * (Cr' + W + depth * q + depth) /
         (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * P *
           (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) ∧
+      -- The gain on the rounded credits is at most a tenth of the stake above `e0`.
       10 * gc ≤ Cr' + W + depth * q + depth ∧
       (∀ z ∈ post.balancePath, min (actualBalanceAt z i) capHigh ≤ S + Cr +
         (gc + (depth * q + depth))) ∧
+      -- Once the credits are rounded down to increments, the bound `e0` is closed.
       effectiveAt y i ≤ e0 + C := by
   obtain ⟨alignedE, closed, splitAll, hform, hten⟩ := ceiling_arith incPos P depth Cr Cr' e0 C S W F
     q hF hq alignedE0 hC key start
@@ -567,26 +560,16 @@ theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     rw [Nat.min_comm]
     exact fixpoint
 
-/-- A key's balance along a run that makes it compound has the ceiling of a run with one cap.
-
-The run splits at the step that makes the key compound.
-
-Before the step the balance counts up to `lo`, and after it up to `hi`.
-
-The ceiling includes the credits of the step.
-
-The step leaves its balance within the smaller of its balance before it and `lo`, plus its credits.
-
-So the balance after the step is at most the ceiling before it, plus the credits of the step.
-
-Both parts take the same closed bound `e0 + C`, and their epochs add up to those of the run. -/
+/-- A key's balance along a run that makes it compound has the ceiling of a run with one cap. -/
 private theorem c_ceiling_abstract_flip {x m n y : ForkedBeaconState preset}
+    -- The run splits at the step that makes the key compound.
     (pre : Run config checks x m) (step : Step config checks m n) (post : Run config checks n y)
     (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (i : ℕ) (inside : i < x.state.validators.data.size) (high P lo hi : ℕ)
     (alignedLo : lo % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
     (alignedHi : hi % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0) (loLe : lo ≤ hi)
     (startCap : effectiveAt x i ≤ lo)
+    -- Before the step the balance counts up to `lo`, and after it up to `hi`.
     (capsPre : ∀ z ∈ pre.balancePath, PinTerms.capAt z i ≤ lo)
     (capsPost : ∀ z ∈ post.balancePath, PinTerms.capAt z i ≤ hi)
     (rate : ∀ z, z ∈ pre.balancePath ∨ z ∈ post.balancePath → ∀ total perIncrement : Gwei,
@@ -607,9 +590,15 @@ private theorem c_ceiling_abstract_flip {x m n y : ForkedBeaconState preset}
     (epochs : (getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat ≤ depth)
     (startBal : min (actualBalanceAt x i) lo ≤ S)
     (startEff : effectiveAt x i ≤ e0 + C)
+    -- The step leaves its balance within the smaller of its balance before it and `lo`.
+    --
+    -- The step's credits come on top of that.
+    --
+    -- So the balance after the step is at most the ceiling before it, plus the credits of the step.
     (junction : actualBalanceAt n i ≤ min (actualBalanceAt m i) lo +
       Internal.stepCredit (fun _ => true) (fun _ => true) i step)
     (keepEff : effectiveAt n i = effectiveAt m i)
+    -- The ceiling includes the credits of the step.
     (credits : Internal.netScan i high pre + (Internal.creditScan (fun _ => false)
         (fun s => decide (s ≠ .rewards)) i high pre) +
       Internal.stepCredit (fun _ => true) (fun _ => true) i step + Internal.netScan i high post +
@@ -629,6 +618,9 @@ private theorem c_ceiling_abstract_flip {x m n y : ForkedBeaconState preset}
   obtain ⟨alignedE, closed, splitAll, hform, hten⟩ := ceiling_arith incPos P depth Cr Cr' e0 C S W F
     q hF hq alignedE0 hC key start
   subst hF
+  -- Both parts take the same closed bound `e0 + C`.
+  --
+  -- Their epochs add up to those of the run.
   have epochStep := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
   have epochPre := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
   have epochPost := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
@@ -742,31 +734,30 @@ theorem rise_kept (config : Config) (pulled anc fin : BeaconState preset fork) (
   · rfl
   · exact absurd kept ‹_›
 
-/-- A key on its kept arm has an effective balance within its rise, the flows and their slack.
-
-The key's effective balance stays at that of R, ends at its start, or is within the ceiling.
-
-The ceiling is within `high` and the flows, and the slack is paid when there are flows.
-
-It starts from any state: `start` bounds the effective balance there.
-
-A key that ends at its start has `start` within the cap and within the rounded top of `H`. -/
+/-- A key on its kept arm has an effective balance within its rise, the flows and their slack. -/
 theorem rise_close (config : Config) (pulled anc fin : BeaconState preset fork) (i : ℕ)
     {H : ℕ} (hH : H = (pinTerms config pulled anc fin).high i)
     (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (kept : (pinTerms config pulled anc fin).keptArm i = true)
+    -- The bound starts from any state, and `start` bounds the effective balance there.
     {eC Bc S U start capHigh : ℕ}
     (alignedC : eC % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
     (startLe : start ≤ max (balanceAt fin i)
       ((H + S) - (H + S) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    -- The key's effective balance stays at that of R, ends at its start, or is within the ceiling.
     (stay : eC = balanceAt pulled i ∨
+      -- A key that ends at its start has `start` within the cap.
+      --
+      -- It also has `start` within the rounded top of `H`.
       (eC ≤ start ∧ start ≤ (pinTerms config pulled anc fin).capFor i + S + U ∧
         start ≤ (H + preset.downwardBand) -
           (H + preset.downwardBand) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat + S + U) ∨
       (eC ≤ Bc + preset.downwardBand ∧
         eC ≤ max start (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
     (capped : eC ≤ (pinTerms config pulled anc fin).capFor i + S + U)
+    -- The ceiling is within `high` and the flows.
     (ceiling : Bc ≤ H + S)
+    -- The slack is paid when there are flows.
     (slack : S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
       (S < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) :
@@ -1364,15 +1355,7 @@ theorem key_stay_to (h : Setting config checks g split fin pulled anc counted V)
   · exact .inr ⟨by omega, c3 (by omega), c1⟩
 
 open DirectSafety.Apriori.Internal in
-/-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains.
-
-The gain is small enough to use the key's effective balance envelope to bound its rewards.
-
-The credit allowance `Cr` covers C's net credits, and the bound includes R's sync debits.
-
-If the cap rises on C's run, `Cr` must cover C's gross credits instead.
-
-The gain is at most a tenth of the credits, sync debits, slack and base gain. -/
+/-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains. -/
 theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {e : BeaconState preset fork}
@@ -1387,9 +1370,11 @@ theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (v : ValidatorIndex) (inside : v.toNat < split.validators.data.size)
     {events eventsF eventsC : List (BalanceEvent preset)} (W : ℕ)
     (replayedC : tailC.balanceEvents highC = .ok eventsC) (Cr : ℕ)
+    -- The credit allowance `Cr` covers C's net credits, and the bound includes R's sync debits.
     (credits : Internal.netScan v.toNat highC tailC +
       (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤
         Cr)
+    -- If the cap rises on C's run, `Cr` must cover C's gross credits instead.
     (flipCover : PinTerms.capAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
         preset.MIN_ACTIVATION_BALANCE.toNat ∧ preset.MIN_ACTIVATION_BALANCE.toNat <
           PinTerms.capAt (⟨fork, e⟩ : ForkedBeaconState preset) v.toNat →
@@ -1414,6 +1399,7 @@ theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
             ((getCurrentEpoch pulled).toNat + 1) -
           PinTerms.dueAmount pulled (Nat.le_trans (by decide) h.fulu) v.toNat
             ((getCurrentEpoch pulled).toNat + 1)))
+    -- The gain is small enough to use the key's effective balance envelope to bound its rewards.
     (rateLow : 11 * (pinTerms config pulled anc fin).depth *
       ((pinTerms config pulled anc fin).gainRate v.toNat + 1) ≤
         (pinTerms config pulled anc fin).ebUp v.toNat) :
@@ -1429,6 +1415,7 @@ theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
             ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) /
           (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * P *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) ∧
+      -- The gain is at most a tenth of the credits, sync debits, slack and base gain.
       10 * gc ≤ (Cr +
             (events.map (Internal.syncDebit v.toNat)).sum + (eventsF.map (Internal.syncDebit
               v.toNat)).sum) + W +
@@ -1689,15 +1676,7 @@ theorem debits_le_top (h : Setting config checks g split fin pulled anc counted 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a key at a state of R's run from the finalized state has a ceiling.
 
-The balance counts up to the key's cap at that state.
-
-The ceiling is R's balance, the leak at `M` over the window and the net partials.
-
-It adds the sync debits of the two runs and the slack `W`.
-
-The floor of the state gives it, with the debits of the run after the state.
-
-The bound `M` is at least the key's effective balance at each state of the run. -/
+The balance counts up to the key's cap at that state. -/
 private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -1705,12 +1684,14 @@ private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (v : ValidatorIndex) (W M : ℕ)
+    -- The bound `M` is at least the key's effective balance at each state of the run.
     (below : ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
       (post : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append post = fromFin.append tail →
       effectiveAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat ≤ M)
     {zs : BeaconState preset fork} (r1 : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
     (r2 : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩) (cut : r1.append r2 = fromFin.append tail)
     (inside : v.toNat < zs.validators.data.size)
+    -- The floor of the state gives the ceiling, with the debits of the run after the state.
     (floorAt : ∀ {evs : List (BalanceEvent preset)}, r2.balanceEvents high = .ok evs →
       min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
           (PinTerms.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
@@ -1720,12 +1701,14 @@ private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc
     min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
         (PinTerms.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
       actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+        -- The ceiling is R's balance, the leak at `M` over the window and the net partials.
         (((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
             (pinTerms config pulled anc fin).leakAt M v.toNat +
           (PinTerms.dueAmount fin (Nat.le_trans (by decide) h.fulu) v.toNat
               ((getCurrentEpoch pulled).toNat + 1) -
             PinTerms.dueAmount pulled (Nat.le_trans (by decide) h.fulu) v.toNat
               ((getCurrentEpoch pulled).toNat + 1))) +
+        -- It adds the sync debits of the two runs and the slack `W`.
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + (events.map (Internal.syncDebit
           v.toNat)).sum + W) := by
   have whole := Apriori.Internal.balanceEvents_append fromFin tail high replayedF replayed
@@ -1797,30 +1780,24 @@ theorem path_ceiling (h : Setting config checks g split fin pulled anc counted V
     r2 cutZ (Nat.le_trans inside (registryGrows_of_chainSteps r1.chainSteps)) (floorAt r1 r2 cutZ')
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The effective balance of a key at each state of R's run from a state `c` is bounded.
-
-The run from `c` is the rest of the run from the finalized state to R's, cut at `c`.
-
-The finalized state is `c` for a key of the finalized registry.
-
-A key that R's run creates has its first state `c` after the split.
-
-At `c` use the ceiling from the finalized balance or the floor of the actual balance there.
-
-After `c` add the whole increments of the sync debits and the slashing allowance `W`.
-
-R's balance and debits bound the balance at each state, which gives the ceiling. -/
+/-- The effective balance of a key at each state of R's run from a state `c` is bounded. -/
 theorem prefix_envelope (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    -- The run from `c` is the rest of the run from the finalized state to R's, cut at `c`.
+    --
+    -- The finalized state is `c` for a key of the finalized registry.
+    --
+    -- A key that R's run creates has its first state `c` after the split.
     (v : ValidatorIndex) {c : BeaconState preset fork}
     (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (rest : Run config checks ⟨fork, c⟩ ⟨fork, pulled⟩)
     (cutC : toC.append rest = fromFin.append tail)
     (inside : v.toNat < c.validators.data.size) (W : ℕ)
+    -- At `c` use the ceiling from the finalized balance or the floor of the actual balance there.
     (start : (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         (pinTerms config pulled anc fin).ebUp v.toNat ∧
         effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤ balanceAt fin v.toNat) ∨
@@ -1828,6 +1805,7 @@ theorem prefix_envelope (h : Setting config checks g split fin pulled anc counte
         actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
           actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat %
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    -- R's balance and debits bound the balance at each state, which gives the ceiling.
     (floorAt : ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, c⟩ ⟨fork, zs⟩)
       (after : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append after = rest →
       ∀ {evs : List (BalanceEvent preset)}, after.balanceEvents high = .ok evs →
@@ -1836,6 +1814,7 @@ theorem prefix_envelope (h : Setting config checks g split fin pulled anc counte
         actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
           (evs.map (penaltyDebit v.toNat)).sum + (evs.map (Internal.syncDebit v.toNat)).sum +
           (evs.map (floorPartialDebit v)).sum + W) :
+    -- After `c` add the whole increments of the sync debits and the slashing allowance `W`.
     ∀ z ∈ rest.balancePath, effectiveAt z v.toNat ≤
       (pinTerms config pulled anc fin).ebUp v.toNat +
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
@@ -1964,24 +1943,20 @@ theorem inactive_from_exit {x y : ForkedBeaconState preset} (tail : Run config c
     exact fun _ => by rw [kept.exitEpoch assigned]; exact reached
   simp [isActiveAt, foundLater, inactive]
 
-/-- A key that exited before the finalized epoch stays within its finalized balance and credits.
-
-The key is idle from the finalized block on.
-
-Its exit is kept, and the previous epoch of each later state is at or past it.
-
-An idle key earns no epoch reward, so the credit ceiling of the run needs no rate.
-
-The ceiling on the balance is the finalized balance and the credits of the run.
-
-Rounding adds the whole increments that cover the credits. -/
+/-- A key that exited before the finalized epoch stays within its finalized balance and credits. -/
 theorem exited_ceiling (h : Setting config checks g split fin pulled anc counted V)
     {a : BeaconState preset fork} (run : Run config checks ⟨fork, fin⟩ ⟨fork, a⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch a).toNat ≤ high + 1) (i : ℕ) {w : Validator}
     (found : fin.validators.data[i]? = some w)
+    -- The key is idle from the finalized block on.
+    --
+    -- Its exit is kept, and the previous epoch of each later state is at or past it.
     (exited : w.exitEpoch.toNat + 1 ≤ (getCurrentEpoch fin).toNat) (Cr : ℕ)
     (credits : Internal.netScan i high run +
       (Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high run) ≤ Cr) :
+    -- The ceiling on the balance is the finalized balance and the credits of the run.
+    --
+    -- Rounding adds the whole increments that cover the credits.
     effectiveAt (⟨fork, a⟩ : ForkedBeaconState preset) i ≤
       max (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
         ((actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i -
@@ -2005,6 +1980,7 @@ theorem exited_ceiling (h : Setting config checks g split fin pulled anc counted
     have := getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
     have := congrArg UInt64.toNat far
     omega
+  -- An idle key earns no epoch reward, so the credit ceiling of the run needs no rate.
   have idle : ∀ z ∈ run.balancePath,
       i.toUInt64 ∉ getActiveValidatorIndices z.state (getPreviousEpoch z.state) := by
     intro z member active
@@ -2604,16 +2580,14 @@ private theorem rate_step (ρn ρd K L Y : ℕ) (first : ρn * Y ≤ ρd * (L + 
 
 /-- The arithmetic of the low bound of an existing key.
 
-The potential floor, rounded down to an increment, is at least the bound less the sync debits.
-
-`L1` and `L2` are the leaks an increment above the base and above the shortfall.
-
-The rate bounds the base and the shortfall by them, plus one each.
-
-`R` is the bound before its drop, and it is at most the base less the partials due. -/
+The potential floor, rounded down to an increment, is at least the bound less the sync debits. -/
 private theorem low_arith (inc band ρn ρd K depth X s R pd sync L1 L2 E0 cap : ℕ)
     (positive : 0 < ρd) (incPos : 0 < inc)
+    -- `L1` and `L2` are the leaks an increment above the base and above the shortfall.
+    --
+    -- The rate bounds the base and the shortfall by them, plus one each.
     (first : ρn * X ≤ ρd * (L1 + 1)) (second : ρn * s ≤ ρd * (L2 + 1)) (epochs : K ≤ depth)
+    -- `R` is the bound before its drop, and it is at most the base less the partials due.
     (baseLe : R ≤ X - pd) (effLe : R ≤ E0) (capLe : E0 ≤ cap) :
     R - ((L2 + 1) + depth * (L1 + 1) + band + inc) ≤
       min E0 (min cap
@@ -2656,13 +2630,7 @@ private theorem low_arith (inc band ρn ρd K depth X s R pd sync L1 L2 E0 cap :
 
 /-- The reserve's lower balance estimate for an existing key allows for losses.
 
-The key is activated at the finalized state, charged on the run from the split, and exits by C.
-
-The bound is its effective balance at the call, less its sync debits.
-
-The loss allowance counts the shortfall below the stored effective balance once.
-
-It carries the leak at the base for each epoch of the depth. -/
+The bound is its effective balance at the call, less its sync debits. -/
 theorem existing_low_explicit
     (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -2670,6 +2638,9 @@ theorem existing_low_explicit
     {events : List (BalanceEvent preset)}
     (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (v : ValidatorIndex)
+    -- The key is activated at the finalized state, and charged on the run from the split.
+    --
+    -- It exits by C.
     (epochLe : ∀ c ∈ tailC.departureCharges, c.index = v.toNat →
       c.epoch ≤ (getCurrentEpoch counted).toNat) (val : Validator)
     (initial : fin.validators.data[v.toNat]? = some val)
@@ -2678,10 +2649,12 @@ theorem existing_low_explicit
           (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat) -
         (pinTerms config pulled anc fin).partialsDue v.toNat)
       preset.MIN_ACTIVATION_BALANCE.toNat -
+      -- The loss allowance counts the shortfall below the stored effective balance once.
       (((pinTerms config pulled anc fin).leakAt
           (balanceAt fin v.toNat -
             actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat +
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
+        -- It carries the leak at the base for each epoch of the depth.
         ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           ((pinTerms config pulled anc fin).leakAt
             (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
@@ -2769,16 +2742,16 @@ private theorem bridge (ρn ρd M k B0 DOWN slack a D X Y inc : Nat) (hM : 2 ≤
 
 /-- The arithmetic of the margin of the floor of a key on C's run.
 
-The closed form of the potential floor, less the sync debits, is at least the base less the fall.
-
-The fall holds the leak at the base and the band for each epoch of the depth, and the carry.
-
-`L1` and `L2` are the leaks an increment above the base with the band and above the shortfall.
-
-The rate bounds the base with the band and the shortfall by them, plus one each. -/
+The closed form of the potential floor, less the sync debits, is at least the base less the fall. -/
 private theorem margin_arith (ρn ρd K depth B band s L1 L2 pd sync D a X : ℕ)
+    -- `L1` is the leak an increment above the base with the band.
+    --
+    -- `L2` is the leak an increment above the shortfall.
+    --
+    -- The rate bounds the base with the band and the shortfall by them, plus one each.
     (positive : 0 < ρd) (first : ρn * (B + band) ≤ ρd * (L1 + 1))
     (second : ρn * s ≤ ρd * (L2 + 1)) (epochs : K ≤ depth)
+    -- The fall holds the leak at the base and the band for each epoch of the depth, and the carry.
     (fall : (L2 + 1) + depth * (L1 + 1) + pd ≤ X) (debit : D ≤ sync + pd)
     (closed : (ρd - ρn * K) * (B + band) ≤ ρd * (a + D + band) + ρn * s) :
     B - X - sync ≤ a := by
@@ -2792,23 +2765,19 @@ private theorem margin_arith (ρn ρd K depth B band s L1 L2 pd sync D a X : ℕ
 
 /-- The arithmetic of the stay of the effective balance of a key on C's run.
 
-The key has no sync debits, and the test of its floor holds.
+A segment of the run that starts above `M` in effective balance ends at a balance of at least `M`.
 
-An effective balance above the finalized one is at least an increment above it.
-
-A segment of the run from a state with that effective balance ends at a balance of at least M.
-
-Here `M` is the finalized effective balance.
-
-The segment loses the rate of the leak for each epoch and the partials due.
-
-The rate bounds the base with the band by the leak, and the test bounds the fall by the band.
-
-A quarter of an increment bounds the band, as the preset requires. -/
+Here `M` is the finalized effective balance. -/
 private theorem stay_arith (ρn ρd K k depth inc band B M Bw X pd D bal L1 L2 : ℕ)
+    -- A quarter of an increment bounds the band, as the preset requires.
     (positive : 0 < ρd) (incPos : 0 < inc) (quarter : 4 * band ≤ inc) (big : inc ≤ M)
+    -- The key has no sync debits, and the test of its floor holds.
+    --
+    -- The rate bounds the base with the band by the leak, and the test bounds the fall by the band.
     (testB : M ≤ B + band) (fallX : X ≤ band) (first : ρn * (B + band) ≤ ρd * (L1 + 1))
+    -- The segment loses the rate of the leak for each epoch and the partials due.
     (fall : (L2 + 1) + depth * (L1 + 1) + pd ≤ X) (epochs : k ≤ K) (depthK : K ≤ depth)
+    -- An effective balance above the finalized one is at least an increment above it.
     (start : M + inc ≤ Bw) (debit : D ≤ pd)
     (closed : (ρd - ρn * k) * (Bw + band) ≤ ρd * (bal + D + band)) : M ≤ bal := by
   have cost := rate_cost ρn ρd K L1 (B + band) first
@@ -2842,25 +2811,7 @@ private theorem stay_arith (ρn ρd K k depth inc band B M Bw X pd D bal L1 L2 :
   have cancel := Nat.le_of_mul_le_mul_left total positive
   omega
 
-/-- The margin of the floor of a key on C's run, from a rate of its leak.
-
-The rate bounds the key's penalties in one rewards pass.
-
-The balance of the key from the finalized block is above the closed form of the potential floor.
-
-The balance floor uses that rate and the balance shortfall.
-
-It also reads the debits of the run, which are its sync debits and its partials.
-
-The partials are at most those due.
-
-`low` is the base less `X`.
-
-`X` is at least the fall.
-
-The fall is the carry, the leak for each epoch of the depth, and the partials due.
-
-The leak is read at the base with the band. -/
+/-- The margin of the floor of a key on C's run, from a rate of its leak. -/
 private theorem floorC_margin (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -2868,6 +2819,7 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
     (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
     (ρn ρd : ℕ) (positive : 0 < ρd)
+    -- The rate bounds the key's penalties in one rewards pass.
     (leaky : ∀ eb : ℕ, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ eb →
       (pinTerms config pulled anc fin).leakAt eb i.toNat ≤ ρn * eb / ρd)
     (above : ∀ x : ℕ, ρn * x ≤ ρd * ((pinTerms config pulled anc fin).leakAt
@@ -2875,7 +2827,13 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
     (base0 X low : ℕ)
     (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat)
+    -- `low` is the base less `X`.
     (hlow : low = base0 - X)
+    -- `X` is at least the fall.
+    --
+    -- The fall is the carry, the leak for each epoch of the depth, and the partials due.
+    --
+    -- The leak is read at the base with the band.
     (fall : ((pinTerms config pulled anc fin).leakAt
           (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
             actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
@@ -2884,6 +2842,9 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
           ((pinTerms config pulled anc fin).leakAt
             (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
         (pinTerms config pulled anc fin).partialsDue i.toNat ≤ X) :
+    -- From the finalized block, the key's balance is above the closed form of the potential floor.
+    --
+    -- The balance floor uses the rate of the leak and the balance shortfall.
     ∃ slack : ℕ,
       effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
         actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
@@ -2900,6 +2861,9 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
           preset.downwardBand) ≤ ρd * (a + D + preset.downwardBand) + ρn * slack →
         low - (events.map (Internal.syncDebit i.toNat)).sum ≤ a := by
   have nearC := h.near
+  -- The floor also reads the debits of the run, which are its sync debits and its partials.
+  --
+  -- The partials are at most those due.
   have partialLe := run_partials_le_due h (fromFin.append tailC) nearC i replayed
   refine ⟨effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
     actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat, by omega,
@@ -2924,16 +2888,6 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
 
 /-- The arithmetic of the margin of the floor of a slashed key on C's run.
 
-The floor deducts the initial slashing penalty at the fork's quotient.
-
-The fall counts leak at the base balance and includes a rounding band in `X`.
-
-`Xs` is the effective balance that the slash is read at.
-
-It is at least the finalized one and an increment.
-
-The resulting floor uses the key's balance and the initial slashing penalty `Xs / M`.
-
 The bound allows one more epoch of penalties. -/
 private theorem floorC_margin_slash (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -2947,10 +2901,14 @@ private theorem floorC_margin_slash (h : Setting config checks g split fin pulle
     (above : ∀ x : ℕ, ρn * x ≤ ρd * ((pinTerms config pulled anc fin).leakAt
       (x + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1))
     (base0 X low Xs : ℕ)
+    -- `Xs` is the effective balance that the slash is read at.
+    --
+    -- It is at least the finalized one and an increment.
     (hXs : max (balanceAt fin i.toNat) base0 + preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ Xs)
     (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat)
     (hlow : low = base0 - X)
+    -- The fall counts leak at the base balance and includes a rounding band in `X`.
     (fall : ((pinTerms config pulled anc fin).leakAt
           (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
             actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
@@ -2977,6 +2935,9 @@ private theorem floorC_margin_slash (h : Setting config checks g split fin pulle
           (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat *
             (ρd * (a + D + preset.downwardBand) + ρn * slack) +
             ρd * (preset.downwardBand + slack) →
+        -- The floor deducts the initial slashing penalty at the fork's quotient.
+        --
+        -- The resulting floor uses the key's balance and the initial slashing penalty `Xs / M`.
         low - (events.map (Internal.syncDebit i.toNat)).sum ≤ a + Xs /
           (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat := by
   have nearC := h.near
@@ -3048,19 +3009,14 @@ private theorem slash_low_arith (R pd dropV X base0 m sy G r inc A P dn : ℕ)
 
 /-- The effective balance at C stays above the reserve's lower estimate less the slashing loss.
 
-The sync debits of the key are added to it.
-
-The key is unslashed at the finalized block, and it may be slashed at C.
-
-The slashing loss uses the same effective balance as the flagged-key charge.
-
-The lower estimate includes a band and an increment to cover rounding the floor. -/
+The sync debits of the key are added to it. -/
 theorem lowEB_slashed (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {events : List (BalanceEvent preset)}
     (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    -- The key is unslashed at the finalized block, and it may be slashed at C.
     (unslashed : val.slashed = false)
     (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
@@ -3069,6 +3025,9 @@ theorem lowEB_slashed (h : Setting config checks g split fin pulled anc counted 
       ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[i.toNat]? = some u →
           (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat)) :
+    -- The slashing loss uses the same effective balance as the flagged-key charge.
+    --
+    -- The lower estimate includes a band and an increment to cover rounding the floor.
     (pinTerms config pulled anc fin).lowEB i.toNat -
         max ((pinTerms config pulled anc fin).ebUp i.toNat)
           (max (balanceAt fin i.toNat) ((pinTerms config pulled anc fin).base0 i.toNat) +
@@ -3599,21 +3558,7 @@ private theorem V_active (h : Setting config checks g split fin pulled anc count
   have eCdef : countedBalance counted v = balanceAt counted v.toNat := rfl
   omega
 
-/-- A V key that left C's active set is charged by its exit, its late activation or its floor.
-
-Its activation is at most R's epoch.
-
-If that is within the seed lookahead of the split, the two branches agree on its activity there.
-
-Then C's record exits it by C's epoch, which R reads as exiting or C charges.
-
-Otherwise R activated it after finalizing the split, and R reads it as late.
-
-R's registry may hold a key that C's does not, since the registries differ by position.
-
-Then `h.voting` holds with the unslashed flag read as false.
-
-Such a key activates late at R, so it is in the second case. -/
+/-- A V key that left C's active set is charged by its exit, its late activation or its floor. -/
 private theorem V_left (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -3634,6 +3579,7 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
   obtain ⟨member, notAC⟩ := Finset.mem_filter.mp hv
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨toPulled⟩ := h.toPulled
+  -- The key's activation is at most R's epoch.
   obtain ⟨w, foundW, activeWb⟩ := Internal.active_of_activeVoters h.early (h.voting v member).1
   have activeW := activeWb
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, UInt64.le_iff_toNat_le,
@@ -3642,6 +3588,15 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
   have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
   have laterNat := UInt64.le_iff_toNat_le.mp h.later
   have nearC := h.near
+  -- Its activation may be within the seed lookahead of the split.
+  --
+  -- Then the two branches agree on its activity there.
+  --
+  -- R's registry may hold a key that C's does not, since the registries differ by position.
+  --
+  -- Then the voting hypothesis holds with the unslashed flag read as false.
+  --
+  -- Such a key activates late at R, so it is in the second case.
   by_cases early : w.activationEpoch.toNat ≤
       (getCurrentEpoch split).toNat + preset.MAX_SEED_LOOKAHEAD.toNat
   · -- the key's activity at its activation epoch is shared, so C holds it
@@ -3654,6 +3609,7 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
     obtain ⟨u, foundU, activeU⟩ := isActiveAt_eq_true_iff.mp atAct
     simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, UInt64.le_iff_toNat_le,
       UInt64.lt_iff_toNat_lt] at activeU
+    -- Then C's record exits the key by C's epoch, which R reads as exiting or C charges.
     have exited : u.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
       by_contra later
       apply notAC

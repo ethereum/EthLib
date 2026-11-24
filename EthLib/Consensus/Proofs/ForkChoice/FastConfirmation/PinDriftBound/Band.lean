@@ -20,36 +20,6 @@ A counting state C of another honest store may lie on another branch since the f
 The two branches leave one split state, at or after the finalized checkpoint's epoch.
 
 The pin reserve bounds quorum drift from R to C for `fusaka ≤ fork < glamsterdam`.
-
-## Keys active only in the previous epoch of the counting state
-
-A key that counts in C's quorum but is not active at C's epoch exits by the epoch after R's.
-
-When activity up to C's epoch is fixed at the split, R reads that exit exactly.
-
-So the pin reserve charges the stake of these scheduled exits.
-
-A slashed key there was slashed after the split, since C does not hold the slashing.
-
-A slashing sets the withdrawable epoch at least `EPOCHS_PER_SLASHINGS_VECTOR` after it.
-
-## The penalties of one key over several epochs
-
-A key pays penalties only in the rewards pass at the end of each epoch.
-
-The pass reads the total, the key's effective balance and its score at the epoch's last state.
-
-So a bound on that rate at each such state bounds the key's penalties over the branch.
-
-## The band of totals
-
-The reserve bounds the rates on both branches using the call's total active balance.
-
-The a priori guard at the finalized state supplies a floor and a ceiling on each total.
-
-Before Gloas, twice the last ceiling of the window is at most three times its last floor.
-
-So two totals of the window are within three halves of each other.
 -/
 
 @[expose] public section
@@ -59,6 +29,14 @@ namespace EthLib.Consensus.Models.Network
 open Base Uint64
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
+
+/-! ## Keys active only in the previous epoch of the counting state
+
+A key that counts in C's quorum but is not active at C's epoch exits by the epoch after R's.
+
+When activity up to C's epoch is fixed at the split, R reads that exit exactly.
+
+So the pin reserve charges the stake of these scheduled exits. -/
 
 namespace PinDrift.Internal
 
@@ -73,21 +51,14 @@ private theorem slashingEvidence_key {x y : ForkedBeaconState preset} (st : Step
     · exact ⟨_, v, found, key⟩
     · exact ⟨_, v, found, key⟩
 
-/-- A validator that first appears in a step, at a position the first state lacks, is unslashed.
-
-A slashed validator of the last state has a slashed key at the first state.
-
-Otherwise the step carries a slashing that names its key.
-
-Either way a validator of the first state holds that key.
-
-The keys of a run from genesis are distinct. -/
+/-- A validator that first appears in a step, at a position the first state lacks, is unslashed. -/
 theorem fresh_unslashed {g m n : ForkedBeaconState preset}
     (toM : Run config checks g m) (step : Step config checks m n)
     (genesis : Genesis config checks g) {i : ℕ} (fresh : m.state.validators.data.size ≤ i)
     {w : Validator} (found : n.state.validators.data[i]? = some w) : w.slashed = false := by
   by_contra not
   have slashed : w.slashed = true := by simpa using not
+  -- The keys of a run from genesis are distinct.
   have unique : PubkeysDistinct n.state := (toM.snoc step).pubkeysDistinct genesis
   have kept := (validatorKeys_prefix_and_distinct_of_chainSteps
     (Relation.ReflTransGen.single step.chainStep)).1
@@ -101,6 +72,11 @@ theorem fresh_unslashed {g m n : ForkedBeaconState preset}
     omega
   have member : w ∈ n.state.validators.data.toList := Array.mem_toList_iff.mpr
     (Array.mem_of_getElem? found)
+  -- A slashed validator of the last state has a slashed key at the first state.
+  --
+  -- Otherwise the step carries a slashing that names its key.
+  --
+  -- Either way a validator of the first state holds that key.
   rcases (Run.nil.snoc step).slashed_evidence w member slashed with
     ⟨v, memberV, key, -⟩ | ⟨a, b, st, contained, evidence⟩
   · obtain ⟨j, read⟩ := List.mem_iff_getElem?.mp memberV
@@ -111,15 +87,7 @@ theorem fresh_unslashed {g m n : ForkedBeaconState preset}
       exact taken j v read key
     | earlier inner _ => cases inner
 
-/-- A key that R slashed and C did not has waited the slashings vector.
-
-The key may be one of the split's registry, or one that joined the registry after the split.
-
-It is slashed on R's branch after the split, or after it joined.
-
-So its withdrawable epoch is at least the split's epoch plus `EPOCHS_PER_SLASHINGS_VECTOR`.
-
-A run keeps every slashing, so the counting state would hold a key slashed at the split slashed. -/
+/-- A key that R slashed and C did not has waited the slashings vector. -/
 theorem slashed_waits {g : ForkedBeaconState preset}
     {split pulled counted : BeaconState preset fork}
     (toSplit : Run config checks g ⟨fork, split⟩) (genesis : Genesis config checks g)
@@ -128,15 +96,24 @@ theorem slashed_waits {g : ForkedBeaconState preset}
     (caps : CapOrder preset)
     (withdrawDelay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {i : ℕ} {validator : Validator} (found : pulled.validators.data[i]? = some validator)
+    -- The key is slashed on R's branch after the split, or after it joined.
     (slashed : validator.slashed = true)
+    -- Such a key was slashed after the split, since C does not hold the slashing.
     (unslashedC : ((counted.validators.data[i]?).map (·.slashed)).getD true = false) :
+    -- A slashing sets the withdrawable epoch at least `EPOCHS_PER_SLASHINGS_VECTOR` after it.
+    --
+    -- So the withdrawable epoch is at least the split's epoch plus `EPOCHS_PER_SLASHINGS_VECTOR`.
     (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
       validator.withdrawableEpoch.toNat := by
+  -- The key may be one of the split's registry, or one that joined the registry after the split.
   by_cases inside : i < split.validators.data.size
   · have oldFound := Array.getElem?_eq_getElem inside
     cases oldSlashed : split.validators.data[i].slashed
     · exact (toPulled.newly_slashed_withdrawableEpoch caps.activation caps.compounding
         withdrawDelay i _ validator oldFound found oldSlashed slashed).2
+    -- A run keeps every slashing.
+    --
+    -- So the counting state would hold a key slashed at the split slashed.
     · obtain ⟨now, nowFound, nowSlashed⟩ :=
         toCounted.slashedPersistence i _ oldFound oldSlashed
       simp [nowFound, nowSlashed] at unslashedC
@@ -158,6 +135,12 @@ end PinDrift.Internal
 
 open DirectSafety DirectSafety.Apriori.Internal
 
+/-! ## The penalties of one key over several epochs
+
+A key pays penalties only in the rewards pass at the end of each epoch.
+
+So a bound on the pass rate at each last state of an epoch bounds its penalties over the branch. -/
+
 namespace PinDrift.Internal
 
 /-- The rate at which one rewards pass can debit a key, read at the last state of the epoch.
@@ -177,25 +160,19 @@ def passPenaltyRate (config : Config) (z : ForkedBeaconState preset) (v : ℕ) :
 
 /-- The penalties of one key in one segment of a branch fit its pass rate.
 
-This holds if the segment ends an epoch, and the penalties are zero otherwise.
-
-The rate is asked only at the last pass state.
-
-It is asked only when that state reads a total active balance and a base reward per increment.
-
-Every step of the segment starts at the epoch of its start `m`.
-
-Inside the epoch only blocks run, and they record no penalty.
-
-The slot that ends the epoch runs the rewards pass, read at its last state.
-
-So a segment that stays in its epoch pays nothing. -/
+This holds if the segment ends an epoch, and the penalties are zero otherwise. -/
 theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     (mid : Run config checks m n) (early : n.fork < .glamsterdam) (altair : .altair ≤ m.fork)
     (high : ℕ) (endEpoch : (getCurrentEpoch n.state).toNat ≤ high + 1)
+    -- Every step of the segment starts at the epoch of its start `m`.
     (starts : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       mid.Contains step → getCurrentEpoch u.state = getCurrentEpoch m.state)
     {v : ℕ} (inside : v < m.state.validators.data.size) (pen : ℕ)
+    -- The rate is asked only at the last pass state.
+    --
+    -- It is asked only when that state reads a total active balance.
+    --
+    -- That state must also read a base reward per increment.
     (rate : ∀ {z : ForkedBeaconState preset} (pre : Run config checks m z)
       (ok : advanceSlotAcross config checks z = .ok n), mid = pre.snoc (Step.slot ok) →
       (getCurrentEpoch z.state).toNat < (getCurrentEpoch n.state).toNat →
@@ -209,9 +186,12 @@ theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
       replayed with same | ⟨u, inner, boundary, during, crossings, cached, rfl, uEarly, uEpoch,
       crossing, duringOk, cachedOk, crossingsFree, -, kind⟩
   · -- A segment inside its epoch runs only blocks, which record no penalty.
+    --
+    -- So a segment that stays in its epoch pays nothing.
     have free := (epoch_sync_data mid altair early same high replayed).2.1
     rw [penaltyDebit_sum_zero_of_free free]
     exact Nat.zero_le _
+  -- The slot that ends the epoch runs the rewards pass, read at its last state.
   rw [ite_eq_left (uEpoch ▸ crossing)]
   have free := (epoch_sync_data inner altair uEarly uEpoch high duringOk).2.1
   rcases kind with rfl | ⟨just, pass, rewarded, later, justified, scored, rewardedOk, rfl,
@@ -333,15 +313,7 @@ def syncDebit (v : ℕ) (event : BalanceEvent preset) : ℕ :=
 def syncCredit (v : ℕ) (event : BalanceEvent preset) : ℕ :=
   if event.source = .sync then actualBalanceAt event.after v - actualBalanceAt event.before v else 0
 
-/-- The balance of a key that stays unslashed falls over a branch only by its debits, as events.
-
-It starts from the smaller of its balance and its largest effective balance.
-
-The debits are the penalties, the sync penalties and the partial withdrawals of its events.
-
-The guards are those of the per-key floor of the a priori bound.
-
-A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
+/-- The balance of a key that stays unslashed falls over a branch only by its debits, as events. -/
 theorem Run.balanceFloor_events_or_fulu {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -350,8 +322,10 @@ theorem Run.balanceFloor_events_or_fulu {g x y : ForkedBeaconState preset}
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (v : ValidatorIndex) (val : Validator) (initial : x.state.validators.data[v.toNat]? = some val)
     (unslashed : val.slashed = false)
+    -- A key with no activation epoch is allowed if the branch starts from Fulu or later.
     (activated : val.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ x.fork)
     (quotient : ℕ) (positive : 0 < quotient)
+    -- The guards are those of the per-key floor of the a priori bound.
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[v.toNat]? = some w →
@@ -364,7 +338,9 @@ theorem Run.balanceFloor_events_or_fulu {g x y : ForkedBeaconState preset}
       ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing)
     (stays : ∀ w, y.state.validators.data[v.toNat]? = some w → w.slashed = false)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    -- The balance starts from the smaller of its value and the largest effective balance.
     min (actualBalanceAt x v.toNat) (withdrawalMaxEffectiveBalance preset x.fork val).toNat ≤
+      -- The debits are the penalties, the sync penalties and the partial withdrawals of its events.
       actualBalanceAt y v.toNat + (events.map (penaltyDebit v.toNat)).sum +
         (events.map (PinDrift.Internal.syncDebit v.toNat)).sum + (events.map (floorPartialDebit
           v)).sum := by
@@ -403,16 +379,16 @@ private theorem partialCost_key (v : ValidatorIndex) :
 
 /-- The partial payments to one key, plus its entries left queued, fit its entries at the start.
 
-The branch is from Electra.
-
-The entries counted are those due by the cutoff.
-
-The cutoff is less than the start epoch plus the minimum withdrawability delay.
-
-This leaves out the extra wait of one epoch plus the seed lookahead before exit churn can start. -/
+The entries counted are those due by the cutoff. -/
 theorem Run.partialDebit_net {x y : ForkedBeaconState preset}
+    -- The branch is from Electra.
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
     (high cutoff : ℕ) (endpoint : (getCurrentEpoch y.state).toNat ≤ cutoff)
+    -- The cutoff is less than the start epoch plus the minimum withdrawability delay.
+    --
+    -- This leaves out the extra wait before exit churn can start.
+    --
+    -- That wait is one epoch plus the seed lookahead.
     (short : cutoff < (getCurrentEpoch x.state).toNat +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (v : ValidatorIndex) {events : List (BalanceEvent preset)}
@@ -461,7 +437,11 @@ theorem Run.partialDebit_le {x y : ForkedBeaconState preset}
 
 end PinDrift.Internal
 
-/-! ## The band of totals from the guard at the finalized state -/
+/-! ## The band of totals from the guard at the finalized state
+
+The reserve bounds the rates on both branches using the call's total active balance.
+
+The a priori guard at the finalized state supplies a floor and a ceiling on each total. -/
 
 section Band
 
@@ -534,10 +514,6 @@ theorem total_within_guard {g x z : ForkedBeaconState preset} {high : ℕ}
 
 Their totals are within three halves of each other.
 
-Both lie between the window's last floor and ceiling.
-
-The guard asks that twice that ceiling be at most three times that floor.
-
 So the band follows from the guard, and nothing assumes it. -/
 theorem total_band_of_guard {g x y z : ForkedBeaconState preset} {high : ℕ}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
@@ -551,7 +527,9 @@ theorem total_band_of_guard {g x y z : ForkedBeaconState preset} {high : ℕ}
     (yOk : getTotalActiveBalance y.state = .ok yTotal)
     (zOk : getTotalActiveBalance z.state = .ok zTotal) :
     2 * zTotal.toNat ≤ 3 * yTotal.toNat := by
+  -- The guard asks that twice the last ceiling be at most three times the last floor.
   have ratio := PinDrift.Internal.ratio_of_guard electra guard
+  -- Both totals lie between the window's last floor and ceiling.
   obtain ⟨yLow, -⟩ := PinDrift.Internal.total_within_guard shared genesis parameters caps aligned
     twoSlots electra
     guard toY yEarly yWithin yOk
@@ -684,28 +662,26 @@ namespace PinDrift.Internal
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 
-The guard asks that twice the last ceiling be at most three times the last floor.
-
-The ceiling is at least an increment, and the floor falls with the epoch of the window.
-
-So the first floor is at least two thirds of an increment.
-
-The window is shorter than the slashings vector, and an increment is at least 900 vectors.
-
-An increment is also at least 14 slashing quotients, so the first floor is at least 9 quotients. -/
+The first floor is at least two thirds of an increment. -/
 theorem first_floor_of_guard {g x : ForkedBeaconState preset} {high : ℕ}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (aligned : MaxEffectiveBalancesAligned preset)
     (xEarly : x.fork < .glamsterdam)
     (electra : .pectra ≤ x.fork) (guard : aprioriGuardAt config x high)
     (facts : PinPresetFacts preset) :
+    -- The window is shorter than the slashings vector, and an increment is at least 900 vectors.
     600 * (high + 2 - (getCurrentEpoch x.state).toNat) ≤ stakeFloorAt config x high 0 ∧
+      -- An increment is also at least 14 slashing quotients.
+      --
+      -- So the first floor is at least 9 quotients.
       9 * (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat ≤
         stakeFloorAt config x high 0 := by
   have notBefore : ¬ x.fork < .pectra := Nat.not_lt_of_ge electra
   have zero : preElectraEpochs config x high = 0 := by simp [preElectraEpochs, notBefore]
   obtain ⟨-, -, -, -, -, -, -, -, -, -, window, -⟩ := id guard
+  -- The guard asks that twice the last ceiling be at most three times the last floor.
   have ratio := PinDrift.Internal.ratio_of_guard electra guard
+  -- The ceiling is at least an increment, and the floor falls with the epoch of the window.
   have unit := (ceiling_unit_of_guard shared genesis aligned xEarly electra guard).trans
     (PinDrift.Internal.stakeCeilingAt_mono electra (Nat.zero_le (high + 1 - (getCurrentEpoch
       x.state).toNat)))
