@@ -11,93 +11,11 @@ public import EthLib.Base.Proofs.Except
 /-!
 # Proofs: the parameters, the head and the payload attributes of `engine_forkchoiceUpdated`
 
-The update is syncing exactly when the execution layer does not hold the head.
+An update is syncing, invalid, valid or an error, and each case has its own theorem.
 
-A held head whose chain fails the terminal block check is invalid, with the zero hash.
+The decoders read back the parameters, the attributes and the response that the writers write.
 
-The head then does not change.
-
-A held head of proof of work fails that check exactly when it is not terminal.
-
-A valid head below the known finalized block is valid, and the head does not change.
-
-A valid update that keeps the head is exactly that case.
-
-Any other valid update selects a valid head that the execution layer holds.
-
-Its safe and finalized blocks are then zero, or the head or one of its known ancestors.
-
-They are zero only while the transition block is not finalized.
-
-The update fails in one case only.
-
-The head is valid, and its chain passes the terminal block check.
-
-The head is not below the known finalized block.
-
-Its safe or its finalized block is then zero after the transition, or neither zero nor on its chain.
-
-Otherwise such a head is valid and becomes the head.
-
-A head that the execution layer does not hold gives a syncing update.
-
-An invalid head names as latest valid hash the valid block of its chain nearest the head.
-
-There is none when no block of the chain is valid.
-
-That hash is zero when the block is of proof of work, and else a valid payload of the chain.
-
-Each block of a chain after the first is the parent of the block before it.
-
-The forkchoice state decodes exactly when its object holds exactly its three fields.
-
-Each of them is a hash of 32 bytes.
-
-The parameters decode exactly when they are a JSON array of the state and the attributes.
-
-From version 4 custody columns may follow, and they must then decode.
-
-The state must decode, and the attributes must be `null` or an object.
-
-Custody columns that decode never change the answer.
-
-Without payload attributes, every version gives the same answer.
-
-When the update applies a valid head, attributes that fit no structure of the version give `-38003`.
-
-When it applies none, the attributes are not read.
-
-Attributes that fit give the answer of their checks against the head, which the tree holds.
-
-They pass exactly when the version takes their fork and their structure is that of the fork.
-
-Their timestamp must also be above the head's.
-
-The attributes at that fork keep every field.
-
-A fork that the version does not take, or no fork at all, gives `-38005`.
-
-A version takes the forks from Paris to Glamsterdam whose attribute structure it decodes.
-
-No version takes another fork.
-
-A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003`.
-
-The decoders read back the state, the attributes and the parameters that the writers write.
-
-A JSON value reads as a forkchoice response exactly when it is an object of this form.
-
-It holds a payload status, and its only other member that is not `null` may be an ID.
-
-The status is valid, invalid or syncing, and the ID 8 bytes in lowercase hex or absent.
-
-Attributes sent with a head that the update applies come back at the fork of the next block.
-
-The bytes that the ID of a build hashes determine the head and the attributes, at one fork.
-
-Take two calls on one configuration and one tree that start builds.
-
-They hash the same bytes only for the same head and the same attributes at the same fork.
+The bytes that the ID of a build hashes determine its head and its attributes, at one fork.
 -/
 
 public section

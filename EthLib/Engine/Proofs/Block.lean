@@ -12,14 +12,6 @@ public import EthLib.Cryptography.Proofs.Hash.Sha256
 A payload whose block hash is the hash of its header is the payload of its block.
 
 A block of the shape that a payload gives comes back from its payload.
-
-The shape is fixed by EIP-3675 from Paris, with roots and a requests hash that match the lists.
-
-From Glamsterdam, the block access list of the method must be the RLP form of a block access list.
-
-The header then holds the Keccak-256 hash of its bytes, and the slot number of the method.
-
-Bytes that are not such a form give no block.
 -/
 
 public section

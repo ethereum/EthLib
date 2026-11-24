@@ -9,47 +9,11 @@ public import EthLib.Engine.Proofs.NewPayload
 
 Each step answers with the rule of its method, on a view of the node.
 
-A payload on the valid head gets the answer of the method on the chain of the head.
-
-That chain has the head as its last block, and the state after the head.
-
-A payload on another known parent that is not invalid is accepted, with no latest valid hash.
-
-That holds for a payload sent again too, and no other answer is accepted.
-
-A payload whose parent is invalid is invalid, with the latest valid hash of the parent's chain.
-
-A payload whose parent is unknown is syncing.
-
-A payload that fails the checks before execution gets their answer, and the node does not change.
-
-A valid payload is then known as valid, with the state after it.
-
-So the next update, with it as the head, is not syncing.
-
 A forkchoice update first validates the accepted blocks of the chain of its head.
 
 A block on a parent found invalid is invalid too.
 
-It keeps every valid block valid, and its forkchoice state as it was.
-
-It then gives the response of the method on the tree of the known blocks.
-
-On the validated node, it applies its forkchoice state exactly when it applies its head.
-
-That head is then a block that the node knows as valid.
-
-A request for a payload gives the answer of the method on the builds.
-
-An update that answers a payload ID stores the build of its request, on the chain of its head.
-
 Every step keeps each block that the node knows as valid or invalid, and the configuration.
-
-So a request whose checks pass, once answered valid or invalid, gets that answer again later.
-
-The checks before execution read the whole request, so they can still answer invalid for it.
-
-An invalid block hash depends on the request and the configuration alone.
 -/
 
 public section
@@ -1218,7 +1182,11 @@ theorem newPayloadStep_invalid_known {checked : CheckedBlock version} {hash : Ha
 
 /-- A payload answered valid is valid again, with its own hash, in every node reached after.
 
-The request is the same, and its checks pass. -/
+The request is the same, and its checks pass.
+
+The checks before execution read the whole request.
+
+So another request for that block can fail them. -/
 theorem newPayloadStep_valid_again {checked : CheckedBlock version} {hash : Hash32}
     {status : PayloadStatus} {reason : Option PayloadError} {next later : Node}
     (hCheck : checkNewPayload node.config version params = .ok (.ok checked))

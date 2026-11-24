@@ -10,37 +10,13 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 A request is too large exactly when it names more hashes than the pool takes.
 
-So a request of at most 128 hashes is never too large.
+Each answer that is a list has one entry per requested hash, in order.
 
-From Fusaka, version 1 is an unsupported fork for every request.
+Each entry is read from the pool for the version of the method.
 
-Each answer that is a list has one entry per requested hash, in the order of the request.
+Version 4 selects the cells that its bitarray sets.
 
-Each entry is what the pool holds for its hash, read for the version.
-
-An entry of version 1 is `null` only when the pool lacks that data or does not serve.
-
-An entry of version 3 is `null` only when the pool lacks that blob or one of its cell proofs.
-
-Version 2 answers a list exactly when the pool serves and holds every blob with its cell proofs.
-
-An entry of version 4 is `null` exactly when the pool holds none of the cells of its blob.
-
-Otherwise it holds the selected cells of its blob, in increasing order of index.
-
-Cell `i` is selected exactly when bit `i mod 8` of byte `i / 8` of the bitarray is set.
-
-The decoder reads back the parameters that the writer writes.
-
-It reads no JSON value other than what the writer writes.
-
-Each structure of the answer reads back from its JSON, and so does the answer of each version.
-
-A JSON value reads as a blob with its proof, or with its cell proofs, exactly in canonical form.
-
-Each blob and proof is then in lowercase hex.
-
-The cells of version 4 decode only from two arrays of one length, with `null` at the same positions.
+The parameters and each answer read back from their JSON.
 -/
 
 public section

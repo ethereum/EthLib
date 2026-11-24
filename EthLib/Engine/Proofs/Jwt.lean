@@ -9,17 +9,11 @@ public import Mathlib.Tactic
 /-!
 # Engine JWT construction, refusal and acceptance
 
-A 32-byte secret always builds a token, since the reader reads back the builder's own JSON.
+A token built with a 32-byte secret authenticates.
 
-That token authenticates with its secret and issued-at time.
+The clock check accepts it at each clock at most 60 seconds from its issued-at time.
 
-The clock check then accepts at every clock within 60 seconds, including both endpoints.
-
-A token whose tag does not match its parts is refused before any JSON is read.
-
-An authenticated token carries the HS256 tag of its header and claims under its secret.
-
-So it is the compact form of those parts with that tag, and no other tag part is accepted.
+A token authenticates only as the compact form of its parts with their HS256 tag under the secret.
 -/
 
 @[expose] public section
@@ -463,7 +457,9 @@ theorem check_build {secret : ByteArray} {time clock : Nat} {token : String}
   rw [check, authenticate_build hb]
   exact (within_nat_iff time clock).2 hclock
 
-/-- A token built with a 32-byte secret passes with it at every clock within 60 seconds. -/
+/-- A token built with a 32-byte secret passes with it at every clock within 60 seconds.
+
+Both endpoints of that window are included. -/
 theorem check_build_of_size {secret : ByteArray} {time clock : Nat} (hs : secret.size = 32)
     (hclock : clock ≤ time + 60 ∧ time ≤ clock + 60) :
     check secret (compact headerPart (claimsPart time)

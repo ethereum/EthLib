@@ -8,23 +8,13 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 /-!
 # Proofs: `engine_exchangeTransitionConfigurationV1`
 
+Once its request decodes, the method answers the configuration of the execution node.
+
 A configuration reads back from its JSON.
 
-A JSON value reads as a configuration exactly when it holds the three members in canonical form.
+The undecided terminal total difficulty is `2^256 - 2^10`.
 
-The block hash is then in lowercase hex, and the two numbers have no leading zeros.
-
-The method succeeds exactly when the request holds one parameter that decodes as a configuration.
-
-It then answers the configuration of the execution node, whatever configuration the request holds.
-
-So the request that a consensus node writes always gets that answer.
-
-The undecided terminal total difficulty is `2^256 - 2^10`, the value of the minimal configuration.
-
-The terminal block check of the execution layer is that of the consensus layer.
-
-Both must hold the same terminal total difficulty.
+When both layers hold the same terminal total difficulty, they check the terminal block alike.
 -/
 
 public section

@@ -8,19 +8,11 @@ import EthLib.Execution.Proofs.Blocks.BodyGas
 /-!
 # Proofs: the payload that the execution layer builds
 
-A built block passes the state transition of its chain, with the state that the build gives.
+A built block carries the fields of its attributes and passes the state transition of its chain.
 
-So `engine_newPayload` answers valid for a built block whose parameters pass its checks.
+Its value sums the priority fee of each of its transactions.
 
-The built block carries the timestamp, RANDAO mix, withdrawals, beacon root, slot and choices.
-
-From Pectra, its header commits to the requests that the build gives.
-
-Its value sums the priority fee of each of its transactions, at the gas that its run uses.
-
-A build on a chain from the attributes of a forkchoice update is such a build, at their fork.
-
-Each refusal of a build happens when its check fails and every earlier check passes.
+A build from the attributes of a forkchoice update is a build of a payload, at their fork.
 -/
 
 public section
@@ -383,7 +375,10 @@ theorem buildPayload_of_buildPayloadOnChain {version : Nat}
       mapError_ok_iff.mp hB⟩
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-! ## Each refusal of a build -/
+/-! ## Each refusal of a build
+
+Each refusal happens when its check fails and every earlier check passes.
+-/
 
 /-- A build on a chain with no recent block fails for a missing parent. -/
 theorem buildPayload_eq_error_of_getLast?_eq_none (hh : ¬ .hegota ≤ fork)

@@ -7,25 +7,11 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 /-!
 # Proofs: `engine_exchangeCapabilities` and `engine_getClientVersionV1`
 
-A full method name gives back its method and its version, since a version has no letter `V`.
+Every method name that EthLib lists has a version, and no name appears twice.
 
-Every name that EthLib lists has a version, and no name appears twice.
+Each method answers what the node holds, once its request decodes.
 
-So the list does not hold `engine_exchangeCapabilities`, which has no version.
-
-The list holds a method at a version exactly when EthLib defines that method up to that version.
-
-The version table reads a name back to the version it was built from.
-
-The parameters of each method read back from their JSON.
-
-Each method succeeds exactly when its request decodes, and then answers what the node holds.
-
-A version object reads back from its JSON when its code is two letters, and only then.
-
-A JSON value reads as a version object exactly when it holds the four members, each in its form.
-
-The code is two letters, the name and the version are strings, and the commit is lowercase hex.
+Its parameters, and a version object whose code is two letters, read back from their JSON.
 -/
 
 public section
