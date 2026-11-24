@@ -100,22 +100,21 @@ instance : Div Fr := ⟨fun a b => a * b.inverse⟩
 
 `pre` is the product of the nonzero elements before `xs`.
 
-The result pairs the inverses of `xs` with `pre⁻¹`.
-
-On the empty list, the result is the empty list and `pre⁻¹`.
-
-On `x :: t`, the recursion on `t` with `pre * x` gives the inverses of `t` and `s = (pre * x)⁻¹`.
-
-Then `x⁻¹ = pre * s` and `pre⁻¹ = s * x`.
-
-A zero is skipped and maps to zero, as `inverse` maps it. -/
+The result pairs the inverses of `xs` with `pre⁻¹`. -/
 def batchInverseAux : Fr → List Fr → List Fr × Fr
+  -- On the empty list, the result is the empty list and `pre⁻¹`.
   | pre, [] => ([], pre.inverse)
   | pre, x :: xs =>
+    -- A zero is skipped and maps to zero, as the inverse maps it.
     if x.isZero then
       let (inverses, s) := batchInverseAux pre xs
       (zero :: inverses, s)
     else
+      -- On `x :: t`, the recursion on `t` with `pre * x` gives the inverses of `t`.
+      --
+      -- It also gives `s = (pre * x)⁻¹`.
+      --
+      -- Then `x⁻¹ = pre * s` and `pre⁻¹ = s * x`.
       let (inverses, s) := batchInverseAux (pre * x) xs
       (pre * s :: inverses, s * x)
 
@@ -123,9 +122,9 @@ def batchInverseAux : Fr → List Fr → List Fr × Fr
 
 It is Montgomery's simultaneous inversion.
 
-One inversion costs about 380 multiplications.
+It takes one inversion in total, and three multiplications per element.
 
-This takes one inversion in total, and three multiplications per element.
+One inversion costs about 380 multiplications.
 
 See Montgomery, "Speeding the Pollard and elliptic curve methods of factorization".
 

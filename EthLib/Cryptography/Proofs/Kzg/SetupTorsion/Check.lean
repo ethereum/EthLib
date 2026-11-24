@@ -14,15 +14,7 @@ The check reads the digit codes of such a string, decodes them to 48 bytes, and 
 
 Then it runs the kernel check of `G1` on that `x`.
 
-That check finds `y` with `y^2 = x^3 + 4`, and tests `[r] (x, y, 1) = 0`.
-
 If the check passes, every point that the string decodes to has order dividing `r`.
-
-The kernel decodes a string slowly, since it reads its UTF-8 bytes one at a time.
-
-So a proof first replaces each string by the list of its codes.
-
-The kernel checks that step by unfolding the literal, which is cheap.
 
 The file also declares the checks of many strings, one theorem each, and a term that gathers them.
 -/
@@ -65,6 +57,7 @@ def xOf : List Nat → Nat
 /-- The check of one string: it decodes, and its `x` passes the check of `G1`. -/
 def checkCodes (ns : List Nat) : Bool :=
   match hexBytes ns with
+  -- The check of `G1` finds `y` with `y^2 = x^3 + 4`, and tests `[r] (x, y, 1) = 0`.
   | some l => G1.TorsionCheck.check (xOf l)
   | none => false
 
@@ -160,7 +153,13 @@ theorem modulus_smul_eq_zero {s : String} {b : ByteArray} {q : G1}
       rw [he] at hx
       exact G1.TorsionCheck.modulus_smul_eq_zero ((fromBytesBE_eq hx).symm ▸ hc) hy
 
-/-! ## Reading the literals -/
+/-! ## Reading the literals
+
+The kernel decodes a string slowly, since it reads its UTF-8 bytes one at a time.
+
+So a proof first replaces each string by the list of its codes.
+
+The kernel checks that step by unfolding the literal, which is cheap. -/
 
 open Lean Meta in
 /-- The codes of a literal `s`, written out as `ns`, and the equation `codes s = ns`.
