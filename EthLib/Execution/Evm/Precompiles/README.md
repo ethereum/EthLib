@@ -240,6 +240,8 @@ The call fails only with `outOfGas`, when the gas is below the price.
 The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Sha256.lean`.
 A call succeeds exactly when the gas covers the price, and then returns 32 bytes
 (`sha256_eq_ok_iff`, `sha256_eq_error_iff`, `sha256_ok_size`).
+The price grows with the size, and fits in 64 bits below `2^63` bytes (`gasCost_mono`,
+`gasCost_lt_two_pow_64`).
 When the gas is below the price of `2^61` bytes, those bytes are the hash of FIPS 180-4 §6.2
 (`sha256_ok_eq_spec_of_gas`).
 
@@ -276,6 +278,10 @@ The output has twelve zero bytes, then the digest (`output_size`, `output_leadin
 `output_digest`).
 A call succeeds exactly when the gas covers the price (`ripemd160_eq_ok_iff`,
 `ripemd160_eq_error_iff`).
+The price grows with the size, and fits in 64 bits below `2^62` bytes (`gasCost_mono`,
+`gasCost_lt_two_pow_64`).
+Some call data shorter than `2^63` bytes costs at least `2^64`, so the bound is lower than for
+SHA256 and IDENTITY.
 
 ### Test vectors
 
@@ -306,6 +312,8 @@ The call fails only with `outOfGas`, when the gas is below the price.
 The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Identity.lean`.
 A call succeeds exactly when the gas covers the price, and then returns its call data
 (`identity_eq_ok_iff`, `identity_eq_error_iff`).
+The price grows with the size, and fits in 64 bits below `2^63` bytes (`gasCost_mono`,
+`gasCost_lt_two_pow_64`).
 
 ### Test vectors
 

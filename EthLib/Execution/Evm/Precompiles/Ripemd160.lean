@@ -22,7 +22,7 @@ The call fails only when the gas is below its price.
 
 namespace EthLib.Execution.Evm.Precompiles.Ripemd160
 
-open EthLib.Execution.Evm (wordCount)
+open EthLib.Execution.Evm (wordPrice)
 
 /-- The size of the output in bytes. -/
 def OUTPUT_BYTES : Nat := 32
@@ -45,7 +45,7 @@ def GAS_PER_WORD : Nat := 120
 /-- The gas a call with `size` bytes of call data is charged. -/
 def gasCost (size : Nat) : Nat :=
   -- `g_r = 600 + 120 * ceil(||I_d|| / 32)`.
-  GAS_BASE + GAS_PER_WORD * wordCount size
+  wordPrice GAS_BASE GAS_PER_WORD size
 
 /-- Why a RIPEMD-160 call fails. -/
 inductive Ripemd160Error where

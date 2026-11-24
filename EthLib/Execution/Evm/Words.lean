@@ -22,4 +22,8 @@ def ceil32 (value : Nat) : Nat :=
 /-- The number of 32-byte words that cover `size` bytes: `size` rounded up to 32, over 32. -/
 def wordCount (size : Nat) : Nat := ceil32 size / WORD_BYTES
 
+/-- The price of `size` bytes: `base`, plus `perWord` for each 32-byte word. -/
+@[inline] def wordPrice (base perWord size : Nat) : Nat :=
+  base + perWord * wordCount size
+
 end EthLib.Execution.Evm

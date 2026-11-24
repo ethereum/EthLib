@@ -76,4 +76,21 @@ theorem stateT_map_eq_ok {ε σ α β : Type} {g : α → β} {x : StateT σ (Ex
     cases h
     exact ⟨r', rfl, rfl⟩
 
+/-- A step that fails below a bound succeeds exactly at or above it, with its value. -/
+theorem ite_lt_eq_ok_iff {ε α : Type} {a bound : Nat} {e : ε} {x out : α} :
+    (if a < bound then Except.error e else .ok x) = .ok out ↔ bound ≤ a ∧ out = x := by
+  by_cases below : a < bound
+  · simp only [below, ↓reduceIte, reduceCtorEq, false_iff, not_and]
+    omega
+  · simp only [below, ↓reduceIte, Except.ok.injEq]
+    exact ⟨fun h => ⟨by omega, h.symm⟩, fun h => h.2.symm⟩
+
+/-- A step that fails below a bound fails exactly there, with its error. -/
+theorem ite_lt_eq_error_iff {ε α : Type} {a bound : Nat} {e other : ε} {x : α} :
+    (if a < bound then Except.error e else .ok x) = .error other ↔ a < bound ∧ other = e := by
+  by_cases below : a < bound
+  · simp only [below, ↓reduceIte, Except.error.injEq, true_and]
+    exact eq_comm
+  · simp [below]
+
 end EthLib.Base

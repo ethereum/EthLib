@@ -21,7 +21,7 @@ The call fails only when the gas is below that price.
 
 namespace EthLib.Execution.Evm.Precompiles.Sha256
 
-open EthLib.Execution.Evm (wordCount)
+open EthLib.Execution.Evm (wordPrice)
 
 /-- The size of the output in bytes: one SHA-256 digest. -/
 def OUTPUT_BYTES : Nat := Cryptography.Hash.Sha256.DIGEST_SIZE_BYTES
@@ -35,7 +35,7 @@ def GAS_PER_WORD : Nat := 12
 /-- The gas a call with `size` bytes of call data is charged. -/
 def gasCost (size : Nat) : Nat :=
   -- `g_r = 60 + 12 * ceil(||I_d|| / 32)`.
-  GAS_BASE + GAS_PER_WORD * wordCount size
+  wordPrice GAS_BASE GAS_PER_WORD size
 
 /-- The one way a SHA-256 call can fail. -/
 inductive Sha256Error where

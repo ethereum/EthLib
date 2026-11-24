@@ -20,7 +20,7 @@ The call fails only when the gas is below its price.
 
 namespace EthLib.Execution.Evm.Precompiles.Identity
 
-open EthLib.Execution.Evm (wordCount)
+open EthLib.Execution.Evm (wordPrice)
 
 /-- The price of every call, from Appendix E of the Yellow Paper. -/
 def GAS_BASE : Nat := 15
@@ -31,7 +31,7 @@ def GAS_PER_WORD : Nat := 3
 /-- The gas a call with `size` bytes of call data is charged. -/
 def gasCost (size : Nat) : Nat :=
   -- `g_r = 15 + 3 * ceil(||I_d|| / 32)`.
-  GAS_BASE + GAS_PER_WORD * wordCount size
+  wordPrice GAS_BASE GAS_PER_WORD size
 
 /-- Why an IDENTITY call fails. -/
 inductive IdentityError where
