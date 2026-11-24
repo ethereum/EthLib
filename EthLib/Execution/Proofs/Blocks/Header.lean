@@ -8,25 +8,7 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 /-!
 # Proofs: the header of a block
 
-At every fork, the RLP codec of a header is lawful.
-
-So a header decodes from exactly one byte string, its encoding, and the decoder accepts no other.
-
-A header at one fork holds a value in exactly the fields of that fork.
-
-So its RLP list has exactly the count of fields of that fork.
-
-A list with another count never decodes as a header of that fork.
-
-The hash of a decoded header is the hash of the bytes that it decodes from.
-
-Two headers at one fork with one hash are equal.
-
-Otherwise a search returns their encodings, which form a Keccak-256 collision.
-
-Keccak-256 has collisions, so no theorem can rule one out.
-
-The theorems give no bound on the cost of finding one.
+The RLP codec of a header at every fork, and the binding of its Keccak-256 hash.
 -/
 
 @[expose] public section
@@ -54,7 +36,9 @@ theorem toItem_eq (h : Header fork) :
       ++ Item.ofSince h.parentBeaconBlockRoot ++ Item.ofSince h.requestsHash
       ++ Item.ofSince h.blockAccessListHash ++ Item.ofSince h.slotNumber) := rfl
 
-/-- The RLP list of a header has one item for each field of its fork. -/
+/-- A header at one fork holds a value in exactly the fields of that fork.
+
+So its RLP list has one item for each field of its fork. -/
 theorem toItem_fields (h : Header fork) :
     ∃ items, Codec.toItem h = .list items ∧ items.length = fieldCount fork := by
   refine ⟨_, toItem_eq h, ?_⟩
@@ -64,6 +48,9 @@ theorem toItem_fields (h : Header fork) :
 
 end Header
 
+-- At every fork, the RLP codec of a header is lawful.
+--
+-- So a header decodes from exactly one byte string, its encoding, and the decoder accepts no other.
 instance : LawfulCodec (Header fork) where
   ofItem_toItem h := by
     show Header.ofItem (Header.toItem h) = _
@@ -163,9 +150,12 @@ theorem findCollision_self (h : Header fork) : findCollision h h = none := by
 
 /-- Two headers at one fork with one hash are equal, or the search returns their encodings.
 
-Those encodings then form a Keccak-256 collision. -/
+Those encodings then form a Keccak-256 collision.
+
+The statement gives no bound on the cost of finding one. -/
 theorem hash_binding {h₁ h₂ : Header fork} {digest : Hash32}
     (hh₁ : h₁.hash = .ok digest) (hh₂ : h₂.hash = .ok digest) :
+    -- Keccak-256 has collisions, so no theorem can rule one out.
     h₁ = h₂ ∨ ∃ pair, findCollision h₁ h₂ = some pair ∧
       Codec.encode h₁ = .ok pair.1 ∧ Codec.encode h₂ = .ok pair.2 ∧ IsCollision keccak256 pair := by
   obtain ⟨b₁, hb₁, hk₁⟩ := hash_eq_ok_iff.mp hh₁

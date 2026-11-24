@@ -8,19 +8,9 @@ public import EthLib.Execution.Proofs.Blocks.Receipt
 
 A header passes exactly when every one of its checks holds.
 
-So a valid header uses at most its gas limit, and the gas limit rule accepts its gas limit.
-
-From London, it also has the base fee that its parent gives, or the initial one at the first block.
-
-From Dencun, it also has the excess blob gas that its parent gives under its blob schedule.
-
-Before Paris, it has the difficulty that its parent gives, and a valid proof of work.
+So a valid header meets the rules of its fork on gas, fees, blob gas, difficulty and proof of work.
 
 From Fusaka, a block passes the size check exactly when its RLP form fits in the limit.
-
-The checks of a header, other than its proof of work, hold exactly when each rule of the list holds.
-
-A header passes validation exactly when it passes those checks and, before Paris, its proof of work.
 -/
 
 @[expose] public section
@@ -123,6 +113,7 @@ theorem excessBlobGas_of_checkHeader (hLondon : .london ≤ parentFork) (h : .de
 /-- From Dencun, with a parent from London on, a header has the excess blob gas its parent gives. -/
 theorem excessBlobGas_of_validateHeader (hLondon : .london ≤ parentFork) (h : .dencun ≤ fork)
     (hv : validateHeader hFork parent header schedule = .ok ()) :
+    -- The parent gives it under the blob schedule of the header.
     (header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent schedule :=
   excessBlobGas_of_checkHeader hLondon h (checkHeader_of_validateHeader hv)
 
@@ -170,30 +161,32 @@ theorem checkProofOfWork_of_validateHeader (h : fork < .paris)
 
 /-- A header passes every check but the proof of work exactly when each rule holds.
 
-- From Paris, the parent is at London or later.
-- The number is at least 1, and is the parent's plus one.
-- From Dencun, with a parent from London, the excess blob gas is the expected one.
-- The gas used is at most the gas limit, and the gas limit passes its check against the parent's.
-- From London, the base fee is the expected one.
-- The timestamp is after the parent's, and the extra data has at most 32 bytes.
-- Before Paris, the difficulty is the expected one.
-- From Paris, the difficulty and the nonce are 0, and the ommers hash is that of no ommers.
-- The parent hash is the hash of the parent.
-
 The rules read only the header and its parent, not the body of the block or the state. -/
 theorem checkHeader_eq_ok_iff :
     checkHeader hFork parent header schedule = .ok () ↔
+      -- From Paris, the parent is at London or later.
+      --
+      -- The number is at least 1.
       (.paris ≤ fork → .london ≤ parentFork) ∧ 1 ≤ header.number ∧
+      -- From Dencun, with a parent from London, the excess blob gas is the expected one.
       (∀ (h : .dencun ≤ fork) (hLondon : .london ≤ parentFork),
         (header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent schedule) ∧
+      -- The gas used is at most the gas limit.
       header.gasUsed ≤ header.gasLimit ∧
+      -- The gas limit passes its check against the parent's.
       GasLimit.checkGasLimitAcross parentFork fork header.gasLimit parent.gasLimit = true ∧
+      -- From London, the base fee is the expected one.
       (∀ h : .london ≤ fork, header.baseFeePerGas h = expectedBaseFeeAcross parent) ∧
+      -- The timestamp is after the parent's, and the number is the parent's plus one.
       parent.timestamp.toNat < header.timestamp.toNat ∧ header.number = parent.number + 1 ∧
+      -- The extra data has at most 32 bytes.
       header.extraData.size ≤ MAX_EXTRA_DATA_BYTES ∧
+      -- Before Paris, the difficulty is the expected one.
       (fork < .paris → header.difficulty = expectedDifficulty parent header) ∧
+      -- From Paris, the difficulty and the nonce are 0, and the ommers hash is that of no ommers.
       (¬fork < .paris → header.difficulty = 0 ∧ header.nonce = Vector.replicate 8 0 ∧
         header.ommersHash = EMPTY_OMMER_HASH) ∧
+      -- The parent hash is the hash of the parent.
       parent.hash = .ok header.parentHash := by
   rw [checkHeader, firstFailure_eq_ok_iff]
   cases hh : parent.hash with

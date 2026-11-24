@@ -16,21 +16,7 @@ An error of the state is a missing account, a missing code, a short balance or a
 
 Five hypotheses exclude every abort and every error of the state.
 
-- The fork is before Hegotá, whose rules are not yet specified.
-- Every nonce of the state is at most `2^64 - 1`, by [EIP-2681][e2681].
-- The state holds the code of every account.
-- The supply plus the ether that the block creates leaves room for every credit.
-- The numbers of the header that an instruction pushes as words are below `2^256`.
-
-Under them, an abort can only be an error of the state, and no error of the state can occur.
-
-A system call that must succeed stops only with an error that does not abort.
-
-The state holds the code of every sender, so no transaction is invalid for a missing code.
-
-So every failure of the transition is an error that makes the block invalid.
-
-A root or a parent with a field of `2^64` bytes or more also counts as an invalid block.
+Source: [EIP-2681][e2681], for the bound on every nonce.
 
 [e2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
 -/
@@ -45,29 +31,28 @@ open EthLib.Execution.Transactions (Transaction)
 
 variable {fork : Fork}
 
-/-- The transition of a block fails only with an error that makes the block invalid.
+/-- Before Hegotá, the transition of a block fails only with an error that makes it invalid.
 
-The fork must be before Hegotá, and every nonce of the state at most `2^64 - 1`.
+It needs bounded nonces, every code, room in the supply and header numbers that fit words.
 
-The state must hold the code of every account.
-
-Its supply plus the ether that the block creates must leave room for every credit.
-
-The numbers of the header that the block pushes as words must fit them.
-
-Then the transition neither aborts nor fails with an error of the state.
-
-A system call that must succeed fails only with an error that does not abort, on any state.
-
-No transaction is then invalid for the missing code of its sender. -/
+A root or a parent with a field of `2^64` bytes or more also counts as an invalid block. -/
 theorem stateTransition_eq_error_invalid {chain : BlockChain} {block : Block fork Transaction}
+    -- The fork is before Hegotá, whose rules are not yet specified.
     {checkSeal : Bool} {e : BlockError} (before : fork < .hegota)
+    -- Every nonce of the state is at most `2^64 - 1`, by EIP-2681.
+    --
+    -- The state holds the code of every account.
     (hfit : chain.state.NoncesFit) (available : chain.state.HasCodes)
+    -- The supply plus the ether that the block creates leaves room for every credit.
     (room : SupplyRoom fork (chain.state.supply + createdWei block))
+    -- The numbers of the header that an instruction pushes as words are below `2^256`.
     (hwords : ∀ hashes, (blockEnvironment chain.config hashes block.header).WordsFit)
     (h : stateTransition chain block checkSeal = .error e) :
+    -- The transition neither aborts nor fails with an error of the state.
     (∀ error, e ≠ .aborted error) ∧ (∀ error, e ≠ .state error) ∧
+      -- A system call that must succeed fails only with an error that does not abort, on any state.
       (∀ address error, e = .systemCallFailed address error → error.aborts = false) ∧
+      -- The state holds the code of every sender, so no transaction is invalid for a missing code.
       ∀ index codeHash, e ≠ .invalidTransaction index (.missingCode codeHash) := by
   -- No error of the state occurs, as an abort or as an error of the block.
   have noState : ∀ error : State.StateError,
@@ -88,6 +73,7 @@ theorem stateTransition_eq_error_invalid {chain : BlockChain} {block : Block for
         (· ∘ (· ▸ h)) (· ∘ (· ▸ h))
   refine ⟨fun error he => ?_, fun error he => (noState error).2 he, fun address error he => ?_,
     fun index codeHash he => ?_⟩
+  -- Under the hypotheses, an abort can only be an error of the state, which cannot occur.
   · subst he
     obtain ⟨s, rfl⟩ := stateTransition_aborted before hfit hwords h
     exact (noState s).1 rfl

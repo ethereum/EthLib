@@ -8,16 +8,6 @@ public import EthLib.Execution.Proofs.Transactions.StateAborts
 # Proofs: before Hegotá, a block aborts only with an error of the state
 
 A block aborts when a system call, a transaction or a read of a system contract aborts.
-
-From Hegotá on, a block also aborts because its fork is not yet specified.
-
-Let every nonce of the state before the block be at most `2^64 - 1`, the bound of EIP-2681.
-
-Each step of the body keeps that bound, so each of them runs on a block state within it.
-
-A call or a transaction on such a state aborts only with an error of the state.
-
-So before Hegotá, the transition of a block aborts only with an error of the state.
 -/
 
 @[expose] public section
@@ -114,11 +104,10 @@ private theorem startSystemCalls_eq_error {env : BlockEnvironment fork} {parentH
 
 /-- Before Hegotá, the leaves of a block body within the bound abort only with errors of the state.
 
-Each of them keeps every nonce within the bound.
-
 The numbers that the block pushes as words must fit them. -/
 private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) (before : fork < .hegota) (hwords : env.WordsFit) :
+    -- Each step of the body keeps the bound, so each of them runs on a block state within it.
     BodyLeaves config env block StateAbort BlockState.NoncesFit BlockState.NoncesFit
       (fun _ => True) where
   plain _ ha _ _ _ x hx := absurd hx (ha x)
@@ -127,6 +116,7 @@ private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
   start _ fit _ h := stateAbort_aborted (startSystemCalls_eq_error fit hwords h)
   start_inv _ _ fit h := startSystemCalls_noncesFit fit h
   inclusion _ _ _ _ _ _ _ h := by cases h
+  -- A transaction on a block state within the bound aborts only with an error of the state.
   process _ _ _ fit included _ h :=
     stateAbort_aborted (Transactions.processTransaction_eq_error before fit hwords included h)
   transaction_inv _ _ _ _ fit h := applyTransaction_noncesFit fit h
@@ -140,6 +130,7 @@ private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
   code _ _ _ _ h := stateAbort_aborted <| by
     obtain ⟨e, -, rfl⟩ := mapError_eq_error h
     exact ⟨e, rfl⟩
+  -- A call on a block state within the bound aborts only with an error of the state.
   call _ _ _ fit _ h := stateAbort_aborted (systemCall_eq_error fit hwords h)
   call_failed _ _ _ _ _ _ _ _ _ h := by cases h
   call_inv _ _ _ _ _ fit called joined :=
@@ -166,12 +157,14 @@ Every nonce of the state before the block must be at most `2^64 - 1`.
 
 The numbers of the header that the block pushes as words must fit them. -/
 theorem stateTransition_aborted {chain : BlockChain} {block : Block fork Transaction}
+    -- Every nonce of the state before the block is at most `2^64 - 1`, the bound of EIP-2681.
     {checkSeal : Bool} {e : EvmError} (before : fork < .hegota) (hfit : chain.state.NoncesFit)
     (hwords : ∀ hashes, (blockEnvironment chain.config hashes block.header).WordsFit)
     (h : stateTransition chain block checkSeal = .error (.aborted e)) :
     ∃ error, e = .state error := by
   have meets : ErrorsMeet StateAbort (stateTransition chain block checkSeal) :=
     errorsMeet_stateTransition (fun _ ha _ x hx => absurd hx (ha x))
+      -- From Hegotá on, a block also aborts because its fork is not yet specified.
       (fun hle => absurd hle (Nat.not_le_of_lt before))
       fun hashes => (leaves _ _ _ before (hwords hashes)).errorsMeet_applyBody
         ((State.BlockState.noncesFit_ofState_iff _).mpr hfit)

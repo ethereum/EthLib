@@ -8,17 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Instructions.EnvironmentData
 
 The hashes that BLOCKHASH reads come from the recent blocks of the chain.
 
-The Yellow Paper ([`Paper.tex`][yp], Appendix H.2) defines BLOCKHASH by a walk up the parent hashes.
+They agree with a walk up the parent hashes when the recent blocks are linked and reach far enough.
 
-The two agree when the recent blocks are linked and reach back far enough.
-
-Each one is numbered one above the one before, and names the hash of that one as its parent hash.
-
-A chain with enough recent blocks keeps this property through each block that passes its transition.
-
-On such a chain, BLOCKHASH finds the hash of each of the 256 blocks before the current one.
-
-It never falls back to 0 inside that window.
+Source: the Yellow Paper ([`Paper.tex`][yp], Appendix H.2), which defines BLOCKHASH by that walk.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
@@ -196,23 +188,20 @@ theorem HistoryOk.eq_of_number {chain : BlockChain} {last : RecentBlock}
 
 /-- BLOCKHASH reads the hash of each of the last 256 blocks before the current one.
 
-On a chain with its history in order, the current block is numbered one above the last recent block.
-
-The entry for `n` is the hash of the last recent block when `n` is its number.
-
-Otherwise it is the parent hash of the recent block numbered `n + 1`.
-
-When a recent block is numbered `n`, the hash is its hash.
-
-The list of hashes is long enough, so the fallback to 0 for a short list is not used. -/
+The chain must have its history in order. -/
 theorem blockHash_ancestor {chain : BlockChain} {hashes : List Hash32} {last : RecentBlock}
     (hok : HistoryOk chain) (hlast : chain.recent.getLast? = some last)
     (hhashes : recentHashes chain.recent = .ok hashes) {n : Nat}
+    -- The current block is numbered one above the last recent block.
     (hlt : n < last.header.number + 1) (hwin : last.header.number + 1 ≤ n + 256) :
+    -- The list of hashes is long enough, so the fallback to 0 for a short list is not used.
     ∃ h, hashes.reverse[last.header.number + 1 - n - 1]? = some h ∧
       blockHash hashes (last.header.number + 1) n = U256.fromBeBytes h ∧
+      -- The entry for `n` is the hash of the last recent block when `n` is its number.
       ((n = last.header.number ∧ last.header.hash = .ok h) ∨
+        -- Otherwise it is the parent hash of the recent block numbered `n + 1`.
         ∃ b ∈ chain.recent, b.header.number = n + 1 ∧ b.header.parentHash = h) ∧
+      -- When a recent block is numbered `n`, the hash is its hash.
       ∀ b ∈ chain.recent, b.header.number = n → b.header.hash = .ok h := by
   obtain ⟨last', hlast', hlen⟩ := hok.2
   obtain rfl : last = last' := (Option.some.inj (hlast'.symm.trans hlast)).symm
@@ -283,22 +272,18 @@ theorem blockHash_ancestor {chain : BlockChain} {hashes : List Hash32} {last : R
 
 /-! ## Along a run of blocks -/
 
-/-- A chain gives BLOCKHASH, in a block numbered `current`, the hash of each of the 256 before it.
-
-For each such block number `n`, the list of hashes has an entry, and BLOCKHASH reads it.
-
-The entry is the hash of the last recent block when `n` is its number.
-
-Otherwise it is the parent hash of the recent block numbered `n + 1`.
-
-When a recent block is numbered `n`, the entry is its hash. -/
+/-- In a block numbered `current`, a chain gives BLOCKHASH the hash of each of the 256 before it. -/
 def Window (chain : BlockChain) (current : Nat) : Prop :=
   ∀ hashes, recentHashes chain.recent = .ok hashes → ∀ n, n < current → current ≤ n + 256 →
+    -- For each such block number `n`, the list of hashes has an entry, and BLOCKHASH reads it.
     ∃ h, hashes.reverse[current - n - 1]? = some h ∧
       blockHash hashes current n = U256.fromBeBytes h ∧
+      -- The entry is the hash of the last recent block when `n` is its number.
       ((∃ last, chain.recent.getLast? = some last ∧ n = last.header.number ∧
           last.header.hash = .ok h) ∨
+        -- Otherwise it is the parent hash of the recent block numbered `n + 1`.
         ∃ b ∈ chain.recent, b.header.number = n + 1 ∧ b.header.parentHash = h) ∧
+      -- When a recent block is numbered `n`, the entry is its hash.
       ∀ b ∈ chain.recent, b.header.number = n → b.header.hash = .ok h
 
 /-- A block that passes its transition on a chain with its history in order has its window. -/
@@ -345,19 +330,16 @@ theorem ChainRun.windows {chain : BlockChain}
 
 /-- A chain with fewer recent blocks than its history asks for gives 0 inside the window.
 
-The last block is numbered `m`, and the chain keeps `k` recent blocks, with `k` below `m` and 255.
-
-In the next block, BLOCKHASH of block `m - k - 1` is inside the window.
-
-The list of hashes holds no entry for it, so BLOCKHASH gives 0.
-
 So the length condition of a history in order is needed. -/
 theorem blockHash_of_short {chain : BlockChain} {hashes : List Hash32} {last : RecentBlock}
     (hlast : chain.recent.getLast? = some last)
     (hhashes : recentHashes chain.recent = .ok hashes)
+    -- The last block is numbered `m`, and the chain keeps `k` recent blocks, with `k < min m 255`.
     (hshort : chain.recent.length < min last.header.number 255) :
+    -- In the next block, BLOCKHASH of block `m - k - 1` is inside the window.
     last.header.number - chain.recent.length - 1 < last.header.number + 1 ∧
       last.header.number + 1 ≤ last.header.number - chain.recent.length - 1 + 256 ∧
+      -- The list of hashes holds no entry for it, so BLOCKHASH gives 0.
       blockHash hashes (last.header.number + 1)
         (last.header.number - chain.recent.length - 1) = 0 := by
   refine ⟨by omega, by omega, blockHash_of_length_lt ?_⟩

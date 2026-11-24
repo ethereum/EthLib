@@ -11,41 +11,9 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: the state transition of a block
 
+What a block that passes the transition gives at each step, and the hashes of the recent blocks.
+
 A block that passes the transition commits to the state after it.
-
-The state root of its header is the root of that state.
-
-It also used the gas that its header states, and its Bloom filter is the filter of its logs.
-
-Its fork is the active fork of its chain at its number and its time.
-
-A transaction that cannot enter the block makes the block invalid, with its own error.
-
-The receipts of a body have the Bloom filters of their logs, and their cumulative gas never falls.
-
-The transactions of a body that runs give one receipt each.
-
-The DAO transfer runs only before Paris, at the block that the chain configuration names.
-
-Before Glamsterdam a body gives no block access list.
-
-From Glamsterdam, the list that a body builds is well formed and fits the gas limit.
-
-A block that passes the checks then commits to that list by the hash in its header.
-
-A header filled from a body passes every check against what that body gave.
-
-From Hegotá the transition fails as not yet specified.
-
-When the hash of the last recent block succeeds, the recent blocks give hashes.
-
-They are the parent hashes of the last 255 blocks, then the hash of the last block.
-
-So there are at most 256 of them.
-
-Take at least 256 recent blocks, each the parent of the next.
-
-Then the hashes are those of the last 256 blocks.
 -/
 
 @[expose] public section
@@ -62,18 +30,15 @@ variable {fork : Fork}
 
 /-! ## The hashes of the recent blocks -/
 
-/-- The hashes of the recent blocks of a chain, and when they exist.
-
-With no recent block there is no hash.
-
-Otherwise the hash of the header of the last block must succeed.
-
-The hashes are then the parent hashes of the last 255 blocks, or of all of them if there are fewer.
-
-The hash of the last block comes after them. -/
+/-- The hashes of the recent blocks of a chain, and when they exist. -/
 theorem recentHashes_eq_ok_iff {recent : List RecentBlock} {hashes : List Hash32} :
+    -- With no recent block there is no hash.
     recentHashes recent = .ok hashes ↔ (recent = [] ∧ hashes = []) ∨
+      -- Otherwise the hash of the header of the last block must succeed.
       ∃ last hash, recent.getLast? = some last ∧ last.header.hash = .ok hash ∧
+        -- The hashes are then the parent hashes of the last 255 blocks, or of all if fewer.
+        --
+        -- The hash of the last block comes after them.
         hashes = (recent.drop (recent.length - 255)).map (·.header.parentHash) ++ [hash] := by
   unfold recentHashes
   cases hr : recent.getLast? with
@@ -237,6 +202,7 @@ Its state root and its Bloom filter are also those that its body gave. -/
 theorem of_outputChecks {header : Header fork} {output : BlockOutput fork} {roots : OutputRoots}
     (h : firstFailure (outputChecks header output roots) = .ok ()) :
     output.gas.gasUsed = header.gasUsed ∧ roots.state = header.stateRoot ∧
+      -- Its Bloom filter is the filter of its logs.
       logsBloom output.logs = header.bloom := by
   have all := (firstFailure_eq_ok_iff _).mp h
   have get : ∀ c ∈ outputChecks header output roots, c.1 = true := all
@@ -355,6 +321,7 @@ theorem accessListHashOf_of_lt_glamsterdam {body : BodyState} {gasLimit : Nat}
 That list passes every check of a list alone: its order, its uniqueness and its size. -/
 theorem accessListHashOf_eq_ok {body : BodyState} {gasLimit : Nat} {hash : Option Hash32}
     (h : accessListHashOf fork body gasLimit = .ok hash) (hFork : .glamsterdam ≤ fork) :
+    -- The list is well formed and fits the gas limit.
     BlockAccessList.check body.builder.build gasLimit = .ok () ∧
       ∃ value, hash = some value ∧ BlockAccessList.hash body.builder.build = .ok value := by
   unfold accessListHashOf at h
@@ -514,26 +481,21 @@ theorem BodyState.getAccount_join {body body' : BodyState} {tx : State.Transacti
   cases h
   exact State.TransactionState.getAccount_ofBlock_incorporateTxIntoBlock tx address
 
-/-- A run of transactions reaches each of them, and the result of each relates to the end.
-
-The relation must be reflexive and transitive.
-
-Each transaction that enters the body relates the output before it to the output after it.
-
-Then the body before the first transaction is related to the end.
-
-For the transaction at index `i`, from 0, the transactions before it run.
-
-That transaction then enters the body, and its result is related to the end. -/
+/-- A run of transactions reaches each of them, and the result of each relates to the end. -/
 theorem applyTransactions_steps {env : BlockEnvironment fork} {body : BodyState}
     {transactions : List Transaction} {output : BodyOutput fork}
+    -- The relation must be reflexive and transitive.
     (R : BodyOutput fork → BodyOutput fork → Prop) (refl : ∀ a, R a a)
     (trans : ∀ {a b c}, R a b → R b c → R a c)
+    -- Each transaction that enters the body relates the output before it to the output after it.
     (step : ∀ {index before after tx}, applyTransaction env index before tx = .ok after →
       R before after)
     (h : applyTransactions env body transactions = .ok output) :
+    -- Then the body before the first transaction is related to the end.
     R ⟨body, .zero, 0, [], [], []⟩ output ∧ ∀ i (hi : i < transactions.length), ∃ before next,
+      -- For the transaction at index `i`, from 0, the transactions before it run.
       applyTransactions env body (transactions.take i) = .ok before ∧
+      -- That transaction then enters the body, and its result is related to the end.
       applyTransaction env i before transactions[i] = .ok next ∧ R next output := by
   obtain ⟨hStart, hSteps⟩ := foldlM_ok_steps R refl trans (fun _ _ _ hStep => step hStep) h
   refine ⟨hStart, fun i hi => ?_⟩
@@ -612,35 +574,33 @@ theorem onBlock_eq_ok {block block' : BlockState}
   cases h
   exact ⟨tx, mapError_ok_iff.mp htx, rfl⟩
 
-/-- A body that runs takes each step, in order, and gives the gas counts of its transactions.
-
-The DAO transfer runs first, then the system calls that start the block, then the transactions.
-
-From Shapella the withdrawals join the body after them, at the position after the transactions.
-
-The requests then run, and the rewards last, which give the block state of the output.
-
-The builder after the requests is the builder of the output, and gives its block access list hash.
-
-The gas counts and the gas used that the receipts add up are those of the transactions. -/
+/-- A body that runs takes each step, in order, and gives the gas counts of its transactions. -/
 theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
     (h : applyBody config env block start = .ok output) :
     ∃ state body txs withdrawn requested,
+      -- The DAO transfer runs first, then the system calls that start the block.
       daoTransfer config fork block.header.number start = .ok state ∧
       startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
+      -- Then the transactions run.
       applyTransactions env body block.transactions = .ok txs ∧
+      -- From Shapella the withdrawals then join the body, at the position after the transactions.
       (∀ hShapella : .shapella ≤ fork, ∃ tx,
         withdrawalState fork txs.body.block (block.withdrawals hShapella) = .ok tx ∧
         (txs.body.beginIndex (block.transactions.length + 1)).join tx = .ok withdrawn) ∧
       (¬.shapella ≤ fork → withdrawn = txs.body.beginIndex (block.transactions.length + 1)) ∧
+      -- The requests then run.
       blockRequests config.depositContractAddress env withdrawn txs.logs =
         .ok (requested, output.requests) ∧
+      -- The rewards run last, and give the block state of the output.
       onBlock requested.block (fun tx => payRewards fork tx block.header.coinbase
         block.header.number (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number))) =
         .ok output.block ∧
+      -- The builder after the requests is the builder of the output.
       output.body.builder = requested.builder ∧
+      -- It gives the block access list hash of the output.
       accessListHashOf fork requested block.header.gasLimit = .ok output.accessListHash ∧
+      -- The gas counts and the gas used that the receipts add up are those of the transactions.
       output.gas = txs.gas ∧ output.cumulativeGasUsed = txs.cumulativeGasUsed := by
   unfold applyBody at h
   dsimp only at h
@@ -747,27 +707,26 @@ theorem stateTransition_of_hegota_le {chain : BlockChain} {block : Block fork Tr
   simp only [stateTransition, h, ↓reduceIte]
   rfl
 
-/-- A block that passes the transition takes each step of it, in order.
-
-Its fork is before Hegotá and is the active fork of its chain, and it passes its own checks.
-
-Its body runs on the state after its parent, in the environment of the recent hashes.
-
-The roots of the output pass the checks against the header.
-
-The state after the block is the state that the body gives. -/
+/-- A block that passes the transition takes each step of it, in order. -/
 theorem stateTransition_eq_ok {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
+    -- Its fork is before Hegotá.
     ¬.hegota ≤ fork ∧
+      -- Its fork is the active fork of its chain.
       chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork ∧
+      -- It passes its own checks.
       checkBlock chain.config checkSeal chain.recent block = .ok () ∧
       ∃ hashes output roots,
+        -- The recent hashes give the environment.
         recentHashes chain.recent = .ok hashes ∧
+        -- Its body runs in that environment, on the state after its parent.
         applyBody chain.config (blockEnvironment chain.config hashes block.header) block
           ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
         outputRoots block.transactions block.withdrawals output output.block.applyChanges =
           .ok roots ∧
+        -- The roots of the output pass the checks against the header.
         firstFailure (outputChecks block.header output roots) = .ok () ∧
+        -- The state after the block is the state that the body gives.
         post = output.block.applyChanges := by
   unfold stateTransition at h
   have hNotHegota : ¬.hegota ≤ fork := fun hH => by
@@ -891,6 +850,7 @@ Its header commits to the state after it. -/
 theorem of_stateTransition {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
     chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork ∧
+      -- The state root of its header is the root of that state.
       stateRoot keccak256 post = .ok block.header.stateRoot := by
   obtain ⟨-, hActive, -, _, output, roots, -, -, hRoots, hChecks, rfl⟩ := stateTransition_eq_ok h
   refine ⟨hActive, ?_⟩
