@@ -10,14 +10,6 @@ With enshrined proposer-builder separation, a block and its execution payload ar
 The fork choice then votes on nodes: a block with its payload pending, empty or full.
 
 This follows EIP-7732, section "Fork-Choice changes".
-
-A pending node has as children the block without its payload, and the block with it.
-
-A block hangs under the empty or the full node of its parent, as the block itself says.
-
-Suppose every block builds on a full parent, and no vote names an empty node.
-
-Then the rule over nodes picks the head of the rule over blocks, with its payload.
 -/
 
 @[expose] public section
@@ -43,7 +35,9 @@ An empty or a full node hangs under the pending node of its block.
 
 A pending node hangs under the parent block, with the status that the block builds on. -/
 def statusParent : β × Status → β × Status
+  -- A pending node has as children the block without its payload, and the block with it.
   | (r, some _) => (r, none)
+  -- A block hangs under the empty or the full node of its parent, as the block itself says.
   | (r, none) => if r = T.genesis then (r, none) else (T.parent r, some (full r))
 
 /-- The height of a node: two levels per block, the pending node below the other two. -/
@@ -231,19 +225,20 @@ theorem weight_empty (hfull : ∀ r, r ≠ T.genesis → full r = true)
 
 /-- The rule over nodes agrees with the rule over blocks when every payload is present.
 
-The views hold the same pending nodes as blocks, and the full node of each block.
-
-Every block builds on a full parent, no vote names an empty node, and votes name the same blocks.
-
-Take a block, and the head that the rule over blocks reaches from it.
-
-From the pending node of that block, the rule over nodes reaches the full node of that head. -/
+The rule over nodes then picks the head of the rule over blocks, with its payload. -/
 theorem ghost_payloadTree {root : β → ρ} (hroot : Set.InjOn root {r | r ≠ T.genesis})
+    -- Every block builds on a full parent.
     (hfull : ∀ r, r ≠ T.genesis → full r = true)
+    -- The views hold the same pending nodes as blocks, and the full node of each block.
     (hpending : ∀ r, (r, none) ∈ N.blocks ↔ r ∈ G.blocks)
     (hpayload : ∀ r ∈ G.blocks, (r, some true) ∈ N.blocks)
+    -- No vote names an empty node.
     (hvote : ∀ v r, N.latest v ≠ some (r, some false))
+    -- Votes name the same blocks.
+    --
+    -- Take a block, and the head that the rule over blocks reaches from it.
     (hlatest : ∀ v, G.latest v = (N.latest v).map Prod.fst) {b : β} (hb : b ∈ G.blocks) :
+    -- From the pending node of that block, the rule over nodes reaches the full node of that head.
     ghost V w N (nodeKey root) (b, none) = (ghost V w G root b, some true) := by
   -- The full node of a block is the heaviest child of its pending node.
   have pend : ∀ r ∈ G.blocks, ghost V w N (nodeKey root) (r, none) =

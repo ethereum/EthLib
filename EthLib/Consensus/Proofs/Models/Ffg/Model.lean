@@ -5,70 +5,18 @@ public import EthLib.Consensus.Proofs.Models.Stake
 /-!
 # Casper FFG: the model
 
+Checkpoints, votes, slashing conditions, links, justification and finalization.
+
 The model follows Casper FFG §2, [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
 
 Checkpoints follow Gasper §4.1, [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
-
-There, a checkpoint is an epoch boundary pair: a block with an epoch.
-
-A preorder on blocks gives the chains: `a ≤ b` means that `a` is in the chain of `b`.
-
-Each checkpoint `c` has its own validator set `V c`, as Gasper §8.6 gives each block its own set.
-
-So one epoch can have two sets on two conflicting branches.
-
-A supermajority link counts only the stake of the validators of its target checkpoint.
-
-Gasper §8.6 counts the stake of the attestation epoch of a pair, which Gasper §4.1 defines.
-
-One stake function `w` holds for every validator, as Gasper §8.6 assumes.
-
-A constant set gives the model of Casper FFG §2 and Gasper §4, with one set for all votes.
-
-A slack link weakens a supermajority link by a second set `U c` for each checkpoint `c`.
-
-A chain can count the votes for `c` against the stake of a later set `U c`, not of `V c`.
-
-A validator of `V c` that left before `U c` then counts as a voter, but not in the total.
-
-The slack is the stake of such validators, the set `E(V c, U c)` of Gasper §8.6, Definition 8.1.
-
-Gasper has no slack: there each quorum holds two thirds of its own set.
-
-Accountable safety then loses twice the slack of each of the two links that it finds.
-
-The slack of earlier links does not add up.
-
-Nothing ties `U` to `V`: with an empty second set, every ordered link is a slack link.
-
-So the safety bounds say something only when the slack is bounded, as the exit churn bounds it.
-
-A slack link also lets each checkpoint `c` have a set `W c` of weights, not one stake function.
-
-The link holds when its bound holds under one choice of weights in `W t`, for its target `t`.
-
-A balance can change from one checkpoint to the next, and between two branches.
-
-Two branches can justify one checkpoint from two states, each with its own balances.
-
-A set of weights holds them both, where a single weights function could not.
-
-Nothing bounds `W` either: with the zero weights in `W t`, every ordered link is a slack link.
-
-So the bounds say something only when every choice of weights in each set stays near a reference.
-
-With `U = V` and the single stake function `w` in each set, a slack link is a supermajority link.
-
-Justification and finalization take the kind of link as a parameter.
-
-Supermajority links and slack links are two kinds.
 -/
 
 @[expose] public section
 
 namespace EthLib.Consensus.Models.Ffg
 
-/-- A checkpoint: a block and an epoch.
+/-- A checkpoint: a block and an epoch, an epoch boundary pair of Gasper §4.1.
 
 One block can stand for several epochs when the epochs after it have no block.
 
@@ -123,42 +71,85 @@ Gasper calls such a view `(1/3)`-slashable. -/
 def OneThirdSlashable (V : Finset ν) (w : ν → ℕ) (votes : Set (Vote ν β)) : Prop :=
   stake w V ≤ 3 * stake w {v ∈ V | Slashable votes v}
 
+-- A preorder on blocks gives the chains: `a ≤ b` means that `a` is in the chain of `b`.
 variable [Preorder β]
 
 /-- Two blocks conflict when neither is in the chain of the other. -/
 def Conflicting (a b : β) : Prop :=
   ¬a ≤ b ∧ ¬b ≤ a
 
-/-- A supermajority link from `s` to `t`.
-
-The source comes before the target, in epoch and in the chain of the target.
-
-Casper FFG §2 ignores a vote that breaks this order.
-
-Validators of the set of the target vote for the link.
-
-They hold at least two thirds of the stake of that set. -/
+/-- A supermajority link from `s` to `t`, with two thirds of the stake of the set of `t`. -/
 def SupermajorityLink (V : Checkpoint β → Finset ν) (w : ν → ℕ) (votes : Set (Vote ν β))
     (s t : Checkpoint β) : Prop :=
-  s.epoch < t.epoch ∧ s.block ≤ t.block ∧ 2 * stake w (V t) ≤ 3 * stake w (signers (V t) votes s t)
+  -- The source comes before the target, in epoch and in the chain of the target.
+  --
+  -- Casper FFG §2 ignores a vote that breaks this order.
+  s.epoch < t.epoch ∧ s.block ≤ t.block ∧
+    -- Validators of the set of the target vote for the link.
+    --
+    -- They hold at least two thirds of the stake of that set.
+    --
+    -- Each checkpoint `c` has its own set `V c`, as Gasper §8.6 gives each block its own set.
+    --
+    -- So one epoch can have two sets on two conflicting branches.
+    --
+    -- The link counts only the stake of the validators of its target checkpoint.
+    --
+    -- Gasper §8.6 counts the stake of the attestation epoch of a pair, which Gasper §4.1 defines.
+    --
+    -- One stake function `w` holds for every validator, as Gasper §8.6 assumes.
+    --
+    -- A constant set gives the model of Casper FFG §2 and Gasper §4, with one set for all votes.
+    2 * stake w (V t) ≤ 3 * stake w (signers (V t) votes s t)
 
 open scoped Classical in
 /-- A slack link from `s` to `t`: a supermajority link up to a slack.
 
-The source comes before the target, in epoch and in the chain of the target.
-
-The slack is the stake of the set `V t` outside the set `U t`.
-
-Some weights `w` of the set `W t` give the bound below.
-
-Under `w`, twice the stake of `V t` is at most three times that of its voters plus twice the slack.
--/
+The slack is the stake of the set `V t` outside the set `U t`. -/
 def SlackLink (V U : Checkpoint β → Finset ν) (W : Checkpoint β → Set (ν → ℕ))
     (votes : Set (Vote ν β)) (s t : Checkpoint β) : Prop :=
+  -- The source comes before the target, in epoch and in the chain of the target.
+  --
+  -- Each checkpoint `c` has a set `W c` of weights, not one stake function.
+  --
+  -- The link holds when its bound holds under one choice `w` of weights in `W t`.
+  --
+  -- A balance can change from one checkpoint to the next, and between two branches.
+  --
+  -- Two branches can justify one checkpoint from two states, each with its own balances.
+  --
+  -- A set of weights holds them both, where a single weights function could not.
+  --
+  -- Nothing bounds `W`: with the zero weights in `W t`, every ordered link is a slack link.
+  --
+  -- So the bounds say something only when every choice in each set `W c` stays near a reference.
   s.epoch < t.epoch ∧ s.block ≤ t.block ∧ ∃ w ∈ W t,
+    -- Under `w`, twice the stake of `V t` is at most three times that of its voters.
+    --
+    -- The slack, counted twice, weakens that bound.
+    --
+    -- A chain can count the votes for `t` against the stake of a later set `U t`, not of `V t`.
+    --
+    -- A validator of `V t` that left before `U t` then counts as a voter, but not in the total.
+    --
+    -- The slack is the stake of such validators.
+    --
+    -- They form the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
+    --
+    -- Gasper has no slack: there each quorum holds two thirds of its own set.
+    --
+    -- Accountable safety then loses twice the slack of each of the two links that it finds.
+    --
+    -- The slack of earlier links does not add up.
+    --
+    -- Nothing ties `U` to `V`: with an empty second set, every ordered link is a slack link.
+    --
+    -- So the safety bounds say something only when the slack is bounded.
+    --
+    -- The exit churn bounds it.
     2 * stake w (V t) ≤ 3 * stake w (signers (V t) votes s t) + 2 * stake w (V t \ U t)
 
-/-- The checkpoints justified by a kind of link.
+/-- The checkpoints justified by a kind of link, such as supermajority links or slack links.
 
 The genesis block at epoch 0 is justified.
 
@@ -172,20 +163,16 @@ inductive JustifiedBy (link : Checkpoint β → Checkpoint β → Prop) (genesis
 
 /-- The checkpoint `c` is `k`-finalized by a kind of link, as in Gasper Definition 4.9.
 
-Blocks `b 0, ..., b k` start at the block of `c`, and each one is in the chain of the next.
-
-The checkpoints `(b i, e + i)` for `i < k` are justified, where `e` is the epoch of `c`.
-
-A link goes from `c` to `(b k, e + k)`.
-
-Gasper also asks that these checkpoints are epoch boundary pairs.
-
-The model drops that condition.
+Gasper also asks that its checkpoints are epoch boundary pairs; the model drops that condition.
 
 It then finalizes more checkpoints, so its safety theorem is stronger. -/
 def KFinalizedBy (link : Checkpoint β → Checkpoint β → Prop) (genesis : β) (k : ℕ)
     (c : Checkpoint β) : Prop :=
+  -- Blocks `b 0, ..., b k` start at the block of `c`, and each one is in the chain of the next.
   ∃ b : ℕ → β, b 0 = c.block ∧ (∀ i < k, b i ≤ b (i + 1)) ∧
+    -- The checkpoints `(b i, e + i)` for `i < k` are justified, where `e` is the epoch of `c`.
+    --
+    -- A link goes from `c` to `(b k, e + k)`.
     (∀ i < k, JustifiedBy link genesis ⟨b i, c.epoch + i⟩) ∧ link c ⟨b k, c.epoch + k⟩
 
 /-- The checkpoints finalized by a kind of link.

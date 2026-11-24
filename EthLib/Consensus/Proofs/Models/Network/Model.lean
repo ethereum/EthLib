@@ -5,42 +5,11 @@ public import EthLib.Consensus.Proofs.Models.Stake
 /-!
 # A partially synchronous network of honest and Byzantine validators
 
+Validators with views, executions of a protocol among them, and partial synchrony.
+
 The model follows the system model of the fast confirmation rule.
+
 That model is §2 of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
-
-Each validator is a node with a view: the set of messages that it has received.
-
-Honest validators follow a protocol, and Byzantine validators send what they like.
-
-The protocol names the signed statements of each message, each with its signer.
-
-No validator can carry such a statement of an honest validator unless a sent message had it.
-
-An execution starts with nothing sent, and each of its events is allowed in the world before it.
-
-The protocol only allows actions; a duty to act is a further condition on executions.
-
-Partial synchrony bounds the delay after a global stabilisation time, written GST.
-
-Take a message in the view of an honest validator at time `t`.
-It reaches every honest validator by `max t GST + Δ`.
-
-The rule follows from the network rule of §2 and its assumption that honest validators gossip.
-
-It is weaker, since §2 also delivers each message that a Byzantine validator sends.
-
-So a result proved here holds under §2, when time grows without bound and the delay is positive.
-
-A message that no honest validator holds may never be delivered, as a Byzantine sender may keep it.
-
-Footnote 1 of §2 compares it with the partial synchrony of Dwork, Lynch and Stockmeyer.
-Their paper is [doi:10.1145/42282.42283](https://doi.org/10.1145/42282.42283).
-
-Partial synchrony also asks that time grows without bound, so that GST comes.
-
-Synchrony is the case where GST is zero.
-
-Time counts milliseconds, the unit of the clock of the fork choice.
 -/
 
 @[expose] public section
@@ -49,9 +18,9 @@ namespace EthLib.Consensus.Models.Network
 
 /-- A protocol that validators run over the network.
 
-Each message carries signed statements, each with the validator that signed it.
-
 An honest validator sends and moves only as the protocol allows, but need not act.
+
+A duty to act is a further condition on executions.
 
 Both choices may read the time, the view and the state of the validator. -/
 structure Protocol (ν μ σ κ : Type*) where
@@ -62,9 +31,13 @@ structure Protocol (ν μ σ κ : Type*) where
   /-- The states that an honest validator may move to. -/
   Moves : ν → ℕ → Set μ → σ → σ → Prop
 
-/-- The network at one moment. -/
+/-- The network at one moment.
+
+Each validator is a node with a view: the set of messages that it has received. -/
 structure World (ν μ σ : Type*) where
-  /-- The time, shared by the clocks of the honest validators. -/
+  /-- The time, shared by the clocks of the honest validators.
+
+  Time counts milliseconds, the unit of the clock of the fork choice. -/
   time : ℕ
   /-- The messages sent so far, by any validator. -/
   sent : Set μ
@@ -104,23 +77,19 @@ def initial (time : ℕ) (state : ν → σ) : World ν μ σ :=
 
 end World
 
-/-- Whether an event may happen in a world, for a protocol and a set `J` of honest validators.
-
-Time never goes back.
-
-A sender may carry the statement of another honest validator only if a sent message had it.
-
-An honest sender also follows the protocol.
-
-Only sent messages are received.
-
-Only honest validators move, as the protocol allows. -/
+/-- Whether an event may happen in a world, for a protocol and a set `J` of honest validators. -/
 def Allowed (P : Protocol ν μ σ κ) (J : Set ν) (w : World ν μ σ) : Event ν μ σ → Prop
+  -- Time never goes back.
   | .wait time => w.time ≤ time
+  -- Honest validators follow a protocol, and Byzantine validators send what they like.
   | .send sender message =>
+    -- A sender may carry the statement of another honest validator only if a sent message had it.
     (∀ x ∈ P.signed message, x.1 ∈ J → x.1 ≠ sender → ∃ m ∈ w.sent, x ∈ P.signed m) ∧
+      -- An honest sender also follows the protocol.
       (sender ∈ J → P.Sends sender w.time (w.view sender) (w.state sender) message)
+  -- Only sent messages are received.
   | .deliver received => ∀ v, received v ⊆ w.sent
+  -- Only honest validators move, as the protocol allows.
   | .move validator state =>
     validator ∈ J ∧ P.Moves validator w.time (w.view validator) (w.state validator) state
 
@@ -154,18 +123,33 @@ def world (e : Execution P J) (n : ℕ) : World ν μ σ :=
 
 /-- Partial synchrony with a stabilisation time `GST` and a delay `Δ`.
 
-The delay is positive, since a send and a delivery are two events.
-
-Time grows without bound.
-
-Take a message in the view of an honest validator at time `t`.
-At each time from `max t GST + Δ` on, it is in the view of every honest validator. -/
+It bounds the delay after the global stabilisation time. -/
 def PartiallySynchronous (e : Execution P J) (GST Δ : ℕ) : Prop :=
+  -- The delay is positive, since a send and a delivery are two events.
+  --
+  -- Time grows without bound, so that GST comes.
   0 < Δ ∧ (∀ T, ∃ n, T ≤ (e.world n).time) ∧
+    -- Take a message in the view of an honest validator at time `t`.
+    --
+    -- At each time from `max t GST + Δ` on, it is in the view of every honest validator.
+    --
+    -- It follows from the network rule of §2 and its assumption that honest validators gossip.
+    --
+    -- It is weaker, since §2 also delivers each message that a Byzantine validator sends.
+    --
+    -- So a result proved here holds under §2, if time grows without bound and `Δ` is positive.
+    --
+    -- A message that no honest validator holds may never be delivered.
+    --
+    -- A Byzantine sender may keep it.
+    --
+    -- Footnote 1 of §2 compares the rule with the partial synchrony of Dwork, Lynch and Stockmeyer.
+    --
+    -- Their paper is [doi:10.1145/42282.42283](https://doi.org/10.1145/42282.42283).
     ∀ n k, n ≤ k → ∀ v ∈ J, ∀ u ∈ J, ∀ m ∈ (e.world n).view v,
       max (e.world n).time GST + Δ ≤ (e.world k).time → m ∈ (e.world k).view u
 
-/-- Synchrony with a delay `Δ`: partial synchrony from time zero. -/
+/-- Synchrony with a delay `Δ`: partial synchrony from time zero, where GST is zero. -/
 def Synchronous (e : Execution P J) (Δ : ℕ) : Prop :=
   e.PartiallySynchronous 0 Δ
 
@@ -360,17 +344,15 @@ private theorem worldAt_flood_one {time : ℕ} {state : ν → σ} {v : ν} {m :
 
 /-- A protocol has an execution where an honest message reaches every validator in time.
 
-An honest validator `v` sends a message `m` that the protocol allows from an empty view.
-
-The message carries no statement of another honest validator.
-
-Two events later every validator has `m`, at the start time and with the start states.
-
 The execution is partially synchronous for every GST and every positive delay. -/
 theorem exists_partiallySynchronous {time : ℕ} {state : ν → σ} {v : ν} {m : μ} (honest : v ∈ J)
+    -- An honest validator `v` sends a message `m` that the protocol allows from an empty view.
+    --
+    -- The message carries no statement of another honest validator.
     (sends : P.Sends v time ∅ (state v) m) (own : ∀ x ∈ P.signed m, x.1 ∈ J → x.1 = v)
     {Δ : ℕ} (positive : 0 < Δ) :
     ∃ e : Execution P J, e.startTime = time ∧ e.start = state ∧ e.events 0 = .send v m ∧
+      -- Two events later every validator has `m`, at the start time and with the start states.
       (e.world 2).time = time ∧ (e.world 2).state = state ∧ (∀ u, m ∈ (e.world 2).view u) ∧
       ∀ GST, e.PartiallySynchronous GST Δ := by
   let e : Execution P J :=

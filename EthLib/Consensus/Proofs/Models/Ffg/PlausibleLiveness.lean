@@ -67,34 +67,32 @@ theorem Justified.epoch_le (hV : ∀ c, 0 < stake w (V c)) {m : ℕ}
     obtain ⟨v, hv⟩ := hl.exists_vote (hV _)
     exact hm _ hv
 
-/-- Plausible liveness.
+/-- Plausible liveness: honest validators can finalize a new checkpoint and stay unslashable.
 
-Take honest validators `H` in the set `V c` of each checkpoint, with two thirds of its stake.
-
-So no honest validator ever exits; the theorem does not cover an honest exit.
-
-A constant set gives the theorem of Casper FFG, with one set for all votes.
-
-The set of votes is finite, and the stake of each set is positive.
-
-Each honest vote has a justified source, and no honest validator is slashable.
-
-Then some justified checkpoint `a` has this property.
-
-Take any block `b` that has the block of `a` in its chain.
-
-Honest validators can add votes that finalize `b` at an epoch after every justified epoch.
-
-Each added vote has a justified source, and no honest validator becomes slashable. -/
-theorem plausible_liveness {H : Finset ν} (hfin : votes.Finite) (hV : ∀ c, 0 < stake w (V c))
+A constant set gives the theorem of Casper FFG, with one set for all votes. -/
+theorem plausible_liveness
+    -- The set of votes is finite, and the stake of each set is positive.
+    {H : Finset ν} (hfin : votes.Finite) (hV : ∀ c, 0 < stake w (V c))
+    -- Honest validators `H` are in the set `V c` of each checkpoint, with two thirds of its stake.
+    --
+    -- So no honest validator ever exits; the theorem does not cover an honest exit.
     (hH : ∀ c, H ⊆ V c) (hq : ∀ c, 2 * stake w (V c) ≤ 3 * stake w H)
+    -- Each honest vote has a justified source.
     (hsrc : ∀ x ∈ votes, x.validator ∈ H → Justified V w genesis votes x.source)
+    -- No honest validator is slashable.
     (hsafe : ∀ v ∈ H, ¬Slashable votes v) :
+    -- Then some justified checkpoint `a` has this property.
+    --
+    -- Take any block `b` that has the block of `a` in its chain.
     ∃ a, Justified V w genesis votes a ∧ ∀ b, a.block ≤ b → ∃ e, ∃ votes' : Set (Vote ν β),
+      -- The finalized epoch is after every justified epoch.
       (∀ c, Justified V w genesis votes c → c.epoch < e) ∧
+      -- Honest validators add votes that finalize `b`.
       (∀ x ∈ votes', x.validator ∈ H) ∧
       Finalized V w genesis (votes ∪ votes') ⟨b, e⟩ ∧
+      -- Each added vote has a justified source.
       (∀ x ∈ votes', Justified V w genesis (votes ∪ votes') x.source) ∧
+      -- No honest validator becomes slashable.
       ∀ v ∈ H, ¬Slashable (votes ∪ votes') v := by
   classical
   -- Every target epoch, and so every justified epoch, is at most `m`.
