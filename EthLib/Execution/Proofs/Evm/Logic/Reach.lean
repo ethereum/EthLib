@@ -7,29 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Interpreter
 
 A program logic over EVM bytecode reasons about the frames that one frame goes through.
 
-The frames that a frame reaches are those of a chain of steps, for any relation of steps.
+Here the steps send no message.
 
-The facts about such chains hold for every relation, so the steps with messages share them.
-
-A step of the frame runs the opcode at the program counter, with the step of the interpreter.
-
-It gives the next frame, or a failure that halts the frame exceptionally, as the loop does.
-
-A step that asks for a message, a call or a creation, has no rule here.
-
-So the relation covers frames that send no message, and says nothing past a call.
-
-The frames that send messages have their own relation, under a runner of messages.
-
-The loop of the interpreter follows the steps of any relation that it runs alike at both ends.
-
-So a frame that reaches a stopped frame by steps without a message is the result of the loop.
-
-That holds whatever its runner of messages and its bound on their gas.
-
-The bound only limits the gas of a message, and no step here sends one.
-
-The loop also stops by the measure of the frame, not by a count of steps.
+Frames that send messages step under a runner of messages.
 -/
 
 @[expose] public section
@@ -40,7 +20,9 @@ open EthLib.Base (Fork)
 
 variable {fork : Fork} {Meter : Type}
 
-/-- The frames that a frame reaches by the steps of a relation, itself included. -/
+/-- The frames that a frame reaches by a chain of steps of a relation, itself included.
+
+Its facts hold for every relation, so the steps with messages share them. -/
 inductive Reaches (S : Evm fork Meter → Evm fork Meter → Prop) :
     Evm fork Meter → Evm fork Meter → Prop where
   /-- A frame reaches itself. -/
@@ -104,9 +86,11 @@ end Reaches
 
 variable [GasMeter Meter]
 
-/-- One step of a running frame that sends no message.
+/-- One step of a running frame that sends no message, by the step of the interpreter.
 
-It gives the next frame, or halts the frame on an error that does not abort the run. -/
+It runs the opcode at the program counter, and gives the next frame or halts, as the loop does.
+
+A step that asks for a message, a call or a creation, has no rule, so none goes past a call. -/
 inductive Step (fork : Fork) : Evm fork Meter → Evm fork Meter → Prop where
   /-- The step gives the next frame. -/
   | next {evm after : Evm fork Meter} : evm.running = true →
@@ -143,6 +127,7 @@ theorem Step.gasHeld_le [LawfulGasMeter Meter] {a b : Evm fork Meter} (h : Step 
     GasMeter.gasHeld b.gas ≤ GasMeter.gasHeld a.gas := by
   cases h with
   | next running next =>
+    -- The step lowers the measure of the frame, by which the loop stops, not by a count of steps.
     exact gasHeld_le_of_measure_lt (show measure _ < measure _ from
       step_decreases fork running next)
   | halt => rw [gasHeld_exceptionalHalt]; omega
@@ -179,12 +164,13 @@ theorem Step.runFrame_eq {a b : Evm fork Meter} (h : Step fork a b)
     runFrame (step fork) (step_decreases fork) bound runChild a within =
       runFrame (step fork) (step_decreases fork) bound runChild b
         (Nat.le_trans h.gasHeld_le within) := by
+  -- The bound only limits the gas of a message, and no step here sends one.
   cases h with
   | next running next => exact runFrame_of_step_eq_next running next
   | halt running failed halts =>
     rw [runFrame_of_step_eq_error running failed halts, runFrame_of_running_eq_false rfl]
 
-/-- A frame that reaches a stopped frame runs to it in the loop of the interpreter.
+/-- A frame that reaches a stopped frame by steps without a message runs to it in the loop.
 
 It holds for every bound on the gas of messages and every runner of messages.
 

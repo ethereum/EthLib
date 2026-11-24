@@ -5,35 +5,15 @@ public import EthLib.Execution.Proofs.Evm.Logic.Rules
 /-!
 # Proofs: rules for the opcodes that read and write only the stack
 
-Each rule here goes from one running frame of a code to the next.
+Each rule goes from one running frame of a code to the next, with one counter of gas, at every fork.
 
-A one-operand, two-operand or three-operand opcode puts its result in place of its operands.
+The opcodes that the fork gives an instruction of one, two or three operands run by its rule.
 
-The opcodes that the fork gives such an instruction run by the rules for one, two or three operands.
+Each rule is first proved over the steps that also never abort with less gas.
 
-POP drops the top word, for 2 gas.
+That form gives the rule over steps monotone in gas, which gives the plain rule.
 
-From Shapella, PUSH0 pushes the word 0, for 2 gas, by [EIP-3855][eip-3855].
-
-The rule for DUP1 to DUP16 sits with the other rules, and pushes a copy of the word at a depth.
-
-SWAP1 to SWAP16 exchange the top word with the word at their depth.
-
-Each SWAP costs 3 gas.
-
-EXP pays its base price and the price per byte of its exponent that the fork sets.
-
-Each rule here is first proved over the steps that also never abort with less gas.
-
-That form gives the rule over the steps from frames that are monotone in gas.
-
-That rule gives the rule over the steps of the logic.
-
-The rules work out the charge of one counter of gas, at every fork.
-
-DUPN, SWAPN and EXCHANGE of Glamsterdam have no rule yet.
-
-[eip-3855]: https://eips.ethereum.org/EIPS/eip-3855#specification
+DUP1 to DUP16 sit with the other rules, and DUPN, SWAPN and EXCHANGE of Glamsterdam have none yet.
 -/
 
 @[expose] public section
@@ -128,11 +108,14 @@ theorem pop {x : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[p
       (At code message (pc + 1) rest memory (gas - 2) state substate returnData) :=
   (popG hlt hbyte hgas).toHoare
 
-/-- From Shapella, PUSH0 pushes the word 0, for 2 gas, by EIP-3855.
+/-- From Shapella, PUSH0 pushes the word 0, for 2 gas, by [EIP-3855][eip-3855].
 
 The stack needs room for one more word.
 
-It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
+It holds over the steps from frames that are monotone in gas and never abort with less gas.
+
+[eip-3855]: https://eips.ethereum.org/EIPS/eip-3855#specification
+-/
 theorem push0GA (hfork : .shapella ≤ fork) (hlt : pc < code.size) (hbyte : code[pc] = 0x5f)
     (hgas : 2 ≤ gas) (hstack : stack.length < STACK_LIMIT) :
     HoareGA fork (At code message pc stack memory gas state substate returnData)

@@ -8,35 +8,11 @@ public import EthLib.Execution.Proofs.Evm.Gas.CallGas
 /-!
 # Proofs: the route of a call to the code that it runs
 
-A call runs the code of the account at its address.
-
-From Pectra, that code may be a delegation indicator of EIP-7702, to a delegate.
-
-The call then runs the code of the delegate instead.
-
-It pays an access to the delegate, cold or warm by EIP-2929, and records the access and the read.
-
-The message keeps the address of the call as its current target.
-
-Its code address is the delegate, and it runs no precompile at that address.
-
-The call follows one delegation only, even when the delegate has an indicator too.
-
-A route names the code that the call runs.
-
-It is either the code of the address, or a delegate and the code that the state holds for it.
+A call runs the code at its address, or, from Pectra, the code of a delegate of EIP-7702.
 
 The rule here covers a call that sends no value of its own, of every kind, along either route.
 
 It holds at every fork from Berlin, with one counter of gas.
-
-The rules for calls with no delegation are its cases along the code of the address.
-
-From Glamsterdam a cold access costs 3000 instead of 2600, by EIP-8038, and the rule pays it.
-
-The rule names the message that the call sends.
-
-So a run may stop because the runner fails, but only on that message.
 
 Sources: [EIP-150][eip150], [EIP-2929][eip2929], [EIP-7702][eip7702] and [EIP-8038][eip8038].
 
@@ -71,6 +47,9 @@ Before Pectra, or when `c` is no delegation indicator, the route is the code of 
 From Pectra, when `c` delegates to `d`, the route is `d` with the code that `state` holds for it. -/
 def Routes (fork : Fork) (state : State.TransactionState) (c : ByteArray) : Route → Prop
   | none => .pectra ≤ fork → delegatedAddress c = none
+  -- When `c` delegates to `d`, the call runs the code of `d` instead.
+  --
+  -- It follows one delegation only, even when the delegate has an indicator too.
   | some (d, c') => .pectra ≤ fork ∧ delegatedAddress c = some d ∧
       state.getCode (state.getAccount d).codeHash = .ok c'
 
@@ -84,7 +63,7 @@ def routeCode (c : ByteArray) : Route → ByteArray
   | none => c
   | some (_, c') => c'
 
-/-- The price of the route: 0, or the access to the delegate.
+/-- The price of the route: 0, or the access to the delegate, cold or warm by EIP-2929.
 
 The access is cold when the delegate is not in the accessed addresses `accessed`. -/
 def routeCost (fork : Fork) (accessed : Std.ExtTreeSet Address) : Route → Nat
@@ -118,19 +97,7 @@ theorem Routes.recordAccountRead {state : State.TransactionState} {address : Add
 
 /-! ## The step of a call along a route -/
 
-/-- The step of a call that sends no value of its own, along a route, up to its checks of gas.
-
-The call pays `cb` for the access to the address, `dc` for the route, and `growth` for memory.
-
-From Glamsterdam, the step fails when the gas does not cover the access and the growth of memory.
-
-From Glamsterdam, the frame halts with only the read of the address when the gas misses the route.
-
-The frame halts with the reads of the route when the gas does not cover the charge of the call.
-
-That charge is the gas that the call passes on, the access, the route and the growth of memory.
-
-Otherwise the frame pays the charge, and the step finishes the call along the route. -/
+/-- The step of a call that sends no value of its own, along a route, up to its checks of gas. -/
 theorem callStep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
     {route : Route} {cb dc : Nat} {growth : ExtendMemory}
@@ -138,8 +105,11 @@ theorem callStep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
       g :: a :: ((if kind.sendsValue then [0] else []) ++ i :: isz :: o :: osz :: rest))
     (hcode : evm.state.getCode (evm.state.getAccount (toAddressMasked a)).codeHash = .ok calleeCode)
     (hroute : Routes fork evm.state calleeCode route)
+    -- The call pays `cb` for the access to the address.
     (hcb : callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) = cb)
+    -- It pays `dc` for the route.
     (hdc : routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route = dc)
+    -- It pays `growth` for memory.
     (hgrowth : extendMemory evm.memory.size [(i, isz), (o, osz)] = growth) :
     ∃ stack : Stack, stack.val = rest ∧
       let read := { evm with
@@ -150,11 +120,17 @@ theorem callStep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
         state := routeState read.state route, substate := routeSub read.substate route }
       let callGas := messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)
       callStep kind evm =
+        -- From Glamsterdam, the step fails when the gas misses the access and the memory growth.
         if fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost then .error .outOfGas
+        -- From Glamsterdam, the frame halts with only the address read if the gas misses the route.
         else if fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost + dc then
           .ok (.next (exceptionalHalt read .outOfGas))
+        -- The frame halts with the reads of the route when the gas misses the charge of the call.
+        --
+        -- That charge is the gas that the call passes on, the access, the route and the growth.
         else if evm.gas < callGas.cost + growth.cost then
           .ok (.next (exceptionalHalt pre .outOfGas))
+        -- Otherwise the frame pays the charge, and the step finishes the call along the route.
         else keepReads pre .next (finishCall kind ⟨g, toAddressMasked a, 0, i, isz, o, osz⟩
           ⟨routeAddr (toAddressMasked a) route, routeCode calleeCode route, route.isSome, dc⟩
           callGas.subCall 0 growth.expandBy
@@ -287,70 +263,56 @@ The call is of kind `kind`, to `to`, along the route `route` to the code `callee
 
 Before the step, the frame has the message `message`, memory, gas, state and substate.
 
-The call asks for `asked` gas, with the input and output ranges `(i, isz)` and `(o, osz)`.
-
-The caller has recorded the reads of `to`, of the delegate, and of its own account.
-
-It has accessed `to` and the delegate.
-
-The message gets the gas it asks for, at most all but one 64th of the gas left.
-
-The gas left is what remains after the access, the route and the growth of memory.
-
-It gets no reservoir, since the meter has one counter.
-
-CALL and STATICCALL run on `to`, and CALLCODE and DELEGATECALL on the current account.
-
-The message runs the code of the route, with the address of the route as its code address.
-
-It runs no precompile when the route is a delegate.
-
-DELEGATECALL keeps the sender and the value of the current message, and moves no value.
-
-The message is static for STATICCALL, and otherwise when the frame is.
-
-It keeps the block and the transaction of the current message. -/
+The call asks for `asked` gas, with the input and output ranges `(i, isz)` and `(o, osz)`. -/
 def CallSends (kind : CallKind) (message : Message fork) (memory : ByteArray) (gas : Nat)
     (state : State.TransactionState) (substate : Substate) (asked to i isz o osz : U256)
     (calleeCode : ByteArray) (route : Route) (caller : Evm fork Nat) (msg : Message fork) :
     Prop :=
+  -- The caller has recorded the reads of `to`, of the delegate, and of its own account.
   caller.state = (routeState (state.recordAccountRead (toAddressMasked to)) route).recordAccountRead
       message.currentTarget ∧
+    -- It has accessed `to` and the delegate.
     caller.substate = routeSub { substate with
       accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } route ∧
+    -- The message gets the gas it asks for, at most all but one 64th of the gas left.
+    --
+    -- The gas left is what remains after the access, the route and the growth of memory.
     msg.gas = (messageCallGas fork 0 asked.toNat gas
       (extendMemory memory.size [(i, isz), (o, osz)]).cost
       (callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)) +
         routeCost fork (substate.accessedAddresses.insert (toAddressMasked to)) route)).subCall ∧
+    -- It gets no reservoir, since the meter has one counter.
     msg.reservoir = 0 ∧
+    -- DELEGATECALL keeps the sender of the current message.
     msg.caller = (if kind = .delegatecall then message.caller else message.currentTarget) ∧
+    -- CALL and STATICCALL run on `to`, and CALLCODE and DELEGATECALL on the current account.
+    --
+    -- A delegation keeps the address of the call as the current target.
     msg.currentTarget = (if kind = .call ∨ kind = .staticcall then toAddressMasked to
       else message.currentTarget) ∧
     msg.target = some (if kind = .call ∨ kind = .staticcall then toAddressMasked to
       else message.currentTarget) ∧
+    -- The message runs the code of the route, with the address of the route as its code address.
     msg.codeAddress = some (routeAddr (toAddressMasked to) route) ∧
+    -- It runs no precompile when the route is a delegate.
     msg.code = routeCode calleeCode route ∧ msg.disablePrecompiles = route.isSome ∧
     msg.data = memoryReadBytes (memoryExtend memory
       (extendMemory memory.size [(i, isz), (o, osz)]).expandBy) i.toNat isz.toNat ∧
+    -- DELEGATECALL also keeps the value of the current message, and moves no value.
     msg.value = (if kind = .delegatecall then message.value else 0) ∧
     msg.shouldTransferValue = (kind != .delegatecall) ∧
+    -- The message is static for STATICCALL, and otherwise when the frame is.
     msg.depth = message.depth + 1 ∧ msg.isStatic = (kind == .staticcall || message.isStatic) ∧
+    -- It keeps the block and the transaction of the current message.
     msg.blockEnv = message.blockEnv ∧ msg.txEnv = message.txEnv
 
 /-- The step of a call that sends no value of its own sends a message along a route.
 
-CALL and CALLCODE pop a value, here 0, and DELEGATECALL and STATICCALL pop none.
-
-The frame pops the operands, accesses the address, records its read, and follows the route.
-
-It pays the access, the route, the growth of memory, and the gas it passes on.
-
-The calling frame and the message are those that every call builds from the frame after the payment.
-
-The message gets the gas it asks for, at most all but one 64th of the gas left, and no reservoir. -/
+The calling frame and the message are those that every call builds from the frame after payment. -/
 theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
     {route : Route}
+    -- CALL and CALLCODE pop a value, here 0, and DELEGATECALL and STATICCALL pop none.
     (hst : evm.stack.val =
       g :: a :: ((if kind.sendsValue then [0] else []) ++ i :: isz :: o :: osz :: rest))
     (hcode : evm.state.getCode (evm.state.getAccount (toAddressMasked a)).codeHash = .ok calleeCode)
@@ -367,14 +329,21 @@ theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
         (callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) + dc)
       let caller := callerFrame
         { evm with
+          -- The frame pops the operands.
           stack
+          -- It pays the access, the route, the growth of memory, and the gas it passes on.
           gas := evm.gas - (callGas.cost + growth.cost)
+          -- It records the read of the address, and follows the route.
           state := routeState (evm.state.recordAccountRead (toAddressMasked a)) route
+          -- It accesses the address.
           substate := routeSub { evm.substate with accessedAddresses := accessed } route }
         growth.expandBy
       callStep kind evm = .ok (.child caller
         (callMessage kind ⟨g, toAddressMasked a, 0, i, isz, o, osz⟩
           ⟨routeAddr (toAddressMasked a) route, routeCode calleeCode route, route.isSome, dc⟩
+          -- The message gets the gas it asks for, at most all but one 64th of the gas left.
+          --
+          -- It gets no reservoir.
           callGas.subCall 0 caller)
         (resumeCall fork caller 0 o osz)) := by
   obtain ⟨stack, hstack, h⟩ := callStep_of_routes hfork hst hcode hroute rfl rfl rfl
@@ -401,24 +370,22 @@ theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
 
 /-! ## The rule of a call along a route -/
 
-/-- A caller with room on its stack resumes from every frame that ends its message.
-
-It pushes 1 for a frame with no error and 0 otherwise, and gets back the gas of the frame.
-
-It writes the start of the output of the frame at the start of its output range.
-
-It writes as many bytes as both the output and the range hold.
-
-The caller keeps its own output. -/
+/-- A caller with room on its stack resumes from every frame that ends its message. -/
 theorem resumeCall_eq {caller child : Evm fork Nat} {o osz : U256}
     (hlen : caller.stack.val.length < STACK_LIMIT) :
     ∃ after, resumeCall fork caller 0 o osz child = .ok after ∧
       after.code = caller.code ∧ after.validJumpDestinations = caller.validJumpDestinations ∧
       after.message = caller.message ∧ after.pc = caller.pc + 1 ∧
+      -- It pushes 1 for a frame with no error and 0 otherwise.
       after.stack.val = (if child.error.isNone then 1 else 0) :: caller.stack.val ∧
+      -- It writes the start of the output of the frame at the start of its output range.
+      --
+      -- It writes as many bytes as both the output and the range hold.
       after.memory = memoryWrite caller.memory o.toNat
         (child.output.extract 0 (min osz.toNat child.output.size)) ∧
+      -- It gets back the gas of the frame.
       after.gas = caller.gas + child.gas ∧
+      -- The caller keeps its own output.
       after.running = caller.running ∧ after.error = caller.error ∧ after.output = caller.output ∧
       after.state = (incorporateChild fork caller child).state ∧
       after.substate = (incorporateChild fork caller child).substate ∧
@@ -435,53 +402,49 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteAr
 
 /-- A call that sends no value of its own, to `to`, along the route `route`.
 
-The opcode at the program counter runs the step of a call of kind `kind`.
-
-CALL and CALLCODE pop a value, here 0, and DELEGATECALL and STATICCALL pop none.
-
-The state holds the code `calleeCode` for `to`, and the route goes from it to the code that runs.
-
-The gas of the frame covers the access to `to`, the price of the route, and the growth of memory.
-
-The call sends one message, and the caller and the message are those of a call along the route.
-
-The runner may fail on that message, with any error, and then the run ends there.
-
-Otherwise the rule holds for every frame that ends the message and meets the assumption.
-
-The caller pushes 1 when the callee ends with no error, and 0 otherwise.
-
-It writes the start of the output of the callee at the start of the output range.
-
-It writes as many bytes as both the output and the range hold, and leaves the rest of memory.
-
-It gets back the gas that the callee leaves, and its state and substate come from the callee.
-
-The rule says nothing more of them, since the callee is arbitrary. -/
+The opcode at the program counter runs the step of a call of kind `kind`. -/
 theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8} {op : Op}
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {calleeCode : ByteArray} {route : Route} (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.ofByte fork byte = some op) (hnone : instruction (Meter := Nat) fork op = none)
     (hrun : messageInstruction (Meter := Nat) fork op = some (callStep kind))
+    -- The state holds the code `calleeCode` for `to`.
     (hcode : state.getCode (state.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
+    -- The route goes from that code to the code that runs.
+    --
+    -- The rules for calls with no delegation are the cases along the code of the address.
     (hroute : Routes fork state calleeCode route)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    -- The gas of the frame covers the access to `to`, the price of the route, and the growth.
+    --
+    -- From Glamsterdam a cold access costs 3000 instead of 2600, by EIP-8038, and the rule pays it.
     (hgas : callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)) +
       routeCost fork (substate.accessedAddresses.insert (toAddressMasked to)) route +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas) :
     HoareOn fork callee
+      -- The call sends one message, and the caller and message are those of a call along the route.
+      --
+      -- The runner may fail only on that message, with any error, and then the run ends there.
       (CallSends kind message memory gas state substate asked to inputStart inputSize outputStart
         outputSize calleeCode route)
+      -- CALL and CALLCODE pop a value, here 0, and DELEGATECALL and STATICCALL pop none.
       (At code message pc (asked :: to :: ((if kind.sendsValue then [0] else []) ++
           inputStart :: inputSize :: outputStart :: outputSize :: rest))
         memory gas state substate returnData)
+      -- Unless the runner fails, the rule holds for every frame that ends the message.
+      --
+      -- Such a frame meets the assumption.
       fun after => ∃ caller msg child,
         CallSends kind message memory gas state substate asked to inputStart inputSize outputStart
           outputSize calleeCode route caller msg ∧
         callee caller msg child ∧ child.gas ≤ msg.gas ∧
+        -- The caller pushes 1 when the callee ends with no error, and 0 otherwise.
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest)
+          -- It writes the start of the output of the callee at the start of the output range.
+          --
+          -- It writes as many bytes as both the output and the range hold, and leaves the rest.
           (memoryWrite (memoryExtend memory
             (extendMemory memory.size
               [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
@@ -491,7 +454,11 @@ theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8
             (callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)) +
               routeCost fork (substate.accessedAddresses.insert (toAddressMasked to)) route)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
+            -- It gets back the gas that the callee leaves.
             child.gas)
+          -- Its state and substate come from the callee.
+          --
+          -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           child.output after := by
   apply HoareOn.of_child

@@ -6,55 +6,9 @@ public import EthLib.Execution.Proofs.Evm.Logic.NatCode
 /-!
 # Proofs: a tactic that steps through the opcodes of a code
 
-A proof about a code applies one rule per opcode.
-
-Each rule needs facts about the code.
-
-These are that the program counter lies inside the code, the byte there, and the data of a PUSH.
+A proof about a code applies one rule per opcode, and each rule needs facts about the code.
 
 The tactic here applies the rule of the opcode at the program counter, and proves those facts.
-
-It takes a list of rewrite rules that turn the code into numbers.
-
-For a code stored as one number, they are the equation of the code and the definition of its number.
-
-The tactic rewrites each fact with that list, and evaluates it on the numbers.
-
-It steps over PUSH0 to PUSH32, POP, DUP1 to DUP16 and SWAP1 to SWAP16.
-
-It steps over each opcode of one, two or three operands that the fork runs on the stack alone.
-
-It steps over JUMPDEST, CALLDATALOAD and JUMP.
-
-It steps over JUMPI on a condition that is a number, or that a hypothesis proves zero or nonzero.
-
-It steps over each opcode that pushes a word fixed by the frame, such as CALLVALUE, and over GAS.
-
-It steps over each opcode that pushes a number of the environment, such as NUMBER.
-
-A hypothesis or linear arithmetic must show that the number is below `2^256`.
-
-It proves a jump destination valid by the walk along the opcodes.
-
-So it steps over a jump only in a code stored as one number.
-
-It fails on any other opcode, and on a step whose gas, fork or room on the stack it cannot prove.
-
-It proves gas by linear arithmetic on the gas of the frame and the hypotheses.
-
-It proves that the fork has an opcode when every fork has it.
-
-It also does so when a hypothesis names a fork that has the opcode.
-
-A variant of the first tactic proves triples over the steps from frames monotone in gas.
-
-It steps over the same opcodes, except GAS.
-
-Another tactic closes a run at STOP, or at the end of the code.
-
-A last rule replaces the stack, the memory and the gas of a frame by equal ones.
-
-It ends a run whose last frame names its fields in another form.
 -/
 
 @[expose] public section
@@ -66,7 +20,9 @@ open GasCosts
 
 variable {fork : Fork}
 
-/-- A frame reaches itself, named with an equal stack, an equal memory and an equal gas. -/
+/-- A frame reaches itself, named with an equal stack, an equal memory and an equal gas.
+
+It ends a run whose last frame names its fields in another form. -/
 theorem reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s' : List U256}
     {m m' : ByteArray} {g g' : Nat} {st : State.TransactionState} {ss : Substate}
     {rd : ByteArray} (hs : s = s') (hm : m = m') (hg : g = g') :
@@ -88,6 +44,8 @@ open Lean.Parser.Tactic
 
 The fact is that a position lies inside the code, the byte at a position, or the data of a PUSH.
 
+For a code stored as one number, the rules are its equation and the definition of its number.
+
 A byte or a word left unknown in the goal is set to the value it evaluates to. -/
 syntax "evm_code" " [" simpLemma,* "]" : tactic
 
@@ -98,7 +56,9 @@ macro_rules
       Nat.reduceShiftRight, UInt8.reduceOfNat, UInt8.reduceToNat, BitVec.reduceOfNat,
       ↓reduceIte]) <;> rfl)
 
-/-- Proves that a jump destination is valid, by the walk along the opcodes from position 0. -/
+/-- Proves that a jump destination is valid, by the walk along the opcodes from position 0.
+
+So a step over a jump needs a code stored as one number. -/
 syntax "evm_dest" " [" simpLemma,* "]" : tactic
 
 macro_rules
@@ -131,6 +91,8 @@ macro_rules
       OPCODE_NUMBER, BASE, VERY_LOW, LOW, MID])
 
 /-- Proves that the frame holds enough gas for a step, by linear arithmetic.
+
+It works on the gas of the frame and the hypotheses.
 
 A goal `a ≤ g - b` is first turned into `a + b ≤ g`.
 
@@ -169,6 +131,7 @@ syntax "evm_step" " [" simpLemma,* "]" : tactic
 
 macro_rules
   | `(tactic| evm_step [$ls,*]) => `(tactic| ((try unfold Spec) <;> (first
+      -- PUSH1 to PUSH32.
       | (refine' Triple.seq (push_of_decode ?lt ?op ?dec ?n ?word ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -177,18 +140,21 @@ macro_rules
          case word => evm_code [$ls,*]
          case gas => evm_gas
          case room => evm_room)
+      -- PUSH0.
       | (refine' Triple.seq (push0 ?fork ?lt ?op ?gas ?room) ?next
          case fork => evm_fork
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
          case room => evm_room)
+      -- Each opcode of two operands that the fork runs on the stack alone.
       | (refine' Triple.seq (binary ?lt ?op ?dec ?run ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case dec => refine ofByte_of_decode rfl ?_; evm_fork
          case run => exact instruction_of_stackOnlyStep rfl
          case gas => evm_gas)
+      -- DUP1 to DUP16.
       | (refine' Triple.seq (dup_of_decode ?lt ?op ?dec ?x ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -196,28 +162,33 @@ macro_rules
          case x => rfl
          case gas => evm_gas
          case room => evm_room)
+      -- SWAP1 to SWAP16.
       | (refine' Triple.seq (swap_of_decode ?lt ?op ?dec ?x ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case dec => rfl
          case x => rfl
          case gas => evm_gas)
+      -- POP.
       | (refine' Triple.seq (pop ?lt ?op ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas)
+      -- Each opcode of one operand that the fork runs on the stack alone.
       | (refine' Triple.seq (unary ?lt ?op ?dec ?run ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case dec => refine ofByte_of_decode rfl ?_; evm_fork
          case run => exact instruction_of_stackOnlyStep rfl
          case gas => evm_gas)
+      -- Each opcode of three operands that the fork runs on the stack alone.
       | (refine' Triple.seq (ternary ?lt ?op ?dec ?run ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case dec => refine ofByte_of_decode rfl ?_; evm_fork
          case run => exact instruction_of_stackOnlyStep rfl
          case gas => evm_gas)
+      -- JUMPDEST, CALLDATALOAD and JUMP.
       | (refine' Triple.seq (jumpdest ?lt ?op ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -231,6 +202,7 @@ macro_rules
          case op => evm_code [$ls,*]
          case gas => evm_gas
          case dest => evm_dest [$ls,*])
+      -- JUMPI on a condition that is a number, or that a hypothesis proves zero or nonzero.
       | (refine' Triple.seq (jumpi_taken ?lt ?op ?gas ?nz ?dest) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -242,6 +214,7 @@ macro_rules
          case op => evm_code [$ls,*]
          case gas => evm_gas
          case zero => first | assumption | decide)
+      -- Each opcode that pushes a word fixed by the frame, such as CALLVALUE.
       | (refine' Triple.seq (push_of_readFrame ?lt ?op ?dec ?run ?word ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -250,35 +223,36 @@ macro_rules
          case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
          case gas => evm_gas
          case room => evm_room)
+      -- Each opcode that pushes an environment number, such as NUMBER.
       | (refine' Triple.seq (push_of_readNumber ?lt ?op ?dec ?run ?word ?fit ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case dec => refine ofByte_of_decode rfl ?_; evm_fork
          case run => rfl
          case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
+         -- A hypothesis or linear arithmetic must show that the number is below `2^256`.
          case fit => first | assumption | omega
          case gas => evm_gas
          case room => evm_room)
+      -- GAS.
       | (refine' Triple.seq (gas_rule ?lt ?op ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
          case room => evm_room)
+      -- It fails on any other opcode, and on a step whose gas, fork or stack room it cannot prove.
       | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
 
 /-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
 
-The goal is a triple over the steps from frames that are monotone in gas.
-
-It starts from a frame of a code at a known program counter.
+The goal is a triple over steps monotone in gas, from a frame of a code at a known program counter.
 
 The rewrite rules `ls` turn the facts about the code into facts about numbers.
 
-It steps over the same opcodes as the tactic above, except GAS, which is not monotone in gas.
-
-The goal that is left starts from the frame after the step. -/
+It steps over the same opcodes as the tactic above, except GAS, which is not monotone in gas. -/
 syntax "evm_stepG" " [" simpLemma,* "]" : tactic
 
+-- The goal that is left starts from the frame after the step.
 macro_rules
   | `(tactic| evm_stepG [$ls,*]) => `(tactic| ((try unfold SpecG) <;> (first
       | (refine' Triple.seq (push_of_decodeG ?lt ?op ?dec ?n ?word ?gas ?room) ?next

@@ -7,23 +7,11 @@ public import EthLib.Execution.Proofs.Evm.Logic.Known
 
 Bytecode often reuses a block of its own code, as a subroutine, with JUMP.
 
-The caller pushes an address to come back to, then the arguments, then the address of the block.
-
-It jumps there, and the block jumps back to the return address once it has its results.
-
 The EVM has no instruction for this: the convention lives only in the code.
 
-A specification of such a block holds for every return address and every stack under the arguments.
-
-- The return address must be a JUMPDEST of the code, since the block jumps back to it.
-- The stack must leave room for the words that the block pushes, up to the limit of 1024 words.
-- The frame must hold at least the gas of the block, and the block keeps the rest.
-
-The block then reaches the return address, with its results in place of its arguments.
+A specification of the block holds for every return address and every stack under the arguments.
 
 So one proof of the block serves at every place in the code that calls it.
-
-The rule for a call composes the push of the address of the block and the JUMP with that proof.
 -/
 
 @[expose] public section
@@ -37,15 +25,7 @@ variable {fork : Fork}
 
 /-- A specification of the block of `code` at `entry`, a subroutine.
 
-It holds for every return address that is a JUMPDEST of the code.
-
-It holds for every stack under the return address that leaves room for `room` more words.
-
-It holds for every gas of at least `cost`.
-
 From the block, with `args` on top of the return address, the frame reaches the return address.
-
-There its stack holds `results` on top of the same stack, and it has paid `cost`.
 
 The frame goes from `memory`, `state` and `substate` to `memory'`, `state'` and `substate'`.
 
@@ -54,10 +34,21 @@ def Subroutine (code : ByteArray) (message : Message fork) (entry : Nat)
     (args results : List U256) (room cost : Nat) (memory memory' : ByteArray)
     (state state' : State.TransactionState) (substate substate' : Substate)
     (returnData returnData' : ByteArray) : Prop :=
+  -- It holds for every return address and every stack under the arguments.
   ∀ (ret : U256) (rest : List U256) (gas : Nat),
+    -- The return address must be a JUMPDEST of the code, since the block jumps back to it.
     isValidJumpDest (validJumpDestinations code) ret.toNat = true →
+    -- The stack under it must leave room for the `room` words that the block pushes, up to 1024.
+    --
+    -- The frame must hold at least the gas `cost` of the block, and the block keeps the rest.
     args.length + 1 + rest.length + room ≤ STACK_LIMIT → cost ≤ gas →
+    -- The caller pushes a return address, then the arguments, then the address of the block.
+    --
+    -- It jumps there.
     Hoare fork (At code message entry (args ++ ret :: rest) memory gas state substate returnData)
+      -- The block jumps back to the return address once it has its results.
+      --
+      -- There its stack holds `results` on top of the same stack, and it has paid `cost`.
       (At code message ret.toNat (results ++ rest) memory' (gas - cost) state' substate'
         returnData')
 
@@ -66,14 +57,6 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory memory' 
   {returnData returnData' : ByteArray}
 
 /-- A call of a subroutine: PUSHn of the address of its block, then JUMP to it.
-
-The address of the block is a JUMPDEST of the code, and so is the return address.
-
-The stack under the return address leaves room for the words that the block pushes.
-
-The stack also has room for the address of the block, below the limit of 1024 words.
-
-The call pays 3 for the push and 8 for the jump, then the gas of the block.
 
 The frame reaches the return address with the results of the block on its stack. -/
 theorem callSubroutine {n : Fin 33} {entry ret : U256} {args results rest : List U256}
@@ -84,9 +67,14 @@ theorem callSubroutine {n : Fin 33} {entry ret : U256} {args results rest : List
     (decoded : Op.decode (0x5f + UInt8.ofNat n.val) = some (.push n))
     (hword : pushData code pc n = entry) (hjlt : pc + (1 + n) < code.size)
     (hjump : code[pc + (1 + n)] = 0x56)
+    -- The address of the block is a JUMPDEST of the code, and so is the return address.
     (ventry : isValidJumpDest (validJumpDestinations code) entry.toNat = true)
     (vret : isValidJumpDest (validJumpDestinations code) ret.toNat = true)
+    -- The stack under the return address leaves room for the words that the block pushes.
     (hroom : args.length + 1 + rest.length + room ≤ STACK_LIMIT)
+    -- The stack also has room for the address of the block, below the limit of 1024 words.
+    --
+    -- The call pays 3 for the push and 8 for the jump, then the gas of the block.
     (hpush : args.length + 1 + rest.length < STACK_LIMIT) (hgas : 11 + cost ≤ gas) :
     Hoare fork (At code message pc (args ++ ret :: rest) memory gas state substate returnData)
       (At code message ret.toNat (results ++ rest) memory' (gas - (11 + cost)) state'
@@ -102,6 +90,7 @@ theorem callSubroutine {n : Fin 33} {entry ret : U256} {args results rest : List
   have h3 := h ret rest (gas - 3 - 8) vret hroom (by omega)
   have hg : gas - 3 - 8 - cost = gas - (11 + cost) := by omega
   rw [hg] at h3
+  -- The rule for a call composes the push of the address of the block and the JUMP with its proof.
   exact (h1.seq h2).seq h3
 
 /-! ## Subroutines over frames that know ranges of memory -/

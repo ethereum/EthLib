@@ -11,19 +11,15 @@ public import EthLib.Execution.Proofs.Evm.Instructions.LogData
 /-!
 # Proofs: instructions that are monotone in gas
 
-The facts here are for the meter of one counter of gas, the meter of every fork before Glamsterdam.
-
-At a later fork they hold of that meter, not of the meter of the fork.
-
-Each instruction here is monotone in gas.
-
-On a frame with less gas it fails, or it gives the same frame with the same less gas.
+With less gas, each instruction here fails, or gives the same frame with the same less gas.
 
 Its failure is an error, or a halt with an error.
 
 The rules of the opcodes over the steps from frames that are monotone in gas rest on these facts.
 
-An instruction that pushes a word of the frame is monotone when the word does not depend on gas.
+The facts here are for the meter of one counter of gas, the meter of every fork before Glamsterdam.
+
+At a later fork they hold of that meter, not of the meter of the fork.
 -/
 
 @[expose] public section

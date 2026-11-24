@@ -7,23 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Copy
 
 A specification often cares about a few ranges of memory, not about every byte of it.
 
-A range holds known bytes when memory covers the whole range and the range reads as those bytes.
-
-- A write within memory holds what it writes.
-- A write within memory keeps every range that it does not touch.
-- Growth keeps every range.
-- Two adjacent ranges that hold bytes hold their concatenation, and a range splits the same way.
-- A range that holds the bytes of a word reads as that word.
-
-Memory grows in whole words, up to the greatest end of a range that an instruction touches.
-
-- A range within memory grows nothing and costs nothing.
-- A range of no bytes grows nothing and costs nothing.
-- A range of some bytes past memory grows it to the rounded end of the range.
-- That growth needs a size of memory that is a multiple of 32.
-- The growth costs the price of the new size minus the price of the old size.
-
-So a specification can track only the size of memory and the ranges it cares about.
+So it can track only the size of memory and the ranges it cares about.
 -/
 
 @[expose] public section
@@ -86,7 +70,7 @@ theorem memoryExtend (h : Holds memory start bytes) (n : Nat) :
     rw [byteAtOrZero_memoryExtend]
     exact h.byteAtOrZero_eq hi
 
-/-- Two adjacent ranges hold their bytes in order. -/
+/-- Two adjacent ranges hold their bytes in order, their concatenation. -/
 theorem append (h₁ : Holds memory start bytes) {more : ByteArray}
     (h₂ : Holds memory (start + bytes.size) more) : Holds memory start (bytes ++ more) := by
   refine of_byteAtOrZero (by rw [ByteArray.size_append]; have := h₂.1; omega) fun i hi => ?_
@@ -127,7 +111,10 @@ theorem loadWord {word : U256} (h : Holds memory start (wordBytes word)) :
 
 end Holds
 
-/-! ## The growth of memory -/
+/-! ## The growth of memory
+
+Memory grows in whole words, up to the greatest end of a range that an instruction touches.
+-/
 
 /-- A range within memory grows nothing and costs nothing. -/
 theorem extendMemory_of_le {size : Nat} {start length : U256}

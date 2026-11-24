@@ -12,43 +12,15 @@ public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
 /-!
 # Proofs: rules for the opcodes of a contract that reads its call data and uses its storage
 
-A contract that answers a call reads its call data and its caller, compares and jumps.
-
-It also hashes memory.
+A contract that answers a call reads its call data and caller, compares, jumps and hashes memory.
 
 It then reads and writes its storage, and returns a word.
 
-The rule for SSTORE holds from Berlin, by EIP-2200 and EIP-2929.
-
-Its price and its refund are those of EIP-2200, with the prices of EIP-2929.
-
-From Glamsterdam, its one counter also pays the state gas of EIP-8037 and ignores its refill.
-
-From London, the refund to clear a slot is that of EIP-3529.
-
-From Glamsterdam, its price and its refund are those of EIP-8038.
-
 Each rule here is a triple for one opcode, from one running frame of a code to the next.
-
-Most rules here also hold over the steps from frames that are monotone in gas.
-
-The rule over the steps of the logic then follows from that form.
-
-If the instruction never aborts, its rule is first proved over steps that never abort with less gas.
-
-The form over the steps from frames that are monotone in gas then follows from it.
-
-SSTORE may abort, so its rule is first proved over the steps from frames that are monotone in gas.
-
-GAS has no such form, since it pushes the gas left.
-
-EXTCODESIZE, the stop past the end of the code and the write of SSTORE to an account have none yet.
 
 The rules rest on the effect of each instruction on the stack, as its proofs state it.
 
-They work out the charge of one counter of gas.
-
-That is the meter of every fork before Glamsterdam.
+They work out the charge of one counter of gas, the meter of every fork before Glamsterdam.
 -/
 
 @[expose] public section
@@ -168,7 +140,14 @@ theorem charge_nat {gas amount : Nat} (h : amount ≤ gas) :
     GasMeter.charge gas amount = .ok (gas - amount) := by
   simp [GasMeter.charge, Nat.not_lt.mpr h]
 
-/-! ## The rules -/
+/-! ## The rules
+
+Most rules also hold over the steps from frames that are monotone in gas, and the plain one follows.
+
+If the instruction never aborts, a rule is first proved over steps that never abort with less gas.
+
+The rule over the steps from frames that are monotone in gas then follows from it.
+-/
 
 /-- PUSHn, for the `n` from 1 that the byte at the program counter decodes to.
 
@@ -380,19 +359,17 @@ private theorem readNumber_of_lt {Meter : Type} [GasMeter Meter] {cost : Nat}
 
 /-- An opcode whose instruction reads a number pushes it as a word, and pays its price.
 
-The read must give `n` on every frame with the code, the message, the counter and the memory.
-
-That number must be below `2^256`, or the instruction aborts.
-
-The stack needs room for one more word.
-
 It holds over the steps from frames that are monotone in gas. -/
 theorem push_of_readNumberG {byte : UInt8} {op : Op} {cost : Nat} {value : Evm fork Nat → Nat}
     {n : Nat} (hlt : pc < code.size) (hbyte : code[pc] = byte)
     (decoded : Op.ofByte fork byte = some op)
     (hrun : instruction (Meter := Nat) fork op = some (readNumber cost value))
+    -- The read must give `n` on every frame with the code, the message, the counter and the memory.
     (hword : ∀ evm : Evm fork Nat, evm.code = code → evm.message = message → evm.pc = pc →
       evm.memory = memory → value evm = n)
+    -- That number must be below `2^256`, or the instruction aborts.
+    --
+    -- The stack needs room for one more word.
     (hfit : n < 2 ^ 256) (hgas : cost ≤ gas) (hstack : stack.length < STACK_LIMIT) :
     HoareG fork (At code message pc stack memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 n :: stack) memory (gas - cost) state substate
@@ -1353,7 +1330,9 @@ theorem stop (hlt : pc < code.size) (hbyte : code[pc] = 0x00) :
       (Halted false .empty gas state substate) :=
   (stopG hlt hbyte).toSpec
 
-/-- A frame at or past the end of its code stops as STOP does, at no price. -/
+/-- A frame at or past the end of its code stops as STOP does, at no price.
+
+It has no form over the steps from frames that are monotone in gas yet. -/
 theorem stop_of_size_le (hle : code.size ≤ pc) :
     Spec fork (At code message pc stack memory gas state substate returnData)
       (Halted false .empty gas state substate) := by
@@ -1453,26 +1432,26 @@ theorem revert (hfork : .byzantium ≤ fork) {start size : U256} {rest : List U2
         (gas - (extendMemory memory.size [(start, size)]).cost) state substate) :=
   (revertG hfork hlt hbyte hgas).toSpec
 
-/-! ## SSTORE -/
+/-! ## SSTORE
+
+From Berlin, its price and its refund are those of EIP-2200, with the prices of EIP-2929.
+
+From Glamsterdam, they are those of EIP-8038.
+
+It may abort, so its rule is first proved over the steps from frames that are monotone in gas.
+-/
 
 /-- SSTORE runs the write of a word of storage. -/
 theorem instruction_sstore : instruction (Meter := Nat) fork .sstore = some sstoreStep := by
   simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep,
     environmentStep, accountStep, storageStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
-/-- The step of SSTORE from Berlin, with one counter of gas, in a frame that may change the state.
+/-- The step of SSTORE from Berlin, with one counter of gas.
 
-It pops a key and a word, marks the slot of the current account accessed, and records its read.
-
-It pays execution gas and state gas, from the original, current and new words and the cold flag.
-
-Before Glamsterdam, the state gas is zero.
-
-It writes the word, and adds the refund of the write to the refund counter.
-
-The frame keeps its output and its return data. -/
+It pops a key and a word, marks the slot of the current account accessed, and records its read. -/
 theorem sstoreStep_eq (hfork : .berlin ≤ fork)
     {evm : Evm fork Nat} {key new : U256} {rest : List U256} {state' : State.TransactionState}
+    -- The frame is not static, so it may change the state.
     (hst : evm.stack.val = key :: new :: rest) (hstatic : evm.message.isStatic = false)
     (hstipend : CALL_STIPEND < evm.gas)
     (hgas : sstoreTotalCost fork
@@ -1486,19 +1465,34 @@ theorem sstoreStep_eq (hfork : .berlin ≤ fork)
       after.code = evm.code ∧ after.validJumpDestinations = evm.validJumpDestinations ∧
       after.message = evm.message ∧ after.pc = evm.pc + 1 ∧ after.stack.val = rest ∧
       after.memory = evm.memory ∧
+      -- It pays execution and state gas, by the original, current and new words and the cold flag.
+      --
+      -- Before Glamsterdam, the state gas is zero.
+      --
+      -- From Glamsterdam, the counter also pays the state gas of EIP-8037 and ignores its refill.
+      --
+      -- From Glamsterdam, the price is that of EIP-8038.
       after.gas = evm.gas - sstoreTotalCost fork
         (evm.state.getStorageOriginal evm.message.currentTarget (U256.toBeBytes key))
         (evm.state.getStorage evm.message.currentTarget (U256.toBeBytes key)) new
         (decide (U256.toBeBytes key ∉
           evm.substate.accessedStorageKeys.getD evm.message.currentTarget ∅)) ∧
+      -- The frame keeps its output.
       after.running = evm.running ∧ after.error = evm.error ∧ after.output = evm.output ∧
+      -- It writes the word.
       after.state = state' ∧ after.substate = { evm.substate with
         accessedStorageKeys := evm.substate.accessedStorageKeys.insert evm.message.currentTarget
           ((evm.substate.accessedStorageKeys.getD evm.message.currentTarget ∅).insert
             (U256.toBeBytes key))
+        -- It adds the refund of the write to the refund counter.
+        --
+        -- From London, the refund to clear a slot is that of EIP-3529.
+        --
+        -- From Glamsterdam, the refund is that of EIP-8038.
         refundCounter := evm.substate.refundCounter + sstoreRefund fork
           (evm.state.getStorageOriginal evm.message.currentTarget (U256.toBeBytes key))
           (evm.state.getStorage evm.message.currentTarget (U256.toBeBytes key)) new } ∧
+      -- The frame keeps its return data.
       after.returnData = evm.returnData := by
   have hist : Fork.istanbul ≤ fork := Nat.le_trans (by decide) hfork
   rcases evm with ⟨pc, ⟨l, hl⟩, memory, code, valid, gas, running, message, output, returnData,
@@ -1524,26 +1518,23 @@ theorem sstoreStep_eq (hfork : .berlin ≤ fork)
 
 /-- From Berlin, with one counter of gas, SSTORE writes a word to a slot of the current account.
 
-The frame may change the state, and holds more than the stipend of 2300 gas, by EIP-2200.
-
-The slot is cold when the transaction has not accessed it yet, by EIP-2929.
-
-It pays execution gas and state gas, and adds the refund of the write.
-
-Before Glamsterdam, the state gas is zero.
-
-The write needs the account of the current address, and gives the state `state'`.
-
 It holds over the steps from frames that are monotone in gas. -/
 theorem sstoreG (hfork : .berlin ≤ fork) {key new : U256}
     {rest : List U256} {cold : Bool} {state' : State.TransactionState}
+    -- The frame is not static, so it may change the state.
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
+    -- The slot is cold when the transaction has not accessed it yet, by EIP-2929.
     (hcold : decide (U256.toBeBytes key ∉
       substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
+    -- The frame holds more than the stipend of 2300 gas, by EIP-2200.
     (hstipend : CALL_STIPEND < gas)
+    -- It pays execution gas and state gas.
+    --
+    -- Before Glamsterdam, the state gas is zero.
     (hgas : sstoreTotalCost fork
       (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
       (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
+    -- The write needs the account of the current address, and gives the state `state'`.
     (hset : (state.recordStorageRead message.currentTarget (U256.toBeBytes key)).setStorage
       message.currentTarget (U256.toBeBytes key) new = .ok state') :
     HoareG fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
@@ -1556,6 +1547,7 @@ theorem sstoreG (hfork : .berlin ≤ fork) {key new : U256}
           accessedStorageKeys := substate.accessedStorageKeys.insert message.currentTarget
             ((substate.accessedStorageKeys.getD message.currentTarget ∅).insert
               (U256.toBeBytes key))
+          -- It adds the refund of the write.
           refundCounter := substate.refundCounter + sstoreRefund fork
             (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
             (state.getStorage message.currentTarget (U256.toBeBytes key)) new } returnData) := by
@@ -1568,26 +1560,23 @@ theorem sstoreG (hfork : .berlin ≤ fork) {key new : U256}
   exact ⟨after, h, by rw [a1, hcode], by rw [a2, hj], a3, by rw [a4, hpc], a5, by rw [a6, hmem],
     a7, by rw [a8, hrun], by rw [a9, herr], by rw [ao, hout], a10, a11, by rw [a12, hrd]⟩
 
-/-- From Berlin, with one counter of gas, SSTORE writes a word to a slot of the current account.
-
-The frame may change the state, and holds more than the stipend of 2300 gas, by EIP-2200.
-
-The slot is cold when the transaction has not accessed it yet, by EIP-2929.
-
-It pays execution gas and state gas, and adds the refund of the write.
-
-Before Glamsterdam, the state gas is zero.
-
-The write needs the account of the current address, and gives the state `state'`. -/
+/-- From Berlin, with one counter of gas, SSTORE writes a word to a slot of the current account. -/
 theorem sstore (hfork : .berlin ≤ fork) {key new : U256}
     {rest : List U256} {cold : Bool} {state' : State.TransactionState}
+    -- The frame is not static, so it may change the state.
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
+    -- The slot is cold when the transaction has not accessed it yet, by EIP-2929.
     (hcold : decide (U256.toBeBytes key ∉
       substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
+    -- The frame holds more than the stipend of 2300 gas, by EIP-2200.
     (hstipend : CALL_STIPEND < gas)
+    -- It pays execution gas and state gas.
+    --
+    -- Before Glamsterdam, the state gas is zero.
     (hgas : sstoreTotalCost fork
       (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
       (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
+    -- The write needs the account of the current address, and gives the state `state'`.
     (hset : (state.recordStorageRead message.currentTarget (U256.toBeBytes key)).setStorage
       message.currentTarget (U256.toBeBytes key) new = .ok state') :
     Hoare fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
@@ -1600,6 +1589,7 @@ theorem sstore (hfork : .berlin ≤ fork) {key new : U256}
           accessedStorageKeys := substate.accessedStorageKeys.insert message.currentTarget
             ((substate.accessedStorageKeys.getD message.currentTarget ∅).insert
               (U256.toBeBytes key))
+          -- It adds the refund of the write.
           refundCounter := substate.refundCounter + sstoreRefund fork
             (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
             (state.getStorage message.currentTarget (U256.toBeBytes key)) new } returnData) :=
@@ -1607,13 +1597,9 @@ theorem sstore (hfork : .berlin ≤ fork) {key new : U256}
 
 /-- From Berlin, with one counter of gas, SSTORE to a slot of the current account, which exists.
 
-The write then gives a state that holds `new` in the slot.
+The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the charge.
 
-That state keeps every other slot of every address.
-
-It also keeps the words before the transaction, the accounts, the codes and the block.
-
-The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the charge. -/
+It has no form over the steps from frames that are monotone in gas yet. -/
 theorem sstore_of_account (hfork : .berlin ≤ fork)
     {key new : U256} {rest : List U256} {cold : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
@@ -1625,9 +1611,12 @@ theorem sstore_of_account (hfork : .berlin ≤ fork)
       (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true) :
     ∃ state' : State.TransactionState,
+      -- The write then gives a state that holds `new` in the slot.
       state'.getStorage message.currentTarget (U256.toBeBytes key) = new ∧
+      -- That state keeps every other slot of every address.
       (∀ other slot, other ≠ message.currentTarget ∨ slot ≠ U256.toBeBytes key →
         state'.getStorage other slot = state.getStorage other slot) ∧
+      -- It also keeps the words before the transaction, the accounts, the codes and the block.
       state'.getStorageOriginal = state.getStorageOriginal ∧
       (∀ other, state'.getAccountOptional other = state.getAccountOptional other) ∧
       (∀ codeHash, state'.getCode codeHash = state.getCode codeHash) ∧
@@ -1711,7 +1700,9 @@ theorem le_sloadCost (hfork : .berlin ≤ fork) (cold : Bool) : 100 ≤ sloadCos
 
 /-- GAS pushes the gas left after its own price of 2, for 2 gas.
 
-The word is the gas left modulo `2 ^ 256`. -/
+The word is the gas left modulo `2 ^ 256`.
+
+It has no form over the steps from frames that are monotone in gas, since it pushes the gas left. -/
 theorem gas_rule (hlt : pc < code.size) (hbyte : code[pc] = 0x5a) (hgas : 2 ≤ gas)
     (hstack : stack.length < STACK_LIMIT) :
     Hoare fork (At code message pc stack memory gas state substate returnData)
@@ -1735,23 +1726,21 @@ theorem externalBaseCost_of_berlin (hfork : .berlin ≤ fork) (hglam : fork < .g
 
 /-- From Berlin, EXTCODESIZE pushes the size of the code of an account.
 
-The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
-
-The address is cold when the transaction has not accessed it yet, by EIP-2929.
-
-Up to BPO5 it pays 2600 for a cold address and 100 for a warm one.
-
-From Glamsterdam it pays the access to the address and a warm access to read the code, by EIP-8038.
-
-It then adds the address to the accessed addresses, and records the read of the account. -/
+It has no form over the steps from frames that are monotone in gas yet. -/
 theorem extcodesize_of_berlin_le (hfork : .berlin ≤ fork) {word : U256} {rest : List U256}
     {cold : Bool} {c : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0x3b)
+    -- The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
     (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
+    -- The address is cold when the transaction has not accessed it yet, by EIP-2929.
     (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
+    -- Up to BPO5 it pays 2600 for a cold address and 100 for a warm one.
+    --
+    -- From Glamsterdam it pays the address access and a warm access to read the code, by EIP-8038.
     (hgas : externalBaseCost fork cold ≤ gas) :
     Hoare fork (At code message pc (word :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory
         (gas - externalBaseCost fork cold)
+        -- It then adds the address to the accessed addresses, and records the read of the account.
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=
@@ -1765,24 +1754,20 @@ theorem extcodesize_of_berlin_le (hfork : .berlin ≤ fork) {word : U256} {rest 
   exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, hmem, rfl, hrun, herr, hout, by simp [hs],
     by simp, hrd⟩
 
-/-- From Berlin to before Glamsterdam, EXTCODESIZE pushes the size of the code of an account.
-
-The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
-
-The address is cold when the transaction has not accessed it yet, by EIP-2929.
-
-It pays 2600 for a cold address and 100 for a warm one.
-
-It then adds the address to the accessed addresses, and records the read of the account. -/
+/-- From Berlin to before Glamsterdam, EXTCODESIZE pushes the size of the code of an account. -/
 theorem extcodesize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {word : U256}
     {rest : List U256} {cold : Bool} {c : ByteArray} (hlt : pc < code.size)
     (hbyte : code[pc] = 0x3b)
+    -- The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
     (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
+    -- The address is cold when the transaction has not accessed it yet, by EIP-2929.
     (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
+    -- It pays 2600 for a cold address and 100 for a warm one.
     (hgas : (if cold then 2600 else 100) ≤ gas) :
     Hoare fork (At code message pc (word :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory
         (gas - if cold then 2600 else 100)
+        -- It then adds the address to the accessed addresses, and records the read of the account.
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=

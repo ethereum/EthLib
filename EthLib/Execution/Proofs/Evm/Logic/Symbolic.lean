@@ -9,23 +9,9 @@ public import EthLib.Execution.Proofs.Evm.Instructions.StackOnly
 
 A proof about bytecode runs it one opcode at a time.
 
-Each step reads the byte at the program counter and decodes its opcode at the fork.
+The lemmas here turn each kind of step into one equation, on a frame with its fields named.
 
-It then runs the instruction of that opcode.
-
-The lemmas here turn that into one equation for each kind of step.
-
-They take the frame as it is, with its fields named, so a proof never unfolds a whole frame.
-
-This keeps the terms of a long run small: each step rewrites a few fields of the last frame.
-
-The equations are for the meter of one counter of gas, the meter of every fork before Glamsterdam.
-
-At a later fork they hold of that meter, not of the meter of the fork.
-
-A rule for an opcode is a triple from one frame of a code to the next.
-
-A run of straight-line code is a sequence of such rules, so each rule is checked once on its own.
+So a proof never unfolds a whole frame, and the terms of a long run stay small.
 -/
 
 @[expose] public section
@@ -44,6 +30,9 @@ theorem Step.of_instruction {evm after : Evm fork Meter} {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} (running : evm.running = true)
     (h : evm.pc < evm.code.size) (decoded : Op.ofByte fork evm.code[evm.pc] = some op)
     (hrun : instruction fork op = some run) (ok : run evm = .ok after) : Step fork evm after :=
+  -- The step reads the byte at the program counter and decodes its opcode at the fork.
+  --
+  -- It then runs the instruction of that opcode.
   .next running (by rw [step_of_instruction h decoded hrun, ok]; rfl)
 
 /-- The same step, with the code, the program counter and the byte given apart from the frame.
@@ -79,7 +68,12 @@ theorem instruction_return : instruction (Meter := Meter) fork .«return» = som
   simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep,
     HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
-/-! ## The instructions, with one counter of gas -/
+/-! ## The instructions, with one counter of gas
+
+That is the meter of every fork before Glamsterdam.
+
+At a later fork the equations hold of that meter, not of the meter of the fork.
+-/
 
 /-- PUSHn, for `n` from 1, with the gas and the room for one word: it pays 3 and pushes `n` bytes.
 
@@ -92,29 +86,31 @@ theorem pushN_nat {evm : Evm fork Nat} {n : Fin 33} (hn : n.val ≠ 0)
   rw [pushN_of_length_lt hstack]
   simp [hn, GasMeter.charge, Nat.not_lt.mpr hgas, Except.map]
 
-/-! ## Rules for the opcodes of a code -/
+/-! ## Rules for the opcodes of a code
+
+A rule for an opcode is a triple from one frame of a code to the next.
+
+A run of straight-line code is a sequence of such rules, so each rule is checked once on its own.
+-/
 
 /-- A running frame of a code, at a program counter, with a stack, a memory and some gas.
 
-It holds the flags of the jump destinations of its code, and its message.
-
-It also names the state, the substate and the error of the frame, none.
-
-Its output is empty.
-
-It names the return data that the last call or creation of the frame gave back.
-
-So it names every field of the frame.
-
-The interpreter sets the code, the flags and the message when it starts a frame.
-
-No step changes them, so they stay the same along a run. -/
+It names every field of the frame, so each step rewrites a few fields of the last frame. -/
 def At (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List U256)
     (memory : ByteArray) (gas : Nat) (state : State.TransactionState) (substate : Substate)
     (returnData : ByteArray) (evm : Evm fork Nat) : Prop :=
+  -- It holds the flags of the jump destinations of its code, and its message.
+  --
+  -- The interpreter sets the code, the flags and the message when it starts a frame.
+  --
+  -- No step changes them, so they stay the same along a run.
   evm.code = code ∧ evm.validJumpDestinations = validJumpDestinations code ∧
     evm.message = message ∧ evm.pc = pc ∧ evm.stack.val = stack ∧ evm.memory = memory ∧
+    -- The error of the frame is none, and its output is empty.
     evm.gas = gas ∧ evm.running = true ∧ evm.error = none ∧ evm.output = .empty ∧
+    -- It also names the state and the substate.
+    --
+    -- It names the return data that the last call or creation of the frame gave back.
     evm.state = state ∧ evm.substate = substate ∧ evm.returnData = returnData
 
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U256}
