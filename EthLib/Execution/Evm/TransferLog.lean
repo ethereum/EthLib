@@ -10,26 +10,17 @@ public import EthLib.Execution.Evm.Log
 
 From Glamsterdam, every move of ether to another account writes a log, by EIP-7708.
 
-The log has the form of the `Transfer` event of ERC-20, and comes from the system address.
-
-Its topics are the hash of the event signature, then the sender and the recipient as words.
-
-Its data is the amount in wei, as a big-endian word.
-
-A move of 0 wei, or from an account to itself, writes no log.
-
 The value of a transaction, of CALL, of a creation and of SELFDESTRUCT each moves ether.
 
 A frame that fails drops its logs, so its transfer log goes with them.
 
-A simulation can also report these moves before Glamsterdam, as logs from `0xee…ee`.
+Sources, at commit `1ca0818` of execution-apis:
 
-Those logs stay out of the receipts.
-
-Sources: [EIP-7708][eip7708], in Last Call, and the [notes of `eth_simulateV1`][notes].
+- [EIP-7708][eip7708], in Last Call: the transfer log and the moves that write it
+- the [notes of `eth_simulateV1`][notes]: the logs of a simulation before Glamsterdam
 
 [eip7708]: https://eips.ethereum.org/EIPS/eip-7708#specification
-[notes]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx#eth-transfer-logs
+[notes]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/docs-api/docs/ethsimulatev1-notes.mdx#eth-transfer-logs
 -/
 
 @[expose] public section
@@ -58,6 +49,8 @@ def TRANSFER_TOPIC : Hash32 :=
 
 /-- The log from `emitter` of a move of `amount` wei from `sender` to `recipient`.
 
+It has the form of the `Transfer` event of ERC-20.
+
 Each address fills a word, with zeros in front.
 
 By default it comes from the system address, as in EIP-7708. -/
@@ -76,6 +69,8 @@ From the fork `activation`, a move of a positive amount to another account gives
 
 That log comes from `emitter`.
 
+A move of 0 wei, or from an account to itself, writes no log.
+
 Otherwise, and at every earlier fork, the logs are as they were.
 
 By default the log is that of EIP-7708, from Glamsterdam. -/
@@ -91,10 +86,14 @@ def pushTransferLog (fork : Fork) (logs : Array Log) (sender recipient : Address
 
 From Glamsterdam, the move adds the log of EIP-7708, as the receipts have it.
 
-Before Glamsterdam, it adds the same log from `0xee…ee`. -/
+Before Glamsterdam, the move adds the same log from `0xee…ee`.
+
+Those logs stay out of the receipts. -/
 def pushSimulatedTransferLog (fork : Fork) (logs : Array Log) (sender recipient : Address)
     (amount : U256) : Array Log :=
-  -- From Glamsterdam, the log of EIP-7708; before, the same log from `0xee…ee`, from Frontier on.
+  -- From Glamsterdam, the log of EIP-7708.
+  --
+  -- Before, the same log from `0xee…ee`, from Frontier on.
   if fork ≥ .glamsterdam then pushTransferLog fork logs sender recipient amount
   else pushTransferLog fork logs sender recipient amount SIMULATED_TRANSFER_ADDRESS .frontier
 

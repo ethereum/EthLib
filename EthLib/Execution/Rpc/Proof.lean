@@ -6,27 +6,16 @@ public import EthLib.Execution.State.AccountProof
 /-!
 # `Execution.Rpc.Proof`
 
-The answer of `eth_getProof`, in [`state.yaml`][state], and its JSON form.
+The answer of `eth_getProof`, and its JSON form.
 
-The node answers with the proof of an account, and of some of its slots, in the state after a block.
+Sources, at commit `1ca0818` of execution-apis:
 
-The block parameter is optional, and `latest` by default.
+- the [method text][method] of [`state.yaml`][state]: the slot order and the form of each key
+- the [`AccountProof` schema][schema]: the fields of the answer
 
-The fields of the answer are those of the [`AccountProof` schema][schema].
-
-Each slot gives back its key in the form of the [method text][method].
-
-The source requires a node to take at least 1024 keys, and here a request may hold any number.
-
-The source does not bound how far back a node serves proofs.
-
-Here it serves them at every block that it holds, so it never gives the error 4444.
-
-That error is for a node that drops old state.
-
-[state]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/state.yaml
-[method]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/state.yaml#L161-L200
-[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/state.yaml#L1-L62
+[state]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/state.yaml
+[method]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/state.yaml#L161-L200
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/state.yaml#L1-L63
 -/
 
 @[expose] public section
@@ -74,7 +63,9 @@ def storageProofOfJson (j : Json) : Read StorageProof := do
     BitVec.ofNat 256 (← quantity "value" 256 (← field "slot" fs "value")),
     ← proofNodes "proof" (← field "slot" fs "proof")⟩
 
-/-- An answer of `eth_getProof`, from the value of its JSON. -/
+/-- An answer of `eth_getProof`, from the value of its JSON.
+
+Its fields are those of the `AccountProof` schema. -/
 def accountProofOfJson (j : Json) : Read AccountProof := do
   let fs ← fields "answer" j
   let field := field "answer" fs
@@ -96,8 +87,7 @@ def accountProofOfJson (j : Json) : Read AccountProof := do
 def proofNodesJson (nodes : List ByteArray) : Json :=
   listJson (dataJson ·.toList) nodes
 
-/-- The JSON of one slot of an answer: the key in the form of the request, the word and the proof.
--/
+/-- The JSON of one slot: the key in the form of the request, the word and the proof. -/
 def storageProofJson (s : StorageProof) : Json :=
   Json.mkObj [("key", storageKeyJson s.key),
     ("value", quantityJson s.value.toNat), ("proof", proofNodesJson s.proof)]
@@ -115,7 +105,15 @@ def accountProofJson (p : AccountProof) : Json :=
 
 namespace ChainView
 
-/-- The proof of an address and some of its slots after a block, as `eth_getProof` gives it. -/
+/-- The proof of an address and some of its slots after a block, as `eth_getProof` gives it.
+
+The source requires a node to take at least 1024 keys, and here a request may hold any number.
+
+The source does not bound how far back a node serves proofs.
+
+Here the node serves them at every block that it holds, so it never gives the error 4444.
+
+That error is for a node that drops old state. -/
 def accountProof (v : ChainView) (a : Address) (keys : List StorageKey) (p : BlockParam) :
     Except RpcError AccountProof :=
   -- The method: one slot for each key, in the order of the request, even for a key given twice.

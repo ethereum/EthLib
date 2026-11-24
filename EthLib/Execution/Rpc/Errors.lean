@@ -5,21 +5,13 @@ public import EthLib.Serialization.JsonRpc
 /-!
 # `Execution.Rpc.Errors`
 
-The error codes of the execution JSON-RPC API, in the groups of its [error groups][groups].
+The error codes of the execution JSON-RPC API.
 
-Each group lists codes with a message, and four groups declare a range that holds their codes.
+Source: the [error groups][groups], at commit `1ca0818` of execution-apis.
 
-The two groups of JSON-RPC itself declare no range in their files.
+They give each group, its codes with their messages, and its range.
 
-The README of the groups gives them `-32768` to `-32000` and `-32099` to `-32000`.
-
-Some methods list two more codes: `4444` for history that the node pruned, and `-32001`.
-
-The code `-32001` is already in the group of non-standard errors.
-
-Only the code of an error is fixed: the official fixtures show messages other than these.
-
-[groups]: https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/error-groups
+[groups]: https://github.com/ethereum/execution-apis/tree/1ca0818569467cff85b7f41372f22e728d5daa14/src/error-groups
 -/
 
 @[expose] public section
@@ -28,7 +20,9 @@ namespace EthLib.Execution.Rpc
 
 open EthLib.Serialization.JsonRpc (RpcError)
 
-/-- An error code with the message that its group gives it. -/
+/-- An error code with the message that its group gives it.
+
+Only the code of an error is fixed: the official fixtures show messages other than these. -/
 structure ErrorCode where
   /-- The code. -/
   code : Int
@@ -36,7 +30,9 @@ structure ErrorCode where
   message : String
   deriving DecidableEq, Repr
 
-/-- A group of error codes, with the range that it declares, if any. -/
+/-- A group of error codes, with the range that it declares, if any.
+
+Each group lists codes with a message, and four groups declare a range that holds their codes. -/
 structure ErrorGroup where
   /-- The name of the group in the source. -/
   name : String
@@ -58,6 +54,7 @@ def internalError : ErrorCode := ⟨-32603, "Internal error"⟩
 /-- The codes of JSON-RPC 2.0 itself. -/
 def rpcStandardErrors : ErrorGroup where
   name := "JSONRPCStandardErrors"
+  -- The file declares no range, and the README of the groups gives `-32768` to `-32000`.
   range := none
   errors := [parseError, ⟨-32600, "Invalid request"⟩, methodNotFound,
     ⟨-32602, "Invalid params"⟩, internalError]
@@ -65,7 +62,9 @@ def rpcStandardErrors : ErrorGroup where
 /-- The code of an input that the method rejects, such as a block that is not canonical. -/
 def invalidInput : ErrorCode := ⟨-32000, "Invalid input"⟩
 
-/-- The code of a resource that the node does not find, such as an unknown block. -/
+/-- The code of a resource that the node does not find, such as an unknown block.
+
+Some methods list this code beside those of their groups, and it is already in this group. -/
 def resourceNotFound : ErrorCode := ⟨-32001, "Resource not found"⟩
 
 /-- The code of a transaction that the node rejects for a reason that no other code names. -/
@@ -77,6 +76,7 @@ def methodNotSupported : ErrorCode := ⟨-32004, "Method not supported"⟩
 /-- The codes that JSON-RPC 2.0 leaves to servers, as the execution API uses them. -/
 def rpcNonStandardErrors : ErrorGroup where
   name := "JSONRPCNonStandardErrors"
+  -- The file declares no range, and the README of the groups gives `-32099` to `-32000`.
   range := none
   errors := [invalidInput, resourceNotFound,
     ⟨-32002, "Resource unavailable"⟩, transactionRejected,
@@ -153,7 +153,9 @@ def errorGroups : List ErrorGroup :=
 
 /-- The code of history that the node pruned.
 
-Many methods that read blocks, transactions, receipts, logs or traces list it. -/
+Many methods that read blocks, transactions, receipts, logs or traces list it.
+
+No group holds it: the methods list it beside the codes of the groups. -/
 def prunedHistoryUnavailable : ErrorCode := ⟨4444, "Pruned history unavailable"⟩
 
 /-- The error object of a code, with its message and the given data. -/

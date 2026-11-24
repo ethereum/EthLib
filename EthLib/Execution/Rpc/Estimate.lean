@@ -5,7 +5,7 @@ public import EthLib.Execution.Rpc.Call
 /-!
 # `Execution.Rpc.Estimate`
 
-The methods `eth_estimateGas` and `eth_createAccessList` of [`execute.yaml`][execute].
+The methods `eth_estimateGas` and `eth_createAccessList`.
 
 Both take the request and the block parameter of `eth_call`, and run its call the same way.
 
@@ -13,7 +13,9 @@ The block parameter is optional, and `latest` by default.
 
 Of the three methods, only `eth_call` states that default, and the other two follow it.
 
-[execute]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml
+Source: [`execute.yaml`][execute], at commit `1ca0818` of execution-apis: the two methods.
+
+[execute]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml
 -/
 
 @[expose] public section
@@ -125,9 +127,9 @@ The authorities and the delegate of EIP-7702 stay in.
 
 So do the contracts that the code of the call creates.
 
-[abi-revert]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_createAccessList/create-al-abi-revert.io
+[abi-revert]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/tests/eth_createAccessList/create-al-abi-revert.io
 [eip-3651]: https://eips.ethereum.org/EIPS/eip-3651
-[rules]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L122-L142
+[rules]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml#L122-L142
 -/
 def accessedList (s : CallSetup) (o : CallOutput) : List Access :=
   let state := o.state
@@ -177,7 +179,7 @@ When the call rejects the request before its message runs, the method fails with
 
 It also fails when the second call is rejected, such as when the gas no longer covers the list.
 
-[rules]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L122-L142
+[rules]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml#L122-L142
 -/
 def createAccessList (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
     (c : CallChoices) : Except RpcError AccessListResult := do

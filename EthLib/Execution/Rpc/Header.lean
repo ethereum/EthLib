@@ -6,19 +6,17 @@ public import EthLib.Execution.Rpc.Base
 /-!
 # `Execution.Rpc.Header`
 
-The header of a block as JSON: the object `Header` of [`block.yaml`][schema].
+The header of a block as JSON: its hash and each field of the header, and no other field.
 
-The object holds the hash of the header and each field of the header, and no other field.
+Sources, at commit `1ca0818` of execution-apis:
 
-The header methods of [`block.yaml`][methods] say that a field MUST be omitted before its fork.
+- the object `Header` of [`block.yaml`][schema]: the names and types of the fields
+- the header methods of [`block.yaml`][methods]: a field MUST be omitted before its fork
+- the [fixtures][tests] of the source: a field is present from its fork on
 
-The schema requires none of the fields from a fork, so they stay optional after their fork too.
-
-Here the object holds a field exactly from its fork on, as the [fixtures][tests] of the source do.
-
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
-[methods]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml
-[tests]: https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getHeaderByNumber
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/block.yaml
+[methods]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/block.yaml
+[tests]: https://github.com/ethereum/execution-apis/tree/1ca0818569467cff85b7f41372f22e728d5daa14/tests/eth_getHeaderByNumber
 -/
 
 @[expose] public section
@@ -40,7 +38,11 @@ def sinceField {f fork : Fork} {α : Type} (name : String) (g : α → Json) (x 
 def sinceName (f fork : Fork) (name : String) : List String :=
   if f ≤ fork then [name] else []
 
-/-- The names of the header object at a fork: the hash, then each field that the fork has. -/
+/-- The names of the header object at a fork: the hash, then each field that the fork has.
+
+The schema requires none of the fields from a fork, so they stay optional after their fork too.
+
+Here the object holds a field exactly from its fork on, as the fixtures of the source do. -/
 def headerNames (fork : Fork) : List String :=
   ["hash", "parentHash", "sha3Uncles", "miner", "stateRoot", "transactionsRoot", "receiptsRoot",
     "logsBloom", "difficulty", "number", "gasLimit", "gasUsed", "timestamp", "extraData",

@@ -19,34 +19,13 @@ public import EthLib.Execution.Rpc.TransactionInfo
 
 The methods of the execution JSON-RPC API that the node serves, each a function of its chain view.
 
-The node answers a request by the method that it names, with the parameters by position.
+Sources:
 
-A method that the node does not serve has the error `-32601` of [JSON-RPC 2.0][rpc].
+- [JSON-RPC 2.0][rpc], sections 4, 5.1 and 6: requests and notifications, error codes, batches
+- the schemas in [`src/eth`][eth], at commit `1ca0818` of execution-apis: the parameters
 
-A method takes the parameters that its schema in [`src/eth`][eth] lists.
-
-The source does not say what a method does with more, and here a method rejects them with `-32602`.
-
-A text that is not JSON has the error `-32700`, and a value that is not a request `-32600`.
-
-Parameters by name are a request of JSON-RPC 2.0 that this API never uses, and get `-32600`.
-
-The response to an invalid request carries its identifier if it can be read, else `null`.
-
-A notification, a request without an identifier, gets no response, as section 4.1 says.
-
-A batch, an array of requests, gets the array of the responses to its requests, as section 6 says.
-
-An empty batch is an invalid request, and a batch of notifications gets no response.
-
-A missing parameter, or a parameter that its reader rejects, also gets `-32602`.
-
-A transaction whose sender or hash the node cannot compute gets `-32603`.
-
-So does a block whose RLP form, or the hash of one of its ommers, the node cannot compute.
-
-[rpc]: https://www.jsonrpc.org/specification#error_object
-[eth]: https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth
+[rpc]: https://www.jsonrpc.org/specification
+[eth]: https://github.com/ethereum/execution-apis/tree/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth
 -/
 
 @[expose] public section
@@ -72,6 +51,14 @@ def chainId (v : ChainView) : Json :=
 The schema of the method says that it is usually the chain ID, but may differ from it. -/
 def netVersion (v : ChainView) : Json :=
   uintDecimalJson v.networkId
+
+-- A method takes the parameters that its schema lists.
+--
+-- The source does not say what a method does with more.
+--
+-- Here a method rejects them with `-32602`.
+--
+-- A missing parameter, or a parameter that its reader rejects, also gets `-32602`.
 
 /-- The result of a method with no parameter, or the error of extra parameters. -/
 def noParams (params : List Json) (result : Json) : Except RpcError Json :=
@@ -148,7 +135,13 @@ def transactionCountByHash (v : ChainView) (hash : Hash32) : Json :=
 def transactionCountByNumber (v : ChainView) (p : BlockParam) : Except RpcError Json :=
   optionJson transactionCount <$> v.resolve p
 
-/-- The outcome of a method of the view, with its parameters by position. -/
+/-- The outcome of a method of the view, with its parameters by position.
+
+The node answers a request by the method that it names.
+
+A transaction whose sender or hash the node cannot compute gets `-32603`.
+
+So does a block whose RLP form, or the hash of one of its ommers, the node cannot compute. -/
 def call (v : ChainView) (method : String) (params : List Json) : Except RpcError Json :=
   match method with
   | "eth_blockNumber" => noParams params v.blockNumber
@@ -208,6 +201,7 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
     | a :: ks :: rest => do
       let a ← readParam (address "address") a
       let keys ← readParam (array "storage keys" (storageKey "storage key")) ks
+      -- The block parameter is optional, and `latest` by default.
       accountProofJson <$> v.accountProof a keys (← optionalBlock rest)
     | _ => .error (RpcError.invalidParams "missing parameter")
   | "eth_getBlockAccessList" => oneParam params fun b => do
@@ -218,6 +212,7 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
   | "eth_call" => match params with
     | t :: rest => do
       let tx ← readParam genericTransaction t
+      -- The block parameter is optional, and `latest` by default.
       (dataJson ·.toList) <$> v.ethCall tx (← optionalBlock rest) {}
     | [] => .error (RpcError.invalidParams "missing parameter")
   | "eth_feeHistory" => match params with
@@ -281,6 +276,7 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
       blockTraceJson <$> v.traceBlockByParam config block
     | [] => .error (RpcError.invalidParams "missing parameter")
     | _ => .error (RpcError.invalidParams "the method takes two parameters")
+  -- A method that the node does not serve has the error `-32601` of JSON-RPC 2.0.
   | _ => .error (methodNotFound.toRpcError (some (.str method)))
 
 /-- The response of the view to a request. -/
@@ -304,10 +300,17 @@ def isNotification : Json → Bool
       | _ => false
   | _ => false
 
-/-- The response of the view to one JSON value, or none for a notification. -/
+/-- The response of the view to one JSON value, or none for a notification.
+
+A notification, a request without an identifier, gets no response, by JSON-RPC 2.0, section 4.1. -/
 def answerJson (v : ChainView) (j : Json) : Option Json :=
   if isNotification j then none
   else some <| responseJson <| match request j with
+    -- A value that is not a request has the error `-32600`.
+    --
+    -- So do parameters by name, a request of JSON-RPC 2.0 that this API never uses.
+    --
+    -- The response carries the identifier of the request if it can be read, else `null`.
     | .error reason => { id := idOf j, outcome := .error (RpcError.invalidRequest reason) }
     | .ok r => v.answer r
 
@@ -315,12 +318,16 @@ def answerJson (v : ChainView) (j : Json) : Option Json :=
 
 The request is the JSON that its text holds, or the reason that the text is not JSON.
 
-A batch gets the array of the responses to its requests, and none when all are notifications. -/
+A batch, an array of requests, gets the array of the responses to its requests.
+
+Section 6 of JSON-RPC 2.0 says so, and gives no response when all its requests are notifications. -/
 def serve (v : ChainView) (request : Except String Json) : Option Json :=
   match request with
+  -- A text that is not JSON has the error `-32700`.
   | .error reason => some <| responseJson
       { id := .null, outcome := .error (parseError.toRpcError (some (.str reason))) }
   | .ok (.arr items) =>
+    -- An empty batch is an invalid request.
     if items.isEmpty then
       some <| responseJson
         { id := .null, outcome := .error (RpcError.invalidRequest "batch: empty array") }

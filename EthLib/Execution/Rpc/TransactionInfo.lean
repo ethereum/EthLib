@@ -10,31 +10,12 @@ public import EthLib.Execution.Transactions.Signature
 
 A transaction of a block that the node holds, as the methods that look one up return it.
 
-It is the object `TransactionInfo` of [`transaction.yaml`][tx].
+Sources:
 
-It has the signed fields of the transaction and the context of its block.
+- [`transaction.yaml`][tx], at commit `1ca0818` of execution-apis: the fields of `TransactionInfo`
+- the upstream report [execution-apis#1008][canonical]: the canonical blocks for a lookup by hash
 
-That context is the hash, number and timestamp of the block, and the index of the transaction.
-
-It also has the sender that the signature names and the hash of the transaction.
-
-Its gas price is the effective gas price: what the sender pays per gas at the base fee of the block.
-
-A block before London has no base fee, and its transactions pay their own gas price.
-
-A lookup by hash reads only the canonical blocks.
-
-So a transaction that only a block off the canonical chain holds, as after a reorg, is not found.
-
-The method text does not say which blocks to read.
-
-The upstream report [execution-apis#1008][canonical] proposes to state this rule there.
-
-It does not read the transactions that wait in the pool: the result schema requires a block hash.
-
-A lookup by block and index finds no transaction when the block is unknown or too short.
-
-[tx]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/transaction.yaml
+[tx]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/transaction.yaml
 [canonical]: https://github.com/ethereum/execution-apis/pull/1008
 -/
 
@@ -47,7 +28,13 @@ open EthLib.Base
 open EthLib.Serialization.JsonRpc
 open EthLib.Execution.Transactions
 
-/-- A transaction of a block, with its sender, its hash, and what it pays per gas. -/
+/-- A transaction of a block, with its sender, its hash, and what it pays per gas.
+
+It has the signed fields of the transaction and the context of its block.
+
+That context is the hash, number and timestamp of the block, and the index of the transaction.
+
+It also has the sender that the signature names and the hash of the transaction. -/
 structure TransactionInfo where
   /-- The hash of the block. -/
   blockHash : Hash32
@@ -61,7 +48,9 @@ structure TransactionInfo where
   sender : Address
   /-- The hash of the transaction. -/
   hash : Hash32
-  /-- The effective gas price: what the sender pays per gas in the block. -/
+  /-- The effective gas price: what the sender pays per gas at the base fee of the block.
+
+  A block before London has no base fee, and its transactions pay their own gas price. -/
   gasPrice : Nat
   /-- The transaction. -/
   tx : Transaction
@@ -109,14 +98,26 @@ A block off the canonical chain is not read. -/
 def findTransaction (v : ChainView) (hash : Hash32) : Option (BlockRecord × Transaction × Nat) :=
   v.canonical.findSome? fun r => (r.findTransaction hash).map fun p => (r, p)
 
-/-- The object of the transaction with a hash, or none when no canonical block holds one. -/
+/-- The object of the transaction with a hash, or none when no canonical block holds one.
+
+So a transaction that only a block off the canonical chain holds, as after a reorg, is not found.
+
+The method text does not say which blocks to read.
+
+The upstream report execution-apis#1008 proposes to state this rule there.
+
+The lookup does not read the transactions that wait in the pool.
+
+The result schema requires a block hash, which such a transaction lacks. -/
 def transactionByHash (v : ChainView) (hash : Hash32) :
     Except RpcError (Option TransactionInfo) :=
   match v.findTransaction hash with
   | none => .ok none
   | some (r, tx, index) => some <$> r.transactionInfo index tx
 
-/-- The object of the transaction at an index of the block that a parameter names, if any. -/
+/-- The object of the transaction at an index of the block that a parameter names, if any.
+
+The lookup finds no transaction when the block is unknown or too short. -/
 def transactionByBlockAndIndex (v : ChainView) (p : BlockParam) (index : Nat) :
     Except RpcError (Option TransactionInfo) := do
   match ← v.resolve p with

@@ -10,16 +10,13 @@ public import EthLib.Execution.Rpc.TransactionInfo
 
 The debug methods that trace transactions with the opcode logger, and the JSON of their answers.
 
-A block is traced on the state of its parent, so the node must hold the parent.
+Sources, at commit `1ca0818` of execution-apis:
 
-Block 0 has no parent, and the methods answer it with an error, as [`trace.yaml`][methods] asks.
+- [`trace.yaml`][methods]: the methods, and the error for block 0
+- [`opcode-tracer.yaml`][schema]: the answers
 
-The text of the error of a step is a choice of this specification, since the source fixes none.
-
-[`opcode-tracer.yaml`][schema] defines the answers.
-
-[methods]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/debug/trace.yaml
-[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml
+[methods]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/debug/trace.yaml
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/opcode-tracer.yaml
 -/
 
 @[expose] public section
@@ -65,7 +62,9 @@ def traceConfig (j : Json) : Read TraceConfig := do
 
 /-! ## The JSON of the answers -/
 
-/-- The text of the error of a step. -/
+/-- The text of the error of a step.
+
+The text is a choice of this specification, since the source fixes none. -/
 def stepErrorText : EvmError → String
   | .stackUnderflow => "stack underflow"
   | .stackOverflow => "stack overflow"
@@ -99,7 +98,7 @@ Empty memory and empty return data are left out.
 
 The schema requires that.
 
-[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml#L144-L199
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/opcode-tracer.yaml#L144-L199
 -/
 def structLogJson (e : StructLog) : Json :=
   Json.mkObj <|
@@ -152,9 +151,11 @@ def genesisNotTraceable : RpcError :=
 
 Block 0 fails, and so does a block whose parent the node does not hold. -/
 def traceChain (v : ChainView) (r : BlockRecord) : Except RpcError BlockChain :=
-  -- Block 0 has no parent, and the methods answer it with an error.
+  -- Block 0 has no parent, and the methods answer it with an error, as the source asks.
   if r.block.header.number = 0 then .error genesisNotTraceable
   -- Else the block runs on the state of its parent on the canonical chain.
+  --
+  -- A block is traced on the state of its parent, so the node must hold the parent.
   --
   -- Without that parent, the answer is the error of pruned history, 4444.
   else match v.parentChain r with

@@ -5,18 +5,15 @@ public import EthLib.Execution.Rpc.Raw
 /-!
 # `Execution.Rpc.Account`
 
-The account queries of the execution JSON-RPC API, in [`state.yaml`][state].
+The account queries of the execution JSON-RPC API.
 
 Each query reads the state after the block that its block parameter names, the latest by default.
 
 The parameter, when present, must not be null: null is an invalid parameter, -32602.
 
-For an address with no account, the fixtures fix answers that no text states, and EthLib follows.
+Source: [`state.yaml`][state], at commit `1ca0818` of execution-apis: the methods and their schemas.
 
-The code of an account delegated by [EIP-7702][eip7702] is its delegation designator.
-
-[state]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/state.yaml
-[eip7702]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7702.md
+[state]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/state.yaml
 -/
 
 @[expose] public section
@@ -30,14 +27,21 @@ open EthLib.Execution.State (Account State EMPTY_ACCOUNT)
 
 namespace BlockRecord
 
-/-- The account of an address in the state after the block, or the empty account for none. -/
+/-- The account of an address in the state after the block, or the empty account for none.
+
+For an address with no account, the fixtures fix answers that no text states, and EthLib follows. -/
 def account (r : BlockRecord) (a : Address) : Account :=
   -- No account reads as the empty account: balance 0, nonce 0, no code, as the fixtures expect.
   (r.state.getAccountOptional a).getD EMPTY_ACCOUNT
 
 /-- The code of an address in the state after the block, empty for no account.
 
-A code hash with no code in the state is an internal error. -/
+The code of an account delegated by [EIP-7702][eip7702] is its delegation designator.
+
+A code hash with no code in the state is an internal error.
+
+[eip7702]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7702.md
+-/
 def code (r : BlockRecord) (a : Address) : Except RpcError ByteArray :=
   -- The code of the code hash, which is the delegation designator for an account of EIP-7702.
   --

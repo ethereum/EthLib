@@ -9,25 +9,12 @@ public import EthLib.Execution.Rpc.Errors
 
 The chain view of a node: the blocks that it holds when it answers a query, with their states.
 
-A query of the execution JSON-RPC API names a block, and its answer reads that block.
+Sources:
 
-The canonical chain runs from the lowest block that the node holds to its head.
+- [`block.yaml`][block], at commit `1ca0818` of execution-apis: the tags that name a block
+- [EIP-1898][eip1898]: a query by hash that may require the block to be canonical
 
-The node may also hold other blocks, which only a hash can name.
-
-The consensus layer names the safe and the finalized blocks by their hashes.
-
-The node may also offer a sample next block, which the tag `pending` names.
-
-The tags are those of [`block.yaml`][block].
-
-A valid view follows the state transition from its lowest block on.
-
-[EIP-1898][eip1898] lets a query by hash require that the block be canonical.
-
-A block that the view does not find resolves to no block, and each method says what it answers.
-
-[block]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
+[block]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/block.yaml
 [eip1898]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1898.md#specification
 -/
 
@@ -87,7 +74,9 @@ def namedBlock (hash : Hash32) : Option Hash32 :=
   -- Engine API of Paris: the safe and finalized hashes may be zero until the transition is final.
   if hash = Vector.replicate 32 0 then none else some hash
 
-/-- What a node holds when it answers a query. -/
+/-- What a node holds when it answers a query.
+
+A query of the execution JSON-RPC API names a block, and its answer reads that block. -/
 structure ChainView where
   /-- The configuration of the chain. -/
   config : ChainConfig
@@ -99,13 +88,15 @@ structure ChainView where
   canonical : List BlockRecord
   /-- The node holds at least one block. -/
   nonempty : canonical ≠ []
-  /-- Other blocks that the node holds, off the canonical chain. -/
+  /-- Other blocks that the node holds, off the canonical chain, which only a hash can name. -/
   side : List BlockRecord := []
   /-- The hash of the block that the consensus layer last named safe. -/
   safe : Option Hash32 := none
   /-- The hash of the block that the consensus layer last named finalized. -/
   finalized : Option Hash32 := none
-  /-- A sample next block that the node built on top of the head, with contents of its choice. -/
+  /-- A sample next block that the node built on top of the head, with contents of its choice.
+
+  The tag `pending` names it. -/
   pending : Option BlockRecord := none
   /-- The network ID of the node. -/
   networkId : Nat
@@ -217,7 +208,9 @@ def notCanonical : RpcError :=
 
 /-- The block that a block parameter names, or no block when the node holds none.
 
-A query by hash that requires a canonical block fails when the block it finds is not one. -/
+A query by hash that requires a canonical block fails when the block it finds is not one.
+
+A block that the view does not find resolves to no block, and each method says what it answers. -/
 def resolve (v : ChainView) : BlockParam → Except RpcError (Option BlockRecord)
   -- A number names a canonical block.
   | .number n => .ok (v.byNumber n)
@@ -225,7 +218,9 @@ def resolve (v : ChainView) : BlockParam → Except RpcError (Option BlockRecord
   -- EIP-1898: a hash names any block that the node holds.
   | .hash h requireCanonical =>
     match v.byHash h with
-    -- EIP-1898 recommends -32001 for a block not found; EthLib leaves the answer to each method.
+    -- EIP-1898 recommends -32001 for a block not found.
+    --
+    -- EthLib leaves the answer to each method.
     | none => .ok none
     | some r =>
       -- EIP-1898 recommends code -32000 for a block off the canonical chain when the flag is set.
