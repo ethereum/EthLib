@@ -8,41 +8,15 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 A hash `H` built on a permutation `π` is compared with a random oracle.
 
-A game asks two oracles, the hash and the permutation in both directions, and returns a bit.
-
-In the real world the permutation is uniform, and the hash is `H` built on it.
-
-In the ideal world the hash is a random oracle, and a simulator answers the permutation.
-
-The simulator keeps a state, flips coins and asks the random oracle, but sees no hash call.
-
-`H` is indifferentiable from a random oracle with bound `ε` when one simulator serves every game.
-
-Then a game that costs at most `N` tells the two worlds apart with advantage at most `ε N`.
-
 This is Definition 1 of [Bertoni, Daemen, Peeters, Van Assche, Eurocrypt 2008][sponge], §2.
 
 Their §2 quotes it from their reference [7].
 
-Here the cost of their §3.5 replaces the query count.
+A game here is a functionality-respecting single-stage game.
 
-A call to the permutation costs 1, and the cost of a hash call is a parameter.
-
-Definition 1 also bounds the running times of the game and the simulator; the version here does not.
-
-A game here is one computation, so all its parts share their state.
-
-Its adversary is the part that calls the permutation; the game's own procedures call the hash.
-
-That is a functionality-respecting single-stage game of [Ristenpart, Shacham, Shrimpton][rss], §3.
+Such games are those of [Ristenpart, Shacham, Shrimpton][rss], §3.
 
 For such a game, the composition below is their Theorem 3.1.
-
-Their §4 shows that the composition fails for games with several stages that share no state.
-
-Bertoni et al. bound the advantage of the sponge by the exact term of their Lemma 5.
-
-EthLib proves that the closed form of their equation (6) bounds that term.
 
 [sponge]: https://keccak.team/files/SpongeIndifferentiability.pdf
 [rss]: https://hovav.net/ucsd/dist/revindiff.pdf
@@ -56,7 +30,10 @@ open OracleComp OracleSpec ENNReal LazyPermutation
 
 variable {A Msg Dg σ : Type}
 
-/-! ## The two worlds -/
+/-! ## The two worlds
+
+A game asks two oracles, the hash and the permutation in both directions, and returns a bit.
+-/
 
 /-- The oracles of the ideal world: coins and the random oracle of messages. -/
 abbrev RomSpec (Msg Dg : Type) := unifSpec + (Msg →ₒ Dg)
@@ -76,6 +53,7 @@ def idealImpl (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg
     QueryImpl (GameSpec A Msg Dg) (StateT σ (OracleComp (RomSpec Msg Dg)))
   | .inl (.inl n) =>
     (liftM ((RomSpec Msg Dg).query (.inl n)) : OracleComp (RomSpec Msg Dg) (Fin (n + 1)))
+  -- The simulator keeps a state, flips coins and asks the random oracle, but sees no hash call.
   | .inl (.inr q) => S q
   | .inr m => (liftM ((RomSpec Msg Dg).query (.inr m)) : OracleComp (RomSpec Msg Dg) Dg)
 
@@ -89,6 +67,7 @@ def romGame (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg))
 /-- The chance that a game returns `true` in the real world. -/
 noncomputable def realProb [FinEnum A] (H : (A → A) → Msg → Dg)
     (game : OracleComp (GameSpec A Msg Dg) Bool) : ℝ≥0∞ :=
+  -- In the real world the permutation is uniform.
   Pr{let π ← $ᵗ (Equiv.Perm A); let b ← simulateQ (realImpl H π) game}[b = true]
 
 /-- The chance that a game in the random-oracle model returns `true`.
@@ -98,7 +77,10 @@ noncomputable def romProb [DecidableEq Msg] [SampleableType Dg]
     (game : OracleComp (RomSpec Msg Dg) Bool) : ℝ≥0∞ :=
   Pr{let b ← (simulateQ (Msg →ₒ Dg).romImpl game).run' ∅}[b = true]
 
-/-! ## The cost of a game -/
+/-! ## The cost of a game
+
+The cost of Bertoni et al., §3.5, replaces the query count.
+-/
 
 /-- The cost of a call: nothing for coins, 1 for the permutation, and `hashCost m` for a hash. -/
 def queryCost (hashCost : Msg → ℕ) : (ℕ ⊕ (A ⊕ A)) ⊕ Msg → ℕ
@@ -133,7 +115,9 @@ It asks the random oracle at most once per call.
 
 A game that costs at most `N` returns `true` with chances in the two worlds at most `ε N` apart.
 
-The definition is Definition 1 of Bertoni et al., §2, without the bounds on running times. -/
+The definition is Definition 1 of Bertoni et al., §2, without the bounds on running times.
+
+Definition 1 also bounds the running times of the game and the simulator. -/
 def Indifferentiable [FinEnum A] [DecidableEq Msg] [SampleableType Dg]
     (H : (A → A) → Msg → Dg) (hashCost : Msg → ℕ) (ε : ℕ → ℝ≥0∞) : Prop :=
   ∃ (σ : Type) (s₀ : σ) (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg)))),
@@ -166,9 +150,7 @@ noncomputable def spongeExact (r c N : ℕ) : ℝ≥0∞ :=
 
 /-- The closed form of Bertoni et al., §4.3, equation (6), for rate `r` and capacity `c`.
 
-It is `((1 - 2^-r) N^2 + (1 + 2^-r) N) / 2^(c + 1)`, for a cost `N`.
-
-Write `x` for it.
+It is `x = ((1 - 2^-r) N^2 + (1 + 2^-r) N) / 2^(c + 1)`, for a cost `N`.
 
 For `N` well below `2^c`, equation (6) approximates the exact term by `1 - e^-x`.
 
@@ -341,7 +323,12 @@ theorem isQueryBoundP_romGame {S : QueryImpl (PermSpec A)
     (isQueryBoundP_romGame_run hS hcost hN s₀) fun _ _ => isQueryBoundP_pure _ _ _
   rwa [Nat.add_zero] at this
 
-/-! ## Composition for single-stage games -/
+/-! ## Composition for single-stage games
+
+A game here is one computation, so all its parts share their state.
+
+Ristenpart et al., §4, show that composition fails for games with stages that share no state.
+-/
 
 /-- **Composition for single-stage games.**
 
@@ -363,6 +350,9 @@ theorem realProb_le_romProb_add [FinEnum A] [DecidableEq Msg] [SampleableType Dg
     (h : Indifferentiable H hashCost ε) :
     ∃ (σ : Type) (s₀ : σ) (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg)))),
       AsksOnce S ∧
+      -- The adversary of a game is the part that calls the permutation.
+      --
+      -- The game's own procedures call the hash.
       ∀ (game : OracleComp (GameSpec A Msg Dg) Bool) (N : ℕ), WithinCost hashCost game N →
         realProb H game ≤ romProb (romGame S s₀ game) + ε N := by
   obtain ⟨σ, s₀, S, hS, hgame⟩ := h

@@ -11,19 +11,11 @@ import VCVio.OracleComp.Constructions.SampleableType.Measure
 
 A secret seed is hidden when every value derived from it is a hash of the seed.
 
-VCVio's hidden-seed games treat such a derivation as a query of its own, a derivation query.
-
-In the real game, a derivation is answered by the random oracle at the point that encodes it.
-
-In the ideal game, it is answered by an independent table, and the seed appears nowhere.
-
-This file adds three facts to them, for every public oracle.
+This file adds three facts to VCVio's hidden-seed games, for every public oracle.
 
 - One hop: an event of the real game is at most the event in the ideal game, plus a term.
-  The term is the number of queries at encodable points times the chance of the drawn seed.
 - A seed fixed by every point that encodes it is hit with probability at most `1 / |S|`.
-- Lazy to eager: drawing each derivation on its first query, or the whole table first.
-  The two give one distribution.
+- Lazy to eager: each derivation drawn on its first query, or the whole table drawn first.
 -/
 
 @[expose] public section
@@ -54,6 +46,15 @@ theorem prEvent_mem_range_enc_le {S X : Type} [SampleableType S] (E : SecretEnco
     exact ht ⟨s, x, hx⟩
 
 variable [DecidableEq ι] [∀ t, SampleableType (pub.Range t)] [SampleableType R]
+
+/-! ## The real and the ideal game
+
+VCVio's hidden-seed games treat a derivation as a query of its own, a derivation query.
+
+In the real game, a derivation is answered by the random oracle at the point that encodes it.
+
+In the ideal game, it is answered by an independent table, and the seed appears nowhere.
+-/
 
 /-- The ideal game answers a sampling or public query as the random oracle does.
 

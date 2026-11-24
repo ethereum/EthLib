@@ -7,29 +7,11 @@ public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.Point
 
 Miller's algorithm evaluates, at a point `P`, a function whose divisor is a multiple of `(Q) - (O)`.
 
-It multiplies values of the function `g_{T,S} = L_{T,S} / L_{T+S,-(T+S)}`.
-
-Here `L_{T,S}` is the normalized line through `T` and `S`: the tangent when `T = S`.
-
-The line through `R` and `-R` is the vertical through `R`.
-
-The curve is in Weierstrass form, and the functions are evaluated at the coordinates `(xp, yp)`.
-
-The loop below walks the bits of `s` from the top, which is the binary addition chain of `s`.
-
-A doubling step multiplies `f^2` by `g_{T,T}` and doubles `T`.
-
-An addition step multiplies `f` by `g_{T,Q}` and adds `Q` to `T`.
-
 See Miller, "The Weil Pairing, and Its Efficient Calculation", J. Cryptology 17 (2004).
 
 Section 4.1 defines `L` (Proposition 2), `g` (Definition 5) and `f_{n,Q}` (Definition 6).
 
 Its Lemma 2, equation (8), gives the doubling and addition rules, and Algorithm 1 the loop.
-
-By that lemma, the loop computes `f_{s,Q}(P)` when no value it divides by is zero.
-
-No theorem here proves that equality; the loop is the definition.
 -/
 
 @[expose] public section
@@ -38,6 +20,7 @@ namespace EthLib.Cryptography.Miller
 
 open WeierstrassCurve.Affine
 
+-- The curve is in Weierstrass form, and the functions are evaluated at the coordinates `(xp, yp)`.
 variable {F : Type*} [Field F] [DecidableEq F] (W : WeierstrassCurve.Affine F)
 
 /-- The normalized line through `T` and `S`, at `(xp, yp)`.
@@ -52,10 +35,14 @@ noncomputable def line : W.Point → W.Point → F → F → F
   | .some x _ _, .zero, xp, _ => xp - x
   | .zero, .some x _ _, xp, _ => xp - x
   | .some x₁ y₁ _, .some x₂ y₂ _, xp, yp =>
+    -- The line through `R` and `-R` is the vertical through `R`.
     if x₁ = x₂ ∧ y₁ = W.negY x₂ y₂ then xp - x₁
+    -- Otherwise the slope is that of the chord, or of the tangent when `T = S`.
     else W.slope x₁ x₂ y₁ y₂ * (xp - x₁) + y₁ - yp
 
-/-- The function `g_{T,S} = L_{T,S} / L_{T+S,-(T+S)}`, at `(xp, yp)`. -/
+/-- The function `g_{T,S} = L_{T,S} / L_{T+S,-(T+S)}`, at `(xp, yp)`.
+
+The loop multiplies its values. -/
 noncomputable def lineRatio (T S : W.Point) (xp yp : F) : F :=
   line W T S xp yp / line W (T + S) (-(T + S)) xp yp
 
@@ -65,14 +52,24 @@ At each bit it doubles `T`, then adds `Q` if the bit is set. -/
 noncomputable def steps (s : ℕ) (Q : W.Point) (xp yp : F) : ℕ → W.Point → F → F
   | 0, _, f => f
   | n + 1, T, f =>
+    -- A doubling step multiplies `f^2` by `g_{T,T}` and doubles `T`.
+    --
+    -- When the bit is set, an addition step then multiplies `f` by `g_{T,Q}` and adds `Q` to `T`.
     if s.testBit n then
       steps s Q xp yp n (T + T + Q) (f ^ 2 * lineRatio W T T xp yp * lineRatio W (T + T) Q xp yp)
     else steps s Q xp yp n (T + T) (f ^ 2 * lineRatio W T T xp yp)
 
 /-- Miller's algorithm for `s`, the point `Q` and the coordinates `(xp, yp)`.
 
-The start `T = Q` and `f = 1` consume the leading bit of `s`. -/
+By Lemma 2 of Miller, it computes `f_{s,Q}(P)` when no value it divides by is zero.
+
+No theorem here proves that equality.
+
+The loop is the definition. -/
 noncomputable def loop (s : ℕ) (Q : W.Point) (xp yp : F) : F :=
+  -- The loop walks the bits of `s` from the top, which is the binary addition chain of `s`.
+  --
+  -- The start `T = Q` and `f = 1` consume the leading bit of `s`.
   steps W s Q xp yp s.log2 Q 1
 
 /-- The bits of `s` from `n` up are twice those from `n + 1` up, plus bit `n`. -/

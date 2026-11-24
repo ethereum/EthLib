@@ -5,17 +5,7 @@ public import EthLib.Cryptography.Proofs.MillerFunction
 /-!
 # Proofs: the ideals of the lines of Miller's algorithm
 
-The coordinate ring of a Weierstrass curve is `F[X, Y]` modulo the curve equation.
-
-The ideal of a finite point `(x, y)` is `⟨X - x, Y - y⟩`, and the ideal of `O` is the whole ring.
-
-An element of the ring vanishes at a point exactly when it lies in the ideal of the point.
-
-The line through `T` and `S` meets the curve at `T`, `S` and `-(T + S)`.
-
-So the principal ideal of the line is the product of the ideals of these three points.
-
-So the function `g_{T,S}` has the fractional ideal of `T` times that of `S` over that of `T + S`.
+The function `g_{T,S}` has the fractional ideal of `T` times that of `S` over that of `T + S`.
 
 See Miller, "The Weil Pairing, and Its Efficient Calculation", J. Cryptology 17 (2004).
 
@@ -34,7 +24,10 @@ open scoped nonZeroDivisors
 
 variable {F : Type*} [Field F] (W : WeierstrassCurve.Affine F)
 
-/-! ## Evaluation at a point -/
+/-! ## Evaluation at a point
+
+The coordinate ring of a Weierstrass curve is `F[X, Y]` modulo the curve equation.
+-/
 
 /-- Evaluation of the coordinate ring at a pair `(x, y)` on the curve. -/
 noncomputable def evalAt {x y : F} (h : W.Equation x y) : W.CoordinateRing →+* F :=
@@ -92,7 +85,12 @@ theorem evalAt_eq_zero_iff {x y : F} (h : W.Equation x y) (a : W.CoordinateRing)
       · simp [evalAt_YClass]
     exact hle ha
 
-/-! ## The ideal of a line -/
+/-! ## The ideal of a line
+
+The line through `T` and `S` meets the curve at `T`, `S` and `-(T + S)`.
+
+So the principal ideal of the line is the product of the ideals of these three points.
+-/
 
 variable (W)
 

@@ -6,19 +6,11 @@ public import EthLib.Cryptography.HashSig
 /-!
 # Proofs: the common frame of the hash-based signatures
 
-A read of a fixed-size object succeeds exactly when the buffer has room, and reads back a write.
-
-A read out of a concatenation reads the part it covers.
-
-In the identity monad, a vector computed in order is the vector of its entries.
-
-A map of monads that keeps `pure` and `bind` commutes with computing a vector in order.
-
-Between lawful monads, such a map keeps `map` too.
-
-The models of the security proofs compute a function in order instead of a vector.
-
-Both make the same calls in the same order.
+- A read of a fixed-size object succeeds exactly when the buffer has room, and reads back a write.
+- A read out of a concatenation reads the part it covers.
+- In the identity monad, a vector computed in order is the vector of its entries.
+- A map of monads that keeps `pure` and `bind` commutes with computing a vector in order.
+- Between lawful monads, such a map keeps `map` too.
 -/
 
 @[expose] public section
@@ -231,7 +223,12 @@ theorem map_monad_map {m n : Type → Type} [Monad m] [Monad n] [LawfulMonad m] 
   rw [← bind_pure_comp, ← bind_pure_comp, map_bind]
   simp only [map_pure]
 
-/-! ## Computing a function in order -/
+/-! ## Computing a function in order
+
+The models of the security proofs compute a function in order instead of a vector.
+
+Both make the same calls in the same order.
+-/
 
 /-- Run the `n` computations in index order and collect their results. -/
 def sequenceFin {m : Type → Type} [Monad m] {α : Type} {n : Nat}
