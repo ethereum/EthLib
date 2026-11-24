@@ -8,21 +8,9 @@ public import EthLib.Cryptography.Wots
 
 The WOTS+C one-time signature: 64 hash chains of 4 positions, hashed as FIPS 205's WOTS+.
 
-Revealing a chain at position `k` lets anyone reach the positions above `k`.
-
-It reveals nothing about the positions below.
-
-Key `K = (l, tau, e)` has 64 chains `C_{i,mu}`, for `i < 64` and positions `mu <= 3`.
-
-The key signs a 16-byte message `M` with the least counter `c` whose digest `D` is a codeword.
-
 Source: WOTS+C of [leanSPHINCS.tex][note] §1, and WOTS+ of [FIPS 205][fips205] §5.
 
 WOTS+C is [ePrint 2022/778][wotsc].
-
-Every definition takes the hash `H` and makes its calls in a fixed order.
-
-Chains go by index, and each chain is walked step by step from its start.
 
 [note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
 [fips205]: https://doi.org/10.6028/NIST.FIPS.205
@@ -35,11 +23,20 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
+-- Every definition takes the hash `H` and makes its calls in a fixed order.
+--
+-- Chains go by index, and each chain is walked step by step from its start.
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
-/-! ## Chains -/
+/-! ## Chains
+
+Revealing a chain at position `k` lets anyone reach the positions above `k`.
+
+It reveals nothing about the positions below. -/
 
 /-- The starts of the 64 chains of one key, one `PRF` each, chain 0 first.
+
+Key `K = (l, tau, e)` has 64 chains `C_{i,mu}`, for `i < 64` and positions `mu <= 3`.
 
 Chain `i` starts at `PRF(PK.seed, SK.seed, ADRS_prf(K, i))`, as in FIPS 205's `wots_pkGen`. -/
 def chainStarts (prf : Prf m) (key : OtsKey) : m (Vector Digest V) :=
@@ -99,13 +96,11 @@ def findCounter (pkSeed : PkSeed) (key : OtsKey) (msg : Digest) (c fuel : Nat) :
 
 end Internal
 
-/-! ## Signing and recovering the leaf -/
+/-! ## Signing and recovering the leaf
+
+The key signs a 16-byte message `M` with the least counter `c` whose digest `D` is a codeword. -/
 
 /-- `Wots.sign(K, M)`: the counter and the 64 chain values that sign `M`.
-
-Takes the least counter `c < 2^32` whose encoding is a codeword `x`.
-
-Reveals chain `i` at position `x_i`.
 
 Returns nothing when no counter gives a codeword.
 
@@ -115,9 +110,13 @@ Two signatures of one message under one key reveal the same positions. -/
 def otsSign (pkSeed : PkSeed) (prf : Prf m) (key : OtsKey) (msg : Digest) :
     m (Option (UInt32 × Vector Digest V)) := do
   -- Step 1: search the counter until the encoding is a codeword.
+  --
+  -- It takes the least counter `c < 2^32` whose encoding is a codeword `x`.
   let some (counter, x) ← Internal.findCounter H pkSeed key msg 0 MAX_COUNTER_TRIALS
     | return none
   -- Step 2: reveal each chain at the position its digit names, chain 0 first.
+  --
+  -- Chain `i` is revealed at position `x_i`.
   --
   -- Algorithm 7, lines 11 to 15, with the codeword in place of the message and checksum.
   let starts ← chainStarts prf key

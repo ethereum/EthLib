@@ -181,22 +181,21 @@ def KECCAK_RATE : Nat := 136
 /-- The permutations Keccak-256 makes on an input of `len` bytes: `floor(len / 136) + 1`. -/
 def permutations (len : Nat) : Nat := len / KECCAK_RATE + 1
 
-/-- The permutations of one verification, counted call by call.
-
-- `H_msg`: two calls of 84 bytes.
-- FORS: per tree, a leaf of 64 bytes and `a` nodes of 80 bytes.
-- `T_k` over the 24 roots: 432 bytes.
-- Encodings: one of 68 bytes per layer.
-- Chains: `(2^w - 1) v - T = 64` steps of 64 bytes per layer.
-- `T_v` over 64 chain ends: 1072 bytes per layer.
-- Paths: `h` nodes of 80 bytes.
--/
+/-- The permutations of one verification, counted call by call. -/
 def VERIFY_PERMUTATIONS : Nat :=
+  -- `H_msg`: two calls of 84 bytes.
   DIGEST_CALLS * permutations (3 * N + MESSAGE_LEN + COUNTER_LEN)
+    -- FORS: per tree, a leaf of 64 bytes and `a` nodes of 80 bytes.
     + FORS_TREES * (permutations (PREFIX_LEN + N) + FORS_HEIGHT * permutations (PREFIX_LEN + 2 * N))
+    -- `T_k` over the 24 roots: 432 bytes.
     + permutations (PREFIX_LEN + FORS_TREES * N)
+    -- Encodings: one of 68 bytes per layer.
     + LAYERS * permutations (PREFIX_LEN + N + COUNTER_LEN)
+    -- Chains: `(2^w - 1) v - T = 64` steps of 64 bytes per layer.
+    --
+    -- `T_v` over 64 chain ends: 1072 bytes per layer.
     + LAYERS * (CHAIN_HASHES + permutations (PREFIX_LEN + V * N))
+    -- Paths: `h` nodes of 80 bytes.
     + HEIGHT * permutations (PREFIX_LEN + 2 * N)
 
 end EthLib.Cryptography.Sphincs.Constants

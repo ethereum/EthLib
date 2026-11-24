@@ -9,22 +9,6 @@ FORS, the few-time signature under each bottom leaf: 24 trees of 1024 leaves.
 
 Each bottom leaf `idx` has its own FORS instance, at the bottom key `K_0(idx) = (0, tau, e)`.
 
-A FORS leaf is the hash of a secret.
-
-The message digest picks one leaf in every tree, and the signature reveals that leaf's secret.
-
-Node indices run across the trees.
-
-In tree `kappa`, node `j` at height `z` has tree index `kappa 2^(a - z) + j`.
-
-Leaf `s` of tree `kappa` is `Y_{0,s}`, the hash of its secret `sk_{kappa,s}`.
-
-The tree's nodes are `Y_{z,j}` for `1 <= z <= a`, and its root is `Y^kappa_{a,0}`.
-
-The FORS public key `Fors.key(idx)` is one digest, which the bottom one-time key signs.
-
-An opening reveals a leaf's secret and its 10 path nodes.
-
 Source: FORS of [FIPS 205][fips205] §8, with 24 trees of height 10 as in [leanSPHINCS.tex][note] §1.
 
 [note]: https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex
@@ -39,7 +23,7 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-! ## Openings -/
 
-/-- The opening of one FORS tree at one leaf. -/
+/-- The opening of one FORS tree at one leaf: the leaf's secret and its 10 path nodes. -/
 structure TreeOpening where
   /-- The secret of the leaf the message digest picked. -/
   secret : Digest
@@ -53,7 +37,9 @@ It counts the nodes at height `z` across the trees, as FIPS 205's `fors_node` do
 def forsTreeIndex (kappa : Fin FORS_TREES) (z j : Nat) : Nat :=
   kappa.val * 2 ^ (FORS_HEIGHT - z) + j
 
-/-! ## Secrets and leaves -/
+/-! ## Secrets and leaves
+
+Leaf `s` of tree `kappa` is `Y_{0,s}`, the hash of its secret `sk_{kappa,s}`. -/
 
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
@@ -92,7 +78,9 @@ def forsLeaves (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TRE
     (s : Nat) : m Digest := do
   forsLeafHash H pkSeed idx kappa s (← forsSecret prf idx kappa s)
 
-/-! ## Nodes and the public key -/
+/-! ## Nodes and the public key
+
+The nodes of a tree are `Y_{z,j}` for `1 <= z <= a`, and its root is `Y^kappa_{a,0}`. -/
 
 /-- `Y_{z,j}`: node `j` at height `z` of tree `kappa` of instance `idx`, FIPS 205's `fors_node`. -/
 def forsNode (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TREES)
@@ -111,12 +99,16 @@ def forsPkFromRoots (pkSeed : PkSeed) (idx : Nat) (roots : Vector Digest FORS_TR
   -- Algorithm 17, lines 22 to 24: `Fors.key(idx) = T_k(PK.seed, ADRS_roots(idx), Y^0_{a,0} | ...)`.
   th H pkSeed (adrsRoots idx) (packDigests roots)
 
-/-- `Fors.key(idx)`: the FORS public key of instance `idx`, from the roots of its trees. -/
+/-- `Fors.key(idx)`: the FORS public key of instance `idx`, from the roots of its trees.
+
+It is one digest, which the bottom one-time key signs. -/
 def forsKey (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) : m Digest := do
   let roots ← ofFnInOrder FORS_TREES fun kappa => forsRoot H pkSeed prf idx kappa
   forsPkFromRoots H pkSeed idx roots
 
-/-! ## Signing -/
+/-! ## Signing
+
+The message digest picks one leaf in every tree, and the signature reveals that leaf's secret. -/
 
 /-- Every node of tree `kappa` of instance `idx`, each computed once.
 

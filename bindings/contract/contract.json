@@ -1020,7 +1020,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "SphincsError",
    "docstring":
-   "`Sign(SK, M)`: sign a message.\n\n1. The randomizer and the message give the digest: the index and one leaf per FORS tree.\n2. FORS instance `idx` opens those leaves.\n3. Each layer's key signs what the layer below gives, with its path.\n\n# Warning\n\nNever sign more than `2^30` messages with one secret key.\n\n# Errors\n\n- A one-time signature finds no codeword."},
+   "`Sign(SK, M)`: sign a message.\n\n# Warning\n\nNever sign more than `2^30` messages with one secret key.\n\nThe digest picks the FORS instance at random, and each reuse weakens it.\n\n# Errors\n\n- A one-time signature finds no codeword."},
   {"summary":
    "`Ver(PK, M, sigma)`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",

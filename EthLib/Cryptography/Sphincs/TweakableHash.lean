@@ -9,18 +9,7 @@ public import EthLib.Cryptography.HashSig
 
 The hash every other definition is built from: `Th` hashes `PK.seed | ADRS | M` and keeps `n` bytes.
 
-- `H` is Keccak-256: the 256-bit hash of FIPS 202, with Keccak's original padding byte `0x01`.
-- `Trunc_n` keeps the first `n = 16` bytes of its output.
-- `PK.seed` has 16 bytes and `ADRS` 32, so the payload `M` always starts at byte 48.
-
 `Th` is FIPS 205's `F`, `H` and `T_l` alike, as the SHAKE instances of FIPS 205 §11.1 lay them out.
-
-Every definition that hashes takes the hash `H` as an argument, in a monad `m`.
-
-- The hash that EthLib computes is Keccak-256, in the identity monad.
-- A proof in the random oracle model passes a query to the oracle instead.
-
-So the definitions that run are the definitions that the security proof is about.
 
 Source: [FIPS 205][fips205] §11.1 for the layout of the input.
 
@@ -40,7 +29,9 @@ open EthLib.Cryptography.Sphincs.Constants
 
 export EthLib.Cryptography.HashSig (pureHash)
 
-/-- `H`: the scheme's 32-byte hash, Keccak-256. -/
+/-- `H`: the scheme's 32-byte hash, Keccak-256.
+
+It is the 256-bit hash of FIPS 202, with Keccak's original padding byte `0x01`. -/
 def hash (input : ByteArray) : HashOutput :=
   Hash.Keccak.keccak256 input
 
@@ -56,11 +47,19 @@ def trunc {k : Nat} (r : Nat) (x : Vector UInt8 k) (h : r ≤ k := by decide) : 
 
 /-! ## Tweakable hash calls -/
 
+-- Every definition that hashes takes the hash `H` as an argument, in a monad `m`:
+--
+-- - The hash that EthLib computes is Keccak-256, in the identity monad.
+-- - A proof in the random oracle model passes a query to the oracle instead.
+--
+-- So the definitions that run are the definitions that the security proof is about.
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-- The bytes one tweakable hash call hashes: `PK.seed | ADRS | M`. -/
 def thInput (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) : ByteArray :=
   -- Fixed-length prefixes, so the input splits back into its three parts one way.
+  --
+  -- `PK.seed` has 16 bytes and `ADRS` 32, so the payload `M` always starts at byte 48.
   packBytes pkSeed ++ packBytes adrs ++ payload
 
 /-- `Th(PK.seed, ADRS, M)`: hash a payload under one address of one key, cut to `n` bytes.
@@ -70,6 +69,8 @@ def th (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) : m Digest := do
   -- `Th(PK.seed, ADRS, M) = Trunc_n(H(PK.seed | ADRS | M))`.
   --
   -- It is FIPS 205 §11.1, with Keccak-256 in place of SHAKE256.
+  --
+  -- `Trunc_n` keeps the first `n = 16` bytes of the output of `H`.
   return trunc N (← H (thInput pkSeed adrs payload))
 
 /-! ## Secret values -/
