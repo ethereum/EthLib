@@ -47,15 +47,6 @@ def SecondPreimage.Valid (leaves : Nat → Id α) (w : SecondPreimage α) : Prop
 
 The climb starts at position `p`, from node `b`, with siblings `t`.
 
-On each level:
-
-- the climb orders its node with its next sibling and hashes the pair into the parent;
-- the search computes the honest children of that parent, and the honest parent;
-- if the pair is not the honest children but the parent is honest, the search returns it;
-- otherwise the climb continues from its parent.
-
-The result is `none` when the siblings run out first.
-
 The search runs in any monad, so a random oracle can answer its hashes.
 
 On each level it hashes the climb's pair first, then computes the honest nodes. -/
@@ -63,18 +54,18 @@ def findSecondPreimage {m : Type → Type} [Monad m] [DecidableEq α]
     (hash : Position → α → α → m α) (leaves : Nat → m α) :
     (p : Position) → (b : α) → (t : List α) → m (Option (SecondPreimage α))
   | p, b, v :: t => do
-    -- The pair the climb hashes on this level, and the parent it gets.
+    -- The climb orders its node with its next sibling and hashes the pair into the parent.
     let y := ordered p b v
     let parent ← hash p.parent y.1 y.2
-    -- The honest children of that parent, and the honest parent.
+    -- The search computes the honest children of that parent, and the honest parent.
     let left ← node hash leaves p.parent.left
     let right ← node hash leaves p.parent.right
     let honest ← node hash leaves p.parent
-    -- A wrong pair with an honest output: this level is the second preimage.
+    -- If the pair is not the honest children but the parent is honest, the search returns it.
     if y ≠ (left, right) ∧ parent = honest then return some ⟨p.parent, y⟩
-    -- Otherwise climb one level and compare again, from the climb's parent.
+    -- Otherwise the climb continues from its parent, and the search compares again.
     else findSecondPreimage hash leaves p.parent parent t
-  -- The siblings have run out, so no level is left to compare.
+  -- The result is `none` when the siblings run out first.
   | _, _, [] => pure none
 
 /-- One level of the search, written without the monad, to rewrite with in proofs.

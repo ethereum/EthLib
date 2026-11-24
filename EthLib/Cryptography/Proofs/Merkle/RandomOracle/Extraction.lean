@@ -10,15 +10,15 @@ From the queries made before a root is published, an extractor reads what any op
 
 A verified opening that disagrees with it has a small probability, bounded by query counts.
 
-Source: Chiesa and Yogev, "Building Cryptographic Proofs from Hash Functions", Lemma 18.5.1.
-
-<https://snargsbook.org>
+Source: Chiesa and Yogev, ["Building Cryptographic Proofs from Hash Functions"][book], Lemma 18.5.1.
 
 The model differs from the book's.
 
 - One random oracle hashes every node, on the input (position, left child, right child).
 - The leaves are digests, with no leaf hash and no salt.
 - So the results cover trees that tweak each node hash by its position, not untweaked trees.
+
+[book]: https://snargsbook.org
 -/
 
 @[expose] public section

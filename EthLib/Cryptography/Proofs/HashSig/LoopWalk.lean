@@ -14,14 +14,6 @@ A position is fresh (not queried, it lands with probability `p`), a cached miss 
 
 The walk pays at a cached hit, at a fresh position that lands, or when the attempts run out.
 
-The successor must not return to a position within the attempt limit.
-
-Then a query at a fresh position changes the mean payoff in proportion to the chance to reach it.
-
-The fresh starts reach a given position with total weight at most `(1 - p) / p`.
-
-Summed over the starts, a query raises the mean payoff by at most `2 - p` fresh-view gains.
-
 Nothing here mentions hashing.
 -/
 
@@ -209,7 +201,12 @@ theorem walk_update_of_not_visit [DecidableEq α] (st : α → St) (item : α �
       | miss => rw [walk_succ_miss _ _ _ _ (hst.trans h'), walk_succ_miss _ _ _ _ h', ih]
       | fresh => rw [walk_succ_fresh _ _ _ _ (hst.trans h'), walk_succ_fresh _ _ _ _ h', ih]
 
-/-! ### Reaching a position -/
+/-! ### Reaching a position
+
+The successor must not return to a position within the attempt limit.
+
+Then a query at a fresh position changes the mean payoff in proportion to the chance to reach it.
+-/
 
 variable (σ p) in
 /-- The probability that the walk from a start reaches the position `y`, which is one at `y`. -/
@@ -318,7 +315,10 @@ theorem probe_eq (hp : p ≤ 1) (st : α → St) (item : α → ℝ≥0∞) (fr 
               _ = p * fr + (1 - p) * (W + p * ρ * c) := by rw [hsplit, ih]
               _ = _ := by ring
 
-/-! ### The fresh starts that reach a position -/
+/-! ### The fresh starts that reach a position
+
+The fresh starts reach a given position with total weight at most `(1 - p) / p`.
+-/
 
 /-- The probability of passing the `i` positions before `y`, from the farthest one. -/
 noncomputable def pass (σ : Equiv.Perm α) (p : ℝ≥0∞) (st : α → St) (y : α) : ℕ → ℝ≥0∞
@@ -477,7 +477,10 @@ theorem sum_reach_le (hp : p ≤ 1) (st : α → St) (y : α) (A : ℕ)
 
 end Reach
 
-/-! ### The value of a message: all starts -/
+/-! ### The value of a message: all starts
+
+Summed over the starts, a query raises the mean payoff by at most `2 - p` fresh-view gains.
+-/
 
 section Group
 

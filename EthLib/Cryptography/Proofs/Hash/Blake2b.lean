@@ -7,27 +7,23 @@ public import Mathlib.Logic.Function.Defs
 /-!
 # Proofs: `Hash.Blake2b`
 
-The constants and the rounds of F, against [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693).
+The constants and the rounds of F, against [RFC 7693][rfc].
 
-- The IV is what §2.6 derives from the square roots of the first eight primes.
-- Each row of the message schedule is a permutation of the 16 word indices.
-- Round `i` uses row `i mod 10`, and a run of rounds splits into two runs.
-- Rotating a word by `n` bits with `0 < n < 64` has rotation by `64 - n` as its inverse.
-- G on a four-word cycle, one round, and every run of rounds permute the work vector.
-- F, read as 64-bit vectors, is the F of a model of §3.1 and §3.2, for every round count.
+F, read as 64-bit vectors, is the F of a model of §3.1 and §3.2, for every round count.
 
-The model works on 64-bit vectors and rotates with the rotation of bit vectors.
-
-It takes the offset counter as one 128-bit vector, as §3.2 does.
-
-It shares only the IV and the message schedule with the executable code.
+[rfc]: https://www.rfc-editor.org/rfc/rfc7693
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Hash.Blake2b
 
-/-! ## The model -/
+/-! ## The model
+
+The model works on 64-bit vectors and rotates with the rotation of bit vectors.
+
+It shares only the IV and the message schedule with the executable code.
+-/
 
 namespace Spec
 
@@ -75,22 +71,20 @@ def rounds (m : Vector Word 16) (v : Vector Word 16) : Nat → Vector Word 16
 - `h` is the state and `m` is the message block.
 - `t` is the 128-bit offset counter and `f` is the final block flag.
 
-The work vector starts as the state followed by the IV.
-
-Word 12 takes `t mod 2^64` and word 13 takes `t >> 64`, both by exclusive-or.
-
-The final block inverts all bits of word 14.
-
-After the rounds, word `i` of the result is `h[i] ^ v[i] ^ v[i + 8]`.
+It takes the offset counter as one 128-bit vector, as §3.2 does.
 
 The RFC fixes `r = 12`, and EIP-152 lets the caller choose `r`. -/
 def compress (r : Nat) (h : Vector Word 8) (m : Vector Word 16) (t : BitVec 128) (f : Bool) :
     Vector Word 8 :=
+  -- The work vector starts as the state followed by the IV.
   let v : Vector Word 16 := h ++ IV.map UInt64.toBitVec
+  -- Word 12 takes `t mod 2^64` and word 13 takes `t >> 64`, both by exclusive-or.
   let v := v.set 12 (v[12] ^^^ t.setWidth 64)
   let v := v.set 13 (v[13] ^^^ (t >>> 64).setWidth 64)
+  -- The final block inverts all bits of word 14.
   let v := if f then v.set 14 (~~~v[14]) else v
   let v := rounds m v r
+  -- After the rounds, word `i` of the result is `h[i] ^ v[i] ^ v[i + 8]`.
   Vector.ofFn fun i => h[i] ^^^ v[i] ^^^ v[i.val + 8]
 
 end Spec

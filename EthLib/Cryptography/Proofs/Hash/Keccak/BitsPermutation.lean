@@ -14,8 +14,6 @@ FIPS 202 §3.1.2 places bit `z` of lane `(x, y)` at position `64 * (x + 5 * y) +
 
 This file reads each lane state at those positions.
 
-Each step mapping commutes with that reading.
-
 So the two permutations agree on every state.
 -/
 
@@ -52,7 +50,10 @@ private theorem coordinates :
     (∀ x : Fin 5, x + 2 = xy (x.val + 2)) := by
   decide
 
-/-! ## The step mappings -/
+/-! ## The step mappings
+
+Each step mapping commutes with that reading.
+-/
 
 /-- Pi agrees with the lane implementation at every state bit. -/
 theorem pi_ofLanes (a : Keccak.State) : ofLanes (Keccak.pi a) = pi (ofLanes a) := by

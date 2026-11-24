@@ -14,8 +14,6 @@ FIPS 202 Appendix B.1 orders the bits of each byte from least significant to mos
 
 This file proves that the two sponges agree in that order for one squeezed block.
 
-The proof covers every positive byte rate that is a multiple of 8.
-
 FIPS 202 §4 defines the sponge only for rates below 200 bytes, which include those of both hashes.
 
 Keccak-256 and Keccak-512 therefore equal their bit models on every message.
@@ -381,7 +379,9 @@ theorem outputByte_eq_squeeze512 (a : Keccak.State) (i : Fin 64) :
 
 /-- A squeeze that reads the first `outBytes` output bytes of the absorbed state is the bit sponge.
 
-The output fits in one rate block, so FIPS 202 Algorithm 8 stops before another permutation. -/
+The output fits in one rate block, so FIPS 202 Algorithm 8 stops before another permutation.
+
+The proof covers every positive byte rate that is a multiple of 8. -/
 theorem sponge_eq_of_squeeze {rate outBytes : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate)
     (hout : outBytes ≤ rate) (sq : Keccak.State → Vector UInt8 outBytes)
     (hsq : ∀ (a : Keccak.State) (i : Fin outBytes), (sq a)[i] = outputByte (ofLanes a) i.val)

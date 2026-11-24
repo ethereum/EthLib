@@ -24,12 +24,7 @@ The proof rests on two facts.
 
 - The division is linear over GF(2): the XOR of two inputs gives the XOR of the remainders.
 - Feeding a remainder its own bits, highest first, shifts every bit out and leaves 0.
-
-The digest is the complemented remainder.
-
-So feeding it is feeding the remainder's own bits, XORed with 32 ones.
-
-By linearity, the result is the remainder of 32 ones fed into 0. -/
+-/
 
 /-- The division step tests the coefficient of x^31, which is bit 31 of the register. -/
 theorem top_eq_getLsbD (r : UInt32) : (r >>> 31 == 1) = r.toBitVec.getLsbD 31 := by
@@ -163,10 +158,15 @@ def residue : UInt32 := (List.replicate 32 true).foldl (shift g) 0
 /-- Every message followed by its digest leaves the residue of the generator. -/
 theorem remainder_append_digest (data : ByteArray) :
     remainder g (data ++ ⟨(digest g data).toArray⟩) = residue g := by
+  -- The digest is the complemented remainder.
+  --
+  -- So feeding it is feeding the remainder's own bits, XORed with 32 ones.
+  --
   -- The bits of the complement are the bits of the remainder, each XORed with 1.
   have flip : topBits (~~~remainder g data) 32
       = List.zipWith (· ^^ ·) (topBits (remainder g data) 32) (List.replicate 32 true) := by
     simp [topBits, List.range_succ]
+  -- By linearity, the result is the remainder of 32 ones fed into 0.
   have linear := foldl_shift_xor g (topBits (remainder g data) 32) (List.replicate 32 true)
     (by simp [topBits]) (remainder g data) 0
   rw [UInt32.xor_zero] at linear

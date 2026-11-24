@@ -8,15 +8,11 @@ public import EthLib.Cryptography.Hash.Hmac
 
 Every HMAC-SHA-256 tag is 32 bytes long.
 
-The key block follows step (1) of [RFC 2104 §2](https://www.rfc-editor.org/rfc/rfc2104#section-2).
-
-A key of at most `B = 64` bytes is padded with zero bytes to `B` bytes.
-
-A longer key is hashed first, and its 32-byte hash is padded the same way.
-
-So zero bytes appended to a short key do not change the tag.
+The key block follows step (1) of [RFC 2104 §2][rfc2104].
 
 The pads act byte by byte, as steps (2) and (5) of the RFC XOR the key block with `ipad` and `opad`.
+
+[rfc2104]: https://www.rfc-editor.org/rfc/rfc2104#section-2
 -/
 
 @[expose] public section
@@ -34,7 +30,9 @@ theorem blockKey_of_le {key : ByteArray} (h : key.size ≤ Sha256.BLOCK_SIZE_BYT
     blockKey key = key ++ ⟨Array.replicate (Sha256.BLOCK_SIZE_BYTES - key.size) 0⟩ := by
   rw [blockKey, ite_eq_right (Nat.not_lt.mpr h)]
 
-/-- A key longer than `B` bytes is hashed, and its hash is padded with zero bytes to `B` bytes. -/
+/-- A key longer than `B` bytes is hashed first.
+
+Its 32-byte hash is padded with zero bytes to `B` bytes. -/
 theorem blockKey_of_lt {key : ByteArray} (h : Sha256.BLOCK_SIZE_BYTES < key.size) :
     blockKey key = Sha256.hash key ++ ⟨Array.replicate (Sha256.BLOCK_SIZE_BYTES - 32) 0⟩ := by
   rw [blockKey, ite_eq_left h, Sha256.hash_size]

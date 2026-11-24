@@ -11,14 +11,6 @@ HKDF expands the key `HMAC-Hash(salt, IKM)` of RFC 5869 §2.2.
 The expansion computes the blocks `T(1), T(2), ...` of [RFC 5869 §2.3][rfc5869].
 
 [rfc5869]: https://www.rfc-editor.org/rfc/rfc5869#section-2.3
-
-`T(0)` is empty, and `T(i)` is `HMAC-Hash(PRK, T(i - 1) | info | i)`.
-
-The output is the first `L` bytes of their concatenation.
-
-So a shorter output is a prefix of a longer one, for one key and one `info`.
-
-An empty salt gives the same pseudorandom key as `HashLen` zero bytes, the salt of RFC 5869 §2.2.
 -/
 
 @[expose] public section

@@ -10,29 +10,11 @@ A message of at most 135 bytes pads to one block of 136 bytes.
 
 Keccak-256 of it is then one call to the permutation on that block, with a zero capacity.
 
-The output is the first 256 bits of the result.
-
-Here the permutation is uniform, and the adversary evaluates it and its inverse.
-
-An adversary with `q` such calls finds a collision with chance at most a ratio.
-
-Its numerator is `Q (Q - 1) / 2 * 2^1344 + Q * 2^1088`, with `Q = q + 2`.
-
-Its denominator is `2^1600 - Q`.
-
-That is about `Q (Q - 1) / 2^257 + Q / 2^512`.
-
-It finds a preimage of a given digest with chance at most `Q (2^1344 + 2^1088) / (2^1600 - Q)`.
-
-There `Q = q + 1`, and the bound is about `Q / 2^256 + Q / 2^512`.
-
 Appendix A.1, Table 4, of [FIPS 202][fips] covers SHA3-256, which has the same capacity.
 
 The table claims 128 bits against collisions for it.
 
 It claims 256 bits against preimages.
-
-The bounds above meet these two claims for one-block messages.
 
 [fips]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
 -/
@@ -204,7 +186,12 @@ theorem card_squeeze256_fiber_le (T : State) :
   · have : Fintype.card {p : Fin 5 × Fin 5 // ¬(p.2 = 0 ∧ p.1.val < 4)} = 21 := by decide
     rw [this, ← pow_mul]
 
-/-! ## The bounds -/
+/-! ## The bounds
+
+Here the permutation is uniform, and the adversary evaluates it and its inverse.
+
+The bounds meet the two claims of FIPS 202 for one-block messages.
+-/
 
 /-- A message of at most 135 bytes, which Keccak-256 absorbs in one block. -/
 abbrev ShortMessage := {m : ByteArray // m.size < RATE_256}
@@ -222,6 +209,8 @@ The adversary makes at most `q` calls to the permutation and its inverse, and `Q
 It finds two messages below 136 bytes with one digest with chance at most this ratio.
 
 The numerator is `Q (Q - 1) / 2 * 2^1344 + Q * 2^1088`, and the denominator `2^1600 - Q`.
+
+That is about `Q (Q - 1) / 2^257 + Q / 2^512`.
 
 For `Q ≥ 2^1600` the denominator is zero and the bound is trivial. -/
 theorem keccak256_collisionAdvantage_le (adversary : PermComp State (ShortMessage × ShortMessage))
@@ -243,6 +232,8 @@ The adversary gets a digest, and makes at most `q` calls to the permutation and 
 It returns a message below 136 bytes with that digest with chance at most this ratio.
 
 The ratio is `Q (2^1344 + 2^1088) / (2^1600 - Q)`, with `Q = q + 1`.
+
+That is about `Q / 2^256 + Q / 2^512`.
 
 For `Q ≥ 2^1600` the denominator is zero and the bound is trivial. -/
 theorem keccak256_preimageAdvantage_le

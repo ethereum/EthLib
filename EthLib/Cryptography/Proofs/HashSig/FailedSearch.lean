@@ -13,27 +13,7 @@ A search hashes the points of its trials `0, 1, ...` in order and stops at the f
 
 The hash is a lazily sampled random oracle, and the cache is shared by everyone who queries it.
 
-A search fails its first `T` trials when the cache holds a failing answer at each of their points.
-
-Some of those points may have been queried before the search starts, by anyone.
-
-Take a run from an empty cache with at most `n` hash calls.
-
-Its final cache holds a search that failed its first `T` trials with probability at most `n * q^T`.
-
-Here `q` is the chance that one uniform answer fails.
-
-The proof follows a potential.
-
-A search whose trials are partly cached, with no passing answer among them, weighs `q^(T - k)`.
-
-Here `k` counts its cached trials, so for `T >= 1` a search that failed all `T` trials weighs 1.
-
-A fresh answer at a point of a touched search does not raise its expected weight.
-
-A fresh answer at a point of an untouched search raises the expected total by at most `q^T`.
-
-So each hash call adds at most `q^T` to the expected total, and the total starts at 0.
+The points of a search may have been queried before the search starts, by anyone.
 -/
 
 @[expose] public section
@@ -193,6 +173,7 @@ theorem wp_searchWeight_cacheQuery_le
     wp ($ᵗ R) (fun u => searchWeight point fail T q (cache.cacheQuery t u) p) ≤
       searchWeight point fail T q cache p +
         if (∃ j < T, point p j = t) ∧ ∀ j < T, cache (point p j) = none then q ^ T else 0 := by
+  -- A fresh answer at a point of a touched search does not raise its expected weight.
   by_cases hp : ∃ j < T, point p j = t
   swap
   · -- No trial of the search hashes the point, so its weight does not move.
@@ -463,8 +444,13 @@ theorem prEvent_failedSearch_le (hT : 1 ≤ T)
       z.2 ≤ n) :
     Pr{let z ← (simulateQ (ι →ₒ R).romImpl oa).run ∅}[FailedSearch point fail T z.2] ≤
       (n : ℝ≥0∞) * Pr{let u ← $ᵗ R}[fail u] ^ T := by
+  -- The proof follows a potential.
+  --
   -- A failed search means a potential of at least 1.
+  --
+  -- A search that failed all `T` trials has `k = T` cached trials, so for `T >= 1` it weighs 1.
   rw [prEvent_eq_wp_propInd]
+  -- Each hash call adds at most `q^T` to the expected total, and the total starts at 0.
   refine (wp_mono _ fun z => ?_).trans ((wp_searchPotential_le point fail T hinj _ le_rfl cost
     hcost oa n ∅ hn).trans_eq (by rw [searchPotential_empty, zero_add]))
   by_cases h : FailedSearch point fail T z.2

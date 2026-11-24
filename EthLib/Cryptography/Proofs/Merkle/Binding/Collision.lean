@@ -11,11 +11,7 @@ On each level it orders its node with the next sibling, left child first, and ha
 
 Two climbs from one position that reach one root are the same climb, or expose a collision.
 
-At the first level where they become equal, two different pairs hash to one node.
-
 So two trees of height `h` with one root agree on every leaf below `2^h`, or expose a collision.
-
-The search runs in any monad, so a random oracle can answer its hash calls.
 -/
 
 @[expose] public section
@@ -47,15 +43,6 @@ def Collision.Valid (c : Collision α) : Prop :=
 
 Both climbs start at position `p`, one from node `a` with siblings `s`, one from `b` with `t`.
 
-On each level:
-
-- each climb orders its node with its next sibling, left child first;
-- each climb hashes its pair into the parent;
-- if the pairs differ and the parents agree, the search returns that collision;
-- otherwise both climbs continue from their parents.
-
-The result is `none` when a list of siblings runs out first.
-
 The search runs in any monad, so a random oracle can answer its hashes.
 
 It makes two hash calls per level, the first climb's first. -/
@@ -63,17 +50,19 @@ def findCollision {m : Type → Type} [Monad m] [DecidableEq α]
     (hash : Position → α → α → m α) :
     (p : Position) → (a b : α) → (s t : List α) → m (Option (Collision α))
   | p, a, b, u :: s, v :: t => do
+    -- Each climb orders its node with its next sibling, left child first.
+    --
     -- The parity of the index says on which side each held node sits.
     let x := ordered p a u
     let y := ordered p b v
-    -- Hash both pairs at the parent's position.
+    -- Each climb hashes its pair into the parent, at the parent's position.
     let parentA ← hash p.parent x.1 x.2
     let parentB ← hash p.parent y.1 y.2
-    -- Different inputs with one output: this level is the collision.
+    -- If the pairs differ and the parents agree, the search returns that collision.
     if x ≠ y ∧ parentA = parentB then return some ⟨p.parent, x, y⟩
-    -- Otherwise climb one level and compare again, from the two parents.
+    -- Otherwise both climbs continue from their parents, and compare again.
     else findCollision hash p.parent parentA parentB s t
-  -- A list of siblings has run out, so no level is left to compare.
+  -- The result is `none` when a list of siblings runs out first.
   | _, _, _, _, _ => pure none
 
 /-- One level of the search, written without the monad, to rewrite with in proofs.
@@ -173,6 +162,8 @@ theorem climb_binding [DecidableEq α] :
     | cons v rest' =>
       rw [climb_cons, climb_cons] at heq
       simp only [findCollision_cons]
+      -- At the first level where the climbs become equal, two different pairs hash to one node.
+      --
       -- When this level is a collision, the search stops here.
       by_cases hfound : ordered p a u ≠ ordered p b v ∧
           (hash p.parent (ordered p a u).1 (ordered p a u).2).run

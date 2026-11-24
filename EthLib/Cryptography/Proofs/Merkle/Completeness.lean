@@ -12,10 +12,6 @@ The statements hold for every node hash, run in the identity monad.
 The unfolding equations of a node hold in every monad.
 
 The file also proves the facts other proofs use to move a tree between hashes and monads.
-
-- Which levels a node, a path or a climb hashes at, so a hash can be changed elsewhere.
-- How a map of monads, such as answering oracle calls from a table, acts on the tree.
-- How a tree whose hash ignores the position splits into subtrees.
 -/
 
 @[expose] public section
@@ -168,7 +164,10 @@ theorem climb_map [LawfulMonad m] {β : Type} (hash' : Position → β → β �
     climb hash' p (f current) (siblings.map f) = f <$> climb hash p current siblings :=
   climb_map_ancestors hash hash' f siblings p current fun k _ _ => commute (p.ancestor k)
 
-/-! ## The levels a tree hashes at -/
+/-! ## The levels a tree hashes at
+
+Which levels a node, a path or a climb hashes at, so a hash can be changed elsewhere.
+-/
 
 /-- A node hashes only at levels 1 to its own.
 
@@ -456,11 +455,7 @@ theorem climb_path (leaves : Nat → Id α) (h j : Nat) :
 
 /-- The last step of a climb along a path of height `n + 1` hashes the children of the top node.
 
-The top node is the leaf's ancestor on level `n + 1`, the root when the leaf is in the tree.
-
-- After `n` steps the climb holds the leaf's ancestor on level `n`.
-- The last sibling is the other child of the top node.
-- The ancestor's position puts the two in order. -/
+The top node is the leaf's ancestor on level `n + 1`, the root when the leaf is in the tree. -/
 theorem ordered_climb_path_last (leaves : Nat → Id α) {h n : Nat} (hn : h = n + 1) (j : Nat) :
     ordered ((⟨0, j⟩ : Position).ancestor n)
         (climb hash ⟨0, j⟩ (leaves j).run ((path hash leaves h j).run.toList.take n)).run
@@ -469,6 +464,8 @@ theorem ordered_climb_path_last (leaves : Nat → Id α) {h n : Nat} (hn : h = n
           (node hash leaves ((⟨0, j⟩ : Position).ancestor (n + 1)).right).run) := by
   subst hn
   -- The path is the `n` siblings below level `n`, then the other node on level `n`.
+  --
+  -- That last sibling is the other child of the top node.
   have hsplit := siblings_succ_toList_concat hash leaves n ⟨0, j⟩
   have hlength : ((siblings hash leaves ⟨0, j⟩ n).run.toList).length = n := by simp
   rw [← Vector.getElem_toList (by simp)]
@@ -478,6 +475,7 @@ theorem ordered_climb_path_last (leaves : Nat → Id α) {h n : Nat} (hn : h = n
   simp only [hlength, Nat.sub_self, List.getElem_cons_zero]
   -- The climb over those siblings reaches the leaf's ancestor on level `n`.
   have hclimb := climb_siblings hash leaves n ⟨0, j⟩
+  -- The ancestor's position puts the two in order.
   rw [show (leaves j).run = (node hash leaves ⟨0, j⟩).run from rfl, hclimb,
     ordered_sibling (fun q => (node hash leaves q).run), Position.parent_ancestor]
 
@@ -491,7 +489,10 @@ theorem climb_path_root (leaves : Nat → Id α) {h j : Nat} (hj : j < 2 ^ h) :
   rw [climb_path, Nat.div_eq_of_lt hj]
   rfl
 
-/-! ## Trees that ignore the position -/
+/-! ## Trees that ignore the position
+
+How a tree whose hash ignores the position splits into subtrees.
+-/
 
 /-- In a tree that hashes every node alike, a node is the root of the subtree below it.
 

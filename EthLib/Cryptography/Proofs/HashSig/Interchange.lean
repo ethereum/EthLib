@@ -17,28 +17,6 @@ Take two hash computations that return the same value for every fixed answer fun
 They may query different inputs, in different orders.
 
 Inside any game, either one can replace the other, and the game's output keeps its distribution.
-
-The proof runs both computations, one after the other.
-
-Both outputs agree, since one answer function is consistent with the joint run.
-
-Then each computation can move past the rest of the game and be dropped.
-
-Some hash computations agree only on the answer functions that keep a few answers already fixed.
-
-A signer that derives its key again from a seed is one example.
-
-It agrees with a signer that reads the derived key once the cache holds the derivation's answers.
-
-Such computations can replace each other inside a game, from any cache that holds those answers.
-
-A relation packages this fact, for a set of known answers.
-
-It is closed under binds, under hash queries that add answers, and under logged adversary runs.
-
-With no known answer, it is interchangeability from every cache.
-
-The last section moves an adversary's requests to another oracle, with its log translated.
 -/
 
 @[expose] public section
@@ -139,7 +117,13 @@ theorem eq_of_mem_support_run_bind_run_of_le {α : Type} {known : spec₀.QueryC
 
 /-- Two hash computations that agree once `known` holds can replace each other.
 
-The continuation then has the same output distribution, from every cache that extends `known`. -/
+The continuation then has the same output distribution, from every cache that extends `known`.
+
+Some hash computations agree only on the answer functions that keep a few answers already fixed.
+
+A signer that derives its key again from a seed is one example.
+
+It agrees with a signer that reads the derived key once the cache holds the derivation's answers. -/
 theorem evalDist_interchange_of_le {α β γ : Type} [MeasurableSpace γ]
     {known : spec₀.QueryCache} (oa ob : OracleComp spec₀ α)
     (h : ∀ f : QueryImpl spec₀ Id, known.AgreesWithFn f →
@@ -150,16 +134,19 @@ theorem evalDist_interchange_of_le {α β γ : Type} [MeasurableSpace γ]
         (simulateQ (OracleSpec.romImpl spec₀) (cont w.1)).run w.2 >>= fun v ↦ g v.1] =
       𝒟[(simulateQ spec₀.randomOracle ob).run cache >>= fun w ↦
         (simulateQ (OracleSpec.romImpl spec₀) (cont w.1)).run w.2 >>= fun v ↦ g v.1] := by
+  -- The proof runs both computations, one after the other.
   calc _ = 𝒟[(simulateQ spec₀.randomOracle oa).run cache >>= fun w ↦
         (simulateQ spec₀.randomOracle ob).run w.2 >>= fun u ↦
         (simulateQ (OracleSpec.romImpl spec₀) (cont w.1)).run u.2 >>= fun v ↦ g v.1] :=
         evalDist_bind_congr_of_support _ _ _ fun w _ ↦
           (evalDist_simulateQ_run_bind_romImpl_discard ob (cont w.1) w.2 g).symm
+    -- Both outputs agree, since one answer function is consistent with the joint run.
     _ = 𝒟[(simulateQ spec₀.randomOracle oa).run cache >>= fun w ↦
         (simulateQ spec₀.randomOracle ob).run w.2 >>= fun u ↦
         (simulateQ (OracleSpec.romImpl spec₀) (cont u.1)).run u.2 >>= fun v ↦ g v.1] :=
         evalDist_bind_congr_of_support _ _ _ fun w hw ↦ evalDist_bind_congr_of_support _ _ _
           fun u hu ↦ by rw [eq_of_mem_support_run_bind_run_of_le oa ob h hle hw hu]
+    -- Then each computation can move past the rest of the game and be dropped.
     _ = 𝒟[(simulateQ spec₀.randomOracle ob).run cache >>= fun u ↦
         (simulateQ spec₀.randomOracle oa).run u.2 >>= fun w ↦
         (simulateQ (OracleSpec.romImpl spec₀) (cont u.1)).run w.2 >>= fun v ↦ g v.1] :=
@@ -215,7 +202,9 @@ def RomEquiv {α : Type} (x y : OracleComp (unifSpec + spec₀) α) : Prop :=
 
 /-- Two computations are interchangeable once the cache holds `known`.
 
-Followed by any continuation, they give one output distribution from each cache above `known`. -/
+Followed by any continuation, they give one output distribution from each cache above `known`.
+
+It is closed under binds, under hash queries that add answers, and under logged adversary runs. -/
 def RomEquivFrom {α : Type} (known : spec₀.QueryCache) (x y : OracleComp (unifSpec + spec₀) α) :
     Prop :=
   ∀ {β : Type} [MeasurableSpace β] (cont : α → OracleComp (unifSpec + spec₀) β)
@@ -443,6 +432,7 @@ theorem run_simulateQ_withLogging {ιS : Type} {S : OracleSpec.{0, 0} ιS} {α :
 
 end RomEquiv
 
+-- This section moves an adversary's requests to another oracle, with its log translated.
 section Translate
 
 variable {ιW : Type} {W : OracleSpec.{0, 0} ιW} {D₁ R₁ D₂ R₂ : Type}
