@@ -108,6 +108,7 @@ public import EthLib.Serialization.Proofs.Ssz.Flat.Bounded
 public import EthLib.Serialization.Proofs.Ssz.Flat.Fold
 public import EthLib.Serialization.Proofs.Ssz.Flat.Walk
 public import EthLib.Serialization.Proofs.Ssz.Typed.Class
+public import EthLib.Serialization.Proofs.Ssz.Typed.Bounds
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Choice
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections

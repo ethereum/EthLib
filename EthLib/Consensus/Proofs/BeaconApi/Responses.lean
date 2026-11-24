@@ -7,7 +7,7 @@ public import EthLib.Consensus.BeaconApi.StateQueries
 
 Writing an answer as JSON fails only with code 500, and passes each refusal of the answer on.
 
-When the writer succeeds on the value, the answer in JSON refuses exactly when the value does.
+When the writer succeeds on the value, the answer in JSON or SSZ refuses exactly when it does.
 -/
 
 @[expose] public section
@@ -82,5 +82,18 @@ theorem versioned_eq_error_iff {α : Type} [SszType α] [ApiSpelling α] {fork :
     versioned fork field = .error error ↔ field = .error error := by
   unfold versioned
   exact apiJsonOr500_bind_eq_error_iff written
+
+/-- An answer written as SSZ refuses exactly when the answer does, with the same error.
+
+It needs the SSZ writer to succeed on the value of the answer, when there is one. -/
+theorem apiSszOr500_bind_eq_error_iff {α : Type} [SszType α] {answer : Except ErrorMessage α}
+    {error : ErrorMessage}
+    (written : ∀ value, answer = .ok value → ∃ data, toApiSsz value = .ok data) :
+    (answer >>= apiSszOr500) = .error error ↔ answer = .error error := by
+  cases answer with
+  | error fault => simp [bind, Except.bind]
+  | ok value =>
+    obtain ⟨data, wrote⟩ := written value rfl
+    simp [apiSszOr500, wrote, Except.mapError, bind, Except.bind]
 
 end EthLib.Consensus.BeaconApi
