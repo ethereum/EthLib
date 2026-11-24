@@ -16,12 +16,6 @@ The committee and the signers of each one succeed.
 Each one is as inclusion in a block stored it, in the epoch of its list.
 
 One slot keeps both facts, and so does a run of slots.
-
-At the end of an epoch the current list becomes the previous one, and its committees stay.
-
-They stay since the epoch step keeps the active validators and the mix that the seed reads.
-
-From Altair both facts hold, since there are no pending attestations.
 -/
 
 @[expose] public section
@@ -95,6 +89,9 @@ theorem PendingResolved.of_advanceSlot
     · rw [signers _ (current attestation inCurrent).1
         (by rw [previousEq]; exact getPreviousEpoch_le state) (UInt64.le_refl _)]
       exact resolved before attestation (.inr inCurrent)
+  -- At the end of an epoch the current list becomes the previous one, and its committees stay.
+  --
+  -- They stay since the epoch step keeps the active validators and the mix that the seed reads.
   · rw [moved, emptied] at member
     have previousEq : getPreviousEpoch after = getCurrentEpoch state :=
       UInt64.toNat_inj.mp (by omega)

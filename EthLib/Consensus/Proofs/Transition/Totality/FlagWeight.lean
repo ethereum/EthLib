@@ -9,25 +9,9 @@ import EthLib.Consensus.Proofs.Transition.StateTransition
 /-!
 # Proofs: the weight of the flags within an epoch
 
-From Altair, a block pays its proposer for the attestations it includes.
+From Altair, the weight of the flags bounds what a block pays its proposer for attestations.
 
-That reward is at most the rise of the weight of the flags, over 448.
-
-Within an epoch the base reward per increment stays.
-
-So these rises add up to at most the weight at its end.
-
-That weight sums over the validators with a flag set, in the previous and the current epoch.
-
-The base reward per increment shrinks as the total active balance grows.
-
-So the weight needs a bound by the active balances, not by the effective balances of the registry.
-
-It holds when each validator with a flag set in an epoch is active at that epoch.
-
-The active balance of the previous epoch still needs its own bound by the run.
-
-An empty slot that does not end an epoch keeps the flags, the registry and the active balance.
+This module bounds that weight by the active balances of the two recent epochs.
 -/
 
 @[expose] public section
@@ -45,16 +29,27 @@ def activeBalanceAt (state : BeaconState preset fork) (epoch : Epoch) : Nat :=
 
 /-- The weight of the flags is within the active balances of the two recent epochs.
 
-Each epoch counts 54 times the base reward of one increment.
-
-It counts it once per whole increment of the active balance at that epoch.
-
-Both epochs read the effective balances of the state, not those at that epoch.
-
-The base reward is that of one increment at the total active balance of the state.
-
-It holds trivially before Altair, and when the total active balance cannot be computed. -/
+It always holds before Altair, and when the total active balance cannot be computed. -/
 def FlagsWithinActive (state : BeaconState preset fork) : Prop :=
+  -- From Altair, a block pays its proposer for the attestations it includes.
+  --
+  -- That reward is at most the rise of this weight, over 448.
+  --
+  -- Within an epoch the base reward per increment stays.
+  --
+  -- So these rises add up to at most the weight at the end of the epoch.
+  --
+  -- That base reward shrinks as the total active balance grows.
+  --
+  -- So the weight needs a bound by active balances, not by effective balances of the registry.
+  --
+  -- The active balance of the previous epoch still needs its own bound by the run.
+  --
+  -- The base reward is that of one increment at the total active balance of the state.
+  --
+  -- Each epoch counts 54 times it, once per whole increment of its active balance.
+  --
+  -- Both epochs read the effective balances of the state, not those at that epoch.
   flagRewardWeight preset (blockPerIncrement preset state) state ≤
     (activeBalanceAt state (getPreviousEpoch state) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
       activeBalanceAt state (getCurrentEpoch state) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *

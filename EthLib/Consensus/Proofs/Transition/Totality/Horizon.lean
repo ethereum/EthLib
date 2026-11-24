@@ -9,13 +9,7 @@ A run of slots without blocks stops finalizing, and after a few epochs the chain
 
 From Altair, in each epoch each inactivity score grows by at most the score bias.
 
-The inactivity penalty multiplies an effective balance by a score, and that product must fit.
-
-So a bound on the scores holds only for a number of epochs, the horizon.
-
-It counts the epochs before the largest cap on an effective balance times a score reaches `2^64`.
-
-From scores of zero on mainnet, it is at least `2.25 * 10^6` epochs, about 27 years.
+The horizon counts the epochs before the largest cap times a score reaches `2^64`.
 -/
 
 @[expose] public section
@@ -30,6 +24,9 @@ That room is divided by the score bias, which must be positive; at zero the hori
 
 The bound at the start must fit with the largest cap, else the horizon is zero too. -/
 def Preset.horizon (preset : Preset) (config : Config) (scoreStart : Nat) : Nat :=
+  -- The inactivity penalty multiplies an effective balance by a score, and that product must fit.
+  --
+  -- So a bound on the scores holds only for this many epochs.
   ((2 ^ 64 - 1) / preset.largestEffectiveBalance - scoreStart) /
     config.INACTIVITY_SCORE_BIAS.toNat
 

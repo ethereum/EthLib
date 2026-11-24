@@ -364,12 +364,6 @@ private theorem PendingFacts.of_advanceSlotsAcross
 
 /-- A block that the transition accepts keeps the facts on the pending attestations.
 
-The state advances to the slot of the block, with the upgrades on the way.
-
-Before Altair, the pending attestations stay well formed and resolved.
-
-Each keeps its target in the epoch of its list and of its slot, and its source at the checkpoint.
-
 At every fork, the early justified checkpoints stay equal.
 
 The least inclusion delay must be positive.
@@ -385,15 +379,20 @@ theorem stateTransitionAcross_pending {forked : ForkedBeaconState preset}
       stateTransitionAcross config checks engine forked signed validateResult = .ok after) :
     PendingWellFormed after ∧ PendingResolved after ∧ PendingVoted Set.univ after ∧
       JustifiedEarly after := by
+  -- The state advances to the slot of the block, with the upgrades on the way.
   obtain ⟨advanced, slotsOk, applied⟩ := stateTransitionAcross_ok computed
   simp only [processSlotsAcross, bind_ok_iff, ensure_ok_iff] at slotsOk
   obtain ⟨_, _, advancedOk⟩ := slotsOk
   obtain ⟨wellFormed', resolved', voted', early'⟩ : PendingFacts advanced :=
     PendingFacts.of_advanceSlotsAcross apart ⟨wellFormed, resolved, voted, early⟩ advancedOk
   have blockOk := (applySignedBlock_ok applied).2.1
+  -- Before Altair, the pending attestations stay well formed and resolved.
   refine ⟨wellFormed'.of_processBlock delay blockOk,
     resolved'.of_processBlock apart wellFormed' blockOk, ?_,
     early'.of_frame (frame_processBlock blockOk)⟩
+  -- Each keeps its target in the epoch of its list and of its slot.
+  --
+  -- Each keeps its source at the checkpoint.
   by_cases before : fork < .altair
   · exact (voted'.of_processBlock before apart blockOk).mono (Set.subset_univ _)
   · exact PendingVoted.of_altair (Nat.le_of_not_lt before) after

@@ -6,25 +6,9 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 /-!
 # Proofs: the update of the inactivity scores succeeds
 
-From Altair the step lists the eligible validators.
+From Altair, the update succeeds when each score plus the score bias fits in 64 bits.
 
-It also lists those that hit the target of the previous epoch.
-
-It tests for a leak, which subtracts the finalized epoch from the previous epoch.
-
-Each eligible validator that missed the target then gains the score bias, with a checked sum.
-
-The step succeeds when each score plus the bias fits in 64 bits.
-
-The registry must stay within its limit, so that each position is a validator index.
-
-The lists of scores and of flags must have one entry for each validator.
-
-The finalized epoch must be at most the previous epoch, so that the subtraction succeeds.
-
-The invariant gives it before justification and finalization, and that step keeps it.
-
-The invariant itself may fail after that step, which can justify the current epoch.
+It also needs the registry within its limit, and the finalized epoch at most the previous epoch.
 -/
 
 @[expose] public section
@@ -144,6 +128,11 @@ theorem processJustificationAndFinalization_finalizedSettled {after : BeaconStat
     (ordered : CheckpointsOrdered state) (settled : JustifiedSettled state)
     (computed : processJustificationAndFinalization state = .ok after) :
     FinalizedSettled after := by
+  -- Before this step, the invariant gives the finalized epoch at most the previous epoch.
+  --
+  -- This step keeps that bound.
+  --
+  -- The invariant itself may fail after this step, which can justify the current epoch.
   have first := UInt64.le_trans ordered.1 (UInt64.le_trans ordered.2 settled)
   have second := UInt64.le_trans ordered.2 settled
   obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
@@ -188,15 +177,11 @@ theorem isInInactivityLeak_eq_ok (finalized : FinalizedSettled state) :
 
 /-- From Altair, the update of the inactivity scores succeeds under bounds.
 
-The registry must stay within its limit.
-
-The finalized epoch must be at most the previous epoch.
+The registry must be within its limit, and the finalized epoch at most the previous epoch.
 
 The lists of scores and of flags must have one entry for each validator.
 
-Each score plus the score bias must be below 2^64.
-
-A score grows only when its validator missed the target, by the bias, so this bound is enough. -/
+Each score plus the score bias must be below 2^64. -/
 theorem processInactivityUpdates_total (config : Config) (altair : .altair ≤ fork)
     (within : state.RegistryWithinLimit) (finalized : FinalizedSettled state)
     (scored : InactivityScoresMatch state) (sized : ParticipationMatches state)
@@ -205,12 +190,22 @@ theorem processInactivityUpdates_total (config : Config) (altair : .altair ≤ f
     ∃ after, processInactivityUpdates config state altair = .ok after := by
   by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
   · exact ⟨state, processInactivityUpdates_genesis altair genesis⟩
+  -- The step lists the eligible validators.
+  --
+  -- The registry within its limit makes each position a validator index.
   obtain ⟨eligible, eligibleOk⟩ := getEligibleValidatorIndices_exists_ok within
+  -- It lists those that hit the target of the previous epoch.
   obtain ⟨hits, hitsOk, _⟩ := getUnslashedParticipatingIndices_exists_ok within altair
     TIMELY_TARGET_FLAG_INDEX (Or.inl rfl) sized
+  -- It tests for a leak, which subtracts the finalized epoch from the previous epoch.
+  --
+  -- The finalized epoch at most the previous epoch makes that subtraction succeed.
   have leakOk := isInInactivityLeak_eq_ok finalized
   have distinct := (getEligibleValidatorIndices_ok eligibleOk).1
   have inRange := getEligibleValidatorIndices_lt within eligibleOk
+  -- Each eligible validator that missed the target gains the score bias, with a checked sum.
+  --
+  -- A score grows only then, so the bound on each score plus the bias is enough.
   obtain ⟨scores, folded⟩ := foldlM_updateInactivityScore_exists_ok config
     (hit := markIndices state.validators.data.size hits) (leaking := _) eligible
     (state.inactivityScores altair) distinct fun index member =>
@@ -253,13 +248,7 @@ theorem processInactivityUpdates_score_le {config : Config} {altair : .altair �
       rw [value]
       split <;> omega
 
-/-- From Altair, the update of the scores keeps every score within a bound plus the score bias.
-
-Take a bound on every score before the update.
-
-After it, every score is at most that bound plus the bias.
-
-This holds when the update succeeds.
+/-- From Altair, a successful update raises a bound on every score by at most the score bias.
 
 The bound carries from one epoch to the next, with the bias added once per epoch. -/
 theorem processInactivityUpdates_scoreBound {config : Config} {altair : .altair ≤ fork}

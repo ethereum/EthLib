@@ -62,16 +62,15 @@ theorem computeSlotProposer_ok {state : BeaconState preset fork}
 
 /-- The draws of the proposers of an epoch end, at the seed of that epoch.
 
-Each slot of the epoch draws its proposer among the candidates, with a seed of its own.
-
-A validator at the cap of the draw makes them end.
-
 In the random oracle model, with at least one candidate, a search ends with high probability.
 
 Before Gloas a draw ends when a selection of one ends, but no theorem joins that to the bound.
 
 That is a bound on a probability, not a fact about the hash, so a run assumes the end. -/
 def ProposersDrawEnd (state : BeaconState preset fork) (epoch : Epoch) : Prop :=
+  -- Each slot of the epoch draws its proposer among the candidates, with a seed of its own.
+  --
+  -- A validator at the cap of the draw makes them end.
   ∀ seed, getSeed state epoch DOMAIN_BEACON_PROPOSER = .ok seed →
     ∀ slot, computeEpochAtSlot preset slot = epoch →
       ∃ proposer, computeSlotProposer state
@@ -296,12 +295,6 @@ theorem getBeaconProposerIndices_ok {state : BeaconState preset fork} {epoch : E
 
 The epoch it draws is the one after the seed lookahead, and it must be drawable.
 
-That epoch plus the length of the history of mixes stays below `2^64`.
-
-The seed lookahead is shorter than that history.
-
-The first slot of the epoch after it is at most `2^64`, so every slot of it fits in 64 bits.
-
 The step changes only the lookahead. -/
 theorem processProposerLookahead_ok (fulu : .fusaka ≤ fork) {state : BeaconState preset fork}
     (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 +
@@ -322,6 +315,11 @@ theorem processProposerLookahead_ok (fulu : .fusaka ≤ fork) {state : BeaconSta
   have second := Uint64.toNat_add_of_lt secondFits
   have epochNat : (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1).toNat + 1 =
       (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 2 := by omega
+  -- That epoch plus the length of the history of mixes stays below `2^64`.
+  --
+  -- The seed lookahead is shorter than that history.
+  --
+  -- The first slot of the epoch after it is at most `2^64`, so every slot of it fits in 64 bits.
   obtain ⟨proposers, drawn⟩ := getBeaconProposerIndices_ok (state := state)
     (epoch := getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1)
     (by omega) lookahead (by rw [epochNat]; exact slotRoom) drawable
@@ -334,15 +332,7 @@ theorem processProposerLookahead_ok (fulu : .fusaka ≤ fork) {state : BeaconSta
 
 It covers the current epoch and each epoch of the seed lookahead after it.
 
-Each of these epochs must be drawable.
-
-The last epoch drawn plus the length of the history of mixes stays below `2^64`.
-
-The seed lookahead is shorter than that history.
-
-The first slot of the epoch after the last one drawn is at most `2^64`.
-
-So every slot drawn fits in 64 bits. -/
+Each of these epochs must be drawable. -/
 theorem initializeProposerLookahead_ok {state : BeaconState preset fork}
     (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
@@ -367,6 +357,13 @@ theorem initializeProposerLookahead_ok {state : BeaconState preset fork}
     have fitsEpoch : (getCurrentEpoch state).toNat + offset.toUInt64.toNat < 2 ^ 64 := by
       omega
     have epochNat := Uint64.toNat_add_of_lt fitsEpoch
+    -- The last epoch drawn plus the length of the history of mixes stays below `2^64`.
+    --
+    -- The seed lookahead is shorter than that history.
+    --
+    -- The first slot of the epoch after the last one drawn is at most `2^64`.
+    --
+    -- So every slot drawn fits in 64 bits.
     obtain ⟨proposers, drawn⟩ := getBeaconProposerIndices_ok (state := state)
       (epoch := getCurrentEpoch state + offset.toUInt64) (by omega) lookahead
       (by

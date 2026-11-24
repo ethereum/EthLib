@@ -14,28 +14,6 @@ It then applies each list of deltas to the balances in turn.
 
 Its checked operations are products, sums and divisions of 64-bit integers.
 
-A base reward is the whole increments of an effective balance times the reward of one increment.
-
-That reward is a fixed factor of the increment over the square root of the total active balance.
-
-The total is at least one increment, so the reward of one increment is at most its value there.
-
-The reward of a flag multiplies the base reward by the weight of the flag.
-
-It also multiplies by the increments that set the flag, which the budget bounds.
-
-These increments are those of the previous epoch, while the total is that of the current epoch.
-
-So the first can exceed the second, and the bound does not use the square root of the total.
-
-The inactivity penalty multiplies the effective balance by the inactivity score.
-
-So the scores must stay small, which bounds the epochs of a run.
-
-Each delta is added once to a zero entry, since each eligible index comes once.
-
-A balance rises by at most the rewards of the three flags, which the budget must leave room for.
-
 The bounds on the presets and configurations are named here, with mainnet and minimal as cases.
 -/
 
@@ -68,6 +46,11 @@ Each of them earns the reward of one increment at the smallest total active bala
 
 That total is one increment. -/
 def Preset.baseRewardCeiling (preset : Preset) : Nat :=
+  -- A base reward is the whole increments of an effective balance, times the reward of each.
+  --
+  -- That reward is the increment times a factor, over the square root of the total active balance.
+  --
+  -- The total is at least one increment, so the reward of one increment is at most its value there.
   preset.largestEffectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
     (preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat.sqrt)
@@ -82,12 +65,19 @@ def Preset.budgetIncrements (preset : Preset) (budget : Nat) : Nat :=
 
 It is the budget plus a bound on the rewards of the three flags for one validator.
 
-Each flag earns at most the base reward bound, times its weight and the increments of the budget.
-
-The sum of these products over the three flags is then divided by the weight denominator, 64.
-
 The inactivity deltas carry no rewards, so they add nothing. -/
 def Preset.rewardsCeiling (preset : Preset) (budget : Nat) : Nat :=
+  -- The reward of a flag multiplies the base reward by the weight of the flag.
+  --
+  -- It also multiplies by the increments that set the flag, which the budget bounds.
+  --
+  -- These increments are those of the previous epoch, while the total is that of the current one.
+  --
+  -- So the first can exceed the second, and the bound does not use the square root of the total.
+  --
+  -- Each flag earns at most the base reward bound, times its weight and the budget increments.
+  --
+  -- The sum of these products over the three flags is then divided by the weight denominator, 64.
   budget + preset.baseRewardCeiling * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum *
     preset.budgetIncrements budget / WEIGHT_DENOMINATOR.toNat
 
@@ -95,29 +85,27 @@ def Preset.rewardsCeiling (preset : Preset) (budget : Nat) : Nat :=
 
 The budget bounds the balances and the sum of the effective balances.
 
-The score bound bounds the inactivity scores.
-
-The increment times the base reward factor must fit.
-
-So must the increments of the budget times the weight denominator, 64.
-
-The base reward bound times the weight of a flag times the increments of the budget must fit.
-
-A balance of the budget plus the rewards of the three flags must fit.
-
-Those rewards are at most that product summed over the weights, divided by 64.
-
-The largest cap times the score bound must fit.
-
-So must the score bias times the inactivity penalty quotient of each fork. -/
+The score bound bounds the inactivity scores. -/
 structure RewardsFit (preset : Preset) (config : Config) (budget scoreBound : Nat) : Prop where
+  -- The increment times the base reward factor must fit.
   perIncrement :
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64
+  -- So must the increments of the budget times the weight denominator, 64.
   activeIncrements : preset.budgetIncrements budget * WEIGHT_DENOMINATOR.toNat < 2 ^ 64
+  -- The base reward bound times the weight of a flag times the budget increments must fit.
   flagNumerator : ∀ weight ∈ PARTICIPATION_FLAG_WEIGHTS,
     preset.baseRewardCeiling * weight.toNat * preset.budgetIncrements budget < 2 ^ 64
+  -- A balance of the budget plus the rewards of the three flags must fit.
+  --
+  -- Those rewards are at most that product summed over the weights, divided by 64.
   flagRewards : preset.rewardsCeiling budget < 2 ^ 64
+  -- The inactivity penalty multiplies the effective balance by the inactivity score.
+  --
+  -- So the largest cap times the score bound must fit.
+  --
+  -- The scores must then stay small, which bounds the epochs of a run.
   scorePenalty : preset.largestEffectiveBalance * scoreBound < 2 ^ 64
+  -- So must the score bias times the inactivity penalty quotient of each fork.
   penaltyQuotient : ∀ fork : Base.Fork, config.INACTIVITY_SCORE_BIAS.toNat *
     (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat < 2 ^ 64
 
@@ -258,11 +246,7 @@ theorem addDelta_exists_ok_of_zero {deltas : Array Gwei} {index : ValidatorIndex
 
 It keeps the sizes of the two arrays.
 
-The base reward and the test for a leak must succeed.
-
-The base reward times the weight, and that times the participating increments, must fit.
-
-The active increments times the weight denominator must fit and be positive. -/
+The base reward and the test for a leak must succeed. -/
 private theorem addFlagDelta_exists_ok {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
     {participated : Array Bool} {total participatingIncrements activeIncrements : Gwei}
     {leak : Bool} (leaking : isInInactivityLeak state = .ok leak)
@@ -279,12 +263,14 @@ private theorem addFlagDelta_exists_ok {flagIndex : Fin PARTICIPATION_FLAG_WEIGH
     ∃ next, addFlagDelta state flagIndex participated total participatingIncrements
       activeIncrements (rewards, penalties) index = .ok next ∧
         next.1.size = rewards.size ∧ next.2.size = penalties.size := by
+  -- The base reward times the weight, and that times the participating increments, must fit.
   have weightOk := mulChecked_of_lt weighted
   have product : (base * PARTICIPATION_FLAG_WEIGHTS[flagIndex]).toNat *
       participatingIncrements.toNat < 2 ^ 64 := by
     rw [UInt64.toNat_mul, Nat.mod_eq_of_lt weighted]
     exact fits
   have numeratorOk := mulChecked_of_lt product
+  -- The active increments times the weight denominator must fit and be positive.
   have denominatorOk := mulChecked_of_lt active
   have nonzero : activeIncrements * WEIGHT_DENOMINATOR ≠ 0 := fun zero => by
     have := congrArg UInt64.toNat zero
@@ -321,10 +307,6 @@ private theorem mul_ne_zero_of_lt {a b : UInt64} (left : a ≠ 0) (right : b ≠
 
 The validator and its score must be in range, and the score must be at most a bound.
 
-The largest cap times that bound must fit.
-
-The score bias times the quotient must fit, and both must be positive.
-
 It keeps the size of the penalties. -/
 private theorem addInactivityScorePenalty_exists_ok {config : Config} (altair : .altair ≤ fork)
     {targetMatched : Array Bool} {penalties : Array Gwei} {index : ValidatorIndex}
@@ -341,8 +323,10 @@ private theorem addInactivityScorePenalty_exists_ok {config : Config} (altair : 
     (inside : index.toNat < penalties.size) (zero : penalties.getD index.toNat 0 = 0) :
     ∃ next, addInactivityScorePenalty config state altair targetMatched penalties index =
       .ok next ∧ next.size = penalties.size := by
+  -- The largest cap times that bound must fit.
   have product : validator.effectiveBalance.toNat * score.toNat < 2 ^ 64 :=
     Nat.lt_of_le_of_lt (Nat.mul_le_mul capped scored) fits
+  -- The score bias times the quotient must fit, and both must be positive.
   have nonzero := mul_ne_zero_of_lt biased positive quotient
   obtain ⟨penalized, penalizedOk⟩ := addDelta_exists_ok_of_zero
     (validator.effectiveBalance * score /
@@ -656,21 +640,7 @@ private theorem map_flag_weights :
       PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat) = PARTICIPATION_FLAG_WEIGHTS.map (·.toNat) := by
   decide
 
-/-- From Altair, the rewards and penalties succeed under bounds.
-
-The registry must stay within its limit, with one balance for each validator.
-
-Each effective balance must be at most the largest cap, as the cap of its validator is.
-
-The sum of the effective balances and each balance must be at most the budget.
-
-Each inactivity score must be at most the score bound, and the bounds must fit.
-
-The finalized epoch must be at most the previous epoch, so that the test for a leak succeeds.
-
-The lists of scores and of flags must have one entry for each validator.
-
-The divisors of the preset and of the configuration must be positive.
+/-- From Altair, the rewards and penalties succeed under bounds on the state and the scores.
 
 The hypotheses are read on the state that the update of the inactivity scores returns.
 
@@ -678,15 +648,26 @@ A run must show that they hold there.
 
 Each balance after the step is then at most the ceiling on the balances after the rewards. -/
 theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : Nat}
+    -- The divisors of the preset must be positive.
     (altair : .altair ≤ fork) (positive : preset.DivisorsPositive)
+    -- So must those of the configuration, and the bounds must fit.
     (configPositive : config.DivisorsPositive) (fit : RewardsFit preset config budget scoreBound)
+    -- The registry must stay within its limit, with one balance for each validator.
     (within : state.RegistryWithinLimit) (matched : BalancesMatch state)
+    -- Each effective balance must be at most the largest cap, as the cap of its validator is.
     (capped : ∀ validator ∈ state.validators.data,
       validator.effectiveBalance.toNat ≤ preset.largestEffectiveBalance)
+    -- The sum of the effective balances must be at most the budget.
     (summed : effectiveBalanceSum state ≤ budget)
+    -- Each balance must be at most the budget.
     (funded : ∀ balance ∈ state.balances.data, balance.toNat ≤ budget)
+    -- Each inactivity score must be at most the score bound.
     (scored : ∀ score ∈ (state.inactivityScores altair).data, score.toNat ≤ scoreBound)
+    -- The finalized epoch must be at most the previous epoch, so that the test for a leak succeeds.
+    --
+    -- The list of scores must have one entry for each validator.
     (finalized : FinalizedSettled state) (scoresMatch : InactivityScoresMatch state)
+    -- So must each list of flags.
     (sized : ParticipationMatches state) :
     ∃ after, processRewardsAndPenalties config state = .ok after ∧
       ∀ balance ∈ after.balances.data, balance.toNat ≤ preset.rewardsCeiling budget := by
@@ -719,6 +700,7 @@ theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : 
         base.toNat ≤ preset.baseRewardCeiling := fun index lt =>
     getBaseReward_le altair perOk perLe ceilingLt (Array.getElem?_eq_getElem lt)
       (largest _ (Array.getElem_mem lt))
+  -- Each delta is added once to a zero entry, since each eligible index comes once.
   obtain ⟨flagDeltas, flagOk⟩ := mapM_exists_ok (f := getFlagIndexDeltas state altair)
     (xs := List.finRange PARTICIPATION_FLAG_WEIGHTS.length) fun flagIndex _ =>
       getFlagIndexDeltas_exists_ok altair positive.increment fit within summed finalized sized
@@ -728,6 +710,7 @@ theorem processRewardsAndPenalties_total {config : Config} {budget scoreBound : 
       scored scoresMatch sized
   have small : state.validators.data.size < 2 ^ 64 :=
     Nat.lt_of_le_of_lt within preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  -- A balance rises by at most the rewards of the three flags, which the budget leaves room for.
   have ceiled : ∀ i (inside : i < state.balances.data.size), state.balances.data[i].toNat +
       ((flagDeltas ++ [(inactivityRewards, inactivityPenalties)]).map
         fun delta => (delta.1.getD i 0).toNat).sum ≤ preset.rewardsCeiling budget :=

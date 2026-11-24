@@ -11,37 +11,9 @@ Before Altair the step sums four lists of rewards and four lists of penalties, t
 
 The rewards and penalties of the source, target and head votes each depend on matching votes.
 
-A vote matches the target when its target is the block root at the first slot of the previous epoch.
-
-It matches the head when its head is also the block root at its own slot.
-
 The inclusion rewards go to each signer and to the proposer of its earliest inclusion.
 
 In a leak the inactivity penalties fall on each eligible validator.
-
-A base reward is an effective balance times a fixed factor, over the square root of the total.
-
-It is then divided among the four parts of an epoch reward.
-
-The total is at least one increment, so a base reward is at most its value there.
-
-A reward for a kind of vote multiplies the base reward by the increments that cast it.
-
-These increments are those of the previous epoch, so the budget bounds them, not the total.
-
-A proposer can earn a share of the base reward of every signer, once for each signer.
-
-So its inclusion reward is at most the bound on base rewards at the sum of the effective balances.
-
-The inactivity penalty multiplies an effective balance by the delay of finality.
-
-That delay is at most the current epoch, which the theorem bounds.
-
-The reads of block roots need the step to run at the last slot of an epoch.
-
-The slot of each matching vote is in the previous epoch, as inclusion in a block checked.
-
-The buffer of block roots then reaches it.
 -/
 
 @[expose] public section
@@ -65,27 +37,24 @@ def Preset.baseRewardBoundBeforeAltair (preset : Preset) (balance : Nat) : Nat :
 
 The budget bounds the balances and the sum of the effective balances.
 
-The epoch bound bounds the current epoch, and so the delay of finality.
-
-The largest cap times the base reward factor must fit.
-
-A balance of the budget plus all the rewards of a validator must fit.
-
-The rewards of the source, target and head votes are each at most one product.
-
-That product is the bound on the base reward of the largest cap, times the increments of the budget.
-
-The inclusion rewards of a validator are at most the bound on the base reward of the budget.
-
-All the penalties of a validator must fit.
-
-They are at most seven bounds on the base reward of the largest cap.
-
-They add the largest cap times the epoch bound. -/
+The epoch bound bounds the current epoch, and so the delay of finality. -/
 structure RewardsFitBeforeAltair (preset : Preset) (budget epochBound : Nat) : Prop where
+  -- The largest cap times the base reward factor must fit.
   product : preset.largestEffectiveBalance * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64
+  -- A balance of the budget plus all the rewards of a validator must fit.
+  --
+  -- The rewards of the source, target and head votes are each at most one product.
+  --
+  -- That product is the bound on the base reward of the largest cap, times the budget increments.
+  --
+  -- The inclusion rewards of a validator are at most the bound on the base reward of the budget.
   rewards : budget + 3 * preset.baseRewardBoundBeforeAltair preset.largestEffectiveBalance *
     preset.budgetIncrements budget + preset.baseRewardBoundBeforeAltair budget < 2 ^ 64
+  -- All the penalties of a validator must fit.
+  --
+  -- They are at most seven bounds on the base reward of the largest cap.
+  --
+  -- They add the largest cap times the epoch bound.
   penalties : 7 * preset.baseRewardBoundBeforeAltair preset.largestEffectiveBalance +
     preset.largestEffectiveBalance * epochBound < 2 ^ 64
 
@@ -123,14 +92,13 @@ theorem rewardsFitBeforeAltair_minimal :
 
 /-- Before Altair, a ceiling on the balances after the rewards of one epoch.
 
-It is the budget plus a bound on all the rewards that one validator can earn in the epoch.
-
-The source, target and head votes each earn at most one product.
-
-That product is the bound on the base reward of the largest cap, times the increments of the budget.
-
-The inclusion rewards earn at most the bound on the base reward of the budget. -/
+It is the budget plus a bound on all the rewards that one validator can earn in the epoch. -/
 def Preset.rewardsCeilingBeforeAltair (preset : Preset) (budget : Nat) : Nat :=
+  -- The source, target and head votes each earn at most one product.
+  --
+  -- That product is the bound on the base reward of the largest cap, times the budget increments.
+  --
+  -- The inclusion rewards earn at most the bound on the base reward of the budget.
   budget + 3 * preset.baseRewardBoundBeforeAltair preset.largestEffectiveBalance *
     preset.budgetIncrements budget + preset.baseRewardBoundBeforeAltair budget
 
@@ -158,12 +126,11 @@ Its slot is in the epoch of the list that holds it, the previous or the current 
 
 Its inclusion delay is not zero, as the least inclusion delay of mainnet and minimal ensures.
 
-The proposer that included it is a validator of the registry.
-
-The epoch step moves the list of the current epoch to that of the previous epoch.
-
-One slot keeps the property, including the step into the next epoch. -/
+The proposer that included it is a validator of the registry. -/
 def PendingWellFormed (state : BeaconState preset fork) : Prop :=
+  -- The epoch step moves the list of the current epoch to that of the previous epoch.
+  --
+  -- One slot keeps the property, including the step into the next epoch.
   ∀ before : fork < .altair,
     (∀ attestation ∈ (state.previousEpochAttestations before).data,
       computeEpochAtSlot preset attestation.data.slot = getPreviousEpoch state ∧
@@ -210,6 +177,11 @@ private theorem getBaseReward_le_of_lt_altair (before : fork < .altair)
     (capped : validator.effectiveBalance.toNat ≤ preset.largestEffectiveBalance) :
     ∃ base, getBaseReward state total index = .ok base ∧
       base.toNat ≤ preset.baseRewardBoundBeforeAltair validator.effectiveBalance.toNat := by
+  -- A base reward is an effective balance times a fixed factor, over the square root of the total.
+  --
+  -- It is then divided among the four parts of an epoch reward.
+  --
+  -- The total is at least one increment, so a base reward is at most its value there.
   have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
     Nat.pos_of_ne_zero fun zero => positive (UInt64.toNat_inj.mp (by simpa using zero))
   have root := toNat_integerSquareroot total
@@ -286,8 +258,6 @@ The step must run at the last slot of an epoch, and the buffer of block roots mu
 
 Each recent pending attestation must be as inclusion in a block stored it.
 
-Only the list of the previous epoch is read; the other half keeps the property through an epoch.
-
 They come from the list of the previous epoch. -/
 private theorem getMatchingHeadAttestations_previous (before : fork < .altair)
     (roots : preset.RootsReachPreviousEpoch)
@@ -296,6 +266,9 @@ private theorem getMatchingHeadAttestations_previous (before : fork < .altair)
     (genesis : getCurrentEpoch state ≠ GENESIS_EPOCH) (wellFormed : PendingWellFormed state) :
     ∃ head, getMatchingHeadAttestations state before (getPreviousEpoch state) = .ok head ∧
       ∀ attestation ∈ head, attestation ∈ (state.previousEpochAttestations before).data := by
+  -- Only the list of the previous epoch is read.
+  --
+  -- The other half keeps the property through an epoch.
   obtain ⟨target, targetOk, targetIn⟩ := getMatchingTargetAttestations_exists_ok before
     (.inl rfl) (getBlockRoot_exists_ok roots last room (.inl rfl))
   simp only [previousSource_eq before genesis] at targetIn
@@ -308,6 +281,11 @@ private theorem getMatchingHeadAttestations_previous (before : fork < .altair)
       let root ← liftAccessor (getBlockRootAtSlot state attestation.data.slot)
       pure (attestation.data.beaconBlockRoot == root) : Except TransitionError Bool))
     fun attestation member => by
+      -- The reads of block roots need the step to run at the last slot of an epoch.
+      --
+      -- The slot of each matching vote is in the previous epoch, as inclusion in a block checked.
+      --
+      -- The buffer of block roots then reaches it.
       have inEpoch := ((wellFormed before).1 attestation
         (targetIn attestation (Array.mem_toList_iff.mp member))).1
       obtain ⟨root, read⟩ := getBlockRootAtSlot_previous_exists roots last room genesis inEpoch
@@ -340,9 +318,7 @@ The signers of each matching attestation must succeed.
 
 Each base reward of the registry must succeed, at most a bound.
 
-That bound times the increments of the budget must fit.
-
-Each reward is then at most that product, and each penalty at most the bound. -/
+Each reward is then at most the bound times the budget increments; each penalty, the bound. -/
 private theorem getAttestationComponentDeltas_exists_le {budget ceiling : Nat}
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state ≤ budget)
     (budgetLt : budget < 2 ^ 64) (finalized : FinalizedSettled state) {total : Gwei}
@@ -362,6 +338,11 @@ private theorem getAttestationComponentDeltas_exists_le {budget ceiling : Nat}
   obtain ⟨attesters, attestersOk, inside⟩ := getUnslashedAttestingIndices_exists_ok resolved
   obtain ⟨attestingBalance, balanceOk, balanceLe⟩ :=
     getTotalBalance_exists_ok inside (Nat.lt_of_le_of_lt summed budgetLt)
+  -- A reward for a kind of vote multiplies the base reward by the increments that cast it.
+  --
+  -- These increments are those of the previous epoch, so the budget bounds them, not the total.
+  --
+  -- The bound on base rewards times the increments of the budget must fit.
   have incrementsLe : (attestingBalance / preset.EFFECTIVE_BALANCE_INCREMENT).toNat ≤
       preset.budgetIncrements budget :=
     toNat_div_le_budgetIncrements (le_trans balanceLe (max_le_max (le_refl _) summed))
@@ -445,9 +426,7 @@ private theorem sum_effectiveBalance_le {indices : List Nat} (distinct : indices
 
 Its proposer and the attester must be in the rewards, and its delay must not be zero.
 
-Each entry plus the base reward of the attester must fit.
-
-The size stays, and each entry rises by at most that base reward. -/
+The size stays, and each entry rises by at most the base reward of the attester. -/
 private theorem addInclusionReward_exists_le {total : Gwei}
     {earliest : Array (Option (PendingAttestation preset))} {rewards : Array Gwei}
     {index : ValidatorIndex} {attestation : PendingAttestation preset} {base : Gwei}
@@ -460,6 +439,7 @@ private theorem addInclusionReward_exists_le {total : Gwei}
     ∃ next, addInclusionReward state total earliest rewards index = .ok next ∧
       next.size = rewards.size ∧
       ∀ j, (next.getD j 0).toNat ≤ (rewards.getD j 0).toNat + base.toNat := by
+  -- Each entry plus the base reward of the attester must fit.
   have share := toNat_proposerReward_le (preset := preset) base
   have shareLe : proposerReward preset base ≤ base := UInt64.le_iff_toNat_le.mpr share
   obtain ⟨raised, raisedOk⟩ := addDelta_exists_ok (amount := proposerReward preset base) proposer
@@ -493,9 +473,7 @@ Each attester must have an earliest inclusion, with its proposer in the rewards 
 
 Its base reward must succeed, at most its weight.
 
-Each entry plus the sum of the weights must fit.
-
-Each entry then rises by at most that sum. -/
+Each entry then rises by at most the sum of the weights. -/
 private theorem foldlM_addInclusionReward_exists_le {total : Gwei}
     {earliest : Array (Option (PendingAttestation preset))} (weight : ValidatorIndex → Nat) :
     ∀ (attesters : List ValidatorIndex) (start : Array Gwei),
@@ -508,6 +486,7 @@ private theorem foldlM_addInclusionReward_exists_le {total : Gwei}
         ∀ j, (result.getD j 0).toNat ≤ (start.getD j 0).toNat + (attesters.map weight).sum
   | [], start, _, _ => ⟨start, rfl, fun j => by simp⟩
   | index :: rest, start, ready, fits => by
+    -- Each entry plus the sum of the weights must fit.
     obtain ⟨inside, ⟨attestation, found, proposer, delayed⟩, base, based, baseLe⟩ :=
       ready index List.mem_cons_self
     simp only [List.map_cons, List.sum_cons] at fits ⊢
@@ -529,8 +508,6 @@ Each base reward must succeed, at most the bound at the effective balance of its
 
 The sum of the effective balances must be at most the budget, whose bound must fit.
 
-The signers of each recent pending attestation must succeed, as inclusion in a block stored it.
-
 Each reward is then at most the bound at the budget. -/
 private theorem getInclusionDelayDeltas_exists_le {budget : Nat} (before : fork < .altair)
     (genesis : getCurrentEpoch state ≠ GENESIS_EPOCH)
@@ -546,6 +523,9 @@ private theorem getInclusionDelayDeltas_exists_le {budget : Nat} (before : fork 
       ∀ j, (rewards.getD j 0).toNat ≤ preset.baseRewardBoundBeforeAltair budget := by
   have sourceOk := getMatchingSourceAttestations_eq_ok (state := state) before (.inl rfl)
   rw [previousSource_eq before genesis] at sourceOk
+  -- The signers of each recent pending attestation must succeed.
+  --
+  -- Each one must be as inclusion in a block stored it.
   obtain ⟨signers, signersOk⟩ := mapM_exists_ok
     (xs := (state.previousEpochAttestations before).data.toList)
     (f := getPendingAttestingIndices state) fun attestation member =>
@@ -604,6 +584,10 @@ private theorem getInclusionDelayDeltas_exists_le {budget : Nat} (before : fork 
     refine ⟨by simpa using lt, ⟨attestation, found, by simpa using proposer, delayed⟩, base,
       based, ?_⟩
     simpa [balanceAt, Array.getElem?_eq_getElem lt] using baseLe
+  -- A proposer can earn a share of the base reward of every signer, once for each signer.
+  --
+  -- So its inclusion reward is at most the bound on base rewards at the sum of the balances.
+  --
   -- The weights of the attesters sum to at most the bound at the budget.
   have weights : (attesters.map fun index =>
       preset.baseRewardBoundBeforeAltair (balanceAt index.toNat)).sum ≤
@@ -638,8 +622,6 @@ The base reward must succeed, at most a bound, and the effective balance at most
 
 The delay of finality must be at most an epoch bound.
 
-Four bounds on base rewards plus the largest cap times the epoch bound must fit.
-
 It keeps the size of the penalties. -/
 private theorem addInactivityPenalty_exists_ok {total delay : Gwei} {targetMatched : Array Bool}
     {penalties : Array Gwei} {index : ValidatorIndex} {validator : Validator} {base : Gwei}
@@ -651,6 +633,7 @@ private theorem addInactivityPenalty_exists_ok {total delay : Gwei} {targetMatch
     (inside : index.toNat < penalties.size) (zero : penalties.getD index.toNat 0 = 0) :
     ∃ next, addInactivityPenalty state total delay targetMatched penalties index = .ok next ∧
       next.size = penalties.size := by
+  -- Four bounds on base rewards plus the largest cap times the epoch bound must fit.
   have perEpoch : BASE_REWARDS_PER_EPOCH.toNat = 4 := rfl
   have full : BASE_REWARDS_PER_EPOCH.toNat * base.toNat < 2 ^ 64 := by
     rw [perEpoch]
@@ -695,11 +678,7 @@ The step must run at the last slot of an epoch, and the buffer of block roots mu
 
 Each base reward of the registry must succeed, at most a bound.
 
-Each effective balance must be at most the largest cap, and the current epoch at most a bound.
-
-Four bounds on base rewards plus the largest cap times the epoch bound must fit.
-
-Each penalty is then at most that sum. -/
+Each penalty is then at most four such bounds plus the largest cap times an epoch bound. -/
 private theorem getInactivityPenaltyDeltas_exists_le {config : Config} {ceiling epochBound : Nat}
     (before : fork < .altair) (roots : preset.RootsReachPreviousEpoch)
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0)
@@ -718,6 +697,13 @@ private theorem getInactivityPenaltyDeltas_exists_le {config : Config} {ceiling 
   have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
   have leakOk := isInInactivityLeak_eq_ok finalized
   have delayOk := getFinalityDelay_eq_ok finalized
+  -- The inactivity penalty multiplies an effective balance by the delay of finality.
+  --
+  -- Each effective balance must be at most the largest cap.
+  --
+  -- The delay is at most the current epoch, which must be at most the epoch bound.
+  --
+  -- Four bounds on base rewards plus the largest cap times the epoch bound must fit.
   have delayLe : (getPreviousEpoch state - state.finalizedCheckpoint.epoch).toNat ≤
       epochBound := by
     rw [UInt64.toNat_sub_of_le _ _ finalized, getPreviousEpoch_toNat]
@@ -814,31 +800,7 @@ private theorem sumDeltas_exists_ok {first second third fourth : Array Gwei}
     simp only [liftAccessor, liftArith, addChecked_of_lt one, addChecked_of_lt two,
       addChecked_of_lt three, Except.mapError, bind, Except.bind]⟩
 
-/-- Before Altair, the rewards and penalties succeed under bounds.
-
-The step must run at the last slot of an epoch.
-
-The current epoch must be at most the epoch bound.
-
-An epoch of the preset must have two slots at least.
-
-Its buffer of block roots must reach the epoch before.
-
-The slot plus the length of that buffer must be below 2^64.
-
-The registry must stay within its limit, with one balance for each validator.
-
-Each effective balance must be at most the largest cap, as the cap of its validator is.
-
-The sum of the effective balances and each balance must be at most the budget.
-
-The finalized epoch must be at most the previous epoch, so that the test for a leak succeeds.
-
-The committee and the signers of each recent pending attestation must succeed.
-
-Each recent pending attestation must be as inclusion in a block stored it.
-
-The divisors of the preset must be positive.
+/-- Before Altair, the rewards and penalties succeed under bounds on the state and the epoch.
 
 The hypotheses are read on the state that justification and finalization return.
 
@@ -846,17 +808,32 @@ A run must show that they hold there.
 
 Each balance after the step is then at most the ceiling on the balances after the rewards. -/
 theorem processRewardsAndPenalties_total_of_lt_altair {config : Config} {budget epochBound : Nat}
+    -- The divisors of the preset must be positive.
     (before : fork < .altair) (positive : preset.DivisorsPositive)
+    -- An epoch of the preset must have two slots at least.
+    --
+    -- Its buffer of block roots must reach the epoch before, and the bounds must fit.
     (roots : preset.RootsReachPreviousEpoch) (fit : RewardsFitBeforeAltair preset budget epochBound)
+    -- The step must run at the last slot of an epoch.
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0)
+    -- The slot plus the length of that buffer must be below 2^64.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    -- The current epoch must be at most the epoch bound.
     (horizon : (getCurrentEpoch state).toNat ≤ epochBound)
+    -- The registry must stay within its limit, with one balance for each validator.
     (within : state.RegistryWithinLimit) (matched : BalancesMatch state)
+    -- Each effective balance must be at most the largest cap, as the cap of its validator is.
     (capped : ∀ validator ∈ state.validators.data,
       validator.effectiveBalance.toNat ≤ preset.largestEffectiveBalance)
+    -- The sum of the effective balances must be at most the budget.
     (summed : effectiveBalanceSum state ≤ budget)
+    -- Each balance must be at most the budget.
     (funded : ∀ balance ∈ state.balances.data, balance.toNat ≤ budget)
+    -- The finalized epoch must be at most the previous epoch, so that the test for a leak succeeds.
+    --
+    -- The committee and the signers of each recent pending attestation must succeed.
     (finalized : FinalizedSettled state) (resolved : PendingResolved state)
+    -- Each recent pending attestation must be as inclusion in a block stored it.
     (wellFormed : PendingWellFormed state) :
     ∃ after, processRewardsAndPenalties config state = .ok after ∧
       ∀ balance ∈ after.balances.data,
@@ -895,9 +872,13 @@ theorem processRewardsAndPenalties_total_of_lt_altair {config : Config} {budget 
     fun attestation member => resolved before attestation (.inl member)
   have sourceOk := getMatchingSourceAttestations_eq_ok (state := state) before (.inl rfl)
   rw [previousSource_eq before genesis] at sourceOk
+  -- The target is the block root at the first slot of the previous epoch.
+  --
+  -- A vote matches the target when its target is that root.
   obtain ⟨target, targetOk, targetIn⟩ := getMatchingTargetAttestations_exists_ok before
     (.inl rfl) (getBlockRoot_exists_ok roots last room (.inl rfl))
   simp only [previousSource_eq before genesis] at targetIn
+  -- It matches the head when its head is also the block root at its own slot.
   obtain ⟨head, headOk, headIn⟩ :=
     getMatchingHeadAttestations_previous before roots last room genesis wellFormed
   obtain ⟨sourceRewards, sourcePenalties, sourceDeltas, sourceLe⟩ :=

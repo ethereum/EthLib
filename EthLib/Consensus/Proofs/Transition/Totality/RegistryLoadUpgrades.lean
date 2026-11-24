@@ -11,33 +11,9 @@ An upgrade between forks keeps the size of the registry.
 
 Only the upgrades to Electra and to Gloas change the pending deposits.
 
-The upgrade to Electra creates the queue of pending deposits.
-
-Each validator not yet active then waits as a pending deposit of its whole balance.
-
-Its balance becomes zero, so it has no balance above the activation balance to queue too.
-
-Each other validator with compounding credentials queues at most one deposit of its excess.
-
-[EIP-7251] introduces the pending deposits and the compounding credentials.
-
-So each validator adds at most one pending deposit.
-
-Before Electra the count is the size of the registry alone, so the upgrade at most doubles it.
-
-The upgrade to Gloas moves the pending deposits of builders to the builders, or drops them.
-
-[EIP-7732] specifies that onboarding at the fork, and [EIP-8282] keeps it.
-
-That only removes pending deposits, and the upgrade to Heze carries the queue over unchanged.
-
 So a slot across forks raises the count only when it crosses Electra, and then at most doubles it.
 
 Before Electra the count is the size of the registry, so the rise is at most that size.
-
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
-[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#fork-transition
-[EIP-8282]: https://eips.ethereum.org/EIPS/eip-8282#fork-transition-onboarding
 -/
 
 @[expose] public section
@@ -327,20 +303,33 @@ private theorem onboardBuilders_registryLoad_le {state after : BeaconState prese
   rw [dite_eq_left (by decide), dite_eq_left (by decide)]
   omega
 
-/-- The upgrade to Electra adds at most one pending deposit for each validator. -/
+/-- The upgrade to Electra adds at most one pending deposit for each validator.
+
+[EIP-7251] introduces the pending deposits and the compounding credentials.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1 -/
 theorem upgradeToElectra_registryLoad_le {pre : BeaconState preset .dencun}
     {after : BeaconState preset .pectra} (computed : upgradeToElectra config pre = .ok after) :
     registryLoad after ≤ registryLoad pre + pre.validators.data.size := by
+  -- The upgrade creates the queue of pending deposits.
+  --
+  -- Before Electra the count is the size of the registry alone, so the upgrade at most doubles it.
   have sizes := (upgradeToElectra_spec computed).1
   simp only [upgradeToElectra, bind_ok_iff] at computed
   obtain ⟨_, -, _, -, _, -, _, -, middle, queued, compounded⟩ := computed
   have small : pre.validators.data.size < 2 ^ 64 :=
     Nat.lt_of_le_of_lt (pre.validators.bound (by decide)) (UInt64.toNat_lt _)
+  -- Each validator not yet active waits as a pending deposit of its whole balance.
+  --
+  -- Its balance becomes zero, so it has no balance above the activation balance to queue too.
   obtain ⟨added, sized, -, zeroed⟩ := foldlM_queuePreActivation_load _ queued
   obtain ⟨distinct, inside⟩ := preActivationIndices_nodup _ small
   have fewer := excessCount_le (preset := preset) distinct inside fun j mem => by
     obtain ⟨index, found, rfl⟩ := List.mem_map.mp mem
     exact zeroed index found
+  -- Each other validator with compounding credentials queues at most one deposit of its excess.
+  --
+  -- So each validator adds at most one pending deposit.
   have queuedExcess := foldlM_queueCompoundingExcess_load _ rfl compounded
   have sized' : middle.validators.data.size = pre.validators.data.size := sized
   rw [sized'] at queuedExcess
@@ -355,7 +344,12 @@ theorem upgradeToElectra_registryLoad_le {pre : BeaconState preset .dencun}
   rw [dite_eq_left (by decide), dite_eq_right (by decide), sizes]
   omega
 
-/-- The upgrade to Gloas never raises the validators plus the pending deposits. -/
+/-- The upgrade to Gloas never raises the validators plus the pending deposits.
+
+[EIP-7732] specifies the onboarding of builders at the fork, and [EIP-8282] keeps it.
+
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#fork-transition
+[EIP-8282]: https://eips.ethereum.org/EIPS/eip-8282#fork-transition-onboarding -/
 theorem upgradeToGloas_registryLoad_le {pre : BeaconState preset .fusaka}
     {after : BeaconState preset .glamsterdam}
     (computed : upgradeToGloas config checks pre = .ok after) :
@@ -363,6 +357,9 @@ theorem upgradeToGloas_registryLoad_le {pre : BeaconState preset .fusaka}
   unfold upgradeToGloas at computed
   obtain ⟨root, -, rest⟩ := bind_ok_iff.mp computed
   obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
+  -- It moves the pending deposits of builders to the builders, or drops them.
+  --
+  -- That only removes pending deposits.
   refine Nat.le_trans (onboardBuilders_registryLoad_le onboarded) (Nat.le_of_eq ?_)
   unfold registryLoad
   rw [dite_eq_left (by decide), dite_eq_left (by decide)]
@@ -372,6 +369,7 @@ theorem upgradeToGloas_registryLoad_le {pre : BeaconState preset .fusaka}
 theorem upgradeToHeze_registryLoad_le {pre : BeaconState preset .glamsterdam}
     {after : BeaconState preset .hegota} (computed : upgradeToHeze config pre = .ok after) :
     registryLoad after ≤ registryLoad pre := by
+  -- The upgrade to Heze carries the queue over unchanged.
   obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
   unfold registryLoad
   rw [dite_eq_left (by decide), dite_eq_left (by decide)]

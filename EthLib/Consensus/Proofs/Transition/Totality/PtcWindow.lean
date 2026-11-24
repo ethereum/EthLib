@@ -25,14 +25,13 @@ variable {preset : Preset} {fork : Base.Fork}
 
 /-- The draws of the payload timeliness committees of an epoch end, at the seed of that epoch.
 
-Each slot draws among the members of its beacon committees, with a seed of its own.
-
 A member at the cap of the draw in each slot makes them end.
 
 In the random oracle model, with at least one candidate, the search ends with high probability.
 
 That is a bound on a probability, not a fact about the hash, so a run assumes the end. -/
 def PtcDrawsEnd (state : BeaconState preset fork) (epoch : Epoch) : Prop :=
+  -- Each slot draws among the members of its beacon committees, with a seed of its own.
   ∀ seed, getSeed state epoch DOMAIN_PTC_ATTESTER = .ok seed →
     ∀ slot, computeEpochAtSlot preset slot = epoch → ∀ members,
       slotCommitteeMembers state slot = .ok members →
@@ -230,26 +229,22 @@ private theorem foldlM_committees_ok {slot : Slot} {perSlot : UInt64}
 
 /-- The payload timeliness committee of a slot is drawn under bounds on the state.
 
-The epoch of the slot plus the length of the history of mixes stays below `2^64`.
+The draws of the epoch of the slot must end.
 
-The seed lookahead is shorter than that history.
-
-An epoch has at least one slot.
-
-The draws of the epoch of the slot end.
-
-The registry holds at most `2^40` validators.
-
-Their number times a bound on the committees of an epoch is below `2^64`.
-
-The bound is one more than the most committees of a slot, times the slots of an epoch. -/
+The registry holds at most `2^40` validators. -/
 theorem computePtc_ok {state : BeaconState preset fork} {slot : Slot}
+    -- The epoch of the slot plus the length of the history of mixes stays below `2^64`.
     (seedRoom : (computeEpochAtSlot preset slot).toNat +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    -- The seed lookahead is shorter than that history.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- An epoch has at least one slot.
     (perEpoch : preset.SLOTS_PER_EPOCH ≠ 0)
     (ends : PtcDrawsEnd state (computeEpochAtSlot preset slot))
     (few : state.validators.data.size ≤ 2 ^ 40)
+    -- The number of validators times a bound on the committees of an epoch is below `2^64`.
+    --
+    -- The bound is one more than the most committees of a slot, times the slots of an epoch.
     (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
       preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
     ∃ committee, computePtc state slot = .ok committee := by
@@ -281,23 +276,16 @@ theorem computePtc_ok {state : BeaconState preset fork} {slot : Slot}
 
 /-- From Gloas, the move of the window of payload timeliness committees succeeds under bounds.
 
-The epoch it draws is the one after the seed lookahead.
-
-That epoch plus the length of the history of mixes stays below `2^64`.
-
-The seed lookahead is shorter than that history.
-
-The first slot of the epoch after it is at most `2^64`, so every slot of it fits in 64 bits.
-
-An epoch has at least one slot.
-
-That epoch meets the assumptions of the draw.
+The epoch it draws is the one after the seed lookahead, and it meets the assumptions of the draw.
 
 The step changes only the window. -/
 theorem processPtcWindow_ok (gloas : .glamsterdam ≤ fork) {state : BeaconState preset fork}
+    -- That epoch plus the length of the history of mixes stays below `2^64`.
     (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    -- The seed lookahead is shorter than that history.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- The first slot of the epoch after it is at most `2^64`, so every slot of it fits in 64 bits.
     (slotRoom : ((getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 2) *
       preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
     (perEpoch : preset.SLOTS_PER_EPOCH ≠ 0)
@@ -306,6 +294,7 @@ theorem processPtcWindow_ok (gloas : .glamsterdam ≤ fork) {state : BeaconState
       after = { state with ptcWindow := fun _ => after.ptcWindow gloas } := by
   have one : (1 : UInt64).toNat = 1 := rfl
   have slotsSmall := preset.SLOTS_PER_EPOCH.toNat_lt
+  -- An epoch has at least one slot.
   have epochPos : 0 < preset.SLOTS_PER_EPOCH.toNat := by
     refine Nat.pos_of_ne_zero fun zero => perEpoch ?_
     exact UInt64.toNat_inj.mp zero
@@ -471,25 +460,18 @@ theorem ptcRoom_presets {size : Nat} (few : size ≤ 2 ^ 40) :
 
 The upgrade to Gloas computes it.
 
-The committees of the previous epoch hold only index zero, and need no bound.
+After the previous epoch, it covers the current epoch and each epoch of the seed lookahead.
 
-The window then covers the current epoch and each epoch of the seed lookahead after it.
-
-Each of these epochs meets the assumptions of the draw.
-
-The last epoch drawn plus the length of the history of mixes stays below `2^64`.
-
-The seed lookahead is shorter than that history.
-
-The first slot of the epoch after the last one drawn is at most `2^64`.
-
-So every slot drawn fits in 64 bits.
-
-An epoch has at least one slot. -/
+Each of these epochs meets the assumptions of the draw. -/
 theorem initializePtcWindow_ok {state : BeaconState preset fork}
+    -- The last epoch drawn plus the length of the history of mixes stays below `2^64`.
     (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    -- The seed lookahead is shorter than that history.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- The first slot of the epoch after the last one drawn is at most `2^64`.
+    --
+    -- So every slot drawn fits in 64 bits.
     (slotRoom : ((getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1) *
       preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
     (perEpoch : preset.SLOTS_PER_EPOCH ≠ 0)
@@ -497,6 +479,7 @@ theorem initializePtcWindow_ok {state : BeaconState preset fork}
       PtcDrawable state (getCurrentEpoch state + offset.toUInt64)) :
     ∃ window, initializePtcWindow state = .ok window := by
   have slotsSmall := preset.SLOTS_PER_EPOCH.toNat_lt
+  -- An epoch has at least one slot.
   have epochPos : 0 < preset.SLOTS_PER_EPOCH.toNat := by
     refine Nat.pos_of_ne_zero fun zero => perEpoch ?_
     exact UInt64.toNat_inj.mp zero
@@ -556,6 +539,7 @@ theorem initializePtcWindow_ok {state : BeaconState preset fork}
     have lt : position < (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat :=
       by simpa using member
     by_cases before : position < preset.SLOTS_PER_EPOCH.toNat
+    -- The committees of the previous epoch hold only index zero, and need no bound.
     · exact ⟨_, by simp only [before, ↓reduceIte]; rfl⟩
     have sizes : (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat =
         (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat +

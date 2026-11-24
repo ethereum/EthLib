@@ -8,17 +8,9 @@ public import EthLib.Consensus.Proofs.Transition.Totality.UpgradeNext
 
 Only a block brings attestations, so a run of slots alone never records a new signer.
 
-Each epoch moves the record of the current epoch to the previous one, and starts an empty record.
+After two epochs both records of signers are empty, and the upgrades keep them empty.
 
-So after one epoch the current record is empty, and after two epochs both records are empty.
-
-Before Altair a record is a list of pending attestations, and from Altair a list of flags.
-
-The upgrade to Altair starts every flag at zero and translates only the previous attestations.
-
-So the upgrades keep both records empty.
-
-A state whose records are both empty meets the condition on the signers of the supply bound.
+Such a state meets the condition on the signers of the supply bound.
 -/
 
 @[expose] public section
@@ -85,12 +77,16 @@ private theorem processEpoch_unset (altair : .altair ≤ fork)
 /-- One epoch leaves no signer in the current epoch. -/
 theorem processEpoch_quietCurrent (computed : processEpoch config checks state = .ok after) :
     QuietCurrent after :=
+  -- Each epoch moves the record of the current epoch to the previous one.
+  --
+  -- It starts an empty record for the current epoch.
   ⟨fun before => (processEpoch_pendingRotation before computed).2,
     fun altair => (processEpoch_unset altair computed).1⟩
 
 /-- One epoch from a state with no signer in the current epoch leaves no signer at all. -/
 theorem QuietCurrent.quiet_of_processEpoch (quiet : QuietCurrent state)
     (computed : processEpoch config checks state = .ok after) : Quiet after := by
+  -- After one epoch the current record is empty, and after two epochs both records are empty.
   refine ⟨processEpoch_quietCurrent computed, fun before => ?_,
     fun altair => (processEpoch_unset altair computed).2 (quiet.2 altair)⟩
   rw [(processEpoch_pendingRotation before computed).1]
@@ -205,6 +201,12 @@ private theorem upgradeNext_quiet {pre : ForkedBeaconState preset}
     obtain ⟨previous, current, -⟩ := carryFields_of_lt_altair (config := config)
       (post := .altair) pre (by decide) (by decide) (by decide) (by decide)
     have late : ¬Fork.altair < .altair := by decide
+    -- Before Altair a record is a list of pending attestations, and from Altair a list of flags.
+    --
+    -- The upgrade to Altair starts every flag at zero.
+    --
+    -- It translates only the previous attestations.
+    --
     -- The translation writes only the previous flags, so the current flags stay at zero.
     have kept : QuietCurrent { middle with
         currentSyncCommittee := fun _ => ‹_›, nextSyncCommittee := fun _ => ‹_› } := by

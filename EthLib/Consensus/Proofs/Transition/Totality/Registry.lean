@@ -9,11 +9,7 @@ public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 
 The registry step queues activations, ejects low-balance validators and activates a queue prefix.
 
-Let a ceiling bound the first activation epoch and every finite exit epoch before the step.
-
-Each ejection increases that ceiling by at most one.
-
-Room for the registry length and the withdrawability delay then excludes every checked overflow.
+Room for the registry length and the withdrawability delay excludes every checked overflow.
 
 The theorem applies to the state that the earlier epoch steps return, without their full invariant.
 
@@ -108,21 +104,20 @@ private theorem exitQueueEpoch_exists_ok {config : Config} {state : BeaconState 
   · refine ⟨latest, ?_, by omega⟩
     simp only [full, ↓reduceIte]
 
-/-- Before Electra, starting the exit of a validator in the registry succeeds.
+/-- Before Electra, starting the exit of a validator in the registry succeeds, under a ceiling.
 
-A ceiling covers the first epoch of a new exit and each exit epoch that is set.
+It keeps the slot and the size of the registry.
 
-The ceiling plus one plus the withdrawal delay is below `2^64`.
-
-The state after keeps the slot and the size of the registry.
-
-Each exit epoch that is set in it is at most the ceiling plus one. -/
+Each exit epoch that is set after it is at most the ceiling plus one. -/
 theorem initiateValidatorExit_total_of_lt_electra {config : Config}
     {state : BeaconState preset fork}
     {index : ValidatorIndex} {ceiling : Nat} (before : fork < .pectra)
     (inside : index.toNat < state.validators.data.size)
+    -- The ceiling covers the first epoch of a new exit.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    -- It covers each exit epoch that is set.
     (exits : ExitsBelow state ceiling)
+    -- The ceiling plus one plus the withdrawal delay is below `2^64`.
     (room : ceiling + 1 + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64) :
     ∃ after, initiateValidatorExit config state index = .ok after ∧
       after.slot = state.slot ∧ after.validators.data.size = state.validators.data.size ∧
@@ -291,6 +286,9 @@ theorem processRegistryUpdates_total_of_lt_electra {config : Config}
     ∃ after, processRegistryUpdates config state = .ok after ∧
       ∀ validator ∈ after.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
         validator.exitEpoch.toNat ≤ ceiling + state.validators.data.size := by
+  -- The ceiling bounds the first activation epoch and every finite exit epoch before the step.
+  --
+  -- Each ejection increases that ceiling by at most one.
   obtain ⟨registered, registeredOk, slot, -, bounds⟩ :=
     foldlM_updateRegistryEntry_exists_ok (config := config)
       before (List.range state.validators.data.size) state
