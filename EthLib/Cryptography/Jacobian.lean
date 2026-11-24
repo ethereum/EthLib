@@ -7,29 +7,22 @@ public import EthLib.Cryptography.Inverse
 
 A point `(x, y)` of the curve `y^2 = x^3 + a x + b` has the Jacobian forms `(X, Y, Z)`.
 
-They satisfy `x = X / Z^2` and `y = Y / Z^3`, for any nonzero `Z`.
-
-A form with `Z = 0` is the point at infinity.
-
-Addition and doubling then need no inverse.
-
-Only the conversion back to `(x, y)` inverts, once.
-
-The formulas are written once, for any representation of the field.
-
-A curve can then run them on Montgomery limbs.
-
 The formulas are those of Cohen, Miyaji and Ono (1998), formulas (5) and (6).
 
-The Explicit-Formulas Database lists them as add-1998-cmo-2 and dbl-1998-cmo-2:
-<https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html>.
+The [Explicit-Formulas Database][efd] lists them as add-1998-cmo-2 and dbl-1998-cmo-2.
+
+[efd]: https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography
 
-/-- A point in Jacobian coordinates over the integers mod `m`. -/
+/-- A point in Jacobian coordinates over the integers mod `m`.
+
+It stands for `x = X / Z^2` and `y = Y / Z^3`, for any nonzero `Z`.
+
+A form with `Z = 0` is the point at infinity. -/
 structure Jacobian (m : Nat) where
   /-- `X`, which is `x Z^2`. -/
   x : Fin m
@@ -59,6 +52,9 @@ abbrev ofCoords {m : Nat} (p : Coords (Fin m)) : Jacobian m :=
 
 namespace Coords
 
+-- The formulas are written once, for any representation of the field.
+--
+-- A curve can then run them on Montgomery limbs.
 variable {F : Type} [OfNat F 0] [OfNat F 1]
   [Add F] [Sub F] [Mul F] [DecidableEq F]
 
@@ -71,7 +67,7 @@ variable {F : Type} [OfNat F 0] [OfNat F 1]
 
 /-- The point `(x, y)` of a form, or nothing at infinity.
 
-This is the only inverse. -/
+It inverts once, and addition and doubling need no inverse. -/
 def toAffine (inverse : F → F) (p : Coords F) : Option (F × F) :=
   if p.z = 0 then none
   else
@@ -176,15 +172,14 @@ It recurses on `fuel`, so the kernel can run it. -/
 
 /-- `k P + l Q`, for `k, l < 2^fuel`, by simultaneous multiple point multiplication.
 
-The two products share their doublings: `fuel` doublings in total, instead of `2 fuel`.
-
 The method is Algorithm 3.48, in §3.3.3 of "Guide to Elliptic Curve Cryptography".
-
-Its windows here have one bit.
 
 That book is by Hankerson, Menezes and Vanstone (Springer, 2004). -/
 @[specialize] def mulAdd (a : F) (fuel k : Nat) (p : Coords F) (l : Nat)
     (q : Coords F) : Coords F :=
+  -- The windows of the method have one bit here.
+  --
+  -- The two products share their doublings: `fuel` doublings in total, instead of `2 fuel`.
   mulAddAux a p q (add a p q) fuel k l
 
 end Coords

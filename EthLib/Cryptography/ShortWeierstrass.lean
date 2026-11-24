@@ -9,19 +9,7 @@ The curve `E: y^2 = x^3 + a x + b` over a field of characteristic other than 2.
 
 It is written once for every such curve.
 
-A point is the point at infinity `O`, or a pair `(x, y)` that satisfies the equation.
-
 The points form a group under the addition rule of SEC 1 v2 §2.2.1.
-
-`O` is its zero, and `-(x, y) = (x, -y)`.
-
-The rule is written in affine coordinates, as SEC 1 prints it.
-
-Scalar multiplication runs in Jacobian coordinates instead, over any such field.
-
-It takes one inverse, at the end.
-
-Each curve gives its field, the constants `a` and `b`, and the inverse that its rule uses.
 -/
 
 @[expose] public section
@@ -39,6 +27,9 @@ class Params (F : Type) where
   /-- The multiplicative inverse of the field. -/
   inv : F → F
 
+-- A point is the point at infinity `O`, or a pair `(x, y)` that satisfies the equation.
+--
+-- `O` is the zero of the group, and `-(x, y) = (x, -y)`.
 /-- A point of the curve: the point at infinity, or a pair of coordinates.
 
 A pair is a point of the curve only when it satisfies the equation. -/
@@ -55,6 +46,7 @@ open Params (a b inv)
 
 section Affine
 
+-- The rule is written in affine coordinates, as SEC 1 prints it.
 variable {F : Type} [Add F] [Sub F] [Mul F] [Neg F] [OfNat F 0] [OfNat F 2] [OfNat F 3]
   [DecidableEq F] [Params F]
 
@@ -115,6 +107,9 @@ end Affine
 
 section Jacobian
 
+-- Scalar multiplication runs in Jacobian coordinates, not affine ones, over any such field.
+--
+-- It takes one inverse, at the end.
 /-- The Jacobian form of a point: `(x, y, 1)`, or `(1, 1, 0)` at infinity. -/
 def toCoords {F : Type} [OfNat F 0] [OfNat F 1] : Point F → Jacobian.Coords F
   | infinity => .infinity
@@ -141,14 +136,13 @@ def ofJacobian (p : Jacobian m) : Point (Fin m) := ofCoords Fin.inverse id p.toC
 
 The steps run in Jacobian coordinates, in a representation of the field.
 
-It takes the maps into and out of that representation, its inverse, and the curve's `a` in it.
-
-The representation can be the field itself, with the identity for both maps.
-
-Only the conversion back takes an inverse. -/
+It takes the maps into and out of that representation, its inverse, and the curve's `a` in it. -/
 @[specialize] def mulBits {F G : Type} [OfNat F 0] [OfNat F 1] [OfNat G 0] [OfNat G 1]
     [Add G] [Sub G] [Mul G] [DecidableEq G] (encode : F → G) (inverse : G → G) (read : G → F)
     (a : G) (fuel k : Nat) (p : Point F) : Point F :=
+  -- The representation can be the field itself, with the identity for both maps.
+  --
+  -- Only the conversion back takes an inverse.
   ofCoords inverse read (Jacobian.Coords.mulBits a fuel k (p.toCoords.map encode))
 
 end Jacobian

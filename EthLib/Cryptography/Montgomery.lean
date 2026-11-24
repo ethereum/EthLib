@@ -8,29 +8,11 @@ Arithmetic mod an odd modulus `p` below `R = 2 ^ (32 n)`, on `n` limbs of 32 bit
 
 An element `a` is stored in Montgomery form, as `a R mod p`.
 
-The product of two forms is then `a b R ^ 2`, and one Montgomery reduction divides it by `R`.
-
-The reduction adds the multiple of `p` that clears the low limb, then drops that limb.
-
-So it needs no division by `p`.
-
 The product is the Coarsely Integrated Operand Scanning (CIOS) method of Koç, Acar and Kaliski.
 
-It appeared as "Analyzing and comparing Montgomery multiplication algorithms" in IEEE Micro 16(3).
+It is "Analyzing and comparing Montgomery multiplication algorithms", [IEEE Micro 16(3)][cios].
 
-<https://doi.org/10.1109/40.502403>
-
-It interleaves the product and the reduction, one limb of `b` at a time.
-
-Each product of two limbs fits in 64 bits, so the code needs no wider product.
-
-The code is written once for every limb count.
-
-Instances for `0` and `n + 1` limbs build it, so the compiler unrolls it for a fixed count.
-
-Every operation keeps its result below `p`, and the theorems here prove those bounds.
-
-The proofs that the operations agree with the integers mod `p` come with the other properties.
+[cios]: https://doi.org/10.1109/40.502403
 -/
 
 @[expose] public section
@@ -43,6 +25,8 @@ namespace Montgomery
 
 /-- The low 32 bits and the carry of `t + a * b + c`. -/
 @[inline] def mac (t a b c : UInt64) : UInt64 × UInt64 :=
+  -- Each product of two limbs fits in 64 bits, so the code needs no wider product.
+  --
   -- `(C,S)` of CIOS: `S` the low word and `C` the carry.
   let s := t + a * b + c
   (s &&& 0xFFFFFFFF, s >>> 32)
@@ -212,17 +196,14 @@ theorem loop_add {σ : Type} (f : Nat → σ → σ) (k m i : Nat) (s : σ) :
   | succ k ih =>
     rw [show k + 1 + m = k + m + 1 by omega, loop, ih, loop, show i + 1 + k = i + (k + 1) by omega]
 
-/-! ## Unrolled words -/
+/-! ## Unrolled words
+
+The code is written once for every limb count.
+-/
 
 /-- Words of `n` limbs, each held in 64 bits, with the operations of the product.
 
 The instances for `0` and `n + 1` limbs build them, so a fixed count unrolls at compile time.
-
-The words of `n + 1` limbs are a pair, which the compiler erases, so each word stays in a register.
-
-Each operation reads its inputs through a function of the limb index.
-
-So a modulus given by a match on the index folds to immediate constants.
 
 Each operation carries the equation of its value, proved once from the instance below it. -/
 class Words (n : Nat) where
@@ -232,6 +213,9 @@ class Words (n : Nat) where
   word : W → Nat → UInt64
   /-- The words of `0`. -/
   zero : W
+  -- Each operation reads its inputs through a function of the limb index.
+  --
+  -- So a modulus given by a match on the index folds to immediate constants.
   /-- The words `a k` to `a (k + n - 1)`. -/
   load : (Nat → UInt64) → Nat → W
   /-- `t + a b + c`, for the words `a` from `k`: the low words and the carry out. -/
@@ -467,6 +451,7 @@ theorem subbS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (br : UInt64) (k 
 
 /-- The words of `n + 1` limbs: a low word and the words of `n` limbs. -/
 @[inline] instance instWordsSucc : Words (n + 1) where
+  -- The words are a pair, which the compiler erases, so each word stays in a register.
   W := UInt64 × inst.W
   word := wordS
   zero := (0, Words.zero)
@@ -571,6 +556,14 @@ private theorem low_zero {m x y z : Nat} (hm : m = x * y % 2 ^ 32)
 `m` is the multiple of `p` that makes the low word of the sum zero. -/
 @[inline] def step (p : Nat → UInt64) (pinv : UInt64) (a b : Nat → UInt64) (i : Nat)
     (st : Words.W n × UInt64) : Words.W n × UInt64 :=
+  -- The product of two forms is `a b R ^ 2`, and one Montgomery reduction divides it by `R`.
+  --
+  -- The reduction adds the multiple of `p` that clears the low limb, then drops that limb.
+  --
+  -- So it needs no division by `p`.
+  --
+  -- CIOS interleaves the product and the reduction, one limb of `b` at a time.
+  --
   -- CIOS, the multiplication loop over `j` from `0` to `s - 1`, with `C := 0` first.
   --
   -- The paper's modulus `n` is `p` here.
@@ -1009,7 +1002,12 @@ instance : Limbs 12 where
       UInt32.toUInt64_inj.mp (g 8 (by decide)), UInt32.toUInt64_inj.mp (g 9 (by decide)),
       UInt32.toUInt64_inj.mp (g 10 (by decide)), UInt32.toUInt64_inj.mp (g 11 (by decide))⟩
 
-/-! ## The modulus -/
+/-! ## The modulus
+
+Every operation keeps its result below `p`, and the theorems here prove those bounds.
+
+The proofs that the operations agree with the integers mod `p` come with the other properties.
+-/
 
 section Core
 

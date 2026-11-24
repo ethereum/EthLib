@@ -38,15 +38,15 @@ decreasing_by exact Nat.mod_lt _ (by omega)
 
 /-- The inverse of `a` mod `m`, by the extended Euclidean algorithm.
 
-The run starts on `a` and `m`, with the coefficients `1` and `0`.
-
-So each coefficient times `a` equals its remainder, mod `m`.
-
 The result is the coefficient of the gcd, reduced mod `m`.
 
 When `m` is prime, it is the inverse of a nonzero `a`, and it sends `0` to `0`. -/
 def Fin.inverse {m : Nat} [NeZero m] (a : Fin m) : Fin m :=
   -- Algorithm 2.142, step 1: Algorithm 2.107 on `a` and `m`, with `x2 = 1` and `x1 = 0`.
+  --
+  -- The run starts on `a` and `m`, with the coefficients `1` and `0`.
+  --
+  -- So each coefficient times `a` equals its remainder, mod `m`.
   --
   -- Algorithm 2.107 asks for `a >= b`; with `a < m`, the first pass of step 3 has `q = 0`.
   --

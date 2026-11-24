@@ -10,12 +10,6 @@ leanXMSS and leanSPHINCS share three tools, and neither scheme owns them.
 - A hash function as a computation in the identity monad.
 - A read of a fixed-size object out of a buffer, which fails on a short buffer.
 - A vector computed entry by entry, index 0 first.
-
-Every definition of the two schemes that hashes takes the hash `H` as an argument, in a monad.
-
-EthLib passes the concrete hash in the identity monad.
-
-A proof in the random oracle model passes a query to the oracle.
 -/
 
 @[expose] public section
@@ -24,7 +18,12 @@ namespace EthLib.Cryptography.HashSig
 
 open EthLib.Base (readBytes)
 
-/-! ## The hash as a computation -/
+/-! ## The hash as a computation
+
+Every definition of the two schemes that hashes takes the hash `H` as an argument, in a monad.
+
+EthLib passes the concrete hash in the identity monad, and a random-oracle proof passes a query.
+-/
 
 /-- A hash function, as a computation in the identity monad.
 
@@ -37,16 +36,19 @@ def pureHash {α β : Type} (f : α → β) (input : α) : Id β :=
 /-- Read a fixed-size object out of a buffer at an offset.
 
 Returns nothing when the buffer has no room for the object.
-
-Never pads and never truncates.
-
-Examples, with `b = ByteArray.mk #[10, 20, 30, 40]`:
-* `unpackBytes? 4 b = some #v[10, 20, 30, 40]`
-* `unpackBytes? 2 b 1 = some #v[20, 30]`
-* `unpackBytes? 2 b 3 = none`
 -/
 def unpackBytes? (n : Nat) (b : ByteArray) (offset : Nat := 0) :
     Option (Vector UInt8 n) :=
+  -- Take `b = ByteArray.mk #[10, 20, 30, 40]` as an example.
+  --
+  -- Then 4 bytes at offset 0 read as `some #v[10, 20, 30, 40]`.
+  --
+  -- 2 bytes at offset 1 read as `some #v[20, 30]`.
+  --
+  -- 2 bytes at offset 3 read as `none`.
+  --
+  -- The read never pads and never truncates.
+  --
   -- The guard is the whole validation: a buffer without room is rejected.
   if h : offset + n ≤ b.size then some (readBytes b offset n h) else none
 
@@ -56,13 +58,14 @@ def unpackBytes? (n : Nat) (b : ByteArray) (offset : Nat := 0) :
 
 The order matters when each computation calls the hash.
 
-It fixes the sequence of hash calls, which a proof in the random oracle model counts.
-
-Core's monadic vector builder recurses on a well-founded measure, which the kernel does not reduce.
-
-So this one recurses structurally on the number of entries left. -/
+It fixes the sequence of hash calls, which a proof in the random oracle model counts. -/
 def ofFnInOrder {m : Type → Type} [Monad m] {α : Type} (n : Nat) (f : Fin n → m α) :
     m (Vector α n) :=
+  -- Core's monadic vector builder recurses on a well-founded measure.
+  --
+  -- The kernel does not reduce that recursion.
+  --
+  -- So this one recurses structurally on the number of entries left.
   go n (Array.emptyWithCapacity n) (by simp)
 where
   /-- The results of the last `k` indices, after the results of the others in `acc`.
