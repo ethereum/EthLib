@@ -908,23 +908,7 @@ theorem reservedReplay_switchToCompounding {fork : Fork} {s t : BeaconState pres
 
 /-- The reserved replay of a tail from Electra, built step by step.
 
-The replay starts at `x` with the initial ownership and its initial reserved frame.
-
-A slot step extends it by the replay of a slot step, and a block step by the replay of a block.
-
-Each step reads the queue provenance and the zero originals of initial tags from the replay so far.
-
-It reads the run facts at its input from `shared` and the prefix.
-
-This is the one run-level replay walk, and it follows the recursion of the run's balance events.
-
-The funding bound of a run cannot carry the step.
-
-Its motive is a fixed number.
-
-Its step bound sees neither the replay so far nor the prefix events.
-
-The floor induction recurses on epochs and sees no events. -/
+This is the one run-level replay walk, and it follows the recursion of the run's balance events. -/
 private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -978,11 +962,27 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
     exact increment
   have xEarly : x.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
+  -- The replay starts at `x` with the initial ownership and its initial reserved frame.
   obtain ⟨initialOwned, initial, frame, cover, future⟩ :=
     reservedFrame_initial shared genesis xEarly high electraX rounding
   -- The sources of the queue at `x` have their exits assigned there.
   have initialSources := (shared.pendingConsolidation_invariant genesis electraX delay).2
   revert early endEpoch roundingAt
+  -- A slot step extends the replay by the replay of a slot step.
+  --
+  -- A block step extends it by the replay of a block.
+  --
+  -- Each step reads the queue provenance and the zero originals of initial tags from the replay.
+  --
+  -- It reads the run facts at its input from the shared run and the prefix.
+  --
+  -- The funding bound of a run cannot carry the step.
+  --
+  -- Its motive is a fixed number.
+  --
+  -- Its step bound sees neither the replay so far nor the prefix events.
+  --
+  -- The floor induction recurses on epochs and sees no events.
   induction tail generalizing events with
   | nil =>
     intro _ _ _
@@ -1118,21 +1118,20 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
 
 /-- From Electra a block deposit keeps every validator and every balance.
 
-It changes no validator, or it appends one new validator.
-
-The new validator has balance 0, effective balance 0, and no activation, exit or withdrawal epoch.
-
-The amount waits in the pending deposits.
-
-The slot, the pending consolidations and the consolidation churn are unchanged. -/
+The amount waits in the pending deposits. -/
 private theorem processDeposit_electra_shape {fork : Fork} {a b : BeaconState preset fork}
     (electra : .pectra ≤ fork) {before : fork < .hegota} {dep : Deposit}
     (ok : processDeposit config checks before a dep = .ok b) (matched : BalancesMatch a) :
+    -- The slot, the pending consolidations and the consolidation churn are unchanged.
     b.slot = a.slot ∧
       b.pendingConsolidations electra = a.pendingConsolidations electra ∧
       b.earliestConsolidationEpoch electra = a.earliestConsolidationEpoch electra ∧
       b.consolidationBalanceToConsume electra = a.consolidationBalanceToConsume electra ∧
+      -- It changes no validator, or it appends one new validator.
       ((b.validators.data = a.validators.data ∧ b.balances.data = a.balances.data) ∨
+        -- The new validator has balance 0 and effective balance 0.
+        --
+        -- It has no activation, exit or withdrawal epoch.
         ∃ w : Validator, b.validators.data = a.validators.data.push w ∧
           b.balances.data = a.balances.data.push 0 ∧ w.effectiveBalance = 0 ∧
           w.slashed = false ∧ w.activationEpoch = FAR_FUTURE_EPOCH ∧
@@ -1155,18 +1154,11 @@ private theorem processDeposit_electra_shape {fork : Fork} {a b : BeaconState pr
     simp [getValidatorFromDeposit, Uint64.toNat_min]
   · exact absurd (Nat.lt_of_lt_of_le early electra) (Nat.lt_irrefl _)
 
-/-- One block deposit from Electra replays as its recorded event, with the same queue and ownership.
-
-Its credit is 0: the amount waits in the pending deposits.
-
-Every existing validator and balance is unchanged.
-
-A validator the deposit appends has balance 0 and effective balance 0.
-
-So every reserve and cover clause holds for it with no token. -/
+/-- A block deposit from Electra replays as its recorded event, keeping the queue and ownership. -/
 theorem operationReplay_deposit {x : ForkedBeaconState preset} {high : Nat}
     {rounding : Nat → Nat} {fork : Fork} (electra : .pectra ≤ fork) {before : fork < .hegota}
     (dep : Deposit) (a b : BeaconState preset fork) (credit debit : Nat)
+    -- Its credit is 0: the amount waits in the pending deposits.
     (_limits : (pure (if fork < .pectra then dep.data.amount.toNat else 0, 0) :
       Except TransitionError (Nat × Nat)) = .ok (credit, debit))
     (ok : processDeposit config checks before a dep = .ok b)
@@ -1187,6 +1179,11 @@ theorem operationReplay_deposit {x : ForkedBeaconState preset} {high : Nat}
     ⟨step.balancesMatch matched, step.exitsOrdered exits, life.trans lifeStep⟩⟩
   intro queue owned eventPosition paymentPosition callPosition reserve assignment erasure _
     retired cover future matched _ life _ _ slashed fresh
+  -- Every existing validator and balance is unchanged.
+  --
+  -- A validator the deposit appends has balance 0 and effective balance 0.
+  --
+  -- So every reserve and cover clause holds for it with no token.
   obtain ⟨_, pending, earliest, consume, shape⟩ := processDeposit_electra_shape electra ok matched
   have sizes : a.balances.data.size = a.validators.data.size := matched
   -- Every existing index keeps its validator and its balance.
@@ -1468,19 +1465,10 @@ section
 
 open Cryptography.Bls Uint64
 
-/-- The selected-release statement from the run's reserved replay.
-
-The run replay rounds with the ledger's source-falling keys.
-
-The given fresh coverage replays the same tags.
-
-A tag replay is determined by its events, start position and initial queue.
-
-So its queue, calls and payments are the replay's own.
-
-The deposit funding and the selected capacity are taken as hypotheses. -/
+/-- The selected-release statement from the run's reserved replay. -/
 private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset}
     (block : BlockReplay (preset := preset) (config := config) (checks := checks))
+    -- The deposit funding is taken as a hypothesis.
     (deposits : ∀ (shared : Run config checks g x) (tail : Run config checks x y) high,
       Supported shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat → .pectra ≤ x.fork →
       ∀ events, tail.balanceEvents high = .ok events →
@@ -1488,6 +1476,7 @@ private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset
           fundingCarry x +
               ((List.range (driftHorizon x high + 1)).map
                 (exitFlowAt (config := config) x high)).sum)
+    -- The selected capacity is taken as a hypothesis.
     (capacity : ∀ (shared : Run config checks g x) (tail : Run config checks x y) high,
       Supported shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat →
       ∀ events, tail.balanceEvents high = .ok events →
@@ -1516,10 +1505,13 @@ private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset
         ite_eq_left (ledger.sourceFalling_of_firstDown shared supported delay pre step rest split
           i v w found next unset assigned reference drop))
       reservedReplay_slotStep block replayed
-  -- The given coverage replays the same tags, so it names the replay's queue, calls and payments.
+  -- The given fresh coverage replays the same tags.
+  --
+  -- So it names the replay's queue, calls and payments.
   obtain ⟨_, _, _, _, _, _, _, _, _, tagReplay, _⟩ := history.counters_original
   obtain ⟨allPaid, coverReplay, named⟩ := coverage
   obtain ⟨tagsEq, paymentsEq⟩ := named
+  -- A tag replay is determined by its events, start position and initial queue.
   obtain ⟨rfl, _, rfl, rfl⟩ := TagReplay.unique tagReplay coverReplay
   have lengths := history.paired_rounds.length_eq
   let pairs := (allPayments.zip allAllocations).filter fun pair =>

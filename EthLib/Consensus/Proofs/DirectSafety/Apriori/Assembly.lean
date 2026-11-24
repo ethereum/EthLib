@@ -732,27 +732,7 @@ private theorem boundary_exit {fork : Fork} {y : BeaconState preset fork}
 
 /-- This is the core of the a priori ledger.
 
-The state drift and twice the common reserve of the scheduled keys fit the drift.
-
-The reference loss splits into the scheduled keys' losses and the new cohort's.
-
-The reference gain splits into the previous-only keys and the gain outside them.
-
-The boundary splits into four parts.
-
-The first two are the scheduled keys exiting at `y` and the new cohort's boundary.
-
-The last two are the previous-only keys and the new nonreference keys.
-
-Each part is paid by its own term of the drift.
-
-The terms are the scheduled reserve `Sch` and the new cohort's budgets.
-
-They also include the old boundary, the previous-only stake plus twice `Bd`.
-
-They include the scheduled growth of the exit cohorts as well.
-
-The last two are the gain budget and the nonreference maximum. -/
+The state drift and twice the common reserve of the scheduled keys fit the drift. -/
 private theorem stateDrift_scheduledReserve_le {x y : ForkedBeaconState preset}
     {tail : Run config checks x y} {high : Nat} {ledger : LedgerCuts tail}
     (uniqueX : PubkeysDistinct x.state) (uniqueY : PubkeysDistinct y.state)
@@ -782,6 +762,25 @@ private theorem stateDrift_scheduledReserve_le {x y : ForkedBeaconState preset}
           adjacentExitStake x (driftHorizon x high)) :
     stateDrift x y + 2 * ∑ i ∈ sched.scheduled, sched.commonReserve i ≤
       drift (config := config) x high := by
+  -- The reference loss splits into the scheduled keys' losses and the new cohort's.
+  --
+  -- The reference gain splits into the previous-only keys and the gain outside them.
+  --
+  -- The boundary splits into four parts.
+  --
+  -- The first two are the scheduled keys exiting at `y` and the new cohort's boundary.
+  --
+  -- The last two are the previous-only keys and the new nonreference keys.
+  --
+  -- Each part is paid by its own term of the drift.
+  --
+  -- The terms are the scheduled reserve `Sch` and the new cohort's budgets.
+  --
+  -- They also include the old boundary, the previous-only stake plus twice `Bd`.
+  --
+  -- They include the scheduled growth of the exit cohorts as well.
+  --
+  -- The last two are the gain budget and the nonreference maximum.
   have xEarly : x.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   have kept := (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1
@@ -1072,23 +1071,7 @@ private theorem cutoff_le_farFuture {x : ForkedBeaconState preset} {high cutoff 
   have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   omega
 
-/-- The common ledger from the new cohort's loss and boundary bound and the gain funding.
-
-The scheduled allocation is read off the two ends.
-
-The scheduled boundary at the end of the tail is bounded by the exit-cohort growth.
-
-The old boundary is bounded by the previous-only stake plus twice `Bd`.
-
-The slashed common stake is paid from the common reserve of the scheduled keys.
-
-The cutoff is below the far future.
-
-That matters: past it the keys exited before the cutoff would admit keys with no exit.
-
-The scheduled reserve does not hold such keys.
-
-The guard excludes it. -/
+/-- The common ledger from the new cohort's loss and boundary bound and the gain funding. -/
 private theorem commonLedger_of_cuts {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -1112,13 +1095,24 @@ private theorem commonLedger_of_cuts {g x y : ForkedBeaconState preset}
   have uniqueX := shared.pubkeysDistinct genesis
   have uniqueY := (shared.append tail).pubkeysDistinct genesis
   have epochs := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
+  -- The scheduled allocation is read off the two ends.
   obtain ⟨sched⟩ := ScheduledAllocation.ofReads tail high
   have core := stateDrift_scheduledReserve_le (config := config) uniqueX uniqueY early guard
     cuts lossBoundary sched funded
+    -- The scheduled boundary at the end of the tail is bounded by the exit-cohort growth.
     (scheduledBoundaryProducer shared tail high support twoSlots _ epochs
       (by unfold horizonEnd driftHorizon; omega) rfl)
+    -- The old boundary is bounded by the previous-only stake plus twice `Bd`.
     (oldBoundary_le shared tail high support twoSlots)
+  -- The slashed common stake is paid from the common reserve of the scheduled keys.
   have reserve := commonSlashed_le_commonReserve sched uniqueX uniqueY xEarly within
+    -- The cutoff is below the far future.
+    --
+    -- That matters: past it the keys exited before the cutoff would admit keys with no exit.
+    --
+    -- The scheduled reserve does not hold such keys.
+    --
+    -- The guard excludes it.
     (cutoff_le_farFuture guard twoSlots within) apart
   omega
 
@@ -1193,14 +1187,13 @@ The premises are the cut, the ownership and the run facts at the operation's inp
 
 The conclusion is the replay over the operation and the same facts at its output.
 
-`sites` lists the states at which the operation reads the consolidation churn.
-
-It is `[]`, except for an accepted consolidation request, which reads it at `⟨fork, s⟩`.
-
 The operation replay closes this over the queue, the ownership and the positions. -/
 def OperationReplayAt (x : ForkedBeaconState preset) (high : Nat)
     (rounding : Nat → Nat) {fork : Fork} (electra : .pectra ≤ fork)
     (s t : BeaconState preset fork) (added : List (BalanceEvent preset))
+    -- This list holds the states at which the operation reads the consolidation churn.
+    --
+    -- It is `[]`, except for an accepted consolidation request, which reads it at `⟨fork, s⟩`.
     (sites : List (ForkedBeaconState preset)) (queue : List TaggedEntry) (owned : Ownership)
     (eventPosition paymentPosition callPosition : Nat) : Prop :=
     ReserveCut x high ⟨fork, s⟩ (getCurrentEpoch s) (queue.map (·.entry)) owned →
@@ -1779,25 +1772,23 @@ def SlotStepReplay : Prop :=
           (v.state.earliestConsolidationEpoch target)
           (v.state.consolidationBalanceToConsume target)
 
-/-- A registry step keeps the slot and the registry size.
-
-It keeps each validator's key, effective balance and credentials, and unslashes nobody.
-
-It only assigns exits that were at the far future, and keeps activity up to the current epoch.
-
-It keeps each withdrawable epoch, or moves one after the current epoch to another after it.
-
-It keeps the order of exits and withdrawals. -/
+/-- A registry step keeps the slot and the registry size. -/
 def RegistryStep {fork : Fork} (s t : BeaconState preset fork) : Prop :=
+  -- It keeps each validator's key, effective balance and credentials, and unslashes nobody.
+  --
+  -- It only assigns exits that were at the far future.
   RegistryEntriesKept s t ∧
+    -- It keeps each withdrawable epoch, or moves one after the current epoch to another after it.
     (∀ (i : Nat) (w₀ w : Validator), s.validators.data[i]? = some w₀ →
       t.validators.data[i]? = some w →
       w.withdrawableEpoch = w₀.withdrawableEpoch ∨
         (getCurrentEpoch s < w₀.withdrawableEpoch ∧ getCurrentEpoch s < w.withdrawableEpoch)) ∧
+    -- It keeps activity up to the current epoch.
     (∀ (i : Nat) (w₀ w : Validator), s.validators.data[i]? = some w₀ →
       t.validators.data[i]? = some w → ∀ e ≤ getCurrentEpoch s,
         isActiveValidator w e = isActiveValidator w₀ e) ∧
     t.slot = s.slot ∧ RegistryLifecycle s t ∧
+    -- It keeps the order of exits and withdrawals.
     t.validators.data.size = s.validators.data.size ∧ ExitsOrdered t
 
 theorem RegistryStep.of_validators {fork : Fork} {s t : BeaconState preset fork}

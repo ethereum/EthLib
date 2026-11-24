@@ -40,25 +40,24 @@ private theorem lowerOriginal_frame (o : Ownership) (u : ForkedBeaconState prese
     ⟨valid, valid, rfl, fun _ => .inl rfl, Finset.Subset.refl _, rfl,
       fun _ => Nat.min_le_left _ _⟩⟩
 
-/-- Lowering at the cut's own state keeps the cut.
-
-Only the reference clause has the original baseline on its larger side.
-
-The lowered value is either the old one or the funding value itself.
-
-That funding value is the larger of the effective balance and the balance at `u`.
-
-It is at least the potential, which caps the balance before it takes the larger. -/
+/-- Lowering at the cut's own state keeps the cut. -/
 private theorem reserveCut_lowerOriginal {x : ForkedBeaconState preset} {high : Nat}
     {u : ForkedBeaconState preset} {demandEpoch : Epoch} {suffix : List PendingConsolidation}
     {o : Ownership} (reserve : ReserveCut x high u demandEpoch suffix o) :
     ReserveCut x high u demandEpoch suffix (lowerOriginal o u) := by
   obtain ⟨valid, wasRetired, original, reference, rest⟩ := reserve
+  -- Only the reference clause has the original baseline on its larger side.
   refine ⟨valid, wasRetired, fun i => ⟨(Nat.min_le_left _ _).trans (original i).1,
     fun notReference => ?_⟩, fun i ref notRetired relevant => ?_, rest⟩
   · show min (o.original i) _ = 0
     rw [(original i).2 notReference, Nat.zero_min]
   · have old := reference i ref notRetired relevant
+    -- The lowered value is either the old one or the funding value itself.
+    --
+    -- That funding value is the larger of the effective balance and the balance at `u`.
+    --
+    -- It is at least the potential, which caps the balance before it takes the larger.
+    --
     -- The potential is at most the funding value, since the capped balance is at most the balance.
     have capped : potential u i ≤ max (effectiveAt u i) (actualBalanceAt u i) := by
       unfold potential effectiveAt
@@ -150,17 +149,7 @@ private theorem epochSuffix_effective {fork : Fork} {consolidated z : BeaconStat
 
 /-- The whole-epoch reserved replay, followed by the lowering at its end state `z`.
 
-Its header is unchanged.
-
-This wrapper appends the lowering frame at `z` to its replay and to its suffix frame.
-
-The last conjunct is the effective bound that the carried bound on original baselines reads.
-
-Without a drop, the lowered value is at most the old one.
-
-A drop rounds the balance down.
-
-So the lowered value is below the new effective balance plus one increment. -/
+It takes the same hypotheses as the whole-epoch reserved replay. -/
 theorem reservedReplay_epochNext_lowered {fork : Fork}
     {s justified scored rewarded registered slashed reset deposited consolidated z :
       BeaconState preset fork}
@@ -241,6 +230,13 @@ theorem reservedReplay_epochNext_lowered {fork : Fork}
           RetiredActivated z (lowerOriginal final ⟨fork, z⟩).retired ∧
           EndpointCoverAll x ⟨fork, z⟩ (lowerOriginal final ⟨fork, z⟩) ∧
           FutureEffectiveCover x ⟨fork, z⟩ (lowerOriginal final ⟨fork, z⟩) ∧
+          -- This conjunct is the effective bound read by the carried bound on original baselines.
+          --
+          -- Without a drop, the lowered value is at most the old one.
+          --
+          -- A drop rounds the balance down.
+          --
+          -- So the lowered value is below the new effective balance plus one increment.
           (0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat → ∀ down : Nat → Prop,
             (∀ i, owned.original i ≤ effectiveAt ⟨fork, s⟩ i +
               (if down i then preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0)) →
@@ -254,6 +250,7 @@ theorem reservedReplay_epochNext_lowered {fork : Fork}
       trace reserve assignment erasure prior retired startCover startFuture startLife startFinite
       startCurrent ordered exits finite delayed delayTwo activationOrder nextOk twoSlots caps
       unique apart sources initialZero slashedSpan horizon orderedX slashedExit provenance
+  -- The lowering frame at `z` is appended to the replay and to its suffix frame.
   have lower := reservedFrame_lowerOriginal (config := config) (checks := checks)
     frame.2.2.2.2.2.2.2.2 frame.2.2.2.2.1 frame.2.2.2.2.2.2.1
   refine ⟨u, suffix, consumed, payments, allocations, final, pass, validators, balances, ?_,
@@ -438,17 +435,7 @@ theorem originalDown_slot {x m n : ForkedBeaconState preset}
   · rw [ite_eq_right f] at h
     omega
 
-/-- A key whose exit a step assigns, after a first drop, is a source-falling key.
-
-Its stop holds a charge, since its exit goes from FAR at `x` to assigned at `y`.
-
-The stop's assigning step cannot lie inside `pre`, where the exit is still FAR at its end.
-
-Nor can it be `pre` itself.
-
-So `pre` is a prefix of the stop's run.
-
-The key is unslashed at its stop state, since its exit is still FAR there. -/
+/-- A key whose exit a step assigns, after a first drop, is a source-falling key. -/
 theorem RoundLedger.sourceFalling_of_firstDown
     {g x y m n : ForkedBeaconState preset} {high : Nat} {tail : Run config checks x y}
     (ledger : RoundLedger tail high) (shared : Run config checks g x)
@@ -472,6 +459,7 @@ theorem RoundLedger.sourceFalling_of_firstDown
   have finalAssigned : final.exitEpoch ≠ FAR_FUTURE_EPOCH := by
     rw [finalLife.exitEpoch assigned]
     exact assigned
+  -- Its stop holds a charge, since its exit goes from FAR at `x` to assigned at `y`.
   obtain ⟨c, chosen, _⟩ :=
     (ledger.stops i).charge_of_new_exit initialFound finalFound initialUnset finalAssigned
   have selected := (ledger.stops i).selected
@@ -482,12 +470,18 @@ theorem RoundLedger.sourceFalling_of_firstDown
   have early : (ledger.stops i).state.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps (ledger.stops i).post.chainSteps)
       supported.2.2.2.2.1
+  -- The key is unslashed at its stop state, since its exit is still FAR there.
   have clean : v'.slashed = false := by
     cases flag : v'.slashed
     · rfl
     · exact absurd unset' (run_slashed_exit_assigned (shared.append (ledger.stops i).pre)
         supported.1 caps.activation caps.compounding delay i v' atStop flag)
   have split₁ := (pre.snoc_append_eq step rest).symm.trans split
+  -- The stop's assigning step cannot lie inside `pre`, where the exit is still FAR at its end.
+  --
+  -- Nor can it be `pre` itself.
+  --
+  -- So `pre` is a prefix of the stop's run.
   have firstDown : FirstDown (ledger.stops i).pre i := by
     rcases Run.prefix_total pre _ ((ledger.stops i).pre.snoc assigning) remaining split₁ split₂
       with ⟨r, extended⟩ | ⟨r, inside⟩

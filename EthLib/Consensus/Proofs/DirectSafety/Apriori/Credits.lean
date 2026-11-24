@@ -22,23 +22,7 @@ noncomputable section
 
 From Altair, an attestation pays its proposer for each flag that it newly sets.
 
-Each flag of one validator and one epoch is set at most once, since no step clears it.
-
 So the proposer credits of an epoch are bounded by a potential over two sets of keys.
-
-The keys active at the previous epoch of a start `r`, and those active at its current epoch.
-
-Each key weighs its base reward times the weights of the flags it holds.
-
-A missing entry counts as every flag set, so that no step can lower the potential.
-
-An attestation raises it by at least its numerator, which is `448` times its proposer credit.
-
-Every other step keeps or raises it, and it never exceeds `54` times the base rewards.
-
-The sync aggregate of each block pays at most the issuance envelope over `28` per slot.
-
-A slot holds at most one block, so an epoch pays at most the envelope over `28` for sync.
 -/
 
 /-- The weights of the flags that are set. -/
@@ -48,6 +32,7 @@ def flagWeight (flags : ParticipationFlags) : Nat :=
 
 /-- The weight of an entry of the flags, with a missing entry counted as every flag set. -/
 def entryWeight (entry : Option ParticipationFlags) : Nat :=
+  -- A missing entry counts as every flag set, so that no step can lower the potential.
   (entry.map flagWeight).getD 54
 
 /-- The flag potential of a state: the weighted flags of the two sets of keys.
@@ -55,6 +40,11 @@ def entryWeight (entry : Option ParticipationFlags) : Nat :=
 Each key counts its base reward, in the flags of the previous epoch or of the current one. -/
 def flagPotential (previous current : Finset ValidatorIndex) (base : ValidatorIndex → Nat)
     (u : ForkedBeaconState preset) : Nat :=
+  -- Each key of the first set weighs its base reward times the weights of its flags.
+  --
+  -- Those flags are the ones of the previous epoch.
+  --
+  -- Each key of the second set weighs the same, with its flags of the current epoch.
   if altair : .altair ≤ u.fork then
     ∑ i ∈ previous,
         entryWeight ((u.state.previousEpochParticipation altair).data[i.toNat]?) * base i +
@@ -94,6 +84,7 @@ private theorem flagWeights_sum :
 
 /-- An entry weighs at most `54`, the sum of the weights. -/
 private theorem entryWeight_le (entry : Option ParticipationFlags) : entryWeight entry ≤ 54 := by
+  -- So the potential never exceeds `54` times the base rewards.
   cases entry with
   | none => exact Nat.le_refl _
   | some flags =>
@@ -190,7 +181,9 @@ private theorem participation_gain {f : Fork} {s : BeaconState preset f} {total 
 
 Its attesters are active at its target, the previous or the current epoch of its state.
 
-So they lie in the sets of keys, if those hold the active keys of the two epochs. -/
+So they lie in the sets of keys, if those hold the active keys of the two epochs.
+
+The raise is at least the numerator of the proposer credit, which is `448` times that credit. -/
 private theorem attestation_flagPotential {f : Fork} {u u' : BeaconState preset f}
     (early : f < .glamsterdam) (altair : .altair ≤ f)
     {att : Attestation preset f} {parent : Slot} {credit : Nat}
@@ -266,6 +259,9 @@ private theorem attestation_flagPotential {f : Fork} {u u' : BeaconState preset 
 
 The keys must be inside the registry before the step, where no byte is zeroed. -/
 private theorem flagPotential_le_of_flags {f : Fork} {a b : BeaconState preset f}
+    -- Each flag of one validator and one epoch is set at most once, since no step clears it.
+    --
+    -- So every step other than an attestation keeps or raises the potential.
     (flags : FlagsKeptOrZero a b) {previous current : Finset ValidatorIndex}
     {base : ValidatorIndex → Nat} (inside : ∀ i ∈ previous ∪ current,
       i.toNat < a.validators.data.size) :
@@ -427,25 +423,19 @@ theorem except_dite_bind {α β : Type} (p : Prop) [Decidable p]
       ((if h : p then yes h else no h) >>= next) := by
   split <;> rfl
 
-/-- The replay of one block raises the flag potential by `448` times its proposer credits.
-
-Its sync credit, times `28` per slot of an epoch, is at most the issuance envelope of the total.
-
-That total is the one after the block, which the sync aggregate reads.
-
-Its sync debit limit is at most its sync credit limit, and it records no penalty event.
-
-Each attestation must raise the potential, at every state that keeps the start of the block. -/
+/-- The replay of one block raises the flag potential by `448` times its proposer credits. -/
 private theorem block_credits_generic {f : Fork} {b t : BeaconState preset f}
     (early : f < .glamsterdam) (altair : .altair ≤ f)
     {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
     {events : List (BalanceEvent preset)}
     (replay : blockBalanceReplay (config := config) (checks := checks) early engine b block =
       .ok (t, events)) :
+    -- The total is the one after the block, which the sync aggregate reads.
     ∃ total perIncrement, getTotalActiveBalance t = .ok total ∧
       getBaseRewardPerIncrement preset total = .ok perIncrement ∧
       ∀ (previous current : Finset ValidatorIndex) (base : ValidatorIndex → Nat)
     (_inside : ∀ i ∈ previous ∪ current, i.toNat < b.validators.data.size)
+    -- Each attestation must raise the potential, at every state that keeps the start of the block.
     (_attest : ∀ {u u' : BeaconState preset f} {att : Attestation preset f} {credit : Nat},
       EffectiveKept b u → ActiveStep b u →
       processAttestation config checks u b.latestBlockHeader.slot att = .ok u' →
@@ -454,9 +444,14 @@ private theorem block_credits_generic {f : Fork} {b t : BeaconState preset f}
         flagPotential previous current base ⟨f, u'⟩),
     flagPotential previous current base ⟨f, b⟩ + 448 * sourceCredits .rewards events ≤
         flagPotential previous current base ⟨f, t⟩ ∧
+      -- Its sync credit, times `28` per epoch slot, is at most the issuance envelope of the total.
+      --
+      -- The sync aggregate of each block pays at most that envelope over `28` per slot.
       sourceCredits .sync events * (28 * preset.SLOTS_PER_EPOCH.toNat) ≤
         preset.epochIssuanceBeforeAltair total.toNat ∧
+      -- Its sync debit limit is at most its sync credit limit.
       sourceDebits .sync events ≤ sourceCredits .sync events ∧
+      -- It records no penalty event.
       0 < preset.SLOTS_PER_EPOCH.toNat ∧ PenaltyFree events := by
   have normalized := replay
   unfold blockBalanceReplay at normalized
@@ -587,21 +582,7 @@ private theorem block_credits_generic {f : Fork} {b t : BeaconState preset f}
     simpa [sourceCredits, sourceDebits] using
       Nat.mul_le_mul_left preset.SYNC_COMMITTEE_SIZE.toNat (Nat.le_add_right _ proposer.toNat)
 
-/-- A step of a run inside an epoch from Electra raises the flag potential by its proposer credits.
-
-The potential reads the keys active at the previous and the current epoch of the start `r`.
-
-Each key weighs its base reward at the total of `r`.
-
-A slot step records no credit and moves the slot on, keeping the slot of the latest header.
-
-A block step stays at its slot, after the slot of the latest header, and makes that header its own.
-
-Its sync credit, times `28` per slot of an epoch, is at most the issuance envelope of the total.
-
-The sync debit limit of each step is at most its sync credit limit.
-
-No step records a penalty or an inactivity event. -/
+/-- A run's step inside an epoch from Electra raises the flag potential by its proposer credits. -/
 private theorem step_credits_generic {r m l : ForkedBeaconState preset}
     (pre : Run config checks r m)
     (step : Step config checks m l) (altairR : .altair ≤ r.fork) (early : l.fork < .glamsterdam)
@@ -616,21 +597,33 @@ private theorem step_credits_generic {r m l : ForkedBeaconState preset}
     ∀ (total perIncrement : Gwei) (_totalOk : getTotalActiveBalance r.state = .ok total)
     (_per : getBaseRewardPerIncrement preset total = .ok perIncrement)
     (previous current : Finset ValidatorIndex) (base : ValidatorIndex → Nat)
+    -- The potential reads the keys active at the previous and the current epoch of the start `r`.
     (_previousEq :
       previous = (getActiveValidatorIndices r.state (getPreviousEpoch r.state)).toFinset)
     (_currentEq : current = (getActiveValidatorIndices r.state (getCurrentEpoch r.state)).toFinset)
+    -- Each key weighs its base reward at the total of `r`.
     (_baseEq : ∀ i, base i =
       effectiveAt r i.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement.toNat),
     flagPotential previous current base m + 448 * sourceCredits .rewards added ≤
         flagPotential previous current base l ∧
+      -- The sync debit limit of each step is at most its sync credit limit.
       sourceDebits .sync added ≤ sourceCredits .sync added ∧
+      -- A slot step records no credit and moves the slot on, keeping the slot of the latest header.
       ((sourceCredits .sync added = 0 ∧ l.state.slot.toNat = m.state.slot.toNat + 1 ∧
           l.state.latestBlockHeader.slot = m.state.latestBlockHeader.slot) ∨
+        -- A block step stays at its slot, after the slot of the latest header.
+        --
+        -- It makes that header its own.
+        --
+        -- Its sync credit, times `28` per epoch slot, is at most the issuance envelope.
+        --
+        -- That envelope is read at the total.
         (sourceCredits .sync added * (28 * preset.SLOTS_PER_EPOCH.toNat) ≤
             preset.epochIssuanceBeforeAltair total.toNat ∧ 0 < preset.SLOTS_PER_EPOCH.toNat ∧
           l.state.slot = m.state.slot ∧
           m.state.latestBlockHeader.slot.toNat < m.state.slot.toNat ∧
           l.state.latestBlockHeader.slot = l.state.slot)) ∧
+      -- No step records a penalty or an inactivity event.
       PenaltyFree added := by
   have mEarly : m.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le early
   have rEarly : r.fork < .glamsterdam :=
@@ -782,21 +775,7 @@ private theorem flagPotential_le (previous current : Finset ValidatorIndex)
       (Finset.sum_le_sum fun i _ => Nat.mul_le_mul_right _ (entryWeight_le _))
   · exact Nat.zero_le _
 
-/-- The proposer and sync credits of the blocks of a run inside one epoch, from Electra.
-
-The proposer credits, times `448`, are at most `54` base rewards per increment for each increment.
-
-The increments are those of the effective stakes at the start `r` of two sets of keys.
-
-The sets are the keys active at the previous epoch of `r`, and those active at its current epoch.
-
-The sync credits, times `28`, are at most the issuance envelope of the total active balance of `r`.
-
-So are the sync debit limits, since each block's debit limit is at most its credit limit.
-
-No event of the run is a penalty or an inactivity event.
-
-A slot holds at most one block, so the epoch has at most `SLOTS_PER_EPOCH` of them. -/
+/-- The proposer and sync credits of the blocks of a run inside one epoch, from Electra. -/
 private theorem epoch_credits_generic {r s : ForkedBeaconState preset}
     (inner : Run config checks r s)
     (altairR : .altair ≤ r.fork) (early : s.fork < .glamsterdam)
@@ -810,13 +789,29 @@ private theorem epoch_credits_generic {r s : ForkedBeaconState preset}
         sourceDebits .sync events = 0 ∧ PenaltyFree events)) ∧
     ∀ (total perIncrement : Gwei) (_totalOk : getTotalActiveBalance r.state = .ok total)
       (_per : getBaseRewardPerIncrement preset total = .ok perIncrement),
+    -- The proposer credits, times `448`, are at most `54` base rewards for each increment.
+    --
+    -- The increments are those of the effective stakes at the start `r` of two sets of keys.
+    --
+    -- One set holds the keys active at the previous epoch of `r`.
+    --
+    -- The other holds the keys active at its current epoch.
     sourceCredits .rewards events * 448 ≤ 54 * perIncrement.toNat *
       ((∑ i ∈ (getActiveValidatorIndices r.state (getPreviousEpoch r.state)).toFinset,
           effectiveAt r i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
         (∑ i ∈ (getActiveValidatorIndices r.state (getCurrentEpoch r.state)).toFinset,
           effectiveAt r i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ∧
+      -- The sync credits, times `28`, are at most the issuance envelope of the total.
+      --
+      -- That total is the total active balance of `r`.
+      --
+      -- A slot holds at most one block, so the epoch has at most `SLOTS_PER_EPOCH` of them.
+      --
+      -- So an epoch pays at most the envelope over `28` for sync.
       sourceCredits .sync events * 28 ≤ preset.epochIssuanceBeforeAltair total.toNat ∧
+      -- So are the sync debit limits, since each block's debit limit is at most its credit limit.
       sourceDebits .sync events * 28 ≤ preset.epochIssuanceBeforeAltair total.toNat ∧
+      -- No event of the run is a penalty or an inactivity event.
       PenaltyFree events := by
   set previous := (getActiveValidatorIndices r.state (getPreviousEpoch r.state)).toFinset
   set current := (getActiveValidatorIndices r.state (getCurrentEpoch r.state)).toFinset

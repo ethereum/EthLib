@@ -949,13 +949,7 @@ private theorem deposit_le_funding {g u v : ForkedBeaconState preset}
 
 /-- From Electra, the pending consolidations of an epoch move at most a weight.
 
-That weight is the weight of their sources at the start of the slot.
-
-The sources that move a positive amount leave the slashable base in the slot.
-
-Skipped slashed sources move nothing, and are not in the base at the start of the slot.
-
-A source that is a target earlier in the same pass moves at most its prior effective balance. -/
+That weight is the weight of their sources at the start of the slot. -/
 private theorem pass_le_freed {g u v : ForkedBeaconState preset}
     (shared : Run config checks g u) (genesis : Genesis (config := config) (checks := checks) g)
     (step : Step config checks u v)
@@ -976,6 +970,11 @@ private theorem pass_le_freed {g u v : ForkedBeaconState preset}
     (final : v.state.validators.data = updated.validators.data)
     (nextEpoch : (getCurrentEpoch v.state).toNat = (getCurrentEpoch u.state).toNat + 1) :
     consumedConsolidations deposited middle electra ≤
+      -- The sources that move a positive amount leave the slashable base in the slot.
+      --
+      -- Skipped slashed sources move nothing, and are not in the base at the start of the slot.
+      --
+      -- A source that was a target earlier in this pass moves at most its prior effective balance.
       ∑ i ∈ Finset.range u.state.validators.data.size,
         if pooled u i && !pooled v i then weight u i else 0 := by
   have uEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early

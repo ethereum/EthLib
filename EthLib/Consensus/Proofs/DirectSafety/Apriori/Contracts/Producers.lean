@@ -718,33 +718,30 @@ private theorem penaltyParts_le {first sync factor weight root : Nat}
     Nat.mul_div_mul_left _ _ (by decide : 0 < 16)] at joined
   exact joined
 
-/-- The penalties of one rewards pass and the sync debits of its epoch fit `lambda_t`.
-
-The pass is replayed from `state`, after the update of the scores, over a set `S` of keys.
-
-Each score of `S` is at most `sigma + bias * (t + 1)`, and their eligible stake at most `W_t`.
-
-`W_t` is the ceiling `T_plus_t` plus `Y`.
-
-The total active balance `T` lies between `T_minus_t` and `W_t`.
-
-The sync debits of the epoch, times `28`, are at most the issuance envelope of `T`. -/
+/-- The penalties of one rewards pass and the sync debits of its epoch fit `lambda_t`. -/
 theorem epoch_penalty_envelope
     {fork : Fork} {state : BeaconState preset fork} {total : Gwei} {x : ForkedBeaconState preset}
     {high t : Nat} (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
     {rewarded : BalanceReplay preset fork}
+    -- The pass is replayed from `state`, after the update of the scores, over a set `S` of keys.
     (replayed : replayRewards (config := config) (state, []) = .ok rewarded)
     (active : getTotalActiveBalance state = .ok total) (S : Finset Nat)
     (inside : ∀ j ∈ S, j < state.validators.data.size)
+    -- Each score of `S` is at most `sigma + bias * (t + 1)`.
     (scores : ∀ j ∈ S, ∀ score : UInt64,
       (state.inactivityScores altair).data[j]? = some score →
         score.toNat ≤ startInactivityScore config x + config.INACTIVITY_SCORE_BIAS.toNat * (t + 1))
+    -- The eligible stake of `S` is at most `W_t`.
+    --
+    -- `W_t` is the ceiling `T_plus_t` plus `Y`.
     (weight : (∑ j ∈ S, eligibleWeight state j) ≤
       stakeCeilingAt config x high t + slashedUnwithdrawnStake x)
+    -- The total active balance `T` lies between `T_minus_t` and `W_t`.
     (floor : stakeFloorAt config x high t ≤ total.toNat)
     (totalLe : total.toNat ≤ stakeCeilingAt config x high t + slashedUnwithdrawnStake x)
     (positive : 0 < stakeFloorAt config x high t)
     (divisor : 0 < inactivityPenaltyDivisor preset config)
+    -- The sync debits of the epoch, times `28`, are at most the issuance envelope of `T`.
     {sync : Nat} (syncLe : sync * 28 ≤ preset.epochIssuanceBeforeAltair total.toNat) :
     (∑ j ∈ S, (rewarded.2.map (penaltyDebit j)).sum) + sync ≤
       epochPenalty preset config (startInactivityScore config x)

@@ -22,17 +22,16 @@ noncomputable section
 
 /-- Conditional composition needs the derived envelope and the ledger at cached calls.
 
-It does not need the resource and per-key producers that establish them.
-
-The cached-call ledger remains an explicit input.
-
-The ledger of the common slashed stake is stated on run endpoints.
-
-But the two selected calls observe cached states inside epoch processing. -/
+It does not need the resource and per-key producers that establish them. -/
 theorem composition_conditional_of_call_ledger
     (derived : ∀ g x y : ForkedBeaconState preset,
       DerivedProducer (config := config) (checks := checks) (g := g) (x := x) (y := y))
     (identities : ∀ x y c, ReducedIdentity (preset := preset) x y c)
+    -- The cached-call ledger remains an explicit input.
+    --
+    -- The ledger of the common slashed stake is stated on run endpoints.
+    --
+    -- But the two selected calls observe cached states inside epoch processing.
     (callLedger : ∀ {g x a b : ForkedBeaconState preset}
       (shared : Run config checks g x) (left : Run config checks x a)
       (right : Run config checks x b), Parameters preset →
@@ -292,14 +291,13 @@ open Cryptography.Bls
 
 Add twice the stake of `c` still unslashed at `y`.
 
-The sum is the drift on all the unslashed keys.
-
-The keys of `c` are not recent at `y`.
-
-So each of them loses all its effective balance when it is unslashed at `y`, and none gains. -/
+The sum is the drift on all the unslashed keys. -/
 theorem reducedIdentity (x y : ForkedBeaconState preset) (c : Finset BLSPubkey) :
     ReducedIdentity (preset := preset) x y c := by
   intro inside apart
+  -- The keys of `c` are not recent at `y`.
+  --
+  -- So each of them loses all its effective balance when it is unslashed at `y`, and none gains.
   have notRecent : ∀ k ∈ c, k ∉ recentKeys y.state := fun k member recent =>
     (Finset.eq_empty_iff_forall_notMem.mp apart) k (Finset.mem_inter.mpr ⟨member, recent⟩)
   -- A recent key is outside `c`, so it has the same support in both reference sets.
@@ -381,15 +379,7 @@ private theorem keys_stake_le_validators {x : ForkedBeaconState preset}
   rw [counted]
   exact (List.filter_sublist.map _).sum_le_sum (fun _ _ => Nat.zero_le _)
 
-/-- The slashed common stake is paid from the scheduled keys' common reserve.
-
-Each common key is the key of one scheduled index of `x`.
-
-That index is unslashed and active, with an exit assigned before the cutoff.
-
-When that key is slashed at `y`, it is not recent there.
-
-So its common reserve is its effective balance at `x`. -/
+/-- The slashed common stake is paid from the scheduled keys' common reserve. -/
 theorem commonSlashed_le_commonReserve {x y : ForkedBeaconState preset}
     {high cutoff : Nat} (allocation : ScheduledAllocation x y high)
     (unique : PubkeysDistinct x.state) (uniqueY : PubkeysDistinct y.state)
@@ -404,6 +394,8 @@ theorem commonSlashed_le_commonReserve {x y : ForkedBeaconState preset}
   have distinct : (x.state.validators.data.toList.map (·.pubkey)).Nodup := unique
   have distinctY : (y.state.validators.data.toList.map (·.pubkey)).Nodup := uniqueY
   -- Each common key is the key of one validator of `x`, at an index.
+  --
+  -- That index is scheduled.
   --
   -- That validator is active and unslashed, with an exit assigned before the cutoff.
   have indexed : ∀ k ∈ exitedBefore x cutoff, ∃ (i : Nat) (v : Validator),
@@ -473,9 +465,11 @@ theorem commonSlashed_le_commonReserve {x y : ForkedBeaconState preset}
     have same : u = w := List.inj_on_of_nodup_map distinctY uListed wListed
       (uKey.trans (key.symm.trans sameKey))
     subst same
+    -- When that key is slashed at `y`, it is not recent there.
     have notRecent : initial.pubkey ∉ recentKeys y.state := fun recent =>
       (Finset.eq_empty_iff_forall_notMem.mp apart) initial.pubkey
         (Finset.mem_inter.mpr ⟨key ▸ common, recent⟩)
+    -- So its common reserve is its effective balance at `x`.
     rw [allocation.exactCommon _ scheduled u initial initialAt endpoint]
     simp [uSlashed, notRecent]
   have weight : ∀ k ∈ slashedCommon,
@@ -679,15 +673,7 @@ theorem penaltyProducer_proved {g x y : ForkedBeaconState preset} :
 
 For each exit epoch through the end of the window, sum `cap - 2e` over the keys that exit there.
 
-The exit-cohort growth takes the largest of these sums.
-
-Each cap and effective balance is read at `x`.
-
-A key with an assigned exit stays within its cap at `x`.
-
-Before Electra, the guard keeps the whole window before the fork.
-
-From Electra, its credentials never become compounding. -/
+The exit-cohort growth takes the largest of these sums. -/
 
 /-- On a supported branch, a key with an assigned exit at `x` stays within its cap at `x`. -/
 private theorem scheduled_effective_le_cap {g x y : ForkedBeaconState preset}
@@ -702,6 +688,9 @@ private theorem scheduled_effective_le_cap {g x y : ForkedBeaconState preset}
   have cap := (shared.append tail).effectiveBalance_capped genesis caps.activation
     caps.compounding w (Array.mem_of_getElem? read)
   have atEnd : effectiveAt y i = w.effectiveBalance.toNat := by simp [effectiveAt, read]
+  -- Before Electra, the guard keeps the whole window before the fork.
+  --
+  -- From Electra, the credentials of the key never become compounding.
   have regime := (guarded_fork_regime (shared.append tail) genesis high endEpoch guard).2
   have kept : withdrawalMaxEffectiveBalance preset y.fork w ≤
       withdrawalMaxEffectiveBalance preset x.fork v := by
@@ -742,6 +731,7 @@ private theorem cohort_le_Rhat (x : ForkedBeaconState preset) (high j : Nat)
     (x.state.validators.data.toList.map fun v =>
       if isActiveValidator v (getCurrentEpoch x.state) && !v.slashed &&
           decide (v.exitEpoch.toNat = j) then
+        -- Each cap and effective balance is read at `x`.
         (withdrawalMaxEffectiveBalance preset x.fork v).toNat - 2 * v.effectiveBalance.toNat
       else 0).sum ≤ exitCohortGrowth x high := by
   unfold exitCohortGrowth
@@ -838,17 +828,7 @@ private theorem queueConsolidation_facts {fork : Fork} {s t : BeaconState preset
     simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set]
     rw [Array.getElem?_set_ne _ (Ne.symm different), validators]
 
-/-- Queueing an unslashed, active source with no exit keeps the reserve cut at the current epoch.
-
-The new entry is appended to the queue.
-
-The source stays supported at the current epoch.
-
-So it was already relevant and bounded at the input.
-
-Its new withdrawable epoch is after the current epoch, so it is not due.
-
-Every other validator and every balance is unchanged. -/
+/-- Queueing an unslashed, active source with no exit keeps the reserve cut at the current epoch. -/
 private theorem reserveCut_queueConsolidation {x : ForkedBeaconState preset} {high : Nat}
     {fork : Fork} {s t : BeaconState preset fork} {electra : .pectra ≤ fork}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
@@ -860,12 +840,15 @@ private theorem reserveCut_queueConsolidation {x : ForkedBeaconState preset} {hi
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t)
     (reserve : ReserveCut x high ⟨fork, s⟩ (getCurrentEpoch s) suffix o) :
     ReserveCut x high ⟨fork, t⟩ (getCurrentEpoch s)
+      -- The new entry is appended to the queue.
       (suffix ++ [⟨sourceIndex, targetIndex⟩]) o := by
+  -- Every other validator and every balance is unchanged.
   obtain ⟨balances, _, exitEpoch, withdrawableEpoch, later, delayed, atSource, others⟩ :=
     queueConsolidation_facts found ok
   have ordered : exitEpoch ≤ withdrawableEpoch := UInt64.le_iff_toNat_le.mpr (by omega)
   obtain ⟨valid, wasRetired, original, reference, scheduled, pending, due, idle, activePending,
     endpoint⟩ := reserve
+  -- The source stays supported at the current epoch.
   have supported : SupportedAt (getCurrentEpoch s) source := ⟨clean, Or.inl active⟩
   -- Each validator after the step is the one before it, or the source with its new epochs.
   have lookup : ∀ k w, t.validators.data[k]? = some w →
@@ -900,6 +883,8 @@ private theorem reserveCut_queueConsolidation {x : ForkedBeaconState preset} {hi
       subst new
       exact absurd index.symm different
   -- Funding relevance after the step gives funding relevance before it.
+  --
+  -- So the source was already relevant and bounded at the input.
   have relevant : ∀ k, FundingRelevant ⟨fork, t⟩ (getCurrentEpoch s)
       (suffix ++ [⟨sourceIndex, targetIndex⟩]) k →
       FundingRelevant ⟨fork, s⟩ (getCurrentEpoch s) suffix k := by
@@ -1002,20 +987,6 @@ private theorem futureCover_queueConsolidation {x : ForkedBeaconState preset} {f
 
 /-- The reserved replay of one consolidation request of a block.
 
-The request does one of three things.
-
-It returns its state, or it switches one validator to compounding credentials.
-
-Otherwise, it queues an accepted source.
-
-- Returning the state keeps everything.
-- The switch is the reserved replay of a switch to compounding, here `switched`.
-- Queueing appends a fresh tag for the call it makes.
-  An accepted source is active with no exit.
-  So by `slashedExit` it is unslashed and supported at the current epoch.
-  Its reserve was already bounded, and it is not due.
-  Its assignment bound is `assigned`.
-
 The ownership is unchanged in every case. -/
 theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState preset fork}
     {request : ConsolidationRequest}
@@ -1028,8 +999,12 @@ theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState pre
     (electra : .pectra ≤ fork)
     (ok : processConsolidationRequest config s electra request = .ok t)
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    -- An accepted source is active with no exit.
+    --
+    -- So by this hypothesis it is unslashed and supported at the current epoch.
     (slashedExit : ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v →
       v.slashed = true → v.exitEpoch ≠ FAR_FUTURE_EPOCH)
+    -- This is the assignment bound of the queued source.
     (assigned : ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v →
       v.exitEpoch = FAR_FUTURE_EPOCH →
       (∃ w, t.validators.data[i]? = some w ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH) →
@@ -1046,6 +1021,7 @@ theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState pre
         getConsolidationChurnLimit config s = .ok call.rate ∧
         computeActivationExitEpoch preset (getCurrentEpoch s) = .ok call.first ∧
         ∃ next, getValidator t sourceIndex = .ok next ∧ next.exitEpoch = call.epoch)
+    -- The reserved replay of a switch to compounding.
     (switched : ∀ index : ValidatorIndex, switchToCompoundingValidator s electra index = .ok t →
       ∀ e : BalanceEvent preset, e.before = ⟨fork, s⟩ → e.after = ⟨fork, t⟩ →
       e.source ≠ .consolidations →
@@ -1094,9 +1070,16 @@ theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState pre
     unfold OwnedEvent
     simp only [notTransfer, ↓reduceIte]
     exact ⟨by trivial, by trivial, Or.inr (OwnedFrame.refl ownedFrame.1)⟩
+  -- The request does one of three things.
+  --
+  -- It returns its state, or it switches one validator to compounding credentials.
+  --
+  -- Otherwise, it queues an accepted source.
   rcases consolidationRequest_cases ok with same | ⟨index, _, _, switch⟩ |
     ⟨sourceIndex, source, targetIndex, target, accepted, queued⟩
-  -- The request returned its state: the event keeps the queue and the ownership.
+  -- The request returned its state, which keeps everything.
+  --
+  -- The event keeps the queue and the ownership.
   · subst t
     have tagged : TagEvent (config := config) ⟨.excess, ⟨fork, s⟩, ⟨fork, s⟩, 0, debit⟩
         callPosition queue queue [] [] [] :=
@@ -1134,6 +1117,7 @@ theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState pre
     obtain rfl := Option.some.inj ((getValidator_eq_ok_iff.mp nextRead).symm.trans atSource)
     let called : IndexedDepartureCall preset config :=
       ⟨some sourceIndex.toNat, call, none, by simp, by simp⟩
+    -- Queueing appends a fresh tag for the call it makes.
     let tag : TaggedEntry :=
       ⟨⟨sourceIndex, targetIndex⟩, .fresh callPosition, call.amount.toNat, call.epoch.toNat⟩
     have erasureT : QueueErasure (queue ++ [tag]) (pendingQueue ⟨fork, t⟩) := by
@@ -1146,6 +1130,9 @@ theorem reservedReplay_consolidationRequest {fork : Fork} {s t : BeaconState pre
       ⟨erasure, erasureT, Or.inr (Or.inl ⟨fork, s, t, electra, request, sourceIndex, source,
         targetIndex, called, rfl, rfl, rfl, ok, getValidator_eq_ok_iff.mpr found, queued, rfl,
         amount, earliest, available, epoch, left, first, rate, rfl, rfl, rfl, rfl⟩)⟩
+    -- The source is unslashed and supported at the current epoch.
+    --
+    -- Its reserve was already bounded, and it is not due.
     have reserveT : ReserveCut x high ⟨fork, t⟩ (getCurrentEpoch t)
         ((queue ++ [tag]).map (·.entry)) owned := by
       rw [sameEpoch, List.map_append]
@@ -1247,17 +1234,7 @@ private theorem B0_le_Bd (x : ForkedBeaconState preset) (high : Nat) : previousO
 
 /-- Take the previous-only keys still recent at `y` and the initially scheduled boundary of `y`.
 
-Together they fit the stake of the previous-only keys plus twice `Bd`.
-
-Each previous-only key exits at the epoch of `x`.
-
-So it stays recent only while `y` is in that epoch.
-
-There it counts once as gain and twice as boundary, and its effective balance has not risen.
-
-Above that epoch, take the active keys of `x` that exit at the epoch of `y`.
-
-They are one exit cohort within the horizon, which `Bd` bounds. -/
+Together they fit the stake of the previous-only keys plus twice `Bd`. -/
 theorem oldBoundary_le {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y) (high : Nat)
     (supported : Supported shared tail high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) :
@@ -1276,6 +1253,10 @@ theorem oldBoundary_le {g x y : ForkedBeaconState preset}
   set E := (getCurrentEpoch x.state).toNat with hE
   set Ey := (getCurrentEpoch y.state).toNat with hEy
   -- The scheduled boundary of `y` is one exit cohort of `x` within the horizon.
+  --
+  -- Above the epoch of `x`, take the active keys of `x` that exit at the epoch of `y`.
+  --
+  -- They are one exit cohort within the horizon, which `Bd` bounds.
   set scheduled := ∑ i ∈ Finset.range x.state.validators.data.size,
     if (x.state.validators.data[i]?).any (fun v =>
         isActiveValidator v (getCurrentEpoch x.state) && !v.slashed &&
@@ -1309,6 +1290,10 @@ theorem oldBoundary_le {g x y : ForkedBeaconState preset}
     · simp only [Bool.not_eq_true] at chosen
       simp only [chosen, Bool.false_eq_true, ↓reduceIte]
       exact Nat.zero_le _
+  -- Each previous-only key exits at the epoch of `x`.
+  --
+  -- So it stays recent only while `y` is in that epoch.
+  --
   -- A previous-only key recent at `y` keeps the epoch of `x` and its effective balance.
   have carried : ∀ k ∈ recentKeys y.state ∩ previousOnly x,
       Ey = E ∧ effectiveWeight y.state k ≤ effectiveWeight x.state k := by
@@ -1360,6 +1345,9 @@ theorem oldBoundary_le {g x y : ForkedBeaconState preset}
               ⟨i, v, found, key, by simpa using activeNow⟩)
           simp [activeBefore, inactive]
   have b0 := B0_le_Bd x high
+  -- In the epoch of `x`, a previous-only key counts once as gain and twice as boundary.
+  --
+  -- There its effective balance has not risen.
   by_cases stayed : Ey = E
   · -- In the epoch of `x` no key active at `x` exits, so the scheduled boundary is empty.
     have empty : scheduled = 0 := by

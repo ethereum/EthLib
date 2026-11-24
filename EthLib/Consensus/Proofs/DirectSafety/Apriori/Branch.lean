@@ -59,15 +59,7 @@ private theorem epochReplayAction_sources {f : Fork} {k : EpochStage}
     · cases ok
       exact ⟨[], by simp, by simp, by simp, fun _ => by simp⟩
 
-/-- The replay of an epoch, from Altair, runs justification and inactivity, then the rewards.
-
-Its events are those of the rewards pass, replayed from the state after the score update.
-
-They are followed by slashing, deposit and consolidation events only.
-
-The rewards pass records reward, penalty and inactivity events only.
-
-The later stages record at most one deposit event. -/
+/-- The replay of an epoch, from Altair, runs justification and inactivity, then the rewards. -/
 private theorem epochReplay_events_core {f : Fork} (altair : .altair ≤ f)
     {cached : BeaconState preset f} {post : BalanceReplay preset f}
     (trace : EpochTrace (epochReplayAction (config := config) (checks := checks))
@@ -75,9 +67,13 @@ private theorem epochReplay_events_core {f : Fork} (altair : .altair ≤ f)
     ∃ just pass rewarded later, EpochStage.Edge config checks .justification cached just ∧
       EpochStage.Edge config checks .inactivity just pass ∧
       replayRewards (config := config) (pass, []) = .ok rewarded ∧
+      -- Its events are those of the rewards pass, replayed from the state after the score update.
       post.2 = rewarded.2 ++ later ∧
+      -- They are followed by slashing, deposit and consolidation events only.
       (∀ e ∈ later, e.source = .slashings ∨ e.source = .deposits ∨ e.source = .consolidations) ∧
+      -- The rewards pass records reward, penalty and inactivity events only.
       (∀ e ∈ rewarded.2, e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity) ∧
+      -- The later stages record at most one deposit event.
       (later.filter fun e => e.source = .deposits).length ≤ 1 := by
   simp only [EpochStage.prefixStages] at trace
   cases trace with | cons one trace =>
@@ -163,14 +159,6 @@ The withdrawn-source credit of an event is what a deposit event credits to pendi
 It counts only the sources that can already withdraw at the current epoch.
 
 On a run from genesis it is zero at every deposit event.
-
-From Electra, a block deposit only queues a pending deposit, so its event credits nothing.
-
-The pass of the pending deposits starts at a state of the epoch replay.
-
-The stages before it keep the pending consolidations ordered, with the current epoch as bound.
-
-So every pending source there withdraws after the current epoch, slashed or not.
 -/
 
 /-- The credit to withdrawable pending sources is part of the credits of the event. -/
@@ -230,6 +218,7 @@ private theorem withdrawnConsolidationCredit_eq_zero_of_ordered {s t : BeaconSta
       simp only [Bool.and_eq_true, decide_eq_true_eq, ← Array.any_toList, List.any_eq_true,
         beq_iff_eq] at due
       obtain ⟨withdrawable, c, mem, index⟩ := due
+      -- Every pending source withdraws after the current epoch, slashed or not.
       obtain ⟨-, -, late⟩ := sources c mem v (by rw [index]; exact read)
       omega
     · rfl
@@ -250,6 +239,9 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
         BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u post.1 ∧
           processPendingDeposits config checks u electra = .ok v ∧
           e.before = ⟨fork, u⟩ ∧ e.after = ⟨fork, v⟩) := by
+  -- The pass of the pending deposits starts at a state of the epoch replay.
+  --
+  -- The stages before it keep the pending consolidations ordered, with the current epoch as bound.
   let Settled (pre : BalanceReplay preset fork) : Prop :=
     PendingConsolidationsOrdered config (getCurrentEpoch pre.1).toNat pre.1 ∧
       (∀ e ∈ pre.2, e.source = .deposits → withdrawnConsolidationCredit e = 0) ∧
@@ -409,15 +401,7 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
     all_goals simp [EpochStage.prefixStages] at member
   exact ⟨done.2.1, fun matched ordered => (done.2.2 matched ordered).2.2⟩
 
-/-- The deposit events of one step before Gloas credit no withdrawable pending source.
-
-A block deposit has no credit limit from Electra, and its credits are within that limit.
-
-A slot runs the epoch replay from an ordered state, and its upgrades record no deposit.
-
-A deposit event of a slot is the pending-deposit pass at an ordered state with matching sizes.
-
-The registry of that state keeps its assigned epochs to the end of the slot. -/
+/-- The deposit events of one step before Gloas credit no withdrawable pending source. -/
 private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
     {g x y : ForkedBeaconState preset} (shared : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g) (step : Step config checks x y)
@@ -427,8 +411,12 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
     (EventsBounded events →
       ∀ e ∈ events, e.source = .deposits → withdrawnConsolidationCredit e = 0) ∧
     ∀ (across : advanceSlotAcross config checks x = .ok y), step = Step.slot across →
+      -- A deposit event of a slot is the pending-deposit pass at an ordered state.
+      --
+      -- That state has matching sizes.
       (∀ e ∈ events, e.source = .deposits →
         ∃ (electra : .pectra ≤ x.fork) (u v : BeaconState preset x.fork),
+          -- The registry of that state keeps its assigned epochs to the end of the slot.
           BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u y.state ∧
             processPendingDeposits config checks u electra = .ok v ∧
             e.before = ⟨x.fork, u⟩ ∧ e.after = ⟨x.fork, v⟩) ∧
@@ -441,14 +429,23 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
     have quiet := funding_block_events sourceEarly engine signed.message
       (Step.balanceEvents_block sourceEarly ok)
     refine ⟨fun bounded e mem deposit => ?_, fun across same => by cases same⟩
+    -- From Electra, a block deposit only queues a pending deposit, so its event credits nothing.
     by_cases electra : .pectra ≤ e.before.fork
+    -- From Electra, a block deposit event has a zero credit limit.
+    --
+    -- Its credits are within that limit, so they are zero.
     · have zero := quiet e mem deposit electra
       have within := (bounded e mem).1
       have part := withdrawnConsolidationCredit_le_credits e
       omega
+    -- Before Electra, the credit to a withdrawable source is zero by definition.
     · rw [withdrawnConsolidationCredit, dite_eq_right electra]
   | slot across =>
     -- The slot replays the epoch only at its last slot, then records the upgrade crossings.
+    --
+    -- A slot runs the epoch replay from an ordered state.
+    --
+    -- Its upgrades record no deposit.
     obtain ⟨advanced, advanceOk, upgrades⟩ := bind_ok_iff.mp across
     have steps := advanceOk
     simp only [advanceSlot, bind_ok_iff] at steps
@@ -1187,17 +1184,9 @@ theorem funding_le_ceiling {g v y : ForkedBeaconState preset}
 
 The rewards pass at the end of epoch `t` reads the participants of epoch `t - 1`.
 
-Each is active at `t - 1`, and its effective balance has not changed since an earlier state `u`.
+Their balance is at most the effective stake of the keys active at `t - 1`.
 
-So their balance is at most the effective stake at `u` of the keys active at `t - 1`.
-
-For `t >= 1`, `u` is the output of the epoch transition that ends `t - 1`.
-
-Its current epoch is still `t - 1`, so its funded stake counts every such key.
-
-For `t = 0`, `u` is the start `x` of the branch.
-
-The keys active at the epoch before `x` but not at `x` are then counted by their stake at `x`.
+That stake is read at an earlier state `u`.
 -/
 
 /-- The participants of the previous epoch weigh at most the stake at `u` of its active keys.
@@ -1205,6 +1194,9 @@ The keys active at the epoch before `x` but not at `x` are then counted by their
 The pass must keep the activity of `u` at that epoch, and its effective balances. -/
 private theorem participating_le_reference {f h : Fork} {u : BeaconState preset f}
     {pass : BeaconState preset h} (early : f < .glamsterdam) (altair : .altair ≤ h)
+    -- Each participant is active at `t - 1`.
+    --
+    -- Its effective balance has not changed since the earlier state `u`.
     (active : ActiveKept (getPreviousEpoch pass) u pass)
     (effective : ∀ i, i < u.validators.data.size →
       effectiveAt ⟨h, pass⟩ i = effectiveAt ⟨f, u⟩ i)
@@ -1306,6 +1298,9 @@ theorem previousStake_le_ceiling {g z w : ForkedBeaconState preset}
     (delay : 2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {events : List (BalanceEvent preset)}
     (replayed : (Step.slot boundary).balanceEvents = .ok events) :
+    -- For `t >= 1`, `u` is the output of the epoch transition that ends `t - 1`.
+    --
+    -- Its current epoch is still `t - 1`, so its funded stake counts every such key.
     ∑ i ∈ (getActiveValidatorIndices w.state (getPreviousEpoch w.state)).toFinset,
         effectiveAt w i.toNat ≤
       fundedStake z + fundingCarry z + config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
@@ -1421,6 +1416,9 @@ It is the funded stake of `x` and the stake at `x` of the keys active only at th
 The keys of the registry must be distinct. -/
 theorem previousStake_le_start (x : ForkedBeaconState preset)
     (xEarly : x.fork < .glamsterdam) (unique : PubkeysDistinct x.state) :
+    -- For `t = 0`, `u` is the start `x` of the branch.
+    --
+    -- The keys active at the epoch before `x` but not at `x` are then counted by their stake there.
     ∑ i ∈ (getActiveValidatorIndices x.state (getPreviousEpoch x.state)).toFinset,
       effectiveAt x i.toNat ≤ fundedStake x + previousOnlyStake x := by
   have within := x.state.validators.bound xEarly
