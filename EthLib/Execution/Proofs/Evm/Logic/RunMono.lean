@@ -11,7 +11,9 @@ public import EthLib.Execution.Proofs.Evm.Instructions.LogData
 /-!
 # Proofs: instructions that are monotone in gas
 
-With less gas, each instruction here fails, or gives the same frame with the same less gas.
+Each instruction here is monotone in gas.
+
+On a frame with less gas it fails, or it gives the same frame with the same less gas.
 
 Its failure is an error, or a halt with an error.
 

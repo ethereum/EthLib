@@ -12,6 +12,12 @@ The facts here cover the other outcomes of that step, for every kind of call tha
 
 They hold at every fork from Berlin, with one counter of gas, along either route.
 
+The outcomes are these:
+
+- A call with less gas than its price before the gas it passes on fails, or halts the frame.
+- A call at the greatest depth, with at least that price in gas, sends no message.
+- From Pectra, a call fails, or halts the frame, when the state fails to give the delegate code.
+
 Out of scope: a call that sends value, and a creation.
 -/
 
@@ -90,7 +96,9 @@ theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
       after.message = evm.message ∧ after.pc = evm.pc + 1 ∧ after.stack.val = 0 :: rest ∧
       after.running = evm.running ∧ after.error = evm.error ∧ after.output = evm.output ∧
       after.returnData = .empty ∧
-      -- It pays only that price and grows its memory, and it gets back the gas it would pass on.
+      -- The frame pays only that price and grows its memory.
+      --
+      -- It gets back the gas that it would pass on.
       after.memory = memoryExtend evm.memory
         (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy ∧
       after.gas = evm.gas -

@@ -7,9 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Interpreter
 
 A program logic over EVM bytecode reasons about the frames that one frame goes through.
 
-Here the steps send no message.
+The steps here send no message, so they say nothing past a call.
 
-Frames that send messages step under a runner of messages.
+The frames that send messages have their own relation, under a runner of messages.
 -/
 
 @[expose] public section
@@ -90,7 +90,7 @@ variable [GasMeter Meter]
 
 It runs the opcode at the program counter, and gives the next frame or halts, as the loop does.
 
-A step that asks for a message, a call or a creation, has no rule, so none goes past a call. -/
+A step that asks for a message, a call or a creation, has no rule here. -/
 inductive Step (fork : Fork) : Evm fork Meter → Evm fork Meter → Prop where
   /-- The step gives the next frame. -/
   | next {evm after : Evm fork Meter} : evm.running = true →

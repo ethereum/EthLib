@@ -10,7 +10,13 @@ A run succeeds when the loop of the interpreter ends its frame in a frame with n
 
 A specification to frames with no error gives a run that succeeds.
 
-For one counter of gas, a run with less gas than a specified halt pays never succeeds.
+So does a specification whose runner may fail only on the messages that it names.
+
+The runner must then never fail on those messages.
+
+For the meter of one counter of gas, no run with less gas than a halt pays succeeds.
+
+That holds when a specification to that halt holds with any gas from some bound on.
 -/
 
 @[expose] public section

@@ -342,7 +342,9 @@ theorem extcodecopy_known (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     (hlt : pc < code.size) (hbyte : code[pc] = 0x3c) (hz : length ≠ 0)
     (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
     (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
-    -- It pays 2600 for a cold address and 100 for a warm one, 3 gas a word and memory growth.
+    -- The copy pays 2600 for a cold address and 100 for a warm one.
+    --
+    -- It also pays 3 gas a word and the growth of memory.
     (hgas : (if cold then 2600 else 100) + 3 * wordCount length.toNat +
       (extendMemory size [(start, length)]).cost ≤ gas) :
     Hoare fork
@@ -353,7 +355,9 @@ theorem extcodecopy_known (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
           facts.filter (Apart start.toNat length.toNat))
         (gas - ((if cold then 2600 else 100) + 3 * wordCount length.toNat +
           (extendMemory size [(start, length)]).cost))
-        -- It adds the address to the accessed addresses, and records the read of the account.
+        -- The copy adds the address to the accessed addresses.
+        --
+        -- It records the read of the account.
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=

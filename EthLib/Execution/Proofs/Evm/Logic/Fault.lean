@@ -9,11 +9,17 @@ public import EthLib.Execution.Proofs.Evm.Logic.GasMono
 
 A step that fails halts the frame exceptionally, unless its error aborts the whole run.
 
-The rules here cover an invalid opcode and a jump to an invalid destination, with a tactic.
+The frame does not roll back the state itself.
 
-The frame does not roll back the state.
+The caller discards the state of a frame that halts exceptionally.
 
-Its caller discards it, and no statement here says so.
+No statement here says so.
+
+The rules here cover a byte that is no opcode at the fork, such as `0xfe` at every fork.
+
+They also cover JUMP, and JUMPI on a nonzero condition, to an invalid jump destination.
+
+A tactic closes such a step in a code stored as one number.
 -/
 
 @[expose] public section

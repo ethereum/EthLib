@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Logic.Copy
 
 A specification often cares about a few ranges of memory, not about every byte of it.
 
-So it can track only the size of memory and the ranges it cares about.
+A range holds known bytes when memory covers the whole range and the range reads as those bytes.
+
+So a specification can track only the size of memory and the ranges it cares about.
 -/
 
 @[expose] public section
@@ -70,7 +72,7 @@ theorem memoryExtend (h : Holds memory start bytes) (n : Nat) :
     rw [byteAtOrZero_memoryExtend]
     exact h.byteAtOrZero_eq hi
 
-/-- Two adjacent ranges hold their bytes in order, their concatenation. -/
+/-- Two adjacent ranges that hold bytes hold their concatenation, in order. -/
 theorem append (h₁ : Holds memory start bytes) {more : ByteArray}
     (h₂ : Holds memory (start + bytes.size) more) : Holds memory start (bytes ++ more) := by
   refine of_byteAtOrZero (by rw [ByteArray.size_append]; have := h₂.1; omega) fun i hi => ?_

@@ -11,9 +11,13 @@ A frame that knows a few slots of storage can send a message, and go on knowing 
 
 The effect of a message names the slots that it may touch, from the frame that sends it.
 
-It also names the addresses whose balances it may move, and those whose accounts it may remake.
+It also names the addresses whose balances it may move.
 
-An account is remade by a creation or a change of a nonce.
+It also names the addresses whose accounts it may remake, by a creation or a change of a nonce.
+
+Outside those slots and addresses, the frame that ends the message agrees with the frame before it.
+
+A message that fails touches no slot, moves no balance and remakes no account.
 -/
 
 @[expose] public section
@@ -207,7 +211,7 @@ theorem effects_rollbackOnError {change : Change} {caller stopped : Evm fork Nat
     (hfunds : stopped.error = none →
       ∀ fund ∈ change.funds, (stopped.state.getAccount fund.1).balance = fund.2)
     (haccounts : stopped.error = none → ∀ fact ∈ change.accounts, fact.Holds stopped.state)
-    -- It then holds the refund of the change.
+    -- The stopped frame then holds the refund of the change.
     (hrefund : stopped.error = none → stopped.substate.refundCounter = change.gain) :
     -- The frame that ends the message is the stopped frame, rolled back on a failure.
     Effects change caller (rollbackOnError caller.state stopped) := by
@@ -413,11 +417,13 @@ abbrev callGas (fork : Fork) (value asked : U256) (gas extra : Nat) (cold : Bool
 /-- The message that a call of the kind `kind`, with no value of its own, sends from a frame. -/
 def CallMessage (kind : CallKind) (message : Message fork) (to : Address) (code data : ByteArray)
     (gas : Nat) (msg : Message fork) : Prop :=
-  -- It has the gas `gas`.
+  -- The message has the gas `gas`.
   msg.gas = gas ∧
     -- DELEGATECALL keeps the sender of the current message, and the others send from its account.
     msg.caller = (if kind = .delegatecall then message.caller else message.currentTarget) ∧
-    -- CALL and STATICCALL run it on `to`, and CALLCODE and DELEGATECALL on the current account.
+    -- CALL and STATICCALL run the code on `to`.
+    --
+    -- CALLCODE and DELEGATECALL run it on the current account.
     msg.currentTarget = (if kind = .call ∨ kind = .staticcall then to
       else message.currentTarget) ∧
     msg.target = some (if kind = .call ∨ kind = .staticcall then to
@@ -442,7 +448,7 @@ def AfterCall (code : ByteArray) (message : Message fork) (pc : Nat) (rest : Lis
   ∃ cold left base' accessed', left ≤ callGas fork value asked gas extra cold ∧
     -- The new base agrees with the old one outside the touched slots and the slots of the facts.
     --
-    -- It also agrees outside the addresses whose balances it moves or whose accounts it remakes.
+    -- It also agrees on each account outside both the moved and the remade addresses.
     Agrees (change.touched ++ slots.map SlotFact.slot) change.moved change.remade base accessed
       base' accessed' ∧
     -- On success the new base holds the balances and the facts of accounts of the change.
@@ -457,7 +463,9 @@ def AfterCall (code : ByteArray) (message : Message fork) (pc : Nat) (rest : Lis
           -- Memory keeps the facts apart from the output range.
           facts.filter (Apart outputStart.toNat outputSize.toNat))
         (gas - callCost fork value asked gas extra cold + left)
-        -- It knows the facts of the effect and of the slots it does not touch, and adds the refund.
+        -- The frame knows the facts of the effect and of the slots that it does not touch.
+        --
+        -- It adds the refund of the effect.
         (change.after ++ keptFacts change.touched slots) (refund + change.gain) base' accessed'
         -- On success the return data is `returned`.
         returned evm) ∨
@@ -469,7 +477,7 @@ def AfterCall (code : ByteArray) (message : Message fork) (pc : Nat) (rest : Lis
       sure = false ∧ ∃ out, failed out ∧ Stored code message (pc + 1) (0 :: rest) size
         -- Either way, memory keeps the facts apart from the output range.
         (facts.filter (Apart outputStart.toNat outputSize.toNat))
-        -- It keeps its facts of slots and its refund counter.
+        -- The frame keeps its facts of slots and its refund counter.
         (gas - callCost fork value asked gas extra cold + left) slots refund base' accessed' out
         evm)
 
@@ -870,7 +878,7 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
       (Stored code message pc
         (asked :: to :: v :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size
         facts gas slots refund base accessed returnData)
-      -- It gets back at most the gas that it passed on with the stipend.
+      -- The frame gets back at most the gas that it passed on, with the stipend.
       (AfterCall code message pc rest size facts outputStart outputSize returned failed gas v asked
         (callNewAccountCost fork base (toAddressMasked to) v + callValueCost fork v) slots refund
         base accessed change sure) := by

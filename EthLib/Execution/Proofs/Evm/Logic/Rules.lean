@@ -12,7 +12,9 @@ public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
 /-!
 # Proofs: rules for the opcodes of a contract that reads its call data and uses its storage
 
-A contract that answers a call reads its call data and caller, compares, jumps and hashes memory.
+A contract that answers a call reads its call data and its caller, compares and jumps.
+
+It also hashes memory.
 
 It then reads and writes its storage, and returns a word.
 
@@ -142,7 +144,9 @@ theorem charge_nat {gas amount : Nat} (h : amount ≤ gas) :
 
 /-! ## The rules
 
-Most rules also hold over the steps from frames that are monotone in gas, and the plain one follows.
+Most rules here also hold over the steps from frames that are monotone in gas.
+
+The rule over the steps of the logic then follows from that form.
 
 If the instruction never aborts, a rule is first proved over steps that never abort with less gas.
 
@@ -1465,7 +1469,9 @@ theorem sstoreStep_eq (hfork : .berlin ≤ fork)
       after.code = evm.code ∧ after.validJumpDestinations = evm.validJumpDestinations ∧
       after.message = evm.message ∧ after.pc = evm.pc + 1 ∧ after.stack.val = rest ∧
       after.memory = evm.memory ∧
-      -- It pays execution and state gas, by the original, current and new words and the cold flag.
+      -- The frame pays execution gas and state gas.
+      --
+      -- The price comes from the original, current and new words, and from the cold flag.
       --
       -- Before Glamsterdam, the state gas is zero.
       --
@@ -1528,7 +1534,7 @@ theorem sstoreG (hfork : .berlin ≤ fork) {key new : U256}
       substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
     -- The frame holds more than the stipend of 2300 gas, by EIP-2200.
     (hstipend : CALL_STIPEND < gas)
-    -- It pays execution gas and state gas.
+    -- The frame pays execution gas and state gas.
     --
     -- Before Glamsterdam, the state gas is zero.
     (hgas : sstoreTotalCost fork
@@ -1570,7 +1576,7 @@ theorem sstore (hfork : .berlin ≤ fork) {key new : U256}
       substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
     -- The frame holds more than the stipend of 2300 gas, by EIP-2200.
     (hstipend : CALL_STIPEND < gas)
-    -- It pays execution gas and state gas.
+    -- The frame pays execution gas and state gas.
     --
     -- Before Glamsterdam, the state gas is zero.
     (hgas : sstoreTotalCost fork
@@ -1733,9 +1739,11 @@ theorem extcodesize_of_berlin_le (hfork : .berlin ≤ fork) {word : U256} {rest 
     (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
     -- The address is cold when the transaction has not accessed it yet, by EIP-2929.
     (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
-    -- Up to BPO5 it pays 2600 for a cold address and 100 for a warm one.
+    -- Up to BPO5 the frame pays 2600 for a cold address and 100 for a warm one.
     --
-    -- From Glamsterdam it pays the address access and a warm access to read the code, by EIP-8038.
+    -- From Glamsterdam it pays the access to the address and a warm access to read the code.
+    --
+    -- That price is from EIP-8038.
     (hgas : externalBaseCost fork cold ≤ gas) :
     Hoare fork (At code message pc (word :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory
@@ -1762,7 +1770,7 @@ theorem extcodesize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {wo
     (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
     -- The address is cold when the transaction has not accessed it yet, by EIP-2929.
     (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
-    -- It pays 2600 for a cold address and 100 for a warm one.
+    -- The frame pays 2600 for a cold address and 100 for a warm one.
     (hgas : (if cold then 2600 else 100) ≤ gas) :
     Hoare fork (At code message pc (word :: rest) memory gas state substate returnData)
       (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory

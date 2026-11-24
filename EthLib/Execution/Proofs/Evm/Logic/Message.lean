@@ -7,7 +7,17 @@ public import EthLib.Execution.Proofs.Evm.Call.Parent
 /-!
 # Proofs: the frames that a frame reaches through its messages
 
-Steps and triples of a frame that may send messages, calls or creations, to a runner of messages.
+A step of a frame can ask for a message, a call or a creation, before the frame goes on.
+
+The loop of the interpreter hands each such message to a runner of messages.
+
+The runner ends the message with a frame, and the frame of the caller goes on from it.
+
+The runner can also fail, and then the whole run fails with its error.
+
+The code that a message runs is arbitrary, and a triple does not reason about it.
+
+It takes an assumption instead, on each frame that ends a message.
 
 This file has no rule for an opcode that sends a message, only the rule for a step that sends one.
 -/
@@ -397,7 +407,9 @@ theorem runFrame [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
     ∃ e, runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e ∧
       e.aborts = true := by
   obtain ⟨after, hreach, ⟨halted, hq⟩ | aborted⟩ := h bound runChild meets evm hp within
-  -- A frame that reaches a stopped frame under the runner is the result of the loop with it.
+  -- A frame that reaches a stopped frame under the runner is the result of the loop.
+  --
+  -- That loop runs with the same runner.
   · rw [runFrame_eq_of_reaches StepBy.gasHeld_le StepBy.runFrame_eq hreach within,
       runFrame_of_running_eq_false halted]
     exact .inl ⟨after, rfl, hq⟩

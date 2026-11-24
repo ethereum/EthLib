@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Logic.Rules
 
 A table of entries in a code compares the top word of the stack with a key in each entry.
 
-The run jumps to the destination of the first entry whose key is the word, or goes past the table.
+The run jumps to the destination of the first entry whose key is the word.
+
+When no key is the word, the run goes on past the table.
 -/
 
 @[expose] public section

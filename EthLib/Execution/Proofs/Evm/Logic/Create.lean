@@ -74,15 +74,17 @@ theorem createStep_child (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
           (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
           (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
         (extendMemory evm.memory.size [(start, size)]).cost)) ∧
-      -- It keeps its output.
+      -- The caller keeps its output.
       caller.running = evm.running ∧ caller.error = evm.error ∧ caller.output = evm.output ∧
-      -- It has recorded the reads, and its state is the one with its nonce grown by one.
+      -- The caller has recorded the reads.
+      --
+      -- Its state is the one with its nonce grown by one.
       ((evm.state.recordAccountRead evm.message.currentTarget).recordAccountRead
         address).incrementNonce fork evm.message.currentTarget = .ok caller.state ∧
       -- It has accessed the new address, by EIP-2929.
       caller.substate = { evm.substate with
         accessedAddresses := evm.substate.accessedAddresses.insert address } ∧
-      -- It passes on all but one 64th of the gas left after the price, by EIP-150.
+      -- The caller passes on all but one 64th of the gas left after the price, by EIP-150.
       msg.gas = createMessageGas fork (evm.gas - (createBaseCost fork +
           (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
           (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
@@ -95,7 +97,7 @@ theorem createStep_child (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
       -- The init code is the range of memory that the operands name, once memory grows for it.
       msg.code = memoryReadBytes (memoryExtend evm.memory
         (extendMemory evm.memory.size [(start, size)]).expandBy) start.toNat size.toNat ∧
-      -- It has no data, it carries the value, and it is not static.
+      -- The message has no data, carries the value, and is not static.
       msg.data = .empty ∧ msg.value = value ∧ msg.depth = evm.message.depth + 1 ∧
       msg.isStatic = false := by
   have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
@@ -195,7 +197,9 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteAr
 
 /-- From Berlin to before Glamsterdam, CREATE, or CREATE2 with a salt, of init code in memory.
 
-The callee runs arbitrary init code, so the rule takes an assumption on the frame that ends it.
+The callee runs arbitrary init code.
+
+So the rule takes an assumption on the frame that ends the message.
 
 The rule holds for every frame that ends the message and meets the assumption. -/
 theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {create2 : Bool}
@@ -209,10 +213,12 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
     (hstatic : message.isStatic = false)
     -- From Shanghai, the init code is at most the greatest size, 49152 bytes, by EIP-3860.
     (hinit : .shapella ≤ fork → size.toNat ≤ maxInitCodeSize fork)
-    -- It holds the value, and its nonce is below the greatest.
+    -- The current account holds the value.
+    --
+    -- Its nonce is below the greatest.
     (hbal : value ≤ (state.getAccount message.currentTarget).balance)
     (hnonce : (state.getAccount message.currentTarget).nonce ≠ MAX_NONCE)
-    -- Its depth leaves room for one more frame.
+    -- The depth of the frame leaves room for one more frame.
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     -- The new address is the one that the specification derives.
     --
@@ -247,7 +253,7 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
         -- The creation accesses the new address, by EIP-2929.
         caller.substate = { substate with
           accessedAddresses := substate.accessedAddresses.insert address } ∧
-        -- It passes on all but one 64th of the gas left after the price, by EIP-150.
+        -- The caller passes on all but one 64th of the gas left after the price, by EIP-150.
         msg.gas = createMessageGas fork (gas - (createBaseCost fork +
             (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
             (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
@@ -259,7 +265,7 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
         msg.codeAddress = none ∧
         msg.code = memoryReadBytes (memoryExtend memory
           (extendMemory memory.size [(start, size)]).expandBy) start.toNat size.toNat ∧
-        -- It has no data, it carries the value, and it is not static.
+        -- The message has no data, carries the value, and is not static.
         msg.data = .empty ∧ msg.value = value ∧ msg.depth = message.depth + 1 ∧
         msg.isStatic = false ∧
         -- The creator pushes the new address when that frame ends with no error, and 0 otherwise.
@@ -273,7 +279,9 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
               (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
               (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
             (extendMemory memory.size [(start, size)]).cost)) + child.gas)
-          -- It gets back the gas that the frame leaves, and its state and substate come from it.
+          -- The creator gets back the gas that the frame leaves.
+          --
+          -- Its state and substate come from that frame.
           --
           -- The rule says nothing more of them, since the init code is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
