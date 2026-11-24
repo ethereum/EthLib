@@ -1365,7 +1365,11 @@ The JSON reader of the tokens is the one in Base, and the Unicode escape of [RFC
 `Base.Json.unicodeEscape_eq_of_pair` proves that a high surrogate followed by an escaped low surrogate is returned as the code point of the pair.
 `Base.Json.unicodeEscape_eq_none_of_surrogate` proves that every other surrogate is refused: the grammar admits a lone surrogate ([§8.2](https://www.rfc-editor.org/rfc/rfc8259#section-8.2)), but this reader refuses one.
 `Base.Json.string_eq_none_of_control` proves that a string is refused when the first character in it that needs an escape is below `0x20` and unescaped.
-The total JSON reader has no theorem of full agreement with RFC 8259.
+`Base.Json.string_eq_some_iff` states the whole string reader: a string reads as what the characters before its first unescaped quotation mark stand for.
+Those characters follow the grammar of §7, with no lone surrogate escape.
+So each two-character escape stands for its character in the table of §7.
+That includes the escapes of the solidus, the backspace, the form feed and the tab, which no printed text holds.
+The rest of the total JSON reader has no theorem of full agreement with RFC 8259.
 These theorems do not establish HMAC unforgeability.
 
 ### ERC-2335 keystores
