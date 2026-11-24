@@ -11,6 +11,7 @@ public import EthLib.Cryptography.Proofs.Bls.KeyPath
 public import EthLib.Cryptography.Proofs.Hash.Pbkdf2
 public import EthLib.Cryptography.Proofs.Hash.Scrypt
 public import EthLib.Cryptography.Proofs.Hash.Sha256
+import EthLib.Cryptography.Proofs.Unicode
 
 /-!
 # Proofs: ERC-2335 decryption
@@ -186,6 +187,14 @@ theorem passwordBytes_eq_toUTF8 {password : String}
     passwordBytes password = password.toUTF8 := by
   unfold passwordBytes
   rw [hn, List.filter_eq_self.mpr (by simpa using hc), String.ofList_toList]
+
+/-- An ASCII password free of control codes prepares to its own UTF-8 bytes. -/
+theorem passwordBytes_eq_toUTF8_of_ascii {password : String}
+    (ascii : ∀ c ∈ password.toList, c.toNat < 0x80 ∧ isControl c = false) :
+    passwordBytes password = password.toUTF8 :=
+  -- ASCII lies below U+00A0, so the text is already in NFKD form.
+  passwordBytes_eq_toUTF8 (Unicode.nfkd_of_lt fun c hc => by have := (ascii c hc).1; omega)
+    fun c hc => (ascii c hc).2
 
 /-! ## What the reader refuses -/
 

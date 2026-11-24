@@ -1329,7 +1329,10 @@ These theorems do not establish HMAC unforgeability or constant-time execution.
 ### ERC-2335 keystores
 
 The keystore proofs show that a short intermediate key, a mismatched checksum, or a key derivation beyond the caller's limits prevents decryption (`Proofs/Keystore.lean`).
-They do not prove Unicode normalization correct for every input, or prove the cryptographic security of the keystore.
+`canonicalOrder_perm` (`Cryptography/Proofs/Unicode.lean`) proves that canonical ordering only reorders characters.
+`nfkd_of_lt` proves that text below U+00A0, so all of ASCII, is its own NFKD form, from the least keys of the two tables.
+`passwordBytes_eq_toUTF8_of_ascii` follows: an ASCII password free of control codes prepares to its own UTF-8 bytes.
+The proofs do not prove Unicode normalization correct for every input, or prove the cryptographic security of the keystore.
 The Python suite compares NFKD with Unicode 16.0.0's normalization tests and checks the two ERC-2335 vectors.
 JSON text parsing stays in the export boundary; the specification consumes a `Lean.Json` value.
 Before parsing, the export refuses deep nesting, long digit runs and large positive exponents, which could exhaust the parser's stack, time or memory.

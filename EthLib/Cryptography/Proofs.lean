@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Bls
 public import EthLib.Cryptography.Proofs.Kzg
 public import EthLib.Cryptography.Proofs.Merkle
 public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
+public import EthLib.Cryptography.Proofs.Unicode
 public import EthLib.Cryptography.Proofs.EvalDistEq
 public import EthLib.Cryptography.Proofs.SupportBind
 public import EthLib.Cryptography.Proofs.UniformReads
