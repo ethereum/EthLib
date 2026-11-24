@@ -8,29 +8,11 @@ public import EthLib.Cryptography.Word64
 
 The base field of secp256k1 in Montgomery form, on four 64-bit words, with `R = 2^256`.
 
-An element holds `a R mod p`, below `p`, so equality of words is equality in the field.
+The reduction follows [Montgomery (1985)][redc].
 
-Multiplication and squaring sum word products by output column.
+The fused operations follow the FIPS method of [Koç, Acar and Kaliski][cios], §7.
 
-Squaring doubles each off-diagonal product once.
-
-Montgomery reduction, from [Montgomery (1985)][redc], cancels the low half of a wide product.
-
-The complement is `2^256 - p = 2^32 + 977`.
-
-The reduction uses that small complement, so it is specific to `p`.
-
-That is why this form sits beside the Montgomery field on 32-bit limbs that other curves share.
-
-Its operations are proved against that shared field at the constants of `p`.
-
-A full product is reduced two words at a time, with the inverse of the complement mod `2^128`.
-
-A fused step is reduced one word at a time, with the inverse of the complement mod `2^64`.
-
-The fused operations scan the product by columns, and take one reduction word per column.
-
-That is the Finely Integrated Product Scanning (FIPS) method of [Koç, Acar and Kaliski][cios], §7.
+FIPS is their Finely Integrated Product Scanning.
 
 [redc]: <https://doi.org/10.1090/S0025-5718-1985-0777282-X>
 
@@ -49,7 +31,9 @@ namespace Montgomery
 export Word64 (wordRadix mulHigh yes Pair mac plus minus plus_spec minus_spec Words64 lowValue
   value Raw rawOfNat rawToNat rawToNat_eq)
 
-/-- The complement of the modulus, `2^256 - p = 2^32 + 977`. -/
+/-- The complement of the modulus, `2^256 - p = 2^32 + 977`.
+
+The reduction uses this small complement, so it is specific to `p`. -/
 def complement : UInt64 := 4294968273
 /-- The inverse of the complement mod `2^64`.
 
@@ -302,7 +286,13 @@ end Montgomery
 /-- An element of the base field in Montgomery form, with `R = 2^256`.
 
 The words hold `a R mod p`, below `p`, so each element has one encoding. -/
-abbrev Montgomery := Word64.Montgomery Fp.modulus
+abbrev Montgomery :=
+  -- The small complement is why this form sits beside the Montgomery field on 32-bit limbs.
+  --
+  -- Other curves share that field.
+  --
+  -- These operations are proved against it at the constants of `p`.
+  Word64.Montgomery Fp.modulus
 
 /-- An element of the base field held in Montgomery form. -/
 abbrev Fp.Montgomery := Secp256k1.Montgomery
@@ -1223,7 +1213,11 @@ theorem multiplyColumns_bound (a b : Words64) (ha : lowValue a < Fp.modulus)
 
 /-- The Montgomery product on four 64-bit words. -/
 @[inline] def mul (a b : @& Montgomery) : Montgomery :=
+  -- The wide product sums the word products by output column.
   let w := multiplyColumns a.raw.words b.raw.words
+  -- Montgomery reduction cancels the low half of the wide product.
+  --
+  -- A full product is reduced two words at a time, with the inverse of the complement mod `2^128`.
   let h := reduceWideInverse_spec w.1 w.2 (multiplyColumns_bound a.raw.words b.raw.words a.lt b.lt)
   finish (reduceWideInverse w.1 w.2) h.1
 
@@ -1231,6 +1225,7 @@ instance : Mul Montgomery := ⟨mul⟩
 
 /-- Square a Montgomery residue using one product for each pair of words. -/
 @[inline] def square (a : @& Montgomery) : Montgomery :=
+  -- Squaring sums the word products by output column, and doubles each off-diagonal one once.
   let w := squareColumns a.raw.words
   let h := reduceWideInverse_spec w.1 w.2 (squareColumns_bound a.raw.words a.lt)
   finish (reduceWideInverse w.1 w.2) h.1
@@ -2299,6 +2294,9 @@ theorem scanProductDiff_spec (a b c d : Montgomery) :
 
 /-- Compute the difference of two products with one shared Montgomery reduction. -/
 @[inline] def productDiff (a b c d : @& Montgomery) : Montgomery :=
+  -- A fused operation scans the product by columns, and takes one reduction word per column.
+  --
+  -- So a fused step is reduced one word at a time, with the inverse of the complement mod `2^64`.
   let t := scanProductDiff a.raw b.raw c.raw d.raw
   let h := (scanProductDiff_spec a b c d).1
   fusedFinish t h.1 h.2

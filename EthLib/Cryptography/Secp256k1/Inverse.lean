@@ -8,23 +8,7 @@ public import EthLib.Cryptography.Secp256k1.Montgomery
 
 The inverses mod `n` and mod `p`, by the divsteps of Bernstein and Yang, checked.
 
-The loop stops when the second remainder is zero, so its time depends on the input.
-
-EthLib makes no constant-time claim (SOUNDNESS.md A3).
-
-The divstep transition comes from [Bernstein and Yang][safegcd] §8.1.
-
-The low-word matrix construction follows §12.1, with 60 divsteps per jump.
-
-A table holds the matrices of 6 steps, generated from the divstep recurrence on low bits.
-
-Thirteen jumps make 780 divsteps, and a loop that has not finished by then gives no candidate.
-
-The final check accepts only a canonical residue whose product with the input is one.
-
-Any other outcome gives way to the extended Euclidean algorithm.
-
-So the result never depends on the loop being right.
+Source: [Bernstein and Yang][safegcd], §8.1 for the divstep, §12.1 for the jumps of 60 divsteps.
 
 [safegcd]: <https://gcd.cr.yp.to/safegcd-20190413.pdf>
 -/
@@ -195,6 +179,7 @@ private abbrev Wide := Montgomery.Words64
 @[noinline, specialize finish] private def run {A : Type} (finish : Wide → A)
     (p : Wide) (pinv : UInt64) :
     Nat → UInt64 → Wide → Wide → Wide → Wide → Option A
+  -- A loop that has not finished after its jumps gives no candidate.
   | 0, _, f, g, d, _ =>
     if g.isZero then some (normalize finish d p (f.top >>> 63 != 0)) else none
   | fuel + 1, δ, f, g, d, e =>
@@ -205,6 +190,10 @@ private abbrev Wide := Montgomery.Words64
     -- The paper always runs its full count of divsteps.
     --
     -- This loop stops early instead, since a divstep with `g = 0` keeps `f`.
+    --
+    -- So its time depends on the input.
+    --
+    -- EthLib makes no constant-time claim (SOUNDNESS.md A3).
     if g.isZero then some (normalize finish d p (f.top >>> 63 != 0))
     else
       -- §12.1, steps 2 and 3: the transition matrix of the next 60 divsteps, from the low words.
@@ -239,6 +228,9 @@ A candidate below `m` whose product with `a` is `1` mod `m` is accepted. -/
   match c with
   | none => Fin.inverse a
   | some v =>
+    -- Any other candidate, like no candidate, gives way to the extended Euclidean algorithm.
+    --
+    -- So the result never depends on the loop being right.
     if h : v < m ∧ v * a.val % m = 1 then ⟨v, h.1⟩ else Fin.inverse a
 
 open Secp256k1.Montgomery in

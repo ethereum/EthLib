@@ -1708,7 +1708,7 @@
       {"constructor": "privateKeyTooLarge", "code": 15}]}],
    "error_class": "Secp256k1Error",
    "docstring":
-   "The low-s rule of EIP-2: `s` is at most `n / 2`, rounded down.\n\nExactly one of `s` and `n - s` passes it, since `n` is odd."},
+   "The low-s rule of EIP-2: `s` is at most `n / 2`, rounded down.\n\nExactly one of `s` and `n - s` passes it, since `n` is odd.\n\nThe rule is not part of ECDSA, and the `ecrecover` precompile does not apply it.\n\nSo it is a separate test."},
   {"summary":
    "The public key whose signature on `hash` is `(r, s)`, by SEC 1 v2 §4.1.6.",
    "signature":

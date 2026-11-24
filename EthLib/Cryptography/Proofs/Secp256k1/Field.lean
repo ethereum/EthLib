@@ -13,12 +13,9 @@ Both moduli are prime, so `ZMod p` and `ZMod n` are fields.
 
 `Fp` is `Fin p`, which is `ZMod p` by definition, with the same ring operations.
 
-So a proof states its algebra over `ZMod p`, where `ring` and `field_simp` work.
-
 An element of `Fp` crosses over unchanged.
 
-- Both moduli are prime, by Pratt certificates that the kernel checks.
-- Square and multiply computes the power.
+Square and multiply computes the power.
 -/
 
 @[expose] public section
@@ -54,6 +51,8 @@ theorem Fin.powBits_mod {m : Nat} [NeZero m] (fuel : Nat) (a : Fin m) (e : Nat) 
 
 namespace Fp
 
+-- Both moduli are prime, by Pratt certificates that the kernel checks.
+--
 -- The certificates compute powers mod 256-bit numbers, deeper than the default.
 set_option maxRecDepth 8000
 
@@ -216,7 +215,9 @@ theorem modulus_lt_two_pow : modulus < 2 ^ 256 := by decide
 /-- `Fp` is `ZMod modulus` as a ring.
 
 The map is the identity, so it carries every operation over, and the algebra of `ZMod` applies. -/
-def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
+def toZMod : Fp ≃+* ZMod modulus :=
+  -- So a proof states its algebra over `ZMod p`, where `ring` and `field_simp` work.
+  RingEquiv.refl _
 
 @[simp] theorem toZMod_zero : toZMod 0 = 0 := rfl
 

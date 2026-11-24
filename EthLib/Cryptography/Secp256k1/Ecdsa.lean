@@ -6,21 +6,7 @@ public import EthLib.Cryptography.Secp256k1.MulAdd
 /-!
 # `Secp256k1.Ecdsa`
 
-ECDSA verification over secp256k1, from SEC 1 v2 §4.1.4.
-
-A signature on a 32-byte hash is a pair of integers `(r, s)`.
-
-The signer's point is `R = k G`, for a secret nonce `k`, and `r` is its `x` mod `n`.
-
-## The low-s rule
-
-`(r, n - s)` is valid whenever `(r, s)` is, because it rebuilds `-R`, which has the same `x`.
-
-EIP-2 removes that freedom from transactions: their `s` must be at most `n / 2`.
-
-The rule is not part of ECDSA, and the `ecrecover` precompile does not apply it.
-
-So it is a separate test.
+ECDSA verification over secp256k1, from SEC 1 v2 §4.1.4, and the low-s rule of EIP-2.
 -/
 
 @[expose] public section
@@ -44,6 +30,8 @@ A key from the decoder always is.
 
 The key `O` would accept any `r` that some `u1 G` hits, so it is rejected here too. -/
 def verify (q : Point) (hash : Vector UInt8 32) (r s : Nat) : Bool :=
+  -- A signature on a 32-byte hash is a pair of integers `(r, s)`.
+  --
   -- Step 1: if `r` and `s` are not both integers in `[1, n-1]`, output "invalid".
   if hr : 0 < r ∧ r < Fn.modulus then
     if hs : 0 < s ∧ s < Fn.modulus then
@@ -63,6 +51,8 @@ def verify (q : Point) (hash : Vector UInt8 32) (r s : Nat) : Bool :=
         match Point.mulAdd u1 .generator u2 q with
         | .infinity => false
         -- Steps 6 to 8: `v = x_R mod n`, and "valid" exactly when `v = r`.
+        --
+        -- The signer's `r` is the `x` of `R = k G` mod `n`, for its secret nonce `k`.
         | .affine x _ => x.val % Fn.modulus == r
       else false
     else false
@@ -70,8 +60,16 @@ def verify (q : Point) (hash : Vector UInt8 32) (r s : Nat) : Bool :=
 
 /-- The low-s rule of EIP-2: `s` is at most `n / 2`, rounded down.
 
-Exactly one of `s` and `n - s` passes it, since `n` is odd. -/
-def isLowS (s : Nat) : Bool := s ≤ Fn.modulus / 2
+Exactly one of `s` and `n - s` passes it, since `n` is odd.
+
+The rule is not part of ECDSA, and the `ecrecover` precompile does not apply it.
+
+So it is a separate test. -/
+def isLowS (s : Nat) : Bool :=
+  -- `(r, n - s)` is valid whenever `(r, s)` is, because it rebuilds `-R`, which has the same `x`.
+  --
+  -- EIP-2 removes that freedom from transactions: their `s` must be at most `n / 2`.
+  s ≤ Fn.modulus / 2
 
 end Ecdsa
 

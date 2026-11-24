@@ -36,14 +36,10 @@ Passing the four words unboxed avoids allocating a value at each step. -/
 
 /-- `a^((p + 1) / 4)`, by the runs of ones in the binary form of the exponent.
 
-In binary, the exponent is 223 ones, a zero, 22 ones, four zeros, two ones and two zeros.
-
-Up to `x223`, each `x_k` is `a^(2^k - 1)`: `x_j` squared `k` times, times `x_k`, is `x_(j + k)`.
-
-The last three steps append the remaining bits of the exponent, in the same way.
-
-So the power takes 253 squarings and 13 products. -/
+The power takes 253 squarings and 13 products. -/
 @[inline] def sqrtCandidate (a : Montgomery) : Montgomery :=
+  -- In binary, the exponent is 223 ones, a zero, 22 ones, four zeros, two ones and two zeros.
+  --
   -- Up to `x223`, `x_(j + k) = x_j^(2^k) x_k`, with `x_k = a^(2^k - 1)` and `x_1 = a`.
   let x2 := squareTimes 1 a * a
   let x3 := squareTimes 1 x2 * a
@@ -56,6 +52,8 @@ So the power takes 253 squarings and 13 products. -/
   let x176 := squareTimes 88 x88 * x88
   let x220 := squareTimes 44 x176 * x44
   let x223 := squareTimes 3 x220 * x3
+  -- The last three steps append the remaining bits of the exponent, in the same way.
+  --
   -- The 223 ones, then a zero and 22 ones: 23 squarings and the product by `x_22`.
   let x246 := squareTimes 23 x223 * x22
   -- Four zeros and two ones: 6 squarings and the product by `x_2`.

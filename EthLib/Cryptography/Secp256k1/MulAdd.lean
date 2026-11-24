@@ -11,27 +11,7 @@ public import EthLib.Cryptography.Secp256k1.Inverse
 
 Both take `Q = G`, the generator, and then a faster method applies.
 
-The endomorphism `(x, y) -> (beta x, y)` acts on this curve as multiplication by `lambda`.
-
-`lambda` is a cube root of unity mod `n`.
-
-The pairs `(u, v)` with `u + lambda v = 0 mod n` form a lattice.
-
-Splitting the variable scalar along a short basis of it gives two signed components.
-
-Each is below `2^128` in magnitude.
-
-The generator scalar splits at bit 128, using `G` and `2^128 G`.
-
-All four products share one chain of 129 signed digits and at most 128 doublings.
-
-For an affine variable point, a six-entry table shares one denominator.
-
-The variable scalar uses the endomorphism method of [Gallant, Lambert and Vanstone][glv].
-
-Its §4 splits the scalar, and its Algorithm 1 adds the two products in one chain of doublings.
-
-The chains use signed digits, as its "simultaneous windowed-NAF" variant of §3 does.
+Source: the endomorphism method of [Gallant, Lambert and Vanstone][glv], for the variable scalar.
 
 The [Guide to Elliptic Curve Cryptography][guide] describes it in Algorithms 3.35, 3.74 and 3.77.
 
@@ -93,6 +73,9 @@ So its `X`, `Y` and `Z` times 4, 8 and 2 are those of the shared doubling.
 
 /-- Apply the curve endomorphism by changing only the X coordinate. -/
 @[inline] def endomorphism (p : Coordinates) : Coordinates :=
+  -- `(x, y) -> (beta x, y)` acts on this curve as multiplication by `lambda`.
+  --
+  -- `lambda` is a cube root of unity mod `n`.
   scaleX (Montgomery.ofFin beta) p
 
 /-- Negate the affine y coordinate while keeping the same projective denominator. -/
@@ -461,14 +444,13 @@ def commonJointTable (p : Coordinates) : Vector JointEntry 6 × Montgomery :=
 
 /-- Signed pairs chosen by the low three bits of each coefficient.
 
-The first two six-bit fields store the digits with a bias of 32.
-
-Five bits select the table entry and two more select its endomorphism power.
-
-Bit 19 gives the sign of the point.
-
 The value zero selects two zero digits. -/
 def jointDigits : Vector Nat 64 :=
+  -- The first two six-bit fields store the digits with a bias of 32.
+  --
+  -- Five bits select the table entry and two more select its endomorphism power.
+  --
+  -- Bit 19 gives the sign of the point.
   #v[
     0, 2081, 0, 18467, 0, 542749, 0, 526367,
     133216, 788577, 6242, 14435, 133216, 546909, 141406, 137311,
@@ -646,18 +628,14 @@ Up to three doublings combine when the digits between them are zero. -/
 termination_by fuel => fuel
 decreasing_by all_goals omega
 
-/-- `k P + l G` in Jacobian form, with five-bit windows for both split components of `k`.
-
-The eight odd multiples of an affine `P` share one denominator.
-
-The endomorphism gives those of `lambda P`.
-
-Any other form takes the shared chain of doublings.
-
-So does the rare case where that denominator vanishes. -/
+/-- `k P + l G` in Jacobian form, with five-bit windows for both split components of `k`. -/
 @[no_expose] def mulCommon (k : Fn) (p : Coordinates) (l : Fn) : Coordinates :=
   if p.z = 1 then
+    -- The eight odd multiples of an affine `P` share one denominator.
+    --
+    -- The endomorphism gives those of `lambda P`.
     let (entries, z) := commonTable p
+    -- The rare case where that denominator vanishes takes the shared chain of doublings.
     if z = 0 then Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator) else
       let lw := Montgomery.rawOfNat l.val
       let split := splitScalarWords (Montgomery.rawOfNat k.val)
@@ -666,32 +644,46 @@ So does the rare case where that denominator vanishes. -/
       restoreZ z (packedCommonChain .width14 z (entries.map prepareCommon) a.2 b.2
         generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi
         lw.w0 lw.w1 lw.w2 lw.w3)
+  -- Any other form takes the shared chain of doublings.
   else Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator)
 
-/-- `k P + l G` in Jacobian form, for a form `P` of a point on the curve.
-
-An affine form takes the joint chain when both split components fit two words with a sign.
-
-That holds when both are below `2^127 - 2^64` in magnitude.
-
-A larger component, which a split of up to `2^128` allows, takes the common-denominator chain.
-
-So does any other form, and the rare case where a table denominator vanishes. -/
+/-- `k P + l G` in Jacobian form, for a form `P` of a point on the curve. -/
 @[no_expose] def mulProjective (k : Fn) (p : Coordinates) (l : Fn) : Coordinates :=
   if p.z = 1 then
     let lw := Montgomery.rawOfNat l.val
+    -- The pairs `(u, v)` with `u + lambda v = 0 mod n` form a lattice.
+    --
+    -- Splitting `k` along a short basis of it gives two signed components.
+    --
+    -- Each is below `2^128` in magnitude.
+    --
+    -- This is the split of §4 of Gallant, Lambert and Vanstone.
     let split := splitScalarWords (Montgomery.rawOfNat k.val)
     let a := split.1
     let b := split.2
+    -- An affine form takes the joint chain when both components fit two words with a sign.
+    --
+    -- That holds when both are below `2^127 - 2^64` in magnitude.
     if a.1.hi < 0x7fffffffffffffff && b.1.hi < 0x7fffffffffffffff then
+      -- For an affine variable point, a six-entry table shares one denominator.
       let (table, z) := commonJointTable p
+      -- The rare case where that denominator vanishes takes the common-denominator chain.
       if z = 0 then mulCommon k p l else
         let aw := if a.2 then a.1.neg else a.1
         let bw := if b.2 then b.1.neg else b.1
+        -- All four products share one chain of 129 signed digits and at most 128 doublings.
+        --
+        -- Algorithm 1 of Gallant, Lambert and Vanstone adds both products in one doubling chain.
+        --
+        -- The chains use signed digits, as the simultaneous windowed-NAF variant of their §3 does.
+        --
+        -- The generator scalar splits at bit 128, using `G` and `2^128 G`.
         let out := packedJointChain .width14 z table generatorTable14 generatorHighTable14 129
           aw.lo aw.hi bw.lo bw.hi lw.w0 lw.w1 lw.w2 lw.w3
         restoreZ z out
+    -- A larger component, up to `2^128` after the split, takes the common-denominator chain.
     else mulCommon k p l
+  -- Any other form takes the common-denominator chain.
   else mulCommon k p l
 
 /-- `k P + l G`, for a point `P` on the curve. -/

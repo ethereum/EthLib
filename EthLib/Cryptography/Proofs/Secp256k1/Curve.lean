@@ -11,18 +11,11 @@ public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.Point
 
 The addition rule of SEC 1 v2 §2.2.1 is the group law of the elliptic curve `y^2 = x^3 + 7`.
 
-Mathlib defines that curve over the field `ZMod p`, and proves its points form a commutative group.
-
 Each point of the specification maps to an element of that group.
 
-- Addition and negation are the group's.
-- Double and add computes `k P`.
-- Each operation stays on the curve.
-- Points on the curve and group elements correspond one to one.
+On the curve, the points and the group elements correspond one to one.
 
 So every fact about the group, such as associativity, holds for the specification's points.
-
-The proofs are those of every short Weierstrass curve, for the map of `Fp` into `ZMod p`.
 -/
 
 @[expose] public section
@@ -31,7 +24,9 @@ namespace EthLib.Cryptography.Secp256k1
 
 open WeierstrassCurve WeierstrassCurve.Affine
 
-/-- secp256k1 as a Weierstrass curve over `ZMod p`: `y^2 = x^3 + 7`. -/
+/-- secp256k1 as a Weierstrass curve over `ZMod p`: `y^2 = x^3 + 7`.
+
+Mathlib proves that the points of this curve form a commutative group. -/
 def curve : WeierstrassCurve.Affine (ZMod Fp.modulus) :=
   { a₁ := 0, a₂ := 0, a₃ := 0, a₄ := 0, a₆ := 7 }
 
@@ -66,7 +61,9 @@ instance : (ShortWeierstrass.curve (0 : ZMod Fp.modulus) 7).IsElliptic :=
 
 private theorem toZMod_b : Fp.toZMod b = 7 := by decide
 
-/-- The map of `Fp` into `ZMod p` keeps the operations of the rule, with `a = 0` and `b = 7`. -/
+/-- The map of `Fp` into `ZMod p` keeps the operations of the rule, with `a = 0` and `b = 7`.
+
+So the proofs of every short Weierstrass curve hold for secp256k1. -/
 theorem embedding : ShortWeierstrass.Embedding Fp.toZMod (0 : ZMod Fp.modulus) 7 :=
   ⟨Fp.toZMod.injective, map_add _, map_sub _, map_mul _, map_neg _, map_zero _, toZMod_two,
     toZMod_three, Fp.toZMod_inv, map_zero _, toZMod_b⟩
@@ -91,7 +88,10 @@ theorem toPoint_affine {x y : Fp} (h : (affine x y).isOnCurve = true) :
 
 @[simp] theorem toPoint_infinity : toPoint infinity = 0 := rfl
 
-/-! ## Negation -/
+/-! ## Negation
+
+Negation is the group's, and stays on the curve.
+-/
 
 theorem isOnCurve_neg {p : Point} (h : p.isOnCurve = true) : (-p).isOnCurve = true :=
   ShortWeierstrass.Point.isOnCurve_neg embedding h
@@ -99,7 +99,10 @@ theorem isOnCurve_neg {p : Point} (h : p.isOnCurve = true) : (-p).isOnCurve = tr
 theorem toPoint_neg {p : Point} (h : p.isOnCurve = true) : toPoint (-p) = -toPoint p :=
   ShortWeierstrass.Point.toPoint_neg embedding h
 
-/-! ## Addition -/
+/-! ## Addition
+
+Addition is the group's, and stays on the curve.
+-/
 
 theorem isOnCurve_add {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
     (p + q).isOnCurve = true :=
@@ -109,7 +112,10 @@ theorem toPoint_add {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = 
     toPoint (p + q) = toPoint p + toPoint q :=
   ShortWeierstrass.Point.toPoint_add embedding hp hq
 
-/-! ## Scalar multiplication -/
+/-! ## Scalar multiplication
+
+Double and add computes `k P`, and stays on the curve.
+-/
 
 private theorem toZ_eq (x : Fp) : Jacobian.toZ x = Fp.toZMod x :=
   ZMod.natCast_zmod_val (Fp.toZMod x)

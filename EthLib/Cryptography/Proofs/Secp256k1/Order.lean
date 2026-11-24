@@ -10,26 +10,9 @@ public import Mathlib.GroupTheory.OrderOfElement
 
 The group of secp256k1 has exactly `n` points, and `G` generates it.
 
-SEC 2 v2 §2.4.1 states this as the order `n` of `G` and the cofactor `h = 1`.
+So `n X = 0` for every point, and the scalars of `Fn` act on the group.
 
-The proof has three steps.
-
-- The kernel runs `n G` and gets `O`, so `G` has order `n`, a prime.
-- So `n` divides the number of points.
-- At most `2 p + 1` points exist, fewer than `3 n`, so the count is `n` or `2 n`.
-
-A group of `2 n` points would hold a point of order 2, which is `(x, 0)` with `x^3 = -7`.
-
-No such `x` exists, because `-7` is not a cube mod `p`.
-
-The kernel checks that by Euler's criterion: `(-7)^((p - 1) / 3)` is not 1, since `p = 1 mod 3`.
-
-With `n` points, `n X = 0` for every point `X`, so the scalars of `Fn` act on the group.
-
-- The group has `n` points.
-- `n X = 0` for every point.
-- Scalar multiplication computes `k P`, with `k` in `ZMod n`.
-- Every point on the curve is `k G` for some scalar `k`.
+Source: SEC 2 v2 §2.4.1, the order `n` of `G` and the cofactor `h = 1`.
 -/
 
 @[expose] public section
@@ -125,6 +108,8 @@ theorem cube_ne_neg_seven (x : ZMod Fp.modulus) : x * x * x ≠ -7 := by
   have hx : x ≠ 0 := by
     rintro rfl
     exact absurd h (by decide)
+  -- The kernel checks that `-7` is not a cube by Euler's criterion, since `p = 1 mod 3`.
+  --
   -- A cube `-7 = x^3` gives `(-7)^((p - 1) / 3) = x^(p - 1) = 1`.
   have hpow : ((Fp.modulus - 7 : Nat) : ZMod Fp.modulus) ^ ((Fp.modulus - 1) / 3) = 1 := by
     rw [show ((Fp.modulus - 7 : Nat) : ZMod Fp.modulus) = -7 by decide, ← h, show x * x * x = x ^ 3 by ring,
@@ -142,6 +127,8 @@ theorem addOrderOf_ne_two (X : curve.Point) : addOrderOf X ≠ 2 := by
   cases X with
   | zero => rw [← Affine.Point.zero_def, addOrderOf_zero] at h; omega
   | some x y hn =>
+    -- A point of order 2 is `(x, 0)` with `x^3 = -7`.
+    --
     -- `2 X = 0` makes `X = -X`, so `y = -y`, so `y = 0`, and then `x^3 = -7`.
     have hneg : Affine.Point.some x y hn = -Affine.Point.some x y hn := by
       rw [two_nsmul] at h2
@@ -158,11 +145,14 @@ theorem addOrderOf_ne_two (X : curve.Point) : addOrderOf X ≠ 2 := by
 
 /-- The group of secp256k1 has `n` points: the cofactor is 1. -/
 theorem card_point : Nat.card curve.Point = Fn.modulus := by
+  -- The kernel runs `n G` and gets `O`, so `G` has order `n`, a prime.
+  --
+  -- So `n` divides the number of points.
   obtain ⟨m, hm⟩ : Fn.modulus ∣ Nat.card curve.Point :=
     Point.addOrderOf_generator ▸ addOrderOf_dvd_natCard _
   have hle := card_point_le
   have hpos : 0 < Nat.card curve.Point := Nat.card_pos
-  -- `2 p + 1 < 3 n`, so `m` is 1 or 2.
+  -- At most `2 p + 1` points exist, and `2 p + 1 < 3 n`, so `m` is 1 or 2.
   have hlt : 2 * Fp.modulus + 1 < 3 * Fn.modulus := by decide
   have hm2 : m ≤ 2 := by
     by_contra hc
