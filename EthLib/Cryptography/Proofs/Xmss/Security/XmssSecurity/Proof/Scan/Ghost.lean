@@ -215,6 +215,71 @@ theorem expectedSimulatedCost_overBudget_eq_zero (Q : ℕ)
               mul_zero]
           · rw [(prEvent_eq_zero_of_not_mem_support _) hr, zero_mul]
 
+/-- The budget is never exceeded, under a bound on the adversary's own hash queries. -/
+theorem expectedSimulatedCost_overBudget_eq_zero_of_isQueryBoundP (Q : ℕ)
+    (computation : OracleComp (OracleWorld + SigningSpec) α) :
+    ∀ (n : ℕ) (s : State), IsQueryBoundP computation IsAdvHash n → s.2 + n ≤ Q →
+      expectedSimulatedCost (impl publicKey secretKey) (overBudget Q) computation s = 0 := by
+  induction computation using OracleComp.inductionOn with
+  | pure value => intros; simp
+  | query_bind input next ih =>
+      rintro n ⟨⟨cache, trace⟩, k⟩ hbound hk
+      rw [isQueryBoundP_query_bind_iff] at hbound
+      rw [expectedSimulatedCost_query_bind]
+      have hcost : overBudget Q input ((cache, trace), k) = 0 := by
+        unfold overBudget
+        rw [ite_eq_right]
+        rintro ⟨hadv, hQ⟩
+        have := hbound.1.resolve_left (not_not.2 hadv)
+        dsimp only at hk
+        omega
+      rw [hcost, zero_add]
+      refine tsum_eq_zero_iff.2 fun r => ?_
+      by_cases hr : r ∈ support ((impl publicKey secretKey input).run ((cache, trace), k))
+      · obtain ⟨r0, hr0, rfl⟩ := mem_support_impl publicKey secretKey hr
+        refine mul_eq_zero_of_right _ (ih r0.1 _ _ (hbound.2 r0.1) ?_)
+        dsimp only at hk ⊢
+        unfold tick
+        split_ifs with h
+        · have := hbound.1.resolve_left (not_not.2 h)
+          omega
+        · exact hk
+      · rw [(prEvent_eq_zero_of_not_mem_support _) hr, zero_mul]
+
+/-- A run's expected cost is at most a bound on the queries that each cost at most one. -/
+theorem expectedSimulatedCost_le_of_isQueryBoundP {ι σ : Type} {spec : OracleSpec ι}
+    (implementation : QueryImpl spec (StateT σ ProbComp)) {p : ι → Prop} [DecidablePred p]
+    {cost : ι → σ → ℝ≥0∞} (hcost : ∀ input s, cost input s ≤ if p input then 1 else 0)
+    (computation : OracleComp spec α) :
+    ∀ (n : ℕ) (s : σ), IsQueryBoundP computation p n →
+      expectedSimulatedCost implementation cost computation s ≤ n := by
+  induction computation using OracleComp.inductionOn with
+  | pure value => intros; simp
+  | query_bind input next ih =>
+      intro n s hbound
+      rw [isQueryBoundP_query_bind_iff] at hbound
+      rw [expectedSimulatedCost_query_bind]
+      calc _ ≤ (if p input then 1 else 0) + ∑' r, Pr{let x ← (implementation input).run s}[x = r] *
+            ((if p input then n - 1 else n : ℕ) : ℝ≥0∞) :=
+          add_le_add (hcost input s)
+            (tsum_le_tsum fun r => mul_le_mul' le_rfl (ih r.1 _ r.2 (hbound.2 r.1)))
+        _ ≤ (if p input then 1 else 0) + ((if p input then n - 1 else n : ℕ) : ℝ≥0∞) := by
+          rw [ENNReal.tsum_mul_right]
+          exact add_le_add le_rfl (mul_le_of_le_one_left' (OracleComp.tsum_prEvent_le_one _))
+        _ ≤ n := by
+          split_ifs with h
+          · have := hbound.1.resolve_left (not_not.2 h)
+            rw [← Nat.cast_one, ← Nat.cast_add]
+            exact_mod_cast (by omega : 1 + (n - 1) ≤ n)
+          · simp
+
+/-- An encoding query of the adversary is one of its hash queries. -/
+theorem isAdvHash_of_isAdvEncoding {parameter : PublicParameter} :
+    ∀ {input : (OracleWorld + SigningSpec).Domain}, IsAdvEncoding parameter input → IsAdvHash input
+  | .inl (.inr _), _ => trivial
+  | .inl (.inl _), h => h.elim
+  | .inr _, h => h.elim
+
 theorem expectedSimulatedQueryCount_liftM_query (parameter : PublicParameter)
     (input : OracleWorld.Domain) (cache : QueryCache HashSpec) :
     expectedSimulatedQueryCount romImpl (CappedEncodingMonitor.IsEncodingHashQuery parameter)
