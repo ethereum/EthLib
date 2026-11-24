@@ -5,22 +5,12 @@ module
 
 The parameters of Ethash, and the sizes of its cache and dataset at each epoch.
 
-An epoch is 30,000 blocks, and the cache and the dataset are fixed for an epoch.
-
-At genesis the cache has about 2^24 bytes and the dataset about 2^30 bytes.
-
-Each epoch adds 2^17 bytes to the cache and 2^23 bytes to the dataset.
-
-A size is cut down to the nearest multiple of its unit whose quotient by the unit is prime.
-
-A prime count of items avoids regular patterns in the accesses.
-
-Appendix J.2 of the Yellow Paper, Berlin version, gives the sizes: [`Paper.tex`][yp].
+Source: Appendix J.2 of the Yellow Paper, Berlin version: [`Paper.tex`][yp].
 
 The Ethash specification of the Ethereum Foundation gives the same rule: [Ethash][ethash].
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
-[ethash]: https://github.com/ethereum/ethereum-org-website/blob/0899bcb4dcb12040ccf46bea0053a422812bf913/public/content/developers/docs/consensus-mechanisms/pow/mining/mining-algorithms/ethash/index.md
+[ethash]: https://github.com/ethereum/ethereum-org-website/blob/3979915ac0eaa74eb0ae9c9eb6605868ae603bac/public/content/developers/docs/consensus-mechanisms/pow/mining/mining-algorithms/ethash/index.md
 -/
 
 @[expose] public section
@@ -42,7 +32,7 @@ def CACHE_BYTES_INIT : Nat := 2 ^ 24
 /-- The bytes that each epoch adds to the cache. -/
 def CACHE_BYTES_GROWTH : Nat := 2 ^ 17
 
-/-- The blocks in an epoch. -/
+/-- The blocks in an epoch, over which the cache and the dataset are fixed. -/
 def EPOCH_LENGTH : Nat := 30000
 
 /-- The bytes in the mix of the proof-of-work loop, two hashes wide. -/
@@ -64,10 +54,9 @@ def ACCESSES : Nat := 64
 def epoch (number : Nat) : Nat :=
   number / EPOCH_LENGTH
 
-/-- Whether no divisor from `d` up divides `n`, among the divisors up to the square root of `n`.
-
-The fuel bounds the divisors tried; `n` of fuel tries every divisor that matters. -/
+/-- Whether no divisor from `d` up divides `n`, among the divisors up to the square root of `n`. -/
 def noDivisorFrom (n : Nat) : Nat → Nat → Bool
+  -- The fuel bounds the divisors tried; `n` of fuel tries every divisor that matters.
   | 0, _ => true
   | fuel + 1, d => n < d * d || (n % d != 0 && noDivisorFrom n fuel (d + 1))
 
@@ -78,12 +67,13 @@ def isPrime (n : Nat) : Bool :=
   -- The specification skips `floor(sqrt(n))`, but its own tables need it tried.
   2 ≤ n && noDivisorFrom n n 2
 
-/-- The largest `x - 2 · unit · k` whose quotient by `unit` is prime, from `x` down.
-
-Each step lowers the quotient by 2, so it keeps its parity.
-
-The fuel is the quotient of `x`, which every step lowers. -/
+/-- The largest `x - 2 · unit · k` whose quotient by `unit` is prime, from `x` down. -/
 def primeSize (x unit : Nat) : Nat :=
+  -- A size is cut down to the nearest multiple of its unit whose quotient by the unit is prime.
+  --
+  -- A prime count of items avoids regular patterns in the accesses.
+  --
+  -- The fuel is the quotient of `x`, which every step lowers.
   go (x / unit) x
 where
   /-- Try `x`, then the next candidate below it, until the fuel runs out. -/
@@ -95,24 +85,26 @@ where
     -- The unit is one hash, 64 bytes, for the cache, and one mix, 128 bytes, for the dataset.
     --
     -- It is the `E_prime` of J.2.
+    --
+    -- Each step lowers the quotient by 2, so it keeps its parity.
     | fuel + 1, x => if isPrime (x / unit) then x else go fuel (x - 2 * unit)
 
-/-- The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.
-
-The search starts one hash below the linear size. -/
+/-- The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2. -/
 def cacheSize (number : Nat) : Nat :=
   -- The linear size is `2^24 + 2^17 · floor(number / 30000)` bytes.
   --
-  -- One hash, 64 bytes, comes off it, then the prime search starts.
+  -- So the cache has about 2^24 bytes at genesis, and each epoch adds 2^17 bytes.
+  --
+  -- One hash, 64 bytes, comes off it, so the prime search starts one hash below it.
   primeSize (CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * epoch number - HASH_BYTES) HASH_BYTES
 
-/-- The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.
-
-The search starts one mix below the linear size. -/
+/-- The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2. -/
 def datasetSize (number : Nat) : Nat :=
   -- The linear size is `2^30 + 2^23 · floor(number / 30000)` bytes.
   --
-  -- One mix, 128 bytes, comes off it, then the prime search starts.
+  -- So the dataset has about 2^30 bytes at genesis, and each epoch adds 2^23 bytes.
+  --
+  -- One mix, 128 bytes, comes off it, so the prime search starts one mix below it.
   primeSize (DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * epoch number - MIX_BYTES) MIX_BYTES
 
 end EthLib.Cryptography.Ethash

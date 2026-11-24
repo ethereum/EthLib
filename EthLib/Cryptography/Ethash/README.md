@@ -34,7 +34,7 @@ In four places it reads differently from every client and from the tests:
 - it reduces a cache index by the cache size in bytes, where clients reduce it by the count of items;
 - it compresses the mix with indices that step by 8 from -4, where clients fold each group of 4 words.
 
-There the definitions follow the Ethash specification of the Ethereum Foundation, as published on ethereum.org at commit `0899bcb4` of its repository.
+There the definitions follow the Ethash specification of the Ethereum Foundation, as published on ethereum.org at commit `3979915a` of its repository.
 Each definition says where it does so.
 
 ## What is proved

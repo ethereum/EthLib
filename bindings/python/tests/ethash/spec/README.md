@@ -5,7 +5,7 @@ It is the file `index.md` below, renamed so that the Markdown checks of the repo
 Its appendix lists the dataset and cache sizes of the first 2048 epochs, which the tests read.
 
 - Repository: [`ethereum/ethereum-org-website`](https://github.com/ethereum/ethereum-org-website).
-- Commit: `0899bcb4dcb12040ccf46bea0053a422812bf913`.
+- Commit: `3979915ac0eaa74eb0ae9c9eb6605868ae603bac`.
 - File: `public/content/developers/docs/consensus-mechanisms/pow/mining/mining-algorithms/ethash/index.md`.
 - Authors: the contributors to ethereum.org.
 - Licence: the MIT License, under the notice below.
