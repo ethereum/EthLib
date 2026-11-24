@@ -7,35 +7,24 @@ RIPEMD-160 of a message of whole bytes.
 
 Dobbertin, Bosselaers and Preneel define it in "RIPEMD-160: A strengthened version of RIPEMD".
 
-The paper appeared at FSE 1996:
-<https://doi.org/10.1007/3-540-60865-6_44>
+The paper appeared at [FSE 1996][fse96].
 
-The steps follow the authors' pseudo-code, `rmd160.txt` on Bosselaers' RIPEMD-160 page:
-<https://homes.esat.kuleuven.be/~bosselae/ripemd/rmd160.txt>
+The steps follow the authors' pseudo-code, [`rmd160.txt`][rmd160] on Bosselaers' RIPEMD-160 page.
 
-Its section "definitions" gives the functions `f`, the constants `K`, `K'` and the initial value.
+The padding is the one of MD4, [RFC 1320 §3.1 and §3.2][rfc1320].
 
-The same section gives the word orders `r` and `r'`, and the rotations `s` and `s'`.
-
-Its section "pseudo-code" gives the eighty steps of a line and the compression of one block.
-
-The padding is the one of MD4, RFC 1320 §3.1 and §3.2:
-<https://www.rfc-editor.org/rfc/rfc1320#section-3.1>
-
-Words are little-endian, unlike SHA-256.
-
-The message words, the length and the digest all put the least significant byte first.
-
-The precompile at address `0x03` uses it, and pads the digest on the left to 32 bytes.
-
-This specification makes no constant-time guarantee.
+[fse96]: https://doi.org/10.1007/3-540-60865-6_44
+[rmd160]: https://homes.esat.kuleuven.be/~bosselae/ripemd/rmd160.txt
+[rfc1320]: https://www.rfc-editor.org/rfc/rfc1320#section-3.1
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Hash.Ripemd160
 
-/-! ## Words -/
+/-! ## Words
+
+The section "definitions" of the pseudo-code gives the functions `f`. -/
 
 /--
 Rotate left by `n` bits, `rol_s` of the pseudo-code with `s = n`.
@@ -60,7 +49,11 @@ The amount `n` is between 1 and 31.
   -- `f(j, x, y, z) = x XOR (y OR NOT(z))`, for `64 <= j <= 79`.
   | 4 => x ^^^ (y ||| ~~~z)
 
-/-! ## Constants -/
+/-! ## Constants
+
+The same section gives the initial value and the constants `K`, `K'`.
+
+It also gives the word orders `r`, `r'` and the rotations `s`, `s'`. -/
 
 /--
 The added constants `K(j)` of the left line, one per group of sixteen steps.
@@ -143,11 +136,16 @@ def pad (message : ByteArray) : ByteArray :=
   -- RFC 1320 §3.1: a single 1 bit, then 0 bits; §3.2: then the 64-bit length.
   message.push 0x80 ++ ⟨Array.replicate (paddingZeros message.size) 0⟩ ++ lengthBytes message.size
 
-/-! ## One block -/
+/-! ## One block
+
+The section "pseudo-code" gives the eighty steps of a line and the compression of one block. -/
 
 /-- Four bytes from `start`, read as one little-endian word, `X[i][j]` of the pseudo-code. -/
 @[inline] def little32 (block : ByteArray) (start : Nat) (within : start + 4 ≤ block.size) :
     UInt32 :=
+  -- Words are little-endian, unlike SHA-256.
+  --
+  -- The message words, the length and the digest all put the least significant byte first.
   block[start].toUInt32 ||| block[start + 1].toUInt32 <<< 8 |||
     block[start + 2].toUInt32 <<< 16 ||| block[start + 3].toUInt32 <<< 24
 
@@ -219,7 +217,9 @@ def digest (state : Vector UInt32 5) : Vector UInt8 20 :=
   Vector.ofFn fun i : Fin 20 =>
     (state[i.val / 4]'(by omega) >>> (8 * UInt32.ofNat (i.val % 4))).toUInt8
 
-/-- RIPEMD-160 of a message: every block of the padded message, in order, from the initial value. -/
+/-- RIPEMD-160 of a message: every block of the padded message, in order, from the initial value.
+
+It makes no constant-time guarantee. -/
 def hash (message : ByteArray) : Vector UInt8 20 :=
   let padded := pad message
   -- `for i := 0 to t-1`, over the `t` blocks of the padded message, from the initial value.
@@ -230,7 +230,9 @@ end EthLib.Cryptography.Hash.Ripemd160
 
 namespace EthLib.Cryptography.Hash
 
-/-- RIPEMD-160 of a byte string of any length. -/
+/-- RIPEMD-160 of a byte string of any length.
+
+The precompile at address `0x03` uses it, and pads the digest on the left to 32 bytes. -/
 @[inline] def ripemd160 (data : ByteArray) : Vector UInt8 20 := Ripemd160.hash data
 
 end EthLib.Cryptography.Hash

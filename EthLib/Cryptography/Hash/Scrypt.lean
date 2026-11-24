@@ -11,13 +11,7 @@ public import EthLib.Cryptography.Hash.Pbkdf2
 
 The bounds on the parameters come from [RFC 7914 §2][params].
 
-The ROMix table stores byte arrays, so its payload is `128 * r * N` bytes.
-
 Passwords are secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
-
-ROMix reads its table at indices that depend on the password.
-
-Parameters within the bounds can still ask for more memory or time than a machine has.
 
 SOUNDNESS.md D1 says what a caller must bound.
 
@@ -270,9 +264,13 @@ def romixRead (r : Nat) (positive : 0 < r) (n : Nat) (nonzero : 0 < n)
 /-- ROMix with its input size in the type, RFC 7914 §5. -/
 def romixCore (r : Nat) (positive : 0 < r) (n : Nat) (nonzero : 0 < n)
     (input : MixBlock r) : MixBlock r :=
+  -- The table stores byte arrays, so its payload is `128 * r * N` bytes.
+  --
   -- Steps 1 and 2: `X = B`, then `N` rounds that fill `V`; step 2 overwrites each slot first.
   let (table, x) := romixFill r positive n 0 (by omega) (Vector.replicate n input) input
   -- Steps 3 and 4: `N` rounds that read `V`, and `B' = X`.
+  --
+  -- The reads of `V` are at indices that depend on the password.
   romixRead r positive n nonzero table n x
 
 /-- The cost bound of RFC 7914 §§2 and 5, without constructing `2^(16 * r)`. -/
@@ -305,6 +303,8 @@ def mixBlocks (input : ByteArray) (n r : Nat) :
     mixBlocks input n r count (offset + 128 * r) (out ++ mixed)
 
 /-- Expand, mix and compress the password, RFC 7914 §6, with the output length in bytes.
+
+Parameters within the bounds can still ask for more memory or time than a machine has.
 
 It holds `128 * r * N` bytes of table, `128 * r * p` bytes per buffer and `length` bytes of key.
 

@@ -75,9 +75,6 @@ variable {m : Type → Type} [Monad m] {α : Type} (hash : Position → α → �
 
 Each entry of `nodes` pairs a position with the value of the node there.
 
-A node in `nodes` is taken as it is.
-Otherwise the node is the hash of its two children, keyed by its position.
-
 The result is missing when `nodes` does not determine the node. -/
 def rebuild.go (nodes : List (Position × α)) : (level j : Nat) → m (Option α)
   -- A leaf has no children, so it is known only when `nodes` holds it.

@@ -11,10 +11,6 @@ The Unicode License V3 is in `EthLib/Cryptography/Unicode/LICENSE`.
 
 Copyright © 2024 Unicode, Inc.
 
-The decomposition table recursively expands both canonical and compatibility mappings.
-
-Hangul syllables are decomposed by the algorithm in `Unicode.lean`.
-
 Source: https://www.unicode.org/Public/16.0.0/ucd/UnicodeData.txt
 -/
 
@@ -6405,6 +6401,9 @@ def decompositions92 : Array (Nat × List Nat) := #[
 
 /-- The decompositions table, sorted by code point. -/
 def decompositions : Array (Nat × List Nat) :=
+  -- The table recursively expands both canonical and compatibility mappings.
+  --
+  -- Hangul syllables are decomposed by the algorithm in `Unicode.lean`.
   decompositions0
     ++   decompositions1
     ++   decompositions2

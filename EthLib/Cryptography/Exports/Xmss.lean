@@ -16,10 +16,6 @@ Key generation, signing, verification and reading a signature's leaf index cross
 
 So do the sizes and the two parameters of a codeword, as constants.
 
-Key generation also returns the secret key, which holds the built top tree, as an opaque object.
-
-The C side keeps it per seed, and signs with it.
-
 The scheme is a black box to callers: no hash, chain or tree is exported.
 -/
 
@@ -111,6 +107,7 @@ def keyGenExport (seed : ByteArray) : Result (ByteArray × SecretKey) :=
     let _ ← Base.exactBytes SEED_LEN seed .badSeedSize
     -- The C side keeps the secret key per seed, so a first signature reuses its top tree.
     let (pk, sk) := keyGen (Hash.Keccak.Lanes4.read seed 0)
+    -- The secret key, which holds the built top tree, crosses as an opaque object.
     return (encodePublicKey pk, sk)
 
 /-- The updated key and the signature of a message at a leaf index, signed with a secret key.
