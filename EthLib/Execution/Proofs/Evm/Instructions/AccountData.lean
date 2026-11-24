@@ -8,27 +8,13 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.AccountData`
 
+The instructions that read another account, and the access to an address that they make.
+
 From Berlin, an access is cold exactly when the transaction has not yet accessed the address.
 
 The access warms the address, so a second access is warm.
 
 Before Berlin, an access changes nothing.
-
-BALANCE pays the price of its access, then pushes the balance of the account.
-
-EXTCODEHASH and EXTCODESIZE access the address and pay the cold or warm price of the fork.
-
-Then EXTCODEHASH puts the code hash of the account in place of the address.
-
-EXTCODESIZE puts the size of the code there, when the lookup of the code succeeds.
-
-EXTCODEHASH gives 0 for an address with no account.
-
-Each instruction exists exactly from the fork that adds its opcode.
-
-EXTCODECOPY sets each byte of its range to the byte of the code, and keeps every other byte.
-
-Each instruction keeps the size of memory a multiple of 32.
 -/
 
 @[expose] public section
@@ -113,10 +99,12 @@ theorem extcodehashStep_cons [GasMeter Meter] {evm : Evm fork Meter} {word : U25
     extcodehashStep evm =
       let accessed := accessAddress { evm with stack := ⟨rest, by
         have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
+      -- It pays the cold or warm price of the access in the fork.
       (GasMeter.charge accessed.2.gas (extcodehashCost fork accessed.1)).map fun gas =>
         { accessed.2 with
           gas
           state := accessed.2.state.recordAccountRead (toAddressMasked word)
+          -- The code hash of the account takes the place of the address.
           stack := ⟨codeHashWord (evm.state.getAccount (toAddressMasked word)) :: rest,
             by have := evm.stack.property; rw [h] at this; simpa using this⟩
           pc := evm.pc + 1 } := by
@@ -143,10 +131,12 @@ theorem extcodesizeStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter} {
     extcodesizeStep evm =
       let accessed := accessAddress { evm with stack := ⟨rest, by
         have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
+      -- It pays the cold or warm price of the access in the fork.
       (GasMeter.charge accessed.2.gas (externalBaseCost fork accessed.1)).map fun gas =>
         { accessed.2 with
           gas
           state := accessed.2.state.recordAccountRead (toAddressMasked word)
+          -- The size of the code takes the place of the address.
           stack := ⟨BitVec.ofNat 256 code.size :: rest,
             by have := evm.stack.property; rw [h] at this; simpa using this⟩
           pc := evm.pc + 1 } := by
@@ -170,30 +160,27 @@ theorem extcodesizeStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter} {
   rcases hc : GasMeter.charge _ _ with _ | _ <;>
     simp [Except.map, Stack.push, room, accountCode, recorded]
 
-/-- EXTCODECOPY on an address word, a start, an offset and a size, whose code is found.
-
-It accesses the address, pays the access, 3 gas a word and the growth of memory.
-
-It records the read of the account.
-
-It then writes the bytes of the code from the offset, with zeros past its end.
-
-The write is made after memory has grown.
-
-The lookup of the code can fail with a state error, which this theorem excludes. -/
+/-- EXTCODECOPY on an address word, a start, an offset and a size, whose code is found. -/
 theorem extcodecopyStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter}
     {word start offset size : U256} {rest : List U256} {code : ByteArray}
     (h : evm.stack.val = word :: start :: offset :: size :: rest)
+    -- The lookup of the code can fail with a state error, which this theorem excludes.
     (found : accountCode evm (toAddressMasked word) = .ok code) :
     extcodecopyStep evm =
+      -- It accesses the address.
       let accessed := accessAddress { evm with stack := ⟨rest, by
         have := evm.stack.property; rw [h] at this; simp at this; omega⟩ } (toAddressMasked word)
       let growth := extendMemory evm.memory.size [(start, size)]
+      -- It pays the access, 3 gas a word and the growth of memory.
       (GasMeter.charge accessed.2.gas (externalBaseCost fork accessed.1 +
           GasCosts.OPCODE_COPY_PER_WORD * wordCount size.toNat + growth.cost)).map fun gas =>
         { accessed.2 with
           gas
+          -- It records the read of the account.
           state := accessed.2.state.recordAccountRead (toAddressMasked word)
+          -- It writes the bytes of the code from the offset, with zeros past its end.
+          --
+          -- The write is made after memory has grown.
           memory := memoryWrite (memoryExtend evm.memory growth.expandBy) start.toNat
             ⟨(bufferRead code offset.toNat size.toNat).toArray⟩
           pc := evm.pc + 1 } := by
@@ -240,20 +227,17 @@ theorem memory_accessAddress (evm : Evm fork Meter) (a : Address) :
 
 /-- EXTCODECOPY sets each byte of its range to the byte of the code of the account from the offset.
 
-Past the end of the code, the byte is zero.
-
-It keeps every other byte.
-
-The code is the one that the step reads for the account, in the frame before the step.
-
-Memory must start at a size that is a multiple of 32. -/
+It keeps every other byte. -/
 theorem byteAtOrZero_extcodecopyStep [GasMeter Meter] {evm after : Evm fork Meter}
     {word start offset size : U256} {rest : List U256}
     (hstack : evm.stack.val = word :: start :: offset :: size :: rest)
+    -- Memory must start at a size that is a multiple of 32.
     (hmod : evm.memory.size % 32 = 0) (h : extcodecopyStep evm = .ok after) :
+    -- The code is the one that the step reads for the account, in the frame before the step.
     ∃ code, accountCode evm (toAddressMasked word) = .ok code ∧ ∀ i,
       byteAtOrZero after.memory i =
         if start.toNat ≤ i ∧ i < start.toNat + size.toNat then
+          -- Past the end of the code, the byte is zero.
           byteAtOrZero code (offset.toNat + (i - start.toNat))
         else byteAtOrZero evm.memory i := by
   unfold extcodecopyStep at h

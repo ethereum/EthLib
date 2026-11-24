@@ -8,27 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Machine.Stack
 /-!
 # Proofs: `Evm.Step`
 
-An instruction with one, two or three operands fails with an underflow on a stack too short.
+The parts of an instruction: pops, pushes, charges, and instructions of up to three operands.
 
-On a stack that holds its operands, it pays its price, then puts its result in place of them.
-
-So it equals the pure function of the instruction, applied to the top words of the stack.
-
-Each part of an instruction keeps the message, the state, the substate and the code of the frame.
-
-A pop takes the top word of the stack and keeps memory and the return data.
-
-A push, a charge, a charge of state gas and an instruction of up to three operands keep memory too.
-
-A charge for gas and memory grows memory to hold each range that is not empty.
-
-That needs a size of memory that is a multiple of 32, and the charge keeps it so.
-
-The charge keeps every byte of memory.
-
-A write of a range that the charge covers keeps the size a multiple of 32.
-
-An instruction that keeps its reads keeps that size when the rest of it keeps it.
+What each part does to the stack and memory, and that it keeps message, state, substate and code.
 -/
 
 @[expose] public section

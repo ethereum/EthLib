@@ -8,33 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.ControlFlow`
 
-JUMP that pays fails exactly when its destination is not a valid jump destination.
+The instructions of control flow: STOP, JUMP, JUMPI, JUMPDEST, PC and GAS.
 
-Otherwise it moves the program counter to the destination.
-
-JUMPI with a zero condition goes to the next opcode, whatever the destination.
-
-JUMPI with another condition fails exactly as JUMP does.
-
-With a nonzero condition and a valid destination, JUMPI that pays drops both words.
-
-Then it moves the program counter to the destination.
-
-STOP halts the frame and moves the program counter by 1, at no price.
-
-JUMPDEST pays its price, then moves the program counter by 1.
-
-PC and GAS, on a stack with room for one more word, pay their price, then push a word.
-
-PC pushes the program counter of the opcode.
-
-GAS pushes the gas left after its own price.
-
-When the frame holds the flags of its code, the valid destinations are the JUMPDEST opcodes.
-
-None of these instructions changes the message, the state or the substate of the frame.
-
-None of them changes memory either.
+None of them changes the message, the state, the substate or memory of the frame.
 -/
 
 @[expose] public section
@@ -148,6 +124,7 @@ theorem jumpiStep_of_isValidJumpDest {evm : Evm fork Meter} {destination conditi
     (nonzero : condition ≠ 0) (paid : GasMeter.charge evm.gas OPCODE_JUMPI = .ok gas)
     (valid : isValidJumpDest evm.validJumpDestinations destination.toNat = true) :
     jumpiStep evm = .ok { evm with
+      -- Both words leave the stack.
       stack := ⟨rest, by
         have := evm.stack.property
         rw [h, List.length_cons, List.length_cons] at this

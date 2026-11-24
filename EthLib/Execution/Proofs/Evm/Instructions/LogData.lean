@@ -14,10 +14,6 @@ That log has the address of the current account and as many topics as the opcode
 The message, the state and the rest of the substate stay as they are.
 
 A LOG instruction never succeeds in a static frame.
-
-The data of the log holds the bytes of memory in its range.
-
-A LOG instruction keeps the size of memory a multiple of 32.
 -/
 
 @[expose] public section

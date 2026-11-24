@@ -6,35 +6,9 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.Storage`
 
-From Istanbul to BPO5, a write that a second write undoes costs, net of refunds, two reads.
+The gas, the refunds and the state gas of SLOAD and SSTORE, fork by fork.
 
-A cold first access adds its price on top.
-
-A write that leaves the slot as it is costs one read and changes no refund.
-
-From Glamsterdam, a write that a second write undoes costs two accesses, net of refunds.
-
-The first may be cold, and the state gas of a new slot comes back.
-
-A write that leaves the slot as it is costs one access, and no state gas.
-
-Only a write that sets a zero slot charges state gas, and only a reset to zero refills it.
-
-From Berlin, an access to a slot is cold exactly when the transaction has not accessed it.
-
-SSTORE never completes in a static frame, and from Istanbul fails with 2300 gas or less.
-
-From Glamsterdam, SSTORE in a static frame fails before it reads the stack.
-
-From Berlin, a write with its state gas costs at most 22,100 gas before Glamsterdam.
-
-From Glamsterdam, it costs at most 5 times that.
-
-SLOAD accesses the slot of the current account and pays the cold or warm price of the fork.
-
-Then it puts the word of the slot in place of the key.
-
-SLOAD and SSTORE keep memory.
+The access to a slot that they make, and SSTORE in a frame that must not change the state.
 -/
 
 @[expose] public section
@@ -256,9 +230,11 @@ From Berlin, the price depends on whether the slot is cold. -/
 theorem sloadStep_cons {evm : Evm fork Meter} {word : U256} {rest : List U256}
     (h : evm.stack.val = word :: rest) :
     sloadStep evm =
+      -- It accesses the slot of the current account.
       let accessed := accessStorageKey { evm with stack := ⟨rest, by
         have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
         evm.message.currentTarget (U256.toBeBytes word)
+      -- It pays the cold or warm price of the fork.
       (GasMeter.charge accessed.2.gas (sloadCost fork accessed.1)).map fun gas =>
         { accessed.2 with
           gas

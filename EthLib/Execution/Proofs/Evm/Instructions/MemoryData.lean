@@ -9,37 +9,13 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.MemoryData`
 
-A word that MSTORE writes reads back whole with MLOAD at the same offset.
+The instructions that move bytes between memory, the stack, call data, code and return data.
 
-MCOPY copies the old bytes of its source, also when the source and the destination overlap.
-
-CALLDATALOAD reads the call data past its end as zeros.
-
-MLOAD pays its price and the growth of memory, and CALLDATALOAD pays its price.
-
-Then each puts the word it reads at the offset in place of the offset.
-
-MLOAD reads after the growth of memory.
-
-MSTORE and MSTORE8 pay their price and the growth of memory.
-
-Then they write a word or a byte of the value at the offset.
-
-MCOPY pays its price, a price for each word copied and the growth of memory to hold both ranges.
-
-Then it writes the bytes of the source range at the destination, read in full before the write.
-
-Each of these three drops its operands and writes after the growth of memory.
-
-RETURNDATACOPY that pays fails exactly when its range ends past the return data.
-
-None of these instructions changes the message, the state or the substate of the frame.
+None of them changes the message, the state or the substate of the frame.
 
 MSTORE, MSTORE8, MCOPY, CALLDATACOPY, CODECOPY and RETURNDATACOPY set each byte of their range.
 
 They keep every other byte of memory.
-
-Each instruction keeps the size of memory a multiple of 32.
 -/
 
 @[expose] public section
@@ -77,7 +53,9 @@ theorem byteAtOrZero_wordBytes (w : U256) {i : Nat} (hi : i < 32) :
   simp [EthLib.Base.natToBytes_length]
   exact UInt8.ofNat_mod_size
 
-/-- The word of 32 bytes that a write of a word puts in memory is that word. -/
+/-- The word of 32 bytes that a write of a word puts in memory is that word.
+
+So a word that MSTORE writes reads back whole with MLOAD at the same offset. -/
 theorem loadWord_memoryWrite_wordBytes {memory : ByteArray} {start : Nat} (word : U256)
     (h : start + 32 ≤ memory.size) :
     loadWord (memoryReadBytes (memoryWrite memory start (wordBytes word)) start 32) 0 32 =
@@ -279,20 +257,17 @@ theorem byteAtOrZero_mcopyStep {evm after : Evm fork Meter} {destination source 
 
 /-- A copy to memory sets each byte of its range to the byte of the source from the offset.
 
-Past the end of the source, the byte is zero.
-
-The copy keeps every other byte.
-
-CALLDATACOPY and CODECOPY run this copy.
-
-Memory must start at a size that is a multiple of 32. -/
+CALLDATACOPY and CODECOPY run this copy. -/
 theorem byteAtOrZero_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm fork Meter}
     {start offset size : U256} {rest : List U256}
+    -- The second hypothesis: memory must start at a size that is a multiple of 32.
     (hstack : evm.stack.val = start :: offset :: size :: rest) (hmod : evm.memory.size % 32 = 0)
     (h : copyToMemory base data evm = .ok after) (i : Nat) :
     byteAtOrZero after.memory i =
       if start.toNat ≤ i ∧ i < start.toNat + size.toNat then
+        -- Past the end of the source, the byte is zero.
         byteAtOrZero data (offset.toNat + (i - start.toNat))
+      -- The copy keeps every other byte.
       else byteAtOrZero evm.memory i := by
   unfold copyToMemory at h
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
@@ -428,6 +403,7 @@ theorem mstoreStep_cons {evm : Evm fork Meter} {start value : U256} {rest : List
       let memory := memoryExtend evm.memory growth.expandBy
       (GasMeter.charge evm.gas (OPCODE_MSTORE_BASE + growth.cost)).map fun gas =>
         { evm with
+          -- The operands leave the stack.
           stack := ⟨rest, by
             have := evm.stack.property
             rw [h, List.length_cons, List.length_cons] at this
@@ -449,6 +425,7 @@ theorem mstore8Step_cons {evm : Evm fork Meter} {start value : U256} {rest : Lis
       let memory := memoryExtend evm.memory growth.expandBy
       (GasMeter.charge evm.gas (OPCODE_MSTORE8_BASE + growth.cost)).map fun gas =>
         { evm with
+          -- The operands leave the stack.
           stack := ⟨rest, by
             have := evm.stack.property
             rw [h, List.length_cons, List.length_cons] at this
@@ -474,10 +451,12 @@ theorem mcopyStep_cons {evm : Evm fork Meter} {destination source length : U256}
     mcopyStep evm =
       let growth := extendMemory evm.memory.size [(source, length), (destination, length)]
       let memory := memoryExtend evm.memory growth.expandBy
+      -- It pays its price, a price for each word copied and the growth of memory.
       (GasMeter.charge evm.gas
           (OPCODE_MCOPY_BASE + OPCODE_COPY_PER_WORD * wordCount length.toNat + growth.cost)).map
         fun gas =>
           { evm with
+            -- The operands leave the stack.
             stack := ⟨rest, by
               have := evm.stack.property
               rw [h, List.length_cons, List.length_cons, List.length_cons] at this

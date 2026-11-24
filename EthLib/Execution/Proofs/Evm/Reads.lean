@@ -18,37 +18,9 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: the reads of an instruction
 
-From Glamsterdam, an instruction checks the gas it knows before it reads the state.
-
-Before Glamsterdam, that check always passes.
-
-An exceptional halt keeps the state of the frame, so it keeps the reads that the frame made.
-
-BALANCE, EXTCODESIZE, EXTCODECOPY and EXTCODEHASH each read the account at their address.
-
-SELFBALANCE reads the current account.
-
-SLOAD and SSTORE each read their slot in the storage of the current account.
-
-SSTORE records that read even when it then halts, as EIP-7928 asks.
-
-When it completes, its write also reads the current account.
-
-SELFDESTRUCT reads its beneficiary even when it then halts.
-
-When it completes, it also reads the current account.
-
-From Paris, an account that SELFDESTRUCT empties, even for a moment, is deleted.
-
-The keys that the transaction wrote at that account then become storage reads.
-
-BALANCE, EXTCODESIZE, EXTCODECOPY, EXTCODEHASH, SELFBALANCE and SLOAD add only their own read.
+The accounts and the storage slots that each instruction of the dispatch adds to the reads.
 
 For SSTORE and SELFDESTRUCT, the account reads and the storage reads are stated exactly.
-
-Every other instruction of the dispatch keeps the account reads and the storage reads.
-
-The calls and the creations are outside the dispatch, and they read accounts too.
 
 A step that fails before its read gives no frame, so it adds no read.
 -/
@@ -67,7 +39,9 @@ theorem checkGas_of_lt_glamsterdam (h : fork < .glamsterdam) (evm : Evm fork Met
   have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
   simp [checkGas, hpre, pure, Except.pure]
 
-/-- From Glamsterdam, the gas check passes exactly when the frame has the amount left. -/
+/-- From Glamsterdam, the gas check passes exactly when the frame has the amount left.
+
+An instruction checks the gas it knows this way before it reads the state. -/
 theorem checkGas_eq_ok_iff (h : fork ≥ .glamsterdam) {evm : Evm fork Meter} {amount : Nat} :
     checkGas evm amount = .ok () ↔ amount ≤ GasMeter.gasLeft evm.gas := by
   unfold checkGas
@@ -204,17 +178,16 @@ theorem reads_sloadStep {evm after : Evm fork Meter} {word : U256} {rest : List 
     rw [state_accessStorageKey]
     exact ⟨rfl, rfl⟩
 
-/-- SSTORE adds its slot to the storage reads of the current account, even when it then halts.
-
-When it halts after reading, it keeps the account reads.
-
-When it completes, it adds the current account to the account reads. -/
+/-- SSTORE adds its slot to the storage reads of the current account, even when it then halts. -/
 theorem reads_sstoreStep {evm after : Evm fork Meter} {key new : U256} {rest : List U256}
     (hs : evm.stack.val = key :: new :: rest) (h : sstoreStep evm = .ok after) :
+    -- The read of the slot is recorded even on a halt, as EIP-7928 asks.
     after.state.storageReads = evm.state.storageReads.insert evm.message.currentTarget
         ((evm.state.storageReads.getD evm.message.currentTarget ∅).insert
           (U256.toBeBytes key)) ∧
+      -- When it halts after reading, it keeps the account reads.
       ((after.state.accountReads = evm.state.accountReads ∧ ∃ e, after.error = some e) ∨
+        -- When it completes, its write adds the current account to the account reads.
         (after.state.accountReads = evm.state.accountReads.insert evm.message.currentTarget ∧
           after.error = evm.error)) := by
   unfold sstoreStep at h
@@ -334,22 +307,21 @@ theorem accountReads_finishSelfdestruct {beneficiary : Address} {refund : Nat}
       (evm.state.accountReads.insert evm.message.currentTarget).insert beneficiary :=
   (reads_finishSelfdestruct h).1
 
-/-- SELFDESTRUCT adds its beneficiary to the account reads, even when it then halts.
-
-When it halts after reading the beneficiary, it keeps every storage read.
-
-When it completes, it also adds the current account.
-
-From Paris, it then reads the written keys of an account that its transfer deletes. -/
+/-- SELFDESTRUCT adds its beneficiary to the account reads, even when it then halts. -/
 theorem reads_selfdestructStep {evm after : Evm fork Meter} {word : U256}
     {rest : List U256} (hs : evm.stack.val = word :: rest)
     (h : selfdestructStep fork evm = .ok after) :
+    -- When it halts after reading the beneficiary, it keeps every storage read.
     (after.state.accountReads = evm.state.accountReads.insert (Base.toAddressMasked word) ∧
         after.state.storageReads = evm.state.storageReads ∧
         ∃ e, after.error = some e) ∨
+      -- When it completes, it also adds the current account.
       (after.state.accountReads =
           (evm.state.accountReads.insert evm.message.currentTarget).insert
             (Base.toAddressMasked word) ∧
+        -- From Paris, an account that its transfer empties, even for a moment, is deleted.
+        --
+        -- It then reads the keys that the transaction wrote at that account.
         (∀ address, after.state.storageReads[address]? =
           if fork ≥ .paris ∧
               ((address = evm.message.currentTarget ∧
@@ -391,7 +363,7 @@ theorem accountReads_selfdestructStep {evm after : Evm fork Meter} {word : U256}
 
 /-- Every other instruction of the dispatch keeps the account and storage reads.
 
-The dispatch leaves out the calls and the creations.
+The dispatch leaves out the calls and the creations, which read accounts too.
 
 Of its own instructions, the eight that read an account or a storage slot are left out. -/
 theorem reads_instruction {op : Op} {run : Evm fork Meter → Except EvmError (Evm fork Meter)}

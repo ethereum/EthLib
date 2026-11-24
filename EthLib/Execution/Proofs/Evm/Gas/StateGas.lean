@@ -5,29 +5,13 @@ public import EthLib.Execution.Evm.Gas.StateGas
 /-!
 # Proofs: `Evm.Gas.StateGas`
 
-A charge of state gas fails exactly when the reservoir and the execution gas do not cover it.
+What charges, refills, commits, rollbacks, repayments and merges do to the state gas meter.
 
-A charge of state gas raises the net state gas by its amount, and a refill lowers it by its amount.
-
-A charge of execution gas keeps it.
-
-So execution gas, plus the reservoir, plus the net state gas, stays the same.
+Charges and refills of state gas keep execution gas plus the reservoir plus the net state gas.
 
 Charges, refills, rollbacks and repayments keep execution gas plus the spill.
 
 A commit lowers that sum.
-
-When the reservoir or the spill is empty, a refill undoes the charge of the same amount.
-
-A repayment leaves the reservoir or the spill empty.
-
-A rollback credits the spill back, and lowers the net state gas as EIP-8037 writes it.
-
-A rollback to the start leaves no net state gas.
-
-A merge adds the net state gas of the child, less its grant and the spill it committed.
-
-A child that got the whole reservoir of the caller and committed nothing adds its own net state gas.
 -/
 
 @[expose] public section
@@ -234,7 +218,9 @@ theorem budget_restore (meter : StateGasMeter) :
   simp only [restore]
   omega
 
-/-- A rollback lowers the net state gas by the baseline minus the reservoir plus the spill. -/
+/-- A rollback lowers the net state gas by the baseline minus the reservoir plus the spill.
+
+This is the rollback as EIP-8037 writes it. -/
 theorem stateGasUsed_restore (meter : StateGasMeter) :
     meter.restore.stateGasUsed =
       meter.stateGasUsed - ((meter.baseline : Int) - meter.reservoir + meter.spill) := by

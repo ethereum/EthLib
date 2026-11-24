@@ -8,15 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Op
 
 A position is a valid jump destination exactly when a JUMPDEST opcode starts there.
 
-So each valid destination holds the byte `0x5b`.
-
 No position between an opcode and the next one is valid, so the data of a PUSH holds none.
 
 A relation states the opcode boundaries by the step rule alone, and the scan lists exactly them.
-
-So a position is a valid jump destination exactly when it is a boundary that holds JUMPDEST.
-
-The step past a PUSH1 to PUSH32 skips its data, by the byte alone.
 -/
 
 @[expose] public section

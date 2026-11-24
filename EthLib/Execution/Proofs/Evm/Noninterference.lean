@@ -9,31 +9,11 @@ public import EthLib.Base.Proofs.Except
 /-!
 # Proofs: changing state outside an instruction's read
 
-The two frames differ only in their transaction state.
+On frames whose states agree where it reads, an instruction fails alike, unless it aborts the run.
 
-Their stack, gas meter and substate, including the warm access sets, are the same.
+On success, it gives agreeing frames when the sets hold every read of the result.
 
-BALANCE depends only on the balance at its address, and SLOAD only on the word at its slot.
-
-EXTCODEHASH depends on its account, since the empty account gives zero.
-
-Agreement there gives the same error, or the same frame with the other state and its read recorded.
-
-The file then covers every instruction of the dispatch.
-
-The calls and the creations are outside the dispatch.
-
-On two frames whose states agree on some sets, an instruction gives the same failure in both.
-
-That holds unless the failure aborts the run.
-
-On success, it gives agreeing frames, when the sets hold every read of the result.
-
-The sets must also hold the current account.
-
-The code hash of each account in the first set must be empty, written, or in the code set.
-
-SELFDESTRUCT reads the balance of the current account to price a new account.
+The file covers every instruction of the dispatch, which leaves out the calls and the creations.
 
 These are local steps toward the coverage of [EIP-7928, Scope and Inclusion][bal].
 
@@ -89,6 +69,7 @@ theorem sloadStep_congr_state {evm : Evm fork Meter} {word : U256} {rest : List 
 On success, the other state receives exactly the account read. -/
 theorem extcodehashStep_congr_state {evm : Evm fork Meter} {word : U256} {rest : List U256}
     (stack : evm.stack.val = word :: rest) (other : State.TransactionState)
+    -- The whole account must agree, since the empty account gives zero.
     (read : other.getAccount (toAddressMasked word) =
       evm.state.getAccount (toAddressMasked word)) :
     extcodehashStep { evm with state := other } =
@@ -106,7 +87,9 @@ theorem extcodehashStep_congr_state {evm : Evm fork Meter} {word : U256} {rest :
 The sets name addresses, whole storages, slots and code hashes, as for two transaction states. -/
 structure FrameAgrees (account allStorage : Address → Prop) (slot : Address → Bytes32 → Prop)
     (code : Hash32 → Prop) (a b : Evm fork Meter) : Prop where
-  /-- Apart from the state, the two frames are equal. -/
+  /-- Apart from the state, the two frames are equal.
+
+  Their stack, gas meter and substate, including the warm access sets, are the same. -/
   rest : b = { a with state := b.state }
   /-- The two states agree on the four sets. -/
   state : AgreesOn account allStorage slot code a.state b.state
@@ -1230,24 +1213,21 @@ private theorem instruction_keeps {op : Op}
     exact hs
   · exact selfdestructOpStep_keeps hf
 
-/-- Each instruction of the dispatch gives agreeing frames when it starts from agreeing frames.
-
-A failure that does not abort the run comes before any read, so both frames fail alike.
-
-A success needs the reads of the frame it gives in the sets.
-
-Each account of the first set needs its code hash empty, written, or in the code set.
-
-The current account must be in the first set.
-
-SELFDESTRUCT reads its balance to price a new account. -/
+/-- Each instruction of the dispatch gives agreeing frames when it starts from agreeing frames. -/
 theorem instruction_agrees {account allStorage : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop} {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hrun : instruction fork op = some run) {e1 e2 : Evm fork Meter}
     (hrel : FrameAgrees account allStorage slot code e1 e2)
+    -- Each account of the first set needs its code hash empty, written, or in the code set.
+    --
+    -- The current account must be in the first set.
+    --
+    -- SELFDESTRUCT reads the balance of the current account to price a new account.
     (hcodes : CodesIn account code e1.state) (hcurrent : account e1.message.currentTarget) :
+    -- A failure that does not abort the run comes before any read, so both frames fail alike.
     (∀ err, run e1 = .error err → err.aborts = false → run e2 = .error err) ∧
+      -- A success needs the reads of the frame it gives in the sets.
       ∀ a1, run e1 = .ok a1 → ReadsIn account slot a1.state →
         ∃ a2, run e2 = .ok a2 ∧ FrameAgrees account allStorage slot code a1 a2 :=
   instruction_keeps hrun e1 e2 hrel hcodes hcurrent
