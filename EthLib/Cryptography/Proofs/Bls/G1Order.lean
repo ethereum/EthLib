@@ -14,12 +14,6 @@ The trusted-setup proofs need three facts about the generator `g_1`.
 - The generator is a nonsingular point of the curve, which the kernel checks.
 - `[r] g_1 = 0`, which the kernel checks by running double and add.
 - The map `s ↦ [s] g_1` is linear in `s`, so scalars mod `r` act on the span of `g_1`.
-
-The double and add runs through a copy that recurses on a fuel argument.
-
-The kernel does not reduce well-founded recursion.
-
-Since `r` is prime and `g_1 ≠ 0`, the order of `g_1` is exactly `r`.
 -/
 
 @[expose] public section
@@ -36,7 +30,11 @@ set_option maxRecDepth 8000
 theorem valid_generator : Valid generator :=
   valid_of_affine_eq (by decide_eq_at_model [])
 
-/-! ## `[r]g_1 = 0` -/
+/-! ## `[r]g_1 = 0`
+
+The double and add runs through a copy that recurses on a fuel argument.
+
+The kernel does not reduce well-founded recursion. -/
 
 /-- The test for the point at infinity reads the same on the image in the model. -/
 theorem isInfinity_model (p : G1) : p.isInfinity = (map Fp.toModel.toHom p).isInfinity :=
@@ -82,6 +80,7 @@ theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := by
 /-- The generator has additive order exactly `r`. -/
 theorem addOrderOf_toPoint_generator :
     addOrderOf (toPoint generator) = Fr.modulus :=
+  -- Since `r` is prime and `g_1 ≠ 0`, the order of `g_1` is exactly `r`.
   addOrderOf_eq_prime modulus_smul_generator toPoint_generator_ne_zero
 
 /-! ## The `Fr` action on `⟨g_1⟩` -/

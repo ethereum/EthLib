@@ -13,11 +13,7 @@ The square root computes `a^((p + 1) / 4)`, since `p = 3 mod 4`.
 
 It squares back to `a` exactly on the squares.
 
-Soundness is the final check of the square root, and completeness is Euler's criterion.
-
 Decompressing the compression of a valid point gives back the same group element.
-
-The coordinates may change, since compression scales to `z = 1`, but the group element does not.
 
 The converse direction shows that the encoding is canonical.
 
@@ -41,6 +37,7 @@ set_option maxRecDepth 4000
 
 /-- Soundness of `Fp.sqrt`: a returned root squares to the input. -/
 theorem sqrt_ok {a c : Fp} (h : Fp.sqrt a = .ok c) : c * c = a := by
+  -- Soundness is the final check of the square root.
   rw [Fp.sqrt] at h
   split at h
   · rename_i hbeq
@@ -64,6 +61,7 @@ private theorem pow_sqrt_exponent {x y : ZMod Fp.modulus} (h : y * y = x) :
 /-- Completeness of `Fp.sqrt`: it succeeds on every square. -/
 theorem sqrt_complete {a b : Fp} (h : b * b = a) :
     Fp.sqrt a = .ok (Fp.powNat a ((Fp.modulus + 1) / 4)) := by
+  -- Completeness is Euler's criterion.
   have hcand : Fp.powNat a ((Fp.modulus + 1) / 4) * Fp.powNat a ((Fp.modulus + 1) / 4) = a := by
     apply toZMod.injective
     rw [toZMod_mul, toZMod_powNat]
@@ -483,17 +481,7 @@ For any valid point `p`, `compress` followed by `uncompress` succeeds.
 
 It returns a point `q` denoting the same group element (`toPoint q = toPoint p`).
 
-The Jacobian representative is generally *not* preserved, but the underlying curve point is.
-
-`compress` records only the affine `x` plus the sign of `y`.
-
-So decompression rebuilds the canonical `z = 1` representative.
-
-This is the encoding half of the BLS G1 serialization spec.
-
-It relies on `p` being prime: both square roots are `±y`, recovered via the stored sign bit.
-
-It also relies on `p ≡ 3 (mod 4)`, so `Fp.sqrt` is exact. -/
+This is the encoding half of the BLS G1 serialization spec. -/
 theorem uncompress_compress {p : G1} (h : Valid p) :
     ∃ q, uncompress (compress p) = .ok q ∧ toPoint q = toPoint p := by
   by_cases hinf : p.isInfinity = true
@@ -508,6 +496,7 @@ theorem uncompress_compress {p : G1} (h : Valid p) :
       rw [hB0, UInt8.lt_iff_toNat_lt]; exact Fp.toBytesBE_head_lt xa
     have hsqw : ya * ya = xa * xa * xa + Fp.ofNat 4 := by
       have := affine_sqrt_witness h hinf; rw [hpa] at this; exact this
+    -- The proof relies on `p ≡ 3 (mod 4)`, so the square root of `Fp` is exact.
     have hsqrt := Fp.sqrt_complete hsqw
     have hysq : Fp.powNat (xa * xa * xa + Fp.ofNat 4) ((Fp.modulus + 1) / 4)
         * Fp.powNat (xa * xa * xa + Fp.ofNat 4) ((Fp.modulus + 1) / 4)
@@ -521,7 +510,13 @@ theorem uncompress_compress {p : G1} (h : Valid p) :
       · rw [ite_eq_left hs, byteArray_get!_set!_ne _ _ hi0, byteArray_get!_set!_ne _ _ hi0]
       · rw [ite_eq_right hs, byteArray_get!_set!_ne _ _ hi0]
     have hsize : (packBytes (compress p)).size = 48 := size_packBytes _
+    -- Compression records only the affine `x` plus the sign of `y`.
+    --
+    -- So decompression rebuilds the canonical `z = 1` representative.
     refine ⟨⟨xa, ya, Fp.one⟩, ?_, ?_⟩
+    -- The proof relies on `p` being prime.
+    --
+    -- Both square roots are `±y`, recovered via the stored sign bit.
     · by_cases hs : Fp.signBit ya
       · have hhead : (packBytes (compress p)).get! 0 = B0 ||| 0x80 ||| 0x20 := by
           rw [hcp]; dsimp only
@@ -553,6 +548,11 @@ theorem uncompress_compress {p : G1} (h : Valid p) :
             rw [byteArray_get!_set!_self _ _ (by rw [hsize]; decide), hhead, ← hB0]
             exact b0_neg_m B0 hb0
           · rw [byteArray_get!_set!_ne _ _ hi0, hother i hi0]
+    -- The Jacobian representative is generally not preserved, but the underlying curve point is.
+    --
+    -- The coordinates may change, since compression scales to `z = 1`.
+    --
+    -- The group element does not change.
     · have := toPoint_affine_normalize (p := p) hinf
       rw [hpa] at this; exact this
 
@@ -573,16 +573,13 @@ The proof rests on three facts:
 
 /-- The equation `x^3 + 4 = 0` has no solution modulo `p`.
 
-Equivalently, `-4` is not a cube modulo `p`.
-
-# Why it holds
-
-- `p - 1` is divisible by 3, so the cubes form a subgroup of index 3 in the nonzero residues.
-- By Euler's criterion for cubes, `a` is a cube if and only if `a^((p - 1) / 3) = 1`.
-- The kernel evaluates `(-4)^((p - 1) / 3) mod p` and finds a value other than 1.
--/
+Equivalently, `-4` is not a cube modulo `p`. -/
 private theorem cube_add_four_ne_zero_zmod (x : ZMod Fp.modulus) :
     x * x * x + 4 ≠ 0 := by
+  -- The kernel shows that `-4` is not a cube modulo `p`:
+  -- - `p - 1` is divisible by 3, so the cubes form a subgroup of index 3 in the nonzero residues.
+  -- - By Euler's criterion for cubes, `a` is a cube if and only if `a^((p - 1) / 3) = 1`.
+  -- - The kernel evaluates `(-4)^((p - 1) / 3) mod p` and finds a value other than 1.
   intro h
   -- Rewrite the root as a cube: x^3 = -4, with -4 written as the natural number p - 4.
   have h3 : x ^ 3 = ((Fp.modulus - 4 : Nat) : ZMod Fp.modulus) := by

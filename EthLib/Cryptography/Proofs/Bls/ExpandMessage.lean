@@ -21,10 +21,6 @@ Sources:
 
 The file restates the message expansion and the hash to the field as a model over lists of bytes.
 
-The model hashes with the FIPS 180-4 model of SHA-256.
-
-It reads and writes integers with OS2IP and I2OSP of RFC 8017 §4.
-
 The code agrees with the model on every message shorter than 2^61 - 323 bytes.
 
 The DST must be shorter than 2^61 - 17 bytes.
@@ -36,7 +32,11 @@ namespace EthLib.Cryptography.Bls.HashToCurve
 
 open EthLib.Cryptography.Bls
 
-/-! ## The model -/
+/-! ## The model
+
+The model hashes with the FIPS 180-4 model of SHA-256.
+
+It reads and writes integers with OS2IP and I2OSP of RFC 8017 §4. -/
 
 namespace Spec
 

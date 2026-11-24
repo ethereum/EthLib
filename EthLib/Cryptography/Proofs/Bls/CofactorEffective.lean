@@ -9,18 +9,6 @@ RFC 9380 §7 defines the cofactor clearing as the multiplication by the scalar `
 
 The code computes it by the method of Appendix G.3, with the endomorphism `psi`.
 
-Both are group homomorphisms of the twist, so they agree on a subgroup.
-
-That subgroup holds the torsion witnesses of the cofactor and the generator of order `r`.
-
-On a witness of order `q`, both maps give `O`, because `q` divides `h_eff`.
-
-On the generator, the kernel checks that the method gives `(h_eff mod r) g_2`.
-
-So the subgroup has an order that `h_2 r` divides, and the twist has at most `2 p^2 + 1` points.
-
-Hence it is the whole twist, and the method gives `h_eff P` for every valid point `P`.
-
 So every output of the hash to `G2` is `h_eff` times a valid point of the twist.
 
 See [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §7, §8.8.2 and Appendix G.3.
@@ -32,7 +20,9 @@ namespace EthLib.Cryptography.Bls.HashToCurve
 
 open CofactorCertificate CofactorPrimes CofactorSpan
 
-/-- The points on which the cofactor clearing is the multiplication by `h_eff`. -/
+/-- The points on which the cofactor clearing is the multiplication by `h_eff`.
+
+Both maps are group homomorphisms of the twist, so they agree on a subgroup. -/
 private noncomputable def effKernel : AddSubgroup G2.curve.toAffine.Point :=
   (cofactorHom - H_EFF_G2 • AddMonoidHom.id _).ker
 
@@ -52,6 +42,7 @@ private theorem mem_eff_of_clear_zero {P : G2} (hP : G2.Valid P)
 
 /-- The generator of order `r` lies in the subgroup, by a kernel computation. -/
 private theorem generator_mem_eff : G2.toPoint G2.generator ∈ effKernel := by
+  -- The kernel checks that the method gives `(h_eff mod r) g_2`.
   rw [mem_effKernel_iff, ← toPoint_clearCofactor G2.valid_generator, G2.nsmul_generator_mod,
     ← G2.toPoint_mulNat G2.valid_generator]
   apply (G2.projectiveEq_eq_true_iff_toPoint_eq (clearCofactor_valid G2.valid_generator)
@@ -61,6 +52,9 @@ private theorem generator_mem_eff : G2.toPoint G2.generator ∈ effKernel := by
 
 /-- The subgroup is the whole twist. -/
 private theorem effKernel_eq_top : effKernel = ⊤ := by
+  -- The subgroup holds the torsion witnesses of the cofactor and the generator of order `r`.
+  --
+  -- On a witness of order `q`, both maps give `O`, because `q` divides `h_eff`.
   have h13 : 13 ^ 2 ∣ Nat.card effKernel :=
     prime_sq_dvd_card_of_mem prime_13 effKernel
       (mem_eff_of_clear_zero q13_valid q13_clear_zero q13_annihilator (by decide))
@@ -94,6 +88,11 @@ private theorem effKernel_eq_top : effKernel = ⊤ := by
   have hr : Fr.modulus ∣ Nat.card effKernel :=
     prime_dvd_card_of_mem Fr.modulus_prime effKernel generator_mem_eff
       G2.modulus_smul_generator G2.toPoint_generator_ne_zero
+  -- So the subgroup has an order that `h_2 r` divides.
+  --
+  -- The twist has at most `2 p^2 + 1` points.
+  --
+  -- Hence it is the whole twist, and the method gives `h_eff P` for every valid point `P`.
   exact eq_top_of_elementary_bound effKernel
     (candidate_dvd_of_prime_divisors h13 h23 h2713 h11953 h262069 hlarge hr)
     G2.card_point_le candidate_gt_field_square

@@ -15,28 +15,6 @@ The kernel can check this for a concrete point by running double and add.
 The BLS parameter is `t = -0xd201000000010000`, and `r = t^4 - t^2 + 1`.
 
 So the check computes `[r] P` as `[t^2] ([t^2] P - P) + P`.
-
-Each `[t^2]` is two products by `|t|`, since `t^2 = |t|^2`.
-
-These take about as many doublings as one product by `r`, but far fewer additions.
-
-Here the coordinates are naturals below `p`, and each field operation is one product or sum mod `p`.
-
-These operations take the same values as the field operations of `Fp`.
-
-The kernel runs them several times faster, since it skips the structure of `Fin`.
-
-They call `Nat.add`, `Nat.sub`, `Nat.mul` and `Nat.mod` directly, not through `+`, `-`, `*` and `%`.
-
-The kernel then computes each one at once, without first unfolding the instances of the notation.
-
-On a run of doublings, that takes about half the time and half the memory.
-
-The check reads only the `x` coordinate of a point with `z = 1`.
-
-It computes a square root `y` of `x^3 + 4`, and checks `[r] (x, y, 1) = 0`.
-
-The other root `-y` gives the opposite point, which then also has order dividing `r`.
 -/
 
 @[expose] public section
@@ -51,6 +29,21 @@ abbrev Coords := Nat × Nat × Nat
 /-- The coordinates of a point, as naturals below `p`. -/
 def coords (q : G1) : Coords := (q.x.val, q.y.val, q.z.val)
 
+-- Here the coordinates are naturals below `p`.
+--
+-- Each field operation is one product or sum mod `p`.
+--
+-- These operations take the same values as the field operations of `Fp`.
+--
+-- The kernel runs them several times faster, since it skips the structure of `Fin`.
+--
+-- They call `Nat.add`, `Nat.sub`, `Nat.mul` and `Nat.mod` directly.
+--
+-- They do not go through `+`, `-`, `*` and `%`.
+--
+-- The kernel then computes each one at once, without first unfolding the instances of the notation.
+--
+-- On a run of doublings, that takes about half the time and half the memory.
 /-- Sum mod `p`, with the value of the sum in `Fp`. -/
 def fadd (a b : Nat) : Nat := Nat.mod (Nat.add a b) Fp.modulus
 
@@ -269,18 +262,21 @@ def powMod : Nat → Nat → Nat → Nat
       let half := powMod fuel (fmul b b) (e / 2)
       bif Nat.beq (e % 2) 1 then fmul b half else half
 
-/-- The chain `[t^2] ([t^2] q - q) + q`, which is `[r] q` for a valid point `q`.
-
-Double and add takes at most one doubling for each bit of the scalar.
-
-It takes at most one addition for each set bit.
-
-`|t|` has 64 bits, six of them set, so the four products by `|t|` take at most 256 doublings.
-
-The four products take at most 24 additions, and the chain adds two more.
-
-One product by `r` would take up to 255 doublings and 134 additions. -/
+/-- The chain `[t^2] ([t^2] q - q) + q`, which is `[r] q` for a valid point `q`. -/
 def mulModulus (q : Coords) : Coords :=
+  -- Each `[t^2]` is two products by `|t|`, since `t^2 = |t|^2`.
+  --
+  -- These take about as many doublings as one product by `r`, but far fewer additions.
+  --
+  -- Double and add takes at most one doubling for each bit of the scalar.
+  --
+  -- It takes at most one addition for each set bit.
+  --
+  -- `|t|` has 64 bits, six of them set, so the four products by `|t|` take at most 256 doublings.
+  --
+  -- The four products take at most 24 additions, and the chain adds two more.
+  --
+  -- One product by `r` would take up to 255 doublings and 134 additions.
   let a := mulNatAux 64 (mulNatAux 64 q blsX) blsX
   add (mulNatAux 64 (mulNatAux 64 (add a (neg q)) blsX) blsX) q
 
@@ -292,6 +288,11 @@ def rootCandidate (x : Nat) : Nat :=
 
 It holds when `x` is below `p`, the candidate `y` squares to `x^3 + 4`, and `[r] (x, y, 1) = 0`. -/
 def check (x : Nat) : Bool :=
+  -- The check reads only the `x` coordinate of a point with `z = 1`.
+  --
+  -- It computes a square root `y` of `x^3 + 4`, and checks `[r] (x, y, 1) = 0`.
+  --
+  -- The other root `-y` gives the opposite point, which then also has order dividing `r`.
   let y := rootCandidate x
   decide (x < Fp.modulus) &&
     fmul y y == fadd (fmul (fmul x x) x) (4 % Fp.modulus) &&

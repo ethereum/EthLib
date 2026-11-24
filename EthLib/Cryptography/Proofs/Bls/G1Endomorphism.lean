@@ -15,8 +15,6 @@ This file proves the facts on `σ` that the check needs.
 - `P + σ(P) + σ(σ(P)) = 0` for every `P`, since the three points lie on one line `Y = y`.
 - So `σ(P) = [-n] P` gives `[n^2 - n + 1] P = 0`, and `t^4 - t^2 + 1 = r`.
 - The kernel checks `σ(g_1) = [-t^2] g_1` for the generator.
-
-Projective equality of Jacobian triples agrees with equality of the points they denote.
 -/
 
 @[expose] public section
@@ -27,7 +25,9 @@ open WeierstrassCurve WeierstrassCurve.Jacobian
 
 local notation "F" => ZMod Fp.modulus
 
-/-! ## Projective equality -/
+/-! ## Projective equality
+
+Projective equality of Jacobian triples agrees with equality of the points they denote. -/
 
 theorem toPoint_eq_iff_rep_equiv {p q : G1} (hp : Valid p) (hq : Valid q) :
     toPoint p = toPoint q ↔ rep p ≈ rep q :=
