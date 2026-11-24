@@ -834,7 +834,7 @@ def test_storage_values_member_twice() -> None:
     assert answer["error"] == {
         "code": -32700,
         "message": "Parse error",
-        "data": f'offset 164: duplicate object key "{CONTRACT}"',
+        "data": f"the name {CONTRACT} appears twice in an object",
     }
 
 

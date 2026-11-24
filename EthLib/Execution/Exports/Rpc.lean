@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyDerive
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Base.Json.Document
 public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Execution.Rpc.BlockParam
 public import EthLib.Execution.Rpc.Errors
@@ -12,37 +13,11 @@ public import EthLib.Execution.Exports.Transition
 /-!
 # `Exports.Rpc`
 
-The C exports of the parameter readers of the execution JSON-RPC API, and of its error codes.
+The C exports of the execution JSON-RPC API: its parameter readers and its error codes.
 
-A parameter crosses as the typed value of its JSON, with the name of its schema.
+A chain view, built from its blocks, answers a list of requests at once.
 
-The names are those of [`base-types.yaml`][types] and [`block.yaml`][block].
-
-A number or a `byte` reads as an `int`, and a byte string, an address or a hash as `bytes`.
-
-A `bytes` value has an even number of digits, though the pattern of the source admits an odd one.
-
-A value that holds Python `bytes` at any depth has no JSON form, so every schema rejects it.
-
-A storage slot of type `bytesMax32` reads as its 32 bytes.
-
-A block parameter reads as a tuple: its kind, then its number, its tag, or its hash and flag.
-
-A value that its schema rejects has the code of invalid parameters, without its sign.
-
-A chain view crosses as the inputs that build it, and answers a list of requests at once.
-
-Its blocks are the lowest block and the blocks after it, each with the name of its fork.
-
-Each block after the lowest runs through the state transition, as a valid view asks.
-
-A chain view reads the embedded KZG trusted setup, which the KZG exports decode once.
-
-An unknown schema, or an argument that Lean cannot read, has code 0.
-
-An error code may be negative, but a Python `int` crosses only when it is not.
-
-So a code crosses as a pair: whether it is negative, then its absolute value.
+Source: the schema names of [`base-types.yaml`][types] and [`block.yaml`][block].
 
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 [block]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
@@ -59,6 +34,7 @@ open EthLib.Serialization.JsonRpc (Read RpcError address bytes reject uint uint6
 
 derive_py BlockTag
 derive_py_laws BlockTag
+-- A block parameter reads as a tuple: its kind, then its number, its tag, or its hash and flag.
 derive_py BlockParam
 derive_py_laws BlockParam
 
@@ -71,7 +47,9 @@ instance : ExportError RpcError where
     | some (.str reason) => reason
     | _ => e.message
 
-/-- An error code crosses as whether it is negative, then its absolute value. -/
+/-- An error code crosses as whether it is negative, then its absolute value.
+
+An error code may be negative, but a Python `int` crosses only when it is not. -/
 local instance : ToPy Int := ⟨fun i => toPy (decide (i < 0), i.natAbs)⟩
 
 mutual
@@ -96,21 +74,22 @@ def containsBytesEntries : List (String × PyValue) → Bool
 
 end
 
-/-- A value read by a reader of a schema, as a Python value.
-
-A value that holds Python `bytes` is no JSON value, so the schema rejects it.
-
-A rejection has the code of invalid parameters, without its sign, and the reason as message. -/
+/-- A value read by a reader of a schema, as a Python value. -/
 def readingOf {α : Type} [ToPy α] (schema : String) (value : PyValue)
     (reader : String → Json → Read α) : Result PyValue :=
   let reading :=
+    -- A value that holds Python `bytes` at any depth has no JSON form, so every schema rejects it.
     if containsBytes value then reject s!"{schema}: not a JSON value"
     else reader schema value.toJson
+  -- A rejection has the code of invalid parameters, without its sign, and the reason as message.
   toResult none ((reading.map toPy).mapError RpcError.invalidParams)
 
 /-- The value of a parameter under the schema of the given name, or why the schema rejects it. -/
 def readParamOf (args : String × PyValue) : Result PyValue :=
   let (schema, value) := args
+  -- A parameter crosses as the typed value of its JSON, with the name of its schema.
+  --
+  -- A number or a `byte` reads as an `int`, and a byte string, an address or a hash as `bytes`.
   match schema with
   | "byte" => readingOf schema value byte
   | "uint" => readingOf schema value uint
@@ -118,7 +97,9 @@ def readParamOf (args : String × PyValue) : Result PyValue :=
   | "uint64" => readingOf schema value uint64
   | "uint256" => readingOf schema value uint256
   | "uintDecimal" => readingOf schema value uintDecimal
+  -- An even number of digits, though the pattern of the source admits an odd one.
   | "bytes" => readingOf schema value bytes
+  -- A storage slot reads as its 32 bytes.
   | "bytesMax32" => readingOf schema value bytesMax32
   | "bytes4" => readingOf schema value bytes4
   | "bytes8" => readingOf schema value bytes8
@@ -133,6 +114,7 @@ def readParamOf (args : String × PyValue) : Result PyValue :=
   | "BlockNumberOrTag" => readingOf schema value blockNumberOrTag
   | "BlockNumberOrTagForRange" => readingOf schema value blockNumberOrTagForRange
   | "BlockNumberOrTagOrHash" => readingOf schema value blockNumberOrTagOrHash
+  -- An unknown schema has code 0.
   | _ => rejectArgument none s!"unknown schema: {schema}"
 
 /-- Read a parameter of the execution JSON-RPC API under the schema of the given name.
@@ -202,6 +184,8 @@ def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRe
 
 /-- The inputs of a chain view: the configuration, the state of the lowest block, and the blocks.
 
+Each block is the name of its fork and its RLP form, the lowest block first.
+
 Then come the head, safe and finalized hashes, the network ID and whether to check the seal. -/
 abbrev ViewInputs :=
   PyValue × ByteArray × List (String × ByteArray) × (Hash32 × Hash32 × Hash32) × Nat × Bool
@@ -215,9 +199,7 @@ def configNat (j : Json) (name : String) : Result (Option Nat) := do
     unless n < 2 ^ 64 do rejectArgument none s!"config: {name} is not below 2^64"
     return some n
 
-/-- Explicit genesis context for a pruned view, or none when neither field is given.
-
-The hash and timestamp must be given together; a partial or malformed context is rejected. -/
+/-- Explicit genesis context for a pruned view, or none when neither field is given. -/
 def configGenesis (j : Json) : Result (Option (Hash32 × Nat)) := do
   let time ← configNat j "genesisTime"
   match j.getObjVal? "genesisHash", time with
@@ -225,27 +207,18 @@ def configGenesis (j : Json) : Result (Option (Hash32 × Nat)) := do
   | .ok hash, some time =>
     let hash ← toResult none ((hash32 "genesisHash" hash).mapError UnreadArgument.mk)
     return some (hash, time)
+  -- The hash and timestamp must be given together; a partial or malformed context is rejected.
   | _, _ => rejectArgument none "config: genesisHash and genesisTime must be given together"
 
-/-- The chain view that its inputs build, or why they build none.
-
-The lowest block is taken with its state, whose root must be the state root of its header.
-
-It must be at the active fork of its header.
-
-It must hold no transaction, since its receipts are not given.
-
-Each block after it runs on the chain before it, without the history before the lowest block.
-
-The head must be the last block, and a zero safe or finalized hash names no block.
-
-When the lowest block is block zero, any given genesis hash and timestamp must match it. -/
+/-- The chain view that its inputs build, or why they build none. -/
 def viewOf (inputs : ViewInputs) : Result ChainView := do
   let (config, state, blocks, (head, safeHash, finalizedHash), networkId, checkSeal) := inputs
   let configJson := config.toJson
   let genesis ← configGenesis configJson
+  -- The configuration may give `mergeForkBlock`, the `FORK_NEXT_VALUE` of EIP-3675.
   let mergeForkBlock ← configNat configJson "mergeForkBlock"
   let config ← ChainConfig.Exports.configOfJson configJson
+  -- The embedded KZG trusted setup, which the KZG exports decode once.
   let setup ← toResult none (Cryptography.Kzg.Exports.embeddedSetup ())
   let state ← toResult none
     ((State.Exports.ofInput state).mapError fun e => UnreadArgument.mk e.message)
@@ -253,15 +226,23 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
     | [] => rejectArgument none "no block"
     | first :: rest => pure (first, rest)
   let ⟨fork, lowest⟩ ← blockOf config first.1 first.2
+  -- The lowest block must be at the active fork of its header.
   unless config.activeFork lowest.header.number lowest.header.timestamp.toNat = some fork do
     rejectArgument none "the lowest block is not at its active fork"
+  -- It is taken with its state, whose root must be the state root of its header.
   let root ← toResult none
     ((stateRoot keccak256 state).mapError fun e => UnreadArgument.mk s!"state root: {reprStr e}")
   unless root = lowest.header.stateRoot do
     rejectArgument none "the state is not the state of the lowest block"
+  -- It must hold no transaction, since its receipts are not given.
   unless lowest.transactions.isEmpty do
     rejectArgument none "the lowest block has transactions, whose receipts are not given"
   let lowest ← recordOf lowest state [] []
+  -- When the lowest block is block zero, the genesis context is read from it.
+  --
+  -- Any given genesis hash and timestamp must then match it.
+  --
+  -- Otherwise the configuration must give both, for the method that reports the fork schedule.
   let genesis ← match lowest.genesis with
     | some actual => do
       if let some given := genesis then
@@ -269,12 +250,19 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
           rejectArgument none "config: genesis context disagrees with block zero"
       pure (some actual)
     | none => pure genesis
+  -- Each block after it runs through the state transition, as a valid view asks.
+  --
+  -- It runs on the chain before it.
+  --
+  -- The history before the lowest block is not there.
   let records ← rest.foldlM (init := [lowest]) fun records block => do
     let prev := records.getLast?.getD lowest
     return records ++ [← nextRecord config checkSeal records prev block]
   if h : records = [] then rejectArgument none "no block"
   else
+    -- The head must be the last block.
     unless (records.getLast h).hash = head do rejectArgument none "the head is not the last block"
+    -- A zero safe or finalized hash names no block.
     let view : ChainView := {
       config := config
       canonical := records
@@ -287,14 +275,16 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
       setup := setup }
     return view
 
-/-- The responses of the chain view that its inputs build, to the texts of requests, as text.
-
-The access lists of the named block numbers are pruned first.
-
-A notification, or a batch of notifications, gets none. -/
+/-- The responses of the chain view that its inputs build, to the texts of requests, as text. -/
 def serveOf (args : ViewInputs × List Nat × List String) : Result (List (Option String)) := do
+  -- The access lists of the named block numbers are pruned, while their blocks remain available.
+  --
+  -- From Glamsterdam, the access-list methods report code 4444 for a pruned list.
   let view := (← viewOf args.1).pruneAccessLists args.2.1
-  return args.2.2.map fun text => (view.serve (Json.parse text)).map (·.compress)
+  -- Each text is read by the total reader of RFC 8259.
+  --
+  -- A notification, or a batch of notifications, gets none.
+  return args.2.2.map fun text => (view.serve (Base.Json.ofText text)).map (·.compress)
 
 /-- Answer requests of the execution JSON-RPC API from the chain that the arguments build.
 
