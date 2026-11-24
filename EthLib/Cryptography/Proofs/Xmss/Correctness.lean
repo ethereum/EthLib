@@ -9,12 +9,11 @@ public import EthLib.Cryptography.Proofs.Xmss.Verify
 
 A signature this specification produces is one it accepts.
 
-```text
-    bottom:  Ots.leaf(0, idx, m, rho^0, y^0)   = X^0_{0,idx}     honest leaf
-             Tree.fold(0, idx, X^0_{0,idx}, pi^0) = X^0_{16,b}   the root the top key signed
-    top:     Ots.leaf(1, b, root, rho^1, y^1)  = X^1_{0,b}       honest leaf
-             Tree.fold(1, b, X^1_{0,b}, pi^1)  = X^1_{16,0}      the public key's root
-```
+- Bottom layer: the one-time signature of the message gives leaf `idx`, in bottom tree `b`.
+- The bottom tree is `b = floor(idx / 2^16)`.
+- Its path folds that leaf to the root of tree `b`, the root that the top key signed.
+- Top layer: the one-time signature of that root gives leaf `b` of the top tree.
+- Its path folds that leaf to the root of the public key.
 
 Correctness holds for every hash function `f`, run in the identity monad.
 
@@ -26,7 +25,11 @@ Every theorem here assumes that signing succeeded.
 
 Signing fails only when a one-time key finds no codeword in `2^32` trials.
 
-How often that happens is not proved: it needs the random oracle model.
+In the random oracle model, signing fails with probability at most `2 exp(-4000)`.
+
+The bound assumes that the oracle's cache holds no trial input of the two keys that sign.
+
+It also assumes that a bottom tree the key kept for this leaf holds a top signature.
 -/
 
 @[expose] public section
