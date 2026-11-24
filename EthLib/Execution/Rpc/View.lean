@@ -140,35 +140,27 @@ def Follows (chain : BlockChain) (checkSeal : Bool) (r : BlockRecord) : Prop :=
 
 /-- A view that the state transition gives, from its lowest block on.
 
-The hash of each block is the hash of its header.
-
-The state of the lowest block is an input, and its root is the state root of its header.
-
-The blocks before it are an input too, and the last of them is its parent.
-
-The lowest block and each block off the canonical chain are at the active fork of their header.
-
-Each other canonical block follows the one before it by the state transition.
-
-When the seal is not checked, the proof of work is left out.
-
-A block off the canonical chain is checked for its hash and its fork only.
-
-The pending block is built on top of the head, and its contents are the node's own choice. -/
+The state of the lowest block and the blocks before it are inputs. -/
 structure Valid (v : ChainView) (checkSeal : Bool) : Prop where
   /-- The hash of each block is the hash of its header. -/
   hash : ∀ r ∈ v.canonical ++ v.side, r.block.header.hash = .ok r.hash
-  /-- The lowest block and each block off the canonical chain are at their active fork. -/
+  /-- The lowest block and each block off the canonical chain are at their header's active fork.
+
+  A block off the canonical chain is checked for its hash and its fork only. -/
   fork : ∀ r ∈ v.lowest :: v.side,
     v.config.activeFork r.block.header.number r.block.header.timestamp.toNat = some r.fork
   /-- The last block of the history is the parent of the lowest block. -/
   history : ∀ b ∈ v.history.getLast?, b.header.hash = .ok v.lowest.block.header.parentHash
   /-- The state of the lowest block has the state root of its header. -/
   lowest : stateRoot keccak256 v.lowest.state = .ok v.lowest.block.header.stateRoot
-  /-- Each other canonical block follows the block before it. -/
+  /-- Each other canonical block follows the block before it by the state transition.
+
+  When the seal is not checked, the proof of work is left out. -/
   follows : ∀ i (h : i + 1 < v.canonical.length),
     Follows (v.chainAt i (by omega)) checkSeal v.canonical[i + 1]
-  /-- The pending block has the hash of its header, the head as parent, and its active fork. -/
+  /-- The pending block has the hash of its header, the head as parent, and its active fork.
+
+  It is built on top of the head, and its contents are the node's own choice. -/
   pending : ∀ p, v.pending = some p →
     p.block.header.hash = .ok p.hash ∧ p.block.header.parentHash = v.head.hash ∧
       p.block.header.number = v.head.block.header.number + 1 ∧
