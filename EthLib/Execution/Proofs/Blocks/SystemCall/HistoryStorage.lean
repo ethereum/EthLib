@@ -7,37 +7,11 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 
 The contract keeps the hashes of the last 8191 blocks, in a ring of 8191 storage slots.
 
-Its code is the 83 bytes of [EIP-2935][eip-2935-bytecode], which its deployment installs.
+Each operation of the EIP is a function here, and a theorem runs the code to show it computes it.
 
-A call from the system address sets a hash.
+The code is the 83 bytes of [EIP-2935][eip-2935-bytecode], which its deployment installs.
 
-It writes the first 32 bytes of the input, padded with zeros, at the parent number modulo 8191.
-
-A call from any other address gets a hash.
-
-Its input is a block number of 32 bytes, read big-endian.
-
-It returns the word at the slot of that number modulo 8191.
-
-It reverts when the input is not 32 bytes, or when the number is not one of the last 8191 blocks.
-
-Each operation of [the EIP][eip-2935-contract] is a function here.
-
-A theorem runs the code and shows that it computes that function.
-
-The set specification uses a conservative one-counter budget.
-
-It holds from Shapella, the fork that adds PUSH0.
-
-From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
-
-The block number must be at least 1 and less than `2^256`, as the code computes on words.
-
-From Pectra, a system call to the contract succeeds with the gas meter of its fork.
-
-It leaves the storage that the EIP describes.
-
-A call to empty code keeps the block state and records the address, at every fork from Pectra.
+Source: [EIP-2935][eip-2935-contract].
 
 [eip-2935-bytecode]: https://eips.ethereum.org/EIPS/eip-2935#bytecode
 [eip-2935-contract]: https://eips.ethereum.org/EIPS/eip-2935#block-hash-history-contract
@@ -91,6 +65,7 @@ The input must be 32 bytes, and its word `n` one of the last 8191 block numbers 
 
 The hash is then the word at the slot of `n`. -/
 def getHash (number : Nat) (read : U256 → U256) (input : ByteArray) : Option U256 :=
+  -- The input is a block number, read big-endian.
   if input.size = 32 ∧ (inputWord input).toNat < number ∧
       number ≤ (inputWord input).toNat + HISTORY_SERVE_WINDOW then
     some (read (slot (inputWord input).toNat))
@@ -113,26 +88,22 @@ variable {fork : Fork} {message : Message fork} {gas : Nat} {state : Transaction
 
 /-- A call from the system address sets a hash, as EIP-2935 describes.
 
-It holds from Shapella, on a frame that may change the state.
-
-The account of the contract exists.
-
-The one-counter budget is 30,000 gas before Glamsterdam and 150,000 from Glamsterdam.
-
-The block number is at least 1 and less than `2^256`.
-
-The frame stops with no error and no output.
-
-The state then holds the storage after the input is set in the block, at the contract.
-
-It keeps the storage of every other account, the accounts and the codes. -/
+It holds from Shapella, the fork that adds PUSH0, on a frame that may change the state. -/
 theorem spec_set (hfork : .shapella ≤ fork)
     (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The block number is at least 1 and less than `2^256`, as the code computes on words.
     (hnumber : 1 ≤ message.blockEnv.number) (hbound : message.blockEnv.number < 2 ^ 256)
+    -- The conservative one-counter budget: 30,000 gas before Glamsterdam, 150,000 from it.
     (hgas : 30000 * storageGasScale fork ≤ gas) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
+      -- The frame stops with no error and no output.
       evm.error = none ∧ evm.output = .empty ∧
+      -- The state then holds the storage after the input is set in the block, at the contract.
+      --
+      -- It keeps the storage of every other account, the accounts and the codes.
       WritesStorage message.currentTarget
         (setHash message.blockEnv.number message.data (storageOf state message.currentTarget))
         state evm.state := by
@@ -233,20 +204,17 @@ theorem getHash_eq (number : Nat) (read : U256 → U256) (input : ByteArray) :
 
 /-- A call from an address other than the system address gets a hash.
 
-It holds over the steps that are monotone in gas.
-
-It holds from Shapella, with at least 5,000 gas and fewer than `2^256` bytes of input.
-
-The block number is at least 1 and less than `2^256`.
-
-The frame returns the hash that the storage holds for the input, or reverts with no output.
-
-Its state reads as the state it starts from. -/
+It holds from Shapella, over the steps that are monotone in gas. -/
 theorem specG_get (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
+    -- The block number is at least 1 and less than `2^256`.
     (hnumber : 1 ≤ message.blockEnv.number) (hbound : message.blockEnv.number < 2 ^ 256)
+    -- The input has fewer than `2^256` bytes, and the frame has at least 5,000 gas.
     (hsize : message.data.size < 2 ^ 256) (hgas : 5000 ≤ gas) :
     SpecG fork (At CODE message 0 [] .empty gas state substate returnData)
+      -- The frame returns the hash that the storage holds for the input, or reverts with no output.
+      --
+      -- Its state reads as the state it starts from.
       (Answer state (getHash message.blockEnv.number
         (storageOf state message.currentTarget) message.data)) := by
   have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
@@ -334,22 +302,19 @@ theorem specG_get (hfork : .shapella ≤ fork)
 
 /-- A call from an address other than the system address gets a hash, as EIP-2935 describes.
 
-It holds from Shapella up to BPO5, the forks whose frames count gas as one number.
-
-The frame has at least 5,000 gas.
-
-The block number is at least 1 and less than `2^256`.
-
-It assumes fewer than `2^256` bytes of input, which the size word of the EVM can hold.
-
-The frame returns the hash that the storage holds for the input, or reverts with no output.
-
-Its state reads as the state it starts from. -/
+It holds from Shapella up to BPO5, the forks whose frames count gas as one number. -/
 theorem spec_get (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
+    -- The block number is at least 1 and less than `2^256`.
     (hnumber : 1 ≤ message.blockEnv.number) (hbound : message.blockEnv.number < 2 ^ 256)
+    -- It assumes fewer than `2^256` bytes of input, which the size word of the EVM can hold.
+    --
+    -- The frame has at least 5,000 gas.
     (hsize : message.data.size < 2 ^ 256) (hgas : 5000 ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData)
+      -- The frame returns the hash that the storage holds for the input, or reverts with no output.
+      --
+      -- Its state reads as the state it starts from.
       (Answer state (getHash message.blockEnv.number (storageOf state message.currentTarget)
         message.data)) :=
   (specG_get hfork hcaller hnumber hbound hsize hgas).toSpec
@@ -366,27 +331,23 @@ theorem addedAt_HISTORY_STORAGE_ADDRESS :
 theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
   simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
 
-/-- From Pectra, a system call to the contract sets a hash.
+/-- From Pectra, a system call to the contract sets a hash, with the gas meter of its fork.
 
 It writes the first 32 bytes of its data, padded with zeros, at the slot of the parent number.
 
-The account at the history storage address must hold the code of EIP-2935.
-
-The block number is at least 1 and less than `2^256`.
-
-The call succeeds with no output, whatever its data.
-
-The storage of the contract is the storage after the data is set in the block.
-
-A block passes the hash of its parent as that data, by EIP-2935.
-
-The call keeps the storage of every other account, the accounts and the codes. -/
+A block passes the hash of its parent as that data, by EIP-2935. -/
 theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} {data : ByteArray}
     (hfork : .pectra ≤ fork)
+    -- The account at the history storage address must hold the code of EIP-2935.
     (hcode : codeAt block HISTORY_STORAGE_ADDRESS = .ok CODE)
+    -- The block number is at least 1 and less than `2^256`.
     (hnumber : 1 ≤ env.number) (hbound : env.number < 2 ^ 256) :
+    -- The call succeeds with no output, whatever its data.
     ∃ out, systemCall env block HISTORY_STORAGE_ADDRESS data = .ok out ∧ out.error = none ∧
       out.output = .empty ∧
+      -- The storage of the contract is the storage after the data is set in the block.
+      --
+      -- The call keeps the storage of every other account, the accounts and the codes.
       WritesStorage HISTORY_STORAGE_ADDRESS
         (setHash env.number data (storageOf (.ofBlock block) HISTORY_STORAGE_ADDRESS))
         (.ofBlock block) out.state :=

@@ -8,23 +8,13 @@ public import EthLib.Execution.Proofs.Evm.Call.Rebuild
 /-!
 # Proofs: the access-list builder follows the system calls
 
-A system call runs one message with zero value and no authorization.
-
-Its target has code whenever the frame runs nonempty bytecode or follows a delegation indicator.
-
-By [EIP-7610][eip7610], any creation inside the call fails at an address that already holds storage.
-
-From Spurious Dragon, a created account starts at nonce 1, so it may hold storage.
-
-So unwritten storage words keep their block values, and each read code hashes to its key.
-
-Thus the access-list builder follows the call, and the block state afterward can still be rebuilt.
+The access-list builder follows a system call, and the block state afterward can still be rebuilt.
 
 This needs the block state before the call to be rebuildable.
 
 Its code matches its hash, and no empty account holds storage.
 
-It also assumes that no account with nonce 0 has the code hash of a delegation indicator.
+By [EIP-7610][eip7610], any creation inside the call fails at an address that already holds storage.
 
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 -/
@@ -41,6 +31,7 @@ open EthLib.Execution.Transactions
 /-- The access-list builder follows every state with the rebuild property on its block. -/
 theorem _root_.EthLib.Execution.Evm.RebuildEnd.followable {block : BlockState}
     {tx : TransactionState} (valid : RebuildEnd block tx) : Followable block tx :=
+  -- Unwritten storage words keep their block values, and each read code hashes to its key.
   ⟨valid.parent, fun _ _ hslot => valid.getStorage_of_slot_eq_none hslot,
     fun _ _ code _ hread => valid.code _ code hread⟩
 
@@ -50,6 +41,7 @@ If the frame runs code, its target has a nonce or code. -/
 private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [GasMeter Meter]
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {first : FirstFrame fork Meter} (valid : RebuildState block (.ofBlock block))
+    -- A system call runs one message with zero value and no authorization.
     (h : prepareFirstFrame (Meter := Meter) env.chainId.toNat (systemMessage env target data)
       (.ofBlock block) (systemSubstate env target) [] ∅ = .ok first) :
     RebuildState block first.state ∧
@@ -75,6 +67,7 @@ private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [Ga
   generalize hdel : (if fork ≥ .pectra then delegatedAddress code else none) = delegate at h
   rcases delegate with _ | delegate
   · cases h
+    -- With no delegation, the target has code whenever the frame runs nonempty bytecode.
     refine ⟨vs1, rfl, fun hsize => .inr (hhash_of_nonempty ?_)⟩
     intro hempty
     rw [hempty] at hsize
@@ -83,6 +76,7 @@ private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [Ga
       intro hempty
       rw [hempty, delegatedAddress_empty, ite_self] at hdel
       cases hdel
+    -- When the frame follows a delegation indicator, its target has code.
     have hs1_nc : HasNonceOrCode s1 target := .inr (hhash_of_nonempty hcode_ne)
     let s2 := s1.recordAccountRead delegate
     have hs2_sw : SameWrites s2 s1 := SameWrites.recordAccountRead _ _
@@ -105,6 +99,7 @@ private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [Ga
 
 /-- From Spurious Dragon, running a system message keeps the rebuild property. -/
 private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [GasMeter Meter]
+    -- From Spurious Dragon, a created account starts at nonce 1, so it may hold storage.
     [LawfulGasMeter Meter] (hfork : .spuriousDragon ≤ fork) {env : BlockEnvironment fork}
     {block : BlockState} {target : Address} {data : ByteArray} {out : CallOutput}
     (valid : Rebuildable block) (delegations : DelegationsHaveNonce (.ofBlock block))

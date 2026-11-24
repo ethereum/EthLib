@@ -7,37 +7,11 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 
 The contract keeps one root per timestamp modulo 8191, in two rings of 8191 storage slots.
 
-Its code is the 97 bytes of [EIP-4788][eip-4788-bytecode], which its deployment installs.
+Each operation of the EIP is a function here, and a theorem runs the code to show it computes it.
 
-A call from the system address sets a root.
+The code is the 97 bytes of [EIP-4788][eip-4788-bytecode], which its deployment installs.
 
-It writes the timestamp of the block at the slot of the timestamp modulo 8191.
-
-It writes the first 32 bytes of the input, the root, 8191 slots above.
-
-A call from any other address gets a root.
-
-Its input is a timestamp of 32 bytes, read big-endian.
-
-It returns the root of that timestamp when the ring still holds it.
-
-It reverts when the input is not 32 bytes, is 0, or when the slot holds another timestamp.
-
-Each operation of [the EIP][eip-4788-contract] is a function here.
-
-A theorem runs the code and shows that it computes that function.
-
-The set specification uses a conservative one-counter budget.
-
-It holds from Shapella, the fork that adds PUSH0.
-
-From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
-
-From Dencun, a system call to the contract succeeds with the gas meter of its fork.
-
-It leaves the storage that the EIP describes.
-
-A call to empty code keeps the block state and records the address, at every fork from Dencun.
+Source: [EIP-4788][eip-4788-contract].
 
 [eip-4788-bytecode]: https://eips.ethereum.org/EIPS/eip-4788#bytecode
 [eip-4788-contract]: https://eips.ethereum.org/EIPS/eip-4788#beacon-roots-contract
@@ -95,9 +69,9 @@ def setRoot (t : U256) (input : ByteArray) (read : U256 → U256) (slot : U256) 
 
 /-- The root that a call gets for the input `input`, from the storage `read`, or none to revert.
 
-The input must be 32 bytes, and its word `t` must not be 0.
+The input must be 32 bytes, and its word `t`, read big-endian, must not be 0.
 
-The slot of `t` must hold `t`, and the root is then the word 8191 slots above. -/
+The slot of `t` must still hold `t`, and the root is then the word 8191 slots above. -/
 def getRoot (read : U256 → U256) (input : ByteArray) : Option U256 :=
   if input.size = 32 ∧ inputWord input ≠ 0 ∧
       read (timestampSlot (inputWord input)) = inputWord input then
@@ -165,23 +139,21 @@ private theorem set_tail (hfork : .shapella ≤ fork)
 
 /-- A call from the system address sets a root, as EIP-4788 describes.
 
-It holds from Shapella, on a frame that may change the state.
-
-The account of the contract exists.
-
-The one-counter budget is 50,000 gas before Glamsterdam and 250,000 from Glamsterdam.
-
-The frame stops with no error and no output.
-
-The storage of the contract is then the storage after the timestamp and the input are set.
-
-It keeps the storage of every other account, the accounts and the codes. -/
+It holds from Shapella, the fork that adds PUSH0. -/
 theorem spec_set (hfork : .shapella ≤ fork)
+    -- The frame may change the state.
     (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The conservative one-counter budget: 50,000 gas before Glamsterdam, 250,000 from it.
     (hgas : 50000 * storageGasScale fork ≤ gas) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
+      -- The frame stops with no error and no output.
       evm.error = none ∧ evm.output = .empty ∧
+      -- The storage of the contract is then the storage after the timestamp and the input are set.
+      --
+      -- It keeps the storage of every other account, the accounts and the codes.
       WritesStorage message.currentTarget
         (setRoot message.blockEnv.timestamp message.data (storageOf state message.currentTarget))
         state evm.state := by
@@ -343,17 +315,16 @@ theorem getRoot_eq (read : U256 → U256) (input : ByteArray) :
 
 /-- A call from an address other than the system address gets a root.
 
-It holds over the steps that are monotone in gas.
-
-It holds from Shapella, with at least 5,100 gas and fewer than `2^256` bytes of input.
-
-The frame returns the root that the storage holds for the input, or reverts with no output.
-
-Its state reads as the state it starts from. -/
+It holds from Shapella, over the steps that are monotone in gas. -/
 theorem specG_get (hfork : .shapella ≤ fork)
+    -- The input has fewer than `2^256` bytes.
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hsize : message.data.size < 2 ^ 256)
+    -- The frame has at least 5,100 gas.
     (hgas : 5100 ≤ gas) :
     SpecG fork (At CODE message 0 [] .empty gas state substate returnData)
+      -- The frame returns the root that the storage holds for the input, or reverts with no output.
+      --
+      -- Its state reads as the state it starts from.
       (Answer state (getRoot (storageOf state message.currentTarget)
         message.data)) := by
   have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
@@ -387,19 +358,17 @@ theorem specG_get (hfork : .shapella ≤ fork)
 
 /-- A call from an address other than the system address gets a root, as EIP-4788 describes.
 
-It holds from Shapella up to BPO5, the forks whose frames count gas as one number.
-
-The frame has at least 5,100 gas.
-
-It assumes fewer than 2^256 bytes of input, which the size word of the EVM can hold.
-
-The frame returns the root that the storage holds for the input, or reverts with no output.
-
-Its state reads as the state it starts from. -/
+It holds from Shapella up to BPO5, the forks whose frames count gas as one number. -/
 theorem spec_get (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
+    -- It assumes fewer than 2^256 bytes of input, which the size word of the EVM can hold.
+    --
+    -- The frame has at least 5,100 gas.
     (hsize : message.data.size < 2 ^ 256) (hgas : 5100 ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData)
+      -- The frame returns the root that the storage holds for the input, or reverts with no output.
+      --
+      -- Its state reads as the state it starts from.
       (Answer state (getRoot (storageOf state message.currentTarget) message.data)) :=
   (specG_get hfork hcaller hsize hgas).toSpec
 
@@ -415,24 +384,21 @@ theorem addedAt_BEACON_ROOTS_ADDRESS :
 theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
   simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
 
-/-- From Dencun, a system call to the contract sets a root.
+/-- From Dencun, a system call to the contract sets a root, with the gas meter of its fork.
 
 It writes the first 32 bytes of its data as the root.
 
-The account at the beacon roots address must hold the code of EIP-4788.
-
-The call succeeds with no output, whatever its data.
-
-The storage of the contract is the storage after the timestamp of the block and the data are set.
-
-A block passes the root of its parent beacon block as that data, by EIP-4788.
-
-The call keeps the storage of every other account, the accounts and the codes. -/
+A block passes the root of its parent beacon block as that data, by EIP-4788. -/
 theorem systemCall_set {env : BlockEnvironment fork} {block : State.BlockState} {data : ByteArray}
     (hfork : .dencun ≤ fork)
+    -- The account at the beacon roots address must hold the code of EIP-4788.
     (hcode : codeAt block BEACON_ROOTS_ADDRESS = .ok CODE) :
+    -- The call succeeds with no output, whatever its data.
     ∃ out, systemCall env block BEACON_ROOTS_ADDRESS data = .ok out ∧ out.error = none ∧
       out.output = .empty ∧
+      -- The storage of the contract is the storage after the block timestamp and the data are set.
+      --
+      -- The call keeps the storage of every other account, the accounts and the codes.
       WritesStorage BEACON_ROOTS_ADDRESS
         (setRoot env.timestamp data (storageOf (.ofBlock block) BEACON_ROOTS_ADDRESS))
         (.ofBlock block) out.state :=

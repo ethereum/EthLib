@@ -11,33 +11,11 @@ public import EthLib.Execution.Proofs.Evm.Logic.Log
 
 The withdrawal request contract of [EIP-7002][eip-7002] keeps a queue of requests in its storage.
 
-The consolidation request contract of [EIP-7251][eip-7251] keeps one as well.
+The consolidation request contract of [EIP-7251][eip-7251] keeps one with the same counters.
 
-Both keep the same four counters in the first four slots of their storage.
-
-Slot 0 holds the excess of requests, slot 1 the number of requests added in the block.
-
-Slots 2 and 3 hold the indices of the head and the tail of the queue.
-
-The requests follow from slot 4, each in a fixed number of slots.
-
-A call from any other address with no input and no value gets the fee to add a request.
-
-A call with a request as its input and at least the fee adds the request at the tail.
-
-The fee is an exponential of the excess, computed by the loop of `fake_exponential`.
-
-Until the first system call, the excess holds the inhibitor, and no request can be added.
-
-A call from the system address takes at most a fixed number of requests from the head.
-
-It then updates the excess with the number of requests of the block, and resets that number.
-
-The EIPs compute on integers, and the code computes on words of 256 bits.
+The EIPs compute on integers, and the code on words of 256 bits.
 
 The two agree while no value reaches `2^256`.
-
-Here, as in the code, each slot and each value written to it is a word, modulo `2^256`.
 
 The bounds that a theorem needs on the counters and on the fee come as hypotheses.
 
@@ -59,26 +37,33 @@ def EXCESS_INHIBITOR : U256 := BitVec.allOnes 256
 
 /-- The fee to add a request at the excess `excess`, or none while the inhibitor holds.
 
-It approximates `factor * e^(excess / fraction)` by the integer loop of `fake_exponential`. -/
+It approximates `factor * e^(excess / fraction)` by the integer loop of `fake_exponential`.
+
+A call from another address with no input and no value gets this fee. -/
 def getFee (factor fraction : Nat) (excess : U256) : Option Nat :=
   if excess = EXCESS_INHIBITOR then none else some (fakeExponential factor excess.toNat fraction)
 
 /-- The loop of the fee stops within `m` steps, and computes on words with no overflow.
 
-Its accumulator is 0 at step `m`, and the sum of the accumulators before it is below `2^256`.
-
-Each product of an accumulator before step `m` and the excess is below `2^256`.
-
-So is `fraction * (m + 1)`, which bounds every divisor of the loop.
-
 The loop of the code fixes the factor at 1. -/
 def FeeFits (factor fraction excess m : Nat) : Prop :=
+  -- Its accumulator is 0 at step `m`, and the sum of the accumulators before it is below `2^256`.
   accum factor excess fraction m = 0 ∧ partialSum factor excess fraction m < 2 ^ 256 ∧
+    -- `fraction * (m + 1)`, which bounds every divisor of the loop, is below `2^256` too.
+    --
+    -- Each product of an accumulator before step `m` and the excess is below `2^256`.
     fraction * (m + 1) < 2 ^ 256 ∧ ∀ k < m, accum factor excess fraction k * excess < 2 ^ 256
 
-/-! ## The storage -/
+/-! ## The storage
 
-/-- The storage `read` with the word `value` at the slot `key`. -/
+Slot 0 holds the excess of requests, and slot 1 the number of requests added in the block.
+
+Slots 2 and 3 hold the indices of the head and the tail, and the requests follow from slot 4.
+-/
+
+/-- The storage `read` with the word `value` at the slot `key`.
+
+As in the code, each slot and each value written to it is a word, modulo `2^256`. -/
 def setSlot (read : U256 → U256) (key value : U256) (slot : U256) : U256 :=
   if slot = key then value else read slot
 
@@ -102,39 +87,37 @@ def numDequeued (max : Nat) (read : U256 → U256) : Nat :=
 
 /-- The storage after a request of the words `words` is added, from the storage `read`.
 
-The count of the block grows by one.
-
-The words go to the slots of the request at the tail, from slot 4, `size` slots per request.
-
-The tail then grows by one.
+A call adds a request when its input is one and its value is at least the fee.
 
 The writes come in this order, as in the EIP. -/
 def afterAdd (size : Nat) (words : List U256) (read : U256 → U256) : U256 → U256 :=
+  -- The request at the tail starts from slot 4, `size` slots per request.
   let start := 4 + read 3 * BitVec.ofNat 256 size
+  -- The count of the block grows by one.
   let counted := setSlot read 1 (read 1 + 1)
+  -- The words go to the slots of that request.
   let stored := (words.zipIdx.foldl fun r (word, j) => setSlot r (start + BitVec.ofNat 256 j) word)
     counted
+  -- The tail then grows by one.
   setSlot stored 3 (read 3 + 1)
 
 /-- The storage after the system call of a block, from the storage `read`.
 
-The call takes at most `max` requests from the head, with a target of `target` per block.
-
-When it empties the queue, the head and the tail go back to 0.
-
-Otherwise the head moves past the requests it took.
-
-The excess is the new excess of the block, and the count of the block is 0.
-
-Every other slot keeps its word. -/
+The call takes at most `max` requests from the head, with a target of `target` per block. -/
 def afterDequeue (max target : Nat) (read : U256 → U256) (slot : U256) : U256 :=
   let head := (read 2).toNat
   let tail := (read 3).toNat
   let next := head + numDequeued max read
+  -- The excess is the new excess of the block.
   if slot = 0 then BitVec.ofNat 256 (newExcess target (read 0) (read 1))
+  -- The count of the block is 0.
   else if slot = 1 then 0
+  -- When the call empties the queue, the head and the tail go back to 0.
+  --
+  -- Otherwise the head moves past the requests it took.
   else if slot = 2 then (if next = tail then 0 else BitVec.ofNat 256 next)
   else if slot = 3 then (if next = tail then 0 else read 3)
+  -- Every other slot keeps its word.
   else read slot
 
 /-- The writes of the system call give the storage after the requests are taken.
@@ -465,23 +448,20 @@ open EthLib.Execution.Blocks.SystemContract (storageOf WritesStorage sloadPrice_
 variable {fork : EthLib.Base.Fork} {code : ByteArray} {message : Message fork}
   {memory : ByteArray} {substate : Substate} {returnData : ByteArray}
 
-/-- From Berlin, SSTORE writes `new` at the slot `key` with a conservative one-counter budget.
-
-The frame may change the state, and the account of the contract exists.
-
-The budget is 25,000 gas before Glamsterdam and 125,000 from Glamsterdam.
-
-The write changes one slot and pays at most 22,100 gas before Glamsterdam and 110,500 from it.
-
-It keeps the logs. -/
+/-- From Berlin, SSTORE writes `new` at the slot `key` with a conservative one-counter budget. -/
 theorem sstore_writes (hfork : .berlin ≤ fork) {pc : Nat}
     {key new : U256} {rest : List U256} {gas : Nat} {S : State.TransactionState}
+    -- The frame may change the state.
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
+    -- The budget is 25,000 gas before Glamsterdam and 125,000 from Glamsterdam.
     (hgas : 25000 * storageGasScale fork ≤ gas) :
+    -- The write changes one slot.
     ∃ S', WritesStorage message.currentTarget
         (setSlot (storageOf S message.currentTarget) key new) S S' ∧
       Hoare fork (At code message pc (key :: new :: rest) memory gas S substate returnData)
+        -- It pays at most 22,100 gas before Glamsterdam and 110,500 from it, and keeps the logs.
         fun evm => ∃ g ss, gas ≤ g + 22100 * storageGasScale fork ∧ ss.logs = substate.logs ∧
           At code message (pc + 1) rest memory g S' ss returnData evm := by
   have hscale := one_le_storageGasScale fork
@@ -618,18 +598,15 @@ open EthLib.Base (Fork Address)
 
 /-- What a stopped frame holds when a call adds the request `words` with the log data `data`.
 
-The frame stops with no error and no output.
-
-The state holds the storage after the request is added, at the contract, and keeps the rest.
-
-The logs gain one log of the contract, with no topic and the data `data`.
-
 The pseudocode of the EIP has no log; its code writes this one. -/
 def Added {fork : Fork} (slots : Nat) (target : Address) (words : List U256) (data : ByteArray)
     (state : TransactionState) (substate : Substate) (evm : Evm fork Nat) : Prop :=
+  -- The frame stops with no error and no output.
   evm.error = none ∧ evm.output = .empty ∧
+    -- The state holds the storage after the request is added, at the contract, and keeps the rest.
     WritesStorage target (afterAdd slots words (storageOf state target)) state
       evm.state ∧
+    -- The logs gain one log of the contract, with no topic and the data `data`.
     evm.substate.logs = substate.logs.push { address := target, topics := [], data := data }
 
 /-- Equal storages, keys and words give equal storages after the write. -/

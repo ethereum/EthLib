@@ -30,21 +30,19 @@ variable {fork : Fork} {message : Message fork} {returnData : ByteArray}
 
 /-- The three words that start a record of 76 bytes, after the bytes `pre` from offset 0.
 
-The first word holds the address in its first 20 bytes, the second the first 32 bytes of the key.
-
-The third holds the end of the key in its first 16 bytes, under the mask of the code.
-
-Each write starts where the bytes before it end, so it overwrites the tail of the word before.
-
-Memory then holds `pre`, the address, the second word and the first 16 bytes of the third. -/
+Each write starts where the bytes before it end, so it overwrites the tail of the word before. -/
 theorem holds_head {M M₁ M₂ M₃ pre : ByteArray} {off e₁ e₂ e₃ : Nat} {v₀ v₁ v₂ : U256}
     (hpre : Holds M 0 pre) (hoff : pre.size = off)
+    -- The first word holds the address in its first 20 bytes.
     (hM₁ : M₁ = memoryWrite (memoryExtend M e₁) off (wordBytes (bitwiseShl 96#256 v₀)))
+    -- The second holds the first 32 bytes of the key.
     (hM₂ : M₂ = memoryWrite (memoryExtend M₁ e₂) (off + 20) (wordBytes v₁))
+    -- The third holds the end of the key in its first 16 bytes, under the mask of the code.
     (hM₃ : M₃ = memoryWrite (memoryExtend M₂ e₃) (off + 52) (wordBytes (bitwiseAnd
       0xffffffffffffffffffffffffffffffff00000000000000000000000000000000#256 v₂)))
     (h₁ : off + 32 ≤ M.size + e₁) (h₂ : off + 20 + 32 ≤ M₁.size + e₂)
     (h₃ : off + 52 + 32 ≤ M₂.size + e₃) :
+    -- Memory then holds `pre`, the address, the second word and the first 16 bytes of the third.
     Holds M₃ 0 (pre ++ ((wordBytes v₀).extract 12 32 ++ wordBytes v₁ ++
       (wordBytes v₂).extract 0 16)) := by
   have s := size_wordBytes
