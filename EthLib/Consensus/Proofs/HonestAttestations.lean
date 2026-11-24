@@ -13,27 +13,9 @@ import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 /-!
 # Proofs: the honest attestation of a committee is accepted, and flags its honest members
 
-An honest validator of a committee signs the attestation data of its slot with its own key.
-
-An aggregator joins those signatures into one attestation, with a bit for each signer.
-
-Before Electra each validator sends an attestation with one bit, and the aggregate joins them.
-
-From Electra each sends a single attestation that names its committee.
-
-The aggregate then marks that one committee in its committee bits, as [EIP-7549] specifies.
-
-Such an aggregate is built when the committee has an honest member.
+An aggregator joins the signatures of the honest members of a committee into one attestation.
 
 From Altair until Gloas, the attestation step of a block in the inclusion window accepts it.
-
-Each honest member of the committee then holds the timely target flag.
-
-That needs the state to hold the target root for the first slot of the target epoch.
-
-The signature check is that of BLS, so the secret keys of the signers must not sum to zero.
-
-[EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
 -/
 
 @[expose] public section
@@ -51,33 +33,40 @@ def honestSigners (honest : Finset ValidatorIndex) (committee : Array ValidatorI
 
 /-- The honest attestation of one committee on some data.
 
-Each honest member of the committee signs the data with its key.
-
-Before Electra the committee is that of the index of the data, and the given index is not read.
-
-Each member sends an attestation with its one bit, and the aggregate joins them.
-
-From Electra the committee is the given one, and each member sends a single attestation.
-
-The aggregate joins those, and marks the committee in its committee bits.
-
 It is the aggregate that an honest aggregator builds once it holds the vote of each honest member.
 
-So it assumes that those votes reach the aggregator in time. -/
+So it assumes that those votes reach the aggregator in time.
+
+From Electra it names one committee, as [EIP-7549] specifies.
+
+[EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
+-/
 def honestAttestation (config : Config) (state : BeaconState preset fork)
     (honest : Finset ValidatorIndex) (key : ValidatorIndex → Signatures.SecretKey)
     (data : AttestationData) (committeeIndex : CommitteeIndex) :
     Except ValidatorDutyError (Attestation preset fork) :=
   if electra : .pectra ≤ fork then do
+    -- From Electra the committee is the given one.
     let committee ← (getBeaconCommittee state data.slot committeeIndex).mapError .accessor
+    -- Each honest member of the committee signs the data of its slot with its key.
+    --
+    -- Each member sends a single attestation that names its committee.
     let singles ← (honestSigners honest committee).mapM fun index =>
       constructSingleAttestation config state data committeeIndex index (key index)
+    -- The aggregate joins those, and marks that one committee in its committee bits.
     constructAggregateOfSingleAttestations state data committeeIndex singles
   else do
     have before : fork < .pectra := Nat.lt_of_not_le electra
+    -- Before Electra the committee is that of the index of the data.
+    --
+    -- The given index is not read.
     let committee ← (getBeaconCommittee state data.slot data.index).mapError .accessor
+    -- Each honest member of the committee signs the data of its slot with its key.
+    --
+    -- Each member sends an attestation with its one bit.
     let singles ← (honestSigners honest committee).mapM fun index =>
       constructAttestation config state before data index (key index)
+    -- The aggregate joins them, with a bit for each signer.
     constructAggregate state before data singles
 
 /-- A computation that does not fail has a value. -/

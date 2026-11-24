@@ -9,21 +9,7 @@ import EthLib.Consensus.Proofs.Transition.ParticipationFlagsKept
 /-!
 # Proofs: the attestation steps accept a list of honest attestations, and flag honest members
 
-A block runs its attestations one after the other, each on the state that the one before left.
-
-An attestation changes only the flags of its attesters and the balance of the proposer.
-
-So the committees, the checkpoints, the roots and the keys that the next one reads stay the same.
-
-Its honest attestation is the same on each of those states, since it reads only those.
-
-Each attestation pays the proposer a reward, which the budget must leave room for.
-
-Then the attestation steps of the block accept every honest attestation of the list.
-
-This holds from Altair until Gloas.
-
-A flag once set stays set, so each honest member of each committee ends with the target flag.
+From Altair until Gloas, the attestation steps of a block accept a list of honest attestations.
 
 From Electra the same holds for a list of honest aggregates, each covering one slot.
 -/
@@ -332,10 +318,6 @@ The data and the state meet the checks of the attestation step, and the state is
 
 The budget must leave room for the rewards of the proposer, one for each attestation of the list.
 
-Each reward is at most 64 base reward ceilings for each validator of the registry, over 448.
-
-The budget must also leave room for that bound before the division.
-
 Each honest member of each committee then holds the timely target flag of its target epoch.
 
 That needs the state to hold the target root for the first slot of that epoch. -/
@@ -349,6 +331,9 @@ theorem foldlM_processAttestation_honestAttestation {budget scoreBound : Nat}
     (holds : WithinBudget budget scoreBound state)
     (participation : ParticipationMatches state)
     {votes : List (AttestationData × CommitteeIndex)}
+    -- Each reward is at most 64 base reward ceilings for each validator of the registry, over 448.
+    --
+    -- The budget must also leave room for that bound before the division.
     (room : budget + votes.length * (state.validators.data.size *
       (64 * preset.baseRewardCeiling) / 448) +
         state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64)
@@ -385,6 +370,10 @@ theorem foldlM_processAttestation_honestAttestation {budget scoreBound : Nat}
   have positive : 0 < state.validators.data.size := by
     obtain ⟨index, -, inside⟩ := proposer
     omega
+  -- A block runs its attestations one after the other, each on the state that the one before left.
+  --
+  -- Each attestation pays the proposer a reward, which the budget must leave room for.
+  --
   -- Each attestation passes on every state like the first, which has spent no budget.
   obtain ⟨after, folded, flagged⟩ := foldlM_processAttestation_of_accepted_from altair beforeGloas
     increment scaled positive
@@ -413,7 +402,12 @@ theorem foldlM_processAttestation_honestAttestation {budget scoreBound : Nat}
           obtain ⟨committee, found, -⟩ := bind_ok_iff.mp read
           rw [indexed, ite_eq_right electra] at found
           exact ⟨committee, mapError_ok_iff.mp found⟩
+      -- An attestation changes only the flags of its attesters and the balance of the proposer.
+      --
+      -- So the next attestation reads the same committees, checkpoints, roots and keys.
       obtain ⟨balances, previous, current, rfl⟩ := shaped
+      -- Its honest attestation is the same on each such state, since it reads only those values.
+      --
       -- The step reads only what the first state holds, so the honest attestation is accepted.
       obtain ⟨middle, processed, flagged⟩ := processAttestation_honestAttestation
         (state := { state with
@@ -430,6 +424,7 @@ theorem foldlM_processAttestation_honestAttestation {budget scoreBound : Nat}
     state 0
     ⟨state.balances, state.previousEpochParticipation, state.currentEpochParticipation, rfl⟩
     (by rwa [Nat.zero_mul, Nat.add_zero]) participation (by rwa [Nat.zero_add])
+  -- A flag once set stays set, so each honest member of each committee ends with the target flag.
   exact ⟨after, folded, fun vote member rooted committee committeeOk index inside honestIndex =>
     flagged vote member index ⟨rooted, committee, committeeOk, inside, honestIndex⟩⟩
 
@@ -440,10 +435,6 @@ Each aggregate covers the committees of the slot of its data that have an honest
 The data and the state meet the checks of the attestation step, and the state is within a budget.
 
 The budget must leave room for the rewards of the proposer, one for each aggregate of the list.
-
-Each reward is at most 64 base reward ceilings for each validator of the registry, over 448.
-
-The budget must also leave room for that bound before the division.
 
 The secret keys of the honest members of the committees of each slot must not sum to zero.
 
@@ -462,6 +453,9 @@ theorem foldlM_processAttestation_honestSlotAggregate {budget scoreBound : Nat}
     (holds : WithinBudget budget scoreBound state)
     (participation : ParticipationMatches state)
     {datas : List AttestationData}
+    -- Each reward is at most 64 base reward ceilings for each validator of the registry, over 448.
+    --
+    -- The budget must also leave room for that bound before the division.
     (room : budget + datas.length * (state.validators.data.size *
       (64 * preset.baseRewardCeiling) / 448) +
         state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64)

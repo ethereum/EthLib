@@ -11,37 +11,11 @@ public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 /-!
 # Proofs: the votes of an honest attester and their aggregates
 
-Attestation data votes for the head block, and its source is the current justified checkpoint.
+It covers the attestation data of an attester and the aggregate of honest signatures.
 
-Its target epoch is the current epoch, which is the epoch of its slot.
+It also covers the attesters and the faults of an aggregate.
 
-Its target root is the root that the state records for the first slot of that epoch.
-
-At that first slot itself, it is the root of the head block.
-
-Its index follows the rule of its fork, which from Electra passes the check of the index of a vote.
-
-It has a value unless, from Gloas, a head block of an earlier slot has a pending payload status.
-
-That holds when the length of an epoch is positive and at most the number of recorded roots.
-
-The slot of the state plus that number must also fit in 64 bits.
-
-Honest signatures on one message aggregate to a signature that verifies.
-
-The keys must not sum to zero, and the signature verifies under the keys in the order of the votes.
-
-Before Electra, the attestation of a validator shows that one validator as its only attester.
-
-The attesters of an aggregate are then the attesters of its attestations with the same data.
-
-From Electra, they are the attesters of the single attestations with the same data and committee.
-
-Its committee bits name that one committee.
-
-Constructing either aggregate fails exactly when its committee, a message or the signatures fail.
-
-The contribution of a sync subcommittee sets the bit of each seat whose key signed a message.
+It also covers the contribution of a sync subcommittee.
 -/
 
 @[expose] public section
