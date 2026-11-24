@@ -23,7 +23,8 @@ These theorems describe the concrete checks that a successful authentication pas
 - A validity reads as two such times in order.
 - The endpoints of a parsed certificate are what its own validity field reads as.
 - An SPKI reads as a P-256 key exactly when it is 26 fixed octets, then an uncompressed point.
-- An extension reads as an OID, then TRUE when critical, then an OCTET STRING; FALSE is rejected.
+- An extension reads as an OID, then TRUE when critical, then an OCTET STRING.
+- An extension that encodes its default FALSE critical flag is rejected.
 -/
 
 @[expose] public section
@@ -547,13 +548,18 @@ theorem readValidity_eq_ok_iff {value : Der.Value} {notBefore notAfter : Int} :
     refine ⟨[first, last], hc, ?_⟩
     simp [ha, hb, hab, ensure, bind, Except.bind, pure, Except.pure]
 
-/-- An extension reads exactly when it holds an OID, an optional TRUE and an OCTET STRING.
+/-- A DER step lifted to the certificate boundary returns a value exactly when the step does. -/
+private theorem der_ok_iff {α : Type} {x : Except Der.Error α} {a : α} :
+    der x = .ok a ↔ x = .ok a :=
+  mapError_ok_iff
+
+/-- An extension reads exactly when it is a SEQUENCE of an OID, optional TRUE and OCTET STRING.
 
 The fields are those of RFC 5280 §4.1, where the critical flag is a BOOLEAN DEFAULT FALSE.
 
 It reads as the OID content, a critical flag set when TRUE is present, and the string octets.
 
-TRUE is the BOOLEAN with the one octet FF.
+TRUE is the BOOLEAN with the one octet FF (X.690 §11.1).
 
 An explicit FALSE is rejected, because DER omits a value equal to its default (X.690 §11.5). -/
 theorem readExtension_eq_ok_iff {value : Der.Value} {ext : Extension} :
@@ -569,11 +575,11 @@ theorem readExtension_eq_ok_iff {value : Der.Value} {ext : Extension} :
     rcases children with _ | ⟨oid, _ | ⟨data, _ | ⟨last, _ | ⟨other, rest⟩⟩⟩⟩
     · simp [throw, throwThe, MonadExceptOf.throw] at h
     · simp [throw, throwThe, MonadExceptOf.throw] at h
-    · simp only [der, bind_ok_iff, ensure_ok_iff, mapError_ok_iff, pure, Except.pure,
+    · simp only [bind_ok_iff, ensure_ok_iff, der_ok_iff, pure, Except.pure,
         Except.ok.injEq] at h
       obtain ⟨_, tag, o, ho, rfl⟩ := h
       exact ⟨oid, data, ho, tag, rfl, .inl ⟨hc, rfl⟩⟩
-    · simp only [der, bind_ok_iff, ensure_ok_iff, mapError_ok_iff, pure, Except.pure,
+    · simp only [bind_ok_iff, ensure_ok_iff, der_ok_iff, pure, Except.pure,
         Except.ok.injEq] at h
       obtain ⟨_, tag, flag, hflag, _, rfl, o, ho, rfl⟩ := h
       obtain ⟨one, ff⟩ := Proofs.Der.boolean_ok_iff.mp hflag
@@ -581,13 +587,20 @@ theorem readExtension_eq_ok_iff {value : Der.Value} {ext : Extension} :
     · simp [throw, throwThe, MonadExceptOf.throw] at h
   · rintro ⟨oid, data, ho, tag, hv, (⟨hc, hf⟩ | ⟨critical, hc, one, ff, hf⟩)⟩
     · refine ⟨[oid, data], hc, ?_⟩
-      cases ext
-      simp_all [der, ensure, bind, Except.bind, pure, Except.pure, Except.mapError]
+      refine bind_unit_ok_iff.mpr ⟨ensure_ok_iff.mpr tag, ?_⟩
+      refine bind_ok_iff.mpr ⟨_, der_ok_iff.mpr ho, ?_⟩
+      -- The extension is its three fields.
+      rw [hv, ← hf]
+      rfl
     · refine ⟨[oid, critical, data], hc, ?_⟩
       have hb : Der.boolean critical = .ok true :=
         Proofs.Der.boolean_ok_iff.mpr ⟨one, by simpa using ff⟩
-      cases ext
-      simp_all [der, ensure, bind, Except.bind, pure, Except.pure, Except.mapError]
+      refine bind_unit_ok_iff.mpr ⟨ensure_ok_iff.mpr tag, ?_⟩
+      refine bind_ok_iff.mpr ⟨_, der_ok_iff.mpr hb, ?_⟩
+      refine bind_unit_ok_iff.mpr ⟨ensure_ok_iff.mpr rfl, ?_⟩
+      refine bind_ok_iff.mpr ⟨_, der_ok_iff.mpr ho, ?_⟩
+      rw [hv, ← hf]
+      rfl
 
 /-- The validity endpoints of a parsed certificate are what its own validity field reads as.
 
@@ -665,11 +678,6 @@ theorem criticalOid_spec (es : List Extension)
 open Proofs.Der (data_toList_eq_nil_of_isEmpty data_toList_eq_of_read_ok read_eq_ok_of_length_lt
   exists_read_of_children_eq_ok_pair children_go_succ_eq_ok_of_read children_go_empty
   size_eq_length)
-
-/-- A DER step lifted to the certificate boundary returns a value exactly when the step does. -/
-private theorem der_ok_iff {α : Type} {x : Except Der.Error α} {a : α} :
-    der x = .ok a ↔ x = .ok a :=
-  mapError_ok_iff
 
 /-- The fields of a value are its children, after a check of its tag. -/
 private theorem fields_ok_iff {tag : UInt8} {value : Der.Value} {values : List Der.Value} :
