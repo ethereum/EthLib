@@ -51,7 +51,7 @@ Its body holds the slashing.
 
 In the next epoch the slots cross one epoch end.
 
-The theorem then requires the three facts that its statement lists for that case.
+The theorem then takes the three assumptions that its statement lists for that case.
 
 Suppose the steps before that slashing succeed; the count checks of the operations are not read.
 
@@ -297,25 +297,32 @@ private theorem ages_slashingTurn {config : Config} {checks : SignatureChecks} {
   obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned
   exact (ages_operationsInput started).trans (ages_slashings proposersOk attestersOk)
 
-/-- A successful advance of slots from `x` to `y` gives a run from `x` to `y`. -/
-private theorem run_of_advanceSlotsAcross {config : Config} {checks : SignatureChecks} :
-    ∀ (count : Nat) {x y : ForkedBeaconState preset},
-      advanceSlotsAcross config checks count x = .ok y → Nonempty (Run config checks x y)
-  | 0, x, y, computed => by
-    simp only [advanceSlotsAcross, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact ⟨.nil⟩
-  | count + 1, x, y, computed => by
-    simp only [advanceSlotsAcross, bind_ok_iff] at computed
-    obtain ⟨middle, middleOk, rest⟩ := computed
-    obtain ⟨tail⟩ := run_of_advanceSlotsAcross count rest
-    exact ⟨(Run.nil.snoc (.slot middleOk)).append tail⟩
+/-- Take a validator at position `i` of `x`, activated by the epoch of `x`, with no exit set.
+
+The epoch of `x` is below the far future, and steps of a chain lead from `x` to `y`.
+
+The record at position `i` of `y` is active at the epoch of `x`. -/
+private theorem active_of_unexited {config : Config} {checks : SignatureChecks}
+    {x y : ForkedBeaconState preset} (steps : Relation.ReflTransGen (ChainStep config checks) x y)
+    {i : Nat} {validator : Validator} (found : x.state.validators.data[i]? = some validator)
+    (activation : validator.activationEpoch ≤ getCurrentEpoch x.state)
+    (far : validator.exitEpoch = FAR_FUTURE_EPOCH)
+    (belowFar : getCurrentEpoch x.state < FAR_FUTURE_EPOCH) :
+    ∃ record, y.state.validators.data[i]? = some record ∧
+      isActiveValidator record (getCurrentEpoch x.state) = true := by
+  have active : isActiveValidator validator (getCurrentEpoch x.state) = true := by
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
+    exact ⟨activation, belowFar⟩
+  have activeKept : isActiveAt y.state (getCurrentEpoch x.state) i = true := by
+    rw [activeKept_of_chainSteps steps _ (getCurrentEpoch_le_activityFixedEpoch x.state)]
+    exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
+  exact isActiveAt_eq_true_iff.mp activeKept
 
 /-- Take the state before the attester slashing at position `j`, in the epoch of `advanced`.
 
 Its exits must be ordered.
 
-Take the validator at index `i`, active at `advanced` and unslashed at that index at the turn.
+Take the validator at index `i`, active at the epoch of `advanced`, and unslashed at the turn.
 
 It is slashable there. -/
 private theorem slashable_of_active {config : Config} {checks : SignatureChecks} {fork : Fork}
@@ -350,7 +357,7 @@ The state `x` is reached by a run from a genesis of deposits.
 
 The withdrawal delay must be positive.
 
-The slots from `x` succeed and reach the epoch after `x`, at the fork of `x`.
+A run from `x` reaches a state at the fork of `x`, in the epoch after `x`.
 
 The steps of a block from there reach its turn, at the same epoch, where exits are ordered.
 
@@ -363,9 +370,9 @@ private theorem slashable_of_nextEpoch {config : Config} {checks : SignatureChec
     (withdrawableDelay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {i : Nat} {validator : Validator} (found : x.state.validators.data[i]? = some validator)
     (activation : validator.activationEpoch ≤ getCurrentEpoch x.state)
-    {count : Nat} {advanced turn : BeaconState preset x.fork}
+    {advanced turn : BeaconState preset x.fork}
     {engine : ExecutionEngine preset x.fork} {block : BeaconBlock preset x.fork} {j : Nat}
-    (advancedOk : advanceSlotsAcross config checks count x = .ok ⟨x.fork, advanced⟩)
+    (slots : Run config checks x ⟨x.fork, advanced⟩)
     (next : (getCurrentEpoch advanced).toNat = (getCurrentEpoch x.state).toNat + 1)
     (withdrawableNext : validator.slashed = false →
       (getCurrentEpoch advanced).toNat < validator.withdrawableEpoch.toNat)
@@ -375,7 +382,6 @@ private theorem slashable_of_nextEpoch {config : Config} {checks : SignatureChec
     {current : Validator} (currentFound : turn.validators.data[i]? = some current)
     (unslashed : current.slashed = false) :
     isSlashableValidator current (getCurrentEpoch turn) = true := by
-  obtain ⟨slots⟩ := run_of_advanceSlotsAcross count advancedOk
   have aged := ages_slashingTurn turned
   have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   -- The record at `advanced`, which the slots keep at the same position.
@@ -411,16 +417,8 @@ private theorem slashable_of_nextEpoch {config : Config} {checks : SignatureChec
     omega
   by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH
   · -- With no exit at `x`, the record is active at the epoch of `x`, up to `advanced`.
-    have active : isActiveValidator validator (getCurrentEpoch x.state) = true := by
-      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
-      refine ⟨activation, ?_⟩
-      rw [UInt64.lt_iff_toNat_lt, farNat]
-      omega
-    have activeAdvanced : isActiveAt advanced (getCurrentEpoch x.state) i = true := by
-      rw [activeKept_of_chainSteps slots.chainSteps _
-        (getCurrentEpoch_le_activityFixedEpoch x.state)]
-      exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
-    obtain ⟨mid', midFound', midActive⟩ := isActiveAt_eq_true_iff.mp activeAdvanced
+    obtain ⟨mid', midFound', midActive⟩ := active_of_unexited slots.chainSteps found activation
+      far (by rw [UInt64.lt_iff_toNat_lt, farNat]; omega)
     rw [midFound, Option.some.injEq] at midFound'
     subst midFound'
     simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at midActive
@@ -464,9 +462,9 @@ Take a block within the limits, applied at `x` at a later slot, at the fork of `
 
 The block is in the epoch of `x` or in the next epoch.
 
-In the next epoch, the theorem requires three facts.
+In the next epoch, the theorem takes three assumptions.
 
-The block's epoch is inside the epochs of the chain.
+The block's epoch is at most the first epoch of the chain plus its number of epochs.
 
 The signers condition reads the last slot of the epoch of `x`, once its roots are cached.
 
@@ -485,6 +483,8 @@ From Altair, the bound holds for each participation flag, not for the union of t
 For a flag, the signers are the unslashed validators active in the signer epoch that set it.
 
 The comparison is required only when the reads of those balances and indices succeed.
+
+No fact of a chain gives it: signers of that epoch may be inactive in the epoch of `x`.
 
 If the chosen validator is unslashed at `x`, take its withdrawable epoch recorded at `x`.
 
@@ -548,7 +548,8 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
   have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
     have := conditions.run.slots
     omega
-  have slotsSteps := advanceSlotsAcross_chainSteps advancedOk
+  obtain ⟨slots⟩ := run_of_advanceSlotsAcross _ advancedOk
+  have slotsSteps := slots.chainSteps
   have advancedSlot : advanced.slot.toNat = block.slot.toNat := by
     have := advanceSlotsAcross_slot _ advancedOk
     dsimp only at this
@@ -603,17 +604,9 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
       · intro unslashed
         by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH
         · -- With no exit yet at `x`, it is active at the epoch of `x`, up to `advanced`.
-          have active : isActiveValidator validator (getCurrentEpoch x.state) = true := by
-            have below := getCurrentEpoch_succ_lt_farFuture conditions.run.roots.twoSlots x.state
-            simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
-            refine ⟨lifetime.1, ?_⟩
-            rw [UInt64.lt_iff_toNat_lt]
-            omega
-          have activeAdvanced : isActiveAt advanced (getCurrentEpoch x.state) i = true := by
-            rw [activeKept_of_chainSteps slotsSteps _
-              (getCurrentEpoch_le_activityFixedEpoch x.state)]
-            exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
-          obtain ⟨mid, midFound, midActive⟩ := isActiveAt_eq_true_iff.mp activeAdvanced
+          have below := getCurrentEpoch_succ_lt_farFuture conditions.run.roots.twoSlots x.state
+          obtain ⟨mid, midFound, midActive⟩ := active_of_unexited slotsSteps found lifetime.1 far
+            (by rw [UInt64.lt_iff_toNat_lt]; omega)
           exact slashable_of_active turned ordered epochTurn midFound
             (epochAdvanced ▸ midActive) currentFound unslashed
         · -- With an exit set, it keeps its activation, and its withdrawable epoch only rises.
@@ -628,12 +621,12 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
           simp only [isSlashableValidator, unslashed, stays.activation, Bool.not_false,
             Bool.true_and, Bool.and_eq_true, decide_eq_true_eq]
           exact ⟨lifetime.1, UInt64.lt_of_lt_of_le lifetime.2 (stays.withdrawable far).1⟩
-    · -- In the next epoch, the three requirements of the crossing apply.
+    · -- In the next epoch, the premise for that case gives the three requirements.
       have crossed : (getCurrentEpoch x.state).toNat <
           block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by omega
       obtain ⟨blockWithin, signers, withdrawableNext⟩ := crossing crossed
       refine ⟨blockWithin, signers, fun unslashed => slashable_of_nextEpoch shared genesis
-        withdrawable found lifetime.1 advancedOk (by omega)
+        withdrawable found lifetime.1 slots (by omega)
         (fun flag => advancedEpoch ▸ withdrawableNext flag) turned ordered epochTurn
         currentFound unslashed⟩
   refine ⟨current, currentFound, currentKey, ?_⟩
@@ -710,15 +703,9 @@ Take any block within the limits, applied at `x` at a later slot, at the fork of
 
 The block is in the epoch of `x` or in the next epoch.
 
-With `x` at the preceding slot, every first-slot block meets the one-epoch bound.
+In the next epoch, the theorem takes three assumptions.
 
-The requirements below still apply.
-
-A block two or more epochs after `x` is not covered.
-
-In the next epoch, the theorem requires three facts.
-
-The block's epoch is inside the epochs of the chain.
+The block's epoch is at most the first epoch of the chain plus its number of epochs.
 
 The signers condition reads the last slot of the epoch of `x`, once its roots are cached.
 
@@ -738,9 +725,15 @@ For a flag, the signers are the unslashed validators active in the signer epoch 
 
 The comparison is required only when the reads of those balances and indices succeed.
 
+No fact of a chain gives it: signers of that epoch may be inactive in the epoch of `x`.
+
 If the chosen validator is unslashed at `x`, take its withdrawable epoch recorded at `x`.
 
 The block's epoch is below it.
+
+So a block at the first slot of an epoch is covered from any state `x` in the epoch before it.
+
+A block two or more epochs after `x` is not covered.
 
 Its body contains the slashing of that validator by those votes, at a position.
 

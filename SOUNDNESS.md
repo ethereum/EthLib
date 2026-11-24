@@ -5093,18 +5093,19 @@ When the validator is already slashed at the turn, the theorem says nothing more
 The specification then rejects the slashing, and so the block, at its final check when the checks before it pass (`Consensus/Transition/Block.lean`).
 This is read from the definition; no theorem states it.
 It is conditional on that inclusion; it does not show that a proposer includes the slashing, or that the block passes its other checks.
-With `x` at the preceding slot, every first-slot block meets the one-epoch bound.
-The requirements below still apply.
-When the block is in the next epoch, the theorem requires three facts.
-The block's epoch is inside the epochs of the chain.
-The signers condition reads the last slot of the epoch of `x`, once its roots are cached successfully.
-Its signer epoch is the epoch before that of `x`, or epoch 0 itself when `x` is in epoch 0.
-The signers of that epoch hold at most the current total active balance of the cached state, the total active balance of the epoch of `x`.
+
+When the block is in the next epoch, the theorem takes three assumptions.
+The first is that the block's epoch is at most the first epoch of the chain plus its number of epochs.
+The second bounds the signers at the last slot of the epoch of `x`, read once its roots are cached successfully.
+The signer epoch of that condition is the epoch before that of `x`, or epoch 0 itself when `x` is in epoch 0.
+The signers of that epoch hold at most the current total active balance of the cached state, which is the total active balance of the epoch of `x`.
 Before Altair, these are the unslashed attesters of the pending attestations of the signer epoch that match the source.
 From Altair, for each participation flag, the unslashed validators active in the signer epoch that set it hold at most that balance; the bound is per flag, not on their union.
 The comparison is required only when the reads of those balances and indices succeed.
-No fact of a chain gives that comparison.
-If the chosen validator is unslashed at `x`, the block's epoch is below its withdrawable epoch recorded at `x`.
+No fact of a chain gives that comparison, and it can fail when signers of the signer epoch are not active in the epoch of `x`.
+The third is that, if the chosen validator is unslashed at `x`, the block's epoch is below its withdrawable epoch recorded at `x`.
+So a block at the first slot of an epoch is covered from any state `x` in the epoch before it, under these three assumptions.
+
 This theorem does not cover a block two or more epochs after `x`, or slots that cross a fork upgrade; the specification does not forbid either.
 Reading each vote at the fork of `x` suffices but is not necessary.
 A slashing at the next fork can still read a vote whose target is before that fork's epoch, under the previous version; no theorem states acceptance at the turn in that case.

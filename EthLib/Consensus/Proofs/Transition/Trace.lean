@@ -381,6 +381,22 @@ theorem run_of_processSlots {fork : Fork} {state after : BeaconState preset fork
   obtain ⟨run, -⟩ := run_of_advanceSlots _ advanced (by simpa only [lastSlot] using before)
   exact ⟨run⟩
 
+/-- Slots that advance a state across forks form a run.
+
+Unlike the slots of one fork, they may cross an upgrade. -/
+theorem run_of_advanceSlotsAcross :
+    ∀ (count : Nat) {x y : ForkedBeaconState preset},
+      advanceSlotsAcross config checks count x = .ok y → Nonempty (Run config checks x y)
+  | 0, x, y, computed => by
+    simp only [advanceSlotsAcross, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨.nil⟩
+  | count + 1, x, y, computed => by
+    simp only [advanceSlotsAcross, bind_ok_iff] at computed
+    obtain ⟨middle, middleOk, rest⟩ := computed
+    obtain ⟨tail⟩ := run_of_advanceSlotsAcross count rest
+    exact ⟨(Run.nil.snoc (.slot middleOk)).append tail⟩
+
 /-- The slots up to a block and the block, when its slot is before the next fork.
 
 The slots form a run with no block step, to the state that the block applies to.
