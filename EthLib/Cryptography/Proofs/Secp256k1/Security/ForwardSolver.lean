@@ -6,41 +6,11 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.InverseCase
 /-!
 # Proofs: two forgeries on one forward query give the discrete logarithm
 
-A fork of the key-only run gives two forgeries `(m, t, s)` and `(m', t', s')` on the key `X = x g`.
+A solver finds the key whenever the fork succeeds and the two forgeries divide apart.
 
-Both checks passed at the same point, so `R = U / s` and `R' = U' / s'` have one encoding.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Figure 9 and the text after Figure 10.
 
-Here `U = H(m) g + t X` and `U' = H(m') g + t' X`.
-
-With a semi-injective encoding, `R' = η R` for a sign `η`.
-
-Let `r` be the discrete logarithm of `R`.
-
-Then `s r = H(m) + t x` and `s' η r = H(m') + t' x`.
-
-Divide by `t` and by `t'`, and subtract: `r (s / t - η s' / t') = H(m) / t - H(m') / t'`.
-
-Say `H(m) / t ≠ H(m') / t'`.
-
-Then `s / t - η s' / t'` is nonzero, so `r` and then `x = (s r - H(m)) / t` follow.
-
-The sign is not known; the key from `η = 1` is kept if it gives `X`, and the other is taken if not.
-
-So the solver below finds the key whenever the fork succeeds and the forgeries divide apart.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-The solver is their Figure 9, and the key is recovered as in the text after their Figure 10.
-
-Their text leaves the sign unknown; here both signs are tried, and the one that gives `X` is kept.
-
-Their fork reuses the coins `ρ`; the fork here draws fresh coins after the forked query.
-
-Their `Q` is `q + 1` here.
-
-The discrete-logarithm game here draws the key from all scalars, as the key-only game does.
-
-Their key generation draws it from the nonzero scalars.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -57,6 +27,9 @@ variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 The key for the sign `1` is kept if it gives `X`, and the key for the sign `-1` is taken if not. -/
 def extractForward (scheme : Scheme F G A M) (X : G) (z z' : M × F × F) : F :=
+  -- The sign `η` with `R' = η R` is not known.
+  --
+  -- Their text leaves it unknown; here both signs are tried, and the one that gives `X` is kept.
   if forwardKey scheme z z' 1 • scheme.g = X then forwardKey scheme z z' 1
   else forwardKey scheme z z' (-1)
 
@@ -84,17 +57,29 @@ theorem extractForward_eq {scheme : Scheme F G A M} (hg : scheme.g ≠ 0)
   obtain ⟨m, t, s⟩ := z
   obtain ⟨m', t', s'⟩ := z'
   simp only at ht hs ht' hs' hU hU' hdiv
+  -- Both checks passed at the same point, so `R = U / s` and `R' = U' / s'` have one encoding.
   have hR : (s⁻¹ * (scheme.hash m + t * x)) • scheme.g ≠ 0 := by
     rw [mul_smul, add_smul, mul_smul]; exact smul_ne_zero (inv_ne_zero hs) hU
   have hR' : (s'⁻¹ * (scheme.hash m' + t' * x)) • scheme.g ≠ 0 := by
     rw [mul_smul, add_smul, mul_smul]; exact smul_ne_zero (inv_ne_zero hs') hU'
   rw [forgeryPoint_smul, forgeryPoint_smul] at hpt
+  -- With a semi-injective encoding, `R' = η R` for a sign `η`.
   have key : s'⁻¹ * (scheme.hash m' + t' * x) = 1 * (s⁻¹ * (scheme.hash m + t * x)) ∨
       s'⁻¹ * (scheme.hash m' + t' * x) = -1 * (s⁻¹ * (scheme.hash m + t * x)) := by
     rcases hsemi _ _ hR hR' hpt with h | h
     · exact Or.inl (by rw [one_mul]; exact hinj h)
     · exact Or.inr (hinj (show _ • _ = (-1 * _) • _ by rw [neg_one_mul, neg_smul]; exact h))
+  -- Let `r` be the discrete logarithm of `R`.
+  --
+  -- Then `s r = H(m) + t x` and `s' η r = H(m') + t' x`.
+  --
+  -- Divide by `t` and by `t'`, and subtract: `r (s / t - η s' / t') = H(m) / t - H(m') / t'`.
+  --
+  -- As `H(m) / t ≠ H(m') / t'`, `s / t - η s' / t'` is nonzero.
+  --
+  -- So `r` and then `x = (s r - H(m)) / t` follow.
   simp only [extractForward]
+  -- The key from `η = 1` is kept if it gives `X`, and the other is taken if not.
   rcases key with h | h
   · have := forwardKey_eq_of (scheme := scheme) (z := (m, t, s)) (z' := (m', t', s'))
       ht hs ht' hs' h hdiv
@@ -119,6 +104,9 @@ No theorem states the running time.
 It reads the base point of the scheme, not its first argument. -/
 def forwardSolver (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M) (q : ℕ) :
     DiffieHellman.DLogAdversary F G := fun _ X => do
+  -- Their fork reuses the coins `ρ`.
+  --
+  -- The fork here draws fresh coins after the forked query.
   let r ← simulateQ outsideSample (contextFork (keyOnlyOutsideRun scheme adversary X)
     (forkBound q) (.inr ()) (forkIndex scheme X q))
   pure <| match r with
@@ -148,6 +136,11 @@ theorem prEvent_contextFork_div_ne_le_dlog {scheme : Scheme F G A M} (hg : schem
           scheme.hash tr₂.forgery.1 / tr₂.forgery.2.1] ≤
       Pr{let b ← DiffieHellman.dlogExperiment scheme.g (forwardSolver scheme adversary q)}[
         b = true] := by
+  -- Their `Q` is `q + 1` here.
+  --
+  -- The discrete-logarithm game draws the key from all scalars, as the key-only game does.
+  --
+  -- Their key generation draws it from the nonzero scalars.
   have hrun : ∀ x : F, EvalDistEq
       (simulateQ outsideSample (contextFork (keyOnlyOutsideRun scheme adversary (x • scheme.g))
         (forkBound q) (.inr ()) (forkIndex scheme (x • scheme.g) q)))

@@ -7,33 +7,13 @@ public import VCVio.CryptoFoundations.HardnessAssumptions.DiffieHellman
 /-!
 # Proofs: a key-only forgery on an inverse answer of `Π` gives the discrete logarithm
 
-Run the key-only forger with independent answers, as in the run with the outside oracle.
+This case wins at most as often as a solver of the discrete logarithm.
 
-Redraw each new inverse answer that encodes a nonzero multiple of the base point.
+It is the step from Game G2 to Game G3 of the proof of Theorem 2 of the source.
 
-The redrawn answer comes with its discrete logarithm.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Theorem 2, Figure 7.
 
-That keeps the law of the run.
-
-Say the check passes, and the forgery's point was not a new forward query of the log.
-
-Then the point was an inverse answer, so the run knows the discrete logarithm `a` of a point `R`.
-
-The forgery's point is the encoding of `R* = (H(m) g + t X) / s`, so `R* = R` or `R* = -R`.
-
-Then `s R* = H(m) g + t X` gives the key `x` with `X = x g`.
-
-So this case wins at most as often as a solver of the discrete logarithm.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-This is the step from Game G2 to Game G3 of the proof of their Theorem 2, in their Figure 7.
-
-Their Game G3 stops with `0` in line 12 when the forgery's pair is an inverse pair.
-
-The discrete-logarithm game here draws the key from all scalars, as the key-only game does.
-
-Their key generation and their Definition 1 draw it from the nonzero scalars.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -58,28 +38,26 @@ variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 A query answered before gets its answer again, in either direction.
 
-A new forward query gets a uniform value of `A`, and joins the cache and the log.
-
-A new inverse query gets a redrawn answer, which joins the cache.
-
-Its discrete logarithm, when the redraw gives one, joins the known ones.
-
-The flag rises by the same rules as with independent answers.
-
-The forward branch is the outside oracle's.
-
-It has a uniform draw in place of the outside query, and no coin query. -/
+The flag rises by the same rules as with independent answers. -/
 def dlogOracle (scheme : Scheme F G A M) (inImage : A → Bool) :
     QueryImpl (PermSpec A) (StateT (DLogState F A) ProbComp)
   | .inl a => fun s =>
     match s.1.1.1.lookup a with
     | some b => pure (b, s)
+    -- A new forward query gets a uniform value of `A`, and joins the cache and the log.
+    --
+    -- This branch is the outside oracle's.
+    --
+    -- It has a uniform draw in place of the outside query, and no coin query.
     | none =>
       (fun b : A => (b, ((IndepState.addForward s.1.1 a b, s.1.2 ++ [(a, b)]), s.2))) <$>
         (uniformOutside [] a : ProbComp A)
   | .inr b => fun s =>
     match (s.1.1.1.map Prod.swap).lookup b with
     | some a => pure (a, s)
+    -- A new inverse query gets a redrawn answer, which joins the cache.
+    --
+    -- Its discrete logarithm, when the redraw gives one, joins the known ones.
     | none =>
       (fun r : A × Option F =>
         (r.1, ((IndepState.addInverse s.1.1 r.1 b, s.1.2), s.2 ++ r.2.toList.map (r.1, ·)))) <$>
@@ -151,6 +129,11 @@ theorem simulateQ_dlogImpl_run_evalDistEq {scheme : Scheme F G A M} {inImage : A
     (oa : PermComp A α) (s : OutsideState A) (known : List (A × F)) :
     EvalDistEq ((fun z => (z.1, z.2.1)) <$> (simulateQ (dlogImpl scheme inImage) oa).run (s, known))
       ((simulateQ outsideImpl oa).run s) := by
+  -- Each new inverse answer that encodes a nonzero multiple of the base point is redrawn.
+  --
+  -- The redrawn answer comes with its discrete logarithm.
+  --
+  -- That keeps the law of the run.
   induction oa using OracleComp.inductionOn generalizing s known with
   | pure x =>
     simpa only [simulateQ_pure, StateT.run_pure, map_pure] using (pure_outside_evalDistEq _).symm
@@ -387,6 +370,11 @@ theorem prEvent_inverse_le_dlog {scheme : Scheme F G A M} {inImage : A → Bool}
         forgeryPoint scheme (x • scheme.g) tr.forgery ∉ tr.forward.map Prod.fst] ≤
       Pr{let b ← DiffieHellman.dlogExperiment scheme.g (inverseSolver scheme inImage adversary)}[
         b = true] := by
+  -- Their Game G3 stops with `0` in line 12 when the forgery's pair is an inverse pair.
+  --
+  -- The discrete-logarithm game here draws the key from all scalars, as the key-only game does.
+  --
+  -- Their key generation and their Definition 1 draw it from the nonzero scalars.
   have hrun : ∀ x : F, EvalDistEq
       ((fun z => decide (z.1.2 = true ∧ forgeryPoint scheme (x • scheme.g) z.1.1 ∉
         z.2.1.2.map Prod.fst)) <$> (simulateQ (dlogImpl scheme inImage)
@@ -415,11 +403,17 @@ theorem prEvent_inverse_le_dlog {scheme : Scheme F G A M} {inImage : A → Bool}
     (dlogImpl_preservesInv scheme inImage hImage) _ _ (by simp [DLogInv]) z hz
   obtain ⟨⟨⟨m, t, s⟩, v⟩, st⟩ := z
   simp only at ht hs hU hmem hE hk hc ⊢
+  -- The point was not a new forward query of the log, so it was an inverse answer.
+  --
+  -- So the run knows the discrete logarithm `a` of a point `R` with the forgery's encoding.
   obtain ⟨p, hp, hpeq⟩ := List.mem_map.mp hmem
   cases hl : st.2.lookup (forgeryPoint scheme (x • scheme.g) (m, t, s)) with
   | some a =>
     obtain ⟨l₁, l₂, heq, -⟩ := List.lookup_eq_some_iff.mp hl
     obtain ⟨ha, henc⟩ := hk (forgeryPoint scheme (x • scheme.g) (m, t, s), a) (by rw [heq]; simp)
+    -- The forgery's point encodes `R* = (H(m) g + t X) / s`, so `R* = R` or `R* = -R`.
+    --
+    -- Then `s R* = H(m) g + t X` gives the key `x` with `X = x g`.
     exact extractInverse_eq hg hsemi ht hs hU ha henc
   | none =>
     exfalso

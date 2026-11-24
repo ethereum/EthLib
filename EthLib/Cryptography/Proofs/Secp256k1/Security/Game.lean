@@ -8,35 +8,15 @@ public import VCVio.OracleComp.SimSemantics.StateT.Basic
 /-!
 # Proofs: the unforgeability game of ECDSA
 
-The source is [Fersch, Kiltz, Poettering](https://doi.org/10.1145/2976749.2978413).
+The game of existential unforgeability of GenDSA under chosen-message attacks.
 
-The scheme is GenDSA, their Definition 6 and Figure 3; ECDSA is GenDSA by their §3.1.
+It is Game G0 of Figure 4 of the source, with the departures that each definition below states.
 
-The key `x g` signs a hash `h` with a nonce `k`.
+ECDSA is GenDSA, by §3.1 of the source.
 
-The signature is `t = f(k g)` and `s = (h + x t) / k`, where `f` is the conversion.
+Source: [Fersch, Kiltz, Poettering][fkp], Definition 6, Figure 3, §3.1 and §4.
 
-The conversion is `ψ(Π(φ(R)))`:
-
-- `φ` encodes a point, as its `x` coordinate.
-- `Π` is a bijection, the identity of the integers below `2^L` in ECDSA.
-- `ψ` maps the result to a scalar, by reduction mod `n`.
-
-The model makes `Π` a uniform permutation, which the adversary evaluates in both directions.
-
-That is the bijective random oracle of their §4.
-
-They map `L`-bit strings to integers below `2^L`; both sets have `2^L` elements.
-
-So `Π` here is a permutation of one set, which stands for both.
-
-The game is existential unforgeability under chosen-message attacks, Game G0 of their Figure 4.
-
-It differs from it in the ways that each definition below states.
-
-Strong unforgeability fails when opposite points share their encoding, as `x` coordinates do.
-
-Verification then accepts `(t, -s)` whenever it accepts `(t, s)`.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -61,21 +41,20 @@ structure Scheme (F G A M : Type) where
   encode : G → A
   /-- The map `ψ` onto the scalars, the last part of the conversion. -/
   reduce : A → F
+  -- Their §2.3 draws a key for `H` before each experiment; here the scheme fixes `H`.
+  --
+  -- A fixed compressing `H` has collisions, and a collision wins the game.
+  --
+  -- So a bound on this game must charge collisions to a named search, such as the one below.
+  --
+  -- If `H` only reduces a digest mod `n`, forging needs no signature.
+  --
+  -- Pick `a` and `b`, and let `R = a g + b X` and `t = f(R)`.
+  --
+  -- When `b`, `t` and `R` are nonzero, `(t, t / b)` is valid on every digest `a t / b` mod `n`.
   /-- The hash `H` of a message to a scalar, a public function and not an oracle.
 
-  Their §2.3 draws a key for `H` before each experiment; here the scheme fixes `H`.
-
-  A fixed compressing `H` has collisions, and a collision wins the game.
-
-  So a bound on this game must charge collisions to a named search, such as the one below.
-
-  A message is what `H` hashes, such as a transaction, not a 32-byte digest.
-
-  If `H` only reduces a digest mod `n`, forging needs no signature.
-
-  Pick `a` and `b`, and let `R = a g + b X` and `t = f(R)`.
-
-  When `b`, `t` and `R` are nonzero, `(t, t / b)` is valid on every digest `a t / b` mod `n`. -/
+  A message is what `H` hashes, such as a transaction, not a 32-byte digest. -/
   hash : M → F
   /-- The normal form of `s` in a signature, such as the low-s rule of EIP-2. -/
   normalize : F → F
@@ -125,6 +104,10 @@ variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 /-- The conversion `f = ψ ∘ Π ∘ φ`, with `Π` the permutation `π`. -/
 def conversion (scheme : Scheme F G A M) (π : Equiv.Perm A) (R : G) : F :=
+  -- The conversion is `ψ(Π(φ(R)))`:
+  -- - `φ` encodes a point, as its `x` coordinate.
+  -- - `Π` is a bijection, the identity of the integers below `2^L` in ECDSA.
+  -- - `ψ` maps the result to a scalar, by reduction mod `n`.
   scheme.reduce (π (scheme.encode R))
 
 /-- The signature of `m` under the key `x` with the nonce `k`, by Figure 3 of the source.
@@ -134,6 +117,7 @@ It is `none` when `k`, `t` or `h + x t` is zero, where the source returns its fa
 The key is secret. -/
 def signNonce (scheme : Scheme F G A M) (π : Equiv.Perm A) (x : F) (m : M) (k : F) :
     Option (F × F) :=
+  -- The key `x g` signs the hash `h` with the nonce `k`: `t = f(k g)` and `s = (h + x t) / k`.
   let t := conversion scheme π (k • scheme.g)
   let u := scheme.hash m + x * t
   if k = 0 ∨ t = 0 ∨ u = 0 then none else some (t, scheme.normalize (u / k))
@@ -235,29 +219,32 @@ def signed (cache : Cache F M) (m : M) : Bool :=
 
 A new message gets a fresh signature, and a repeated one the answer it got first.
 
-[RFC 6979](https://www.rfc-editor.org/rfc/rfc6979#section-3.2) derives the nonces with HMAC_DRBG.
-
-Its seed holds the private key and the hash.
+[RFC 6979][rfc6979] derives the nonces with HMAC_DRBG.
 
 The model draws them as a random function of the message instead.
 
-That assumes the output of HMAC_DRBG seeded with the private key is pseudorandom.
-
-No theorem proves it.
-
-Two messages with one hash share one signature in RFC 6979, and get two independent ones here.
-
-EthLib's signing tries 16 nonces.
-
-It also fails when `x_R` is at least `n`, which the model leaves out.
-
-An adversary of their Game G0 simulates this oracle with `fuel` times more signing queries.
-
-No theorem states it. -/
+[rfc6979]: https://www.rfc-editor.org/rfc/rfc6979#section-3.2 -/
 def sign (scheme : Scheme F G A M) (fuel : ℕ) (π : Equiv.Perm A) (x : F) (m : M) :
     StateT (Cache F M) ProbComp (Option (F × F)) := fun cache =>
+  -- RFC 6979 seeds HMAC_DRBG with the private key and the hash.
+  --
+  -- Drawing the nonces at random assumes the output of that HMAC_DRBG is pseudorandom.
+  --
+  -- No theorem proves it.
   match cache.lookup m with
+  -- A repeated message gets the answer it got first.
   | some σ => pure (σ, cache)
+  -- A new message gets a fresh signature, from at most `fuel` nonces.
+  --
+  -- Two messages with one hash share one signature in RFC 6979, and get two independent ones here.
+  --
+  -- EthLib's signing tries 16 nonces.
+  --
+  -- It also fails when `x_R` is at least `n`, which the model leaves out.
+  --
+  -- An adversary of their Game G0 simulates this oracle with `fuel` times more signing queries.
+  --
+  -- No theorem states it.
   | none => (fun σ => (σ, cache ++ [(m, σ)])) <$> signFresh scheme π x m fuel
 
 /-- The oracles of the game, with the permutation `π` and the key `x`.
@@ -296,23 +283,28 @@ variable [FinEnum A]
 
 /-- The game: draw `Π` and the key, run the adversary with its oracles, and check the forgery.
 
-The message must have no signature from the oracle.
-
-A failed request gives no signature, so its message stays fresh, as in Game G0 of Figure 4.
-
-The key is uniform over all scalars, where the source's key generation avoids `0`.
-
-The scalar `0` gives the key `0`, which verification rejects.
-
-So the advantage here is the source's times `(n - 1) / n`, where `n` is the number of scalars.
-
-No theorem states it. -/
+The message must have no signature from the oracle. -/
 def experiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     ProbComp Bool := do
+  -- `Π` is a uniform permutation, which the adversary evaluates in both directions.
+  --
+  -- That is the bijective random oracle of their §4.
+  --
+  -- They map `L`-bit strings to integers below `2^L`; both sets have `2^L` elements.
+  --
+  -- So `Π` here is a permutation of one set, which stands for both.
   let π ← $ᵗ (Equiv.Perm A)
+  -- The key is uniform over all scalars, where the source's key generation avoids `0`.
+  --
+  -- The scalar `0` gives the key `0`, which verification rejects.
+  --
+  -- So the advantage here is the source's times `(n - 1) / n`, where `n` is the number of scalars.
+  --
+  -- No theorem states it.
   let x ← $ᵗ F
   let X := x • scheme.g
   let ((m, t, s), cache) ← (simulateQ (impl scheme fuel π x) (adversary.main X)).run []
+  -- A failed request gives no signature, so its message stays fresh, as in Game G0 of Figure 4.
   return !signed cache m && verify scheme π X m t s
 
 /-- The probability that the adversary forges. -/

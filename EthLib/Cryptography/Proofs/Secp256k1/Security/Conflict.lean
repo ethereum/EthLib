@@ -7,55 +7,11 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.QueryBound
 /-!
 # Proofs: the chance of a conflict in the ECDSA game with `Π` programmed
 
-In the game with `Π` programmed, two pairs of the cache of `Π` may share a query or an answer.
+A bound on the chance that two pairs of the cache of `Π` share a query or an answer.
 
-That is a conflict, and this module bounds its chance.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], §4.1, Figure 5.
 
-Take an adversary with at most `q_Π` queries to `Π` or its inverse, and `q_S` signing queries.
-
-The check of the forgery may relay one more query, so `Π` gets at most `q_Π + 1` relayed queries.
-
-The signer programs `Π` at most `fuel` times per signing query.
-
-So the cache holds at most `N = q_Π + 1 + fuel · q_S` pairs.
-
-A relayed query gets a uniform answer outside the relayed answers.
-
-It conflicts only when it hits one of the at most `fuel · q_S` programmed pairs.
-
-So it conflicts with chance at most `fuel · q_S / (|A| - N)`.
-
-That bound is infinite once `N` reaches `|A|`.
-
-A nonzero nonce `k` programs the query `φ(k g)` with a uniform answer of `A`.
-
-At most two nonzero nonces give one encoding, when `g` is nonzero and `φ` is semi-injective.
-
-So the query is cached with chance at most `2 N / |F|`, over a nonce drawn from all scalars.
-
-A zero nonce programs nothing, so it adds nothing to that chance.
-
-The answer is cached with chance at most `N / |A|`.
-
-A signing query tries at most `fuel` nonces.
-
-The union bound over all queries adds these chances.
-
-It is a union bound with a potential on the pair of budgets that remain.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-Their aborts in lines 05, 11, 13 and 25 of Figure 5 are conflicts here.
-
-The proof of their Theorem 1, §4.1, bounds the chance of each of these aborts.
-
-Their term for line 11 is `2 Q_s Q / (q - 1)`, with a nonzero nonce, where `q` is the group order.
-
-Their signer tries one nonce, so their counts of `Q_s` programmed pairs become `fuel · Q_s` here.
-
-The check of the forgery relays one more query, which their Definition 4 rules out.
-
-So their `Q_Π` becomes `q_Π + 1` here.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -311,15 +267,55 @@ theorem prEvent_programmedExperiment_conflict_le {scheme : Scheme F G A M} (hg :
     (hSign : ∀ X, IsQueryBoundP (adversary.main X) (isSignQuery · = true) qSign) :
     Pr{let z ← programmedExperiment scheme fuel adversary}[z.2.2.1.Conflict] ≤
       conflictBound F A fuel qPerm qSign := by
+  -- Their aborts in lines 05, 11, 13 and 25 of Figure 5 are conflicts here.
+  --
+  -- The proof of their Theorem 1, §4.1, bounds the chance of each of these aborts.
+  --
+  -- Their term for line 11 is `2 Q_s Q / (q - 1)`, with a nonzero nonce.
+  --
+  -- There `q` is the group order.
+  --
+  -- The check of the forgery may relay one more query.
+  --
+  -- So `Π` gets at most `q_Π + 1` relayed queries.
+  --
+  -- Their Definition 4 rules that query out, so their `Q_Π` becomes `q_Π + 1` here.
+  --
+  -- The signer programs `Π` at most `fuel` times per signing query.
+  --
+  -- Their signer tries one nonce.
+  --
+  -- So their counts of `Q_s` programmed pairs become `fuel · Q_s` here.
+  --
+  -- So the cache holds at most `N = q_Π + 1 + fuel · q_S` pairs.
   set N : ℕ := qPerm + 1 + fuel * qSign with hN
+  -- A relayed query gets a uniform answer outside the relayed answers.
+  --
+  -- It conflicts only when it hits one of the at most `fuel · q_S` programmed pairs.
+  --
+  -- So it conflicts with chance at most `fuel · q_S / (|A| - N)`.
   set εR : ℝ≥0∞ :=
     ((fuel * qSign : ℕ) : ℝ≥0∞) / ((FinEnum.card A - N : ℕ) : ℝ≥0∞) with hεR
+  -- A nonzero nonce `k` programs the query `φ(k g)` with a uniform answer of `A`.
+  --
+  -- At most two nonzero nonces give one encoding, when `g` is nonzero and `φ` is semi-injective.
+  --
+  -- So the query is cached with chance at most `2 N / |F|`, over a nonce drawn from all scalars.
+  --
+  -- A zero nonce programs nothing, so it adds nothing to that chance.
+  --
+  -- The answer is cached with chance at most `N / |A|`.
+  --
+  -- A signing query tries at most `fuel` nonces.
   set εS : ℝ≥0∞ :=
     (fuel : ℝ≥0∞) * (2 * (N : ℝ≥0∞) / FinEnum.card F + (N : ℝ≥0∞) / FinEnum.card A) with hεS
   have hbound : conflictBound F A fuel qPerm qSign =
       ((qPerm + 1 : ℕ) : ℝ≥0∞) * εR + (qSign : ℝ≥0∞) * εS := rfl
   rw [hbound, programmedExperiment]
   refine prEvent_bind_le_of_forall_le _ _ _ fun x => ?_
+  -- The union bound over all queries adds these chances.
+  --
+  -- It is a union bound with a potential on the pair of budgets that remain.
   refine prEvent_bad_le_of_isQueryBound
     (impl := jointImpl overlayLazyOracle
       (liftFresh programPermOracle fun m => signFreshQ scheme x m fuel))

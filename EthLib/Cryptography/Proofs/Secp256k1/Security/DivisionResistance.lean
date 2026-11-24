@@ -5,73 +5,11 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardCase
 /-!
 # Proofs: the division resistance of the hash, and the forward case of a fork
 
-This game measures the division resistance of the hash `H` relative to `ψ`.
+The game of division resistance of the hash `H` relative to `ψ`, and a reduction to it from a fork.
 
-Draw `β` uniformly from the answers that `ψ` maps to a nonzero scalar.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Definition 5 and Figure 10.
 
-From `β`, the first stage returns a message `m` and a state.
-
-Draw `β'` the same way, independently.
-
-From the state and `β'`, the second stage returns a message `m'`.
-
-The adversary wins if `H(m) / ψ(β) = H(m') / ψ(β')`.
-
-The messages may be equal.
-
-Either stage may abort, and then the adversary loses.
-
-Here `H` is fixed, as in the game of forgery, while their §2.3 draws a key for it first.
-
-So an adversary that knows a zero of `H` always wins.
-
-A bound therefore charges a named adversary, here the reduction from a fork.
-
-A fork of the key-only run gives two forgeries `(m, t, s)` and `(m', t', s')`.
-
-The fork fails to give the key when `H(m) / t = H(m') / t'`.
-
-With a uniform key, the reduction below wins the game at least that often, divided by `q + 1`.
-
-It draws the key and a guess of the fork index.
-
-Its first stage runs the forger up to the guessed query of the outside oracle.
-
-It answers that query with `β`, runs the rest, and checks that the fork index is the guess.
-
-It passes the run before the query on as its state.
-
-Its second stage answers the same query with `β'`, runs the rest again, and checks the same.
-
-Both stages answer every other query with uniform values, as the fork does.
-
-Their stages share the coins `ρ`.
-
-Here, as in the fork of this library, the coins after the guessed query are fresh.
-
-Their second stage aborts when `β = β'`; here it does not, which only adds wins.
-
-The first stage runs the forger once, and the second runs only its part after the guessed query.
-
-No theorem states the running time.
-
-With a fork index `j`, the check of a forgery read the answer at `j`, so `ψ` maps it to `t`.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-The game is their Definition 5, and the reduction is their Figure 10.
-
-Their `Q` is `q + 1` here.
-
-Their reduction draws the key from the nonzero scalars; here it draws it from all of them.
-
-That matches the key-only game here.
-
-The fork answers its query with a uniform value of all of `A`.
-
-The game draws only the answers that `ψ` maps to a nonzero scalar.
-
-The forgery's `t` is nonzero, so the event of the fork has no larger chance than the game.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -104,10 +42,23 @@ The adversary loses if either stage aborts.
 If no answer maps to a nonzero scalar, the draw fails and the adversary loses. -/
 def divisionExperiment (scheme : Scheme F G A M) (adversary : DivisionAdversary A M) :
     ProbComp Bool := do
+  -- Draw `β` uniformly from the answers that `ψ` maps to a nonzero scalar.
   let some β ← ($ nonzeroAnswers scheme : OptionT ProbComp A).run | pure false
+  -- From `β`, the first stage returns a message `m` and a state.
   let some (m, state) ← adversary.choose β | pure false
+  -- Draw `β'` the same way, independently.
   let some β' ← ($ nonzeroAnswers scheme : OptionT ProbComp A).run | pure false
+  -- From the state and `β'`, the second stage returns a message `m'`.
   let some m' ← adversary.finish state β' | pure false
+  -- The adversary wins if `H(m) / ψ(β) = H(m') / ψ(β')`.
+  --
+  -- The messages may be equal.
+  --
+  -- Here `H` is fixed, as in the game of forgery, while their §2.3 draws a key for it first.
+  --
+  -- So an adversary that knows a zero of `H` always wins.
+  --
+  -- A bound therefore charges a named adversary, here the reduction from a fork.
   pure (decide (scheme.hash m / scheme.reduce β = scheme.hash m' / scheme.reduce β'))
 
 /-- The probability that the adversary wins the game of division resistance. -/
@@ -175,6 +126,11 @@ It answers the guessed query with `β` and runs the rest of the forger.
 It returns the forgery's message if the fork index is the guess. -/
 def DivisionState.complete {scheme : Scheme F G A M} {adversary : KeyOnlyAdversary F G A M}
     {q : ℕ} (state : DivisionState scheme adversary q) (β : A) : ProbComp (Option M) := do
+  -- Every other query gets a uniform value, as in the fork.
+  --
+  -- Their stages share the coins `ρ`.
+  --
+  -- Here, as in the fork of this library, the coins after the guessed query are fresh.
   let c ← simulateQ outsideSample (state.occurrence.completeWith β)
   let tr := PFunctor.FreeM.output _ c.path
   pure (if forkIndex scheme (state.key • scheme.g) q tr = some state.guess then
@@ -182,27 +138,39 @@ def DivisionState.complete {scheme : Scheme F G A M} {adversary : KeyOnlyAdversa
 
 /-- The reduction from a fork of the key-only forger to division resistance, after Figure 10.
 
-The first stage draws the key and the guess, and runs the forger up to the guessed query.
-
-It aborts if the forger asks the outside oracle at most `s` times, where `s` is the guess.
-
-Both stages then complete the query, one with `β` and the other with `β'`.
+Both stages complete the guessed query, one with `β` and the other with `β'`.
 
 Each stage aborts unless the fork index of its run is the guess. -/
 def divisionReduction (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M)
     (q : ℕ) : DivisionAdversary A M where
   State := DivisionState scheme adversary q
   choose β := do
+    -- Draw the key.
+    --
+    -- Their reduction draws it from the nonzero scalars; here it draws it from all of them.
+    --
+    -- That matches the key-only game here.
     let x ← $ᵗ F
+    -- Draw the guess `s` of the fork index.
     let s ← $ᵗ Fin (forkBound q (.inr ()) + 1)
+    -- Run the forger up to the guessed query of the outside oracle.
     let split ← simulateQ outsideSample (PFunctor.FreeM.Cursor.splitAt
       (P := (OutsideSpec A).toPFunctor) (.inr ())
       (keyOnlyOutsideRun scheme adversary (x • scheme.g)) s)
     match split with
+    -- Abort if the forger asks the outside oracle at most `s` times.
     | .missing _ => pure none
     | .found occ =>
+      -- Pass the key, the guess and the run before the query on as the state.
       let state : DivisionState scheme adversary q := ⟨x, s, occ⟩
       (fun m => m.map fun m => (m, state)) <$> state.complete β
+  -- The second stage answers the same query with `β'`, and runs the rest again.
+  --
+  -- Their second stage aborts when `β = β'`; here it does not, which only adds wins.
+  --
+  -- The first stage runs the forger once, and the second runs only its part after the query.
+  --
+  -- No theorem states the running time.
   finish state β' := state.complete β'
 
 variable [UniformAnswerMeasure (Unit →ₒ A)]
@@ -291,6 +259,9 @@ theorem prEvent_contextFork_div_eq_le_divisionAdvantage (scheme : Scheme F G A M
         scheme.hash tr₁.forgery.1 / tr₁.forgery.2.1 =
           scheme.hash tr₂.forgery.1 / tr₂.forgery.2.1] ≤
       (q + 1) * divisionAdvantage scheme (divisionReduction scheme adversary q) := by
+  -- When `H(m) / t = H(m') / t'`, the fork fails to give the key.
+  --
+  -- Their `Q` is `q + 1` here.
   classical
   let E : Option (KeyOnlyTrace F A M × KeyOnlyTrace F A M) → Prop := fun r =>
     ∃ tr₁ tr₂, r = some (tr₁, tr₂) ∧
@@ -328,6 +299,7 @@ theorem prEvent_contextFork_div_eq_le_divisionAdvantage (scheme : Scheme F G A M
   have hstep1 : ∀ x : F, Pr{let r ← fork x}[E r] ≤
       ((q : ℝ≥0∞) + 1) * Pr{let s ← $ᵗ Fin (forkBound q (.inr ()) + 1); let e ← Φ x s}[e] := by
     intro x
+    -- Guess the fork index, losing a factor of `q + 1`.
     have hsplit : Pr{let r ← fork x}[E r] ≤ ∑ s : Fin (forkBound q (.inr ()) + 1),
         Pr{let r ← fork x}[∃ tr₁ tr₂, r = some (tr₁, tr₂) ∧
           forkIndex scheme (x • scheme.g) q tr₁ = some s ∧
@@ -356,6 +328,11 @@ theorem prEvent_contextFork_div_eq_le_divisionAdvantage (scheme : Scheme F G A M
       simp only [forkBound, Nat.cast_add, Nat.cast_one]
       exact ENNReal.mul_inv_cancel (by simp) (by simp)
     rw [hq, one_mul]
+  -- The fork answers its query with a uniform value of all of `A`.
+  --
+  -- The game draws only the answers that `ψ` maps to a nonzero scalar.
+  --
+  -- The forgery's `t` is nonzero, so the event of the fork has no larger chance than the game.
   have hstep2 : Pr{let x ← $ᵗ F; let s ← $ᵗ Fin (forkBound q (.inr ()) + 1); let e ← Φ x s}[e] ≤
       divisionAdvantage scheme (divisionReduction scheme adversary q) := by
     let S : (x : F) → (s : Fin (forkBound q (.inr ()) + 1)) → ProbComp
