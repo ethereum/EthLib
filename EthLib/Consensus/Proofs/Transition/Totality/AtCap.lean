@@ -26,17 +26,15 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- From Altair, a bound on what an epoch's rewards take from a validator at the cap.
 
-The score is a bound on its inactivity score after the update.
-
-The missed source and target cost at most one base reward, at a total of one increment.
-
-The inactivity penalty adds the cap times the score, over the bias times the smaller quotient.
-
-The two quotients are those of Altair and Bellatrix. -/
+The score is a bound on its inactivity score after the update. -/
 def Preset.capPenalty (preset : Preset) (config : Config) (score : Nat) : Nat :=
+  -- The missed source and target cost at most one base reward, at a total of one increment.
   preset.MAX_EFFECTIVE_BALANCE.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
       (preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat.sqrt) +
+    -- The inactivity penalty adds the cap times the score, over the bias times a quotient.
+    --
+    -- That quotient is the smaller of those of Altair and Bellatrix.
     preset.MAX_EFFECTIVE_BALANCE.toNat * score /
       (config.INACTIVITY_SCORE_BIAS.toNat * min preset.INACTIVITY_PENALTY_QUOTIENT_ALTAIR.toNat
         preset.INACTIVITY_PENALTY_QUOTIENT_BELLATRIX.toNat)
@@ -517,16 +515,14 @@ private theorem effective_atCap (before : fork < .pectra)
 
 Every score must be at most a bound, and the balance at least the cap plus one penalty.
 
-The penalty is at that bound plus the score bias.
+The penalty is taken at that bound plus the score bias.
 
-The balance then loses at most that penalty.
-
-The cap must be a whole number of increments, and above the ejection balance.
-
-The inactivity penalty quotients of Altair and Bellatrix must be positive. -/
+Its balance then loses at most that penalty. -/
 theorem run_readyStages_atCap (altair : .altair ≤ fork) (before : fork < .pectra)
+    -- The cap must be a whole number of increments, and above the ejection balance.
     (aligned : MaxEffectiveBalancesAligned preset)
     (ejection : config.EJECTION_BALANCE < preset.MAX_EFFECTIVE_BALANCE)
+    -- The inactivity penalty quotients of Altair and Bellatrix must be positive.
     (quotients : 0 < min preset.INACTIVITY_PENALTY_QUOTIENT_ALTAIR.toNat
       preset.INACTIVITY_PENALTY_QUOTIENT_BELLATRIX.toNat)
     (computed : run (action config checks) readyStages state = .ok ready)
@@ -637,16 +633,14 @@ theorem run_readyStages_atCap (altair : .altair ≤ fork) (before : fork < .pect
 
 Every score must be at most a bound, and the balance at least the cap plus one penalty.
 
-The penalty is at that bound plus the score bias.
+The penalty is taken at that bound plus the score bias.
 
-The balance then loses at most that penalty.
-
-The cap must be a whole number of increments, and above the ejection balance.
-
-The inactivity penalty quotients of Altair and Bellatrix must be positive. -/
+Its balance then loses at most that penalty. -/
 theorem processEpoch_atCap (altair : .altair ≤ fork) (before : fork < .pectra)
+    -- The cap must be a whole number of increments, and above the ejection balance.
     (aligned : MaxEffectiveBalancesAligned preset)
     (ejection : config.EJECTION_BALANCE < preset.MAX_EFFECTIVE_BALANCE)
+    -- The inactivity penalty quotients of Altair and Bellatrix must be positive.
     (quotients : 0 < min preset.INACTIVITY_PENALTY_QUOTIENT_ALTAIR.toNat
       preset.INACTIVITY_PENALTY_QUOTIENT_BELLATRIX.toNat)
     (computed : processEpoch config checks state = .ok after)

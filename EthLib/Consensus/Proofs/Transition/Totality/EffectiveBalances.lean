@@ -5,23 +5,9 @@ public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 /-!
 # Proofs: the update of the effective balances succeeds
 
-The update adds a band of hysteresis to each balance and to each effective balance.
+The update succeeds when each balance, each effective balance and each band is below 2^63 Gwei.
 
-Each sum is checked, so an amount near 2^64 Gwei can make the update fail.
-
-The update succeeds when each balance and each effective balance is below 2^63 Gwei.
-
-The two bands of the preset must also be below 2^63 Gwei, as they are on mainnet and minimal.
-
-The registry must hold one balance for each validator.
-
-The update leaves the balances unchanged.
-
-Each validator keeps every field except its effective balance.
-
-The new effective balance is the old one, or at most the balance.
-
-In the second case it is also at most the largest effective balance of the validator.
+It leaves the balances unchanged, and each validator keeps every field but its effective balance.
 -/
 
 @[expose] public section
@@ -54,6 +40,9 @@ private theorem updatedEffectiveBalance_exists_ok {largest balance effectiveBala
     (bands : preset.HysteresisBandsBelow) (low : balance.toNat < 2 ^ 63)
     (old : effectiveBalance.toNat < 2 ^ 63) :
     ∃ result, updatedEffectiveBalance preset largest balance effectiveBalance = .ok result := by
+  -- The update adds a band of hysteresis to each balance and to each effective balance.
+  --
+  -- Each sum is checked, so an amount near 2^64 Gwei can make the update fail.
   obtain ⟨down, up⟩ := bands
   have downOk := mulChecked_of_lt (Nat.lt_trans down (by decide))
   have upOk := mulChecked_of_lt (Nat.lt_trans up (by decide))

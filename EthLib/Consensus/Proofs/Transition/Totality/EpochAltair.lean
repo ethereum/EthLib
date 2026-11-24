@@ -14,12 +14,6 @@ From Altair the epoch transition adds the inactivity scores and the participatio
 It also draws a new sync committee at the end of each period.
 
 This file states the hypotheses of its steps on the state before the epoch.
-
-Before Electra the steps keep the registry size and keys, and no effective balance passes the cap.
-
-The draw must end on the state the steps compute.
-
-So that is an assumption on the steps, not a bound on the state.
 -/
 
 @[expose] public section
@@ -50,104 +44,87 @@ private theorem processEffectiveBalanceUpdates_mem {after : BeaconState preset f
   rw [read]
   exact ⟨_, Array.getElem_mem insideOld, rfl, bound.imp id And.right⟩
 
-/-- From Altair and before Electra, the epoch transition succeeds under bounds on the state.
-
-The divisors of the preset and the configuration are positive, and the hysteresis bands fit.
-
-The block roots reach the previous epoch, and the seed lookahead is short.
-
-A sync committee is not empty.
-
-The step runs at the last slot of an epoch.
-
-The slot plus the slots of the history of roots fits in 64 bits.
-
-The next epoch plus the length of the history of mixes fits in 64 bits.
-
-The registry is within its limit, with one balance, one score and one flag set per validator.
-
-Each effective balance is at most the cap of the draw.
-
-The sum of the effective balances and each balance are at most the budget.
-
-Three times that sum plus one increment fits in 64 bits, and so does each increment count times it.
-
-Each inactivity score is at most a bound, and that bound plus the bias fits in 64 bits.
-
-The rewards fit for the budget and that bound plus the bias.
-
-The ceiling on the balances after the rewards is below `2^63`.
-
-The checkpoints are in order, and the current justified epoch is at most the previous epoch.
-
-An epoch bounds the first activation epoch and every finite exit epoch, with room above it.
-
-The slashed balances fit, and so does their sum times the multiplier.
-
-The epoch plus half the vector of slashed balances fits too.
-
-The list of history entries of the fork has room for one more.
-
-When the next epoch starts a sync committee period, a new committee is drawn.
-
-The registry must then hold at most `2^40` validators.
-
-The committee size times the registry size must also fit in 64 bits.
-
-The draw also needs valid keys, and it must end under those bounds.
-
-Both are read in the state that the steps before the draw reach. -/
+/-- From Altair and before Electra, the epoch transition succeeds under bounds on the state. -/
 theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : SignatureChecks}
     {budget scoreBound ceiling : Nat}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     [NeZero preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat]
     (altair : .altair ≤ fork) (before : fork < .pectra)
+    -- The divisors of the preset and the configuration are positive.
     (positive : preset.DivisorsPositive) (configPositive : config.DivisorsPositive)
+    -- The block roots reach the previous epoch, and the hysteresis bands fit.
     (roots : preset.RootsReachPreviousEpoch) (bands : preset.HysteresisBandsBelow)
+    -- The rewards fit for the budget and the score bound plus the bias.
     (fit : RewardsFit preset config budget (scoreBound + config.INACTIVITY_SCORE_BIAS.toNat))
+    -- The ceiling on the balances after the rewards is below `2^63`.
     (half : preset.rewardsCeiling budget < 2 ^ 63)
+    -- The seed lookahead is short.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- A sync committee is not empty.
     (members : preset.SYNC_COMMITTEE_SIZE ≠ 0)
+    -- The step runs at the last slot of an epoch.
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0)
+    -- The slot plus the slots of the history of roots fits in 64 bits.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    -- The next epoch plus the length of the history of mixes fits in 64 bits.
     (epochRoom : (getCurrentEpoch state).toNat + 1 + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat <
       2 ^ 64)
+    -- The registry is within its limit, with one balance, one score and one flag set per validator.
     (within : state.RegistryWithinLimit) (matched : BalancesMatch state)
     (sized : ParticipationMatches state) (scoresMatch : InactivityScoresMatch state)
+    -- Each effective balance is at most the cap of the draw.
     (drawCapped : ∀ validator ∈ state.validators.data,
       validator.effectiveBalance.toNat ≤ drawCap preset fork)
+    -- The sum of the effective balances is at most the budget.
     (summed : effectiveBalanceSum state ≤ budget)
+    -- Three times that sum plus one increment fits in 64 bits.
     (tripled : 3 * (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state) < 2 ^ 64)
+    -- Each balance is at most the budget.
     (funded : ∀ balance ∈ state.balances.data, balance.toNat ≤ budget)
+    -- Each inactivity score is at most a bound, and that bound plus the bias fits in 64 bits.
     (scored : ∀ score ∈ (state.inactivityScores altair).data, score.toNat ≤ scoreBound)
     (scoreRoom : scoreBound + config.INACTIVITY_SCORE_BIAS.toNat < 2 ^ 64)
+    -- The checkpoints are in order, and the current justified epoch is at most the previous epoch.
     (ordered : CheckpointsOrdered state) (settled : JustifiedSettled state)
+    -- An epoch bounds the first activation epoch and every finite exit epoch, with room above it.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
     (exitRoom : ceiling + state.validators.data.size +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64)
+    -- The slashed balances fit, and so does their sum times the multiplier.
     (slashedFits : slashedBalanceSum state < 2 ^ 64)
     (slashedProduct : slashedBalanceSum state *
       (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64)
+    -- The epoch plus half the vector of slashed balances fits too.
     (halfway : (getCurrentEpoch state).toNat + (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat <
       2 ^ 64)
+    -- Each increment count times the sum of the effective balances fits in 64 bits.
     (product : ∀ validator ∈ state.validators.data,
       (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT).toNat *
         effectiveBalanceSum state < 2 ^ 64)
+    -- The list of history entries of the fork has room for one more.
     (rootsRoom : fork < .shapella →
       state.historicalRoots.data.size < preset.HISTORICAL_ROOTS_LIMIT.toNat)
     (summariesRoom : ∀ capella : .shapella ≤ fork,
       (state.historicalSummaries capella).data.size < preset.HISTORICAL_ROOTS_LIMIT.toNat)
+    -- When the next epoch starts a sync committee period, a new committee is drawn.
+    --
+    -- The draw needs valid keys, read in the state that the steps before the draw reach.
     (keys : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       ∀ ready, run (action config checks) (prefixStages ++ middleStages ++ [.participation])
           state = .ok ready →
         ∀ validator ∈ ready.validators.data,
           ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point)
+    -- The registry must then hold at most `2^40` validators.
     (few : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       state.validators.data.size ≤ 2 ^ 40)
+    -- The committee size times the registry size must also fit in 64 bits.
     (syncRoom : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       preset.SYNC_COMMITTEE_SIZE.toNat * state.validators.data.size < 2 ^ 64)
+    -- The draw must end under those bounds, on the state that the steps before the draw compute.
+    --
+    -- So that is an assumption on the steps, not a bound on the state.
     (ends : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       ∀ ready, run (action config checks) (prefixStages ++ middleStages ++ [.participation])
           state = .ok ready →
@@ -366,6 +343,10 @@ theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : S
       (.cons deposits (.cons consolidations (.cons payments
       (.cons (action_cases.mpr updatedOk) (.cons (action_cases.mpr clearedOk)
       (.cons (action_cases.mpr mixedOk) (.cons rootedOk (.cons rotated .nil)))))))))))))
+  -- Before Electra the steps keep the registry size and keys.
+  --
+  -- No effective balance passes the cap.
+  --
   -- The draw reads the registry after the update of the effective balances.
   have drawable : (getCurrentEpoch flagged + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       SyncDrawable flagged := by

@@ -14,22 +14,6 @@ Before Altair the epoch transition runs ten steps in a row.
 Each step has its own theorem that it succeeds, under hypotheses on the state it reads.
 
 This file reads all of them on the state before the epoch.
-
-Justification and finalization change only the checkpoints and their bits.
-
-The rewards and penalties then change only the balances, and leave each at most a ceiling.
-
-The registry updates keep the balances and every effective balance.
-
-The slashing penalties only lower balances.
-
-So the bounds on the effective balances, the slashed balances and the history carry over.
-
-The balances stay at most that ceiling.
-
-The update of the effective balances needs that ceiling below 2^63.
-
-The resets and the update of the history then need only that the slot plus one fits in 64 bits.
 -/
 
 @[expose] public section
@@ -171,83 +155,67 @@ private theorem getPendingAttestingIndices_eq_of_eq {other : BeaconState preset 
 
 /-- Before Altair, the epoch transition succeeds under bounds.
 
-The transition must run at the last slot of an epoch.
-
-The current epoch must be at most the epoch bound.
-
-The rewards and penalties must fit in 64 bits under the budget and the epoch bound.
-
-An epoch of the preset must have two slots at least.
-
-The buffer of block roots of the preset must reach the epoch before.
-
-The slot plus the length of that buffer must be below 2^64.
-
-The registry must stay within its limit, with one balance for each validator.
-
-Each effective balance must be at most the largest cap.
-
-The sum of the effective balances and each balance must be at most the budget.
-
-One increment plus the sum of the effective balances, times three, must be below 2^64.
-
-The ceiling of the balances after the rewards must be below 2^63.
-
-The finalized, previous justified and current justified epochs must be in order.
-
-The current justified epoch must be at most the previous epoch.
-
-The committee and the signers of each recent pending attestation must succeed.
-
-Each recent pending attestation must be as inclusion in a block stored it.
-
-An epoch must bound the first activation epoch and every finite exit epoch.
-
-That epoch plus the registry size plus the withdrawability delay must be below 2^64.
-
-The sum of the slashed balances must be below 2^64, and so must that sum times the multiplier.
-
-The current epoch plus half the length of the slashings vector must be below 2^64.
-
-Each effective balance in increments, times the sum of the effective balances, must be below 2^64.
-
-The list of historical roots must have room for one more entry.
-
-The divisors of the preset must be positive, and its hysteresis bands below 2^63.
-
-Its circular buffers of slashed balances and of RANDAO mixes must have positive length. -/
+The preset buffers of slashed balances and of RANDAO mixes must have a positive length. -/
 theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChecks}
     {budget epochBound ceiling : Nat}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     [NeZero preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat]
+    -- The divisors of the preset must be positive.
     (before : fork < .altair) (positive : preset.DivisorsPositive)
+    -- An epoch of the preset must have two slots at least.
+    --
+    -- The buffer of block roots of the preset must reach the epoch before.
+    --
+    -- The hysteresis bands of the preset must be below 2^63.
     (roots : preset.RootsReachPreviousEpoch) (bands : preset.HysteresisBandsBelow)
+    -- The rewards and penalties must fit in 64 bits under the budget and the epoch bound.
     (fit : RewardsFitBeforeAltair preset budget epochBound)
+    -- The ceiling of the balances after the rewards must be below 2^63.
     (half : preset.rewardsCeilingBeforeAltair budget < 2 ^ 63)
+    -- The transition must run at the last slot of an epoch.
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0)
+    -- The slot plus the length of the buffer of block roots must be below 2^64.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    -- The current epoch must be at most the epoch bound.
     (horizon : (getCurrentEpoch state).toNat ≤ epochBound)
+    -- The registry must stay within its limit, with one balance for each validator.
     (within : state.RegistryWithinLimit) (matched : BalancesMatch state)
+    -- Each effective balance must be at most the largest cap.
     (capped : ∀ validator ∈ state.validators.data,
       validator.effectiveBalance.toNat ≤ preset.largestEffectiveBalance)
+    -- The sum of the effective balances must be at most the budget.
     (summed : effectiveBalanceSum state ≤ budget)
+    -- One increment plus the sum of the effective balances, times three, must be below 2^64.
     (tripled : 3 * (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state) < 2 ^ 64)
+    -- Each balance must be at most the budget.
     (funded : ∀ balance ∈ state.balances.data, balance.toNat ≤ budget)
+    -- The finalized, previous justified and current justified epochs must be in order.
+    --
+    -- The current justified epoch must be at most the previous epoch.
     (ordered : CheckpointsOrdered state) (settled : JustifiedSettled state)
+    -- The committee and the signers of each recent pending attestation must succeed.
+    --
+    -- Each recent pending attestation must be as inclusion in a block stored it.
     (resolved : PendingResolved state) (wellFormed : PendingWellFormed state)
+    -- An epoch must bound the first activation epoch and every finite exit epoch.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
+    -- That epoch plus the registry size plus the withdrawability delay must be below 2^64.
     (exitRoom : ceiling + state.validators.data.size +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64)
+    -- The slashed balance sum must be below 2^64, and so must that sum times the multiplier.
     (slashedFits : slashedBalanceSum state < 2 ^ 64)
     (slashedProduct : slashedBalanceSum state *
       (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64)
+    -- The current epoch plus half the length of the slashings vector must be below 2^64.
     (halfway : (getCurrentEpoch state).toNat + (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat <
       2 ^ 64)
+    -- Each effective balance in increments, times the effective balance sum, must be below 2^64.
     (product : ∀ validator ∈ state.validators.data,
       (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT).toNat *
         effectiveBalanceSum state < 2 ^ 64)
+    -- The list of historical roots must have room for one more entry.
     (history : state.historicalRoots.data.size < preset.HISTORICAL_ROOTS_LIMIT.toNat) :
     ∃ after, processEpoch config checks state = .ok after := by
   have notAltair : ¬ Fork.altair ≤ fork := Nat.not_le_of_lt before
@@ -316,6 +284,8 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
   have currentEpoch2 : getCurrentEpoch rewarded = getCurrentEpoch state := by
     simp only [getCurrentEpoch, slot2]
   -- The registry updates change only the epochs of the validators.
+  --
+  -- They keep the balances and every effective balance.
   obtain ⟨registered, registeredOk, -⟩ := processRegistryUpdates_total_of_lt_electra
     (config := config) rewarded electra ceiling (by rw [currentEpoch2]; exact first)
     (by rw [validators2]; exact exits) (by rw [validators2]; exact exitRoom)
@@ -339,6 +309,10 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
     unfold BalancesMatch at matched2 ⊢
     rw [balances3, size3, matched2, validators2]
   -- The slashing penalties only lower balances.
+  --
+  -- So the bounds on the effective balances, the slashed balances and the history carry over.
+  --
+  -- The balances stay at most the ceiling of the rewards.
   obtain ⟨slashed, slashedOk⟩ := processSlashings_total positive
     (by unfold BeaconState.RegistryWithinLimit; rw [size3]; exact within) matched3
     (by rw [sum3]; have := fit.budget_lt; omega) below3
@@ -379,6 +353,8 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
     (congrArg BeaconState.validators frame5).trans <|
       (congrArg BeaconState.validators frame4).trans rfl
   -- The effective balances move toward the balances, which stay below 2^63.
+  --
+  -- The update of the effective balances needs the ceiling of the balances below 2^63.
   obtain ⟨updated, updatedOk⟩ := processEffectiveBalanceUpdates_total bands
     (by unfold BalancesMatch at matched4 ⊢; rw [balances5, validators5, matched4,
       ← congrArg BeaconState.validators frame4])
@@ -396,6 +372,8 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
       (congrArg BeaconState.historicalRoots frame5).trans <|
       (congrArg BeaconState.historicalRoots frame4).trans (roots3.trans roots2)
   -- The resets and the update of the history need only a next slot.
+  --
+  -- That is, they need only that the slot plus one fits in 64 bits.
   obtain ⟨cleared, clearedOk⟩ := processSlashingsReset_total (state := updated)
     (by rw [slot6]; exact next)
   obtain ⟨_, _, _, _, frame7⟩ := processSlashingsReset_eq clearedOk

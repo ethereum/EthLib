@@ -9,15 +9,7 @@ public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
 The state is at the Altair fork epoch and holds one validator, with no vote and no finality.
 
-Its key is the generator of `G1`, and its effective balance is 32 ETH.
-
-Its balance is `10^5` ETH, more than the leak takes before the Electra fork epoch.
-
-It meets the facts of a run that starts at its epoch, under the mainnet bounds.
-
-So every slot advance up to the last slot before Electra succeeds.
-
-The run makes 1131 sync committee draws, and each one finds the validator.
+Every slot advance from it up to the last slot before Electra succeeds.
 -/
 
 @[expose] public section
@@ -51,16 +43,11 @@ def witnessCommittee : SyncCommittee Preset.mainnet where
 
 /-- A mainnet state at the first slot of the Altair fork epoch, with one validator.
 
-The validator holds `10^5` ETH, and no one has voted.
-
-Every checkpoint is at genesis, so the chain is in the leak.
-
-Both sync committees hold its key at every seat.
-
-The deposit data counts one deposit, and every other field is zero or empty. -/
+Its fork versions are Altair's, and each other field that no comment describes is zero or empty. -/
 def altairWitnessState : BeaconState Preset.mainnet .altair where
   genesisTime := 0
   genesisValidatorsRoot := Vector.replicate 32 0
+  -- The slot is the first one of epoch 74240, the Altair fork epoch.
   slot := 74240 * 32
   forkVersions :=
     ⟨Config.mainnet.GENESIS_FORK_VERSION, Config.mainnet.ALTAIR_FORK_VERSION, 74240⟩
@@ -68,22 +55,29 @@ def altairWitnessState : BeaconState Preset.mainnet .altair where
   blockRoots := .ofVector (Vector.replicate _ (Vector.replicate 32 0))
   stateRoots := .ofVector (Vector.replicate _ (Vector.replicate 32 0))
   historicalRoots := ⟨#[], by simp⟩
+  -- The deposit data counts one deposit.
   eth1Data := fun _ => ⟨Vector.replicate 32 0, 1, Vector.replicate 32 0⟩
   eth1DataVotes := fun _ => ⟨#[], by simp⟩
+  -- The deposit index is past that one deposit.
   eth1DepositIndex := fun _ => 1
+  -- The registry holds the one validator of the witness.
   validators := .ofData #[witnessValidator] fun _ => by decide
+  -- The validator holds `10^5` ETH.
   balances := ⟨#[10 ^ 14], fun _ => by decide⟩
   randaoMixes := .ofVector (Vector.replicate _ (Vector.replicate 32 0))
   slashings := .ofVector (Vector.replicate _ 0)
   previousEpochAttestations := fun before => absurd before (by decide)
   currentEpochAttestations := fun before => absurd before (by decide)
+  -- No one has voted.
   previousEpochParticipation := fun _ => ⟨#[0], fun _ => by decide⟩
   currentEpochParticipation := fun _ => ⟨#[0], fun _ => by decide⟩
   justificationBits := ⟨Vector.replicate _ false⟩
+  -- Every checkpoint is at genesis, so the chain is in the leak.
   previousJustifiedCheckpoint := ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩
   currentJustifiedCheckpoint := ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩
   finalizedCheckpoint := ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩
   inactivityScores := fun _ => ⟨#[0], fun _ => by decide⟩
+  -- Both sync committees hold its key at every seat.
   currentSyncCommittee := fun _ => .of witnessCommittee
   nextSyncCommittee := fun _ => .of witnessCommittee
   latestExecutionPayloadHeader := fun during => absurd during.1 (by decide)
@@ -259,6 +253,9 @@ theorem processSlotsAcross_exists_ok_altairWitnessState {checks : SignatureCheck
     rw [Array.mem_singleton] at member
     subst member
     exact Nat.zero_le _
+  -- The run makes 1131 sync committee draws, and each one finds the validator.
+  --
+  -- The balance of `10^5` ETH is more than the leak takes before the Electra fork epoch.
   obtain ⟨signers, draws, limit⟩ := runHypotheses_of_quiet_altair (config := Config.mainnet)
     (checks := checks) (forked := ⟨.altair, altairWitnessState⟩)
     (count := slot.toNat - 74240 * 32) (by decide) (by decide)

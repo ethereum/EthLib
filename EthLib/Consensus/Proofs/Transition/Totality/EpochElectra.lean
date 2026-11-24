@@ -16,11 +16,7 @@ From Fulu it moves the lookahead of proposers.
 
 From Gloas it pays builders and moves the window of payload timeliness committees.
 
-From Heze it skips the reset of the deposit votes.
-
 The supply and the size of the registry stay bounded from the start, so the draws can succeed.
-
-Each draw also needs a validator at its cap, which the steps take as an assumption.
 -/
 
 @[expose] public section
@@ -101,161 +97,127 @@ private theorem withdrawalMaxEffectiveBalance_le_drawCap (electra : .pectra ≤ 
 
 /-- From Electra, the epoch transition succeeds under bounds on the state.
 
-The vectors of slashed balances and of mixes are not empty.
-
-The divisors of the preset and the configuration are positive.
-
-The block roots reach the previous epoch, and the hysteresis bands fit.
-
-The rewards fit for the budget and an inactivity bound plus the bias.
-
-The ceiling on the balances after the rewards is below `2^63`.
-
-The seed lookahead is shorter than the history of mixes, and a sync committee is not empty.
-
-The step runs at the last slot of an epoch.
-
-The slot plus the slots of the history of roots fits in 64 bits.
-
-The current epoch plus the seed lookahead, one and the length of the mixes fits in 64 bits.
-
-The first slot of the epoch two past the seed lookahead is at most `2^64`.
-
-The validators plus the pending deposits are within the limit of the registry.
-
-There is one balance, one flag set and one score per validator.
-
-Each effective balance is at most the largest one its credentials allow.
-
-The sum of the effective balances is at most the budget.
-
-That sum plus one increment, times three, fits in 64 bits.
-
-Each balance is at most the budget.
-
-Each inactivity score is at most that bound, and that bound plus the bias fits in 64 bits.
-
-The total active balance and the balance behind each flag of the previous epoch are computed.
-
-No flag of the previous epoch was set by more balance than is active now.
-
-That is an assumption, not a consequence of validity, and the issuance bound needs it.
-
-The balances plus the pending deposits plus the issuance bound are below `2^63`.
-
-The checkpoints are in order, and the current justified epoch is at most the previous epoch.
-
-An epoch bounds the first activation epoch, the end of the exit queue and every finite exit epoch.
-
-That epoch plus the cost of the unstarted exits and the withdrawability delay is below `2^64 - 1`.
-
-The least churn and the largest shared churn are each at least one increment.
-
-The churn carried for exits plus three times its ceiling fits in 64 bits.
-
-The churn carried for deposits plus its cap fits in 64 bits.
-
-Both indices of every queued consolidation are in the registry.
-
-The slashed balances fit, and so does their sum times the multiplier.
-
-The current epoch plus half the length of the vector of slashed balances fits too.
-
-The list of history summaries has room for one more.
-
-From Gloas an epoch has at least six slots.
-
-The least balance to activate is at most the cap of a compounding validator.
-
-The validators plus the pending deposits number at most `2^40`.
-
-That number times the size of a sync committee fits in 64 bits.
-
-From Gloas, so does that number times the size of a payload committee.
-
-From Gloas, so does it times one more than the committees per slot, times the slots of an epoch.
-
-When the next epoch starts a sync committee period, take the state reached before that draw.
-
-Every key of that state must pass validation.
-
-The other two draws are for the epoch one past the seed lookahead, from Fulu and from Gloas.
-
-Each draw must end on the state it reads, under the bounds of the draw.
-
-No bound on the state makes a draw end, so that is assumed. -/
+The vectors of slashed balances and of mixes are not empty. -/
 theorem processEpoch_total_of_electra {config : Config} {checks : SignatureChecks}
     {budget scoreBound ceiling : Nat}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     [NeZero preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat]
     (electra : .pectra ≤ fork)
+    -- The divisors of the preset and the configuration are positive.
     (positive : preset.DivisorsPositive) (configPositive : config.DivisorsPositive)
+    -- The block roots reach the previous epoch, and the hysteresis bands fit.
     (roots : preset.RootsReachPreviousEpoch) (bands : preset.HysteresisBandsBelow)
+    -- The rewards fit for the budget and an inactivity bound plus the bias.
     (fit : RewardsFit preset config budget (scoreBound + config.INACTIVITY_SCORE_BIAS.toNat))
+    -- The ceiling on the balances after the rewards is below `2^63`.
     (half : preset.rewardsCeiling budget < 2 ^ 63)
+    -- The seed lookahead is shorter than the history of mixes, and a sync committee is not empty.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (members : preset.SYNC_COMMITTEE_SIZE ≠ 0)
+    -- The step runs at the last slot of an epoch.
     (last : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0)
+    -- The slot plus the slots of the history of roots fits in 64 bits.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    -- The current epoch plus the seed lookahead, one and the length of the mixes fits in 64 bits.
     (seedRoom : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    -- The first slot of the epoch two past the seed lookahead is at most `2^64`.
     (slotRoom : ((getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 2) *
       preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    -- The validators plus the pending deposits are within the limit of the registry.
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
+    -- There is one balance, one flag set and one score per validator.
     (matched : BalancesMatch state)
     (sized : ParticipationMatches state) (scoresMatch : InactivityScoresMatch state)
+    -- Each effective balance is at most the largest one its credentials allow.
     (capped : ∀ validator ∈ state.validators.data,
       validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator)
+    -- The sum of the effective balances is at most the budget.
     (summed : effectiveBalanceSum state ≤ budget)
+    -- That sum plus one increment, times three, fits in 64 bits.
     (tripled : 3 * (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state) < 2 ^ 64)
+    -- Each balance is at most the budget.
     (funded : ∀ balance ∈ state.balances.data, balance.toNat ≤ budget)
+    -- Each inactivity score is at most the bound, and that bound plus the bias fits in 64 bits.
     (scored : ∀ score ∈ (state.inactivityScores (Nat.le_trans (by decide) electra)).data,
       score.toNat ≤ scoreBound)
     (scoreRoom : scoreBound + config.INACTIVITY_SCORE_BIAS.toNat < 2 ^ 64)
+    -- The total active balance and the balance behind each flag of the previous epoch are computed.
     {total : Gwei} (active : getTotalActiveBalance state = .ok total)
     {participatingBalance : Fin PARTICIPATION_FLAG_WEIGHTS.length → Gwei}
     (weighed : ∀ flagIndex, ∃ indices,
       getUnslashedParticipatingIndices state (Nat.le_trans (by decide) electra)
           flagIndex.val.toUInt64 (getPreviousEpoch state) = .ok indices ∧
         getTotalBalance state indices = .ok (participatingBalance flagIndex))
+    -- No flag of the previous epoch was set by more balance than is active now.
+    --
+    -- That is an assumption, not a consequence of validity, and the issuance bound needs it.
     (kept : ∀ flagIndex, participatingBalance flagIndex ≤ total)
+    -- The balances plus the pending deposits plus the issuance bound are below `2^63`.
     (supply : balanceSum state + pendingDepositSum state + preset.epochIssuance total.toNat <
       2 ^ 63)
+    -- The checkpoints are in order, and the current justified epoch is at most the previous epoch.
     (ordered : CheckpointsOrdered state) (settled : JustifiedSettled state)
+    -- An epoch bounds the first activation epoch.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    -- It also bounds the end of the exit queue.
     (queued : (state.earliestExitEpoch electra).toNat ≤ ceiling)
+    -- It also bounds every finite exit epoch.
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
+    -- That epoch plus the unstarted exit cost and withdrawability delay is below `2^64 - 1`.
     (exitRoom : ceiling + exitCost preset state +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64 - 1)
+    -- The least churn and the largest shared churn are each at least one increment.
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
     (maximum :
       preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    -- The churn carried for exits plus three times its ceiling fits in 64 bits.
     (exitCarried : (state.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config state <
       2 ^ 64)
+    -- The churn carried for deposits plus its cap fits in 64 bits.
     (depositCarried :
       (state.depositBalanceToConsume electra).toNat + depositChurnCap config fork < 2 ^ 64)
+    -- Both indices of every queued consolidation are in the registry.
     (inside : ∀ consolidation ∈ (state.pendingConsolidations electra).data,
       consolidation.sourceIndex.toNat < state.validators.data.size ∧
         consolidation.targetIndex.toNat < state.validators.data.size)
+    -- The slashed balances fit, and so does their sum times the multiplier.
     (slashedFits : slashedBalanceSum state < 2 ^ 64)
     (slashedProduct : slashedBalanceSum state *
       (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64)
+    -- The current epoch plus half the length of the vector of slashed balances fits too.
     (halfway : (getCurrentEpoch state).toNat + (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat <
       2 ^ 64)
+    -- The list of history summaries has room for one more.
     (summariesRoom : (state.historicalSummaries (Nat.le_trans (by decide) electra)).data.size <
       preset.HISTORICAL_ROOTS_LIMIT.toNat)
+    -- From Gloas an epoch has at least six slots.
     (slots : .glamsterdam ≤ fork → 6 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    -- The least balance to activate is at most the cap of a compounding validator.
     (activationCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    -- The validators plus the pending deposits number at most `2^40`.
     (few : registryLoad state ≤ 2 ^ 40)
+    -- That number times the size of a sync committee fits in 64 bits.
     (syncRoom : preset.SYNC_COMMITTEE_SIZE.toNat * registryLoad state < 2 ^ 64)
+    -- From Gloas, so does that number times the size of a payload committee.
+    --
+    -- From Gloas, so does it times the committees per slot plus one, times the slots of an epoch.
     (ptcRoom : .glamsterdam ≤ fork → preset.PTC_SIZE.toNat * registryLoad state < 2 ^ 64 ∧
       registryLoad state * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
         preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    -- When the next epoch starts a sync committee period, take the state reached before that draw.
+    --
+    -- Every key of that state must pass validation.
     (keys : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       ∀ ready, run (action config checks) readyStages state = .ok ready →
         ∀ validator ∈ ready.validators.data,
           ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point)
+    -- Each draw must end on the state it reads, under the bounds of the draw.
+    --
+    -- No bound on the state makes a draw end, so that is assumed.
+    --
+    -- Each draw also needs a validator at its cap, which the steps take as an assumption.
     (syncEnds : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       ∀ ready, run (action config checks) readyStages state = .ok ready →
         (∀ validator ∈ ready.validators.data,
@@ -263,6 +225,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
         ready.validators.data.size ≤ 2 ^ 40 →
         preset.SYNC_COMMITTEE_SIZE.toNat * ready.validators.data.size < 2 ^ 64 →
         SyncDrawEnds ready (getCurrentEpoch state + 1))
+    -- The other two draws are for the epoch one past the seed lookahead, from Fulu and from Gloas.
     (proposersEnd : .fusaka ≤ fork → ∀ synced,
       run (action config checks) (readyStages ++ [.syncCommittees]) state = .ok synced →
         (∀ validator ∈ synced.validators.data,

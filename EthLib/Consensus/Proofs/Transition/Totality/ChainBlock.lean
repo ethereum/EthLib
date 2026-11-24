@@ -17,23 +17,9 @@ A chain keeps bounds that each block may raise by a fixed step.
 
 The protocol does not cap every amount that a block brings in, such as the Gwei of its deposits.
 
-So a block must stay within stated limits on its body.
-
-A slashing limit fits only far below what the protocol allows from Electra.
-
-The slashed balances must fit in 64 bits after the most blocks, at the largest cap per name.
-
-The step must then cover those limits, at the budget of the effective balances.
-
-A block that the transition accepts, within the limits, keeps the facts of the chain.
-
-Its count of blocks rises by one, and the slots before it keep the facts too.
-
-At the end of each epoch on the way, the signers must hold at most the active balance.
+So a block must stay within stated limits on its body, and then it keeps the facts of the chain.
 
 Within the same limits, slashing a validator succeeds at the turn of an attester slashing.
-
-That attester slashing must name at least one validator.
 -/
 
 @[expose] public section
@@ -75,30 +61,27 @@ structure BlockBounded {fork : Fork} (limits : BlockLimits)
 
 /-- A block step covers the limits on a block body, for a chain within a budget.
 
-The slashed step covers the largest cap for each validator that the slashings name.
-
-The effective step covers the largest cap for each deposit, and the load step twice the load limit.
-
-The supply step covers the deposits and the bound on the rewards of a block.
-
-It also covers the whistleblower share of the slashed step, at every fork.
-
-The effective step fits the supply step in the ratio of the hysteresis.
-
-The ceiling step covers one more epoch, and the exit cost of the registry at the budget.
-
-That cost reads the load after the most blocks of the chain.
-
-It also covers the cost of each new validator, and of each withdrawal request at the budget. -/
+The budget bounds the effective balances. -/
 structure BlockStep.Covers (preset : Preset) (step : BlockStep) (limits : BlockLimits)
     (start : RunStart) (budget epochs : Nat) : Prop where
-  /-- The slashed step covers the slashings. -/
+  -- A slashing limit fits only far below what the protocol allows from Electra.
+  --
+  -- The slashed balances must fit in 64 bits after the most blocks, at the largest cap per name.
+  --
+  -- The step must then cover those limits, at the budget of the effective balances.
+  /-- The slashed step covers the slashings.
+
+  It covers the largest cap for each validator that the slashings name. -/
   slashed : limits.slashings * preset.largestEffectiveBalance ≤ step.slashed
-  /-- The effective step covers the new validators. -/
+  /-- The effective step covers the new validators, at the largest cap for each deposit. -/
   effective : limits.joins * preset.largestEffectiveBalance ≤ step.effective
   /-- The load step covers twice the load limit, the weight of the load before Electra. -/
   load : 2 * limits.load ≤ step.load
-  /-- The supply step covers the deposits, the whistleblower rewards and the other rewards. -/
+  /-- The supply step covers the deposits, the whistleblower rewards and the other rewards.
+
+  The other rewards are the bound on the rewards of a block.
+
+  The whistleblower rewards are the share of the slashed step, at every fork. -/
   supply : ∀ fork, limits.deposits +
       step.slashed / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
       blockRewardBound preset budget ≤ step.supply
@@ -106,7 +89,13 @@ structure BlockStep.Covers (preset : Preset) (step : BlockStep) (limits : BlockL
   ratio : step.effective *
       (preset.HYSTERESIS_QUOTIENT.toNat - preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat) ≤
     step.supply * preset.HYSTERESIS_QUOTIENT.toNat
-  /-- The ceiling step covers the exits that a block can start. -/
+  /-- The ceiling step covers the exits that a block can start.
+
+  It covers one more epoch, and the exit cost of the registry at the budget.
+
+  That cost reads the load after the most blocks of the chain.
+
+  It also covers the cost of each new validator, and of each withdrawal request at the budget. -/
   ceiling : 1 + budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
       (start.afterBlocks step (preset.chainBlocks epochs)).load +
       limits.joins *
@@ -271,13 +260,7 @@ private theorem reached_le_ceilingAt {fork : Fork} {start : RunStart} {step : Bl
 
 /-- A block within the limits keeps the bounds of a chain, raised by one more block.
 
-The step covers the limits, and one more block is within the most blocks of the chain.
-
-The effective balances after the block are within their caps.
-
-The current epoch plus one plus the longest lookahead is at most the exit ceiling.
-
-The increment is at most the least balance to activate, and the withdrawal delay is positive. -/
+The step covers the limits, and one more block is within the most blocks of the chain. -/
 private theorem RunBounded.of_processBlock {fork : Fork} {engine : ExecutionEngine preset fork}
     {state after : BeaconState preset fork} {block : BeaconBlock preset fork}
     {start : RunStart} {step : BlockStep} {limits : BlockLimits}
@@ -285,11 +268,15 @@ private theorem RunBounded.of_processBlock {fork : Fork} {engine : ExecutionEngi
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
     (covers : step.Covers preset limits start budget epochs)
     (raised : blocks + 1 ≤ preset.chainBlocks epochs)
+    -- The increment is at most the least balance to activate.
     (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
+    -- The withdrawal delay is positive.
     (withdrawable : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (le : elapsed ≤ epochs)
     (holds : RunBounded config (start.afterBlocks step blocks) budget elapsed state)
+    -- The effective balances after the block are within their caps.
     (shaped : Shaped state) (cappedAfter : EffectiveBalancesCapped after)
+    -- The current epoch plus one plus the longest lookahead is at most the exit ceiling.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤
       (start.afterBlocks step blocks).ceilingAt preset budget elapsed)
     (bounded : BlockBounded limits block.body)
@@ -524,13 +511,7 @@ The facts hold at the state before the slots that lead to the block, with some c
 
 They then hold after the block, with one more block.
 
-The step covers the limits, and the slot of the block is within the epochs of the chain.
-
-At the end of each epoch before the block, the signers hold at most the active balance.
-
-The least inclusion delay and the withdrawal delay are positive.
-
-The increment is at most the least balance to activate. -/
+The step covers the limits, and the slot of the block is within the epochs of the chain. -/
 theorem ChainHolds.of_stateTransitionAcross {fork : Fork} {engine : ExecutionEngine preset fork}
     {start : RunStart} {step : BlockStep} {limits : BlockLimits}
     {budget epochs lastEpoch startEpoch blocks : Nat}
@@ -539,12 +520,15 @@ theorem ChainHolds.of_stateTransitionAcross {fork : Fork} {engine : ExecutionEng
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
     (fits : startEpoch + epochs ≤ lastEpoch)
     (covers : step.Covers preset limits start budget epochs)
+    -- The least inclusion delay and the withdrawal delay are positive.
     (inclusion : 0 < preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat)
     (withdrawable : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    -- The increment is at most the least balance to activate.
     (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
     (holds : ChainHolds config start step budget startEpoch blocks forked.state)
     (bounded : BlockBounded limits signed.message.body)
     (within : signed.message.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs)
+    -- At the end of each epoch before the block, the signers hold at most the active balance.
     (signers : SignersAtEnds config checks forked
       (signed.message.slot.toNat - forked.state.slot.toNat))
     (computed :
@@ -631,25 +615,9 @@ private theorem slashingTurn_proposer
 
 /-- Take the state a block reaches after its proposer slashings and first `j` attester slashings.
 
-The attester slashing at position `j` has at least one index in its first attestation.
-
-The conditions of the chain hold, and one more block fits its count.
-
-The epoch of `advanced` is within the epochs of the chain.
-
-The facts of the chain hold at `advanced`, after advancing the slots and before the block.
-
-The slashing count and the deposits of the block are within the limits, which the step covers.
-
 Then three bounds hold for a validator in the registry at the turn, and one for `advanced`.
 
-The slashed balance of the current epoch, if read, plus its effective balance is below `2^64`.
-
-From Altair, its whistleblower reward times the proposer weight is below `2^64`.
-
-Each balance at the turn plus that effective balance is below `2^64`.
-
-The sum of the balances at `advanced` is within the budget. -/
+The conditions of the chain hold, and one more block fits its count. -/
 private theorem slashingTurn_balanceRoom {start : RunStart} {step : BlockStep}
     {limits : BlockLimits} {budget epochs lastEpoch startEpoch blocks : Nat}
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
@@ -659,24 +627,34 @@ private theorem slashingTurn_balanceRoom {start : RunStart} {step : BlockStep}
     (coversSupply : limits.deposits +
       step.slashed / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
       blockRewardBound preset budget ≤ step.supply)
+    -- The facts of the chain hold at `advanced`, after advancing the slots and before the block.
     (advancedHolds : ChainHolds config start step budget startEpoch blocks advanced)
     (raised : blocks + 1 ≤ preset.chainBlocks epochs)
+    -- The epoch of `advanced` is within the epochs of the chain.
     (le : (getCurrentEpoch advanced).toNat - startEpoch ≤ epochs)
     (turned : SlashingTurn config checks engine advanced block j turn)
+    -- The slashing count and the deposits of the block are within the limits.
+    --
+    -- The step covers those limits.
     (counted : blockSlashingCount block.body ≤ limits.slashings)
     (deposits : blockDepositAmount block.body ≤ limits.deposits)
     {slashing : AttesterSlashing preset fork}
     (atJ : block.body.attesterSlashings.data.toList[j]? = some slashing)
+    -- The attester slashing at position `j` has at least one index in its first attestation.
     (named : 1 ≤ slashing.attestation1.attestingIndices.data.size)
     {index : ValidatorIndex} {validator : Validator}
     (found : turn.validators.data[index.toNat]? = some validator) :
+    -- The current epoch's slashed balance, if read, plus its effective balance is below `2^64`.
     (∀ amount, readCircular turn.slashings.elements (getCurrentEpoch turn) = .ok amount →
       amount.toNat + validator.effectiveBalance.toNat < 2 ^ 64) ∧
+    -- From Altair, its whistleblower reward times the proposer weight is below `2^64`.
     (.altair ≤ fork → (validator.effectiveBalance /
       (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat * PROPOSER_WEIGHT.toNat <
         2 ^ 64) ∧
+    -- Each balance at the turn plus that effective balance is below `2^64`.
     (∀ (position : Nat) (balance : Gwei), turn.balances.data[position]? = some balance →
       balance.toNat + validator.effectiveBalance.toNat < 2 ^ 64) ∧
+    -- The sum of the balances at `advanced` is within the budget.
     balanceSum advanced ≤ budget := by
   have baseRun := conditions.at (Nat.le_of_succ_le raised)
   have raisedRun := conditions.at raised
@@ -791,38 +769,35 @@ private theorem slashingTurn_balanceRoom {start : RunStart} {step : BlockStep}
 
 When the block has at most `j` attester slashings, that is the state after all of them.
 
-The conditions of the chain hold, and one more block fits its count.
+Then starting the exit of a validator in the registry at the turn succeeds.
 
-The epoch of `advanced` is within the epochs of the chain, and those end by its last epoch.
-
-The facts of the chain hold at `advanced`, after advancing the slots and before the block.
-
-The sum of the balances at `advanced` is within the budget.
-
-The withdrawal requests of the block are within the limit, and the ceiling step covers the exits.
-
-The withdrawal delay is positive, and an increment is at most the least balance to activate.
-
-Then starting the exit of a validator in the registry at the turn succeeds. -/
+The conditions of the chain hold, and one more block fits its count. -/
 private theorem slashingTurn_exitRoom {start : RunStart} {step : BlockStep}
     {limits : BlockLimits} {budget epochs lastEpoch startEpoch blocks : Nat}
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
+    -- The epochs of the chain end by its last epoch.
     (fits : startEpoch + epochs ≤ lastEpoch)
+    -- The ceiling step covers the exits.
     (coversCeiling : 1 + budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
       (start.afterBlocks step (preset.chainBlocks epochs)).load +
       limits.joins *
         (preset.largestEffectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) +
       limits.withdrawals * (budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) ≤
     step.ceiling)
+    -- The withdrawal delay is positive, and an increment is at most the least balance to activate.
     (withdrawable : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
     {fork : Fork} {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
     {advanced turn : BeaconState preset fork} {j : Nat}
+    -- The facts of the chain hold at `advanced`, after advancing the slots and before the block.
     (advancedHolds : ChainHolds config start step budget startEpoch blocks advanced)
     (raised : blocks + 1 ≤ preset.chainBlocks epochs)
+    -- The epoch of `advanced` is within the epochs of the chain.
     (le : (getCurrentEpoch advanced).toNat - startEpoch ≤ epochs)
     (turned : SlashingTurn config checks engine advanced block j turn)
+    -- The withdrawal requests of the block are within the limit.
     (withdrawals : (blockWithdrawalRequests block.body).length ≤ limits.withdrawals)
+    -- The sum of the balances at `advanced` is within the budget.
     (capped : balanceSum advanced ≤ budget)
     {index : ValidatorIndex} (inside : index.toNat < turn.validators.data.size) :
     ∃ exited, initiateValidatorExit config turn index = .ok exited := by
@@ -893,17 +868,7 @@ private theorem slashingTurn_exitRoom {start : RunStart} {step : BlockStep}
 
 The turn is the state that the steps before that attester slashing reach.
 
-That attester slashing counts at least one name, and supplies the budget of one name.
-
 This says nothing about the rest of the block.
-
-The facts of a chain hold before the slots that lead to the block.
-
-The block is within limits that a block step covers, inside the epochs of the chain.
-
-The signers are within the active balance at each epoch end of the slots.
-
-The withdrawal delay is positive, and an increment is at most the least balance to activate.
 
 The slashings vector has a nonzero length. -/
 theorem slashValidator_total_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
@@ -912,8 +877,10 @@ theorem slashValidator_total_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
     (fits : startEpoch + epochs ≤ lastEpoch)
     (covers : step.Covers preset limits start budget epochs)
+    -- The withdrawal delay is positive, and an increment is at most the least balance to activate.
     (withdrawable : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
+    -- The facts of a chain hold before the slots that lead to the block.
     (holds : ChainHolds config start step budget startEpoch blocks forked.state)
     {fork : Fork} {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork} {advanced turn : BeaconState preset fork} {j : Nat}
@@ -921,11 +888,14 @@ theorem slashValidator_total_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR
       (block.slot.toNat - forked.state.slot.toNat) forked = .ok ⟨fork, advanced⟩)
     (later : forked.state.slot.toNat < block.slot.toNat)
     (turned : SlashingTurn config checks engine advanced block j turn)
+    -- The block is within limits that a block step covers, inside the epochs of the chain.
     (bounded : BlockBounded limits block.body)
     (within : block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs)
+    -- The signers are within the active balance at each epoch end of the slots.
     (signers : SignersAtEnds config checks forked (block.slot.toNat - forked.state.slot.toNat))
     {slashing : AttesterSlashing preset fork}
     (atJ : block.body.attesterSlashings.data.toList[j]? = some slashing)
+    -- That attester slashing counts at least one name, and supplies the budget of one name.
     (named : 1 ≤ slashing.attestation1.attestingIndices.data.size)
     {index : ValidatorIndex} (inside : index.toNat < turn.validators.data.size) :
     ∃ after, slashValidator config turn index = .ok after := by

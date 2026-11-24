@@ -13,15 +13,7 @@ A chain alternates runs of slots and blocks.
 
 Its states keep the invariant, the shape of the state and the bounds of a run.
 
-A block may raise some of those bounds, by at most a fixed amount for each block.
-
-At most one block lands in each slot, so the slots since the start bound the number of blocks.
-
 Each empty slot keeps these facts, and succeeds, under hypotheses on the state it reaches.
-
-At the end of each epoch, the signers must hold at most the active balance.
-
-Blocks carry attestations, so that condition is a hypothesis at every epoch, not only early on.
 -/
 
 @[expose] public section
@@ -148,11 +140,7 @@ theorem RunConditions.toChain {start : RunStart} {budget epochs lastEpoch : Nat}
 
 The chain starts at a given epoch, and the bounds count the epochs since then.
 
-They start from the bounds of the run, raised by the blocks of the chain so far.
-
-There is at most one block in each slot since the start of the first epoch.
-
-Before Altair, the pending attestations are as block processing stored and checked them. -/
+They start from the bounds of the run, raised by the blocks of the chain so far. -/
 structure ChainHolds (config : Config) (start : RunStart) (step : BlockStep)
     (budget startEpoch blocks : Nat) {fork : Fork} (state : BeaconState preset fork) : Prop where
   /-- The state is at the first epoch of the chain or later. -/
@@ -161,6 +149,7 @@ structure ChainHolds (config : Config) (start : RunStart) (step : BlockStep)
   invariant : Invariant state
   /-- The state keeps its shape. -/
   shaped : Shaped state
+  -- Before Altair, the pending attestations are as block processing stored and checked them.
   /-- Each pending attestation has its slot in its epoch, a nonzero delay, and a known proposer. -/
   wellFormed : PendingWellFormed state
   /-- The committee and the signers of each pending attestation succeed. -/
@@ -169,6 +158,7 @@ structure ChainHolds (config : Config) (start : RunStart) (step : BlockStep)
   early : JustifiedEarly state
   /-- Each pending attestation has the target and the source that its block checked. -/
   voted : PendingVoted Set.univ state
+  -- At most one block lands in each slot, so the slots since the start bound the number of blocks.
   /-- The blocks so far are at most one for each slot since the start of the first epoch. -/
   counted : blocks ≤ state.slot.toNat + 1 - startEpoch * preset.SLOTS_PER_EPOCH.toNat
   /-- The bounds hold, raised by the blocks so far, after the epochs since the first one. -/
@@ -385,19 +375,7 @@ theorem ChainHolds.of_advanceSlotAcross {start : RunStart} {step : BlockStep}
     advancedEpoch (ChainHolds.of_advanceSlot conditions fits holds within signers advancedOk)
     upgraded
 
-/-- One slot of a chain succeeds, with the upgrades due at the slot it reaches.
-
-The epoch of the next slot is at most the first epoch of the chain plus the number of epochs.
-
-The chain then ends by the last epoch of the conditions.
-
-At the end of an epoch, the signers hold at most the active balance.
-
-At the end of an epoch, the draws of the epoch transition end.
-
-The draws of the upgrades due at the next slot end.
-
-Before Altair, the epoch is within the limit before Altair. -/
+/-- One slot of a chain succeeds, with the upgrades due at the slot it reaches. -/
 theorem ChainHolds.advanceSlotAcross_exists_ok
     [∀ fork, Serialization.Ssz.LawfulSszType (BeaconState preset fork)]
     [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat]
@@ -406,16 +384,24 @@ theorem ChainHolds.advanceSlotAcross_exists_ok
     {start : RunStart} {step : BlockStep} {budget epochs lastEpoch startEpoch blocks : Nat}
     {forked : ForkedBeaconState preset}
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
+    -- The chain ends by the last epoch of the conditions.
     (fits : startEpoch + epochs ≤ lastEpoch)
     (holds : ChainHolds config start step budget startEpoch blocks forked.state)
+    -- The epoch of the next slot is at most the first epoch of the chain plus the epochs.
     (within : (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs)
+    -- At the end of an epoch, the signers hold at most the active balance.
+    --
+    -- Blocks carry attestations, so this is a hypothesis at every epoch, not only early on.
     (signers : (forked.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot forked.state = .ok cached → SignersWithinActive cached)
+    -- At the end of an epoch, the draws of the epoch transition end.
     (draws : (forked.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot forked.state = .ok cached → EpochDrawsEnd config checks cached)
+    -- The draws of the upgrades due at the next slot end.
     (upgradeDraws : ∀ advanced, advanceSlot config checks forked.state = .ok advanced →
       ∀ upgrading, UpgradesPass config checks ⟨forked.fork, advanced⟩ upgrading →
         upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading)
+    -- Before Altair, the epoch is within the limit before Altair.
     (limit : forked.fork < .altair →
       (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair) :
     ∃ next, advanceSlotAcross config checks forked = .ok next := by

@@ -18,19 +18,7 @@ import EthLib.Consensus.Proofs.Transition.Requests
 
 A block moves the exit and consolidation queues through exits, slashings and two kinds of request.
 
-Each validator that starts to exit moves the end of its queue by at most its cost.
-
-That cost is its effective balance in increments, plus one, and the validator then stops owing it.
-
-So the end of each queue, plus the cost still owed, rises only through two kinds of steps.
-
-A new validator owes its cost from the moment it joins.
-
-A partial withdrawal moves the exit queue with no exit.
-
-It moves it by at most its amount, capped by the balance of the validator, in increments, plus one.
-
-Before Electra an exit moves the latest exit epoch by at most one, which is within its cost.
+Each queue end plus the cost still owed rises only through new validators and partial withdrawals.
 
 From Electra, the churn carried for exits stays within one churn bound or its value before.
 -/
@@ -221,7 +209,9 @@ private theorem Moves.foldlM_sum {α ε : Type} {step : BeaconState preset fork 
 
 /-- A step that keeps the slot and the queues, and keeps each validator or appends new ones.
 
-Its new validators have not started to exit. -/
+Its new validators have not started to exit.
+
+A new validator owes its cost from the moment it joins. -/
 private structure Plain (a b : BeaconState preset fork) : Prop where
   slot : b.slot = a.slot
   appended : ∃ extra, keys b = keys a ++ extra ∧ ∀ k ∈ extra, k.1 = FAR_FUTURE_EPOCH
@@ -483,7 +473,9 @@ private theorem foldl_latest_le {r : Nat} :
     rw [Uint64.toNat_max]
     exact max_le le (each v List.mem_cons_self)
 
-/-- Before Electra, an exit epoch lands at most one epoch past the bound. -/
+/-- Before Electra, an exit epoch lands at most one epoch past the bound.
+
+That move of at most one epoch is within the cost of the exit. -/
 private theorem exitQueueEpoch_bound {a : BeaconState preset fork} {epoch : Epoch} {r u : Nat}
     (holds : Holds config start ceiling a r u)
     (computed : exitQueueEpoch config a = .ok epoch) : epoch.toNat ≤ r + 1 := by
@@ -620,6 +612,8 @@ private theorem moves_exit (rates : Rates preset config) {a b : BeaconState pres
   omega
 
 /-- A partial withdrawal moves the exit queue by at most its amount in increments, plus one.
+
+It moves the queue with no exit, and it withdraws at most the balance of the validator.
 
 Its amount counts up to a cap on the sum of the balances, which bounds what it withdraws. -/
 private theorem moves_partialWithdrawal (rates : Rates preset config)
@@ -1162,54 +1156,44 @@ private theorem processBlock_exits_churn {engine : ExecutionEngine preset fork}
 
 /-- A block raises the end of each exit queue, plus the cost still owed, by a bounded amount.
 
-Before the block, each exit epoch that is set is at most a ceiling.
-
-From Electra, the ends of the exit and consolidation queues are at most that ceiling too.
-
-The ceiling covers the first epoch at which a new exit can take effect.
-
-The increment is positive.
-
-It is at most the least churn, the largest churn and the least balance to activate.
-
-The withdrawal delay is positive, so no exit that succeeds lands on the far future epoch.
-
-A cap is at least the bound on the supply of the block.
-
-It then bounds the sum of the balances where each withdrawal request of the block runs.
-
 After the block, some bound covers each exit epoch that is set and, from Electra, both queue ends.
 
-It also covers the first epoch at which a new exit can take effect.
-
-That bound plus the cost still owed is at most the ceiling plus the cost owed before the block.
-
-It adds the cost of the validators that joined in the block.
-
-It also adds the cost of the withdrawal requests of the block, with their amounts capped. -/
+That bound plus the cost still owed is at most the ceiling plus the cost owed before the block. -/
 theorem processBlock_exits {engine : ExecutionEngine preset fork}
     {state after : BeaconState preset fork} {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after)
+    -- The increment is positive.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    -- It is at most the least churn, the largest churn and the least balance to activate.
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
     (maximum :
       preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
     (activation : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
+    -- The withdrawal delay is positive, so no exit that succeeds lands on the far future epoch.
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {ceiling : Nat}
+    -- A ceiling covers the first epoch at which a new exit can take effect.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    -- Before the block, each exit epoch that is set is at most that ceiling.
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
+    -- From Electra, the ends of the exit and consolidation queues are at most that ceiling too.
     (queues : ∀ electra : .pectra ≤ fork, (state.earliestExitEpoch electra).toNat ≤ ceiling ∧
       (state.earliestConsolidationEpoch electra).toNat ≤ ceiling)
     {cap : Nat}
+    -- A cap is at least the bound on the supply of the block.
+    --
+    -- It then bounds the sum of the balances where each withdrawal request of the block runs.
     (capped : balanceSum state + pendingDepositSum state + blockDepositAmount block.body +
         (slashedBalanceSum after - slashedBalanceSum state) /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
         blockRewardCap preset state ≤ cap) :
     ∃ reached, reached + exitCost preset after ≤
+        -- It adds the cost of the validators that joined in the block.
         ceiling + exitCost preset state + exitCostFrom preset after state.validators.data.size +
+          -- It also adds the cost of the block's withdrawal requests, with their amounts capped.
           partialExitCost preset cap block.body ∧
+      -- The bound also covers the first epoch at which a new exit can take effect.
       (getCurrentEpoch after).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ reached ∧
       (∀ validator ∈ after.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
         validator.exitEpoch.toNat ≤ reached) ∧
@@ -1222,21 +1206,18 @@ theorem processBlock_exits {engine : ExecutionEngine preset fork}
 
 /-- From Electra, the churn carried for exits after a block is within a bound.
 
-That bound is the larger of the churn before the block and one churn bound after it.
-
-The increment is positive.
-
-It is at most the least churn, the largest churn and the least balance to activate.
-
-The withdrawal delay is positive. -/
+That bound is the larger of the churn before the block and one churn bound after it. -/
 theorem processBlock_exitBalanceToConsume_le {engine : ExecutionEngine preset fork}
     {state after : BeaconState preset fork} {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after)
+    -- The increment is positive.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    -- It is at most the least churn, the largest churn and the least balance to activate.
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
     (maximum :
       preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
     (activation : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
+    -- The withdrawal delay is positive.
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (electra : .pectra ≤ fork) :
     (after.exitBalanceToConsume electra).toNat ≤
@@ -1257,51 +1238,40 @@ The turn is the state that the steps before that attester slashing reach.
 
 The bound covers the first epoch of a new exit and each exit epoch that is set.
 
-From Electra it also covers the end of the exit queue.
-
-Before the block, each exit epoch that is set is at most a ceiling.
-
-From Electra so are the ends of both queues.
-
-The ceiling covers the first epoch of a new exit.
-
-The increment is positive.
-
-It is at most the least churn, the largest churn and the least balance to activate.
-
-The withdrawal delay is positive.
-
-A cap is at least the sum of the balances before the block.
-
-The bound plus the cost still owed is at most the ceiling plus the cost owed before the block.
-
-It adds the cost of the validators that joined.
-
-From Gloas it also adds the cost of the withdrawal requests of the parent payload, capped.
-
-From Electra the churn carried for exits is at most one of two bounds, whichever is larger.
-
-They are the churn before the block and the exit churn ceiling of the turn. -/
+From Electra it also covers the end of the exit queue. -/
 theorem slashingTurn_exits {engine : ExecutionEngine preset fork}
     {state turn : BeaconState preset fork} {block : BeaconBlock preset fork} {j : Nat}
     (turned : SlashingTurn config checks engine state block j turn)
+    -- The increment is positive.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    -- It is at most the least churn, the largest churn and the least balance to activate.
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
     (maximum :
       preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
     (activation : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
+    -- The withdrawal delay is positive.
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {ceiling : Nat}
+    -- A ceiling covers the first epoch of a new exit.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    -- Before the block, each exit epoch that is set is at most that ceiling.
     (exits : ExitsBelow state ceiling)
+    -- From Electra so are the ends of both queues.
     (queues : ∀ electra : .pectra ≤ fork, (state.earliestExitEpoch electra).toNat ≤ ceiling ∧
       (state.earliestConsolidationEpoch electra).toNat ≤ ceiling)
+    -- A cap is at least the sum of the balances before the block.
     {cap : Nat} (capped : balanceSum state ≤ cap) :
+    -- The bound plus the cost still owed is at most the ceiling plus that cost before the block.
     ∃ reached, reached + exitCost preset turn ≤
+        -- It adds the cost of the validators that joined.
         ceiling + exitCost preset state + exitCostFrom preset turn state.validators.data.size +
+          -- From Gloas it also adds the cost of the parent payload's withdrawal requests, capped.
           (if .glamsterdam ≤ fork then partialExitCost preset cap block.body else 0) ∧
       (getCurrentEpoch turn).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ reached ∧
       ExitsBelow turn reached ∧
+      -- From Electra the churn carried for exits is at most one of two bounds, whichever is larger.
+      --
+      -- They are the churn before the block and the exit churn ceiling of the turn.
       ∀ electra : .pectra ≤ fork, (turn.earliestExitEpoch electra).toNat ≤ reached ∧
         (turn.exitBalanceToConsume electra).toNat ≤
           max (state.exitBalanceToConsume electra).toNat (exitChurnCeiling config turn) := by

@@ -9,27 +9,9 @@ import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
 One epoch carries a ceiling on the exit queue into the next, both before and from Electra.
 
-From Electra, the registry updates bound the queue end and each exit epoch.
+From Electra the ceiling rises by the cost owed by the exits not yet started.
 
-The bound is a ceiling plus the cost.
-
-That cost counts each validator that has not started to exit.
-
-Each one owes its effective balance in increments, plus one.
-
-The other steps of the epoch keep the queue and every exit epoch that is set.
-
-A deposit adds a validator with no exit epoch, so it raises only the cost owed.
-
-That cost is at most the sum of the effective balances in increments, plus the registry size.
-
-So the ceiling rises by at most that amount in each epoch.
-
-The churn carried for exits stays at most the larger of its value before and a bound on one churn.
-
-Before Electra, the registry updates leave each exit epoch at most a ceiling plus the registry size.
-
-The other steps keep every exit epoch that is set, so the ceiling rises by at most that size.
+Before Electra it rises by at most the registry size.
 -/
 
 @[expose] public section
@@ -286,31 +268,24 @@ private theorem ExitsKept.of_edge {config : Config} {checks : SignatureChecks}
 
 /-- From Electra, one epoch keeps a ceiling on the exit queue, raised by the cost owed.
 
-The epoch must succeed.
-
-The increment must be positive.
-
-The least churn and the largest exit churn must each be at least one increment.
-
-The other hypotheses bound the registry and the exit queue before the epoch.
-
-They are the bounds that the registry updates need.
-
 After the epoch, the end of the exit queue and each exit epoch that is set are at most a sum.
 
 That sum is the ceiling plus the cost of the exits not yet started before the epoch.
 
-The churn carried for exits is at most the larger of the one before and one churn bound.
-
 To apply this again at the next epoch, the ceiling must grow by one more epoch. -/
 theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureChecks}
+    -- The epoch must succeed.
     (electra : .pectra ≤ fork) (computed : processEpoch config checks state = .ok after)
+    -- The registry stays within its limit, and its effective balances sum below 2^64.
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64)
+    -- The increment must be positive.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    -- The least churn and the largest exit churn must each be at least one increment.
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
     (maximum :
       preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
     {ceiling : Nat}
+    -- These and the bounds below on the exit queue are those that the registry updates need.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
     (bounded : ExitsAtMost electra ceiling state)
     (room : ceiling + exitCost preset state + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat <
@@ -318,6 +293,7 @@ theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureCheck
     (carried : (state.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config state <
       2 ^ 64) :
     ExitsAtMost electra (ceiling + exitCost preset state) after ∧
+      -- The churn carried for exits is at most the larger of the one before and one churn bound.
       (after.exitBalanceToConsume electra).toNat ≤
         max (state.exitBalanceToConsume electra).toNat (exitChurnCeiling config state) := by
   obtain ⟨before, next, head, registryOk, tail⟩ := processEpoch_registryCut computed
@@ -352,6 +328,18 @@ theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureCheck
     rw [sumSame]
   have epochSame : getCurrentEpoch before = getCurrentEpoch state := by
     simp only [getCurrentEpoch, slot]
+  -- From Electra, the registry updates bound the queue end and each exit epoch.
+  --
+  -- The bound is a ceiling plus the cost owed.
+  --
+  -- That cost counts each validator that has not started to exit.
+  --
+  -- Each one owes its effective balance in increments, plus one.
+  --
+  -- The cost is at most the sum of the effective balances in increments, plus the registry size.
+  --
+  -- So the ceiling rises by at most that amount in each epoch.
+  --
   -- The registry updates move the exit queue by at most the cost owed.
   obtain ⟨registered, registeredOk, queued, exits, carried', -⟩ :=
     processRegistryUpdates_total_of_electra (config := config) before electra
@@ -367,6 +355,8 @@ theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureCheck
   have middle : ExitsAtMost electra (ceiling + exitCost preset state) registered :=
     ⟨by omega, fun validator member set => by have := exits validator member set; omega⟩
   -- The steps after the registry updates keep the exit queue and each exit epoch that is set.
+  --
+  -- A deposit adds a validator with no exit epoch, so it raises only the cost owed.
   have kept := tail.transport ExitsKept ExitsKept.refl (fun one two => one.trans two)
     fun stage member _ _ ok =>
       ExitsKept.of_edge (action_cases.mp ok)
@@ -377,25 +367,21 @@ theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureCheck
 
 /-- Before Electra, one epoch keeps a ceiling on the exit epochs, raised by the registry size.
 
-The epoch must succeed.
-
-The ceiling must be at least the first epoch at which a new exit can take effect.
-
-Each exit epoch that is set must be at most the ceiling.
-
-The ceiling plus the registry size and the withdrawal delay must stay below 2^64.
-
-They are the bounds that the registry updates need.
-
 After the epoch, each exit epoch that is set is at most the ceiling plus the registry size.
 
 At the next epoch, take this ceiling plus one, since the current epoch has risen by one. -/
 theorem processEpoch_exits_of_lt_electra {config : Config} {checks : SignatureChecks}
+    -- The epoch must succeed.
     (before : fork < .pectra) (computed : processEpoch config checks state = .ok after)
     {ceiling : Nat}
+    -- The ceiling must be at least the first epoch at which a new exit can take effect.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    -- Each exit epoch that is set must be at most the ceiling.
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
+    -- The ceiling plus the registry size and the withdrawal delay must stay below 2^64.
+    --
+    -- These are the bounds that the registry updates need.
     (room : ceiling + state.validators.data.size +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64) :
     ∀ validator ∈ after.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
@@ -430,6 +416,8 @@ theorem processEpoch_exits_of_lt_electra {config : Config} {checks : SignatureCh
     Except.ok.inj (registeredOk.symm.trans registryOk)
   rw [sizeSame] at bounded
   -- The steps after the registry updates set no new exit epoch.
+  --
+  -- So the ceiling rises by at most the registry size.
   have kept := tail.transport ExitsKept ExitsKept.refl (fun one two => one.trans two)
     fun stage member _ _ ok =>
       ExitsKept.of_edge (action_cases.mp ok)
