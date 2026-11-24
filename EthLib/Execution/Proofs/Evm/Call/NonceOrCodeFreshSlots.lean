@@ -6,31 +6,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.StorageStateGas
 /-!
 # Proofs: the fresh slots of the accounts where code can run
 
-A slot is fresh when its word was zero before the transaction and is not zero now.
-
-From Spurious Dragon, code runs only at an account with a nonce or code.
-
-So only such an account writes its storage.
-
 The slots counted here are the fresh slots of the accounts with a nonce or code.
-
-From Glamsterdam, a storage write at such an account pays for them.
-
-Its state gas, net of its refill, is the state gas of a new slot times their change.
-
-A step that changes an account changes no counted slot, when it keeps the nonce and the code.
-
-So does a rise of the nonce of an account with a nonce or code.
-
-So does the start of a creation at an account with none, and new code at an account with a nonce.
-
-A rollback restores the counted slots of its snapshot.
-
-It must be on the same block and keep the created accounts.
-
-Each account it adds to them must have no nonce or code in the snapshot.
-
-The words before the transaction may differ at those accounts, but none of their slots is counted.
 
 Source: [EIP-8037][eip8037], the state gas of a new slot and its refill.
 
@@ -51,8 +27,13 @@ instance instDecidableHasNonceOrCode (tx : TransactionState) (address : Address)
     Decidable (HasNonceOrCode tx address) :=
   inferInstanceAs (Decidable (_ ∨ _))
 
-/-- The fresh slots of the accounts with a nonce or code. -/
+/-- The fresh slots of the accounts with a nonce or code.
+
+From Spurious Dragon, code runs only at an account with a nonce or code.
+
+So only such an account writes its storage. -/
 def nonceOrCodeFreshSlots (tx : TransactionState) : Finset (Address × Bytes32) :=
+  -- A slot is fresh when its word was zero before the transaction and is not zero now.
   tx.freshSlots.filter fun slot => HasNonceOrCode tx slot.1
 
 /-- A slot is counted exactly when its account has a nonce or code and the slot is fresh. -/
@@ -369,6 +350,9 @@ Each account that it created and the snapshot did not must have no nonce or code
 theorem nonceOrCodeFreshSlots_restoreTxState {tx snapshot : TransactionState}
     (hparent : tx.parent = snapshot.parent)
     (hkept : ∀ address, address ∈ snapshot.createdAccounts → address ∈ tx.createdAccounts)
+    -- The words before the transaction may differ at an account created since the snapshot.
+    --
+    -- But none of the slots of such an account is counted.
     (hnew : ∀ address, address ∈ tx.createdAccounts → address ∉ snapshot.createdAccounts →
       ¬HasNonceOrCode snapshot address) :
     nonceOrCodeFreshSlots (tx.restoreTxState snapshot) = nonceOrCodeFreshSlots snapshot := by

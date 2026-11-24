@@ -6,27 +6,9 @@ public import EthLib.Execution.Proofs.Evm.Call.Supply
 /-!
 # Proofs: no call or creation overflows a balance when the supply leaves room
 
-A credit fails when the balance it raises would reach `2^256`.
-
 A message credits a balance in two places: the move of its value, and SELFDESTRUCT.
 
-The move of a value takes the value from the caller first.
-
-So the target ends with at most what two distinct balances hold, which is at most the supply.
-
 From Cancun, SELFDESTRUCT moves the balance of its account like a value, by [EIP-6780][e6780].
-
-Before Cancun, it first credits the beneficiary, then sets the balance of its account to 0.
-
-So an account that is its own beneficiary first doubles its balance.
-
-A supply below `2^255` leaves room for that, and a supply below `2^256` leaves room for a move.
-
-No step raises the supply, and a frame that fails gives back the supply of its start.
-
-So every frame of a message has at most the supply that the message starts with.
-
-So no call or creation fails for a balance that would overflow, when that supply leaves room.
 
 [e6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
 -/
@@ -46,6 +28,7 @@ Before Cancun, twice the supply must be below `2^256`, for a SELFDESTRUCT to its
 
 From Cancun, the supply itself must be below `2^256`. -/
 def SupplyRoom (fork : Fork) (supply : Nat) : Prop :=
+  -- A supply below `2^255` leaves room for that SELFDESTRUCT, and one below `2^256` for a move.
   (if fork < .dencun then 2 * supply else supply) < 2 ^ 256
 
 /-- A smaller supply leaves room when a larger one does. -/
@@ -70,13 +53,18 @@ private theorem selfdestructTransfer_ne_balanceOverflow {tx : TransactionState}
   intro h
   unfold selfdestructTransfer at h
   split at h
+  -- From Cancun, the balance moves like a value.
   · rcases Base.bind_eq_error h with h | ⟨a, -, h⟩
     · exact TransactionState.moveEther_ne_balanceOverflow room.lt _ _ _ address h
     · split at h
       · cases TransactionState.modifyState_eq_error.mp h
       · cases h
+  -- Before Cancun, it first credits the beneficiary, then sets the balance of its account to 0.
+  --
+  -- So an account that is its own beneficiary first doubles its balance.
   · rename_i hdencun
     rcases Base.bind_eq_error h with h | ⟨a, -, h⟩
+    -- A credit fails when the balance it raises would reach `2^256`.
     · refine TransactionState.createEther_ne_balanceOverflow ?_ address h
       have := TransactionState.balanceOf_le_supply tx originator
       unfold TransactionState.balanceOf at this
@@ -111,6 +99,9 @@ private theorem runFrame_ne_balanceOverflow [LawfulGasMeter Meter] {bound supply
     (le : evm.state.supply ≤ supply) (address : Address) :
     runFrame (step fork) (step_decreases fork) bound runChild evm within ≠
       .error (.state (.balanceOverflow address)) := by
+  -- No step raises the supply.
+  --
+  -- So every frame of a message has at most the supply that the message starts with.
   have T := stepRules_supplyLe (fork := fork) (Meter := Meter)
   revert le
   refine runFrame_induct
@@ -164,6 +155,9 @@ theorem processMessage_ne_balanceOverflow_of_gas [LawfulGasMeter Meter] (n : Nat
       split at h
       · exact (ih child.gas lt).1 child _ _ _ _ rfl room address h
       · exact (ih child.gas lt).2 child _ _ _ _ rfl room address h
+    -- Each message that returns a frame ends with at most the supply of its caller.
+    --
+    -- A frame that fails gives back the supply of its start.
     have keeps : ∀ (caller : Evm fork Meter) (child : Message fork) ended, (match child.target with
           | some _ => processMessage (Meter := Meter) fork child caller.state caller.substate.child
           | none => processCreateMessage (Meter := Meter) fork child caller.state
@@ -205,6 +199,11 @@ theorem processMessage_ne_balanceOverflow_of_gas [LawfulGasMeter Meter] (n : Nat
             | error e' =>
               rw [hx] at hm
               cases hm
+              -- The move of a value takes the value from the caller first.
+              --
+              -- So the target ends with at most what two distinct balances hold.
+              --
+              -- That is at most the supply.
               exact TransactionState.moveEther_ne_balanceOverflow (started ▸ room.lt) _ _ _
                 address hx
           have entered := (TransactionState.supply_moveEther

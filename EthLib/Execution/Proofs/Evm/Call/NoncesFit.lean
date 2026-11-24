@@ -7,17 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Call.Nonce
 
 EIP-2681 limits every nonce to `2^64 - 1`.
 
-CREATE and CREATE2 raise the nonce of the creator only when it is below that bound.
+A call that starts with every nonce within the bound ends with every nonce within it.
 
-From Spurious Dragon, a creation also raises the nonce of its new address.
-
-So a creation must start at an address whose nonce is below the bound.
-
-Every other write keeps each nonce, or from Paris deletes an account left empty, with nonce 0.
-
-A frame that fails rolls back to its snapshot.
-
-So a message that starts with every nonce within the bound ends with every nonce within it.
+So does a creation whose address starts with a nonce below the bound.
 -/
 
 @[expose] public section
@@ -162,7 +154,11 @@ private theorem nonceLe_restoreTxState_rev {tx snapshot : TransactionState}
   NonceLe.of_getAccountOptional fun address =>
     (TransactionState.getAccountOptional_restoreTxState h address).symm
 
-/-- Each write of a step keeps every nonce within the bound, static frame or not. -/
+/-- Each write of a step keeps every nonce within the bound, static frame or not.
+
+Every write but a rise of a nonce keeps each nonce.
+
+From Paris, such a write may delete an account left empty, with nonce 0. -/
 theorem stepRules_noncesFit :
     StepRules fork (fun a b : Evm fork Meter => a.state.NoncesFit → b.state.NoncesFit) where
   trans hab hbc h := hbc (hab h)
@@ -173,6 +169,7 @@ theorem stepRules_noncesFit :
   tstore _ _ _ _ := NoncesFit.of_nonceLe (NonceLe.of_getAccountOptional fun _ => rfl)
   log _ hs _ _ _ h := hs ▸ h
   selfdestruct _ _ h := NoncesFit.of_nonceLe (nonceLe_finishSelfdestruct_rev h)
+  -- CREATE and CREATE2 raise the nonce of the creator only when it is below the bound.
   incrementNonce _ _ _ hn h hfit := noncesFit_incrementNonce hfit hn h
   incorporate h := by rw [state_incorporateChild]; exact h
 
@@ -273,6 +270,7 @@ private theorem noncesFit_rollbackOnError {message : Message fork}
   refine ⟨fun hfit => ?_, (parent_rollbackOnError state ended).trans hp⟩
   unfold rollbackOnError
   split
+  -- A frame that fails rolls back to its snapshot.
   · exact NoncesFit.of_nonceLe (nonceLe_restoreTxState_rev hp) hfit
   · apply hrun.1
     rcases hentry with ⟨-, rfl, -⟩ | ⟨-, hm, -⟩
@@ -297,6 +295,7 @@ private theorem noncesFit_prepareCreation_depositCode {state prepared : Transact
     have h0 : ((state.destroyStorage address).markAccountCreated address).NoncesFit :=
       NoncesFit.of_nonceLe (NonceLe.of_getAccountOptional fun _ => rfl) hfit
     split at hp
+    -- From Spurious Dragon, a creation also raises the nonce of its new address.
     · exact noncesFit_incrementNonce h0 (Nat.ne_of_lt hlt) (Base.mapError_ok_iff.mp hp)
     · cases hp
       exact h0

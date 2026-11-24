@@ -27,18 +27,15 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The rules for a relation `Q` of two meters to hold from a frame to every frame after it.
 
-It must be reflexive and transitive, and hold of each operation that a frame applies to its meter.
+It must be reflexive and transitive.
 
-A frame charges execution gas or state gas, refills state gas, exhausts and rolls back.
-
-A call or a creation drains the reservoir, credits back a message that never ran, and absorbs one.
-
-The child of an absorb may be any meter. -/
+It must hold of each operation that a frame applies to its meter. -/
 structure MeterRules (Q : Meter → Meter → Prop) : Prop where
   /-- Every meter is related to itself. -/
   refl : ∀ meter, Q meter meter
   /-- The relation is transitive. -/
   trans : ∀ {a b c}, Q a b → Q b c → Q a c
+  -- A frame charges execution gas or state gas, refills state gas, exhausts and rolls back.
   /-- A charge of execution gas keeps the relation. -/
   charge : ∀ {meter after : Meter} {amount : Nat}, GasMeter.charge meter amount = .ok after →
     Q meter after
@@ -51,10 +48,14 @@ structure MeterRules (Q : Meter → Meter → Prop) : Prop where
   exhaust : ∀ meter : Meter, Q meter (GasMeter.exhaust meter)
   /-- A revert keeps the relation. -/
   rollback : ∀ meter : Meter, Q meter (GasMeter.rollback meter)
+  -- A call or a creation drains the reservoir and credits back a message that never ran.
+  --
+  -- It also absorbs the meter of a message.
   /-- Passing on the reservoir keeps the relation. -/
   drain : ∀ meter : Meter, Q meter (GasMeter.drain meter)
   /-- Taking back a message that never ran keeps the relation. -/
   credit : ∀ (meter : Meter) (gas reservoir : Nat), Q meter (GasMeter.credit meter gas reservoir)
+  -- The child of an absorb may be any meter.
   /-- Taking in the meter of any message that ran keeps the relation. -/
   absorb : ∀ (meter child : Meter) (succeeded : Bool),
     Q meter (GasMeter.absorb meter child succeeded)

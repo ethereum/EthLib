@@ -12,23 +12,7 @@ Run the same message on two states that agree on four sets of accounts, slots an
 
 When the first run ends with every read in the sets, the second ends in an agreeing frame.
 
-The first state must have read the account that the message runs at.
-
-Its code hashes must come from the block or from writes, with no new deployment candidate.
-
-A first run that fails with an error that aborts the execution is not covered.
-
 The two frames differ only in their states, and both carry the same tracker.
-
-Each step of the first run reads only what it records, and a run never drops a read.
-
-So every step of the first run has its reads in the sets, and the two runs move together.
-
-The sets must hold the code hash in the block of each account in the account set.
-
-They must hold the whole storage of each such account with nonce 0 and no code in the block.
-
-The tracker sets of a transaction meet both conditions.
 
 The sets play the part of a block access list in [EIP-7928, Scope and Inclusion][bal].
 
@@ -683,6 +667,9 @@ private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
       ReadsIn account slot after.state →
       ∃ after', runFrame (step fork) (step_decreases fork) bound runChild e2 within' = .ok after' ∧
         FrameAgrees account allStorage slot code after after' := by
+  -- Each step of the first run reads only what it records, and a run never drops a read.
+  --
+  -- So every step of the first run has its reads in the sets, and the two runs move together.
   have kept : ∀ {a b : Evm fork Meter} {w : GasMeter.gasHeld a.gas ≤ bound},
       runFrame (step fork) (step_decreases fork) bound runChild a w = .ok b → Kept a b :=
     fun hrun => stepRules_kept.runFrame (fun c m lt ended hr => (ens c m lt ended hr).1) hrun
@@ -1135,6 +1122,7 @@ theorem processMessage_agrees [LawfulGasMeter Meter] {block : BlockState}
     (horigin : CodeOrigin block state) (hcandidates : NoNewCandidate block state)
     (hcurrent : message.currentTarget ∈ state.accountReads)
     {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
+    -- A first run that fails with an error that aborts the execution is not covered.
     (h : processMessage fork message state substate meter held = .ok ended)
     (hreads : ReadsIn account slot ended.val.state) :
     ∃ ended', processMessage fork message other substate meter held = .ok ended' ∧
@@ -1158,6 +1146,7 @@ theorem processCreateMessage_agrees [LawfulGasMeter Meter] {block : BlockState}
     (horigin : CodeOrigin block state) (hcandidates : NoNewCandidate block state)
     (hcurrent : message.currentTarget ∈ state.accountReads)
     {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
+    -- A first run that fails with an error that aborts the execution is not covered.
     (h : processCreateMessage fork message state substate meter held = .ok ended)
     (hreads : ReadsIn account slot ended.val.state) :
     ∃ ended', processCreateMessage fork message other substate meter held = .ok ended' ∧

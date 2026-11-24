@@ -6,18 +6,6 @@ public import EthLib.Execution.Proofs.Evm.Call.StepRules
 # Proofs: every message keeps the block of the state
 
 The block of a transaction state is the state before the block, with the writes of the block so far.
-
-Every successful step of every frame keeps the block, at every fork, static frame or not.
-
-A successful run of a frame keeps it too, under a runner of messages that keeps it.
-
-Such a runner ends each message that succeeds with the block of the frame that sends it.
-
-Every successful call and creation keeps the block, by induction on the gas of the message.
-
-A rollback to a snapshot of the same block gives back the storage of the snapshot.
-
-So a call that ends with an error leaves every storage word of every address as it was.
 -/
 
 @[expose] public section
@@ -93,7 +81,9 @@ abbrev ParentResult (evm : Evm fork Meter) : StepResult fork Meter → Prop :=
   StepResult.Keeps (fun a b => b.state.parent = a.state.parent)
     (fun caller _ child => child.state.parent = caller.state.parent) evm
 
-/-- Every successful step of every frame keeps the block of the state, static frame or not. -/
+/-- Every successful step of every frame keeps the block of the state, at every fork.
+
+That holds in a static frame too. -/
 theorem parentResult_step {evm : Evm fork Meter} {result : StepResult fork Meter}
     (h : step fork evm = .ok result) : ParentResult evm result :=
   stepRules_parent.step h
@@ -222,6 +212,7 @@ theorem processMessage_sameOutside_of_error [LawfulGasMeter Meter] {message : Me
   unfold rollbackOnError at herr hp ⊢
   split at herr
   · simp only [‹last.error.isSome = true›, ↓reduceIte] at hp ⊢
+    -- A rollback to a snapshot of the same block gives back the storage of the snapshot.
     exact TransactionState.sameOutside_restoreTxState hp
   · exact absurd herr ‹_›
 

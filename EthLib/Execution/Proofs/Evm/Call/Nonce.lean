@@ -5,20 +5,6 @@ public import EthLib.Execution.Proofs.Evm.Call.Parent
 /-!
 # Proofs: no message lowers a nonce
 
-Every successful step of every frame keeps or raises the nonce of every address, at every fork.
-
-A creation raises the nonce of the creator, and from Spurious Dragon that of the new account.
-
-A transfer of ether, a new code and a write of storage keep every nonce.
-
-From Paris, a change that leaves an account empty deletes it, but that account had nonce 0.
-
-A frame that fails rolls back to its snapshot, whose nonces are those at its start.
-
-So a call or creation that returns a frame ends with no nonce below the nonce it started with.
-
-That holds whether or not the frame ends with an error.
-
 The deletions at the end of a transaction are not part of a message, so they are not covered here.
 -/
 
@@ -67,11 +53,14 @@ theorem nonceLe_restoreTxState {tx snapshot : TransactionState}
     (h : tx.parent = snapshot.parent) : NonceLe snapshot (tx.restoreTxState snapshot) :=
   NonceLe.of_getAccountOptional (TransactionState.getAccountOptional_restoreTxState h)
 
-/-! ## The writes of the state -/
+/-! ## The writes of the state
+
+A transfer of ether, a new code and a write of storage keep every nonce.
+-/
 
 /-- A change of one account that keeps or raises its nonce keeps or raises every nonce.
 
-From Paris, the change may delete the account, but only when it leaves nonce 0. -/
+From Paris, a change that leaves an account empty deletes it, but that account had nonce 0. -/
 theorem nonceLe_modifyState {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account}
     (hf : ∀ account account', f account = .ok account' → account.nonce ≤ account'.nonce)
@@ -175,6 +164,7 @@ theorem nonceLe_prepareCreation {tx tx' : TransactionState} {address : Address}
   have h0 : NonceLe tx ((tx.destroyStorage address).markAccountCreated address) :=
     NonceLe.of_getAccountOptional fun _ => rfl
   split at h
+  -- From Spurious Dragon, a creation raises the nonce of the new account.
   · exact h0.trans (nonceLe_incrementNonce (Base.mapError_ok_iff.mp h))
   · cases h
     exact h0
@@ -202,6 +192,7 @@ theorem stepRules_nonceLe :
   tstore _ _ _ _ := NonceLe.of_getAccountOptional fun _ => rfl
   log _ hs _ _ _ := by rw [hs]; exact NonceLe.refl _
   selfdestruct _ _ h := nonceLe_finishSelfdestruct h
+  -- A creation raises the nonce of the creator.
   incrementNonce _ _ _ _ h := nonceLe_incrementNonce h
   incorporate h := by rw [state_incorporateChild]; exact h
 
@@ -216,7 +207,9 @@ abbrev NonceResult (evm : Evm fork Meter) : StepResult fork Meter → Prop :=
   StepResult.Keeps (fun a b => NonceLe a.state b.state)
     (fun caller _ child => NonceLe caller.state child.state) evm
 
-/-- Every successful step of every frame keeps or raises every nonce, static frame or not. -/
+/-- Every successful step of every frame keeps or raises every nonce, at every fork.
+
+That holds in a static frame too. -/
 theorem nonceResult_step {evm : Evm fork Meter} {result : StepResult fork Meter}
     (h : step fork evm = .ok result) : NonceResult evm result :=
   stepRules_nonceLe.step h
@@ -283,6 +276,7 @@ theorem nonceLe_rollbackOnError {message : Message fork} {state entry : Transact
   refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩
   unfold rollbackOnError
   split
+  -- A frame that fails rolls back to its snapshot, whose nonces are those at its start.
   · exact nonceLe_restoreTxState hp
   · exact h1.1.trans hle
 

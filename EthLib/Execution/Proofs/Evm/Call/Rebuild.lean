@@ -9,35 +9,9 @@ public import EthLib.Execution.Proofs.State.Rebuild
 /-!
 # Proofs: every message from Spurious Dragon keeps the rebuild property
 
-From Spurious Dragon, every successful call and creation keeps a property of transaction states.
-
-A call must run code only at an address with a nonce or code.
-
-A creation needs its address to be deployable.
-
-Both need value to move only from a caller with a nonce or code.
-
 From Spurious Dragon, a created account starts at nonce 1 by [EIP-161][eip161].
 
-The state runs on a fixed block state.
-
-Each code that the state returns has the Keccak-256 hash under which it is read.
-
-Every empty or missing account holds no nonzero word of storage.
-
-Every address whose storage was wiped held no nonzero word in the block state.
-
-Every address with nonce 0 and no code keeps at least its balance from the block state.
-
-It also had nonce 0 and no code in the block state, and has no storage write in the transaction.
-
-Every account that the transaction created held no nonzero word in the block state.
-
-That ties the storage of a call to the storage of the block state at every key not written.
-
 No account with nonce 0 has the code hash of a delegation indicator of [EIP-7702][eip7702].
-
-Each nonce or code that a step or a message keeps comes from the proof that messages keep them.
 
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
@@ -58,21 +32,19 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- No account with nonce 0 has the code hash of a delegation indicator.
 
-Accounts without code are left out.
-
-Their hash is the hash of empty code, and ruling out an indicator with that hash needs a collision.
-
-An authorization sets an indicator and then raises the nonce of its authority.
-
-From Spurious Dragon, a creation raises the nonce of its address before it deposits code.
-
-So only a contract created before Spurious Dragon or placed at genesis could break it.
+Only a contract created before Spurious Dragon or placed at genesis could break it.
 
 No contract on mainnet started with the byte 0xef in May 2021, by [EIP-3541][eip3541].
 
 [eip3541]: https://eips.ethereum.org/EIPS/eip-3541#rationale -/
 def DelegationsHaveNonce (tx : TransactionState) : Prop :=
+  -- An authorization sets an indicator and then raises the nonce of its authority.
+  --
+  -- From Spurious Dragon, a creation raises the nonce of its address before it deposits code.
   ∀ address code, (tx.getAccount address).nonce = 0 →
+    -- Accounts without code are left out.
+    --
+    -- Their hash is the hash of empty code, and ruling out an indicator with it needs a collision.
     (tx.getAccount address).codeHash ≠ EMPTY_CODE_HASH → isValidDelegation code = true →
       keccak256 code ≠ (tx.getAccount address).codeHash
 
@@ -104,19 +76,11 @@ theorem DelegationsHaveNonce.ofBlock_incorporateTxIntoBlock {tx : TransactionSta
 
 /-! ## Same writes and the rebuild property -/
 
-/-- What a transaction state on `block` keeps of the rebuild property, even after its deletions.
-
-The state runs on `block`, and each returned code has the hash under which it is read.
-
-An empty or missing account holds no nonzero storage word.
-
-Every wiped storage held no nonzero word in `block`.
-
-No account with nonce 0 has the code hash of a delegation indicator. -/
+/-- What a transaction state on `block` keeps of the rebuild property, even after its deletions. -/
 structure RebuildEnd (block : BlockState) (tx : TransactionState) : Prop where
   /-- The state runs on `block`. -/
   parent : tx.parent = block
-  /-- Each returned code has the hash under which it is read. -/
+  /-- Each returned code has the Keccak-256 hash under which it is read. -/
   code : ∀ hash code, tx.getCode hash = .ok code → keccak256 code = hash
   /-- Empty and missing accounts hold no nonzero storage word. -/
   emptyStorage : ∀ address, tx.getAccount address = EMPTY_ACCOUNT →
@@ -217,7 +181,9 @@ theorem RebuildState.blockStorage_of_empty {block : BlockState} {tx : Transactio
     simp only [hnone, hnot, ↓reduceIte]
     exact hzero
 
-/-- Under the rebuild property, an unwritten storage slot reads its value in the block. -/
+/-- Under the rebuild property, an unwritten storage slot reads its value in the block.
+
+That ties the storage of a call to the storage of the block state at every key not written. -/
 theorem RebuildEnd.getStorage_of_slot_eq_none {block : BlockState} {tx : TransactionState}
     (valid : RebuildEnd block tx) {address : Address} {key : Bytes32}
     (hslot : tx.storageWrites.slot address key = none) :
@@ -1539,6 +1505,7 @@ theorem processMessage_rebuildState_induction [LawfulGasMeter Meter]
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         CreateRebuild block message state substate meter ended.val) := by
+  -- Each nonce or code that a step or a message keeps comes from the proof that messages keep them.
   have T := stepRules_keepsNonceOrCodeFrame (fork := fork) (Meter := Meter)
   have both := processMessage_rel_byKind (R := RebuildFrame block) (Inv := fun _ => True)
     (Mcall := RebuildCall block) (Mcreate := RebuildCreate block)

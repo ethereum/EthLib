@@ -6,33 +6,11 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: the reads of call and creation preparation
 
-A call records its target, once its gas check passes, before resolving a delegation.
+The results describe the next frame or the caller before its child runs.
 
-Resolving a delegation records only the delegate, once its gas check passes.
-
-From Glamsterdam, a failed gas check on the delegate halts the frame with the target read alone.
-
-Call preparation then reads the current account's balance before deciding whether to run a message.
-
-[EIP-7928][bal] keeps both reads when the call then fails its balance or depth check.
+[EIP-7928][bal] keeps both reads of a call when it then fails its balance or depth check.
 
 [EIP-7928][halt] also keeps every account read when the frame then halts.
-
-Call preparation only adds account reads.
-
-Paying for the call changes no transaction state.
-
-A creation reads its sender before the checks on its balance, its nonce and the depth.
-
-When one of those checks fails, it runs no message and keeps only the read of the sender.
-
-Otherwise it reads the new address, and then either halts or raises the sender's nonce.
-
-Both paths keep the reads of the sender and of the new address.
-
-A creation also only adds account reads.
-
-The results describe the next frame or the caller before its child runs.
 
 [bal]: https://eips.ethereum.org/EIPS/eip-7928#eip-7702-delegation
 [halt]: https://eips.ethereum.org/EIPS/eip-7928#edge-cases-normative
@@ -56,6 +34,7 @@ theorem state_accessDelegation {evm after : Evm fork Meter} {address : Address} 
     after.state =
       match (generalizing := false) (if fork ≥ .pectra then
         (accountCode evm address).toOption.bind delegatedAddress else none) with
+      -- Only the delegate is recorded, once its gas check passes.
       | some delegate => evm.state.recordAccountRead delegate
       | none => evm.state := by
   unfold accessDelegation at h
@@ -197,29 +176,31 @@ private theorem keepReads_eq_ok_halt {α : Type} {evm : Evm fork Meter}
 
 /-- A call records its target, a resolved delegate, and then the current account.
 
-A halt before delegation finishes keeps the target read.
-
-It happens only from Glamsterdam, with a resolved delegate, and the error is out of gas.
-
-A halt after delegation keeps any delegate read too.
-
-A child is sent only after the current account is read.
--/
+Call preparation only adds account reads. -/
 theorem state_callStep {kind : CallKind} {evm popped : Evm fork Meter} {call : CallOperands}
     {result : StepResult fork Meter} (pop : popCallOperands kind evm = .ok (call, popped))
     (h : callStep kind evm = .ok result) :
     let resolved := if fork ≥ .pectra then
       (accountCode evm call.address).toOption.bind delegatedAddress else none
+    -- A call records its target, once its gas check passes, before resolving a delegation.
     let target := evm.state.recordAccountRead call.address
     let delegated := match (generalizing := false) resolved with
       | some delegate => target.recordAccountRead delegate
       | none => target
     match (generalizing := false) result with
     | .next after =>
+      -- A halt before delegation finishes keeps the target read alone.
+      --
+      -- It happens only from Glamsterdam, when the gas check on a resolved delegate fails.
+      --
+      -- The error is then out of gas.
       (fork ≥ .glamsterdam ∧ (∃ delegate, resolved = some delegate) ∧
         after.state = target ∧ after.error = some .outOfGas) ∨
+      -- A halt after delegation keeps any delegate read too.
       (after.state = delegated ∧ ∃ e, e.aborts = false ∧ after.error = some e) ∨
+      -- Then it reads the current account's balance, before deciding whether to run a message.
       after.state = delegated.recordAccountRead evm.message.currentTarget
+    -- A child is sent only after the current account is read.
     | .child caller _ _ =>
       caller.state = delegated.recordAccountRead evm.message.currentTarget := by
   have pstate : popped.state = evm.state := by rw [popCallOperands_eq_ok pop]
@@ -274,34 +255,36 @@ theorem state_callStep {kind : CallKind} {evm popped : Evm fork Meter} {call : C
 /-! ## The creations -/
 
 /-- A creation that has paid reads its sender first, before the checks on the sender and the depth.
-
-When one of those checks fails, it runs no message and keeps only the read of the sender.
-
-Otherwise it derives the new address, reads it, then halts or raises the sender's nonce.
-
-A halt keeps both reads, with an error that does not abort the execution.
-
-At an address that is not deployable, it runs no message, and keeps both reads and the new nonce.
-
-At a deployable address, it sends a message, and the caller keeps both reads and the new nonce. -/
+-/
 theorem state_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
     {salt : Option U256} {result : StepResult fork Meter}
     (h : launchCreate evm value initCode salt = .ok result) :
     let current := evm.message.currentTarget
     let sender := evm.state.getAccount current
     let senderRead := evm.state.recordAccountRead current
+    -- The checks are on the balance and the nonce of the sender, and on the depth.
+    --
+    -- When one of them fails, it runs no message and keeps only the read of the sender.
     ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
         evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
       ∃ after, result = .next after ∧ after.state = senderRead) ∨
+    -- Otherwise it derives the new address, reads it, then halts or raises the sender's nonce.
     (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
       evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
       ∃ address, creationAddress current sender.nonce salt initCode = .ok address ∧
         let both := senderRead.recordAccountRead address
         match (generalizing := false) result with
         | .next after =>
+          -- A halt keeps both reads, with an error that does not abort the execution.
           (after.state = both ∧ ∃ e, e.aborts = false ∧ after.error = some e) ∨
+          -- At an address that is not deployable, it runs no message.
+          --
+          -- It keeps both reads and the new nonce.
           (evm.state.accountDeployable address = false ∧
             both.incrementNonce fork current = .ok after.state)
+        -- At a deployable address, it sends a message.
+        --
+        -- The caller keeps both reads and the new nonce.
         | .child caller _ _ =>
           evm.state.accountDeployable address = true ∧
             both.incrementNonce fork current = .ok caller.state) := by
@@ -406,19 +389,7 @@ theorem reads_launchCreate {evm : Evm fork Meter} {value : U256} {initCode : Byt
       dsimp only
       exact reads_incrementNonce_recordAccountRead hres.2
 
-/-- CREATE and CREATE2 read the sender first, before the checks on the sender and the depth.
-
-When one of those checks fails, they run no message and keep only the read of the sender.
-
-Otherwise they derive the new address and read it.
-
-CREATE2 hashes the init code that it reads from the grown memory.
-
-A halt keeps both reads, with an error that does not abort the execution.
-
-At an address that is not deployable, they run no message, and keep both reads and the new nonce.
-
-At a deployable address, they send a message, and the caller keeps both reads and the new nonce. -/
+/-- CREATE and CREATE2 read the sender first, before the checks on the sender and the depth. -/
 theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start size : U256}
     {salt : U256} {rest : List U256} {result : StepResult fork Meter}
     (hs : evm.stack.val = value :: start :: size :: ((if create2 then [salt] else []) ++ rest))
@@ -426,22 +397,32 @@ theorem state_createStep {create2 : Bool} {evm : Evm fork Meter} {value start si
     let current := evm.message.currentTarget
     let sender := evm.state.getAccount current
     let senderRead := evm.state.recordAccountRead current
+    -- CREATE2 hashes the init code that it reads from the grown memory.
     let initCode := memoryReadBytes
       (memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy)
       start.toNat size.toNat
     let saltOption := if create2 then some salt else none
+    -- When one of those checks fails, they run no message and keep only the read of the sender.
     ((sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
         evm.message.depth + 1 > STACK_DEPTH_LIMIT) ∧
       ∃ after, result = .next after ∧ after.state = senderRead) ∨
+    -- Otherwise they derive the new address and read it.
     (value ≤ sender.balance ∧ sender.nonce ≠ MAX_NONCE ∧
       evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT ∧
       ∃ address, creationAddress current sender.nonce saltOption initCode = .ok address ∧
         let both := senderRead.recordAccountRead address
         match (generalizing := false) result with
         | .next after =>
+          -- A halt keeps both reads, with an error that does not abort the execution.
           (after.state = both ∧ ∃ e, e.aborts = false ∧ after.error = some e) ∨
+          -- At an address that is not deployable, they run no message.
+          --
+          -- They keep both reads and the new nonce.
           (evm.state.accountDeployable address = false ∧
             both.incrementNonce fork current = .ok after.state)
+        -- At a deployable address, they send a message.
+        --
+        -- The caller keeps both reads and the new nonce.
         | .child caller _ _ =>
           evm.state.accountDeployable address = true ∧
             both.incrementNonce fork current = .ok caller.state) := by
