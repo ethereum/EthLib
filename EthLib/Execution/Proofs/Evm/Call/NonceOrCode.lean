@@ -7,31 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Call.NonceOrCodeWrites
 
 An account has a nonce or code when its nonce is positive or it holds code.
 
-A step lowers no nonce, and changes the code of no account.
-
-A step deletes an account only when it is empty, so the account had no nonce and no code.
-
-So every step keeps a nonce or code wherever there is one.
-
-From Spurious Dragon, a creation raises the nonce of its address to 1 before it deposits code there.
-
-So the code it deposits, even empty code, leaves a nonce at the address.
-
 Before Spurious Dragon, empty code deposited at an address with code and nonce 0 leaves neither.
 
 So the theorems below start at Spurious Dragon.
-
-A rollback restores the accounts of a snapshot, which kept a nonce or code wherever it had one.
-
-So from Spurious Dragon, every call and creation keeps a nonce or code wherever there is one.
-
-That holds whatever the state, and whether or not the message ends with an error.
-
-The rebuild property of the state is not needed.
-
-The proofs of the rebuild property and of the slot surplus reuse the relation of frames below.
-
-They also reuse its rules for a step, a call and a creation.
 
 [EIP-161][eip161] starts the nonce of a new account at 1.
 
@@ -49,7 +27,11 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-! ## A step -/
 
-/-- Each write of a step keeps each nonce or code, static frame or not. -/
+/-- Each write of a step keeps each nonce or code, static frame or not.
+
+A step lowers no nonce, and changes the code of no account.
+
+It deletes an account only when it is empty, so the account had no nonce and no code. -/
 theorem stepRules_keepsNonceOrCode :
     StepRules fork (fun a b : Evm fork Meter => KeepsNonceOrCode a.state b.state) where
   trans := KeepsNonceOrCode.trans
@@ -83,18 +65,26 @@ private theorem keepsNonceOrCode_depositCode_of_prepared (hfork : .spuriousDrago
     (htarget : evm.message.currentTarget = address)
     (hd : depositCode fork state evm = .ok after) : KeepsNonceOrCode state after.state := by
   have k0 := keepsNonceOrCode_prepareCreation hp
-  -- From Spurious Dragon, the address of the creation has a positive nonce once prepared.
+  -- From Spurious Dragon, a creation raises the nonce of its address to 1 before it deposits code.
+  --
+  -- So the address of the creation has a positive nonce once prepared.
   have hnonce : 1 ≤ (prepared.getAccount address).nonce := by
     unfold prepareCreation at hp
     simp only [show fork ≥ .spuriousDragon from hfork, ↓reduceIte] at hp
     rw [(TransactionState.getAccount_incrementNonce (Base.mapError_ok_iff.mp hp)).1]
     exact Nat.succ_le_of_lt (Nat.succ_pos _)
+  -- So the code it deposits, even empty code, leaves a nonce at the address.
+  --
   -- The frame keeps that nonce, so the deposit keeps each nonce or code of the state before.
   refine keepsNonceOrCode_depositCode (k0.trans hk) (hpar.trans (parent_prepareCreation hp)) ?_ hd
   rw [htarget]
   exact Nat.le_trans hnonce (hk.1 address)
 
-/-- A frame that keeps each nonce or code and the block, with its message and code. -/
+/-- A frame that keeps each nonce or code and the block, with its message and code.
+
+The proofs of the rebuild property and of the slot surplus reuse it.
+
+They also reuse the rules of this relation for a step, a call and a creation. -/
 abbrev KeepsNonceOrCodeFrame (a b : Evm fork Meter) : Prop :=
   (KeepsNonceOrCode a.state b.state ∧ b.state.parent = a.state.parent) ∧
     b.message = a.message ∧ b.code = a.code
@@ -176,6 +166,7 @@ theorem keepsNonceOrCodeCall_rollbackOnError {message : Message fork}
     (hentry : Entered fork message state substate entry entrySubstate)
     (hrun : KeepsNonceOrCodeFrame (startFrame message entry entrySubstate meter) ended) :
     KeepsNonceOrCodeCall message state substate meter (rollbackOnError state ended) :=
+  -- A rollback restores the accounts of a snapshot, which kept a nonce or code wherever it had one.
   ⟨⟨keepsNonceOrCode_rollbackOnError ((keepsNonceOrCode_entered hentry).trans hrun.1.1)
       (hrun.1.2.trans (parent_entered hentry)),
     (parent_rollbackOnError state ended).trans (hrun.1.2.trans (parent_entered hentry))⟩,
@@ -195,9 +186,11 @@ theorem keepsNonceOrCodeCreate_depositCode (hfork : .spuriousDragon ≤ fork)
       (congrArg (·.currentTarget) hm.2) hd,
     (parent_depositCode hd).trans (hm.1.2.trans (parent_prepareCreation hp))⟩
 
-/-- From Spurious Dragon, every call and creation keeps each nonce or code.
+/-- From Spurious Dragon, every call and creation keeps each nonce or code, whatever the state.
 
 That holds whether or not the message ends with an error.
+
+It needs no rebuild property.
 
 The proof is by strong induction on the gas of the message, for calls and creations together. -/
 theorem processMessage_keepsNonceOrCode_induction [LawfulGasMeter Meter]

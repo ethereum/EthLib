@@ -12,24 +12,6 @@ The two frames differ only in their states, which agree on four sets.
 
 The sets name addresses, whole storages, slots and code hashes.
 
-A call or a creation then fails alike unless the error aborts the run.
-
-A success whose reads lie in the sets gives agreeing frames or agreeing messages.
-
-A message it sends is the same in both frames, and so is the way its caller resumes.
-
-The caller resumes alike from two agreeing frames that end the message.
-
-A creation checks that a contract may be deployed at the new address.
-
-That reads whether the address has any storage, which the block access list does not record.
-
-So the second set must hold each address of the first set with nonce 0 and no code.
-
-That is needed only where its storage was not wiped.
-
-The step of a frame is then covered for every opcode.
-
 These are local steps toward the coverage of [EIP-7928, Scope and Inclusion][bal].
 
 [bal]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
@@ -769,6 +751,9 @@ private theorem createRest_rel {g1 g2 : Evm fork Meter}
   have hnew : createNewAccountStateGas fork s address =
       createNewAccountStateGas fork g1.state address := by
     simp only [createNewAccountStateGas, hrel.state.isAccountAlive_eq (.inr haddress)]
+  -- A creation checks that a contract may be deployed at the new address.
+  --
+  -- That reads whether the address has any storage, which the block access list does not record.
   have hdep : s.accountDeployable address = g1.state.accountDeployable address :=
     hrel.state.accountDeployable_eq (.inr haddress) (hcandidates address haddress)
   have hinc := hrel.state.incrementNonce fork (.inr hcurrent)
@@ -997,26 +982,21 @@ private theorem createStep_sim {e1 e2 : Evm fork Meter}
       exact hcandidates
     exact genericCreate_sim hframe hcur' hcand' _ _ _
 
-/-- Each call and creation gives agreeing results when it starts from agreeing frames.
-
-A failure that does not abort the run is the same in both frames.
-
-A success needs the reads of the frame it gives in the sets.
-
-Each account of the first set needs its code hash empty, written, or in the code set.
-
-Each such account with nonce 0 and no code needs its storage wiped or in the second set.
-
-The current account must be in the first set. -/
+/-- Each call and creation gives agreeing results when it starts from agreeing frames. -/
 theorem messageInstruction_agrees {account allStorage : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop} {op : Op}
     {run : Evm fork Meter → Except EvmError (StepResult fork Meter)}
     (hrun : messageInstruction fork op = some run) {e1 e2 : Evm fork Meter}
     (hrel : FrameAgrees account allStorage slot code e1 e2)
+    -- Each account of the first set needs its code hash empty, written, or in the code set.
     (hcodes : CodesIn account code e1.state)
+    -- Each such account with nonce 0 and no code needs its storage wiped or in the second set.
     (hcandidates : CandidatesIn account allStorage e1.state)
+    -- The current account must be in the first set.
     (hcurrent : account e1.message.currentTarget) :
+    -- A failure that does not abort the run is the same in both frames.
     (∀ err, run e1 = .error err → err.aborts = false → run e2 = .error err) ∧
+      -- A success needs the reads of the frame it gives in the sets.
       ∀ r1, run e1 = .ok r1 → ReadsIn account slot r1.state →
         ∃ r2, run e2 = .ok r2 ∧ StepAgrees account allStorage slot code r1 r2 := by
   unfold messageInstruction at hrun

@@ -6,21 +6,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Funded
 /-!
 # Proofs: no creation, and no hosted call, fails to write storage for lack of an account
 
-SSTORE writes the storage of the address its frame runs at, and fails when it has no account.
-
-A frame runs an instruction only when it has code.
-
-A call with code runs at an account that holds code, or at the account of the frame that calls it.
-
-A creation runs at its new address, which has an account once the creation starts.
-
-From Spurious Dragon it holds a nonce of at least 1, and before Paris its start touches it.
-
-Every step, call and creation keeps the settled accounts, so the frame keeps its account.
-
-So no creation fails for a write of storage at an address with no account.
-
-Nor does a call that runs with code only at a settled address.
+A hosted call is one that runs with code only at a settled address.
 -/
 
 @[expose] public section
@@ -64,9 +50,11 @@ private theorem step_ne_noAccount [LawfulGasMeter Meter] {evm : Evm fork Meter}
   intro h
   rcases step_eq_error_state h with ⟨_, h1⟩ | ⟨-, hnone⟩ | ⟨_, h1⟩
   · cases h1
+  -- A frame runs an instruction only when it has code.
   · have hsize : evm.code.size ≠ 0 := fun h0 => by
       rw [step_of_size_eq_zero h0] at h
       cases h
+    -- SSTORE writes the storage of the address its frame runs at, and fails when it has no account.
     obtain ⟨account, ha, -⟩ := hosts hsize
     rw [ha] at hnone
     cases hnone
@@ -84,6 +72,7 @@ private theorem step_eq_child_hosts {evm caller : Evm fork Meter} {message : Mes
   have hev : evm.code.size ≠ 0 := fun h0 => by
     rw [step_of_size_eq_zero h0] at h
     cases h
+  -- A call with code runs at the account of the frame that calls it, or at one that holds code.
   rcases step_eq_child_staticCode h call with heq | hstatic
   · rw [heq]
     exact r.1 _ (hosts hev)
@@ -106,6 +95,7 @@ private theorem runFrame_ne_noAccount [LawfulGasMeter Meter] {bound : Nat}
     (hosts : FrameHosts evm) (address : Address) :
     runFrame (step fork) (step_decreases fork) bound runChild evm within ≠
       .error (.state (.noAccount address)) := by
+  -- Every step, call and creation keeps the settled accounts, so the frame keeps its account.
   have T := stepRules_settledLe (fork := fork) (Meter := Meter) |>.and stepRules_messageCode
   revert hosts
   refine runFrame_induct
@@ -250,15 +240,19 @@ theorem processMessage_ne_noAccount_of_gas [LawfulGasMeter Meter] (n : Nat) :
       split at hp
       · exact mapError_ne_of_isOk (State.TransactionState.incrementNonce_isOk _ _ _) _ hp
       · cases hp
-    -- The new address has an account once the creation starts.
+    -- A creation runs at its new address, which has an account once the creation starts.
     have ready : Hosts fork message (startState fork message prepared) := fun _ => by
       unfold startState
       split
+      -- Before Paris, the start of the creation touches it.
       · rename_i hlt
         obtain ⟨account, ha⟩ := Option.isSome_iff_exists.mp
           (State.TransactionState.isSome_getAccountOptional_touchAccount prepared
             message.currentTarget)
         exact ⟨account, ha, .inl hlt⟩
+      -- From Paris, the start does not touch it.
+      --
+      -- Its nonce is at least 1 from Spurious Dragon, so it still has an account.
       · rename_i hge
         exact settled_of_getAccount (.inl (nonce_ne_zero_prepareCreation hprep
           (Nat.le_trans (by decide) (Nat.le_of_not_lt hge))))

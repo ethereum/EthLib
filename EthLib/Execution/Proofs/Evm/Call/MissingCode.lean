@@ -5,23 +5,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Codes
 /-!
 # Proofs: no call or creation aborts for a missing code, on a state that holds every code
 
-A run aborts with a missing code when it looks up a code hash whose code the state lacks.
-
-Only EXTCODESIZE, EXTCODECOPY and the call instructions look up code.
-
-Each looks up the code of an account in the state of its frame, or that of its delegate.
-
 Every change of the state in a step fails only with an error other than a missing code.
-
-A lawful meter fails a charge only for lack of gas, so no charge fails with a missing code.
-
-So a step from a frame whose state holds the code of every account never aborts for a missing code.
-
-A caller resumes from its child with no lookup of code.
-
-Every call and creation keeps the code of each account available.
-
-So every frame of a run holds every code, and no call or creation aborts for a missing code.
 -/
 
 @[expose] public section
@@ -92,6 +76,7 @@ private theorem noMiss_pushWord (evm : Evm fork Meter) (x : Base.U256) :
 private theorem noMiss_chargeGas [LawfulGasMeter Meter] (evm : Evm fork Meter) (amount : Nat) :
     NoMiss (chargeGas evm amount) := by
   refine NoMiss.bind (fun c h => ?_) fun _ _ => NoMiss.pure _
+  -- A lawful meter fails a charge only for lack of gas, so no charge fails with a missing code.
   cases LawfulGasMeter.charge_error h
 
 /-- A charge of state gas has no missing code. -/
@@ -320,7 +305,12 @@ private theorem noMiss_storageStep [LawfulGasMeter Meter] {op : Op}
   cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hstep <;>
     subst hstep <;> simp only [sloadStep, sstoreStep] <;> no_miss
 
-/-! ## The instructions that read code -/
+/-! ## The instructions that read code
+
+Only EXTCODESIZE, EXTCODECOPY and the call instructions read code.
+
+Each reads the code of an account in the state of its frame, or that of its delegate.
+-/
 
 /-- A static step keeps the code of each account available. -/
 private theorem hasCodes_static {a b : Evm fork Meter} (h : StaticStep a b)
@@ -331,6 +321,7 @@ omit [GasMeter Meter] in
 /-- A read of code from a state that holds every code has no missing code. -/
 private theorem noMiss_accountCode {evm : Evm fork Meter} (available : HasCodes evm.state)
     (address : Base.Address) : NoMiss (accountCode evm address) := by
+  -- A run aborts with a missing code when it reads the code of a hash that the state lacks.
   obtain ⟨code, hc⟩ := available address
   intro c h
   simp [accountCode, hc, Except.mapError] at h
@@ -491,6 +482,7 @@ theorem step_ne_missingCode [LawfulGasMeter Meter] {evm : Evm fork Meter}
 private theorem noMiss_resume [LawfulGasMeter Meter] {evm caller child : Evm fork Meter}
     {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (h : step fork evm = .ok (.child caller message resume)) : NoMiss (resume child) := by
+  -- A caller resumes from its child with no lookup of code.
   rcases step_eq_child_resume h with ⟨_, _, _, rfl⟩ | ⟨_, _, rfl⟩
   · simp only [resumeCall]
     no_miss
@@ -528,6 +520,7 @@ private theorem runFrame_ne_missingCode [LawfulGasMeter Meter] {bound : Nat}
     intro c h
     cases h
     exact noMiss_resume hstep c resumed
+  -- After its child, the caller still holds every code, so every frame of the run does.
   case case7 hstep _ _ _ ran _ resumed _ ih =>
     refine ih ?_
     rw [(sameContext_of_step_eq_child hstep resumed).state, state_incorporateChild]
@@ -558,6 +551,7 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
       split at h
       · exact (ih child.gas lt).1 child _ _ _ _ rfl available c h
       · exact (ih child.gas lt).2 child _ _ _ _ rfl available c h
+    -- Every call and creation keeps the code of each account available.
     have keeps : ∀ (caller : Evm fork Meter) (child : Message fork) ended, (match child.target with
           | some _ => processMessage (Meter := Meter) fork child caller.state caller.substate.child
           | none => processCreateMessage (Meter := Meter) fork child caller.state

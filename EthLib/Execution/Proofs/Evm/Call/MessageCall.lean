@@ -7,27 +7,13 @@ public import EthLib.Execution.Proofs.Evm.Interpreter
 /-!
 # Proofs: `Evm.Call.MessageCall`
 
-A message that fails leaves the writes of the transaction as they were before the message.
+How a message and a creation end: their writes, logs, refunds, touches, gas and errors.
 
-Only the record of the created accounts may differ.
+The touches of a failed message stay undone, except at the precompile 0x03.
 
-Its state is a rollback to the state it started from, which keeps the reads of its last frame.
+From Spurious Dragon to Paris, 0x03 stays touched when the message touched it.
 
-A message that succeeds appends its logs to those of the caller and adds its refund.
-
-A message that fails passes on no log, no refund and no account to delete.
-
-Its touches stay undone, except at the precompile 0x03 from Spurious Dragon to Paris.
-
-A message ends with no more execution gas than it was given.
-
-From Glamsterdam, a revert rolls the state gas of the frame back to its baseline.
-
-A message and a creation fail only with an error that aborts the run.
-
-The deposit of code at the end of a creation keeps the substate and the memory.
-
-Its state is the snapshot restored, the state it was given, or that state with the code set.
+It also stays touched when the message called it and its account exists and is empty.
 -/
 
 @[expose] public section
@@ -199,7 +185,9 @@ theorem SameWrites.getStorage {tx snapshot : TransactionState}
     tx.getStorage address key = snapshot.getStorage address key := by
   simp only [TransactionState.getStorage, h.storageWrites, h.storageClears, hp]
 
-/-- A message that fails leaves the writes of the transaction as they were before it. -/
+/-- A message that fails leaves the writes of the transaction as they were before it.
+
+Only the record of the created accounts may differ. -/
 theorem processMessage_sameWrites_of_error [LawfulGasMeter Meter] {message : Message fork}
     {state : TransactionState} {substate : Substate} {evm : Evm fork Meter}
     {used : GasMeter.gasHeld evm.gas ≤ message.gas}

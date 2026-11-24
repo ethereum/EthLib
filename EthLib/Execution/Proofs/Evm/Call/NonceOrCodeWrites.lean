@@ -6,27 +6,13 @@ public import EthLib.Execution.Proofs.Evm.Call.Run
 /-!
 # Proofs: each write of a transaction state keeps each nonce or code
 
-An account has a nonce or code when its nonce is positive or it holds code.
-
 A write keeps each nonce or code when it lowers no nonce, and each account with one keeps one.
 
 The writes below do on any state, with two exceptions.
 
 New code needs a nonce at its account, or neither a nonce nor code there.
 
-A creation from Spurious Dragon sets the nonce first.
-
-A delegation may find its authority with neither.
-
 A rollback or a deposit of code needs a frame that kept them.
-
-A write of storage, transient storage or a balance keeps the nonce and the code of every account.
-
-A rise of a nonce, and new code at an account with a nonce, leave a nonce at that account.
-
-From Paris, a change that leaves an account empty deletes it, but that account had neither.
-
-A rollback restores the accounts of its snapshot.
 -/
 
 @[expose] public section
@@ -89,7 +75,10 @@ theorem SameWrites.keepsNonceOrCode {tx snapshot : TransactionState}
     exact Nat.le_refl _
   · exact (HasNonceOrCode.congr (h.getAccount hp address)).mpr hnc
 
-/-! ## The writes of the state -/
+/-! ## The writes of the state
+
+A write of storage, transient storage or a balance keeps the nonce and the code of every account.
+-/
 
 /-- A change of an account that keeps its nonce and its code keeps each nonce or code.
 
@@ -190,7 +179,7 @@ theorem keepsNonceOrCode_incrementNonce {tx tx' : TransactionState} {address : A
   obtain ⟨hself, hother⟩ := TransactionState.getAccount_incrementNonce h
   refine ⟨nonceLe_incrementNonce h, fun other hnc => ?_⟩
   by_cases hne : other = address
-  · -- The raised nonce is positive.
+  · -- The raised nonce is positive, so the rise leaves a nonce at that account.
     subst hne
     left
     rw [hself]
@@ -200,12 +189,13 @@ theorem keepsNonceOrCode_incrementNonce {tx tx' : TransactionState} {address : A
 
 /-- New code at an account with a nonce keeps each nonce or code. -/
 theorem keepsNonceOrCode_setCode {tx tx' : TransactionState} {address : Address}
+    -- A creation from Spurious Dragon meets the nonce hypothesis: it sets the nonce first.
     {code : ByteArray} (hnonce : 1 ≤ (tx.getAccount address).nonce)
     (h : tx.setCode fork address code = .ok tx') : KeepsNonceOrCode tx tx' := by
   obtain ⟨hself, hother⟩ := TransactionState.getAccount_setCode h
   refine ⟨nonceLe_setCode h, fun other hnc => ?_⟩
   by_cases hne : other = address
-  · -- The account keeps its positive nonce.
+  · -- The account keeps its positive nonce, so new code leaves a nonce there.
     subst hne
     left
     rw [hself]
@@ -217,6 +207,7 @@ theorem keepsNonceOrCode_setCode {tx tx' : TransactionState} {address : Address}
 
 That account had none to keep, and every other account stays. -/
 theorem keepsNonceOrCode_setCode_of_not_hasNonceOrCode {tx tx' : TransactionState}
+    -- A delegation meets this hypothesis when it finds its authority with neither.
     {address : Address} {code : ByteArray} (hplain : ¬HasNonceOrCode tx address)
     (h : tx.setCode fork address code = .ok tx') : KeepsNonceOrCode tx tx' := by
   obtain ⟨-, hother⟩ := TransactionState.getAccount_setCode h
