@@ -6598,18 +6598,25 @@ From Electra that refusal also needs a committee index below `MAX_COMMITTEES_PER
 The construction fails exactly when the committee has no value, an attestation with the data has bits of another size, or their aggregate signature fails.
 `exists_constructAggregateOfSingleAttestations_eq_error_iff` states it for single attestations, with the faults of the committee and the signatures.
 The other faults are an index not below `MAX_COMMITTEES_PER_SLOT`, an attester outside the committee, and a committee above the limit of an attestation before Gloas.
-By `List.mem_of_find?_eq_some` the first match is in the list, and by `List.find?_some` it matches the request, so from Electra it has the committee.
-No theorem states it, but in the aggregate answer the construction therefore never joins an empty list of signatures.
+`aggregateAttestation_first_mem_of_lt_electra` and `aggregateAttestation_first_mem_of_electra` state that the first match is in the list that the construction joins, so that list is never empty.
 `getBeaconCommittee_exists` (`Consensus/Proofs/Accessors.lean`) gives the committee a value for an index below the count of its slot, when the bounds fit.
 The converse fails: the lookup does not check the index against that count, so an index at or above it can still give a committee.
 The source defines the lookup the same way, and leaves that check to its callers: block processing and the gossip rules check it.
 Neither construction checks that count, so either can build an aggregate that the rules of a block reject, for an index that the caller chooses.
 An honest aggregator takes the index from its committee assignment.
 Its aggregate then meets the bound in the state of the assignment, as [Honest aggregation](#honest-aggregation) states.
-No theorem states either that the aggregate of signatures that are not an empty list fails only on a signature that does not decode.
-`aggregateAttestation_internal_iff_of_lt_electra` with `exists_constructAggregate_eq_error_iff` gives code 500 exactly when the block of the first match is verified and a fault occurs.
-`aggregateAttestation_internal_iff_of_electra` with `exists_constructAggregateOfSingleAttestations_eq_error_iff` gives the same from Electra, for an index below `MAX_COMMITTEES_PER_SLOT`.
-`produceSyncCommitteeContribution_internal_iff` states the same for the contribution answer, once the slot, the subcommittee index and the root pass their checks.
+`exists_aggregate_eq_error_iff` (`Cryptography/Proofs/Bls/Signatures.lean`) shows that aggregating signatures fails exactly on an empty list, or on a signature that does not decode.
+`exists_aggregate_map_eq_error_iff` states that aggregating the signatures of a list with a member fails exactly on one that does not decode.
+`aggregateAttestation_internal_iff_faults_of_lt_electra` combines it with `aggregateAttestation_internal_iff_of_lt_electra` and `exists_constructAggregate_eq_error_iff`.
+The lemma applies because the first match is in the list that the construction joins (`aggregateAttestation_first_mem_of_lt_electra`).
+The theorem gives code 500 exactly when the block of the first match is verified and one of three faults occurs.
+The committee has no value, or an attestation with the data of that match has bits of another size.
+The third is that the signature of such an attestation does not decode.
+`aggregateAttestation_internal_iff_faults_of_electra` gives the same from Electra with four faults, for an index below `MAX_COMMITTEES_PER_SLOT`.
+It combines the same lemma with `aggregateAttestation_internal_iff_of_electra`, `exists_constructAggregateOfSingleAttestations_eq_error_iff` and `aggregateAttestation_first_mem_of_electra`.
+The committee has no value, an attester is outside it, or before Gloas it is above the limit of an attestation.
+The fourth is that a single attestation of the committee with the data of the first match has a signature that does not decode.
+`produceSyncCommitteeContribution_internal_iff` states when the contribution answer refuses with code 500, once the slot, the subcommittee index and the root pass their checks.
 It then refuses so exactly when the sync committee of the next slot has no value, or the construction fails on a signature.
 The sync committee of the next slot has no value only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtNextSlot_eq`).
 The answer hands the construction only the messages of members.

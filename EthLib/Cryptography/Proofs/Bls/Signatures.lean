@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Proofs.Bls.Fr
 public import EthLib.Cryptography.Proofs.Bls.HashToCurveValidity
+import EthLib.Base.Proofs.MapM
 
 /-!
 # Proofs: BLS signing never fails, and the rejected inputs
@@ -42,6 +43,51 @@ theorem popProve_ok (sk : SecretKey) : ∃ proof, popProve sk = .ok proof :=
 
 /-- Aggregation rejects an empty list (§2.8). -/
 theorem aggregate_empty : aggregate #[] = .error .emptySignatureList := rfl
+
+/-- Aggregation fails exactly on an empty list, or on a signature that does not decode (§2.8). -/
+theorem exists_aggregate_eq_error_iff {sigs : Array BLSSignature} :
+    (∃ error, aggregate sigs = .error error) ↔
+      sigs = #[] ∨ ∃ sig ∈ sigs, ∃ error, G2.uncompress sig = .error error := by
+  rcases sigs with ⟨_ | ⟨first, rest⟩⟩
+  · exact iff_of_true ⟨_, aggregate_empty⟩ (.inl rfl)
+  -- A list with a signature passes the check of its size, so only the sum of the points can fail.
+  have nonempty : (first :: rest).toArray ≠ #[] :=
+    Array.ne_empty_of_mem (List.mem_toArray.mpr List.mem_cons_self)
+  simp only [nonempty, false_or, List.mem_toArray]
+  unfold aggregate
+  simp only [List.isEmpty_toArray, List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte,
+    List.foldlM_toArray]
+  constructor
+  · rintro ⟨error, failed⟩
+    rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+    -- When each signature decodes, each step of the sum succeeds, and so does the fold.
+    · refine Classical.byContradiction fun decodes => foldlM_ne_error _ _ ?_ failed
+      intro agg sig member
+      cases decoded : G2.uncompress sig with
+      | error error => exact absurd ⟨sig, member, error, decoded⟩ decodes
+      | ok point => exact ⟨_, rfl⟩
+    · cases failed
+  · rintro ⟨sig, member, error, bad⟩
+    cases folded : (first :: rest).foldlM
+        (fun agg sig => do let point ← G2.uncompress sig; pure (G2.add agg point)) G2.zero with
+    | error fault => exact ⟨fault, rfl⟩
+    -- A fold that succeeds succeeds at the step of each signature, and this step fails.
+    | ok done =>
+      obtain ⟨-, -, before, after, -, -, step⟩ := foldlM_ok_of_mem member folded
+      rw [bad] at step
+      cases step
+
+/-- Aggregating the signatures of a list with a member fails exactly on one that does not decode. -/
+theorem exists_aggregate_map_eq_error_iff {α : Type} {entries : List α} {entry : α}
+    (member : entry ∈ entries) (signature : α → BLSSignature) :
+    (∃ error, aggregate (entries.map signature).toArray = .error error) ↔
+      ∃ entry ∈ entries, ∃ error, G2.uncompress (signature entry) = .error error := by
+  have nonempty : (entries.map signature).toArray ≠ #[] :=
+    Array.ne_empty_of_mem (List.mem_toArray.mpr (List.mem_map_of_mem member))
+  rw [exists_aggregate_eq_error_iff]
+  simp only [nonempty, false_or, List.mem_toArray, List.mem_map]
+  exact ⟨fun ⟨_, ⟨entry, inside, rfl⟩, bad⟩ => ⟨entry, inside, bad⟩,
+    fun ⟨entry, inside, bad⟩ => ⟨_, ⟨entry, inside, rfl⟩, bad⟩⟩
 
 /-- The key sum rejects an empty list (§3.3.4). -/
 theorem aggregatePubkeyPoint_empty : aggregatePubkeyPoint #[] = .error .emptyPubkeyList := rfl

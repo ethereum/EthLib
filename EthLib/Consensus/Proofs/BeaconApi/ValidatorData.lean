@@ -733,6 +733,98 @@ theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset
       inRangeFault]
     simp
 
+/-- Before Electra, the first match is among the attestations that the construction joins. -/
+theorem aggregateAttestation_first_mem_of_lt_electra
+    {attestations : List (Attestation preset fork)} {dataRoot : Root} {slot : Slot}
+    {committeeIndex : CommitteeIndex} {first : Attestation preset fork}
+    (found : attestations.find? (matchesRequest · dataRoot slot committeeIndex) = some first) :
+    first ∈ attestations.filter (·.data = first.data) :=
+  List.mem_filter.mpr ⟨List.mem_of_find?_eq_some found, by simp⟩
+
+/-- From Electra, the first match is among the single attestations that the construction joins. -/
+theorem aggregateAttestation_first_mem_of_electra {singles : List SingleAttestation}
+    {dataRoot : Root} {slot : Slot} {committeeIndex : CommitteeIndex} {first : SingleAttestation}
+    (found : singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first) :
+    first ∈ singles.filter (fun single =>
+      single.data = first.data ∧ single.committeeIndex = committeeIndex) := by
+  have matched := List.find?_some found
+  simp only [singleMatchesRequest, Bool.and_eq_true, beq_iff_eq] at matched
+  exact List.mem_filter.mpr ⟨List.mem_of_find?_eq_some found, by simp [matched.2]⟩
+
+/-- Before Electra, code 500 of the aggregate answer comes exactly when one of three faults occurs.
+
+That refusal needs a first match whose block is verified.
+
+The committee has no value, or an attestation with the data of that match has bits of another size.
+
+The third is that the signature of such an attestation does not decode. -/
+theorem aggregateAttestation_internal_iff_faults_of_lt_electra {state : BeaconState preset fork}
+    {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
+    {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
+    {committeeIndex : CommitteeIndex} (before : fork < .pectra) :
+    (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
+      committeeIndex = .error error ∧ error.code = 500) ↔
+      ∃ first, attestations.find? (matchesRequest · dataRoot slot committeeIndex) = some first ∧
+        isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        -- The committee of the requested slot and index has no value.
+        ((∃ error, getBeaconCommittee state slot committeeIndex = .error error) ∨
+          ∃ committee, getBeaconCommittee state slot committeeIndex = .ok committee ∧
+            -- An attestation with the data of the first match has bits of another size.
+            ((∃ attestation ∈ attestations.filter (·.data = first.data),
+                attestation.aggregationBits.bits.size ≠ committee.size) ∨
+              -- The signature of such an attestation does not decode.
+              ∃ attestation ∈ attestations.filter (·.data = first.data),
+                ∃ error, G2.uncompress attestation.signature = .error error)) := by
+  rw [aggregateAttestation_internal_iff_of_lt_electra before]
+  refine exists_congr fun first => and_congr_right fun found => and_congr_right fun _ => ?_
+  -- The first match has the requested slot and index.
+  have matched := List.find?_some found
+  simp only [matchesRequest, Bool.and_eq_true, beq_iff_eq] at matched
+  rw [exists_constructAggregate_eq_error_iff, matched.1.2, matched.2, getAggregateSignature,
+    Signatures.exists_aggregate_map_eq_error_iff
+      (aggregateAttestation_first_mem_of_lt_electra found)]
+
+/-- From Electra, code 500 of the aggregate answer comes exactly when one of four faults occurs.
+
+That refusal needs a first match whose block is verified, and a committee index in range.
+
+The committee has no value, an attester is outside it, or before Gloas it exceeds `maxAttesters`.
+
+The fourth is that the signature of a joined single attestation does not decode. -/
+theorem aggregateAttestation_internal_iff_faults_of_electra {state : BeaconState preset fork}
+    {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
+    {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
+    {committeeIndex : CommitteeIndex} (electra : .pectra ≤ fork) :
+    (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
+      committeeIndex = .error error ∧ error.code = 500) ↔
+      ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
+        isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        -- It also needs a committee index below the most committees a slot can have.
+        committeeIndex < preset.MAX_COMMITTEES_PER_SLOT ∧
+        -- The committee of the requested slot and index has no value.
+        ((∃ error, getBeaconCommittee state slot committeeIndex = .error error) ∨
+          ∃ committee, getBeaconCommittee state slot committeeIndex = .ok committee ∧
+            -- A single attestation of the committee with that data has an attester outside it.
+            ((∃ single ∈ singles.filter (fun single =>
+                single.data = first.data ∧ single.committeeIndex = committeeIndex),
+                single.attesterIndex ∉ committee) ∨
+              -- Before Gloas, the committee has more members than the limit of an attestation.
+              (fork < .glamsterdam ∧ maxAttesters preset fork < committee.size) ∨
+              -- The signature of such a single attestation does not decode.
+              ∃ single ∈ singles.filter (fun single =>
+                single.data = first.data ∧ single.committeeIndex = committeeIndex),
+                ∃ error, G2.uncompress single.signature = .error error)) := by
+  rw [aggregateAttestation_internal_iff_of_electra electra]
+  refine exists_congr fun first => and_congr_right fun found => and_congr_right fun _ =>
+    and_congr_right fun inside => ?_
+  -- The first match has the requested slot.
+  have matched := List.find?_some found
+  simp only [singleMatchesRequest, Bool.and_eq_true, beq_iff_eq] at matched
+  rw [exists_constructAggregateOfSingleAttestations_eq_error_iff, matched.1.2,
+    Signatures.exists_aggregate_map_eq_error_iff (aggregateAttestation_first_mem_of_electra found)]
+  -- An index in range is not a fault.
+  simp only [UInt64.not_le.mpr inside, false_or]
+
 /-! ## Sync committee contributions -/
 
 /-- From Altair, a bit of a contribution is set exactly when a member of that seat sent a message.
