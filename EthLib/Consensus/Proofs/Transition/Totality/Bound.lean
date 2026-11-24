@@ -13,49 +13,9 @@ public import Mathlib.Algebra.Order.Group.Nat
 
 The steps of a run of slots divide by constants of the preset and of the configuration.
 
-The specification raises an error on a division by zero and on a remainder by zero.
+It names the presets and configurations with every divisor positive, mainnet and minimal among them.
 
-In Lean a division of 64-bit integers by zero returns zero, and a remainder returns the dividend.
-
-So with a zero divisor a step can succeed in Lean where the specification fails.
-
-A checked division fails on zero in both, but a proof that the step succeeds then needs it positive.
-
-This file names the presets and the configurations whose divisors are all positive.
-
-It shows that mainnet and minimal are such presets and such configurations.
-
-The lengths of the circular buffers are not listed: a read or a write fails on a zero length.
-
-The proofs take them as separate hypotheses.
-
-The file also names two sums of a state that the bounds of the steps use.
-
-They are the sum of the effective balances and the sum of the recent slashed balances.
-
-It names a count too: the validators plus the pending deposits, which bounds the registry.
-
-It shows that a checked sum of a list and the total active balance succeed under such bounds.
-
-It then names the bounds on the amounts of a state that a run of slots needs.
-
-They hold a budget of Gwei, and a bound on the inactivity scores.
-
-They are not enough alone.
-
-A run also needs the budget below a ceiling, and its epochs within a horizon.
-
-It also needs the inactivity scores and the participation lists to match the registry.
-
-Its indices must be in range, and each effective balance at most the largest one of its validator.
-
-The budget covers the larger of each balance and its effective balance, and the pending deposits.
-
-It also covers the recent slashed balances, on their own.
-
-A run of slots adds no pending deposit and no slashed balance, which only blocks bring.
-
-The budget is an assumption about the ether at stake, not a fact that a state keeps forever.
+It names the sums of a state that the bounds use, and the bounds that a run of slots needs.
 -/
 
 @[expose] public section
@@ -66,30 +26,32 @@ open Base Uint64
 
 /-- Each constant of a preset that a run of slots divides by is positive.
 
-The run computes epochs from slots, and effective balances in increments.
+The specification fails on a division or a remainder by zero; Lean returns zero or the dividend.
 
-The update of an effective balance divides the increment by the hysteresis quotient.
+So with a zero divisor a step can succeed in Lean where the specification fails.
 
-The run also starts the periods of deposit votes, of history and of sync committees.
-
-The target size of a committee divides the active validators of a slot, to count the committees.
-
-The base rewards divide by the quotient of the proposer reward.
-
-The inactivity penalty divides by the quotient of its fork.
-
-From Altair that division is checked, so the specification and Lean agree there.
-
-A proof that the penalty succeeds still needs the quotient positive. -/
+The circular buffer lengths are separate hypotheses: a read or a write fails on a zero length. -/
 structure Preset.DivisorsPositive (preset : Preset) : Prop where
+  -- The run computes epochs from slots, and effective balances in increments.
   slotsPerEpoch : preset.SLOTS_PER_EPOCH ≠ 0
   increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0
+  -- The update of an effective balance divides the increment by the hysteresis quotient.
   hysteresis : preset.HYSTERESIS_QUOTIENT ≠ 0
+  -- The run also starts the periods of deposit votes, of history and of sync committees.
   votingPeriod : preset.EPOCHS_PER_ETH1_VOTING_PERIOD ≠ 0
   historicalPeriod : preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH ≠ 0
   syncPeriod : preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0
+  -- The count of committees is the active validators of a slot over the target committee size.
   committeeSize : preset.TARGET_COMMITTEE_SIZE ≠ 0
+  -- The base rewards divide by the quotient of the proposer reward.
   proposerReward : preset.PROPOSER_REWARD_QUOTIENT ≠ 0
+  -- The inactivity penalty divides by the quotient of its fork.
+  --
+  -- From Altair that division is checked, so the specification and Lean agree there.
+  --
+  -- A checked division fails on zero in both, but a proof that a step succeeds needs it positive.
+  --
+  -- So a proof that the penalty succeeds still needs the quotient positive.
   inactivityPenalty : preset.INACTIVITY_PENALTY_QUOTIENT ≠ 0
   inactivityPenaltyAltair : preset.INACTIVITY_PENALTY_QUOTIENT_ALTAIR ≠ 0
   inactivityPenaltyBellatrix : preset.INACTIVITY_PENALTY_QUOTIENT_BELLATRIX ≠ 0
@@ -106,17 +68,15 @@ theorem Preset.divisorsPositive_minimal : Preset.minimal.DivisorsPositive := by
 
 The epoch steps run at the last slot of an epoch.
 
-They read the roots of the first slots of that epoch and of the one before.
-
-With one slot an epoch, the first slot of the current epoch is the slot of the state.
-
-The specification then refuses to read its root, which a justification of that epoch needs.
-
-The first slot of the previous epoch is two epochs less one slot back.
-
-The buffer must reach that far. -/
+They read the roots of the first slots of that epoch and of the one before. -/
 structure Preset.RootsReachPreviousEpoch (preset : Preset) : Prop where
+  -- With one slot an epoch, the first slot of the current epoch is the slot of the state.
+  --
+  -- The specification then refuses to read its root, which a justification of that epoch needs.
   twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat
+  -- The first slot of the previous epoch is two epochs less one slot back.
+  --
+  -- The buffer must reach that far.
   reach : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat + 1
 
 /-- The buffer of block roots of the mainnet preset reaches the epoch before. -/
@@ -305,32 +265,32 @@ def registryLoad (state : BeaconState preset fork) : Nat :=
   state.validators.data.size +
     if electra : .pectra ≤ fork then (state.pendingDeposits electra).data.size else 0
 
-/-- The bounds on the amounts of a state that a run of slots needs.
+/-- The bounds on the amounts of a state that a run of slots needs: a budget of Gwei, a score bound.
 
-The registry stays within its limit, and has one balance for each validator.
+A run also needs the budget below a ceiling, its epochs within a horizon and its indices in range.
 
-Each effective balance is at most the largest one of its validator.
+It also needs the inactivity scores and the participation lists to match the registry.
 
-The larger of each balance and its effective balance, plus the pending deposits, fit in a budget.
-
-The slashed balances of the recent epochs fit in the same budget, on their own.
-
-From Altair each inactivity score is at most a bound.
-
-From Electra the balances left to consume for deposits and for exits fit in the budget too.
-
-The balances of the builders and the churn of the consolidations are left out.
-
-A run of slots does no checked sum on them. -/
+They leave out builder balances and consolidation churn, on which a run does no checked sum. -/
 structure WithinBudget (budget scoreBound : Nat) (state : BeaconState preset fork) : Prop where
+  -- The registry stays within its limit, and has one balance for each validator.
   within : state.RegistryWithinLimit
   matched : BalancesMatch state
+  -- Each effective balance is at most the largest one of its validator.
   capped : ∀ validator ∈ state.validators.data,
     validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator
+  -- The budget covers the pending deposits and the larger of each balance and effective balance.
+  --
+  -- The budget is an assumption about the ether at stake, not a fact that a state keeps forever.
   funded : stakeSum state + pendingDepositSum state ≤ budget
+  -- The slashed balances of the recent epochs fit in the same budget, on their own.
+  --
+  -- A run of slots adds no pending deposit and no slashed balance, which only blocks bring.
   slashed : slashedBalanceSum state ≤ budget
+  -- From Altair each inactivity score is at most a bound.
   scored : ∀ altair : .altair ≤ fork, ∀ score ∈ (state.inactivityScores altair).data,
     score.toNat ≤ scoreBound
+  -- From Electra the balances left to consume for deposits and for exits fit in the budget too.
   carried : ∀ electra : .pectra ≤ fork,
     (state.depositBalanceToConsume electra).toNat ≤ budget ∧
       (state.exitBalanceToConsume electra).toNat ≤ budget

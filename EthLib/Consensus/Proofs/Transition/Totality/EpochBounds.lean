@@ -16,21 +16,9 @@ import EthLib.Consensus.Proofs.Transition.SlashingsHistory
 
 A run of slots carries bounds on the state from one epoch to the next.
 
-From Altair, one epoch keeps every inactivity score within a bound plus the score bias.
-
-The update of the scores adds at most the bias, and the other steps keep the scores.
-
-A validator that a deposit adds starts at a score of zero.
-
-One epoch never raises the sum of the slashed balances, since it only resets one entry.
-
-One epoch adds at most one historical root, and from Capella at most one historical summary.
-
-From Electra, the churn carried for deposits grows by at most the cap of the deposit churn.
+One epoch keeps bounds on the scores, the slashed balances, the history and the deposit churn.
 
 After one epoch, the effective balances sum to at most 4/3 of the balances on mainnet.
-
-That needs a state that keeps the invariant.
 
 Only the pending deposits grow the registry, by at most their cap at each epoch start.
 -/
@@ -148,10 +136,12 @@ theorem processEpoch_scoreBound {config : Config} {checks : SignatureChecks}
   simp only [Edge, altair, ↓reduceDIte] at edge
   have justifiedScores := processJustificationAndFinalization_inactivityScores
     (action_cases.mp justified)
+  -- The update of the scores adds at most the bias.
   have bounded : ScoresAtMost altair (bound + config.INACTIVITY_SCORE_BIAS.toNat) middle :=
     processInactivityUpdates_scoreBound edge fun score member => by
       rw [justifiedScores] at member
       exact scored score member
+  -- The other steps keep the scores, and a validator that a deposit adds starts at zero.
   have carried := middleTrace.transport
     (fun first second => ScoresAtMost altair (bound + config.INACTIVITY_SCORE_BIAS.toNat) first →
       ScoresAtMost altair (bound + config.INACTIVITY_SCORE_BIAS.toNat) second)
@@ -186,6 +176,7 @@ private theorem slashingsReset_facts {config : Config} {checks : SignatureChecks
   · cases written
   · cases written
     simp only [Serialization.Ssz.RootedVector.elements_set, Vector.toList_set, List.map_set]
+    -- The reset sets one entry to zero, so the sum does not rise.
     exact sum_set_zero_le _ _
 
 /-- The history update keeps the slashed balances, and adds at most one entry to each list. -/
@@ -385,12 +376,11 @@ The factor is the hysteresis quotient divided by that quotient less the downward
 
 It says something only when the downward multiplier is below the quotient.
 
-On mainnet it is 4/3.
-
-The state must satisfy the state invariant.
-
-The largest effective balances must be whole increments. -/
+On mainnet it is 4/3. -/
 theorem processEpoch_effectiveBalanceSum_le {config : Config} {checks : SignatureChecks}
+    -- The state must satisfy the state invariant.
+    --
+    -- The largest effective balances must be whole increments.
     (holds : Invariant state) (maxAligned : MaxEffectiveBalancesAligned preset)
     (computed : processEpoch config checks state = .ok after) :
     effectiveBalanceSum after *

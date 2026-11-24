@@ -7,25 +7,11 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RunHypotheses
 /-!
 # Proofs: every slot advance after a chain of bounded blocks succeeds
 
-A chain starts from a state that keeps the facts of a chain.
+A chain of blocks within the limits, each accepted by the transition, keeps the facts of a chain.
 
-Each of its blocks stays within the limits, and the transition accepts it.
-
-Each block keeps the facts, with one more block in the count.
-
-So the state at the end of the chain keeps them.
-
-From that state, every slot advance within the epochs of the chain succeeds.
-
-At the end of each epoch on the way, the signers must hold at most the active balance.
-
-The draws must end, and a run before Altair must end within the epoch limit.
+From the state at its end, every slot advance within the epochs of the chain succeeds.
 
 On mainnet, the step covers the limits for 16 epochs at a budget of `2^57` Gwei.
-
-Before Gloas, the types of a mainnet body keep it within three of those limits.
-
-The chain may start at any epoch up to `2^40`.
 -/
 
 @[expose] public section
@@ -173,16 +159,6 @@ theorem ChainHolds.processSlotsAcross_exists_ok
 
 The chain starts from a state that keeps the facts of a chain.
 
-The step covers the limits, and the conditions of the chain hold.
-
-The least inclusion delay and the withdrawal delay are positive.
-
-The increment is at most the least balance to activate.
-
-At the end of each epoch of the advance, the signers hold at most the active balance.
-
-The draws end, and before Altair the advance ends within the epoch limit.
-
 The state that the advance returns keeps the facts of the chain, with its blocks counted. -/
 theorem processSlotsAcross_exists_ok_of_chain
     [∀ fork, Serialization.Ssz.LawfulSszType (BeaconState preset fork)]
@@ -192,17 +168,22 @@ theorem processSlotsAcross_exists_ok_of_chain
     {start : RunStart} {step : BlockStep} {limits : BlockLimits}
     {budget epochs lastEpoch startEpoch blocks count : Nat}
     {forked reached : ForkedBeaconState preset} {slot : Slot}
+    -- The conditions of the chain hold, and the step covers the limits.
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
     (fits : startEpoch + epochs ≤ lastEpoch)
     (covers : step.Covers preset limits start budget epochs)
+    -- The least inclusion delay and the withdrawal delay are positive.
     (inclusion : 0 < preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat)
     (withdrawable : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    -- The increment is at most the least balance to activate.
     (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
     (holds : ChainHolds config start step budget startEpoch blocks forked.state)
     (reaches : ChainReaches config checks limits forked count reached)
     (later : reached.state.slot < slot)
     (within : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs)
+    -- At the end of each epoch of the advance, the signers hold at most the active balance.
     (signers : SignersAtEnds config checks reached (slot.toNat - reached.state.slot.toNat))
+    -- The draws end, and before Altair the advance ends within the epoch limit.
     (draws : DrawsEnd config checks reached (slot.toNat - reached.state.slot.toNat))
     (limit : EpochLimitBeforeAltair reached (slot.toNat - reached.state.slot.toNat)) :
     ∃ after, processSlotsAcross config checks reached slot = .ok after ∧
@@ -218,17 +199,20 @@ theorem processSlotsAcross_exists_ok_of_chain
 
 /-- Limits on a block body on mainnet.
 
-Its deposits and deposit requests bring in at most 10,000 ETH, and it applies at most 16 deposits.
-
-It raises the validators plus the pending deposits by at most `2^14`.
-
-Its slashings name at most `2^10` validators, and it carries at most 16 withdrawal requests.
-
 Before Gloas, the body types bound the count of deposits, the load and the withdrawal requests.
 
 The protocol does not cap the Gwei of the deposits, and it allows far more slashed validators. -/
 def BlockLimits.mainnet : BlockLimits :=
-  { deposits := 10 ^ 13, joins := 16, load := 2 ^ 14, slashings := 2 ^ 10, withdrawals := 16 }
+  -- Its deposits and deposit requests bring in at most 10,000 ETH.
+  { deposits := 10 ^ 13,
+    -- It applies at most 16 deposits.
+    joins := 16,
+    -- It raises the validators plus the pending deposits by at most `2^14`.
+    load := 2 ^ 14,
+    -- Its slashings name at most `2^10` validators.
+    slashings := 2 ^ 10,
+    -- It carries at most 16 withdrawal requests.
+    withdrawals := 16 }
 
 /-- Before Gloas, every mainnet block body is within three of the mainnet limits.
 
@@ -398,16 +382,16 @@ The chain starts from a state that keeps the facts of a chain, with the mainnet 
 
 The budget of effective balances is `2^57` Gwei.
 
-The advance ends at most 16 epochs past the first epoch of the chain, which is at most `2^40`.
-
 It takes the hypotheses on the signers, the draws and the epoch limit of the general theorem. -/
 theorem processSlotsAcross_exists_ok_of_chain_mainnet {startEpoch blocks count : Nat}
     {forked reached : ForkedBeaconState Preset.mainnet} {slot : Slot}
+    -- The first epoch of the chain is at most `2^40`.
     (early : startEpoch ≤ 2 ^ 40)
     (holds : ChainHolds Config.mainnet (RunStart.mainnet startEpoch) BlockStep.mainnet (2 ^ 57)
       startEpoch blocks forked.state)
     (reaches : ChainReaches Config.mainnet checks BlockLimits.mainnet forked count reached)
     (later : reached.state.slot < slot)
+    -- The advance ends at most 16 epochs past the first epoch of the chain.
     (within : slot.toNat / Preset.mainnet.SLOTS_PER_EPOCH.toNat ≤ startEpoch + 16)
     (signers : SignersAtEnds Config.mainnet checks reached (slot.toNat - reached.state.slot.toNat))
     (draws : DrawsEnd Config.mainnet checks reached (slot.toNat - reached.state.slot.toNat))
