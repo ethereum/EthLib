@@ -52,5 +52,23 @@ The tests also check how the reader reads that block parameter.
 For a method that the view does not serve, they do not check the result of the request.
 The view does not serve the trace methods yet, so the tests do not run their other files.
 
+## Methods that are not vendored
+
+The source has twelve method directories under `tests/` that EthLib does not vendor.
+Nine of them answer from state of the node that the test chain alone does not fix:
+
+- `eth_gasPrice` and `eth_maxPriorityFeePerGas` read the gas price oracle of the node;
+- `eth_syncing` reads the sync state of the node;
+- `net_listening` and `net_peerCount` read the peers of the node;
+- `eth_capabilities` reads the retention policy of the node;
+- `txpool_content`, `txpool_contentFrom` and `txpool_status` read the transaction pool of the node.
+
+`testing_buildBlockV1` and `testing_commitBlockV1` build a new block, and the second one also makes it the head.
+The chain view only reads the chain, so it serves neither.
+
+The twelfth, `eth_blobBaseFee`, waits for [ethereum/execution-apis#1004](https://github.com/ethereum/execution-apis/pull/1004), which proposes that it return the blob base fee of the next block.
+
+## Error groups
+
 The tests compare the error codes of the bindings with these groups.
 They take the order of the groups from the table of reserved ranges in `src/error-groups/README.md` of the source.

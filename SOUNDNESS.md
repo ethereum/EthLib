@@ -5279,7 +5279,7 @@ Payload attributes of `engine_forkchoiceUpdated` answer by the version of the me
 `attributesTakeFork_eq_true_iff` shows that a version takes such a fork exactly when it decodes the structure of the attributes at that fork.
 So version 1 takes Paris, version 2 Paris and Shapella, version 3 the forks from Dencun before Glamsterdam, version 4 Glamsterdam and version 5 Hegotá.
 Version 0 reads as version 1, and a version above 5 as version 5.
-Version 5 follows [`bogota.md`](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_forkchoiceupdatedv5), cited at a commit after the pin until #3567 moves it.
+Version 5 follows [`bogota.md`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#engine_forkchoiceupdatedv5).
 Its attributes add the transactions of the inclusion lists, each any byte string.
 Its payload status has version 2, and its verdict on the inclusion list of a valid head is an input of the C export.
 That verdict needs the execution rules of Bogota, which #1369 tracks.
@@ -5638,7 +5638,7 @@ The reader takes a reading where its sources leave a choice:
 ### Execution JSON-RPC API
 
 The execution JSON-RPC API is the interface through which wallets, indexers and test suites read an execution node.
-EthLib follows commit [`3284ee8`](https://github.com/ethereum/execution-apis/tree/3284ee80c3da3e516c53782dde75157cccf1ebdc) of `ethereum/execution-apis`, which is ahead of release `v1.0.0-beta.7`.
+EthLib follows commit [`1ca0818`](https://github.com/ethereum/execution-apis/tree/1ca0818569467cff85b7f41372f22e728d5daa14) of `ethereum/execution-apis`, which is ahead of release `v1.0.0-beta.7`.
 The definitions are in `Execution/Rpc/`, and the theorems in `Execution/Proofs/Rpc/`.
 
 Each reader of a base type reads back what its writer writes.
@@ -5758,10 +5758,10 @@ From Fusaka the size check of the block gives that form, of at most `8 * 2^20` b
 A valid view does not run the lowest block, a block off the canonical chain or the pending block through the state transition.
 So no theorem says that the writer succeeds on them.
 For the tag `pending`, the header method answers `null`.
-The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml) answer `null` for `pending`.
+The block and count methods read the pending block of the view instead, since only the header methods of [`block.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/block.yaml) answer `null` for `pending`.
 The schema gives `size` only the title "Block size"; here it is the length of the RLP form of the block, which the fixtures pin.
 
-The raw getters of [`getters.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/debug/getters.yaml) return the consensus encodings of a header, a block, a transaction and the receipts of a block (`Execution/Rpc/Raw.lean`).
+The raw getters of [`getters.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/debug/getters.yaml) return the consensus encodings of a header, a block, a transaction and the receipts of a block (`Execution/Rpc/Raw.lean`).
 The bytes of a transaction hash to the hash that names it in the request (`keccak256_rawTransaction`, `Proofs/Rpc/Raw.lean`).
 In a valid view, the raw header that the getter returns hashes to the hash that the node keeps for its block, and decodes back to the header (`Valid.rawHeader_eq_ok`, `Valid.rawHeader`).
 The header and block objects report that hash (`getObjVal_hash_headerObject`, `getObjVal_blockJson`), so the raw header hashes to the hash of the block object (`Valid.hash_blockByNumber_rawHeader`).
@@ -5795,7 +5795,7 @@ Its `pruned_access_lists` argument removes lists at named block numbers while ke
 `encode_block_access_list` reads a JSON list under the same schema and returns its RLP bytes, so callers can check a JSON answer against a header hash.
 It does not check the order of the list, so only a list in canonical order gives the hash of the header.
 
-The receipt methods return the object `ReceiptInfo` of [`receipt.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/receipt.yaml), with its logs as objects `Log` (`Execution/Rpc/Receipt.lean`).
+The receipt methods return the object `ReceiptInfo` of [`receipt.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/receipt.yaml), with its logs as objects `Log` (`Execution/Rpc/Receipt.lean`).
 The receipt objects of a block are one for each receipt, in order, each built from its transaction and its receipt (`receiptInfos_eq_ok`, `receiptInfo_eq_ok`, `Proofs/Rpc/Receipt.lean`).
 Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`), and the lookup of one receipt returns the object at its index among those of its block (`transactionReceipt_eq_ok`).
 In a valid view, it is the object at that index among the receipts of the number of the block, so both methods give each log the same `logIndex` (`Valid.transactionReceipt_blockReceipts`).
@@ -5804,7 +5804,7 @@ A creation has the address that the sender makes at its nonce, and a call has no
 A receipt object has `blobGasUsed` and `blobGasPrice` exactly for a blob transaction (`receiptInfo_blob`).
 It reports `2^17` blob gas for each versioned hash.
 From Dencun, its blob gas price is the base fee per blob gas that the blob schedule of the chain, at the fork, number and timestamp of the block, gives for the excess blob gas of its header.
-No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
+No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
 These properties hold whenever the receipt objects of a block are built.
 They are built exactly when the block has one receipt for each transaction, and each transaction has a hash and a sender (`exists_receiptInfos_eq_ok_iff`).
 That sender is the one that the signature names at the fork of the block.
@@ -5832,7 +5832,7 @@ The theorem states the purchase on that state; that the run of the transaction s
 From Glamsterdam, EIP-7778 makes the cumulative gas of a receipt the gas that the senders paid.
 As a choice of EthLib, the object copies it, so `gasUsed` is the gas that the sender paid, while the descriptions of `receipt.yaml` read "gas used".
 
-`eth_getLogs` reads the logs that a filter of [`filter.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/filter.yaml) selects (`Execution/Rpc/Filter.lean`).
+`eth_getLogs` reads the logs that a filter of [`filter.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/filter.yaml) selects (`Execution/Rpc/Filter.lean`).
 A filter names one block by its hash, or a range of canonical blocks by its bounds, and then the addresses and the topics at each position that it takes.
 A range is valid exactly when its bounds resolve to numbers in order, the first at least the lowest block and the last at most the head (`filterBlocks_range_eq_ok_iff`).
 It then reads exactly the canonical blocks between its bounds.
@@ -5851,11 +5851,11 @@ The module header gives the choice for each, and follows the official fixtures w
 A log with fewer topics than the filter has positions does not match, even when each extra position takes any topic (`Filter.selects_eq_false_of_length_lt`).
 No fixture filter ends with a position that takes any topic, and no text of the source decides the case.
 
-The account queries of [`state.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/state.yaml) read the state after the block that their parameter names, `latest` by default (`Execution/Rpc/Account.lean`).
+The account queries of [`state.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/state.yaml) read the state after the block that their parameter names, `latest` by default (`Execution/Rpc/Account.lean`).
 `eth_getStorageValues` gives, for each key of each address of its request, the word that `eth_getStorageAt` gives for the same block (`storageValues_agree`).
 An address with no account has balance and nonce zero and empty code (`balance_of_none`, `nonce_of_none`, `code_of_none`), as the fixtures expect, though no text states it.
 
-`eth_call` of [`execute.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml) runs the message of a transaction on the state after a block, and commits nothing (`Execution/Rpc/Call.lean`).
+`eth_call` of [`execute.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml) runs the message of a transaction on the state after a block, and commits nothing (`Execution/Rpc/Call.lean`).
 The request is a `GenericTransaction`, whose fields are all optional and which has no field outside its schema.
 A field of the schema whose value is `null` counts as absent.
 The call prepares its message with the steps of a transaction, then runs it with `processMessageCall`, the function that the state transition runs.
@@ -5872,7 +5872,7 @@ A request makes a transaction exactly when it passes the checks of its kind (`ex
 Its kind is at most 4, and a request of type 3 or 4 names a recipient.
 A gas price, a fee cap, a priority fee, an access list, blob hashes, a blob fee cap or authorizations appear only in the kinds that carry them.
 The schema ties none of its fields to the kind, so these checks are choices of EthLib.
-The call drops the field `type` before these checks, as the [text of the three methods](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L11-L24) requires, so the kind comes from the other fields.
+The call drops the field `type` before these checks, as the [text of the three methods](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml#L11-L24) requires, so the kind comes from the other fields.
 So a request with any type gets the answer of the same request without it (`prepareCall_type`, `ethCall_type`, `estimateGas_type`, `createAccessList_type`).
 A chain that it names is that of the node.
 The nonce, the gas limit and the fee cap that the call gives are below `2^256`.
@@ -5935,7 +5935,7 @@ It leaves out an address without a storage key that the transaction accesses fro
 These addresses are the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
 The list keeps the authorities and the delegate of EIP-7702, and the contracts that the code of the call creates.
 EIP-2929 and EIP-7702 make these addresses warm, but they stay in the list.
-The [text of the method](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L122-L142) leaves out only the sender, the recipient or the created contract, and the precompiles, and keeps every other address that the transaction accesses.
+The [text of the method](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml#L122-L142) leaves out only the sender, the recipient or the created contract, and the precompiles, and keeps every other address that the transaction accesses.
 Read literally, it keeps the beneficiary, which EIP-3651 makes warm from Shapella, so that its entry only costs gas.
 EthLib leaves it out until the source says which reading holds ([ethereum/execution-apis#1005](https://github.com/ethereum/execution-apis/issues/1005)).
 
@@ -5946,7 +5946,7 @@ The result reports the gas used and the error message of that second call (`crea
 A rejection of the second call, such as a gas limit that no longer covers the list, is the error of the method.
 The list is not iterated to a fixed point, so a call whose accesses change with its access list can report a list that the second call does not match.
 
-`eth_simulateV1` of [`execute.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml) runs calls in a sequence of blocks on top of a base block (`Execution/Rpc/Simulate.lean`).
+`eth_simulateV1` of [`execute.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml) runs calls in a sequence of blocks on top of a base block (`Execution/Rpc/Simulate.lean`).
 EthLib specifies its request, the checks before the execution, and the simulated blocks.
 The reader rejects a key outside the schema of block or account overrides (`blockOverrides_unknown_key`, `accountOverride_unknown_key`, `Proofs/Rpc/Simulate.lean`).
 It rejects an account override with both `state` and `stateDiff`, even when one is `null` (`accountOverride_state_and_stateDiff`).
@@ -5977,7 +5977,7 @@ Once it is, a transaction whose fee cap is 0 pays at a base fee of 0 (`paidBaseF
 The check of the base fee, the purchase of the gas and the settlement read that base fee, by definition.
 The base fee of the block, which BASEFEE reads, stays unchanged, since the block environment is not modified.
 
-Block times strictly increase, and a block without a time comes a block time after the block before it, as the notes and the [schema of the time](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/execute.yaml#L116-L119) say.
+Block times strictly increase, and a block without a time comes a block time after the block before it, as the notes and the [schema of the time](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml#L116-L119) say.
 The block time is 12 seconds by default, that of Mainnet.
 
 Where the source is silent or conflicts with itself, EthLib follows the fixtures, else decides:
@@ -5988,7 +5988,7 @@ Where the source is silent or conflicts with itself, EthLib follows the fixtures
 - a gap block comes a block time after the block before it, 12 seconds by default, and counts toward the limit of 256 blocks;
 - an unknown base block, and a move of an address that is not a precompile, get `-32000`;
 - a precompile moved to its own address gets `-38022`;
-- the fixtures move two precompiles to one address without an error, so EthLib never gives `-38023`, which the method lists;
+- the fixtures move two precompiles to one address without an error, and the method lists no code for it;
 - `state` with `stateDiff` gets `-32602`, for which the source gives no code;
 - an address or a slot given twice, in hex digits of another case, gets `-32602`;
 - block and account overrides support no key beyond their schema, `difficulty` included, nor a key that differs from one only in case;
@@ -6000,7 +6000,7 @@ A simulated block differs from a real one in these places:
 - its header takes the defaults of the notes and the overrides of the request, and is not checked against its parent;
 - without validation, its base fee and its base fee per blob gas are 0, unless the request sets them;
 - each call runs from its given sender with `r`, `s` and `yParity` 0, so it needs no signature and may come from an account with code;
-- no call fails for the code of its sender (`applyTransactions_ne_senderNotEoa`), so EthLib never gives `-38024`, which the method lists for a sender that is not an EOA;
+- no call fails for the code of its sender (`applyTransactions_ne_senderNotEoa`), and the method lists no code for a sender that is not an EOA;
 - the cap at `2^32 - 1` on the gas limit never applies, and without validation the nonce check and the caps at `2^24` of EIP-8037 do not either;
 - without validation, the block access list need not fit the gas limit;
 - without validation, a call whose fee cap is 0 pays nothing for its gas, apart from its blob gas, even below a base fee that the request sets;
@@ -6090,7 +6090,7 @@ So each block of the plan has a fork no earlier than the active fork of the head
 When that fork is Glamsterdam or later, the answer is the same either way (`simulate_traceTransfers_of_base`, `Proofs/Rpc/SimulateCalls.lean`).
 When that fork is before Glamsterdam, or no fork is active at the base block, no theorem derives the hypothesis on the blocks of the plan.
 
-`eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
+`eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
 The base fee of each block of the range is that of its header, or 0 before London (`ChainView.feeHistory_baseFeePerGas`).
 The last base fee is `expectedBaseFeeAcross` of the newest header, the rule that checks the base fee of a header, or 0 when the next block is before London.
@@ -6114,7 +6114,7 @@ The comparison is exact.
 Before London the base fee is 0, so a tip is the whole gas price.
 A ratio is written with at most 18 decimal places, rounded down, and the rewards are left out when the request names no percentile.
 
-`eth_sendRawTransaction` of [`submit.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/submit.yaml) submits a signed transaction in its raw form (`Execution/Rpc/Submit.lean`).
+`eth_sendRawTransaction` of [`submit.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/submit.yaml) submits a signed transaction in its raw form (`Execution/Rpc/Submit.lean`).
 A blob transaction must come in its network form at the fork of the next block.
 Before Fusaka that form has one proof per blob, and from Fusaka it has cell proofs.
 The hash of an accepted submission is the hash of the transaction that the raw form holds, without blobs, commitments or proofs (`ChainView.sendRawTransaction_hash`, `Proofs/Rpc/Submit.lean`).
@@ -6147,7 +6147,7 @@ The code 802 names a minimum that the node configures.
 The codes 805, 807 and 808 name values that the decoder already rejects.
 The code 1000 names a transaction that the node already knows, and the codes `-32000` to `-32006` name no single condition.
 
-`debug_traceTransaction`, `debug_traceBlockByNumber` and `debug_traceBlockByHash` of [`trace.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/debug/trace.yaml) return the trace of the opcode logger, whose shape [`opcode-tracer.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/opcode-tracer.yaml) fixes (`Execution/Rpc/Trace.lean`, `Execution/Rpc/TraceView.lean`).
+`debug_traceTransaction`, `debug_traceBlockByNumber` and `debug_traceBlockByHash` of [`trace.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/debug/trace.yaml) return the trace of the opcode logger, whose shape [`opcode-tracer.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/opcode-tracer.yaml) fixes (`Execution/Rpc/Trace.lean`, `Execution/Rpc/TraceView.lean`).
 The trace is an observer of the one interpreter: the frame loop, the message runs and the transaction runs take an observer of the steps, and the runs of the rest of EthLib are the instances with no observer (`processMessageCall_unfold`, `runTransaction_unfold`, `processTransaction_unfold`, `Proofs/Transactions/Unfold.lean`).
 An observer that only records in a state leaves the run unchanged once the state is dropped (`processTransactionWith_modify`, `Proofs/Transactions/Observe.lean`), so the traced run gives what the run gives, for every configuration and bound (`traceRun_output`, `Proofs/Rpc/Trace.lean`).
 Two recording observers related by a map of their states give related runs (`runFrameWith_map`, `processTransactionWith_map`).
@@ -6159,7 +6159,7 @@ The trace of a block has one entry per transaction, and each entry is the trace 
 A block whose transactions run after the start of its body has a trace (`traceBlock_ok`).
 So a block that passes its transition has a trace with one entry per receipt, and from Byzantium each entry failed exactly when its receipt says so (`stateTransition_traceBlock`).
 The Python suite runs the 13 vendored `tests/debug_trace*` fixtures; each success fixture is `speconly`, and EthLib matches it field for field.
-The [schema of an entry](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml#L144-L199) gives `refund` only when it is not zero, and `storage` only at an SLOAD or SSTORE step that does not halt with an error.
+The [schema of an entry](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/opcode-tracer.yaml#L144-L199) gives `refund` only when it is not zero, and `storage` only at an SLOAD or SSTORE step that does not halt with an error.
 `record_storage` (`Proofs/Rpc/Trace.lean`) shows that an entry holds storage only at a step that read or wrote a slot, and `record_slots_of_stepError` that a step that fails changes the slots of no account.
 
 The source leaves these points open, and EthLib picks:
