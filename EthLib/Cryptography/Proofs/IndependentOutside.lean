@@ -8,51 +8,17 @@ public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 /-!
 # Proofs: independent answers to a permutation, asked of one outside oracle
 
-The oracle with independent answers draws each new forward answer itself.
-
-Here each new forward answer is one query to an outside oracle with no input.
-
-New inverse answers still come from coins.
-
-Before it asks the outside oracle, a new forward query asks the coins at the code of its point.
-
-That query changes no law, since its answer is dropped, but it records the point in the transcript.
-
-The cache and the flag change as before, and each new forward query is logged with its answer.
-
-Each logged pair stays in the cache.
-
-While the flag is down, no two cached pairs share their query or their answer.
+Each new forward answer is one query to an outside oracle with no input.
 
 With uniform answers from the outside oracle, the output, the cache and the flag keep their law.
 
-A replay forking lemma rewinds a run at one query of an oracle.
+A replay forking lemma can then rewind a run at a new forward query of the permutation.
 
-So a run in this form can be rewound at a new forward query of the permutation.
-
-Its transcript of the outside oracles follows the log of new forward pairs in lockstep.
-
-The `k`-th answer of the outside oracle is the answer of the `k`-th pair of the log.
-
-Just before it, the transcript holds a coin query at the code of the point of that pair.
-
-So two runs whose transcripts agree before the `k`-th outside answer share the `k`-th point.
-
-Answering the coins and the outside oracle with uniform draws keeps the law of a run.
-
-A run can also stop just before a query to the outside oracle, and complete it with a given answer.
-
-A replay fork there, with an event, is no likelier than two independent completions meeting it.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
+The source is [Fersch, Kiltz, Poettering, CCS 2016][fkp].
 
 The change is the forward part of their Game G2 of Figure 7, in the proof of their Theorem 2.
 
-Its lines 01 and 19 answer new forward queries with values `β_1, …, β_Q` drawn up front.
-
-The inverse answers stay those of their Game G1, line 25.
-
-Their Game G2 also changes those, in lines 26 to 28, which this run leaves out.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -80,30 +46,36 @@ abbrev queryCode (a : A) : ℕ := (FinEnum.equiv a : Fin (FinEnum.card A))
 
 /-- The permutation oracle with independent answers, the new forward ones asked outside.
 
-A query answered before gets its answer again, in either direction.
-
-A new forward query first asks the coins once, at the code of its point, and drops the answer.
-
-That marks the point in the transcript of the outside oracles.
-
-It then asks the outside oracle once, and joins the log with its answer.
-
-A new inverse query gets a uniform value of `A` from coins.
-
 The cache and the flag change by the same rules as with independent answers. -/
 def outsideOracle : QueryImpl (PermSpec A) (StateT (OutsideState A) (OracleComp (OutsideSpec A)))
   | .inl a => fun s =>
     match s.1.1.lookup a with
+    -- A query answered before gets its answer again, in either direction.
     | some b => pure (b, s)
     | none => do
+      -- A new forward query first asks the coins once, at the code of its point.
+      --
+      -- Its answer is dropped, so it changes no law.
+      --
+      -- It marks the point in the transcript of the outside oracles.
       let _ ← (query (spec := OutsideSpec A) (.inl (queryCode a)) :
         OracleComp (OutsideSpec A) (Fin (queryCode a + 1)))
+      -- It then asks the outside oracle once, and joins the log with its answer.
+      --
+      -- Independent answers would draw this value with coins instead.
+      --
+      -- Lines 01 and 19 of the source's Game G2 draw these values `β_1, …, β_Q` up front.
       (fun b : A => (b, (IndepState.addForward s.1 a b, s.2 ++ [(a, b)]))) <$>
         (query (spec := OutsideSpec A) (.inr ()) : OracleComp (OutsideSpec A) A)
   | .inr b => fun s =>
     match (s.1.1.map Prod.swap).lookup b with
     | some a => pure (a, s)
     | none =>
+      -- A new inverse query gets a uniform value of `A` from coins.
+      --
+      -- These are the inverse answers of the source's Game G1, line 25.
+      --
+      -- Its Game G2 also changes them, in lines 26 to 28, which this run leaves out.
       (fun a => (a, (IndepState.addInverse s.1 a b, s.2))) <$>
         liftComp (uniformOutside [] b) (OutsideSpec A)
 
@@ -249,7 +221,12 @@ theorem outsideInv_of_mem_support_simulateQ_outsideImpl {α : Type} (oa : PermCo
     obtain ⟨w, hw, hz'⟩ := hz
     exact ih w.1 (outsideInv_of_mem_support_outsideImpl t hs hw) hz'
 
-/-! ## The transcript of the outside oracles -/
+/-! ## The transcript of the outside oracles
+
+A replay forking lemma rewinds a run at one query of an oracle.
+
+Two runs whose transcripts agree before the `k`-th outside answer share the `k`-th point.
+-/
 
 /-- An entry of the transcript of the outside oracles: a query and its answer. -/
 abbrev OutsideEntry (A : Type) := (t : (OutsideSpec A).Domain) × (OutsideSpec A).Range t
@@ -531,7 +508,10 @@ theorem simulateQ_outsideImpl_run_evalDistEq {α : Type} (oa : PermComp A α) (s
         fun _ => evalDistEq_liftComp_uniform _
       simpa only [bind_map_left] using h
 
-/-! ## The oracles answered by uniform draws, and the stopped run -/
+/-! ## The oracles answered by uniform draws, and the stopped run
+
+A run can stop just before a query to the outside oracle, and complete it with a given answer.
+-/
 
 omit [FinEnum A] [UniformAnswerMeasure (Unit →ₒ A)] in
 /-- The oracles of the run with the outside oracle: coins passed through, and uniform answers. -/

@@ -8,33 +8,17 @@ public import VCVio.EvalDist.ProbabilityBounds
 /-!
 # Proofs: a random permutation answered by independent uniform values
 
-The lazy permutation answers a new forward query with a uniform value that is no cached image.
+The oracle here answers every new query with a uniform value of the whole set, and flags a repeat.
 
-It answers a new inverse query with a uniform value that is no cached preimage.
+Against the lazy permutation, this swap costs at most the birthday bound.
 
-The oracle here answers every new query with a uniform value of the whole set instead.
-
-It keeps the same cache, and raises a flag when the new value is already in the cache.
-
-Until the flag rises, the lazy permutation puts at least as much mass on each outcome.
-
-A new query raises the flag with chance at most the size of the cache over `|A|`.
-
-Take a run that asks the permutation, in either direction, at most `Q` times.
-
-Compare an event under the lazy permutation with the same event here, with no flag raised.
-
-The first chance exceeds the second by at most `Q (Q - 1) / 2` over `|A|`.
-
-This is the birthday bound between a random permutation and independent answers.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
+The source is [Fersch, Kiltz, Poettering, CCS 2016][fkp].
 
 The swap is the step from Game G0 to Game G1 of their §4.2, in the proof of their Theorem 2.
 
 Their Game G1 is in their Figure 7.
 
-Their bound there is `Q^2 / 2^L`; the bound here is half of it, or less.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -148,23 +132,26 @@ abbrev IndepState.addInverse (s : IndepState A) (a b : A) : IndepState A :=
 
 /-- The permutation oracle answered by independent uniform values.
 
-A query answered before gets its answer again, in either direction.
-
-A new query gets a uniform value of `A`, and the pair joins the cache.
-
-The flag rises when a new forward answer is a cached image.
-
-It also rises when a new inverse answer is a cached preimage.
+A new answer that is already cached raises the flag.
 
 Once raised, the flag stays. -/
 def indepPermOracle : QueryImpl (PermSpec A) (StateT (IndepState A) ProbComp)
   | .inl a => fun s =>
     match s.1.lookup a with
+    -- A query answered before gets its answer again, in either direction.
     | some b => pure (b, s)
+    -- A new query gets a uniform value of `A`, and the pair joins the cache.
+    --
+    -- The flag rises when a new forward answer is a cached image.
+    --
+    -- The lazy permutation would draw a value that is no cached image instead.
     | none => (fun b => (b, IndepState.addForward s a b)) <$> (uniformOutside [] a : ProbComp A)
   | .inr b => fun s =>
     match (s.1.map Prod.swap).lookup b with
     | some a => pure (a, s)
+    -- The flag rises when a new inverse answer is a cached preimage.
+    --
+    -- The lazy permutation would draw a value that is no cached preimage instead.
     | none => (fun a => (a, IndepState.addInverse s a b)) <$> (uniformOutside [] b : ProbComp A)
 
 /-- The oracles with independent answers: coins, passed through, then the oracle above. -/
@@ -335,8 +322,12 @@ theorem prEvent_lazyPermImpl_le_indepPermImpl {α : Type} (oa : PermComp A α) {
     (hQ : IsQueryBoundP oa (·.isRight = true) Q) (P : α → Prop) :
     Pr{let z ← (simulateQ lazyPermImpl oa).run' []}[P z] ≤
       Pr{let z ← (simulateQ indepPermImpl oa).run ([], false)}[P z.1 ∧ z.2.2 = false] +
+        -- The bound of the source is `Q^2 / 2^L`.
+        --
+        -- The bound here is half of it, or less.
         (Q.choose 2 : ℝ≥0∞) / FinEnum.card A := by
   rw [StateT.run'_eq, prEvent_map]
+  -- Until the flag rises, the lazy permutation puts at least as much mass on each outcome.
   refine (dominatedUntilBad_indepPermImpl.prEvent_simulateQ_run_le_map_or_bad
     (fun _ _ _ _ _ => trivial) indepPermImpl_preservesInv_flag oa ([], false) trivial
     fun z => P z.1).trans ?_
@@ -348,6 +339,7 @@ theorem prEvent_lazyPermImpl_le_indepPermImpl {α : Type} (oa : PermComp A α) {
       (fun t ht s w hw => by simpa [ht] using length_le_of_mem_support_indepPermImpl t s w hw)
       ([], false) z hz
     simpa using this
+  -- A new query raises the flag with chance at most the size of the cache over `|A|`.
   have hbad := badOnGrowthBy_indepPermImpl.prEvent_bad_le oa ([], false) (by simp) hn
   rw [show List.length ([] : PermCache A) = 0 from rfl, ← Finset.range_eq_Ico,
     sum_range_natCast_div] at hbad

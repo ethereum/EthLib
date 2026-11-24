@@ -14,16 +14,6 @@ Doubling and addition of forms give the forms of the group's sums.
 So double and add on forms computes `k P`, and one shared chain of doublings computes `k P + l Q`.
 
 The proofs hold over any field of characteristic other than 2.
-
-A change of field representation commutes with every formula, on every form.
-
-It commutes with the conversion back too, when it keeps the inverse.
-
-So forms mod a prime `m` other than 2 follow the law through their values in `ZMod m`.
-
-A point of a short Weierstrass curve converts to a form and back.
-
-So double and add on points computes `k P`, in any representation of any such field.
 -/
 
 @[expose] public section
@@ -102,7 +92,12 @@ theorem mulBits_succ (a : F) (fuel k : Nat) (p : Coords F) :
 
 end Steps
 
-/-! ## A change of field representation -/
+/-! ## A change of field representation
+
+A change of field representation commutes with every formula, on every form.
+
+It commutes with the conversion back too, when it keeps the inverse.
+-/
 
 /-- A map between two representations of one field.
 
@@ -679,7 +674,10 @@ theorem toAffine_of_z_ne_zero {p : Jacobian m} (hz : p.z ≠ 0) :
     by simp [toAffine, Coords.toAffine, hz], ?_, ?_⟩ <;>
     simp [affX, affY, div_eq_mul_inv, pow_succ, mul_assoc]
 
-/-! ## The group law, from the coordinates in `ZMod m` -/
+/-! ## The group law, from the coordinates in `ZMod m`
+
+Forms mod a prime `m` other than 2 follow the law through their values in `ZMod m`.
+-/
 
 section Law
 
@@ -788,7 +786,12 @@ namespace EthLib.Cryptography.ShortWeierstrass.Point
 
 open Jacobian (toZ)
 
-/-! ## Points of a curve as forms, over a field -/
+/-! ## Points of a curve as forms, over a field
+
+A point of a short Weierstrass curve converts to a form and back.
+
+So double and add on points computes `k P`, in any representation of any such field.
+-/
 
 section Field
 

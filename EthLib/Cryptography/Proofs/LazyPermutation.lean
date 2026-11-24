@@ -11,25 +11,21 @@ public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 /-!
 # Proofs: a random permutation sampled one answer at a time
 
-A random permutation oracle draws a uniform permutation `π` of a finite set before the run.
+A random permutation oracle draws a uniform permutation `π` before the run.
 
-The adversary then asks for `π a` and for the inverse `π⁻¹ b`.
+The lazy oracle draws nothing up front, and keeps the pairs `(a, π a)` answered so far.
 
-The lazy oracle draws nothing up front.
+It answers a new query with a uniform value that no cached pair uses in that direction.
 
-It keeps the pairs `(a, π a)` answered so far.
+From the empty cache, it gives every run the output law of a uniform permutation drawn first.
 
-A new forward query gets a uniform value that is no cached image.
-
-A new inverse query gets a uniform value that is no cached preimage.
-
-From the empty cache, the two oracles give the same output distribution to every run.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
+The source is [Fersch, Kiltz, Poettering, CCS 2016][fkp].
 
 The permutation is their bijective random oracle, §4.
 
 Theirs maps between two sets of one size; here both sets are `A`, as in the ECDSA game.
+
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -162,6 +158,7 @@ abbrev PermComp (A : Type) := OracleComp (unifSpec + PermSpec A)
 
 /-- The permutation `π` as an oracle: `π` and its inverse. -/
 def permOracle (π : Equiv.Perm A) : QueryImpl (PermSpec A) ProbComp
+  -- The adversary asks for `π a`, and for the inverse `π⁻¹ b`.
   | .inl a => (pure (π a) : ProbComp A)
   | .inr b => (pure (π.symm b) : ProbComp A)
 

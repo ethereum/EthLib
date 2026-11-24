@@ -8,41 +8,15 @@ public import EthLib.Cryptography.Proofs.MillerUnique
 
 An ate-type pairing evaluates a quotient of products of lines, built from `Q`, at a point `P`.
 
-The final exponentiation then raises the value to a fixed power `N`.
-
-Let `σ` be the map `z -> z^q` of the field, and let it fix the coefficients of the curve.
-
-Let `pi` be the map `(x, y) -> (σ x, σ y)` on the points of the curve.
-
-The quotient for `Q` has the divisor `sum_j c_j ((pi^j Q) - (O))`, for fixed integers `c_j`.
-
-Let `n = sum_j c_j q^j`, and let `z^(N n)` be 1 for every nonzero `z`.
-
-Let `Q` lie in a group that `pi` maps into itself, where `pi` fixes only `O`.
-
-Let `P` be fixed by `pi`.
-
-Then the power `N` of the value is linear in `Q`, and also in `P` when `N` is even.
-
-In `P`, Weil reciprocity with the function `g_{P₁,P₂}` leaves the factor `g_{P₁,P₂}(Q)^n`.
-
-In `Q`, the quotients for `Q₁`, `Q₂` and `Q₁ + Q₂` differ by a product of functions `g`.
-
-That product takes the value `g_{Q₁,Q₂}(P)^n`.
-
-Both factors become 1 after the final exponentiation.
-
-So does the sign of Weil reciprocity, when `N` is even.
-
-The proof does not go through the Tate pairing.
+The final exponentiation to a power `N` makes it linear in `Q`, and also in `P` when `N` is even.
 
 See Miller, "The Weil Pairing, and Its Efficient Calculation", J. Cryptology 17 (2004).
 
 Its Proposition 7, in Section 4.2, proves linearity of the Weil pairing with Weil reciprocity.
 
-See [Vercauteren](https://eprint.iacr.org/2008/096), "Optimal pairings", Section 2.2.
+See [Vercauteren][opt], "Optimal pairings", Section 2.2.
 
-There, `pi` fixes the first group of an ate pairing, and acts as `q` on the second.
+[opt]: https://eprint.iacr.org/2008/096
 -/
 
 @[expose] public section
@@ -53,10 +27,16 @@ open Polynomial WeierstrassCurve WeierstrassCurve.Affine
 
 variable {K : Type*} [Field K] [DecidableEq K] {W : WeierstrassCurve.Affine K}
 
-/-! ## The map of points -/
+/-! ## The map of points
+
+In the ate pairings of Vercauteren, `pi` fixes the first group, and acts as `q` on the second.
+-/
 
 section Frobenius
 
+-- Let `σ` be a map of the field that fixes the coefficients of the curve.
+--
+-- The theorems on linearity take it to be the map `z -> z^q`.
 variable (σ : K →+* K) (hW : W.map σ = W)
 
 include hW
@@ -589,7 +569,10 @@ theorem ratioAt_chordRatio_ne_zero {G : AddSubgroup W.Point}
   refine (LinesIn.chordRatio (G := AddMonoidHom.eqLocus (mapPoint σ hW) (AddMonoidHom.id _))
     hP₁ hP₂).ratioAt_ne_zero fun h => absurd (hG Q hQ h) hQ0
 
-/-! ## Linearity -/
+/-! ## Linearity
+
+The proof does not go through the Tate pairing.
+-/
 
 /-- Linearity in `Q`, before the final exponentiation.
 
@@ -613,12 +596,14 @@ theorem ratioAt_mul_ratioAt_right {q : ℕ} (hσ : ∀ z, σ z = z ^ q) {G : Add
       ratioAt M₃ P * ratioAt (chordRatio Q₁ Q₂) P ^ ateExponent q L := by
   have hPG : P ∈ G → P = 0 := fun h => hG P h hP
   have hC := LinesIn.ateChords hGπ h₁ h₂ L
+  -- The quotients for `Q₁`, `Q₂` and `Q₁ + Q₂` differ by a product of functions `g`.
   have hd : ratioDivisor (M₁ + M₂) =
       ratioDivisor (M₃ + ateChords (mapPoint σ hW) Q₁ Q₂ L) := by
     rw [ratioDivisor_add, ratioDivisor_add, hd₁, hd₂, hd₃, ratioDivisor_ateChords]
     abel
   have he := ratioAt_eq_of_ratioDivisor hd ((hM₁.add hM₂).linesAt_snd_ne_zero hPG)
     ((hM₃.add hC).linesAt_snd_ne_zero hPG)
+  -- That product takes the value `g_{Q₁,Q₂}(P)^n`, with `n = sum_j c_j q^j`.
   rwa [ratioAt_add, ratioAt_add, ratioAt_ateChords hσ Q₁ Q₂ hP
     ((LinesIn.chordRatio h₁ h₂).ratioAt_ne_zero hPG)] at he
 
@@ -632,9 +617,7 @@ Let `P₁` and `P₂` be fixed by `pi`.
 
 The product of the values at `P₁` and `P₂` is the value at `P₁ + P₂`, times two factors.
 
-One is a sign, and the other is `g_{P₁,P₂}(Q)` to the power `sum_j c_j q^j`.
-
-The proof is Weil reciprocity for the quotient and `g_{P₁,P₂}`. -/
+One is a sign, and the other is `g_{P₁,P₂}(Q)` to the power `sum_j c_j q^j`. -/
 theorem ratioAt_mul_ratioAt_left {q : ℕ} (hσ : ∀ z, σ z = z ^ q) {G : AddSubgroup W.Point}
     (hG : ∀ R ∈ G, mapPoint σ hW R = R → R = 0) {Q : W.Point} (hQ : Q ∈ G)
     {L : List (ℕ × ℤ)} {M : LineRatio W} (hM : LinesIn G M)
@@ -655,6 +638,9 @@ theorem ratioAt_mul_ratioAt_left {q : ℕ} (hσ : ∀ z, σ z = z ^ q) {G : AddS
       ratioAt (chordRatio P₁ P₂) Q ^ q ^ j := fun j => by
     have := ratioAt_chordRatio_iterate (hW := hW) hσ P₁ P₂ Q j
     rwa [Function.iterate_fixed hP₁, Function.iterate_fixed hP₂] at this
+  -- The proof is Weil reciprocity for the quotient and `g_{P₁,P₂}`.
+  --
+  -- It leaves the factor `g_{P₁,P₂}(Q)^n`, with `n = sum_j c_j q^j`.
   have hw := weil_reciprocity (W := W) (N₁ := M.1) (D₁ := M.2) (N₂ := (chordRatio P₁ P₂).1)
     (D₂ := (chordRatio P₁ P₂).2) (fun R h₁ h₂ => hG R (hM.mem R h₁) ((hFix R).mp
       (hC.mem R h₂)))
@@ -689,8 +675,10 @@ theorem pow_ratioAt_add_left {q : ℕ} (hσ : ∀ z, σ z = z ^ q) {G : AddSubgr
     ratioAt M (P₁ + P₂) ^ N = ratioAt M P₁ ^ N * ratioAt M P₂ ^ N := by
   have h := congrArg (· ^ N) (ratioAt_mul_ratioAt_left hσ hG hQ hM hd hP₁ hP₂)
   simp only [mul_pow] at h
+  -- The sign of Weil reciprocity becomes 1 after the final exponentiation, since `N` is even.
   have hε : ∀ k : ℤ, ((-1 : K) ^ k) ^ N = 1 := fun k => by
     rw [← zpow_natCast, ← zpow_mul, mul_comm, zpow_mul, zpow_natCast, hN.neg_one_pow, one_zpow]
+  -- So does the factor `g_{P₁,P₂}(Q)^n`, since `z^(N n)` is 1 for every nonzero `z`.
   have hy : (ratioAt (chordRatio P₁ P₂) Q ^ ateExponent q L) ^ N = 1 := by
     rw [← zpow_natCast, ← zpow_mul, mul_comm]
     exact hkill _ (ratioAt_chordRatio_ne_zero hG hQ hP₁ hP₂)
@@ -712,6 +700,7 @@ theorem pow_ratioAt_add_right {q : ℕ} (hσ : ∀ z, σ z = z ^ q) {G : AddSubg
   have h := congrArg (· ^ N)
     (ratioAt_mul_ratioAt_right hσ hGπ hG h₁ h₂ hM₁ hM₂ hM₃ hd₁ hd₂ hd₃ hP)
   simp only [mul_pow] at h
+  -- The factor `g_{Q₁,Q₂}(P)^n` becomes 1 after the final exponentiation.
   have hy : (ratioAt (chordRatio Q₁ Q₂) P ^ ateExponent q L) ^ N = 1 := by
     rw [← zpow_natCast, ← zpow_mul, mul_comm]
     exact hkill _ ((LinesIn.chordRatio h₁ h₂).ratioAt_ne_zero fun h => hG P h hP)

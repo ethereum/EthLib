@@ -66,7 +66,7 @@ Two handlers log the same entries of each answer.
 
 The second replies with `reply t u` instead of `u`, but only when the entries of `u` hold a bad one.
 
-Both are run over a second, stateful handler, such as a random oracle.
+Both handlers are run over a second, stateful handler, such as a random oracle.
 
 An event of the first run, with no bad entry in its log, has at most its mass in the second run. -/
 theorem prEvent_logReply_and_not_bad_le
@@ -96,6 +96,7 @@ theorem prEvent_logReply_and_not_bad_le
     simp [QueryImpl.flattenStateT, QueryImpl.mapStateTBase, logReplyState, aux,
       QueryImpl.apply_compose, map_eq_bind_pure_comp, hr]
   let badSt : List W × τ → Prop := fun st => ∃ w ∈ st.1, bad w
+  -- With the log in the state, the two handlers agree until a bad entry is logged.
   have hagree : QueryImpl.AgreeUntilBad
       ((ro ∘ₛ fun t => (fun u => u) <$> impl t).extendStateLeft aux)
       ((ro ∘ₛ fun t => reply t <$> impl t).extendStateLeft aux) badSt := by
@@ -112,6 +113,7 @@ theorem prEvent_logReply_and_not_bad_le
     · rintro ⟨hQ, hgood⟩
       rw [hreply t p.1 fun w hw => hgood w (List.mem_append_right _ hw)] at hQ
       exact ⟨hQ, hgood⟩
+  -- A bad entry, once logged, stays in the log.
   have hpres : QueryImpl.PreservesInv
       ((ro ∘ₛ fun t => (fun u => u) <$> impl t).extendStateLeft aux) badSt := by
     intro t st hst z hz

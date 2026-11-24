@@ -15,35 +15,9 @@ public import EthLib.Cryptography.Proofs.Hash.Sha256
 /-!
 # Proofs: ERC-2335 decryption
 
-A mismatched checksum prevents secret decryption.
+What verification and decryption accept and refuse, and the password bytes that the reader prepares.
 
-A key derivation beyond the caller's limits gives the limit error.
-
-Verification accepts exactly a key of at least 32 bytes whose checksum matches the ciphertext.
-
-A successful derivation gives at least 32 bytes, so verification never refuses its key as too short.
-
-Decryption returns as many bytes as the ciphertext holds.
-
-AES-128-CTR undoes itself: decrypting the secret under its own checksum gives back the ciphertext.
-
-The prepared password bytes encode the NFKD form of the password, in order, less its control codes.
-
-A password already in NFKD form and free of control codes prepares to its own UTF-8 bytes.
-
-A well-formed key derivation other than PBKDF2 and scrypt is refused before any parameter is read.
-
-A store of a version other than 4 is refused before any other field is read.
-
-A UUID written in its text form reads back as itself.
-
-A keystore that encryption writes reads back with its key derivation, its IV and its metadata.
-
-Decrypting it with the same password, under limits that admit its key derivation, gives the secret.
-
-A keystore written with the public key of its secret passes the public key check.
-
-A keystore without a public key fails that check.
+A written keystore reads back, decrypts to its secret and passes the public key check.
 -/
 
 @[expose] public section

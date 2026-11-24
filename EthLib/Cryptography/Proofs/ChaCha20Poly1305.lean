@@ -151,15 +151,19 @@ private theorem testBit_clampMask (i : Nat) :
 
 Bit `i` is bit `i % 8` of byte `i / 8`, so it is bit `i % 32` of word `i / 32`.
 
-The clamp clears bits 28 to 31 of every word: the top four bits of bytes 3, 7, 11 and 15.
-
-It clears bits 0 and 1 of every word but the first: the bottom two bits of bytes 4, 8 and 12.
-
-Every other bit below 128 is the bit of the key's low half, and no bit from 128 up is set. -/
+A bit below 128 that the clamp keeps is the bit of the key's low half. -/
 theorem testBit_clampR (key : Key) (i : Nat) :
     (clampR key).testBit i
       = ((Base.ByteOrder.ofLE (Vector.ofFn fun j : Fin 16 => key[j.val]'(by omega))).testBit i
+          -- No bit from 128 up is set.
+          --
+          -- The clamp clears bits 28 to 31 of every word.
+          --
+          -- They are the top four bits of bytes 3, 7, 11 and 15.
           && (decide (i < 128) && decide (i % 32 < 28)
+            -- It clears bits 0 and 1 of every word but the first.
+            --
+            -- They are the bottom two bits of bytes 4, 8 and 12.
             && (decide (i < 32) || decide (2 ≤ i % 32)))) := by
   rw [← testBit_clampMask]
   simp [clampR, Nat.testBit_and]
@@ -271,17 +275,9 @@ theorem serializeState_stateOfBytes (bytes : Vector UInt8 64) :
 
 /-! ## The keystream and the cipher
 
-RFC 8439 §2.4 encrypts byte `j` of the input with byte `j % 64` of a block.
+One theorem gives every byte of the cipher's output by its block and counter.
 
-That block has the initial counter plus `j / 64`, so each block of the input has its own counter.
-
-RFC 8439 §2.8 starts the counter at 1, since §2.6 makes the Poly1305 key from block 0.
-
-One theorem gives every byte of the cipher's output in those terms, and another the AEAD's output.
-
-A cipher whose keystream is shorter than the input leaves the bytes past its end in plaintext.
-
-Such a cipher fails them.
+Another gives every byte of the AEAD's output.
 -/
 
 /-- One more block appends the block whose counter is the initial counter plus their number. -/
@@ -306,6 +302,9 @@ Every byte past the requested blocks reads as zero. -/
 theorem byteAtOrZero_keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks j : Nat) :
     Base.byteAtOrZero (keyStream key counter nonce blocks) j
       = if j < 64 * blocks then
+          -- RFC 8439 §2.4 encrypts byte `j` of the input with byte `j % 64` of this block.
+          --
+          -- Its counter is the initial one plus `j / 64`, so each input block has its own counter.
           (block key (counter + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide))
         else 0 := by
   induction blocks with
@@ -325,17 +324,19 @@ theorem byteAtOrZero_keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (b
 
 /-- The cipher accepts exactly when the counter does not wrap.
 
-RFC 8439 §2.3 makes the block counter 32 bits, and §2.4 adds `j / 64` to it at byte `j`.
-
-Its output then has the length of the input.
-
-Byte `j` of the output is byte `j` of the input XOR byte `j % 64` of block `counter + j / 64`.
+Its output then has the length of the input, and each byte is XORed with its keystream byte.
 
 So a cipher that leaves a byte unencrypted, or reuses a counter, fails it. -/
 theorem crypt_eq_ok_iff (key : Key) (counter : UInt32) (nonce : Nonce)
     (input output : ByteArray) :
     crypt key counter nonce input = .ok output ↔
+      -- RFC 8439 §2.3 makes the block counter 32 bits, and §2.4 adds `j / 64` to it at byte `j`.
       counter.toNat + (input.size + 63) / 64 ≤ 2 ^ 32 ∧ output.size = input.size ∧
+        -- Byte `j` of the output is byte `j` of the input XOR a byte of the keystream.
+        --
+        -- That byte is byte `j % 64` of block `counter + j / 64`.
+        --
+        -- A keystream shorter than the input would leave the bytes past its end in plaintext.
         ∀ j < input.size, Base.byteAtOrZero output j = Base.byteAtOrZero input j ^^^
         (block key (counter + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide)) := by
   -- The keystream covers every byte of the input.
@@ -365,26 +366,28 @@ theorem crypt_eq_ok_iff (key : Key) (counter : UInt32) (nonce : Nonce)
 
 These are the limits of RFC 8439 §2.8.
 
-The AAD is below `2 ^ 64` bytes, and the plaintext is at most `2 ^ 32 - 1` blocks of 64 bytes.
+Its ciphertext then has the length of the plaintext, XOR the keystream from block 1.
 
-Its ciphertext then has the length of the plaintext.
-
-Byte `j` of the ciphertext is byte `j` of the plaintext XOR byte `j % 64` of block `1 + j / 64`.
-
-Its tag is the Poly1305 tag of the padded AAD, ciphertext and lengths, RFC 8439 §2.8.
-
-The lengths are 8 bytes each, least significant first.
-
-The Poly1305 key is the first 32 bytes of block 0, RFC 8439 §2.6. -/
+Its tag is the Poly1305 tag of the padded AAD, ciphertext and lengths, RFC 8439 §2.8. -/
 theorem encrypt_eq_ok_iff (key : Key) (nonce : Nonce) (aad plaintext ciphertext : ByteArray)
     (tag : Tag) :
     encrypt key nonce aad plaintext = .ok (ciphertext, tag) ↔
+      -- The AAD is below `2 ^ 64` bytes, and the plaintext at most `2 ^ 32 - 1` blocks of 64 bytes.
       aad.size < 2 ^ 64 ∧ plaintext.size ≤ (2 ^ 32 - 1) * 64 ∧
+        -- The ciphertext then has the length of the plaintext.
         ciphertext.size = plaintext.size ∧
+        -- Byte `j` of the ciphertext is byte `j` of the plaintext XOR a byte of the keystream.
+        --
+        -- That byte is byte `j % 64` of block `1 + j / 64`.
         (∀ j < plaintext.size, Base.byteAtOrZero ciphertext j = Base.byteAtOrZero plaintext j ^^^
+          -- RFC 8439 §2.8 starts the counter at 1, since §2.6 makes the Poly1305 key from block 0.
           (block key (1 + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide))) ∧
+        -- The tag is the Poly1305 tag of the padded AAD, ciphertext and lengths, RFC 8439 §2.8.
+        --
+        -- The Poly1305 key is the first 32 bytes of block 0, RFC 8439 §2.6.
         tag = poly1305 (Vector.ofFn fun i : Fin 32 => (block key 0 nonce)[i.val]'(by omega))
           (aad ++ pad16 aad ++ ciphertext ++ pad16 ciphertext ++
+            -- The lengths are 8 bytes each, least significant first.
             Base.packBytes (Base.ByteOrder.toLE 8 aad.size) ++
             Base.packBytes (Base.ByteOrder.toLE 8 ciphertext.size)) := by
   unfold encrypt checkLengths
