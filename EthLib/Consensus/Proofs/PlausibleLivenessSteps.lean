@@ -20,16 +20,6 @@ import EthLib.Consensus.Proofs.Transition.StateTransition
 Plausible liveness joins runs of slot steps and honest continuations through two epochs.
 
 These are the facts that the joins need.
-
-The latest block header of a state reached from a genesis state is at its slot or before.
-
-A state after a slot step, with a slot after its latest block header, has no upgrade due.
-
-A run without blocks casts no vote, so joining it in front keeps the votes of the rest.
-
-Activity up to two epochs ahead is fixed along a run, and an honest run slashes no one.
-
-So at the last slot of each later epoch, the honest validators outside that slot count.
 -/
 
 @[expose] public section
@@ -85,19 +75,19 @@ theorem headerSlot_le_of_run {g x : ForkedBeaconState preset} (genesis : Genesis
 
 /-! ## No upgrade due -/
 
-/-- After a step, a state with a slot after its latest block header has no upgrade due.
-
-A block would have put the header at the slot.
-
-So the step is a slot step, which runs the upgrades. -/
+/-- After a step, a state with a slot after its latest block header has no upgrade due. -/
 theorem Step.notDue_of_fresh {before after : ForkedBeaconState preset}
     (step : Step config checks before after)
     (fresh : after.state.latestBlockHeader.slot < after.state.slot) :
     upgradeDue config after = false := by
   cases step with
+  -- A slot step runs the upgrades.
   | slot ok =>
     obtain ⟨_, _, upgraded⟩ := bind_ok_iff.mp ok
     exact processUpgrades_upgradeDue upgraded
+  -- A block would have put the header at the slot.
+  --
+  -- So the step is a slot step.
   | block engine signed due ok =>
     rw [headerSlot_of_applySignedBlock ok] at fresh
     exact absurd fresh (UInt64.lt_irrefl _)
@@ -177,6 +167,7 @@ theorem Run.mem_votes_of_append {first middle last : ForkedBeaconState preset}
     (member : vote ∈ (pre.append tail).votes) : vote ∈ tail.votes := by
   obtain ⟨before, after, step, contained, voted⟩ := member
   rcases (Run.contains_append pre tail step).mp contained with inPre | inTail
+  -- A run without blocks casts no vote, so joining it in front keeps the votes of the rest.
   · rw [pre.slotStep_of_blockCount (fun step => step.votes = ∅) (fun _ => rfl) none inPre]
       at voted
     exact absurd voted (Set.notMem_empty _)

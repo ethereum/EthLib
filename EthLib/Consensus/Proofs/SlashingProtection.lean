@@ -16,55 +16,11 @@ A signer checks each message against its record, and then records it.
 
 Such a signer signs a slashable pair only when two messages share a signing root.
 
+This holds also for a signer that imports files between its messages.
+
 The statement holds for any function that gives the signing root of a message.
 
-Two votes that Casper FFG forbids together, among those signed, have equal signing roots.
-
-So do two block headers of one slot.
-
-The two headers of a valid proposer slashing, both signed, are different with one signing root.
-
 Since slashable messages are different messages, each such pair is a collision of signing roots.
-
-No signed vote is slashable with a vote of the starting file, as a record sees it.
-
-A file may keep only the latest messages of a key, and drop the older ones.
-
-Each block that a signer signs from it is after every older block.
-
-So no valid proposer slashing pairs an older block with a signed block.
-
-No vote that it signs is slashable with an older vote.
-
-Each of these needs the file to keep one or more such messages of the key.
-
-An import keeps only the greatest slot and epochs of each key.
-
-After any sequence of imports, an accepted message meets every condition of each imported file.
-
-A signer that also imports files signs no two headers of one slot with different signing roots.
-
-Each block that it signs meets conditions 1 and 2 of its starting file.
-
-If that file holds a block of the key, each signed block is after any slot before all its blocks.
-
-Each block that it signs after an import is after every block of the imported file.
-
-So it meets conditions 1 and 2 of that file too.
-
-A signer of votes that imports files signs a slashable pair only when the two share a signing root.
-
-Each vote that it signs meets conditions 3, 4 and 5 of its starting file.
-
-If that file holds a vote of the key, no signed vote is slashable with an older vote.
-
-Each vote that it signs after an import is after every vote of the imported file.
-
-So it meets conditions 3, 4 and 5 of that file too.
-
-The signer without imports is the case of a run that imports no file.
-
-An interchange file reads back as itself from the document that writes it.
 -/
 
 @[expose] public section
@@ -644,7 +600,10 @@ theorem signingRoot_eq_of_isSlashableWith_eq_false {signingRootOf : AttestationD
     signingRootOf earlier = signingRootOf later :=
   root_eq_of_isSlashableWith_eq_false passed slashable
 
-/-! ## A file that drops older messages -/
+/-! ## A file that drops older messages
+
+A file may keep only the latest messages of a key, and drop the older ones.
+-/
 
 /-- The least value of a field over a list that is not empty is the field of one of its members. -/
 private theorem exists_min?_map_eq {α : Type} {xs : List α} (field : α → UInt64)
@@ -710,7 +669,10 @@ theorem isSlashableAttestationData_eq_false_of_le_of_lt {old data : AttestationD
   simp [isSlashableAttestationData, UInt64.ne_of_lt target, (UInt64.ne_of_lt target).symm,
     notAbove, notBelow]
 
-/-! ## Imports with the minimal strategy -/
+/-! ## Imports with the minimal strategy
+
+An import keeps only the greatest slot and epochs of each key.
+-/
 
 /-- A slot limit covers a slot when it exists and is at least that slot. -/
 private abbrev CoversSlot (limit : Option Slot) (slot : Slot) : Prop :=
@@ -1363,9 +1325,7 @@ An older header is before each block of the starting file.
 
 The starting file holds one or more blocks of the key.
 
-The signed header may be the first or the second header of the slashing.
-
-The two headers of a valid proposer slashing have one slot. -/
+The signed header may be the first or the second header of the slashing. -/
 theorem processProposerSlashing_ne_ok_of_importAndSignBlocks
     {signingRootOf : BeaconBlockHeader → Root} {pubkey : BLSPubkey}
     {start finish : Interchange} {steps : List BlockSignerStep}
@@ -1378,6 +1338,7 @@ theorem processProposerSlashing_ne_ok_of_importAndSignBlocks
       slashing.signedHeader1.message = header ∧ slashing.signedHeader2.message = old) :
     processProposerSlashing config checks state slashing ≠ .ok after := by
   intro valid
+  -- The two headers of a valid proposer slashing have one slot.
   have sameSlot := (processProposerSlashing_checks valid).1
   have before := UInt64.ne_of_lt (lt_slot_of_importAndSignBlocks signed nonempty older member)
   rcases pair with ⟨first, second⟩ | ⟨first, second⟩

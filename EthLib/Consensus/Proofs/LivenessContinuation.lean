@@ -12,30 +12,6 @@ import EthLib.Consensus.Proofs.Transition.RootLinks
 
 Plausible liveness extends the chain with blocks of honest proposers that carry honest votes.
 
-Such a continuation is a run whose blocks are honest, from proposers of the honest set.
-
-The honest validators of a slot vote for the latest block at that slot and the target of its epoch.
-
-Their source is the current justified checkpoint.
-
-After a block at a slot of the epoch, the honest voters of the slots just before it must be flagged.
-
-Every slot of an epoch but the last must have such a block after it in the epoch, within a gap.
-
-With two slots or more in an epoch, the last slot must then have a block of an honest proposer.
-
-Then a run through the epoch gives each honest member of those slots the timely target flag.
-
-The flag holds at the last slot of the epoch, where the justification test reads it.
-
-The run keeps the justified checkpoint and the bits of justification through the epoch.
-
-The blocks of the run and its slot steps are hypotheses of the theorem.
-
-They quantify over the honest runs from the first state of the epoch.
-
-Those runs apply blocks only at the slots of the proposals.
-
 This is one part of the continuation in Theorem 2 of Casper FFG, on the beacon chain from Altair.
 
 The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
@@ -52,20 +28,6 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 /-! ## Honest votes and honest runs -/
 
 /-- The vote of an honest validator, as a block carries it on a state.
-
-The validator is honest, and sits in a committee of the slot of the vote.
-
-Before Electra the index of the data names that committee; from Electra it is zero.
-
-The state is before Gloas, where the index also votes on the presence of the payload.
-
-The slot is in the current epoch of the state.
-
-The head is the latest block at that slot or before.
-
-The source is the current justified checkpoint of the state.
-
-The target is the current epoch, with the root of the latest block at its first slot or before.
 
 The head and the target are read on the chain that carries the vote, with no reorganization.
 
@@ -84,12 +46,14 @@ structure HonestVote (honest : Finset ValidatorIndex) {fork : Fork}
   target : vote.2.target.epoch = getCurrentEpoch state
   /-- The target root is the root of the latest block at the first slot of the epoch or before. -/
   targetRoot : getBlockRoot state (getCurrentEpoch state) = .ok vote.2.target.root
-  /-- The validator sits in a committee of the slot, which the index names before Electra. -/
+  /-- The validator sits in a committee of the slot, which the index names before Electra.
+
+  From Electra the index is zero. -/
   committee : ∃ (index : CommitteeIndex) (members : Array ValidatorIndex),
     index < getCommitteeCountPerSlot state (getCurrentEpoch state) ∧
       getBeaconCommittee state vote.2.slot index = .ok members ∧ vote.1 ∈ members ∧
       vote.2.index = if .pectra ≤ fork then 0 else index
-  /-- The state is before Gloas, where the index also votes on the payload. -/
+  /-- The state is before Gloas, where the index also votes on the presence of the payload. -/
   beforeGloas : fork < .glamsterdam
 
 /-- A step of an honest continuation: a slot, or the block of an honest proposer.
@@ -177,7 +141,9 @@ def GathersVotes (honest : Finset ValidatorIndex) (gap : Nat) {fork : Fork}
 
 /-- The flags of every slot of the current epoch but the last, at a state.
 
-Each honest member of each committee of such a slot holds the timely target flag. -/
+Each honest member of each committee of such a slot holds the timely target flag.
+
+The justification test reads these flags at the last slot of the epoch. -/
 def VotesGathered (honest : Finset ValidatorIndex) {fork : Fork}
     (state : BeaconState preset fork) : Prop :=
   ∀ (altair : .altair ≤ fork) (slot : Slot),
@@ -339,23 +305,22 @@ private theorem slotStep_inside {fork : Fork} {w : BeaconState preset fork}
   · rw [header]
     split <;> rfl
 
-/-- The facts that a walk through an epoch keeps, from its first state to a later state.
-
-The later state is in the same epoch, with the same checkpoint and bits.
-
-It is reached by steps that keep the registry and the committees.
-
-Take a slot of the epoch with a proposal after it, before a bound and within the gap.
-
-Each honest member of each committee of that slot then holds the timely target flag.
-
-The committees and their count are those of the first state. -/
+/-- The facts that a walk through an epoch keeps, from its first state to a later state. -/
 private def EpochKept (honest : Finset ValidatorIndex) (gap : Nat) (proposals : Set Slot)
     {fork : Fork} (altair : .altair ≤ fork) (start w : BeaconState preset fork) (bound : Nat) :
     Prop :=
+  -- The later state is in the same epoch.
+  --
+  -- It is reached by steps that keep the registry and the committees.
   getCurrentEpoch w = getCurrentEpoch start ∧ RunKept start w ∧
+    -- It has the same checkpoint and bits.
     w.currentJustifiedCheckpoint = start.currentJustifiedCheckpoint ∧
     w.justificationBits = start.justificationBits ∧
+    -- Take a slot of the epoch with a proposal after it, before a bound and within the gap.
+    --
+    -- Each honest member of each committee of that slot then holds the timely target flag.
+    --
+    -- The committees and their count are those of the first state.
     ∀ slot : Slot, computeEpochAtSlot preset slot = getCurrentEpoch start →
       (∃ proposal ∈ proposals, slot < proposal ∧ proposal.toNat < bound ∧
         proposal.toNat ≤ slot.toNat + gap) →
@@ -618,8 +583,6 @@ Each slot of the epoch but the last must have a slot of a proposal after it in t
 
 That slot must be within the gap.
 
-With two slots or more in an epoch, the last slot is then a slot of a proposal.
-
 At each slot of a proposal, an honest block must pass from such a state.
 
 That block must gather the votes of the slots shortly before it.
@@ -641,6 +604,7 @@ theorem exists_epochContinuation {s : ForkedBeaconState preset}
       run.Honest config honest key → run.BlocksAt proposals →
       getCurrentEpoch w.state = getCurrentEpoch s.state →
         ∃ next, advanceSlotAcross config checks w = .ok next)
+    -- With two slots or more in an epoch, this makes the last slot a slot of a proposal.
     (covered : ∀ slot : Slot, computeEpochAtSlot preset slot = getCurrentEpoch s.state →
       (slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat ≠ 0 →
       ∃ proposal ∈ proposals, slot < proposal ∧

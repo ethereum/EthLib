@@ -9,28 +9,6 @@ public import EthLib.Consensus.Proofs.LivenessContinuation
 An honest proposer at a slot carries the honest votes of the recent slots of its epoch.
 
 Those are the slots of the current epoch before its own, by at most a gap.
-
-Before Electra it carries one attestation for each committee of those slots with an honest member.
-
-From Electra it carries one aggregate for each of those slots with an honest member.
-
-The gap must leave room for them in the block.
-
-Each vote heads the latest block at its slot or before.
-
-It targets the latest block at the first slot of the epoch or before.
-
-Its source is the current justified checkpoint.
-
-The rest of the block is free: the proposer may complete it as an honest block.
-
-That its payload passes and its deposits have proofs is an assumption.
-
-It is on the execution layer and on the deposit data.
-
-Then the block passes the step of a run, and it gives each of those honest members the flag.
-
-Each vote it carries is an honest vote on the state before it.
 -/
 
 @[expose] public section
@@ -41,34 +19,7 @@ open Base Cryptography.Bls Serialization.Ssz Serialization.Ssz.SszType
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config}
 
-/-- The conditions on a state for its honest proposer to carry the votes of the gap before it.
-
-The honest validators hold their keys in the registry, and the proposer is not slashed.
-
-The state is within a budget, and its flags and scores match its registry.
-
-The deposit votes leave room for one more, and the members of the sync committee are registered.
-
-Every slot up to the end of the buffer of roots fits in 64 bits.
-
-The budget leaves room for the rewards of a full block of attestations.
-
-The active validators times the committees of the epoch fit in 64 bits.
-
-Each committee of the epoch has at most the largest size of a committee, an assumption.
-
-The gap times the attestations of a slot fit in a block.
-
-The secret keys of the honest signers of each attestation must not sum to zero, an assumption.
-
-Any list of attestations that fits in a block completes to an honest block of the proposer.
-
-That is an assumption, on the execution layer and on the deposit data.
-
-Its execution part passes, its deposits have proofs, and the registry has room for them.
-
-The pending deposits have room for them, and before Electra the budget has room for their amounts.
--/
+/-- The conditions on a state for its honest proposer to carry the votes of the gap before it. -/
 structure ProposalConditions (config : Config) (honest : Finset ValidatorIndex)
     (key : ValidatorIndex → Signatures.SecretKey) (budget scoreBound gap : Nat)
     (state : BeaconState preset fork) (proposer : ValidatorIndex) : Prop where
@@ -101,7 +52,9 @@ structure ProposalConditions (config : Config) (honest : Finset ValidatorIndex)
   shuffleRoom : (getActiveValidatorIndices state (getCurrentEpoch state)).length *
     ((getCommitteeCountPerSlot state (getCurrentEpoch state)).toNat *
       preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64
-  /-- Each committee of the current epoch has at most the largest size of a committee. -/
+  /-- Each committee of the current epoch has at most the largest size of a committee.
+
+  This is an assumption. -/
   committeeSizes : ∀ (slot : Slot) (index : CommitteeIndex) committee,
     computeEpochAtSlot preset slot = getCurrentEpoch state →
     index < getCommitteeCountPerSlot state (getCurrentEpoch state) →
@@ -111,14 +64,18 @@ structure ProposalConditions (config : Config) (honest : Finset ValidatorIndex)
   capacity : gap * (if .pectra ≤ fork then 1
       else (getCommitteeCountPerSlot state (getCurrentEpoch state)).toNat) ≤
     (parameters preset fork).MAX_ATTESTATIONS.toNat
-  /-- Before Electra, the honest keys of a committee of the gap do not sum to zero. -/
+  /-- Before Electra, the honest keys of a committee of the gap do not sum to zero.
+
+  This is an assumption. -/
   committeeKeys : ¬.pectra ≤ fork → ∀ (slot : Slot) (index : CommitteeIndex) committee,
     computeEpochAtSlot preset slot = getCurrentEpoch state → slot < state.slot →
     state.slot.toNat ≤ slot.toNat + gap →
     index < getCommitteeCountPerSlot state (getCurrentEpoch state) →
     getBeaconCommittee state slot index = .ok committee → honestSigners honest committee ≠ [] →
       (((honestSigners honest committee).map key).map (·.val)).sum ≠ 0
-  /-- From Electra, the keys of the honest members of a slot of the gap do not sum to zero. -/
+  /-- From Electra, the keys of the honest members of a slot of the gap do not sum to zero.
+
+  This is an assumption. -/
   slotKeys : .pectra ≤ fork → ∀ (slot : Slot) committees,
     computeEpochAtSlot preset slot = getCurrentEpoch state → slot < state.slot →
     state.slot.toNat ≤ slot.toNat + gap →
@@ -126,7 +83,9 @@ structure ProposalConditions (config : Config) (honest : Finset ValidatorIndex)
       (fun position => getBeaconCommittee state slot position.toUInt64) = .ok committees →
     committees.flatMap (honestSigners honest) ≠ [] →
       (((committees.flatMap (honestSigners honest)).map key).map (·.val)).sum ≠ 0
-  /-- Any list of attestations that fits completes to an honest block of the proposer.
+  /-- Any list of attestations that fits in a block completes to an honest block of the proposer.
+
+  That is an assumption, on the execution layer and on the deposit data.
 
   Its execution part passes on the state after its header, and its deposits have proofs.
 
@@ -355,6 +314,12 @@ theorem exists_honestBlock_gathersVotes [LawfulSszType (BeaconBlockBody preset f
       (by rw [epochNat]; rw [Nat.mul_add, Nat.mul_one] at high; rw [Nat.mul_comm]; omega)
     rw [read, rootOfOk _ _ rfl]
   -- The data of the votes of the gap, at a slot and for a committee.
+  --
+  -- Each vote heads the latest block at its slot or before.
+  --
+  -- It targets the latest block at the first slot of the epoch or before.
+  --
+  -- Its source is the current justified checkpoint.
   obtain ⟨voteData, voteDataEq⟩ : ∃ voteData : Slot → CommitteeIndex → AttestationData,
       ∀ slot committeeIndex, voteData slot committeeIndex =
         { slot, index := if .pectra ≤ fork then 0 else committeeIndex,

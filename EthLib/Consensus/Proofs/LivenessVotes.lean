@@ -10,25 +10,9 @@ import EthLib.Consensus.Proofs.Transition.SlashedFlags
 /-!
 # Proofs: the votes of an honest continuation count for the target and add no slashable pair
 
-The committees of an epoch hold each of its active validators once.
+The target test of an epoch counts every honest validator outside its last slot.
 
-So an active honest validator sits in a committee of some slot of the epoch.
-
-If that slot is not the last one, an honest continuation through the epoch gave it the flag.
-
-So the justification test of the epoch counts every honest validator outside the last slot.
-
-An honest validator also votes once in each epoch, in its one committee.
-
-Its vote reads the target, the source and the head that the epoch fixes.
-
-So two of its votes for one target epoch in an honest run are the same data.
-
-Its source never goes back from one epoch to the next.
-
-So with a fresh source, its new votes add no slashable pair to its old ones.
-
-An honest block, as modelled, carries no slashing, so an honest run slashes no one.
+With a fresh source, the new votes of an honest validator add no slashable pair to its old ones.
 
 These are steps toward Theorem 2 of Casper FFG.
 
@@ -230,6 +214,9 @@ theorem targetIndices_of_votesGathered {fork : Fork} {state : BeaconState preset
     have bound := state.slot.toNat_lt
     rw [getCurrentEpoch_toNat, Nat.mul_comm]
     omega
+  -- The committees of an epoch hold each of its active validators once.
+  --
+  -- So the honest validator sits in a committee of some slot of the epoch.
   obtain ⟨slot, position, committee, slotEpoch, positionLt, committeeOk, inCommittee⟩ :=
     exists_mem_getBeaconCommittee indicesFit seedOk
       (fun zero => by rw [zero] at positive; exact absurd positive (by decide)) slotsFit small
@@ -252,6 +239,7 @@ theorem targetIndices_of_votesGathered {fork : Fork} {state : BeaconState preset
     subst read
     exact absurd (List.mem_toFinset.mpr (List.mem_flatMap.mpr
       ⟨_, List.getElem_mem _, Array.mem_toList_iff.mpr inCommittee⟩)) outside
+  -- In any other slot, the honest continuation through the epoch gave it the flag.
   · exact gathered altair slot slotEpoch lastSlot position committee positionLt committeeOk
       index inCommittee isHonest
 
@@ -261,11 +249,7 @@ theorem targetIndices_of_votesGathered {fork : Fork} {state : BeaconState preset
 
 The two committees have slots of one epoch and indices below the committees of a slot.
 
-The active validators times the committees of the epoch fit in 64 bits.
-
-A committee with a value comes from the checked read of the active indices.
-
-So each active position fits in 64 bits, and no index is active twice. -/
+The active validators times the committees of the epoch fit in 64 bits. -/
 private theorem eq_of_mem_committees {fork : Fork} {state : BeaconState preset fork}
     {firstSlot secondSlot : Slot} {firstIndex secondIndex : CommitteeIndex}
     (sameEpoch : computeEpochAtSlot preset firstSlot = computeEpochAtSlot preset secondSlot)
@@ -282,6 +266,10 @@ private theorem eq_of_mem_committees {fork : Fork} {state : BeaconState preset f
     (secondMem : member ∈ secondCommittee) :
     firstSlot = secondSlot ∧ firstIndex = secondIndex := by
   -- The shuffle of the epoch read the active indices with the check.
+  --
+  -- A committee with a value comes from that checked read.
+  --
+  -- So each active position fits in 64 bits, and no index is active twice.
   have nodup : (getActiveValidatorIndices state
       (computeEpochAtSlot preset firstSlot)).toArray.toList.Nodup := by
     obtain ⟨active, shuffled, shuffleOk⟩ := attesterShuffle_ok_of_getBeaconCommittee first
@@ -474,6 +462,8 @@ private theorem vote_eq_of_chainSteps {honest : Finset ValidatorIndex}
   rw [← slot₂] at below₂
   obtain ⟨sameSlot, sameIndex⟩ := eq_of_mem_committees (slot₁.trans slot₂.symm) below₁ below₂
     room committee₁ committee₂ in₁ in₂
+  -- The vote reads the target, the source and the head that the epoch fixes.
+  --
   -- The head and the target root are roots of slots before the first state.
   have head₁ := vote₁.head
   have head₂ := vote₂.head

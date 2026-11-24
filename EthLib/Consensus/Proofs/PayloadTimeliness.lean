@@ -10,33 +10,11 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 /-!
 # Proofs: the balance-weighted selection and the payload timeliness committee
 
-Each validator that a balance-weighted selection draws is one of its candidates.
+The balance-weighted selection draws only its candidates.
 
-So each member of a payload committee sits on a beacon committee of its slot.
+The indexed form of a payload vote lists the attesters of its committee, sorted.
 
-The indexed form of a vote lists the members whose bit is set, sorted, with any repeats.
-
-After the window is initialized, the state reads the computed committee of each slot it covers.
-
-The covered slots are those of the current epoch and of the lookahead.
-
-The window has a committee for each slot from the epoch before the state's to the lookahead's end.
-
-That statement needs a slot from the Gloas fork epoch on, and an epoch of at least one slot.
-
-The last epoch of the lookahead and the length of the window must also fit in 64 bits.
-
-Initializing the window shares the seeds and the shuffle of each epoch among its committees.
-
-It gives what each committee alone gives, errors included.
-
-Moving the window shifts every committee back by one epoch.
-
-The last epoch of the moved window holds the computed committees of the epoch after the lookahead.
-
-It computes them with one seed and one shuffle, and gives what each committee alone gives.
-
-A payload attestation changes nothing in the state.
+Other theorems say how the window of payload committees is initialized, read and moved.
 -/
 
 @[expose] public section
@@ -138,6 +116,8 @@ theorem mem_of_ptcAttesters {committee : PayloadTimelinessCommittee preset}
   · cases chosen
 
 /-- The indexed form of a vote lists the members of its committee whose bit is set, sorted.
+
+A validator that sits twice in the committee, with both bits set, appears twice.
 
 It keeps the vote and the signature. -/
 theorem getIndexedPayloadAttestation_spec {config : Config} {state : BeaconState preset fork}

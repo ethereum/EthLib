@@ -9,29 +9,11 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 /-!
 # Proofs: builder indices and builder rules
 
-Setting the flag on a builder index gives an index that names a builder.
+Setting the flag bit turns a builder index into an index that names a builder.
 
-Below 2^40, clearing the flag gives the builder index back.
+No index below 2^40 names a builder, so below 2^40 a builder index gives a distinct index.
 
-An index that names a builder comes back from its builder index.
-
-So below 2^40 the index of a builder names it alone.
-
-No index below 2^40 names a builder, so no validator of a registry within a limit of 2^40 does.
-
-What a builder owes fits in 64 bits exactly when its sum does, and then it is that sum.
-
-A builder can cover a bid exactly when its balance holds the bid, its debt and the minimum deposit.
-
-With at least six slots in an epoch, the quorum of a payment never overflows.
-
-On a preset whose increment per slot is large enough, every quorum is at least one gwei.
-
-A builder that starts to exit is no longer active, unless its withdrawable epoch is the far future.
-
-Settling a payment empties its position and queues at most one withdrawal, of its amount.
-
-So settling keeps what each builder owes.
+The other theorems state the rules on debts and bids, the payment quorum, exits and settling.
 -/
 
 @[expose] public section

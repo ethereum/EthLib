@@ -17,20 +17,6 @@ Take a state reached from a genesis state, in some epoch.
 
 Honest validators with two thirds of the stake and a margin can extend the chain from it.
 
-The extension runs to the end of the epoch, then through two more epochs.
-
-In each of those two epochs, honest proposers carry the honest votes of every slot but the last.
-
-So the justification test at the end of each counts the honest validators outside its last slot.
-
-The margin keeps their stake at two thirds of the active stake at both ends.
-
-So the two epochs are justified, and the first is finalized, above the justified epoch at the start.
-
-The honest validators vote once in each epoch, from the justified source of that epoch.
-
-So, with a fresh source, none of them becomes slashable.
-
 This is Theorem 2 of Casper FFG on the beacon chain.
 
 The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
@@ -44,17 +30,7 @@ open Base Cryptography.Bls Models Serialization.Ssz DirectSafety DirectSafety.Ap
 
 variable {preset : Preset} {config : Config}
 
-/-- The conditions on a state of the continuation.
-
-The state is before Gloas, and its slot step succeeds.
-
-The active validators times the committees of its epoch fit in 64 bits.
-
-The committees of each slot of its epoch have values.
-
-At a slot of a proposal after the latest block header, the proposer is honest.
-
-There the state meets the conditions of its honest proposal, for some budget. -/
+/-- The conditions on a state of the continuation. -/
 structure ContinuationConditions (config : Config) (honest : Finset ValidatorIndex)
     (key : ValidatorIndex → Signatures.SecretKey) (proposals : Set Slot) (gap : Nat)
     (w : ForkedBeaconState preset) : Prop where
@@ -71,7 +47,9 @@ structure ContinuationConditions (config : Config) (honest : Finset ValidatorInd
     ∃ committees : List (Array ValidatorIndex), (List.range
         (getCommitteeCountPerSlot w.state (getCurrentEpoch w.state)).toNat).mapM
       (fun position => getBeaconCommittee w.state slot position.toUInt64) = .ok committees
-  /-- At a slot of a proposal after the latest block header, an honest proposer can propose. -/
+  /-- At a slot of a proposal after the latest block header, the proposer is honest.
+
+  There the state meets the conditions of its honest proposal, for some budget. -/
   propose : w.state.slot ∈ proposals → w.state.latestBlockHeader.slot < w.state.slot →
     ∃ (budget scoreBound : Nat) (proposer : ValidatorIndex),
       getBeaconProposerIndex w.state = .ok proposer ∧ proposer ∈ honest ∧
@@ -84,8 +62,6 @@ An honest run from `x` reaches the first state, at the first slot of an epoch af
 That epoch is at most two after that of `x`, and the first state has no upgrade due.
 
 Its slot is after its latest block header.
-
-The conditions of the continuation then give the slot steps and the honest blocks of the epoch.
 
 The run gathers the votes of all slots of the epoch but the last. -/
 private theorem exists_epochStage
@@ -133,6 +109,7 @@ private theorem exists_epochStage
     have := roots.twoSlots
     omega
   have altairS : .altair ≤ s.fork := Nat.le_trans altair (fork_le_of_chainSteps pre.chainSteps)
+  -- The conditions of the continuation give the slot steps and the honest blocks of the epoch.
   refine exists_epochContinuation (gap := gap) positive parameters.lookahead altairS first fresh
     ?_ ?_ ?_
   · -- Each slot step of the epoch is a slot step of a continuation from `x`.
@@ -162,7 +139,7 @@ A run from a genesis state `g` reaches `x`, from Altair, in an epoch `e` past th
 
 The preset meets the parameters of accountable safety and of the honest block.
 
-The seed lookahead reaches two epochs, so the activity of `e + 1` and `e + 2` is fixed at `x`.
+The seed lookahead reaches two epochs.
 
 The guard of the a priori drift holds at `x` through `e + 2`.
 
@@ -202,6 +179,7 @@ theorem plausible_liveness_beacon
     (incrementLe : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ preset.largestEffectiveBalance)
     (inclusion : preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤ 1)
     (committeesPositive : 0 < preset.MAX_COMMITTEES_PER_SLOT)
+    -- A seed lookahead of two epochs fixes the activity of `e + 1` and `e + 2` at `x`.
     (lookahead : 2 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     {g x : ForkedBeaconState preset} (shared : Run config .bls g x)
     (genesis : Genesis (config := config) (checks := .bls) g)
@@ -249,6 +227,8 @@ theorem plausible_liveness_beacon
     have := roots.twoSlots
     omega
   have invariantX := Run.invariant (Genesis.invariant genesis) shared
+  -- The extension runs to the end of the epoch, then through two more epochs.
+  --
   -- Empty slots lead from `x` to the first slot of the next epoch.
   obtain ⟨s1, r1, honest1, none1, epoch1, first1, fresh1⟩ :=
     exists_slotsContinuation (honest := honest) (key := key) positive
@@ -260,6 +240,8 @@ theorem plausible_liveness_beacon
     refine r1.notDue_of_moved (fun same => ?_) fresh1
     have := congrArg UInt64.toNat same
     omega
+  -- In each of the two epochs, honest proposers carry the honest votes of every slot but the last.
+  --
   -- The first epoch of the continuation gathers its votes.
   obtain ⟨z1, q1, honestQ1, blocksQ1, forkZ1, epochZ1, lastZ1, behindZ1, justifiedZ1, bitsZ1,
       gatheredZ1⟩ :=
@@ -308,6 +290,7 @@ theorem plausible_liveness_beacon
     Nat.le_trans altair (fork_le_of_chainSteps (r1.append q1).chainSteps)
   have altairZ2 : .altair ≤ z2.fork :=
     Nat.le_trans altair (fork_le_of_chainSteps (r1.append tail).chainSteps)
+  -- The margin keeps their stake at two thirds of the active stake at both ends.
   obtain ⟨counted1, counted1Ok, quorum1⟩ :=
     exists_counted_quorum shared (r1.append q1) genesis parameters caps aligned roots lookahead
       guard (honest1.append honestQ1) active unslashed margin altairZ1 conditions1.beforeGloas
@@ -322,6 +305,7 @@ theorem plausible_liveness_beacon
     rw [UInt64.lt_iff_toNat_lt, epochZ1Nat]
     have one : (GENESIS_EPOCH + 1 : Epoch).toNat = 1 := rfl
     omega
+  -- So the two epochs are justified, and the first is finalized.
   obtain ⟨-, finalizedEpoch, -⟩ := advanceSlotAcross_finalizesTwoEpochs altairZ1 altairZ2 ok1
     lastZ1 lateZ1 counted1Ok quorum1
     justifiedZ2 bitsZ2 (by omega) ok2 lastZ2 counted2Ok quorum2
@@ -359,7 +343,11 @@ theorem plausible_liveness_beacon
     rw [finalizedEpoch, UInt64.lt_iff_toNat_lt, epochZ1Nat]
     have := UInt64.le_iff_toNat_le.mp (UInt64.le_trans settled previous)
     omega
-  · -- New votes have a fresh source and a target from the first epoch of the continuation on.
+  · -- The honest validators vote once in each epoch, from the justified source of that epoch.
+    --
+    -- New votes have a fresh source and a target from the first epoch of the continuation on.
+    --
+    -- So none of them becomes slashable.
     intro i member
     refine not_slashableIn_union_of_fresh (source := x.state.currentJustifiedCheckpoint.epoch)
       (target := getCurrentEpoch s1.state) (safe i member) (fun data old => ?_)

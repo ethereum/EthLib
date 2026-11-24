@@ -9,23 +9,9 @@ public import EthLib.Consensus.Proofs.Accessors
 /-!
 # Proofs: participation flags
 
-A flag that is added is set, at any index.
+A validator with a participation flag is active and not slashed, and its flag is set.
 
-Each validator that participates with a flag in an epoch is active then and not slashed.
-
-Its flag is set in the participation of that epoch.
-
-An attestation earns flags only when its source is the justified checkpoint of its target epoch.
-
-Its flags are the source, target and head flags, each at most once and in that order.
-
-From Gloas a vote for the block of its own slot matches its payload exactly when its index is zero.
-
-A vote for an earlier block matches when its index is the availability bit of the parent slot.
-
-A head flag from Gloas needs a matching payload vote.
-
-From Altair, a base reward is the base reward per increment, once for each whole increment.
+The other theorems give the flags an attestation earns, when a vote matches, and the base reward.
 -/
 
 @[expose] public section
@@ -36,7 +22,7 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork}
 
-/-- A flag that is added is set. -/
+/-- A flag that is added is set, at any index. -/
 theorem hasFlag_addFlag (flags : ParticipationFlags) (flagIndex : UInt64) :
     hasFlag (addFlag flags flagIndex) flagIndex = true := by
   simp only [hasFlag, addFlag, beq_iff_eq]
@@ -183,16 +169,16 @@ theorem getBaseReward_eq_mul_of_altair {state : BeaconState preset fork}
 
 Two validators with the same effective balance read the same base reward.
 
-They may sit in one state, or in two states whose forks agree on Altair.
-
-The first validator's index must be in the registry.
-
-A missing validator's error names its index, so two missing validators differ. -/
+The first validator's index must be in the registry. -/
 theorem getBaseReward_congr {f h : Base.Fork} {a : BeaconState preset f}
     {b : BeaconState preset h} {total : Gwei} {first second : ValidatorIndex}
+    -- A missing validator's error names its index, so two missing validators differ.
+    --
+    -- So the first index must be in the registry.
     (inside : first.toNat < a.validators.data.size)
     (same : (a.validators.data[first.toNat]?).map (·.effectiveBalance) =
       (b.validators.data[second.toNat]?).map (·.effectiveBalance))
+    -- The two validators may sit in one state, or in two states whose forks agree on Altair.
     (altair : Base.Fork.altair ≤ f ↔ Base.Fork.altair ≤ h := by rfl) :
     getBaseReward a total first = getBaseReward b total second := by
   unfold getBaseReward getValidator

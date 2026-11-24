@@ -8,29 +8,11 @@ public import EthLib.Consensus.Churn
 /-!
 # Proofs: the balance churn
 
-A queue never places an amount before its earliest open epoch, or before the first epoch allowed.
+The churn queue places an amount no earlier than its first open epoch.
 
-The queue spends exactly the amount.
+It spends exactly that amount.
 
-The churn left plus the amount equals the churn available, plus a full churn for each added epoch.
-
-An amount that needs later epochs takes the fewest, so less than one churn is left in the last.
-
-An amount that fits the churn available always finds its place in the current epoch.
-
-Amounts queued in turn spend exactly their sum, with one full churn for each added epoch.
-
-So the amounts placed up to an epoch take at most the churn left, then a full churn per epoch.
-
-The bound also holds when the first epoch and the churn vary between calls, under a cap.
-
-In Electra, the churns of consolidations and of activations and exits add up to the whole churn.
-
-So their difference does not wrap.
-
-From Gloas, the churn of exits is a whole number of increments.
-
-The churn of activations is the churn of exits up to a maximum, and pending deposits take it.
+Other theorems give the churn limits of Electra and Gloas, and the churn that pending deposits take.
 -/
 
 @[expose] public section
@@ -47,7 +29,7 @@ The churn left plus the amount equals the churn available at the first open epoc
 
 Each epoch that the queue adds contributes one more full churn to that sum.
 
-If the queue adds epochs, less than one full churn is left in the last. -/
+If the queue adds epochs, it takes the fewest, so less than one full churn is left in the last. -/
 theorem churnQueue_spend {earliestEpoch firstEpoch perEpochChurn churnLeft amount epoch left :
     UInt64}
     (computed :
@@ -302,6 +284,9 @@ theorem getConsolidationChurnLimit_add {config : Config} {state : BeaconState pr
   simp only [getActivationExitChurnLimit, bind_ok_iff, wholeOk, pure, Except.pure,
     Except.ok.injEq, exists_eq_left'] at activationExitOk
   subst consolidationOk activationExitOk
+  -- The churn of activations and exits is at most the whole churn.
+  --
+  -- So the consolidation churn, their difference, does not wrap.
   have le : min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT whole ≤ whole := by
     rw [UInt64.min_def]
     split
