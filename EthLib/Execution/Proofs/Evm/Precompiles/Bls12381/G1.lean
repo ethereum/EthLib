@@ -6,7 +6,9 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.G1`
 
-It proves when G1ADD, G1MSM and MAP_FP_TO_G1 fail or succeed, and that each output has 128 bytes.
+This file proves when G1ADD, G1MSM and MAP_FP_TO_G1 fail and when they succeed.
+
+Each output of the three has 128 bytes.
 
 Each one rejects a wrong input length before it charges gas.
 

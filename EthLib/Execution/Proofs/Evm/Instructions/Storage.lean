@@ -6,9 +6,11 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.Storage`
 
-The gas, the refunds and the state gas of SLOAD and SSTORE, fork by fork.
+This file proves the gas, the refunds and the state gas of SLOAD and SSTORE, fork by fork.
 
-The access to a slot that they make, and SSTORE in a frame that must not change the state.
+It also covers the access to a slot that they make.
+
+SSTORE in a frame that must not change the state is covered too.
 -/
 
 @[expose] public section
@@ -230,11 +232,11 @@ From Berlin, the price depends on whether the slot is cold. -/
 theorem sloadStep_cons {evm : Evm fork Meter} {word : U256} {rest : List U256}
     (h : evm.stack.val = word :: rest) :
     sloadStep evm =
-      -- It accesses the slot of the current account.
+      -- The step accesses the slot of the current account.
       let accessed := accessStorageKey { evm with stack := ⟨rest, by
         have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
         evm.message.currentTarget (U256.toBeBytes word)
-      -- It pays the cold or warm price of the fork.
+      -- The step pays the cold or warm price of the fork.
       (GasMeter.charge accessed.2.gas (sloadCost fork accessed.1)).map fun gas =>
         { accessed.2 with
           gas

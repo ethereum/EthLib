@@ -9,7 +9,9 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.MemoryData`
 
-The instructions that move bytes between memory, the stack, call data, code and return data.
+This file covers the instructions that move bytes to and from memory.
+
+The bytes come from or go to the stack, call data, code, return data or memory itself.
 
 None of them changes the message, the state or the substate of the frame.
 
@@ -260,7 +262,7 @@ theorem byteAtOrZero_mcopyStep {evm after : Evm fork Meter} {destination source 
 CALLDATACOPY and CODECOPY run this copy. -/
 theorem byteAtOrZero_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm fork Meter}
     {start offset size : U256} {rest : List U256}
-    -- The second hypothesis: memory must start at a size that is a multiple of 32.
+    -- The second hypothesis asks that memory start at a size that is a multiple of 32.
     (hstack : evm.stack.val = start :: offset :: size :: rest) (hmod : evm.memory.size % 32 = 0)
     (h : copyToMemory base data evm = .ok after) (i : Nat) :
     byteAtOrZero after.memory i =
@@ -451,7 +453,7 @@ theorem mcopyStep_cons {evm : Evm fork Meter} {destination source length : U256}
     mcopyStep evm =
       let growth := extendMemory evm.memory.size [(source, length), (destination, length)]
       let memory := memoryExtend evm.memory growth.expandBy
-      -- It pays its price, a price for each word copied and the growth of memory.
+      -- The step pays its price, a price for each word copied and the growth of memory.
       (GasMeter.charge evm.gas
           (OPCODE_MCOPY_BASE + OPCODE_COPY_PER_WORD * wordCount length.toNat + growth.cost)).map
         fun gas =>

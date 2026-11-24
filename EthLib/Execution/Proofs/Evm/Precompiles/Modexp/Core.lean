@@ -7,9 +7,14 @@ public import EthLib.Execution.Evm.Precompiles.Modexp.Core
 /-!
 # Proofs: `Core`
 
-The precompile does what EIP-198 and EIP-7823 say, for its output, its input, its bound and its gas.
+The precompile does what EIP-198 and EIP-7823 say.
 
-The output is `base ^ exponent mod modulus`, or `0` when the modulus is `0`, on `len_mod` bytes.
+- The output is `base ^ exponent mod modulus`, or `0` when the modulus is `0`.
+- The output has exactly `len_mod` bytes.
+- A short input reads as if padded with zeros.
+- Data past the last field is ignored.
+- From Fusaka, a length above 1024 fails before gas is charged.
+- Otherwise the call fails exactly when the gas given is below the price.
 -/
 
 @[expose] public section

@@ -8,11 +8,13 @@ public import EthLib.Cryptography.Proofs.Bls.MapToCurve
 /-!
 # Proofs: MAP_FP_TO_G1 and MAP_FP2_TO_G2 of EIP-2537 land in the subgroup
 
-With the right length and gas, each succeeds exactly when its padded field element decodes.
+Take an input of the right length, and enough gas.
+
+Each precompile then succeeds exactly when its padded field element decodes.
 
 Every output encodes a valid point of the subgroup of order `r`.
 
-It passes the point decoder with the subgroup check.
+Every output passes the point decoder of EIP-2537 with the subgroup check.
 -/
 
 @[expose] public section

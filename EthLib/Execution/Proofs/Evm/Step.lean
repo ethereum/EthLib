@@ -8,9 +8,11 @@ public import EthLib.Execution.Proofs.Evm.Machine.Stack
 /-!
 # Proofs: `Evm.Step`
 
-The parts of an instruction: pops, pushes, charges, and instructions of up to three operands.
+This file proves what the parts of an instruction do to the stack and to memory.
 
-What each part does to the stack and memory, and that it keeps message, state, substate and code.
+The parts are pops, pushes, charges, and instructions of up to three operands.
+
+Each part keeps the message, the state, the substate and the code of the frame.
 -/
 
 @[expose] public section

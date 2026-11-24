@@ -1,11 +1,11 @@
 module
 
--- The frames that a frame reaches.
+-- This import gives the frames that a frame reaches.
 public import EthLib.Execution.Proofs.Evm.Logic.Reach
--- Triples over them.
+-- This import gives triples over those frames.
 public import EthLib.Execution.Proofs.Evm.Logic.Triple
 public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
--- Rules for loops.
+-- This import gives rules for loops.
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
 public import EthLib.Execution.Proofs.Evm.Logic.Subroutine
 -- A triple over frames that send messages takes an assumption on the frames that end the messages.
@@ -26,7 +26,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Static
 public import EthLib.Execution.Proofs.Evm.Logic.Create
 public import EthLib.Execution.Proofs.Evm.Logic.Deposit
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
--- Rules for opcodes.
+-- This import gives rules for opcodes.
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Copy
 public import EthLib.Execution.Proofs.Evm.Logic.Region

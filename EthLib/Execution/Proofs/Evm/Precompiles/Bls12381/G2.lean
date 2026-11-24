@@ -6,7 +6,9 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.G2`
 
-It proves when G2ADD, G2MSM and MAP_FP2_TO_G2 fail or succeed, and that each output has 256 bytes.
+This file proves when G2ADD, G2MSM and MAP_FP2_TO_G2 fail and when they succeed.
+
+Each output of the three has 256 bytes.
 
 Each one rejects a wrong input length before it charges gas.
 

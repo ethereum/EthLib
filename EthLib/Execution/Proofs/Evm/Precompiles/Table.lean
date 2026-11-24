@@ -7,7 +7,11 @@ public import EthLib.Execution.Evm.Precompiles.Table
 
 The table lists 18 distinct addresses, and each one has the fork that adds it.
 
-A call runs a precompile only from that fork, fails below its price, and is unchanged above it.
+A call to one of these addresses follows three rules:
+
+- Before the fork that adds it, an address runs no precompile.
+- A call with less gas than its price fails.
+- Gas above the price changes nothing.
 -/
 
 @[expose] public section

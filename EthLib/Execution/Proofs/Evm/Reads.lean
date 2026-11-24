@@ -18,7 +18,7 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: the reads of an instruction
 
-The accounts and the storage slots that each instruction of the dispatch adds to the reads.
+This file proves which accounts and storage slots each instruction of the dispatch records as read.
 
 For SSTORE and SELFDESTRUCT, the account reads and the storage reads are stated exactly.
 

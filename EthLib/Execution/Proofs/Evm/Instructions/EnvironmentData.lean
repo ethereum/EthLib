@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.Fees.BlobBaseFee
 /-!
 # Proofs: `Evm.Instructions.EnvironmentData`
 
-Instructions that read the frame, among them BLOCKHASH, BLOBHASH, CHAINID, BLOBBASEFEE and SLOTNUM.
+This file covers the instructions that read the frame.
+
+Among them are BLOCKHASH, BLOBHASH, CHAINID, BLOBBASEFEE and SLOTNUM.
 
 None of them changes the message, the state, the substate or memory of the frame.
 -/

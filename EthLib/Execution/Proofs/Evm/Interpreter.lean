@@ -5,7 +5,9 @@ public import EthLib.Execution.Evm.Interpreter
 /-!
 # Proofs: `Evm.Interpreter`
 
-What a step does at each byte of the code, and how the loop runs steps until the frame stops.
+This file proves what a step does at each byte of the code.
+
+It also proves how the loop runs steps until the frame stops.
 
 No opcode lacks an instruction, so a step never fails at its dispatch for want of one.
 -/

@@ -8,9 +8,11 @@ import EthLib.Cryptography.Proofs.AltBn128.PairingAte
 /-!
 # Proofs: ECPAIRING checks a product of pairings
 
-ECPAIRING returns the word 1 exactly when `sum_i a_i * b_i = 0`.
+Let `P_i = a_i P1` and `Q_i = b_i P2`, for scalars `a_i` and `b_i` in `ZMod q`.
 
-Here `P_i = a_i P1` and `Q_i = b_i P2`, for scalars `a_i` and `b_i` in `ZMod q`.
+Every pair that ECPAIRING decodes holds such multiples of `P1` and `P2`.
+
+ECPAIRING returns the word 1 exactly when `sum_i a_i * b_i = 0`.
 
 The pairing law is proved in `PairingAte.lean`, so no theorem here assumes it.
 

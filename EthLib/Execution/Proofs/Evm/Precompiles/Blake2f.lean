@@ -6,9 +6,11 @@ import EthLib.Base.Proofs.Bytes
 /-!
 # Proofs: `Precompiles.Blake2f`
 
-The precompile rejects an input that is not 213 bytes long, or whose flag byte is not `0` or `1`.
+The precompile handles each input in one of three ways:
 
-It returns F on the fields of any other input, decoded as EIP-152 encodes them.
+- an input that is not 213 bytes long is rejected;
+- a 213-byte input whose flag byte is neither `0` nor `1` is rejected;
+- any other input returns F on its fields, decoded as EIP-152 encodes them.
 -/
 
 @[expose] public section
@@ -17,7 +19,9 @@ namespace EthLib.Execution.Evm.Precompiles.Blake2f
 
 /-! ## The errors and the result
 
-The flag byte is byte 212, read with a default that a 213-byte input never uses. -/
+The flag byte is byte 212 of a 213-byte input.
+
+The statements read it with a default, which a 213-byte input never uses. -/
 
 /-- The price of a 213-byte input is one gas per round. -/
 theorem gasCost_of_size (data : ByteArray) (h : data.size = INPUT_BYTES) :
@@ -218,7 +222,7 @@ theorem writeState_byte (h : Vector UInt64 8) (i k : Fin 8) :
 
 /-- Output word `i`, read back little-endian, is state word `i`.
 
-So the output words are little-endian too, the encoding of the input, EIP-152 Specification. -/
+So the output words keep the little-endian encoding of the input words, EIP-152 Specification. -/
 theorem writeState_word (h : Vector UInt64 8) (i : Fin 8) :
     ((writeState h)[8 * i.val]'(by simp only [OUTPUT_BYTES]; omega)).toNat +
       2 ^ 8 * ((writeState h)[8 * i.val + 1]'(by simp only [OUTPUT_BYTES]; omega)).toNat +

@@ -141,11 +141,11 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 It keeps its message, its code and both lists of logs of its substate. -/
 structure StaticStep (before after : Evm fork Meter) : Prop where
-  -- It only adds reads: every field but the reads stays, and no read is lost.
+  -- The step only adds reads: every field but the reads stays, and no read is lost.
   tracker : before.state.ReadsMore after.state
   message : after.message = before.message
   code : after.code = before.code
-  -- It also keeps the touched accounts and the accounts to delete of its substate.
+  -- The step also keeps the touched accounts and the accounts to delete of its substate.
   touched : after.substate.touchedAccounts = before.substate.touchedAccounts
   toDelete : after.substate.accountsToDelete = before.substate.accountsToDelete
   /-- The step keeps the logs. -/

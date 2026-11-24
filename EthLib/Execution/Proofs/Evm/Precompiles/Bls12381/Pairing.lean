@@ -6,11 +6,14 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.Pairing`
 
-It proves when the pairing check fails or succeeds, and that every output is the word 0 or 1.
+This file proves when the pairing check fails and when it succeeds.
 
-Each output has 32 bytes.
+Before it charges gas, the check rejects two kinds of input:
 
-Before it charges gas, it rejects an empty input or a length not a multiple of 384 bytes.
+- an empty input;
+- a length that is not a whole number of 384-byte pairs.
+
+Every output is the 32-byte word 0 or 1.
 -/
 
 @[expose] public section

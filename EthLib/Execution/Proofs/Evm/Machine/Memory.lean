@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Gas.Memory
 /-!
 # Proofs: `Evm.Machine.Memory`
 
-What reads, writes and growth of memory give, byte by byte, and how two of them combine.
+This file proves what reads, writes and growth of memory give, byte by byte.
+
+It also proves how two of them combine.
 
 Memory grows in whole words, so its size stays a multiple of 32.
 -/

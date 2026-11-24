@@ -8,7 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.ControlFlow`
 
-The instructions of control flow: STOP, JUMP, JUMPI, JUMPDEST, PC and GAS.
+This file covers the instructions of control flow: STOP, JUMP, JUMPI, JUMPDEST, PC and GAS.
 
 None of them changes the message, the state, the substate or memory of the frame.
 -/

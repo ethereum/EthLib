@@ -7,11 +7,10 @@ public import EthLib.Execution.Evm.Precompiles.Modexp.Gas
 
 What the gas formula guarantees.
 
-At every fork, the iteration count follows the case split of EIP-198 for the exponent.
-
-From Fusaka, the price has a minimum, and a maximum for lengths in bounds.
-
-From Fusaka, the price does not fall when an operand grows longer.
+- At every fork, the iteration count follows the case split of EIP-198 for the exponent.
+- From Fusaka, the price is never below the minimum, 500.
+- From Fusaka, for lengths in bounds, the price is at most 528449536.
+- From Fusaka, the price does not fall when an operand grows longer.
 -/
 
 @[expose] public section

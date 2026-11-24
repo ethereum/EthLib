@@ -247,7 +247,9 @@ theorem p256Verify_callData_sign (d k : Fn) {e : Nat} (he : e < 2 ^ 256) (hd : d
     (hr : rx.val % Fn.modulus ≠ 0)
     -- `s = k^(-1) (e + r d)` is not zero.
     (hs : Fn.inv k * (Fin.ofNat _ e + Fin.ofNat _ (rx.val % Fn.modulus) * d) ≠ 0)
-    -- `Q = d G` is the affine key `(qx, qy)`, and the call has at least 6900 gas.
+    -- `Q = d G` is the affine key `(qx, qy)`.
+    --
+    -- The call has at least 6900 gas.
     (hQ : Point.mul d Point.generator = .affine qx qy) {gas : Nat} (hgas : GAS_P256VERIFY ≤ gas) :
     p256Verify (callData e (rx.val % Fn.modulus)
       (Fn.inv k * (Fin.ofNat _ e + Fin.ofNat _ (rx.val % Fn.modulus) * d)).val

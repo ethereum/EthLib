@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: `Evm.Instructions.SelfDestruct`
 
-What SELFDESTRUCT deletes, where its ether goes, what it costs, what it reads and what it logs.
+This file proves what SELFDESTRUCT deletes, where its ether goes and what it costs.
+
+It also proves what SELFDESTRUCT reads and what it logs.
 
 Its rules change at Tangerine Whistle, Spurious Dragon, London, Paris, Cancun and Glamsterdam.
 -/
@@ -132,7 +134,9 @@ theorem selfdestructStateGas_eq_zero (h : fork < .glamsterdam ∨ createsAccount
     simp [this]
   · simp [h]
 
-/-- From Tangerine Whistle to Glamsterdam, a new beneficiary adds what a CALL pays for it. -/
+/-- From Tangerine Whistle to Glamsterdam, a new beneficiary adds the price of a new account.
+
+That price is what a CALL pays for the account that it creates. -/
 theorem selfdestructCost_selfdestructCreatesAccount (hlt : fork < .glamsterdam) (cold : Bool)
     (state : TransactionState) (originator beneficiary : Address) :
     selfdestructCost fork cold (selfdestructCreatesAccount fork state originator beneficiary) =
@@ -143,7 +147,7 @@ theorem selfdestructCost_selfdestructCreatesAccount (hlt : fork < .glamsterdam) 
         if (gasSchedule fork).OPCODE_SELFDESTRUCT_BASE = 0 then 0
         -- That CALL sends the balance of the current account to the beneficiary.
         --
-        -- EIP-150, Specification, charges 25000 for that account, similar to CALLs.
+        -- EIP-150, Specification, charges 25000 for the new account, similar to CALLs.
         --
         -- From Spurious Dragon, EIP-161, Specification (b), narrows that charge.
         --
@@ -233,7 +237,9 @@ theorem accountReads_selfdestructTransfer {tx tx' : State.TransactionState}
 
 /-- The transfer of SELFDESTRUCT can read the written keys of the originator and the beneficiary.
 
-From Paris, it reads those of an account that it leaves empty, even for a moment. -/
+From Paris, the transfer reads the written keys of an account that it leaves empty.
+
+That holds even when the account is empty only for a moment. -/
 theorem getElem?_storageReads_selfdestructTransfer {tx tx' : State.TransactionState}
     {originator beneficiary : Address}
     (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') (address : Address) :
@@ -245,7 +251,9 @@ theorem getElem?_storageReads_selfdestructTransfer {tx tx' : State.TransactionSt
             -- From Paris, a beneficiary that the transfer leaves empty has its written keys read.
             (address = beneficiary ∧ tx'.getAccount beneficiary = State.EMPTY_ACCOUNT)) then
         (tx.destroyStorage address).storageReads[address]?
-      -- Every other address keeps its storage reads, and before Paris every address keeps them.
+      -- Every other address keeps its storage reads.
+      --
+      -- Before Paris, every address keeps them.
       else tx.storageReads[address]? := by
   unfold selfdestructTransfer at h
   dsimp only at h

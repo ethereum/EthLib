@@ -5,9 +5,11 @@ public import EthLib.Execution.Evm.Gas.StateGas
 /-!
 # Proofs: `Evm.Gas.StateGas`
 
-What charges, refills, commits, rollbacks, repayments and merges do to the state gas meter.
+This file proves what each operation does to the state gas meter.
 
-Charges and refills of state gas keep execution gas plus the reservoir plus the net state gas.
+The operations are charges, refills, commits, rollbacks, repayments and merges.
+
+Charges and refills of state gas keep the sum of execution gas, the reservoir and the net state gas.
 
 Charges, refills, rollbacks and repayments keep execution gas plus the spill.
 
