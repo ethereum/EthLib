@@ -16,8 +16,6 @@ The source is [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "Storag
 
 The tries are secured: each key is the hash of an address or of a slot key.
 
-The value of an account in the trie is its full encoding, which the answer sends in slim form.
-
 Otherwise a search returns a collision of Keccak-256, as for a range of any trie.
 -/
 
@@ -64,31 +62,28 @@ private theorem mapM_fullAccount {ε : Type}
 
 /-- Soundness of an AccountRange answer that is not the empty reply.
 
-It gives each account hash between its ends the full account of the state trie with that hash.
-
-When the answer reaches the end of the trie, each hash need only follow the start.
-
-The keys of the state trie must be distinct.
-
-Otherwise the range search returns a collision in the plain trie of the hashed keys.
-
-Or the state trie has two keys with one hash, which the key search returns. -/
+It gives each account hash between its ends the full account of the state trie with that hash. -/
 theorem verifyAccountRange_sound {data : List (ByteArray × ByteArray)} {root' start : Hash32}
     {accounts : List (RangeEntry Item)} {proof : List ByteArray} {answer : RangeAnswer}
+    -- The keys of the state trie must be distinct.
     (hroot : root keccak256 ⟨true, data⟩ = .ok root') (hkeys : (data.map Prod.fst).Nodup)
     (hverify : verifyAccountRange root' start accounts proof = .ok answer)
     (hstate : answer ≠ .noState) (key : Hash32)
     (hstart : bytesToNibbleList ⟨start.toArray⟩ ≤ bytesToNibbleList ⟨key.toArray⟩)
+    -- When the answer reaches the end of the trie, each hash need only follow the start.
     (hlast : answer = .toEnd ∨ accounts.getLast?.all fun last =>
       bytesToNibbleList ⟨key.toArray⟩ ≤ bytesToNibbleList ⟨last.hash.toArray⟩) :
+    -- An account's value in the trie is its full encoding, which the answer sends in slim form.
     (data.find? fun entry => decide ((show Hash32 from keccak256 entry.1) = key)).map Prod.snd =
         ((accounts.find? fun account => account.hash = key).bind fun account =>
           fullAccount account.data) ∨
+      -- Otherwise the range search returns a collision in the plain trie of the hashed keys.
       (∃ pair, findRangeCollision keccak256
         ⟨false, data.map fun entry => (⟨(keccak256 entry.1).toArray⟩, entry.2)⟩ root' start
         (accounts.filterMap fun account =>
           (fullAccount account.data).map fun value => (account.hash, value))
         proof key = some pair ∧ IsCollision keccak256 pair) ∨
+      -- Or the state trie has two keys with one hash, which the key search returns.
       ∃ pair, findPathCollision keccak256 ⟨true, data⟩ = some pair ∧
         IsCollision keccak256 pair := by
   unfold verifyAccountRange at hverify
@@ -154,46 +149,39 @@ private theorem exists_ok_of_discard {ε α : Type} {x : Except ε α}
 
 /-- Soundness of one range of a StorageRanges answer that is not the empty reply.
 
-The ranges are those of the answer, or one empty range when it holds a proof alone.
-
 It gives each slot hash of the range the value of the storage trie of its account with that hash.
 
-Each range but the last is a whole trie, so this holds for every hash.
-
-Requested accounts after the last range get no answer.
-
-The last range starts at the starting hash for one account, and at the zero hash for several.
-
-It holds for each hash from there to its last slot, or to the end when the answer says so.
-
-The keys of the storage trie must be distinct.
-
-Otherwise the range search returns a collision in the plain trie of the hashed keys.
-
-Or the storage trie has two keys with one hash, which the key search returns. -/
+Requested accounts after the last range get no answer. -/
 theorem verifyStorageRanges_sound {roots : List Hash32} {start : Hash32}
     {slots ranges : List (List (RangeEntry ByteArray))} {proof : List ByteArray}
     {answer : RangeAnswer}
     (hverify : verifyStorageRanges roots start slots proof = .ok answer)
+    -- The ranges are those of the answer, or one empty range when it holds a proof alone.
     (hstate : answer ≠ .noState) (hranges : ranges = if slots.isEmpty then [[]] else slots)
     {index : Nat} {range : List (RangeEntry ByteArray)} {root' : Hash32}
     (hrange : ranges[index]? = some range) (hrootIndex : roots[index]? = some root')
     {data : List (ByteArray × ByteArray)}
+    -- The keys of the storage trie must be distinct.
     (hroot : root keccak256 ⟨true, data⟩ = .ok root') (hkeys : (data.map Prod.fst).Nodup)
     (key : Hash32)
+    -- Each range but the last is a whole trie, so this holds for every hash.
     (hkey : index + 1 < ranges.length ∨
+      -- The last range starts at the starting hash for one account, at the zero hash for several.
       (bytesToNibbleList ⟨(if roots.length = 1 then start else Vector.replicate 32 0).toArray⟩ ≤
           bytesToNibbleList ⟨key.toArray⟩ ∧
+        -- It holds for each hash from there to its last slot, or to the end if the answer says so.
         (answer = .toEnd ∨ range.getLast?.all fun last =>
           bytesToNibbleList ⟨key.toArray⟩ ≤ bytesToNibbleList ⟨last.hash.toArray⟩))) :
     (data.find? fun entry => decide ((show Hash32 from keccak256 entry.1) = key)).map Prod.snd =
         (range.find? fun slot => slot.hash = key).map RangeEntry.data ∨
+      -- Otherwise the range search returns a collision in the plain trie of the hashed keys.
       (∃ pair, findRangeCollision keccak256
         ⟨false, data.map fun entry => (⟨(keccak256 entry.1).toArray⟩, entry.2)⟩ root'
         (if roots.length = 1 then start else Vector.replicate 32 0)
         (range.map fun slot => (slot.hash, slot.data))
         (if index + 1 < ranges.length then [] else proof) key = some pair ∧
         IsCollision keccak256 pair) ∨
+      -- Or the storage trie has two keys with one hash, which the key search returns.
       ∃ pair, findPathCollision keccak256 ⟨true, data⟩ = some pair ∧
         IsCollision keccak256 pair := by
   unfold verifyStorageRanges at hverify

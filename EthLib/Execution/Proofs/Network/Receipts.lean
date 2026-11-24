@@ -7,23 +7,9 @@ public import EthLib.Serialization.Proofs.Rlp.Encodings
 /-!
 # Proofs: the receipts of the eth protocol
 
-A receipt reads back from its RLP item.
-
-Leaving out the Bloom filter and computing it again can give a receipt back.
-
-It does so exactly when its filter is the filter of its logs.
-
-From eth/69 on, the reader of a receipt gives its consensus form.
-
-On eth/68, a list reads as a legacy receipt, and a byte string as a receipt of another type.
-
-The receipts of a block match a root exactly when two conditions hold.
-
-Each reads in consensus form, and those forms, in order, have that root.
+A receipt reads back from its RLP item, and the receipts of a block match a root in consensus form.
 
 From eth/70, a partial list of receipts passes the EIP-7975 checks exactly when three bounds hold.
-
-Before eth/70, a peer sends every receipt of a block, and these checks do not apply.
 
 The size of each receipt is that of its encoding, read from its slice of the list.
 -/
@@ -228,21 +214,18 @@ theorem of_checkPartialReceipts {gasLimits : List Nat} {blockGasLimit : Nat} {si
 
 /-- From eth/70, a partial list passes the checks of EIP-7975 exactly when three bounds hold.
 
-There are no more receipts than transactions.
+Before eth/70, a peer sends every receipt of a block, and these checks do not apply.
 
-Each receipt is within the bound of its transaction, its gas limit over 8.
-
-All the receipts together are within the bound of the block.
-
-The conditions read only the sizes of the receipts.
-
-They do not check the receipts against the receipts root, nor that the list is complete. -/
+The conditions read only the sizes, not the receipts root, nor whether the list is complete. -/
 theorem checkPartialReceipts_eq_ok_iff {gasLimits : List Nat} {blockGasLimit : Nat}
     {sizes : List Nat} :
     checkPartialReceipts gasLimits blockGasLimit sizes = .ok () ↔
+      -- There are no more receipts than transactions.
       sizes.length ≤ gasLimits.length ∧
+        -- Each receipt is within the bound of its transaction, its gas limit over 8.
         (∀ (i : Nat) (hs : i < sizes.length) (hg : i < gasLimits.length),
           sizes[i] ≤ gasLimits[i] / 8) ∧
+        -- All the receipts together are within the bound of the block.
         sizes.sum ≤ blockGasLimit / 8 := by
   refine ⟨of_checkPartialReceipts, fun ⟨hl, hall, ht⟩ => ?_⟩
   unfold checkPartialReceipts

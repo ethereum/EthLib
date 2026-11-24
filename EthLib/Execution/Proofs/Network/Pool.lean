@@ -6,17 +6,11 @@ public import EthLib.Execution.Proofs.Transactions.Inclusion
 /-!
 # Proofs: the pool of transactions
 
-A node keeps a transaction exactly when three things hold.
+A node keeps a transaction exactly when it passes alone, with a nonce at least its sender's.
 
-It passes the checks of a transaction alone.
+Its sender must also hold its cost.
 
-Its nonce is at least that of its sender, and its sender holds its cost.
-
-A transaction that the next block could include is kept by the pool.
-
-A transaction whose nonce is ahead of its sender's is kept, though no block can include it yet.
-
-A node disconnects a peer only for a transaction of a type that no fork defines.
+So the pool keeps each transaction that the next block could include, and some it cannot yet.
 
 A Transactions message built from the transactions that may go whole holds no blob transaction.
 -/
