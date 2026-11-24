@@ -153,7 +153,7 @@ def xmss_verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
     ...
 
 def xmss_signature_index(signature: bytes) -> int:
-    """The leaf index a 2404-byte signature carries."""
+    """The leaf index that a 2404-byte signature claims, read without verifying the signature."""
     ...
 
 def sphincs_key_gen(seed: bytes) -> bytes:
