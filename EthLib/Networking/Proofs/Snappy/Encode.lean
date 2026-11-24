@@ -148,6 +148,41 @@ theorem reads_copyElement {declared : Nat} {L : List UInt8} {p offset len : Nat}
       Nat.min_eq_left (show p ≤ L.length by omega), show offset ≠ 0 by omega,
       show ¬ declared < p + len by omega, show ¬ s.length + 1 + 1 < 2 by omega, hr]
 
+/-- A copy element with a four-byte offset takes the first `p` bytes of `L` to its first `p + len`.
+
+Each byte of the copy is the byte `offset` places before it in `L`. -/
+theorem reads_copyFour {declared : Nat} {L : List UInt8} {p offset len : Nat}
+    -- The offset is from 1 to 2^32 - 1 and at most `p`, and the length is from 1 to 64.
+    (hoff : 0 < offset) (hle : offset ≤ p) (hlen1 : 1 ≤ len) (hlen2 : len ≤ maxCopyLength)
+    (hbound : offset < 2 ^ 32)
+    -- Both `L` and the declared length hold at least `p + len` bytes.
+    (hL : p + len ≤ L.length) (hfit : p + len ≤ declared)
+    (hmatch : ∀ (j : Nat) (_hj : p ≤ j) (_hjn : j < p + len) (h1 : j < L.length)
+      (h2 : j - offset < L.length), L[j] = L[j - offset]) :
+    -- The tag holds the type 11 and len - 1, and a little-endian 32-bit offset follows (§2.2.3).
+    Reads declared (UInt8.ofNat (3 + (len - 1) * 4) :: (ByteOrder.toLE 4 offset).toList)
+      (L.take p) (L.take (p + len)) := by
+  have hlp : (L.take p).length = p := by simp; omega
+  obtain ⟨r, hr, hrlen, hpre, hrep⟩ := copyBytes_spec (o := L.take p) len hoff (by omega)
+  have hrL : r = L.take (p + len) :=
+    eq_take_of_repeat hoff hle hL (by omega) hpre (fun j hj hjr => hrep j (by omega) hjr) hmatch
+  subst hrL
+  simp only [maxCopyLength] at hlen2
+  refine reads_of_step (by simp) fun s fuel => ?_
+  have ht : (UInt8.ofNat (3 + (len - 1) * 4)).toNat = 3 + (len - 1) * 4 := by
+    rw [UInt8.toNat_ofNat']; omega
+  -- The four bytes after the tag read back as the offset.
+  have hread :
+      (ByteOrder.toLE 4 offset).foldr (fun byte acc => byte.toNat + 256 * acc) 0 = offset :=
+    EthLib.Base.ByteOrder.foldr_toLE_of_lt (by omega)
+  have h3 : (3 + (len - 1) * 4) % 4 = 3 := by omega
+  have hup : (3 + (len - 1) * 4) / 4 + 1 = len := by omega
+  simp only [List.cons_append, decompressElements]
+  rw [ht, h3, hup]
+  simp [EthLib.Base.ByteOrder.ofLE_toVector, hread, show offset ≠ 0 by omega,
+    Nat.min_eq_left (show p ≤ L.length by omega), show ¬ declared < p + len by omega, hr,
+    show ¬ 4 + s.length < 4 by omega]
+
 /-! ## The encoder -/
 
 /-- The copies that the encoder appends for one offset do not depend on the output before them. -/
