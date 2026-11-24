@@ -187,7 +187,7 @@ commit = "dd184f1ce89c81808503bb719b5fcb13844d08f3"
 commit = "9a1fbe8edadebea223f47102f1913b8026c23a1c"
 
 [repositories."libp2p/specs"]
-commit = "4facaf9876da1eb7d6e066982010c81495ebb965"
+commit = "1a084b699d9d424ca7027edf350cf4184cd6f5bd"
 
 # The gossip RPC tests build their frames from the protobuf encoding guide at this commit.
 [repositories."protocolbuffers/protocolbuffers.github.io"]

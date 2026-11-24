@@ -5,7 +5,7 @@ import pytest
 from ethlib.networking.libp2p import yamux
 from raising import raises
 
-# The format is yamux/README.md of libp2p/specs at commit 4facaf9876da1eb7d6e066982010c81495ebb965.
+# The format is yamux/README.md of libp2p/specs at commit 1a084b699d9d424ca7027edf350cf4184cd6f5bd.
 # Its sections are "Framing" with its field sections, "Flow Control" and "Session termination".
 # A header is version 0, the type, two bytes of flags, then the stream ID and the length in four.
 # The flags are SYN 1, ACK 2, FIN 4 and RST 8.

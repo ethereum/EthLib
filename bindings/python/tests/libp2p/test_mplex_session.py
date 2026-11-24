@@ -7,7 +7,7 @@ from raising import raises
 
 # The rules come from "Protocol" of mplex/README.md.
 # Repository: libp2p/specs.
-# Commit: 4facaf9876da1eb7d6e066982010c81495ebb965.
+# Commit: 1a084b699d9d424ca7027edf350cf4184cd6f5bd.
 #
 # A header is the unsigned varint of 8 * stream ID + flag, then a length and the data.
 #

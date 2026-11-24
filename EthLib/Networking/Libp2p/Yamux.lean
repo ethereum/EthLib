@@ -26,7 +26,7 @@ def headerSize : Nat :=
   -- Framing: 8 + 8 + 16 + 32 + 32 bits, so each header has a 12 byte overhead.
   12
 
-/-- The window of a new stream in bytes: 256 KiB, from the section Flow Control. -/
+/-- The window of a new stream in bytes, from the section Flow Control. -/
 def initialWindow : Nat :=
   -- Flow Control: each stream starts with a window of 256KiB, that is `2^18` bytes.
   262144

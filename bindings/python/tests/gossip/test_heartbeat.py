@@ -21,7 +21,7 @@ from ethlib.networking.gossip.router import (
 from ethlib.networking.gossip.rpc import Control, Graft, IHave, Message, Prune, Rpc
 from raising import raises
 
-# The rules are in libp2p/specs at commit 4facaf9876da1eb7d6e066982010c81495ebb965.
+# The rules are in libp2p/specs at commit 1a084b699d9d424ca7027edf350cf4184cd6f5bd.
 # Membership, publishing and the heartbeat are three sections of pubsub/gossipsub/gossipsub-v1.0.md.
 # They are "Topic Membership", the last list of "Message Processing", and "Heartbeat".
 # The v1.1 rules are four sections of gossipsub-v1.1.md.
