@@ -6,19 +6,9 @@ import EthLib.Consensus.Proofs.Time
 /-!
 # Proofs: stores whose clock never goes back
 
-A tick of the fork choice sets the time of the store, even to an earlier time.
-
-The clock of an honest node only moves forward, so its ticks never go back.
-
 A store is reachable with a forward clock when the handlers build it and no tick sets it back.
 
-Such a store is reachable, so every result on reachable stores applies to it.
-
-A tick to a time no earlier than that of the store does not lower its current slot.
-
 An honest node also runs every handler with one setting of the signature checks.
-
-A store built that way is also reachable with a forward clock.
 -/
 
 @[expose] public section
@@ -42,6 +32,9 @@ inductive ForwardReachable (config : Config) (anchorState : BeaconState preset f
       ForwardReachable config anchorState anchorBlock store
   /-- The store after a tick to a time no earlier than its own. -/
   | tick {store after : Store preset fork} {timeMs : UInt64} :
+    -- A tick of the fork choice sets the time of the store, even to an earlier time.
+    --
+    -- The clock of an honest node only moves forward, so its ticks never go back.
     ForwardReachable config anchorState anchorBlock store → store.timeMs ≤ timeMs →
       store.onTick config timeMs = .ok after → ForwardReachable config anchorState anchorBlock after
   /-- The store after a signed block. -/
@@ -84,11 +77,7 @@ inductive ForwardReachable (config : Config) (anchorState : BeaconState preset f
 
 /-- A store that the handlers build from an anchor with one setting of the signature checks.
 
-No tick sets its time back, as for a store with a forward clock.
-
 Every handler runs with the same setting, as on an honest node.
-
-A block reads that setting: it skips a deposit for a new key with a bad signature.
 
 From Electra the epoch step reads it too, so the setting can change the states of the store. -/
 inductive ForwardReachableWith (config : Config) (checks : SignatureChecks)
@@ -100,6 +89,7 @@ inductive ForwardReachableWith (config : Config) (checks : SignatureChecks)
       ForwardReachableWith config checks anchorState anchorBlock store
   /-- The store after a tick to a time no earlier than its own. -/
   | tick {store after : Store preset fork} {timeMs : UInt64} :
+    -- No tick sets its time back, as for a store with a forward clock.
     ForwardReachableWith config checks anchorState anchorBlock store → store.timeMs ≤ timeMs →
       store.onTick config timeMs = .ok after →
       ForwardReachableWith config checks anchorState anchorBlock after
@@ -107,6 +97,7 @@ inductive ForwardReachableWith (config : Config) (checks : SignatureChecks)
   | block {store after : Store preset fork} {sources : BlockSources preset fork}
       {signed : SignedBeaconBlock preset fork} :
     ForwardReachableWith config checks anchorState anchorBlock store →
+      -- A block reads the setting: it skips a deposit for a new key with a bad signature.
       store.onBlock config checks sources signed = .ok after →
       ForwardReachableWith config checks anchorState anchorBlock after
   /-- The store after an attestation, from the wire or from a block. -/
@@ -142,7 +133,9 @@ inductive ForwardReachableWith (config : Config) (checks : SignatureChecks)
 variable {config : Config} {anchorState : BeaconState preset fork}
   {anchorBlock : BeaconBlock preset fork} {store after : Store preset fork}
 
-/-- A store with a forward clock is reachable. -/
+/-- A store with a forward clock is reachable.
+
+So every result on reachable stores applies to it. -/
 theorem ForwardReachable.reachable
     (forward : ForwardReachable config anchorState anchorBlock store) :
     Reachable config anchorState anchorBlock store := by

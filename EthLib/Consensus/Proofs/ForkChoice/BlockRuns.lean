@@ -14,21 +14,9 @@ import EthLib.Consensus.Proofs.Containers.State
 
 In a reachable store, each block state is at or after the anchor state.
 
-So each known block is at or after the anchor block.
-
-This needs the anchor block not to be after the anchor state.
-
 The walk back from a block to an earlier slot passes through blocks whose states form a run.
 
-So the state of the ancestor that the walk reaches runs on to the state of the block.
-
 With one setting of the signature checks, the state of a checkpoint also runs on.
-
-It runs to the state of each block that has the checkpoint block as its ancestor.
-
-That ancestor is taken at the start of the checkpoint epoch.
-
-The block must be at or after that start.
 -/
 
 @[expose] public section

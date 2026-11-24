@@ -12,25 +12,7 @@ Its §3.1 assumes that an honest validator never commits a slashable offence.
 
 The network model of this library derives that from the duty of the honest validator.
 
-A statement of an honest validator in a sent message first came from that validator itself.
-
-So it sits in a message of its own view, which only grows.
-
-Before a new vote, the validator checks it against each vote of its own in that view.
-
-Two votes that it may sign at one time are equal, when slots last a positive time.
-
-So no two votes of an honest validator in sent messages can be slashed together.
-
-A store adds a validator to its equivocators only from an attester slashing that it accepts.
-
-That slashing holds two votes of the validator, which can be slashed together.
-
-It comes as a message or inside a block, and in both cases from the view of the store.
-
-So no honest store lists an honest validator among its equivocators.
-
-The store-level form of Lemmas 4 and 3 assumes as much, and an honest execution discharges it.
+Hence no honest store lists an honest validator among its equivocators.
 
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
@@ -403,18 +385,21 @@ theorem Execution.isSlashableAttestationData_honest (slots : 0 < config.SLOT_DUR
     simp [Execution.world_zero, World.initial] at sent
   | succ n ih =>
     rintro d₁ d₂ ⟨m₁, sent₁, signs₁⟩ ⟨m₂, sent₂, signs₂⟩
-    -- A vote sent before is in a message of the view of the validator.
+    -- A vote sent before is in a message of the view of the validator, which only grows.
     have inView : ∀ d, Sent n d → ∃ m ∈ (e.world n).view v,
         (v, d) ∈ statements config checks anchorState anchorBlock m :=
       fun d ⟨m, sent, signs⟩ => e.signed_mem_view n honest sent signs rfl
+    -- A statement of an honest validator in a sent message first came from that validator itself.
     rcases e.sent_or_maySign n honest sent₁ signs₁ with old₁ | new₁ <;>
       rcases e.sent_or_maySign n honest sent₂ signs₂ with old₂ | new₂
     · exact ih d₁ d₂ old₁ old₂
-    · obtain ⟨m, member, has⟩ := inView d₁ old₁
+    · -- Before a new vote, the validator checks it against each vote of its own in its view.
+      obtain ⟨m, member, has⟩ := inView d₁ old₁
       exact (new₂.choose_spec.2.2.2.2.2 m member _ has rfl).1
     · obtain ⟨m, member, has⟩ := inView d₂ old₂
       exact (new₁.choose_spec.2.2.2.2.2 m member _ has rfl).2
-    · rw [MaySign.eq slots new₁ new₂]
+    · -- Two votes the validator may sign at one time are equal, when slots last a positive time.
+      rw [MaySign.eq slots new₁ new₂]
       exact isSlashableAttestationData_self d₂
 
 /-- No honest store lists an honest validator among its known equivocators.
@@ -431,7 +416,12 @@ theorem Execution.equivocatingIndices_honest (slots : 0 < config.SLOT_DURATION_M
     rcases e.state_succ n u with same | ⟨-, moved⟩
     · rw [same] at member
       exact ih v member honest
-    · rcases Handles.mem_equivocatingIndices (anchorState := anchorState)
+    · -- A store adds a validator to its equivocators only from an attester slashing it accepts.
+      --
+      -- That slashing holds two votes of the validator, which can be slashed together.
+      --
+      -- It comes as a message or inside a block, and in both cases from the view of the store.
+      rcases Handles.mem_equivocatingIndices (anchorState := anchorState)
         (anchorBlock := anchorBlock) moved member with
         old | ⟨m, mem, first, second, one, two, slash⟩
       · exact ih v old honest
@@ -486,6 +476,9 @@ theorem Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed
         {v ∈ ((e.world n).state u).supportersOf balanceSource ⟨root, .pending⟩ | v ∈ J} :=
   Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed within slotOk blockOk parentOk boostOk
     firstOk lastOk maximumOk discountOk adversaryOk rangeOk participantsOk confirmed supportersIn
+    -- The store-level form of Lemmas 4 and 3 assumes that no known equivocator is honest.
+    --
+    -- An honest execution discharges that assumption.
     aligned increment (e.equivocatingIndices_honest slots start n receiver) byzantine
 
 end Models.Network

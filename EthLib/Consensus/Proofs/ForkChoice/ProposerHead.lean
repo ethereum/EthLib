@@ -15,15 +15,7 @@ It skips the head only when the head is weak.
 
 It never answers while the head still holds the boost.
 
-An exact statement gives when it answers and which node it takes, from its tests.
-
-The parent node has the payload status that the head builds on.
-
-So from Gloas a proposer whose head is not pending never builds on a pending node.
-
 Each test has an exact statement of when it answers and what it returns.
-
-The shuffling test always passes from Fulu, and before Fulu it reads the slot in its epoch.
 -/
 
 @[expose] public section
@@ -327,15 +319,7 @@ private theorem forIn_committees_ok_iff {state justified : BeaconState preset fo
       refine ⟨committee, found, _, ⟨known.1, rfl⟩, ?_⟩
       rw [ite_eq_right_iff.mpr (fun above => absurd above (Nat.not_le_of_lt within))]
 
-/-- A head is weak exactly when its votes and equivocators weigh below the threshold.
-
-Its equivocators are those of the committees of its slot, in the state of the head.
-
-Its votes and the balances of its equivocators come from the justified state.
-
-That state must hold each equivocator.
-
-The weight must fit in 64 bits. -/
+/-- A head is weak exactly when its votes and equivocators weigh below the threshold. -/
 theorem isHeadWeak_ok_iff {root : Root} {weak : Bool} :
     store.isHeadWeak config root = .ok weak ↔
       ∃ justified threshold state block votes committees,
@@ -343,13 +327,17 @@ theorem isHeadWeak_ok_iff {root : Root} {weak : Bool} :
         calculateCommitteeFraction justified config.REORG_HEAD_WEIGHT_THRESHOLD = .ok threshold ∧
         store.blockStates[root]? = some state ∧
         store.blocks[root]? = some block ∧
+        -- Its votes and the balances of its equivocators come from the justified state.
         store.getAttestationScore ⟨root, .pending⟩ justified = .ok votes ∧
+        -- Its equivocators are those of the committees of its slot, in the state of the head.
         (List.range
             (getCommitteeCountPerSlot state (computeEpochAtSlot preset block.slot)).toNat).mapM
           (fun index => getBeaconCommittee state block.slot index.toUInt64) = .ok committees ∧
+        -- The justified state must hold each equivocator.
         (∀ validator ∈ committees.flatMap Array.toList,
           store.equivocatingIndices.contains validator = true →
             justified.validators.data[validator.toNat]?.isSome) ∧
+        -- The weight must fit in 64 bits.
         votes.toNat + equivocatorWeight store.equivocatingIndices justified
           (committees.flatMap Array.toList) < 2 ^ 64 ∧
         weak = decide (votes.toNat + equivocatorWeight store.equivocatingIndices justified
@@ -385,40 +373,36 @@ private theorem ite_ite_eq_ite_or {α : Type} {first second firstNat secondNat :
       if firstNat ∨ secondNat then node else other := by
   by_cases one : firstNat <;> by_cases two : secondNat <;> simp [sameFirst, sameSecond, one, two]
 
-/-- The exact choice of a proposer.
-
-It answers when the boost has worn off and the store holds the head and its parent.
-
-Each test must answer, and the slot of each block plus one must fit in 64 bits.
-
-It takes the parent when either list of tests passes, and the head otherwise.
-
-The parent node has the payload status that the head builds on.
-
-The first list is for a late head.
-
-The second list is for a weak head of the previous slot whose proposer equivocated. -/
+/-- The exact choice of a proposer. -/
 theorem getProposerHead_ok_iff {headNode chosen : ForkChoiceNode} {slot : Slot} :
     store.getProposerHead config headNode slot = .ok chosen ↔
+      -- The choice answers when the boost has worn off.
       store.proposerBoostRoot ≠ headNode.root ∧
       ∃ head parent late shuffling competitive recent onTime weak strong equivocation,
+        -- The store holds the head and its parent.
         store.blocks[headNode.root]? = some head ∧
         store.blocks[head.parentRoot]? = some parent ∧
+        -- Each test must answer.
         store.isHeadLate headNode.root = .ok late ∧
         shufflingAllowsReorg preset fork slot = .ok shuffling ∧
         store.isFfgCompetitive headNode.root head.parentRoot = .ok competitive ∧
         store.isFinalizationOk config slot = .ok recent ∧
         store.isProposingOnTime config = .ok onTime ∧
+        -- The slot of each block plus one must fit in 64 bits.
         parent.slot.toNat + 1 < 2 ^ 64 ∧
         head.slot.toNat + 1 < 2 ^ 64 ∧
         store.isHeadWeak config headNode.root = .ok weak ∧
         store.isParentStrong config headNode.root = .ok strong ∧
         store.isProposerEquivocation headNode.root = .ok equivocation ∧
+        -- The choice is the parent when either list of tests passes, and the head otherwise.
         chosen =
+          -- The first list is for a late head.
           if (late ∧ shuffling ∧ competitive ∧ recent ∧ onTime ∧
                 (parent.slot.toNat + 1 = head.slot.toNat ∧ head.slot.toNat + 1 = slot.toNat) ∧
                 weak ∧ strong) ∨
+              -- The second list is for a weak head of the previous slot whose proposer equivocated.
               (weak ∧ head.slot.toNat + 1 = slot.toNat ∧ equivocation)
+          -- The parent node has the payload status that the head builds on.
           then ⟨head.parentRoot, parentPayloadStatus head parent⟩
           else headNode := by
   simp only [getProposerHead, bind_ok_iff, block_ok_iff]

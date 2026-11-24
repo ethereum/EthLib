@@ -15,23 +15,7 @@ At each move it ticks its store to the current time, or processes a message of i
 
 The messages are those of the fork choice handlers.
 
-A received block and its carried votes and slashings are processed separately.
-
-A carried vote or slashing is processed only once the store holds its block.
-
-A rejected carried operation leaves the block and earlier updates in the store.
-
-A message that the handler rejects leaves the store as it was, and may be processed later.
-
-What lies outside the beacon chain, such as the execution engine, is one source for all.
-
 The store of each honest validator stays reachable from the anchor along every execution.
-
-Along an execution of the network model, an honest store that starts with a forward clock keeps one.
-
-An honest store built with the signature checks of the model stays built that way.
-
-Along an execution, the unrealized justified epoch of each store never decreases.
 -/
 
 @[expose] public section
@@ -59,35 +43,36 @@ inductive Message (preset : Preset) (fork : Fork)
 
 /-- The moves of the store of an honest validator, at a time and with a view.
 
-A tick sets the store to the time, which must fit in 64 bits.
+Every other move than a tick processes a message of the view, or one operation of a block in it.
 
-That time must not lie before the clock of the store.
+A message that the handler rejects leaves the store as it was, and may be processed later.
 
-Every other move processes a message of the view, or one operation of a block in the view.
-
-An operation of a block is processed only when the store holds that block.
-
-Carried operations can be retried and interleaved with other moves, without an ordered queue.
-
-Blocks and envelopes are judged with the given sources outside the beacon chain. -/
+Carried operations can be retried and interleaved with other moves, without an ordered queue. -/
 inductive Handles (config : Config) (checks : SignatureChecks) (sources : BlockSources preset fork)
     (time : ℕ) (view : Set (Message preset fork)) (store : Store preset fork) :
     Store preset fork → Prop
   /-- The store after a tick at the time. -/
   | tick {after : Store preset fork} :
+    -- A tick sets the store to the time, which must fit in 64 bits.
+    --
+    -- That time must not lie before the clock of the store.
     store.timeMs.toNat ≤ time → time < 2 ^ 64 → store.onTick config time.toUInt64 = .ok after →
       Handles config checks sources time view store after
   /-- The store after admitting a block of the view. -/
   | block {after : Store preset fork} {signed : SignedBeaconBlock preset fork} :
+    -- Blocks are judged with the given sources outside the beacon chain.
     .block signed ∈ view → store.onBlock config checks sources signed = .ok after →
       Handles config checks sources time view store after
   /-- The store after an attestation carried by a block of the view that the store holds. -/
   | blockAttestation {after : Store preset fork}
       {signed : SignedBeaconBlock preset fork} {blockRoot : Root}
       {attestation : Attestation preset fork} :
+    -- A received block and its carried votes and slashings are processed separately.
     .block signed ∈ view →
+      -- An operation of a block is processed only when the store holds that block.
       SszType.hashTreeRoot signed.message = .ok blockRoot → store.blocks.contains blockRoot →
       attestation ∈ signed.message.body.attestations.data →
+      -- A rejected carried operation leaves the block and earlier updates in the store.
       store.onAttestation config checks attestation true = .ok after →
       Handles config checks sources time view store after
   /-- The store after a slashing carried by a block of the view that the store holds. -/
@@ -119,6 +104,7 @@ inductive Handles (config : Config) (checks : SignatureChecks) (sources : BlockS
   | envelope {after : Store preset fork} {gloas : .glamsterdam ≤ fork}
       {signed : SignedExecutionPayloadEnvelope preset fork} :
     .envelope gloas signed ∈ view →
+      -- Envelopes are judged with the given sources outside the beacon chain.
       store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after →
       Handles config checks sources time view store after
   /-- From Heze, the store after an inclusion list of the view. -/
@@ -132,7 +118,9 @@ inductive Handles (config : Config) (checks : SignatureChecks) (sources : BlockS
 
 The signed statements of a message and the messages that honest validators send are parameters.
 
-The moves of an honest validator are those of its store, with sources shared by all. -/
+The moves of an honest validator are those of its store, with sources shared by all.
+
+Those sources cover what lies outside the beacon chain, such as the execution engine. -/
 def forkChoice {ν κ : Type*} (config : Config) (checks : SignatureChecks)
     (sources : BlockSources preset fork) (signed : Message preset fork → Set (ν × κ))
     (sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop) :
@@ -619,19 +607,7 @@ theorem Handles.tick_anchor {checks : SignatureChecks} {sources : BlockSources p
 
 /-- Honest validators that run the fork choice have an execution where a block reaches all.
 
-No message carries a signed statement here, so unforgeability asks nothing.
-
-Each validator starts from a store built from an anchor, and the clock starts at its time.
-
-An honest validator sends a block from an empty view, as the protocol allows.
-
-Two events later every validator has the block, with the clock and the stores as at the start.
-
-The stores stay reachable.
-
-There the honest validator may also move to its own store, when slots last a positive time.
-
-The execution is partially synchronous for every GST and every positive delay. -/
+No message carries a signed statement here, so unforgeability asks nothing. -/
 theorem exists_forkChoice_execution {ν κ : Type*} [DecidableEq ν] (checks : SignatureChecks)
     (sources : BlockSources preset fork) {store : Store preset fork}
     (slots : 0 < config.SLOT_DURATION_MS)
@@ -640,12 +616,25 @@ theorem exists_forkChoice_execution {ν κ : Type*} [DecidableEq ν] (checks : S
     (positive : 0 < Δ) :
     ∃ e : Execution (forkChoice config checks sources (fun _ => (∅ : Set (ν × κ)))
         fun _ _ _ _ m => m = .block signed) J,
+      -- Each validator starts from a store built from an anchor.
+      --
+      -- The clock starts at the time of that store.
       e.startTime = store.timeMs.toNat ∧ e.start = (fun _ => store) ∧
+      -- An honest validator sends a block from an empty view, as the protocol allows.
+      --
+      -- Two events later every validator has the block.
+      --
+      -- The clock and the stores are then as at the start.
       e.events 0 = .send v (.block signed) ∧ (e.world 2).time = store.timeMs.toNat ∧
       (e.world 2).state = (fun _ => store) ∧ (∀ u, .block signed ∈ (e.world 2).view u) ∧
+      -- There the honest validator may also move to its own store.
+      --
+      -- That holds when slots last a positive time.
       Allowed (forkChoice config checks sources (fun _ => (∅ : Set (ν × κ)))
         fun _ _ _ _ m => m = .block signed) J (e.world 2) (.move v store) ∧
+      -- The execution is partially synchronous for every GST and every positive delay.
       (∀ GST, e.PartiallySynchronous GST Δ) ∧
+      -- The stores stay reachable.
       ∀ n, ∀ u ∈ J, Store.Reachable config anchorState anchorBlock ((e.world n).state u) := by
   obtain ⟨e, startTime, start, sends, time, states, delivered, sync⟩ :=
     exists_partiallySynchronous

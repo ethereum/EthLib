@@ -7,33 +7,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 
 From Gloas a builder reveals its payload after its block.
 
-The payload committee of the slot votes on whether the payload came on time.
-
-It also votes on whether the blob data of the payload is available.
-
-At the next slot, the walk of the fork choice chooses between the empty and the full node.
-
-Both nodes weigh nothing in that slot, so a tiebreaker decides between them.
-
-The tiebreaker favours the full node when the payload should be extended.
-
-A verified payload is extended when more than half of the committee votes it on time.
-
-More than half must also vote its blob data available.
-
-So a head that goes through the block goes through its full node.
-
-The full node must lead to a viable leaf, or the walk cannot take it.
-
-The theorems hold for a store whose known blocks sit later than their parents.
-
-A store that the handlers build is such a store, when its anchor block is not after its state.
-
-The parent of the anchor must also be unknown.
-
-From Heze the payload must also satisfy its inclusion lists.
-
-A payload that is not extended, such as one that fails them, leaves the next head on the empty node.
+A payload that is not extended leaves the next head on the empty node.
 
 The source is [EIP-7732](https://eips.ethereum.org/EIPS/eip-7732), fork choice.
 
@@ -54,13 +28,7 @@ variable {config : Config} {store : Store preset fork}
 
 variable {tally : Except ForkChoiceError VoteTally}
 
-/-- A verified payload of the previous slot is extended when it is timely and its data available.
-
-More than half of the committee must vote that it came on time.
-
-More than half must also vote that its blob data is available.
-
-From Heze it must also satisfy its inclusion lists. -/
+/-- A verified payload of the previous slot is extended when it is timely and its data available. -/
 theorem shouldExtendPayload_of_timely {gloas : .glamsterdam ≤ fork} {root : Root}
     {block : BeaconBlock preset fork} {next : Slot}
     {timelyVotes availableVotes : Vector (Option Bool) preset.PTC_SIZE.toNat}
@@ -68,11 +36,16 @@ theorem shouldExtendPayload_of_timely {gloas : .glamsterdam ≤ fork} {root : Ro
     (nextOk : Uint64.addChecked block.slot 1 = .ok next)
     (current : store.getCurrentSlot config = .ok next)
     (verified : store.isPayloadVerified gloas root = true)
+    -- From Heze the payload must also satisfy its inclusion lists.
     (satisfied : ∀ heze : .hegota ≤ fork,
       store.isPayloadInclusionListSatisfied heze root = .ok true)
+    -- The payload committee of the slot votes on whether the payload came on time.
     (timelyFound : (store.payloadTimelinessVote gloas)[root]? = some timelyVotes)
+    -- More than half of the committee must vote that it came on time.
     (timely : ptcThreshold preset < timelyVotes.toList.countP (· == some true))
+    -- The committee also votes on whether the blob data of the payload is available.
     (availableFound : (store.payloadDataAvailabilityVote gloas)[root]? = some availableVotes)
+    -- More than half must also vote that its blob data is available.
     (available : ptcThreshold preset < availableVotes.toList.countP (· == some true)) :
     store.shouldExtendPayload config gloas root = .ok true := by
   have onTime : store.payloadTimeliness gloas root true = .ok true := by
@@ -117,10 +90,14 @@ private theorem heaviestChild_full {gloas : .glamsterdam ≤ fork}
     (extend : store.shouldExtendPayload config gloas root = .ok true)
     (fullIn : ⟨root, .full⟩ ∈ nodes) :
     store.heaviestChild config tally nodes ⟨root, .pending⟩ = .ok (some ⟨root, .full⟩) := by
+  -- At the next slot, the walk of the fork choice chooses between the empty and the full node.
   by_cases emptyIn : (⟨root, .empty⟩ : ForkChoiceNode) ∈ nodes
   · simpa using heaviestChild_of_previousSlot found nextOk current verified emptyIn fullIn extend
   have fullDecision := isPreviousSlotPayloadDecision_of_previous (status := .full) found nextOk
     current (by decide)
+  -- Both nodes weigh nothing in that slot, so a tiebreaker decides between them.
+  --
+  -- The tiebreaker favours the full node when the payload should be extended.
   have fullWeighed : store.weighNode config tally ⟨root, .full⟩ = .ok (⟨root, .full⟩, 0, 2) :=
     weighNode_ok_iff.mpr ⟨rfl, getWeight_of_payloadDecision gloas fullDecision, by
       simp [tiebreaker, gloas, getPayloadStatusTiebreaker, fullDecision, extend, bind,
@@ -176,6 +153,7 @@ theorem isAncestor_full_getHead_of_shouldExtendPayload (lower : store.ParentsBel
     (current : store.getCurrentSlot config = .ok next)
     (verified : store.isPayloadVerified gloas root = true)
     (extend : store.shouldExtendPayload config gloas root = .ok true)
+    -- The full node must lead to a viable leaf, or the walk cannot take it.
     (tree : store.getFilteredNodeTree config = .ok nodes) (fullIn : ⟨root, .full⟩ ∈ nodes)
     (headOk : store.getHead config = .ok head)
     (through : store.isAncestor head ⟨root, .pending⟩ = .ok true) :
@@ -204,12 +182,6 @@ theorem isAncestor_full_getHead_of_shouldExtendPayload (lower : store.ParentsBel
 
 /-- A head that goes through a block of the previous slot goes through its empty node.
 
-The payload of the block must not be extended.
-
-Its empty node must be among the viable nodes.
-
-Then the head does not go through the full node of the block.
-
 From two slots after the block, the votes weigh both nodes, and this no longer holds.
 
 Each known block must sit at a later slot than its known parent. -/
@@ -219,11 +191,14 @@ theorem isAncestor_empty_getHead_of_not_shouldExtendPayload (lower : store.Paren
     (found : store.blocks[root]? = some block)
     (nextOk : Uint64.addChecked block.slot 1 = .ok next)
     (current : store.getCurrentSlot config = .ok next)
+    -- The payload of the block must not be extended.
     (extend : store.shouldExtendPayload config gloas root = .ok false)
+    -- Its empty node must be among the viable nodes.
     (tree : store.getFilteredNodeTree config = .ok nodes) (emptyIn : ⟨root, .empty⟩ ∈ nodes)
     (headOk : store.getHead config = .ok head)
     (through : store.isAncestor head ⟨root, .pending⟩ = .ok true) :
     store.isAncestor head ⟨root, .empty⟩ = .ok true ∧
+      -- Then the head does not go through the full node of the block.
       store.isAncestor head ⟨root, .full⟩ = .ok false := by
   have known : store.block root = .ok block := block_ok_iff.mpr found
   have empty : store.isAncestor head ⟨root, .empty⟩ = .ok true := by
@@ -259,14 +234,6 @@ theorem isAncestor_empty_getHead_of_not_shouldExtendPayload (lower : store.Paren
 
 /-- From Heze, the next head never goes through the full node of a payload that fails its lists.
 
-Take a block of the previous slot whose payload the store does not count as satisfying its lists.
-
-A payload that the store has not verified counts as failing them.
-
-Its empty node is among the viable nodes, and the head goes through the block.
-
-Then the head goes through the empty node of the block, and not through its full node.
-
 From two slots after the block, the votes weigh both nodes, and this no longer holds.
 
 Each known block must sit at a later slot than its known parent. -/
@@ -274,12 +241,19 @@ theorem isAncestor_empty_getHead_of_not_satisfied (lower : store.ParentsBelow)
     (heze : .hegota ≤ fork) {nodes : List ForkChoiceNode} {head : ForkChoiceNode} {root : Root}
     {block : BeaconBlock preset fork} {next : Slot}
     (found : store.blocks[root]? = some block)
+    -- The block is of the previous slot.
     (nextOk : Uint64.addChecked block.slot 1 = .ok next)
     (current : store.getCurrentSlot config = .ok next)
+    -- The store does not count the payload of the block as satisfying its lists.
+    --
+    -- A payload that the store has not verified counts as failing them.
     (unsatisfied : store.isPayloadInclusionListSatisfied heze root = .ok false)
+    -- Its empty node is among the viable nodes.
     (tree : store.getFilteredNodeTree config = .ok nodes) (emptyIn : ⟨root, .empty⟩ ∈ nodes)
     (headOk : store.getHead config = .ok head)
+    -- The head goes through the block.
     (through : store.isAncestor head ⟨root, .pending⟩ = .ok true) :
+    -- Then the head goes through the empty node of the block, and not through its full node.
     store.isAncestor head ⟨root, .empty⟩ = .ok true ∧
       store.isAncestor head ⟨root, .full⟩ = .ok false :=
   isAncestor_empty_getHead_of_not_shouldExtendPayload (gloas := Nat.le_trans (by decide) heze)
@@ -289,36 +263,32 @@ theorem isAncestor_empty_getHead_of_not_satisfied (lower : store.ParentsBelow)
 
 /-- A timely and available payload is extended by the next head.
 
-Take a block of the previous slot whose payload the store has verified.
-
-More than half of its payload committee voted that the payload came on time.
-
-More than half voted that its blob data is available.
-
-From Heze the payload also satisfied its inclusion lists.
-
-Its full node is among the viable nodes, and the head goes through the block.
-
-Then the head goes through the full node of the block.
-
 Each known block must sit at a later slot than its known parent. -/
 theorem isAncestor_full_getHead_of_timely (lower : store.ParentsBelow)
     {gloas : .glamsterdam ≤ fork} {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     {root : Root} {block : BeaconBlock preset fork} {next : Slot}
     {timelyVotes availableVotes : Vector (Option Bool) preset.PTC_SIZE.toNat}
     (found : store.blocks[root]? = some block)
+    -- The block is of the previous slot.
     (nextOk : Uint64.addChecked block.slot 1 = .ok next)
     (current : store.getCurrentSlot config = .ok next)
+    -- The store has verified the payload of the block.
     (verified : store.isPayloadVerified gloas root = true)
+    -- From Heze the payload also satisfied its inclusion lists.
     (satisfied : ∀ heze : .hegota ≤ fork,
       store.isPayloadInclusionListSatisfied heze root = .ok true)
     (timelyFound : (store.payloadTimelinessVote gloas)[root]? = some timelyVotes)
+    -- More than half of its payload committee voted that the payload came on time.
     (timely : ptcThreshold preset < timelyVotes.toList.countP (· == some true))
     (availableFound : (store.payloadDataAvailabilityVote gloas)[root]? = some availableVotes)
+    -- More than half voted that its blob data is available.
     (available : ptcThreshold preset < availableVotes.toList.countP (· == some true))
+    -- Its full node is among the viable nodes.
     (tree : store.getFilteredNodeTree config = .ok nodes) (fullIn : ⟨root, .full⟩ ∈ nodes)
     (headOk : store.getHead config = .ok head)
+    -- The head goes through the block.
     (through : store.isAncestor head ⟨root, .pending⟩ = .ok true) :
+    -- Then the head goes through the full node of the block.
     store.isAncestor head ⟨root, .full⟩ = .ok true :=
   isAncestor_full_getHead_of_shouldExtendPayload lower found nextOk current verified
     (shouldExtendPayload_of_timely found nextOk current verified satisfied timelyFound timely

@@ -20,10 +20,6 @@ That count ran in a state the store holds, or on the way from such a state to a 
 The votes it counts were cast by the attestations of held blocks, or are older than the anchor.
 
 The roots that such a state reads in its history are those the store's walk reaches.
-
-That needs the anchor's latest header to be the anchor block's, with a zero state root.
-
-The anchor store checks neither, so the results take it as a hypothesis.
 -/
 
 @[expose] public section
@@ -386,28 +382,18 @@ private theorem Store.Reachable.processSlots_history_ancestor {store : Store pre
     exact reachable.lookahead_history_ancestor_of_held (UInt64.le_of_eq anchorSlot) nonzero
       reachable stored found lookahead read later _
 
-/-- A block root that a counted state reads after the anchor slot is held.
-
-The store's walk from the held root reaches it.
-
-The anchor's latest header must be the anchor block's, with a zero state root.
-
-The post-state of a block has a zero state root in its header.
-
-The anchor store checks neither.
-
-When the count caches a slot, the read slot must stay less than one buffer length behind.
-
-Caching writes the root at the state's slot.
-
-That position is shared with the slot one buffer length earlier. -/
+/-- A block root that a counted state reads after the anchor slot is held. -/
 theorem Store.ForwardReachableWith.counted_history {store : Store preset fork}
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (anchorSlot : anchorBlock.slot = anchorState.slot)
+    -- The anchor's latest header must be the anchor block's, with a zero state root.
     (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
       anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
       anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
       SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
+    -- The post-state of a block has a zero state root in its header.
+    --
+    -- The anchor store checks neither condition, so this theorem takes both as hypotheses.
     (anchorZero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
     (nonzero : ∀ (r : Root) (b : BeaconBlock preset fork), store.blocks[r]? = some b →
       b.stateRoot ≠ Vector.replicate 32 0)
@@ -416,6 +402,11 @@ theorem Store.ForwardReachableWith.counted_history {store : Store preset fork}
     (held : store.blockStates[root]? = some base)
     (advanced : state = base ∨ processSlots config checks base slot = .ok state)
     (cached : counted = base ∨ processSlot state = .ok counted)
+    -- When the count caches a slot, the read slot must stay less than one buffer length behind.
+    --
+    -- Caching writes the root at the state's slot.
+    --
+    -- That position is shared with the slot one buffer length earlier.
     (recent : processSlot state = .ok counted → ∀ start,
       computeStartSlotAtEpoch preset epoch = .ok start →
         state.slot.toNat < start.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
@@ -423,6 +414,7 @@ theorem Store.ForwardReachableWith.counted_history {store : Store preset fork}
     (afterAnchor : ∀ start, computeStartSlotAtEpoch preset epoch = .ok start →
       anchorState.slot ≤ start) :
     (∃ b, store.blocks[readRoot]? = some b) ∧
+      -- The store's walk from the held root reaches the read root.
       store.getCheckpointBlock root epoch = .ok readRoot := by
   have reachable := reached.reachable
   obtain ⟨start, startOk, startRead⟩ := getBlockRoot_ok_iff.mp read
@@ -586,21 +578,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- A vote of a held block, for a target the store reaches, is a statement of a sent message.
-
-The block's message is in the store's view, so it was sent.
-
-The store reads the block's attestation in the state of its target, with a valid signature.
-
-The block checked that signature on its own state.
-
-The check reads only the signers' keys, the fork versions and the genesis validators root.
-
-The run from the target state to the block keeps those.
-
-So the vote is a statement of the block in the sense of the network model.
-
-Its slot is before the store's current slot, by the inclusion delay. -/
+/-- A vote of a held block, for a target the store reaches, is a statement of a sent message. -/
 theorem Execution.exists_sent_of_votesBelow {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
@@ -614,6 +592,7 @@ theorem Execution.exists_sent_of_votesBelow {anchor : Store preset fork}
       .ok vote.2.target.root)
     (slotOk : ((e.world k).state w).getCurrentSlot config = .ok slot) :
     ∃ m ∈ (e.world k).sent, vote ∈ statements config checks anchorState anchorBlock m ∧
+      -- The slot of the vote is before the store's current slot, by the inclusion delay.
       vote.2.slot < slot := by
   have reached := e.forwardReachableWith
     (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w honest
@@ -641,6 +620,8 @@ theorem Execution.exists_sent_of_votesBelow {anchor : Store preset fork}
   rw [slotsOk, Except.ok.injEq] at slotsOk'
   subst slotsOk'
   -- The block checked the attestation, in a recent epoch and late enough.
+  --
+  -- It checked the signature on its own state.
   obtain ⟨input, checked, indexed, started, site, indexedOk, valid, recent, epochEq, late⟩ :=
     processBlock_attestation_checked apart blockOk included
   have blockSlot : advanced.slot = block.slot := (processSlots_slot slotsOk).2
@@ -700,6 +681,10 @@ theorem Execution.exists_sent_of_votesBelow {anchor : Store preset fork}
     rw [← indexedOk]
     simp only [getIndexedAttestation, ← attesters]
   -- The signature checked in the block holds in the target state.
+  --
+  -- The check reads only the signers' keys, the fork versions and the genesis validators root.
+  --
+  -- The run from the target state to the block keeps those.
   have frame : Frame advanced checked := (frame_operationsInput started).toFrame.trans site.frame
   obtain ⟨indexed', indexedOk', listed, indexedData, -⟩ :=
     getIndexedAttestation_of_getAttestingIndices (attesters.symm.trans indicesOk)
@@ -713,7 +698,7 @@ theorem Execution.exists_sent_of_votesBelow {anchor : Store preset fork}
         exact lt_size_of_mem_getActiveValidatorIndices
           (mem_getActiveValidatorIndices_of_getAttestingIndices (attesters.symm.trans indicesOk)
             (by simpa using inside)))
-  -- The store reads the attestation in that state.
+  -- The store reads the attestation in that state, with a valid signature.
   have computed : ((e.world k).state w).computeCheckpointState config checks
       attestation.data.target = .ok boundary := by
     unfold Store.computeCheckpointState
@@ -728,8 +713,11 @@ theorem Execution.exists_sent_of_votesBelow {anchor : Store preset fork}
   subst baseFound' firstOk'
   rw [boundaryOk, Except.ok.injEq] at targetOk
   subst targetOk
+  -- So the vote is a statement of the block in the sense of the network model.
   have reads : ReadsAttestation config checks ((e.world k).state w) attestation indexed' :=
     ⟨withTarget, _, stored, read, boundaryIndexed, boundaryValid⟩
+  -- The block's message is in the store's view, so it was sent.
+  --
   -- The block's message carries the vote, and the block came before the store's slot.
   refine ⟨.block signed, e.view_subset_sent k w seen, .inl ⟨attestation, message ▸ included,
     _, indexed', reachable, reads, ?_, ?_⟩, ?_⟩

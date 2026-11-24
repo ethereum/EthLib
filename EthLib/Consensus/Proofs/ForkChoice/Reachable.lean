@@ -12,45 +12,11 @@ public import EthLib.Consensus.Proofs.Transition.Slot
 
 A store is reachable when the handlers build it from an anchor.
 
-The handlers are the tick, the block, the attestation and the attester slashing.
-
-From Gloas they also take a vote of the payload committee and a signed envelope.
-
-From Heze they also take an inclusion list.
-
 In a reachable store, each known parent sits at an earlier slot than its child.
 
-That needs two conditions.
+All the states of a reachable store have one genesis time, and each keeps the bid of its block.
 
-The anchor block must sit at or before the slot of the anchor state.
-
-The state after a valid block sits at the slot of the block, so a genuine anchor meets that.
-
-The parent root of the anchor must name no known block.
-
-A known block has its own root as its key.
-
-So a block at that root would hash to the parent root of the anchor.
-
-The head of such a store is then the LMD-GHOST head of its filtered tree.
-
-That holds before Gloas, with the proposer boost as one more vote for the boosted block.
-
-From Gloas the head is that of LMD-GHOST over payload nodes, with the boost too.
-
-There no viable block may sit at the slot before the current one.
-
-All the states of a reachable store have one genesis time.
-
-From Gloas each state has the block hash of the bid of its block.
-
-Otherwise its latest block hash is the block hash of its latest bid.
-
-Each known block has its unrealized justification.
-
-It has its timeliness too, except the anchor before Gloas.
-
-From Gloas it also has a timeliness for the payload committee and the two votes of that committee.
+Its head is the head of LMD-GHOST with the boost, before Gloas and over payload nodes from Gloas.
 -/
 
 @[expose] public section
@@ -220,12 +186,6 @@ theorem onBlock_blocks_of_found {config : Config} {checks : SignatureChecks}
     · exact found
 
 /-- A store that the handlers build from an anchor block and the state after it.
-
-The handlers are the tick, the block, the attestation and the attester slashing.
-
-From Gloas they also take a vote of the payload committee and a signed envelope.
-
-From Heze they also take an inclusion list.
 
 A store with a forward clock has the same cases, with a tick that never sets the time back. -/
 inductive Reachable (config : Config) (anchorState : BeaconState preset fork)
@@ -431,13 +391,17 @@ theorem Reachable.linked_of_unknown (reachable : Reachable config anchorState an
   · rw [Std.TreeMap.contains_eq_isSome_getElem?, unknown] at known
     cases known
 
-/-- In a reachable store, each known parent sits at an earlier slot than its child.
-
-That needs the anchor block at or before the slot of the anchor state.
-
-It also needs the parent root of the anchor to name no known block. -/
+/-- In a reachable store, each known parent sits at an earlier slot than its child. -/
 theorem Reachable.parentsBelow (reachable : Reachable config anchorState anchorBlock store)
+    -- The anchor block must sit at or before the slot of the anchor state.
+    --
+    -- The state after a valid block sits at the slot of the block, so a genuine anchor meets that.
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    -- The parent root of the anchor must name no known block.
+    --
+    -- A known block has its own root as its key.
+    --
+    -- So a block at that root would hash to the parent root of the anchor.
     (unknown : store.blocks[anchorBlock.parentRoot]? = none) : store.ParentsBelow :=
   (reachable.linked_of_unknown anchorSlot unknown).parentsBelow
 
@@ -519,18 +483,15 @@ theorem Reachable.oneGenesisTime (reachable : Reachable config anchorState ancho
 
 From Gloas its latest bid has the block hash of the bid of that block.
 
-Otherwise its latest block hash is the block hash of its latest bid.
-
-The anchor state must meet the same condition with the anchor block.
-
-A state from the upgrade to Gloas meets the second case, with any anchor block.
-
-A genesis block with a default body meets the first case.
-
-That needs the bid of the genesis state to have a zero block hash.
-
-A block leaves its own bid as the latest bid of the state after it. -/
+Otherwise its latest block hash is the block hash of its latest bid. -/
 theorem Reachable.statesKeepBids (reachable : Reachable config anchorState anchorBlock store)
+    -- The anchor state must meet the same condition with the anchor block.
+    --
+    -- A state from the upgrade to Gloas meets the second case, with any anchor block.
+    --
+    -- A genesis block with a default body meets the first case.
+    --
+    -- That needs the bid of the genesis state to have a zero block hash.
     (anchorBid : ∀ gloas : .glamsterdam ≤ fork,
       (anchorState.latestExecutionPayloadBid gloas).blockHash =
           (anchorBlock.body.signedExecutionPayloadBid gloas).message.blockHash ∨
@@ -574,6 +535,7 @@ theorem Reachable.statesKeepBids (reachable : Reachable config anchorState ancho
     by_cases same : blockRoot = r
     · simp only [same, ↓reduceIte, Option.some.injEq] at found ⊢
       obtain ⟨_, -, -, -, blockOk, -⟩ := stateTransition_ok transition
+      -- A block leaves its own bid as the latest bid of the state after it.
       exact ⟨_, rfl, fun gloas =>
         .inl (found ▸
           congrArg (·.blockHash) (latestExecutionPayloadBid_processBlock gloas blockOk))⟩
@@ -738,56 +700,51 @@ theorem Reachable.getHead_eq_ghost {state : BeaconState preset fork}
       rootValue (some store.justifiedCheckpoint.root) = some head.root :=
   Store.getHead_eq_ghost _ before noBoost justifiedState tree found
 
-/-- Before Gloas, the head of a reachable store is the head of LMD-GHOST with the boost.
-
-That needs the anchor block at or before the slot of the anchor state.
-
-It also needs the parent root of the anchor to name no known block.
-
-The model starts at the justified block, over the view of the viable nodes.
-
-The boost is one more vote, for the boosted block, and its stake is the score of the boost. -/
+/-- Before Gloas, the head of a reachable store is the head of LMD-GHOST with the boost. -/
 theorem Reachable.getHead_eq_ghost_withBoost {state : BeaconState preset fork}
     {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     (reachable : Reachable config anchorState anchorBlock store)
+    -- The anchor block must sit at or before the slot of the anchor state.
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    -- The parent root of the anchor must name no known block.
     (unknown : store.blocks[anchorBlock.parentRoot]? = none) (before : fork < .glamsterdam)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes)
     (found : store.getHead config = .ok head) :
+    -- The boost is one more vote, for the boosted block, and its stake is the score of the boost.
     ghost (voters state).insertNone (boostStake (balanceAt state) (store.boostScore config))
+      -- The model runs over the view of the viable nodes.
       ((view (reachable.parentsBelow anchorSlot unknown) nodes).withBoost store.boostedRoot)
+      -- The model starts at the justified block.
       rootValue (some store.justifiedCheckpoint.root) = some head.root :=
   Store.getHead_eq_ghost_withBoost _ before justifiedState tree found
 
-/-- From Gloas, the head of a reachable store is the head of LMD-GHOST over nodes with the boost.
-
-That needs the anchor block at or before the slot of the anchor state.
-
-It also needs the parent root of the anchor to name no known block.
-
-No viable node may be a payload decision of the previous slot, and some node must be viable.
-
-So no viable block, the justified block included, may sit at the slot before the current one.
-
-The model starts at the pending node of the justified block, over the view of the viable nodes.
-
-The boost is one more vote, for the pending node of the boosted block.
-
-Its stake is the score of the boost, and the vote is absent when the boost does not apply. -/
+/-- From Gloas, the head of a reachable store is the head of LMD-GHOST over nodes with the boost. -/
 theorem Reachable.getHead_eq_ghost_withBoost_of_gloas {state : BeaconState preset fork}
     {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     (reachable : Reachable config anchorState anchorBlock store)
+    -- The anchor block must sit at or before the slot of the anchor state.
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    -- The parent root of the anchor must name no known block.
     (unknown : store.blocks[anchorBlock.parentRoot]? = none) (gloas : .glamsterdam ≤ fork)
+    -- No viable node may be a payload decision of the previous slot.
+    --
+    -- So no viable block, the justified block included, may sit at the slot before the current one.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    -- Some node must be viable.
     (tree : store.getFilteredNodeTree config = .ok nodes) (someViable : nodes ≠ [])
     (found : store.getHead config = .ok head) :
     ghost (voters state).insertNone
+      -- The boost is one more vote, and its stake is the score of the boost.
       (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+      -- The model runs over the view of the viable nodes.
       ((nodeView (reachable.parentsBelow anchorSlot unknown) nodes).withBoost
+        -- The vote of the boost is for the pending node of the boosted block.
+        --
+        -- The vote is absent when the boost does not apply.
         (store.boostedNode config gloas)) nodeOrder
+      -- The model starts at the pending node of the justified block.
       (some store.justifiedCheckpoint.root, none) = head.toModel :=
   Store.getHead_eq_ghost_withBoost_of_gloas _ gloas noDecision justifiedState tree someViable found
 

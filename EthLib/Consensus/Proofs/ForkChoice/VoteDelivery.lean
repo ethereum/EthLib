@@ -19,8 +19,6 @@ The receiver retains a vote of at least that rank at every later event.
 
 Acceptance and agreement on the indexed attestation are explicit hypotheses.
 
-Synchrony alone does not establish handler success.
-
 The network model and voting time follow [arXiv 2405.00549v4, Sections 2 and 3.1][fcr].
 
 [fcr]: https://arxiv.org/abs/2405.00549v4
@@ -86,23 +84,22 @@ theorem VoteAt.data_head {anchor : Store preset fork}
   exact ⟨dataSlot.trans atSlot, by simpa [getCurrentEpoch, atSlot] using epoch,
     head, block, headOk, known, dataRoot, blocks head.root block known⟩
 
-/-- An honest vote names the checkpoint obtained by walking its voter's head.
-
-Some store reachable from the same anchor must hold the target block.
-
-The anchor store does not tie the anchor state's latest header to the anchor block.
-
-So a target read from lookahead at the anchor names the anchor only when that block is held.
-
-The anchor starts at an epoch boundary; nonzero state roots prevent repeated header filling. -/
+/-- An honest vote names the checkpoint obtained by walking its voter's head. -/
 theorem HonestVoteData.target_read {store other : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (anchorSlot : anchorBlock.slot = anchorState.slot)
+    -- The anchor starts at an epoch boundary.
     (anchorAtBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    -- Nonzero state roots prevent repeated header filling.
     (nonzero : ∀ (root : Root) (block : BeaconBlock preset fork), store.blocks[root]? = some block →
       block.stateRoot ≠ Vector.replicate 32 0)
     {slot : Slot} {committeeIndex : CommitteeIndex} {data : AttestationData}
     (made : HonestVoteData config checks store slot committeeIndex data)
+    -- Some store reachable from the same anchor must hold the target block.
+    --
+    -- The anchor store does not tie the anchor state's latest header to the anchor block.
+    --
+    -- So a target read from lookahead at the anchor names the anchor only when that block is held.
     (holder : Store.Reachable config anchorState anchorBlock other)
     {targetBlock : BeaconBlock preset fork}
     (known : other.blocks[data.target.root]? = some targetBlock) :
@@ -487,6 +484,7 @@ theorem VoteAt.recorded {Δ : ℕ} (sync : e.Synchronous Δ) {v u : ValidatorInd
     (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view u)
       ((e.world k).state u))
     {after : Store preset fork}
+    -- Synchrony alone does not establish handler success, so acceptance is a hypothesis.
     (accepted : ((e.world k).state u).onAttestation config checks attestation false = .ok after)
     (reads : ReadsAttestation config checks ((e.world k).state u) attestation indexed)
     (counted : v ∉ ((e.world k).state u).equivocatingIndices) :
