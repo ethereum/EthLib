@@ -14,13 +14,7 @@ Each container has distinct field names, and converts to and from its fields.
 
 So its bytes decode back to it, at every fork.
 
-The request types are distinct bytes, so a request list names its type without doubt.
-
 The list that the execution layer receives keeps the nonempty lists, in increasing order of type.
-
-Each of its entries has more than one byte: its type, then the bytes of a nonempty list.
-
-At Gloas, with no builder request, it is the list of Electra for the same requests.
 -/
 
 @[expose] public section
@@ -197,7 +191,9 @@ theorem getExecutionRequestsList_glamsterdam {preset : Preset}
     serialize_forkList_across (by decide) (by decide) consolidations, List.filter_cons,
     (by decide : ¬Fork.glamsterdam ≤ Fork.pectra)]
 
-/-- The five request types are five distinct bytes. -/
+/-- The five request types are five distinct bytes.
+
+So a request list names its type without doubt. -/
 theorem requestTypes_nodup :
     [DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
       BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE].Nodup := by

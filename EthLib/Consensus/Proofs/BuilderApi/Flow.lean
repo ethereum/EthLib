@@ -6,17 +6,11 @@ public import EthLib.Consensus.Proofs.BuilderApi.Bid
 /-!
 # Proofs: the body built from an accepted bid names the proposer's fee recipient
 
-A proposer accepts a bid only when the header of the bid names its fee recipient.
+From Bellatrix to Fulu, the unblinded payload names the fee recipient that the proposer checked.
 
-It then signs a blinded block whose body holds that header.
+The proofs show that the payload names the fee recipient.
 
-The payload that the builder reveals unblinds that body only when its header is the same header.
-
-So the payload of the full body names the fee recipient that the proposer checked.
-
-This holds at every fork from Bellatrix to Fulu.
-
-It says that the payload names the fee recipient, not that the fee recipient receives the value.
+They do not show that the fee recipient receives the value.
 -/
 
 @[expose] public section
@@ -48,11 +42,9 @@ theorem BlindedBeaconBlockBody.executionPayload_unblind
 
 /-- From Bellatrix to Fulu, a body built from an accepted bid names the checked fee recipient.
 
-The proposer accepts the bid, and builds the blinded body from the header of the bid.
+The proposer builds the blinded body from the header of the bid.
 
 It unblinds that body with the payload that the builder reveals.
-
-The payload of the full body then names the fee recipient of the check.
 
 The check takes the fee recipient that the proposer registered last, so the payload names that one.
 -/
@@ -65,7 +57,9 @@ theorem feeRecipient_unblind_of_processBid {config : Config} {checks : Signature
     (fromBid : body.executionPayloadHeader range = signed.message.header)
     (made : body.unblind range payload = .ok full) :
     (full.executionPayload range).feeRecipient = feeRecipient := by
+  -- The proposer accepts a bid only when the header of the bid names its fee recipient.
   obtain ⟨-, pays, -⟩ := processBid_ok_iff.mp accepted
+  -- The payload unblinds the body only when its header is the header of the body.
   obtain ⟨held, header⟩ := BlindedBeaconBlockBody.executionPayload_unblind made
   -- The header of the payload is the header of the bid, which names the fee recipient.
   rw [held, ← (ExecutionPayload.header_parentHash_feeRecipient header).2, fromBid, pays]

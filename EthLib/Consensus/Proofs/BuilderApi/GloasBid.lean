@@ -7,15 +7,7 @@ public import EthLib.Consensus.BuilderApi.GloasBid
 
 A Gloas builder serves a request exactly when its six rules hold.
 
-So it serves only the key of the proposer of the slot, and only while that proposer is active.
-
 A proposer accepts a fetched bid exactly when its eight rules hold and the signature verifies.
-
-The builder's funds are checked only for a bid of positive value.
-
-A bid that names the index of a self-built payload is never accepted.
-
-While the registry of builders is shorter than that index, the check of an active builder fails.
 -/
 
 @[expose] public section
@@ -175,6 +167,7 @@ theorem validateBid_not_selfBuild {config : Config} {checks : SignatureChecks}
     have h : (UInt64.ofNat (2 ^ 64 - 1)).toNat = 2 ^ 64 - 1 := by simp
     simp only [BUILDER_INDEX_SELF_BUILD]
     omega
+  -- The registry is shorter than that index, so the check of an active builder fails.
   obtain ⟨e, he⟩ : ∃ e, isActiveBuilder state gloas signed.message.builderIndex = .error e := by
     simp [isActiveBuilder, getBuilder, hnone, bind, Except.bind]
   unfold validateBid

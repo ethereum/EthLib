@@ -7,15 +7,7 @@ public import EthLib.Consensus.Proofs.KeymanagerApi.Types
 /-!
 # Proofs: the builder configuration of the Keymanager API
 
-A resolved configuration, stored with every value set, resolves to itself.
-
-The reader of a configuration reads back what the writer of a resolved one writes.
-
-It needs each entry within the bounds of the schema.
-
 A set, then a get, gives the configuration set, resolved.
-
-A set of a resolved configuration within the bounds of the schema, then a get, answers it again.
 
 A delete, then a get, gives what a key never set gets: the configuration of the client.
 -/

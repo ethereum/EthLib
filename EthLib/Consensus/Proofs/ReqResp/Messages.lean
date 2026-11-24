@@ -12,14 +12,6 @@ public import EthLib.Serialization.Proofs.Ssz.Type.Legality
 # `Consensus.Proofs.ReqResp.Messages`
 
 Properties of the request and response messages of the consensus layer.
-
-- Each protocol ID parses back to its protocol and its version.
-- So no two protocol IDs of a fork are one string.
-- A protocol ID of a fork is a protocol ID of every later fork.
-- The metadata of a version is that of the first fork from Phase 0 that has the version.
-- The status, the metadata and the container requests are lawful SSZ containers at every fork.
-- A goodbye code is recovered from the reason it names.
-- The fewest epochs over which a node serves blocks, when it exists, never wraps.
 -/
 
 @[expose] public section
@@ -195,6 +187,8 @@ instance {config : Config} {fork : Fork} [NeZero config.ATTESTATION_SUBNET_COUNT
      by simp,
      firstDuplicate_of_nodup _ (MetaData.names_nodup fork)⟩
     (fun _ => rfl) (fun _ => rfl)
+
+-- The requests of the protocols are lawful SSZ containers at every fork.
 
 instance : LawfulSszType BeaconBlocksByRangeRequest :=
   .container (by decide) (fun _ => rfl) (fun _ => rfl)

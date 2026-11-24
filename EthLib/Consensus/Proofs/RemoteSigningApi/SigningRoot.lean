@@ -16,24 +16,6 @@ public import EthLib.Base.Proofs.Except
 The domain that the fork info of a request gives is the domain of a state with that fork info.
 
 So under the fork info of a state, a request has the root that its duty signs in that state.
-
-The header of a block has the root of the block.
-
-So a signer that sees only the header signs the root of the proposer's block.
-
-A registration and a deposit get the root that their checks verify.
-
-A voluntary exit gets the root that its check verifies, under a hypothesis on its fork version.
-
-A bid, a payload attestation and a Builder API authentication get the roots of their duties.
-
-An envelope does too when the epoch of its payload's slot takes the fork version of the state.
-
-Proposer preferences do when the fork info gives the configured version of the proposal epoch.
-
-The domain of each request starts with the domain type of its kind.
-
-Only three pairs of kinds share a domain type.
 -/
 
 @[expose] public section

@@ -5,13 +5,7 @@ public import EthLib.Consensus.BuilderApi.Registration
 /-!
 # Proofs: a builder keeps a registration exactly when the five rules hold
 
-A registration passes exactly when its key names a validator of the state that is eligible.
-
-Its time must be at most ten seconds ahead, no older than the kept one, and signed.
-
-The clock plus ten seconds must fit in 64 bits, as in the source.
-
-So a kept registration carries a valid signature.
+A kept registration carries a valid signature.
 
 The time kept for a key never goes back.
 
@@ -36,12 +30,17 @@ theorem processRegistration_ok_iff {config : Config} {checks : SignatureChecks}
     {state : BeaconState preset fork} {registry : Registry}
     {signed : SignedValidatorRegistrationV1} {now : UInt64} :
     processRegistration config checks state registry signed now = .ok () ↔
+      -- The key of the registration names a validator of the state that is eligible.
       (∃ validator, validatorOfPubkey? state signed.message.pubkey = some validator ∧
         isEligibleForRegistration state validator = true) ∧
+      -- The clock plus ten seconds fits in 64 bits, as in the source.
       now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 ∧
+      -- Its time is at most ten seconds ahead.
       signed.message.timestamp.toNat ≤ now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat ∧
+      -- Its time is no older than the kept one.
       (∀ previous, registry.find? signed.message.pubkey = some previous →
         previous.message.timestamp ≤ signed.message.timestamp) ∧
+      -- The registration is signed.
       verifyRegistrationSignature config checks signed = .ok true := by
   unfold processRegistration
   cases hv : validatorOfPubkey? state signed.message.pubkey with

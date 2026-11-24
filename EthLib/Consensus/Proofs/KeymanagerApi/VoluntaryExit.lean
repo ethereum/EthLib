@@ -10,15 +10,9 @@ public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 
 A key whose public key is that of its secret key signs exits that the chain accepts.
 
-The signature verifies, under the key of the validator, against the signing root of the exit.
-
-That root is under the domain of a voluntary exit in the state of the call.
-
 From Deneb the domain depends only on the genesis validators root.
 
 So the signature also verifies in every state of the same chain at a fork from Deneb on.
-
-That state must keep the key of the validator at the index of the exit.
 -/
 
 @[expose] public section

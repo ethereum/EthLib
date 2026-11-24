@@ -6,13 +6,9 @@ public import EthLib.Consensus.Proofs.SlashingProtection
 /-!
 # Proofs: importing keystores through the Keymanager API
 
-A request whose lists differ in length is refused.
-
 A call that succeeds gives one status for each keystore.
 
 A key with the status imported is held afterwards, and no key held before is removed.
-
-A keystore is a duplicate exactly when its key was held before, or imported earlier in the request.
 
 The record refuses afterwards every message that it refused before.
 

@@ -17,25 +17,7 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 A submission for the slot of a store replaces the entry of its builder, whatever the values.
 
-No other entry changes, and a submission for another slot changes nothing.
-
 The served bid holds the header, the value, the key and, from Deneb, the commitments of the bundle.
-
-A blinded body that carries the header of that bid unblinds with the payload of the submission.
-
-The JSON that the writer gives for a delivered payload reads back as that payload.
-
-So does the JSON of a received bid, whose reader takes the two timestamps out first.
-
-A filter with no field keeps every entry.
-
-A filter with only a slot keeps exactly the entries of that slot.
-
-A sort by value orders the payloads that it is given, and keeps them all.
-
-From Fulu, each entry of the listed validators names the proposer of its slot.
-
-That proposer is the one that the state gives once the slots of the transition reach that slot.
 -/
 
 @[expose] public section
@@ -188,6 +170,7 @@ theorem ofJson_toJson {entry : BidTraceV2WithTimestamp} {document : Lean.Json}
   have noMs₁ : "timestamp_ms" ∉ m.insert "timestamp" (int64Json entry.timestamp) := by
     rw [Std.TreeMap.Raw.mem_insert wf]
     simpa using noMs
+  -- The reader takes the two timestamps out first, which leaves the object of the bid.
   have first := erase_insert_equiv wf₁ noMs₁ (value := int64Json entry.timestampMs)
   have second :=
     Std.TreeMap.Raw.Equiv.erase (wf₂.erase (a := "timestamp_ms")) wf₁ first "timestamp"

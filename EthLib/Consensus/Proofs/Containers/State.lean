@@ -14,11 +14,7 @@ So its bytes decode back to it, at every fork.
 
 At Altair the participation flags take the places of the pending attestations.
 
-At Gloas the latest block hash takes the place of the latest payload header.
-
 The field names at Fulu and at Gloas are those of the specification, in their order.
-
-At Heze four fields leave the state, and each field that stays keeps its place in the tree.
 
 The vectors whose length comes from the preset need that length to be positive.
 

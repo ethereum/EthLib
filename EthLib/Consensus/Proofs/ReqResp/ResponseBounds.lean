@@ -14,25 +14,6 @@ A successful response chunk passes the length check of its protocol, for the for
 From Gloas, a size limit of its protocol bounds it too.
 
 The fork of a chunk is a parameter, which the caller reads from the context bytes.
-
-- Before Gloas, no protocol has a size limit.
-- Only data column sidecars and inclusion lists have one.
-- From Gloas, the size limit of the two sidecar protocols is the largest size of a sidecar.
-- From Heze, the size limit of inclusion lists by indices is `MAX_SIGNED_INCLUSION_LIST_SIZE`.
-- With a size limit, the largest length of a chunk is the lower of the limit and that of its type.
-- Take a successful chunk that decodes at the bounds of its protocol.
-  Its payload is within the bounds of its SSZ type, and within the size limit of its protocol.
-- A value that a server serializes, within the payload cap, makes a chunk that decodes.
-  It must also be within the size limit of its protocol, if the protocol has one.
-  The chunk is the one of the encoder that may compress its payload.
-- That chunk decodes at those bounds, and its payload reads back as the value.
-- The decoder reads an error payload at the bounds of the error message type.
-- An error chunk that decodes holds an error message, whatever the bytes of its payload.
-- On a chain that passes the fork digest check, the receiver reads a chunk at the sender's type.
-- A protocol that serves the object of a gossip topic sends the message of that topic.
-  The message is that of the fork of the chunk, and the size limit is that of the topic.
-- At a fork that lists the topic, the largest length of such a chunk is the bound of the topic.
-- At version 1, blocks by range and by root send a Phase 0 block, whatever the fork of the chunk.
 -/
 
 @[expose] public section
@@ -248,13 +229,7 @@ theorem deserialize_errorMessage_of_decodeResponseChunk {contextBytes : Nat} {lo
 
 The sender serializes a value of the type of its fork, at an epoch.
 
-It puts the fork digest of that epoch in the context bytes of the chunk.
-
-The search finds an epoch for that digest, whose fork is the sender's.
-
-At the bounds of that fork, the chunk decodes with the same context bytes and payload.
-
-The payload reads back as the value. -/
+It puts the fork digest of that epoch in the context bytes of the chunk. -/
 theorem decodeResponseChunk_forkOfDigest {α : Type} [SszType α] [LawfulSszType α] {a : α}
     {data : ByteArray} {genesisValidatorsRoot : Root} {epoch : Epoch} {digest : ForkDigest}
     (identify : digestsIdentify config genesisValidatorsRoot = true)
@@ -263,11 +238,14 @@ theorem decodeResponseChunk_forkOfDigest {α : Type} [SszType α] [LawfulSszType
     (wrote : SszType.serialize a = .ok data) (hcap : data.size ≤ MAX_PAYLOAD_SIZE.toNat)
     (hlimit : ∀ limit, id.protocol.sizeLimit preset config (config.forkAtEpoch epoch) =
       some limit → data.size ≤ limit.toNat) :
+    -- The search finds an epoch for that digest, whose fork is the sender's.
     ∃ start lo hi, forkOfDigest config genesisValidatorsRoot digest = some start ∧
       config.forkAtEpoch start = config.forkAtEpoch epoch ∧
+      -- At the bounds of that fork, the chunk decodes with the same context bytes and payload.
       responseBounds preset config (config.forkAtEpoch start) id = some (lo, hi) ∧
       decodeResponseChunk 4 lo hi (encodeResponseChunk ⟨.success, ⟨digest.toArray⟩, data⟩) =
         .ok ⟨.success, ⟨digest.toArray⟩, data⟩ ∧
+      -- The payload reads back as the value.
       SszType.deserialize α data = .ok a := by
   obtain ⟨start, found⟩ := Option.isSome_iff_exists.mp (forkOfDigest_isSome computed)
   have recovers := forkOfDigest_recovers identify computed
