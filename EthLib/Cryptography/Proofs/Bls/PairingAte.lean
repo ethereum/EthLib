@@ -7,28 +7,7 @@ public import EthLib.Cryptography.Proofs.Bls.G1SubgroupSpan
 /-!
 # Proofs: the pairing of BLS12-381 is bilinear
 
-Let `N = (p^12 - 1) / r` be the exponent of the final exponentiation.
-
-For points `P` and `Q` of `E : y^2 = x^3 + 4` over `Fp12`, take Miller's function of `|x|` and `Q`.
-
-Its value at `P`, raised to `N`, is the ate value of `P` and `Q`.
-
-- Let `pi` be the map `(x, y) -> (x^p, y^p)`, and let `G` be the untwist of `G2`.
-- The ate value is linear in `P` among the points that `pi` fixes, for each `Q` in `G`.
-- It is linear in `Q` in `G`, for each `P` that `pi` fixes.
-- Both follow from the linearity of an ate-type pairing, whose hypotheses hold on `G`.
-- The points of `G1` lie on `E` over `Fp12`.
-- `pi` fixes them, because their coordinates lie in `Fp`.
-
-Take a valid point `P` of `G1` other than `O`, and a valid point `Q` of the subgroup of `G2`.
-
-Their pairing is the ate value of their points on `E`, raised to `p^6`.
-
-The `p^6`-th power is the conjugation that the pairing applies because `x < 0`.
-
-So `e(a g_1, b g_2) = e(g_1, g_2)^(a b)` for all `a` and `b` in `Fr`.
-
-When `a` or `b` is zero, one of the points is `O`, and both sides are 1.
+The pairing is bilinear: `e(a g_1, b g_2) = e(g_1, g_2)^(a b)` for all `a` and `b` in `Fr`.
 
 The pairing law of the check follows from this equation, so that law holds with no hypothesis.
 
@@ -45,10 +24,22 @@ open TwistFrobenius WeierstrassCurve.Affine Miller
 
 namespace Ate
 
+-- Let `N = (p^12 - 1) / r` be the exponent of the final exponentiation.
+--
+-- Take points `P` and `Q` of `E : y^2 = x^3 + 4` over `Fp12`.
+--
+-- Take Miller's function of `|x|` and `Q`.
+--
+-- Its value at `P`, raised to `N`, is the ate value of `P` and `Q`.
 /-- Miller's function of `|x|` and `Q`, at `P`, raised to the exponent `(p^12 - 1) / r`. -/
 noncomputable def ateValue (P Q : ambientCurve.Point) : Fp12 :=
   ratioAt (lines ambientCurve blsX Q) P ^ finalExpExponent
 
+-- The linearity of the ate value:
+-- - Let `pi` be the map `(x, y) -> (x^p, y^p)`, and let `G` be the untwist of `G2`.
+-- - The ate value is linear in `P` among the points that `pi` fixes, for each `Q` in `G`.
+-- - It is linear in `Q` in `G`, for each `P` that `pi` fixes.
+-- - Both follow from the linearity of an ate-type pairing, whose hypotheses hold on `G`.
 /-- The ate value is linear in a point `P` that the Frobenius map fixes. -/
 theorem ateValue_add_left {P₁ P₂ Q : ambientCurve.Point} (hP₁ : frobenius P₁ = P₁)
     (hP₂ : frobenius P₂ = P₂) (hQ : Q ∈ g2Subgroup) :
@@ -100,6 +91,9 @@ theorem ateValue_nsmul_right {P Q : ambientCurve.Point} (hP : frobenius P = P)
 
 /-! ## `G1` on the curve over `Fp12` -/
 
+-- The points of `G1` lie on `E` over `Fp12`.
+--
+-- `pi` fixes them, because their coordinates lie in `Fp`.
 /-- The inclusion of the points of `G1`, over `Fp`, into the points over `Fp12`. -/
 noncomputable def g1Hom : G1.curve.toAffine.Point →+ ambientCurve.Point :=
   ShortWeierstrass.scaledHom fpToFp12 one_ne_zero (by rw [one_pow, mul_one, map_ofNat])
@@ -150,6 +144,7 @@ theorem pairing_eq_ateValue {P : G1} {Q : G2} (hP : G1.Valid P) (hi : P.isInfini
     (hQ : G2.Valid Q) (hQr : G2.inSubgroup Q = true) :
     pairing P Q = ateValue (g1Hom (G1.toPoint P)) (g2Hom (G2.toPoint Q)) ^ (Fp.modulus ^ 6) := by
   obtain ⟨h, e⟩ := g1Hom_toPoint hP hi
+  -- The `p^6`-th power is the conjugation that the pairing applies because `x < 0`.
   rw [pairing_eq_finalExponentiation_loop hQ hQr hi, e, ateValue, finalExponentiation_eq_pow,
     Fp12.conjugate_eq_pow, ← pow_mul, ← pow_mul, mul_comm, loop_eq_linesAt _ _ h, ratioAt]
 
@@ -166,6 +161,7 @@ theorem pairingBilinear : PairingBilinear := by
       g1Hom (G1.toPoint G1.generator) :=
     frobenius_g1Hom _
   have hQ : g2Hom (G2.toPoint G2.generator) ∈ g2Subgroup := AddSubgroup.mem_zmultiples _
+  -- When `a` or `b` is zero, one of the points is `O`, and both sides are 1.
   by_cases ha : a = 0
   · subst ha
     have hi : (G1.mul (G1.generator : G1) 0).isInfinity = true :=

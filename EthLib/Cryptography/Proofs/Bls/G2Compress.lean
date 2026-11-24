@@ -25,10 +25,6 @@ Section C.1 encodes a point, and Section C.2 decodes it.
 - Bad lengths, bad flags, bad encodings of infinity, and field elements `>= p` are rejected.
 - Decoding then encoding gives back the exact 96 input bytes.
 - So two different byte strings never decode to the same point.
-
-The last two facts need `y ≠ 0` on the twist.
-
-That holds because `x^3 + 4 (1 + i)` has no root in `Fp2`.
 -/
 
 @[expose] public section
@@ -635,7 +631,13 @@ theorem uncompress_compress_of_z_one {p : G2} (hz : p.z = Fp2.one)
     G2.uncompress (G2.compress G2.generator) = .ok G2.generator :=
   uncompress_compress_of_z_one rfl isOnTwist_generator
 
-/-! ## Converse decompression round-trip (`compress_uncompress`) -/
+/-! ## Converse decompression round-trip: decoding then encoding
+
+Decoding then encoding gives back the exact input bytes only because `y ≠ 0` on the twist.
+
+So does the fact that two byte strings never decode to the same point.
+
+That holds because `x^3 + 4 (1 + i)` has no root in `Fp2`. -/
 
 private theorem signBit_select_fp2 {yPos : Fp2} (hypos : yPos ≠ 0)
     {P : Prop} [Decidable P] :

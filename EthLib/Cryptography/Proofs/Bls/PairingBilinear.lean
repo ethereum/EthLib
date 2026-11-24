@@ -11,16 +11,6 @@ The pairing law of the check follows from one equation on the multiples of the g
 
 `e(a g1, b g2) = e(g1, g2)^(a b)` for all `a` and `b` in `Fr`.
 
-The check multiplies the factors of its pairs and applies the final exponentiation once.
-
-The final exponentiation is multiplicative.
-
-So the check tests whether the product of the pairings is 1.
-
-By the equation, that product is `e(g1, g2)` to the power `sum_i a_i b_i`.
-
-The pairing of the generators has order `r`, so the power is 1 exactly when `r` divides the sum.
-
 This file takes the equation as a hypothesis.
 
 The proof of the equation, through Miller's function, imports this file and lives in another one.
@@ -75,6 +65,11 @@ theorem pairing_congr {P : G1} {Q : G2} {a b : Fr} (hP : G1.Represents P a)
 /-- The check of a list of pairs accepts exactly when the product of their pairings is 1. -/
 theorem pairingCheck_toArray_iff (l : List (G1 × G2)) :
     pairingCheck l.toArray = true ↔ (l.map fun pq => pairing pq.1 pq.2).prod = 1 := by
+  -- The check multiplies the factors of its pairs and applies the final exponentiation once.
+  --
+  -- The final exponentiation is multiplicative.
+  --
+  -- So the check tests whether the product of the pairings is 1.
   rw [pairingCheck_eq_finalExp_prod, Fp12.isOne_iff, List.toList_toArray, finalExp_foldl,
     Fp12.one_eq_one, finalExponentiation_one, one_mul]
 
@@ -125,7 +120,11 @@ private theorem dvd_sum_zipWith_val_iff_fr (a b : List Fr) :
 /-- Bilinearity gives the pairing law of the check. -/
 theorem PairingLaws.of_bilinear (h : PairingBilinear) : PairingLaws where
   pairingCheck_iff pairs a b ha hb hr := by
+    -- By the equation, the product of the pairings is `e(g1, g2)` to the power `sum_i a_i b_i`.
     rw [pairingCheck_toArray_iff, prod_pairing h pairs a b ha hb hr]
+    -- The pairing of the generators has order `r`.
+    --
+    -- So the power is 1 exactly when `r` divides the sum.
     have hord := orderOf_pairing_generators
     exact (hord ▸ orderOf_dvd_iff_pow_eq_one).symm.trans
       (dvd_sum_zipWith_val_iff_fr a b)

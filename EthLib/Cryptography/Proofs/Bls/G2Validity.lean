@@ -14,12 +14,6 @@ The curve and the subgroup follow draft-04, §1.3 and Appendix A.
 
 The twist also matches draft-07, §4.2.1.
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-07>
-
-The cubic `x^3 + 4 (1 + i)` has no root in `Fp2`.
-
-So every affine solution `(x, y)` has `y ≠ 0`, and its derivative `2 y` in `y` is nonzero.
-
-The kernel checks that the generator is on the twist, so the generator is valid.
 -/
 
 @[expose] public section
@@ -104,6 +98,9 @@ theorem cube_add_bTwist_ne_zero (x : Fp2) :
   push_toZMod at hz
   exact cube_ne_32_zmod (Fp.toZMod (Fp2.norm x)) (hz.trans hbt)
 
+-- The cubic `x^3 + 4 (1 + i)` has no root in `Fp2`.
+--
+-- So every affine solution `(x, y)` has `y ≠ 0`, and its derivative `2 y` in `y` is nonzero.
 /-- Because `x^3 + bTwist` has no root, any affine solution has `2 * y ≠ 0` and is nonsingular. -/
 theorem valid_of_affine_equation {x y : Fp2}
     (h : y * y = x * x * x + bTwist) : Valid ⟨x, y, Fp2.one⟩ := by
@@ -138,6 +135,7 @@ theorem valid_of_isOnTwist_of_z_one {p : G2}
   exact valid_of_affine_equation heq
 
 theorem valid_generator : Valid generator :=
+  -- The kernel checks that the generator is on the twist, so the generator is valid.
   valid_of_isOnTwist_of_z_one rfl isOnTwist_generator
 
 end EthLib.Cryptography.Bls.G2
