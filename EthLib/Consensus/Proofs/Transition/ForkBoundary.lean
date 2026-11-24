@@ -7,21 +7,11 @@ public import EthLib.Consensus.Transition.ForkBoundary
 /-!
 # Proofs: the state transition across a fork boundary
 
-An upgrade moves the state to the next consensus fork of the schedule.
-
 Before the first slot of the next fork epoch, the slots and blocks run as in one fork.
-
-The fork of the state never moves back.
-
-A valid block ran on the state of its own fork, at its slot.
 
 Each upgrade keeps the invariant that each valid block keeps, and the finalized checkpoint.
 
 So the invariant holds across fork boundaries, and the finalized epoch never decreases there.
-
-When the upgrades due at a slot succeed, no upgrade is due after them.
-
-So at the first slot of an epoch, the next fork of the state they reach does not start then.
 -/
 
 @[expose] public section

@@ -10,50 +10,6 @@ The theorem on chains takes the sets, weights and votes of the model as paramete
 
 Here they come from the chain itself.
 
-The validator set of a checkpoint is the active set of its epoch.
-
-Its second set is the active set of the next epoch.
-
-Both are read in the last state of the run.
-
-From the step that justifies a checkpoint of an epoch on, the active set of that epoch stays fixed.
-
-So the last state gives the validator set that this step reads.
-
-For a checkpoint of the previous epoch, it also gives the second set that the step reads.
-
-For a checkpoint of the current epoch, the step reads no second set.
-
-Its validators that exit at the next epoch then count as slack, which that step does not need.
-
-Its weights are the effective balances of each state at the end of its epoch or the next one.
-
-That state must record its root for its epoch.
-
-That state may lie on any run between the first and the last state.
-
-The votes are those that the block steps between the first and the last state cast.
-
-A block casts a vote for each validator that the bits of one of its attestations show.
-
-The committees are those of the state before the block.
-
-The block accepts each of its attestations only when the signature checks accept it.
-
-Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
-
-So the voters of a link are validators whose attestations a block of some run applied.
-
-The step asks only the stake, the order of the blocks and the preset.
-
-The blocks of the model can also be the roots themselves, ordered by the links of reached states.
-
-Two roots are linked when a state that genesis reaches records them at consecutive slots.
-
-The zero root is also linked to the root recorded at slot zero.
-
-Then the order of the blocks holds by construction, and the step asks only the stake.
-
 The slack is the stake of the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
@@ -84,28 +40,27 @@ def activeSetAt {fork : Fork} (state : BeaconState preset fork) (epoch : ℕ) :
 
 The state lies on any run of steps from the first state to the last one.
 
-Its next step on that run is a slot that ends an epoch.
-
-The epoch of the checkpoint is the previous or the current epoch of the state.
-
-Its block is that of the root that the state records for the start of that epoch.
-
-The epoch step of that slot may justify the checkpoint, and the finalization rules may read it.
-
-That step need not justify the checkpoint.
-
 A map from roots to blocks that tells roots apart keeps the set small. -/
 def justifyingBalances (config : Config) (checks : SignatureChecks) (block : Root → β)
     (first last : ForkedBeaconState preset) (c : Models.Ffg.Checkpoint β) :
     Set (ValidatorIndex → ℕ) :=
   {weights | ∃ forked after, Relation.ReflTransGen (ChainStep config checks) first forked ∧
+    -- Its next step on that run is a slot that ends an epoch.
+    --
+    -- The epoch step of that slot may justify the checkpoint.
+    --
+    -- The finalization rules may read it.
+    --
+    -- That step need not justify the checkpoint.
     ChainStep config checks forked after ∧ after.state.slot ≠ forked.state.slot ∧
     (forked.state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 ∧
     Relation.ReflTransGen (ChainStep config checks) after last ∧
+    -- The epoch of the checkpoint is the previous or the current epoch of the state.
     ∃ (current : Bool) (root : Root),
       getBlockRoot forked.state
           (if current then getCurrentEpoch forked.state else getPreviousEpoch forked.state) =
         .ok root ∧
+      -- Its block is that of the root that the state records for the start of that epoch.
       c = ⟨block root,
         (if current then getCurrentEpoch forked.state else getPreviousEpoch forked.state).toNat⟩ ∧
       weights = fun index => balanceAt forked.state index.toNat}
@@ -119,6 +74,17 @@ def runVotes (config : Config) (checks : SignatureChecks)
     (first last : ForkedBeaconState preset) : Set (ValidatorIndex × AttestationData) :=
   {vote | ∃ forked after, Relation.ReflTransGen (ChainStep config checks) first forked ∧
     Relation.ReflTransGen (ChainStep config checks) after last ∧
+    -- A block casts a vote for each validator that the bits of one of its attestations show.
+    --
+    -- The committees are those of the state before the block.
+    --
+    -- The block accepts each of its attestations only when the signature checks accept it.
+    --
+    -- Reading such a vote as signed by its validator assumes the BLS checks.
+    --
+    -- It also assumes unforgeable aggregates.
+    --
+    -- So the voters of a link are validators whose attestations a block of some run applied.
     vote ∈ blockStepVotes config checks forked after}
 
 /-- The active sets, the balances and the votes of a run meet the hypotheses of one of its steps.
@@ -136,6 +102,9 @@ theorem SlackStepHypotheses.of_activeSetAt
       (fun c => activeSetAt last.state (c.epoch + 1))
       (justifyingBalances config checks block first last) (runVotes config checks first last)
       block forked after := by
+  -- The active set of an epoch is fixed from the step that justifies a checkpoint of it on.
+  --
+  -- So the last state gives the validator set that this step reads.
   have kept : ActiveKept (getCurrentEpoch forked.state) forked.state last.state :=
     (step.activeKept.trans ((activeKept_of_chainSteps rest).mono
       (activityFixedEpoch_mono step.currentEpoch_le))).mono
@@ -161,10 +130,15 @@ theorem SlackStepHypotheses.of_activeSetAt
   refine ⟨activeEq, ⟨forked, after, reach, step, moved, boundary, rest, current, root, rootOk,
     rfl, rfl⟩, ?_⟩
   dsimp only
+  -- For a checkpoint of the current epoch, the step reads no second set.
+  --
+  -- Its validators that exit at the next epoch then count as slack, which that step does not need.
   by_cases same : epoch = getCurrentEpoch forked.state
   · rw [activeEq, same]
     exact Finset.inter_subset_left
   -- The previous epoch is then below the current one, so its next epoch is the current one.
+  --
+  -- So the last state also gives the second set that the step reads.
   have previousEq : epoch = getPreviousEpoch forked.state := recent.resolve_right same
   have next : epoch.toNat + 1 = (getCurrentEpoch forked.state).toNat := by
     have ne := mt UInt64.toNat_inj.mp same
@@ -216,30 +190,16 @@ theorem SlackStepBounds.of_toChainRoot {first last : ForkedBeaconState preset}
 
 /-- Along a run of steps of a chain from genesis, both justified checkpoints are slack-justified.
 
-The validator set of a checkpoint is the active set of its epoch in the last state.
+The sets of a checkpoint are the active sets of its epoch and the next one, in the last state.
 
-Its second set is the active set of the next epoch in the last state.
-
-Its weights are the effective balances of each state at the end of its epoch or the next one.
-
-That state must record its root for its epoch.
-
-The votes are those that the block steps between genesis and the last state cast.
-
-Each vote comes from an attestation that a block of some run between them applied.
-
-Each step on any run between them must meet the bounds on the stake and the blocks.
-
-The order of the blocks is an assumption on the map from roots to blocks.
-
-An epoch must have at least one slot, and the buffer of roots must cover two epochs.
-
-The seed lookahead must leave room in the buffer of RANDAO mixes.
+Each step on any run from genesis to the last state must meet the bounds on the stake and blocks.
 
 The genesis block of the model is the block of the zero root. -/
 theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
+    -- An epoch must have at least one slot, and the buffer of roots must cover two epochs.
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    -- The seed lookahead must leave room in the buffer of RANDAO mixes.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
@@ -247,6 +207,7 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
       .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
+    -- The order of the blocks is an assumption on the map from roots to blocks.
     (meets : ∀ forked after,
       Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ forked →
       ChainStep config checks forked after →
@@ -256,6 +217,19 @@ theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps
       (fun c => activeSetAt last.state (c.epoch + 1))
       (justifyingBalances config checks block ⟨fork, state⟩ last) (block (Vector.replicate 32 0))
       (ffgVotes block (runVotes config checks ⟨fork, state⟩ last)) block last.state :=
+  -- The validator set of a checkpoint is the active set of its epoch in the last state.
+  --
+  -- Its second set is the active set of the next epoch in the last state.
+  --
+  -- Its weights are the effective balances of each state at the end of its epoch or the next one.
+  --
+  -- That state must record its root for its epoch.
+  --
+  -- The votes are those that the block steps between genesis and the last state cast.
+  --
+  -- Each vote comes from an attestation that a block of some run between them applied.
+  --
+  -- Each step then asks only the stake, the order of the blocks and the preset.
   slackJustifiedCheckpoints_of_chainSteps positive window apart computed steps
     (SlackStepHypotheses.of_activeSetAt_of_chainSteps meets)
 
@@ -265,16 +239,12 @@ The blocks of the model are the roots, ordered by the links of the states that g
 
 The sets are the active sets, the weights the effective balances, and the votes those of the run.
 
-Each step on any run between them must meet the bound on the stake.
-
-An epoch must have at least one slot, and the buffer of roots must cover two epochs.
-
-The seed lookahead must leave room in the buffer of RANDAO mixes.
-
 The genesis block of the model is the zero root. -/
 theorem slackJustifiedCheckpoints_chainRoot_of_chainSteps
+    -- An epoch must have at least one slot, and the buffer of roots must cover two epochs.
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    -- The seed lookahead must leave room in the buffer of RANDAO mixes.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
@@ -282,6 +252,7 @@ theorem slackJustifiedCheckpoints_chainRoot_of_chainSteps
       .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
+    -- Each step on any run between genesis and the last state must meet the bound on the stake.
     (large : ∀ forked after,
       Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ forked →
       ChainStep config checks forked after →
@@ -300,6 +271,11 @@ theorem slackJustifiedCheckpoints_chainRoot_of_chainSteps
         (runVotes config checks ⟨fork, state⟩ last))
       (toChainRoot config checks ⟨fork, state⟩) last.state :=
   slackJustifiedCheckpoints_activeSetAt_of_chainSteps positive window apart computed steps
+    -- Two roots are linked when a state that genesis reaches records them at consecutive slots.
+    --
+    -- The zero root is also linked to the root recorded at slot zero.
+    --
+    -- Then the order of the blocks holds by construction, and the step asks only the stake.
     (SlackStepBounds.of_toChainRoot large)
 
 end EthLib.Consensus

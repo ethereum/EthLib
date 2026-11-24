@@ -6,27 +6,11 @@ public import EthLib.Consensus.Proofs.Transition.FfgStake
 /-!
 # Proofs: two epochs of honest target votes finalize the first
 
-At the end of an epoch, justification tests the target balance of that epoch.
-
-The test passes when three times that balance reaches twice the active balance.
-
-Then the epoch becomes the current justified one, and the newest bit of justification is set.
-
-At the end of the next epoch that bit is the second newest.
-
-If the test of that next epoch passes too, a rule of finalization applies.
-
-It finalizes the justified checkpoint of the first epoch, one epoch back.
-
 This is the step of plausible liveness that turns votes into finality, Theorem 2 of Casper FFG.
 
 The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
 
 Each test is read here from honest validators with two thirds of the active stake.
-
-They must all be among the validators that justification counts for the target of the epoch.
-
-From Altair these are the unslashed validators with the timely target flag.
 -/
 
 @[expose] public section
@@ -45,6 +29,11 @@ theorem weighJustificationAndFinalization_currentPassed {total previous current 
     (quorum : 2 * total.toNat ≤ 3 * current.toNat) :
     after.justificationBits.bits[0] = true ∧
       after.currentJustifiedCheckpoint.epoch = getCurrentEpoch state := by
+  -- At the end of an epoch, justification tests the target balance of that epoch.
+  --
+  -- The test passes when three times that balance reaches twice the active balance.
+  --
+  -- Then the epoch becomes the current justified one, and the newest bit of justification is set.
   simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, liftArith,
     mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨previousWeight, previousOk, threshold, thresholdOk, first, firstOk, currentWeight,
@@ -103,6 +92,7 @@ private theorem weighJustificationAndFinalization_of_honest
     (computed : processJustificationAndFinalization state = .ok after)
     (late : GENESIS_EPOCH + 1 < getCurrentEpoch state)
     {honest : Finset ValidatorIndex}
+    -- From Altair, justification counts the unslashed validators with the timely target flag.
     (counted : ∀ indices, targetIndices state (getCurrentEpoch state) = .ok indices →
       honest ⊆ indices.toFinset)
     (quorum : 2 * stake (fun index => balanceAt state index.toNat)
@@ -129,13 +119,12 @@ The newest bit of justification is then set.
 
 The active stake is that of the current epoch, with effective balances.
 
-Justification must run, after the first two epochs.
-
-Every target index that justification counts for the epoch must include the honest set. -/
+Justification must run, after the first two epochs. -/
 theorem processJustificationAndFinalization_justifiesCurrent
     (computed : processJustificationAndFinalization state = .ok after)
     (late : GENESIS_EPOCH + 1 < getCurrentEpoch state)
     {honest : Finset ValidatorIndex}
+    -- Every target index that justification counts for the epoch must include the honest set.
     (counted : ∀ indices, targetIndices state (getCurrentEpoch state) = .ok indices →
       honest ⊆ indices.toFinset)
     (quorum : 2 * stake (fun index => balanceAt state index.toNat)
@@ -151,27 +140,21 @@ theorem processJustificationAndFinalization_justifiesCurrent
 
 The first step ends an epoch, and the second step ends the next one.
 
-Between them the current justified checkpoint and the bits of justification stay as they are.
-
 In each step, honest validators with two thirds of the active stake count for the target.
-
-Justification must run in the first step, after the first two epochs.
-
-Then the second step finalizes the checkpoint of the first epoch.
-
-The current justified checkpoint after the second step is that of the second epoch.
 
 The two states may be at different forks, as when an upgrade comes between the two steps. -/
 theorem processJustificationAndFinalization_finalizesTwoEpochs {fork' : Base.Fork}
     {first firstAfter : BeaconState preset fork} {second secondAfter : BeaconState preset fork'}
     {firstHonest secondHonest : Finset ValidatorIndex}
     (firstComputed : processJustificationAndFinalization first = .ok firstAfter)
+    -- Justification must run in the first step, after the first two epochs.
     (late : GENESIS_EPOCH + 1 < getCurrentEpoch first)
     (firstCounted : ∀ indices, targetIndices first (getCurrentEpoch first) = .ok indices →
       firstHonest ⊆ indices.toFinset)
     (firstQuorum : 2 * stake (fun index => balanceAt first index.toNat)
         (getActiveValidatorIndices first (getCurrentEpoch first)).toFinset ≤
       3 * stake (fun index => balanceAt first index.toNat) firstHonest)
+    -- Between the steps the current justified checkpoint and the bits of justification stay.
     (justifiedKept : second.currentJustifiedCheckpoint = firstAfter.currentJustifiedCheckpoint)
     (bitsKept : second.justificationBits = firstAfter.justificationBits)
     (next : (getCurrentEpoch second).toNat = (getCurrentEpoch first).toNat + 1)
@@ -191,10 +174,16 @@ theorem processJustificationAndFinalization_finalizesTwoEpochs {fork' : Base.For
     exact Nat.lt_succ_of_lt (UInt64.lt_iff_toNat_lt.mp late)
   obtain ⟨_, _, _, weighed, passed⟩ := weighJustificationAndFinalization_of_honest
     secondComputed secondLate secondCounted secondQuorum
+  -- At the end of the next epoch the newest bit of the first step is the second newest.
+  --
+  -- The test of that next epoch passes too, so a rule of finalization applies.
+  --
+  -- It finalizes the justified checkpoint of the first epoch, one epoch back.
   have finalized := weighJustificationAndFinalization_finalizesCurrent weighed
     (by rw [bitsKept]; exact firstBit)
     (by rw [justifiedKept, firstEpoch, next]) passed
   rw [justifiedKept] at finalized
+  -- The current justified checkpoint after the second step is that of the second epoch.
   exact ⟨finalized, by rw [finalized, firstEpoch],
     (weighJustificationAndFinalization_currentPassed weighed passed).2⟩
 

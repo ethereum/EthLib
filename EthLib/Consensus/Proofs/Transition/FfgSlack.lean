@@ -7,42 +7,6 @@ public import EthLib.Consensus.Proofs.Transition.FfgJustification
 
 The bound that the epoch step gives for a link, up to churn, is a slack link of the model.
 
-So the step keeps the two justified checkpoints of a state slack-justified in the model.
-
-This is the step of an induction over the epochs of a chain, from the genesis checkpoint.
-
-Each checkpoint of the model has its own set of weights.
-
-Here they hold the effective balances of each state whose step justifies it.
-
-A target is read at the step of its epoch and again at the next step, with new balances between.
-
-So the sets and weights of a checkpoint need to match only the step that first justifies it.
-
-Along one chain that step is unique.
-
-Two branches can justify one checkpoint from two different states.
-
-The set of weights of that checkpoint then holds the balances of both states.
-
-Its validator set must still be one set in both states, which no theorem shows yet.
-
-Justification runs in the epoch step, at the state after the caching of the last slot of an epoch.
-
-The caching writes the root of that slot only.
-
-So the roots of the recent epochs stay when the buffer of roots covers two epochs.
-
-So one slot keeps the two checkpoints slack-justified, under hypotheses on the state before it.
-
-The link of the previous epoch needs its source below its target.
-
-So the previous justified epoch must be below the previous epoch once justification runs.
-
-One slot keeps that, given the two invariants on the justified checkpoints.
-
-The blocks and the upgrades keep it too.
-
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 The slack is the stake of the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
@@ -75,23 +39,37 @@ def SlackJustifiedCheckpoints (V U : Models.Ffg.Checkpoint β → Finset Validat
 
 /-- The sets of the model match the state for the checkpoint of an epoch.
 
-That checkpoint has the block of the root that the state records for the start of the epoch.
-
-Its validator set is the active set of the epoch.
-
-Its set of weights holds the effective balances of the state.
-
-Each of its validators in its second set is active in the current epoch.
-
-For the current epoch that always holds.
-
-As the second set, the active set of the next epoch meets it for both recent epochs. -/
+That checkpoint has the block of the root that the state records for the start of the epoch. -/
 def TargetSetsMatch (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (block : Root → β)
     (state : BeaconState preset fork) (epoch : Epoch) : Prop :=
+  -- Each checkpoint of the model has its own set of weights.
+  --
+  -- Here they hold the effective balances of each state whose step justifies it.
+  --
+  -- A target is read at the step of its epoch and again at the next step.
+  --
+  -- The balances can change between the two steps.
+  --
+  -- So the sets and weights of a checkpoint need to match only the step that first justifies it.
+  --
+  -- Along one chain that step is unique.
+  --
+  -- Two branches can justify one checkpoint from two different states.
+  --
+  -- The set of weights of that checkpoint then holds the balances of both states.
+  --
+  -- Its validator set must still be one set in both states, which no theorem shows yet.
   ∀ root, getBlockRoot state epoch = .ok root →
+    -- Its validator set is the active set of the epoch.
     V ⟨block root, epoch.toNat⟩ = (getActiveValidatorIndices state epoch).toFinset ∧
+      -- Its set of weights holds the effective balances of the state.
       (fun index => balanceAt state index.toNat) ∈ W ⟨block root, epoch.toNat⟩ ∧
+      -- Each of its validators in its second set is active in the current epoch.
+      --
+      -- For the current epoch that always holds.
+      --
+      -- As the second set, the active set of the next epoch meets it for both recent epochs.
       V ⟨block root, epoch.toNat⟩ ∩ U ⟨block root, epoch.toNat⟩ ⊆
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset
 
@@ -125,27 +103,9 @@ theorem LinkWithChurn.slackLink {block : Root → β} {epoch : Epoch} {root : Ro
 
 The hypotheses on the votes and the stake are those of the bound of a link up to churn.
 
-The current justified epoch must be at most the previous epoch.
+The sets of the model must match the state for the epoch of a new current justified checkpoint.
 
-Once justification runs, the previous justified epoch must be below the previous epoch.
-
-The step may make the checkpoint of the previous or the current epoch the current justified one.
-
-If that changes the current justified checkpoint, the sets and weights of the model must match.
-
-They must match the state for the epoch of the new checkpoint.
-
-Otherwise they need not match.
-
-Take each of the two recent epochs and the source of its link.
-
-The block of that source must be in the chain of the block of the epoch.
-
-That block is the block of the root that the state records for the start of the epoch.
-
-For the genesis state, choose the block of the zero root as the genesis block of the model.
-
-The hypothesis on the chain then needs that block below the block of each recent epoch. -/
+The source of the link of each recent epoch must be in the chain of the block of that epoch. -/
 theorem processJustificationAndFinalization_slackJustifiedCheckpoints
     (flagsVoted : TargetFlagsVoted attested state)
     (pendingVoted : PendingVoted attested state)
@@ -154,10 +114,28 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
     (block : Root → β)
     (contains : ffgVotes block attested ⊆ votes)
+    -- The current justified epoch must be at most the previous epoch.
     (settled : JustifiedSettled state)
+    -- Once justification runs, the previous justified epoch must be below the previous epoch.
     (separated : JustifiedSeparated state)
+    -- The step may make the checkpoint of the previous or the current epoch the current one.
+    --
+    -- If that changes the current justified checkpoint, the sets and weights must match.
+    --
+    -- They must match the state for the epoch of the new checkpoint.
+    --
+    -- Otherwise they need not match.
     (sets : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint →
       TargetSetsMatch V U W block state after.currentJustifiedCheckpoint.epoch)
+    -- Take each of the two recent epochs and the source of its link.
+    --
+    -- The block of that source must be in the chain of the block of the epoch.
+    --
+    -- That block is the block of the root that the state records for the start of the epoch.
+    --
+    -- For the genesis state, choose the block of the zero root as the genesis block of the model.
+    --
+    -- The hypothesis on the chain then needs that block below the block of each recent epoch.
     (chain : ∀ (current : Bool) (root : Root),
       getBlockRoot state (if current then getCurrentEpoch state else getPreviousEpoch state) =
           .ok root →
@@ -166,6 +144,7 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
     (holds : SlackJustifiedCheckpoints V U W genesis votes block state)
     (computed : processJustificationAndFinalization state = .ok after) :
     SlackJustifiedCheckpoints V U W genesis votes block after := by
+  -- This is the step of an induction over the epochs of a chain, from the genesis checkpoint.
   by_cases early : getCurrentEpoch state ≤ GENESIS_EPOCH + 1
   · exact processJustificationAndFinalization_early_eq early computed ▸ holds
   have one := toNat_genesisEpoch_add_one
@@ -189,6 +168,8 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
   rw [epoch] at rootOk targetSets
   have before := chain current _ rootOk
   -- In both cases the source epoch of the link is below its target epoch.
+  --
+  -- For the link of the previous epoch, that needs the previous justified epoch below it.
   have below := UInt64.lt_iff_toNat_lt.mp (separated.source_lt settled
     (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; exact late)) current)
   -- The new checkpoint is the checkpoint of its epoch, with the root of its first slot.
@@ -221,8 +202,6 @@ A recent epoch is the previous or the current epoch of the state before.
 
 The root of the new checkpoint is the root that the state before records for the epoch.
 
-The slot ends an epoch, as only the epoch step changes the checkpoint.
-
 The buffer of roots must cover two epochs. -/
 theorem advanceSlot_getBlockRoot_currentJustified_of_ne
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
@@ -242,6 +221,7 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
   have previousEq : getPreviousEpoch cached = getPreviousEpoch state := by
     unfold getPreviousEpoch
     rw [currentEq]
+  -- The slot ends an epoch, as only the epoch step changes the checkpoint.
   obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
   · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
     rw [frame.currentJustified] at changed ⊢
@@ -262,23 +242,11 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
 
 /-- One slot keeps the two justified checkpoints slack-justified in the model.
 
-When the slot ends an epoch, justification runs at the state after the caching of the slot.
-
-That caching keeps the roots of the recent epochs, the flags, the checkpoints and the stakes.
-
-So the hypotheses of justification are asked of the state before the slot.
+The hypotheses of justification are asked of the state before the slot.
 
 The bound on the active stake and the chain are asked only when the slot ends an epoch.
 
-The buffer of roots must cover two epochs, as both presets do, so that the caching keeps them.
-
-The previous justified epoch must be below the previous epoch once justification runs.
-
-If the slot changes the current justified checkpoint, the sets and weights of the model must match.
-
-They must match the state before the slot for the epoch of the new checkpoint.
-
-The chain hypothesis also reads the roots of the state before the slot. -/
+The buffer of roots must cover two epochs, as both presets do. -/
 theorem advanceSlot_slackJustifiedCheckpoints
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (flagsVoted : TargetFlagsVoted attested state)
@@ -289,9 +257,14 @@ theorem advanceSlot_slackJustifiedCheckpoints
           (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
     (block : Root → β)
     (contains : ffgVotes block attested ⊆ votes)
+    -- The previous justified epoch must be below the previous epoch once justification runs.
     (settled : JustifiedSettled state) (separated : JustifiedSeparated state)
+    -- If the slot changes the current justified checkpoint, the sets and weights must match.
+    --
+    -- They must match the state before the slot for the epoch of the new checkpoint.
     (sets : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint →
       TargetSetsMatch V U W block state after.currentJustifiedCheckpoint.epoch)
+    -- The chain hypothesis also reads the roots of the state before the slot.
     (chain : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 → ∀ (current : Bool) (root : Root),
       getBlockRoot state (if current then getCurrentEpoch state else getPreviousEpoch state) =
           .ok root →
@@ -311,7 +284,15 @@ theorem advanceSlot_slackJustifiedCheckpoints
     rw [currentEq]
   obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
   · have positive := slotsPerEpoch_pos_of_mod sum boundary
-    -- The caching keeps the roots of both recent epochs.
+    -- When the slot ends an epoch, justification runs at the state after the caching of the slot.
+    --
+    -- That caching keeps the roots of the recent epochs, the flags, the checkpoints and the stakes.
+    --
+    -- So the hypotheses of justification are asked of the state before the slot.
+    --
+    -- The caching writes the root of that slot only.
+    --
+    -- So the roots of both recent epochs stay when the buffer of roots covers two epochs.
     have roots : ∀ current : Bool,
         getBlockRoot cached (if current then getCurrentEpoch state else getPreviousEpoch state) =
           getBlockRoot state
@@ -355,6 +336,9 @@ theorem advanceSlot_slackJustifiedCheckpoints
     · unfold JustifiedSettled
       rw [cachedFrame.currentJustified, previousEq]
       exact settled
+    -- One slot keeps the separation, given the two invariants on the justified checkpoints.
+    --
+    -- The blocks and the upgrades keep it too.
     · exact separated.of_frame cachedFrame
     · intro changed
       dsimp only at sets

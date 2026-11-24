@@ -11,21 +11,7 @@ The trace bound of an inactivity leak reads one validator before each epoch tran
 
 Between two epoch transitions, the chain runs blocks and slots that end no epoch.
 
-A slot that runs no epoch keeps every balance, every score and the registry.
-
-A block keeps each score and each effective balance of the registry before it.
-
-It raises no balance of a validator that it does not credit.
-
-The module follows the validator through any sequence of such steps.
-
-After them the validator keeps its position, its key, its effective balance and its score.
-
-It still has a balance, and that balance is no higher.
-
-The steps stay within one fork.
-
-The slot that runs an epoch transition, and an upgrade, are not among them.
+The module follows the validator through any sequence of such steps, within one fork.
 -/
 
 @[expose] public section
@@ -39,30 +25,28 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- One step between two epoch transitions that credits nothing to one validator.
 
-The validator is named by its position and by its key, given separately.
-
-A slot step is one slot that does not end an epoch, so it runs no epoch transition.
-
-A block step is a successful block whose proposer sits at another position.
-
-From Altair no member that signs its sync aggregate has the key.
-
-No deposit of the block carries the key; there are none from Heze. -/
+The validator is named by its position and by its key, given separately. -/
 inductive QuietStep (config : Config) (checks : SignatureChecks) (index : Nat)
     (key : Cryptography.Bls.BLSPubkey) :
     BeaconState preset fork → BeaconState preset fork → Prop where
+  -- The slot that runs an epoch transition, and an upgrade, are not among the steps.
+  --
+  -- A slot step is one slot that does not end an epoch, so it runs no epoch transition.
   | slot {state after : BeaconState preset fork}
       (ok : advanceSlot config checks state = .ok after)
       (inside : (state.slot + 1) % preset.SLOTS_PER_EPOCH ≠ 0) :
       QuietStep config checks index key state after
+  -- A block step is a successful block whose proposer sits at another position.
   | block {state after : BeaconState preset fork} (engine : ExecutionEngine preset fork)
       (block : BeaconBlock preset fork)
       (ok : processBlock config checks engine state block = .ok after)
       (notProposer : block.proposerIndex.toNat ≠ index)
+      -- From Altair no member that signs its sync aggregate has the key.
       (unsigned : ∀ altair : .altair ≤ fork,
         ∀ member ∈ ((state.currentSyncCommittee altair).value.pubkeys.toArray.zip
           (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray).toList,
           member.2 = true → member.1 ≠ key)
+      -- No deposit of the block carries the key; there are none from Heze.
       (undeposited : ∀ before : fork < .hegota, ∀ deposit ∈ (block.body.deposits before).data,
         deposit.data.pubkey ≠ key) :
       QuietStep config checks index key state after
@@ -90,10 +74,9 @@ The validator has a balance and the given key before the steps.
 
 After them it keeps its position, its key, its effective balance and its score.
 
-It still has a balance, and that balance is no higher.
-
-The mixes must span more than the seed lookahead plus two epochs. -/
+It still has a balance, and that balance is no higher. -/
 theorem quietSteps_kept
+    -- The mixes must span more than the seed lookahead plus two epochs.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {index : Nat} {key : Cryptography.Bls.BLSPubkey}
     (steps : Relation.ReflTransGen (QuietStep config checks index key) state after)
@@ -114,6 +97,9 @@ theorem quietSteps_kept
       by rw [balances]; exact nowHeld,
       raised.trans (.of_balances balances index), scored.trans (.of_scores scores index)⟩
   | block engine block ok notProposer unsigned undeposited =>
+    -- A block keeps each score and each effective balance of the registry before it.
+    --
+    -- It raises no balance of a validator that it does not credit.
     obtain ⟨later, atLater, laterKey⟩ :=
       validators_getElem?_of_validatorKeys_prefix (frame_processBlock ok).pubkeysPrefix atNow
     have inside := (Array.getElem?_eq_some_iff.mp atNow).1

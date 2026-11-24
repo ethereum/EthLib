@@ -8,12 +8,6 @@ public import EthLib.Consensus.Proofs.Models.Stake
 
 The stake of a validator is its effective balance, and a total balance is the stake of a set.
 
-With aligned effective balances, each stake is a multiple of each divisor of the increment.
-
-The total is never below one increment, which matters only for small totals.
-
-Above one and a half increments of active stake, the test of justification compares stakes.
-
 A supermajority link of the model follows Gasper Definition 4.5.
 
 Gasper asks for more than two thirds of the stake; the beacon chain and the model accept two thirds.
@@ -103,6 +97,7 @@ theorem getTotalBalance_ok_iff_stake {state : BeaconState preset fork}
         stake (fun index => balanceAt state index.toNat) indices.toFinset < 2 ^ 64 ∧
         total.toNat = max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
           (stake (fun index => balanceAt state index.toNat) indices.toFinset) := by
+  -- The total is never below one increment, which matters only for small totals.
   rw [getTotalBalance_ok_iff, sumMarked_markIndices_eq_stake]
   refine and_congr_right fun _ => and_congr_right fun lt => ?_
   rw [← UInt64.toNat_inj, toNat_max, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lt]
@@ -156,12 +151,6 @@ private theorem two_mul_max_le_three_mul_max_iff {floor total part : ℕ}
 
 /-- The test of justification compares the stakes of two sets of indices.
 
-The first total balance is that of the active indices, the second that of the attesting ones.
-
-The test computes twice the first and three times the second.
-
-It asks that the first is at most the second.
-
 It answers yes exactly when twice the active stake is at most three times the attesting stake.
 
 The active stake must be more than one and a half increments.
@@ -169,8 +158,12 @@ The active stake must be more than one and a half increments.
 The attesting indices need not be active, so the attesting stake may count inactive validators. -/
 theorem justificationTest_iff_stake {state : BeaconState preset fork}
     {active attesting : List ValidatorIndex} {total balance threshold weight : Gwei}
+    -- The first total balance is that of the active indices, the second that of the attesting ones.
     (totalOk : getTotalBalance state active = .ok total)
     (balanceOk : getTotalBalance state attesting = .ok balance)
+    -- The test computes twice the first and three times the second.
+    --
+    -- It asks that the first is at most the second.
     (thresholdOk : mulChecked total 2 = .ok threshold)
     (weightOk : mulChecked balance 3 = .ok weight)
     (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
