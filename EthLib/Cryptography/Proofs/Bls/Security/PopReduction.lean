@@ -12,24 +12,7 @@ It gives the adversary the honest key `X1` and guesses a position `j` of the mes
 
 It answers the oracles itself, without the secret `a`.
 
-- The new message at position `j` hashes to `Y`, any other to `s • g2` with `s` fresh.
-- A signature on a message with hash `s • g2` is `s • X2`, which is `a • (s • g2)`.
-- At position `j` it cannot sign, and returns 0.
-- The honest key hashes to `s • g2`, so its proof is `s • X2`.
-- Any other key hashes to `r • Y`, with `r` fresh and kept in the key table.
-
-The reduction's answer is the extraction step, with the key scalars `r` read from its key table.
-
 The coupling compares it with the game whose message scalar at `j` is drawn first, as `z`.
-
-Let `c = z` and `z ≠ 0`.
-
-Each step of the game, seen through a map of states, is at most as likely as the reduction's step.
-
-- A message scalar is the same, except the one at `j`: the game keeps `z`, the reduction 0.
-- A key scalar `t` of a key other than the honest one is `r * z`, a bijection in `r`.
-
-This holds until the bad event of the single-key reduction: the message at `j` was signed.
 -/
 
 @[expose] public section
@@ -51,13 +34,18 @@ def embedHashAt (g₂ Y : G₂) (j : ℕ) (m : M) : StateT (Security.State F M) 
     match lookup m st.table with
     | some (k, s) => pure (embed g₂ Y j k s, { st with calls := st.calls + 1 })
     | none =>
+      -- The new message at position `j` hashes to `Y`.
       if st.table.length = j then
         pure (Y, { st with table := st.table ++ [(m, 0)], calls := st.calls + 1 })
+      -- Any other new message hashes to `s • g2`, with `s` fresh.
       else embedHash g₂ Y j m st
 
 /-- The reduction's signing oracle: `s • X2` for a message with hash `s • g2`, and 0 at `j`. -/
 def embedSignAt (g₂ X₂ Y : G₂) (j : ℕ) (m : M) : StateT (Security.State F M) ProbComp G₂ :=
   fun st =>
+    -- A signature on a message with hash `s • g2` is `s • X2`, which is `a • (s • g2)`.
+    --
+    -- At position `j` the reduction cannot sign, and returns 0.
     (fun w => (embedSignature X₂ j m w.2, { w.2 with signed := w.2.signed ++ [m] })) <$>
       embedHashAt g₂ Y j m st
 
@@ -66,6 +54,7 @@ def keyAnswer (g₂ Y : G₂) (pk x : G₁) (s : F) : G₂ := if x = pk then s �
 
 /-- The reduction's key hash: a new key gets a fresh scalar `s`, kept in the key table. -/
 def embedKeyHash (g₂ Y : G₂) (pk x : G₁) : StateT (State F G₁ M) ProbComp G₂ := fun st =>
+  -- A key other than the honest one hashes to `s • Y`, with `s` fresh and kept in the key table.
   match lookup x st.keyTable with
   | some (_, s) => pure (keyAnswer g₂ Y pk x s, { st with keyCalls := st.keyCalls + 1 })
   | none =>
@@ -106,11 +95,15 @@ def reduction (g₂ : G₂) (adversary : Adversary G₁ G₂ M) (q : ℕ) : CoCd
   fun X₁ X₂ Y => do
     let j ← $[0..q - 1]
     let s ← $ᵗ F
+    -- The honest key hashes to `s • g2`, so its proof is `s • X2`.
     let (w, st) ← (simulateQ (embedImpl g₂ X₂ Y X₁ j) (run adversary X₁ (s • X₂))).run
       (State.withKey X₁ s)
     return extract X₁ j w st
 
-/-! ## The coupling with the game -/
+/-! ## The coupling with the game
+
+The challenge is `Y = c • g2` with `c = z`, and `z ≠ 0`.
+-/
 
 /-- The key table with the scalar of every key other than `pk` multiplied by `u`. -/
 def scaleKeys (pk : G₁) (u : F) (l : List (G₁ × F)) : List (G₁ × F) :=
@@ -270,6 +263,7 @@ theorem dominatedUntilBad (g₂ : G₂) (pk : G₁) (a : F) {z : F} (hz : z ≠ 
   · change Pr{let w ← (·, st) <$> _}[_] ≤ Pr{let w ← (·, projectState pk j z st) <$> _}[_]
     rw [prEvent_map, prEvent_map]
     exact prEvent_mono _ _ _ fun _ h => h.1
+  -- A message scalar is the same, except the one at `j`: the game keeps `z`, the reduction 0.
   · change Pr{let w ← (fun w => (w.1, { st with msg := w.2 })) <$> hashAt g₂ j z m st.msg}[
         Q (w.1, projectState pk j z w.2) ∧ _] ≤
       Pr{let w ← (fun w => (w.1, { projectState pk j z st with msg := w.2 })) <$>
@@ -283,6 +277,7 @@ theorem dominatedUntilBad (g₂ : G₂) (pk : G₁) (a : F) {z : F} (hz : z ≠ 
       Pr{let w ← (fun w => (w.1, { projectState pk j z st with msg := w.2 })) <$>
         ((fun w => (embedSignature (a • g₂) j m w.2, { w.2 with signed := w.2.signed ++ [m] })) <$>
           embedHashAt g₂ (z • g₂) j m (shiftState z j st.msg))}[Q w]
+    -- The bad event is that of the single-key reduction: the message at `j` was signed.
     rw [prEvent_map, prEvent_map, prEvent_map, prEvent_map]
     let Q' : G₂ × State F G₁ M → Prop := Q
     have hshift := prEvent_hashAt_shift g₂ j z m st.msg fun w =>
@@ -293,6 +288,7 @@ theorem dominatedUntilBad (g₂ : G₂) (pk : G₁) (a : F) {z : F} (hz : z ≠ 
     obtain ⟨⟨k, t, hk, hw1⟩, -⟩ := mem_support_hashAt hw
     rw [embedSignature_shiftState_of_not_bad hk hbad, ← hw1]
     exact hQ
+  -- A key scalar `t` of a key other than the honest one is `r * z`, a bijection in `r`.
   · change Pr{let w ← keyHash g₂ x st}[Q (w.1, projectState pk j z w.2) ∧ _] ≤
       Pr{let w ← embedKeyHash g₂ (z • g₂) pk x (projectState pk j z st)}[Q w]
     exact (prEvent_mono _ _ _ fun _ h => h.1).trans

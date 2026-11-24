@@ -7,32 +7,7 @@ public import EthLib.Cryptography.Proofs.Bls.Security.PopWins
 
 This is the bound for the game of aggregates with proofs of possession, in the random oracle model.
 
-The reduction guesses the position `j` of the forged message among at most `q` message hashes.
-
-It programs that hash to the challenge.
-
-It programs the hash of every key other than the honest one to a known multiple of it.
-
 The co-CDH problem here also gives `a • g2`, stronger than the co-CDH of Boneh, Lynn and Shacham.
-
-The reduction signs, and proves possession of the honest key, with it.
-
-A forgery at position `j` then gives the answer, unless one of two events happens.
-
-- The message scalar drawn first at `j` is 0, with probability `1 / |F|` for each `j`.
-- A key other than the honest one has the scalar 0, with probability at most `(qK - 1) / |F|`.
-
-So a forger wins at most `q` times as often as the reduction, plus `(q + qK - 1) / |F|`.
-
-The bound needs the scheme to accept exactly the co-Diffie-Hellman tuples.
-
-It needs every element of `G1` to be a multiple of `g1`, as in a group of prime order.
-
-It needs `qK` at most the characteristic of the scalars.
-
-Then the number of copies of the honest key among the keys, the honest count, is not zero in `F`.
-
-The coupling needs the challenge scalar to be nonzero, so the proof pays `1 / |F|` per guess.
 -/
 
 @[expose] public section
@@ -223,6 +198,10 @@ Let every run of the game make at most `q >= 1` message hash calls and `qK` key 
 
 Let the scheme be sound, and every element of `G1` be a multiple of `g1`.
 
+Every element of `G1` is such a multiple in a group of prime order.
+
+A sound scheme accepts exactly the co-Diffie-Hellman tuples.
+
 Let `qK` be at most the characteristic of `F`.
 
 Then the forger's advantage is at most `q` times the reduction's, plus `(q + qK - 1) / |F|`. -/
@@ -245,12 +224,32 @@ theorem forgeAdvantage_le [DecidableEq G₂] (scheme : Scheme G₁ G₂) (hsound
     have h₂ := (hq.calls_le_of_mem_support hp).2
     simp only [State.withKey] at h₁
     omega
+  -- The reduction guesses the position `j` of the forged message among at most `q` message hashes.
+  --
+  -- It programs that hash to the challenge.
+  --
+  -- It programs the hash of every key other than the honest one to a known multiple of it.
+  --
+  -- The reduction signs, and proves possession of the honest key, with `a • g2`.
+  --
   -- The reduction's success with the guess `j`, the honest scalar `t` and the challenge `z`.
   let G : F → F → F → Fin (n + 1) → ℝ≥0∞ := fun a t z j =>
     Pr{let p ← ((simulateQ (embedImpl scheme.g₂ (a • scheme.g₂) (z • scheme.g₂)
       (a • scheme.g₁) j) (run adversary (a • scheme.g₁) (t • (a • scheme.g₂)))).run
         (State.withKey (a • scheme.g₁) t))}[
       extract (a • scheme.g₁) j p.1 p.2 = (a * z) • scheme.g₂]
+  -- A forgery at position `j` then gives the answer, unless one of two events happens.
+  --
+  -- - The message scalar drawn first at `j` is 0, with probability `1 / |F|` for each `j`.
+  -- - A key other than the honest one has the scalar 0, with probability at most `(qK - 1) / |F|`.
+  --
+  -- The honest count is the number of copies of the honest key among the keys.
+  --
+  -- With `qK` at most the characteristic of the scalars, the honest count is not zero in `F`.
+  --
+  -- The coupling needs the challenge scalar to be nonzero, so the proof pays `1 / |F|` per guess.
+  --
+  -- So a forger wins at most `q` times as often as the reduction, plus `(q + qK - 1) / |F|`.
   have hstep : ∀ a t : F, Pr{let p ← ((simulateQ (impl scheme.g₂ a)
       (run adversary (a • scheme.g₁) (a • (t • scheme.g₂)))).run
         (State.withKey (a • scheme.g₁) t))}[

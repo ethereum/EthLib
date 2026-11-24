@@ -11,13 +11,7 @@ These are the checks of the proof-of-possession scheme of the BLS draft, §3.3.
 
 Each check below takes the hash to `G2` as an argument instead of computing it.
 
-With the hash under the key tag, the first is EthLib's proof verification, §3.3.3.
-
-With the hash under the message tag, the second is EthLib's fast aggregate verification, §3.3.4.
-
 An accepted check is a test of the scheme on the decoded group elements.
-
-For fast aggregate verification, the key of that test is the sum of the decoded keys.
 -/
 
 @[expose] public section
@@ -28,7 +22,7 @@ open EthLib.Base EthLib.Cryptography.Bls EthLib.Cryptography.Bls.Signatures
 
 /-! ## Proofs of possession -/
 
-/-- With the hash of the key under the key tag, the check is EthLib's proof verification. -/
+/-- With the hash of the key under the key tag, the check is EthLib's proof verification, §3.3.3. -/
 theorem byteVerify_eq_popVerify (pk : BLSPubkey) (proof : BLSSignature) :
     byteVerify (packBytes pk) (packBytes proof) (hashPointWith POP_DST (packBytes pk)) =
       popVerify pk proof :=
@@ -87,7 +81,9 @@ private theorem foldlM_byteAddKey (l : List BLSPubkey) (idx : Nat) (acc R : G1) 
         Except.map]
     | ok P => exact ih (idx + 1) (G1.add acc P)
 
-/-- With keys in bytes and the hash of the message, it is EthLib's fast aggregate check. -/
+/-- With keys in bytes and the hash of the message, it is EthLib's fast aggregate check, §3.3.4.
+
+The hash of the message is the hash to `G2` under the message tag. -/
 theorem byteFastAggregateVerify_hashPoint (pubkeys : Array BLSPubkey) (msg : ByteArray)
     (sig : BLSSignature) :
     byteFastAggregateVerify (pubkeys.map packBytes) (packBytes sig) (hashPoint msg) =

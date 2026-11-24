@@ -17,10 +17,6 @@ EthLib signs and verifies as the scheme does, with `H(m)` the hash to `G2` of `m
 
 With that hash taken as a random oracle, the bound of the game applies to this scheme.
 
-The byte game gives the adversary compressed keys, hashes and signatures.
-
-Decoding its output gives a group forger with at least the same advantage.
-
 The soundness of the pairing check and the refinement of verification use the proved pairing law.
 
 The step from bytes to group elements does not use that law.
@@ -307,7 +303,12 @@ theorem forgeAdvantage_blsScheme_le
       q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary q) :=
   forgeAdvantage_le blsScheme blsScheme_sound adversary hq0 hq
 
-/-! ## The byte interface -/
+/-! ## The byte interface
+
+The byte game gives the adversary compressed keys, hashes and signatures.
+
+Decoding its output gives a group forger with at least the same advantage.
+-/
 
 /-- The canonical bytes of a subgroup element of `G1`.
 
