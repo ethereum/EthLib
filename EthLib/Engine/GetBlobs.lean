@@ -11,32 +11,11 @@ The method `engine_getBlobs`, versions 1 to 4, which reads blobs from the blob p
 
 A step comment names the version of the method, as in version 3, step 4.
 
-The pool is an input: what it holds for each hash, whether it serves, and its request limit.
+Sources, at commit `3284ee8` of execution-apis: versions [1][v1], [2][v2], [3][v3] and [4][v4].
 
-The model trusts the pool: it files each blob under its own versioned hash.
+Version 1 has an [update by Osaka][v1-osaka], and the pool [samples cells][sampling] from Amsterdam.
 
-Each proof and each cell that it holds also belongs to that blob.
-
-The method checks none of this.
-
-The only fork rule of the source rejects version 1 from Osaka, here Fusaka.
-
-So EthLib answers every version at every other fork.
-
-The consensus layer also writes the parameters as JSON.
-
-The source orders no two checks.
-
-EthLib decodes the parameters first, then checks the fork of version 1, then the request size.
-
-The answer is also written as JSON, and read back as a consensus node reads it.
-
-The method specifications state these rules, at commit `3284ee8` of execution-apis:
-
-- [`engine_getBlobsV1`][v1], and its update by Osaka in [`osaka.md`][v1-osaka]
-- [`engine_getBlobsV2`][v2] and [`engine_getBlobsV3`][v3]
-- [`engine_getBlobsV4`][v4], and the sampling of cells by the pool in [`amsterdam.md`][sampling]
-- the bitarray of version 4 in [EIP-8070, "Engine API extensions"][eip8070]
+Version 4 takes its bitarray from [EIP-8070][eip8070], section Engine API extensions.
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_getblobsv1
 [v1-osaka]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#cancun-api
@@ -44,7 +23,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#engine_getblobsv3
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_getblobsv4
 [sampling]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
-[eip8070]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8070.md#engine-api-extensions
+[eip8070]: https://github.com/ethereum/EIPs/blob/d27448e08f60513856bbe228ea7ce04f156209dc/EIPS/eip-8070.md#engine-api-extensions
 -/
 
 @[expose] public section
@@ -77,8 +56,13 @@ structure PooledBlob where
   /-- Each cell of the extended blob with its proof, where the pool holds it. -/
   cells : Vector (Option (Cell × KZGProof)) CELLS_PER_EXT_BLOB
 
-/-- The blob pool of an execution layer, as the method reads it. -/
+/-- The blob pool of an execution layer, an input of the method. -/
 structure BlobPool where
+  -- The model trusts the pool: it files each blob under its own versioned hash.
+  --
+  -- Each proof and each cell that it holds also belongs to that blob.
+  --
+  -- The method checks none of this.
   /-- What the pool holds for a versioned hash, if anything. -/
   lookup : Bytes32 → Option PooledBlob
   /-- Whether the pool serves its data at all; a syncing node may not. -/
@@ -199,6 +183,8 @@ def getBlobsParams (version : Nat) (params : Json) :
 
 /-- The parameters as JSON: the versioned hashes, then the bitarray when there is one. -/
 def getBlobsParamsJson (hashes : List Bytes32) (bits : Option CellBitarray) : Json :=
+  -- The consensus layer also writes the parameters as JSON.
+  --
   -- The request of the version: the array of versioned hashes, then from version 4 the bitarray.
   .arr (([listJson (dataJson ·.toList) hashes] ++ bits.toList.map (dataJson ·.toList)).toArray)
 
@@ -207,7 +193,13 @@ def getBlobsParamsJson (hashes : List Bytes32) (bits : Option CellBitarray) : Js
 From Fusaka the version is an unsupported fork. -/
 def getBlobsV1 (pool : BlobPool) (fork : Fork) (hashes : List Bytes32) :
     Except EngineError (List (Option BlobAndProofV1)) := do
+  -- The source orders no two checks.
+  --
+  -- The parameters are decoded before this, then EthLib checks the fork, then the request size.
+  --
   -- The update of Osaka: from Osaka, here Fusaka, the error is `-38005`, unsupported fork.
+  --
+  -- It is the only fork rule of the source, so EthLib answers every version at every other fork.
   if fork ≥ .fusaka then throw (.unsupportedFork (some fork))
   -- Version 1, step 3: more hashes than the pool takes is `-38004`, too large request.
   checkRequestSize pool.maxRequest hashes.length
@@ -263,7 +255,11 @@ def getBlobsV4 (pool : BlobPool) (hashes : List Bytes32) (bits : CellBitarray) :
   -- Step 6: `null` when the pool does not serve.
   else return none
 
-/-! ## The answer as JSON -/
+/-!
+## The answer as JSON
+
+The answer is also written as JSON, and read back as a consensus node reads it.
+-/
 
 /-- A blob and its proof as JSON. -/
 def blobAndProofV1Json (x : BlobAndProofV1) : Json :=
