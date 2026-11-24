@@ -8,12 +8,6 @@ public import EthLib.Cryptography.Xmss.Ots
 
 The Merkle trees of one layer, whose leaves are the layer's one-time keys.
 
-- The top layer is one tree, with root `X_{16,0}`.
-- The bottom layer is `2^16` trees, with node indices global across the layer.
-- Level `lambda` of the bottom layer has `2^(32 - lambda)` nodes.
-- Bottom tree `b` has root `X_{16,b}`.
-- It holds the nodes `j` on level `lambda` with `floor(j / 2^(16 - lambda)) = b`.
-
 Source: the leanXMSS specification draft, section "Trees".
 
 Each tree is the Merkle tree of Construction 1 of [ePrint 2025/055][hbms], §3.3.
@@ -39,6 +33,10 @@ def nodeHash (publicParam : PublicParam) (layer : Layer) (p : Merkle.Position)
     m Digest :=
   -- `X_{lambda,j} = Th(P, A_node(l, lambda, j), X_{lambda-1,2j} | X_{lambda-1,2j+1})`.
   -- The tree hashes only at levels 1 to 16, so the level modulo 17 in the address is the level.
+  --
+  -- The bottom layer is `2^16` trees, with node indices global across the layer.
+  --
+  -- So level `lambda` of the bottom layer has `2^(32 - lambda)` nodes.
   th H publicParam (.node layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index))
     -- The payload is the left child, then the right child.
     #[left.lo, left.hi, right.lo, right.hi]
@@ -57,6 +55,12 @@ def build (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (level j
     m (Merkle.Built Digest) :=
   -- The top value is `X_{level,j}`.
   -- It holds the `level` lowest siblings of every key below, so at level 16 the whole path.
+  --
+  -- The top layer is one tree, with root `X_{16,0}`.
+  --
+  -- Bottom tree `b` has root `X_{16,b}`.
+  --
+  -- It holds the nodes `j` on level `lambda` with `floor(j / 2^(16 - lambda)) = b`.
   Merkle.build (nodeHash H publicParam layer) (leaves H publicParam prf layer) ⟨level, j⟩
 
 /-! ## The path -/

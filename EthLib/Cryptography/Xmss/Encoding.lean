@@ -41,10 +41,6 @@ end Internal
 
 Returns nothing when the digest is not a codeword.
 
-Two distinct codewords are incomparable: each has a digit smaller than the other's.
-
-So the chain values revealed for one codeword never sign another.
-
 We use the target-sum code of Construction 6 of [ePrint 2025/055][hbms], §5.2.
 
 [hbms]: https://eprint.iacr.org/2025/055
@@ -62,6 +58,9 @@ def codeword? (d : Digest) : Option (Vector (Fin CHAIN_LENGTH) V) :=
     -- The first 58 digits name a position on each chain.
     let chains : Vector (Fin CHAIN_LENGTH) V :=
       Vector.ofFn fun i => x[i.val]'(by have := i.isLt; simp only [V, DIGITS] at *; omega)
+    -- Two distinct codewords are incomparable: each has a digit smaller than the other's.
+    --
+    -- So the chain values revealed for one codeword never sign another.
     if Internal.digitSum chains == TARGET_SUM then some chains else none
   else none
 

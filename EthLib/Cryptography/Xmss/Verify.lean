@@ -66,12 +66,7 @@ def bottomTree (idx : LeafIndex) : Nat :=
 
 /-- The root one layer's signature leads to, from the message it signs.
 
-Returns nothing when the signed digest is not a codeword.
-
-# Arguments
-
-- `e`: the signing key's index on its layer.
-- `msg`: the 32-byte message on the bottom layer, a 16-byte root on the top. -/
+Returns nothing when the signed digest is not a codeword. -/
 def layerRoot {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
     (publicParam : PublicParam) (layer : Layer) (e : Nat) (msg : Array UInt64)
     (sig : LayerSignature) : m (Option Digest) := do
@@ -79,6 +74,10 @@ def layerRoot {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
   -- - the digest, of 80 bytes on the bottom layer and 64 on the top, in 1;
   -- - the `3v - T = 68` chain steps, in 1 each;
   -- - the leaf, of the 960 bytes of 58 chain ends, in 8.
+  --
+  -- `e` is the signing key's index on its layer.
+  --
+  -- The message is 32 bytes on the bottom layer, and a 16-byte root on the top.
   let some leaf ← otsLeaf H publicParam layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues
     | return none
   -- Climb the key's path to its tree's root, in 16 permutations, one per level.
@@ -90,9 +89,7 @@ A yes or a no, never a reason.
 
 Which step rejected a well-formed signature carries no consensus meaning.
 
-It costs 186 permutations of Keccak-f[1600], whatever the message.
-
-That fixed count keeps the aggregation circuit a fixed size. -/
+It costs a fixed 186 permutations of Keccak-f[1600], so the aggregation circuit has a fixed size. -/
 def verifyWith {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
     (pk : PublicKey) (msg : Message) (sig : Signature) : m Bool := do
   let publicParam := pk.publicParam

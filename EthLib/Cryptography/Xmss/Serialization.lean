@@ -6,7 +6,9 @@ public import EthLib.Cryptography.Xmss.Errors
 /-!
 # leanXMSS byte encodings
 
-The public key and the signature as bytes: fixed-size fields, concatenated with no offsets or length prefixes.
+The public key and the signature as bytes.
+
+Every field has a fixed size, and the fields are concatenated with no offsets or length prefixes.
 
 Source: the leanXMSS specification draft, section "The scheme", paragraph "Serialization".
 -/
