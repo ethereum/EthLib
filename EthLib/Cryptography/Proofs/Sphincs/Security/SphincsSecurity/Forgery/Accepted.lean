@@ -25,6 +25,8 @@ Every exception other than a tree hit is at a key on the path of a landed index.
 
 open OracleComp OracleSpec
 
+open EthLib.Base
+
 namespace SphincsSecurity.Security.SignatureWitness
 open Concrete PrunedGraph
 
@@ -831,7 +833,7 @@ theorem encodingMatch_hit (f : QueryImpl HashSpec Id) (parameter : PublicParamet
         ¬ForsSigner.IsMsgInput input := by
   obtain ⟨message, counter, hlength, hexempt, hmem, hout⟩ := h
   refine ⟨_, hmem, ?_, ForsSigner.not_msg_tweakable _ _ _ (by
-    rw [List.length_append, hlength, bytesBE_length_counter]; omega)⟩
+    rw [List.length_append, hlength, ByteOrder.length_toList_toBE]; omega)⟩
   have hentry : fullTable f parameter seed labels
       (hashDomainFields (.encoding key.1 key.2.1 key.2.2)) =
       some ⟨ReferenceChoice.exemptInput f parameter key.1 key.2.1 key.2.2
@@ -841,7 +843,7 @@ theorem encodingMatch_hit (f : QueryImpl HashSpec Id) (parameter : PublicParamet
   have hexempt' : ¬ReferenceChoice.exemptInput f parameter key.1 key.2.1 key.2.2
       (labelMessage labels key) =
         some (tweakableHashInput parameter (.encoding key.1 key.2.1 key.2.2)
-          (message ++ bytesBE 4 counter)) := hexempt
+          (message ++ (ByteOrder.toBE 4 counter.toNat).toList)) := hexempt
   unfold Wots.encodingInput
   rw [targets_at_entry _ _ _ _ _ hentry]
   simp only []

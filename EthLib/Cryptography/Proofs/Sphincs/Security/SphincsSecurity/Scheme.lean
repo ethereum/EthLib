@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Proofs.HashSig.Oracle
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
@@ -83,6 +84,7 @@ Only the verification costs depend on the concrete hash function.
 
 open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography
+open EthLib.Base
 
 namespace SphincsSecurity
 
@@ -311,13 +313,6 @@ def bytesLE (byteCount : Nat) (value : BitVec (8 * byteCount)) : List UInt8 :=
   List.ofFn fun index : Fin byteCount =>
     UInt8.ofBitVec (value.extractLsb' (8 * index.val) 8)
 
-/-- Serialize a bit vector into a fixed number of bytes, most significant byte first.
-
-This is FIPS 205's `toByte`, for the address words and the counters. -/
-def bytesBE (byteCount : Nat) (value : BitVec (8 * byteCount)) : List UInt8 :=
-  List.ofFn fun index : Fin byteCount =>
-    UInt8.ofBitVec (value.extractLsb' (8 * (byteCount - 1 - index.val)) 8)
-
 /-! ### Reading the digest, as Algorithm 19 of FIPS 205 does -/
 
 /-- The bytes of the digest calls, call 0 first, each in the output order of the hash. -/
@@ -332,17 +327,16 @@ def msbBit (bytes : List UInt8) (p : Nat) : Nat :=
 def msbField (bytes : List UInt8) (offset width : Nat) : Nat :=
   (List.range width).foldl (fun value j => 2 * value + msbBit bytes (offset + j)) 0
 
-/-- The big-endian integer of a byte string, FIPS 205's `toInt`. -/
-def beInt (bytes : List UInt8) : Nat :=
-  bytes.foldl (fun value byte => 256 * value + byte.toNat) 0
-
 /-- The index of a digest: the tree index from its middle bytes, then the bottom leaf.
 
-The bottom leaf comes from its last bytes, and each field is cut to its number of bits. -/
+The bottom leaf comes from its last bytes, and each field is cut to its number of bits.
+
+Each field is read as FIPS 205's `toInt` reads it, the first byte the most significant. -/
 def digestIndexValue (bytes : List UInt8) : Nat :=
-  beInt ((bytes.drop mdBytes).take treeIndexBytes) % 2 ^ (totalHeight - bottomHeight) *
-      2 ^ bottomHeight +
-    beInt ((bytes.drop (mdBytes + treeIndexBytes)).take leafIndexBytes) % 2 ^ bottomHeight
+  ByteOrder.ofBE ((bytes.drop mdBytes).take treeIndexBytes) %
+        2 ^ (totalHeight - bottomHeight) * 2 ^ bottomHeight +
+    ByteOrder.ofBE ((bytes.drop (mdBytes + treeIndexBytes)).take leafIndexBytes) %
+      2 ^ bottomHeight
 
 /-- The fields of a digest, packed as the message digest lays them out.
 
@@ -368,11 +362,16 @@ structure TweakFields where
   index : BitVec 32
 deriving DecidableEq
 
-/-- The 32 address bytes: eight big-endian words, of which the tree takes three. -/
+/-- The 32 address bytes: eight big-endian words, of which the tree takes three.
+
+Each word is written as FIPS 205's `toByte` writes it, on four bytes, or twelve for the tree. -/
 def fieldBytes (fields : TweakFields) : HashInput :=
-  bytesBE 4 fields.layer ++ bytesBE 12 fields.tree ++ bytesBE 4 fields.tag ++
-    bytesBE 4 fields.keyPair ++
-    bytesBE 4 fields.height ++ bytesBE 4 fields.index
+  (ByteOrder.toBE 4 fields.layer.toNat).toList ++
+    (ByteOrder.toBE 12 fields.tree.toNat).toList ++
+    (ByteOrder.toBE 4 fields.tag.toNat).toList ++
+    (ByteOrder.toBE 4 fields.keyPair.toNat).toList ++
+    (ByteOrder.toBE 4 fields.height.toNat).toList ++
+    (ByteOrder.toBE 4 fields.index.toNat).toList
 
 /-- An address from its integer fields. -/
 def tweakFields (tag layer tree keyPair height index : Nat) : TweakFields :=
@@ -508,7 +507,7 @@ The 32-byte message is not framed here. -/
 def messageDigestInput (parameter : PublicParameter) (root : Digest) (message : Message)
     (randomness : Randomness) (call : DigestCall) : HashInput :=
   bytesLE 16 randomness ++ bytesLE 16 parameter ++ bytesLE 16 root ++ bytesLE 32 message ++
-    bytesBE 4 (BitVec.ofNat 32 call.val)
+    (ByteOrder.toBE 4 (BitVec.ofNat 32 call.val).toNat).toList
 
 /-!
 ### The target-sum code
@@ -654,7 +653,7 @@ The input `PK.seed || ADRS || M || BE_32(c)` has 68 bytes. -/
 def encode (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (message : HashInput) (counter : Counter) : m (Option Encoding) := do
   let digest ← tweakableHash parameter (.encoding lay tree leaf)
-    (message ++ bytesBE 4 counter)
+    (message ++ (ByteOrder.toBE 4 counter.toNat).toList)
   return TargetSum.decodeDigest digest
 
 /-- The leaf that the verifier recovers, or nothing if the counter does not encode the message. -/

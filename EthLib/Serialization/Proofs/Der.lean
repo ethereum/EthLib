@@ -1494,25 +1494,13 @@ private theorem toBE_succ_eq_cons (i n : Nat) :
   rw [Nat.add_comm, ByteOrder.toList_toBE_add]
   rfl
 
-/-- On 32 bytes, a number with `i + 1` significant bytes keeps them once its leading zeros go. -/
-private theorem dropWhile_toBE {n i : Nat} (hi : i < 32) (low : 256 ^ i ≤ n)
+/-- A number below `2 ^ 256` with `i + 1` significant bytes has them as its fewest bytes. -/
+private theorem minimal_toBE {n i : Nat} (hn : n < 2 ^ 256) (low : 256 ^ i ≤ n)
     (high : n < 256 ^ (i + 1)) :
-    ((ByteOrder.toBE 32 n).toList).dropWhile (· == 0) = (ByteOrder.toBE (i + 1) n).toList := by
-  have hsplit := ByteOrder.toList_toBE_add (31 - i) (i + 1) n
-  rw [show 31 - i + (i + 1) = 32 by omega, Nat.div_eq_of_lt high, ByteOrder.toList_toBE_zero_right]
-    at hsplit
-  have hpos : 0 < 256 ^ i := Nat.pow_pos (by decide)
-  have hlow : 1 ≤ n / 256 ^ i := (Nat.le_div_iff_mul_le hpos).mpr (by omega)
-  have hhigh : n / 256 ^ i < 256 :=
-    (Nat.div_lt_iff_lt_mul hpos).mpr (by rw [Nat.pow_succ] at high; omega)
-  have nonzero : UInt8.ofNat (n / 256 ^ i) ≠ 0 := by
-    intro h
-    have := congrArg UInt8.toNat h
-    rw [UInt8.toNat_ofNat_of_lt' hhigh] at this
-    simp at this
-    omega
-  rw [hsplit, toBE_succ_eq_cons, List.dropWhile_append_of_pos (by simp)]
-  simp [nonzero]
+    (ByteOrder.toBE (ByteOrder.byteLength (n % 256 ^ 32)) (n % 256 ^ 32)).toList
+      = (ByteOrder.toBE (i + 1) n).toList := by
+  have h256 : n < 256 ^ 32 := by simpa using hn
+  rw [Nat.mod_eq_of_lt h256, ByteOrder.byteLength_eq_of_bounds low high]
 
 /-- The DER INTEGER of a number below `2 ^ 256`, as BIP 62 spells out strict DER.
 
@@ -1538,7 +1526,7 @@ theorem ecdsaInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 
   · have hj32 : j < 32 := (Nat.pow_lt_pow_iff_right (a := 256) (by decide)).mp (by omega)
     have hdiv : n / 256 ^ j < 128 :=
       (Nat.div_lt_iff_lt_mul (Nat.pow_pos (by decide))).mpr (by omega)
-    have hdrop := dropWhile_toBE hj32 hj (by rw [Nat.pow_succ]; omega)
+    have hdrop := minimal_toBE (i := j) hn hj (by rw [Nat.pow_succ]; omega)
     rw [toBE_succ_eq_cons j n] at hdrop ⊢
     have : ¬ (UInt8.ofNat (n / 256 ^ j)).toNat ≥ 128 := by
       rw [UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)]; omega
@@ -1554,8 +1542,7 @@ theorem ecdsaInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 
         · omega
         · rw [show 8 * (i + 1 + 1 - 1) - 1 = 7 + 8 * i by omega, Nat.pow_add, Nat.pow_mul] at h
           simpa using h
-      have hi32 : i < 32 := (Nat.pow_lt_pow_iff_right (a := 256) (by decide)).mp (by omega)
-      have hdrop := dropWhile_toBE (n := n) hi32 (by omega) (by omega)
+      have hdrop := minimal_toBE (n := n) (i := i) hn (by omega) (by omega)
       have hdiv : 128 ≤ n / 256 ^ i :=
         (Nat.le_div_iff_mul_le (Nat.pow_pos (by decide))).mpr (by omega)
       have hdiv256 : n / 256 ^ i < 256 :=

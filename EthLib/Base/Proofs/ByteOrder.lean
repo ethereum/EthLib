@@ -301,6 +301,121 @@ theorem toList_toBE_zero_right (n : Nat) : (toBE n 0).toList = List.replicate n 
   | zero => rfl
   | succ n ih => rw [toList_toBE_succ, Nat.zero_div, ih, List.replicate_succ']; rfl
 
+/-! ## Bytes with no leading zero -/
+
+/-- Zero has no bytes. -/
+@[simp] theorem byteLength_zero : byteLength 0 = 0 := rfl
+
+/-- A nonzero number has `log2 / 8 + 1` bytes. -/
+theorem byteLength_of_ne_zero {x : Nat} (hx : x ≠ 0) : byteLength x = x.log2 / 8 + 1 := by
+  simp [byteLength, hx]
+
+/-- A nonzero number has at least one byte. -/
+theorem byteLength_pos {x : Nat} (hx : x ≠ 0) : 0 < byteLength x := by
+  simp [byteLength, hx]
+
+/-- A number is below 256 to the power of its number of bytes. -/
+theorem lt_byteLength (x : Nat) : x < 256 ^ byteLength x := by
+  by_cases hx : x = 0
+  · subst hx
+    simp [byteLength]
+  · rw [byteLength_of_ne_zero hx]
+    -- The number is below `2 ^ (log2 + 1)`, and `log2 + 1` bits fit in `log2 / 8 + 1` bytes.
+    have h1 : x < 2 ^ (x.log2 + 1) := Nat.lt_log2_self
+    have h2 : 2 ^ (x.log2 + 1) ≤ 2 ^ (8 * (x.log2 / 8 + 1)) :=
+      Nat.pow_le_pow_right (by omega) (by omega)
+    have h3 : 2 ^ (8 * (x.log2 / 8 + 1)) = 256 ^ (x.log2 / 8 + 1) := by
+      rw [Nat.pow_mul]
+    omega
+
+/-- A nonzero number is at least `256` to the power of one less than its number of bytes. -/
+theorem pow_byteLength_sub_one_le {x : Nat} (hx : x ≠ 0) :
+    256 ^ (byteLength x - 1) ≤ x := by
+  rw [byteLength_of_ne_zero hx, Nat.add_sub_cancel]
+  -- The highest set bit is worth `2 ^ log2`, and `8 * (log2 / 8)` bits lie below it.
+  have h1 : 2 ^ x.log2 ≤ x := Nat.log2_self_le (by omega)
+  have h2 : 2 ^ (8 * (x.log2 / 8)) ≤ 2 ^ x.log2 := Nat.pow_le_pow_right (by omega) (by omega)
+  have h3 : 2 ^ (8 * (x.log2 / 8)) = 256 ^ (x.log2 / 8) := by
+    rw [Nat.pow_mul]
+  omega
+
+/-- A number below `256 ^ k` has at most `k` bytes. -/
+theorem byteLength_le_of_lt {x k : Nat} (h : x < 256 ^ k) : byteLength x ≤ k := by
+  by_cases hx : x = 0
+  · subst hx
+    simp
+  · have h1 := pow_byteLength_sub_one_le hx
+    have h2 : byteLength x - 1 < k :=
+      (Nat.pow_lt_pow_iff_right (by omega)).mp (Nat.lt_of_le_of_lt h1 h)
+    have h3 : byteLength x ≠ 0 := by have := byteLength_pos hx; omega
+    omega
+
+/-- A number at least `256 ^ k` and below `256 ^ (k + 1)` has `k + 1` bytes. -/
+theorem byteLength_eq_of_bounds {x k : Nat} (low : 256 ^ k ≤ x) (high : x < 256 ^ (k + 1)) :
+    byteLength x = k + 1 := by
+  have hx : x ≠ 0 := by have := Nat.one_le_pow k 256 (by omega); omega
+  have h1 := byteLength_le_of_lt high
+  have h2 := pow_byteLength_sub_one_le hx
+  have h3 := lt_byteLength x
+  -- `256 ^ k ≤ x` is below 256 to the power of the byte count, so `k` is below the byte count.
+  have h4 : k < byteLength x := (Nat.pow_lt_pow_iff_right (by omega)).mp (Nat.lt_of_le_of_lt low h3)
+  omega
+
+/-- The bytes of a number with no leading zero read back as the number. -/
+theorem ofBE_toBE_byteLength (x : Nat) : ofBE (toBE (byteLength x) x).toList = x :=
+  ofBE_toBE_of_lt (lt_byteLength x)
+
+/-- The shortest bytes of a number start with a nonzero byte, if there is one. -/
+theorem head_toBE_byteLength_ne_zero (x : Nat) :
+    ∀ b ∈ (toBE (byteLength x) x).toList.head?, b ≠ 0 := by
+  by_cases hx : x = 0
+  · subst hx
+    simp
+  · obtain ⟨k, hk⟩ : ∃ k, byteLength x = k + 1 :=
+      ⟨byteLength x - 1, by have := byteLength_pos hx; omega⟩
+    have low : 256 ^ k ≤ x := by simpa [hk] using pow_byteLength_sub_one_le hx
+    have high : x < 256 ^ (k + 1) := hk ▸ lt_byteLength x
+    -- The first byte is the digit worth `256 ^ k`, which is between 1 and 255.
+    have hq : 1 ≤ x / 256 ^ k := (Nat.le_div_iff_mul_le (Nat.pow_pos (by omega))).mpr (by omega)
+    have hq' : x / 256 ^ k < 256 := by
+      rw [Nat.div_lt_iff_lt_mul (Nat.pow_pos (by omega)), ← Nat.pow_succ']
+      omega
+    rw [hk]
+    have hget := getElem_toBE (n := k + 1) (x := x) (i := 0) (by omega)
+    rw [Nat.sub_zero, Nat.add_sub_cancel, Nat.mod_eq_of_lt hq'] at hget
+    have : (toBE (k + 1) x).toList.head? = some (toBE (k + 1) x)[0] := by
+      simp [List.head?_eq_getElem?]
+    rw [this, hget]
+    intro b hb h0
+    simp only [Option.mem_def, Option.some.injEq] at hb
+    subst hb
+    have := congrArg UInt8.toNat h0
+    rw [UInt8.toNat_ofNat_of_lt' (by omega)] at this
+    simp at this
+    omega
+
+/-- Bytes with no leading zero have as many bytes as the number they read as. -/
+theorem byteLength_ofBE {bytes : List UInt8} (h : ∀ b ∈ bytes.head?, b ≠ 0) :
+    byteLength (ofBE bytes) = bytes.length := by
+  cases bytes with
+  | nil => simp
+  | cons b rest =>
+    have hb : b ≠ 0 := h b (by simp)
+    have hpos : 1 ≤ b.toNat := by
+      have : b.toNat ≠ 0 := fun h0 => hb (UInt8.toNat_inj.mp h0)
+      omega
+    have hlt := ofBE_lt rest
+    have hcons := ofBE_cons b rest
+    -- The first byte is worth at least `256 ^ rest.length`; the whole is below `256 ^ length`.
+    have hb256 : b.toNat < 256 := b.toNat_lt
+    have low : 256 ^ rest.length ≤ ofBE (b :: rest) := by
+      rw [hcons]
+      have := Nat.mul_le_mul_right (256 ^ rest.length) hpos
+      omega
+    have high : ofBE (b :: rest) < 256 ^ (rest.length + 1) := by
+      simpa using ofBE_lt (b :: rest)
+    exact byteLength_eq_of_bounds low high
+
 /-- Two bytes compare as the numbers they hold. -/
 theorem _root_.UInt8.compare_eq_compare_toNat (a b : UInt8) :
     compare a b = compare a.toNat b.toNat := by

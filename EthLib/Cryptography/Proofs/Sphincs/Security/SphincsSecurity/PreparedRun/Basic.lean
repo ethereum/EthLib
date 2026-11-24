@@ -21,6 +21,8 @@ This module holds the pieces they share:
 
 open OracleComp OracleSpec ENNReal
 
+open EthLib.Base
+
 namespace SphincsSecurity.Security.ForsPotential
 
 variable [Params]
@@ -306,7 +308,7 @@ theorem noQ_search_counter {bad : HashInput → Prop} [DecidablePred bad]
     (message : HashInput)
     (hbad : ∀ counter : Counter,
       ¬bad (tweakableHashInput parameter (.encoding lay tree leaf)
-        (message ++ bytesBE 4 counter))) :
+        (message ++ (ByteOrder.toBE 4 counter.toNat).toList))) :
     ∀ attempts start, (ReferenceChoice.search parameter lay tree leaf message attempts start :
       OracleComp HashSpec (Option (Counter × Encoding))).IsQueryBoundP bad 0
   | 0, _ => trivial
@@ -617,7 +619,7 @@ theorem prepared_clean (parameterOutput : HashOutput) (fixed : HiddenGraph.Table
         noQ_sequenceFin _ fun leaf =>
       noQ_search_counter (bad := IsMsgInput) _ _ _ _ _
         (fun counter => not_msg_tweakable _ _ _ (by
-          rw [List.length_append, bytesBE_length_counter]
+          rw [List.length_append, ByteOrder.length_toList_toBE]
           unfold keyMessages PublicData.keyMessage
           split <;> rw [rootPayload_length] <;> omega)) _ _)
       fun _ => trivial
@@ -644,7 +646,7 @@ theorem search_eq_searchLoop (parameter : PublicParameter) (lay : Layer) (tree :
     (ReferenceChoice.search parameter lay tree leaf message n t : OracleComp HashSpec
         (Option (Counter × Encoding))) =
       searchLoop (fun c => tweakableHashInput parameter (.encoding lay tree leaf)
-          (message ++ bytesBE 4 (BitVec.ofNat counterBits c)))
+          (message ++ (ByteOrder.toBE 4 (BitVec.ofNat counterBits c).toNat).toList))
         (fun out => TargetSum.decodeDigest (truncateHash out))
         (fun c encoding => pure (BitVec.ofNat counterBits c, encoding)) n t := by
   intro n

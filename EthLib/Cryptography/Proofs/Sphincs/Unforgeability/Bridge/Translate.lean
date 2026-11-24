@@ -268,7 +268,7 @@ theorem toList_digestInput (P : SphincsSecurity.PublicParameter) (root : Sphincs
         ++ packBytes (ofMessage msg) ++ packBytes (toByte 4 call.val)).data.toList
       = SphincsSecurity.messageDigestInput P root msg rho call := by
   simp only [toList_data_append, toList_data_packBytes, toList_ofRandomizer, toList_ofParam,
-    toList_ofDigest, toList_ofMessage, toList_toByte_bytesBE, SphincsSecurity.messageDigestInput]
+    toList_ofDigest, toList_ofMessage, toList_toByte_toBE, SphincsSecurity.messageDigestInput]
 
 omit [LawfulMonad m] in
 /-- A digest call of `H_msg` is the model's digest call. -/

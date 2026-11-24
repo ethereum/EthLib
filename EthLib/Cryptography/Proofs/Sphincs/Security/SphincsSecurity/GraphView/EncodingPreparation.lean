@@ -15,6 +15,8 @@ So no queried input of the search hits its structural target, even when every co
 
 open OracleComp OracleSpec
 
+open EthLib.Base
+
 namespace SphincsSecurity.Security.ReferenceChoice
 
 variable [Params]
@@ -108,7 +110,7 @@ theorem search_targets_empty_or_miss (f : QueryImpl HashSpec Id) (parameter : Pu
       cases hencode
   · have hexempt' : exemptInput f parameter lay tree leaf message =
         some (tweakableHashInput parameter (.encoding lay tree leaf)
-          (message ++ bytesBE 4 counter)) := hexempt
+          (message ++ (ByteOrder.toBE 4 counter.toNat).toList)) := hexempt
     rw [ite_eq_left hexempt']
     exact Finset.notMem_empty _
 

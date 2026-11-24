@@ -27,6 +27,8 @@ set_option backward.isDefEq.respectTransparency false
 
 open OracleComp OracleSpec
 
+open EthLib.Base
+
 namespace SphincsSecurity.Security.Wots
 
 variable [Params]
@@ -50,15 +52,16 @@ The input of the encoding hash: the message, then the counter in four big-endian
 The message is the FORS public key, or the root of the tree below.
 -/
 def encodingInput (message : HashInput) (counter : Counter) : HashInput :=
-  tweakableHashInput parameter (.encoding lay tree leaf) (message ++ bytesBE 4 counter)
+  tweakableHashInput parameter (.encoding lay tree leaf)
+    (message ++ (ByteOrder.toBE 4 counter.toNat).toList)
 
 theorem encodingInput_injective {message message' : HashInput} {counter counter' : Counter}
     (h : encodingInput parameter lay tree leaf message counter =
       encodingInput parameter lay tree leaf message' counter') :
     message = message' ∧ counter = counter' := by
   have hpayload := List.append_cancel_left h
-  obtain ⟨hm, hc⟩ := List.append_inj' hpayload (by rw [bytesBE_length, bytesBE_length])
-  exact ⟨hm, bytesBE_injective hc⟩
+  obtain ⟨hm, hc⟩ := List.append_inj' hpayload (by simp)
+  exact ⟨hm, toList_toBE_injective hc⟩
 
 theorem encode_query_mem (message : HashInput) (counter : Counter) :
     encodingInput parameter lay tree leaf message counter ∈
