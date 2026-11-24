@@ -19,25 +19,11 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 /-!
 # Proofs: the shape of the state that a run of slots keeps
 
-The totality theorems of the epoch steps read lists indexed by the registry.
-
-They assume that each such list has one entry for each validator.
-
-From Electra they also assume each effective balance at most the largest one of its validator.
-
-Before Electra they assume a bound that this one implies.
-
-From Electra, they assume that each queued consolidation names two validators of the registry.
+The totality theorems of the epoch steps read lists indexed by the registry, and assume a shape.
 
 One epoch keeps these facts, and so does one slot and a run of slots within a fork.
 
 So do the upgrades, when the caps of the preset grow at Electra.
-
-A deposit appends one entry to each list.
-
-The rotation of the flags writes a fresh list of the registry size.
-
-The update of the effective balances caps each one.
 -/
 
 @[expose] public section
@@ -57,10 +43,17 @@ Each effective balance is within its cap.
 
 From Electra, each queued consolidation is inside the registry. -/
 structure Shaped (state : BeaconState preset fork) : Prop where
+  -- Each list indexed by the registry has one entry for each validator.
   balancesMatch : BalancesMatch state
   participationMatches : ParticipationMatches state
   inactivityScoresMatch : InactivityScoresMatch state
+  -- From Electra the epoch steps also assume a cap on each effective balance.
+  --
+  -- The cap is the largest effective balance of its validator.
+  --
+  -- Before Electra, the epoch steps assume a weaker bound, which this cap implies.
   capped : EffectiveBalancesCapped state
+  -- From Electra, each queued consolidation names two validators of the registry.
   inside : ConsolidationsInside state
 
 /-- The facts of the shape other than the caps, which each stage of an epoch keeps. -/
@@ -158,6 +151,7 @@ private theorem Sized.of_action {stage : EpochStage} {s t : BeaconState preset f
       exact shaped.of_eq
     · subst edge
       exact shaped
+  -- A deposit appends one entry to each list.
   case pendingDeposits =>
     split at edge
     · have frame := frame_processPendingDeposits edge
@@ -233,6 +227,7 @@ private theorem Sized.of_action {stage : EpochStage} {s t : BeaconState preset f
       simp only [bind, Except.bind, pure, Except.pure] at edge
       repeat' (split at edge <;> try cases edge)
       all_goals exact shaped.of_eq
+  -- The rotation of the flags writes a fresh list of the registry size.
   case participation =>
     split at edge
     · rename_i altair
@@ -282,6 +277,7 @@ private theorem processEpoch_sized (computed : processEpoch config checks state 
 /-- One epoch keeps the shape of the state. -/
 theorem processEpoch_shaped (computed : processEpoch config checks state = .ok after)
     (shaped : Shaped state) : Shaped after :=
+  -- The update of the effective balances caps each one.
   (processEpoch_sized computed shaped.sized).shaped (processEpoch_capped computed shaped.capped)
 
 /-- One slot keeps the shape of the state. -/

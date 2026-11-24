@@ -11,39 +11,7 @@ A run of slots succeeds under bounds that each epoch keeps, and under three more
 
 They are not consequences of the bounds, so a run takes them as assumptions.
 
-The first bounds the signers of the first two epochs by the total active balance.
-
-A validator that exits at the epoch boundary still counts as a signer but is not active.
-
-The run applies no block, so from the third epoch no one has signed and the bound holds.
-
-The second asks that each draw of committees and proposers ends.
-
-A draw is certain to end when it meets a validator at the cap of its fork.
-
-The validators at the cap can leave or lose balance during the run, so a leak breaks that form.
-
-Without a validator at the cap, whether a draw ends depends on the hashes.
-
-In the random oracle model, a search of at most `2^32` members fails with chance below `2^-128`.
-
-That needs a fresh cache and at least one candidate.
-
-That is a bound on a probability, so the end of each draw stays a hypothesis.
-
-The same hypothesis carries the condition of the upgrade to Heze: its two deposit indices are equal.
-
-The third bounds the epochs of a run that starts before Altair.
-
-Before Altair, the inactivity penalty grows with the epochs since the last finality.
-
-It fits when the epoch is at most a limit, about `9 * 10^6` epochs on mainnet.
-
-A run that stays before Altair on a quiet state meets all three, since nothing is drawn there.
-
-It meets the draws in their form at the cap, which gives the end of each draw.
-
-That shows only that the three are consistent, not that the draws from Altair can be met.
+They bound the early signers, ask that each draw ends, and bound the epochs before Altair.
 -/
 
 @[expose] public section
@@ -58,25 +26,12 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- The draws of an epoch transition stop at a validator at the cap, at the states they read.
 
-Each draw reads the state that the stages before it reach.
-
-From Altair, when the next epoch starts a sync committee period, a new committee is drawn.
-
-Every key of the state it reads must then pass validation.
-
-That state must also hold a validator at the cap, active in the next epoch.
-
-From Fulu, the proposers of the epoch one past the seed lookahead are drawn.
-
-The state that step reads must hold a validator at the cap, active then, and unslashed from Gloas.
-
-From Gloas, the payload committees of the slots of that epoch are drawn.
-
-In each slot, one member of the beacon committees must be at the cap. -/
+Each draw reads the state that the stages before it reach. -/
 structure EpochDraws (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) : Prop where
   /-- From Altair, at a sync committee period, every key that the draw reads is valid. -/
   keys : .altair ≤ fork →
+    -- When the next epoch starts a sync committee period, a new committee is drawn.
     (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
     ∀ ready, run (action config checks) readyStages state = .ok ready →
       ∀ validator ∈ ready.validators.data,
@@ -84,59 +39,61 @@ structure EpochDraws (config : Config) (checks : SignatureChecks)
   /-- From Altair, at a sync committee period, a validator at the cap is active next epoch. -/
   sync : .altair ≤ fork →
     (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
+    -- The state that the draw reads must hold that validator.
     ∀ ready, run (action config checks) readyStages state = .ok ready →
       ∃ validator ∈ ready.validators.data,
         isActiveValidator validator (getCurrentEpoch state + 1) ∧
           validator.effectiveBalance.toNat = drawCap preset fork
   /-- From Fulu, a validator at the cap is active one epoch past the seed lookahead. -/
   proposers : .fusaka ≤ fork → ∀ synced,
+    -- The proposers of the epoch one past the seed lookahead are drawn from this state.
     run (action config checks) (readyStages ++ [.syncCommittees]) state = .ok synced →
       ∃ validator ∈ synced.validators.data,
         isActiveValidator validator (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1) ∧
+          -- From Gloas, that validator must also be unslashed.
           (.glamsterdam ≤ fork → validator.slashed = false) ∧
           validator.effectiveBalance.toNat = drawCap preset fork
   /-- From Gloas, in each slot of that epoch, a member of the beacon committees is at the cap. -/
   ptc : .glamsterdam ≤ fork → ∀ moved,
     run (action config checks) (readyStages ++ [.syncCommittees, .proposerLookahead]) state =
         .ok moved →
+      -- The payload committees of the slots of that epoch are drawn.
       ∀ slot, computeEpochAtSlot preset slot =
           getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD + 1 →
         ∀ members, slotCommitteeMembers moved slot = .ok members →
           ∃ index ∈ members, ∃ validator, getValidator moved index = .ok validator ∧
             validator.effectiveBalance.toNat = drawCap preset fork
 
-/-- The draws of the upgrade from the fork of a state stop at a validator at the cap.
-
-The upgrade to Altair draws a sync committee.
-
-Every key must pass validation, and a validator at the cap must be active in the next epoch.
-
-The upgrade to Fulu draws the proposers of the epochs up to the seed lookahead.
-
-In each such epoch a validator at the cap must be active.
-
-The upgrade to Gloas draws the payload committees of the slots of those epochs.
-
-In each slot, one member of the beacon committees must be at the cap.
-
-The upgrade to Heze also needs its two deposit indices equal, which no draw gives. -/
+/-- The draws of the upgrade from the fork of a state stop at a validator at the cap. -/
 def UpgradeDraws (forked : ForkedBeaconState preset) : Prop :=
   match forked with
+  -- The upgrade to Altair draws a sync committee.
+  --
+  -- Every key must pass validation.
+  --
+  -- A validator at the cap must be active in the next epoch.
   | ⟨.phase0, pre⟩ =>
     (∀ validator ∈ pre.validators.data,
       ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point) ∧
     ∃ validator ∈ pre.validators.data, isActiveValidator validator (getCurrentEpoch pre + 1) ∧
       validator.effectiveBalance.toNat = drawCap preset .phase0
+  -- The upgrade to Fulu draws the proposers of the epochs up to the seed lookahead.
+  --
+  -- In each such epoch a validator at the cap must be active.
   | ⟨.pectra, pre⟩ =>
     ∀ offset ≤ preset.MIN_SEED_LOOKAHEAD.toNat, ∃ validator ∈ pre.validators.data,
       isActiveValidator validator (getCurrentEpoch pre + offset.toUInt64) ∧
         validator.effectiveBalance.toNat = drawCap preset .pectra
+  -- The upgrade to Gloas draws the payload committees of the slots of those epochs.
+  --
+  -- In each slot, one member of the beacon committees must be at the cap.
   | ⟨.fusaka, pre⟩ =>
     ∀ offset ≤ preset.MIN_SEED_LOOKAHEAD.toNat, ∀ slot,
       computeEpochAtSlot preset slot = getCurrentEpoch pre + offset.toUInt64 →
       ∀ members, slotCommitteeMembers pre slot = .ok members →
         ∃ index ∈ members, ∃ validator, getValidator pre index = .ok validator ∧
           validator.effectiveBalance.toNat = drawCap preset .fusaka
+  -- The upgrade to Heze also needs its two deposit indices equal, which no draw gives.
   | ⟨.glamsterdam, pre⟩ =>
     pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide)
   | _ => True
@@ -176,11 +133,7 @@ def DrawsAtCap (config : Config) (checks : SignatureChecks) (forked : ForkedBeac
 
 Each draw reads the state that the stages before it reach.
 
-The run proves bounds on that state, and each draw must end under them.
-
-No effective balance is above the cap of the draw, and the registry holds at most `2^40` validators.
-
-The size of a sync committee or a payload committee, times the validators, is below `2^64`.
+Each draw must end under the bounds that the run proves on the state it reads.
 
 From Altair, at a sync committee period, every key of the state it reads must also be valid. -/
 structure EpochDrawsEnd (config : Config) (checks : SignatureChecks)
@@ -195,6 +148,11 @@ structure EpochDrawsEnd (config : Config) (checks : SignatureChecks)
   sync : .altair ≤ fork →
     (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
     ∀ ready, run (action config checks) readyStages state = .ok ready →
+      -- No effective balance is above the cap of the draw.
+      --
+      -- The registry holds at most `2^40` validators.
+      --
+      -- The size of a sync committee, times the validators, is below `2^64`.
       (∀ validator ∈ ready.validators.data,
         validator.effectiveBalance.toNat ≤ drawCap preset fork) →
       ready.validators.data.size ≤ 2 ^ 40 →
@@ -203,6 +161,9 @@ structure EpochDrawsEnd (config : Config) (checks : SignatureChecks)
   /-- From Fulu, the draws of the proposers one epoch past the seed lookahead end. -/
   proposers : .fusaka ≤ fork → ∀ synced,
     run (action config checks) (readyStages ++ [.syncCommittees]) state = .ok synced →
+      -- No effective balance is above the cap of the draw.
+      --
+      -- The registry holds at most `2^40` validators.
       (∀ validator ∈ synced.validators.data,
         validator.effectiveBalance.toNat ≤ drawCap preset fork) →
       synced.validators.data.size ≤ 2 ^ 40 →
@@ -211,6 +172,11 @@ structure EpochDrawsEnd (config : Config) (checks : SignatureChecks)
   ptc : .glamsterdam ≤ fork → ∀ moved,
     run (action config checks) (readyStages ++ [.syncCommittees, .proposerLookahead]) state =
         .ok moved →
+      -- No effective balance is above the cap of the draw.
+      --
+      -- The registry holds at most `2^40` validators.
+      --
+      -- The size of a payload committee, times the validators, is below `2^64`.
       (∀ validator ∈ moved.validators.data,
         validator.effectiveBalance.toNat ≤ drawCap preset fork) →
       moved.validators.data.size ≤ 2 ^ 40 →
@@ -219,64 +185,82 @@ structure EpochDrawsEnd (config : Config) (checks : SignatureChecks)
 
 /-- The draws of the upgrade from the fork of a state end, under the bounds that it reads.
 
-No effective balance is above the cap of the draw, and the registry holds at most `2^40` validators.
-
-The size of a sync committee or a payload committee, times the validators, is below `2^64`.
-
-The upgrade to Altair draws a sync committee, and every key must also pass validation.
-
-The upgrade to Fulu draws the proposers of the epochs up to the seed lookahead.
-
-The upgrade to Gloas draws the payload committees of the slots of those epochs.
-
-The upgrade to Heze also needs its two deposit indices equal, which no draw gives. -/
+Each draw ends under the bounds that it reads. -/
 def UpgradeDrawsEnd (forked : ForkedBeaconState preset) : Prop :=
   match forked with
+  -- The upgrade to Altair draws a sync committee.
+  --
+  -- Every key must also pass validation.
   | ⟨.phase0, pre⟩ =>
     (∀ validator ∈ pre.validators.data,
       ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point) ∧
+    -- No effective balance is above the cap of the draw.
+    --
+    -- The registry holds at most `2^40` validators.
+    --
+    -- The size of a sync committee, times the validators, is below `2^64`.
     ((∀ validator ∈ pre.validators.data,
         validator.effectiveBalance.toNat ≤ drawCap preset .phase0) →
       pre.validators.data.size ≤ 2 ^ 40 →
       preset.SYNC_COMMITTEE_SIZE.toNat * pre.validators.data.size < 2 ^ 64 →
       SyncDrawEnds pre (getCurrentEpoch pre + 1))
+  -- The upgrade to Fulu draws the proposers of the epochs up to the seed lookahead.
   | ⟨.pectra, pre⟩ =>
     ∀ offset ≤ preset.MIN_SEED_LOOKAHEAD.toNat,
+      -- No effective balance is above the cap of the draw.
+      --
+      -- The registry holds at most `2^40` validators.
       (∀ validator ∈ pre.validators.data,
         validator.effectiveBalance.toNat ≤ drawCap preset .pectra) →
       pre.validators.data.size ≤ 2 ^ 40 →
       ProposersDrawEnd pre (getCurrentEpoch pre + offset.toUInt64)
+  -- The upgrade to Gloas draws the payload committees of the slots of those epochs.
   | ⟨.fusaka, pre⟩ =>
     ∀ offset ≤ preset.MIN_SEED_LOOKAHEAD.toNat,
+      -- No effective balance is above the cap of the draw.
+      --
+      -- The registry holds at most `2^40` validators.
+      --
+      -- The size of a payload committee, times the validators, is below `2^64`.
       (∀ validator ∈ pre.validators.data,
         validator.effectiveBalance.toNat ≤ drawCap preset .fusaka) →
       pre.validators.data.size ≤ 2 ^ 40 →
       preset.PTC_SIZE.toNat * pre.validators.data.size < 2 ^ 64 →
       PtcDrawsEnd pre (getCurrentEpoch pre + offset.toUInt64)
+  -- The upgrade to Heze also needs its two deposit indices equal, which no draw gives.
   | ⟨.glamsterdam, pre⟩ =>
     pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide)
   | _ => True
 
 /-- The draws of a run of slots end, at each state they read.
 
-Each state that the run reaches before its end must let the draws of its next slot end.
-
-At the end of an epoch, the epoch transition reads the state with the roots of the slot cached.
-
-The upgrades due at the next slot read the states they pass through.
-
 This holds when each draw meets a validator at the cap of its fork.
 
-In the random oracle model, a search of at most `2^32` members fails with chance below `2^-128`.
-
-That needs a fresh cache and at least one candidate.
-
-That bound is not a deterministic fact, and no theorem sums it over the draws of a run. -/
+Without one, whether a draw ends depends on the hashes, so it stays a hypothesis. -/
 def DrawsEnd (config : Config) (checks : SignatureChecks) (forked : ForkedBeaconState preset)
     (count : Nat) : Prop :=
+  -- The validators at the cap can leave or lose balance during the run.
+  --
+  -- So a leak breaks the form at the cap.
+  --
+  -- Without a validator at the cap, whether a draw ends depends on the hashes.
+  --
+  -- In the random oracle model, a search of at most `2^32` members fails with chance `< 2^-128`.
+  --
+  -- That needs a fresh cache and at least one candidate.
+  --
+  -- That bound is not a deterministic fact.
+  --
+  -- No theorem sums it over the draws of a run.
+  --
+  -- Each state that the run reaches before its end must let the draws of its next slot end.
   ∀ steps < count, ∀ reached, advanceSlotsAcross config checks steps forked = .ok reached →
+    -- At the end of an epoch, the epoch transition reads the state with the slot roots cached.
     ((reached.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot reached.state = .ok cached → EpochDrawsEnd config checks cached) ∧
+    -- The upgrades due at the next slot read the states they pass through.
+    --
+    -- This hypothesis also carries the condition of the upgrade to Heze: its deposit indices agree.
     ∀ advanced, advanceSlot config checks reached.state = .ok advanced →
       ∀ upgrading, UpgradesPass config checks ⟨reached.fork, advanced⟩ upgrading →
         upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading
@@ -336,6 +320,9 @@ The condition reads the state at the end of each of those epochs, with the roots
 def SignersEarly (config : Config) (checks : SignatureChecks) (forked : ForkedBeaconState preset)
     (count : Nat) : Prop :=
   ∀ steps < count, ∀ reached, advanceSlotsAcross config checks steps forked = .ok reached →
+    -- A validator that exits at the epoch boundary still counts as a signer but is not active.
+    --
+    -- The run applies no block, so from the third epoch no one has signed and the bound holds.
     (getCurrentEpoch reached.state).toNat < (getCurrentEpoch forked.state).toNat + 2 →
     (reached.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
     ∀ cached, processSlot reached.state = .ok cached → SignersWithinActive cached
@@ -375,7 +362,11 @@ theorem Preset.epochLimitBeforeAltair_mainnet :
   simp only [Preset.epochLimitBeforeAltair, Preset.baseRewardBoundBeforeAltair, root]
   decide
 
-/-- A run that starts before Altair ends at an epoch within the limit before Altair. -/
+/-- A run that starts before Altair ends at an epoch within the limit before Altair.
+
+Before Altair, the inactivity penalty grows with the epochs since the last finality.
+
+It fits when the epoch is at most a limit, about `9 * 10^6` epochs on mainnet. -/
 def EpochLimitBeforeAltair (forked : ForkedBeaconState preset) (count : Nat) : Prop :=
   forked.fork < .altair →
     (forked.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat ≤
@@ -433,19 +424,20 @@ private theorem advanceSlotsAcross_quiet : ∀ (steps : Nat) {state : BeaconStat
 
 It meets the draws in their form at the cap, which gives the end of each draw.
 
-No one signs in the run, so the signers hold at most the total active balance.
-
-An epoch before Altair draws nothing, and no upgrade is due before the Altair fork epoch.
-
-The run ends at an epoch within the limit before Altair. -/
+That shows only that the three are consistent, not that the draws from Altair can be met. -/
 theorem runHypotheses_of_quiet {state : BeaconState preset .phase0} {count : Nat}
     (quiet : Quiet state)
     (before : (state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat <
       config.ALTAIR_FORK_EPOCH.toNat)
     (limit : (state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat ≤
       preset.epochLimitBeforeAltair) :
+    -- No one signs in the run, so the signers hold at most the total active balance.
     SignersEarly config checks ⟨.phase0, state⟩ count ∧
+      -- An epoch before Altair draws nothing.
+      --
+      -- No upgrade is due before the Altair fork epoch.
       DrawsAtCap config checks ⟨.phase0, state⟩ count ∧
+      -- The run ends at an epoch within the limit before Altair.
       EpochLimitBeforeAltair (preset := preset) ⟨.phase0, state⟩ count := by
   -- Every slot the run reaches before its end stays before the fork epoch.
   have early : ∀ {slot}, slot ≤ state.slot.toNat + count →

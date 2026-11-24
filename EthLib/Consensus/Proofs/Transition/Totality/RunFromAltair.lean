@@ -7,17 +7,9 @@ import EthLib.Consensus.Proofs.Transition.Totality.EpochBounds
 /-!
 # Proofs: a run from Altair before Electra meets its hypotheses
 
-A run of slots from Altair applies no block, so a quiet state stays quiet.
+A run of slots from Altair that ends before Electra meets the three hypotheses that a run takes.
 
-The signers then hold at most the total active balance.
-
-A validator at the cap with a large balance keeps its record while the leak drains it.
-
-So it meets every draw of a sync committee, as long as its balance stays above the cap.
-
-Before Electra the keys never change, and the upgrades on the way draw nothing.
-
-The bound for runs before Altair holds trivially, since the run starts at Altair.
+It needs a validator at the cap whose balance stays above the cap.
 -/
 
 @[expose] public section
@@ -422,35 +414,32 @@ private theorem Tracked.of_advanceSlotsAcross {origin index : Nat} {validator : 
 
 /-- A run from Altair that ends before Electra meets its three hypotheses.
 
-It meets the draws in their form at the cap.
-
-The state is quiet, and every key of its registry passes validation.
-
-One validator is at the cap, and every inactivity score is at most a bound.
-
-Its balance is at least the cap plus the drain of the epochs that the run crosses.
-
-The caps before and from Electra and the activation balance are whole numbers of increments.
-
-The cap is above the ejection balance.
-
-The inactivity penalty quotients of Altair and Bellatrix are positive. -/
+It meets the draws in their form at the cap. -/
 theorem runHypotheses_of_quiet_altair {forked : ForkedBeaconState preset} {count : Nat}
     (altair : .altair ≤ forked.fork) (before : forked.fork < .pectra)
+    -- The caps before and from Electra and the activation balance are whole numbers of increments.
     (aligned : MaxEffectiveBalancesAligned preset)
+    -- The cap is above the ejection balance.
     (ejection : config.EJECTION_BALANCE < preset.MAX_EFFECTIVE_BALANCE)
+    -- The inactivity penalty quotients of Altair and Bellatrix are positive.
     (quotients : 0 < min preset.INACTIVITY_PENALTY_QUOTIENT_ALTAIR.toNat
       preset.INACTIVITY_PENALTY_QUOTIENT_BELLATRIX.toNat)
+    -- The state is quiet.
+    --
+    -- Every key of its registry passes validation.
     (quiet : Quiet forked.state)
     (keys : ∀ validator ∈ forked.state.validators.data,
       ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point)
+    -- One validator is at the cap.
     {index : Nat} {validator : Validator} {balance : Gwei} {scoreStart : Nat}
     (found : forked.state.validators.data[index]? = some validator)
     (atCap : AtCap preset (getCurrentEpoch forked.state) validator)
     (held : forked.state.balances.data[index]? = some balance)
+    -- Every inactivity score is at most a bound.
     (scored : ∀ score ∈ (forked.state.inactivityScores altair).data, score.toNat ≤ scoreStart)
     (beforeElectra : (forked.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat <
       config.ELECTRA_FORK_EPOCH.toNat)
+    -- Its balance is at least the cap plus the drain of the epochs that the run crosses.
     (funded : preset.MAX_EFFECTIVE_BALANCE.toNat + preset.capDrain config scoreStart
       ((forked.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat -
         (getCurrentEpoch forked.state).toNat) ≤ balance.toNat) :
@@ -462,19 +451,23 @@ theorem runHypotheses_of_quiet_altair {forked : ForkedBeaconState preset} {count
     ⟨altair, before, quiet, keys, found, atCap, Nat.le_refl _,
       ⟨balance, held, by rw [Nat.sub_self]; exact Nat.le_add_right _ _⟩,
       by rw [Nat.sub_self, Nat.mul_zero, Nat.add_zero]; exact scored⟩
+  -- A run of slots from Altair applies no block, so a quiet state stays quiet.
   have run : ∀ steps < count, ∀ reached,
       advanceSlotsAcross config checks steps forked = .ok reached →
       Tracked config (getCurrentEpoch forked.state).toNat index validator balance scoreStart
         reached ∧ reached.state.slot.toNat = forked.state.slot.toNat + steps :=
     fun steps short _ computed => Tracked.of_advanceSlotsAcross aligned ejection quotients
       funded beforeElectra steps start (by omega) computed
+  -- The bound for runs before Altair holds, since the run starts at Altair.
   refine ⟨?_, ?_, fun early => absurd (Nat.lt_of_le_of_lt altair early) (by decide)⟩
   · intro steps short reached computed _ _ cached cachedOk
     obtain ⟨holds, -⟩ := run steps short reached computed
     obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    -- The state stays quiet, so the signers hold at most the total active balance.
     exact holds.quiet.signers
   · intro steps short reached computed
     obtain ⟨holds, slot⟩ := run steps short reached computed
+    -- Before Electra, the upgrades on the way draw nothing.
     refine ⟨fun last cached cachedOk => ?_, fun advanced advancedOk upgrading passes _ =>
       passes.early holds.altair holds.before (Nat.lt_of_le_of_lt (Nat.div_le_div_right
         (by dsimp only; rw [advanceSlot_slot advancedOk]; omega)) beforeElectra)⟩
@@ -502,10 +495,14 @@ theorem runHypotheses_of_quiet_altair {forked : ForkedBeaconState preset} {count
     refine ⟨fun _ _ ready readyOk => ?_, fun _ _ ready readyOk => ?_,
       fun fulu => absurd (Nat.lt_of_le_of_lt fulu holds.before) (by decide),
       fun gloas => absurd (Nat.lt_of_le_of_lt gloas holds.before) (by decide)⟩
+    -- Before Electra, the keys never change.
     · refine KeysValid.of_keys (run_readyStages_validatorKeys holds.before readyOk) ?_
       intro member contained
       rw [validators] at contained
       exact holds.keys member contained
+    -- A validator at the cap with a large balance keeps its record while the leak drains it.
+    --
+    -- So it meets every draw of a sync committee, as long as its balance stays above the cap.
     · obtain ⟨readyFound, -⟩ := run_readyStages_atCap holds.altair holds.before aligned
         ejection quotients readyOk (by rw [validators]; exact holds.found)
         (by rw [epoch]; exact holds.atCap) (by rw [balances]; exact leftHeld)

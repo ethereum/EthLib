@@ -83,16 +83,19 @@ structure RunBounded (config : Config) (start : RunStart) (budget elapsed : Nat)
     start.supply + elapsed * preset.epochIssuanceBeforeAltair budget
   /-- The effective balances stay within their start or a fixed ratio of the bound on the supply.
 
-  The ratio comes from the hysteresis constants, and it is 4/3 on mainnet.
-
-  The bound says nothing when the downward multiplier is at least the quotient.
-
-  An epoch sets them within that ratio of the balances, and a slot does not change them.
-
   It reads the bound on the supply, not the supply.
 
   The upgrade to Gloas can lower the supply. -/
   effective : effectiveBalanceSum state ≤ start.effective ∨
+    -- The ratio comes from the hysteresis constants.
+    --
+    -- It is 4/3 on mainnet.
+    --
+    -- The bound says nothing when the downward multiplier is at least the quotient.
+    --
+    -- An epoch sets the effective balances within that ratio of the balances.
+    --
+    -- A slot does not change them.
     effectiveBalanceSum state *
         (preset.HYSTERESIS_QUOTIENT.toNat - preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat) ≤
       (start.supply + elapsed * preset.epochIssuanceBeforeAltair budget) *
@@ -149,44 +152,38 @@ theorem RunBounded.withSlot {config : Config} {start : RunStart} {budget elapsed
 
 /-- One epoch keeps the bounds of a run, one epoch further on.
 
-The state before it must keep the invariant of the state transition.
-
-The largest effective balances of the preset must be whole numbers of increments.
-
-The conditions of the bound on the supply must hold on that state.
-
-The budget must cover one increment and the sum of the effective balances.
-
-The signers of the previous epoch must hold at most the total active balance.
-
-No theorem derives that condition, which a run takes as an assumption.
-
-The current epoch plus one plus the seed lookahead must be at most the exit ceiling.
-
-The least churn and the largest activation and exit churn must each be at least one increment.
-
-The exit ceiling plus its step and the withdrawal delay must be below `2^64 - 1`.
-
-The bound on the carried exit churn plus three exit churns must be below `2^64`. -/
+The conditions of the bound on the supply must hold on the state before it. -/
 theorem RunBounded.of_processEpoch {config : Config} {checks : SignatureChecks}
     {start : RunStart} {budget elapsed : Nat}
     (holds : RunBounded config start budget elapsed state)
+    -- The state before it must keep the invariant of the state transition.
+    --
+    -- The largest effective balances of the preset must be whole numbers of increments.
     (invariant : Invariant state) (aligned : MaxEffectiveBalancesAligned preset)
     (within : state.RegistryWithinLimit)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (perIncrement :
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
     (summed : effectiveBalanceSum state < 2 ^ 64)
+    -- The budget must cover one increment and the sum of the effective balances.
     (budgeted : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) ≤ budget)
     (sized : ParticipationMatches state) (resolved : PendingResolved state)
+    -- The signers of the previous epoch must hold at most the total active balance.
+    --
+    -- No theorem derives that condition, which a run takes as an assumption.
     (signers : SignersWithinActive state)
+    -- The current epoch plus one plus the seed lookahead must be at most the exit ceiling.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤
       start.ceilingAt preset budget elapsed)
+    -- The least churn must be at least one increment.
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
+    -- The largest activation and exit churn must be at least one increment.
     (maximum :
       preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    -- The exit ceiling plus its step and the withdrawal delay must be below `2^64 - 1`.
     (exitRoom : start.ceilingAt preset budget elapsed + start.exitStep preset budget +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64 - 1)
+    -- The bound on the carried exit churn plus three exit churns must be below `2^64`.
     (churnRoom : max start.exitChurn (exitChurnBound preset config budget) +
       3 * exitChurnBound preset config budget < 2 ^ 64)
     (computed : processEpoch config checks state = .ok after) :

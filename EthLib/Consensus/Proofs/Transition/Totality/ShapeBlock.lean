@@ -30,8 +30,6 @@ A change of credentials never lowers a cap, and a queued consolidation stays in 
 
 So a block keeps the shape, and so does a block applied across the forks.
 
-A block also keeps the history and the deposit carry.
-
 From Altair, each inactivity score after a block is the one before it, or zero.
 -/
 

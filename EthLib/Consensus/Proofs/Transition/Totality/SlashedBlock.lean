@@ -23,13 +23,7 @@ import EthLib.Consensus.Proofs.Transition.Withdrawals
 /-!
 # Proofs: a block raises the slashed balances by at most the balances not yet slashed
 
-A slashing adds the effective balance of its validator to the slashed balances of its epoch.
-
-Only a validator that is not yet slashed can be slashed, and it stays slashed.
-
-A block keeps the effective balance of each validator that was there before it.
-
-So the slashed balances plus the effective balances not yet slashed do not grow in a block.
+The slashed balances plus the effective balances not yet slashed do not grow in a block.
 
 The slashed balances then rise by at most the effective balances not yet slashed before it.
 
@@ -600,6 +594,13 @@ theorem processBlock_slashedBalanceSum_add_le {engine : ExecutionEngine preset f
     (computed : processBlock config checks engine state block = .ok after) :
     slashedBalanceSum after + unslashedBalanceSum after state.validators.data.size ≤
       slashedBalanceSum state + unslashedBalanceSum state state.validators.data.size := by
+  -- A slashing adds the effective balance of its validator to the slashed balances of its epoch.
+  --
+  -- Only a validator that is not yet slashed can be slashed.
+  --
+  -- It stays slashed.
+  --
+  -- A block keeps the effective balance of each validator that was there before it.
   obtain ⟨_, _, _, head, sized, proposersOk, slashingsOk, later⟩ := processBlock_slashings computed
   -- The slashings run on the registry of the block, which they keep.
   have slashed := lowers_slashings (count := state.validators.data.size) proposersOk slashingsOk
@@ -782,26 +783,23 @@ theorem processBlock_slashedBalanceSum_le_count {engine : ExecutionEngine preset
 
 /-- At the turn of an attester slashing of a block, the slashed balances are bounded.
 
-The turn is the state that the steps before that attester slashing reach.
-
-The effective balances before the block are within their caps.
-
-The registry has the size it had before the block, and each earlier effective balance is kept.
-
-The slashed balances are at most those before the block plus one largest cap for each name counted.
-
-The names are those of the slashings before the turn.
-
-A proposer slashing counts one name.
-
-An attester slashing counts each index of its first attestation, with repeats. -/
+The turn is the state that the steps before that attester slashing reach. -/
 theorem slashingTurn_slashed_le {engine : ExecutionEngine preset fork}
     {state turn : BeaconState preset fork} {block : BeaconBlock preset fork} {j : Nat}
+    -- The effective balances before the block are within their caps.
     (capped : EffectiveBalancesCapped state)
     (turned : SlashingTurn config checks engine state block j turn) :
+    -- The registry keeps its size.
+    --
+    -- Each effective balance from before the block is kept.
     turn.validators.data.size = state.validators.data.size ∧ EffectiveKept state turn ∧
+      -- The slashed balances are at most those before the block plus one largest cap per name.
+      --
+      -- The names are those of the slashings before the turn.
       slashedBalanceSum turn ≤ slashedBalanceSum state +
+        -- A proposer slashing counts one name.
         (block.body.proposerSlashings.data.size +
+          -- An attester slashing counts each index of its first attestation, with repeats.
           ((block.body.attesterSlashings.data.toList.take j).map fun slashing =>
             slashing.attestation1.attestingIndices.data.size).sum) *
           preset.largestEffectiveBalance := by

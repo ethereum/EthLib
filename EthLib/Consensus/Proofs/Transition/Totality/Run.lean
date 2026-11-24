@@ -10,14 +10,6 @@ A run of slots advances a state one slot at a time, with the upgrades due on the
 Each state that it reaches keeps the invariant, the shape of the state and the bounds of the run.
 
 So every slot advance within the horizon succeeds, under three hypotheses on the states reached.
-
-From Electra, a run of empty slots leaks.
-
-Within about `7.7 * 10^5` epochs no validator stays at the cap of the draw.
-
-The hypothesis on the draws asks only that each draw ends, which needs no validator at the cap.
-
-On mainnet the bounds alone hold for `2.25 * 10^6` epochs, about 27 years.
 -/
 
 @[expose] public section
@@ -126,19 +118,7 @@ private theorem RunHolds.quiet_of_advanceSlotAcross {start : RunStart} {budget s
     · exact (holds.quiet (by omega)).of_advanceSlot advancedOk
     · exact (holds.quietCurrent (by omega)).quiet_of_advanceSlot_of_lt advancedOk (by omega)
 
-/-- One slot of a bounded run succeeds, with the upgrades due at the slot it reaches.
-
-The epoch of the next slot is at most the first epoch of the run plus the number of epochs.
-
-The run then ends by the last epoch of the conditions.
-
-At the end of an epoch, the draws of the epoch transition end.
-
-In the first two epochs of the run, the signers hold at most the active balance.
-
-The draws of the upgrades due at the next slot end.
-
-Before Altair, the epoch is within the limit before Altair. -/
+/-- One slot of a bounded run succeeds, with the upgrades due at the slot it reaches. -/
 theorem RunHolds.advanceSlotAcross_exists_ok
     [∀ fork, Serialization.Ssz.LawfulSszType (BeaconState preset fork)]
     [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat]
@@ -147,17 +127,23 @@ theorem RunHolds.advanceSlotAcross_exists_ok
     {start : RunStart} {budget epochs lastEpoch startEpoch : Nat}
     {forked : ForkedBeaconState preset}
     (conditions : RunConditions preset config start budget epochs lastEpoch)
+    -- The run ends by the last epoch of the conditions.
     (fits : startEpoch + epochs ≤ lastEpoch)
     (holds : RunHolds config start budget startEpoch forked.state)
+    -- The epoch of the next slot is at most the first epoch of the run plus the number of epochs.
     (within : (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs)
+    -- In the first two epochs of the run, the signers hold at most the active balance.
     (signers : (getCurrentEpoch forked.state).toNat < startEpoch + 2 →
       (forked.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot forked.state = .ok cached → SignersWithinActive cached)
+    -- At the end of an epoch, the draws of the epoch transition end.
     (draws : (forked.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot forked.state = .ok cached → EpochDrawsEnd config checks cached)
+    -- The draws of the upgrades due at the next slot end.
     (upgradeDraws : ∀ advanced, advanceSlot config checks forked.state = .ok advanced →
       ∀ upgrading, UpgradesPass config checks ⟨forked.fork, advanced⟩ upgrading →
         upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading)
+    -- Before Altair, the epoch is within the limit before Altair.
     (limit : forked.fork < .altair →
       (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair) :
     ∃ next, advanceSlotAcross config checks forked = .ok next := by
@@ -186,23 +172,23 @@ theorem RunHolds.of_advanceSlotAcross {start : RunStart}
   exact RunHolds.of_chainHolds (ChainHolds.of_advanceSlotAcross conditions.toChain fits
     holds.toChainHolds within (holds.signers signers) computed) quietCurrent quiet
 
-/-- A run of slots succeeds and keeps a fact, when each slot advance from it succeeds and keeps it.
-
-Each advance reads that its next slot is within the last epoch, and a condition on its state.
-
-It also reads the epoch limit before Altair.
-
-The run starts from a state with the fact, and its last slot is within the last epoch.
-
-It meets the condition at each state it reaches before its end, and the epoch limit. -/
+/-- A run of slots succeeds and keeps a fact when each of its slot advances does. -/
 theorem advanceSlotsAcross_of_step {Holds Ahead : ForkedBeaconState preset → Prop}
     {lastEpoch : Nat}
+    -- Each advance reads that its next slot is within the last epoch, and a condition on its state.
+    --
+    -- It also reads the epoch limit before Altair.
     (step : ∀ {forked : ForkedBeaconState preset}, Holds forked →
       (forked.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤ lastEpoch →
       Ahead forked →
       (forked.fork < .altair →
         (getCurrentEpoch forked.state).toNat ≤ preset.epochLimitBeforeAltair) →
       ∃ next, advanceSlotAcross config checks forked = .ok next ∧ Holds next) :
+    -- The run starts from a state with the fact.
+    --
+    -- Its last slot is within the last epoch.
+    --
+    -- It meets the condition at each state it reaches before its end, and the epoch limit.
     ∀ (count : Nat) {forked : ForkedBeaconState preset}, Holds forked →
       (forked.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat ≤ lastEpoch →
       (∀ steps < count, ∀ reached,
@@ -313,19 +299,7 @@ theorem advanceSlotsAcross_exists_ok_of_run
 
 /-- Every slot advance within the horizon succeeds from a bounded state.
 
-The state keeps the facts of a run that starts at its own epoch.
-
-The conditions hold for some number of epochs, which is within the horizon of the scores.
-
-Their last epoch is at least that number of epochs past the epoch of the state.
-
-The later slot is in an epoch at most that number of epochs past the epoch of the state.
-
 The run takes three hypotheses on the states it reaches.
-
-In its first two epochs, the signers hold at most the active balance.
-
-The draws end, and before Altair the run ends within the epoch limit.
 
 The state that the advance returns keeps the facts of the run. -/
 theorem processSlotsAcross_exists_ok_of_run
@@ -335,14 +309,21 @@ theorem processSlotsAcross_exists_ok_of_run
     [NeZero preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat]
     {start : RunStart} {budget epochs lastEpoch : Nat}
     {forked : ForkedBeaconState preset} {slot : Slot}
+    -- The conditions hold for some number of epochs, which is within the horizon of the scores.
     (conditions : RunConditions preset config start budget epochs lastEpoch)
+    -- Their last epoch is at least that number of epochs past the epoch of the state.
     (fits : (getCurrentEpoch forked.state).toNat + epochs ≤ lastEpoch)
+    -- The state keeps the facts of a run that starts at its own epoch.
     (holds : RunHolds config start budget (getCurrentEpoch forked.state).toNat forked.state)
     (later : forked.state.slot < slot)
+    -- The later slot is in an epoch at most that number of epochs past the epoch of the state.
     (within : slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
       (getCurrentEpoch forked.state).toNat + epochs)
+    -- In its first two epochs, the signers hold at most the active balance.
     (signers : SignersEarly config checks forked (slot.toNat - forked.state.slot.toNat))
+    -- The draws end.
     (draws : DrawsEnd config checks forked (slot.toNat - forked.state.slot.toNat))
+    -- Before Altair, the run ends within the epoch limit.
     (limit : EpochLimitBeforeAltair forked (slot.toNat - forked.state.slot.toNat)) :
     ∃ after, processSlotsAcross config checks forked slot = .ok after ∧
       RunHolds config start budget (getCurrentEpoch forked.state).toNat after.state := by
@@ -357,23 +338,30 @@ theorem processSlotsAcross_exists_ok_of_run
 
 /-- On mainnet, every slot advance within `2.25 * 10^6` epochs succeeds from a bounded state.
 
-The epoch of the state is at most `2^40`.
+The bounds alone hold for that many epochs, about 27 years.
 
-The state keeps the facts of a run from its epoch, with the mainnet bounds at the start.
-
-The budget of effective balances is `2^57` Gwei.
-
-The run takes the three hypotheses on the states it reaches.
-
-The hypothesis on the draws needs no validator at the cap, so a leak alone does not break it. -/
+The run takes the three hypotheses on the states it reaches. -/
 theorem processSlotsAcross_exists_ok_mainnet {forked : ForkedBeaconState Preset.mainnet}
+    -- The epoch of the state is at most `2^40`.
     {slot : Slot} (early : (getCurrentEpoch forked.state).toNat ≤ 2 ^ 40)
+    -- The state keeps the facts of a run from its epoch, with the mainnet bounds at the start.
+    --
+    -- The budget of effective balances is `2^57` Gwei.
     (holds : RunHolds Config.mainnet (RunStart.mainnet (getCurrentEpoch forked.state).toNat)
       (2 ^ 57) (getCurrentEpoch forked.state).toNat forked.state)
     (later : forked.state.slot < slot)
     (within : slot.toNat / Preset.mainnet.SLOTS_PER_EPOCH.toNat ≤
       (getCurrentEpoch forked.state).toNat + 2250000)
     (signers : SignersEarly Config.mainnet checks forked (slot.toNat - forked.state.slot.toNat))
+    -- From Electra, a run of empty slots leaks.
+    --
+    -- Within about `7.7 * 10^5` epochs no validator stays at the cap of the draw.
+    --
+    -- The hypothesis on the draws asks only that each draw ends.
+    --
+    -- That needs no validator at the cap.
+    --
+    -- So a leak alone does not break it.
     (draws : DrawsEnd Config.mainnet checks forked (slot.toNat - forked.state.slot.toNat))
     (limit : EpochLimitBeforeAltair forked (slot.toNat - forked.state.slot.toNat)) :
     ∃ after, processSlotsAcross Config.mainnet checks forked slot = .ok after ∧

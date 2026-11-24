@@ -8,27 +8,9 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 
 The step sums the slashed balances of the recent epochs, and scales the sum by a multiplier.
 
-It also sums the active effective balances.
-
-Each slashed validator halfway to its withdrawal then loses a share of the scaled sum.
-
 Each sum and each product is checked, so large amounts can make the step fail.
 
 The step succeeds when the sums and the effective balances are small enough.
-
-The registry must hold one balance for each validator, and stay within its limit.
-
-Before Electra the step multiplies the effective balance in increments by the capped slashed sum.
-
-That sum is at most the total active balance.
-
-The total is one increment, or at most the sum of the effective balances.
-
-The product with the sum of the effective balances must fit in 64 bits.
-
-The step divides by the increment at every fork, and from Electra divides the active balance by it.
-
-The specification fails on a zero increment, so the theorem asks for positive divisors.
 -/
 
 @[expose] public section
@@ -183,34 +165,40 @@ private theorem applySlashingPenalty_exists_ok (within : state.RegistryWithinLim
 
 /-- The slashing penalties of an epoch succeed when every sum and product fits in 64 bits.
 
-The sum of the effective balances must be below 2^64 Gwei, and each one below 2^63 Gwei.
-
-The theorem asks for the second bound at every fork, though only the step from Electra uses it.
-
-The sum of the slashed balances of the recent epochs must fit, and so must its scaled value.
-
-The current epoch plus half the length of the slashings vector must be below 2^64.
-
-Before Electra the effective balance in increments must fit when multiplied by a sum.
-
-That sum is the sum of the effective balances.
-
-The divisors of the preset must be positive, as each step divides by the increment.
-
-The registry must hold one balance for each validator, and stay within its limit. -/
+The divisors of the preset must be positive, as each step divides by the increment. -/
 theorem processSlashings_total (divisors : preset.DivisorsPositive)
+    -- The registry must hold one balance for each validator, and stay within its limit.
     (within : state.RegistryWithinLimit) (matched : BalancesMatch state)
+    -- The sum of the effective balances must be below 2^64 Gwei.
     (summed : effectiveBalanceSum state < 2 ^ 64)
+    -- Each effective balance must be below 2^63 Gwei.
+    --
+    -- The theorem asks for this bound at every fork, though only the step from Electra uses it.
     (effective : ∀ validator ∈ state.validators.data, validator.effectiveBalance.toNat < 2 ^ 63)
+    -- The sum of the slashed balances of the recent epochs must fit.
     (fits : slashedBalanceSum state < 2 ^ 64)
+    -- So must its value scaled by the multiplier.
     (slashed : slashedBalanceSum state *
       (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64)
+    -- Each slashed validator halfway to its withdrawal loses a share of the scaled sum.
+    --
+    -- The current epoch plus half the length of the slashings vector must be below 2^64.
     (halfway : (getCurrentEpoch state).toNat + (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat <
       2 ^ 64)
+    -- Before Electra the step multiplies the effective balance in increments by a sum.
+    --
+    -- That sum is the capped slashed sum.
+    --
+    -- It is at most the total active balance.
+    --
+    -- The total is one increment, or at most the sum of the effective balances.
+    --
+    -- So the effective balance in increments times the sum of the effective balances must fit.
     (product : fork < .pectra → ∀ validator ∈ state.validators.data,
       (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT).toNat *
         effectiveBalanceSum state < 2 ^ 64) :
     ∃ after, processSlashings state = .ok after := by
+  -- The step also sums the active effective balances.
   obtain ⟨total, totalOk, incLe, totalCases⟩ := getTotalActiveBalance_exists_ok within summed
   obtain ⟨sum, sumOk, sumVal⟩ := foldlM_addChecked_exists_ok state.slashings.elements.toList 0
     (by simpa [slashedBalanceSum] using fits)
@@ -240,6 +228,11 @@ theorem processSlashings_total (divisors : preset.DivisorsPositive)
       split
       · assumption
       · exact UInt64.le_refl _)
+  -- The step divides by the increment at every fork.
+  --
+  -- From Electra, it also divides the active balance by the increment.
+  --
+  -- The specification fails on a zero increment, so the theorem asks for positive divisors.
   have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
     Nat.pos_of_ne_zero fun zero => divisors.increment (UInt64.toNat_inj.mp zero)
   have incLe' : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ total.toNat :=

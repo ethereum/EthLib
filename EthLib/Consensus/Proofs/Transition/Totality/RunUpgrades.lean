@@ -9,18 +9,6 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RunBounds
 An upgrade keeps the slot, so it counts no epoch, and the bounds of a run keep their parameters.
 
 Most upgrades carry the fields that the bounds read.
-
-The upgrade to Altair starts the inactivity scores at zero.
-
-The upgrade to Electra moves balances into pending deposits, and zeroes some effective balances.
-
-So the supply stays, and the sum of the effective balances can only fall.
-
-It opens the exit queue one past the latest exit and the first activation epoch.
-
-The exit ceiling allows that when it covers the first activation epoch.
-
-The upgrade to Gloas can only remove pending deposits, when it funds builders from them.
 -/
 
 @[expose] public section
@@ -612,6 +600,7 @@ theorem RunBounded.of_upgradeNext {start : RunStart} {budget elapsed : Nat}
   have load := (upgradeNext_weightedRegistryLoad_le computed).trans holds.load
   obtain ⟨fork, state⟩ := pre
   cases fork
+  -- The upgrade to Altair starts the inactivity scores at zero.
   case phase0 =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
@@ -620,6 +609,15 @@ theorem RunBounded.of_upgradeNext {start : RunStart} {budget elapsed : Nat}
     simp only [upgradeNext, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact holds.of_carryFields _ (by dsimp only; decide) (by dsimp only; decide) load
+  -- The upgrade to Electra moves balances to pending deposits, and zeroes some effective balances.
+  --
+  -- So the supply stays.
+  --
+  -- The sum of the effective balances can only fall.
+  --
+  -- The upgrade opens the exit queue one past the latest exit and the first activation epoch.
+  --
+  -- The exit ceiling allows that when it covers the first activation epoch.
   case dencun =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
@@ -628,6 +626,7 @@ theorem RunBounded.of_upgradeNext {start : RunStart} {budget elapsed : Nat}
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
     exact holds.of_upgradeToFulu effective load upgraded
+  -- The upgrade to Gloas can only remove pending deposits, when it funds builders from them.
   case fusaka =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed

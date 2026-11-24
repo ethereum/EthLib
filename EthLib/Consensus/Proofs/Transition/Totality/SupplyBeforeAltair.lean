@@ -11,25 +11,7 @@ Before Altair the rewards of an epoch pay for the votes of the previous epoch.
 
 Assume the signers of the source hold no more balance than is active now.
 
-A matching signer then earns at most one base reward for each of its source, target and head.
-
-In a leak such a vote earns exactly one base reward, with no assumption.
-
-Its inclusion pays at most one more base reward, shared between it and the proposer.
-
-The inactivity penalties pay no rewards.
-
-So each signer brings at most four base rewards.
-
-Together they are at most its effective balance times the factor, over the root of the total.
-
-The target and head votes are among the source votes.
-
-So the rise is at most the base reward factor times two more than the root of the total.
-
-The other steps keep or lower the balances.
-
-There are no pending deposits before Electra, so the sum of the balances is the supply.
+Then one epoch raises the supply by at most an issuance bound.
 -/
 
 @[expose] public section
@@ -445,8 +427,15 @@ private theorem sum_attestationRewards_le {config : Config} (before : fork < .al
   obtain ⟨target, targetMatching, targetDeltas⟩ := bind_ok_iff.mp targetOk
   unfold getHeadDeltas at headOk
   obtain ⟨head, headMatching, headDeltas⟩ := bind_ok_iff.mp headOk
+  -- The target and head votes are among the source votes.
   have targetSub := mem_of_getMatchingTargetAttestations before matching targetMatching
   have headSub := mem_of_getMatchingHeadAttestations before targetMatching headMatching
+  -- A matching signer earns at most one base reward for each of its source, target and head.
+  --
+  -- In a leak such a vote earns exactly one base reward, with no assumption.
+  --
+  -- The inactivity penalties pay no rewards.
+  --
   -- Each validator earns at most three weights for its votes.
   have votes : ∀ j ∈ List.range state.validators.data.size,
       4 * (rewards.getD j 0).toNat ≤ 3 * (if j.toUInt64 ∈ attesters then
@@ -467,9 +456,13 @@ private theorem sum_attestationRewards_le {config : Config} (before : fork < .al
     omega
   have summed := sum_map_le_sum_map votes
   rw [List.sum_map_add, sum_map_mul_left, sum_map_mul_left, sum_map_mul_left] at summed
+  -- Its inclusion pays at most one more base reward, shared between it and the proposer.
+  --
+  -- So each signer brings at most four base rewards.
   have inclusion := four_mul_inclusionRewards_le before inclusionOk active matching listed
     state.validators.data.size
   rw [sum_weights_eq within listed weighed] at inclusion
+  -- Together they are at most its effective balance times the factor, over the root of the total.
   have weights := sum_range_weights_le within weighed (Nat.sqrt total.toNat)
   have positive : 0 < total.toNat := Nat.lt_of_lt_of_le increment
     (UInt64.le_iff_toNat_le.mp (le_getTotalBalance (getTotalActiveBalance_ok active)))
@@ -477,21 +470,20 @@ private theorem sum_attestationRewards_le {config : Config} (before : fork < .al
       Nat.sqrt total.toNat ≤ total.toNat * preset.BASE_REWARD_FACTOR.toNat /
         Nat.sqrt total.toNat :=
     Nat.div_le_div_right (Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp kept))
+  -- So the rise is at most the base reward factor times two more than the root of the total.
   have issuance := mul_div_sqrt_le positive preset.BASE_REWARD_FACTOR.toNat
   unfold Preset.epochIssuanceBeforeAltair
   omega
 
 /-- Before Altair, take a step where the source signers hold no more balance than is active.
 
-The signers are the unslashed ones of the previous epoch, and the active balance is the current one.
-
 That is an assumption: it fails when validators that signed exit at the epoch boundary.
 
-Then the step raises the sum of the balances by at most the issuance bound.
-
-That needs a registry within its limit, and an increment above zero. -/
+Then the step raises the sum of the balances by at most the issuance bound. -/
 theorem processRewardsAndPenalties_balanceSum_le_of_lt_altair {config : Config}
+    -- The step needs a registry within its limit.
     (before : fork < .altair) (within : state.RegistryWithinLimit)
+    -- It needs an increment above zero.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (computed : processRewardsAndPenalties config state = .ok after)
     {total : Gwei} (active : getTotalActiveBalance state = .ok total)
@@ -501,6 +493,9 @@ theorem processRewardsAndPenalties_balanceSum_le_of_lt_altair {config : Config}
       getMatchingSourceAttestations state before (getPreviousEpoch state) = .ok attestations)
     (listed : getUnslashedAttestingIndices state attestations = .ok attesters)
     (weighed : getTotalBalance state attesters = .ok attestingBalance)
+    -- The signers are the unslashed ones of the previous epoch.
+    --
+    -- The active balance is the current one.
     (kept : attestingBalance ≤ total) :
     balanceSum after ≤ balanceSum state + preset.epochIssuanceBeforeAltair total.toNat := by
   by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
@@ -610,13 +605,11 @@ private theorem getUnslashedAttestingIndices_congr {other : BeaconState preset f
 
 The bound reads the active balance of the state before the epoch.
 
-Assume the unslashed signers of the source in the previous epoch hold at most the active balance.
-
-That fails when validators that signed exit at the epoch boundary.
-
-That needs a registry within its limit, and an increment above zero. -/
+It assumes the unslashed source signers of the previous epoch hold at most the active balance. -/
 theorem processEpoch_supply_le_of_lt_altair {config : Config} {checks : SignatureChecks}
+    -- The registry must be within its limit.
     (before : fork < .altair) (within : state.RegistryWithinLimit)
+    -- The increment must be above zero.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     {total : Gwei} (active : getTotalActiveBalance state = .ok total)
     {attestations : Array (PendingAttestation preset)} {attesters : List ValidatorIndex}
@@ -625,6 +618,7 @@ theorem processEpoch_supply_le_of_lt_altair {config : Config} {checks : Signatur
       getMatchingSourceAttestations state before (getPreviousEpoch state) = .ok attestations)
     (listed : getUnslashedAttestingIndices state attestations = .ok attesters)
     (weighed : getTotalBalance state attesters = .ok attestingBalance)
+    -- That assumption fails when validators that signed exit at the epoch boundary.
     (kept : attestingBalance ≤ total)
     (computed : processEpoch config checks state = .ok after) :
     balanceSum after ≤ balanceSum state + preset.epochIssuanceBeforeAltair total.toNat := by
@@ -635,6 +629,9 @@ theorem processEpoch_supply_le_of_lt_altair {config : Config} {checks : Signatur
     .slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
     .proposerLookahead, .ptcWindow]) _ _ at trace
   obtain ⟨rewarded, head, tail⟩ := EpochTrace.append_iff.mp trace
+  -- The other steps keep or lower the balances.
+  --
+  -- There are no pending deposits before Electra, so the sum of the balances is the supply.
   have lowered := balanceSum_le_of_tail before tail
   obtain _ | ⟨justifiedOk, head⟩ := head
   obtain _ | ⟨scoredOk, head⟩ := head

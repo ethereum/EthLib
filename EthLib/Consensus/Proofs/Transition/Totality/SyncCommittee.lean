@@ -14,17 +14,7 @@ From Altair the epoch step draws a new sync committee at the start of each perio
 
 The draw reads the candidates in a fixed order and accepts each with a chance set by its balance.
 
-A candidate at the largest effective balance of the draw is always accepted.
-
-The order visits every candidate once in each pass over them.
-
-So each pass accepts at least one candidate, and the draw ends within as many passes as members.
-
-With a candidate at the cap, the draw fails only when it runs out of 64-bit draw numbers first.
-
-So a registry with a candidate at that balance, and a bound on the passes, makes the draw succeed.
-
-The committee then aggregates the keys of its members, which must all be valid.
+A candidate at the cap and a bound on the passes make the draw succeed.
 -/
 
 @[expose] public section
@@ -123,10 +113,17 @@ theorem balanceWeightedSearch_ok {indices : Array ValidatorIndex} {balances : Ar
     (fits : DrawFits preset fork)
     (capped : ∀ j < indices.size, (balances.getD (order j) 0).toNat ≤ drawCap preset fork)
     {j : Nat} (jLt : j < indices.size)
+    -- A candidate at the largest effective balance of the draw is always accepted.
     (atCap : (balances.getD (order j) 0).toNat = drawCap preset fork)
+    -- With a candidate at the cap, the draw fails only if it first runs out of 64-bit draw numbers.
     (room : i + (size - selected.size) * indices.size < 2 ^ 64) :
     ∃ out, balanceWeightedSearch preset fork indices balances order seed size selected bound i
       random = .ok out := by
+  -- The order visits every candidate once in each pass over them.
+  --
+  -- So each pass accepts at least one candidate.
+  --
+  -- The draw ends within as many passes as members.
   refine balanceWeightedSearch_ok_of_next fits capped jLt atCap _ rfl ?_
   by_cases full : selected.size = size
   · exact .inl full
@@ -292,8 +289,6 @@ theorem getActiveValidatorIndices_eq_of_eq {fork' : Base.Fork}
 
 /-- The draw of a sync committee for an epoch ends, at the seed of that epoch.
 
-It is the balance-weighted selection among the validators active in that epoch.
-
 A validator at the cap of the draw makes it end.
 
 In the random oracle model, with at least one candidate, the search ends with high probability.
@@ -301,6 +296,7 @@ In the random oracle model, with at least one candidate, the search ends with hi
 That is a bound on a probability, not a fact about the hash, so a run assumes the end. -/
 def SyncDrawEnds (state : BeaconState preset fork) (epoch : Epoch) : Prop :=
   ∀ seed, getSeed state epoch DOMAIN_SYNC_COMMITTEE = .ok seed →
+    -- The draw is the balance-weighted selection among the validators active in that epoch.
     ∃ indices, computeBalanceWeightedSelection state
       (getActiveValidatorIndices state epoch).toArray seed preset.SYNC_COMMITTEE_SIZE true =
         .ok indices
@@ -416,6 +412,7 @@ theorem getNextSyncCommittee_ok {state : BeaconState preset fork}
     (epochRoom : (getCurrentEpoch state).toNat + 1 + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat <
       2 ^ 64)
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- The committee aggregates the keys of its members, which must all be valid.
     (keys : ∀ validator ∈ state.validators.data,
       ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point)
     (few : state.validators.data.size ≤ 2 ^ 40)
@@ -471,19 +468,16 @@ structure SyncDrawable (state : BeaconState preset fork) : Prop where
 
 /-- From Altair, the sync committee update succeeds under bounds on the state.
 
-The epoch after the current one, plus the length of the history of mixes, stays below `2^64`.
-
-That room is asked at every epoch, though only a draw reads the history.
-
-The seed lookahead is shorter than that history.
-
-The committee is not empty, since the keys of an empty one have no aggregate.
-
 The state must allow the draw only when the next epoch starts a period, the only time it draws. -/
 theorem processSyncCommitteeUpdates_ok (altair : .altair ≤ fork) {state : BeaconState preset fork}
+    -- The epoch after the current one, plus the length of the history of mixes, stays below `2^64`.
+    --
+    -- That room is asked at every epoch, though only a draw reads the history.
     (epochRoom : (getCurrentEpoch state).toNat + 1 + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat <
       2 ^ 64)
+    -- The seed lookahead is shorter than that history.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- The committee is not empty, since the keys of an empty one have no aggregate.
     (members : preset.SYNC_COMMITTEE_SIZE ≠ 0)
     (drawable : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       SyncDrawable state) :
