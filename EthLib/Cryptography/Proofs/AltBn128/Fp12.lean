@@ -12,14 +12,6 @@ public import Mathlib.Algebra.Ring.Hom.InjSurj
 `Fp12` is `Fp[w] / (w^12 - 18 w^6 + 82)`, a field of `p^12` elements.
 
 Sending `w` to a root of `X^12 - 18 X^6 + 82` maps `Fp12` into the quotient of `ZMod p[X]`.
-
-That map is injective and keeps the product of the specification, so the ring laws hold.
-
-In a quotient by a maximal ideal, the image of `w` is fixed by the `p^12`-th power.
-
-It is not fixed by the `p^4`-th or the `p^6`-th power.
-
-So that quotient has at least `p^12` elements, the ideal is zero, and `Fp12` is a field.
 -/
 
 @[expose] public section
@@ -218,6 +210,9 @@ theorem toQuot_pow (a : Fp12) (n : ℕ) : toQuot (a ^ n) = toQuot a ^ n := by
 
 /-- The ring laws, carried back from the quotient. -/
 noncomputable instance : CommRing Fp12 :=
+  -- The map into the quotient is injective and keeps the product of the specification.
+  --
+  -- So the ring laws hold.
   toQuot_injective.commRing toQuot toQuot_zero toQuot_one toQuot_add toQuot_mul toQuot_neg
     toQuot_sub toQuot_nsmul toQuot_zsmul toQuot_pow
     (fun n => (toQuot_ofFp _).trans (map_natCast ι n))
@@ -352,8 +347,10 @@ theorem mk_injective (M : Ideal Fp12) [M.IsMaximal] :
   have hn : Function.IsPeriodicPt (_root_.frobenius (Fp12 ⧸ M) Fp.modulus) n α := by
     rw [hper, ← hcard]
     exact FiniteField.pow_card α
+  -- In a quotient by a maximal ideal, the image of `w` is fixed by the `p^12`-th power.
   have h12 : Function.IsPeriodicPt (_root_.frobenius (Fp12 ⧸ M) Fp.modulus) 12 α :=
     (hper 12).mpr ((key 12 (by decide)).mpr xi_pow_twelve_eq_one)
+  -- It is not fixed by the `p^4`-th or the `p^6`-th power.
   have hdvd : 12 ∣ (n : ℕ) := by
     have hg := hn.gcd h12
     have hg12 : Nat.gcd n 12 ∣ 12 := Nat.gcd_dvd_right _ _
@@ -372,13 +369,16 @@ theorem mk_injective (M : Ideal Fp12) [M.IsMaximal] :
       exact xi_pow_six_ne_one h6
   have hle : Fintype.card (Fp12 ⧸ M) ≤ Fintype.card Fp12 :=
     Fintype.card_le_of_surjective π hsurj
+  -- So that quotient has at least `p^12` elements.
   have hge : Fintype.card Fp12 ≤ Fintype.card (Fp12 ⧸ M) := by
     rw [card_eq, hcard]
     exact Nat.pow_le_pow_right (by decide) (Nat.le_of_dvd n.pos hdvd)
+  -- So the quotient map is a bijection, and the ideal is zero.
   exact ((Fintype.bijective_iff_surjective_and_card π).mpr
     ⟨hsurj, (le_antisymm hle hge).symm⟩).1
 
 instance : IsDomain Fp12 := by
+  -- Each maximal ideal is zero, so `Fp12` is a domain, and the next instance makes it a field.
   obtain ⟨M, hM⟩ := Ideal.exists_maximal Fp12
   exact Function.Injective.isDomain (Ideal.Quotient.mk M) (mk_injective M)
 

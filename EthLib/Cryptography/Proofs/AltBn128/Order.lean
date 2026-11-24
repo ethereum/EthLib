@@ -11,14 +11,6 @@ public import Mathlib.GroupTheory.OrderOfElement
 [EIP-197](https://eips.ethereum.org/EIPS/eip-197) §"Definition of the groups" defines `G_1` and `q`.
 
 The curve over `Fp` has exactly `q` points, so `G_1` is the whole group.
-
-The kernel computes `q P1 = O`, so `q` divides the number of points.
-
-At most `2 p + 1 < 3 q` points exist, so the count is `q` or `2 q`.
-
-A count of `2 q` needs a point `(x, 0)` with `x^3 = -3`.
-
-Euler's criterion rules it out: `(-3)^((p - 1) / 3)` is not 1, since `p = 1 mod 3`.
 -/
 
 @[expose] public section
@@ -112,6 +104,8 @@ theorem cube_ne_neg_three (x : ZMod Fp.modulus) : x * x * x ≠ -3 := by
   have hx : x ≠ 0 := by
     rintro rfl
     exact absurd h (by decide)
+  -- Euler's criterion rules out a cube: `(-3)^((p - 1) / 3)` is not 1, since `p = 1 mod 3`.
+  --
   -- A cube `-3 = x^3` gives `(-3)^((p - 1) / 3) = x^(p - 1) = 1`.
   have hpow : ((Fp.modulus - 3 : Nat) : ZMod Fp.modulus) ^ ((Fp.modulus - 1) / 3) = 1 := by
     rw [show ((Fp.modulus - 3 : Nat) : ZMod Fp.modulus) = -3 by decide, ← h, show x * x * x = x ^ 3 by ring,
@@ -145,8 +139,10 @@ theorem addOrderOf_ne_two (X : curve.Point) : addOrderOf X ≠ 2 := by
 
 /-- The group of alt_bn128 over `Fp` has `q` points: the cofactor is 1. -/
 theorem card_point : Nat.card curve.Point = Fr.modulus := by
+  -- The kernel computes `q P1 = O`, so `q` divides the number of points.
   obtain ⟨m, hm⟩ : Fr.modulus ∣ Nat.card curve.Point :=
     Point.addOrderOf_generator ▸ addOrderOf_dvd_natCard _
+  -- At most `2 p + 1 < 3 q` points exist, so the count is `q` or `2 q`.
   have hle := card_point_le
   have hpos : 0 < Nat.card curve.Point := Nat.card_pos
   -- `2 p + 1 < 3 q`, so `m` is 1 or 2.
@@ -161,6 +157,8 @@ theorem card_point : Nat.card curve.Point = Fr.modulus := by
   rcases (show m = 1 ∨ m = 2 by omega) with rfl | rfl
   · simpa using hm
   · -- `m = 2` would give a point of order 2.
+    --
+    -- A count of `2 q` needs a point `(x, 0)` with `x^3 = -3`.
     have : Fact (Nat.Prime 2) := ⟨Nat.prime_two⟩
     obtain ⟨X, hX⟩ := exists_prime_addOrderOf_dvd_card' 2 (hm ▸ dvd_mul_left 2 _)
     exact absurd hX (addOrderOf_ne_two X)

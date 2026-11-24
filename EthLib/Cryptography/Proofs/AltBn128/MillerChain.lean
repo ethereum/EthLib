@@ -8,11 +8,9 @@ public import EthLib.Cryptography.Proofs.ScaledCurve
 /-!
 # Proofs: the pairing of alt_bn128 is the final exponentiation of Miller's algorithm
 
-The untwist sends a point `(x, y)` of the twist to `(x w^2, y w^3)` on `y^2 = x^3 + 3`.
-
-That curve is over `Fp12`, and `pi` is the map `(x, y) -> (x^p, y^p)` on its points.
-
 Write `Q'` for the untwist of `Q`, `s = 6 u + 2` and `R = s Q'`.
+
+The map `pi` is `(x, y) -> (x^p, y^p)` on the points over `Fp12`.
 
 The pairing multiplies three values at `P`, then applies the final exponentiation.
 
@@ -22,19 +20,9 @@ The pairing multiplies three values at `P`, then applies the final exponentiatio
 
 [Beuchat et al.](https://eprint.iacr.org/2010/354), §2, call this the optimal ate pairing.
 
-There, the first value is `f_{s, Q'}(P)`, which Miller's Lemma 2 gives; no theorem here proves it.
+There, the first value is `f_{s, Q'}(P)`, which Miller's Lemma 2 gives.
 
-The loop of the specification multiplies by lines, without the verticals of Miller's algorithm.
-
-The vertical through the untwist of `(x, y)` is `xp - x w^2`, nonzero when `x ≠ 0`.
-
-It is fixed by the `p^6`-th power, so the final exponentiation sends it to 1.
-
-The loop keeps `T = k Q`, with `0 < k ≤ s < q`, and `Q` of prime order `q`.
-
-So no point of the loop is `O`, or has order 2 or 3.
-
-A finite point with `x = 0` has order 3, so each vertical of the loop is nonzero.
+No theorem here proves that lemma.
 -/
 
 @[expose] public section
@@ -64,6 +52,9 @@ theorem twist_coefficient : ofFp2Hom b2 * wPow 1 ^ 6 = 3 := by
   rw [w_pow_six, ← map_mul, show b2 = 3 * (⟨9, 1⟩ : Fp2)⁻¹ from rfl, mul_assoc,
     inv_mul_cancel₀ xi_ne_zero, mul_one, map_ofNat]
 
+-- The untwist sends a point `(x, y)` of the twist to `(x w^2, y w^3)` on `y^2 = x^3 + 3`.
+--
+-- That curve is over `Fp12`.
 /-- The untwist `(x, y) -> (x w^2, y w^3)`, a group homomorphism. -/
 noncomputable def untwist : twist.Point →+ ambientCurve.Point :=
   ShortWeierstrass.scaledHom ofFp2Hom w_ne_zero twist_coefficient
@@ -383,7 +374,6 @@ theorem ateLoopCount_lt : ATE_LOOP_COUNT < Fr.modulus := by decide +kernel
 
 Miller's algorithm runs on the untwists.
 
-
 The invariant is that `T` is `k Q`, where `k` is the part of `6 u + 2` above the bits left.
 
 At the end, the point of the steps is `(6 u + 2) Q`. -/
@@ -398,6 +388,17 @@ private theorem finalExponentiation_loopSteps {Q : Point2}
             (ofFpHom xp) (ofFpHom yp) n (untwist T.toPoint) f') ∧
         (loopSteps Q xp yp n (f, T)).2.isOnCurve = true ∧
         (loopSteps Q xp yp n (f, T)).2.toPoint = ATE_LOOP_COUNT • Q.toPoint := by
+  -- The loop of the specification multiplies by lines, without the verticals of Miller's algorithm.
+  --
+  -- The vertical through the untwist of `(x, y)` is `xp - x w^2`, nonzero when `x ≠ 0`.
+  --
+  -- It is fixed by the `p^6`-th power, so the final exponentiation sends it to 1.
+  --
+  -- The loop keeps `T = k Q`, with `0 < k ≤ s < q`, and `Q` of prime order `q`.
+  --
+  -- So no point of the loop is `O`, or has order 2 or 3.
+  --
+  -- A finite point with `x = 0` has order 3, so each vertical of the loop is nonzero.
   have hr : ∀ j : ℕ, Fr.modulus • (j • Q.toPoint) = 0 := fun j => by
     rw [smul_comm, ← hord, addOrderOf_nsmul_eq_zero, smul_zero]
   have hne : ∀ j, 0 < j → j ≤ ATE_LOOP_COUNT → j • Q.toPoint ≠ 0 := fun j hj0 hjs h =>
@@ -470,7 +471,9 @@ The algorithm computes `f_{s, Q'}` at `P = (xp, yp)`.
 
 The lines pass through `s Q'` and `pi(Q')`, then through `s Q' + pi(Q')` and `-pi(pi(Q'))`.
 
-`Q` is on the twist and `q Q = O`; `P` is any pair, since the pairing does not check it. -/
+`Q` is on the twist and `q Q = O`.
+
+`P` is any pair, since the pairing does not check it. -/
 theorem pairing_eq_finalExponentiation_loop {Q : Point2} (hQ : Q.isOnCurve = true)
     (hQr : Fr.modulus • Q.toPoint = 0) (xp yp : Fp) :
     pairing (.affine xp yp) Q = finalExponentiation

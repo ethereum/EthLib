@@ -17,14 +17,6 @@ It uses two extension fields of `Fp`:
 - `Fp2 = Fp[i] / (i^2 + 1)`, where the points of `G_2` live.
 - `Fp12 = Fp[w] / (w^12 - 18 w^6 + 82)`, where the pairing lands.
 - `Fp2` sits inside `Fp12` by `a + b i -> (a - 9 b) + b w^6`, since `(w^6 - 9)^2 = -1` there.
-
-`G_2` lies on the twist `y^2 = x^3 + 3 / (9 + i)` over `Fp2`.
-
-The twist sends `(x, y)` to `(x w^2, y w^3)` on `y^2 = x^3 + 3` over `Fp12`.
-
-The Miller loop adds and doubles points on the twist, over `Fp2`.
-
-Each line of the loop is evaluated in `Fp12`, at the twisted points.
 -/
 
 @[expose] public section
@@ -61,6 +53,9 @@ end Fp2
 
 /-! ## The twist and `G_2` -/
 
+-- `G_2` lies on the twist `y^2 = x^3 + 3 / (9 + i)` over `Fp2`.
+--
+-- The twist sends `(x, y)` to `(x w^2, y w^3)` on `y^2 = x^3 + 3` over `Fp12`.
 /-- `b2 = 3 / (9 + i)`, the constant of the twist, from EIP-197. -/
 def b2 : Fp2 := Fp2.mul (Fp2.ofFp 3) (Fp2.inv ⟨9, 1⟩)
 
@@ -136,12 +131,6 @@ def sub (a b : Fp12) : Fp12 := Vector.ofFn fun k => a[k] - b[k]
 
 /-- The product: the product of the polynomials, reduced with `w^12 = 18 w^6 - 82`.
 
-The coefficient of `w^m` in the product of the polynomials is `c_m`, for `m ≤ 22`.
-
-Each `w^m` with `m ≥ 12` is `18 w^(m - 6) - 82 w^(m - 12)`.
-
-So the terms of `w^18` to `w^22` first fold into those of `w^12` to `w^16`.
-
 The sums are taken on the values in `Nat`, and each coefficient is reduced modulo `p` once. -/
 def mul (a b : Fp12) : Fp12 :=
   let x0 := a[0].val; let x1 := a[1].val; let x2 := a[2].val; let x3 := a[3].val
@@ -150,6 +139,7 @@ def mul (a b : Fp12) : Fp12 :=
   let y0 := b[0].val; let y1 := b[1].val; let y2 := b[2].val; let y3 := b[3].val
   let y4 := b[4].val; let y5 := b[5].val; let y6 := b[6].val; let y7 := b[7].val
   let y8 := b[8].val; let y9 := b[9].val; let y10 := b[10].val; let y11 := b[11].val
+  -- The coefficient of `w^m` in the product of the polynomials is `c_m`, for `m ≤ 22`.
   let c0 := x0 * y0
   let c1 := x0 * y1 + x1 * y0
   let c2 := x0 * y2 + x1 * y1 + x2 * y0
@@ -179,6 +169,10 @@ def mul (a b : Fp12) : Fp12 :=
   let c20 := x9 * y11 + x10 * y10 + x11 * y9
   let c21 := x10 * y11 + x11 * y10
   let c22 := x11 * y11
+  -- Each `w^m` with `m ≥ 12` is `18 w^(m - 6) - 82 w^(m - 12)`.
+  --
+  -- So the terms of `w^18` to `w^22` first fold into those of `w^12` to `w^16`.
+  --
   -- The terms of `w^12` to `w^16`, once those of `w^18` to `w^22` folded into them.
   let d12 := c12 + 18 * c18
   let d13 := c13 + 18 * c19
@@ -255,15 +249,13 @@ def LOG_ATE_LOOP_COUNT : Nat := 63
 
 /-- The line of slope `l w` through the twisted point `(x1 w^2, y1 w^3)`, at `(xt, yt)`.
 
-It is `l w (xt - x1 w^2) - (yt - y1 w^3)`.
-
-An element `a + b i` of `Fp2` is `(a - 9 b) + b w^6` in `Fp12`, so the line has a closed form.
-
-Write `l = l0 + l1 i` and `y1 - l x1 = d0 + d1 i`.
-
-Then the line is `-yt + xt (l0 - 9 l1) w + (d0 - 9 d1) w^3 + xt l1 w^7 + d1 w^9`. -/
+It is `l w (xt - x1 w^2) - (yt - y1 w^3)`. -/
 def slopeLine (l x1 y1 : Fp2) (xt yt : Fp) : Fp12 :=
+  -- An element `a + b i` of `Fp2` is `(a - 9 b) + b w^6` in `Fp12`, so the line has a closed form.
+  --
+  -- Write `l = l0 + l1 i` and `y1 - l x1 = d0 + d1 i`.
   let d := y1 - l * x1
+  -- Then the line is `-yt + xt (l0 - 9 l1) w + (d0 - 9 d1) w^3 + xt l1 w^7 + d1 w^9`.
   #v[-yt, xt * (l.c0 - 9 * l.c1), 0, d.c0 - 9 * d.c1, 0, 0, 0, xt * l.c1, 0, d.c1, 0, 0]
 
 /-- The vertical line `xt - x1 w^2` through the twisted point with `x` coordinate `x1 w^2`.
@@ -274,10 +266,6 @@ def verticalLine (x1 : Fp2) (xt : Fp) : Fp12 :=
 
 /-- The line through the twisted points `r` and `q`, at the point `(xt, yt)` of `G_1`.
 
-A twisted point has `x` times `w^2` and `y` times `w^3`.
-
-So a slope `l` of the twist is the slope `l w` of the twisted points.
-
 It follows the line function of [the pairing-friendly curves draft][pfc], Appendix A.
 
 The draft writes it on `E`, and here it runs on the twisted points.
@@ -285,6 +273,11 @@ The draft writes it on `E`, and here it runs on the twisted points.
 [pfc]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11#appendix-A
 -/
 def linefunc (r q : Point2) (xt yt : Fp) : Fp12 :=
+  -- Each line of the loop is evaluated in `Fp12`, at the twisted points.
+  --
+  -- A twisted point has `x` times `w^2` and `y` times `w^3`.
+  --
+  -- So a slope `l` of the twist is the slope `l w` of the twisted points.
   match r, q with
   | .affine x1 y1, .affine x2 y2 =>
     -- The draft tests `Q_1 = Q_2`, then `Q_1 = -Q_2`; on the curve, both have `x_1 = x_2`.
@@ -323,6 +316,8 @@ Their `t` is the BN parameter `u`.
 
 It takes `Q` of `G_2` on the twist, and `P = (xp, yp)` of `G_1`. -/
 def millerLoop (q : Point2) (xp yp : Fp) : Fp12 :=
+  -- The loop adds and doubles points on the twist, over `Fp2`.
+  --
   -- Line 1: write `s = 6t + 2` as `s = sum_{i=0}^{L-1} s_i 2^i`, with `s_i` in `{-1, 0, 1}`.
   --
   -- The digits here are the bits of `s`, so no `s_i` is `-1`, and lines 5 and 6 never apply.
