@@ -9,37 +9,7 @@ public import VCVio.CryptoFoundations.SignatureAlg.RomQueryCount
 
 Strong unforgeability under chosen-message attacks, for one key, in the random-oracle model.
 
-1. `SK.seed` is 32 uniform bytes, and `(sk, pk) = Gen(SK.seed)`.
-2. The adversary gets `pk`, queries `H`, and requests `Sign(sk, m)` for messages of its choice.
-3. It returns a pair `(m*, sigma*)`.
-4. It wins when `Ver(pk, m*, sigma*) = 1` and no request for `m*` returned `sigma*`.
-
-One random oracle answers every hash call.
-
-The algorithms are EthLib's own: `keyGenWith`, `signWith` and `verifyWith`.
-
-Their `H` is a query to the random oracle that leanXMSS's game also uses.
-
-The oracle is lazily sampled, from an empty cache.
-
-A failed signing request is answered with nothing, and nothing never verifies.
-
 The game, the advantage and the budget are VCVio's, for this scheme.
-
-# The budget
-
-An adversary's budget is two numbers, counted on every path of its own program.
-
-- `qH`: its hash queries.
-- `qS`: its signing requests.
-
-The calls of key generation, of the signer and of the final verification are not charged.
-
-No signing limit is built into the game.
-
-A bound in `qS` then says how the security falls with the number of signatures.
-
-The signer does not count its signatures, so the limit of `2^30` is the caller's to keep.
 
 # Scope
 
@@ -68,7 +38,11 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability
 
 open OracleSpec OracleComp ENNReal MeasureTheory
 
-/-- `H` in the game: a query to the random oracle. -/
+/-- `H` in the game: a query to the random oracle.
+
+One random oracle answers every hash call.
+
+leanXMSS's game uses the same oracle. -/
 abbrev H : ByteArray → OracleComp HashSig.OracleWorld (Vector UInt8 32) :=
   HashSig.queryH
 
@@ -94,11 +68,30 @@ noncomputable def scheme :
     | none => pure false
     | some sig => verifyWith H pk msg sig
 
-/-- An adversary: from the public key, it queries `H`, requests signatures and returns a pair. -/
+/-- An adversary: from the public key, it queries `H`, requests signatures and returns a pair.
+
+Its budget is two numbers, counted on every path of its own program:
+
+- `qH`: its hash queries.
+- `qS`: its signing requests.
+
+The calls of key generation, of the signer and of the final verification are not charged.
+
+No signing limit is built into the game.
+
+A bound in `qS` then says how the security falls with the number of signatures.
+
+The signer does not count its signatures, so the limit of `2^30` is the caller's to keep. -/
 abbrev Adversary := SignatureAlg.StrongUnforgeableAdversary scheme
 
-/-- The probability that the adversary returns a valid pair that no request returned. -/
+/-- The probability that the adversary returns a valid pair that no request returned.
+
+1. `SK.seed` is 32 uniform bytes, and `(sk, pk) = Gen(SK.seed)`.
+2. The adversary gets `pk`, queries `H`, and requests `Sign(sk, m)` for messages of its choice.
+3. It returns a pair `(m*, sigma*)`.
+4. It wins when `Ver(pk, m*, sigma*) = 1` and no request for `m*` returned `sigma*`. -/
 noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
+  -- The oracle is lazily sampled, from an empty cache.
   SignatureAlg.strongUnforgeableAdvantage (ProbCompRuntime.rom HashSig.HashSpec) adversary
 
 /-! ## What the game checks -/

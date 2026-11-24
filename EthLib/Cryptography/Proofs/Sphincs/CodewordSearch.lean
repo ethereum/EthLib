@@ -16,29 +16,11 @@ To sign, a one-time key encodes the message under counters `0, 1, ...`, up to `2
 
 It keeps the first counter whose 16-byte digest is a codeword, and signing fails if none is.
 
-Counter `c` hashes `PK.seed | ADRS_enc(K) | M | BE_32(c)` and keeps the first 16 bytes.
+The search starts from a cache that holds none of its trial inputs.
 
-Here the hash is a random oracle, and its cache holds none of the trial inputs yet.
-
-The counters below `2^32` have distinct big-endian words, so the trials hash distinct inputs.
-
-So the trials see fresh, independent, uniform digests.
-
-Exactly `|C|` of the `2^128` digests are codewords.
-
-So all counters fail with probability `(1 - |C| / 2^128)^(2^32)`, exactly.
-
-One counter succeeds with probability `|C| / 2^128 = 2^-13.84`, about one in 14,670.
-
-So `2^32` counters expect 292,764.7 codewords, and all fail with probability below `exp(-2^18)`.
-
-That is below `2^-378193`.
+Then all `2^32` counters fail with probability below `exp(-2^18)`.
 
 The bound is for one search, so for one one-time signature of the hypertree.
-
-Whether the signer's cache holds a trial input when the search starts is not proved here.
-
-An empty cache holds none, and a corollary states the bound from it.
 -/
 
 @[expose] public section
@@ -91,7 +73,9 @@ The hash is a lazily sampled random oracle, and the search starts from any cache
 
 The cache must hold none of the `2^32` inputs that the counters hash.
 
-The `PK.seed`, the message and the key are arbitrary. -/
+The `PK.seed`, the message and the key are arbitrary.
+
+Whether the signer's cache holds a trial input when the search starts is not proved here. -/
 theorem prEvent_findCounter_none (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
     (cache : HashSig.HashSpec.QueryCache)
     (hfresh : ∀ j < MAX_COUNTER_TRIALS,
@@ -101,13 +85,16 @@ theorem prEvent_findCounter_none (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
         HashSig.queryH pkSeed key msg 0 MAX_COUNTER_TRIALS)).run' cache}[z = none]
       = (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ MAX_COUNTER_TRIALS := by
   rw [← prEvent_not_codeword]
+  -- The trials see fresh, independent, uniform digests.
   refine Wots.prEvent_findFirst_romImpl_none UInt32.ofNat
     (fun c => (thInput pkSeed (adrsEnc key)
       (packBytes msg ++ packBytes (toByte COUNTER_LEN c.toNat))).data.toList)
     (fun u => codeword? (trunc N (HashSig.ofOutput u))) _ (fun c => ?_) _ 0 cache
     (fun j j' _ hj _ hj' h => ?_) (fun j _ hj => ?_)
+  -- Counter `c` hashes `PK.seed | ADRS_enc(K) | M | BE_32(c)` and keeps the first 16 bytes.
   · simp only [encode, th, HashSig.queryH, HashSig.oracleHash, map_eq_bind_pure_comp]
     rfl
+  -- The counters below `2^32` have distinct big-endian words, so the trials hash distinct inputs.
   · -- The trials share the prefix and the message, so their counter words agree.
     have hin := (thInput_inj (ByteArray.ext (Array.toList_inj.mp h))).2.2
     have hword : UInt32.size = 256 ^ COUNTER_LEN := by decide
@@ -133,6 +120,13 @@ theorem prEvent_findCounter_none_le (pkSeed : PkSeed) (key : OtsKey) (msg : Dige
   rw [prEvent_findCounter_none pkSeed key msg cache hfresh,
     HashSig.ofReal_one_sub_div _ _ (by simp [CODE_SIZE]),
     ← ENNReal.ofReal_pow (by norm_num [CODE_SIZE])]
+  -- One counter succeeds with probability `|C| / 2^128 = 2^-13.84`, about one in 14,670.
+  --
+  -- So `2^32` counters expect 292,764.7 codewords.
+  --
+  -- All of them fail with probability below `exp(-2^18)`.
+  --
+  -- That is below `2^-378193`.
   exact ENNReal.ofReal_le_ofReal all_counters_fail_probability
 
 /-- From an empty cache, all `2^32` counters miss the code with probability below `exp(-2^18)`. -/
@@ -140,6 +134,7 @@ theorem prEvent_findCounter_none_le_empty (pkSeed : PkSeed) (key : OtsKey) (msg 
     Pr{let z ← (simulateQ HashSig.HashSpec.romImpl (Internal.findCounter
         HashSig.queryH pkSeed key msg 0 MAX_COUNTER_TRIALS)).run' ∅}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) :=
+  -- An empty cache holds none of the trial inputs.
   prEvent_findCounter_none_le pkSeed key msg ∅ fun _ _ => rfl
 
 end EthLib.Cryptography.Sphincs

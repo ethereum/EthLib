@@ -15,15 +15,6 @@ FIPS 205 Algorithm 19 splits the 34-byte digest `D` into three fields of whole b
 
 Read big-endian, `D` is a 272-bit integer, and the fields read disjoint runs of its bits.
 
-```text
-    toInt(D) / 2^32   = sum_{kappa < 24} s_kappa * 2^(10 (23 - kappa))
-    toInt(D) mod 2^26 = idx = tree * 2^8 + leaf
-```
-
-- The 24 leaves `s_kappa` are the top 240 bits, 10 at a time, leaf 0 first.
-- The index is the low 26 bits: the low 18 bits of the tree field, then the leaf byte.
-- The top 6 bits of the tree field are not read.
-
 So a uniform digest gives a uniform index and 24 independent uniform leaves.
 
 The tree and leaf fields are FIPS 205's `idx_tree` and `idx_leaf`: the bottom key's tree and leaf.
@@ -207,10 +198,13 @@ theorem length_leafBytes (d : MessageDigest) :
 
 ```text
     toInt(D) / 2^32   = sum_{kappa < 24} s_kappa * 2^(10 (23 - kappa))
-    toInt(D) mod 2^26 = idx
+    toInt(D) mod 2^26 = idx = tree * 2^8 + leaf
 ```
 
-The 6 bits between the two are not read. -/
+- The 24 leaves `s_kappa` are the top 240 bits, 10 at a time, leaf 0 first.
+- The index is the low 26 bits: the low 18 bits of the tree field, then the leaf byte.
+
+The 6 bits between the two, the top 6 bits of the tree field, are not read. -/
 theorem digest_fields (d : MessageDigest) :
     toInt d / 2 ^ (8 * (TREE_INDEX_BYTES + LEAF_INDEX_BYTES))
         = ((List.finRange FORS_TREES).map fun kappa : Fin FORS_TREES =>

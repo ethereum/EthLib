@@ -9,19 +9,6 @@ public import EthLib.Cryptography.Proofs.Sphincs.Digest
 # Proofs: leanSPHINCS signing
 
 What a successful signature is made of, and why signing can fail.
-
-- The signer signs under the public key that key generation gives `SK.seed`.
-- A signature carries the randomizer `R = PRF_msg(SK.prf, PK.seed, M')`.
-- It carries the FORS openings at its digest, and three honest layer signatures.
-- Signing fails only when a one-time key finds no codeword in `2^32` counters.
-
-The signer builds each tree once, and reads both a key's path and the tree's root from it.
-
-It signs exactly as a signer that computes each path, then builds each tree again for its root.
-
-Each theorem holds for every hash function `f`, run in the identity monad.
-
-`sign` is the case `f = hash`.
 -/
 
 @[expose] public section
@@ -97,6 +84,9 @@ def signWith (sk : SecretKey) (msg : Message) : m (Except SphincsError Signature
 
 end Recompute
 
+-- Each theorem holds for every hash function `f`, run in the identity monad.
+--
+-- The specification's signer is the case `f = hash`.
 variable {f : ByteArray → Vector UInt8 32}
 
 section Layers
@@ -335,6 +325,7 @@ end Equal
 /-- A signature holds the randomizer, the FORS openings its digest picks, and three layers.
 
 - `pk` is the public key that key generation gives `SK.seed`.
+- The randomizer is `R = PRF_msg(SK.prf, PK.seed, M')`.
 - Every secret is `PRF(PK.seed, SK.seed, ADRS)`.
 - Each layer's key signs what the layer below gives, with its path in its key's tree.
 - The bottom key signs the FORS public key, and a higher key the root of the tree below. -/
@@ -377,7 +368,7 @@ theorem sign_eq_ok {sk : SecretKey} {pk : PublicKey} {m : Message} {σ : Signatu
   rw [OtsKey.ofIndex_top_tree (digestIndex_lt _), ← forsSign_run_snd]
   exact ⟨rfl, rfl, hbottom, hmiddle, htop⟩
 
-/-- Signing fails only when a one-time key finds no codeword.
+/-- Signing fails only when a one-time key finds no codeword in `2^32` counters.
 
 The error names the layer of that key. -/
 theorem sign_error {sk : SecretKey} {m : Message} {e : SphincsError}

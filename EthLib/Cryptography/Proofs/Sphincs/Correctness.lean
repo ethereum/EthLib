@@ -12,19 +12,6 @@ public import EthLib.Cryptography.Proofs.Sphincs.Digest
 
 A signature this specification produces is one it accepts.
 
-The signer rebuilds the public key as key generation computes it.
-
-So the signer and the verifier hash the message into the same digest, and read the same `idx`.
-
-- The FORS openings recover the FORS public key of instance `idx`.
-- The bottom layer leads to the root of bottom tree `idx >> 8`.
-- The middle layer leads to the root of middle tree `idx >> 16`.
-- The top layer leads to the root of the top tree, which is `PK.root`.
-
-Each layer's key signs exactly what the layer below leads to.
-
-So the verifier walks the signer's path back.
-
 # Assumption
 
 Every theorem here assumes that signing succeeded.
@@ -86,8 +73,19 @@ The public key is the one key generation gives `SK.seed`. -/
 theorem verify_sign {sk : SecretKey} {m : Message} {σ : Signature}
     (h : (signWith (pureHash f) sk m).run = .ok σ) :
     (verifyWith (pureHash f) (keyGenWith (pureHash f) sk.seed).run.2 m σ).run = true := by
+  -- The signer rebuilds the public key as key generation computes it.
+  --
+  -- So the signer and the verifier hash the message into the same digest, and read the same `idx`.
   obtain ⟨-, hfors, hbottom, hmiddle, htop⟩ := sign_eq_ok rfl h
   simp only [value_buildTree_run] at hmiddle htop
+  -- Each layer's key signs exactly what the layer below leads to.
+  --
+  -- So the verifier walks the signer's path back:
+  --
+  -- - The FORS openings recover the FORS public key of instance `idx`.
+  -- - The bottom layer leads to the root of bottom tree `idx >> 8`.
+  -- - The middle layer leads to the root of middle tree `idx >> 16`.
+  -- - The top layer leads to the root of the top tree, which is `PK.root`.
   rw [verify_iff, signatureRoot]
   -- Step 1: the FORS openings recover the FORS public key the bottom key signed.
   rw [hfors, forsRecover_forsSign]

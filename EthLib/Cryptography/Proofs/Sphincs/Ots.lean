@@ -8,15 +8,6 @@ public import EthLib.Cryptography.Proofs.HashSig
 # Proofs: WOTS+C one-time signatures
 
 Correctness of the one-time signature.
-
-- The counter search returns the least counter whose encoding is a codeword.
-- An honest one-time signature leads back to the key's own leaf.
-
-Each theorem holds for every hash function `f`, run in the identity monad.
-
-Keccak-256 is one such function, so the theorems cover the specification as it runs.
-
-A variable `f` also keeps every proof from unfolding the hash on a concrete input.
 -/
 
 @[expose] public section
@@ -25,6 +16,11 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
+-- Each theorem holds for every hash function `f`, run in the identity monad.
+--
+-- Keccak-256 is one such function, so the theorems cover the specification as it runs.
+--
+-- A variable `f` also keeps every proof from unfolding the hash on a concrete input.
 variable {f : ByteArray → Vector UInt8 32} {pkSeed : PkSeed} {key : OtsKey} {i : Fin V}
   {start : Nat} {value : Digest}
 

@@ -9,19 +9,7 @@ public import EthLib.Cryptography.Proofs.Merkle.Build
 
 An honest path leads from a key's leaf to the root of its tree.
 
-The key `e` of a tree of height `h` reaches node `floor(e / 2^h)` at the top height.
-
-So a key below `2^h`, which every key of the tree is, reaches the root.
-
-A tree hashes only at heights 1 to its own height, so only those node hashes matter.
-
-A build of a tree holds its root and the path of each of its keys.
-
 Each statement specializes one proved for every Merkle tree.
-
-The unfolding equations hold in every monad.
-
-The other statements hold for every hash function `f`, run in the identity monad.
 -/
 
 @[expose] public section
@@ -54,7 +42,10 @@ theorem node_succ (z j : Nat) :
       nodeHash H pkSeed layer tree ⟨z + 1, j⟩ left right) :=
   rfl
 
-/-! ## Only the heights of the tree matter -/
+/-! ## Only the heights of the tree matter
+
+A tree hashes only at heights 1 to its own height, so only those node hashes matter.
+-/
 
 /-- A path is the same with any node hash that agrees on the heights of the tree. -/
 theorem path_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
@@ -87,6 +78,7 @@ end Monad
 
 section Build
 
+-- From here on, the statements hold for every hash function, run in the identity monad.
 variable {H : ByteArray → Id (Vector UInt8 32)} {pkSeed : PkSeed} {prf : Prf Id} {layer : Layer}
   {tree : Nat}
 
@@ -118,7 +110,9 @@ theorem fold_path (e : Nat) :
       = (node (pureHash f) pkSeed prf layer tree layer.height (e / 2 ^ layer.height)).run :=
   Merkle.climb_path _ _ _ _
 
-/-- A key of the tree, below `2^h`, reaches the tree's root. -/
+/-- A key of the tree, below `2^h`, reaches the tree's root.
+
+Every key of the tree is below `2^h`. -/
 theorem fold_path_root {e : Nat} (he : e < 2 ^ layer.height) :
     (fold (pureHash f) pkSeed layer tree e
         (otsPublicLeaf (pureHash f) pkSeed prf ⟨layer, tree, e⟩).run

@@ -10,18 +10,7 @@ public import EthLib.Cryptography.Proofs.HashSig
 
 An honest FORS opening leads back to the instance's FORS public key.
 
-- Climbing all 10 heights from leaf `s` with its path reaches the tree's root `Y_{10,0}`.
-- The 24 roots, hashed by `T_k`, are the FORS public key.
-
-The signer builds each tree once, and reads both the opening and the root from that build.
-
 Each step specializes a statement proved for every Merkle tree.
-
-A FORS tree hashes only at heights 1 to 10, so only those node hashes matter.
-
-The unfolding equations hold in every monad.
-
-The other statements hold for every hash function `f`, run in the identity monad.
 -/
 
 @[expose] public section
@@ -53,7 +42,9 @@ theorem forsNode_eq_of_agree (hash' : Merkle.Position → Digest → Digest → 
       = Merkle.node hash' (forsLeaves H pkSeed prf idx kappa) ⟨z, j⟩ :=
   Merkle.node_congr _ hash' _ ⟨z, j⟩ agree
 
-/-- A tree's root is the same with any node hash that agrees on heights 1 to 10. -/
+/-- A tree's root is the same with any node hash that agrees on heights 1 to 10.
+
+A FORS tree hashes only at heights 1 to 10, so only those node hashes matter. -/
 theorem forsRoot_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
     (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ FORS_HEIGHT →
       forsNodeHash H pkSeed idx kappa q = hash' q) :
@@ -76,6 +67,7 @@ end Monad
 
 /-! ## The values computed -/
 
+-- From here on, the statements hold for every hash function `f`, run in the identity monad.
 variable {f : ByteArray → Vector UInt8 32} {pkSeed : PkSeed} {prf : Prf Id} {idx : Nat}
   {kappa : Fin FORS_TREES}
 
@@ -144,6 +136,8 @@ theorem treeRecover_treeOpen (s : Fin (2 ^ FORS_HEIGHT)) :
       = (forsRoot (pureHash f) pkSeed prf idx kappa).run := by
   rw [treeOpen_run]
   -- The revealed secret hashes to the honest leaf, and the honest path climbs to the root.
+  --
+  -- Climbing all 10 heights from leaf `s` with its path reaches the tree's root `Y_{10,0}`.
   exact Merkle.climb_path_root (forsNodeHash (pureHash f) pkSeed idx kappa)
     (forsLeaves (pureHash f) pkSeed prf idx kappa) s.isLt
 
@@ -154,6 +148,8 @@ theorem forsRecover_forsSign (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES
       = (forsKey (pureHash f) pkSeed prf idx).run := by
   rw [forsRecover_run, forsKey_run, forsSign_run]
   -- Tree by tree, the opening recovers the tree's root.
+  --
+  -- The 24 roots, hashed by `T_k`, are the FORS public key.
   refine congrArg (fun roots => (forsPkFromRoots (pureHash f) pkSeed idx roots).run)
     (congrArg Vector.ofFn (funext fun kappa => ?_))
   simp only [Fin.getElem_fin, Vector.getElem_ofFn]
