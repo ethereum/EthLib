@@ -9,27 +9,15 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 /-!
 # Proofs: the JSON form of a block
 
-The block object has the names of the header object of its fork and those of the fields of a block.
-
-On each name of the header, it holds what the header object of the same block holds.
-
-Its transactions are their hashes, or their objects, which carry the same hashes in the same order.
-
-Each list has one entry for each transaction of the block.
-
-The size of the object is the length of the RLP form of the block, in bytes.
-
-The object lists the hashes of the headers of the ommers, in order.
+The block object agrees with the header object, and lists the transactions, ommers and size.
 
 Each property holds whenever the writer gives an object.
 
-The writer fails when the node cannot encode the block, or recover a sender in it.
+The writer fails when the node cannot encode the block.
+
+With hydrated transactions, it also fails when it cannot recover a sender.
 
 In a valid view, a canonical block after the lowest has an object exactly when it has an RLP form.
-
-From Fusaka, the size check gives that form, of at most 8 MiB, so the object exists.
-
-In a valid view, each signature of a canonical block after the lowest names a sender.
 -/
 
 public section
@@ -331,6 +319,7 @@ theorem Valid.exists_rawBlock_of_fusaka_le {v : ChainView} {checkSeal : Bool}
   unfold Blocks.checkBlock at hcheck
   obtain ⟨items, hitems, hcheck⟩ := EthLib.Base.bind_ok_iff.mp hcheck
   obtain ⟨_, hsize, -⟩ := EthLib.Base.bind_ok_iff.mp hcheck
+  -- From Fusaka, the size check of the transition gives the RLP form, of at most 8 MiB.
   rcases (Blocks.validateBlockSize_eq_ok_iff items).mp hsize with hlt | ⟨bytes, hbytes, hle⟩
   · exact absurd hf (Nat.not_le_of_lt hlt)
   · refine ⟨bytes, ?_, hle⟩

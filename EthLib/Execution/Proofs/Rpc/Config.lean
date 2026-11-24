@@ -177,24 +177,22 @@ theorem ChainView.configReport_no_genesis (v : ChainView) (absent : v.genesis = 
   simp [ChainView.configReport, ChainView.schedule?, absent, throw, throwThe,
     MonadExceptOf.throw]
 
-/-- A successful report comes from the view's schedule, with the configurations it selects.
-
-The schedule has blob schedules at forks, and the head has passed its fork blocks.
-
-The current one is at the last fork time the head has reached, and its fork has a known time.
-
-The next and last ones are at the first and last supported fork times after the head.
-
-They are both absent when no such time exists. -/
+/-- A successful report comes from the view's schedule, with the configurations it selects. -/
 theorem ChainView.configReport_eq_ok {v : ChainView} {r : ConfigReport}
     (made : v.configReport = .ok r) :
+    -- The schedule has blob schedules at forks.
     ∃ s, v.schedule? = some s ∧ configBlobsAtForks s = true ∧
+      -- The head has passed its fork blocks.
       s.blocks.all (· ≤ v.head.block.header.number) = true ∧
+      -- The current configuration is at the last fork time the head has reached.
       configObject s v.head.block.header.number
         (configCurrentTime s v.head.block.header.timestamp.toNat) = .ok r.current ∧
+      -- Its fork has a known time.
       configTimeKnown s.config r.current.fork = true ∧
+      -- The next and last ones are both absent when no supported fork time follows the head.
       ((configFutureTimes s v.head.block.header.number v.head.block.header.timestamp.toNat = [] ∧
           r.next = none ∧ r.last = none) ∨
+        -- Else they are at the first and last supported fork times after the head.
         ∃ first rest c c',
           configFutureTimes s v.head.block.header.number v.head.block.header.timestamp.toNat =
             first :: rest ∧
@@ -239,7 +237,7 @@ theorem ChainView.configReport_eq_ok {v : ChainView} {r : ConfigReport}
               exact ⟨rfl, hk, .inr ⟨first, rest, c, c', heq, hn, hl, rfl, rfl⟩⟩
     · simp [hb, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
 
-/-- A future fork time of the report is exactly a fork time after the head that the node supports. -/
+/-- A future fork time of the report is exactly a supported fork time after the head. -/
 theorem mem_configFutureTimes {s : Schedule} {number timestamp time : Nat} :
     time ∈ configFutureTimes s number timestamp ↔
       time ∈ s.times ∧ timestamp < time ∧ configSupported s number time = true := by

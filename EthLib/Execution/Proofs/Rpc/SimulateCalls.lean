@@ -12,19 +12,7 @@ The blocks of a simulation, with their headers, do not depend on traced transfer
 
 Only the logs of the call results read that choice.
 
-From Glamsterdam, the receipts already hold the transfer logs of EIP-7708.
-
-So a block from Glamsterdam gives the same answer with transfers traced or not.
-
-A block without transactions reports no call result, so it gives the same answer too.
-
-So does a simulation whose blocks are each from Glamsterdam or without transactions.
-
-It suffices that each block of the plan is from Glamsterdam or has no calls.
-
-A gap block has no calls.
-
-It also suffices that the active fork at the header of the base block is Glamsterdam or later.
+A simulation whose blocks are from Glamsterdam or without transactions answers alike either way.
 -/
 
 @[expose] public section
@@ -117,6 +105,7 @@ theorem simulateBlock_json_trace {chain chain' : BlockChain} {base : RecentBlock
     obtain ⟨-, -, _, -, -, -, -, -, -, -, _, -, res, hres, _, -, hEq⟩ := h
     simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
     obtain ⟨-, -, hb⟩ := hEq
+    -- From Glamsterdam, the receipts already hold the transfer logs of EIP-7708.
     have same := callsJson_trace (b := b) (by rw [← hb]; exact runBody_simulatedLogs hfork hres)
     unfold SimulatedBlock.json
     rw [same]

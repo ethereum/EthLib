@@ -9,45 +9,15 @@ public import EthLib.Execution.Proofs.Rpc.Raw
 /-!
 # Proofs: `eth_call`
 
-A call answers data exactly when the message that it prepares ends without an error.
+A call answers from the message that it prepares, on the state after the block that it names.
 
-The data is then the output of that message.
+A request makes a transaction only when it passes checks, and the transaction keeps its fields.
 
-A call answers the revert error exactly when that message reverts.
+The blobs, the commitments, the proofs and the type of a request change no answer of the call.
 
-The data of the error is then the output of the revert.
+A request without a fee, from a sender that holds its value, never gets code 809.
 
-The message runs on the state after the block that the request names.
-
-Its caller is the sender, its target the recipient, and its value that of the request.
-
-A call to a recipient carries the input of the request as its data.
-
-A request that names no fee takes no wei from its sender before its message runs.
-
-Such a request, from a sender that holds its value, never fails with code 809, insufficient funds.
-
-A sender that holds less than the value never gets an answer with data.
-
-A request makes a transaction exactly when it passes the checks below.
-
-Its fee, access, blob and authorization fields must fit its kind.
-
-Its kind must be at most 4, and a request of type 3 or 4 must name a recipient.
-
-A chain that it names must be that of the node.
-
-Each number that the transaction carries must also fit in 256 bits.
-
-That transaction has the kind, the value, the recipient, the data and the lists of the request.
-
-The blobs, the commitments and the proofs of the request are not checked and change no transaction.
-
-Nor do they change the answer of the call.
-
-The call ignores the type of the request, so any type gives the answer of no type.
-
-An empty list of blob hashes, or a blob fee cap without blob hashes, is rejected with code -32000.
+Before Hegotá, an empty list of blob hashes, or a blob fee cap without them, fails with code -32000.
 -/
 
 public section
@@ -133,39 +103,32 @@ private theorem kind_eq_four {k : UInt8} (h : k ≤ 4) (h0 : ¬k = 0) (h1 : ¬k 
     (h3 : ¬k = 3) : k = 4 := by
   rcases kind_cases h with rfl | rfl | rfl | rfl | rfl <;> simp_all
 
-/-- A request makes a transaction exactly when it passes each check below.
-
-Its kind is at most 4.
-
-A fee cap or a priority fee needs type 2 or more, and a gas price type 1 or less.
-
-An access list needs type 1 or more, and authorizations type 4.
-
-Blob hashes or a blob fee cap need type 3.
-
-A chain that the request names is the chain of the node.
-
-Type 3 and type 4 need a recipient.
-
-The nonce, the gas limit and the fee cap that the call gives are below `2 ^ 256`.
-
-So is each number of the request that the transaction carries.
-
-For type 4, the nonce is below `2 ^ 64`. -/
+/-- A request makes a transaction exactly when it passes each check below. -/
 theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt64}
     {nonce gas maxFee : Nat} :
     (∃ t, tx.toTransaction chainId nonce gas maxFee = .ok t) ↔
+      -- Its kind is at most 4.
       tx.kind ≤ 4 ∧
+      -- A fee cap or a priority fee needs type 2 or more, and a gas price type 1 or less.
       (tx.kind ≤ 1 → tx.maxFeePerGas = none ∧ tx.maxPriorityFeePerGas = none) ∧
       (2 ≤ tx.kind → tx.gasPrice = none) ∧
+      -- An access list needs type 1 or more.
       (tx.kind = 0 → tx.accessList = none) ∧
+      -- Blob hashes or a blob fee cap need type 3.
       (tx.kind ≠ 3 → tx.blobVersionedHashes = none ∧ tx.maxFeePerBlobGas = none) ∧
+      -- Authorizations need type 4.
       (tx.kind ≠ 4 → tx.authorizationList = none) ∧
+      -- A chain that the request names is the chain of the node.
       (∀ c, tx.chainId = some c → c = chainId.toNat) ∧
+      -- Type 3 and type 4 need a recipient.
       (3 ≤ tx.kind → tx.to.isSome) ∧
+      -- The nonce, the gas limit and the fee cap that the call gives are below `2 ^ 256`.
+      --
+      -- So is each number of the request that the transaction carries.
       nonce < 2 ^ 256 ∧ gas < 2 ^ 256 ∧ tx.value.getD 0 < 2 ^ 256 ∧
       tx.maxPriorityFeePerGas.getD 0 < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧
       tx.gasPrice.getD 0 < 2 ^ 256 ∧ tx.maxFeePerBlobGas.getD 0 < 2 ^ 256 ∧
+      -- For type 4, the nonce is below `2 ^ 64`.
       (tx.kind = 4 → nonce < 2 ^ 64) := by
   constructor
   · rintro ⟨t, h⟩
@@ -618,7 +581,7 @@ theorem ethCall_type (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
 
 /-- A request with an empty list of blob hashes is rejected with code -32000.
 
-This holds at every fork that EthLib specifies, on a block that the view holds. -/
+This holds at every fork before Hegotá, on a block that the view holds. -/
 theorem prepareCall_emptyBlobHashes {v : ChainView} {tx : GenericTransaction} {p : BlockParam}
     {c : CallChoices} {r : BlockRecord} (hr : v.resolve p = .ok (some r))
     (hfork : (c.environment v r).fork < .hegota) (h : tx.blobVersionedHashes = some []) :
@@ -627,7 +590,7 @@ theorem prepareCall_emptyBlobHashes {v : ChainView} {tx : GenericTransaction} {p
 
 /-- A request with a blob fee cap and no blob hashes is rejected with code -32000.
 
-This holds at every fork that EthLib specifies, on a block that the view holds. -/
+This holds at every fork before Hegotá, on a block that the view holds. -/
 theorem prepareCall_blobFeeWithoutHashes {v : ChainView} {tx : GenericTransaction}
     {p : BlockParam} {c : CallChoices} {r : BlockRecord} (hr : v.resolve p = .ok (some r))
     (hfork : (c.environment v r).fork < .hegota) (hfee : tx.maxFeePerBlobGas.isSome)
@@ -761,6 +724,7 @@ theorem ethCall_ne_insufficientFunds {v : ChainView} {tx : GenericTransaction} {
     {c : CallChoices} {r : BlockRecord} {e : RpcError} (hfee : tx.namesFee = false)
     (hr : v.resolve p = .ok (some r))
     (hvalue : tx.value.getD 0 ≤ (r.account (tx.sender.getD c.sender)).balance.toNat) :
+    -- It never fails with code 809, insufficient funds.
     v.ethCall tx p c = .error e → e.code ≠ insufficientFunds.code := by
   rw [ethCall_eq]
   rcases hp : v.prepareCall tx p c with e' | s

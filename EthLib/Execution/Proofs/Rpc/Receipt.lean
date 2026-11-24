@@ -15,34 +15,9 @@ The receipt objects of a block follow its receipts, one for each transaction, in
 
 Their logs are numbered from 0 across the block, and the lookup of one receipt keeps that number.
 
-The receipt objects of a block are built exactly when two conditions hold.
+They are built exactly when there is one receipt per transaction, each with a hash and a sender.
 
-- The block has as many receipts as transactions.
-- Each transaction has a hash, and a signature that names a sender at the fork of the block.
-
-From Byzantium, the status of a receipt object is `0x1` exactly when the receipt is a success.
-
-A receipt object has blob fields exactly for a blob transaction, with `2^17` blob gas per hash.
-
-From Dencun, its blob gas price is the base fee per blob gas at the excess blob gas of the header.
-
-In a valid view, take a canonical block after the lowest.
-
-Its receipt objects are built, and the lookups by block and by transaction return them.
-
-Each receipt object has the Bloom filter of its logs.
-
-The gas of the receipt objects adds up to the last cumulative gas.
-
-The base fee of the block is at most the maximum fee of each transaction.
-
-So the effective gas price follows the formula of the description.
-
-The run of the block reaches each transaction, on a state where the sender can buy the gas.
-
-Buying it lowers the balance by the gas limit times the effective gas price of the object.
-
-A blob transaction adds the blob gas of the object times its blob gas price.
+In a valid view, those of a canonical block after the lowest are built and agree with its run.
 -/
 
 public section
@@ -182,25 +157,21 @@ private theorem receiptInfo_transactionInfo {r : BlockRecord} {config : ChainCon
     subst h
     rfl
 
-/-- The object of a receipt has blob fields exactly for a blob transaction.
-
-Its blob gas is `2^17` for each versioned hash of the transaction.
-
-From Dencun, its price is the base fee per blob gas at the excess blob gas of the header.
-
-That base fee follows the blob schedule of the chain at the number and timestamp of the block.
-
-Before Dencun, the definition sets the price to 0. -/
+/-- The object of a receipt has blob fields exactly for a blob transaction. -/
 theorem receiptInfo_blob {r : BlockRecord} {config : ChainConfig}
     {index before firstLog : Nat} {tx : Transaction} {receipt : Receipt r.fork}
     {info : ReceiptInfo} (h : r.receiptInfo config index before firstLog tx receipt = .ok info) :
     info.blob = match tx with
+      -- Its blob gas is `2^17` for each versioned hash of the transaction.
       | .blob t => some (2 ^ 17 * t.blobVersionedHashes.length,
+          -- From Dencun, its price is the base fee per blob gas at the header's excess blob gas.
           if hd : .dencun ≤ r.fork then
             Fees.BlobBaseFee.getBaseFeePerBlobGas
+              -- That base fee follows the blob schedule of the chain at the number and timestamp.
               (Fees.BlobBaseFee.chainBlobSchedule config r.fork r.block.header.number
                 r.block.header.timestamp.toNat hd)
               (r.block.header.excessBlobGas hd).toNat
+          -- Before Dencun, the definition sets the price to 0.
           else 0)
       | _ => none := by
   unfold receiptInfo logInfos at h
@@ -427,7 +398,9 @@ end BlockRecord
 
 /-- From Byzantium, the outcome of a receipt is a status.
 
-It is `true` exactly when the receipt is a success. -/
+It is `true` exactly when the receipt is a success.
+
+So the status of a receipt object is `0x1` exactly when the receipt is a success. -/
 theorem outcomeOf_of_byzantium {fork : Fork} (h : .byzantium ≤ fork) (o : Outcome fork) :
     ∃ b, outcomeOf o = .inr b ∧ (b = true ↔ o = .status h true) := by
   cases o with
@@ -445,18 +418,15 @@ theorem outcomeOf_of_lt_byzantium {fork : Fork} (h : fork < .byzantium) (o : Out
 
 /-- The effective gas price agrees with the formula of the description, in integers.
 
-A legacy or EIP-2930 transaction pays its gas price.
-
-Any other transaction pays the base fee plus a priority part.
-
-That part is the least of the maximum fee minus the base fee, and the maximum priority fee.
-
 The formula holds when the base fee is at most the maximum fee. -/
 theorem effectiveGasPrice_description {baseFee : Nat} {tx : Transaction}
     (h : baseFee ≤ tx.maxFeePerGas) :
     (effectiveGasPrice baseFee tx : Int) = match (generalizing := false) tx with
+      -- A legacy or EIP-2930 transaction pays its gas price.
       | .legacy t | .accessList t => t.gasPrice.toNat
+      -- Any other transaction pays the base fee plus a priority part.
       | .feeMarket t | .blob t | .setCode t =>
+        -- The part is the least of: the maximum fee minus the base fee, the maximum priority fee.
         baseFee + min ((t.maxFeePerGas.toNat : Int) - baseFee) t.maxPriorityFeePerGas.toNat := by
   rcases tx with t | t | t | t | t <;>
     simp only [Transaction.maxFeePerGas] at h <;>
@@ -601,15 +571,7 @@ theorem Valid.effectiveGasPrice_receiptInfos {v : ChainView} {checkSeal : Bool}
 
 /-- In a valid view, take a canonical block after the lowest, and a receipt object of it.
 
-The run of the block reached its transaction after those before it.
-
-On the state that the transaction starts from, the sender can buy its gas.
-
-Buying it lowers its balance by exactly the gas limit of the transaction times a price.
-
-That price is the effective gas price of the object.
-
-A blob transaction adds the blob gas of the object times its price per blob gas. -/
+The sender of its transaction buys its gas at the prices of the object. -/
 theorem Valid.buyGas_receiptInfos {v : ChainView} {checkSeal : Bool}
     (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length)
     {infos : List ReceiptInfo} (h : v.canonical[i + 1].receiptInfos v.config = .ok infos)
@@ -621,10 +583,15 @@ theorem Valid.buyGas_receiptInfos {v : ChainView} {checkSeal : Bool}
         ⟨v.canonical[i].state, ∅, ∅, ∅, ∅⟩ = .ok state ∧
       startSystemCalls (blockEnvironment v.config hashes v.canonical[i + 1].block.header)
         v.canonical[i + 1].block.header.parentHash (.init state) = .ok body ∧
+      -- The run of the block reached its transaction after those before it.
       applyTransactions (blockEnvironment v.config hashes v.canonical[i + 1].block.header) body
         (v.canonical[i + 1].block.transactions.take k) = .ok before ∧
+      -- On the state that the transaction starts from, the sender can buy its gas.
       buyGas (blockEnvironment v.config hashes v.canonical[i + 1].block.header)
         (.ofBlock before.block) info.sender tx = .ok bought ∧
+      -- Buying lowers the balance by exactly the gas limit times the object's effective gas price.
+      --
+      -- A blob transaction adds the blob gas of the object times its price per blob gas.
       (bought.getAccount info.sender).balance.toNat + tx.gas.toNat * info.effectiveGasPrice +
           (info.blob.map fun (used, price) => used * price).getD 0 =
         ((State.TransactionState.ofBlock before.block).getAccount info.sender).balance.toNat := by

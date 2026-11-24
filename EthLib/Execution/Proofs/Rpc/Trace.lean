@@ -10,13 +10,7 @@ public import EthLib.Execution.Rpc.Trace
 
 The opcode logger changes nothing in the run of a transaction, for every configuration.
 
-The trace of a transaction of a block exists whenever the block runs it, at every fork.
-
-From Byzantium, the trace fails exactly when the receipt of the transaction says it failed.
-
-The trace of a block runs its transactions as its body does.
-
-Each entry is the trace of its transaction run alone, after the transactions before it.
+A transaction or a block has a trace whenever it runs, at every fork.
 
 An entry holds storage only at an SLOAD or SSTORE that runs, and a failed step changes no slot.
 

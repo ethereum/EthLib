@@ -7,27 +7,13 @@ public import EthLib.Execution.Proofs.Blocks.Bloom
 /-!
 # Proofs: the log filters
 
-The logs that a filter returns match it, and lie in the blocks that it reads.
+The logs that a filter returns are exactly the matching logs of the blocks that it reads.
 
-Each log of those blocks that matches the filter is returned.
-
-A range reads the canonical blocks between its bounds.
-
-It lies between the lowest block that the node holds and the head.
-
-A number bound above the head is an invalid range, whatever the other bound.
-
-Bounds that resolve in order between the lowest block and the head make a valid range.
-
-So two equal bounds, or a last bound at the head, make a valid range.
+A range reads the canonical blocks between its bounds, from the lowest held block to the head.
 
 In a valid view, take a canonical block after the lowest.
 
-The Bloom filter of its header covers the logs of its receipts.
-
-Suppose its Bloom filter excludes the addresses or a topic position of a filter.
-
-Then the block has no log that the filter selects.
+If its Bloom filter excludes a filter, it has no log that the filter selects.
 -/
 
 public section
@@ -181,6 +167,9 @@ theorem filterBlocks_range_eq_ok_iff {v : ChainView} {fromBlock toBlock : Option
     {blocks : List BlockRecord} :
     v.filterBlocks (.range fromBlock toBlock) = .ok blocks ↔
       ∃ first last, v.boundNumber fromBlock = .ok first ∧ v.boundNumber toBlock = .ok last ∧
+        -- The bounds lie in order from the lowest block to the head.
+        --
+        -- So two equal bounds, or a last bound at the head, make a valid range.
         v.lowest.block.header.number ≤ first ∧ first ≤ last ∧
         last ≤ v.head.block.header.number ∧
         blocks = v.canonical.filter fun r =>

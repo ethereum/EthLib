@@ -5,23 +5,13 @@ public import EthLib.Execution.Rpc.Simulate
 /-!
 # Proofs: the request of `eth_simulateV1`
 
-The reader rejects a key outside the schema of block or account overrides.
+The reader rejects an unknown key, or an account override that gives both `state` and `stateDiff`.
 
-It rejects an account override that gives both `state` and `stateDiff`.
+Such a rejection rejects the whole request.
 
-A rejected block or account override rejects the whole request.
-
-Each block keeps the number and the time that the request gives it.
-
-With a positive block time and no number or time override, the numbers and the times increase.
-
-The order check passes exactly when all numbers and times, gap blocks included, strictly increase.
-
-When the blocks pass the order check, each is above the base block in number and in time.
+Each block keeps the number and time that the request gives it, and the order check follows them.
 
 An override sets each field that it gives, and keeps the others and the other accounts.
-
-`stateDiff` keeps the slots that it does not name, and `state` clears them.
 
 Filling the defaults of a call keeps every field that the call gives.
 -/
@@ -295,7 +285,7 @@ theorem planBlocks_time {blockTime number time : Nat} {cs : List BlockStateCall}
     · simp_all
     · exact ih hb
 
-/-- Without number and time overrides, the blocks pass the order check. -/
+/-- With a positive block time and no number or time override, the blocks pass the order check. -/
 theorem checkOrder_planBlocks_of_none {blockTime : Nat} (hbt : 0 < blockTime)
     (number time : Nat) {cs : List BlockStateCall}
     (hcs : ∀ c ∈ cs, c.blockOverrides.number = none ∧ c.blockOverrides.time = none) :

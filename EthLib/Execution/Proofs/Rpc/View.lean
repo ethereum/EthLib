@@ -14,8 +14,6 @@ The latest tag resolves to the head.
 
 In a valid view, the canonical blocks have consecutive numbers, and each links to its parent.
 
-So every number from the lowest block to the head resolves to a block.
-
 The state of each canonical block has the state root of its header.
 -/
 

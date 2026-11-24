@@ -14,13 +14,11 @@ The JSON reader recovers every list that the writer writes, in the same order.
 
 The raw getter decodes to the retained list too.
 
-The hash guarantee holds in a valid view, from Glamsterdam.
+In a valid view from Glamsterdam, take a canonical block after the lowest.
 
-There, a retained list of a canonical block after the lowest hashes to its header field.
+Its retained list hashes to its header field.
 
-The lowest block, side blocks and the pending block are inputs.
-
-No transition checks their retained lists.
+No transition checks the lists of the lowest, side and pending blocks, which are inputs.
 -/
 
 public section

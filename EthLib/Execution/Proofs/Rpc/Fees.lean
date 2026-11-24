@@ -6,21 +6,11 @@ public import EthLib.Execution.Proofs.Rpc.View
 /-!
 # Proofs: the fee history
 
-A fee history lists the base fee of each block of its range, the header's or 0 before London.
-
-Its list of base fees ends with the base fee that the header rule gives to the next block.
-
-In a valid view, that is the base fee in the header of the next canonical block, from London on.
-
-That holds for the first London block too, which takes the initial base fee.
+A fee history lists the base fees, gas ratios and rewards of its blocks.
 
 `eth_baseFee` gives the last base fee of the history of the head alone.
 
-Each list of base fees has one more entry than the list of gas ratios.
-
-Each reward of a block with transactions, and as many receipts, is the tip of one of them.
-
-Along strictly increasing percentiles, the rewards of a block do not decrease.
+In a valid view from London on, the last base fee is that of the next canonical block's header.
 -/
 
 public section
@@ -106,6 +96,7 @@ The header rule gives the next block the base fee in the header of that next blo
 theorem Valid.nextBaseFee {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal) {i : Nat}
     (hi : i + 1 < v.canonical.length) (hNext : .london ≤ v.canonical[i].nextFork v.config)
     (hl1 : .london ≤ v.canonical[i + 1].fork) :
+    -- This holds for the first London block too, which takes the initial base fee.
     v.canonical[i].nextBaseFee v.config = v.canonical[i + 1].baseFee := by
   obtain ⟨hst, -⟩ := hv.follows i hi
   obtain ⟨parent, hlast, _hFork, hch⟩ := checkBlock_checkHeader (stateTransition_eq_ok hst).2.2.1

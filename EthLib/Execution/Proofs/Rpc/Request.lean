@@ -11,19 +11,11 @@ The readers of requests and responses read back what their writers write.
 
 A request reads back with its parameters, whether it has any or not.
 
-A JSON value reads as a request exactly when it is an object of this form.
-
-Its only members are `jsonrpc`, `id`, `method` and `params`, and `params` may be missing.
-
-Its version is `2.0`, its identifier a string, a number or `null`, and its method a string.
-
-Its parameters, when present, are an array.
-
 A response reads back with its result, even `null`, or with its error object.
 
-A JSON value reads as a response exactly when it is an object of three members.
+A request reads only from a JSON object of up to four members.
 
-They are the version `2.0`, the identifier, and either the result or an error object.
+A response reads only from a JSON object of three members.
 -/
 
 public section
@@ -142,22 +134,19 @@ theorem response_responseJson (r : Response) : response (responseJson r) = .ok r
     simp [rpcErrorOfJson_json]
     rfl
 
-/-- A JSON value reads as a request exactly when it is an object that meets the conditions below.
-
-Its only members are `jsonrpc`, `id`, `method` and `params`, and the last may be missing.
-
-The value of `jsonrpc` is the string `2.0`.
-
-The values of `id` and `method` are the identifier and the method of the request.
-
-The parameters of the request are the array under `params`, or empty when it is missing. -/
+/-- A JSON value reads as a request exactly when it is an object that meets the conditions below. -/
 theorem request_eq_ok_iff {j : Json} {r : Request} :
     request j = .ok r ↔ ∃ kvs, j = .obj kvs ∧
+      -- Its only members are `jsonrpc`, `id`, `method` and `params`, and the last may be missing.
       (∀ member ∈ kvs.toList, member.1 = "jsonrpc" ∨ member.1 = "id" ∨
         member.1 = "method" ∨ member.1 = "params") ∧
+      -- The value of `jsonrpc` is the string `2.0`.
       kvs.toList.lookup "jsonrpc" = some (.str "2.0") ∧
+      -- The value of `id` is the identifier of the request: a string, a number or `null`.
       kvs.toList.lookup "id" = some (requestIdJson r.id) ∧
+      -- The value of `method` is the method of the request, a string.
       kvs.toList.lookup "method" = some (.str r.method) ∧
+      -- The parameters are the array under `params`, or empty when it is missing.
       (kvs.toList.lookup "params" = none ∧ r.params = [] ∨
         kvs.toList.lookup "params" = some (.arr r.params.toArray)) := by
   obtain ⟨id, method, params⟩ := r
