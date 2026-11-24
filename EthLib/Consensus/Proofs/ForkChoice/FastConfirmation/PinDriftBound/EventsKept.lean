@@ -479,23 +479,9 @@ theorem Step.deposit_input {u w : ForkedBeaconState preset}
 
 /-- Every deposit event of a slot step of the run starts at a state that keeps the registry.
 
-A slot step records a deposit event only for the pending deposits of its epoch pass.
-
-So the event starts at the input of that pass.
-
-That input is the state after the first six stages of the epoch.
-
-They are justification, inactivity, rewards, registry updates, slashings and the eth1 reset.
-
-The steps of the run before the slot keep the registry, and so does each of those stages.
-
 Block deposits are not covered.
 
-From Electra they credit no existing key.
-
-The registry at the event's start has at most the size of the one at the slot step's start.
-
-A slashed key at the slot step's start is slashed at the event's start, and their epochs agree. -/
+From Electra they credit no existing key. -/
 theorem Run.events_kept {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (fulu : .fusaka ≤ x.fork) (early : y.fork < .glamsterdam)
@@ -507,7 +493,11 @@ theorem Run.events_kept {g x y : ForkedBeaconState preset}
       RegistryLifecycle x.state e.before.state ∧
       WithdrawableKept x.state e.before.state ∧
       getCurrentEpoch e.before.state ≤ getCurrentEpoch y.state ∧
+      -- The registry at the event's start has at most the size of the one at the slot step's start.
       e.before.state.validators.data.size ≤ u.state.validators.data.size ∧
+      -- A slashed key at the slot step's start is slashed at the event's start.
+      --
+      -- The epochs of the two states agree.
       SlashedPersistence u.state e.before.state ∧
       getCurrentEpoch e.before.state = getCurrentEpoch u.state := by
   intro e member source
@@ -517,12 +507,22 @@ theorem Run.events_kept {g x y : ForkedBeaconState preset}
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
   have earlyU : u.fork < .glamsterdam := Nat.lt_of_le_of_lt stepFork earlyW
   have fuluU : .fusaka ≤ u.fork := Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps)
+  -- The steps of the run before the slot keep the registry.
   have run : PinDrift.Internal.Kept x.state u.state := PinDrift.Internal.kept_run shared genesis
     fulu pre earlyU
   have epochLe : getCurrentEpoch u.state ≤ getCurrentEpoch y.state :=
     currentEpoch_le_of_chainSteps
       (Relation.ReflTransGen.head (Step.slot ok : Step config checks u w).chainStep
         post.chainSteps)
+  -- A slot step records a deposit event only for the pending deposits of its epoch pass.
+  --
+  -- So the event starts at the input of that pass.
+  --
+  -- That input is the state after the first six stages of the epoch.
+  --
+  -- They are justification, inactivity, rewards, registry updates, slashings and the eth1 reset.
+  --
+  -- Each of those stages keeps the registry.
   obtain ⟨kept, size, same, -, -⟩ := PinDrift.Internal.Step.deposit_input ok fuluU earlyW replayed e
     member source
   have total := run.trans kept

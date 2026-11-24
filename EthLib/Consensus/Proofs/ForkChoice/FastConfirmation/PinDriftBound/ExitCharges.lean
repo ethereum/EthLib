@@ -99,26 +99,24 @@ private theorem cV_split (h : Setting config checks g split fin pulled anc count
     simp only [Finset.mem_filter]
     exact ⟨fun ⟨_, a, b⟩ => ⟨a, b⟩, fun ⟨a, b⟩ => ⟨sub a, a, b⟩⟩
 
-/-- The fall of the V keys, from their per-key facts.
-
-The first fact is for a V key that is active in C: its fall and what C's floor leaves out.
-
-The floor leaves out the key's sync debits from the finalized block, and their rounding band.
-
-The second is for a V key that is not active in C: the same, and the charges that the sum names.
-
-The shared run from the finalized block adds the key's sync debits to the sum.
-
-C's tail adds its sync movement. -/
+/-- The fall of the V keys, from their per-key facts. -/
 theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {eventsF eventsC : List (BalanceEvent preset)}
+    -- The first fact is for a V key that is active in C.
+    --
+    -- It gives the key's fall and what C's floor leaves out.
+    --
+    -- The floor leaves out the key's sync debits from the finalized block, and their rounding band.
     (active : ∀ v ∈ V, v ∈ countedActiveVoters counted → (pulledBalance pulled v : ℤ) -
         countedBalance counted v
       ≤
       ((pinTerms config pulled anc fin).fall v.toNat : ℤ) +
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat) +
           Internal.bandR (eventsF ++ eventsC) v.toNat)
+    -- The second fact is for a V key that is not active in C.
+    --
+    -- It gives the same terms, and the charges that the sum names.
     (left : ∀ v ∈ countedInactiveVoters counted V, (pulledBalance pulled v : ℤ) ≤
       ((pinTerms config pulled anc fin).fall v.toNat +
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat) +
@@ -129,6 +127,9 @@ theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
           else 0) : ℕ)) :
     voterFallCost pulled counted V + inactiveVoterCost pulled counted V ≤
       ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
+        -- The shared run from the finalized block adds the key's sync debits to the sum.
+        --
+        -- C's tail adds its sync movement.
         (∑ v ∈ V,
           ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat)) +
         (∑ v ∈ V, Internal.bandR (eventsF ++ eventsC) v.toNat) +
@@ -212,22 +213,17 @@ theorem unslashed_of_run {x y : ForkedBeaconState preset} (run : Run config chec
 
 /-- The guards of the floor trace of a run from a state `zs` of the run from the finalized block.
 
-The run ends at any state `y` that is at most one epoch after `pulled`.
-
-The slashing quotient at `zs` is the guard's, which is positive.
-
-The window of the slashing vector and the slashing quotient of each step are the guard's.
-
-No upgrade runs from Fulu, so no step records a crossing.
-
 It is the part of the floor of a key, on R's run and on C's, that does not read the key. -/
 private theorem floor_guards (h : Setting config checks g split fin pulled anc counted V)
     {zs y : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
+    -- The run ends at any state `y` that is at most one epoch after `pulled`.
     (endpoint : (getCurrentEpoch y).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
+    -- The slashing quotient at `zs` is the guard's, which is positive.
     0 < DirectSafety.Apriori.minSlashingPenaltyQuotient preset
       (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩ (getCurrentEpoch pulled).toNat) ∧
     ∀ {m n : ForkedBeaconState preset}, Run config checks ⟨fork, zs⟩ m →
       ∀ step : Step config checks m n, Run config checks n ⟨fork, y⟩ →
+      -- The window of the slashing vector and the slashing quotient of each step are the guard's.
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch zs).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -235,6 +231,7 @@ private theorem floor_guards (h : Setting config checks g split fin pulled anc c
         (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩
           (getCurrentEpoch pulled).toNat) ≤
         (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+      -- No upgrade runs from Fulu, so no step records a crossing.
       ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing := by
   obtain ⟨toFin⟩ := h.toFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -261,18 +258,11 @@ private theorem floor_guards (h : Setting config checks g split fin pulled anc c
       (Nat.lt_of_le_of_lt (fork_le_of_chainSteps after.chainSteps) h.early)
       (.inl (Nat.le_trans electra (fork_le_of_chainSteps before.chainSteps))) addedOk
 
-/-- R's balance of a key that does not exit in the window falls only by its debit events.
-
-The floor starts from the smaller of the key's balance at a state `zs` of R's run and its cap.
-
-The state `zs` lies on R's run from the finalized block, and the rest of the run leads to `pulled`.
-
-The guards of the floor trace come from the setting's guard at the finalized block.
-
-The window of the slashing vector and the slashing quotient are the guard's.
-
-No upgrade runs from Fulu, so no step records a crossing. -/
+/-- R's balance of a key that does not exit in the window falls only by its debit events. -/
 theorem key_floorR_from (h : Setting config checks g split fin pulled anc counted V)
+    -- The state `zs` lies on R's run from the finalized block.
+    --
+    -- The rest of the run leads to `pulled`.
     {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
     (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -285,6 +275,7 @@ theorem key_floorR_from (h : Setting config checks g split fin pulled anc counte
       (before.snoc step).append after = rest → ∀ w,
       n.state.validators.data[i.toNat]? = some w → high + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) :
+    -- The floor starts from the smaller of the key's balance at `zs` and its cap.
     min (actualBalanceAt ⟨fork, zs⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
       actualBalanceAt ⟨fork, pulled⟩ i.toNat +
@@ -292,6 +283,11 @@ theorem key_floorR_from (h : Setting config checks g split fin pulled anc counte
         (events.map (Internal.syncDebit i.toNat)).sum +
         (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum := by
   obtain ⟨toFin⟩ := h.toFin
+  -- The guards of the floor trace come from the setting's guard at the finalized block.
+  --
+  -- The window of the slashing vector and the slashing quotient are the guard's.
+  --
+  -- No upgrade runs from Fulu, so no step records a crossing.
   obtain ⟨positive, guards⟩ := floor_guards h pre (y := pulled) (Nat.le_succ _)
   refine Internal.Run.balanceFloor_events_or_fulu (toFin.append pre) rest h.genesis h.caps
     (Internal.Setting.delay h)
@@ -333,59 +329,55 @@ private theorem prefix_debit_le (i : ValidatorIndex) (before rest : List (Balanc
 
 /-- A run's debit events and one slashing penalty bound the fall of a key's balance.
 
-The run starts at a state `zs` of R's run from the finalized block.
-
-It ends within one epoch after the call.
-
-The floor starts from the smaller of the key's balance at `zs` and its largest balance.
-
-Its effective balance stays at most `top` along the run.
-
-The key is unslashed at `zs`.
-
-Or it is slashed there, with its withdrawal at least the slashings vector past the finalized epoch.
-
-Then its delayed penalty is not due along the run, since the window is shorter than half the vector.
-
-The slashing penalty is then at most `top` over the slashing quotient, whenever the run slashes it.
-
-A key slashed at `zs` pays no slashing penalty along the run.
-
-The guard at the finalized block supplies the conditions for the floor along the branch.
-
-Nothing in the statement needs the key to be slashed, so it holds for a key that stays unslashed.
-
-A step may assign the key's exit within the window, if its withdrawable epoch is beyond the window.
-
-No upgrade runs from Fulu, so no step records a crossing. -/
+Nothing in the statement needs the key to be slashed, so it holds for a key that stays unslashed. -/
 theorem slashed_floor (h : Setting config checks g split fin pulled anc counted V)
     {zs e : BeaconState preset fork}
+    -- The run starts at a state `zs` of R's run from the finalized block.
     (toZ : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
+    -- It ends within one epoch after the call.
     (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
     (tail : Run config checks ⟨fork, zs⟩ ⟨fork, e⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch e).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (i : ValidatorIndex) (val : Validator)
     (initial : zs.validators.data[i.toNat]? = some val)
+    -- The key is unslashed at `zs`.
+    --
+    -- Or it is slashed there.
+    --
+    -- Its withdrawal is then at least the slashings vector past the finalized epoch.
+    --
+    -- The window is shorter than half the vector, so its delayed penalty is not due along the run.
     (slashedLate : val.slashed = true → (getCurrentEpoch fin).toNat +
       preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ val.withdrawableEpoch.toNat)
     (top : ℕ)
+    -- Its effective balance stays at most `top` along the run.
     (envelope : ∀ z ∈ tail.balancePath, effectiveAt z i.toNat ≤ top)
+    -- A step may assign the key's exit within the window.
+    --
+    -- Its withdrawable epoch must then be beyond the window.
     (retained : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, zs⟩ m)
       (step : Step config checks m n) (post : Run config checks n ⟨fork, e⟩),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
       high + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) :
+    -- The floor starts from the smaller of the key's balance at `zs` and its largest balance.
     min (actualBalanceAt ⟨fork, zs⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
       actualBalanceAt ⟨fork, e⟩ i.toNat +
         (events.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
         (events.map (Internal.syncDebit i.toNat)).sum +
         (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum +
+        -- A key slashed at `zs` pays no slashing penalty along the run.
+        --
+        -- If the run slashes the key, the penalty is at most `top` over the slashing quotient.
         (if val.slashed = true then 0 else
           top / (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat) := by
   obtain ⟨toFin⟩ := h.toFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  -- The guard at the finalized block supplies the conditions for the floor along the branch.
+  --
+  -- No upgrade runs from Fulu, so no step records a crossing.
   obtain ⟨positive, guards⟩ := floor_guards h toZ (y := e) near
   have member : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, zs⟩ m)
       (step : Step config checks m n) (post : Run config checks n ⟨fork, e⟩),
@@ -521,22 +513,19 @@ private theorem segment_guards (h : Setting config checks g split fin pulled anc
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The potential floor of a segment of C's run, read at the state where the segment starts.
 
-The segment runs from `wS` to `pS`.
-
-A run from the finalized block to `wS` comes before it, and a run to the end `e` after it.
-
-The key is unslashed at the end, and its exit is after the call's cutoff at each state of the run.
-
-The rate bounds the pass penalties of each step by a fraction of its effective balance.
-
 The closed form reads the balance and the cap of the key at the start of the segment. -/
 theorem segment_potential (h : Setting config checks g split fin pulled anc counted V)
     {e : BeaconState preset fork}
     (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1) (i : ValidatorIndex)
+    -- The key is unslashed at the end.
     (clean : ∀ w, e.validators.data[i.toNat]? = some w → w.slashed = false)
+    -- The segment runs from `wS` to `pS`.
+    --
+    -- A run from the finalized block to `wS` comes before it, and a run to the end `e` after it.
     {wS pS : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, wS⟩)
     (seg : Run config checks ⟨fork, wS⟩ ⟨fork, pS⟩) (rest : Run config checks ⟨fork, pS⟩ ⟨fork, e⟩)
     (valW : Validator) (initialW : wS.validators.data[i.toNat]? = some valW)
+    -- The key's exit is after the call's cutoff at each state of the run.
     (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
       (before.snoc step).append after = seg → ∀ w,
@@ -548,6 +537,7 @@ theorem segment_potential (h : Setting config checks g split fin pulled anc coun
     (start : effectiveAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat ≤
       actualBalanceAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat +
         (preset.downwardBand + slack))
+    -- The rate bounds the pass penalties of each step by a fraction of its effective balance.
     (pass : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
       (before.snoc step).append after = seg → ∀ evs, step.balanceEvents = .ok evs →
@@ -578,10 +568,6 @@ theorem segment_potential (h : Setting config checks g split fin pulled anc coun
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The potential floor of a segment of C's run for a key that is unslashed at its start.
 
-The key may be slashed at the end of the segment, or at the end of C's run.
-
-The closed form is the one of a slash with the fork's quotient, over one more epoch.
-
 For a key still unslashed at the end, the floor needs no slashing deduction.
 
 The slash form cannot give that one, so the lemmas stay apart. -/
@@ -591,6 +577,7 @@ private theorem segment_potential_slash (h : Setting config checks g split fin p
     {wS pS : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, wS⟩)
     (seg : Run config checks ⟨fork, wS⟩ ⟨fork, pS⟩) (rest : Run config checks ⟨fork, pS⟩ ⟨fork, e⟩)
     (valW : Validator) (initialW : wS.validators.data[i.toNat]? = some valW)
+    -- The key may be slashed at the end of the segment, or at the end of C's run.
     (unslashed : valW.slashed = false)
     (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
@@ -612,6 +599,7 @@ private theorem segment_potential_slash (h : Setting config checks g split fin p
     ∃ D, D + (segEvents.map (penaltyDebit i.toNat)).sum =
         (segEvents.map (floorPenaltyDebit i.toNat)).sum +
           (segEvents.map (floorPartialDebit i)).sum ∧
+      -- The closed form is the one of a slash with the fork's quotient, over one more epoch.
       ((EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat - 1) *
           ((ρd - ρn * ((getCurrentEpoch pS).toNat - (getCurrentEpoch wS).toNat + 1)) *
             (min (actualBalanceAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat)
@@ -645,26 +633,16 @@ theorem fork_eq_of_run {x m y : ForkedBeaconState preset} (r1 : Run config check
     (Nat.le_trans (fork_le_of_chainSteps r2.chainSteps) back) (fork_le_of_chainSteps r1.chainSteps))
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The balance of a key at every prefix end of C's run is above `floor`.
-
-The run is C's from the finalized block, and `floor` is below what the potential floor gives.
-
-The potential floor applies at the end of each prefix from the finalized block.
-
-The floor uses the segment's exit guard and a bound on the rate of penalties per pass.
-
-The step `arith` is the arithmetic that fits the closed form of the potential floor to `floor`.
-
-It holds for each epoch count up to C's.
-
-It also holds for each debit that is at most the key's sync and partial debits over the run. -/
+/-- The balance of a key at every prefix end of C's run is above `floor`. -/
 theorem cfloor_balance (h : Setting config checks g split fin pulled anc counted V)
+    -- The run is C's from the finalized block, and `floor` is below what the potential floor gives.
     (e : BeaconState preset fork) (wholeRun : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
     (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
     {events : List (BalanceEvent preset)}
     (replayed : wholeRun.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
     (clean : ∀ w, e.validators.data[i.toNat]? = some w → w.slashed = false)
+    -- The floor uses the segment's exit guard.
     (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
       (before.snoc step).append after = wholeRun → ∀ w,
@@ -676,11 +654,17 @@ theorem cfloor_balance (h : Setting config checks g split fin pulled anc counted
     (start : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
       actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
         (preset.downwardBand + slack))
+    -- It also uses a bound on the rate of penalties per pass.
     (pass : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
       (before.snoc step).append after = wholeRun → ∀ evs,
       step.balanceEvents = .ok evs →
       (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd)
+    -- This hypothesis is the arithmetic that fits the potential floor's closed form to `floor`.
+    --
+    -- It holds for each epoch count up to C's.
+    --
+    -- It also holds for each debit that is at most the key's sync and partial debits over the run.
     (arith : ∀ a D k : ℕ,
       k ≤ (getCurrentEpoch e).toNat - (getCurrentEpoch fin).toNat →
       D ≤ (events.map (Internal.syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
@@ -690,6 +674,7 @@ theorem cfloor_balance (h : Setting config checks g split fin pulled anc counted
       floor ≤ a) :
     ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
       (r2 : Run config checks p ⟨fork, e⟩), r1.append r2 = wholeRun →
+      -- The potential floor applies at the end of each prefix from the finalized block.
       floor ≤ actualBalanceAt p i.toNat := by
   intro p r1 r2 whole
   obtain ⟨pFork, pState⟩ := p
@@ -714,14 +699,6 @@ theorem cfloor_balance (h : Setting config checks g split fin pulled anc counted
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a key at every prefix end of C's run is above `floor`, less `loss`.
 
-The key is unslashed at the finalized block, and it may be slashed on C's run.
-
-The potential floor includes the loss from slashing.
-
-It is read at the end of each prefix, from the finalized block.
-
-The step `arithS` fits its closed form to `floor`, and `loss` is the slash's share.
-
 If the key stays unslashed, the closed form can use one fewer epoch.
 
 Setting the slashing loss to zero does not recover that sharper epoch bound. -/
@@ -731,6 +708,7 @@ private theorem cfloor_balance_slash (h : Setting config checks g split fin pull
     {events : List (BalanceEvent preset)}
     (replayed : wholeRun.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    -- The key is unslashed at the finalized block, and it may be slashed on C's run.
     (unslashed : val.slashed = false)
     (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
@@ -748,6 +726,7 @@ private theorem cfloor_balance_slash (h : Setting config checks g split fin pull
       (before.snoc step).append after = wholeRun → ∀ evs,
       step.balanceEvents = .ok evs →
       (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd)
+    -- This hypothesis fits the closed form to `floor`, and `loss` is the slash's share.
     (arithS : ∀ a D k : ℕ,
       k ≤ (getCurrentEpoch e).toNat - (getCurrentEpoch fin).toNat →
       D ≤ (events.map (Internal.syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
@@ -759,6 +738,9 @@ private theorem cfloor_balance_slash (h : Setting config checks g split fin pull
           (ρd * (a + D + preset.downwardBand) + ρn * slack) +
           ρd * (preset.downwardBand + slack) →
       floor ≤ a + loss) :
+    -- The potential floor includes the loss from slashing.
+    --
+    -- It is read at the end of each prefix, from the finalized block.
     ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
       (r2 : Run config checks p ⟨fork, e⟩), r1.append r2 = wholeRun →
       floor ≤ actualBalanceAt p i.toNat + loss := by
@@ -868,15 +850,7 @@ private theorem cfloor_endpoint_of (h : Setting config checks g split fin pulled
     simpa [PinTerms.capAt, found] using UInt64.le_iff_toNat_le.mp mono
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The effective balance of a key at a state of C's run is above a least value.
-
-The key's actual balance stays at least `floor` at every prefix end.
-
-The effective balance of the key at the end of a prefix is then at least a least value.
-
-That value is the least of its effective balance and its cap at the finalized block.
-
-And of `floor` rounded down to an increment. -/
+/-- The effective balance of a key at a state of C's run is above a least value. -/
 theorem cfloor_endpoint (h : Setting config checks g split fin pulled anc counted V)
     (e : BeaconState preset fork) (wholeRun : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
     (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
@@ -909,10 +883,18 @@ theorem cfloor_endpoint (h : Setting config checks g split fin pulled anc counte
       floor ≤ a)
     {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
     (rest : Run config checks z ⟨fork, e⟩) (cut : rp.append rest = wholeRun) :
+    -- The effective balance of the key at the end of a prefix is at least a least value.
+    --
+    -- That value is the least of three amounts.
+    --
+    -- Two are the key's effective balance and its cap at the finalized block.
+    --
+    -- The third is `floor` rounded down to an increment.
     min (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
         (min (withdrawalMaxEffectiveBalance preset fork val).toNat
           (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       effectiveAt z i.toNat := by
+  -- The key's actual balance stays at least `floor` at every prefix end.
   exact cfloor_endpoint_of h e wholeRun i val initial floor
     (fun r1 r2 whole => Internal.cfloor_balance h e wholeRun near replayed i val initial clean
       retained
@@ -973,19 +955,7 @@ theorem cfloor_endpoint_slash (h : Setting config checks g split fin pulled anc 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key's effective balance on C's run is above the floor of its fall.
 
-The run starts at the finalized block, and the bound holds at each state of it.
-
-It is above that floor less the key's sync debits and their band.
-
-The floor starts from the smaller of the key's balance and its cap at the finalized block.
-
-The charge `X` covers leak and gain over the window and due partial withdrawals.
-
-The hypothesis `margin` fits the closed form of the potential floor to the floor of the fall.
-
-The hypothesis `stay` keeps the effective balance at its finalized value if the test holds.
-
-This test applies when the key takes no sync debits. -/
+It is above that floor less the key's sync debits and their band. -/
 theorem floorC_at (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -1000,15 +970,19 @@ theorem floorC_at (h : Setting config checks g split fin pulled anc counted V)
       ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[i.toNat]? = some u →
           (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
+    -- The charge `X` covers leak and gain over the window and due partial withdrawals.
     (base0 X low finEB floorC : ℕ)
+    -- The floor starts from the smaller of the key's balance and its cap at the finalized block.
     (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat)
     (hlow : low = base0 - X)
     (hfin : finEB = effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
     (hfloorC : floorC = if max finEB base0 ≤ low + preset.downwardBand then finEB
       else min finEB (low - low % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    -- The run starts at the finalized block, and the bound holds at each state of it.
     {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
     (rest : Run config checks z ⟨fork, counted⟩) (cut : rp.append rest = fromFin.append tailC)
+    -- This hypothesis fits the closed form of the potential floor to the floor of the fall.
     (margin : ∃ slack ρn ρd : ℕ,
       effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
         actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
@@ -1024,6 +998,9 @@ theorem floorC_at (h : Setting config checks g split fin pulled anc counted V)
             (withdrawalMaxEffectiveBalance preset fork val).toNat +
           preset.downwardBand) ≤ ρd * (a + D + preset.downwardBand) + ρn * slack →
         low - (events.map (Internal.syncDebit i.toNat)).sum ≤ a)
+    -- This hypothesis keeps the effective balance at its finalized value if the test holds.
+    --
+    -- The test applies when the key takes no sync debits.
     (stay : max finEB base0 ≤ low + preset.downwardBand →
       (events.map (Internal.syncDebit i.toNat)).sum = 0 → finEB ≤ effectiveAt z i.toNat) :
     floorC ≤ effectiveAt z i.toNat + (events.map (Internal.syncDebit i.toNat)).sum +
@@ -1430,20 +1407,13 @@ theorem rise_arith {inc band capFor high finEB start eR eC Bc capHigh S U : Nat}
       omega
     omega
 
-/-- The effective balance at the end of a run is at most the rounded bound on its balance.
-
-The run starts at a state where the key's effective balance is within the largest one.
-
-The starting balance, epoch rewards and other credits bound the actual balance at every state.
-
-The effective-balance ceiling `E` must cover the rounded bound used to estimate epoch rewards.
-
-Then the update of the effective balances reads that bound as its ceiling. -/
+/-- The effective balance at the end of a run is at most the rounded bound on its balance. -/
 theorem key_credit_ceiling {n y : ForkedBeaconState preset}
     (post : Run config checks n y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ n.fork)
     (i : ℕ) (inside : i < n.state.validators.data.size) (high P E : ℕ)
     (aligned : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    -- The run starts at a state where the key's effective balance is within the largest one.
     (startCap : effectiveAt n i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
     (capCeil : ∀ z ∈ post.balancePath,
       PinTerms.capAt z i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
@@ -1457,6 +1427,9 @@ theorem key_credit_ceiling {n y : ForkedBeaconState preset}
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
           P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    -- The effective-balance ceiling `E` must cover the rounded bound.
+    --
+    -- That bound is the one used to estimate epoch rewards.
     (fixpoint : max (effectiveAt n i) (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
       (Internal.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat -
         Internal.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
@@ -1468,7 +1441,9 @@ theorem key_credit_ceiling {n y : ForkedBeaconState preset}
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) := by
   obtain ⟨-, -, third, fourth⟩ := Internal.Run.effective_floor_pair post early fulu i inside 0 0
     preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat high E P
+  -- The starting balance, epoch rewards and other credits bound the actual balance at every state.
   have balances := fourth aligned startCap capCeil rate endEpoch fixpoint
+  -- Then the update of the effective balances reads that bound as its ceiling.
   exact (third _ aligned startCap
     (fun z member => balances z member) capCeil).1
 
@@ -2067,13 +2042,7 @@ private theorem joinedKeys_exit_late {g : ForkedBeaconState preset}
 
 /-- A key of the split's registry that R has withdrawable by the finalized epoch is not charged.
 
-The charge would be on C's tail.
-
-Its exit is at most its withdrawable epoch, so R's exit is assigned by the finalized epoch.
-
-An exit assigned after the split is at least the split's epoch plus one and the seed lookahead.
-
-So the split already holds the exit, and a run never charges an exit twice. -/
+The charge would be on C's tail. -/
 theorem no_charge_of_settled {g : ForkedBeaconState preset}
     {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
     (h : Setting config checks g split fin pulled anc counted V)
@@ -2085,12 +2054,18 @@ theorem no_charge_of_settled {g : ForkedBeaconState preset}
   obtain ⟨rs⟩ := h.fromFin
   obtain ⟨rp⟩ := h.toPulled
   have valid := Run.invariant (Genesis.invariant h.genesis) ((rf.append rs).append rp)
+  -- The key's exit is at most its withdrawable epoch.
+  --
+  -- So R's exit is assigned by the finalized epoch.
   have ordered := UInt64.le_iff_toNat_le.mp
     (valid.exitsOrdered w (Array.mem_of_getElem? found))
   have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
   have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots split
   have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   have oldFound := Array.getElem?_eq_getElem inside
+  -- An exit assigned after the split is at least the split's epoch plus one and the seed lookahead.
+  --
+  -- So the split already holds the exit, and a run never charges an exit twice.
   have assigned : split.validators.data[i].exitEpoch ≠ FAR_FUTURE_EPOCH := by
     intro unset
     have wAssigned : w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
@@ -3106,22 +3081,18 @@ private theorem slashed_deposit_held (h : Setting config checks g split fin pull
     have := congrArg UInt64.toNat eq2
     omega
 
-/-- The deposits credited to keys active at C's end, and to keys slashed there, fit the churn.
-
-A key that exits after C's epoch is not withdrawable at any deposit event of C's run.
-
-Its exit epoch is constant once set, and the exit epoch bounds the withdrawable epoch.
-
-A key slashed at C counts only the deposits of events that do not hold it slashed.
-
-An event that raises no balance credits nothing. -/
+/-- The deposits credited to keys active at C's end, and to keys slashed there, fit the churn. -/
 theorem deposits_active_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (S P : Finset ValidatorIndex) (apart : Disjoint S P)
+    -- A key that exits after C's epoch is not withdrawable at any deposit event of C's run.
+    --
+    -- Its exit epoch is constant once set, and the exit epoch bounds the withdrawable epoch.
     (active : ∀ v ∈ S, ∃ w, counted.validators.data[v.toNat]? = some w ∧
       (getCurrentEpoch counted).toNat < w.exitEpoch.toNat)
+    -- A key slashed at C counts only the deposits of events that do not hold it slashed.
     (slashedC : ∀ v ∈ P, ∃ b, counted.validators.data[v.toNat]? = some b ∧ b.slashed = true) :
     3 * (∑ v ∈ S, (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat
       highC
@@ -3133,6 +3104,7 @@ theorem deposits_active_le (h : Setting config checks g split fin pulled anc cou
     replayedC).1
   refine deposits_scan_le h tailC highC endEpochC replayedC S P fun e member dep => ?_
   rcases located e member dep with unconditional | ⟨u, w, ok, es, contained, replayedEs, inStep, -⟩
+  -- An event that raises no balance credits nothing.
   · have zero (i : ℕ) : Internal.keyCredit i e = 0 := by
       have := unconditional i
       simp only [Internal.keyCredit]

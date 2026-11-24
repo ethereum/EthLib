@@ -412,19 +412,7 @@ theorem sum_unitK (t : PinTerms preset) {x y : ForkedBeaconState preset}
   unfold Internal.unitK
   split <;> simp_all
 
-/-- The reserve covers the rounding units of the counted keys at their respective weights.
-
-A credited key uses one rounding unit, and a key with only seat activity uses a seat unit.
-
-A key credited only by consolidation uses a unit for an entry in X's consolidation queue.
-
-A key slashed only on R's branch uses a unit from that branch's slashing budget.
-
-The newly slashed keys and the created slashed keys hold the slots that the three classes leave.
-
-The classes are the staying, the previous-only and the joined keys.
-
-The newly slashed keys alone fit the slots and the extra units at weight one. -/
+/-- The reserve covers the rounding units of the counted keys at their respective weights. -/
 theorem budget_units (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -442,17 +430,26 @@ theorem budget_units (h : Setting config checks g split fin pulled anc counted V
       (∑ v ∈ (joinedKeys pulled counted),
           Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF
             v.toNat) +
+      -- The newly slashed keys and the created slashed keys hold the slots that are left.
+      --
+      -- Those are the slots that the three classes leave.
+      --
+      -- The classes are the staying, the previous-only and the joined keys.
       (∑ v ∈ newlySlashed pulled counted split,
           Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF
             v.toNat) +
       (∑ v ∈ createdSlashed counted split,
           Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF
             v.toNat) ≤
+      -- A credited key uses one rounding unit, and a key with only seat activity uses a seat unit.
       (pinTerms config pulled anc fin).creditUnits +
+        -- A key credited only by consolidation uses a unit for an entry in X's consolidation queue.
         3 * (pinTerms config pulled anc fin).unitGain *
           (pinTerms config pulled anc fin).consolidationsXCount +
+        -- A key slashed only on R's branch uses a unit from that branch's slashing budget.
         3 * ((pinTerms config pulled anc fin).unitGain *
           (pinTerms config pulled anc fin).slashedR)) ∧
+      -- The newly slashed keys alone fit the slots and the extra units at weight one.
       ∑ v ∈ newlySlashed pulled counted split,
           Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
             ≤
@@ -790,26 +787,25 @@ private theorem syncLeak_of_envelope (h : Setting config checks g split fin pull
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A counted key's balance at C is at most its balance at R plus its rise and its flows.
 
-It adds the key's rise together with credits, flows and rounding that the rise bound excludes.
-
-The slacks are one increment for a slashing on R's branch.
-
-They are one rounding step for a credit on C's branch.
-
-They are one rounding step for a sync debit on R's branch or on its shared segment with C's.
-
-The bound also includes compounding flows, one rounding unit and the induced leak.
-
-The starting balance floor accounts for rounding down to an increment. -/
+It adds the key's rise together with credits, flows and rounding that the rise bound excludes. -/
 def keyCeiling (anc : BeaconState preset fork)
     (run : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (i : ℕ) : Prop :=
   balanceAt counted i ≤ balanceAt pulled i + (pinTerms config pulled anc fin).rise i +
+    -- The bound also includes compounding flows, one rounding unit and the induced leak.
+    --
+    -- The starting balance floor accounts for rounding down to an increment.
     (Internal.credC tailC highC i +
       Internal.keyExtra (pinTerms config pulled anc fin) run tailC highC eventsC events eventsF i) +
     Internal.whistC tailC highC i + (Internal.syncF events i + Internal.syncF eventsC i) +
+    -- The slacks are one increment for a slashing on R's branch.
+    --
+    -- They are one rounding step for a credit on C's branch.
     Internal.slashR (pinTerms config pulled anc fin) i + Internal.bandC tailC highC i +
+    -- They are one rounding step for a sync debit on R's branch.
+    --
+    -- They are one rounding step for a sync debit on the segment that R's branch shares with C's.
     Internal.bandR (eventsF ++ events) i + Internal.bandX fin highC i
 
 /-- The gain of the flows `Z0` and a penalty `W` is within a tenth of `Z0`, rounded up, and a unit.
@@ -878,20 +874,11 @@ private theorem flow_gain_slack {I WD F P D Z0 W U : ℕ} (hI : 0 < I)
     simp only [Nat.add_zero]
     omega
 
-/-- The key's effective balance at slashing fits the reward budget's stake bound plus its slack.
-
-`pre` is C's run up to the state before the slashing, and `tailC` is the whole run.
-
-The stake bound adds an increment if R's branch also slashed the key.
-
-`Cr` and the sync debits are credits of the slack.
-
-The flows' gain is within a tenth of them, rounded up, with a unit for the penalty of R's slashing.
-
-The key's bands and unit of the prefix are within those of the whole run. -/
+/-- The key's effective balance at slashing fits the reward budget's stake bound plus its slack. -/
 private theorem whistle_of_close (h : Setting config checks g split fin pulled anc counted V)
     (t : PinTerms preset) (ht : t = pinTerms config pulled anc fin)
     {x y x' y' r r' : ForkedBeaconState preset}
+    -- `pre` is C's run up to the state before the slashing, and `tailC` is the whole run.
     (pre : Run config checks x y) (tailC : Run config checks x' y')
     (rrun : Run config checks r r') (highC high : ℕ)
     (eventsC eventsPre eventsF events : List (BalanceEvent preset))
@@ -902,6 +889,7 @@ private theorem whistle_of_close (h : Setting config checks g split fin pulled a
         Internal.unitK t pre highC eventsPre events eventsF i) +
       (Internal.bandC pre highC i + Internal.bandR (eventsF ++ events) i + Internal.bandX fin highC
         i + Internal.slashR t i))
+    -- The credits `Cr` and the sync debits are credits of the slack.
     (hCr : Cr ≤ Internal.propN tailC highC i + Internal.depPre eventsC i + Internal.whistC tailC
       highC i +
       Internal.syncCr eventsC i + Internal.consAmt eventsC i)
@@ -910,10 +898,16 @@ private theorem whistle_of_close (h : Setting config checks g split fin pulled a
       + Internal.consAmt eventsC i)
     (hwhist : Internal.whistC pre highC i ≤ Internal.whistC tailC highC i)
     (hsync : Internal.syncCr eventsPre i ≤ Internal.syncCr eventsC i)
+    -- The key's bands of the prefix are within those of the whole run.
     (hband : Internal.bandC pre highC i ≤ Internal.bandC tailC highC i)
     (kept : t.keptArm i = true) :
+    -- The stake bound adds an increment if R's branch also slashed the key.
     X ≤ Internal.whistleEnv t pulled anc fin i +
+      -- The gain of the flows is within a tenth of the credits, rounded up.
+      --
+      -- A unit is added for the penalty of R's slashing.
       Internal.whistleSlack t tailC rrun highC high eventsC eventsF events fin i := by
+  -- The key's unit of the prefix is within that of the whole run.
   have incPos := h.bands.1
   have key : 11 * min t.depth t.depthFin * (t.perIncrement *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
@@ -999,13 +993,7 @@ private theorem prefix_prologue (h : Setting config checks g split fin pulled an
 
 They are the key's block credits from rewards and its consolidation and deposit credits.
 
-They are those up to the step.
-
-The proposer credits are at most those of the whole run.
-
-The deposit bound counts only deposits made before the key was slashed.
-
-The consolidation credits are at most the total applied to the key. -/
+They are those up to the step. -/
 private theorem credC_prefix_le (h : Setting config checks g split fin pulled anc counted V)
     {a b : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ a)
     (step : Step config checks a b) (post : Run config checks b ⟨fork, counted⟩) (highC : ℕ)
@@ -1014,7 +1002,11 @@ private theorem credC_prefix_le (h : Setting config checks g split fin pulled an
     (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
       (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
     Internal.credC pre highC i ≤
+      -- The proposer credits are at most those of the whole run.
+      --
+      -- The deposit bound counts only deposits made before the key was slashed.
       Internal.propN ((pre.snoc step).append post) highC i + Internal.depPre eventsC i +
+        -- The consolidation credits are at most the total applied to the key.
         Internal.consAmt eventsC i := by
   obtain ⟨v, rfl, e1, t, replayed1, rfl, clean⟩ :=
     prefix_prologue h pre step post highC replayedC i flag
@@ -1090,19 +1082,17 @@ theorem syncCr_prefix_le {a b : ForkedBeaconState preset}
   unfold Internal.syncCr
   simp [List.map_append, List.sum_append]
 
-/-- A slashing penalty and the gain on it over the window fit below one increment.
-
-The penalty leaves a downward band, which is at least a quarter of the increment.
-
-The penalty alone gains the unit gain, as it is under ten elevenths of an increment.
-
-The unit gain is a gain per increment over the window, and two more gwei for each epoch.
-
-`key` bounds the gain per increment by an eleventh of an increment. -/
+/-- A slashing penalty and the gain on it over the window fit below one increment. -/
 private theorem slash_gain_small {I db WD F P D W : ℕ} (hI : 0 < I)
+    -- The first premise bounds the gain per increment by an eleventh of an increment.
+    --
+    -- The penalty leaves a downward band, which is at least a quarter of the increment.
     (key : 11 * D * (P * F) < WD * I) (band : I ≤ 4 * db) (slashBand : W + db ≤ I)
     (window : 88 * D ≤ 3 * I) :
     W + (D * (11 * W / (10 * I) * P * F / WD) +
+      -- The penalty alone gains the unit gain, as it is under ten elevenths of an increment.
+      --
+      -- The unit gain is a gain per increment over the window, and two more gwei for each epoch.
       if 0 < W then D * (P * F / WD + 2) else 0) < I := by
   have zero : 11 * W / (10 * I) = 0 := Nat.div_eq_of_lt (by omega)
   have small : 11 * (D * (P * F / WD)) < I := by
@@ -1120,25 +1110,25 @@ private theorem slash_gain_small {I db WD F P D W : ℕ} (hI : 0 < I)
   · simp only [Nat.zero_mul, Nat.zero_div, Nat.mul_zero, Nat.zero_add]
     omega
 
-/-- A key that the split holds, unslashed, is not withdrawable at R's next epoch.
-
-An unslashed key has its withdrawable epoch at its exit plus the delay, or both unset.
-
-Its exit is late at R.
-
-A key that R slashes after the split has its withdrawable epoch a slashings vector past the split.
-
-The window of the guard is under half a vector. -/
+/-- A key that the split holds, unslashed, is not withdrawable at R's next epoch. -/
 private theorem voter_not_withdrawn (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (v : ValidatorIndex)
     (unslashed : (split.validators.data[v.toNat]?.map (·.slashed)).getD false = false)
+    -- An unslashed key has its withdrawable epoch at its exit plus the delay, or both unset.
+    --
+    -- Its exit is late at R.
     (late : ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = false →
       (getCurrentEpoch pulled).toNat + 1 <
         w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (inSplit : v.toNat < split.validators.data.size) :
     (pinTerms config pulled anc fin).withdrawnRB v.toNat = false := by
+  -- Take a key that R slashes after the split.
+  --
+  -- Its withdrawable epoch is a slashings vector past the split.
+  --
+  -- The window of the guard is under half a vector.
   classical
   obtain ⟨shared⟩ := h.toFin
   have sizeSplit := registryGrows_of_chainSteps tail.chainSteps
@@ -1172,25 +1162,21 @@ private theorem voter_not_withdrawn (h : Setting config checks g split fin pulle
 
 /-- The credit stake of a key on a low rate, rounded down to increments, is paid by the slack.
 
-The stake is its credits, the gain on them and the gain of its base stake.
-
-On a low rate, the base gain is below an increment, so it rounds away.
-
-With bands, an increment of slack pays what is left of the gain over the flows.
-
-With none, there are no credits.
-
-Then a slashing's penalty is below an increment, and the stake is below two.
-
-A stake below two increments rounds to one at most, which the slashing's increment pays. -/
+The stake is its credits, the gain on them and the gain of its base stake. -/
 private theorem y_floor_le (I WD F P D Df q Cr Ds DsF W gc S U Fl : ℕ)
     (key : 11 * D * (P * F) < WD * I) (hDf : D ≤ Df)
+    -- On a low rate, the base gain is below an increment, so it rounds away.
     (lowG : Df * ((11 * q + 9) / 10 + 3) < I)
     (hform : gc = D * (11 * ((Cr + Ds + DsF) + W + D * q + D) / (10 * I) * P * F / WD))
+    -- With bands, an increment of slack pays what is left of the gain over the flows.
     (cases : (I ≤ U + 1 ∧ Cr + Fl ≤ S ∧
         gc + (D * q + D) ≤ Fl + Df * ((11 * q + 9) / 10 + 3)) ∨
+      -- With none, there are no credits.
+      --
+      -- Then a slashing's penalty is below an increment, and the stake is below two.
       (Cr = 0 ∧ Ds = 0 ∧ DsF = 0 ∧ W < I ∧ (0 < W → I ≤ S + U))) :
     Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) % I ≤ S + U := by
+  -- A stake below two increments rounds to one at most, which the slashing's increment pays.
   have hI : 0 < I := by
     rcases Nat.eq_zero_or_pos I with h | h
     · subst h; simp at key
@@ -1282,31 +1268,12 @@ private theorem keyCeiling_of_close (anc : BeaconState preset fork)
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The rise of a key on the kept branch bounds its effective balance on C's branch, up to flows.
-
-Its balance on C's branch is bounded by `Bc`, and the effective balance by `stay`.
-
-`Bc` adds up R's balance and the leak at the largest effective balance.
-
-It adds the debits and slack on R's runs, and the credits and gains of C's run.
-
-The bound also accounts for flows between states and the bands that pay for rounding.
-
-The cap enters only through `stay` and `cappedY`, which the cap arms prove.
-
-The bound applies to any prefix of C's run.
-
-The effective balance at any starting state must also satisfy the ceiling's starting bound.
-
-The rise bound accounts for flows and rounding bands, apart from the credits on C's branch.
-
-The effective balance at the endpoint is at most the applicable cap and the rounded stake.
-
-A key off the low rate reads the largest cap. -/
+/-- The rise of a key on the kept branch bounds its effective balance on C's branch, up to flows. -/
 private theorem key_close (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {ending : BeaconState preset fork}
+    -- The bound applies to any prefix of C's run.
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, ending⟩) (highC : ℕ)
     {eventsC events eventsF : List (BalanceEvent preset)} (v : ValidatorIndex)
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true)
@@ -1326,6 +1293,11 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         Internal.slashW (pinTerms config pulled anc fin) v.toNat + D * q + D) /
         (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * P *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat))
+    -- The key's balance on C's branch is bounded by `Bc`.
+    --
+    -- `Bc` adds up R's balance and the leak at the largest effective balance.
+    --
+    -- It adds the debits and slack on R's runs, and the credits and gains of C's run.
     (hBc : Bc = actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
         (Df * (pinTerms config pulled anc fin).leakAt M v.toNat +
           (PinTerms.dueAmount fin (Nat.le_trans (by decide) h.fulu) v.toNat
@@ -1341,11 +1313,15 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
             Internal.slashW (pinTerms config pulled anc fin) v.toNat) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (start : ℕ)
+    -- The effective balance at any starting state must also satisfy the ceiling's starting bound.
     (startLe : ∀ S : ℕ, Bc ≤ (pinTerms config pulled anc fin).high v.toNat + S →
       start ≤ max (balanceAt fin v.toNat)
         (((pinTerms config pulled anc fin).high v.toNat + S) -
           ((pinTerms config pulled anc fin).high v.toNat + S) %
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    -- This bounds the effective balance.
+    --
+    -- The effective balance at the endpoint is at most the applicable cap and the rounded stake.
     (stay : balanceAt ending v.toNat = balanceAt pulled v.toNat ∨
       (balanceAt ending v.toNat ≤ start ∧ ∀ S U : ℕ,
         Bc ≤ (pinTerms config pulled anc fin).high v.toNat + S →
@@ -1359,6 +1335,9 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
       (balanceAt ending v.toNat ≤ Bc + preset.downwardBand ∧
         balanceAt ending v.toNat ≤ max start
           (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
+    -- The cap enters only through this hypothesis and the previous one, which the cap arms prove.
+    --
+    -- A key off the low rate reads the largest cap.
     (cappedY : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat →
       balanceAt ending v.toNat ≤ (pinTerms config pulled anc fin).capFor v.toNat +
         (Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) %
@@ -1367,6 +1346,9 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
       (eventsC.map (Internal.syncCredit v.toNat)).sum)
     (noCredit : Internal.bandC tailC highC v.toNat = 0 → Internal.bandX fin highC v.toNat = 0 → Cr =
       0) :
+    -- The bound also accounts for flows between states and the bands that pay for rounding.
+    --
+    -- The rise bound accounts for flows and rounding bands, apart from the credits on C's branch.
     balanceAt ending v.toNat ≤ balanceAt pulled v.toNat +
       (pinTerms config pulled anc fin).rise v.toNat +
       (Internal.syncD eventsF v.toNat + Internal.syncD events v.toNat + Cr +
@@ -1651,18 +1633,6 @@ private theorem start_le_round {inc fin e a cap H S : ℕ}
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The closing of the rise for a key on its kept arm, from a start state `c`, at any end of C.
 
-The key is in the registry at the state `c` of the shared segment, and unslashed at the split.
-
-The run from the finalized state reaches `c` first, and the key is absent before it.
-
-The caps along the runs are those of each state, so a switch to compounding on either run is read.
-
-The credits `Cr` are all of C's, so they cover the cap's rise on C's run.
-
-For an unslashed key at R, the exit epoch plus the withdrawal delay must exceed R's next epoch.
-
-At an end before R's epoch and no later than `c`, `shortStart` bounds the effective balance at `c`.
-
 The replays are read at R's epoch. -/
 private theorem key_core_frozen_from (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -1677,13 +1647,19 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     (nearC : (getCurrentEpoch ending).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (v : ValidatorIndex)
+    -- The key is unslashed at the split.
     (unslashed : (split.validators.data[v.toNat]?.map (·.slashed)).getD false = false)
+    -- Take a key that is unslashed at R.
+    --
+    -- Its exit epoch plus the withdrawal delay must exceed R's next epoch.
     (late : ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = false →
       (getCurrentEpoch pulled).toNat + 1 <
         w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    -- The key is in the registry at the state `c` of the shared segment.
     {c : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
     (inside : v.toNat < c.validators.data.size)
+    -- The run from the finalized state reaches `c` first, and the key is absent before it.
     (before : ∀ p ∈ toC.balancePath, p = ⟨fork, c⟩ ∨ effectiveAt p v.toNat = 0)
     (start : (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         (pinTerms config pulled anc fin).ebUp v.toNat ∧
@@ -1692,6 +1668,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
         actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
           actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat %
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    -- At an end before R's epoch and no later than `c`, this bounds the effective balance at `c`.
     (shortStart : (getCurrentEpoch ending).toNat < (getCurrentEpoch pulled).toNat →
       (getCurrentEpoch ending).toNat ≤ (getCurrentEpoch c).toNat → ∀ S U : ℕ,
       (S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
@@ -1719,6 +1696,11 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
       (Internal.bandC tailC highC v.toNat + Internal.bandR (eventsF ++ events) v.toNat +
         Internal.bandX fin highC v.toNat +
         Internal.slashR (pinTerms config pulled anc fin) v.toNat) := by
+  -- The caps along the runs are those of each state.
+  --
+  -- So a switch to compounding on either run is read.
+  --
+  -- The credits `Cr` are all of C's, so they cover the cap's rise on C's run.
   classical
   obtain ⟨toFin⟩ := h.toFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -2075,20 +2057,7 @@ private theorem key_core_cap (h : Setting config checks g split fin pulled anc c
     (Nat.le_refl _)
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A key of the split's registry, unslashed at the split and kept, is bounded at its slashing.
-
-The key is held at a state `c` of the shared segment.
-
-The closing reads the cap of each state, so the cap is not read as frozen.
-
-The step `a → b` of C's run slashes it, and `pre` is C's run up to `a`.
-
-The reward budget's credit allowance covers the credits of the prefix.
-
-The reward budget's stake bound includes the slashing increment.
-
-For an unslashed key at R, the exit epoch plus the withdrawal delay must exceed R's next epoch.
--/
+/-- A key of the split's registry, unslashed at the split and kept, is bounded at its slashing. -/
 theorem registry_frozen (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2099,7 +2068,9 @@ theorem registry_frozen (h : Setting config checks g split fin pulled anc counte
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    -- The step `a → b` of C's run slashes the key, and `pre` is C's run up to `a`.
     {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    -- The key is held at a state `c` of the shared segment.
     (i : ℕ) {c : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
     (inside : i < c.validators.data.size)
@@ -2114,13 +2085,20 @@ theorem registry_frozen (h : Setting config checks g split fin pulled anc counte
     (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
     (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
       (b.state.validators.data[i]?.map (·.slashed)).getD false) = true)
+    -- Take a key that is unslashed at R.
+    --
+    -- Its exit epoch plus the withdrawal delay must exceed R's next epoch.
     (late : ∀ w, pulled.validators.data[i]? = some w → w.slashed = false →
       (getCurrentEpoch pulled).toNat + 1 <
         w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (kept : (pinTerms config pulled anc fin).keptArm i = true) :
+    -- The reward budget's credit allowance covers the credits of the prefix.
+    --
+    -- The reward budget's stake bound includes the slashing increment.
     effectiveAt a i ≤ Internal.whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
       Internal.whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
         eventsC eventsF events fin i := by
+  -- The closing reads the cap of each state, so the cap is not read as frozen.
   classical
   obtain ⟨pre, post, cut, aEarly, aEpoch⟩ :=
     DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
@@ -2236,17 +2214,7 @@ private theorem key_core_headroom (h : Setting config checks g split fin pulled 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C's branch created beyond the split is bounded by its credits and their gains.
 
-The key's stake is its credits on C's branch.
-
-Its effective balance is within the ceiling of a created key.
-
-Its flows hold the credits, and the key's gain over the depth of the window is the flow gain.
-
-The premises are the rate of the ceiling at the depth of the window.
-
-They are also the charge of the flow gain to the key.
-
-The unit pays the joint floor, and the band is an upward band at least. -/
+The key's stake is its credits on C's branch. -/
 theorem created_key_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {events : List (BalanceEvent preset)}
@@ -2258,14 +2226,17 @@ theorem created_key_ceiling (h : Setting config checks g split fin pulled anc co
     {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
       w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
     (absent : split.validators.data.size ≤ v.toNat)
+    -- The premises are the rate of the ceiling at the depth of the window.
     (key : 11 * (min (pinTerms config pulled anc fin).depth
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
         ((pinTerms config pulled anc fin).perIncrement *
           (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    -- This premise also charges the flow gain to the key.
     (charged : (pinTerms config pulled anc fin).keptArm v.toNat = true ∨
       (v.toNat ∉ (pinTerms config pulled anc fin).positions ∧
         (pinTerms config pulled anc fin).gainHigh = false))
+    -- The unit pays the joint floor, and the band is an upward band at least.
     (band : preset.upwardBand ≤ Internal.bandC tailC highC v.toNat + Internal.bandX fin highC
       v.toNat) :
     balanceAt counted v.toNat ≤
@@ -2277,6 +2248,9 @@ theorem created_key_ceiling (h : Setting config checks g split fin pulled anc co
         (Internal.slashR (pinTerms config pulled anc fin) v.toNat + Internal.bandC tailC highC
           v.toNat +
           Internal.bandR (eventsF ++ events) v.toNat)) + Internal.bandX fin highC v.toNat := by
+  -- The key's effective balance is within the ceiling of a created key.
+  --
+  -- Its flows hold the credits, and the key's gain over the depth of the window is the flow gain.
   classical
   obtain ⟨z, pre, post, -, positive, -, bound⟩ := Internal.created_ceiling h tailC highC endEpochC
       replayedC
@@ -2352,12 +2326,6 @@ private theorem created_late (h : Setting config checks g split fin pulled anc c
 
 /-- The per-key core of the rise for a counted voter created after the finalized state.
 
-The key is absent from the finalized registry, and its rise is on the kept arm.
-
-A key created on C's branch after the split is bounded by its credits and their gains.
-
-The kept arm bounds the key's gain rate, which is the rate that bound reads.
-
 The replays are read at R's epoch. -/
 private theorem key_core_created (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -2370,9 +2338,13 @@ private theorem key_core_created (h : Setting config checks g split fin pulled a
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (v : ValidatorIndex) (voter : v ∈ countedQuorum counted)
+    -- The key is absent from the finalized registry, and its rise is on the kept arm.
     (created : fin.validators.data.size ≤ v.toNat)
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
     Internal.keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat := by
+  -- A key created on C's branch after the split is bounded by its credits and their gains.
+  --
+  -- The kept arm bounds the key's gain rate, which is the rate that bound reads.
   classical
   by_cases absent : split.validators.data.size ≤ v.toNat
   · have activated := Internal.activated_of_quorum h.early voter
@@ -2394,17 +2366,7 @@ private theorem key_core_created (h : Setting config checks g split fin pulled a
       (Or.inr floorStart) kept
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The leak that the counted keys' sync debits on R's branch induce, at their weights.
-
-The keys that are slashed at C and not at the split are counted too, at weight one.
-
-The keys slashed at the split that R's call reads as slashed are counted at weight three.
-
-They are the keys whose sync flows are charged to the reserve.
-
-The bounds include the leak induced by one increment for each key slashed on R's branch.
-
-That allowance is weighted three in the combined bound and one for the keys slashed on C alone. -/
+/-- The leak that the counted keys' sync debits on R's branch induce, at their weights. -/
 theorem budget_syncLeak (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2420,11 +2382,20 @@ theorem budget_syncLeak (h : Setting config checks g split fin pulled anc counte
       (∑ v ∈ (joinedKeys pulled counted), Internal.inducedR (pinTerms config pulled anc fin)
         (fromFin.append tail)
           v.toNat) +
+      -- The keys that are slashed at C and not at the split are counted too, at weight one.
       (∑ v ∈ (newlySlashed pulled counted split), Internal.inducedR (pinTerms config pulled anc fin)
           (fromFin.append tail) v.toNat) +
+      -- The keys slashed at the split that R's call reads as slashed are counted at weight three.
+      --
+      -- They are the keys whose sync flows are charged to the reserve.
       3 * (∑ v ∈ Internal.cutKeys config pulled anc fin split,
           Internal.inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat) ≤
       (pinTerms config pulled anc fin).syncLeak +
+        -- The bounds include the leak induced by one increment for each key slashed on R's branch.
+        --
+        -- That allowance weighs three in the combined bound.
+        --
+        -- It weighs one for the keys slashed on C alone.
         3 * ((pinTerms config pulled anc fin).slashedR *
           (pinTerms config pulled anc fin).slashLeak) ∧
     (∑ v ∈ (newlySlashed pulled counted split), Internal.inducedR (pinTerms config pulled anc fin)
@@ -2575,15 +2546,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 A key of R's registry rises from R to C by at most its rise term.
 
-It also rises by credits and rounding allowances not included in the rise bound.
-
-The slacks are one increment for a slashing on R's branch.
-
-They are one rounding step for a credit on C's branch or a sync debit on R's.
-
-The bound also includes compounding flows, one rounding unit and the induced leak.
-
-It includes the key's sync debits on the shared segment. -/
+It also rises by credits and rounding allowances not included in the rise bound. -/
 theorem key_core (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)

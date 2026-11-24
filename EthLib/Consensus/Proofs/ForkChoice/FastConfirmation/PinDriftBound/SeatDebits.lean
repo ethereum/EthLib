@@ -600,34 +600,32 @@ private theorem Run.blockCount_mul_le {x y : ForkedBeaconState preset}
 
 /-- The sync debits of any set of keys over a run from Fulu fit one envelope per seat per slot.
 
-The slots are those of the epochs that the run touches.
-
-Every total along the run is within three halves of `total`.
-
-Each block debits the keys at most one participant reward per seat.
-
-Each block moves the keys at most one participant reward and its proposer share per seat.
-
-If no block's proposer is among the keys, each block moves them at most one participant reward.
-
-That reward is per seat. -/
+The slots are those of the epochs that the run touches. -/
 theorem Run.syncDebits_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (fulu : .fusaka ≤ x.fork) (early : y.fork < .glamsterdam) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (total : ℕ)
+    -- Every total along the run is within three halves of `total`.
     (band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       tail.Contains step → ∀ t : Gwei, getTotalActiveBalance w.state = .ok t →
         2 * t.toNat ≤ 3 * total)
     (keys : Finset ℕ) :
+    -- Each block debits the keys at most one participant reward per seat.
     ∑ i ∈ keys, (events.map (PinDrift.Internal.syncDebit i)).sum ≤
       ((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
         preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
           PinTerms.syncEnvelope preset total ∧
+    -- Each block moves the keys at most one participant reward and its proposer share per seat.
     ∑ i ∈ keys, ((events.map (PinDrift.Internal.syncCredit i)).sum + (events.map
       (PinDrift.Internal.syncDebit i)).sum) ≤
       ((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
         preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
           PinDrift.Internal.syncSeatEnvelope preset total ∧
+    -- Assume that no block's proposer is among the keys.
+    --
+    -- Then each block moves them at most one participant reward.
+    --
+    -- That reward is per seat.
     (∀ debited moving : Finset ℕ, Disjoint debited moving →
       (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
         tail.Contains step → PinDrift.Internal.stepApart moving step) →

@@ -87,31 +87,9 @@ private theorem lastPass_debit_le {m z n : ForkedBeaconState preset} (pre : Run 
 open Classical in
 /-- The floor of one key over a run that crosses at most one epoch boundary.
 
-The run starts at `m`, reached from genesis, and ends at `n`, from Fulu and before Gloas.
-
-It stays in the epoch of `m`.
-
-Or it ends with the slot step that leaves that epoch, at the first slot of the next epoch.
-
-The key must be assigned an activation at `m`, and not exit by the epoch after that of `m`.
-
-If it is slashed at `m`, its delayed slashing penalty must not be due by the epoch of `n`.
-
 Take any `C` below the key's largest effective balance at `m`.
 
 The least of the balance at `m` and `C` is at most the balance at `n`, plus its debits.
-
-The first debit is the pass at the last state `z` of the first epoch, if the run crosses its end.
-
-The pass is a debit only when it reads a total active balance there.
-
-Otherwise it records no penalty.
-
-The others are the key's sync debits and its payments from the queue of partial withdrawals.
-
-The last is its initial slashing penalty, if the run slashes it.
-
-That penalty is the effective balance at `m` over the slashing quotient.
 
 The effective balance changes only at the boundary, after any slashing before it. -/
 theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run config checks g m)
@@ -120,16 +98,22 @@ theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run config check
     (vector : 4 ≤ preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat)
     (positive :
       0 < (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat)
+    -- The run starts at `m`, reached from genesis, and ends at `n`, from Fulu and before Gloas.
     (r : Run config checks m n) (hm : .fusaka ≤ m.fork) (hn : n.fork < .glamsterdam)
+    -- The run stays in the epoch of `m`.
+    --
+    -- Or it ends with the slot step that leaves that epoch, at the first slot of the next epoch.
     (shape : getCurrentEpoch n.state = getCurrentEpoch m.state ∨
       ∃ (z : ForkedBeaconState preset) (pre : Run config checks m z)
         (ok : advanceSlotAcross config checks z = .ok n),
         r = pre.snoc (Step.slot ok) ∧ getCurrentEpoch z.state = getCurrentEpoch m.state ∧
           (getCurrentEpoch n.state).toNat = (getCurrentEpoch m.state).toNat + 1)
+    -- The key must be assigned an activation at `m`, and not exit by the epoch after that of `m`.
     (i : ℕ) (val : Validator) (hval : m.state.validators.data[i]? = some val)
     (hact : val.activationEpoch ≠ FAR_FUTURE_EPOCH)
     (hexit : ∀ w, n.state.validators.data[i]? = some w →
       (getCurrentEpoch m.state).toNat + 1 < w.exitEpoch.toNat)
+    -- If it is slashed at `m`, its delayed slashing penalty must not be due by the epoch of `n`.
     (hslash : val.slashed = true → (getCurrentEpoch n.state).toNat +
       preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat / 2 < val.withdrawableEpoch.toNat)
     (C : ℕ) (hC : C ≤ (withdrawalMaxEffectiveBalance preset m.fork val).toNat)
@@ -138,11 +122,24 @@ theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run config check
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks m z) (post : Run config checks z n),
       r = pre.append post ∧ getCurrentEpoch z.state = getCurrentEpoch m.state ∧
       min (actualBalanceAt m i) C ≤ actualBalanceAt n i +
+        -- The first debit is the pass at the last state `z` of the first epoch.
+        --
+        -- It counts only if the run crosses the end of that epoch.
+        --
+        -- The pass is a debit only when it reads a total active balance there.
+        --
+        -- Otherwise it records no penalty.
         (if getCurrentEpoch m.state < getCurrentEpoch n.state ∧
             ∃ total, getTotalActiveBalance z.state = .ok total then
           PinDrift.Internal.passPenaltyRate config z i else 0) +
+        -- The next debits are the key's sync debits.
+        --
+        -- Then come its payments from the queue of partial withdrawals.
         (events.map (PinDrift.Internal.syncDebit i)).sum + (events.map (floorPartialDebit
           i.toUInt64)).sum +
+        -- The last is its initial slashing penalty, if the run slashes it.
+        --
+        -- That penalty is the effective balance at `m` over the slashing quotient.
         (if val.slashed = false ∧ ∃ w, n.state.validators.data[i]? = some w ∧ w.slashed = true
           then effectiveAt m i /
             (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat

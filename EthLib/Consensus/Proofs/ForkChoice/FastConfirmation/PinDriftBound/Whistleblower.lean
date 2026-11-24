@@ -50,30 +50,31 @@ def slashedOnC (split counted : BeaconState preset fork) : Finset ℕ :=
     (split.validators.data[i]?.map (·.slashed)).getD false = false ∧
       (counted.validators.data[i]?.map (·.slashed)).getD false = true
 
-/-- The bound on the effective balance of a key of R's registry that R's call reads.
-
-It is the key's effective balance, its rise and one increment, if R's branch slashes it.
-
-It is also at least the key's effective balance at the finalized state.
-
-A prefix state of the finalized epoch can reach that balance.
-
-R's branch budget supplies that bound and an increment to cover the slashing penalty.
-
-For slashable exits and charged late or pending keys, start with the balance at R plus its rise.
-
-Take the larger of that sum and the finalized balance, including the rounded bound for early exits.
-
-These charges omit the general effective-balance ceiling, which can be higher.
-
-The remaining keys use that ceiling if it is higher. -/
+/-- The bound on the effective balance of a key of R's registry that R's call reads. -/
 def whistleEnv (t : PinTerms preset) (pulled anc fin : BeaconState preset fork) (i : ℕ) :
     ℕ :=
+  -- If R's branch slashes the key, the bound is its effective balance, its rise and one increment.
+  --
+  -- It is also at least the key's effective balance at the finalized state.
+  --
+  -- A prefix state of the finalized epoch can reach that balance.
+  --
+  -- R's branch budget supplies that bound and an increment to cover the slashing penalty.
   if t.slashedRB i = true then
     max (balanceAt pulled i + t.rise i + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) (balanceAt fin i)
+  -- For slashable exits and charged late or pending keys, start with the balance at R.
+  --
+  -- Add the key's rise to it.
+  --
+  -- Take the larger of that sum and the finalized balance.
+  --
+  -- The finalized side includes the rounded bound for early exits.
+  --
+  -- These charges omit the general effective-balance ceiling, which can be higher.
   else if PinTerms.exitedSlashable anc pulled i = true ∨
       (t.tight = false ∧ (t.lateB i = true ∨ t.pendingRB i = true)) then
     max (balanceAt pulled i + t.rise i) (max (t.bF i) (balanceAt fin i))
+  -- The remaining keys use that ceiling if it is higher.
   else max (max (t.ebUp i) (balanceAt pulled i + t.rise i)) (t.bF i)
 
 /-- The reward budget's stake bound plus any slack covers the finalized effective balance.
@@ -89,22 +90,21 @@ private theorem short_end (h : Setting config checks g split fin pulled anc coun
   unfold Internal.whistleEnv
   split_ifs <;> omega
 
-/-- The reward stake bound applies on C's run within the epoch of the starting state `c`.
-
-The run from `c` to it stays in one epoch.
-
-So a key of the registry at `c` keeps its effective balance there.
-
-If the balance at `c` is within the finalized bound, it stays within that bound plus the slack.
-
-The finalized state is the case `c = fin`. -/
+/-- The reward stake bound applies on C's run within the epoch of the starting state `c`. -/
 theorem short_in_fin (h : Setting config checks g split fin pulled anc counted V)
+    -- The finalized state is the case `c = fin`.
     {c : BeaconState preset fork}
     (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {a b : ForkedBeaconState preset} (step : Step config checks a b)
     (member : tailC.Contains step) (i : ℕ) (inside : i < c.validators.data.size)
+    -- Assume that the balance at `c` is within the finalized bound.
+    --
+    -- It then stays within that bound plus the slack.
     (left : effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i ≤ balanceAt fin i) (slack : ℕ)
+    -- The run from `c` to the step stays in one epoch.
+    --
+    -- So a key of the registry at `c` keeps its effective balance there.
     (sameEpoch : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch c).toNat) :
     effectiveAt a i ≤ Internal.whistleEnv (pinTerms config pulled anc fin) pulled anc fin i + slack
       := by
@@ -118,30 +118,28 @@ theorem short_in_fin (h : Setting config checks g split fin pulled anc counted V
   have kept := (fromC.append pre).effectiveKept_of_same_epoch same i inside
   exact short_end h i (by rw [kept]; exact left) slack
 
-/-- The credits that raise the effective balance of a key of R's registry on C's branch.
-
-They are the key's credits at eleven tenths, rounded up, with the bands of credits and seat debits.
-
-The credits hold the key's own whistleblower credits.
-
-Its unit of gain and the leak that its sync debits induce on R's run come on top, unscaled.
-
-The seat debits are those of the two runs that R shares with C.
-
-A key that exited before the finalized state also holds its credits on the shared segment.
-
-A sync credit there has the band of its rounding. -/
+/-- The credits that raise the effective balance of a key of R's registry on C's branch. -/
 def whistleSlackBase (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) {x' y' : ForkedBeaconState preset}
     (rrun : Run config checks x' y') (highC high : ℕ)
     (eventsC eventsF events : List (BalanceEvent preset)) (fin : BeaconState preset fork)
     (i : ℕ) : ℕ :=
+  -- The credits are taken at eleven tenths, rounded up.
+  --
+  -- The credits hold the key's own whistleblower credits.
+  --
+  -- The seat debits are those of the two runs that R shares with C.
   (11 * (Internal.propN tail highC i + Internal.depPre eventsC i + Internal.whistC tail highC i +
     Internal.syncCr eventsC i +
     Internal.consAmt eventsC i + Internal.syncD eventsF i + Internal.syncD events i) + 9) / 10 +
+      -- The bands of credits and seat debits come on top.
       Internal.bandC tail highC i +
     Internal.bandX fin highC i + Internal.bandR (eventsF ++ events) i +
+    -- Its unit of gain and the leak that its sync debits induce on R's run come on top, unscaled.
     Internal.unitK t tail highC eventsC events eventsF i + Internal.inducedR t rrun i +
+  -- A key that exited before the finalized state also holds its credits on the shared segment.
+  --
+  -- A sync credit there has the band of its rounding.
   if t.exitBeforeFin i = true then
     (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX fin
       high i +
@@ -170,14 +168,6 @@ private def whistleExtra (t : PinTerms preset) {x y : ForkedBeaconState preset}
 
 /-- The bound on the effective balance at its slashing of a key of the split's registry.
 
-A key that is not active at C and has a departure charge on C's branch is also read at its charge.
-
-That reading is the charge, the key's rise after it, and the slack.
-
-A charge in the split's own epoch reads the balance before the credits of `pre`.
-
-So the key's proposer, whistleblower and sync credits over `pre` are read too.
-
 The slashing starts the key's exit, or finds the exit that an earlier charge started. -/
 private def whistleRead (t : PinTerms preset) (pulled anc counted : BeaconState preset fork)
     {x y : ForkedBeaconState preset} (tail : Run config checks x y)
@@ -185,10 +175,18 @@ private def whistleRead (t : PinTerms preset) (pulled anc counted : BeaconState 
     {x'' y'' : ForkedBeaconState preset} (pre : Run config checks x'' y'') (highC high : ℕ)
     (eventsC eventsF events eventsP : List (BalanceEvent preset)) (fin : BeaconState preset fork)
     (i : ℕ) : ℕ :=
+  -- A key that is not active at C may have a departure charge on C's branch.
+  --
+  -- It is then also read at its charge.
   if ¬ isActiveAt counted (getCurrentEpoch counted) i = true ∧
       (tail.departureCharges.any fun c => c.index == i) = true then
     min (Internal.whistleEnv t pulled anc fin i +
         Internal.whistleSlack t tail rrun highC high eventsC eventsF events fin i)
+      -- That reading is the charge, the key's rise after it, and the slack.
+      --
+      -- A charge in the split's own epoch reads the balance before the credits of `pre`.
+      --
+      -- So the key's proposer, whistleblower and sync credits over `pre` are read too.
       (Internal.chargeAmt tail i + Internal.riseQ tail highC i + (Internal.propN pre highC i +
         Internal.whistC pre highC i +
         Internal.syncCr eventsP i) + Internal.whistleSlack t tail rrun highC high eventsC eventsF
@@ -216,22 +214,20 @@ private def createdCeil (t : PinTerms preset) {x y : ForkedBeaconState preset}
       WEIGHT_DENOMINATOR.toNat) + t.depth * (rate / WEIGHT_DENOMINATOR.toNat + 2) +
         preset.downwardBand
 
-/-- The gain of a created key's credits and base stake is at most the gain of its flows and a unit.
-
-The key's base stake is credits, so it sits in the flows `Z`.
-
-The flow of `Cr` and the slack `S - e0` compound at eleven tenths.
-
-The floor holds the base gain `D * q` and `D`.
-
-A key whose rate is low has `11 * D * q ≤ e0`, so its base gain is within a tenth of its stake.
-
-The floors then lose one increment against the floor of the flows, which the unit pays. -/
+/-- A created key's credits and base stake gain at most the gain of its flows and a unit. -/
 private theorem created_gain_arith (I WD F P D e0 S Cr Z β : ℕ)
+    -- The key's base stake is credits, so it sits in the flows `Z`.
     (key : 11 * D * (P * F) < WD * I) (start : e0 ≤ S + β) (flows : Cr + S ≤ Z)
+    -- A key whose rate is low has `11 * D * q ≤ e0`.
+    --
+    -- So its base gain is within a tenth of its stake.
     (small : 11 * (β + D) < 10 * I) :
+    -- The flow of `Cr` and the slack `S - e0` compound at eleven tenths.
+    --
+    -- The floor holds the base gain `D * q` and `D`.
     D * (11 * (Cr + (S - e0) + D * (e0 / I * P * F / WD) + D) / (10 * I) * P * F / WD) +
         (D * (e0 / I * P * F / WD) + D) ≤
+      -- The floors then lose one increment against the floor of the flows, which the unit pays.
       D * (11 * Z / (10 * I) * P * F / WD) + D * (P * F / WD + 2) := by
   have hWD : 0 < WD := Nat.pos_of_ne_zero fun zero => by
     rw [zero] at key
@@ -310,13 +306,7 @@ private theorem scan_deposits_consolidations_le (v high : ℕ) {x y : ForkedBeac
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key created on C's branch is at most its credits and their gains.
 
-The run from the split reaches a state `z` where the key holds the activation reserve, and then C.
-
-The bound holds at every state of C's run after `z`, and at C.
-
-The key's base stake is credits, so one floor of the flows pays its gain.
-
-The rate premise is that of the low regime: `key` reads it at the depth of the call. -/
+The key's base stake is credits, so one floor of the flows pays its gain. -/
 theorem created_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -329,17 +319,24 @@ theorem created_ceiling (h : Setting config checks g split fin pulled anc counte
           ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
         (getTotalActiveBalance pulled).toOption.getD 0 / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat)
+    -- The rate premise is that of the low regime.
+    --
+    -- This hypothesis reads it at the depth of the call.
     (key : 11 * (min (pinTerms config pulled anc fin).depth
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
       (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
         WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :
     let Z := Internal.credC tailC highC v.toNat + Internal.whistC tailC highC v.toNat +
       Internal.syncCr eventsC v.toNat
+    -- The run from the split reaches a state `z` where the key holds the activation reserve.
+    --
+    -- It then reaches C.
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
       (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧ 0 < Z ∧
       (∀ p ∈ pre.balancePath, ∀ w : Validator, p.state.validators.data[v.toNat]? = some w →
         w.activationEpoch ≠ FAR_FUTURE_EPOCH →
         (getCurrentEpoch p.state).toNat + 1 < w.activationEpoch.toNat) ∧
+      -- The bound holds at every state of C's run after `z`, and at C.
       ∀ p ∈ post.balancePath, effectiveAt p v.toNat ≤ Z +
         (min (pinTerms config pulled anc fin).depth
           ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
@@ -616,27 +613,7 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The whistleblower credits of any set of keys on C's branch are at most the reward base.
 
-The base is the slashing reward of each key slashed on that branch, read at its balance then.
-
-A key of the split's registry is read at the bound `registry` gives for it.
-
-If it is not active at C and has a charge there, it is also read at `registryCharge`.
-
-`registry` is asked for each key that is unslashed at the split, at each step of C's branch.
-
-A key slashed before the split has no term, since its credit on C's branch is zero.
-
-A key of R's registry that is also slashed on R's branch is a term of the first sum.
-
-A consumer that pays those terms by another budget splits that sum by the key's slashing on R.
-
-A new key active at C is bounded by the largest cap or by its credits, gains and rounding band.
-
-If it has exited by C, it is read at its charge and credits.
-
-A charge in the split's own epoch also reads the credits of `pre`, the run from that epoch's start.
-
-The bound for a charged key accounts for how that prefix joins the run. -/
+The base is the slashing reward of each key slashed on that branch, read at its balance then. -/
 private theorem whistle_core (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -644,8 +621,14 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    -- A charge in the split's own epoch also reads the credits of `pre`.
+    --
+    -- That run goes from the start of that epoch to the split.
     {b : BeaconState preset fork} (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     {eventsP : List (BalanceEvent preset)}
+    -- A key of the split's registry is read at the bound that this hypothesis gives for it.
+    --
+    -- It is asked for each key that is unslashed at the split, at each step of C's branch.
     (registry : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
       tailC.Contains step → ∀ i, i < split.validators.data.size →
         (split.validators.data[i]?.map (·.slashed)).getD false = false →
@@ -655,6 +638,7 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
             Internal.whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC
               high
               eventsC eventsF events fin i)
+    -- If such a key is not active at C and has a charge there, it is also read at this bound.
     (registryCharge : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
       tailC.Contains step → ∀ i, i < split.validators.data.size →
         (split.validators.data[i]?.map (·.slashed)).getD false = false →
@@ -668,11 +652,21 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
               eventsC eventsF events fin i)
     (S : Finset ValidatorIndex) :
     ∑ v ∈ S, Internal.whistC tailC highC v.toNat ≤
+      -- A key of R's registry that is also slashed on R's branch is a term of the first sum.
+      --
+      -- A consumer that pays those terms by another budget splits that sum.
+      --
+      -- It splits the sum by the key's slashing on R.
       (∑ i ∈ (Internal.slashedOnC split counted).filter (fun i => i < split.validators.data.size),
         min (whistleRead (pinTerms config pulled anc fin) pulled anc counted tailC
             (fromFin.append tail) pre highC high eventsC eventsF events eventsP fin i)
           preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
             (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
+      -- A new key active at C is bounded by the largest cap.
+      --
+      -- Or it is bounded by its credits, gains and rounding band.
+      --
+      -- If a new key has exited by C, it is read at its charge and credits.
       (∑ i ∈ ((Internal.slashedOnC split counted).filter (fun i => ¬ i <
           split.validators.data.size)).filter
           (fun i => isActiveAt counted (getCurrentEpoch counted) i = true),
@@ -686,6 +680,9 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
             whistleExtra (pinTerms config pulled anc fin) tailC highC eventsC i)
           preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
             (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) := by
+  -- A key slashed before the split has no term, since its credit on C's branch is zero.
+  --
+  -- The bound for a charged key accounts for how `pre` joins the run.
   classical
   obtain ⟨shared⟩ := h.toFin
   have limit := whistC_sum_le_limits (shared.append fromFin) h.genesis tailC h.early highC
@@ -877,19 +874,7 @@ private theorem sum_newlySlashed_filter_positions
       0)).trans
     (Finset.sum_filter _ _).symm)
 
-/-- A key that C slashes after the split, and that R neither slashes nor exits, keeps its exit late.
-
-The exit guard of its run from the finalized block holds along the run.
-
-Its exit at C is after R's cutoff less the delay.
-
-The exit is assigned on C's run, so it is a departure charge there, after the split.
-
-Or it is assigned by the split, and then it is kept, and so it is R's exit.
-
-R's exit is then after the cutoff.
-
-The key cannot already be withdrawable by the finalized epoch. -/
+/-- A key that C slashes after the split, and R neither slashes nor exits, keeps its exit late. -/
 private theorem slashedC_retained (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -898,6 +883,7 @@ private theorem slashedC_retained (h : Setting config checks g split fin pulled 
     (inside : i.toNat < split.validators.data.size)
     (notR : ¬ (pinTerms config pulled anc fin).slashedRB i.toNat = true)
     (notExit : ¬ PinTerms.exitedSlashable anc pulled i.toNat = true) :
+    -- The exit guard of its run from the finalized block holds along the run.
     ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
       (before.snoc step).append after = fromFin.append tailC → ∀ w,
@@ -905,6 +891,15 @@ private theorem slashedC_retained (h : Setting config checks g split fin pulled 
       ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[i.toNat]? = some u →
           (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat) := by
+  -- Its exit at C is after R's cutoff less the delay.
+  --
+  -- Either the exit is assigned on C's run, so it is a departure charge there, after the split.
+  --
+  -- Or it is assigned by the split, and then it is kept, and so it is R's exit.
+  --
+  -- R's exit is then after the cutoff.
+  --
+  -- The key cannot already be withdrawable by the finalized epoch.
   classical
   obtain ⟨hLt, hSplit, hCount⟩ : i.toNat < counted.validators.data.size ∧
       (split.validators.data[i.toNat]?.map (·.slashed)).getD false = false ∧
@@ -987,22 +982,20 @@ theorem deposits_le_depPre (L : List (BalanceEvent preset)) (i : ℕ)
     · simp [dep]
       omega
 
-/-- Each deposit of a run's replay that credits a key finds it unslashed.
-
-The run ends with the key unslashed.
-
-A deposit event of a block credits no balance.
-
-One of a slot step starts from a state that does not hold the key slashed.
-
-A slashed key stays slashed up to the end of the run. -/
+/-- Each deposit of a run's replay that credits a key finds it unslashed. -/
 theorem prefix_deposits_clean (h : Setting config checks g split fin pulled anc counted V)
     {a : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ a)
     (aEarly : a.fork < .glamsterdam) (highC : ℕ) {e1 : List (BalanceEvent preset)}
     (replayed1 : pre.balanceEvents highC = .ok e1) (v : ValidatorIndex)
+    -- The run ends with the key unslashed.
     (unslashedA : (a.state.validators.data[v.toNat]?.map (·.slashed)).getD false = false) :
     ∀ e ∈ e1, e.source = .deposits →
       Internal.keyCredit v.toNat e = 0 ∨ ¬ slashedFlagAt e.before.state v.toNat = some true := by
+  -- A deposit event of a block credits no balance.
+  --
+  -- One of a slot step starts from a state that does not hold the key slashed.
+  --
+  -- A slashed key stays slashed up to the end of the run.
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -1140,17 +1133,7 @@ theorem created_band (h : Setting config checks g split fin pulled anc counted V
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A newly slashed key that R neither slashes nor exits, and not active at C, is charged on C.
-
-An exit unset at the split is set by the key's slashing on C's run, which charges it.
-
-An exit set at the split belongs to a key activated by the split's epoch.
-
-If R slashes the key, the vector delays withdrawal enough for the branch slashing charge.
-
-Otherwise it exits after R's next epoch or falls under the slashable-exit charge.
-
-An exit after R's next epoch leaves the key active at C. -/
+/-- A newly slashed key that R neither slashes nor exits, and not active at C, is charged on C. -/
 private theorem newlySlashed_inactive_charged
     (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -1162,6 +1145,15 @@ private theorem newlySlashed_inactive_charged
     (notES : ¬ PinTerms.exitedSlashable anc pulled i = true)
     (inactive : ¬ isActiveAt counted (getCurrentEpoch counted) i = true) :
     ∃ c ∈ tailC.departureCharges, c.index = i := by
+  -- An exit unset at the split is set by the key's slashing on C's run, which charges it.
+  --
+  -- An exit set at the split belongs to a key activated by the split's epoch.
+  --
+  -- If R slashes the key, the vector delays withdrawal enough for the branch slashing charge.
+  --
+  -- Otherwise it exits after R's next epoch or falls under the slashable-exit charge.
+  --
+  -- An exit after R's next epoch leaves the key active at C.
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨inSlashed, inside⟩ := Finset.mem_filter.mp member
   obtain ⟨-, unslashedS, slashedC⟩ := Finset.mem_filter.mp inSlashed
@@ -1743,21 +1735,7 @@ private theorem newlySlashed_key_round (h : Setting config checks g split fin pu
   · have pFour := Nat.mul_le_mul_left Q four
     omega
 
-/-- The slack and the rounding of the rewards of the newly slashed keys are paid by their shares.
-
-A key of the split's registry is read at its bound and the slack that `registry` adds.
-
-A key that exits on C's branch is read at its charge and its rise after it.
-
-The slashing credits of the slack are the keys' own.
-
-The aggregate reward bound subtracts those credits.
-
-The unit, the induced leak and the bands of the slack are paid unscaled.
-
-Its credits are paid by the shares, with a tenth for their gains.
-
-Each credited key has an upward band, which pays the rounding of its floor. -/
+/-- The newly slashed keys' shares pay the slack and the rounding of their rewards. -/
 private theorem whistle_slack_newlySlashed
     (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -1770,6 +1748,11 @@ private theorem whistle_slack_newlySlashed
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     {b : BeaconState preset fork}
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩) (eventsP : List (BalanceEvent preset)) :
+    -- A key of the split's registry is read at its bound.
+    --
+    -- The slack that the registry bound adds comes on top.
+    --
+    -- A key that exits on C's branch is read at its charge and its rise after it.
     3 * (∑ i ∈ ((Internal.slashedOnC split counted).filter (fun i => i <
         split.validators.data.size)),
         min (whistleRead (pinTerms config pulled anc fin) pulled anc counted tailC
@@ -1854,6 +1837,15 @@ private theorem whistle_slack_newlySlashed
           if 0 < Internal.propN pre highC v.toNat + Internal.whistC pre highC v.toNat +
             Internal.syncCr eventsP v.toNat then
             preset.upwardBand else 0) := by
+  -- The slashing credits of the slack are the keys' own.
+  --
+  -- The aggregate reward bound subtracts those credits.
+  --
+  -- The unit, the induced leak and the bands of the slack are paid unscaled.
+  --
+  -- Its credits are paid by the shares, with a tenth for their gains.
+  --
+  -- Each credited key has an upward band, which pays the rounding of its floor.
   have quotient := h.facts.whistleblower fork
   have pos : 0 < (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by omega
   -- each key is read at its group's bound, with the ceiling of its slack
@@ -2116,13 +2108,7 @@ theorem exitEpoch_toNat_lt_of_ne_far {epoch : Epoch} (assigned : epoch ≠ FAR_F
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C's run creates and slashes is credited its proposer credits and consolidations.
 
-It is also credited its deposits before its exit.
-
-The run charges the key at the step that sets its exit, and its deposits stop there.
-
-The key is unslashed before that step, since a slashed key has its exit set.
-
-The consolidation credits that the run scans are among those of its events. -/
+It is also credited its deposits before its exit. -/
 private theorem created_credC_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -2131,6 +2117,11 @@ private theorem created_credC_le (h : Setting config checks g split fin pulled a
     (slashedC : (counted.validators.data[i]?.map (·.slashed)).getD false = true) :
     Internal.credC tailC highC i ≤ Internal.propN tailC highC i + Internal.depPre eventsC i +
       Internal.consAmt eventsC i := by
+  -- The run charges the key at the step that sets its exit, and its deposits stop there.
+  --
+  -- The key is unslashed before that step, since a slashed key has its exit set.
+  --
+  -- The consolidation credits that the run scans are among those of its events.
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -2381,26 +2372,15 @@ private theorem createdSlashed_key_round
       rw [Nat.mul_add] at pB
       omega
 
-/-- The slack and the rounding of the rewards of the created slashed keys are paid by their shares.
-
-A created key that has exited is read at its charge and its credits.
-
-A created key active at C is charged for its credits and their gains, or at the largest cap.
-
-Its credits are paid by the shares, with a tenth for their gains.
-
-Its unit, or its largest cap at a high rate, is paid for each active key.
-
-Each credited key has an upward band, which pays the rounding of its floor.
-
-The credits of a slashed created key are its proposer credits.
-
-They are also its deposits before the slashing and its consolidations. -/
+/-- The created slashed keys' shares pay the slack and the rounding of their rewards. -/
 private theorem whistle_slack_createdSlashed
     (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    -- A created key active at C is charged for its credits and their gains, or at the largest cap.
+    --
+    -- A created key that has exited is read at its charge and its credits.
     3 * (∑ i ∈ (((Internal.slashedOnC split counted).filter (fun i => ¬ i <
         split.validators.data.size)).filter (fun i => isActiveAt counted (getCurrentEpoch counted) i
         = true)), min (createdCeil (pinTerms config pulled anc fin) tailC highC eventsC i)
@@ -2422,6 +2402,7 @@ private theorem whistle_slack_createdSlashed
         3 * (∑ i ∈ ((Internal.slashedOnC split counted).filter (fun i => ¬ i <
             split.validators.data.size)),
             Internal.whistC tailC highC i) +
+        -- A created key's credits are paid by the shares, with a tenth for their gains.
         (Internal.wShare preset fork ((∑ v ∈ createdSlashed counted split, Internal.propN tailC
             highC
           v.toNat) +
@@ -2430,13 +2411,18 @@ private theorem whistle_slack_createdSlashed
             v.toNat) +
           Internal.wShare preset fork (∑ v ∈ createdSlashed counted split, Internal.consAmt eventsC
             v.toNat) +
+          -- Each credited key has an upward band, which pays the rounding of its floor.
           (∑ v ∈ createdSlashed counted split, Internal.bandC tailC highC v.toNat) +
           (∑ v ∈ createdSlashed counted split, Internal.bandX fin highC v.toNat) : ℕ) +
+        -- Its unit, or its largest cap at a high rate, is paid for each active key.
         ((createdSlashed counted split).filter fun v => isActiveAt counted (getCurrentEpoch counted)
           v.toNat =
           true).card * (if (pinTerms config pulled anc fin).gainHigh = true then
               preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
             else (pinTerms config pulled anc fin).unitGain) := by
+  -- The credits of a slashed created key are its proposer credits.
+  --
+  -- They are also its deposits before the slashing and its consolidations.
   have quotient := h.facts.whistleblower fork
   have pos : 0 < (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by omega
   -- each created slashed key is within its charge, its shares and its bands
@@ -2602,28 +2588,28 @@ private theorem charged_window (h : Setting config checks g split fin pulled anc
 
 /-- The reward reserve covers keys that R exits, with a queue allowance for newly created keys.
 
-A key of the split's registry counts here if it is unslashed at R and not withdrawable by finality.
-
-It exits by R's next epoch.
-
-It is read at its balance and rise, or at its finalized balance.
-
-A key of the split's registry that is none of those, and not active at C, is not slashed at R.
-
-Its exit was assigned on C's branch.
-
-It pays its charge and its rise after it, from the window.
-
-A created key that has exited by C pays its charge from the window.
-
 Each key the queues can exit adds a rounding band and gains at the largest rate. -/
 private theorem whistle_exited (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
+    -- A key of the split's registry counts here if it is unslashed at R.
+    --
+    -- It must also not be withdrawable by finality.
+    --
+    -- It exits by R's next epoch.
+    --
+    -- It is read at its balance and rise, or at its finalized balance.
     3 * (∑ i ∈ (((Internal.slashedOnC split counted).filter (fun i => i <
         split.validators.data.size)).filter
         (fun i => PinTerms.exitedSlashable anc pulled i = true)),
           Internal.whistleEnv (pinTerms config pulled anc fin) pulled anc fin i
             / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
+      -- Take a key of the split's registry that is none of those, and not active at C.
+      --
+      -- It is not slashed at R.
+      --
+      -- Its exit was assigned on C's branch.
+      --
+      -- It pays its charge and its rise after it, from the window.
       3 * (∑ i ∈ ((((Internal.slashedOnC split counted).filter (fun i => i <
           split.validators.data.size)).filter (fun i => ¬ (pinTerms config pulled anc fin).slashedRB
           i = true ∧ ¬ PinTerms.exitedSlashable anc pulled i = true)).filter (fun i => ¬ isActiveAt
@@ -2631,6 +2617,7 @@ private theorem whistle_exited (h : Setting config checks g split fin pulled anc
           (getCurrentEpoch counted) i = true)), (Internal.chargeAmt tailC i + Internal.riseQ tailC
             highC i) /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
+      -- A created key that has exited by C pays its charge from the window.
       3 * (∑ i ∈ (((Internal.slashedOnC split counted).filter (fun i => ¬ i <
           split.validators.data.size)).filter (fun i => ¬ isActiveAt counted (getCurrentEpoch
           counted) i = true)), (Internal.chargeAmt tailC i + preset.upwardBand + (pinTerms config
@@ -2866,12 +2853,6 @@ private theorem pulledBalance_rise_aligned
 
 /-- A key charged to the flagged-key budget is slashable at R.
 
-It is in R's registry and unslashed there.
-
-It is activated by R's next epoch.
-
-It is not yet withdrawable at the finalized epoch.
-
 A key outside those cases is charged as slashed, late or pending. -/
 private theorem free_slashable (h : Setting config checks g split fin pulled anc counted V)
     {i : ℕ} (inside : i < split.validators.data.size) (below : i < 2 ^ 64)
@@ -2882,8 +2863,11 @@ private theorem free_slashable (h : Setting config checks g split fin pulled anc
     (notLate : ¬ ((pinTerms config pulled anc fin).tight = false ∧
       ((pinTerms config pulled anc fin).lateB i = true ∨
         (pinTerms config pulled anc fin).pendingRB i = true))) :
+    -- It is in R's registry and unslashed there.
     ∃ w, pulled.validators.data[i]? = some w ∧ w.slashed = false ∧
+      -- It is activated by R's next epoch.
       w.activationEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 ∧
+      -- It is not yet withdrawable at the finalized epoch.
       anc.finalizedCheckpoint.epoch.toNat < w.withdrawableEpoch.toNat := by
   classical
   obtain ⟨rp⟩ := h.toPulled
@@ -2923,15 +2907,7 @@ private theorem free_slashable (h : Setting config checks g split fin pulled anc
 
 /-- The reward bound charges the key either as flagged or through its stake at C and seat debits.
 
-The bound uses the reserve's effective-balance ceiling or the key's balance and rise.
-
-The excess over that ceiling is at most the key's rise allowance.
-
-If the floor test fails, the flagged-key charge pays the reward at the reserve's ceiling.
-
-Otherwise the key's balance at C contributes to the reward bound.
-
-It also adds the key's seat debits on both runs. -/
+The bound uses the reserve's effective-balance ceiling or the key's balance and rise. -/
 private theorem free_key (h : Setting config checks g split fin pulled anc counted V)
     (high : ℕ) (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -2958,6 +2934,7 @@ private theorem free_key (h : Setting config checks g split fin pulled anc count
     3 * (Internal.whistleEnv (pinTerms config pulled anc fin) pulled anc fin v.toNat / (parameters
       preset
         fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ≤
+      -- If the floor test fails, the flagged-key charge pays the reward at the reserve's ceiling.
       (if 2 * ((pinTerms config pulled anc fin).lowEB v.toNat - max
           ((pinTerms config pulled anc fin).ebUp v.toNat)
           (max (balanceAt fin v.toNat) ((pinTerms config pulled anc fin).base0 v.toNat) +
@@ -2967,6 +2944,11 @@ private theorem free_key (h : Setting config checks g split fin pulled anc count
             fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) then
         3 * ((pinTerms config pulled anc fin).ebUp v.toNat / (parameters preset
           fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0) +
+      -- Otherwise the key's balance at C contributes to the reward bound.
+      --
+      -- It also adds the key's seat debits on both runs.
+      --
+      -- The excess over that ceiling is at most the key's rise allowance.
       (((pinTerms config pulled anc fin).rise v.toNat + 2 * balanceAt counted v.toNat) +
         2 * Internal.syncD eventsF v.toNat + 2 * Internal.syncD eventsC v.toNat) := by
   classical
@@ -3058,19 +3040,7 @@ These are the keys of the split's registry that C slashes and leaves active.
 
 R neither slashes them nor exits them.
 
-Outside the tight window, R does not charge them as late or pending activations.
-
-They are active at both branches.
-
-A slashable key whose floor does not cover its reward is charged at the reserve's ceiling.
-
-The other keys draw on their stake at C and their seat debits.
-
-C's branch has a separate allowance for seat debits.
-
-The sync budget covers the seat debits of the shared segment.
-
-The key's rise allowance covers the part above that ceiling. -/
+Outside the tight window, R does not charge them as late or pending activations. -/
 private theorem whistle_free (h : Setting config checks g split fin pulled anc counted V)
     (high : ℕ) (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -3087,10 +3057,17 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
         pulled anc fin).pendingRB i = true)))),
           Internal.whistleEnv (pinTerms config pulled anc fin) pulled anc fin i
             / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) : ℕ) : ℤ) ≤
+      -- A slashable key whose floor does not cover its reward is charged at the reserve's ceiling.
+      --
+      -- The other keys draw on their stake at C and their seat debits.
       -outsideQuorumCost pulled counted - departedCost pulled counted V + (pinTerms config pulled
           anc
         fin).flagged +
+          -- C's branch has a separate allowance for seat debits.
           (pinTerms config pulled anc fin).seatShortfall +
+        -- The sync budget covers the seat debits of the shared segment.
+        --
+        -- The key's rise allowance covers the part above that ceiling.
         ((∑ i ∈ (((((Internal.slashedOnC split counted).filter (fun i => i <
             split.validators.data.size)).filter (fun i => ¬ (pinTerms config pulled anc
             fin).slashedRB i = true ∧ ¬ PinTerms.exitedSlashable anc pulled i = true)).filter (fun
@@ -3106,6 +3083,7 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
             config pulled anc fin).tight = false ∧ ((pinTerms config pulled anc fin).lateB i = true
             ∨ (pinTerms config pulled anc fin).pendingRB i = true)))),
             Internal.syncD eventsF i : ℕ) : ℤ) := by
+  -- The keys are active at both branches.
   classical
   obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
   set FW : Finset ℕ := (((((Internal.slashedOnC split counted).filter (fun i => i <
@@ -3270,17 +3248,7 @@ def whistleActiveRow (config : Config) (pulled anc fin : BeaconState preset fork
     (if terms.tight = false ∧ terms.pendingRB i = true then balanceAt pulled i + 3 * excess
       else 0)
 
-/-- A key of the split's registry that only C activates pays from its row of R.
-
-At R the key is late or pending, and only the upcoming-only quorum class can share that charge.
-
-It needs no floor.
-
-The charge for late activations triples the effective balance but counts the rise once.
-
-Its finalized balance can exceed its balance and rise at R.
-
-The row's reward of that excess, rounded up, pays the rest. -/
+/-- A key of the split's registry that only C activates pays from its row of R. -/
 private theorem whistle_late (h : Setting config checks g split fin pulled anc counted V) :
     3 * (∑ i ∈ (((((Internal.slashedOnC split counted).filter (fun i => i <
         split.validators.data.size)).filter (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i
@@ -3291,6 +3259,11 @@ private theorem whistle_late (h : Setting config checks g split fin pulled anc c
         pulled anc fin).pendingRB i = true)))),
           Internal.whistleEnv (pinTerms config pulled anc fin) pulled anc fin i
             / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ≤
+      -- The charge for late activations triples the effective balance but counts the rise once.
+      --
+      -- Its finalized balance can exceed its balance and rise at R.
+      --
+      -- The row's reward of that excess, rounded up, pays the rest.
       ∑ i ∈ (((((Internal.slashedOnC split counted).filter (fun i => i <
           split.validators.data.size)).filter
           (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧ ¬
@@ -3299,6 +3272,11 @@ private theorem whistle_late (h : Setting config checks g split fin pulled anc c
           true)).filter (fun i => ((pinTerms config pulled anc fin).tight = false ∧ ((pinTerms
           config pulled anc fin).lateB i = true ∨ (pinTerms config pulled anc fin).pendingRB i =
           true)))), Internal.whistleActiveRow config pulled anc fin i 0 := by
+  -- At R the key is late or pending.
+  --
+  -- Only the upcoming-only quorum class can share that charge.
+  --
+  -- It needs no floor.
   rw [Finset.mul_sum]
   refine Finset.sum_le_sum fun i member => ?_
   simp only [Finset.mem_filter] at member
@@ -3616,19 +3594,19 @@ theorem budget_joining : (pinTerms config pulled anc fin).joining ≤
   dsimp only [pinTerms, quorumReserve]
   exact (show ∀ a b c : ℕ, a ≤ 2 * (a + b) + 3 * c by intros; omega) _ _ _
 
-/-- The weighted gains fit the low-rate flow budget, the slashing budget and the credits.
-
-The gains are bounded linearly, at the rate `11 * D * FP / (I * WD)` of a unit of flow.
-
-The credit part pays at a rate below one, so it costs at most itself.
-
-The other parts round down their increments once, and `f` at least two covers the rounding.
-
-The consolidations are a whole number `m` of increments, and the slashed keys are at most `n`. -/
+/-- The weighted gains fit the low-rate flow budget, the slashing budget and the credits. -/
 theorem flow_close (I WD FP D D2 m OC Wr Wc Wo Ws n df L : ℕ)
+    -- The parts other than the credits round down their increments once.
+    --
+    -- `f` at least two covers that rounding.
     (hI : 0 < I) (hWD : 0 < WD) (key : 0 < L → 11 * D * FP < WD * I) (f2 : 0 < L → 2 ≤ FP / WD)
+    -- The consolidations are a whole number `m` of increments.
+    --
+    -- The slashed keys are at most `n`.
     (hD : D ≤ df) (hDD : D ≤ D2) (hc : Wc ≤ 3 * (I * m)) (ho : Wo ≤ OC) (hs : Ws ≤ 3 * (I * n))
+    -- The gains are bounded linearly, at the rate `11 * D * FP / (I * WD)` of a unit of flow.
     (lin : 10 * (I * WD) * L ≤ 11 * D * FP * (Wr + Wc + Wo + Ws)) :
+    -- The credit part pays at a rate below one, so it costs at most itself.
     10 * L ≤ 10 * ((33 * D2 * (m * FP / WD) + 11 * D2 * ((OC / I) * FP / WD) +
       30 * D2 * (FP / WD + 1) + 9) / 10 + 3 * (n * (2 * df * (FP / WD)))) + Wr := by
   rcases Nat.eq_zero_or_pos L with zero | pos
@@ -3962,15 +3940,7 @@ private theorem whistleEnv_sum_le (h : Setting config checks g split fin pulled 
     _ ≤ _ := Nat.mul_le_mul_left _ (Finset.sum_le_sum_of_subset fun i member =>
         Finset.mem_range.mpr (inside i member))
 
-/-- The sync flows of any keys on the three runs fit the sync part of the credit total.
-
-C's credits take the seats' envelope and the proposer's share.
-
-The shared segment's credits and debits of a seat are at most its reward with the proposer's share.
-
-R's debits take the envelope.
-
-So the segment from the finalized state takes the share too. -/
+/-- The sync flows of any keys on the three runs fit the sync part of the credit total. -/
 private theorem sync_flows_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (highF : ℕ)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents highF = .ok eventsF)
@@ -3988,6 +3958,13 @@ private theorem sync_flows_le (h : Setting config checks g split fin pulled anc 
         ((pinTerms config pulled anc fin).depth +
           ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
             (pinTerms config pulled anc fin).syncProposer := by
+  -- C's credits take the seats' envelope and the proposer's share.
+  --
+  -- On the shared segment, a seat moves at most its reward plus the proposer's share.
+  --
+  -- R's debits take the envelope.
+  --
+  -- So the segment from the finalized state takes the share too.
   obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
   have totalEq := Internal.getD_total_eq pulledOk
   have called := UInt64.le_iff_toNat_le.mp (Internal.Setting.called h)
@@ -4095,19 +4072,7 @@ private theorem band_credited_le (h : Setting config checks g split fin pulled a
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The credits that the registry keys without a deposit gain on C's branch fit the credit total.
 
-Each credit is rounded to at most its double, so the keys pay twice their credits.
-
-Their whistleblower credits stay as they are, for the base to bound.
-
-The credit reserve covers proposer credits, sync flows and consolidations.
-
-The bands of the consolidation targets are at most a fifth of the consolidation total.
-
-The bands of the credited keys are the upward band for each slot of the window.
-
-`SB` is the bands of the keys that hold a seat on the shared segment or on R's run.
-
-`SU` is the units and the induced leak of the keys. -/
+Each credit is rounded to at most its double, so the keys pay twice their credits. -/
 theorem slack_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -4121,9 +4086,13 @@ theorem slack_le (h : Setting config checks g split fin pulled anc counted V)
     (highLe : highC ≤ (getCurrentEpoch pulled).toNat)
     (T : Finset ℕ) (inside : ∀ i ∈ T, i < split.validators.data.size)
     (quiet : ∀ i ∈ T, Internal.depPre eventsC i = 0) (SB SU : ℕ)
+    -- This bounds by `SB` the bands of the keys that hold a seat.
+    --
+    -- The seat is on the shared segment or on R's run.
     (seat : ∑ i ∈ T, (Internal.bandR (eventsF ++ events) i +
       if (pinTerms config pulled anc fin).exitBeforeFin i = true then
         (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) ≤ SB)
+    -- This bounds by `SU` the units and the induced leak of the keys.
     (units : ∑ i ∈ T, (Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events
       eventsF i +
       Internal.inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
@@ -4132,6 +4101,7 @@ theorem slack_le (h : Setting config checks g split fin pulled anc counted V)
     ∑ i ∈ T, Internal.whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail)
       highC high
         eventsC eventsF events fin i ≤
+      -- The credit reserve covers proposer credits, sync flows and consolidations.
       2 * ((11 * ((pinTerms config pulled anc fin).consolidationsX +
         (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit +
         (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat *
@@ -4144,13 +4114,16 @@ theorem slack_le (h : Setting config checks g split fin pulled anc counted V)
               ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
         ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           (pinTerms config pulled anc fin).syncProposer) + 9) / 10) +
+      -- Their whistleblower credits stay as they are, for the base to bound.
       2 * ∑ i ∈ T, Internal.whistC tailC highC i +
+      -- The bands of the credited keys are the upward band for each slot of the window.
       preset.upwardBand * ((pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
         ((pinTerms config pulled anc fin).depth /
           max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
             preset.SYNC_COMMITTEE_SIZE.toNat +
         (pinTerms config pulled anc fin).depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat) +
       SB + SU := by
+  -- The bands of the consolidation targets are at most a fifth of the consolidation total.
   classical
   have grows : split.validators.data.size ≤ counted.validators.data.size := by
     have := registryGrows_of_chainSteps tailC.chainSteps
@@ -4317,17 +4290,7 @@ theorem whist_count (h : Setting config checks g split fin pulled anc counted V)
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The whistleblower budget bounds the credits of any set of keys.
 
-The bound uses base stake `Sx`, total credits `Y` and total rounding bands `Ck`.
-
-A key that received a deposit on C's branch, or was created there, is read at the largest cap.
-
-`count` bounds those keys by the deposit recipients of the window, so `Y` pays them.
-
-`slack` is the credits that the other keys of R's registry gain on C's branch.
-
-It holds their whistleblower credits twice, because their rounding is at most their double.
-
-Those credits are within the base too, so the bound divides by the quotient less two. -/
+The bound uses base stake `Sx`, total credits `Y` and total rounding bands `Ck`. -/
 theorem flow_whist_of (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -4362,6 +4325,11 @@ theorem flow_whist_of (h : Setting config checks g split fin pulled anc counted 
       max (max ((pinTerms config pulled anc fin).ebUp i)
         (balanceAt pulled i + (pinTerms config pulled anc fin).rise i))
         ((pinTerms config pulled anc fin).bF i))
+    -- A key that received a deposit on C's branch is read at the largest cap.
+    --
+    -- So is a key that was created there.
+    --
+    -- This bounds those keys by the deposit recipients of the window, so `Y` pays them.
     (count : ((((Internal.slashedOnC split counted).filter
           (fun i => i < split.validators.data.size)).filter
             (fun i => 0 < Internal.depPre eventsC i)).card +
@@ -4372,6 +4340,9 @@ theorem flow_whist_of (h : Setting config checks g split fin pulled anc counted 
             split.validators.data.size)).filter
           (fun i => ¬ isActiveAt counted (getCurrentEpoch counted) i = true)).card) ≤
       (pinTerms config pulled anc fin).depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat)
+    -- This bounds the credits that the other keys of R's registry gain on C's branch.
+    --
+    -- It holds their whistleblower credits twice, because their rounding is at most their double.
     (slack : (∑ i ∈ ((Internal.slashedOnC split counted).filter
           (fun i => i < split.validators.data.size)).filter (fun i => ¬ 0 < Internal.depPre eventsC
             i),
@@ -4390,6 +4361,9 @@ theorem flow_whist_of (h : Setting config checks g split fin pulled anc counted 
     ∑ v ∈ keys, Internal.whistC tailC highC v.toNat ≤
       2 * (Sx + (11 * Y + 9) / 10 + Ck) /
         ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 2) := by
+  -- The other keys' whistleblower credits are within the base too.
+  --
+  -- So the bound divides by the quotient less two.
   classical
   obtain ⟨toPulled⟩ := h.toPulled
   have grows : split.validators.data.size ≤ pulled.validators.data.size :=

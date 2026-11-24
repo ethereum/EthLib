@@ -109,19 +109,7 @@ private theorem sum_filter_credit_le (p q : BalanceSource → Bool)
       · simp only [List.filter_cons, inP, inQ, Bool.false_eq_true, ↓reduceIte]
         exact ih
 
-/-- The credits of a set of keys over a run, read as a scan, fit one bound for each replayed event.
-
-A block step counts the events of `blockP`.
-
-A slot step counts the events of `slotP`.
-
-So an event of the run is counted at most once.
-
-The credits of a key from a source set `src` over the events are at most its scan.
-
-Each kind of step either counts all of `src`, or records no credit from `src`.
-
-That holds for a run from Electra to before Glamsterdam. -/
+/-- The credits of a set of keys over a run, read as a scan, fit one bound per replayed event. -/
 theorem creditScan_bounds {ι : Type} (S : Finset ι) (key : ι → ℕ)
     (blockP slotP : BalanceSource → Bool) (high : ℕ) (T : BalanceEvent preset → ℕ)
     {x y : ForkedBeaconState preset}
@@ -129,9 +117,19 @@ theorem creditScan_bounds {ι : Type} (S : Finset ι) (key : ι → ℕ)
     (replayed : tail.balanceEvents high = .ok events)
     (each : ∀ e ∈ events, (blockP e.source = true ∨ slotP e.source = true) →
       ∑ v ∈ S, PinDrift.Internal.keyCredit (key v) e ≤ T e) :
+    -- A block step counts the events of `blockP`.
+    --
+    -- A slot step counts the events of `slotP`.
+    --
+    -- So an event of the run is counted at most once.
     (∑ v ∈ S, (PinDrift.Internal.creditScan blockP slotP (key v) high tail) ≤
       (events.map fun e =>
         if blockP e.source = true ∨ slotP e.source = true then T e else 0).sum) ∧
+    -- The credits of a key from a source set `src` over the events are at most its scan.
+    --
+    -- Each kind of step either counts all of `src`, or records no credit from `src`.
+    --
+    -- That holds for a run from Electra to before Glamsterdam.
     (∀ src : BalanceSource → Bool,
       ((∀ s, src s = true → blockP s = true) ∨
         ∀ {f : Fork} {u w : BeaconState preset f} {engine : ExecutionEngine preset f}
@@ -399,24 +397,21 @@ private theorem effective_floor_slot {f : Fork} {s t : BeaconState preset f}
   · cases advance
     exact previous
 
-/-- The update of the effective balances keeps an upper bound on the effective balance of a key.
-
-The smaller of the balance and `capHigh` must be at most `ceil`, and the cap at most `capHigh`.
-
-The cap bound is a whole number of increments, and the old effective balance is at most it.
-
-The new value is at most `ceil` plus the downward band.
-
-It is also at most the old one, or the balance rounded down to an increment, at most the cap. -/
+/-- The update of the effective balances keeps an upper bound on the effective balance of a key. -/
 private theorem effective_ceiling_update {f : Fork} {s t : BeaconState preset f}
     (ok : processEffectiveBalanceUpdates s = .ok t) (i ceil capHigh : ℕ)
     (inside : i < s.validators.data.size)
+    -- The cap bound is a whole number of increments, and the old effective balance is at most it.
     (alignedHigh : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
     (old : effectiveAt ⟨f, s⟩ i ≤ capHigh)
+    -- The smaller of the balance and `capHigh` must be at most `ceil`.
     (funded : min (actualBalanceAt ⟨f, s⟩ i) capHigh ≤ ceil)
+    -- The cap must be at most `capHigh`.
     (cap : ∀ v, t.validators.data[i]? = some v →
       (withdrawalMaxEffectiveBalance preset f v).toNat ≤ capHigh) :
+    -- The new value is at most `ceil` plus the downward band.
     effectiveAt ⟨f, t⟩ i ≤ ceil + preset.downwardBand ∧
+    -- It is also at most the old one, or the balance rounded down to an increment, at most the cap.
     effectiveAt ⟨f, t⟩ i ≤ max (effectiveAt ⟨f, s⟩ i)
       (min (ceil - ceil % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh) := by
   obtain ⟨v, balance, new, found, owned, read, updated⟩ := effective_update_at ok inside
@@ -535,21 +530,16 @@ private theorem sum_filter_rewards (events : List (BalanceEvent preset)) (v : �
     · simp [rewards, PinDrift.Internal.keyCredit, DirectSafety.Apriori.Internal.rewardCredit, ih]
     · simp [rewards, DirectSafety.Apriori.Internal.rewardCredit, ih]
 
-/-- A flag pays a key at most its base reward times the weight of the flag, over the active stake.
-
-The increments that set the flag in the previous epoch are at most those active then.
-
-The rate read there is at most `P` times the active increments.
-
-A key that is not active in the previous epoch earns nothing, so it needs no rate.
-
-That is also stated outright, as its reward being 0. -/
+/-- A flag pays a key at most its base reward times the flag's weight, over the active stake. -/
 private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : BeaconState preset f}
     (within : state.RegistryWithinLimit) {flag : Fin PARTICIPATION_FLAG_WEIGHTS.length}
     {rewards penalties : Array Gwei}
     (computed : getFlagIndexDeltas state altair flag = .ok (rewards, penalties))
     {total : Gwei} (active : getTotalActiveBalance state = .ok total) (P v : ℕ)
     (inside : v < state.validators.data.size)
+    -- The rate read in the previous epoch is at most `P` times the active increments.
+    --
+    -- A key that is not active in the previous epoch earns nothing, so it needs no rate.
     (rate : v.toUInt64 ∉ getActiveValidatorIndices state (getPreviousEpoch state) ∨
       ∀ perIncrement : Gwei, getBaseRewardPerIncrement preset total = .ok perIncrement →
         perIncrement.toNat *
@@ -563,8 +553,10 @@ private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : Beaco
         (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
     (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
       (rewards.getD v 0).toNat = 0) ∧
+    -- A key that is not active in the previous epoch also gets a reward of 0 outright.
     (v.toUInt64 ∉ getActiveValidatorIndices state (getPreviousEpoch state) →
       (rewards.getD v 0).toNat = 0) := by
+  -- The increments that set the flag in the previous epoch are at most those active then.
   obtain ⟨participating, participatingBalance, total', flaggedOk, weighed, totalOk, perKey⟩ :=
     getFlagIndexDeltas_getD within computed
   obtain rfl : total = total' := Except.ok.inj (active.symm.trans totalOk)
@@ -669,15 +661,7 @@ private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : Beaco
         (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :=
         Nat.mul_le_mul_left _ bound
 
-/-- The three flags pay a key, in a rewards replay of a state, at most its stake times `P`.
-
-The credit is scaled by `64` and by the active increments.
-
-It is at most the key's increments times `54`, `P` and the active increments.
-
-A state with no active increment pays nothing.
-
-A key that is not active in the previous epoch is paid nothing. -/
+/-- The three flags pay a key, in a rewards replay of a state, at most its stake times `P`. -/
 private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
     {pass : BeaconState preset f} (within : pass.RegistryWithinLimit)
     {rewarded : BalanceReplay preset f}
@@ -692,12 +676,17 @@ private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
           P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
     (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0 ∨
       ∃ total : Gwei,
+        -- The credit is scaled by `64` and by the active increments.
+        --
+        -- It is at most the key's increments times `54`, `P` and the active increments.
         (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum *
             (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * 64) ≤
           balanceAt pass v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * 54 *
             (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
+        -- A state with no active increment pays nothing.
         (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
           (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0) ∧
+        -- A key that is not active in the previous epoch is paid nothing.
         (v.toUInt64 ∉ getActiveValidatorIndices pass (getPreviousEpoch pass) →
           (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0) := by
   by_cases genesis : getCurrentEpoch pass = GENESIS_EPOCH
@@ -815,20 +804,15 @@ private theorem replayRewards_absent {f : Fork} {pass : BeaconState preset f}
   exact final.2.2
 
 open DirectSafety.Apriori.Internal in
-/-- One key's rewards credit in a step is at most a rate for each epoch that the step ends.
-
-The step is a slot, and it ends an epoch exactly when it runs the epoch's pass.
-
-The key's stake at the start is at most `E`.
-
-`P` bounds the rate read at the active stake, scaled by the previous epoch's share of it.
-
-A key past the registry of a state with matched balances gets no reward. -/
+/-- One key's rewards credit in a step is at most a rate for each epoch that the step ends. -/
 theorem epochRewards_le {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (altair : .altair ≤ m.fork) (early : n.fork < .glamsterdam)
+    -- A key past the registry of a state with matched balances gets no reward.
     (v : ℕ) (known : v < m.state.validators.data.size ∨ BalancesMatch m.state) (E P : ℕ)
+    -- The key's stake at the start is at most `E`.
     (envelope : v.toUInt64 ∉ getActiveValidatorIndices m.state (getPreviousEpoch m.state) ∨
       effectiveAt m v ≤ E)
+    -- `P` bounds the rate read at the active stake, scaled by the previous epoch's share of it.
     (rate : v.toUInt64 ∉ getActiveValidatorIndices m.state (getPreviousEpoch m.state) ∨
       ∀ total perIncrement : Gwei, getTotalActiveBalance m.state = .ok total →
         getBaseRewardPerIncrement preset total = .ok perIncrement →
@@ -840,6 +824,7 @@ theorem epochRewards_le {m n : ForkedBeaconState preset}
       m.state).toNat) *
       (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) := by
+  -- The step is a slot, and it ends an epoch exactly when it runs the epoch's pass.
   cases step with
   | block engine signed due ok => simp [PinDrift.Internal.epochRewards]
   | slot ok =>
@@ -986,94 +971,63 @@ theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step config che
 
 /-- The bound on a key's balance below a cap along a run.
 
-It is the start, the epoch rewards and the other credits.
-
-The start and the balance count only up to the cap.
-
-The epoch rewards are those of the epochs that the run ends, at the rate given by `E` and `P`.
-
-The other credits are the net rises of its block steps and the credits of its slot steps.
-
-The slot-step credits leave out the epoch rewards. -/
+It is the start, the epoch rewards and the other credits. -/
 def creditBound {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (i high E P capHigh : ℕ) : ℕ :=
+  -- The start and the balance count only up to the cap.
   min (actualBalanceAt x i) capHigh +
+    -- The epoch rewards are those of the epochs that the run ends.
+    --
+    -- They are read at the rate given by `E` and `P`.
     ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
       (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
+    -- The other credits are the net rises of its block steps and the credits of its slot steps.
+    --
+    -- The slot-step credits leave out the epoch rewards.
     PinDrift.Internal.netScan i high tail +
       (PinDrift.Internal.creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high tail)
 
 end Rewards
 
-/-- A balance ceiling, an envelope or a floor on a key's balance bounds its effective balance.
-
-First, suppose a key's balance stays at least `floor` at every state of the run.
-
-Suppose also that its cap stays at least `capLow`.
-
-Then its effective balance at the end is at least the least of three values.
-
-They are its effective balance at the start, `capLow`, and `floor` rounded down to an increment.
-
-Second, suppose the effective balance at the start is a whole number of increments.
-
-Suppose a step that could lower it leaves a balance of at least that effective balance.
-
-A step could lower it when the balance after it plus the downward band is below it.
-
-Suppose also that its cap stays at least its effective balance at the start.
-
-Then the effective balance at the end is at least that at the start.
-
-A downward update sets it to the balance rounded down.
-
-That is at least the effective balance at the start, which is a whole number of increments.
-
-An update moves the effective balance only at an epoch's first slot.
-
-It moves it down to the balance rounded to an increment, and up to at most the cap.
-
-It never moves it up below where it was.
-
-Third, suppose the smaller of the balance and `capHigh` stays at most `ceil`.
-
-Suppose also that the cap stays at most `capHigh`.
-
-The bound `capHigh` is a whole number of increments.
-
-The effective balance at the start is at most `capHigh`.
-
-Then the effective balance at the end is at most the greater of two values.
-
-They are its effective balance at the start, and the ceiling rounded down, at most the cap.
-
-If no epoch boundary is crossed, it is the effective balance at the start.
-
-After a boundary, it is at most `ceil` plus the downward band.
-
-The epoch never moves back.
-
-Fourth, suppose the cap stays at most `capHigh`, as in the third.
-
-Suppose the rate of the rewards at every state is at most `P`.
-
-Suppose also that the run ends by the epoch `high + 1`.
-
-Suppose also that `E` is at least the greatest effective balance that the bound below allows.
-
-Then the balance at every state is at most its start, plus the epoch rewards at the rate of `E`.
-
-It also adds the other credits that the events of the run give the key. -/
+/-- A balance ceiling, an envelope or a floor on a key's balance bounds its effective balance. -/
 theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (i : ℕ) (inside : i < x.state.validators.data.size)
     (floor capLow capHigh high E P : ℕ) :
+    -- First, suppose a key's balance stays at least `floor` at every state of the run.
+    --
+    -- Suppose also that its cap stays at least `capLow`.
+    --
+    -- Then its effective balance at the end is at least the least of three values.
+    --
+    -- They are its effective balance at the start, `capLow`, and `floor` rounded down.
+    --
+    -- That rounding is down to an increment.
     ((∀ z ∈ tail.balancePath, floor ≤ actualBalanceAt z i) →
       (∀ z ∈ tail.balancePath, capLow ≤ PinTerms.capAt z i) →
       min (effectiveAt x i)
         (min capLow (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
           effectiveAt y i) ∧
+    -- Second, suppose the effective balance at the start is a whole number of increments.
+    --
+    -- Suppose a step that could lower it leaves a balance of at least that effective balance.
+    --
+    -- A step could lower it when the balance after it plus the downward band is below it.
+    --
+    -- Suppose also that its cap stays at least its effective balance at the start.
+    --
+    -- Then the effective balance at the end is at least that at the start.
+    --
+    -- A downward update sets it to the balance rounded down.
+    --
+    -- That is at least the effective balance at the start, which is a whole number of increments.
+    --
+    -- An update moves the effective balance only at an epoch's first slot.
+    --
+    -- It moves it down to the balance rounded to an increment, and up to at most the cap.
+    --
+    -- It never moves it up below where it was.
     (effectiveAt x i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
       (∀ {m n : ForkedBeaconState preset} (before : Run config checks x m)
           (step : Step config checks m n) (after : Run config checks n y),
@@ -1082,6 +1036,23 @@ theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
         effectiveAt x i ≤ actualBalanceAt n i) →
       (∀ z ∈ tail.balancePath, effectiveAt x i ≤ PinTerms.capAt z i) →
       effectiveAt x i ≤ effectiveAt y i) ∧
+    -- Third, suppose the smaller of the balance and `capHigh` stays at most `ceil`.
+    --
+    -- Suppose also that the cap stays at most `capHigh`.
+    --
+    -- The bound `capHigh` is a whole number of increments.
+    --
+    -- The effective balance at the start is at most `capHigh`.
+    --
+    -- Then the effective balance at the end is at most the greater of two values.
+    --
+    -- They are its effective balance at the start, and the ceiling rounded down, at most the cap.
+    --
+    -- If no epoch boundary is crossed, it is the effective balance at the start.
+    --
+    -- After a boundary, it is at most `ceil` plus the downward band.
+    --
+    -- The epoch never moves back.
     (∀ ceil : ℕ, capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
       effectiveAt x i ≤ capHigh →
       (∀ z ∈ tail.balancePath, min (actualBalanceAt z i) capHigh ≤ ceil) →
@@ -1093,6 +1064,19 @@ theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       ((getCurrentEpoch x.state).toNat < (getCurrentEpoch y.state).toNat →
         effectiveAt y i ≤ ceil + preset.downwardBand) ∧
       (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat) ∧
+    -- Fourth, suppose the cap stays at most `capHigh`, as in the third.
+    --
+    -- Suppose the rate of the rewards at every state is at most `P`.
+    --
+    -- Suppose also that the run ends by the epoch `high + 1`.
+    --
+    -- Suppose also that `E` is at least the greatest effective balance that the bound below allows.
+    --
+    -- Then the balance at every state is at most its start, plus the epoch rewards.
+    --
+    -- Those rewards are read at the rate of `E`.
+    --
+    -- It also adds the other credits that the events of the run give the key.
     (capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 → effectiveAt x i ≤ capHigh →
       (∀ z ∈ tail.balancePath, PinTerms.capAt z i ≤ capHigh) →
       (∀ z ∈ tail.balancePath,
@@ -1317,23 +1301,20 @@ theorem Run.effective_floor_rounded {x y : ForkedBeaconState preset}
 
 /-- A balance floor and a cap floor along a run give an effective-balance floor.
 
-Suppose a key's balance stays at least `floor` at every state of a run.
+The key's effective balance at the end is at least the least of three values.
 
-Suppose also that its cap stays at least `capLow`.
-
-Then its effective balance at the end is at least the least of three values.
-
-They are its effective balance at the start, `capLow`, and `floor` less one increment of rounding.
-
-The floor rounded down to an increment is at least `floor + 1 - inc`. -/
+They are its starting effective balance, `capLow`, and `floor` less one increment of rounding. -/
 private theorem Run.effective_floor_of_balance_floor {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat) (i : ℕ)
     (inside : i < x.state.validators.data.size) (floor capLow : ℕ)
+    -- Suppose a key's balance stays at least `floor` at every state of a run.
     (balanceFloor : ∀ z ∈ tail.balancePath, floor ≤ actualBalanceAt z i)
+    -- Suppose also that its cap stays at least `capLow`.
     (capFloor : ∀ z ∈ tail.balancePath, capLow ≤ PinTerms.capAt z i) :
     min (effectiveAt x i) (min capLow (floor + 1 - preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       effectiveAt y i := by
+  -- The floor rounded down to an increment is at least `floor + 1 - inc`.
   have remainder := Nat.mod_lt floor incPos
   refine Nat.le_trans ?_
     (PinDrift.Internal.Run.effective_floor_rounded tail early fulu i inside floor capLow
@@ -1342,36 +1323,29 @@ private theorem Run.effective_floor_of_balance_floor {x y : ForkedBeaconState pr
 
 /-- A balance ceiling and a cap ceiling along a run give an effective-balance ceiling.
 
-Suppose the smaller of a key's balance and `capHigh` stays at most `ceil` along a run.
+The key's effective balance at the end is at most the greater of two values.
 
-Suppose also that its cap stays at most `capHigh`.
-
-The bound `capHigh` is a whole number of increments.
-
-The effective balance at the start is at most `capHigh`.
-
-Then its effective balance at the end is at most the greater of two values.
-
-They are its effective balance at the start, and the ceiling rounded down, at most the cap.
-
-If no epoch boundary is crossed, it is the effective balance at the start.
-
-After a boundary, it is at most `ceil` plus the downward band.
-
-The epoch never moves back. -/
+They are its effective balance at the start, and the ceiling rounded down, at most the cap. -/
 theorem Run.effective_ceiling_of_balance_ceiling {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (i : ℕ) (inside : i < x.state.validators.data.size) (ceil capHigh : ℕ)
+    -- The bound `capHigh` is a whole number of increments.
     (alignedHigh : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    -- The effective balance at the start is at most `capHigh`.
     (startCap : effectiveAt x i ≤ capHigh)
+    -- Suppose the smaller of a key's balance and `capHigh` stays at most `ceil` along a run.
     (balanceCeil : ∀ z ∈ tail.balancePath, min (actualBalanceAt z i) capHigh ≤ ceil)
+    -- Suppose also that its cap stays at most `capHigh`.
     (capCeil : ∀ z ∈ tail.balancePath, PinTerms.capAt z i ≤ capHigh) :
     effectiveAt y i ≤ max (effectiveAt x i)
       (min (ceil - ceil % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh) ∧
+    -- If no epoch boundary is crossed, it is the effective balance at the start.
     ((getCurrentEpoch y.state).toNat ≤ (getCurrentEpoch x.state).toNat →
       effectiveAt y i = effectiveAt x i) ∧
+    -- After a boundary, it is at most `ceil` plus the downward band.
     ((getCurrentEpoch x.state).toNat < (getCurrentEpoch y.state).toNat →
       effectiveAt y i ≤ ceil + preset.downwardBand) ∧
+    -- The epoch never moves back.
     (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat :=
   (PinDrift.Internal.Run.effective_floor_pair tail early fulu i inside 0 0 capHigh 0 0 0).2.2.1 ceil
     alignedHigh startCap balanceCeil capCeil
@@ -1380,36 +1354,28 @@ theorem Run.effective_ceiling_of_balance_ceiling {x y : ForkedBeaconState preset
 
 /-- One rewards pass debits a key at a state at a rate of at most the pin reserve's leak rate.
 
-The rate is taken at the key's effective balance at the state.
-
-Use a quarter of R's active balance from 18 increments, and a fifth of an increment below that.
-
-The reserve reads the base reward per increment at the quarter.
-
-The state's total is at least two thirds of R's, so its square root is at least the quarter's.
-
-The leak rate uses a bound on the pass's score after its update.
-
-That score is the score plus one bias.
-
-Effective balances are whole increments.
-
-`roomy` makes the rounding of the per-increment reward lose less than its fraction.
-
-The flag term is `40 / 64` of a base reward per increment for each increment.
-
-It fits in `2 * (increments * perIncrement)`.
-
-The floor of a quotient that is at least one is at least half of it. -/
+The rate is taken at the key's effective balance at the state. -/
 theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ) (pulledTotal : ℕ)
     (scoreBound : ℕ) (facts : PinPresetFacts preset)
     (pulledFits : pulledTotal < 2 ^ 64)
+    -- Effective balances are whole increments.
     (aligned : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ effectiveAt z v)
+    -- The state's total is at least two thirds of R's.
+    --
+    -- So its square root is at least the quarter's.
     (band : 2 * pulledTotal ≤ 3 * activeBalanceTotal z.state)
+    -- The leak rate uses a bound on the pass's score after its update.
+    --
+    -- That score is the score plus one bias.
     (scored : (if altair : .altair ≤ z.fork then
         (((z.state.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0) +
       config.INACTIVITY_SCORE_BIAS.toNat ≤ scoreBound) :
     let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    -- Use a quarter of R's active balance from 18 increments.
+    --
+    -- Below that, use a fifth of an increment.
+    --
+    -- The reserve reads the base reward per increment at the quarter.
     let quarter := if 18 * inc ≤ pulledTotal then pulledTotal / 4 else inc / 5
     let perIncrement := inc * preset.BASE_REWARD_FACTOR.toNat / quarter.sqrt
     PinDrift.Internal.passPenaltyRate config z v ≤
@@ -1423,6 +1389,7 @@ theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ) (pulled
   let score := if altair : .altair ≤ z.fork then
     (((z.state.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0
   have sizeInc : 10 ^ 8 ≤ inc := facts.incrementSize
+  -- This makes the rounding of the per-increment reward lose less than its fraction.
   have roomy := Nat.le_trans (show 2 ^ 33 ≤ 2 ^ 35 by decide) facts.rewardScale
   have positive : 0 < inc := by omega
   have weights : TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat = 40 := by decide
@@ -1468,6 +1435,11 @@ theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ) (pulled
     rwa [Nat.sqrt_eq'] at this
   have totalRoot : quarter.sqrt ≤ total.sqrt := Nat.sqrt_le_sqrt quarterTotal
   have perOne : 1 ≤ X / quarter.sqrt := (Nat.le_div_iff_mul_le quarterPositive).mpr (by omega)
+  -- The flag term is `40 / 64` of a base reward per increment for each increment.
+  --
+  -- It fits in `2 * (increments * perIncrement)`.
+  --
+  -- The floor of a quotient that is at least one is at least half of it.
   have rewardRate : 40 * preset.BASE_REWARD_FACTOR.toNat * effectiveAt z v / (64 * total.sqrt) ≤
       2 * (effectiveAt z v / inc * perIncrement) := by
     have increments : effectiveAt z v / inc = k := by
@@ -2574,23 +2546,18 @@ theorem Run.exiting_deposit_credit_zero_of_exited {x y : ForkedBeaconState prese
 
 /-- The deposit bound along a run.
 
-Along C's run, no deposit credits a key that exits at the run's start.
-
-The key stays not withdrawable through the run's end.
-
-`kept` is the withdrawable-kept fact at the state before each deposit event of a slot step.
-
-A block deposit needs none: from Electra it raises no balance.
-
-An assigned exit epoch stays fixed.
-
-Once the exit is set, the withdrawable epoch can only rise.
-
-It also says that the epoch of each event's state is at most the run's last epoch. -/
+Along C's run, no deposit credits a key that exits at the run's start. -/
 private theorem Run.exiting_deposit_credit_zero_of_kept {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
     (high : ℕ) {events : List (BalanceEvent preset)}
     (replayed : tail.balanceEvents high = .ok events)
+    -- This is the withdrawable-kept fact at the state before each deposit event of a slot step.
+    --
+    -- It also says that the epoch of each event's state is at most the run's last epoch.
+    --
+    -- A block deposit needs no such fact.
+    --
+    -- From Electra it raises no balance.
     (kept : ∀ {u w : ForkedBeaconState preset} (ok : advanceSlotAcross config checks u = .ok w),
       tail.Contains (Step.slot ok) → ∀ {es : List (BalanceEvent preset)},
         (Step.slot ok : Step config checks u w).balanceEvents = .ok es →
@@ -2598,7 +2565,11 @@ private theorem Run.exiting_deposit_credit_zero_of_kept {x y : ForkedBeaconState
           RegistryLifecycle x.state e.before.state ∧ WithdrawableKept x.state e.before.state ∧
           getCurrentEpoch e.before.state ≤ getCurrentEpoch y.state)
     (i : ℕ) (v : Validator) (found : x.state.validators.data[i]? = some v)
+    -- An assigned exit epoch stays fixed.
+    --
+    -- Once the exit is set, the withdrawable epoch can only rise.
     (exited : v.exitEpoch.toNat < 2 ^ 64 - 1)
+    -- The key stays not withdrawable through the run's end.
     (held : (getCurrentEpoch y.state).toNat < v.withdrawableEpoch.toNat) :
     ((events.filter (·.source = .deposits)).map (PinDrift.Internal.keyCredit i)).sum = 0 :=
   PinDrift.Internal.Run.exiting_deposit_credit_zero_of_exited tail electra early high replayed i
@@ -2934,18 +2905,15 @@ theorem Run.charge_of_exit {x y : ForkedBeaconState preset}
 
 /-! ## A potential that retains a decreasing floor -/
 
-/-- One epoch keeps the fraction of the potential that the floor keeps, up to a rounding error.
-
-The floor `φj` never rises, and stays within three halves of its start `φ0`.
-
-The potential `dj` keeps the fraction `φj1 / φj` of itself, less the error `e`.
-
-Then `d0` keeps the fraction `φj1 / φ0` of itself after `j + 1` epochs.
-
-It loses `3 e (j + 1) / 2` over `φ0`. -/
+/-- One epoch keeps the fraction of the potential that the floor keeps, up to a rounding error. -/
 private theorem chain_step (φ0 φj φj1 d0 dj dj1 e j : ℕ) (pos : 0 < φj) (anti : φj1 ≤ φj)
+    -- The floor `φj` never rises, and stays within three halves of its start `φ0`.
     (band : 2 * φ0 ≤ 3 * φj) (ih : 2 * d0 * φj ≤ 2 * dj * φ0 + 3 * e * j)
+    -- The potential `dj` keeps the fraction `φj1 / φj` of itself, less the error `e`.
     (step : dj * φj1 ≤ dj1 * φj + e) :
+    -- Then `d0` keeps the fraction `φj1 / φ0` of itself after `j + 1` epochs.
+    --
+    -- It loses `3 e (j + 1) / 2` over `φ0`.
     2 * d0 * φj1 ≤ 2 * dj1 * φ0 + 3 * e * (j + 1) := by
   refine Nat.le_of_mul_le_mul_right ?_ pos
   calc 2 * d0 * φj1 * φj = (2 * d0 * φj) * φj1 := by ring
@@ -2982,27 +2950,22 @@ private theorem big_arith (c K band X φt φt1 : ℕ) (hc : c ≤ K) (hφ : φt1
   have := Nat.mul_le_mul (Nat.add_le_add_right hc band) hφ
   nlinarith
 
-/-- One epoch of a key keeps the fraction of its potential that the floor keeps.
-
-The potential is the least of the balance and `K`, plus the downward band.
-
-The epoch loses at most its pass.
-
-The pass is charged at the effective balance `EB`.
-
-That balance lies within the band above the balance, and below the cap.
-
-The pass rate is at most `EB * (pen + 1) / φt`.
-
-Here `φt = φt1 + pen` is the floor before the epoch, and `φt1` the floor after it.
-
-The error is `K + band`, from the rounding. -/
+/-- One epoch of a key keeps the fraction of its potential that the floor keeps. -/
 private theorem step_arith (b' b cap K band pass X φt φt1 pen EB : ℕ)
     (hcap : K ≤ cap)
+    -- The epoch loses at most its pass.
     (seg : min b' cap ≤ b + pass + X)
+    -- The pass is charged at the effective balance `EB`.
+    --
+    -- That balance lies within the band above the balance, and below the cap.
     (hyst : EB ≤ b' + band) (hcapEB : EB ≤ cap)
+    -- The pass rate is at most `EB * (pen + 1) / φt`.
     (pr : pass * φt ≤ EB * (pen + 1))
+    -- Here `φt = φt1 + pen` is the floor before the epoch, and `φt1` the floor after it.
     (ph : φt = φt1 + pen) (hφ : 1 ≤ φt1) :
+    -- The potential is the least of the balance and `K`, plus the downward band.
+    --
+    -- The error is `K + band`, from the rounding.
     (min b' K + band) * φt1 ≤ (min b K + band) * φt + (K + band) + X * φt := by
   obtain ⟨hEB, hcle⟩ := eb_le_min_band b' cap K band EB hcap hyst hcapEB
   set C := min b' cap with hC
@@ -3142,23 +3105,20 @@ private theorem step_arith_slash (b' b cap K band pass X sl Q Bq φt φt1 pen EB
 
 /-! ## The state before a new key is scheduled -/
 
-/-- A key that is activated by the end of a run is scheduled two epochs before its activation.
-
-The key may have exited, so long as its activation is before its exit.
-
-It is not active by the epoch after the start of the run.
-
-At the state `z` that the run reaches in that epoch, the key holds its activation epoch `A`.
-
-Activity up to `A` is fixed at `z`, since the seed lookahead is at least three epochs. -/
+/-- A key that is activated by the end of a run is scheduled two epochs before its activation. -/
 theorem Run.start_state {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (window : preset.SeedLookaheadAtLeastThree) (i : ℕ)
+    -- The key is not active by the epoch after the start of the run.
     (pending : ∀ v, x.state.validators.data[i]? = some v →
       (getCurrentEpoch x.state).toNat + 1 < v.activationEpoch.toNat)
     (activated : ∃ vy, y.state.validators.data[i]? = some vy ∧
       vy.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ vy.activationEpoch ≤ getCurrentEpoch y.state)
+    -- The key may have exited, so long as its activation is before its exit.
     (ordered : ∀ vy, y.state.validators.data[i]? = some vy →
       vy.activationEpoch.toNat < vy.exitEpoch.toNat) :
+    -- At the state `z` that the run reaches in that epoch, the key holds its activation epoch `A`.
+    --
+    -- Activity up to `A` is fixed at `z`, since the seed lookahead is at least three epochs.
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks x z) (post : Run config checks z y)
       (v0 vy : Validator), tail = pre.append post ∧ z.state.validators.data[i]? = some v0 ∧
       y.state.validators.data[i]? = some vy ∧ v0.activationEpoch = vy.activationEpoch ∧
@@ -3293,21 +3253,19 @@ private theorem floor_succ (x : ForkedBeaconState preset) (high t : ℕ) :
 
 /-- The pass rate of a key against the fall of the floor path.
 
-The floor lies below the total active balance read by the pass, and below the weight of the penalty.
-
-The floor after the epoch is positive, so its fall is the penalty.
-
-The score of the key at the pass, plus the bias, is within that of the penalty.
-
 The rate times the floor is at most the key's effective balance times the fall, plus one. -/
 private theorem passRate_mul_le {x z : ForkedBeaconState preset} (high t i : ℕ)
     (total : Gwei) (totalOk : getTotalActiveBalance z.state = .ok total)
+    -- The floor lies below the total active balance read by the pass.
     (floor : stakeFloorAt config x high t ≤ total.toNat)
+    -- It also lies below the weight of the penalty.
     (floorLe : stakeFloorAt config x high t ≤
       stakeCeilingAt config x high t + slashedUnwithdrawnStake x)
+    -- The floor after the epoch is positive, so its fall is the penalty.
     (positive : 0 < stakeFloorAt config x high (t + 1))
     (divisor : 0 < inactivityPenaltyDivisor preset config)
     (factor : 1 ≤ preset.BASE_REWARD_FACTOR.toNat)
+    -- The score of the key at the pass, plus the bias, is within that of the penalty.
     (scored : (if altair : .altair ≤ z.fork then
         (((z.state.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 else 0) +
       config.INACTIVITY_SCORE_BIAS.toNat ≤
@@ -4414,24 +4372,13 @@ theorem Run.funded_at_start {g x z : ForkedBeaconState preset}
     simpa [effectiveAt, found0] using this
 
 open DirectSafety.Apriori.Internal in
-/-- A key created on the run keeps its effective balance near two thirds of the maximum.
-
-Under the guard at the split, the key's effective balance at the end of the window is large.
-
-It is at least two thirds of `MAX_EFFECTIVE_BALANCE`.
-
-The bound loses the initial slashing penalty, the downward band and an increment.
-
-The key's sync debits and its partial payments are added back.
-
-The key is scheduled at the split.
-
-It is not active by the epoch after the split, and it is active at the end. -/
+/-- A key created on the run keeps its effective balance near two thirds of the maximum. -/
 theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
     (electra : .pectra ≤ x.fork) (fulu : .fusaka ≤ x.fork) (high : ℕ)
+    -- Under the guard at the split, the key's effective balance at the end of the window is large.
     (guard : DirectSafety.Apriori.aprioriGuardAt config x high)
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
     (within : (getCurrentEpoch y.state).toNat ≤ high + 1)
@@ -4439,14 +4386,21 @@ theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (bands : preset.IncrementWithinUpwardBand) (facts : PinPresetFacts preset)
     (i : ℕ)
+    -- The key is scheduled at the split.
+    --
+    -- It is not active by the epoch after the split, and it is active at the end.
     (pending : ∀ v, x.state.validators.data[i]? = some v →
       (getCurrentEpoch x.state).toNat + 1 < v.activationEpoch.toNat)
     (active : isActiveAt y.state (getCurrentEpoch y.state) i = true)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    -- The effective balance is at least two thirds of `MAX_EFFECTIVE_BALANCE`.
+    --
+    -- The bound loses the initial slashing penalty, the downward band and an increment.
     2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
         preset.MAX_EFFECTIVE_BALANCE.toNat /
           (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
         preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+      -- The key's sync debits and its partial payments are added back.
       effectiveAt y i + (events.map (PinDrift.Internal.syncDebit i)).sum +
         (events.map (floorPartialDebit i.toUInt64)).sum := by
   -- The potential, the least of balance and maximum plus the band, follows the floor path.
