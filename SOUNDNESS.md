@@ -3122,12 +3122,12 @@ The stream name of a NewStream is not read, since the source says that the proto
 ### The streams of a yamux session
 
 `step`, `receive` and `send` (`Networking/Libp2p/YamuxSession.lean`) check each yamux frame against the streams of one side, and `run` checks a list of frames in turn.
-They follow [yamux, "Message Flow"](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#message-flow), with the flags of ["Flag Field"](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#flag-field) and the IDs of ["StreamID Field"](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#streamid-field).
+They follow [yamux, "Message Flow"](https://github.com/libp2p/specs/blob/1a084b699d9d424ca7027edf350cf4184cd6f5bd/yamux/README.md#message-flow), with the flags of ["Flag Field"](https://github.com/libp2p/specs/blob/1a084b699d9d424ca7027edf350cf4184cd6f5bd/yamux/README.md#flag-field) and the IDs of ["StreamID Field"](https://github.com/libp2p/specs/blob/1a084b699d9d424ca7027edf350cf4184cd6f5bd/yamux/README.md#streamid-field).
 A Data or Window Update frame with SYN opens a stream with a new nonzero ID of its writer's parity: odd for the client, even for the server.
 Data may follow SYN before the ACK, and the ACK must come from the side that did not open the stream.
 The source says that this side "must then reply" with ACK to accept or RST to reject, so its frames on the stream carry one of them until it has sent ACK; any other is `missingAck`.
 FIN closes the direction of its writer, and RST closes the stream at once.
-Data spends the window of its direction, which starts at 256 KiB by ["Flow Control"](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#flow-control), and a Window Update adds its length to the window of the other direction.
+Data spends the window of its direction, which starts at 256 KiB by ["Flow Control"](https://github.com/libp2p/specs/blob/1a084b699d9d424ca7027edf350cf4184cd6f5bd/yamux/README.md#flow-control), and a Window Update adds its length to the window of the other direction.
 A Ping with SYN gets a Ping with ACK and the same value, and a Go Away from the peer marks the session.
 `receive_ping` (`Networking/Proofs/Libp2p/YamuxSession.lean`) proves the reply to a Ping.
 `run_parity` proves that every stream has a nonzero ID of its opener's parity.
@@ -3147,7 +3147,7 @@ The windows are unbounded naturals, since the source fixes no maximum window.
 A Ping with both SYN and ACK is answered like a Ping with SYN.
 The source says only that Ping and Go Away "should" use stream 0, so they are read the same on any stream.
 Neither side is stopped from opening streams after a Go Away, since the source fixes no rule.
-The ACK backlog of 256 streams is a SHOULD under [yamux, "ACK backlog & backpressure"](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#ack-backlog--backpressure), and is left out.
+The ACK backlog of 256 streams is a SHOULD under [yamux, "ACK backlog & backpressure"](https://github.com/libp2p/specs/blob/1a084b699d9d424ca7027edf350cf4184cd6f5bd/yamux/README.md#ack-backlog--backpressure), and is left out.
 The export decodes every frame first, so the table does not check the size of the data again.
 
 ### The transaction pool of the eth protocol
