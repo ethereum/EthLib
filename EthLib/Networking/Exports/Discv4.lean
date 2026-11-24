@@ -96,7 +96,7 @@ def receiveOf (args : ReceiveArgs) :
     Result ((Option (Vector UInt8 32) × Option Nat) × List ByteArray) := do
   -- The arguments are the time, the sender's IP and UDP port, and what the node knows of it.
   --
-  -- That is the hash of the node's last Ping there, and the time of the last Pong that carried it.
+  -- That is the hash of the node's last Ping to it, and the time of the last Pong that carried it.
   --
   -- Then come the packet and the expiration of the answers.
   --
@@ -117,6 +117,16 @@ def receiveOf (args : ReceiveArgs) :
   return (((state address).lastPing, (state address).lastPong), ← replies.mapM content)
 
 /-- What a node knows of the sender of a packet after it receives it, and what it sends back.
+
+The arguments are the time, the sender's IP and UDP port, and what the node knows of it.
+
+That is the hash of the node's last Ping to it, and the time of the last Pong that carried it.
+
+Then come the packet and the expiration of the answers.
+
+Last come the node's record sequence number, its record and the nodes it gives for any target.
+
+The record and the list of nodes are RLP bytes.
 
 The result is the new hash and time, and the content of each packet that the node sends. -/
 @[export eth_discv4_receive]
