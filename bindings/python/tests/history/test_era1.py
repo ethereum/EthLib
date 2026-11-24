@@ -1,7 +1,7 @@
 """Era1 files, built in the test and pinned from the public pre-Merge history."""
 
-# The layout follows formats/era1.md of eth-clients/e2store-format-specs at commit 31cf6b57:
-# https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/formats/era1.md
+# The layout follows formats/era1.md of eth-clients/e2store-format-specs at commit 923b1522:
+# https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/formats/era1.md
 # Where that document leaves the layout open, the built files take EthLib's reading.
 # The pinned public file checks that reading.
 # The test writes the records, the block index and the accumulator without EthLib.

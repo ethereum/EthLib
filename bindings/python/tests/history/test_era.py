@@ -1,7 +1,7 @@
 """Era files, built in the test from the blocks and states of the ssz_static vectors."""
 
-# The layout follows formats/era.md of eth-clients/e2store-format-specs at commit 31cf6b57:
-# https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/formats/era.md
+# The layout follows formats/era.md of eth-clients/e2store-format-specs at commit 923b1522:
+# https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/formats/era.md
 # No public era file is pinned: none is served from a host that names no implementation.
 # The test writes the records, the indices and the block roots without EthLib.
 # It takes the block bodies and the states from the vendored ssz_static vectors of consensus-specs.

@@ -89,7 +89,7 @@ commit = "7406111ac4ae539ea0db8b7ea2dc76730cd957f4"
 
 # The e2store, era1 and era formats, which the history file tests follow.
 [repositories."eth-clients/e2store-format-specs"]
-commit = "31cf6b577123bf1703eb3713f0b242f65fea806a"
+commit = "923b1522f8970e9ebe939057d2a573aaf71b7f22"
 
 [repositories."ethereum/devp2p"]
 commit = "277ceb399c15df86efb17d51eb58200c26879784"

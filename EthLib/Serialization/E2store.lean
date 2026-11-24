@@ -14,26 +14,8 @@ The history files of Ethereum, era1 and era, are e2store files.
 
 The [format documents][formats] build on it, and name each record type in their [type list][types].
 
-[formats]: https://github.com/eth-clients/e2store-format-specs/tree/31cf6b577123bf1703eb3713f0b242f65fea806a
-[types]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/types/README.md
-[version]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/types/0x6532.md
-[slotindex]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/types/0x6932.md
-
-A record is an 8-byte header, then its data.
-
-The header holds the type in 2 bytes, the length of the data in 4 bytes, then 2 reserved bytes.
-
-The length is little-endian, and the reserved bytes are zero.
-
-The documents of the [Version][version] and [SlotIndex][slotindex] types give the header 8 bytes.
-
-The documents do not lay out those 8 bytes, so EthLib states the layout as its own definition.
-
-A type is written as its two bytes in order, so the Version type `0x6532` is `e2` in ASCII.
-
-A file starts with a Version record, as [its document][version] says.
-
-An index record gives the position of each entry of a file, as an offset from the record.
+[formats]: https://github.com/eth-clients/e2store-format-specs/tree/923b1522f8970e9ebe939057d2a573aaf71b7f22
+[types]: https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/types/README.md
 -/
 
 @[expose] public section
@@ -90,6 +72,10 @@ def E2storeError.code : E2storeError → UInt32
 
 A length of `2^32` or more keeps only its value modulo `2^32`, so the encoder rejects it first. -/
 def encodeHeader (type : UInt16) (length : Nat) : ByteArray :=
+  -- The documents of the Version and SlotIndex types give the header 8 bytes.
+  --
+  -- They do not lay out those 8 bytes, so EthLib states the layout as its own definition.
+  --
   -- EthLib's header layout: the type in 2 bytes, in the order that the type list writes them.
   --
   -- Then the length of the data in 4 bytes, little-endian, then 2 reserved zero bytes.
@@ -157,9 +143,12 @@ termination_by bytes.size - offset
 def decode (bytes : ByteArray) : Except E2storeError (List Record) :=
   decodeFrom bytes 0 #[]
 
-/-- The records of an e2store file, which must start with a Version record.
+/-- The records of an e2store file, which must start with a [Version][version] record.
 
-Every Version record must have no data. -/
+Every Version record must have no data.
+
+[version]: https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/types/0x6532.md
+-/
 def decodeFile (bytes : ByteArray) : Except E2storeError (List Record) := do
   let records ← decode bytes
   -- Version: the version type must be the first record in the file.
@@ -181,7 +170,7 @@ def recordStarts (pos : Nat) : List Record → List Nat
 
 /-! ### Index records -/
 
-/-- An index record: the number of its first entry, then the offset of each entry.
+/-- An index record: the number of its first entry, then the offset of each entry of a file.
 
 An offset counts bytes from the start of the index record, so it may be negative. -/
 structure Index where
@@ -202,7 +191,7 @@ def readInt64 (data : ByteArray) (pos : Nat) : Int :=
 
 The [SlotIndex][slotindex] document gives its layout.
 
-[slotindex]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/types/0x6932.md
+[slotindex]: https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/types/0x6932.md
 -/
 def readIndex (data : ByteArray) : Except E2storeError Index :=
   -- SlotIndex: `data: starting-slot | index | index | index ... | count`, 8 bytes each.
@@ -217,9 +206,11 @@ def readIndex (data : ByteArray) : Except E2storeError Index :=
     else
       -- The first number is the first 8 bytes, which EthLib reads unsigned and little-endian.
       --
-      -- SlotIndex: entry `N`, from the first number, is at `(N * 8) + 16` of the record.
+      -- SlotIndex: the entry for slot `N` is at `((N - starting-slot) * 8) + 16` of the record.
       --
-      -- So it is at `8 + 8 N` of the data.
+      -- The record starts with its 8-byte header.
+      --
+      -- So entry `i`, counted from 0, is at `8 + 8 i` of the data.
       .ok ⟨Ssz.readUint data.data 0 8, (List.range count).map fun i => readInt64 data (8 + 8 * i)⟩
 
 end EthLib.Serialization.E2store
