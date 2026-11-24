@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.PowBlock
+public import EthLib.Consensus.Proofs.Types
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind

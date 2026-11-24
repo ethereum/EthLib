@@ -81,8 +81,8 @@ A wrong length is rejected here with its size error, before the operation runs. 
 def parseBlob (b : ByteArray) : Except KzgError Blob :=
   Base.exactBytes BYTES_PER_BLOB b .badBlobSize
 
-/-- Read a commitment. -/
-def parseCommitment (b : ByteArray) : Except KzgError KZGCommitment :=
+/-- Read the bytes of a commitment, which are not yet checked as a point. -/
+def parseCommitment (b : ByteArray) : Except KzgError Bytes48 :=
   Base.exactBytes BYTES_PER_COMMITMENT b .badCommitmentSize
 
 /-- Read a proof. -/
@@ -142,7 +142,8 @@ def constCellsPerExtBlob (_ : Unit) : UInt64 :=
 
 @[export eth_kzg_blob_to_kzg_commitment]
 def blobToKzgCommitmentExport (blob : ByteArray) : Result ByteArray :=
-  packBytes <$> runKzgWithSetup fun setup => do blobToKzgCommitment setup (← parseBlob blob)
+  (packBytes ·.bytes) <$> runKzgWithSetup fun setup => do
+    blobToKzgCommitment setup (← parseBlob blob)
 
 @[export eth_kzg_compute_challenge]
 def computeChallengeExport
@@ -217,9 +218,9 @@ def computeVerifyCellKzgProofBatchChallengeExport
     if proofs.size ≠ commitmentIndices.size then
       throw (.inputLengthMismatch "proofs" commitmentIndices.size proofs.size)
     let commitments ← commitments.mapM parseCommitment
-    for (commitment, i) in commitments.zipIdx do
+    let commitments ← commitments.zipIdx.mapM fun (commitment, i) =>
       match bytesToKzgCommitment commitment with
-      | .ok _    => pure ()
+      | .ok c    => pure c
       | .error _ => throw (.invalidCommitment (some i))
     if commitmentIndices.any (· ≥ commitments.size) then
       let index := (commitmentIndices.find? (· ≥ commitments.size)).getD 0

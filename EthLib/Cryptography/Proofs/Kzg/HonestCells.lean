@@ -166,7 +166,7 @@ Let the code compute the commitment of the blob, and its cells and proofs.
 Then cell `j` and proof `j` are a valid opening of cell index `j`, for every `j` below 128. -/
 theorem cellOpeningValid_computeCellsAndKzgProofs {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {blob : Blob} {commitment : Bytes48} {cells : Array Cell}
-    {proofs : Array Bytes48} (hC : blobToKzgCommitment s blob = .ok commitment)
+    {proofs : Array Bytes48} (hC : blobToKzgCommitment s blob = .ok ⟨commitment⟩)
     (hP : computeCellsAndKzgProofs s blob = .ok (cells, proofs)) {j : Nat}
     (hj : j < CELLS_PER_EXT_BLOB) :
     CellOpeningValid τ commitment j cells[j]! proofs[j]! := by
@@ -176,7 +176,7 @@ theorem cellOpeningValid_computeCellsAndKzgProofs {s : TrustedSetup} {τ : Fr}
     cases hP
   | ok poly =>
     rw [blobToKzgCommitment_eq_ok s hblob] at hC
-    obtain rfl := Except.ok.inj hC
+    obtain rfl := congrArg KZGCommitment.bytes (Except.ok.inj hC)
     rw [computeCellsAndKzgProofs_ok_eq s hblob] at hP
     set fc := polynomialEvalToCoeff poly
     have hfc : fc.size = FIELD_ELEMENTS_PER_BLOB := by
@@ -367,7 +367,7 @@ theorem verifyCellKzgProofBatch_computeCellsAndKzgProofs
     {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {bs : Array Bytes48}
     {cellIndices : Array CellIndex} {cells : Array Cell} {ps : Array Bytes48}
     (h₁ : cells.size = bs.size) (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
-    (hblobs : ∀ k < bs.size, ∃ blob cs qs, blobToKzgCommitment s blob = .ok bs[k]! ∧
+    (hblobs : ∀ k < bs.size, ∃ blob cs qs, blobToKzgCommitment s blob = .ok ⟨bs[k]!⟩ ∧
       computeCellsAndKzgProofs s blob = .ok (cs, qs) ∧ cellIndices[k]! < CELLS_PER_EXT_BLOB ∧
       cells[k]! = cs[cellIndices[k]!]! ∧ ps[k]! = qs[cellIndices[k]!]!) :
     verifyCellKzgProofBatch s bs cellIndices cells ps = .ok true := by
@@ -410,7 +410,7 @@ Let the code compute the commitment of a blob, and its cells and proofs, with th
 Then the opening of cell `j` by cell `j` and proof `j` verifies, for every `j` below 128. -/
 theorem CellOpening.verifies_computeCellsAndKzgProofs (τ : Fr)
     {blob : Blob} {commitment : Bytes48} {cells : Array Cell} {proofs : Array Bytes48}
-    (hC : blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) blob = .ok commitment)
+    (hC : blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) blob = .ok ⟨commitment⟩)
     (hP : computeCellsAndKzgProofs (TrustedSetup.ofPowers (setupPowers τ)) blob =
       .ok (cells, proofs)) {j : Nat} (hj : j < CELLS_PER_EXT_BLOB) :
     (⟨j, cells[j]!, proofs[j]!⟩ : CellOpening).Verifies (TrustedSetup.ofPowers (setupPowers τ))

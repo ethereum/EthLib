@@ -36,7 +36,7 @@ The fields start at bytes 0, 32, 64, 96 and 144, as in "Point evaluation precomp
 theorem pointEvaluation_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
     pointEvaluation data gas = .ok out ↔
       ∃ fits : data.size = INPUT_BYTES, GAS_POINT_EVALUATION ≤ gas ∧
-        kzgCommitmentToVersionedHash (readBytes data 96 48 (by simp [fits, INPUT_BYTES]))
+        (kzgCommitmentToVersionedHash ⟨readBytes data 96 48 (by simp [fits, INPUT_BYTES])⟩).bytes
           = readBytes data 0 32 (by simp [fits, INPUT_BYTES]) ∧
         verifyKzgProof (readBytes data 96 48 (by simp [fits, INPUT_BYTES]))
           (readBytes data 32 32 (by simp [fits, INPUT_BYTES]))

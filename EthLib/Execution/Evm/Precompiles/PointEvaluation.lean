@@ -149,8 +149,9 @@ def pointEvaluation (data : ByteArray) (gas : Nat) : Except PointEvaluationError
     let commitment := readBytes data 96 48 (by simp [fits, INPUT_BYTES])
     let proof := readBytes data 144 48 (by simp [fits, INPUT_BYTES])
     -- The versioned hash of the commitment equals the given versioned hash.
-    if kzgCommitmentToVersionedHash commitment ≠ versionedHash then
-      throw (.versionedHashMismatch (kzgCommitmentToVersionedHash commitment) versionedHash)
+    let expected := (kzgCommitmentToVersionedHash ⟨commitment⟩).bytes
+    if expected ≠ versionedHash then
+      throw (.versionedHashMismatch expected versionedHash)
     -- The proof shows that the polynomial of the commitment takes the value `y` at `z`.
     if !(← verifyKzgProof commitment z y proof) then
       throw .proofRejected

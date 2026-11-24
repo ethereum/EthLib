@@ -139,4 +139,17 @@ instance (priority := high) {n : Nat} : SszType (Vector UInt8 n) where
   encode v :=
     if n ≥ 2 ^ (8 * bytesPerOffset) then .error (.offsetOverflow n) else .ok ⟨v.toArray⟩
 
+/-- The SSZ type of a structure around one value: the SSZ type of that value.
+
+It encodes, decodes and roots as the value inside. -/
+@[instance_reducible]
+def SszType.wrapper {α β : Type} [SszType β] (mk : β → α) (get : α → β) : SszType α where
+  desc := desc β
+  toValue a := toValue (get a)
+  ofValue value := mk <$> ofValue (α := β) value
+  -- The fast paths of the value inside are kept.
+  root a := root (get a)
+  encode a := encode (get a)
+  decode data := mk <$> decode (α := β) data
+
 end EthLib.Serialization.Ssz

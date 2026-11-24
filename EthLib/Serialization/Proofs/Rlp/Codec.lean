@@ -276,6 +276,29 @@ instance {n : Nat} : LawfulCodec (Vector UInt8 n) where
       · rw [exactBytes_of_size_ne _ hs] at h
         cases h
 
+/-- A structure around one value keeps the laws of the codec of that value.
+
+It needs its two conversions to undo each other. -/
+theorem LawfulCodec.wrapper {α β : Type} [Codec β] [LawfulCodec β] (mk : β → α) (get : α → β)
+    (get_mk : ∀ b, get (mk b) = b) (mk_get : ∀ a, mk (get a) = a) :
+    @LawfulCodec α (Codec.wrapper mk get) :=
+  letI : Codec α := Codec.wrapper mk get
+  { ofItem_toItem a := by
+      change mk <$> Codec.ofItem (α := β) (Codec.toItem (get a)) = .ok a
+      rw [LawfulCodec.ofItem_toItem]
+      exact congrArg Except.ok (mk_get a)
+    toItem_of_ofItem {item a} h := by
+      change mk <$> Codec.ofItem (α := β) item = .ok a at h
+      change Codec.toItem (get a) = item
+      -- The value read back is the one inside the structure that the item gives.
+      cases read : Codec.ofItem (α := β) item with
+      | error e => rw [read] at h; cases h
+      | ok b =>
+        rw [read] at h
+        cases h
+        rw [get_mk]
+        exact LawfulCodec.toItem_of_ofItem read }
+
 /-- Reading back the items of a list of values gives the values. -/
 theorem mapM_ofItem_map_toItem {α : Type} [Codec α] [LawfulCodec α] :
     (xs : List α) → (xs.map Codec.toItem).mapM Codec.ofItem = .ok xs

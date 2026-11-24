@@ -97,12 +97,13 @@ theorem natDegree_interpolant_lt (poly : Polynomial) :
 /-- On a decoded blob, the commitment compresses the sum of the values times the points. -/
 theorem blobToKzgCommitment_eq_ok (s : TrustedSetup) {blob : Blob} {poly : Polynomial}
     (hblob : blobToPolynomial blob = .ok poly) :
-    blobToKzgCommitment s blob = .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) := by
+    blobToKzgCommitment s blob = .ok ⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)⟩ := by
   have hsize : s.g1LagrangeBrp.toArray.size = poly.size := by
     rw [Vector.size_toArray, size_blobToPolynomial blob poly hblob]
   unfold blobToKzgCommitment
   rw [hblob]
-  change (g1LincombPoints s.g1LagrangeBrp.toArray poly >>= fun c => pure (compressG1 c)) = _
+  change (g1LincombPoints s.g1LagrangeBrp.toArray poly >>= fun c =>
+    pure (KZGCommitment.mk (compressG1 c))) = _
   rw [g1LincombPoints_eq_msm hsize]
   rfl
 
@@ -131,7 +132,7 @@ theorem represents_lagrange_msm {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed 
 Here `p` is the polynomial of degree below 4096 that takes the blob's values on the domain. -/
 theorem blobToKzgCommitment_represents {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     {blob : Blob} {poly : Polynomial} (hblob : blobToPolynomial blob = .ok poly) :
-    blobToKzgCommitment s blob = .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) ∧
+    blobToKzgCommitment s blob = .ok ⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)⟩ ∧
       G1.Represents (G1.msm s.g1LagrangeBrp.toArray poly) ((interpolant poly).eval τ) :=
   ⟨blobToKzgCommitment_eq_ok s hblob,
     represents_lagrange_msm hs (size_blobToPolynomial blob poly hblob)⟩
@@ -177,7 +178,7 @@ theorem eval_interpolant_eq_of_blobToKzgCommitment_eq {s : TrustedSetup} {τ : F
   obtain ⟨hC', hr'⟩ := blobToKzgCommitment_represents hs hblob'
   have heq : compressG1 (G1.msm s.g1LagrangeBrp.toArray poly) =
       compressG1 (G1.msm s.g1LagrangeBrp.toArray poly') :=
-    Except.ok.inj (hC.symm.trans (hc.trans (hc'.symm.trans hC')))
+    congrArg KZGCommitment.bytes (Except.ok.inj (hC.symm.trans (hc.trans (hc'.symm.trans hC'))))
   exact represents_eq_of_compressG1_eq hr hr' heq
 
 /-- Two blobs whose decoded values differ and whose commitments agree make `τ` a root of `p - p'`.

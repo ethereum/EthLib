@@ -244,7 +244,7 @@ theorem verifyPartialDataColumnSidecarKzgProofs_of_all {preset : Preset} {fork :
     (all : ∀ bit ∈ sidecar.cellsPresentBitmap.bits, bit = true)
     (oneEach : sidecar.cellsPresentBitmap.bits.size = commitments.data.size) :
     verifyPartialDataColumnSidecarKzgProofs setup sidecar commitments columnIndex =
-      Cryptography.Kzg.verifyCellKzgProofBatch setup commitments.data
+      Cryptography.Kzg.verifyCellKzgProofBatch setup (commitments.data.map (·.bytes))
         (Array.replicate commitments.data.size columnIndex.toNat) sidecar.partialColumn.data
         sidecar.kzgProofs.data := by
   unfold verifyPartialDataColumnSidecarKzgProofs
@@ -827,8 +827,8 @@ theorem verifyDataColumnSidecarKzgProofs_eq_verify {preset : Preset} {fork : For
     (setup : TrustedSetup) (sidecar : DataColumnSidecar preset fork)
     (bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)) :
     verifyDataColumnSidecarKzgProofs setup sidecar bidCommitments =
-      ColumnBatch.verify setup ⟨(sidecar.commitments bidCommitments).data, sidecar.index.toNat,
-        sidecar.column.data, sidecar.kzgProofs.data⟩ :=
+      ColumnBatch.verify setup ⟨(sidecar.commitments bidCommitments).data.map (·.bytes),
+        sidecar.index.toNat, sidecar.column.data, sidecar.kzgProofs.data⟩ :=
   rfl
 
 end Matrix

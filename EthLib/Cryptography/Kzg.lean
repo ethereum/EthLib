@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Kzg.Constants
+public import EthLib.Cryptography.Kzg.Types
 public import EthLib.Cryptography.Kzg.BitReversal
 public import EthLib.Cryptography.Kzg.Polynomials
 public import EthLib.Cryptography.Kzg.Fft

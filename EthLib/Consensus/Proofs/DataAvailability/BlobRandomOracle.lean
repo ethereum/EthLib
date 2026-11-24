@@ -125,7 +125,13 @@ theorem collision_of_extractBlobSidecars {preset : Preset} {fork : Fork}
     · -- One root of two different commitments is one answer to two different messages.
       subst sameLeaf
       refine collision_of_cached (fun same => differ ?_) ?_ firstCached secondCached
-      · exact Vector.toArray_inj.mp ((Array.append_left_inj _).mp same)
+      · -- A commitment is its 48 bytes, so equal bytes are one commitment.
+        have bytes := Vector.toArray_inj.mp ((Array.append_left_inj _).mp same)
+        cases first : claim.1.kzgCommitment
+        cases second : claim.2.kzgCommitment
+        rw [first, second] at bytes
+        cases bytes
+        rfl
       · exact congrArg ByteArray.mk (hfirstLeaf.trans hsecondLeaf.symm)
     · -- Two different roots climb to one body root, so the search finds a collision of the climbs.
       have hout := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hbranches

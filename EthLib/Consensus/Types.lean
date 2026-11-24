@@ -3,6 +3,8 @@ module
 public import EthLib.Base.Address
 public import EthLib.Base.Bytes
 public import EthLib.Base.Hex
+public import EthLib.Cryptography.Kzg.Types
+public import EthLib.Serialization.Ssz.Typed.Basic
 
 /-!
 # `Consensus.Types`
@@ -71,8 +73,24 @@ abbrev BlobIndex := UInt64
 
 /-- From Deneb: the versioned hash of a KZG commitment, which names a blob.
 
-[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#type-aliases) defines it. -/
-abbrev VersionedHash := Base.Bytes32
+[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#type-aliases) defines it.
+
+It is the type of KZG itself, so the consensus layer needs no conversion.
+
+The execution layer keeps it as 32 bytes, so the Engine API reads its bytes. -/
+abbrev VersionedHash := Cryptography.Kzg.VersionedHash
+
+/-- From Deneb: a versioned hash is a `Bytes32` in SSZ.
+
+Source: "Type aliases" of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#type-aliases). -/
+instance : Serialization.Ssz.SszType Cryptography.Kzg.VersionedHash :=
+  .wrapper Cryptography.Kzg.VersionedHash.mk Cryptography.Kzg.VersionedHash.bytes
+
+/-- From Deneb: a KZG commitment is a `Bytes48` in SSZ.
+
+Source: "Type aliases" of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#type-aliases). -/
+instance : Serialization.Ssz.SszType Cryptography.Kzg.KZGCommitment :=
+  .wrapper Cryptography.Kzg.KZGCommitment.mk Cryptography.Kzg.KZGCommitment.bytes
 
 /-- From Fulu: the index of a cell in an extended blob, below the number of cells. -/
 abbrev CellIndex := UInt64

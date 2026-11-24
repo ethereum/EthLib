@@ -184,7 +184,7 @@ def verifyDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork} (setup : Tr
   -- Cell `j` of the column answers to commitment `j`, with proof `j`.
   --
   -- Every cell sits at the index of the column in the extended blob of its row.
-  verifyCellKzgProofBatch setup (sidecar.commitments bidCommitments).data
+  verifyCellKzgProofBatch setup ((sidecar.commitments bidCommitments).data.map (·.bytes))
     (Array.replicate sidecar.column.data.size sidecar.index.toNat) sidecar.column.data
     sidecar.kzgProofs.data
 
@@ -517,7 +517,8 @@ def verifyPartialDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork}
   -- The `j`-th cell present answers to the commitment of the `j`-th set bit, with proof `j`.
   --
   -- Every cell sits at the index of the column in the extended blob of its row.
-  verifyCellKzgProofBatch setup commitments (Array.replicate indices.size columnIndex.toNat)
+  verifyCellKzgProofBatch setup (commitments.map (·.bytes))
+    (Array.replicate indices.size columnIndex.toNat)
     sidecar.partialColumn.data sidecar.kzgProofs.data
 
 end EthLib.Consensus
