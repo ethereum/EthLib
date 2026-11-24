@@ -16,15 +16,7 @@ public import EthLib.Execution.Evm.Precompiles.Sha256
 
 The precompiled contracts of every fork, by address.
 
-A fork adds precompiles, so a call runs a precompile only from the fork that adds it.
-
-The EIP that adds each precompile names it, next to its fork.
-
 Every precompile takes the call data and the gas, and returns the output or an error.
-
-An error halts the call, which then consumes all its gas.
-
-A call that succeeds uses exactly its price.
 -/
 
 @[expose] public section
@@ -102,6 +94,7 @@ def ADDRESSES : List Nat :=
 
 /-- The fork that adds the precompile at `address`, or none when no fork adds one. -/
 def addedAt (address : Nat) : Option Fork :=
+  -- The EIP that adds each precompile names it, next to its fork.
   match address with
   -- ECRECOVER, SHA-256, RIPEMD-160 and IDENTITY
   | 0x01 | 0x02 | 0x03 | 0x04 => some .frontier
@@ -125,9 +118,12 @@ def isPrecompile (fork : Fork) (address : Nat) : Bool :=
 
 /-- The call of the precompile at `address` on the call data with the gas given.
 
-It is `none` when the fork has no precompile at that address. -/
+It is `none` when the fork has no precompile at that address.
+
+An error halts the call, which then consumes all its gas. -/
 def run (fork : Fork) (address : Nat) (data : ByteArray) (gas : Nat) :
     Option (Except PrecompileError ByteArray) :=
+  -- A fork adds precompiles, so a call runs a precompile only from the fork that adds it.
   if !isPrecompile fork address then none else
   match address with
   | 0x01 => some ((Ecrecover.ecrecover data gas).mapError .ecrecover)
@@ -153,6 +149,8 @@ def run (fork : Fork) (address : Nat) (data : ByteArray) (gas : Nat) :
 /-- The gas that the precompile at `address` charges for the call data.
 
 It is `none` when the fork has no precompile at that address.
+
+A call that succeeds uses exactly this price.
 
 Some precompiles check the call data before the charge, and such a check can fail with any gas. -/
 def price (fork : Fork) (address : Nat) (data : ByteArray) : Option Nat :=

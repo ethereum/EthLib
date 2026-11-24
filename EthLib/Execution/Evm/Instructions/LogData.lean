@@ -8,12 +8,6 @@ public import EthLib.Execution.Evm.Step
 
 LOG0 to LOG4: append a log of a range of memory and up to four topics to the substate.
 
-The log holds the address of the account whose code runs.
-
-A log costs 375, 8 per byte of data, 375 per topic, and the growth of memory.
-
-A log fails in a static frame.
-
 Appendix H.2 of the Yellow Paper, Shanghai version, defines these instructions.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -51,7 +45,11 @@ def logStep (n : Nat) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) 
   let (size, evm) ← popWord evm
   let (topics, evm) ← popTopics evm n
   -- The price, and `mu'_i = M(mu_i, mu_s[0], mu_s[1])` with its cost.
+  --
+  -- It also pays the growth of memory.
   let evm ← chargeGasAndMemory evm (logCost n size) [(start, size)]
+  -- A log fails in a static frame.
+  --
   -- §9.4.2: `Z` holds for `¬I_w ∧ W(w, mu)`, and W holds for every LOG.
   --
   -- The source halts by `Z` before any charge; here the charge comes first.
@@ -64,6 +62,7 @@ def logStep (n : Nat) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) 
     --
     -- Here `t = (mu_s[2], ..., mu_s[n + 1])`, the topics.
     let log : Log := {
+      -- The log holds the address of the account whose code runs.
       address := evm.message.currentTarget
       topics
       data := memoryReadBytes evm.memory start.toNat size.toNat }

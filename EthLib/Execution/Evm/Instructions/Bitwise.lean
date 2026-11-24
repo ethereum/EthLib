@@ -10,11 +10,11 @@ The bitwise instructions of the EVM, from AND to CLZ.
 Source: Appendix H.2 of the Yellow Paper, Shanghai version, in `Paper.tex`:
 <https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
 
-AND to BYTE date from Frontier.
+The instructions date from these forks:
 
-The shifts date from Constantinople, as in [EIP-145](https://eips.ethereum.org/EIPS/eip-145).
-
-CLZ dates from Fusaka, as in [EIP-7939](https://eips.ethereum.org/EIPS/eip-7939#specification).
+- AND to BYTE from Frontier
+- the shifts from Constantinople, as in [EIP-145](https://eips.ethereum.org/EIPS/eip-145)
+- CLZ from Fusaka, as in [EIP-7939](https://eips.ethereum.org/EIPS/eip-7939#specification)
 
 Every later fork computes the same results.
 
