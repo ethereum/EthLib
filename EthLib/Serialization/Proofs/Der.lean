@@ -26,6 +26,7 @@ The reader is stated against X.690 itself, in terms of octets and numbers.
 - An OBJECT IDENTIFIER is one or more subidentifiers, each on the fewest base-128 octets.
 - A SEQUENCE passes validation exactly when each value it holds passes.
 - A SET OF also needs the encodings of those values in ascending order.
+- No encoding that reads is a proper prefix of another, so zero padding never changes that order.
 - A value with under 128 content octets is its tag, one length octet, then its content.
 - A read of the values in a SEQUENCE reads each value in turn, and an empty input holds none.
 
@@ -314,6 +315,66 @@ theorem encoded_eq_of_read_ok {a b rest rest' : ByteArray} {v w : Value}
       · have := Nat.pow_le_pow_right (show 0 < 256 by decide) h
         omega
     rw [hv, hw, hkl]
+
+/-- A value that reads also reads from its own encoding followed by any bytes. -/
+theorem read_encoded_append {a rest : ByteArray} {v : Value} (ha : read a = .ok (v, rest))
+    (more : ByteArray) : read (v.encoded ++ more) = .ok (v, more) := by
+  obtain ⟨t1, t2, -, hv⟩ := read_ok_iff.mp ha
+  -- The conditions on the value do not depend on the bytes after it.
+  exact read_ok_iff.mpr ⟨t1, t2, by simp, hv⟩
+
+/-- No encoding that reads is a proper prefix of another one.
+
+The header fixes the length of the whole encoding (X.690 §§8.1.3, 10.1). -/
+theorem encoded_eq_of_prefix {a b rest rest' : ByteArray} {v w : Value}
+    (ha : read a = .ok (v, rest)) (hb : read b = .ok (w, rest'))
+    (hp : v.encoded.data.toList <+: w.encoded.data.toList) : v.encoded = w.encoded := by
+  obtain ⟨t, ht⟩ := hp
+  obtain ⟨-, -, hin, -⟩ := read_ok_iff.mp hb
+  -- The input of the second read starts with the encoding of the first value.
+  have hb' : b = v.encoded ++ ⟨(t ++ rest'.data.toList).toArray⟩ := by
+    apply byteArray_eq_of_toList
+    simp [hin, ← ht]
+  rw [hb', read_encoded_append ha] at hb
+  -- Both reads return the first value, so the two values are one.
+  obtain ⟨hvw, -⟩ := Prod.mk.inj (Except.ok.inj hb)
+  rw [hvw]
+
+/-- Two lists of which neither is a prefix of the other compare as their extensions do. -/
+private theorem le_append_iff_of_not_prefix {l1 l2 : List UInt8} (h12 : ¬ l1 <+: l2)
+    (h21 : ¬ l2 <+: l1) (t1 t2 : List UInt8) : l1 ++ t1 ≤ l2 ++ t2 ↔ l1 ≤ l2 := by
+  induction l1 generalizing l2 with
+  | nil => exact absurd (List.nil_prefix) h12
+  | cons a as ih =>
+    cases l2 with
+    | nil => exact absurd (List.nil_prefix) h21
+    | cons b bs =>
+      simp only [List.cons_append, List.cons_le_cons_iff]
+      by_cases hab : a = b
+      · -- Equal first bytes: the order is that of the rest, where neither is a prefix either.
+        subst hab
+        have h12' : ¬ as <+: bs := fun h => h12 (List.prefix_cons_inj a |>.mpr h)
+        have h21' : ¬ bs <+: as := fun h => h21 (List.prefix_cons_inj a |>.mpr h)
+        simp [ih h12' h21']
+      · -- Different first bytes decide both comparisons alike.
+        simp [hab]
+
+/-- The order of two encodings that read is the order of §11.6, with zero padding. -/
+theorem encoded_le_iff_padded {a b rest rest' : ByteArray} {v w : Value}
+    (ha : read a = .ok (v, rest)) (hb : read b = .ok (w, rest')) (n : Nat) :
+    v.encoded.data.toList ≤ w.encoded.data.toList ↔
+      v.encoded.data.toList ++ List.replicate (n - v.encoded.size) 0 ≤
+        w.encoded.data.toList ++ List.replicate (n - w.encoded.size) 0 := by
+  by_cases heq : v.encoded = w.encoded
+  · -- One encoding twice: both sides compare a list with itself.
+    rw [heq]
+    exact iff_of_true (List.le_refl _) (List.le_refl _)
+  · -- Two encodings: neither is a prefix of the other, so the padding never decides.
+    have h12 : ¬ v.encoded.data.toList <+: w.encoded.data.toList :=
+      fun p => heq (encoded_eq_of_prefix ha hb p)
+    have h21 : ¬ w.encoded.data.toList <+: v.encoded.data.toList :=
+      fun p => heq (encoded_eq_of_prefix hb ha p).symm
+    exact (le_append_iff_of_not_prefix h12 h21 _ _).symm
 
 /-! ## INTEGER -/
 
@@ -1459,11 +1520,41 @@ theorem validate_sequence_ok_iff {value : Value} (tag : value.tag = 48)
   rw [validate_constructed_ok_iff (.inl (by rw [tag]; rfl)) header]
   simp [tag]
 
+/-- Every value in a read of siblings reads on its own. -/
+private theorem exists_read_of_mem_children_go : ∀ (fuel : Nat) (input : ByteArray)
+    (vs : List Value), children.go fuel input = .ok vs →
+      ∀ v ∈ vs, ∃ a rest, read a = .ok (v, rest) := by
+  intro fuel input vs
+  induction vs generalizing fuel input with
+  | nil => intro _ v hv; simp at hv
+  | cons w ws ih =>
+    intro h v hv
+    obtain ⟨f, rest, -, hw, h⟩ := exists_of_children_go_eq_ok_cons h
+    rcases List.mem_cons.mp hv with rfl | hv
+    · exact ⟨input, rest, hw⟩
+    · exact ih f rest h v hv
+
+/-- Siblings are in ascending order exactly when they are once padded with zero octets.
+
+So the order check of a SET OF is the order of X.690 §11.6. -/
+theorem pairwise_le_iff_padded {input : ByteArray} {values : List Value}
+    (h : children input = .ok values) (n : Nat) :
+    (values.map (·.encoded.data.toList)).Pairwise (· ≤ ·) ↔
+      (values.map fun v => v.encoded.data.toList ++
+        List.replicate (n - v.encoded.size) 0).Pairwise (· ≤ ·) := by
+  rw [List.pairwise_map, List.pairwise_map]
+  apply List.Pairwise.iff_of_mem
+  intro v w hv hw
+  -- Each sibling reads, so each pair compares alike with or without the padding.
+  obtain ⟨a, rest, ha⟩ := exists_read_of_mem_children_go _ _ _ h v hv
+  obtain ⟨b, rest', hb⟩ := exists_read_of_mem_children_go _ _ _ h w hw
+  exact encoded_le_iff_padded ha hb n
+
 /-- A SET OF passes validation exactly when its content reads as values that each pass.
 
 Their encodings must also come in ascending order, compared octet by octet, a proper prefix first.
 
-X.690 §11.6 pads the shorter encoding with zero octets instead.
+X.690 §11.6 pads the shorter encoding with zero octets instead, which never changes the order.
 
 Every value that the reader returns has a header, so its encoding is longer than its content. -/
 theorem validate_set_ok_iff {value : Value} (tag : value.tag = 49)
