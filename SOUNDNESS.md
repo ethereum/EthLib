@@ -6532,12 +6532,16 @@ It also needs the first slot after the epoch to fit, and the bound on the slot o
 `dutiesResponse_ptc_error_code` follows: such an answer fails only with code 400.
 `dutiesResponse_ptc_error` does not ask the epoch to be within the seed lookahead, so it covers the code 400 that an epoch past it gets.
 That error is reachable only at the next epoch, under a preset whose seed lookahead is zero.
+`Run.assignedProposers` bounds the lookahead along a run from the Phase 0 genesis state of deposits.
+From Fulu, each entry of the lookahead names a validator of the registry.
+`dutiesResponse_proposer_error_code_of_run` follows: at a state that such a run reaches, from Fulu, a proposer answer that fails has code 400.
+It needs the bounds of `dutiesResponse_proposer_error_code` on the slots of the epoch and on the slot of the state.
 These cases of code 500 remain without a theorem:
 
-- No theorem bounds the entries of the lookahead by the registry along a chain from the Phase 0 genesis state of deposits.
-  So no theorem excludes the code 500 of `dutiesResponse_proposer_internal_iff` at a state that such a chain reaches.
-  `registryGrows_of_chainSteps` gives one part of that bound, since the registry never shrinks along a chain.
-  A state decoded from bytes, as the export of the duty answers takes it, can hold such an entry.
+- A state decoded from bytes, as the export of the duty answers takes it, can hold an entry of the lookahead past the registry.
+  `dutiesResponse_proposer_internal_iff` gives code 500 exactly when such an entry is at a slot of the requested epoch.
+  That holds for a served request: the first answer at the current epoch, or the second at an epoch of the seed lookahead.
+  It also needs the slots of the epoch to fit in 64 bits, and the bound on the slot of the state.
 - Before Fulu, no theorem excludes a failed draw of the current epoch, which gives code 500 by `dutiesResponse_proposer_internal_iff_of_lt_fulu`.
   `dutiesResponse_proposer_error_of_lt_fulu` assumes that the draws of that epoch end (`ProposersDrawEnd`), as `getBeaconProposerIndices_ok` does.
   Under its other bounds, a draw of an epoch with active validators fails only for a product past 64 bits, or at `2^64` steps.
@@ -6545,7 +6549,7 @@ These cases of code 500 remain without a theorem:
   `ProposersDrawEnd.of_atCap` gives the end when an active validator is at the cap of the draw, which no theorem shows along a chain.
   `Genesis` does not require a state valid for launch, and `initializeBeaconStateFromEth1` has no check that refuses an empty list of deposits.
   So no theorem excludes a reachable state with no active validator, where, before Fulu and with epochs of at least one slot, both proposer answers get code 500 by `dutiesResponse_proposer_no_active`.
-- No theorem excludes code 500 from the attester and PTC answers where a bound of their error theorems fails.
+- No theorem excludes code 500 from the proposer, attester and PTC answers where a bound of their error theorems fails.
   On mainnet and minimal, code 500 from a PTC assignment needs a slot of the state within two epochs of `2^64`.
   Code 500 from an attester assignment needs such a slot, or a registry of more than `2^40` validators.
   `getCommitteeAssignment_eq_error_of_overflow` shows that the assignment overflows at an epoch up to the next one whose slots pass 64 bits.

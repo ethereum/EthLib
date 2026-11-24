@@ -78,29 +78,11 @@ private theorem LookaheadActive.upgradeToFulu {pre : BeaconState preset .pectra}
   simp only [Consensus.upgradeToFulu, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at ok
   obtain ⟨lookahead, drawn, rfl⟩ := ok
-  simp only [initializeProposerLookahead, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at drawn
-  obtain ⟨epochs, mapped, rfl⟩ := drawn
   intro _ k inside e he
-  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat :=
-    Nat.pos_of_ne_zero fun zero => by simp [zero] at inside
-  have div : k / preset.SLOTS_PER_EPOCH.toNat < preset.MIN_SEED_LOOKAHEAD.toNat + 1 :=
-    Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact inside)
-  have drawn := vector_mapM_ok_getElem mapped (k / preset.SLOTS_PER_EPOCH.toNat) div
-  simp only [Vector.getElem_range, bind_ok_iff, liftArith, mapError_ok_iff] at drawn
-  obtain ⟨epoch, counted, drawn⟩ := drawn
-  have sum := Uint64.addChecked_ok_iff.mp counted
-  have small : (k / preset.SLOTS_PER_EPOCH.toNat).toUInt64.toNat =
-      k / preset.SLOTS_PER_EPOCH.toNat := by
-    refine UInt64.toNat_ofNat_of_lt' ?_
-    have := preset.MIN_SEED_LOOKAHEAD.toNat_lt
-    have : UInt64.size = 2 ^ 64 := rfl
-    omega
-  have same : e = epoch := UInt64.toNat_inj.mp (by rw [he, sum.2, small]; rfl)
-  subst same
-  simp only [Vector.getElem_flatten]
-  obtain ⟨validator, found, active⟩ := getBeaconProposerIndices_active drawn _
-    (Vector.getElem_mem _ |> fun member => by simpa using member)
+  obtain ⟨epoch, proposers, epochNat, computed, member⟩ :=
+    initializeProposerLookahead_drawn drawn k inside
+  obtain rfl : e = epoch := UInt64.toNat_inj.mp (by rw [he, epochNat]; rfl)
+  obtain ⟨validator, found, active⟩ := getBeaconProposerIndices_active computed _ member
   exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
 
 /-- A slot keeps the invariant. -/

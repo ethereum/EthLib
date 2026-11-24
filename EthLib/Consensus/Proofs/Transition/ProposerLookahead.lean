@@ -175,11 +175,11 @@ theorem getBeaconProposerIndex_of_proposerLookahead (fulu : .fusaka ≤ fork)
 end Moves
 
 /-- From Fulu, an upgrade keeps the lookahead: those to Gloas and to Heze copy it. -/
-private theorem upgradeNext_proposerLookahead {pre : ForkedBeaconState preset}
+theorem upgradeNext_proposerLookahead {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (computed : upgradeNext config checks pre = .ok post) (early : .fusaka ≤ pre.fork)
-    (late : .fusaka ≤ post.val.fork) :
-    post.val.state.proposerLookahead late = pre.state.proposerLookahead early := by
+    (computed : upgradeNext config checks pre = .ok post) (early : .fusaka ≤ pre.fork) :
+    post.val.state.proposerLookahead (Nat.le_trans early (Nat.le_of_lt post.property)) =
+      pre.state.proposerLookahead early := by
   obtain ⟨fork, state⟩ := pre
   cases fork
   case fusaka =>
@@ -208,7 +208,7 @@ private theorem proposerLookaheadShifted_upgradeNext {pre : ForkedBeaconState pr
     simp only [getCurrentEpoch, (upgradeFrame_upgradeNext computed).slot]
   unfold ProposerLookaheadShifted currentEpochStart
   refine ⟨Nat.le_of_eq (by rw [epoch]), fun early late _ _ _ => ?_⟩
-  rw [epoch, upgradeNext_proposerLookahead computed early late]
+  rw [epoch, upgradeNext_proposerLookahead computed early]
 
 /-- A step of a chain keeps the proposer of each slot that both lookaheads cover. -/
 private theorem ChainStep.proposerLookaheadShifted {x y : ForkedBeaconState preset}
