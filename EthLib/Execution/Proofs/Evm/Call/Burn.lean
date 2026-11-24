@@ -11,9 +11,11 @@ From Cancun, only an account created in the transaction burns, by [EIP-6780][e67
 
 From Glamsterdam, none does, by [EIP-8246][e8246].
 
-A log of burns records them.
+A log of burns records each such burn, in the order of the run.
 
-A step that gives the next frame lowers the supply by its burn; one that sends a message keeps it.
+A step that gives the next frame lowers the supply by the burn of the step.
+
+A step that sends a message gives a caller frame with the supply of the frame before.
 
 [e6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
 [e8246]: https://eips.ethereum.org/EIPS/eip-8246#specification

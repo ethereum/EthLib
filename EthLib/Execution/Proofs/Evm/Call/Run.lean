@@ -12,7 +12,7 @@ When each step keeps it, so does a whole run of a frame.
 
 The frame that resumes after a message needs a fact about the frame that ends that message.
 
-That fact relates the message, its start state, substate and meter, and that frame.
+That fact relates the message, its start state, substate and meter, and the frame that ends it.
 
 This fact then holds of every call and creation, by strong induction on the gas of the message.
 -/

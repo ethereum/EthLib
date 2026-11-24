@@ -28,7 +28,9 @@ Before Cancun, twice the supply must be below `2^256`, for a SELFDESTRUCT to its
 
 From Cancun, the supply itself must be below `2^256`. -/
 def SupplyRoom (fork : Fork) (supply : Nat) : Prop :=
-  -- A supply below `2^255` leaves room for that SELFDESTRUCT, and one below `2^256` for a move.
+  -- A supply below `2^255` leaves room for that SELFDESTRUCT.
+  --
+  -- A supply below `2^256` leaves room for a move.
   (if fork < .dencun then 2 * supply else supply) < 2 ^ 256
 
 /-- A smaller supply leaves room when a larger one does. -/

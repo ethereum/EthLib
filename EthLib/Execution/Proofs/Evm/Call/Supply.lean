@@ -34,7 +34,9 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- Whether `fork` is Glamsterdam or later, or Cancun or later with no account created in `tx`.
 
-Then a message that ends in `tx` keeps the supply, and from Glamsterdam no step burns ether. -/
+Then a message that ends in `tx` keeps the supply.
+
+From Glamsterdam, no step burns ether. -/
 def BurnsNone (fork : Fork) (tx : TransactionState) : Prop :=
   .glamsterdam ≤ fork ∨ (.dencun ≤ fork ∧ ∀ address, address ∉ tx.createdAccounts)
 

@@ -9,7 +9,11 @@ From Cancun, SELFDESTRUCT marks its account for deletion only when its transacti
 
 [EIP-6780][e6780] sets this rule.
 
-So each account that a message marks was marked before it, or created in the transaction.
+Take a call or creation that returns a frame, with or without an error.
+
+Each account that frame marks for deletion was marked before the message started.
+
+Otherwise the transaction has created it by the end of the message.
 
 The deletions at the end of a transaction are not part of a message, so they are not covered here.
 

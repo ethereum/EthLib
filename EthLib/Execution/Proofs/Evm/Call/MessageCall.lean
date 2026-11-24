@@ -7,13 +7,15 @@ public import EthLib.Execution.Proofs.Evm.Interpreter
 /-!
 # Proofs: `Evm.Call.MessageCall`
 
-How a message and a creation end: their writes, logs, refunds, touches, gas and errors.
+The theorems below state how a message and a creation end.
+
+They cover the writes, the logs, the refunds, the touches, the gas and the errors.
 
 The touches of a failed message stay undone, except at the precompile 0x03.
 
 From Spurious Dragon to Paris, 0x03 stays touched when the message touched it.
 
-It also stays touched when the message called it and its account exists and is empty.
+0x03 also stays touched when the message called it and its account exists and is empty.
 -/
 
 @[expose] public section

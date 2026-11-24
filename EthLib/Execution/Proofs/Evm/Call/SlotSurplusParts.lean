@@ -9,7 +9,9 @@ A frame keeps the surplus of another when it keeps its error and its surplus doe
 
 A pop, a push, an access, a record of a read and a charge keep the surplus.
 
-So do the instructions of the stack, KECCAK256, the program counter, memory and the environment.
+So does each instruction that reads and writes only the stack, and KECCAK256.
+
+So does each instruction of the program counter, of memory and of the environment.
 
 So do RETURN, the reads of another account, SLOAD, TLOAD, TSTORE and each LOG.
 

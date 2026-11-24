@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Gas.StateGas
 /-!
 # Proofs: `Evm.Call.Create`
 
-The prices, the first checks, the refill, the deployed code and the memory of a creation.
+The theorems below cover the prices, the first checks and the refill of a creation.
+
+They also cover the code that it deploys and the memory that it leaves.
 
 Every instruction that may send a message keeps the size of memory a multiple of 32.
 -/

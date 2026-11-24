@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Call.Fresh
 
 Only a frame that runs code at an account can mark it for deletion.
 
-No frame runs code at an account with a nonce above 0 and no code, not created in its transaction.
+Take an account with a nonce above 0, no code, and not created in its transaction.
+
+No frame that runs code has it as its current target, so no message marks it.
 
 These facts hold at every fork, whether or not the message ends with an error.
 

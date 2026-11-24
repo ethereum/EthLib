@@ -8,13 +8,15 @@ public import EthLib.Execution.Proofs.Evm.Call.ToDelete
 
 From Cancun, SELFDESTRUCT marks for deletion only an account that the transaction created.
 
+[EIP-6780][e6780] sets that rule.
+
 From Glamsterdam, the deletion at the end of a transaction reads the account to keep its balance.
 
-The block access list names every accessed account, so that deletion needs each created one read.
+[EIP-7928, Scope and Inclusion][bal] asks the block access list to name every accessed account.
+
+So this deletion needs each created account among the recorded reads.
 
 The end of a transaction is not covered here.
-
-Sources: [EIP-6780][e6780], [EIP-7928, Scope and Inclusion][bal].
 
 [e6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
 [bal]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
@@ -173,7 +175,9 @@ theorem createdRead_processMessage [LawfulGasMeter Meter] {message : Message for
 
 /-- A creation that returns a frame keeps every created account among the reads.
 
-The state it is sent from must have read its address, as a frame does before it sends one. -/
+The state it is sent from must already have read the address it creates.
+
+A frame reads that address before it sends a creation. -/
 theorem createdRead_processCreateMessage [LawfulGasMeter Meter] {message : Message fork}
     {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas}

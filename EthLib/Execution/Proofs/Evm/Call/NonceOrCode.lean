@@ -190,7 +190,7 @@ theorem keepsNonceOrCodeCreate_depositCode (hfork : .spuriousDragon ≤ fork)
 
 That holds whether or not the message ends with an error.
 
-It needs no rebuild property.
+The proof needs no rebuild property of the state.
 
 The proof is by strong induction on the gas of the message, for calls and creations together. -/
 theorem processMessage_keepsNonceOrCode_induction [LawfulGasMeter Meter]
