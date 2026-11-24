@@ -15,10 +15,6 @@ They are WHOAREYOU Packet, Ordinary Message Packet and Protocol Header:
 Steps 1 and 2 of the section Handshake Steps in `discv5-theory.md` use them:
 <https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#handshake-steps>
 
-The caller chooses the masking IV, the nonce, the ID nonce and the session key.
-
-This module does not check that a nonce or an ID nonce is fresh, or that the `enr-seq` is current.
-
 It keeps no state; the session states of a node, built on it, find the key of a source.
 -/
 
@@ -70,7 +66,12 @@ structure Challenge where
 
 /-- Node B's WHOAREYOU packet for node A, and its challenge data.
 
-`nonce` is the nonce of the message packet that caused the challenge. -/
+`nonce` is the nonce of the message packet that caused the challenge.
+
+The caller chooses the masking IV, the nonce and the ID nonce.
+
+The function does not check that a nonce or an ID nonce is fresh, or that the `enr-seq` is current.
+-/
 def makeWhoareyou (nodeIdA : NodeId) (maskingIv : Vector UInt8 16) (nonce : Vector UInt8 12)
     (idNonce : Vector UInt8 16) (enrSeq : UInt64) :
     Except SessionError (ByteArray × ByteArray) := do
@@ -106,7 +107,11 @@ def readWhoareyou (nodeIdA : NodeId) (bytes : ByteArray) : Except SessionError C
 
 /-- An ordinary message packet from node A to node B, encrypted under a session key.
 
-It fails when the packet would exceed 1280 bytes. -/
+It fails when the packet would exceed 1280 bytes.
+
+The caller chooses the masking IV, the nonce and the session key.
+
+The function does not check that the nonce is fresh. -/
 def sealMessage (key : Aes.Key .aes128) (nodeIdA nodeIdB : NodeId) (maskingIv : Vector UInt8 16)
     (nonce : Vector UInt8 12) (plaintext : ByteArray) : Except SessionError ByteArray :=
   -- Ordinary Message Packet: `flag = 0`, and `authdata = src-id`, with `src-id = node-id-A`.

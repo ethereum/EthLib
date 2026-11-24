@@ -2389,7 +2389,7 @@
    "docstring":
    "The session keys from the shared secret and the challenge that the recipient sent.\n\nThe initiator is node A, and the recipient is node B, which sent the challenge."},
   {"summary":
-   "The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the hash.",
+   "The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the SHA-256 hash.",
    "signature":
    "(static_key: bytes, challenge_data: bytes, ephemeral_pubkey: bytes, node_id_b: bytes) -> bytes",
    "operation": "EthLib.Networking.Discv5.idSign",
@@ -2397,7 +2397,7 @@
    "errors": [],
    "error_class": "Discv5Error",
    "docstring":
-   "The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the hash.\n\nThe signature is deterministic, with the nonces of RFC 6979, and its `s` is at most `n / 2`."},
+   "The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the SHA-256 hash.\n\nThe signature is deterministic, with the nonces of RFC 6979, and its `s` is at most `n / 2`."},
   {"summary":
    "Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A.",
    "signature":
@@ -11350,7 +11350,7 @@
       {"constructor": "trailingBytes", "code": 10}]}],
    "error_class": "ReqRespError",
    "docstring":
-   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
+   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.\n\nThe caller deserializes the bytes, since it knows their SSZ type.\n\nThe reader of a payload stops at the chunk that completes the declared length.\n\nAny byte after that chunk makes the payload invalid."},
   {"summary":
    "One response chunk, given the number of context bytes that the method sends.",
    "signature":
@@ -11372,7 +11372,7 @@
       {"constructor": "trailingBytes", "code": 10}]}],
    "error_class": "ReqRespError",
    "docstring":
-   "One response chunk, given the number of context bytes that the method sends.\n\nA success carries that many context bytes, and its payload has the bounds of the message type.\n\nAn error carries no context bytes, and its payload is an error message of at most 256 bytes."},
+   "One response chunk, given the number of context bytes that the method sends.\n\nA success carries that many context bytes, and its payload has the bounds of the message type.\n\nAn error carries no context bytes, and its payload is an error message of at most 256 bytes.\n\nA chunk is a response code, then context bytes, then a payload."},
   {"summary":
    "A payload that decodes to `data`: its length as a varint, then a stream that compresses.",
    "signature": "(ssz_bytes: bytes) -> bytes",
@@ -13356,7 +13356,7 @@
       {"constructor": "nonMinimal", "code": 5}]}],
    "error_class": "VarintError",
    "docstring":
-   "The 64-bit value a varint denotes, or why it is not a valid varint."},
+   "The 64-bit value a varint denotes, or why it is not a valid varint.\n\nA req/resp message starts with the length of its payload, written as a varint.\n\nThe consensus layer sets three rules for the length prefix:\n\n- It SHOULD be minimally encoded.\n- It MUST NOT exceed 10 bytes.\n- It MUST decode into a type that holds every `Uint64` value."},
   {"summary": "The unsigned varint of a value below `2^63`.",
    "signature": "(value: int) -> bytes",
    "operation": "EthLib.Networking.Encoding.Uvarint.Exports.encodeExport",

@@ -13,24 +13,10 @@ It stops at the first application traffic secrets; the exporter and resumption s
 
 It also computes the Finished value of [RFC 9846 §4.5.3][finished].
 
-Callers supply the transcript bytes of [RFC 9846 §4.1][transcript], including handshake headers.
-
-After a HelloRetryRequest, the transcript starts with the `message_hash` message of §4.1.
-
-That message, with its handshake header, takes the place of ClientHello1.
-
 The functions do not parse messages, negotiate algorithms or authenticate a peer.
-
-They accept a shared secret of any length and do not check it.
-
-The caller encodes the shared secret as [§7.4][dh] specifies.
-
-The caller also rejects an all-zero X25519 output and invalid group elements, as §7.4 requires.
 
 [schedule]: https://www.rfc-editor.org/rfc/rfc9846#section-7.1
 [finished]: https://www.rfc-editor.org/rfc/rfc9846#section-4.5.3
-[transcript]: https://www.rfc-editor.org/rfc/rfc9846#section-4.1
-[dh]: https://www.rfc-editor.org/rfc/rfc9846#section-7.4
 -/
 
 @[expose] public section
@@ -62,7 +48,16 @@ def earlySecret : Secret :=
   -- The salt `0` is the 0-value, and the PSK, which is not available, is the 0-value too.
   Tls13.extract (packBytes zeros) (packBytes zeros)
 
-/-- Mix the shared secret into the early secret, RFC 9846 §7.1. -/
+/-- Mix the shared secret into the early secret, RFC 9846 §7.1.
+
+It accepts a shared secret of any length and does not check it.
+
+The caller encodes the shared secret as [§7.4][dh] specifies.
+
+The caller also rejects an all-zero X25519 output and invalid group elements, as §7.4 requires.
+
+[dh]: https://www.rfc-editor.org/rfc/rfc9846#section-7.4
+-/
 def handshakeSecret (sharedSecret : ByteArray) : Except Tls13.Error Secret := do
   -- `Derive-Secret(., "derived", "")`, from the Early Secret.
   let derived ← deriveSecret earlySecret "derived".toUTF8 .empty
@@ -104,7 +99,16 @@ The second runs from ClientHello through the server's Finished message.
 
 The function does not check that the second transcript extends the first.
 
-Each transcript includes handshake headers and excludes record headers, as §4.1 requires. -/
+Callers supply the transcript bytes of [§4.1][transcript].
+
+Each transcript includes handshake headers and excludes record headers, as §4.1 requires.
+
+After a HelloRetryRequest, the transcript starts with the `message_hash` message of §4.1.
+
+That message, with its handshake header, takes the place of ClientHello1.
+
+[transcript]: https://www.rfc-editor.org/rfc/rfc9846#section-4.1
+-/
 def keySchedule (sharedSecret helloTranscript serverTranscript : ByteArray) :
     Except Tls13.Error KeySchedule := do
   -- The left side of the §7.1 diagram: the Handshake Secret, from the asymmetric shared secret.

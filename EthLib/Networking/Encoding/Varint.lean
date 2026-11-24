@@ -5,22 +5,6 @@ module
 
 Unsigned protobuf varints, as the req/resp protocol of the consensus layer uses them.
 
-A req/resp message starts with the length of its payload, written as a varint.
-
-A varint splits a number into groups of seven bits, least significant group first.
-
-Each group takes one byte.
-
-The top bit of a byte is the continuation bit: it is set on every byte but the last.
-
-For example, 300 has the groups `0x2c` and `0x02`, so its bytes are `0xac 0x02`.
-
-The consensus layer sets three rules for the length prefix:
-
-- It SHOULD be minimally encoded.
-- It MUST NOT exceed 10 bytes.
-- It MUST decode into a type that holds every `Uint64` value.
-
 The byte format is Base 128 Varints of the protobuf encoding guide:
 <https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md#base-128-varints-varints>
 -/
@@ -83,23 +67,29 @@ def VarintError.code : VarintError → UInt32
 
 /-- The varint bytes of `n`, using at most `fuel` bytes.
 
-# Why fuel
-
 The recursion counts down a byte budget instead of shrinking `n`.
 
 The kernel unfolds such a definition directly, so proofs can compute with it.
-
-Encoding passes the ten-byte cap, which covers every 64-bit value.
-
-So the budget never runs out on that path.
 -/
 def encodeAux : Nat → Nat → List UInt8
   -- Out of budget: write nothing.
+  --
+  -- Encoding passes the ten-byte cap, which covers every 64-bit value.
+  --
+  -- So the budget never runs out on that path.
   | _, 0 => []
   | n, fuel + 1 =>
+      -- A varint splits a number into groups of seven bits, least significant group first.
+      --
+      -- Each group takes one byte.
+      --
+      -- For example, 300 has the groups `0x2c` and `0x02`, so its bytes are `0xac 0x02`.
+      --
       -- Base 128 Varints: if `n < 2^7`, one byte holds the 7-bit payload `n`, with its MSB clear.
       --
       -- The MSB is the continuation bit, so a clear MSB makes this the last byte.
+      --
+      -- It is set on every byte but the last.
       if n < groupSize then
         [UInt8.ofNat n]
       -- Otherwise the payload `n mod 2^7` comes first, with the MSB set, since a byte follows.
@@ -129,18 +119,16 @@ def valueOf : List UInt8 → Nat
 
 Succeeds when every byte but the last carries the continuation bit, and the last does not.
 
-# Why a budget
-
 Input comes from a peer and can be megabytes long.
 
 Reading stops once the budget is spent, so the work is bounded by the cap, not by the input.
-
-A long run of continuation bytes is rejected at byte eleven.
 -/
 def groups : Nat → List UInt8 → Except VarintError (List UInt8)
   -- The input ran out while the last MSB read said a byte follows, or before any byte.
   | _, [] => .error .unterminated
   -- At most ten bytes, the cap of the consensus layer, and ten bytes had their MSB set.
+  --
+  -- A long run of continuation bytes is rejected at byte 11.
   | 0, _ :: _ => .error .tooLong
   | fuel + 1, b :: bs =>
       -- Base 128 Varints: a clear MSB says no byte of the varint follows.
@@ -180,7 +168,16 @@ def nonMinimal (gs : List UInt8) : Bool :=
   -- More than one byte, and the last payload is zero: the last byte is exactly `0x00`.
   1 < gs.length && gs.getLast? == some 0
 
-/-- The 64-bit value a varint denotes, or why it is not a valid varint. -/
+/-- The 64-bit value a varint denotes, or why it is not a valid varint.
+
+A req/resp message starts with the length of its payload, written as a varint.
+
+The consensus layer sets three rules for the length prefix:
+
+- It SHOULD be minimally encoded.
+- It MUST NOT exceed 10 bytes.
+- It MUST decode into a type that holds every `Uint64` value.
+-/
 def decode (bs : List UInt8) : Except VarintError UInt64 :=
   -- The ten-byte cap is checked first, while reading, so the work stays bounded.
   match groups maxLength bs with

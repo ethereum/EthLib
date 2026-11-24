@@ -17,10 +17,6 @@ The source is `discv5-theory.md` in `ethereum/devp2p`:
 
 Its sections are Identity-Specific Cryptography in the Handshake, and Steps 3 and 4 of it.
 
-- The shared secret is the point `d Q` of an ECDH, in its 33-byte compressed form.
-- HKDF over SHA-256 turns the secret into two 16-byte session keys.
-- The ID signature is an ECDSA signature of a SHA-256 hash, written as the 64 bytes `r || s`.
-
 The private keys are secret, and these functions make no constant-time claim.
 -/
 
@@ -49,7 +45,9 @@ def ecdh (sk : Fn) (pk : Point) : Except Secp256k1Error ByteArray :=
     -- The 33-byte secret is `y || eph.x`, with `y = 0x02` for an even `eph.y` and `0x03` otherwise.
     | p => .ok p.encodeCompressed
 
-/-- The session keys of a handshake: the first and the last 16 bytes of the HKDF output. -/
+/-- The session keys of a handshake: the first and the last 16 bytes of the HKDF output.
+
+HKDF over SHA-256 turns the shared secret into these two keys. -/
 structure SessionKeys where
   /-- The key of the node that starts the handshake. -/
   initiatorKey : ByteArray
@@ -84,7 +82,7 @@ def idSignatureHash (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeI
   Sha256.hash32 (asciiBytes "discovery v5 identity proof" ++ challengeData ++
     ephemeralPubkey ++ ⟨nodeIdB.toArray⟩)
 
-/-- The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the hash.
+/-- The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the SHA-256 hash.
 
 The signature is deterministic, with the nonces of RFC 6979, and its `s` is at most `n / 2`. -/
 def idSign (sk : Fn) (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeId) :

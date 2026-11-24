@@ -369,7 +369,7 @@
   "The session keys from the shared secret and the challenge that the recipient sent."
 
 #define DOC_discv5_id_sign \
-  "The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the hash."
+  "The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the SHA-256 hash."
 
 #define DOC_discv5_id_verify \
   "Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A."
