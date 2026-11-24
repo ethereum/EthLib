@@ -6,25 +6,11 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme
 /-!
 # Key material without the master seed
 
-A secret is the start of one WOTS+C chain, the secret of one FORS leaf, or a surrogate.
-
 Each secret is one derivation: the first 16 bytes of one hash of `SK.seed` at `PK.seed`.
 
 The seed also gives two hashes of `leanSPHINCS || SK.seed || d` without an address.
 
 The first 16 bytes at `d = 0` are `PK.seed`, and the whole output at `d = 1` is `SK.prf`.
-
-`SK.prf` keys the randomizers.
-
-The material holds these two outputs and one 32-byte value per secret.
-
-These are the full answers of the programmed inputs, with the 16 bytes that a derivation discards.
-
-Its sampling takes no master seed.
-
-Only the inputs of the secrets depend on the public seed, the first 16 bytes of its output.
-
-Programming a cache writes the material at these inputs.
 
 This module does not assume that a cache of the honest game is independent of the master seed.
 -/
@@ -54,7 +40,9 @@ attribute [local instance] Classical.propDecidable
 
 /-- The outputs that give `PK.seed` and `SK.prf`, then one 32-byte value per secret.
 
-A secret uses only the first 16 bytes of its value, but the material keeps all 32. -/
+A secret uses only the first 16 bytes of its value, but the material keeps all 32.
+
+The two outputs and the values are the full answers of the programmed inputs. -/
 abbrev Material := (HashOutput × HashOutput) × SecretOutputs
 
 /-- The output whose first half is `PK.seed`. -/
@@ -63,7 +51,7 @@ def parameterOutput (material : Material) : HashOutput := material.1.1
 /-- The public seed: the first 16 bytes of the parameter output. -/
 def parameter (material : Material) : PublicParameter := truncateHash (parameterOutput material)
 
-/-- The secret PRF key `SK.prf`. -/
+/-- The secret PRF key `SK.prf`, which keys the randomizers. -/
 def prf (material : Material) : HashOutput := material.1.2
 
 @[irreducible] noncomputable def secretOutputsSampleableType : SampleableType SecretOutputs :=
@@ -92,7 +80,10 @@ theorem secretDomain_injective : Function.Injective secretDomain := by
   rcases left with ⟨_, _, _, _⟩ | ⟨_, _, _⟩ | _ <;>
     rcases right with ⟨_, _, _, _⟩ | ⟨_, _, _⟩ | _ <;> simp_all [secretDomain]
 
-/-! ### Programming the cache -/
+/-! ### Programming the cache
+
+Only the inputs of the secrets depend on `PK.seed`, the first 16 bytes of the parameter output.
+-/
 
 /-- The input whose output gives `PK.seed`. -/
 def parameterInput (seed : MasterSeed) : HashInput := keySeedInput seed 0

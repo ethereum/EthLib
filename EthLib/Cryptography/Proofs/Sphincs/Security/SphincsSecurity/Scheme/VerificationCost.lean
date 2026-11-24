@@ -11,14 +11,6 @@ This file counts the compressions of the hash calls that verification makes, for
 
 An addressed hash input is `PK.seed || ADRS || payload`, which is `48 + |payload|` bytes.
 
-A digest call hashes 84 bytes.
-
-Every hash takes its input of `n` bytes as it is, and the model charges each call as follows:
-
-- Keccak-256: `n / 136 + 1` permutations, since the padding adds at least one byte.
-- BLAKE2s: `ceil(n / 64)` compressions, since the last block is padded with zeros.
-- SHA-256: `ceil((n + 9) / 64)` compressions, since the padding adds at least 9 bytes.
-
 The answers of the oracle stay arbitrary, and only the byte lengths count.
 
 An accepted signature costs exactly the closed-form verification cost.
@@ -46,10 +38,15 @@ inductive HashFn where
   | sha256
 deriving DecidableEq
 
-/-- The compressions of one call on an `n`-byte input. -/
+/-- The compressions of one call on an `n`-byte input.
+
+Every hash takes its input of `n` bytes as it is. -/
 def HashFn.cost : HashFn → Nat → Nat
+  -- Keccak-256: `n / 136 + 1` permutations, since the padding adds at least one byte.
   | .keccak256, n => n / 136 + 1
+  -- BLAKE2s: `ceil(n / 64)` compressions, since the last block is padded with zeros.
   | .blake2s, n => (n + 63) / 64
+  -- SHA-256: `ceil((n + 9) / 64)` compressions, since the padding adds at least 9 bytes.
   | .sha256, n => (n + 9 + 63) / 64
 
 variable (H : HashFn)

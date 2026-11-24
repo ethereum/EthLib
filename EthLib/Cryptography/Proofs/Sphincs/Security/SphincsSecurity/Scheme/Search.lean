@@ -10,14 +10,6 @@ The randomizer search and the counter search of the signer hash a sequence of di
 Each search stops at the first answer that its test accepts.
 
 This file bounds the probability that such a search exhausts all its trials.
-
-The lazy random oracle answers an input outside its cache with a uniform draw.
-
-So one trial rejects with probability the share of answers that the test rejects.
-
-The trial caches its answer at an input that no later trial visits.
-
-So each step of the induction keeps the later inputs fresh and adds one rejection factor.
 -/
 
 @[expose] public section
@@ -94,7 +86,13 @@ theorem probEvent_searchLoop (inputs : Nat → HashInput) (decode : HashOutput �
       rw [searchLoop]
       simp only [Concrete.oracleHash, HasQuery.query, simulateQ_bind, simulateQ_spec_query,
         StateT.run_bind]
+      -- The lazy random oracle answers an input outside its cache with a uniform draw.
+      --
+      -- So one trial rejects with probability the share of answers that the test rejects.
       rw [fresh_run (inputs t) cache (hfresh t (Nat.le_refl t) (by omega))]
+      -- The trial caches its answer at an input that no later trial visits.
+      --
+      -- So each step of the induction keeps the later inputs fresh and adds one rejection factor.
       have hterm : ∀ u : HashOutput,
           Pr{let r ← ((simulateQ randomOracle
               (match decode u with
