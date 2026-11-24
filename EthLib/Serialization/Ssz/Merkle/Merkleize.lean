@@ -28,9 +28,7 @@ Root of the perfect binary tree of a given depth.
 
 Leaves arrive as a function from position to node, not as a list.
 
-A tree wider than its data therefore needs no padding to describe.
-
-For example, at depth 2 the root hashes two parents, of leaves 0 and 1, and of leaves 2 and 3.
+So a tree wider than its data needs no padding to describe.
 
 Nothing here reads a node, so this holds for any node type at all.
 
@@ -38,6 +36,8 @@ It is the Merkle tree of that depth, hashing every node alike.
 -/
 def subtreeRoot (combine : α → α → α) (depth : Nat) (leaves : Nat → α) : α :=
   -- The root of depth `d` over the leaves `0` to `2^d - 1`, each parent `H(left || right)`.
+  --
+  -- For example, at depth 2 the root hashes two parents, of leaves 0 and 1, and of leaves 2 and 3.
   (Cryptography.Merkle.root (m := Id) (fun _ => combine) leaves depth).run
 
 /-- Root of the perfect tree of a given depth whose leaves are all zero, one hash per level. -/

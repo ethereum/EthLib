@@ -69,9 +69,9 @@ The hash that merkleization calls, and the roots of the all-zero subtrees that i
 
 Both answer in a monad.
 
-The root of an all-zero subtree is itself a hash of zero nodes, so a model of the hash computes it.
+The specification reads the zero roots from a table.
 
-The specification reads these roots from a table instead.
+A hasher built from its hash alone computes them.
 
 Nothing here ties the zero roots to the hash: a hasher built from its hash alone computes them.
 -/
@@ -87,6 +87,7 @@ def sha256Hasher : Hasher Id :=
 
 /-- A hasher that computes the roots of the all-zero subtrees with its own hash, one per level. -/
 def Hasher.ofHash {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) : Hasher m :=
+  -- The root of an all-zero subtree is itself a hash of zero nodes.
   ⟨hash, zeroRootM (combineM hash) zeroChunk⟩
 
 /-- Bytes right-padded to a node boundary and split into nodes. -/
@@ -170,16 +171,6 @@ def merkleizeBoundedUnchecked (chunks : Array Bytes) (limit : Option Nat) : Exce
 /--
 Root of the progressive tree over a node sequence, per EIP-7916.
 
-A right-leaning spine of binary subtrees, closed by a zero node.
-
-Successive levels hold 1, 4, 16, then 64 nodes, so the capacity grows with the data.
-
-The root holds chunk 0 in a subtree of width 1 on its left, and everything past it on its right.
-
-That right child holds chunks 1 to 4 in a subtree of width 4, and so on.
-
-A zero node closes the spine.
-
 A node keeps its index as later ones are appended.
 
 Its branch still has to be rebuilt to authenticate the new root.
@@ -188,6 +179,16 @@ Every node is trusted to be 32 bytes wide.
 -/
 def merkleizeProgressiveUncheckedM {m : Type → Type} [Monad m] (hasher : Hasher m)
     (chunks : List Bytes) (level : Nat := 0) : m Bytes := do
+  -- EIP-7916: a right-leaning spine of binary subtrees.
+  --
+  -- Successive levels hold 1, 4, 16, then 64 nodes, so the capacity grows with the data.
+  --
+  -- The root holds chunk 0 in a subtree of width 1 on its left.
+  --
+  -- Everything past chunk 0 is on its right.
+  --
+  -- That right child holds chunks 1 to 4 in a subtree of width 4, and so on.
+  --
   -- EIP-7916: level `k` merkleizes its up to `4^k` chunks as a tree of `4^k` leaves.
   let tops ← (progressiveWindows chunks level).mapM fun (window, windowLevel) =>
     subtreeAtM hasher window.toArray (depthFor (4 ^ windowLevel)) 0

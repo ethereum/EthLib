@@ -7,20 +7,6 @@ public import EthLib.Serialization.Ssz.Typed.Collections
 
 A rooted vector holds its elements together with every level of their Merkle tree.
 
-The levels are a table of the generic Merkle nodes, filled one node step at a time.
-
-Writing one element then rehashes only the path above its leaf, one node per level.
-
-The root is read from the top level, and the proofs show that it is the root of the vector.
-
-Each leaf is the root of one element when the elements are composite.
-
-Basic elements are packed, several to a leaf, and a write rehashes the leaf that holds the element.
-
-A decoded vector builds its tree on the first read of the root or the first write.
-
-A call that never needs the tree then never hashes it.
-
 In the comments, `H` is SHA-256 and `Z_h` is the root of an all-zero tree of height `h`.
 -/
 
@@ -83,6 +69,8 @@ The level stands in as the leaves, and an entry past it is the zero subtree of t
 -/
 def parentAt (height : Nat) (level : Array Bytes) (index : Nat) : Bytes :=
   -- The parent `i` is `H(E[2i] || E[2i + 1])`, `E` the level, an entry past it read as `Z_h`.
+  --
+  -- The parent is one node step of the generic Merkle tree, with the level as its leaves.
   (Cryptography.Merkle.node (m := Id) (fun _ => combine)
     (fun position => level[position]?.getD (zeroSubtree height)) ⟨1, index⟩).run
 
@@ -569,8 +557,13 @@ open RootedVector
 instance {α : Type} [SszType α] {length : Nat} : SszType (RootedVector α length) where
   desc := desc (Vector α length)
   toValue v := toValue v.elements
+  -- A decoded vector builds its tree on the first read of the root or the first write.
+  --
+  -- A call that never needs the tree then never hashes it.
   ofValue value := ofVector <$> ofValue value
   -- Vector[type, N]: the root of its leaves at the depth of the capacity, with no mix-in.
+  --
+  -- The root is read from the top level, and the proofs show that it is the root of the vector.
   root v := .ok (topOfLevels (depthFor (leafCapacity α length)) v.levels.get)
   encode v := encode v.elements
 

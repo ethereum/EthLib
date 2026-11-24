@@ -15,16 +15,6 @@ So the decoder accepts exactly the outputs of the encoding, and nothing else.
 
 Every item has one encoding, so two decoders that follow this rule agree on every input.
 
-A lax decoder would accept bytes that the encoding never writes.
-
-There are three such forms, each longer than the real encoding:
-
-- A byte below `0x80` written with a prefix, as `81 05` for `05`.
-- A length below 56 written in the long form, as `b8 03` for `83`.
-- A length written with a leading zero byte, as `b9 00 40` for `b8 40`.
-
-The decoder rejects all three, and any input that ends early or has bytes left after the item.
-
 [paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
@@ -51,12 +41,12 @@ The bytes of `input` from `pos` to `stop` follow the first byte.
 
 The result is the kind of payload, the number `k` of bytes that write the length, and the length.
 
-A byte below `0x80` is its own encoding and announces nothing, so it is not passed here.
-
-The Yellow Paper defines only the encoding, so each case inverts a case of `R_b` or `R_l`. -/
+A byte below `0x80` is its own encoding and announces nothing, so it is not passed here. -/
 def readPrefix (input : ByteArray) (first : UInt8) (pos stop : Nat)
     (bounded : stop ≤ input.size := by omega) :
     Except RlpError (PayloadKind × Nat × Nat) :=
+  -- The Yellow Paper defines only the encoding, so each case inverts a case of `R_b` or `R_l`.
+  --
   -- From `0x80` to `0xb7`, `R_b` case 2: a byte string of `first - 128` bytes, and `k = 0`.
   if first < 0xb8 then
     .ok (.bytes, 0, first.toNat - 0x80)
@@ -80,6 +70,10 @@ where
     else if zero : k = 0 then
       .error (.longFormForShortLength 0)
     -- `BE` asks `b_0 ≠ 0`, so its first byte is not zero, and `k` is at least 1 here.
+    --
+    -- A lax decoder would accept a leading zero byte, as `b9 00 40` for `b8 40`.
+    --
+    -- The encoding never writes that form, which is longer than the real encoding.
     else if input[pos]'(by omega) = 0 then
       .error .leadingZeroInLength
     else
@@ -89,6 +83,10 @@ where
       -- So a length below 56 is never in it.
       --
       -- With `k = first - 183` or `k = first - 247`, `k <= 8`, so the length is below `2^64`.
+      --
+      -- A lax decoder would accept a length below 56 in the long form, as `b8 03` for `83`.
+      --
+      -- The encoding never writes that form, which is longer than the real encoding.
       if length < 56 then
         .error (.longFormForShortLength length)
       else
@@ -125,6 +123,10 @@ def readHead (input : ByteArray) (pos stop : Nat) (bounded : stop ≤ input.size
           -- `R_b` case 2 applies only where case 1 does not.
           --
           -- So a single byte below 128 is never written as `0x81`, then the byte.
+          --
+          -- A lax decoder would accept a byte below `0x80` with a prefix, as `81 05` for `05`.
+          --
+          -- The encoding never writes that form, which is longer than the real encoding.
           if low : length = 1 ∧ ∃ inside : start < input.size, input[start] < 0x80 then
             .error (.singleByteWithPrefix (input[start]'low.2.1))
           -- The byte string `x` is the payload itself.
@@ -214,7 +216,7 @@ def decodeItem (input : ByteArray) (pos stop : Nat)
 It fails unless `input` is exactly the encoding of one item. -/
 def decode (input : ByteArray) : Except RlpError Item := do
   let (item, ⟨next, _⟩) ← decodeItem input 0 input.size
-  -- The encoding of the item must be the whole input.
+  -- The encoding of the item must be the whole input, so bytes left after the item are rejected.
   if next = input.size then
     .ok item
   else
