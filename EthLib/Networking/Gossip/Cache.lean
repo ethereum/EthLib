@@ -8,25 +8,7 @@ public import EthLib.Networking.Gossip.Rpc
 
 The two caches of a gossipsub router: the message cache and the seen cache.
 
-The message cache keeps whole messages in history windows, one window per heartbeat.
-
-A message goes into the current window, the newest one.
-
-A shift starts a new window, and drops the windows beyond the history length.
-
-So a message stays as many heartbeats as the history length.
-
-It is told of in gossip only while fewer shifts ran than the gossip count.
-
-The seen cache keeps each message ID with the time when it was inserted, until a lifetime ends.
-
 The source is [gossipsub v1.0, section Message Cache][mcache].
-
-The source calls the seen cache a timed least-recently-used cache.
-
-It does not say whether a lookup refreshes the time of an entry.
-
-Here an entry keeps the time when it was inserted.
 
 [mcache]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#message-cache
 -/
@@ -46,7 +28,9 @@ def MessageId.toBytes (id : MessageId) : ByteArray :=
 def MessageId.ofBytes? (bytes : ByteArray) : Option MessageId :=
   Base.exactBytes? 20 bytes
 
-/-- The message cache: its history windows, the newest first, each with its messages and IDs. -/
+/-- The message cache: its history windows, the newest first, each with its messages and IDs.
+
+It keeps whole messages, one window per heartbeat. -/
 structure MessageCache where
   /-- The windows, the newest first; each lists its messages, the newest first. -/
   windows : List (List (MessageId × Message)) := [[]]
@@ -70,16 +54,24 @@ def MessageCache.get (cache : MessageCache) (id : MessageId) : Option Message :=
 def MessageCache.gossipIds (cache : MessageCache) (gossip : Nat) (topic : String) :
     List MessageId :=
   -- Message Cache, gossip IDs: the IDs of the topic in the gossip count of newest windows.
+  --
+  -- So a message is told of in gossip only while fewer shifts ran than the gossip count.
   ((cache.windows.take gossip).flatten.filter (·.2.topic = topic)).map (·.1)
 
 /-- The cache with a new empty window, keeping at most the history length of windows. -/
 def MessageCache.shift (cache : MessageCache) (len : Nat) : MessageCache :=
   -- Message Cache, shift: a new current window, and the windows past the history length go.
+  --
+  -- So a message stays as many heartbeats as the history length.
   ⟨([] :: cache.windows).take len⟩
 
 /-- The seen cache: each message ID seen, with the time in milliseconds when it was inserted.
 
-A caller passes the seen-cache parameter, in seconds, times 1000 as the lifetime. -/
+It keeps each ID until a lifetime ends.
+
+A caller passes the seen-cache parameter, in seconds, times 1000 as the lifetime.
+
+The source calls it a timed least-recently-used cache, and does not say if a lookup refreshes it. -/
 structure SeenCache where
   /-- The IDs, the newest first, each with the time when it was inserted. -/
   entries : List (MessageId × Nat) := []

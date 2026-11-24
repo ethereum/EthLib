@@ -15,23 +15,13 @@ public import EthLib.Networking.Discv5.Session
 
 C-ABI exports of the Node Discovery Protocol v5, for the Python bindings.
 
-A private key crosses the boundary as 32 big-endian bytes, and a public key in a SEC 1 encoding.
+A packet, message, handshake or session-packet error comes back with its own code.
 
-A node ID is 32 bytes.
+When a handshake or session failure is in the packet itself, the code is that of the packet error.
 
-A packet error or a message error comes back with its code.
-
-Any other rejected input comes back with code 0, including a failure of AES-GCM.
-
-A failure of the handshake or of a session packet comes back with its own code.
-
-When the failure is in the packet itself, the code is that of the packet error instead.
+Any other rejected input, such as an AES-GCM failure or an argument Lean cannot read, has code 0.
 
 The exports that read a packet, a message or a handshake return typed Python values.
-
-A byte string is `bytes` and a number is an `int`.
-
-An argument that Lean cannot read fails with code 0.
 -/
 
 public section
@@ -42,6 +32,7 @@ open EthLib.Exports (ExportError Result PyValue UnreadArgument toPy pyExport rej
   toResult)
 
 open EthLib.Cryptography.Secp256k1
+-- A private key crosses the boundary as 32 big-endian bytes.
 open EthLib.Networking.Enr.Exports (privateKeyOf)
 
 /-- A node ID of 32 bytes. -/

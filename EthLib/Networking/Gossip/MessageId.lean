@@ -9,34 +9,10 @@ public import EthLib.Serialization.Ssz.Codec.Serialize
 /-!
 # `Networking.Gossip.MessageId`
 
-The message ID of gossip on the consensus layer.
-
-Gossipsub is the publish-subscribe protocol of the consensus layer.
-
-It drops a message whose ID is still in its cache of seen IDs.
+The message ID of gossip on the consensus layer, which computes it from the content.
 
 The pubsub interface of libp2p lets the application choose the function that computes that ID:
 <https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#message-identification>
-
-The consensus layer computes it from the content.
-
-So a second copy of the same data on one topic gets the same ID and is dropped.
-
-The data of a message is Snappy-compressed.
-
-One payload, the uncompressed content, has many compressions.
-
-Data decompresses when the Snappy block decoder accepts it.
-
-That decoder reads at most five preamble bytes, which hold any length up to 2^32 - 1.
-
-Data that decompresses is hashed as its payload.
-
-So on one topic, all data that decompresses to one payload gets one ID.
-
-Clients reject messages over a size limit, as a separate check.
-
-The message ID rules do not mention that limit, so the ID does not apply it.
 -/
 
 @[expose] public section
@@ -92,12 +68,29 @@ def hashInput (fork : Base.Fork) (domain : Vector UInt8 4) (topic bytes : ByteAr
 The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.
 
 A missing topic or data field of the protobuf message is the empty byte string.
+
+Gossipsub, the consensus publish-subscribe protocol, drops a message whose ID is in its seen cache.
+
+So a second copy of the same data on one topic gets the same ID and is dropped.
 -/
 def messageId (fork : Base.Fork) (topic data : ByteArray) : MessageId :=
+  -- Clients reject messages over a size limit, as a separate check.
+  --
+  -- The message ID rules do not mention that limit, so the ID does not apply it.
+  --
+  -- The data of a message is Snappy-compressed.
+  --
+  -- One payload, the uncompressed content, has many compressions.
+  --
+  -- Data decompresses when the Snappy block decoder accepts it.
+  --
+  -- That decoder reads at most five preamble bytes, which hold any length up to 2^32 - 1.
   match Snappy.decompress data with
   -- Data that decompresses to the payload `p`: the first 20 bytes of SHA-256 of the input.
   --
   -- There `b = p` and the domain is `d = 01 00 00 00`.
+  --
+  -- So on one topic, all data that decompresses to one payload gets one ID.
   | .ok payload =>
     (Cryptography.Hash.Sha256.hash32
       (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).take 20

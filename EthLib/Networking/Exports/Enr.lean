@@ -18,16 +18,6 @@ A record crosses the boundary as its RLP bytes, and its text form as a string.
 Each operation decodes the record first.
 
 A rejected record comes back as the code and the message of its error.
-
-A private key crosses the boundary as 32 big-endian bytes, and a bad one comes back with code 0.
-
-Booleans come back as `UInt8`.
-
-The consensus entries hold up to BPO2.
-
-BPO3 to BPO5 have no consensus configuration yet, and Gloas is not yet specified.
-
-So the forks after BPO2 fail with code 0.
 -/
 
 public section
@@ -119,6 +109,7 @@ def seqExport (record : ByteArray) : Result UInt64 := do
 @[export eth_enr_verify_v4]
 def verifyV4Export (record : ByteArray) : Result UInt8 := do
   let r ← toResult none (decode record)
+  -- Booleans come back as `UInt8`.
   return if verifyV4 r then 1 else 0
 
 /-- The 32-byte node ID of a "v4" record. -/
@@ -128,7 +119,9 @@ def nodeIdExport (record : ByteArray) : Result ByteArray := do
   let id ← toResult none (nodeId r)
   return ⟨id.toArray⟩
 
-/-- A private key of 32 big-endian bytes, below the group order. -/
+/-- A private key of 32 big-endian bytes, below the group order.
+
+A bad one comes back with code 0. -/
 def privateKeyOf (bytes : ByteArray) : Result Cryptography.Secp256k1.Fn :=
   let bad := UnreadArgument.mk "private key is not 32 bytes below the group order"
   toResult none (Cryptography.Secp256k1.Exports.readPrivateKey bytes (fun _ => bad) bad)
@@ -192,6 +185,11 @@ abbrev EntriesValue := (Vector UInt8 4 × Vector UInt8 4 × UInt64) × Option By
 /-- The consensus entries of a record at the named fork, with `count` attestation subnets. -/
 def consensusEntriesOf (args : String × UInt64 × ByteArray) : Result EntriesValue := do
   let (fork, count, record) := args
+  -- The consensus entries hold up to BPO2.
+  --
+  -- BPO3 to BPO5 have no consensus configuration yet, and Gloas is not yet specified.
+  --
+  -- So the forks after BPO2 fail with code 0.
   let fork ← forkUpTo .bpo2 fork.toUTF8
   let r ← toResult none (decode record)
   let e ← toResult none (readEntries count fork r)

@@ -7,48 +7,15 @@ public import EthLib.Networking.Gossip.Validation
 /-!
 # `Networking.Gossip.Router`
 
-What a gossipsub router does with one RPC that it receives from a peer.
+What a gossipsub router does with one RPC, and how it joins, leaves and publishes.
 
-It also joins and leaves topics, publishes the messages of this node, and runs the heartbeat.
+It also runs the heartbeat.
 
-The router is a pure function of its state, the time, and its inputs.
-
-The sources are these sections of gossipsub v1.0 and v1.1, and of the pubsub interface.
-
-- v1.0: [Message Processing][proc], [Topic Membership][member] and [Heartbeat][heartbeat].
-- v1.1: [Extended Validators][ext] and [Explicit Peering Agreements][explicit].
-- v1.1: [PRUNE Backoff and Peer Exchange][backoff] and [Outbound Mesh Quotas][quota].
-- v1.1: [Spam Protection Measures][spam], [Score Thresholds][thr] and [Flood Publishing][flood].
-- v1.1: [Heartbeat Maintenance][hbm] and [Adaptive Gossip Dissemination][adaptive].
-- pubsub: [The RPC][rpc], for the subscriptions of a peer.
+Each step comment names the section of gossipsub v1.0, v1.1 or pubsub that it follows.
 
 The rules of v1.1 apply on top of those of v1.0.
 
-Each step comment names the section that it follows, or one of its subsections.
-
 Where the sources leave a case open, the comment says how EthLib reads it.
-
-The standing of a peer under the score thresholds, the message ID and the validation are arguments.
-
-So every result holds for every choice that a client makes for them.
-
-The choice among candidate peers is an argument, and so are the values that v1.1 leaves open.
-
-Floodsub peers are not modelled, so the router never sends to them.
-
-[proc]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#message-processing
-[ext]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#extended-validators
-[explicit]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#explicit-peering-agreements
-[backoff]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#prune-backoff-and-peer-exchange
-[quota]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#outbound-mesh-quotas
-[spam]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#spam-protection-measures
-[thr]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#score-thresholds
-[member]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#topic-membership
-[flood]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing
-[heartbeat]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#heartbeat
-[hbm]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#heartbeat-maintenance
-[adaptive]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#adaptive-gossip-dissemination
-[rpc]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#the-rpc
 -/
 
 @[expose] public section
@@ -85,7 +52,9 @@ structure Standing where
   belowGraylist : Bool := false
   deriving DecidableEq, Repr
 
-/-- The state of a gossipsub router. -/
+/-- The state of a gossipsub router.
+
+The router is a pure function of its state, the time, and its inputs. -/
 structure RouterState where
   /-- The topics this node joined. -/
   topics : List String := []
@@ -109,7 +78,9 @@ structure RouterState where
   seen : SeenCache := {}
   deriving DecidableEq
 
-/-- What the router sends and delivers on one RPC, each list in the order it was produced. -/
+/-- What the router sends and delivers on one RPC, each list in the order it was produced.
+
+Floodsub peers are not modelled, so the router never sends to them. -/
 structure Out where
   /-- The valid new messages, each with a peer it is forwarded to. -/
   forward : List (PeerId × Message) := []
@@ -145,7 +116,12 @@ def setBackoff (backoff : List ((String × PeerId) × Nat)) (topic : String) (pe
     (ends : Nat) : List ((String × PeerId) × Nat) :=
   ((topic, peer), ends) :: backoff.filter (·.1 != (topic, peer))
 
-/-- The topics of each peer, after one subscription change from a peer. -/
+/-- The topics of each peer, after one subscription change from a peer.
+
+Source: pubsub, [The RPC][rpc], for the subscriptions of a peer.
+
+[rpc]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#the-rpc
+-/
 def applySubscription (src : PeerId) (peerTopics : List (PeerId × List String))
     (sub : SubOpts) : List (PeerId × List String) :=
   let old := (peerTopics.lookup src).getD []
@@ -157,7 +133,13 @@ def applySubscription (src : PeerId) (peerTopics : List (PeerId × List String))
     else old.filter (· != sub.topicId)
   (src, new) :: peerTopics.filter (·.1 != src)
 
-/-- The router after one published message of an RPC: what it records, delivers and forwards. -/
+/-- The router after one published message of an RPC: what it records, delivers and forwards.
+
+Sources: v1.0 [Message Processing][proc], and v1.1 [Extended Validators][ext].
+
+[proc]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#message-processing
+[ext]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#extended-validators
+-/
 def receiveMessage (p : GossipsubParameters) (msgId : Message → MessageId)
     (validate : Message → ValidationResult) (now : Nat) (acc : RouterState × Out)
     (m : Message) : RouterState × Out :=
@@ -199,7 +181,17 @@ def remainingSeconds (now ends : Nat) : UInt64 :=
 
 /-- The router after one GRAFT of an RPC, from the peer that sent it, and its answer if any.
 
-The caller passes the extension of a backoff, in milliseconds. -/
+The caller passes the extension of a backoff, in milliseconds.
+
+Sources, v1.1: [Explicit Peering Agreements][explicit], [Spam Protection Measures][spam].
+
+Also [PRUNE Backoff and Peer Exchange][backoff] and [Outbound Mesh Quotas][quota].
+
+[explicit]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#explicit-peering-agreements
+[spam]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#spam-protection-measures
+[backoff]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#prune-backoff-and-peer-exchange
+[quota]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#outbound-mesh-quotas
+-/
 def receiveGraft (p : GossipsubParameters) (backoffMs now : Nat) (src : PeerId)
     (acc : RouterState × Out) (g : Graft) : RouterState × Out :=
   let (s, out) := acc
@@ -296,12 +288,16 @@ def receiveIWant (src : PeerId) (s : RouterState) (out : Out) (w : IWant) : Out 
 
 /-- What the router does with one RPC from a peer, at a time in milliseconds.
 
-The caller passes two durations in milliseconds.
+The two durations in milliseconds: the extension of a backoff, and the backoff of a PRUNE with none.
 
-They are the extension of a backoff, and the backoff of a PRUNE that carries none.
+Source of the threshold checks: v1.1 [Score Thresholds][thr].
 
-It also passes the standing of each peer, the message ID and the validation. -/
+[thr]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#score-thresholds
+-/
 def receiveRpc (p : GossipsubParameters) (backoffMs pruneBackoffMs : Nat)
+    -- The standing of each peer, the message ID and the validation are arguments.
+    --
+    -- So every result holds for every choice that a client makes for them.
     (standing : PeerId → Standing)
     (msgId : Message → MessageId) (validate : Message → ValidationResult) (now : Nat)
     (src : PeerId) (rpc : Rpc) (s : RouterState) : RouterState × Out :=
@@ -347,6 +343,8 @@ def Select.Lawful (sel : Select) : Prop :=
 def Select.first : Select := fun n l => l.take n
 
 /-- The values that gossipsub v1.1 leaves to the client, and the consensus layer does not fix.
+
+They are an argument of the router.
 
 Backoffs are in seconds, as a PRUNE carries them. -/
 structure ClientChoices where
@@ -397,7 +395,12 @@ def extendBackoff (backoff : List ((String × PeerId) × Nat)) (topic : String) 
     (ends : Nat) : List ((String × PeerId) × Nat) :=
   setBackoff backoff topic peer (max (backoffEnd backoff topic peer) ends)
 
-/-- The router after this node joins a topic, and the GRAFTs it sends. -/
+/-- The router after this node joins a topic, and the GRAFTs it sends.
+
+Source: v1.0 [Topic Membership][member].
+
+[member]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#topic-membership
+-/
 def join (p : GossipsubParameters) (sel : Select) (standing : PeerId → Standing) (now : Nat)
     (topic : String) (s : RouterState) : RouterState × Out :=
   -- Joining a topic already joined changes nothing.
@@ -444,7 +447,12 @@ def leave (c : ClientChoices) (now : Nat) (topic : String) (s : RouterState) : R
 
 /-- The peers that a message this node publishes goes to, before the explicit peers.
 
-The router keeps the fanout, and the time of this publish, only when it publishes to the fanout. -/
+Source: v1.1 [Flood Publishing][flood].
+
+The router keeps the fanout, and the time of this publish, only when it publishes to the fanout.
+
+[flood]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing
+-/
 def publishPeers (p : GossipsubParameters) (c : ClientChoices) (sel : Select)
     (standing : PeerId → Standing) (now : Nat) (topic : String) (s : RouterState) :
     RouterState × List PeerId :=
@@ -504,7 +512,12 @@ A topic with no recorded publish reads as published at time zero. -/
 def lastPublished (s : RouterState) (topic : String) : Nat :=
   (s.lastPublish.lookup topic).getD 0
 
-/-- The peers that a mesh pruned for oversubscription keeps. -/
+/-- The peers that a mesh pruned for oversubscription keeps.
+
+Source: v1.1 [Heartbeat Maintenance][hbm].
+
+[hbm]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#heartbeat-maintenance
+-/
 def keepPeers (p : GossipsubParameters) (c : ClientChoices) (sel : Select) (rank : Rank)
     (outbound mesh : List PeerId) : List PeerId :=
   -- Heartbeat Maintenance: the peer keeps the best `D_score` scoring peers, here at most `D`.
@@ -572,7 +585,12 @@ def meshAfter (p : GossipsubParameters) (c : ClientChoices) (sel : Select) (rank
     m3 ++ sel (c.dOut - out) ((graftCandidates standing now s topic m3).filter (· ∈ s.outbound))
   else m3
 
-/-- The fanout after a heartbeat. -/
+/-- The fanout after a heartbeat.
+
+Source: v1.0 [Heartbeat][heartbeat].
+
+[heartbeat]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#heartbeat
+-/
 def fanoutAfter (p : GossipsubParameters) (sel : Select) (standing : PeerId → Standing)
     (now : Nat) (s : RouterState) : List (String × List PeerId) :=
   s.fanout.filterMap fun (topic, peers) =>
@@ -593,7 +611,12 @@ def fanoutAfter (p : GossipsubParameters) (sel : Select) (standing : PeerId → 
 
 /-- The number of peers that get gossip, out of a count of candidates.
 
-It is the gossip factor of them, rounded as the client chooses, and at least the lazy degree. -/
+Source: v1.1 [Adaptive Gossip Dissemination][adaptive].
+
+It is the gossip factor of them, rounded as the client chooses, and at least the lazy degree.
+
+[adaptive]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#adaptive-gossip-dissemination
+-/
 def gossipCount (p : GossipsubParameters) (c : ClientChoices) (n : Nat) : Nat :=
   -- Adaptive Gossip Dissemination: gossip factor peers, with a minimum of `D_lazy`.
   --

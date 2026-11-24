@@ -8,18 +8,6 @@ public import EthLib.Networking.Snappy.Block
 The elements that a Snappy compressor writes, from `format_description.txt` of `google/snappy`:
 <https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
 
-- A copy with a one-byte offset holds a length of 4 to 11 and an offset of 1 to 2047 (§2.2.1).
-- A copy with a two-byte offset holds a length of 1 to 64 and an offset of 1 to 65535 (§2.2.2).
-- A literal of 1 to 2^32 bytes holds its data unchanged (§2.1).
-
-An offset of 0 can be encoded, but it is not legal (§2.2).
-
-Other arguments give an element that does not encode them.
-
-A copy longer than 64 bytes is written as several copies of one offset.
-
-The decoder reads these bytes back as the copy they were written for.
-
 This file only writes elements, and it never decides which bytes to copy.
 -/
 
@@ -64,7 +52,13 @@ def copyTwo (offset len : Nat) : List UInt8 :=
   -- The offset is a little-endian 16-bit integer in the two bytes following the tag byte.
   [UInt8.ofNat (2 + (len - 1) * 4), UInt8.ofNat (offset % 256), UInt8.ofNat (offset / 256)]
 
-/-- The shortest copy element for a length of 1 to 64 and an offset of 1 to 65535. -/
+/-- The shortest copy element for a length of 1 to 64 and an offset of 1 to 65535.
+
+An offset of 0 can be encoded, but it is not legal (§2.2).
+
+Other arguments give an element that does not encode them.
+
+The decoder reads these bytes back as the copy they were written for. -/
 def copyElement (offset len : Nat) : List UInt8 :=
   -- §2.2.1 takes two bytes and §2.2.2 takes three, when the length and offset fit both.
   --
@@ -104,7 +98,7 @@ def emitLiteral (out src : ByteArray) (lo hi : Nat) : ByteArray :=
   if lo < hi then
     -- §2.1: the tag and the length of the literal.
     let out := out ++ ⟨(literalHeader (hi - lo)).toArray⟩
-    -- §2.1: then the literal itself, from `src` straight to the end of the output.
+    -- §2.1: then the literal itself, unchanged, from `src` straight to the end of the output.
     src.copySlice lo out out.size (hi - lo) false
   else out
 

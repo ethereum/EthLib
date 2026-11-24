@@ -11,17 +11,9 @@ public import EthLib.Serialization.Ssz.Merkle.Merkleize
 /-!
 # `Networking.Gossip.Subnet`
 
-A node stays subscribed to a few attestation subnets for a period of epochs.
+The attestation subnets that a node stays subscribed to, for a period of epochs.
 
-Its node ID and the period choose the subnets, so any peer can compute them.
-
-The top bits of the node ID give a prefix, and a shuffle seeded by the period permutes it.
-
-The node takes the subnets that start at the permuted prefix, modulo the number of subnets.
-
-The node ID modulo the period length shifts the start of each period.
-
-So nodes do not all change their subnets at once.
+Its node ID and the period choose them, so any peer can compute them.
 
 The parameters and the shuffle are inputs, since the consensus layer defines them.
 -/
@@ -87,6 +79,8 @@ def computeAttestationSubnetPrefixBits (config : SubnetParameters) :
 
 /-- The shuffled prefix of a node in an epoch, which every index of the node shares.
 
+The prefix is the top bits of the node ID, and a shuffle seeded by the period permutes it.
+
 `shuffle i n seed` is the position of `i` in a permutation of `0, …, n - 1` that the seed selects.
 
 The shuffle permutes the prefix of the node among all prefixes of its length.
@@ -100,6 +94,8 @@ def computeShuffledPrefix (config : SubnetParameters)
   -- The period length `E` is the epochs per subscription, and `E = 0` is an error.
   if config.EPOCHS_PER_SUBNET_SUBSCRIPTION = 0 then throw .zeroEpochsPerSubscription
   -- The offset of the node is `id mod E`, below `E`, so it fits 64 bits.
+  --
+  -- The offset shifts the start of each period, so nodes do not all change their subnets at once.
   let nodeOffset := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64
   -- The epoch plus the offset is a 64-bit integer, and an overflow is an error.
   let shifted ← (Base.Uint64.addChecked epoch nodeOffset).mapError
@@ -116,6 +112,8 @@ def computeShuffledPrefix (config : SubnetParameters)
   (shuffle nodePrefix.toUInt64 (2 ^ bits).toUInt64 seed).mapError .shuffle
 
 /-- The subnet with a given index among the subnets of a node in an epoch.
+
+The node takes the subnets that start at its shuffled prefix.
 
 The subnet is the shuffled prefix plus the index, modulo the number of subnets.
 -/

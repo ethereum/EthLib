@@ -10,18 +10,6 @@ C-ABI exports for the fork identifier, callable from the Python C extension.
 
 A remote fork identifier, and the output of the encoder, is its RLP list `[FORK_HASH, FORK_NEXT]`.
 
-A schedule crosses it as the RLP list `[genesis-hash, genesis-time, merge-fork, forks]`.
-
-- `merge-fork` is an empty list, or a list of the one block of `FORK_NEXT_VALUE`.
-- `forks` holds `[name, kind, value]` for each fork, with kind 0 for a block and 1 for a time.
-- A fork name is written as its case is, such as `homestead`.
-
-A block number and a timestamp cross the boundary as 64-bit integers.
-
-The fork identifier of a node comes back as typed Python values: its hash and its next fork.
-
-Two exports write a schedule and a fork identifier in RLP, from typed Python values.
-
 An input that the export rejects before the fork identifier rules has code 0.
 -/
 
@@ -51,9 +39,11 @@ def readActivation (item : Item) : Result (Fork × Activation) := do
   let .ok [name, kind, value] := item.fields 3 |
     rejectArgument none "a fork is not [name, kind, value]"
   let .ok name := name.toBytes | rejectArgument none "a fork name is not a byte string"
+  -- A fork name is written as its case is, such as `homestead`.
   let fork ← forkOfName name
   let .ok (value : Nat) := Codec.ofItem value | rejectArgument none "a fork value is not a scalar"
   unless value < ACTIVATION_BOUND do rejectArgument none "a fork value is not below 2^64"
+  -- The kind is 0 for a block and 1 for a time.
   match (Codec.ofItem kind : Except RlpError Nat) with
   | .ok 0 => return (fork, .block value)
   | .ok 1 => return (fork, .time value)
@@ -69,6 +59,7 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
     rejectArgument none "schedule is not [genesis-hash, genesis-time, merge-fork, forks]"
   let .ok (hash : Hash32) := Codec.ofItem hash | rejectArgument none "genesis hash is not 32 bytes"
   let .ok (time : Nat) := Codec.ofItem time | rejectArgument none "genesis time is not a scalar"
+  -- `merge-fork` is an empty list, or a list of the one block of `FORK_NEXT_VALUE`.
   let mergeForkBlock ← match (Codec.ofItem merge : Except RlpError (List Nat)) with
     | .ok [] => pure none
     | .ok [n] =>
@@ -76,6 +67,7 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
       unless n < ACTIVATION_BOUND do rejectArgument none "merge fork is not below 2^64"
       pure (some n)
     | _ => rejectArgument none "merge fork is not a list of at most one block"
+  -- `forks` holds `[name, kind, value]` for each fork.
   let .ok forks := forks.toItems | rejectArgument none "forks are not a list"
   let activations ← forks.mapM readActivation
   -- The chain ID and the deposit contract play no part in a fork ID.
@@ -83,12 +75,15 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
     { chainId := 0, depositContractAddress := Vector.replicate 20 0, activations := activations }
   return ⟨hash, time, config, mergeForkBlock⟩
 
-/-- The hash and the next fork of a fork identifier. -/
+/-- The hash and the next fork of a fork identifier.
+
+The fork identifier of a node comes back to Python as these typed values. -/
 def forkIdFields (id : ForkId) : Vector UInt8 4 × UInt64 :=
   (id.hash, id.next)
 
 /-- The fork identifier of a node with a schedule in RLP at a head: its hash and its next fork. -/
 def forkIdOf (args : ByteArray × UInt64 × UInt64) : Result (Vector UInt8 4 × UInt64) := do
+  -- A block number and a timestamp cross the boundary as 64-bit integers.
   let (schedule, number, timestamp) := args
   let s ← readSchedule schedule
   return forkIdFields (s.forkId number.toNat timestamp.toNat)
@@ -126,7 +121,9 @@ def scheduleOf (args : ByteArray × Nat × Option Nat × List (String × Nat × 
 
 The arguments are the genesis hash, the genesis time, the merge fork block or `None`, and the forks.
 
-Each fork is its name, its kind, 0 for a block and 1 for a time, and its block or time. -/
+Each fork is its name, its kind, 0 for a block and 1 for a time, and its block or time.
+
+It and the encoder of a fork identifier write RLP from typed Python values. -/
 @[export eth_fork_id_schedule]
 def scheduleExport (args : PyValue) : Result PyValue :=
   pyExport scheduleOf args

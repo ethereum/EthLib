@@ -5,19 +5,7 @@ module
 
 The outcome of validating one gossip message.
 
-Gossipsub v1.1 lets the application accept, reject or ignore each message.
-
-Its section Extended Validators says so, in [libp2p/specs `4facaf9`][gossipsub].
-
-An accepted message is delivered and forwarded.
-
-A rejected message is invalid, and its sender is penalized.
-
-An ignored message is neither delivered nor forwarded, and its sender is not penalized.
-
-Each consensus topic states its rules as conditions that ignore or reject a message.
-
-A message that meets no such condition is accepted.
+The source is gossipsub v1.1, section Extended Validators, in [libp2p/specs `4facaf9`][gossipsub].
 
 [gossipsub]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#extended-validators
 -/
@@ -26,7 +14,13 @@ A message that meets no such condition is accepted.
 
 namespace EthLib.Networking.Gossip
 
-/-- The outcome of validating one gossip message, with the reason of an ignore or a reject. -/
+/-- The outcome of validating one gossip message, with the reason of an ignore or a reject.
+
+Gossipsub v1.1 lets the application accept, reject or ignore each message.
+
+Each consensus topic states its rules as conditions that ignore or reject a message.
+
+A message that meets no such condition is accepted. -/
 inductive ValidationResult where
   /-- The message is valid: deliver it and forward it. -/
   | accept

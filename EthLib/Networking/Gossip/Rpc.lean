@@ -7,58 +7,19 @@ public import EthLib.Networking.Encoding.Protobuf
 
 The RPC that carries gossip between two peers, from [pubsub, section The RPC][rpc].
 
-An RPC holds subscriptions, published messages and control messages.
+Its control messages follow gossipsub [v1.0][v10], [v1.1][v11] and [v1.2][v12].
 
-The control messages follow the schemas of gossipsub [v1.0][v10], [v1.1][v11] and [v1.2][v12].
+Its extension fields come from the [v1.3 schema][v13] and the [partial messages schema][partial].
 
 The consensus layer applies the `StrictNoSign` [signature policy][policy].
 
-So a message must not hold the field `from`, `seqno`, `signature` or `key`, not even empty.
-
-A message must hold a topic, since [the message schema][message] makes it required.
-
-Topics are UTF-8 strings, and [proto2][string] asks every string to be UTF-8.
-
-An RPC is rejected when any topic or topic ID is not valid UTF-8, which is a choice of EthLib.
-
-A field the schema does not name is skipped.
-
-A field the schema names but with another wire type is rejected, which is a choice of EthLib.
-
-The four forbidden fields are rejected whatever their wire type.
-
-A missing optional field reads as its default: false, zero or empty.
-
-A singular field that occurs twice keeps its last value, as [the encoding guide][last] says.
-
-Each occurrence of the control field is decoded alone, then their lists are joined in order.
-
-The extension fields come from the [v1.3 schema][v13] and the [partial messages schema][partial].
-
-A singular message field that occurs twice keeps its last occurrence whole, a choice of EthLib.
-
-Protobuf would merge the occurrences field by field instead.
-
-The extensions of the control field keep their last occurrence too, across its occurrences.
-
-The encoder writes the flags of the extensions only when true, and their messages only when present.
-
-It writes the partial message and the parts metadata of a partial message only when present.
-
-So an RPC without extensions encodes as it did before them.
-
-The experimental extension fields are skipped, as every field the schema does not name.
-
 [rpc]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#the-rpc
-[message]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#the-message
 [policy]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#signature-policy-options
 [v10]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#protobuf
 [v11]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.1.md#protobuf
 [v12]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.2.md#protobuf-extension
-[string]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/proto2.md#scalar-value-types-scalar
 [v13]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.3.md#protobuf
 [partial]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/partial-messages.md#protobuf
-[last]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md#last-one-wins-last-one-wins
 -/
 
 @[expose] public section
@@ -185,7 +146,9 @@ def RpcError.code : RpcError → UInt32
   | .wireType .. => 104
   | .utf8 _ => 105
 
-/-- The field numbers that `StrictNoSign` forbids in a message. -/
+/-- The field numbers that `StrictNoSign` forbids in a message, even with an empty value.
+
+They are the fields `from`, `seqno`, `signature` and `key`. -/
 def signedFields : List Nat := [1, 3, 5, 6]
 
 /-! ## Decoding -/
@@ -193,17 +156,25 @@ def signedFields : List Nat := [1, 3, 5, 6]
 /-- The bytes of a length-delimited value. -/
 def bytesOf (field : Nat) : Value → Except RpcError ByteArray
   | .len bytes => .ok bytes
+  -- A field the schema names but with another wire type is rejected, a choice of EthLib.
   | v => .error (.wireType field v.wireType)
 
-/-- The string of a length-delimited value, which must be valid UTF-8. -/
+/-- The string of a length-delimited value, which must be valid UTF-8.
+
+Topics are UTF-8 strings, and [proto2][string] asks every string to be UTF-8.
+
+[string]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/proto2.md#scalar-value-types-scalar
+-/
 def stringOf (field : Nat) (v : Value) : Except RpcError String := do
   match String.fromUTF8? (← bytesOf field v) with
   | some s => return s
+  -- An RPC is rejected when any topic or topic ID is not valid UTF-8, a choice of EthLib.
   | none => throw (.utf8 field)
 
 /-- The number of a varint value. -/
 def uint64Of (field : Nat) : Value → Except RpcError UInt64
   | .varint v => .ok v
+  -- A field the schema names but with another wire type is rejected, a choice of EthLib.
   | v => .error (.wireType field v.wireType)
 
 /-- Every value of a repeated field, each read by the given reader. -/
@@ -213,9 +184,15 @@ def repeated (read : Nat → Value → Except RpcError α) (rs : List Record) (f
 
 /-- The last value of a singular field, or the default when it is missing.
 
-Every occurrence must still be well formed. -/
+Every occurrence must still be well formed.
+
+A field that occurs twice keeps its last value, as [the encoding guide][last] says.
+
+[last]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md#last-one-wins-last-one-wins
+-/
 def singular (read : Nat → Value → Except RpcError α) (default : α) (rs : List Record)
     (field : Nat) : Except RpcError α :=
+  -- A missing optional field reads as its default: false, zero or empty.
   return (← repeated read rs field).getLastD default
 
 /-- The last value of a singular message field, decoded, or none when it is missing.
@@ -223,9 +200,14 @@ def singular (read : Nat → Value → Except RpcError α) (default : α) (rs : 
 Every occurrence must still decode. -/
 def lastMessage (decode : ByteArray → Except RpcError α) (rs : List Record) (field : Nat) :
     Except RpcError (Option α) :=
+  -- A field that occurs twice keeps its last occurrence whole, a choice of EthLib.
+  --
+  -- Protobuf would merge the occurrences field by field instead.
   return (← (← repeated bytesOf rs field).mapM decode).getLast?
 
-/-- The records of a message. -/
+/-- The records of a message.
+
+A field the schema does not name is skipped, since each reader picks its fields by number. -/
 def recordsOf (bytes : ByteArray) : Except RpcError (List Record) :=
   (records bytes.data.toList).mapError .protobuf
 
@@ -248,10 +230,17 @@ def decodeSubOpts (bytes : ByteArray) : Except RpcError SubOpts := do
     requestsPartial := requestsPartial != 0
     supportsSendingPartial := supportsSendingPartial != 0 }
 
-/-- A published message, which `StrictNoSign` forbids to hold any of four fields. -/
+/-- A published message, which `StrictNoSign` forbids to hold any of four fields.
+
+A message must hold a topic, since [the message schema][message] makes it required.
+
+[message]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#the-message
+-/
 def decodeMessage (bytes : ByteArray) : Except RpcError Message := do
   let rs ← recordsOf bytes
   -- StrictNoSign, consuming side: `from`, `seqno`, `signature` and `key` are absent, else reject.
+  --
+  -- The four forbidden fields are rejected whatever their wire type.
   if let some r := rs.find? (·.field ∈ signedFields) then throw (.signed r.field)
   -- Message: `data = 2`, optional bytes.
   let data ← singular bytesOf .empty rs 2
@@ -314,7 +303,9 @@ def decodeControl (bytes : ByteArray) : Except RpcError Control := do
 
 /-- Merge two control messages: each list of the second follows that of the first.
 
-The extensions of the second win, if it has some. -/
+The extensions of the second win, if it has some.
+
+So the extensions keep their last occurrence, across the occurrences of the control field. -/
 def Control.merge (a b : Control) : Control :=
   ⟨a.ihave ++ b.ihave, a.iwant ++ b.iwant, a.graft ++ b.graft, a.prune ++ b.prune,
     a.idontwant ++ b.idontwant, b.extensions.or a.extensions⟩
@@ -342,6 +333,8 @@ def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
   -- Protobuf of v1.0: `control = 3`, optional; each occurrence decodes alone, then the lists join.
   --
   -- The extensions schema: `partial = 10`, optional; the experimental RPC fields are skipped.
+  --
+  -- The experimental fields are skipped as every field the schema does not name.
   let control := (← (← repeated bytesOf rs 3).mapM decodeControl).foldl Control.merge {}
   return { subscriptions, publish, control, partialMessage := ← lastMessage decodePartial rs 10 }
 
@@ -350,6 +343,8 @@ def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
 The encoder writes every singular field, except the optional fields of the extensions.
 
 It writes the control field only when a control list is not empty, or it has extensions.
+
+So an RPC without extensions encodes as it did before them.
 -/
 
 /-- The bytes of a subscription change. -/
@@ -399,11 +394,13 @@ def Control.encode (c : Control) : ByteArray :=
   serialize (c.ihave.map (lenRecord 1 ∘ IHave.encode) ++
     c.iwant.map (lenRecord 2 ∘ IWant.encode) ++ c.graft.map (lenRecord 3 ∘ Graft.encode) ++
     c.prune.map (lenRecord 4 ∘ Prune.encode) ++ c.idontwant.map (lenRecord 5 ∘ IDontWant.encode) ++
+    -- The extensions message only when present.
     c.extensions.toList.map (lenRecord 6 ∘ ControlExtensions.encode))
 
 /-- The bytes of a partial message. -/
 def PartialMessagesExtension.encode (m : PartialMessagesExtension) : ByteArray :=
   serialize ([lenRecord 1 m.topicId, lenRecord 2 m.groupId] ++
+    -- The partial message and the parts metadata only when present.
     m.partialMessage.toList.map (lenRecord 3) ++ m.partsMetadata.toList.map (lenRecord 4))
 
 /-- The bytes of an RPC. -/
@@ -412,6 +409,7 @@ def Rpc.encode (rpc : Rpc) : ByteArray :=
     rpc.publish.map (lenRecord 2 ∘ Message.encode) ++
     -- The control field only when it holds a control message or extensions.
     (if rpc.control = {} then [] else [lenRecord 3 rpc.control.encode]) ++
+    -- The partial message extension only when present.
     rpc.partialMessage.toList.map (lenRecord 10 ∘ PartialMessagesExtension.encode))
 
 /-! ## Rules of the partial message extension -/
