@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.BeaconApi.Rewards
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
+public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.Transition.BlockRewards
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.Invariants
@@ -14,43 +15,7 @@ import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 /-!
 # Proofs: the rewards answers of the Beacon API
 
-The attestation rewards name each requested validator once, in order of index.
-
-Each part is the reward minus the penalty of the deltas of its kind.
-
-Before Altair the inclusion part is the attester's own part of the inclusion deltas.
-
-The parts add up to what the epoch transition applies to the balance, with the proposer shares.
-
-When the penalties do not exhaust the balance, the balance moves by exactly that sum.
-
-The answer reads the state that the rewards step of the epoch transition reads.
-
-Each ideal entry is read at a validator of the registry with the effective balance of the entry.
-
-Before Altair, its parts follow the formulas of the phase 0 deltas, with an inclusion delay of 1.
-
-An eligible validator whose votes matched, included one slot after its vote, earns those parts.
-
-The sync committee rewards name each requested member once, in order of index.
-
-Each is the sum, over the seats of the member, of the participant reward of the transition.
-
-That reward counts for a seat that signed, and against a seat that did not.
-
-When the balance covers each seat of the member, it moves by that sum.
-
-The proposer also earns a share of the reward of each seat that signed.
-
-The block rewards start from the state that the operations of the block read.
-
-Their total is the sum of their parts, and from Altair the sync part is the share of the step.
-
-The operations and the sync aggregate raise the proposer's balance by exactly that total.
-
-That needs a block that does not slash the proposer, pay it a deposit or switch its credentials.
-
-It also needs a proposer without a seat in the sync committee.
+What the attestation, sync committee and block rewards answer, and how each part moves a balance.
 -/
 
 @[expose] public section
@@ -106,7 +71,10 @@ private theorem sum_netDelta (i : Nat) :
     simp only [netDelta, Int.natCast_add]
     omega
 
-/-! ## The validators of the answer -/
+/-! ## The validators of the answer
+
+The attestation rewards name each requested validator once, in order of index.
+-/
 
 /-- The answer names the validators that the request selects, once each and in that order. -/
 theorem attestationRewards_indices {config : Config} {ids : List ValidatorId}
@@ -131,7 +99,12 @@ private theorem mem_selectValidators_of_answered {config : Config} {ids : List V
   rw [← attestationRewards_indices answered]
   exact List.mem_map_of_mem member
 
-/-! ## Each part -/
+/-! ## Each part
+
+Each part is the reward minus the penalty of the deltas of its kind.
+
+Before Altair the inclusion part is the attester's own part of the inclusion deltas.
+-/
 
 /-- From Altair, each part of the rewards of a validator is the net delta of its kind.
 
@@ -306,7 +279,14 @@ theorem attestationRewards_inclusionDelay_le_of_lt_altair {config : Config}
   rw [inclusionPart, Option.getD_some, split]
   exact Nat.le_add_right _ _
 
-/-! ## Ideal rewards -/
+/-! ## Ideal rewards
+
+Each ideal entry is read at a validator of the registry with the effective balance of the entry.
+
+Before Altair, its parts follow the formulas of the phase 0 deltas, with an inclusion delay of 1.
+
+An eligible validator whose votes matched, included one slot after its vote, earns those parts.
+-/
 
 /-- The ideal rewards list distinct effective balances, in increasing order. -/
 theorem idealAttestationRewards_sorted {ideal : List IdealAttestationRewards}
@@ -988,7 +968,10 @@ theorem attestationRewards_ideal_of_lt_altair {config : Config} (before : fork <
       firstRead same (fun attestations attesters attested signed =>
         matched _ (by simp) attestations attesters attested signed) penaltyIdeal
 
-/-! ## Sums -/
+/-! ## Sums
+
+The parts add up to what the epoch transition applies to the balance, with the proposer shares.
+-/
 
 /-- Before Altair, four parts of a validator and its inclusion deltas add up to its net deltas.
 
@@ -1053,7 +1036,10 @@ theorem attestationRewards_sum_of_altair {config : Config} (altair : .altair ≤
     List.sum_nil, List.getD_cons_zero, List.getD_cons_succ]
   omega
 
-/-! ## Balances -/
+/-! ## Balances
+
+When the penalties do not exhaust the balance, the balance moves by exactly the sum of the parts.
+-/
 
 /-- Before Altair, the rewards and penalties step moves a balance by its parts and inclusion deltas.
 
@@ -1129,7 +1115,10 @@ theorem attestationRewards_balance_of_altair {config : Config} (altair : .altair
   have sum := sum_netDelta entry.validatorIndex.toNat (flags ++ [inactivity])
   omega
 
-/-! ## The state and the response -/
+/-! ## The state and the response
+
+The answer reads the state that the rewards step of the epoch transition reads.
+-/
 
 /-- Adding an amount to some deltas succeeds only for an index inside them. -/
 private theorem lt_size_of_addDelta {deltas result : Array Gwei} {index : ValidatorIndex}
@@ -1263,7 +1252,18 @@ theorem attestationRewardsResponse_ok {config : Config} {epoch : Epoch}
     exact ⟨unknown.1, unknown.2.1, unknown.2.2, rewarded, ideal, entries, rewardedOk, idealOk,
       entriesOk, fit.1, fit.2, rfl⟩
 
-/-! ## Sync committee rewards -/
+/-! ## Sync committee rewards
+
+The sync committee rewards name each requested member once, in order of index.
+
+Each is the sum, over the seats of the member, of the participant reward of the transition.
+
+That reward counts for a seat that signed, and against a seat that did not.
+
+When the balance covers each seat of the member, it moves by that sum.
+
+The proposer also earns a share of the reward of each seat that signed.
+-/
 
 /-- The sync aggregate steps move one balance by the net rewards of the seats it holds.
 
@@ -1500,7 +1500,20 @@ theorem syncCommitteeRewardsResponse_of_lt_altair (before : fork < .altair)
   simp [syncCommitteeRewardsResponse, not]
   rfl
 
-/-! ## Block rewards -/
+/-! ## Block rewards
+
+The block rewards start from the state that the operations of the block read.
+
+Their total is the sum of their parts, and from Altair the sync part is the share of the step.
+
+The operations and the sync aggregate raise the proposer's balance by exactly that total.
+
+That needs a block that does not slash the proposer, pay it a deposit or switch its credentials.
+
+It also needs a proposer without a seat in the sync committee.
+
+On a state where the block applies, the rewards fail only by an overflow.
+-/
 
 /-- The state that the operations of a block read, as the steps before them give it. -/
 theorem stateBeforeOperations_ok_iff {config : Config} {checks : SignatureChecks}
@@ -1782,6 +1795,141 @@ theorem blockRewards_balance {config : Config} {checks : SignatureChecks}
     rw [totalOk.2, secondOk.2, firstOk.2, none, riseOne, riseTwo, riseThree]
     simp only [UInt64.toNat_zero]
     omega
+
+/-- A checked sum or product fails only when it overflows. -/
+private theorem error_of_checked {a b : UInt64} {fault : ArithError}
+    (failed : Uint64.addChecked a b = .error fault ∨ Uint64.mulChecked a b = .error fault) :
+    fault = .overflow := by
+  rcases failed with failed | failed <;>
+  · simp only [Uint64.addChecked, Uint64.mulChecked] at failed
+    split at failed <;> simp_all
+
+/-- The three sums of the total fail only when one overflows. -/
+private theorem sums_error {a b c d : UInt64} {fault : ArithError}
+    (failed : (do
+      let first ← Uint64.addChecked a b
+      let second ← Uint64.addChecked first c
+      Uint64.addChecked second d) = .error fault) : fault = .overflow := by
+  rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+  · exact error_of_checked (.inl failed)
+  rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+  · exact error_of_checked (.inl failed)
+  · exact error_of_checked (.inl failed)
+
+/-- An arithmetic step that fails only by an overflow fails, lifted, with that overflow. -/
+private theorem lift_error {α : Type} {step : Except ArithError α} {error : TransitionError}
+    (only : ∀ fault, step = .error fault → fault = .overflow)
+    (failed : liftAccessor (liftArith step) = .error error) :
+    error = .accessor (.arith .overflow) := by
+  obtain ⟨_, lifted, rfl⟩ := mapError_eq_error failed
+  obtain ⟨fault, faulted, rfl⟩ := mapError_eq_error lifted
+  rw [only fault faulted]
+
+/-- On a state where the block applies, the block rewards fail only by an overflow.
+
+The steps that the rewards rerun succeed, as the block ran them.
+
+So a failure comes from the product of the sync part or from the sums, past 64 bits. -/
+theorem blockRewards_error_of_processBlock {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {after : BeaconState preset fork} {error : TransitionError}
+    (applied : processBlock config checks engine state block = .ok after)
+    (failed : blockRewards config checks engine state block = .error error) :
+    error = .accessor (.arith .overflow) := by
+  obtain ⟨start, operated, startOk, operatedOk, synced⟩ :=
+    processBlock_stateBeforeOperations applied
+  -- The operations ran the three folds that the rewards rerun.
+  obtain ⟨slashed, caught, attested, slashedOk, caughtOk, attestedOk, -⟩ :=
+    processOperations_folds operatedOk
+  rw [Array.foldlM_toList] at slashedOk caughtOk attestedOk
+  simp only [blockRewards] at failed
+  rw [startOk, ok_bind, slashedOk, ok_bind, caughtOk, ok_bind, attestedOk, ok_bind] at failed
+  -- What is left is the sync part from Altair, then the sums.
+  split at failed
+  · rename_i altair
+    simp only [altair, ↓reduceDIte] at synced
+    -- The sync aggregate step computed the reward of a participant and the share of the proposer.
+    unfold processSyncAggregate at synced
+    simp only [bind_ok_iff] at synced
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, reward, rewardOk, share, shareOk, -⟩ := synced
+    rw [operatedOk, ok_bind, rewardOk, ok_bind, shareOk, ok_bind] at failed
+    rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+    · exact lift_error (fun _ product => error_of_checked (.inr product)) failed
+    rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+    · exact lift_error (fun _ sums => sums_error sums) failed
+    · cases failed
+  · rw [pure_bind] at failed
+    rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+    · exact lift_error (fun _ sums => sums_error sums) failed
+    · cases failed
+
+/-- The block rewards of a block that a store imported fail only by an overflow.
+
+They read the state of the parent, advanced to the slot of the block.
+
+They run with the checks and the engine of the transition that gave the state of the block. -/
+theorem blockRewards_error_of_fromParents {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork} {allowed : SignatureChecks → Prop}
+    (imports : store.BlockStatesFromParents config allowed anchorState anchorBlock) {root : Root}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (imported : block ≠ anchorBlock) :
+    ∃ parentState checks engine advanced state, ∃ signed : SignedBeaconBlock preset fork,
+      allowed checks ∧ signed.message = block ∧ store.blockStates[root]? = some state ∧
+      store.blockStates[block.parentRoot]? = some parentState ∧
+      stateTransition config checks engine parentState signed true = .ok state ∧
+      processSlots config checks parentState block.slot = .ok advanced ∧
+      ∀ error, blockRewards config checks engine advanced block = .error error →
+        error = .accessor (.arith .overflow) := by
+  -- The store took the block by a transition from the state of its parent.
+  obtain ⟨state, stateFound, -, fromParent⟩ := imports found
+  obtain ⟨parentState, checks, engine, signed, permitted, message, parentFound, transition⟩ :=
+    fromParent imported
+  subst message
+  obtain ⟨advanced, advancedOk, -, -, applied, -⟩ := stateTransition_ok transition
+  exact ⟨parentState, checks, engine, advanced, state, signed, permitted, rfl, stateFound,
+    parentFound, transition, advancedOk,
+    fun _ failed => blockRewards_error_of_processBlock applied failed⟩
+
+/-- The block rewards of a block that a reachable store imported fail only by an overflow.
+
+They run with the checks and the engine of the transition that gave the state of the block. -/
+theorem blockRewards_error_of_reachable {config : Config} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store) {root : Root}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (imported : block ≠ anchorBlock) :
+    ∃ parentState checks engine advanced state, ∃ signed : SignedBeaconBlock preset fork,
+      signed.message = block ∧ store.blockStates[root]? = some state ∧
+      store.blockStates[block.parentRoot]? = some parentState ∧
+      stateTransition config checks engine parentState signed true = .ok state ∧
+      processSlots config checks parentState block.slot = .ok advanced ∧
+      ∀ error, blockRewards config checks engine advanced block = .error error →
+        error = .accessor (.arith .overflow) := by
+  obtain ⟨parentState, checks, engine, advanced, state, signed, -, rest⟩ :=
+    blockRewards_error_of_fromParents reachable.blockStatesFromParents found imported
+  exact ⟨parentState, checks, engine, advanced, state, signed, rest⟩
+
+/-- The block rewards of a block that a store built with one setting of the checks imported.
+
+They fail only by an overflow, under that setting and the engine of the import. -/
+theorem blockRewards_error_of_forwardReachableWith {config : Config} {checks : SignatureChecks}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    {root : Root} {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (imported : block ≠ anchorBlock) :
+    ∃ parentState engine advanced state, ∃ signed : SignedBeaconBlock preset fork,
+      signed.message = block ∧ store.blockStates[root]? = some state ∧
+      store.blockStates[block.parentRoot]? = some parentState ∧
+      stateTransition config checks engine parentState signed true = .ok state ∧
+      processSlots config checks parentState block.slot = .ok advanced ∧
+      ∀ error, blockRewards config checks engine advanced block = .error error →
+        error = .accessor (.arith .overflow) := by
+  obtain ⟨parentState, used, engine, advanced, state, signed, same, rest⟩ :=
+    blockRewards_error_of_fromParents reached.blockStatesFromParents found imported
+  subst same
+  exact ⟨parentState, engine, advanced, state, signed, rest⟩
 
 /-- An answer is the JSON of the block rewards. -/
 theorem blockRewardsResponse_ok {config : Config} {checks : SignatureChecks}
