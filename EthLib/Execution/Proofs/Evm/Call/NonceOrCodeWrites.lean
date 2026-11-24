@@ -6,6 +6,8 @@ public import EthLib.Execution.Proofs.Evm.Call.Run
 /-!
 # Proofs: each write of a transaction state keeps each nonce or code
 
+An account has a nonce or code when its nonce is positive or it holds code.
+
 A write keeps each nonce or code when it lowers no nonce, and each account with one keeps one.
 
 The writes below do on any state, with two exceptions.
@@ -189,7 +191,9 @@ theorem keepsNonceOrCode_incrementNonce {tx tx' : TransactionState} {address : A
 
 /-- New code at an account with a nonce keeps each nonce or code. -/
 theorem keepsNonceOrCode_setCode {tx tx' : TransactionState} {address : Address}
-    -- A creation from Spurious Dragon meets the nonce hypothesis: it sets the nonce first.
+    -- A creation from Spurious Dragon meets the nonce hypothesis.
+    --
+    -- It sets the nonce of its address first.
     {code : ByteArray} (hnonce : 1 ≤ (tx.getAccount address).nonce)
     (h : tx.setCode fork address code = .ok tx') : KeepsNonceOrCode tx tx' := by
   obtain ⟨hself, hother⟩ := TransactionState.getAccount_setCode h

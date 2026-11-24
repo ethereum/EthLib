@@ -248,7 +248,9 @@ private theorem keepsCandidates_depositCode {state prepared : TransactionState} 
     exact .restoreTxState (hk.1.trans hprep.1)
   · rw [hs]
     exact hprep.trans hk
-  -- Only the creation's address gets code, and its storage was wiped when the creation started.
+  -- Only the address of the creation gets code.
+  --
+  -- Its storage was wiped when the creation started.
   · exact (hprep.trans hk).trans (keepsCandidates_setCode (ht ▸ hk.2.1 _ hmem) hs)
 
 omit [GasMeter Meter] in

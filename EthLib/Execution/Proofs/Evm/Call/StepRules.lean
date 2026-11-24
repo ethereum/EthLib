@@ -25,11 +25,13 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The rules for a relation `R` of two frames to hold of every step other than SELFDESTRUCT.
 
-It also relates a caller to the frame that ends each message the caller sends. -/
+The relation also relates a caller to the frame that ends each message the caller sends. -/
 structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Prop) : Prop where
   /-- The relation is transitive. -/
   trans : ∀ {a b c}, R a b → R b c → R a c
-  -- The relation cannot see what the steps that keep the state change freely.
+  -- Steps that keep the state change other parts of a frame freely.
+  --
+  -- So the relation cannot see those parts.
   /-- A step that only adds reads keeps the relation.
 
   So the relation sees only the state up to its reads, the message, the code and the substate.
@@ -482,7 +484,9 @@ theorem runFrame [LawfulGasMeter Meter] (rules : StepRules fork R) {bound : Nat}
 
 /-- Every successful call and creation satisfies a relation `M` of messages.
 
-Each relation must still handle the start of a call and the deposit of code. -/
+The rules for steps do not cover the start of a call or the deposit of code.
+
+So the relation `M` must handle both of them. -/
 theorem processMessage [LawfulGasMeter Meter] (rules : StepRules fork R)
     {M : Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop}
     -- A call must satisfy `M` after its rollback, when its frame ends related to its start frame.

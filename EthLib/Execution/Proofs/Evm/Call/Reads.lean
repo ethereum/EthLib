@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.State.Tracker
 
 The results describe the next frame or the caller before its child runs.
 
-[EIP-7928][bal] keeps both reads of a call when it then fails its balance or depth check.
+[EIP-7928][bal] keeps the reads of a call target and of the delegate that it resolves.
+
+They stay even when the call then fails its balance or depth check.
 
 [EIP-7928][halt] also keeps every account read when the frame then halts.
 

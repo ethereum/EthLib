@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Gas.StateGas
 
 The meter of [EIP-8037][eip8037] counts the net state gas of a frame, which can be negative.
 
-It defines the surplus of a frame, and when a frame or a message pays for its slots.
+The surplus of a frame is its net state gas, less the state gas of a new slot per counted slot.
+
+The definitions below say when a frame or a message pays for its slots.
 
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#specification
 -/
@@ -37,7 +39,9 @@ def FailedFrame (evm : Evm fork StateGasMeter) : Prop :=
   evm.running = false ∧ evm.error ≠ none ∧
     (evm.error = some .revert ∨ (evm.gas.spill = 0 ∧ evm.gas.reservoir = evm.gas.baseline))
 
-/-- The frame `b` pays for its slots from the frame `a`: `b` failed, or its surplus did not drop.
+/-- The frame `b` pays for its slots from the frame `a`.
+
+Either `b` failed, or its surplus did not drop.
 
 That relation is a preorder. -/
 def PaysSlots (a b : Evm fork StateGasMeter) : Prop :=
@@ -87,7 +91,9 @@ theorem PaysSlots.of_le {a b : Evm fork StateGasMeter} (running : a.running = tr
 
 /-- A message pays for its slots, from the state and the meter it starts with.
 
-The message and the substate are not read; they give the form of a relation of messages. -/
+The message and the substate are not read.
+
+They give the definition the form of a relation of messages. -/
 def MessagePays (_message : Message fork) (state : TransactionState) (_substate : Substate)
     (meter : StateGasMeter) (ended : Evm fork StateGasMeter) : Prop :=
   -- The frame that ends it keeps the starting reservoir and the committed spill of the meter.

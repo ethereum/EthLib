@@ -9,7 +9,9 @@ public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 
 The potential of a frame is four times the weight of its logs, plus the gas it holds.
 
-No step raises it, and the caller that resumes has at most its potential before.
+No step raises the potential of its frame.
+
+The caller that resumes after a call or a creation has at most its potential before.
 
 That needs the child to end with at most its gas, plus its allowance.
 -/

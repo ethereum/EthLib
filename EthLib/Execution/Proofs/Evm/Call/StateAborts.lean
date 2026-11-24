@@ -9,6 +9,8 @@ import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 
 Five kinds of error abort a run: an error of the state, an encoding, an opcode, a fork, a word.
 
+The last is a value of the environment that no word can hold.
+
 No step fails for a fork whose rules are not yet specified.
 
 So a run from a state whose nonces fit aborts only with an error of the state.

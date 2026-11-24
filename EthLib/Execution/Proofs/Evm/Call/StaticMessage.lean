@@ -12,11 +12,15 @@ A message that is static and is a call changes no storage and no transient stora
 
 From Byzantium, [EIP-214][e214] adds STATICCALL, and a static call changes the state by touches.
 
+Each touched address goes from no account to the empty account.
+
 [EIP-161][e161] deletes the touched empty accounts.
 
 The only change left is the deletion of accounts that were empty before.
 
 From Paris, [EIP-7523][e7523] allows no empty account, so a call drops the touch.
+
+Every address then stays as it was, up to the records of reads.
 
 [e161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [e214]: https://eips.ethereum.org/EIPS/eip-214#specification

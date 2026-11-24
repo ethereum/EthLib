@@ -10,7 +10,9 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Call.Instructions`
 
-The prices, the refill, the output, the failures and the memory of a call.
+The theorems below cover the prices, the refill, the output and the failures of a call.
+
+They also cover the memory that a call leaves.
 
 From Glamsterdam, CALL with value to a dead account pays state gas instead of execution gas.
 -/
@@ -423,9 +425,11 @@ theorem callStep_eq_error_iff {kind : CallKind} {evm : Evm fork Meter} {e : EvmE
           -- The call knows that price before it reads.
           (¬(kind = .call ∧ evm.message.isStatic ∧ call.value ≠ 0) ∧ fork ≥ .glamsterdam ∧
             GasMeter.gasLeft evm.gas <
-              -- It is the access to the address, the price of the value and the growth of memory.
+              -- The price is the access to the address.
               callBaseCost fork (accessAddress evm call.address).1 +
+                -- It adds the price of the value.
                 callValueCost fork call.value +
+                -- It adds the growth of memory.
                 (extendMemory evm.memory.size
                   [(call.inputStart, call.inputSize), (call.outputStart, call.outputSize)]).cost ∧
             e = .outOfGas)) := by

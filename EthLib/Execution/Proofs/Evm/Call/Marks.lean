@@ -10,7 +10,9 @@ SELFDESTRUCT can mark the account that runs it for deletion, in the substate of 
 
 From Cancun, it marks that account only when the transaction created it.
 
-A frame keeps its marks until it ends, and a child without an error passes them to its caller.
+A frame keeps its marks until it ends.
+
+A child that ends without an error passes its marks to its caller.
 
 These facts hold at every fork.
 -/

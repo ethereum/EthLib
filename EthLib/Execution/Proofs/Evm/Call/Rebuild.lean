@@ -9,6 +9,10 @@ public import EthLib.Execution.Proofs.State.Rebuild
 /-!
 # Proofs: every message from Spurious Dragon keeps the rebuild property
 
+The rebuild property ties the storage of a call to the block state at every key not written.
+
+From Spurious Dragon, every successful call and creation keeps it.
+
 From Spurious Dragon, a created account starts at nonce 1 by [EIP-161][eip161].
 
 No account with nonce 0 has the code hash of a delegation indicator of [EIP-7702][eip7702].
@@ -44,7 +48,9 @@ def DelegationsHaveNonce (tx : TransactionState) : Prop :=
   ∀ address code, (tx.getAccount address).nonce = 0 →
     -- Accounts without code are left out.
     --
-    -- Their hash is the hash of empty code, and ruling out an indicator with it needs a collision.
+    -- Their hash is the hash of empty code.
+    --
+    -- Ruling out an indicator with that hash needs a collision.
     (tx.getAccount address).codeHash ≠ EMPTY_CODE_HASH → isValidDelegation code = true →
       keccak256 code ≠ (tx.getAccount address).codeHash
 
