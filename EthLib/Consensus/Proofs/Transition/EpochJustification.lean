@@ -6,21 +6,9 @@ public import EthLib.Consensus.Transition.EpochJustification
 /-!
 # Proofs: justification and finalization
 
+What weighing the votes justifies and finalizes, and how the step keeps the checkpoints in order.
+
 The step finalizes only a checkpoint that was justified before it, or keeps the finalized one.
-
-The old current justified checkpoint becomes the previous one.
-
-The new current justified checkpoint is the old one, or that of the previous or the current epoch.
-
-It is that of an epoch only when the test of that epoch passes.
-
-Its root is then the block root that the state records for the first slot of that epoch.
-
-The checkpoints of a state are in order when finalized, previous and current justified epochs grow.
-
-The step keeps them in order when the current justified epoch is at most the previous epoch.
-
-The finalized epoch then never decreases.
 -/
 
 @[expose] public section
@@ -80,27 +68,23 @@ theorem justifyCheckpoint_ok {justified : Bool} {epoch : Epoch} {checkpoint resu
 
 /-- Weighing the votes justifies a new checkpoint only for an epoch whose test passes.
 
-The new current justified checkpoint stays when neither test passes.
-
-Otherwise it is that of the previous or the current epoch, whose test passes.
-
-A test passes when twice the total balance is at most three times the target balance.
-
-The root of the checkpoint is the block root that the state records for the first slot of the epoch.
--/
+A test passes when twice the total balance is at most three times the target balance. -/
 theorem weighJustificationAndFinalization_currentJustified
     {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
+    -- When neither test passes, the current justified checkpoint stays.
     (after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∧
         ∀ (current : Bool) (threshold weight : Gwei), mulChecked total 2 = .ok threshold →
           mulChecked (if current then currentBalance else previousBalance) 3 = .ok weight →
           weight < threshold) ∨
+      -- Otherwise it is that of the previous or the current epoch, whose test passes.
       ∃ (current : Bool) (threshold weight : Gwei), mulChecked total 2 = .ok threshold ∧
         mulChecked (if current then currentBalance else previousBalance) 3 = .ok weight ∧
         threshold ≤ weight ∧
         after.currentJustifiedCheckpoint.epoch =
           (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
+        -- Its root is the block root that the state records for the first slot of the epoch.
         getBlockRoot state after.currentJustifiedCheckpoint.epoch =
           .ok after.currentJustifiedCheckpoint.root := by
   simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, liftArith,
@@ -129,24 +113,20 @@ theorem weighJustificationAndFinalization_currentJustified
     subst weightOk
     exact UInt64.not_le.mp (of_decide_eq_false failedCurrent)
 
-/-- The checkpoints that weighing the votes sets.
-
-The old current justified checkpoint becomes the previous one.
-
-The new current justified checkpoint is the old one, or that of the previous or the current epoch.
-
-The new finalized checkpoint is the old one, or one of the two old justified checkpoints.
-
-Nothing else changes but the bits of justification. -/
+/-- The checkpoints that weighing the votes sets; nothing else changes but the bits. -/
 theorem weighJustificationAndFinalization_checkpoints {total previous current : Gwei}
     (computed : weighJustificationAndFinalization state total previous current = .ok after) :
+    -- The old current justified checkpoint becomes the previous one.
     after.previousJustifiedCheckpoint = state.currentJustifiedCheckpoint ∧
+      -- The new current justified one is the old one, or that of the previous or current epoch.
       (after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∨
         after.currentJustifiedCheckpoint.epoch = getPreviousEpoch state ∨
         after.currentJustifiedCheckpoint.epoch = getCurrentEpoch state) ∧
+      -- The new finalized checkpoint is the old one, or one of the two old justified ones.
       (after.finalizedCheckpoint = state.finalizedCheckpoint ∨
         after.finalizedCheckpoint = state.previousJustifiedCheckpoint ∨
         after.finalizedCheckpoint = state.currentJustifiedCheckpoint) ∧
+      -- Nothing else changes but the bits of justification.
       { after with
         previousJustifiedCheckpoint := state.previousJustifiedCheckpoint,
         currentJustifiedCheckpoint := state.currentJustifiedCheckpoint,
@@ -184,23 +164,21 @@ theorem finalizes_eq_true {justified : Bool} {source gap currentEpoch : Epoch}
 
 The bits are those of the state after the step.
 
-The epoch and the justified checkpoints are those of the state before the step.
-
-The old previous justified checkpoint needs bits 1 and 2, and also bit 3 when three epochs back.
-
-The old current justified checkpoint needs bits 0 and 1, and also bit 2 when two epochs back. -/
+The epoch and the justified checkpoints are those of the state before the step. -/
 def FinalizationStepRule (state after : BeaconState preset fork) (checkpoint : Checkpoint) :
     Prop :=
   let bits := after.justificationBits.bits
   let e := (getCurrentEpoch state).toNat
+  -- The old previous justified checkpoint needs bits 1 and 2, and bit 3 when three epochs back.
   (checkpoint = state.previousJustifiedCheckpoint ∧
     ((bits[1] = true ∧ bits[2] = true ∧ bits[3] = true ∧ checkpoint.epoch.toNat + 3 = e) ∨
       (bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e))) ∨
+  -- The old current justified checkpoint needs bits 0 and 1, and bit 2 when two epochs back.
   (checkpoint = state.currentJustifiedCheckpoint ∧
     ((bits[0] = true ∧ bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e) ∨
       (bits[0] = true ∧ bits[1] = true ∧ checkpoint.epoch.toNat + 1 = e)))
 
-/-- Weighing the votes keeps the finalized checkpoint, or finalizes an old justified one by a rule. -/
+/-- Weighing votes keeps the finalized checkpoint, or finalizes an old justified one by a rule. -/
 theorem weighJustificationAndFinalization_finalized {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
@@ -238,44 +216,38 @@ theorem weighJustificationAndFinalization_finalized {total previousBalance curre
         exact .inr ⟨rule.1.1, rule.1.2, rule.2⟩
     · exact .inl rfl
 
-/-- What weighing the votes does to the four bits and to the finalized checkpoint.
-
-A set bit 0 means that the test of the current epoch passed.
-
-Its checkpoint is then the new current justified one, with the root recorded for the epoch.
-
-A set bit 1 means that the test of the previous epoch passed, or that the old bit 0 was set.
-
-In the first case the state records a root for the previous epoch.
-
-Bits 2 and 3 are the old bits 1 and 2.
-
-The new finalized checkpoint is the old one, or an old justified one by one of the four rules.
-
-The old current justified checkpoint needs at least bit 0, and also bit 1 when two back.
-
-The old previous justified checkpoint needs at least bit 1, and also bit 2 when three back. -/
+/-- What weighing the votes does to the four bits and to the finalized checkpoint. -/
 theorem weighJustificationAndFinalization_bits {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
     ∃ threshold previousWeight currentWeight : Gwei, mulChecked total 2 = .ok threshold ∧
       mulChecked previousBalance 3 = .ok previousWeight ∧
       mulChecked currentBalance 3 = .ok currentWeight ∧
+      -- A set bit 0 means that the test of the current epoch passed.
+      --
+      -- Its checkpoint is then the new current justified one, with the root recorded for the epoch.
       (after.justificationBits.bits[0] = true → threshold ≤ currentWeight ∧
         ∃ root, getBlockRoot state (getCurrentEpoch state) = .ok root ∧
           after.currentJustifiedCheckpoint = ⟨getCurrentEpoch state, root⟩) ∧
+      -- A set bit 1 means that the test of the previous epoch passed, or that old bit 0 was set.
+      --
+      -- In the first case the state records a root for the previous epoch.
       (after.justificationBits.bits[1] = true →
         (threshold ≤ previousWeight ∧
             ∃ root, getBlockRoot state (getPreviousEpoch state) = .ok root) ∨
           state.justificationBits.bits[0] = true) ∧
+      -- Bits 2 and 3 are the old bits 1 and 2.
       after.justificationBits.bits[2] = state.justificationBits.bits[1] ∧
       after.justificationBits.bits[3] = state.justificationBits.bits[2] ∧
+      -- The new finalized checkpoint is the old one, or an old justified one by one of four rules.
       (after.finalizedCheckpoint = state.finalizedCheckpoint ∨
+        -- The old current justified checkpoint needs at least bit 0, and also bit 1 when two back.
         (after.finalizedCheckpoint = state.currentJustifiedCheckpoint ∧
           after.justificationBits.bits[0] = true ∧
           (state.currentJustifiedCheckpoint.epoch.toNat + 1 = (getCurrentEpoch state).toNat ∨
             (after.justificationBits.bits[1] = true ∧
               state.currentJustifiedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat))) ∨
+        -- The old previous justified checkpoint needs at least bit 1, and bit 2 when three back.
         (after.finalizedCheckpoint = state.previousJustifiedCheckpoint ∧
           after.justificationBits.bits[1] = true ∧
           (state.previousJustifiedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat ∨

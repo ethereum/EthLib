@@ -6,45 +6,9 @@ public import EthLib.Consensus.Transition.EpochPending
 /-!
 # Proofs: the pending deposits of an epoch
 
-The pending deposits of an epoch keep one balance for each validator.
+What a pass over the queue of pending deposits reads, applies, postpones and carries over.
 
-The queue never grows.
-
-A pass never credits more inside the churn than the churn available.
-
-The churn that a pass uses grows by the amounts of the deposits it reads that take churn.
-
-A pass reads a prefix of the queue, applies some of it in order, and postpones the others.
-
-So the queue splits into the deposits added to the balances, those dropped, and the queue after.
-
-A pass postpones exactly the deposits it reads whose validator exits and is not withdrawn.
-
-The validator is the first with the key of the deposit.
-
-It exits when its exit epoch is before the far future.
-
-It is withdrawn when its withdrawable epoch is before the next epoch.
-
-The validators a pass tests are those at its start.
-
-The balances plus the amounts in the queue never rise.
-
-A pass that leaves deposits unread stops at its stop condition, the limit per epoch or the churn.
-
-Only a pass that stops at the churn records that it reached the churn.
-
-If it does, the churn that the pass did not use carries over to the next epoch, and else none does.
-
-The pass of an epoch reads only deposits with a slot at most the first slot of the finalized epoch.
-
-In Electra, while deposits of the old mechanism remain, it reads no request either.
-
-So only such deposits leave the queue.
-
-From Gloas, the churn of deposits is the churn of activations alone.
-
-The pending deposits keep the pending consolidations.
+The step keeps one balance for each validator and never raises the balances plus the queue.
 -/
 
 @[expose] public section
@@ -232,33 +196,28 @@ theorem depositTargetStatus_of_ok {state : BeaconState preset fork} {nextEpoch :
       | error _ => simp [liftArith, converted, Except.mapError, bind, Except.bind] at ok
       | ok _ => exact small (ofNatChecked_ok_iff.mp converted).1
 
-/-- The pending deposits of an epoch end with a pass over the queue from its front.
-
-The pass reads the next epoch and the churn available.
-
-That churn is the churn left from the last epoch and the churn of deposits.
-
-It stops at a deposit that waits for the first slot of the finalized epoch.
-
-The registry and the balances are those of the pass.
-
-The queue holds the deposits that the pass did not reach, then those it postponed.
-
-If the pass records that it reached the churn, the churn it did not use carries over.
-
-Otherwise none carries over to the next epoch. -/
+/-- The pending deposits of an epoch end with a pass over the queue from its front. -/
 theorem processPendingDeposits_pass {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
     ∃ nextEpoch churn available finalizedSlot pass,
+      -- The pass reads the next epoch and the churn available.
       liftArith (addChecked (getCurrentEpoch state) 1) = .ok nextEpoch ∧
+      -- From Gloas, the churn of deposits is the churn of activations alone.
       depositChurnLimit config state = .ok churn ∧
+      -- The churn available is the churn left from the last epoch and the churn of deposits.
       liftArith (addChecked (state.depositBalanceToConsume electra) churn) = .ok available ∧
+      -- The pass stops at a deposit that waits for the first slot of the finalized epoch.
       liftArith (computeStartSlotAtEpoch preset state.finalizedCheckpoint.epoch) =
         .ok finalizedSlot ∧
       passPendingDeposits config checks (depositWaits state finalizedSlot) nextEpoch available
           state 0 0 #[] (state.pendingDeposits electra).data.toList = .ok pass ∧
+        -- The registry and the balances are those of the pass.
         after.validators = pass.1.state.validators ∧ after.balances = pass.1.state.balances ∧
+        -- The queue holds the deposits that the pass did not reach, then those it postponed.
         (after.pendingDeposits electra).data = pass.1.rest.toArray ++ pass.1.postponed ∧
+        -- If the pass records that it reached the churn, the churn it did not use carries over.
+        --
+        -- Otherwise none carries over to the next epoch.
         (after.depositBalanceToConsume electra).toNat =
           if pass.1.churnReached then available.toNat - pass.1.processed.toNat else 0 := by
   unfold processPendingDeposits at computed
@@ -299,61 +258,54 @@ private theorem some_beq_true_false {status : Bool × Bool} :
 
 /-- What a pass does with `read`, the deposits that it reads.
 
-They are a prefix of its deposits, at most what the limit per epoch still allows.
-
-It applies `applied` in order, and postpones `moved` in order, and the two make up `read`.
-
-It reads no deposit for which `stop` is true.
-
-If deposits remain, it stopped at one for which `stop` is true, or at the limit per epoch.
-
-Otherwise that deposit takes churn, and it would take more than the churn available.
-
-After the deposits it applied, no validator with its key exits or is withdrawn.
-
-The pass records that it reached the churn.
-
-In every other case it records that it did not reach the churn.
-
-The churn that it uses grows by the amount of each deposit it reads that takes churn.
-
-Those are the deposits whose validator, at the start of the pass, neither exits nor is withdrawn.
-
-The churn grows by nothing else.
-
-`moved` holds exactly the deposits of `read` whose validator exits and is not withdrawn.
-
-As for the churn, the validators are those at the start of the pass.
-
-`applied` holds the others.
-
-The tests of a deposit that the pass reads succeed, so the filters may read them as options. -/
+It applies `applied` in order, and postpones `moved` in order, and the two make up `read`. -/
 structure PassPendingDepositsFacts (config : Config) (checks : SignatureChecks)
     (stop : PendingDeposit → Bool) (nextEpoch : Epoch) (available : Gwei)
     (state : BeaconState preset fork) (processed : Gwei) (count : Nat)
     (postponed : Array PendingDeposit) (deposits : List PendingDeposit)
     (pass : PendingDepositsPass preset fork) (read applied moved : List PendingDeposit) : Prop where
+  -- The deposits read are a prefix of the deposits of the pass.
   split : deposits = read ++ pass.rest
   pushed : pass.postponed.toList = postponed.toList ++ moved
+  -- The deposits read are at most what the limit per epoch still allows.
   bounded : read.length ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat - count
   appliedSublist : applied.Sublist read
   movedSublist : moved.Sublist read
   perm : (applied ++ moved).Perm read
   applies : applied.foldlM (applyPendingDeposit config checks) state = .ok pass.state
+  -- It reads no deposit for which `stop` is true.
   noneStop : ∀ deposit ∈ read, stop deposit = false
+  -- If deposits remain, it stopped at one for which `stop` is true, or at the limit per epoch.
+  --
+  -- Otherwise that deposit takes churn, and it would take more than the churn available.
+  --
+  -- After the deposits it applied, no validator with its key exits or is withdrawn.
+  --
+  -- The pass records that it reached the churn.
   stops : ∀ deposit tail, pass.rest = deposit :: tail →
     stop deposit = true ∨ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ≤ count + read.length ∨
       (depositTargetStatus pass.state nextEpoch deposit.pubkey = .ok (false, false) ∧
         available.toNat < pass.processed.toNat + deposit.amount.toNat ∧ pass.churnReached = true)
+  -- In every other case it records that it did not reach the churn.
   reached : pass.churnReached = true →
     ∃ deposit tail, pass.rest = deposit :: tail ∧ stop deposit = false ∧
       count + read.length < preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat
+  -- The churn that it uses grows by the amount of each deposit it reads that takes churn.
+  --
+  -- Those are the deposits whose validator at the start of the pass neither exits nor is withdrawn.
+  --
+  -- The churn grows by nothing else.
   used : pass.processed.toNat = processed.toNat + pendingAmount (read.filter fun deposit =>
       (depositTargetStatus state nextEpoch deposit.pubkey).toOption == some (false, false))
+  -- `applied` holds the deposits of `read` that are not in `moved`.
   appliedFilter : applied = read.filter fun deposit =>
       (depositTargetStatus state nextEpoch deposit.pubkey).toOption != some (true, false)
+  -- `moved` holds exactly the deposits of `read` whose validator exits and is not withdrawn.
+  --
+  -- As for the churn, the validators are those at the start of the pass.
   movedFilter : moved = read.filter fun deposit =>
       (depositTargetStatus state nextEpoch deposit.pubkey).toOption == some (true, false)
+  -- The tests of a deposit that the pass reads succeed, so the filters may read them as options.
   statusOk : ∀ deposit ∈ read, ∃ status,
     depositTargetStatus state nextEpoch deposit.pubkey = .ok status
 
@@ -721,29 +673,27 @@ theorem processPendingDeposits_history {electra : .pectra ≤ fork}
 
 /-- The pending deposits of an epoch read a prefix of the queue, at most the limit per epoch.
 
-They postpone those whose validator, in the state before, exits and is not withdrawn.
-
-Withdrawn means withdrawable before the next epoch.
-
-They apply the others in order, and move the postponed ones to the end of the queue in order.
-
-The state after is the state of those applied, with a new queue and a new churn left over.
-
-The two tests of each deposit read succeed. -/
+They postpone those whose validator, in the state before, exits and is not withdrawn. -/
 theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
     ∃ (read rest : List PendingDeposit) (next : BeaconState preset fork)
         (pending : PendingDeposits preset fork) (carried : Gwei),
       (state.pendingDeposits electra).data.toList = read ++ rest ∧
+        -- The postponed ones move to the end of the queue in order.
+        --
+        -- Withdrawn means withdrawable before the next epoch.
         pending.data.toList = rest ++ read.filter (fun deposit =>
           (depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey).toOption ==
             some (true, false)) ∧
         read.length ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ∧
+        -- The two tests of each deposit read succeed.
         (∀ deposit ∈ read, ∃ status,
           depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey = .ok status) ∧
+        -- They apply the others in order.
         (read.filter fun deposit =>
             (depositTargetStatus state (getCurrentEpoch state + 1) deposit.pubkey).toOption !=
               some (true, false)).foldlM (applyPendingDeposit config checks) state = .ok next ∧
+        -- The state after is the state of those applied, with a new queue and new churn left over.
         after = { next with
           pendingDeposits := fun _ => pending
           depositBalanceToConsume := fun _ => carried } := by
@@ -767,34 +717,33 @@ theorem processPendingDeposits_postponed {electra : .pectra ≤ fork}
 
 /-- An epoch postpones exactly the deposits read whose validator exits and is not withdrawn.
 
-That validator is the first with the key of the deposit.
-
-Its exit epoch is below `2^64 - 1`, the far future.
-
-Its withdrawable epoch is above the current epoch.
-
-The validator and its epochs are those of the state before.
-
-The epoch reads a prefix of the queue, at most the limit per epoch.
-
-It applies the others in order, and moves the postponed ones to the end of the queue in order.
-
-The state after is the state of those applied, with a new queue and a new churn left over. -/
+The validator and its epochs are those of the state before. -/
 theorem processPendingDeposits_postponed_epochs {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
     ∃ (read rest : List PendingDeposit) (next : BeaconState preset fork)
         (pending : PendingDeposits preset fork) (carried : Gwei),
+      -- The epoch reads a prefix of the queue.
       (state.pendingDeposits electra).data.toList = read ++ rest ∧
+        -- It moves the postponed ones to the end of the queue in order.
+        --
+        -- Their validator is the first with the key of the deposit.
+        --
+        -- Its exit epoch is below `2^64 - 1`, the far future.
+        --
+        -- Its withdrawable epoch is above the current epoch.
         pending.data.toList = rest ++ read.filter (fun deposit =>
           (state.validators.data.find? (·.pubkey == deposit.pubkey)).any fun validator =>
             validator.exitEpoch.toNat < 2 ^ 64 - 1 &&
               (getCurrentEpoch state).toNat < validator.withdrawableEpoch.toNat) ∧
+        -- It reads at most the limit per epoch.
         read.length ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ∧
+        -- It applies the others in order.
         (read.filter fun deposit =>
             !(state.validators.data.find? (·.pubkey == deposit.pubkey)).any fun validator =>
               validator.exitEpoch.toNat < 2 ^ 64 - 1 &&
                 (getCurrentEpoch state).toNat < validator.withdrawableEpoch.toNat).foldlM
           (applyPendingDeposit config checks) state = .ok next ∧
+        -- The state after is the state of those applied, with a new queue and new churn left over.
         after = { next with
           pendingDeposits := fun _ => pending
           depositBalanceToConsume := fun _ => carried } := by

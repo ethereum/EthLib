@@ -9,41 +9,11 @@ public import EthLib.Consensus.Proofs.Transition.TargetPending
 
 The epoch step justifies the previous or the current epoch from the stake of its attesters.
 
-In the model of Casper FFG, a supermajority link counts the stake of the voters of a link.
-
-The voters belong to the validator set of the target, which here is the active set of its epoch.
-
-Each attester that the step counts is active in the epoch of the target.
-
-It cast a vote of a set whose source is the justified checkpoint of that epoch.
-
-The target of that vote is the checkpoint of the epoch.
-
-Its root is the block root that the state records for the first slot of the epoch.
-
-From Altair the target flags give that, and before Altair the pending attestations do.
-
-The meaningful set holds the votes that the attestations of applied blocks cast.
-
-A block accepts an attestation only when the signature checks accept its aggregate signature.
-
-Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
-
-The step drops slashed attesters, so the attesters are a subset of the voters of the model.
-
-The step divides by the active stake of the current epoch, not of the epoch of the target.
-
-For the previous epoch, the validators that exit at the current epoch count in the target set.
-
-They do not count in that total, so their stake enters the bound as a term of churn.
-
-For the current epoch that term is the stake of the empty set, zero.
-
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 Gasper §8.6 lets the validator set change, with a set for each block.
 
-The term of churn is the stake of the exited set of Gasper §8.6, Definition 8.1.
+Reading a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/
@@ -60,29 +30,42 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- The stake bound of a supermajority link of Casper FFG, up to a term of churn.
 
-The validator set is the active set of the given epoch.
-
 The caller must give the epoch of the target, which this does not check.
 
-Each validator weighs its effective balance in the state.
-
-The model needs that set and those stakes fixed across states, which this does not show.
-
-Twice the stake of that set is at most three times the stake of its voters for the link.
-
-The term of churn adds twice the stake of that set outside the active set of the current epoch.
-
-A supermajority link of the model asks for the bound without that term; a slack link takes it.
-
-Both ask for a source epoch below the target epoch.
-
-Both also ask for the source block in the chain of the target block. -/
+The model needs the validator set and the stakes fixed across states, which this does not show.
+-/
 def LinkWithChurn (state : BeaconState preset fork) (votes : Set (Vote ValidatorIndex β))
     (epoch : Epoch) (source target : Models.Ffg.Checkpoint β) : Prop :=
+  -- In the model of Casper FFG, a supermajority link counts the stake of the voters of a link.
+  --
+  -- The voters belong to the validator set of the target, here the active set of the given epoch.
+  --
+  -- Each validator weighs its effective balance in the state.
+  --
+  -- Twice the stake of that set is at most three times the stake of its voters for the link.
+  --
+  -- A supermajority link of the model asks for the bound without the term of churn.
+  --
+  -- A slack link takes it.
+  --
+  -- Both ask for a source epoch below the target epoch.
+  --
+  -- Both also ask for the source block in the chain of the target block.
   2 * stake (fun index => balanceAt state index.toNat)
       (getActiveValidatorIndices state epoch).toFinset ≤
     3 * stake (fun index => balanceAt state index.toNat)
         (signers (getActiveValidatorIndices state epoch).toFinset votes source target) +
+      -- The term of churn: twice the stake of that set outside the active set of the current epoch.
+      --
+      -- The step divides by the active stake of the current epoch, not of the epoch of the target.
+      --
+      -- For the previous epoch, validators that exit at the current epoch count in the target set.
+      --
+      -- They do not count in that total, so their stake enters the bound as a term of churn.
+      --
+      -- For the current epoch that term is the stake of the empty set, zero.
+      --
+      -- It is the stake of the exited set of Gasper §8.6, Definition 8.1.
       2 * stake (fun index => balanceAt state index.toNat)
         ((getActiveValidatorIndices state epoch).toFinset \
           (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
@@ -150,25 +133,22 @@ theorem exists_exitEpoch_eq_of_mem_sdiff_active (within : state.RegistryWithinLi
 
 /-- A passing test of justification bounds the stake of a target set by the stake of a vote set.
 
-The attesters must lie in the vote set.
-
-The test divides by the active stake of the current epoch, so the bound adds a term.
-
-That term is twice the stake of the target set outside the active set of the current epoch.
-
-The active stake must be more than one and a half increments. -/
+The test divides by the active stake of the current epoch, so the bound adds a term. -/
 private theorem stake_le_of_justificationTest {attesting : List ValidatorIndex}
     {total balance threshold weight : Gwei} {target voters : Finset ValidatorIndex}
     (totalOk : getTotalActiveBalance state = .ok total)
     (balanceOk : getTotalBalance state attesting = .ok balance)
     (thresholdOk : mulChecked total 2 = .ok threshold)
     (weightOk : mulChecked balance 3 = .ok weight) (passed : threshold ≤ weight)
+    -- The active stake must be more than one and a half increments.
     (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (fun index => balanceAt state index.toNat)
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
+    -- The attesters must lie in the vote set.
     (subset : attesting.toFinset ⊆ voters) :
     2 * stake (fun index => balanceAt state index.toNat) target ≤
       3 * stake (fun index => balanceAt state index.toNat) voters +
+        -- The term: twice the stake of the target set outside the active set of the current epoch.
         2 * stake (fun index => balanceAt state index.toNat)
           (target \ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset) := by
   have test := (justificationTest_iff_stake (getTotalActiveBalance_ok totalOk) balanceOk
@@ -182,20 +162,18 @@ private theorem stake_le_of_justificationTest {attesting : List ValidatorIndex}
 
 That vote is for the link of the epoch.
 
-The epoch is the current one when asked, and the previous one otherwise.
-
-The attesters are the unslashed validators with the timely target flag for that epoch.
-
-Each of them is active in that epoch.
-
 Justification must run, so the current epoch must be past the first two. -/
 theorem TargetFlagsVoted.attester (altair : .altair ≤ fork)
     (holds : TargetFlagsVoted attested state)
     (late : ¬getCurrentEpoch state ≤ GENESIS_EPOCH + 1) (current : Bool)
     {indices : List ValidatorIndex}
+    -- The epoch is the current one when asked, and the previous one otherwise.
+    --
+    -- The attesters are the unslashed validators with the timely target flag for that epoch.
     (counted : getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX
       (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok indices)
     {index : ValidatorIndex} (member : index ∈ indices) :
+    -- Each of them is active in that epoch.
     index ∈ getActiveValidatorIndices state
         (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
       ∃ vote, LinkVote state current index.toNat vote ∧ vote ∈ attested := by
@@ -217,35 +195,30 @@ theorem TargetFlagsVoted.attester (altair : .altair ≤ fork)
 
 The epoch is the current one when asked, and the previous one otherwise.
 
-The test passes when twice the total active balance is at most three times the target balance.
-
-The target balance is the total balance of a list of attesters.
-
-Each of them must be active in that epoch, and have cast a vote of the set for its link.
-
-The active stake of the current epoch must be more than one and a half increments.
-
-The votes of the model must hold those of the data that the state signs, with blocks for roots.
-
-The link goes from the justified checkpoint of the epoch to the checkpoint of the epoch.
-
-The root of that checkpoint is the block root that the state records for its first slot. -/
+The active stake of the current epoch must be more than one and a half increments. -/
 theorem linkWithChurn_of_test (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (fun index => balanceAt state index.toNat)
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
     (block : Root → β) {votes : Set (Vote ValidatorIndex β)}
+    -- The votes of the model must hold those of the data the state signs, with blocks for roots.
     (contains : ffgVotes block attested ⊆ votes)
     {current : Bool} {attesting : List ValidatorIndex} {total balance threshold weight : Gwei}
     {root : Root} (totalOk : getTotalActiveBalance state = .ok total)
+    -- The target balance is the total balance of a list of attesters.
     (balanceOk : getTotalBalance state attesting = .ok balance)
+    -- The test passes when twice the total active balance is at most three times that balance.
     (thresholdOk : mulChecked total 2 = .ok threshold)
     (weightOk : mulChecked balance 3 = .ok weight) (passed : threshold ≤ weight)
     (rootOk : getBlockRoot state
       (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok root)
+    -- Each attester must be active in that epoch, and have cast a vote of the set for its link.
     (counted : ∀ index ∈ attesting,
       index ∈ getActiveValidatorIndices state
           (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
         ∃ vote, LinkVote state current index.toNat vote ∧ vote ∈ attested) :
+    -- The link goes from the justified checkpoint of the epoch to the checkpoint of the epoch.
+    --
+    -- The root of that checkpoint is the block root that the state records for its first slot.
     LinkWithChurn state votes
       (if current then getCurrentEpoch state else getPreviousEpoch state)
       ((if current then state.currentJustifiedCheckpoint
@@ -301,41 +274,38 @@ private theorem linkWithChurn_of_weigh (large : 3 * preset.EFFECTIVE_BALANCE_INC
 From Altair each target flag must come from a vote of a set for the link of its epoch.
 
 Before Altair each pending attestation of the two epochs must be a vote of the set for its link.
-
-The active stake of the current epoch must be more than one and a half increments.
-
-The votes of the model must hold those of the data that the state signs, with blocks for roots.
-
-In the first two epochs the step leaves the state as it is.
-
-Otherwise it weighs the total active balance and two target balances.
-
-Each recent epoch whose test passes then gives the stake bound of its link, with churn.
-
-A test passes when twice the total balance is at most three times the target balance.
-
-The source of the link is the justified checkpoint of the epoch.
-
-Its target is the checkpoint of the epoch, with the root the state records for its first slot. -/
+-/
 theorem processJustificationAndFinalization_weighed
     (flagsVoted : TargetFlagsVoted attested state)
     (pendingVoted : PendingVoted attested state)
+    -- The active stake of the current epoch must be more than one and a half increments.
     (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (fun index => balanceAt state index.toNat)
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
     (block : Root → β) {votes : Set (Vote ValidatorIndex β)}
+    -- The votes of the model must hold those of the data the state signs, with blocks for roots.
     (contains : ffgVotes block attested ⊆ votes)
     (computed : processJustificationAndFinalization state = .ok after) :
+    -- In the first two epochs the step leaves the state as it is.
     (getCurrentEpoch state ≤ GENESIS_EPOCH + 1 ∧ after = state) ∨
+      -- Otherwise it weighs the total active balance and two target balances.
       GENESIS_EPOCH + 1 < getCurrentEpoch state ∧ ∃ total previousBalance currentBalance : Gwei,
         getTotalActiveBalance state = .ok total ∧
         weighJustificationAndFinalization state total previousBalance currentBalance = .ok after ∧
+          -- Each recent epoch whose test passes then gives the stake bound of its link, with churn.
+          --
+          -- A test passes when twice the total balance is at most three times the target balance.
           ∀ (recent : Bool) (threshold weight : Gwei) (root : Root),
             mulChecked total 2 = .ok threshold →
             mulChecked (if recent then currentBalance else previousBalance) 3 = .ok weight →
             threshold ≤ weight →
             getBlockRoot state
                 (if recent then getCurrentEpoch state else getPreviousEpoch state) = .ok root →
+              -- The source of the link is the justified checkpoint of the epoch.
+              --
+              -- Its target is the checkpoint of the epoch.
+              --
+              -- Its root is the one that the state records for the first slot of the epoch.
               LinkWithChurn state votes
                 (if recent then getCurrentEpoch state else getPreviousEpoch state)
                 ((if recent then state.currentJustifiedCheckpoint
@@ -372,40 +342,47 @@ From Altair each target flag must come from a vote of a set for the link of its 
 
 Before Altair each pending attestation of the two epochs must be a vote of the set for its link.
 
-The active stake of the current epoch must be more than one and a half increments.
-
-The votes of the model must hold those of the data that the state signs, with blocks for roots.
-
-Then the step keeps the current justified checkpoint.
-
-Or it replaces it by the checkpoint of the previous or the current epoch, whose test passes.
-
-In the second case, take the active set of that epoch as the validator set of the target.
-
-When both epochs pass, this says nothing of the previous one.
-
-The source is the justified checkpoint of that epoch, and the target is the new checkpoint.
-
-Twice the stake of the target set is at most three times the stake of the voters of the link.
-
-A term of churn adds twice the stake of the target set outside the current active set.
-
-Each validator weighs its effective balance in the state before the step. -/
+When both epochs pass, this says nothing of the previous one. -/
 theorem processJustificationAndFinalization_linkWithChurn
     (flagsVoted : TargetFlagsVoted attested state)
     (pendingVoted : PendingVoted attested state)
+    -- The active stake of the current epoch must be more than one and a half increments.
     (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (fun index => balanceAt state index.toNat)
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
     (block : Root → β) {votes : Set (Vote ValidatorIndex β)}
+    -- The votes of the model must hold those of the data the state signs, with blocks for roots.
+    --
+    -- The meaningful set holds the votes that the attestations of applied blocks cast.
+    --
+    -- A block accepts an attestation only when the signature checks accept its aggregate signature.
+    --
+    -- Reading such a vote as signed by its validator assumes BLS checks and unforgeable aggregates.
     (contains : ffgVotes block attested ⊆ votes)
     (computed : processJustificationAndFinalization state = .ok after) :
+    -- Then the step keeps the current justified checkpoint.
     after.currentJustifiedCheckpoint = state.currentJustifiedCheckpoint ∨
+      -- Or it replaces it by the checkpoint of the previous or current epoch, whose test passes.
+      --
+      -- Take then the active set of that epoch as the validator set of the target.
       ∃ current : Bool,
         after.currentJustifiedCheckpoint.epoch =
             (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
           getBlockRoot state after.currentJustifiedCheckpoint.epoch =
             .ok after.currentJustifiedCheckpoint.root ∧
+          -- The source is the justified checkpoint of that epoch.
+          --
+          -- The target is the new checkpoint.
+          --
+          -- Twice the target set's stake is at most three times that of the voters of the link.
+          --
+          -- A term of churn adds twice the stake of the target set outside the current active set.
+          --
+          -- Each validator weighs its effective balance in the state before the step.
+          --
+          -- The step drops slashed attesters.
+          --
+          -- So the attesters it counts are a subset of the voters of the model.
           LinkWithChurn state votes
             (if current then getCurrentEpoch state else getPreviousEpoch state)
             ((if current then state.currentJustifiedCheckpoint
@@ -436,12 +413,6 @@ def quorumVoters (state : BeaconState preset fork) : Finset ValidatorIndex :=
 
 /-- The votes for the links of the two recent epochs have a target epoch at most the current one.
 
-A target flag comes from a vote for the link of the current or the previous epoch.
-
-A pending attestation is a vote for the link of the epoch of its list.
-
-Either epoch is at most the current one.
-
 So every such vote lies in the set of votes whose target epoch is at most the current epoch. -/
 theorem TargetFlagsVoted.earlier {votes : Set (ValidatorIndex × AttestationData)}
     {state : BeaconState preset fork}
@@ -456,9 +427,11 @@ theorem TargetFlagsVoted.earlier {votes : Set (ValidatorIndex × AttestationData
     · exact getPreviousEpoch_le state
     · exact UInt64.le_refl _
   refine ⟨fun altair current position flagged => ?_, fun before current attestation member => ?_⟩
+  -- A target flag comes from a vote for the link of the current or the previous epoch.
   · -- The vote behind a flag has the target epoch of the flag.
     obtain ⟨vote, -, link⟩ := flags altair current position flagged
     exact ⟨vote, show _ ≤ _ from link.2.1 ▸ recent current, link⟩
+  -- A pending attestation is a vote for the link of the epoch of its list.
   · -- Each vote of a pending attestation holds its data, whose target epoch is that of its list.
     obtain ⟨epoch, slot, source, -⟩ := pending before current attestation member
     exact ⟨epoch, slot, source, fun _ _ _ _ => show _ ≤ _ from epoch ▸ recent current⟩
@@ -466,10 +439,6 @@ theorem TargetFlagsVoted.earlier {votes : Set (ValidatorIndex × AttestationData
 /-- Each attester that justification counts for a recent epoch is a quorum voter with a vote.
 
 It is active in that epoch, the current or the previous one, and not slashed.
-
-It cast a vote of the set for the link of that epoch.
-
-From Altair the target flags give the vote, and before Altair the pending attestations do.
 
 Justification must run, so the current epoch must be past the first two. -/
 private theorem counted_quorumVoter {attested : Set (ValidatorIndex × AttestationData)}
@@ -481,6 +450,9 @@ private theorem counted_quorumVoter {attested : Set (ValidatorIndex × Attestati
       (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok indices)
     {index : ValidatorIndex} (member : index ∈ indices) :
     index ∈ quorumVoters state ∧
+      -- It cast a vote of the set for the link of that epoch.
+      --
+      -- From Altair the target flags give the vote, and before Altair the pending attestations do.
       ∃ vote ∈ attested, LinkVote state current index.toNat vote := by
   -- An active validator of a recent epoch that is not slashed is a quorum voter.
   have voter : index ∈ getActiveValidatorIndices state
@@ -517,40 +489,20 @@ private theorem counted_quorumVoter {attested : Set (ValidatorIndex × Attestati
 
 The property must leave out too little stake to justify alone.
 
-That is, three times the stake of the quorum voters without the property is below twice the total.
-
-The step justifies the checkpoint of the current or the previous epoch only when its test passes.
-
-That is the justification rule of `process_justification_and_finalization`.
-
 It follows Gasper §4.4, Definition 4.5, a supermajority link to the checkpoint.
 
-The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
-
-The test asks twice the total active balance to be at most three times the target balance.
-
-The target balance counts unslashed attesters that are active in that epoch.
-
-So they are quorum voters.
-
-If none of them had the property, the test would fail by the bound on the voters without it.
-
-So one of them has it, and it cast a vote of the set for the link of the epoch.
-
-The target of that vote is the new checkpoint.
-
-Its epoch is that epoch, and its root is the block root that the state records for that epoch.
-
-The active stake of the current epoch must be more than one and a half increments.
-
-Then the test compares stakes, without the floor of one increment on each balance. -/
+The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3). -/
 theorem processJustificationAndFinalization_exists_voter
     {attested : Set (ValidatorIndex × AttestationData)} {state after : BeaconState preset fork}
     (p : ValidatorIndex → Prop) [DecidablePred p]
     (flagsVoted : TargetFlagsVoted attested state) (pendingVoted : PendingVoted attested state)
+    -- The active stake of the current epoch must be more than one and a half increments.
+    --
+    -- Then the test compares stakes, without the floor of one increment on each balance.
     (large : 3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
       2 * stake (fun index => balanceAt state index.toNat)
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
+    -- Three times the stake of the quorum voters without the property is below twice the total.
     (few : ∀ total, getTotalActiveBalance state = .ok total →
       3 * stake (fun index => balanceAt state index.toNat) {v ∈ quorumVoters state | ¬p v} <
         2 * total.toNat)
@@ -558,12 +510,17 @@ theorem processJustificationAndFinalization_exists_voter
     (changed : after.currentJustifiedCheckpoint ≠ state.currentJustifiedCheckpoint) :
     ∃ current : Bool, ∃ vote ∈ attested, p vote.1 ∧
       LinkVote state current vote.1.toNat vote ∧
+      -- The target of that vote is the new checkpoint.
       vote.2.target = after.currentJustifiedCheckpoint := by
   -- In the first two epochs the step changes nothing, so justification ran.
   rcases processJustificationAndFinalization_reads computed with ⟨-, same⟩ | ⟨late, previous,
     current, total, previousBalance, currentBalance, previousOk, currentOk, totalOk,
     previousBalanceOk, currentBalanceOk, weighed⟩
   · exact absurd (same ▸ rfl) changed
+  -- The step justifies the checkpoint of the current or previous epoch only when its test passes.
+  --
+  -- That is the justification rule of the epoch step.
+  --
   -- The checkpoint moved, so the test of a recent epoch passed, and the checkpoint is its own.
   rcases weighJustificationAndFinalization_currentJustified weighed with ⟨same, -⟩ | ⟨recent,
     threshold, weight, thresholdOk, weightOk, passed, epoch, rootOk⟩
@@ -579,14 +536,25 @@ theorem processJustificationAndFinalization_exists_voter
     cases recent
     · exact previousBalanceOk
     · exact currentBalanceOk
+  -- The test asks twice the total active balance to be at most three times the target balance.
+  --
+  -- The target balance counts unslashed attesters that are active in that epoch.
+  --
+  -- So they are quorum voters.
   by_cases found : ∃ index ∈ (if recent then current else previous), p index
   · obtain ⟨index, member, holds⟩ := found
     obtain ⟨-, vote, cast, link⟩ :=
       counted_quorumVoter flagsVoted pendingVoted late recent counted member
+    -- One of them has the property, and it cast a vote of the set for the link of the epoch.
+    --
     -- The vote is cast by the attester itself.
     have voter : vote.1 = index := UInt64.toNat_inj.mp link.1
     refine ⟨recent, vote, cast, voter ▸ holds, voter ▸ link, ?_⟩
     -- The target has the epoch of the new checkpoint, and the root the state records for it.
+    --
+    -- Its epoch is that epoch.
+    --
+    -- Its root is the block root that the state records for that epoch.
     obtain ⟨-, targetEpoch, -, targetRoot⟩ := link
     have sameEpoch : vote.2.target.epoch = after.currentJustifiedCheckpoint.epoch :=
       targetEpoch.trans epoch.symm
@@ -598,6 +566,7 @@ theorem processJustificationAndFinalization_exists_voter
     rw [checkpoint] at sameEpoch targetRoot
     simp only at sameEpoch targetRoot
     rw [sameEpoch, targetRoot]
+  -- If none of them had the property, the test would fail by the bound on the voters without it.
   · -- Otherwise every counted attester is a quorum voter without the property.
     exfalso
     have subset : (if recent then current else previous).toFinset ⊆

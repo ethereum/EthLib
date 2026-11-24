@@ -6,23 +6,7 @@ public import EthLib.Consensus.Proofs.Transition.FfgSlackActive
 /-!
 # Proofs: along a chain, the finalized checkpoint is slack-finalized in Casper FFG
 
-The genesis checkpoint is finalized in the model, as the genesis state finalizes it.
-
-Each step of a chain keeps the finalized checkpoint slack-finalized, with two facts of the bits.
-
-A set bit 0 gives a slack link from the previous to the current justified checkpoint.
-
-A set bit 1 makes the checkpoint two epochs back slack-justified.
-
-So along a chain from the genesis state built from deposits, it is slack-finalized in the model.
-
-The sets, weights and votes are those of the theorem on justified checkpoints.
-
-The step asks the sets and weights to match for both recent epochs at each end of an epoch.
-
-The rules of finalization read epochs as justified that no field of the state holds.
-
-The buffer of roots must cover three epochs, as both presets do.
+Each step of a chain from genesis keeps the finalized checkpoint slack-finalized in the model.
 
 Gasper Definition 4.9 defines `k`-finalization.
 
@@ -42,13 +26,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks} {β : Ty
 
 /-- The properties of a state that the steps of a chain keep, with finality.
 
-They are those for the justified checkpoints, and three more.
-
-The map from roots to blocks keeps in order the roots the state records at consecutive slots.
-
-The two newest bits carry their facts for the current epoch.
-
-The finalized checkpoint is slack-finalized in the model. -/
+They are those for the justified checkpoints, and three more. -/
 structure SlackFinalityInvariant (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (genesis : β)
     (attested : Set (ValidatorIndex × AttestationData)) (block : Root → β)
@@ -56,7 +34,13 @@ structure SlackFinalityInvariant (V U : Models.Ffg.Checkpoint β → Finset Vali
     extends SlackChainInvariant V U W genesis attested block forked where
   /-- The map from roots to blocks keeps the roots of consecutive slots in order. -/
   links : ∀ link ∈ rootLinks forked.state, block link.1 ≤ block link.2
-  /-- The two newest bits carry their facts for the current epoch. -/
+  /-- The two newest bits carry their facts for the current epoch.
+
+  The rules of finalization read epochs as justified that no field of the state holds.
+
+  A set bit 0 gives a slack link from the previous to the current justified checkpoint.
+
+  A set bit 1 makes the checkpoint two epochs back slack-justified. -/
   bits : SlackBits V U W genesis (ffgVotes block attested) block
     (getCurrentEpoch forked.state).toNat forked.state
   /-- The finalized checkpoint is slack-finalized. -/
@@ -69,6 +53,7 @@ An epoch must have at least one slot, and the buffer of roots must cover three e
 
 The seed lookahead must leave room in the buffer of RANDAO mixes. -/
 theorem SlackFinalityInvariant.of_chainStep (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    -- The buffer of roots must cover three epochs, as both presets do.
     (window : 3 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {forked after : ForkedBeaconState preset}
@@ -129,6 +114,7 @@ theorem initializeBeaconStateFromEth1_slackFinalityInvariant {fork : Fork}
   · simp [bitsEq]
   · simp [bitsEq] at set
   · simp [bitsEq] at set
+  -- The genesis checkpoint is finalized in the model, as the genesis state finalizes it.
   · rw [finalizedEq]
     exact .inl rfl
 
@@ -136,27 +122,25 @@ theorem initializeBeaconStateFromEth1_slackFinalityInvariant {fork : Fork}
 
 Each step must meet its hypotheses when a run from genesis reaches it and it reaches the last state.
 
-An epoch must have at least one slot, and the buffer of roots must cover three epochs.
-
-The seed lookahead must leave room in the buffer of RANDAO mixes.
-
-The genesis block of the model is the block of the zero root.
-
-The genesis state built from deposits exists only before Altair. -/
+An epoch must have at least one slot, and the buffer of roots must cover three epochs. -/
 theorem slackFinalized_of_chainSteps (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 3 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    -- The seed lookahead must leave room in the buffer of RANDAO mixes.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
+    -- The genesis state built from deposits exists only before Altair.
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
+    -- The step asks the sets and weights to match for both recent epochs at each end of an epoch.
     (meets : ∀ forked after,
       Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ forked →
       ChainStep config checks forked after →
       Relation.ReflTransGen (ChainStep config checks) after last →
       SlackStepHypotheses config checks V U W attested block forked after) :
+    -- The genesis block of the model is the block of the zero root.
     SlackFinalized V U W (block (Vector.replicate 32 0)) (ffgVotes block attested)
       (last.state.finalizedCheckpoint.toFfg block) := by
   have chain := chainSteps_and steps meets
@@ -169,42 +153,37 @@ theorem slackFinalized_of_chainSteps (positive : 0 < preset.SLOTS_PER_EPOCH.toNa
 
 /-- Along a run of steps of a chain from genesis, the finalized checkpoint is slack-finalized.
 
-The validator set of a checkpoint is the active set of its epoch in the last state.
-
-Its second set is the active set of the next epoch in the last state.
-
-Its weights are the effective balances of each state at the end of its epoch or the next one.
-
-That state must record its root for its epoch.
-
-The votes are those that the block steps between genesis and the last state cast.
-
-Each step on any run between them must meet the bounds on the stake and the blocks.
-
-An epoch must have at least one slot, and the buffer of roots must cover three epochs.
-
-The seed lookahead must leave room in the buffer of RANDAO mixes.
-
-The genesis block of the model is the block of the zero root.
-
-The genesis state built from deposits exists only before Altair. -/
+The votes are those that the block steps between genesis and the last state cast. -/
 theorem slackFinalized_activeSetAt_of_chainSteps
+    -- An epoch must have at least one slot, and the buffer of roots must cover three epochs.
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 3 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    -- The seed lookahead must leave room in the buffer of RANDAO mixes.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
+    -- The genesis state built from deposits exists only before Altair.
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
+    -- Each step on any run between them must meet the bounds on the stake and the blocks.
     (meets : ∀ forked after,
       Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ forked →
       ChainStep config checks forked after →
       Relation.ReflTransGen (ChainStep config checks) after last →
       SlackStepBounds block forked after) :
+    -- The sets, weights and votes are those of the theorem on justified checkpoints.
+    --
+    -- The validator set of a checkpoint is the active set of its epoch in the last state.
     SlackFinalized (fun c => activeSetAt last.state c.epoch)
+      -- Its second set is the active set of the next epoch in the last state.
       (fun c => activeSetAt last.state (c.epoch + 1))
+      -- Its weights are the effective balances of each state at the end of its epoch or the next.
+      --
+      -- That state must record its root for its epoch.
+      --
+      -- The genesis block of the model is the block of the zero root.
       (justifyingBalances config checks block ⟨fork, state⟩ last) (block (Vector.replicate 32 0))
       (ffgVotes block (runVotes config checks ⟨fork, state⟩ last))
       (last.state.finalizedCheckpoint.toFfg block) :=
@@ -215,27 +194,21 @@ theorem slackFinalized_activeSetAt_of_chainSteps
 
 The blocks of the model are the roots, ordered by the links of the states that genesis reaches.
 
-The sets are the active sets, the weights the effective balances, and the votes those of the run.
-
-Each step on any run between them must meet the bound on the stake.
-
-An epoch must have at least one slot, and the buffer of roots must cover three epochs.
-
-The seed lookahead must leave room in the buffer of RANDAO mixes.
-
-The genesis block of the model is the zero root.
-
-The genesis state built from deposits exists only before Altair. -/
+The sets are the active sets, the weights the effective balances, and the votes those of the run. -/
 theorem slackFinalized_chainRoot_of_chainSteps
+    -- An epoch must have at least one slot, and the buffer of roots must cover three epochs.
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 3 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    -- The seed lookahead must leave room in the buffer of RANDAO mixes.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
+    -- The genesis state built from deposits exists only before Altair.
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
+    -- Each step on any run between them must meet the bound on the stake.
     (large : ∀ forked after,
       Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ forked →
       ChainStep config checks forked after →
@@ -249,6 +222,7 @@ theorem slackFinalized_chainRoot_of_chainSteps
       (fun c => activeSetAt last.state (c.epoch + 1))
       (justifyingBalances config checks (toChainRoot config checks ⟨fork, state⟩)
         ⟨fork, state⟩ last)
+      -- The genesis block of the model is the zero root.
       (toChainRoot config checks ⟨fork, state⟩ (Vector.replicate 32 0))
       (ffgVotes (toChainRoot config checks ⟨fork, state⟩)
         (runVotes config checks ⟨fork, state⟩ last))
