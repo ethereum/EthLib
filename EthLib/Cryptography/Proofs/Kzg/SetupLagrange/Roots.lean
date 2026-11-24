@@ -12,10 +12,6 @@ The three rounds use the root `u = ζ^256` of order 16, the scalar `c = 4096⁻�
 The kernel checks of the rounds read these values as naturals below `r`.
 
 Here each natural is computed by square and multiply mod `r`.
-
-Each one is the value of its element of `Fr`, by a proof on variables.
-
-Three constants are written out, and a computation on naturals checks each of them once.
 -/
 
 @[expose] public section
@@ -53,7 +49,10 @@ def scalarB (k1 j2 : Nat) : Nat := scaleNat * zetaPowNat (16 * j2 * k1) % Fr.mod
 /-- The value of `ζ^(j3 (k1 + 16 k2))`, the scalar of the third round. -/
 def scalarC (k1 k2 j3 : Nat) : Nat := zetaPowNat (j3 * (k1 + 16 * k2))
 
-/-! ## The constants -/
+/-! ## The constants
+
+Three constants are written out, and a computation on naturals checks each of them once.
+-/
 
 private theorem natCast_mod (n : Nat) : ((n % Fr.modulus : Nat) : Fr) = n := by
   conv_rhs => rw [← Nat.mod_add_div n Fr.modulus]
@@ -104,7 +103,10 @@ theorem scaleNat_eq : (scaleNat : Fr) = (4096 : Fr)⁻¹ := by
 theorem isPrimitiveRoot_root : IsPrimitiveRoot (zeta ^ 256) 16 :=
   isPrimitiveRoot_zeta.pow (by decide) (by decide)
 
-/-! ## The values -/
+/-! ## The values
+
+Each natural is the value of its element of `Fr`, by a proof on variables.
+-/
 
 theorem rootPowNat_spec (i : Nat) :
     rootPowNat i < Fr.modulus ∧ Fr.ofNat (rootPowNat i) = (zeta ^ 256) ^ i := by

@@ -14,12 +14,6 @@ A comparison of points also needs `y`, with the sign that the encoding gives.
 Here the coordinates are naturals below `p`, with the field operations of the torsion check.
 
 So the check computes the same values as `Fp`, without reducing its representation.
-
-- A string of 96 hexadecimal digits encodes `(x, y)` under three conditions.
-  The value is `x`, `y^2 = x^3 + 4`, and the sign flag is the sign of `y`.
-  Decompression of the string then gives `(x, y)`, since only one root of `x^3 + 4` has that sign.
-- A pair `(x, y)` below `p` with `y^2 = x^3 + 4` is a valid point with `z = 1`.
-- A point `(X, Y, Z)` with `Z ≠ 0`, `X = x Z^2` and `Y = y Z^3` is the point `(x, y, 1)`.
 -/
 
 @[expose] public section
@@ -51,7 +45,11 @@ def encodesBytes (x y : Nat) : List Nat → Bool
     Nat.land (h % 256) 0x40 == 0 && xOf (h :: t) == x && Nat.blt y Fp.modulus &&
       fmul y y == rhs x && signBit y == (Nat.land (h % 256) 0x20 != 0)
 
-/-- The list of digit codes encodes the affine point `(x, y)`. -/
+/-- The list of digit codes encodes the affine point `(x, y)`.
+
+A string of 96 hexadecimal digits encodes `(x, y)` under three conditions.
+
+The value is `x`, `y^2 = x^3 + 4`, and the sign flag is the sign of `y`. -/
 def encodes (ns : List Nat) (x y : Nat) : Bool :=
   match hexBytes ns with
   | some l => encodesBytes x y l
@@ -94,7 +92,9 @@ private theorem select_eq {y₀ yPos : Fp} (hy : yPos = y₀ ∨ yPos = -y₀) (
   rw [signBit_neg h0]
   by_cases hP : P <;> cases Fp.signBit y₀ <;> simp [hP, hnn]
 
-/-- Decompression returns `(x, y, 1)` from the bytes of a string that encodes `(x, y)`. -/
+/-- Decompression returns `(x, y, 1)` from the bytes of a string that encodes `(x, y)`.
+
+Only one root of `x^3 + 4` has the sign of `y`. -/
 theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
     (hd : encodes (codes s) x y = true) (hb : Base.hexBytes? s.toList = some b)
     (hq : TrustedSetup.decodeG1 b = .ok q) : coords q = (x, y, 1) := by
@@ -158,6 +158,7 @@ theorem coords_affinePoint {x y : Nat} (h : onCurve x y = true) :
   simp only [coords, affinePoint, Fp.val_ofNat_of_lt h.1.1, Fp.val_ofNat_of_lt h.1.2,
     Fp.one_def, Fp.val_one]
 
+/-- A pair `(x, y)` below `p` with `y^2 = x^3 + 4` is a valid point with `z = 1`. -/
 theorem valid_affinePoint {x y : Nat} (h : onCurve x y = true) : Valid (affinePoint x y) := by
   apply valid_of_affine_eq
   have hc : (Fp.ofNat x).val = x := congrArg (·.1) (coords_affinePoint h)
@@ -175,7 +176,9 @@ def sameAffine (q : Coords) (x y : Nat) : Bool :=
   let z2 := fmul q.2.2 q.2.2
   q.2.2 != 0 && q.1 == fmul x z2 && q.2.1 == fmul y (fmul z2 q.2.2)
 
-/-- A point that the comparison matches with `(x, y)` is the point `(x, y, 1)`. -/
+/-- A point that the comparison matches with `(x, y)` is the point `(x, y, 1)`.
+
+The comparison asks `Z ≠ 0`, `X = x Z^2` and `Y = y Z^3` of the point `(X, Y, Z)`. -/
 theorem toPoint_eq_of_sameAffine {P Q : G1} {x y : Nat} (hQ : coords Q = (x, y, 1))
     (h : sameAffine (coords P) x y = true) : toPoint P = toPoint Q := by
   simp only [sameAffine, coords, Bool.and_eq_true, bne_iff_ne, ne_eq, beq_iff_eq] at h

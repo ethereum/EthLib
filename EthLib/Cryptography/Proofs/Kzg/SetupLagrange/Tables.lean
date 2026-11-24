@@ -18,16 +18,6 @@ The repository holds no copy of the tables.
 
 Elaborators compute them each time this file is built, with the compiled specification.
 
-Each table, and each quarter of table `B`, is its own definition with its own elaborator.
-
-Each elaborator thus stays within the default limit of heartbeats.
-
-That needs the compiled specification, which `lake build`, `lake lean` and the editor load.
-
-A bare `lake env lean` does not load it, so this file then runs out of heartbeats.
-
-An elaborator reads the table of the previous round from the definition that holds it.
-
 The proofs do not trust the tables: a wrong entry only makes a kernel check fail.
 
 The file also declares the commands that state the checks against the tables.
@@ -39,7 +29,14 @@ namespace EthLib.Cryptography.Kzg.SetupLagrange
 
 open EthLib.Cryptography.Bls (Fp Fr G1)
 
-/-! ## The computation -/
+/-! ## The computation
+
+The elaborators need the compiled specification.
+
+The commands `lake build` and `lake lean` load it, and so does the editor.
+
+A bare `lake env lean` does not load it, so this file then runs out of heartbeats.
+-/
 
 /-- The affine coordinates of a point, as naturals. -/
 meta def affineNat (p : G1) : Nat × Nat :=
@@ -131,7 +128,9 @@ meta def tableOfLit? (e : Expr) : Option (Array (Nat × Nat)) := do
       out := out.push (← p.appFn!.appArg!.nat?, ← p.appArg!.nat?)
   return out
 
-/-- The entries of the table literal that the definition `c` holds. -/
+/-- The entries of the table literal that the definition `c` holds.
+
+An elaborator reads the table of the previous round from the definition that holds it. -/
 meta def readTable (c : Name) : MetaM (Array (Nat × Nat)) := do
   let some (.defnInfo d) := (← getEnv).find? c
     | throwError "{c} is not a definition"
@@ -159,7 +158,12 @@ elab "setup_table_a%" c:ident : term => do
 elab "setup_table_b%" c:ident q:num : term => do
   tableLit (tableBNat (← readTable (← realizeGlobalConstNoOverloadWithInfo c)) q.getNat)
 
-/-! ## The tables -/
+/-! ## The tables
+
+Each table, and each quarter of table `B`, is its own definition with its own elaborator.
+
+Each elaborator thus stays within the default limit of heartbeats.
+-/
 
 /-- Entry `n` of a table in rows of 64 entries. -/
 def entryAt (rows : Array (Array (Nat × Nat))) (n : Nat) : Nat × Nat :=
