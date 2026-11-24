@@ -79,6 +79,15 @@ theorem resolveValidatorId_pubkey {state : BeaconState preset fork} {pubkey : BL
       have := hbefore j hj _ (Array.getElem?_eq_getElem (by omega))
       simpa using this
 
+/-- A public key that some validator of the registry holds names a validator. -/
+theorem resolveValidatorId_pubkey_isSome {state : BeaconState preset fork} {pubkey : BLSPubkey}
+    (held : ∃ validator ∈ state.validators.data, validator.pubkey = pubkey) :
+    (resolveValidatorId state (.pubkey pubkey)).isSome := by
+  obtain ⟨validator, inside, rfl⟩ := held
+  obtain ⟨i, lt, read⟩ := Array.mem_iff_getElem.mp inside
+  simp only [resolveValidatorId, Option.isSome_map, Array.findIdx?_isSome]
+  exact Array.any_eq_true.mpr ⟨i, lt, by simp [read]⟩
+
 /-- An empty request selects every index below the size, and any other request each named index. -/
 private theorem mem_selectIndices {size : Nat} {resolve : ValidatorId → Option UInt64}
     {ids : List ValidatorId} {index : UInt64} :

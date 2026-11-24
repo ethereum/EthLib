@@ -10,6 +10,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
 import EthLib.Consensus.Proofs.BeaconApi.Encoding
+import EthLib.Consensus.Proofs.BeaconApi.Registries
 import EthLib.Serialization.Proofs.Ssz.Typed.Bounds
 
 /-!
@@ -326,6 +327,90 @@ theorem epochSyncCommittees_aggregates {state : BeaconState preset fork}
   rw [whole, List.take_length] at slices
   simp only [syncAggregates, ← List.flatMap_def]
   exact slices
+
+/-- The period lookup selects the committee of the current period or the one of the next. -/
+theorem syncCommitteeOf_ok {state : BeaconState preset fork} {altair : .altair ≤ fork}
+    {epoch : Epoch} {committee : SyncCommittee preset}
+    (committeeOk : syncCommitteeOf state altair epoch = .ok committee) :
+    committee = (state.currentSyncCommittee altair).value ∨
+      committee = (state.nextSyncCommittee altair).value := by
+  unfold syncCommitteeOf at committeeOk
+  dsimp only at committeeOk
+  split at committeeOk
+  · exact .inl (Except.ok.inj committeeOk).symm
+  split at committeeOk
+  · exact .inr (Except.ok.inj committeeOk).symm
+  cases committeeOk
+
+/-- Every error of the period lookup has code 400. -/
+theorem syncCommitteeOf_error_code {state : BeaconState preset fork} {altair : .altair ≤ fork}
+    {epoch : Epoch} {error : ErrorMessage}
+    (failed : syncCommitteeOf state altair epoch = .error error) : error.code = 400 := by
+  unfold syncCommitteeOf at failed
+  dsimp only at failed
+  split at failed
+  · cases failed
+  split at failed
+  · cases failed
+  cases failed
+  rfl
+
+/-- The answer for an epoch has a value when the period lookup selects a committee.
+
+It needs a validator of the registry to hold each key of that committee. -/
+theorem epochSyncCommittees_ok_of_keys {state : BeaconState preset fork}
+    {altair : .altair ≤ fork} {epoch : Epoch} {committee : SyncCommittee preset}
+    (committeeOk : syncCommitteeOf state altair epoch = .ok committee)
+    (held : ∀ key ∈ committee.pubkeys.toList,
+      ∃ validator ∈ state.validators.data, validator.pubkey = key) :
+    ∃ answer, epochSyncCommittees state altair epoch = .ok answer := by
+  simp only [epochSyncCommittees, committeeOk, bind, Except.bind, pure, Except.pure]
+  split
+  · rename_i message failed
+    -- A failed lookup has a key that names no validator, against the hypothesis.
+    obtain ⟨key, member, bad⟩ := exists_mem_of_mapM_error failed
+    obtain ⟨index, found⟩ :=
+      Option.isSome_iff_exists.mp (resolveValidatorId_pubkey_isSome (held key member))
+    simp only [found, reduceCtorEq] at bad
+  · exact ⟨_, rfl⟩
+
+/-- Every error of the sync committees answer has code 400 when validators hold the keys.
+
+From Altair, a validator of the registry must hold each key of the current and the next committee.
+
+The lookup names the first validator that holds a key, so a key may appear twice in the registry. -/
+theorem syncCommitteesResponse_error_code_of_keys {state : BeaconState preset fork}
+    (held : ∀ altair : .altair ≤ fork,
+      (∀ key ∈ (state.currentSyncCommittee altair).value.pubkeys.toList,
+        ∃ validator ∈ state.validators.data, validator.pubkey = key) ∧
+      (∀ key ∈ (state.nextSyncCommittee altair).value.pubkeys.toList,
+        ∃ validator ∈ state.validators.data, validator.pubkey = key))
+    {epoch : Option Epoch} {error : ErrorMessage}
+    (failed : syncCommitteesResponse state epoch = .error error) : error.code = 400 := by
+  unfold syncCommitteesResponse at failed
+  split at failed
+  · rename_i altair
+    rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+    case inr => cases failed
+    cases committeeOk : syncCommitteeOf state altair (epoch.getD (getCurrentEpoch state)) with
+    | error outside =>
+      -- Outside the current and the next period, the lookup refuses with code 400.
+      simp only [epochSyncCommittees, committeeOk, bind, Except.bind] at refused
+      cases refused
+      exact syncCommitteeOf_error_code committeeOk
+    | ok committee =>
+      -- The selected committee is one of the two, so the answer has a value.
+      have keys : ∀ key ∈ committee.pubkeys.toList,
+          ∃ validator ∈ state.validators.data, validator.pubkey = key := by
+        rcases syncCommitteeOf_ok committeeOk with rfl | rfl
+        · exact (held altair).1
+        · exact (held altair).2
+      obtain ⟨answer, answerOk⟩ := epochSyncCommittees_ok_of_keys committeeOk keys
+      rw [answerOk] at refused
+      cases refused
+  -- Before Altair the state holds no sync committee, and the answer gets code 400.
+  · cases failed
+    rfl
 
 /-! ## Payload timeliness committees -/
 

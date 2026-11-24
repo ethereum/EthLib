@@ -6342,6 +6342,9 @@ That is an epoch whose sum with the length of the buffer of mixes is at most the
 `epochSyncCommittees_validators` shows that each seat of the sync committee answer holds the first validator whose key is the key of the seat, in the committee of the period of the epoch.
 `syncAggregates_pubkeys` shows that the slices cut the keys of a committee as the subcommittees of the gossip rules do.
 `epochSyncCommittees_aggregates` shows that its slices, put end to end, give back that list, when the count of subnets divides the size of a sync committee.
+`syncCommitteesResponse_error_code_of_keys` shows that every error of the sync committees answer has code 400 under one condition.
+From Altair, a validator of the registry holds each key of the current and the next committee.
+`syncCommitteesResponse_error_code_of_run` (`Consensus/Proofs/BeaconApi/SyncCommitteesReachable.lean`) shows that this holds on a state of a run from a genesis of deposits, so the answer never gets code 500 there.
 `statePtc_ok_iff` shows that, from Gloas, the PTC answer is the committee that `getPtc` reads in the window of the state.
 `statePtc_error_iff` shows that it is an error exactly when one of four conditions holds.
 The state is before Gloas, or the epoch of the slot is before the Gloas fork epoch.
@@ -7080,6 +7083,10 @@ Points that remain open:
 - The PTC answer gives the same message for a slot before the Gloas fork epoch and for a slot outside the window; both get code 400.
 - A key of a sync committee names the first validator of the registry that holds it; the source does not say which validator a key held twice names.
   A key that no validator holds gives code 500.
+  From Altair, no key of either committee of a state of a run from a genesis of deposits is such a key.
+  So on such a state the sync committees answer never gets code 500 (`syncCommitteesResponse_error_code_of_run`).
+  That genesis is at Phase 0, so the result does not cover a chain whose genesis is at a later fork.
+  It does not cover a checkpoint state with no run behind it either; there it needs the keys of both committees in the registry (`syncCommitteesResponse_error_code_of_keys`).
 - The source has the sync committees answer read "the current sync committee", but takes an epoch; EthLib answers the committee of the period of the epoch, the current one or the next, and gives code 400 for any other period.
 - Every error of the PTC answer has code 400, since the source names no other code for a slot that the window does not hold.
 - The blinded block endpoint "only supports forks through Fulu" and names no code for a later block; EthLib gives code 400.
