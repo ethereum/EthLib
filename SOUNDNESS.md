@@ -5083,17 +5083,31 @@ Take a pair of votes (`VotePairAt`), each read at a state of a run from the gene
 The theorem takes these signatures and reading states as arguments; `SignedConflict` does not supply them, since it carries a relation of signatures, not the signatures themselves.
 The theorem names a validator of `x` with that key, chosen before the block.
 Unlike an active validator, it may have exited; as with an active one, it may already be slashed.
-Take any block within the limits, applied at `x` at a later slot in the epoch of `x`, whose body holds the slashing of that validator by those votes at a position.
+Take any block within the limits, applied at `x` at a later slot in the epoch of `x` or in the next epoch, at the fork of `x`, whose body holds the slashing of that validator by those votes at a position.
 If the steps before that slashing succeed, then at the state they reach the validator still has the key.
-The slashing succeeds there, or the validator is already slashed there.
+The slashing succeeds there.
+Otherwise the validator is already slashed there.
 After a slashing that succeeds, the validator at that index still has the key and is slashed, in the state right after that operation.
 The theorem does not carry the flag to the state after the block.
 When the validator is already slashed at the turn, the theorem says nothing more.
 The specification then rejects the slashing, and so the block, at its final check when the checks before it pass (`Consensus/Transition/Block.lean`).
 This is read from the definition; no theorem states it.
 It is conditional on that inclusion; it does not show that a proposer includes the slashing, or that the block passes its other checks.
-The block must be at a later slot in the epoch of `x`, so the theorem does not cover a block at the first slot of an epoch, or a block whose parent state is in an earlier epoch.
-The same fork suffices but is not necessary.
+
+When the block is in the next epoch, the theorem takes three assumptions.
+The first is that the block's epoch is at most the first epoch of the chain plus its number of epochs.
+The second bounds the signers at the last slot of the epoch of `x`, read once its roots are cached successfully.
+The signer epoch of that condition is the epoch before that of `x`, or epoch 0 itself when `x` is in epoch 0.
+The signers of that epoch hold at most the current total active balance of the cached state, which is the total active balance of the epoch of `x`.
+Before Altair, these are the unslashed attesters of the pending attestations of the signer epoch that match the source.
+From Altair, for each participation flag, the unslashed validators active in the signer epoch that set it hold at most that balance; the bound is per flag, not on their union.
+The comparison is required only when the reads of those balances and indices succeed.
+No fact of a chain gives that comparison, and it can fail when signers of the signer epoch are not active in the epoch of `x`.
+The third is that, if the chosen validator is unslashed at `x`, the block's epoch is below its withdrawable epoch recorded at `x`.
+So a block at the first slot of an epoch is covered from any state `x` in the epoch before it, under these three assumptions.
+
+This theorem does not cover a block two or more epochs after `x`, or slots that cross a fork upgrade; the specification does not forbid either.
+Reading each vote at the fork of `x` suffices but is not necessary.
 A slashing at the next fork can still read a vote whose target is before that fork's epoch, under the previous version; no theorem states acceptance at the turn in that case.
 The pairs of headers are left out: they arise only from a proposer slashing that a tail already processed, so that run already slashed the key.
 The relation of signatures is an argument; the theorems say who signed only when it is the relation of real signatures.
