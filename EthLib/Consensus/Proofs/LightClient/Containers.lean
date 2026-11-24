@@ -9,23 +9,15 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Since
 /-!
 # Proofs: the light client containers
 
-Each container has distinct field names at every fork, and converts to and from its fields.
+Each container decodes back from its bytes.
 
-So its bytes decode back to it.
+Each light client index is the one that its type gives.
 
-The indices of the finalized root and of the sync committees are those that the types give.
+The node at each index is the root of its field.
 
-They hold at every fork from Altair, at every preset.
+So the length of each branch is the depth of the node that it proves.
 
-The execution indices hold from Capella, at every preset.
-
-At each of these forks the node at each index is the root of its field.
-
-So the length of each branch is the depth of the node it proves.
-
-The nodes are those of a state of a lawful type.
-
-Instance search finds that type lawful in the mainnet and the minimal presets.
+Instance search finds the state type lawful in the mainnet and the minimal presets.
 -/
 
 @[expose] public section
@@ -381,6 +373,9 @@ variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTE
 instance : NeZero (Nat.log2 (executionBranchGindex fork)) :=
   ⟨by unfold executionBranchGindex; split <;> decide⟩
 
+-- Each light client container has distinct field names at every fork.
+--
+-- Each converts to and from its fields, so its bytes decode back to it.
 instance : LawfulSszType (LightClientHeader preset fork) :=
   .container
     ⟨by

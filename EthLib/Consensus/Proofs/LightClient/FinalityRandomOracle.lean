@@ -10,35 +10,11 @@ import EthLib.Consensus.Proofs.LightClient.Authenticate
 
 An update proves its finalized header by a branch against the attested state root.
 
-The leaf of the branch is the root of the beacon header, or zero bytes at the genesis slot.
-
-An adversary outputs a state root and two beacon headers with a branch each.
-
 The generalized index of the branches is fixed before the run.
-
-The experiment reads both leaves as the check does, and climbs both branches.
-
-Every hash of the experiment is an oracle call.
 
 The adversary wins with two different headers, if both branches pass the check at that index.
 
-A header at the genesis slot has the zero leaf, so such a win also needs two different leaves.
-
-Each win exposes two different queried inputs with one answer, so the birthday bound applies.
-
-The count grows with the depth of the index alone.
-
-An adversary of `q` calls gives a bound of `(q + 14 + 2 * depth)^2 / 2^256`.
-
-The depth of the index is 6 before Electra, 7 from Electra and 9 from Gloas.
-
-With SHA-256 as the node hash, a win is two different headers whose branches the check accepts.
-
-Two updates that prove finality and pass the finality check give a win with SHA-256.
-
-That result needs one attested state root and slot, and two different finalized headers.
-
-It also needs the root of neither finalized header to be zero bytes.
+Every hash of the experiment is an oracle call.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
@@ -125,22 +101,22 @@ def FinalityWins (gindex : Nat) (outcome : FinalityOutcome) : Prop :=
 
 /-- The root of a beacon block header is seven hashes.
 
-The slot and the proposer index are their 8 bytes and 24 zero bytes, and share one hash.
-
-The parent and state roots share one hash, and the body root takes one with a zero node.
-
-One hash joins two zero nodes, and three more join those four digests.
+Three of them join the digests of the other four.
 
 It holds for a hash in any lawful monad. -/
 theorem hashTreeRootM_beaconBlockHeader {m : Type → Type} [Monad m] [LawfulMonad m]
     (hash : ByteArray → m ByteArray) (header : BeaconBlockHeader) :
     (hashTreeRootM (Hasher.ofHash hash) (SszType.desc BeaconBlockHeader)
       (SszType.toValue header)).run = (do
+      -- The slot and the proposer index are their 8 bytes and 24 zero bytes, and share one hash.
       let indices ← hash ⟨uintBytes 8 header.slot.toNat ++ Array.replicate 24 0 ++
         (uintBytes 8 header.proposerIndex.toNat ++ Array.replicate 24 0)⟩
+      -- The parent and state roots share one hash.
       let roots ← hash ⟨header.parentRoot.toArray ++ header.stateRoot.toArray⟩
       let left ← hash ⟨indices.data ++ roots.data⟩
+      -- The body root takes one hash with a zero node.
       let body ← hash ⟨header.bodyRoot.toArray ++ zeroChunk⟩
+      -- One hash joins two zero nodes.
       let zero ← hash ⟨zeroChunk ++ zeroChunk⟩
       let right ← hash ⟨body.data ++ zero.data⟩
       let root ← hash ⟨left.data ++ right.data⟩
@@ -296,7 +272,9 @@ private theorem finalizedLeafM_queryBound (header : BeaconBlockHeader) :
 
 /-- The extraction makes at most `14 + 2 * depth` oracle calls, where `depth` is that of the index.
 
-Each leaf takes at most seven calls, and each climb one call per climbed node. -/
+Each leaf takes at most seven calls, and each climb one call per climbed node.
+
+The count grows with the depth of the index alone. -/
 theorem extractFinality_queryBound (gindex : Nat) (claim : FinalityClaim) :
     IsQueryBoundP (extractFinality queryHash gindex claim) (fun _ => True)
       (14 + 2 * Nat.log2 gindex) := by
@@ -326,16 +304,18 @@ A win is two different headers whose branches, past zero front nodes, climb to t
 
 The leaves must also differ, when a header is at the genesis slot.
 
-`Q` bounds the oracle calls of the whole experiment, repeats included, and `N` counts digests.
+`Q` bounds the oracle calls of the whole experiment, repeats included.
 
-The oracle cache starts empty, and the adversary's private sampling is not counted. -/
+`N` counts the digests. -/
 theorem prEvent_finalityWins_le [SampleableType Hash32] (gindex : Nat)
     (adversary : OracleComp (unifSpec + HashOracle) FinalityClaim) {Q : Nat}
     (hQ : IsQueryBoundP (experimentWith (extractFinality queryHash gindex) adversary)
       (fun t => t.isRight = true) Q) :
+    -- The oracle cache starts empty, and the adversary's private sampling is not counted.
     Pr{let z ← (simulateQ HashOracle.romImpl
       (experimentWith (extractFinality queryHash gindex) adversary)).run ∅}[
         FinalityWins gindex z.1] ≤ Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  -- Each win exposes two different queried inputs with one answer, so the birthday bound applies.
   prEvent_experimentWith_le (extractFinality queryHash gindex) (FinalityWins gindex)
     collision_of_extractFinality adversary hQ
 
@@ -343,7 +323,9 @@ theorem prEvent_finalityWins_le [SampleableType Hash32] (gindex : Nat)
 
 A win has probability at most `(q + 14 + 2 * depth)^2 / 2^256`.
 
-It needs the adversary to make at most `q` oracle calls. -/
+It needs the adversary to make at most `q` oracle calls.
+
+The depth of the index is 6 before Electra, 7 from Electra and 9 from Gloas. -/
 theorem prEvent_finalityWins_le_of_adversary (gindex : Nat)
     (adversary : OracleComp (unifSpec + HashOracle) FinalityClaim) {q : Nat}
     (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :

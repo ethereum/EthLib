@@ -9,23 +9,9 @@ import EthLib.Base.Proofs.Bytes
 /-!
 # Proofs: the upgrade of light client data to a later fork
 
-An upgrade keeps the beacon header of a light client header.
+An upgrade keeps the beacon header of a light client header, and the beacon headers of a store.
 
-So the upgrade of a store keeps its finalized and optimistic beacon headers, and their slots.
-
-Before Gloas, the upgrade of a header from Capella carries the upgrade of its execution header.
-
-The Gloas header of a valid Electra header is valid too, under three conditions.
-
-The header is not the empty one, and its slot comes before Gloas.
-
-The configuration activates Capella no later than Deneb.
-
-The new branch joins the proof of the block hash in the execution header to the old branch.
-
-Before Gloas, an upgrade keeps a header valid when its slot needs no field that the header lacks.
-
-A header of an earlier fork reaches Gloas through its Electra form, so it stays valid as well.
+It keeps a valid header valid, under conditions on its slot and on the configuration.
 -/
 
 @[expose] public section
@@ -221,11 +207,7 @@ private theorem gindexConcat_payloadHeaderBlockHash :
 
 The Electra header is not the empty one, and its slot comes before Gloas.
 
-The configuration activates Capella no later than Deneb.
-
-The new branch proves the block hash inside the execution header, then climbs as the old one did.
-
-A header of a slot before Capella keeps a zero block hash and a zero branch. -/
+The configuration activates Capella no later than Deneb. -/
 theorem LightClientHeader.isValidLightClientHeader_toGloas {config : Config} {post : Fork}
     {gloas : .glamsterdam ≤ post} {header : LightClientHeader preset .pectra}
     {upgraded : LightClientHeader preset post}
@@ -260,6 +242,9 @@ theorem LightClientHeader.isValidLightClientHeader_toGloas {config : Config} {po
     subst built
     refine ⟨(), trivial, LightClientError.liftRoot_ok.mpr ?_⟩
     rw [branchVector_toList made]
+    -- The new branch first proves the block hash inside the execution header.
+    --
+    -- It then climbs as the old branch did.
     exact computeMerkleProof_append _ gindexConcat_payloadHeaderBlockHash.1 (by decide)
       (by decide) (ExecutionPayloadHeader.nodeRoot_blockHash (by decide) (by decide) _)
       (ExecutionPayloadHeader.hashTreeRoot_untyped (.inr rfl) _
@@ -280,6 +265,9 @@ theorem LightClientHeader.isValidLightClientHeader_toGloas {config : Config} {po
     subst built
     refine ⟨(), trivial, LightClientError.liftRoot_ok.mpr ?_⟩
     rw [branchVector_toList made]
+    -- The new branch first proves the block hash inside the execution header.
+    --
+    -- It then climbs as the old branch did.
     exact computeMerkleProof_append _ gindexConcat_payloadHeaderBlockHash.2 (by decide)
       (by decide) (ExecutionPayloadHeader.nodeRoot_blockHash (by decide) (by decide) _)
       (ExecutionPayloadHeader.hashTreeRoot_untyped (.inl rfl) _
@@ -548,6 +536,7 @@ theorem LightClientHeader.isValidLightClientHeader_upgrade {config : Config} {pr
   · simp only [preGloas, gloas, ↓reduceDIte] at computed
     have preBefore : pre < .glamsterdam := Nat.lt_of_not_le preGloas
     have epoch := beforeGloas.resolve_left preGloas
+    -- A header of an earlier fork reaches Gloas through its Electra form, so it stays valid.
     refine LightClientHeader.isValidLightClientHeader_toGloas (header := header.upgradeFields
       .pectra preBefore (by decide)) ?_ ?_ ordered epoch computed
     · exact LightClientHeader.isValidLightClientHeader_upgradeFields (by decide)

@@ -12,37 +12,11 @@ No signature scheme gives that with certainty, so this module bounds a game inst
 
 The bound is not a proof of that assumption, which stays a hypothesis of those theorems.
 
-One member of the committee is honest, and the game protects that one member only.
-
-The forger knows the honest key and its proof of possession, and asks for signatures under it.
-
-It chooses everything else: the configuration, the store, the update and the clock.
-
 Each member whose bit is set must carry a valid proof of possession, §3.3.3 of the BLS draft.
 
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3>
 
 Ethereum registers keys with deposit signatures instead, so the bound does not cover its keys.
-
-The forger wins if the light client accepts the update with the honest member's bit set.
-
-The honest member must never have signed the signing root of the update.
-
-Both hashes to `G2` are random oracles.
-
-The light client checks the aggregate against the message hash.
-
-The game checks each proof against the key hash.
-
-The game is the byte game of aggregates with the update read as an aggregate forgery.
-
-So it wins at most `q` times as often as a co-CDH solver built from it, plus `(q + qK - 1) / r`.
-
-Here `r` is the order of the groups, and co-CDH is the variant that the aggregate game uses.
-
-This needs `qK` at most `r`.
-
-It is small when co-CDH is hard, if the solver runs in about the forger's time, which is not proved.
 -/
 
 @[expose] public section
@@ -57,7 +31,11 @@ variable {preset : Preset} {fork : Fork}
 
 /-- The output of a forger: the inputs of the light client's check, and the proofs of possession.
 
-The proofs are those of the members whose bit is set, in committee order. -/
+The proofs are those of the members whose bit is set, in committee order.
+
+The forger chooses everything but the honest key.
+
+It chooses the configuration, the store, the update and the clock. -/
 structure Forgery (preset : Preset) (fork : Fork) where
   /-- The configuration of the chain. -/
   config : Config
@@ -74,7 +52,9 @@ structure Forgery (preset : Preset) (fork : Fork) where
 
 /-- A forger against the light client.
 
-It receives the encoded honest key and its proof, and has the oracles of the aggregate game. -/
+It receives the encoded honest key and its proof, and has the oracles of the aggregate game.
+
+It can ask for signatures under the honest key. -/
 structure Adversary (preset : Preset) (fork : Fork) where
   /-- The forger's run. -/
   main : ByteArray → ByteArray →
@@ -130,19 +110,19 @@ theorem validateLightClientUpdate_oracleChecks {config : Config}
   have rooted' : syncCommitteeSigningRoot config update genesisValidatorsRoot = pure root := rooted
   simp only [rooted', pure_bind, oracleChecks_hashPoint]
 
-/-- Whether a forgery wins against the honest key `pk`, given the hashes of verification.
-
-The light client accepts the update, with the oracle's hash `h` of the signing root.
-
-The honest key is among the signers, and the signing oracle never signed the signing root.
-
-There is one proof per signer, and each passes the proof check on its key hash. -/
+/-- Whether a forgery wins against the honest key `pk`, given the hashes of verification. -/
 noncomputable def wins (pk : G1Sub) (signed : List ByteArray) (f : Forgery preset fork)
     (h : G2Sub) (hs : List G2Sub) : Bool :=
+  -- The light client accepts the update, with the oracle's hash `h` of the signing root.
+  --
+  -- It checks the aggregate against that message hash.
   decide (validateLightClientUpdate f.config (oracleChecks f.message h) f.store f.update
       f.currentSlot f.genesisValidatorsRoot = .ok ()) &&
+    -- The honest key is among the signers, and the signing oracle never signed the signing root.
     decide (G1Sub.encode pk ∈ f.signers) && decide (f.message ∉ signed) &&
+    -- There is one proof per signer.
     decide (f.proofs.length = f.signers.length) && decide (hs.length = f.signers.length) &&
+    -- Each proof passes the proof check on its key hash.
     ((f.signers.zip f.proofs).zip hs).all fun (k, h') => byteVerify k.1 k.2 h'
 
 /-- The game for the secret scalar `a`, as the byte game of aggregates runs it.
@@ -150,6 +130,7 @@ noncomputable def wins (pk : G1Sub) (signed : List ByteArray) (f : Forgery prese
 After the forger's run, verification hashes the signing root and each decoded signer. -/
 noncomputable def experimentAt (adversary : Adversary preset fork) (a : Scalar) :
     ProbComp (Bool × Pop.State Scalar G1Sub ByteArray) :=
+  -- The game is the byte game of aggregates, with the update read as an aggregate forgery.
   (fun z => (wins (a • g1) z.2.msg.signed z.1.1 z.1.2.1 z.1.2.2, z.2)) <$>
     Pop.runAt adversary.main Forgery.toAggregate a
 
@@ -161,7 +142,9 @@ noncomputable def experiment (adversary : Adversary preset fork) :
   let a ← $ᵗ Scalar
   experimentAt adversary a
 
-/-- The probability that the light client accepts a forged signature of the honest member. -/
+/-- The probability that the light client accepts a forged signature of the honest member.
+
+One member of the committee is honest, and the game protects that one member only. -/
 noncomputable def forgeAdvantage (adversary : Adversary preset fork) : ℝ≥0∞ :=
   Pr{let z ← experiment adversary}[z.1 = true]
 
@@ -220,14 +203,23 @@ theorem hashCallBound_iff (adversary : Adversary preset fork) (q qK : ℕ) :
 
 This holds in the random oracle model, when every signer carries a proof of possession.
 
-The forger makes at most `q` message hash calls and `qK` key hash calls, with `qK` at most `r`.
-
 Its advantage is at most `q` times that of a co-CDH solver built from it, plus `(q + qK - 1) / r`.
 
 Ethereum keys carry deposit signatures, not these proofs, so this does not cover them. -/
 theorem forgeAdvantage_le (adversary : Adversary preset fork) {q qK : ℕ} (hq0 : 0 < q)
+    -- The forger makes at most `q` message hash calls and `qK` key hash calls.
+    --
+    -- This needs `qK` at most `r`.
     (hchar : qK ≤ Fr.modulus) (hq : HashCallBound adversary q qK) :
+    -- Both hashes to `G2` are random oracles.
+    --
+    -- The bound is small when co-CDH is hard, if the solver runs in about the forger's time.
+    --
+    -- That running time is not proved.
     forgeAdvantage adversary ≤
+      -- Here `r` is the order of the groups.
+      --
+      -- Co-CDH is the variant that the aggregate game uses.
       q * coCdhAdvantage Scalar g1 g2
           (Pop.reduction (F := Scalar) g2 adversary.toAggregate.toGroup q) +
         ((q + qK - 1 : ℕ) : ℝ≥0∞) * (Fr.modulus : ℝ≥0∞)⁻¹ :=
