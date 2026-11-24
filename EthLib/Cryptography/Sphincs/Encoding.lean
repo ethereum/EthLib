@@ -5,21 +5,9 @@ public import EthLib.Cryptography.Sphincs.TweakableHash
 /-!
 # The WOTS+C target-sum code
 
-The target-sum code of WOTS+C (ePrint 2022/778).
+The target-sum code of WOTS+C.
 
 A 16-byte digest `D` has 64 digits of 2 bits each, read most significant first.
-
-Digit `i` is `x_i = floor(D_{floor(i / 4)} / 2^(6 - 2 (i mod 4))) mod 4`, so `x = base_2b(D, w, v)`.
-
-`D_j` is byte `j` of `D`, so digit 0 is the top two bits of byte 0.
-
-`D` is a codeword when its 64 digits sum to `T = 128`.
-
-Two distinct codewords are incomparable: each has a digit smaller than the other's.
-
-So the chain values revealed for one codeword never sign another.
-
-This replaces the Winternitz checksum.
 
 Source: WOTS+C with target sum 128 of [leanSPHINCS.tex][note] §1.
 
@@ -49,6 +37,10 @@ def digits (d : Digest) : Codeword :=
   -- A digit never crosses a byte, so it is read from its byte, without the running `total`.
   --
   -- Byte `floor(i / 4)` holds digits `4 floor(i / 4)` to `4 floor(i / 4) + 3`, the first on top.
+  --
+  -- Digit `i` is `x_i = floor(D_{floor(i / 4)} / 2^(6 - 2 (i mod 4))) mod 4`.
+  --
+  -- Here `D_j` is byte `j` of `D`, so digit 0 is the top two bits of byte 0.
   Vector.ofFn fun i =>
     ⟨((d[i.val / 4]'(by have := i.isLt; simp only [V, N] at *; omega)).toNat
         >>> (6 - 2 * (i.val % 4))) % 4, Nat.mod_lt _ (by decide)⟩
@@ -64,6 +56,13 @@ end Internal
 Returns nothing when the digits do not sum to the target. -/
 def codeword? (d : Digest) : Option Codeword :=
   let x := Internal.digits d
+  -- `D` is a codeword when its 64 digits sum to `T = 128`.
+  --
+  -- Two distinct codewords are incomparable: each has a digit smaller than the other's.
+  --
+  -- So the chain values revealed for one codeword never sign another.
+  --
+  -- This replaces the Winternitz checksum.
   if Internal.digitSum x == TARGET_SUM then some x else none
 
 end EthLib.Cryptography.Sphincs

@@ -12,8 +12,6 @@ Every field has a fixed size.
 
 So an encoding is the fields concatenated, with no offsets and no length prefixes.
 
-Decoding checks the total length, then reads each field at its fixed offset.
-
 Source: [FIPS 205][fips205] §9.1 and §9.2, for the public key and the order of a signature.
 
 leanSPHINCS puts each layer's counter before its chain values.
@@ -45,16 +43,13 @@ def encodeFors (openings : Vector TreeOpening FORS_TREES) : ByteArray :=
   -- Opening `kappa` lands at bytes `176 kappa` to `176 kappa + 175`.
   packBytes (openings.map treeOpeningBytes).flatten
 
-/-- Encode one layer's signature: 1156 bytes on a lower layer, 1188 on the top one.
-
-It is the 4-byte counter, the 64 chain values (1024 bytes), then the `h` siblings (`16 h` bytes).
-
-- The counter is `BE_32(c)`, a big-endian 32-bit word.
-- Chain values are in chain order.
-- Siblings run from the leaf up to the root.
--/
+/-- Encode one layer's signature: 1156 bytes on a lower layer, 1188 on the top one. -/
 def encodeLayerSignature {layer : Layer} (sig : LayerSignature layer) : ByteArray :=
-  packBytes (toByte COUNTER_LEN sig.counter.toNat) ++ packDigests sig.chainValues
+  -- The counter `BE_32(c)`, a big-endian 32-bit word: 4 bytes.
+  packBytes (toByte COUNTER_LEN sig.counter.toNat)
+    -- The 64 chain values, in chain order: 1024 bytes.
+    ++ packDigests sig.chainValues
+    -- The `h` siblings, from the leaf up to the root: `16 h` bytes.
     ++ packDigests sig.path
 
 /-- Encode a signature as 7740 bytes.
@@ -70,7 +65,9 @@ def encodeSignature (sig : Signature) : ByteArray :=
   packBytes sig.randomizer ++ encodeFors sig.fors ++ encodeLayerSignature sig.bottom
     ++ encodeLayerSignature sig.middle ++ encodeLayerSignature sig.top
 
-/-! ## Decoding -/
+/-! ## Decoding
+
+Decoding checks the total length, then reads each field at its fixed offset. -/
 
 /-- Decode a public key from 32 bytes.
 

@@ -8,27 +8,6 @@ public import EthLib.Cryptography.Sphincs.Ots
 
 The Merkle trees of the hypertree, whose leaves are one-time keys.
 
-Tree `tau` of layer `l` has height `h_l`, and its nodes are `X_{z,j}` for `z <= h_l`.
-
-Its root is `X_{h_l,0}`, and the top tree's root is `PK.root`.
-
-A signature carries its key's path: the sibling of every node on the way up.
-
-For example, in a tree of height 2 with leaves `l_0` to `l_3`, the path of `l_2` is:
-
-- `l_3`, its sibling at height 0.
-- `X_{1,0}`, the sibling of its parent at height 1.
-
-The trees of a layer are the shared Merkle trees of EthLib.
-
-Their node hash puts the height and the index of the node into its address.
-
-Every definition takes the hash `H`.
-
-A node computes its left subtree, then its right subtree, then its own hash.
-
-A build computes every node of a tree once, so it gives both the root and each key's path.
-
 Source: `xmss_node` and `xmss_pkFromSig` of [FIPS 205][fips205] §6.
 
 The layer heights are those of [leanSPHINCS.tex][note] §1.
@@ -43,9 +22,14 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
+-- Every definition takes the hash `H`.
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
-/-! ## Nodes -/
+/-! ## Nodes
+
+Tree `tau` of layer `l` has height `h_l`, and its nodes are `X_{z,j}` for `z <= h_l`.
+
+Its root is `X_{h_l,0}`, and the top tree's root is `PK.root`. -/
 
 /-- The parent at a position of tree `tree` of a layer, from its two children.
 
@@ -57,6 +41,10 @@ def nodeHash (pkSeed : PkSeed) (layer : Layer) (tree : Nat) (p : Merkle.Position
   -- `X_{z,j} = H(PK.seed, ADRS_node(l, tau, z, j), X_{z-1,2j} | X_{z-1,2j+1})`.
   --
   -- The payload is the left child, then the right child.
+  --
+  -- The trees of a layer are the shared Merkle trees of EthLib.
+  --
+  -- Their node hash puts the height and the index of the node into its address.
   th H pkSeed (adrsNode layer tree p.level p.index) (packBytes left ++ packBytes right)
 
 /-- `X_{0,e}`: the leaf of one-time key `e` of tree `tree` of a layer. -/
@@ -68,6 +56,7 @@ def leaves (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree e : Nat) : m Di
 
 Computing it evaluates the `2^z` one-time keys below it. -/
 def node (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree z j : Nat) : m Digest :=
+  -- A node computes its left subtree, then its right subtree, then its own hash.
   Merkle.node (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree) ⟨z, j⟩
 
 /-- The root of tree `tree` of a layer: its one node at the top height. -/
@@ -79,14 +68,22 @@ def treeRoot (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree : Nat) : m Di
 Its top value is the tree's root, and it holds the path of each of its keys. -/
 def buildTree (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree : Nat) :
     m (Merkle.Built Digest) :=
+  -- A build computes every node of a tree once, so it gives both the root and each key's path.
   Merkle.build (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree) ⟨layer.height, 0⟩
 
-/-! ## The path -/
+/-! ## The path
+
+A signature carries its key's path: the sibling of every node on the way up. -/
 
 /-- The path of key `e` of tree `tree`, from the leaf up, height 0 first. -/
 def path (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree e : Nat) :
     m (Vector Digest layer.height) :=
   -- Algorithm 10, lines 2 and 3: `P_z = X_{z, floor(e / 2^z) xor 1}`.
+  --
+  -- For example, in a tree of height 2 with leaves `l_0` to `l_3`, the path of `l_2` is:
+  --
+  -- - `l_3`, its sibling at height 0.
+  -- - `X_{1,0}`, the sibling of its parent at height 1.
   Merkle.path (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree) layer.height e
 
 /-- `Tree.fold`: the root a path leads to from the leaf of key `e` of tree `tree`.

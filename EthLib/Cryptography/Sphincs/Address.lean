@@ -7,16 +7,6 @@ public import EthLib.Cryptography.Sphincs.Types
 
 Addresses keep the hash inputs of a key distinct.
 
-Every addressed hash call of a key is `H(PK.seed | ADRS | M)`.
-
-The address `ADRS` names the call site.
-
-One hash for every call site would expose many targets at once.
-
-A preimage among `M` targets then costs `2^128 / M`.
-
-Giving each call site its own address removes that discount.
-
 The address is FIPS 205's: eight big-endian 32-bit words.
 
 leanSPHINCS adds one address type, for the WOTS+C encoding.
@@ -32,24 +22,34 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
-/-! ## The encoding -/
+/-! ## The encoding
 
-/-- `enc(l, tau, t, u_1, u_2, u_3)`: the 32 bytes of one address.
+Every addressed hash call of a key is `H(PK.seed | ADRS | M)`.
 
-The fields take 4, 12, 4, 4, 4 and 4 bytes, in this order.
+The address `ADRS` names the call site.
 
-- `layer` is the hypertree layer, counted from the bottom.
-- `tree` is the tree on that layer, written as a 96-bit word, so its first 4 bytes are zero.
-- `type` says what the call computes, and gives the meaning of the last three words.
-- `u_1` is the key pair address.
-- `u_2` is the chain address or the tree height.
-- `u_3` is the hash address or the tree index.
-- Every word is big-endian.
--/
+One hash for every call site would expose many targets at once.
+
+A preimage among `M` targets then costs `2^128 / M`.
+
+Giving each call site its own address removes that discount. -/
+
+/-- `enc(l, tau, t, u_1, u_2, u_3)`: the 32 bytes of one address, each word big-endian. -/
 def encodeAdrs (layer : UInt32) (tree : UInt64) (type keyPair word2 word3 : UInt32) : Adrs :=
   -- FIPS 205 §4.2: the layer address, the tree address, the type, then three words.
-  toByte 4 layer.toNat ++ toByte 12 tree.toNat ++ toByte 4 type.toNat ++ toByte 4 keyPair.toNat
-    ++ toByte 4 word2.toNat ++ toByte 4 word3.toNat
+  --
+  -- The hypertree layer, counted from the bottom: 4 bytes.
+  toByte 4 layer.toNat
+    -- The tree on that layer, as a 96-bit word, so its first 4 bytes are zero: 12 bytes.
+    ++ toByte 12 tree.toNat
+    -- The type, which says what the call computes and the meaning of the last three words: 4 bytes.
+    ++ toByte 4 type.toNat
+    -- The key pair address `u_1`: 4 bytes.
+    ++ toByte 4 keyPair.toNat
+    -- The chain address or the tree height `u_2`: 4 bytes.
+    ++ toByte 4 word2.toNat
+    -- The hash address or the tree index `u_3`: 4 bytes.
+    ++ toByte 4 word3.toNat
 
 /-! ## Address types -/
 
@@ -88,18 +88,17 @@ def AdrsType.code : AdrsType → UInt32
 
 /-! ## Addresses of one key
 
-An address of a one-time key or a FORS instance carries a layer, a tree and a type.
-
-Each word holds its value modulo `2^32`, and the tree modulo `2^64`.
-
-Every value that an honest call puts there fits.
-
-- A tree is below `2^18`, and a leaf below `2^10`.
-- A FORS tree index is below `24 * 2^10`.
-- A chain index, a chain position, a height and a node index are below `2^10`. -/
+An address of a one-time key or a FORS instance carries a layer, a tree and a type. -/
 
 /-- `ADRS` of a type in tree `tree` of a layer, with its last three words. -/
 def adrs (type : AdrsType) (layer : Layer) (tree keyPair word2 word3 : Nat) : Adrs :=
+  -- Each word holds its value modulo `2^32`, and the tree modulo `2^64`.
+  --
+  -- Every value that an honest call puts there fits:
+  --
+  -- - A tree is below `2^18`, and a leaf below `2^10`.
+  -- - A FORS tree index is below `24 * 2^10`.
+  -- - A chain index, a chain position, a height and a node index are below `2^10`.
   encodeAdrs (UInt32.ofNat layer.toNat) (UInt64.ofNat tree) type.code (UInt32.ofNat keyPair)
     (UInt32.ofNat word2) (UInt32.ofNat word3)
 

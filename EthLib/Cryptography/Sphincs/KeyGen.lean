@@ -5,17 +5,7 @@ public import EthLib.Cryptography.Sphincs.Verify
 /-!
 # leanSPHINCS key generation
 
-Key generation.
-
-The secret key is `SK.seed`, 32 bytes, and nothing more.
-
-Two hashes of it under the scheme's 11-byte ASCII name give `PK.seed` and `SK.prf`.
-
-`SK.prf` keeps all 32 bytes, so predicting a randomizer is as hard as guessing `SK.seed`.
-
-So `SK.seed` alone regenerates every chain, every FORS secret and the public key.
-
-FIPS 205 draws `SK.prf` and `PK.seed` independently of `SK.seed`.
+Key generation: the secret key is `SK.seed`, 32 bytes, and nothing more.
 
 Source: `slh_keygen_internal` of [FIPS 205][fips205] (Algorithm 18).
 
@@ -30,7 +20,9 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-! ## Keys -/
 
-/-- A secret key: `SK.seed`. -/
+/-- A secret key: `SK.seed`.
+
+It alone regenerates every chain, every FORS secret and the public key. -/
 structure SecretKey where
   /-- `SK.seed`, the 32 uniform bytes every secret derives from. -/
   seed : Seed
@@ -42,7 +34,11 @@ structure ExpandedKey where
   /-- `SK.prf`, the whole hash under domain 1, the key of `PRF_msg`. -/
   skPrf : HashOutput
 
-/-! ## Key expansion -/
+/-! ## Key expansion
+
+Two hashes of `SK.seed` under the scheme's 11-byte ASCII name give `PK.seed` and `SK.prf`.
+
+FIPS 205 draws `SK.prf` and `PK.seed` independently of `SK.seed`. -/
 
 /-- The 44 bytes the key expansion hashes: `"leanSPHINCS" | SK.seed | BE_8(domain)`.
 
@@ -57,6 +53,8 @@ def expandKey (seed : Seed) : m ExpandedKey := do
   -- `PK.seed = Trunc_n(H("leanSPHINCS" | SK.seed | BE_8(0)))`.
   let pkSeed := trunc N (← H (expandInput seed 0))
   -- `SK.prf = H("leanSPHINCS" | SK.seed | BE_8(1))`, all 32 bytes.
+  --
+  -- Keeping all 32 bytes makes predicting a randomizer as hard as guessing `SK.seed`.
   let skPrf ← H (expandInput seed 1)
   return { pkSeed, skPrf }
 
@@ -76,15 +74,16 @@ def publicKeyOf (pkSeed : PkSeed) (prf : Prf m) : m PublicKey := do
 
 /-- `Gen` over a hash `H`: the key pair of `SK.seed`, by Algorithm 18 of FIPS 205.
 
-1. `PK.seed` and `SK.prf`, from `SK.seed`.
-2. `PK.root`, the root of the top tree, whose secrets are `PRF(PK.seed, SK.seed, ADRS)`.
-
 The seed must be 32 uniform bytes, kept secret.
 
 `SK.prf` is not part of the public key, but `Gen` derives it all the same. -/
 def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
+  -- Step 1: `PK.seed` and `SK.prf`, from `SK.seed`.
+  --
   -- FIPS 205 takes `SK.prf` and `PK.seed` as inputs; leanSPHINCS derives them from `SK.seed`.
   let key ← expandKey H seed
+  -- Step 2: `PK.root`, the root of the top tree, whose secrets are `PRF(PK.seed, SK.seed, ADRS)`.
+  --
   -- Algorithm 18, line 4 returns the secret key `(SK.seed, SK.prf, PK.seed, PK.root)`.
   --
   -- It returns the public key `(PK.seed, PK.root)`.

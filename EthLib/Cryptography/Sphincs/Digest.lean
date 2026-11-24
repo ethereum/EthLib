@@ -7,19 +7,7 @@ public import EthLib.Cryptography.Sphincs.Fors
 
 The message digest `D`, and the randomizer `R` the signer hashes into it.
 
-`H_msg` is MGF1 of RFC 8017 on Keccak-256, and `D` has `m = 34` bytes `g_0` to `g_33`.
-
-FIPS 205 Algorithm 19 splits them into three fields, each read most significant bit first.
-
-The fields `md`, `tree` and `leaf` take 30, 3 and 1 bytes, in this order.
-
-- `md` gives the leaf of each FORS tree: `(s_0, ..., s_23) = base_2b(md, a, k)`.
-- `tree` is a big-endian integer cut to `h - h_0 = 18` bits: the bottom tree.
-- `leaf` is cut to `h_0 = 8` bits: the leaf in that tree.
-
-The index is `idx = tree * 2^8 + leaf`, a bottom leaf and so a FORS instance.
-
-Every index names a bottom leaf of the key, so every digest is valid.
+`H_msg` is MGF1 of RFC 8017 on Keccak-256, and `D` has `m = 34` bytes.
 
 Source: [FIPS 205][fips205] Algorithms 19 and 22, and MGF1 of [RFC 8017][rfc8017] Appendix B.2.1.
 
@@ -57,7 +45,11 @@ def prfMsg (skPrf : HashOutput) (optRand : PkSeed) (msg : Message) : m Randomize
   -- Algorithm 19, line 3: `R = PRF_msg(SK.prf, opt_rand, M') = Trunc_n(H(SK.prf | opt_rand | M'))`.
   return trunc N (← H (packBytes skPrf ++ packBytes optRand ++ framedMessage msg))
 
-/-! ## The digest -/
+/-! ## The digest
+
+Algorithm 19 of FIPS 205 cuts `g_0` to `g_33` into three fields, most significant bit first.
+
+The fields `md`, `tree` and `leaf` take 30, 3 and 1 bytes, in this order. -/
 
 /-- The `m = 34` bytes of the message digest. -/
 abbrev MessageDigest := Vector UInt8 DIGEST_BYTES
@@ -117,7 +109,7 @@ def digestLeaves (d : MessageDigest) : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES
   Vector.ofFn fun kappa =>
     ⟨msbField d (FORS_HEIGHT * kappa.val) FORS_HEIGHT, msbField_lt d _ FORS_HEIGHT⟩
 
-/-- The tree index: bytes 30 to 32 of the digest, as a big-endian integer cut to 18 bits. -/
+/-- The bottom tree index: bytes 30 to 32 of the digest, as a big-endian integer cut to 18 bits. -/
 def digestTree (d : MessageDigest) : Nat :=
   -- Algorithm 19, lines 7 and 9: `idx_tree <- toInt(tmp_idx_tree, ...) mod 2^(h - h/d)`.
   --
@@ -125,7 +117,7 @@ def digestTree (d : MessageDigest) : Nat :=
   EthLib.Base.ByteOrder.ofBE ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES)
     % 2 ^ (HEIGHT - LOWER_HEIGHT)
 
-/-- The bottom leaf index: byte 33 of the digest, cut to 8 bits. -/
+/-- The index of the leaf in that bottom tree: byte 33 of the digest, cut to 8 bits. -/
 def digestLeaf (d : MessageDigest) : Nat :=
   -- Algorithm 19, lines 8 and 10: `idx_leaf <- toInt(tmp_idx_leaf, ...) mod 2^(h/d)`.
   --
@@ -133,7 +125,11 @@ def digestLeaf (d : MessageDigest) : Nat :=
   EthLib.Base.ByteOrder.ofBE ((d.toList.drop (MD_BYTES + TREE_INDEX_BYTES)).take LEAF_INDEX_BYTES)
     % 2 ^ LOWER_HEIGHT
 
-/-- `idx = tree * 2^h_0 + leaf`: the bottom leaf the digest names, below `2^26`. -/
+/-- `idx = tree * 2^h_0 + leaf`: the bottom leaf, and so the FORS instance, that the digest names.
+
+It is below `2^26`, with `h_0 = 8`.
+
+Every index names a bottom leaf of the key, so every digest is valid. -/
 def digestIndex (d : MessageDigest) : Nat :=
   digestTree d * 2 ^ LOWER_HEIGHT + digestLeaf d
 
