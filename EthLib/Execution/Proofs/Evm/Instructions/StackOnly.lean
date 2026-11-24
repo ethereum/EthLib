@@ -8,23 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Instructions.StackOnly`
 
-PUSH reads the code past its end as zeros.
-
-POP on a stack with a word on top pays its price.
-
-Then it drops that word and moves the program counter by 1.
-
-PUSH0 to PUSH32 on a stack with room pay the price of PUSH0 for width 0, else of PUSH.
-
-Then they push the next `n` bytes of code, as a big-endian word.
-
-They move the program counter by `1 + n`.
-
-DUP and SWAP fail with an underflow exactly on a stack too short for their depth.
-
-From Spurious Dragon, EXP costs 10 plus 50 per byte of the exponent.
-
-KECCAK256 pays 30, 6 per hashed word and the growth of memory.
+The stack instructions, among them POP, PUSH, DUP, SWAP and EXP, and KECCAK256.
 
 None of these instructions changes the message, the state or the substate of the frame.
 
@@ -97,6 +81,7 @@ theorem popStep_cons {evm : Evm fork Meter} {x : U256} {rest : List U256}
           have := evm.stack.property
           rw [h, List.length_cons] at this
           omega⟩,
+        -- The program counter moves past the opcode.
         gas, pc := evm.pc + 1 } := by
   have hstack : evm.stack = ⟨x :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
   simp only [popStep, popWord, chargeGas, hstack, Stack.pop]
@@ -113,6 +98,7 @@ theorem pushN_of_length_lt {n : Fin 33} {evm : Evm fork Meter}
     pushN n evm = (GasMeter.charge evm.gas (if n.val = 0 then OPCODE_PUSH0 else OPCODE_PUSH)).map
       fun gas =>
         { evm with
+          -- The next `n` bytes of code are pushed as one big-endian word.
           stack := ⟨pushData evm.code evm.pc n :: evm.stack.val, room⟩,
           gas, pc := evm.pc + (1 + n) } := by
   have full : ¬evm.stack.val.length = STACK_LIMIT := Nat.ne_of_lt room
@@ -160,6 +146,7 @@ theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm
 theorem keccak256Step_cons {evm : Evm fork Meter} {start size : U256} {rest : List U256}
     (h : evm.stack.val = start :: size :: rest) :
     keccak256Step evm =
+      -- It pays 30, 6 per hashed word and the growth of memory.
       (GasMeter.charge evm.gas (keccak256Cost size +
         (extendMemory evm.memory.size [(start, size)]).cost)).map fun gas =>
         let memory :=

@@ -12,12 +12,6 @@ RETURN and REVERT pay the growth of memory, then stop with the memory range as t
 REVERT succeeds as a step, with the revert error in the frame, so it keeps the gas it has left.
 
 Neither changes the message, the state or the substate.
-
-Their output has the size of the range.
-
-It holds the bytes of memory in the range, and reads as zero past its end.
-
-Both keep the size of memory a multiple of 32.
 -/
 
 @[expose] public section

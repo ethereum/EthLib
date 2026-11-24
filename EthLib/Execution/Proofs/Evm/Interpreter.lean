@@ -5,29 +5,9 @@ public import EthLib.Execution.Evm.Interpreter
 /-!
 # Proofs: `Evm.Interpreter`
 
-A step past the end of the code stops the frame, as STOP does.
+What a step does at each byte of the code, and how the loop runs steps until the frame stops.
 
-A step on a byte that is no opcode at the fork fails with that byte.
-
-The loop leaves a stopped frame as it is.
-
-A step on a call or a creation runs it.
-
-A step on an opcode with no instruction yet fails with an error that aborts the run.
-
-No opcode lacks an instruction: each opcode has one at every fork from the fork that adds it.
-
-So a step never fails at its dispatch with that error.
-
-A step that fails halts the frame with no gas and no output, unless its error aborts the run.
-
-Then the whole run fails with that error.
-
-A step that succeeds lets the loop go on from the next frame.
-
-Every run that succeeds ends with a stopped frame.
-
-A run keeps the size of memory a multiple of 32 when each of its steps keeps it.
+No opcode lacks an instruction, so a step never fails at its dispatch for want of one.
 -/
 
 @[expose] public section
@@ -38,7 +18,7 @@ open EthLib.Base (Fork)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- A step past the end of the code stops the frame and moves past the end. -/
+/-- A step past the end of the code stops the frame, as STOP does, and moves past the end. -/
 theorem step_of_size_le {evm : Evm fork Meter} (h : evm.code.size ≤ evm.pc) :
     step fork evm = .ok (.next (advance { evm with running := false })) := by
   simp [step, Nat.not_lt.mpr h, stopStep, Functor.map, Except.map]
@@ -187,7 +167,9 @@ theorem runFrame_of_step_eq_abort {evm : Evm fork Meter}
   simp only [running, dite_true]
   split <;> simp_all
 
-/-- A step that fails with any other error halts the frame exceptionally. -/
+/-- A step that fails with any other error halts the frame exceptionally.
+
+The frame is left with no gas and no output. -/
 theorem runFrame_of_step_eq_error {evm : Evm fork Meter}
     {within : GasMeter.gasHeld evm.gas ≤ bound} {e : EvmError} (running : evm.running = true)
     (failed : step evm = .error e) (halts : e.aborts = false) :
@@ -294,20 +276,17 @@ theorem runFrame_of_runChild_eq_error {evm caller : Evm fork Meter} {message : M
 
 /-- Induction on the loop with no observer, with each case given the value of the run.
 
-It has the cases of the loop, in its order.
-
-A step aborts, halts or goes on.
-
-Or it sends a message, which fails, or whose resume aborts, halts or goes on.
-
-Or the frame is stopped. -/
+It has the cases of the loop, in its order. -/
 theorem runFrame_induct
     (motive : (evm : Evm fork Meter) → GasMeter.gasHeld evm.gas ≤ bound →
       Except EvmError (Evm fork Meter) → Prop)
+    -- A step aborts.
     (case1 : ∀ evm within, evm.running = true → ∀ e, step evm = .error e → e.aborts = true →
       motive evm within (.error e))
+    -- A step halts.
     (case2 : ∀ evm within, evm.running = true → ∀ e, step evm = .error e → ¬e.aborts = true →
       motive evm within (.ok (exceptionalHalt evm e)))
+    -- A step goes on.
     (case3 : ∀ evm within, evm.running = true → ∀ after, step evm = .ok (.next after) →
       ∀ (lower : measure after < measure evm),
         motive after (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)
@@ -316,17 +295,20 @@ theorem runFrame_induct
         motive evm within
           (runFrame step decreases bound runChild after
             (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)))
+    -- A step sends a message, which fails.
     (case4 : ∀ evm within, evm.running = true → ∀ caller message resume,
       step evm = .ok (.child caller message resume) →
       ∀ (lower : StepResult.Decreases evm (.child caller message resume)) e,
         runChild caller message (Nat.lt_of_lt_of_le lower.1 within) = .error e →
         motive evm within (.error e))
+    -- Or the resume of the message aborts.
     (case5 : ∀ evm within, evm.running = true → ∀ caller message resume,
       step evm = .ok (.child caller message resume) →
       ∀ (lower : StepResult.Decreases evm (.child caller message resume)) child
         (used : GasMeter.gasHeld child.gas ≤ message.gas),
         runChild caller message (Nat.lt_of_lt_of_le lower.1 within) = .ok ⟨child, used⟩ →
         ∀ e, resume child = .error e → e.aborts = true → motive evm within (.error e))
+    -- Or the resume halts.
     (case6 : ∀ evm within, evm.running = true → ∀ caller message resume,
       step evm = .ok (.child caller message resume) →
       ∀ (lower : StepResult.Decreases evm (.child caller message resume)) child
@@ -334,6 +316,7 @@ theorem runFrame_induct
         runChild caller message (Nat.lt_of_lt_of_le lower.1 within) = .ok ⟨child, used⟩ →
         ∀ e, resume child = .error e → ¬e.aborts = true →
           motive evm within (.ok (exceptionalHalt evm e)))
+    -- Or the resume goes on.
     (case7 : ∀ evm within, evm.running = true → ∀ caller message resume,
       step evm = .ok (.child caller message resume) →
       ∀ (lower : StepResult.Decreases evm (.child caller message resume)) child
@@ -347,6 +330,7 @@ theorem runFrame_induct
           motive evm within
             (runFrame step decreases bound runChild after
               (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)))
+    -- Or the frame is stopped.
     (case8 : ∀ evm within, ¬evm.running = true → motive evm within (.ok evm))
     (evm : Evm fork Meter) (within : GasMeter.gasHeld evm.gas ≤ bound) :
     motive evm within (runFrame step decreases bound runChild evm within) := by

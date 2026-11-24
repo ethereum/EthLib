@@ -16,23 +16,9 @@ public import EthLib.Execution.Proofs.State.Frame
 /-!
 # Proofs: the instructions in a frame that must not change the state
 
-A step of a frame that must not change the state leaves its state as it was.
-
-Only the records of the reads of the frame differ.
-
-The step only adds reads, and every read recorded before stays.
-
-The step also keeps the message, the code and the block of the frame.
-
-The account, the storage and the transient storage of every address read as before.
-
-That holds for the instructions of each of the ten groups that give the next frame.
+A step of such a frame leaves its state as it was, up to the records of its reads.
 
 The instructions that write fail in such a frame: SSTORE, TSTORE, LOG and SELFDESTRUCT.
-
-Before Glamsterdam, SSTORE and SELFDESTRUCT halt the frame with the reads that they made.
-
-From Glamsterdam, they fail before any read.
 
 The calls and the creations are not here.
 -/
@@ -48,6 +34,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- A step leaves the state as it was, up to the records of its reads. -/
 def StateKept (before after : Evm fork Meter) : Prop :=
+  -- The account, the storage and the transient storage of every address read as before.
   SameOutside [] before.state after.state
 
 omit [GasMeter Meter] in
@@ -152,17 +139,13 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- A step of a static frame keeps its state, up to the records of its reads.
 
-It only adds reads: every field but the reads stays, and no read is lost.
-
-It keeps its message and its code.
-
-It also keeps the touched accounts and the accounts to delete of its substate.
-
-It keeps both lists of logs of its substate. -/
+It keeps its message, its code and both lists of logs of its substate. -/
 structure StaticStep (before after : Evm fork Meter) : Prop where
+  -- It only adds reads: every field but the reads stays, and no read is lost.
   tracker : before.state.ReadsMore after.state
   message : after.message = before.message
   code : after.code = before.code
+  -- It also keeps the touched accounts and the accounts to delete of its substate.
   touched : after.substate.touchedAccounts = before.substate.touchedAccounts
   toDelete : after.substate.accountsToDelete = before.substate.accountsToDelete
   /-- The step keeps the logs. -/
@@ -530,6 +513,7 @@ theorem staticStep_instruction_of_isStatic {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
     (hrun : instruction fork op = some run) (static : evm.message.isStatic = true)
     (h : run evm = .ok after) : StaticStep evm after := by
+  -- The instructions that give the next frame fall in ten groups, tried in turn.
   unfold instruction at hrun
   rcases orElse_eq_some hrun with hf | hrun
   · exact StaticStep.of_sameContext (stackOnlyStep_sameContext hf h)

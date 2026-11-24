@@ -8,35 +8,9 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: `Evm.Instructions.SelfDestruct`
 
-From Cancun, SELFDESTRUCT deletes no account that the transaction did not create.
+What SELFDESTRUCT deletes, where its ether goes, what it costs, what it reads and what it logs.
 
-Before Cancun, it always records the current account for deletion.
-
-From London, it gives no refund.
-
-From Cancun to BPO5, an account created in the transaction that names itself burns its ether.
-
-From Glamsterdam, SELFDESTRUCT burns no ether, by EIP-8246.
-
-It moves the balance to another beneficiary and keeps the sum of the two balances.
-
-An account that names itself keeps its balance.
-
-From Tangerine Whistle, a new beneficiary adds what a CALL of the balance pays for a new account.
-
-That holds up to Glamsterdam, and before Tangerine Whistle a new beneficiary adds nothing.
-
-From Glamsterdam, a new beneficiary costs 9000 execution gas and 183600 state gas.
-
-No SELFDESTRUCT pays state gas before Glamsterdam.
-
-SELFDESTRUCT keeps memory.
-
-Its transfer reads the originator and the beneficiary.
-
-From Paris, it also reads the written keys of an account that it leaves empty, even for a moment.
-
-From Glamsterdam, it writes the transfer log of the balance it moves, and none before.
+Its rules change at Tangerine Whistle, Spurious Dragon, London, Paris, Cancun and Glamsterdam.
 -/
 
 @[expose] public section
@@ -83,7 +57,9 @@ theorem refund_selfdestruct_of_london (london : fork ≥ .london) :
 
 /-! ## The ether -/
 
-/-- From Glamsterdam, the transfer of SELFDESTRUCT moves the whole balance, and nothing more. -/
+/-- From Glamsterdam, the transfer of SELFDESTRUCT moves the whole balance, and nothing more.
+
+So SELFDESTRUCT burns no ether, by EIP-8246. -/
 theorem selfdestructTransfer_of_glamsterdam (h : fork ≥ .glamsterdam) (state : TransactionState)
     (originator beneficiary : Address) :
     selfdestructTransfer fork state originator beneficiary =
@@ -141,7 +117,7 @@ theorem selfdestructNewAccount_of_glamsterdam (h : fork ≥ .glamsterdam) :
   simp only [gasSchedule, h, ↓reduceIte]
   rfl
 
-/-- From Glamsterdam, a new beneficiary costs the state gas of a new account. -/
+/-- From Glamsterdam, a new beneficiary costs the state gas of a new account, 183600. -/
 theorem selfdestructStateGas_of_glamsterdam (h : fork ≥ .glamsterdam) :
     selfdestructStateGas fork true = 183600 := by
   simp only [selfdestructStateGas, h, and_self, ↓reduceIte]
@@ -156,20 +132,24 @@ theorem selfdestructStateGas_eq_zero (h : fork < .glamsterdam ∨ createsAccount
     simp [this]
   · simp [h]
 
-/-- From Tangerine Whistle to Glamsterdam, a beneficiary that gets an account adds what a CALL pays.
-
-That CALL sends the balance of the current account to the beneficiary.
-
-EIP-150, Specification, charges 25000 for that account, "similar to CALLs".
-
-EIP-161, Specification (b), then charges both only when ether moves to a dead account.
-
-Before Tangerine Whistle, SELFDESTRUCT has no base price and charges nothing for the account. -/
+/-- From Tangerine Whistle to Glamsterdam, a new beneficiary adds what a CALL pays for it. -/
 theorem selfdestructCost_selfdestructCreatesAccount (hlt : fork < .glamsterdam) (cold : Bool)
     (state : TransactionState) (originator beneficiary : Address) :
     selfdestructCost fork cold (selfdestructCreatesAccount fork state originator beneficiary) =
       selfdestructCost fork cold false +
+        -- Before Tangerine Whistle, SELFDESTRUCT has no base price.
+        --
+        -- It then charges nothing for the account.
         if (gasSchedule fork).OPCODE_SELFDESTRUCT_BASE = 0 then 0
+        -- That CALL sends the balance of the current account to the beneficiary.
+        --
+        -- EIP-150, Specification, charges 25000 for that account, similar to CALLs.
+        --
+        -- From Spurious Dragon, EIP-161, Specification (b), narrows that charge.
+        --
+        -- It is then paid only for ether sent to a dead account.
+        --
+        -- The rule is the same for CALL and SELFDESTRUCT.
         else callNewAccountCost fork state beneficiary (state.getAccount originator).balance := by
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
   unfold selfdestructCost selfdestructCreatesAccount callNewAccountCost
@@ -253,20 +233,19 @@ theorem accountReads_selfdestructTransfer {tx tx' : State.TransactionState}
 
 /-- The transfer of SELFDESTRUCT can read the written keys of the originator and the beneficiary.
 
-From Paris, an originator whose nonce and code are empty has its written keys read.
-
-From Paris, a beneficiary that the transfer leaves empty has its written keys read.
-
-Every other address keeps its storage reads, and before Paris every address keeps them. -/
+From Paris, it reads those of an account that it leaves empty, even for a moment. -/
 theorem getElem?_storageReads_selfdestructTransfer {tx tx' : State.TransactionState}
     {originator beneficiary : Address}
     (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') (address : Address) :
     tx'.storageReads[address]? =
       if fork ≥ .paris ∧
+          -- From Paris, an originator whose nonce and code are empty has its written keys read.
           ((address = originator ∧
               { tx.getAccount originator with balance := 0 } = State.EMPTY_ACCOUNT) ∨
+            -- From Paris, a beneficiary that the transfer leaves empty has its written keys read.
             (address = beneficiary ∧ tx'.getAccount beneficiary = State.EMPTY_ACCOUNT)) then
         (tx.destroyStorage address).storageReads[address]?
+      -- Every other address keeps its storage reads, and before Paris every address keeps them.
       else tx.storageReads[address]? := by
   unfold selfdestructTransfer at h
   dsimp only at h

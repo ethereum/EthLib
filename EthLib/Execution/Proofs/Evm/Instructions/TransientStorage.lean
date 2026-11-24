@@ -11,12 +11,6 @@ After TSTORE, the transient word at its key is the word it wrote.
 
 So a TLOAD of that key in the same frame reads it back.
 
-TSTORE never succeeds in a static frame.
-
-TLOAD pays its price.
-
-Then it puts the transient word of the current account at the key in place of the key.
-
 TLOAD and TSTORE exist exactly from Dencun, and keep memory.
 -/
 
@@ -34,6 +28,7 @@ theorem tloadStep_cons {evm : Evm fork Meter} {word : U256} {rest : List U256}
     (h : evm.stack.val = word :: rest) :
     tloadStep evm = (GasMeter.charge evm.gas OPCODE_TLOAD).map fun gas =>
       { evm with
+        -- The transient word of the current account at the key takes the place of the key.
         stack := ⟨evm.state.getTransientStorage evm.message.currentTarget (U256.toBeBytes word) ::
             rest, length_cons_le (dropped := [word]) h (by simp)⟩,
         gas, pc := evm.pc + 1 } := by

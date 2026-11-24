@@ -7,17 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Gas.Memory
 /-!
 # Proofs: `Evm.Machine.Memory`
 
-- A read gives exactly the bytes asked for, as a byte array or as a list.
-- A read of memory after a write of the same range gives the written bytes, and the size stays.
-- Memory grows in whole words, so its size stays a multiple of 32.
-- A write within memory sets each byte of its range and keeps every other byte.
-- Growth keeps every byte, and a read gives the bytes of its range.
-- Growth by no byte, and a write or a read of a whole memory from offset 0, give simple forms.
-- A read of a range that a write does not touch gives the bytes before the write.
-- A read across two adjacent writes gives the two values in order.
-- A read that ends where a write ends gives the bytes before the write, then the value.
-- Two writes to disjoint ranges commute.
-- A read across two adjacent writes in either order gives the values in order.
+What reads, writes and growth of memory give, byte by byte, and how two of them combine.
+
+Memory grows in whole words, so its size stays a multiple of 32.
 -/
 
 @[expose] public section

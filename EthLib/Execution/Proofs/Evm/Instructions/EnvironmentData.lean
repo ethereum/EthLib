@@ -8,35 +8,9 @@ public import EthLib.Execution.Proofs.Fees.BlobBaseFee
 /-!
 # Proofs: `Evm.Instructions.EnvironmentData`
 
-An instruction that reads the frame pays its price, then pushes its value on a stack with room.
+Instructions that read the frame, among them BLOCKHASH, BLOBHASH, CHAINID, BLOBBASEFEE and SLOTNUM.
 
-BLOCKHASH gives the parent's hash for the block before, and 0 out of the 256 blocks before.
-
-A list of hashes too short to reach a block gives 0 for it, never another hash.
-
-BLOBHASH gives the hash at its index, and 0 past the end of the list.
-
-BLOCKHASH pays its price, and so does BLOBHASH, which exists from Dencun.
-
-Then BLOCKHASH puts the hash of the block in place of the number.
-
-BLOBHASH puts the versioned hash in place of the index.
-
-CHAINID pays the base price and pushes the chain id, from Istanbul on.
-
-BLOBBASEFEE pays the base price and pushes the blob base fee, from Dencun on.
-
-A fee of `2^256` or more aborts the execution instead.
-
-Below the threshold of a mainnet blob schedule, the fee is below `2^256`.
-
-SLOTNUM pays the base price and pushes the slot of the block, from Glamsterdam on.
-
-Each instruction exists exactly from the fork that adds its opcode.
-
-None of these instructions changes the message, the state or the substate of the frame.
-
-None of them changes memory either.
+None of them changes the message, the state, the substate or memory of the frame.
 -/
 
 @[expose] public section
