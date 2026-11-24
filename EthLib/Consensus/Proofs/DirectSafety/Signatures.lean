@@ -10,41 +10,13 @@ import EthLib.Consensus.Proofs.Containers.Misc
 
 Two runs share a run from genesis to a state `x`, then split into two tails.
 
-For each accountable key, the runs executed two accepted checks on conflicting objects.
+Each accountable key signed the signing roots of two conflicting objects.
 
-A check that accepted says nothing about who signed, unless an assumption links the two.
+This holds under two assumptions on the signature checks that blocks of the runs made.
 
-The two assumptions here cover only the accepted signature checks that blocks of the runs made.
+They say that none of those checks accepted a forgery.
 
-For the relation of real signatures, they say that none of those checks accepted a forgery.
-
-Under them, each accountable key signed the signing roots of two conflicting objects.
-
-They are two attestation data that the test of slashable votes flags, in attester domains.
-
-Or they are two different headers of one slot, in proposer domains.
-
-The proposer index of the two headers holds the key in the registry at `x`.
-
-Each domain is that of the genesis validators root of the runs and of a version of the config.
-
-The states of the runs hold only such versions, so their checks read no other.
-
-The two headers are signed under the version of one fork.
-
-Two runs that finalize conflicting checkpoints meet the bound of direct accountable safety.
-
-So the keys that signed such a pair hold at least a third of the unslashed active stake at `x`.
-
-Two thirds of the larger drift of the two tails are subtracted from that third.
-
-When the unslashed active keys stay those of `x` on both tails, the drift is zero.
-
-Otherwise the hashes of the runs show evidence.
-
-The two signed roots of a pair differ, or SHA-256 collides in the signing roots of the checks.
-
-These theorems do not show that a block of either run could include a slashing of those keys.
+This module does not show that a block of either run could include a slashing of those keys.
 
 With a signature by the key alone on each data, a separate module shows when a state accepts one.
 -/
@@ -175,27 +147,27 @@ def SigningEvidence {g a b : ForkedBeaconState preset} (one : Run config checks 
 
 /-- `key` signed the signing roots of two conflicting objects, and the two roots differ.
 
-They are two attestation data that the test of slashable votes flags, each in an attester domain.
-
-Or they are two different headers of one slot, each in a proposer domain.
-
-Their proposer index holds `key` in the registry of the reference state.
-
-Each domain is that of the given genesis validators root and of the version of a fork of the config.
-
-The two attestation data may take two forks, and the two headers take one.
-
 The two roots differ, so the two signatures are two signatures, not one. -/
 def SignedConflict (config : Config) (genesisRoot : Root) (reference : ForkedBeaconState preset)
     (signed : BLSPubkey → ByteArray → Prop) (key : BLSPubkey) : Prop :=
+  -- They are two attestation data that the test of slashable votes flags.
+  --
+  -- Each is in an attester domain.
+  --
+  -- The two attestation data may take two forks.
   (∃ (d₁ d₂ : AttestationData) (f₁ f₂ : Fork) (r₁ r₂ : Root),
       isSlashableAttestationData d₁ d₂ = true ∧ r₁ ≠ r₂ ∧
+      -- Each domain is that of the given genesis validators root.
+      --
+      -- It is also that of the version of a fork of the config.
       SignedIn config genesisRoot signed key DOMAIN_BEACON_ATTESTER (config.forkVersion f₁) d₁
         r₁ ∧
       SignedIn config genesisRoot signed key DOMAIN_BEACON_ATTESTER (config.forkVersion f₂) d₂
         r₂) ∨
+    -- Or they are two different headers of one slot, each in a proposer domain, under one fork.
     ∃ (h₁ h₂ : BeaconBlockHeader) (f : Fork) (r₁ r₂ : Root), h₁.slot = h₂.slot ∧
       h₁.proposerIndex = h₂.proposerIndex ∧ h₁ ≠ h₂ ∧ r₁ ≠ r₂ ∧
+      -- Their proposer index holds `key` in the registry of the reference state.
       (∃ v, reference.state.validators.data[h₁.proposerIndex.toNat]? = some v ∧
         v.pubkey = key) ∧
       SignedIn config genesisRoot signed key DOMAIN_BEACON_PROPOSER (config.forkVersion f) h₁ r₁ ∧
@@ -203,18 +175,16 @@ def SignedConflict (config : Config) (genesisRoot : Root) (reference : ForkedBea
 
 /-- An accepted check of an indexed attestation that names `key` is a signature by `key`.
 
-The key signed the signing root of the data, in the attester domain of the run.
-
-The version is the one that the state before the block reads at the target epoch of the data.
-
-The data and the domain of the check are a signing of the run, and the signed root is its root.
-
 This needs the assumption on the aggregate calls of the run. -/
 theorem AttestationCheck.signedIn {g a : ForkedBeaconState preset} {run : Run config checks g a}
     {key : BLSPubkey} (c : AttestationCheck run key) {signed : BLSPubkey → ByteArray → Prop}
     (sound : checks.AggregateSoundOn (· ∈ aggregateCalls run) signed) :
+    -- The data and domain of the check are a signing of the run, and the signed root is its root.
     ∃ domain root, (c.indexed.data, domain) ∈ attestationSignings run ∧
       computeSigningRoot c.indexed.data domain = .ok root ∧
+      -- The key signed the signing root of the data, in the attester domain of the run.
+      --
+      -- The version is what the state before the block reads at the target epoch of the data.
       SignedIn config g.state.genesisValidatorsRoot signed key DOMAIN_BEACON_ATTESTER
         (c.before.forkVersions.versionAt c.indexed.data.target.epoch) c.indexed.data root := by
   obtain ⟨pubkeys, domain, root, keysOk, domainOk, rootOk, verified⟩ :=
@@ -256,19 +226,19 @@ theorem AttestationCheck.signedIn {g a : ForkedBeaconState preset} {run : Run co
 
 /-- Both headers of a checked proposer slashing are signatures by `key`.
 
-The key signed the signing root of each header, in the proposer domain of the run.
-
-The version is the one that the state before the block reads at the epoch of the slot of the header.
-
-Each header and the domain of its check are a signing of the run, and the signed root is its root.
-
 This needs the assumption on the header calls of the run. -/
 theorem HeaderCheck.signedIn {g a : ForkedBeaconState preset} {run : Run config checks g a}
     {key : BLSPubkey} (c : HeaderCheck run key) {signed : BLSPubkey → ByteArray → Prop}
     (sound : checks.VerifySoundOn (· ∈ verifyCalls run) signed) :
     ∀ header ∈ [c.slashing.signedHeader1, c.slashing.signedHeader2],
+      -- Each header and the domain of its check are a signing of the run.
+      --
+      -- The signed root is the root of that signing.
       ∃ domain root, (header.message, domain) ∈ headerSignings run ∧
         computeSigningRoot header.message domain = .ok root ∧
+        -- The key signed the signing root of each header, in the proposer domain of the run.
+        --
+        -- The version is what the state before the block reads at the epoch of the header's slot.
         SignedIn config g.state.genesisValidatorsRoot signed key DOMAIN_BEACON_PROPOSER
           (c.before.forkVersions.versionAt (computeEpochAtSlot preset header.message.slot))
           header.message root := by
@@ -390,28 +360,38 @@ private theorem headerRoots_ne_or_evidence {g a b : ForkedBeaconState preset}
 
 /-- Every accountable key signed two different signing roots of two conflicting objects.
 
-They are two attestation data that the test of slashable votes flags, or two headers of one slot.
-
-The proposer index of the two headers holds the key at `x`.
-
-Otherwise SHA-256 collides in the signing roots that the checks of the runs compute.
-
-This needs the assumptions on the aggregate and header calls of both runs.
-
-The runs start at a genesis from deposits, with more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
--/
+Otherwise SHA-256 collides in the signing roots that the checks of the runs compute. -/
 theorem signedConflict_of_accountable {g x a b : ForkedBeaconState preset}
+    -- The runs start at a genesis from deposits.
     (shared : Run config checks g x) (left : Run config checks x a)
     (right : Run config checks x b) (genesis : Genesis config checks g)
+    -- There are more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat + 2 <
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- This needs the assumptions on the aggregate and header calls of both runs.
+    --
+    -- A check that accepted says nothing about who signed, unless an assumption links the two.
+    --
+    -- These cover only the accepted signature checks that blocks of the runs made.
+    --
+    -- For the relation of real signatures, they say that none of those checks accepted a forgery.
     {signed : BLSPubkey → ByteArray → Prop}
     (aggregate : checks.AggregateSoundOn
       (· ∈ aggregateCalls (shared.append left) ∪ aggregateCalls (shared.append right)) signed)
     (single : checks.VerifySoundOn
       (· ∈ verifyCalls (shared.append left) ∪ verifyCalls (shared.append right)) signed)
     {key : BLSPubkey} (member : key ∈ accountableKeys shared left right) :
+    -- The objects are two attestation data that the test of slashable votes flags.
+    --
+    -- Or they are two headers of one slot.
+    --
+    -- The proposer index of the two headers holds the key at `x`.
+    --
+    -- The states of the runs hold only versions of the config, so their checks read no other.
+    --
+    -- The two signed roots of a pair differ.
     SignedConflict config g.state.genesisValidatorsRoot x signed key ∨
+      -- Otherwise SHA-256 collides in the signing roots that the checks of the runs compute.
       SigningEvidence (shared.append left) (shared.append right) := by
   classical
   obtain ⟨unslashed, accountable⟩ := Finset.mem_filter.mp member
@@ -538,38 +518,39 @@ theorem accountableKeys_subset_signedConflictKeys {g x a b : ForkedBeaconState p
 
 /-- Direct accountable safety, for the keys that signed conflicting objects.
 
-The finalized checkpoints of the two runs conflict, and the left epoch is at most the right one.
-
-Then the unslashed active stake at `x` is at most three times the stake of those keys at `x`.
-
-Twice the larger drift of the two tails is added.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-Or SHA-256 collides in the signing roots that the checks of the runs compute.
-
-This needs the assumptions on the aggregate and header calls of both runs.
-
-The other hypotheses are those of direct accountable safety. -/
+Its hypotheses are those of direct accountable safety and the two signature assumptions. -/
 theorem accountable_safety_signed {g x a b : ForkedBeaconState preset}
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     (enoughA : EnoughStake (shared.append left) b.state.finalizedCheckpoint.epoch.toNat)
     (enoughB : EnoughStake (shared.append right) b.state.finalizedCheckpoint.epoch.toNat)
+    -- The finalized checkpoints of the runs conflict, and the left epoch is at most the right one.
     (ordered : a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch)
     (conflict : Conflict (shared.append left) (shared.append right)
       a.state.finalizedCheckpoint b.state.finalizedCheckpoint)
+    -- This needs the assumptions on the aggregate and header calls of both runs.
     {signed : BLSPubkey → ByteArray → Prop}
     (aggregate : checks.AggregateSoundOn
       (· ∈ aggregateCalls (shared.append left) ∪ aggregateCalls (shared.append right)) signed)
     (single : checks.VerifySoundOn
       (· ∈ verifyCalls (shared.append left) ∪ verifyCalls (shared.append right)) signed) :
+    -- The unslashed active stake at `x` is at most three times the stake of those keys at `x`.
+    --
+    -- Twice the larger drift of the two tails is added.
+    --
+    -- So those keys hold at least a third of that stake.
+    --
+    -- Two thirds of the larger drift of the tails are subtracted from that third.
     Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
         3 * Models.stake (effectiveWeight x.state)
           (signedConflictKeys config g.state.genesisValidatorsRoot signed x) +
         2 * max (derivedDrift b.state.finalizedCheckpoint.epoch.toNat left)
           (derivedDrift b.state.finalizedCheckpoint.epoch.toNat right) ∨
+      -- Otherwise SHA-256 collides in the root of a header of the runs.
+      --
+      -- Or a header or state has root zero.
       HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) ∨
+      -- Or SHA-256 collides in the signing roots that the checks of the runs compute.
       SigningEvidence (shared.append left) (shared.append right) := by
   classical
   rcases accountableKeys_subset_signedConflictKeys shared left right genesis parameters.lookahead
@@ -584,17 +565,13 @@ theorem accountable_safety_signed {g x a b : ForkedBeaconState preset}
 
 /-- Direct accountable safety, for the keys that signed conflicting objects, in its one-third form.
 
-The hypotheses are those of the signed form, with stable unslashed active keys on both tails.
+The signers of conflicting objects hold at least a third of the unslashed active stake at `x`.
 
-That holds up to one epoch past the later finalized epoch, as for the one-third form.
+Otherwise SHA-256 collides in the root of a header or in a signing root, or a root is zero.
 
-Then the signers of conflicting objects hold at least a third of the unslashed active stake at `x`.
-
-Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
-
-Or SHA-256 collides in the signing roots that the checks of the runs compute.
--/
+When the unslashed active keys stay those of `x` on both tails, the drift is zero. -/
 theorem accountable_safety_signed_third {g x a b : ForkedBeaconState preset}
+    -- The hypotheses are those of the signed form, with stable unslashed active keys on both tails.
     (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     (enoughA : EnoughStake (shared.append left) b.state.finalizedCheckpoint.epoch.toNat)
@@ -607,6 +584,7 @@ theorem accountable_safety_signed_third {g x a b : ForkedBeaconState preset}
       (· ∈ aggregateCalls (shared.append left) ∪ aggregateCalls (shared.append right)) signed)
     (single : checks.VerifySoundOn
       (· ∈ verifyCalls (shared.append left) ∪ verifyCalls (shared.append right)) signed)
+    -- Stability holds up to one epoch past the later finalized epoch, as for the one-third form.
     (stableA : ∀ {u : ForkedBeaconState preset} (pre : Run config checks x u)
       (post : Run config checks u a), pre.append post = left →
         (getCurrentEpoch u.state).toNat ≤ b.state.finalizedCheckpoint.epoch.toNat + 1 →
@@ -618,7 +596,11 @@ theorem accountable_safety_signed_third {g x a b : ForkedBeaconState preset}
     Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
         3 * Models.stake (effectiveWeight x.state)
           (signedConflictKeys config g.state.genesisValidatorsRoot signed x) ∨
+      -- Otherwise SHA-256 collides in the root of a header of the runs.
+      --
+      -- Or a header or state has root zero.
       HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) ∨
+      -- Or SHA-256 collides in the signing roots that the checks of the runs compute.
       SigningEvidence (shared.append left) (shared.append right) := by
   classical
   rcases accountableKeys_subset_signedConflictKeys shared left right genesis parameters.lookahead

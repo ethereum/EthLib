@@ -102,28 +102,26 @@ def replayRewards {fork : Fork} (pre : BalanceReplay preset fork) :
     let pre ← ordinary.foldlM (fun pre p => replayDeltas .penalties (#[], p.2) pre) pre
     replayDeltas .inactivity (#[], inactivity.2) pre
 
-/-- One stage of the epoch replay, over the stages that run before the payments.
-
-Justification, inactivity, registry updates and the eth1 reset change no balance and record nothing.
-
-The rewards and the slashings record their protocol-computed limits.
-
-Pending deposits and pending consolidations record their consumed amounts.
-
-A stage that is absent at the fork, or that runs after the payments, leaves the pair unchanged. -/
+/-- One stage of the epoch replay, over the stages that run before the payments. -/
 def epochReplayAction {fork : Fork} (stage : EpochStage) (pre : BalanceReplay preset fork) :
     Except TransitionError (BalanceReplay preset fork) :=
   match stage with
+  -- Justification and inactivity change no balance and record nothing.
   | .justification => carryBalance processJustificationAndFinalization pre
   | .inactivity =>
     if altair : .altair ≤ fork then carryBalance (processInactivityUpdates config · altair) pre
     else pure pre
+  -- The rewards record their protocol-computed limit.
   | .rewards => replayRewards (config := config) pre
+  -- Registry updates change no balance and record nothing.
   | .registry => carryBalance (processRegistryUpdates config) pre
+  -- The slashings record their protocol-computed limit.
   | .slashings =>
     recordBalance .slashings (fun s => return (0, ← delayedSlashingLimit s)) processSlashings pre
+  -- The eth1 reset changes no balance and records nothing.
   | .eth1Reset =>
     if before : fork < .hegota then carryBalance (processEth1DataReset before) pre else pure pre
+  -- Pending deposits and pending consolidations record their consumed amounts.
   | .pendingDeposits =>
     if electra : .pectra ≤ fork then do
       let deposited ← processPendingDeposits config checks pre.1 electra
@@ -137,6 +135,7 @@ def epochReplayAction {fork : Fork} (stage : EpochStage) (pre : BalanceReplay pr
       return (consolidated, pre.2 ++
         [⟨.consolidations, ⟨fork, pre.1⟩, ⟨fork, consolidated⟩, moved, moved⟩])
     else pure pre
+  -- A stage that is absent at the fork, or that runs after the payments, leaves the pair unchanged.
   | _ => pure pre
 
 /-- The replay ends after the last balance-changing epoch pass, before effective-balance updates.
@@ -1733,15 +1732,7 @@ theorem upgradeBalanceReplay_bounded {s t : ForkedBeaconState preset}
     rw [upgradeBalanceReplay]
     simp [due, pure, Except.pure]
 
-/-- The balance events of a slot, before Gloas: its epoch passes, then its fork upgrades.
-
-The epoch passes run only at the last slot of an epoch, on the state after the slot processing.
-
-They end at the input of the effective-balance updates, which holds the balances after the slot.
-
-The updates give the validators after the slot.
-
-At any other slot the slot keeps the balances, and the events are those of the upgrades. -/
+/-- The balance events of a slot, before Gloas: its epoch passes, then its fork upgrades. -/
 theorem _root_.EthLib.Consensus.Step.balanceEvents_slot {x y : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
     {events : List (BalanceEvent preset)} (replayed : (Step.slot ok).balanceEvents = .ok events) :
@@ -1751,9 +1742,20 @@ theorem _root_.EthLib.Consensus.Step.balanceEvents_slot {x y : ForkedBeaconState
       processSlot x.state = .ok cached ∧
       upgradeBalanceReplay (config := config) (checks := checks) ⟨x.fork, advanced⟩ =
         .ok crossings ∧
+      -- At a slot that is not the last of its epoch, the slot keeps the balances.
+      --
+      -- The events are then those of the upgrades.
       ((advanced.balances = cached.balances ∧ events = crossings) ∨
+        -- The epoch passes run only at the last slot of an epoch.
+        --
+        -- They run on the state after the slot processing.
         ∃ middle updated recorded,
           epochBalanceReplay (config := config) (checks := checks) cached = .ok (middle, recorded) ∧
+          -- They end at the input of the effective-balance updates.
+          --
+          -- That input holds the balances after the slot.
+          --
+          -- The updates give the validators after the slot.
           processEffectiveBalanceUpdates middle = .ok updated ∧
           advanced.validators = updated.validators ∧ advanced.balances = middle.balances ∧
           events = recorded ++ crossings ∧ ∃ next : Slot,
@@ -2316,22 +2318,19 @@ private theorem BalanceChain.plain :
     refine ⟨nofun, by simpa using chain.1, by simpa using last, ?_⟩
     exact .cons_cons (fun i => (head e' (by simp) i).symm) linked
 
-/-- The events of a step in order, around the state at which effective balances update.
-
-The events of a block run from its start to its end.
-
-A slot runs its epoch events up to the state after the slot, then those of its upgrades.
-
-Each event starts at the balances where the one before it ends, from the start of its part.
-
-The last event of a part ends at the balances of the end of that part. -/
+/-- The events of a step in order, around the state at which effective balances update. -/
 theorem _root_.EthLib.Consensus.Step.balanceChain {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (early : y.fork < .glamsterdam)
     {events : List (BalanceEvent preset)} (replayed : step.balanceEvents = .ok events) :
+    -- The events of a block run from its start to its end.
+    --
+    -- A slot runs its epoch events up to the state after the slot, then those of its upgrades.
     ∃ p first second, (step.balancePath = [x, y] ∧ p = x ∨ step.balancePath = [x, p, y]) ∧
       events = first ++ second ∧
       (first = [] → ∀ i, actualBalanceAt p i = actualBalanceAt x i) ∧
+      -- Each event starts at the balances where the one before it ends, from the start of its part.
       (∀ e ∈ first.head?, ∀ i, actualBalanceAt e.before i = actualBalanceAt x i) ∧
+      -- The last event of a part ends at the balances of the end of that part.
       (∀ e ∈ first.getLast?, ∀ i, actualBalanceAt e.after i = actualBalanceAt p i) ∧
       first.IsChain (fun e e' => ∀ i, actualBalanceAt e.after i = actualBalanceAt e'.before i) ∧
       (second = [] → ∀ i, actualBalanceAt y i = actualBalanceAt p i) ∧
@@ -4181,17 +4180,18 @@ private theorem funding_epoch_result {fork : Fork} {s t : BeaconState preset for
 
 /-- A step spends at most the carry plus a rate per epoch it enters.
 
-The only step that changes the carry processes the epoch of its input.
-
-Its pending deposits read their churn after the six stages before them.
-
-That state has the validators and the slot of that input.
-
-`capOk` bounds that churn by the rate of the input's epoch. -/
+The only step that changes the carry processes the epoch of its input. -/
 private theorem funding_step_capacity_rate {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (matched : BalancesMatch x.state)
     (early : y.fork < .glamsterdam) {events : List (BalanceEvent preset)}
     (replayed : step.balanceEvents = .ok events) (rate : Nat → Nat)
+    -- The pending deposits of the epoch that the step processes read their churn.
+    --
+    -- They read it after the six stages before them.
+    --
+    -- That state has the validators and the slot of that input.
+    --
+    -- This hypothesis bounds that churn by the rate of the input's epoch.
     (capOk : ∀ (cached reset : BeaconState preset x.fork) churn,
       cached.validators = x.state.validators → cached.slot = x.state.slot →
       EpochTrace (EpochStage.action config checks)
@@ -4408,15 +4408,7 @@ theorem funding_window_of_steps {x y : ForkedBeaconState preset}
 
 /-- Take the deposit carry at the end of a branch plus its deposit credits.
 
-It is at most the carry at its start plus a rate for each epoch the branch processes.
-
-`capOk` bounds the churn that the pending deposits of an epoch read by the rate of that epoch.
-
-They read it after the six stages before them.
-
-That state has the validators and the slot of the epoch's input `a`.
-
-The branch reaches `a` by `epoch a ≤ high + 1`. -/
+It is at most the carry at its start plus a rate for each epoch the branch processes. -/
 theorem funding_deposit_run_rate {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)
@@ -4424,6 +4416,13 @@ theorem funding_deposit_run_rate {g x y : ForkedBeaconState preset}
     (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (events : List (BalanceEvent preset)) (replayed : tail.balanceEvents high = .ok events)
     (rate : Nat → Nat)
+    -- This bounds the churn that the pending deposits of an epoch read by the rate of that epoch.
+    --
+    -- They read it after the six stages before them.
+    --
+    -- That state has the validators and the slot of the epoch's input `a`.
+    --
+    -- The branch reaches `a` by `epoch a ≤ high + 1`.
     (capOk : ∀ {a : ForkedBeaconState preset}, Run config checks x a →
       a.fork < .glamsterdam → (getCurrentEpoch a.state).toNat ≤ high + 1 →
       ∀ (cached reset : BeaconState preset a.fork) churn,
