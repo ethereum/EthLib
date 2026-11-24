@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Hex
+public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Gossip.Topic
 
 /-!
@@ -19,38 +20,8 @@ The parser of topic strings inverts the printer.
 namespace EthLib.Networking.Proofs.Gossip.Topic
 
 open EthLib.Networking.Gossip
-
-/-! ## Prefixes and suffixes -/
-
-/-- A list that starts with a prefix gives back the rest. -/
-theorem dropPrefix?_append (pre rest : List Char) :
-    dropPrefix? pre (pre ++ rest) = some rest := by
-  simp [dropPrefix?]
-
-/-- A list that gives back a rest is the prefix followed by the rest. -/
-theorem eq_append_of_dropPrefix? {pre cs rest : List Char}
-    (h : dropPrefix? pre cs = some rest) : cs = pre ++ rest := by
-  unfold dropPrefix? at h
-  split at h
-  · rename_i hp
-    cases h
-    exact (List.prefix_iff_eq_append.mp (List.isPrefixOf_iff_prefix.mp hp)).symm
-  · cases h
-
-/-- A list that ends with a suffix gives back the start. -/
-theorem dropSuffix?_append (start suf : List Char) :
-    dropSuffix? suf (start ++ suf) = some start := by
-  simp [dropSuffix?]
-
-/-- A list that gives back a start is the start followed by the suffix. -/
-theorem eq_append_of_dropSuffix? {suf cs start : List Char}
-    (h : dropSuffix? suf cs = some start) : cs = start ++ suf := by
-  unfold dropSuffix? at h
-  split at h
-  · rename_i hs
-    cases h
-    exact (List.suffix_iff_eq_append.mp (List.isSuffixOf_iff_suffix.mp hs)).symm
-  · cases h
+open EthLib.Base (dropPrefix?_append eq_append_of_dropPrefix? dropSuffix?_append
+  eq_append_of_dropSuffix?)
 
 /-! ## The fork digest -/
 

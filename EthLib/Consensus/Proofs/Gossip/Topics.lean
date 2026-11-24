@@ -75,7 +75,7 @@ theorem parseSubnetTopicName_other {base other : String} (subnet : SubnetID)
   have fails : ((base ++ "_").toList.isPrefixOf
       ((other ++ "_").toList ++ Nat.toDigits 10 subnet.toNat)) = false := by
     rwa [Bool.eq_false_iff, ne_eq, List.isPrefixOf_iff_prefix]
-  simp only [parseSubnetTopicName, dropPrefix?, shape, fails]
+  simp only [parseSubnetTopicName, dropPrefix?_eq, shape, fails]
   rfl
 
 /-- The name of every topic parses back to the topic. -/

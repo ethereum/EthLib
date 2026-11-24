@@ -1,16 +1,69 @@
 module
 
+public import EthLib.Base.List
+
 /-!
 # `Base.Proofs.List`
 
 Facts about lists that Lean core does not prove and that several layers use.
 
 They cover duplicates, sums and their bounds, the front of a list, searches in arrays and maxima.
+
+They also invert the readers of a prefix and of a suffix.
+
+The prefix reader is also a test of the prefix, then a drop of its length.
 -/
 
 @[expose] public section
 
 namespace EthLib.Base
+
+/-- A list that starts with a prefix leaves what follows the prefix. -/
+theorem dropPrefix?_append {α : Type} [DecidableEq α] :
+    (pre rest : List α) → dropPrefix? pre (pre ++ rest) = some rest
+  | [], _ => rfl
+  | c :: pre, rest => by simp [dropPrefix?, dropPrefix?_append pre rest]
+
+/-- A list from which a prefix leaves a rest is that prefix, then the rest. -/
+theorem eq_append_of_dropPrefix? {α : Type} [DecidableEq α] :
+    {pre cs rest : List α} → dropPrefix? pre cs = some rest → cs = pre ++ rest
+  | [], cs, rest, h => by
+    simp only [dropPrefix?, Option.some.injEq] at h
+    simp [h]
+  | c :: pre, d :: cs, rest, h => by
+    simp only [dropPrefix?] at h
+    split at h
+    · rename_i same
+      simp [same, eq_append_of_dropPrefix? h]
+    · cases h
+  | _ :: _, [], _, h => by simp [dropPrefix?] at h
+
+/-- The rest after a prefix, read as a test of the prefix, then a drop of its length. -/
+theorem dropPrefix?_eq {α : Type} [DecidableEq α] :
+    (pre cs : List α) → dropPrefix? pre cs =
+      if pre.isPrefixOf cs then some (cs.drop pre.length) else none
+  | [], cs => by simp [dropPrefix?]
+  | _ :: _, [] => by simp [dropPrefix?]
+  | p :: pre, c :: cs => by
+    by_cases h : p = c
+    · subst h
+      simp [dropPrefix?, dropPrefix?_eq pre cs]
+    · simp [dropPrefix?, h]
+
+/-- A list that ends with a suffix gives back the start. -/
+theorem dropSuffix?_append {α : Type} [DecidableEq α] (start suf : List α) :
+    dropSuffix? suf (start ++ suf) = some start := by
+  simp [dropSuffix?]
+
+/-- A list that gives back a start is the start followed by the suffix. -/
+theorem eq_append_of_dropSuffix? {α : Type} [DecidableEq α] {suf cs start : List α}
+    (h : dropSuffix? suf cs = some start) : cs = start ++ suf := by
+  unfold dropSuffix? at h
+  split at h
+  · rename_i hs
+    cases h
+    exact (List.suffix_iff_eq_append.mp (List.isSuffixOf_iff_suffix.mp hs)).symm
+  · cases h
 
 /-- Removing the duplicates of a list leaves a list in which each element comes once. -/
 theorem nodup_eraseDups {α : Type} [BEq α] [LawfulBEq α] (l : List α) : l.eraseDups.Nodup := by

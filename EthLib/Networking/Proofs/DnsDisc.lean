@@ -4,6 +4,7 @@ public import EthLib.Networking.DnsDisc
 public import EthLib.Networking.Proofs.Encoding.Base32
 public import EthLib.Base.Proofs.Base64
 public import EthLib.Base.Proofs.Bytes
+public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Proofs.Enr.Record
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import Std.Data.String.ToNat
@@ -44,25 +45,6 @@ def Entry.Valid : Entry → Prop
 
 /-! ## Prefixes -/
 
-/-- A list that starts with a prefix leaves what follows the prefix. -/
-theorem dropPrefix_append : (p cs : List Char) → dropPrefix p (p ++ cs) = some cs
-  | [], _ => rfl
-  | c :: p, cs => by simp [dropPrefix, dropPrefix_append p cs]
-
-/-- A list that a prefix leaves a rest of is the prefix, then that rest. -/
-theorem eq_append_of_dropPrefix : (p cs rest : List Char) → dropPrefix p cs = some rest →
-    cs = p ++ rest
-  | [], cs, rest, h => by
-    simp only [dropPrefix, Option.some.injEq] at h
-    simp [h]
-  | c :: p, d :: cs, rest, h => by
-    simp only [dropPrefix] at h
-    split at h
-    · rename_i same
-      simp [same, eq_append_of_dropPrefix p cs rest h]
-    · cases h
-  | _ :: _, [], _, h => by simp [dropPrefix] at h
-
 /-- The characters of the prefix of a root. -/
 theorem ROOT_PREFIX_eq :
     ROOT_PREFIX = ['e', 'n', 'r', 't', 'r', 'e', 'e', '-', 'r', 'o', 'o', 't', ':', 'v', '1', ' ',
@@ -81,33 +63,33 @@ theorem URL_PREFIX_eq : URL_PREFIX = ['e', 'n', 'r', 't', 'r', 'e', 'e', ':', '/
 
 /-- A branch does not start with the prefix of a root. -/
 theorem dropPrefix_root_branch (cs : List Char) :
-    dropPrefix ROOT_PREFIX (BRANCH_PREFIX ++ cs) = none := by
-  simp [ROOT_PREFIX_eq, BRANCH_PREFIX_eq, dropPrefix]
+    dropPrefix? ROOT_PREFIX (BRANCH_PREFIX ++ cs) = none := by
+  simp [ROOT_PREFIX_eq, BRANCH_PREFIX_eq, dropPrefix?]
 
 /-- A link does not start with the prefix of a root. -/
 theorem dropPrefix_root_url (cs : List Char) :
-    dropPrefix ROOT_PREFIX (URL_PREFIX ++ cs) = none := by
-  simp [ROOT_PREFIX_eq, URL_PREFIX_eq, dropPrefix]
+    dropPrefix? ROOT_PREFIX (URL_PREFIX ++ cs) = none := by
+  simp [ROOT_PREFIX_eq, URL_PREFIX_eq, dropPrefix?]
 
 /-- A link does not start with the prefix of a branch. -/
 theorem dropPrefix_branch_url (cs : List Char) :
-    dropPrefix BRANCH_PREFIX (URL_PREFIX ++ cs) = none := by
-  simp [BRANCH_PREFIX_eq, URL_PREFIX_eq, dropPrefix]
+    dropPrefix? BRANCH_PREFIX (URL_PREFIX ++ cs) = none := by
+  simp [BRANCH_PREFIX_eq, URL_PREFIX_eq, dropPrefix?]
 
 /-- A record does not start with the prefix of a root. -/
 theorem dropPrefix_root_enr (cs : List Char) :
-    dropPrefix ROOT_PREFIX (Enr.TEXT_PREFIX ++ cs) = none := by
-  simp [ROOT_PREFIX_eq, Enr.TEXT_PREFIX, dropPrefix]
+    dropPrefix? ROOT_PREFIX (Enr.TEXT_PREFIX ++ cs) = none := by
+  simp [ROOT_PREFIX_eq, Enr.TEXT_PREFIX, dropPrefix?]
 
 /-- A record does not start with the prefix of a branch. -/
 theorem dropPrefix_branch_enr (cs : List Char) :
-    dropPrefix BRANCH_PREFIX (Enr.TEXT_PREFIX ++ cs) = none := by
-  simp [BRANCH_PREFIX_eq, Enr.TEXT_PREFIX, dropPrefix]
+    dropPrefix? BRANCH_PREFIX (Enr.TEXT_PREFIX ++ cs) = none := by
+  simp [BRANCH_PREFIX_eq, Enr.TEXT_PREFIX, dropPrefix?]
 
 /-- A record does not start with the prefix of a link. -/
 theorem dropPrefix_url_enr (cs : List Char) :
-    dropPrefix URL_PREFIX (Enr.TEXT_PREFIX ++ cs) = none := by
-  simp [URL_PREFIX_eq, Enr.TEXT_PREFIX, dropPrefix]
+    dropPrefix? URL_PREFIX (Enr.TEXT_PREFIX ++ cs) = none := by
+  simp [URL_PREFIX_eq, Enr.TEXT_PREFIX, dropPrefix?]
 
 /-! ## Fields -/
 
@@ -178,10 +160,10 @@ theorem repr_of_seqOf {cs : List Char} {n : Nat} (h : seqOf cs = .ok n) :
 
 /-- The text of a root after its prefix. -/
 theorem Root.dropPrefix_toText (r : Root) :
-    dropPrefix ROOT_PREFIX r.toText = some (r.enrRoot.toText ++ " l=".toList ++
+    dropPrefix? ROOT_PREFIX r.toText = some (r.enrRoot.toText ++ " l=".toList ++
       r.linkRoot.toText ++ " seq=".toList ++ (Nat.repr r.seq).toList ++ " sig=".toList ++
       Base64.encodeList r.signature.toList) := by
-  simp only [Root.toText, signedText, List.append_assoc, dropPrefix_append]
+  simp only [Root.toText, signedText, List.append_assoc, dropPrefix?_append]
 
 /-- A root reads back from its text after its prefix. -/
 theorem Root.parseFields_toText (r : Root) :
@@ -199,7 +181,7 @@ theorem Root.parseFields_toText (r : Root) :
     have : " sig=".toList.length = 5 := by decide
     omega
   simp only [Root.parseFields, List.append_assoc, List.take_left' he, List.drop_left' he,
-    Hash.ofText_toText, dropPrefix_append, List.take_left' hl, List.drop_left' hl, bind,
+    Hash.ofText_toText, dropPrefix?_append, List.take_left' hl, List.drop_left' hl, bind,
     Except.bind, hlen, List.take_left', List.drop_left', seqOf_repr, signatureOf_encodeList]
   rfl
 
@@ -225,9 +207,9 @@ theorem Root.toText_of_parseFields {rest : List Char} {r : Root}
   cases h
   -- Each field is the text that it reads from, and the separators are between them.
   rw [← List.take_append_drop HASH_TEXT_SIZE rest, ← Hash.toText_of_ofText he,
-    eq_append_of_dropPrefix _ _ _ h2, ← List.take_append_drop HASH_TEXT_SIZE rest2,
-    ← Hash.toText_of_ofText hl, eq_append_of_dropPrefix _ _ _ h3,
-    ← List.take_append_drop tail rest3, ← repr_of_seqOf hs, eq_append_of_dropPrefix _ _ _ h4,
+    eq_append_of_dropPrefix? h2, ← List.take_append_drop HASH_TEXT_SIZE rest2,
+    ← Hash.toText_of_ofText hl, eq_append_of_dropPrefix? h3,
+    ← List.take_append_drop tail rest3, ← repr_of_seqOf hs, eq_append_of_dropPrefix? h4,
     ← encodeList_of_signatureOf hg]
   simp only [Root.toText, signedText, List.append_assoc]
 
@@ -387,14 +369,14 @@ theorem Entry.parse_toText {e : Entry} {text : String} (h : e.toText = .ok text)
   | branch hashes =>
     simp only [Entry.toText, pure, Except.pure, Except.ok.injEq] at h
     subst h
-    simp only [Entry.parse, String.toList_ofList, dropPrefix_root_branch, dropPrefix_append,
+    simp only [Entry.parse, String.toList_ofList, dropPrefix_root_branch, dropPrefix?_append,
       branchOf_hashesText]
     rfl
   | link url =>
     simp only [Entry.toText, pure, Except.pure, Except.ok.injEq] at h
     subst h
     simp only [Entry.parse, String.toList_ofList, Url.toText, List.append_assoc,
-      dropPrefix_root_url, dropPrefix_branch_url, dropPrefix_append, Url.parseFields_toText valid]
+      dropPrefix_root_url, dropPrefix_branch_url, dropPrefix?_append, Url.parseFields_toText valid]
     rfl
   | enr record =>
     simp only [Entry.toText] at h
@@ -413,7 +395,7 @@ theorem Entry.parse_toText {e : Entry} {text : String} (h : e.toText = .ok text)
     have chars : t.toList = Enr.TEXT_PREFIX ++ (Base64.encode bytes).toList := by
       rw [← hs, String.toList_append, String.toList_ofList]
     simp only [Entry.parse, chars, dropPrefix_root_enr, dropPrefix_branch_enr,
-      dropPrefix_url_enr, dropPrefix_append, back]
+      dropPrefix_url_enr, dropPrefix?_append, back]
     rfl
 
 /-- The text of an entry is the only text that reads as that entry. -/
@@ -427,7 +409,7 @@ theorem Entry.toText_of_parse {text : String} {e : Entry} (h : Entry.parse text 
     | ok r =>
       simp only [hp, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      simp only [Entry.toText, Root.toText_of_parseFields hp, ← eq_append_of_dropPrefix _ _ _ hd,
+      simp only [Entry.toText, Root.toText_of_parseFields hp, ← eq_append_of_dropPrefix? hd,
         String.ofList_toList]
       rfl
   split at h
@@ -437,7 +419,7 @@ theorem Entry.toText_of_parse {text : String} {e : Entry} (h : Entry.parse text 
     | ok hashes =>
       simp only [hp, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      simp only [Entry.toText, hashesText_of_branchOf hp, ← eq_append_of_dropPrefix _ _ _ hd,
+      simp only [Entry.toText, hashesText_of_branchOf hp, ← eq_append_of_dropPrefix? hd,
         String.ofList_toList]
       rfl
   split at h
@@ -447,7 +429,7 @@ theorem Entry.toText_of_parse {text : String} {e : Entry} (h : Entry.parse text 
     | ok url =>
       simp only [hp, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      simp only [Entry.toText, Url.toText_of_parseFields hp, ← eq_append_of_dropPrefix _ _ _ hd,
+      simp only [Entry.toText, Url.toText_of_parseFields hp, ← eq_append_of_dropPrefix? hd,
         String.ofList_toList]
       rfl
   split at h
@@ -462,7 +444,7 @@ theorem Entry.toText_of_parse {text : String} {e : Entry} (h : Entry.parse text 
 /-- A URL reads back from its text, when its key is a point of the curve. -/
 theorem Url.parse_toText {url : Url} (valid : (Point.decode ⟨url.key.toArray⟩).toBool = true) :
     Url.parse (String.ofList url.toText) = .ok url := by
-  simp only [Url.parse, String.toList_ofList, Url.toText, List.append_assoc, dropPrefix_append]
+  simp only [Url.parse, String.toList_ofList, Url.toText, List.append_assoc, dropPrefix?_append]
   exact Url.parseFields_toText valid
 
 /-- The text of a URL is the only text that reads as that URL. -/
@@ -471,7 +453,7 @@ theorem Url.toText_of_parse {text : String} {url : Url} (h : Url.parse text = .o
   unfold Url.parse at h
   split at h
   · rename_i rest hd
-    rw [Url.toText_of_parseFields h, ← eq_append_of_dropPrefix _ _ _ hd, String.ofList_toList]
+    rw [Url.toText_of_parseFields h, ← eq_append_of_dropPrefix? hd, String.ofList_toList]
   · cases h
 
 /-- A root signed with a private key verifies under the compressed public key of that key. -/
