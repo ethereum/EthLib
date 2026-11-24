@@ -11,13 +11,9 @@ Every list that the builder gives passes the order and uniqueness checks of EIP-
 
 So each account appears once, and no key of an account is both read and written.
 
-A write that leaves a value as its position found it records no change at that position.
+A write records a changed value at the current position, and no change for a value left as found.
 
-It keeps the changes of the other positions.
-
-A write that changes a value records it at the current position.
-
-It keeps every other account and key.
+It keeps the changes of the other positions, and every other account and key.
 -/
 
 @[expose] public section

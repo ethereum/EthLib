@@ -10,31 +10,9 @@ import EthLib.Execution.Proofs.Fees.GasLimit
 
 Before it runs a transaction, a block checks that the transaction fits in what the block has left.
 
-At every fork, the blob gas of the body is at most the blob gas limit of the block.
+So at every fork, each gas count of the body is within its bound.
 
-Before Dencun that limit is 0, so a body that runs uses no blob gas.
-
-Up to BPO5, the gas of the body is at most the gas limit of the block, and it counts no state gas.
-
-From Glamsterdam, the execution gas and the state gas of the body are each at most the gas limit.
-
-So at every fork, each count of the body is within its bound.
-
-Each transaction of a body that runs has a gas limit of at most the gas limit of the block.
-
-Up to BPO5, the cumulative gas of each receipt is at most that gas limit too.
-
-Up to BPO5, a block that passes its transition then records both below `2^64`.
-
-That result needs the gas limit of the parent below `2^63`.
-
-At every fork, each receipt records at most the execution gas plus the state gas of the body.
-
-So at every fork, a block that passes its transition then records both below `2^64`.
-
-That result needs the gas limit of the parent below `2^62`.
-
-The gas limit of the block then stays below `2^63`, and twice it below `2^64`.
+A passing block records its gas in 64 bits for a parent gas limit below `2^62` (`2^63` to BPO5).
 
 [EIP-4844][e4844] asks for the bound on the blob gas.
 
@@ -59,6 +37,7 @@ variable {fork : Fork}
 theorem applyTransactions_blob_le {env : BlockEnvironment fork} {body : BodyState}
     {transactions : List Transaction} {output : BodyOutput fork}
     (h : applyTransactions env body transactions = .ok output) :
+    -- Before Dencun the blob gas limit of the block is 0, so a body that runs uses no blob gas.
     output.gas.blob ≤ maxBlobGasPerBlock env := by
   refine foldlM_ok_invariant (fun before : BodyOutput fork => before.gas.blob ≤
     maxBlobGasPerBlock env) ?_ (Nat.zero_le _) h
@@ -257,25 +236,21 @@ theorem stateTransition_gasLimit_mul_lt {chain : BlockChain} {block : Block fork
   obtain ⟨-, -, -, -, hLimit, -⟩ := checkHeader_eq_ok_iff.mp hHead
   exact ⟨parent, hLast, Fees.GasLimit.mul_lt_of_checkGasLimit hLimit⟩
 
-/-- Up to BPO5, a block that passes its transition records its gas in 64 bits.
-
-Each of its transactions has a gas limit below `2^64`.
-
-Each receipt that its body gives has a cumulative gas below `2^64`.
-
-It needs the gas limit of the parent, the last recent block, below `2^63`.
-
-That gas limit is the one that the rule of the gas limit reads, doubled at the first London block.
--/
+/-- Up to BPO5, a block that passes its transition records its gas in 64 bits. -/
 theorem stateTransition_gas_lt_of_lt {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State.State} (hlt : fork < .glamsterdam)
     (h : stateTransition chain block checkSeal = .ok post)
+    -- It needs the gas limit of the parent, the last recent block, below `2^63`.
+    --
+    -- That is the gas limit of the parent that the rule reads, doubled at the first London block.
     (hParent : ∀ parent, chain.recent.getLast? = some parent →
       Fees.GasLimit.parentGasLimitForCheck parent.fork fork parent.header.gasLimit < 2 ^ 63) :
+    -- Each of its transactions has a gas limit below `2^64`.
     (∀ tx ∈ block.transactions, tx.gas.toNat < 2 ^ 64) ∧
       ∃ hashes output, recentHashes chain.recent = .ok hashes ∧
         applyBody chain.config (blockEnvironment chain.config hashes block.header) block
           ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+        -- Each receipt that its body gives has a cumulative gas below `2^64`.
         ∀ p ∈ output.receipts, p.2.cumulativeGasUsed < 2 ^ 64 := by
   obtain ⟨-, -, -, hashes, output, roots, hHashes, hApply, -⟩ := stateTransition_eq_ok h
   obtain ⟨parent, hLast, hRule⟩ := stateTransition_gasLimit_mul_lt h
@@ -288,27 +263,24 @@ theorem stateTransition_gas_lt_of_lt {chain : BlockChain} {block : Block fork Tr
   rw [hReceipts] at hp
   exact Nat.lt_of_le_of_lt (applyTransactions_cumulativeGasUsed_le_of_lt hlt hTxs p hp) hGas
 
-/-- A block that passes its transition records its gas in 64 bits, at every fork.
-
-Each of its transactions has a gas limit below `2^64`.
-
-Each receipt that its body gives has a cumulative gas below `2^64`.
-
-It needs the gas limit of the parent, the last recent block, below `2^62`.
-
-That gas limit is the one that the rule of the gas limit reads, doubled at the first London block.
--/
+/-- A block that passes its transition records its gas in 64 bits, at every fork. -/
 theorem stateTransition_gas_lt {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State.State} (h : stateTransition chain block checkSeal = .ok post)
+    -- It needs the gas limit of the parent, the last recent block, below `2^62`.
+    --
+    -- That is the gas limit of the parent that the rule reads, doubled at the first London block.
     (hParent : ∀ parent, chain.recent.getLast? = some parent →
       Fees.GasLimit.parentGasLimitForCheck parent.fork fork parent.header.gasLimit < 2 ^ 62) :
+    -- Each of its transactions has a gas limit below `2^64`.
     (∀ tx ∈ block.transactions, tx.gas.toNat < 2 ^ 64) ∧
       ∃ hashes output, recentHashes chain.recent = .ok hashes ∧
         applyBody chain.config (blockEnvironment chain.config hashes block.header) block
           ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+        -- Each receipt that its body gives has a cumulative gas below `2^64`.
         ∀ p ∈ output.receipts, p.2.cumulativeGasUsed < 2 ^ 64 := by
   obtain ⟨-, -, -, hashes, output, roots, hHashes, hApply, -⟩ := stateTransition_eq_ok h
   obtain ⟨parent, hLast, hRule⟩ := stateTransition_gasLimit_mul_lt h
+  -- The gas limit of the block then stays below `2^63`, and twice it below `2^64`.
   have hGas : block.header.gasLimit < 2 ^ 63 := by
     have hBound := hParent parent hLast
     omega

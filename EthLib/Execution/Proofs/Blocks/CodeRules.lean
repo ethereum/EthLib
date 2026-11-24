@@ -13,17 +13,9 @@ A block writes code only through the messages of its transactions and of its sys
 
 From Pectra, the authorizations of its transactions also write delegation indicators.
 
-Its other steps change balances, nonces and accounts, and write no code.
-
 So each account whose code changes in a block gets the empty code, or a code that the block wrote.
 
-Each code that the block wrote meets the rules of its fork.
-
-From Pectra, such a code may also be a delegation indicator.
-
 Codes from the genesis or from an earlier block are out of scope, as they may break the rules.
-
-An account counts as changing its code when it is new or when its code hash changes.
 
 Sources: [EIP-170][eip170], [EIP-3541][eip3541], [EIP-7702][eip7702], [EIP-7954][eip7954].
 
@@ -471,7 +463,9 @@ private theorem keeps_payRewards {tx tx' : TransactionState} {coinbase : Address
   · obtain ⟨mid, hmid, h⟩ := Base.bind_ok_iff.mp h
     exact (keeps_createEther hmid).trans (keeps_foldlM_createEther h)
 
-/-- The body of a block carries the codes. -/
+/-- The body of a block carries the codes.
+
+Its other steps change balances, nonces and accounts, and write no code. -/
 private theorem Carried.applyBody {pre : State} {config : ChainConfig}
     {env : BlockEnvironment fork} {block : Block fork Transaction} {start : BlockState}
     {output : BlockOutput fork} (carried : Carried pre fork start)

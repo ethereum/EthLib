@@ -12,15 +12,7 @@ The filter of two lists of logs, one after the other, is the OR of their filters
 
 The filter has no false negative: it has every bit of the address and of each topic of each log.
 
-A bit of the filter of an entry is set exactly when it is one of the bits of the entry.
-
-A bit of the filter of some logs is set exactly when it is a bit of an entry of one of the logs.
-
-The entries of a log are its address and its topics.
-
-A query for an entry passes exactly when each bit of the entry is a bit of an entry of a log.
-
-The 256 bytes of a filter read back, most significant byte first, as the number of the filter.
+Its 256 bytes read back, most significant byte first, as its number.
 
 So two filters with the same bytes are the same filter.
 -/

@@ -9,25 +9,7 @@ public import EthLib.Execution.Proofs.Transactions.NoninterferenceRun
 
 From Glamsterdam, a block that passes the transition commits to a block access list.
 
-Run one of its transactions on another block state instead.
-
-That state must agree with the one the transaction ran on, at what the list names.
-
-It must also agree on the code and, for each named account with nonce 0 and no code, the storage.
-
-The list names neither the code nor that storage.
-
-The other state must also hold the code of every account.
-
-Then the transaction is accepted alike, and gives the same gas used, block gas, logs and error.
-
-The states it leaves agree on what the list names, with the same tracker.
-
-The same holds for the calls of the body that are not transactions.
-
-These are the two system calls at its start, the withdrawals and the calls to the request contracts.
-
-None of them needs the other state to hold the code of every account.
+Each transaction and other call of it runs alike on a state that agrees on what the list names.
 
 Source: [EIP-7928, Scope and Inclusion][bal].
 
@@ -70,6 +52,9 @@ They agree on the whole storage of each named account with nonce 0 and no code i
 They agree on the code under the code hash, in the first block state, of each named account. -/
 abbrev _root_.EthLib.Execution.State.BlockState.AgreesOnList (bal : BlockAccessList)
     (block other : BlockState) : Prop :=
+  -- The list names no code.
+  --
+  -- It names no storage key of an account with nonce 0 and no code.
   BlockState.AgreesOn bal.NamesAccount (bal.NamesCandidate block) bal.NamesKey
     (bal.NamesCode block) block other
 
@@ -147,18 +132,6 @@ private theorem checkInclusion_of_sender {fork : Fork} {chainId : UInt64}
 
 /-- From Glamsterdam, each transaction of a block that passes depends only on what its list names.
 
-The list is the one whose hash the header commits to.
-
-The transaction at index `i`, from 0, runs after the system calls and the transactions before it.
-
-Take another block state that agrees with the state before it on what the list names.
-
-The transaction is accepted alike there.
-
-It gives the same gas, logs and error, and a state that agrees on what the list names.
-
-The other block state must hold the code of every account.
-
 From Hegotá the transition is not yet specified, so this holds from Glamsterdam up to Hegotá. -/
 theorem stateTransition_transaction_agrees {fork : Fork} {chain : BlockChain}
     {block : Block fork Transaction} {checkSeal : Bool} {post : State.State}
@@ -167,20 +140,29 @@ theorem stateTransition_transaction_agrees {fork : Fork} {chain : BlockChain}
       recentHashes chain.recent = .ok hashes ∧
       env = blockEnvironment chain.config hashes block.header ∧
       applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+      -- The list is the one whose hash the header commits to.
       BlockAccessList.hash output.body.builder.build =
         .ok (block.header.blockAccessListHash hFork) ∧
       startSystemCalls env block.header.parentHash (.init ⟨chain.state, ∅, ∅, ∅, ∅⟩) = .ok body ∧
+      -- The transaction at index `i`, from 0, runs after the system calls.
+      --
+      -- It also runs after the transactions before it.
       ∀ i (hi : i < block.transactions.length), ∃ before included out,
         applyTransactions env body (block.transactions.take i) = .ok before ∧
         checkInclusion env.chainId env before.gas (.ofBlock before.block)
           block.transactions[i] = .ok included ∧
         processTransaction env before.block included block.transactions[i] = .ok out ∧
+        -- Take another block state that agrees with the state before it on what the list names.
         ∀ other, BlockState.AgreesOnList output.body.builder.build before.block other →
+          -- The other block state must hold the code of every account.
           Transactions.HasCodes (.ofBlock other) →
+          -- The transaction is accepted alike there.
           checkInclusion env.chainId env before.gas (.ofBlock other) block.transactions[i] =
             .ok included ∧
           ∃ out', processTransaction env other included block.transactions[i] = .ok out' ∧
+            -- It gives the same gas used, block gas, logs and error.
             out' = { out with state := out'.state } ∧
+            -- It leaves a state that agrees on what the list names, with the same tracker.
             TransactionState.AgreesOnList output.body.builder.build before.block
               out.state out'.state := by
   obtain ⟨hashes, env, output, body, -, -, hHashes, hEnv, hOutput, hBal, -, hStart, -, hTx, -, -⟩ :=
@@ -199,15 +181,9 @@ theorem stateTransition_transaction_agrees {fork : Fork} {chain : BlockChain}
 
 /-- From Glamsterdam, the calls of a block that passes depend only on what its list names.
 
-The list is the one whose hash the header commits to.
-
 They are the two system calls at the start, the withdrawals and each call to a request contract.
 
-Run one of them on another block state that agrees with its own on what the list names.
-
-A system call gives the same output there, and a state that agrees on what the list names.
-
-The withdrawals give a state that agrees on what the list names.
+None of them needs the other block state to hold the code of every account.
 
 From Hegotá the transition is not yet specified, so this holds from Glamsterdam up to Hegotá. -/
 theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
@@ -217,6 +193,7 @@ theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
       recentHashes chain.recent = .ok hashes ∧
       env = blockEnvironment chain.config hashes block.header ∧
       applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+      -- The list is the one whose hash the header commits to.
       BlockAccessList.hash output.body.builder.build =
         .ok (block.header.blockAccessListHash hFork) ∧
       (∃ out mid out',
@@ -226,6 +203,11 @@ theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
         (BodyState.init ⟨chain.state, ∅, ∅, ∅, ∅⟩).join out.state = .ok mid ∧
         systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨block.header.parentHash.toArray⟩ =
           .ok out' ∧
+        -- Run on another block state that agrees with its own on what the list names.
+        --
+        -- A system call gives the same output there.
+        --
+        -- It leaves a state that agrees on what the list names.
         (∀ other,
           BlockState.AgreesOnList output.body.builder.build ⟨chain.state, ∅, ∅, ∅, ∅⟩ other →
           ∃ o, systemCall env other BEACON_ROOTS_ADDRESS
@@ -243,6 +225,7 @@ theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
         withdrawalState fork txOutput.body.block
           (block.withdrawals (Nat.le_trans (by decide) hFork)) = .ok tx ∧
         (txOutput.body.beginIndex (block.transactions.length + 1)).join tx = .ok withdrawn ∧
+        -- The withdrawals give a state that agrees on what the list names.
         ∀ other, BlockState.AgreesOnList output.body.builder.build txOutput.body.block other →
           ∃ tx', withdrawalState fork other
               (block.withdrawals (Nat.le_trans (by decide) hFork)) = .ok tx' ∧
@@ -250,6 +233,9 @@ theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
       ∀ j (hj : j < (requestContracts fork).length), ∃ mid out,
         ((requestContracts fork).take j).foldlM (readRequest env) (withdrawn, []) = .ok mid ∧
         checkedSystemCall env mid.1.block (requestContracts fork)[j].2 .empty = .ok out ∧
+        -- A call to a request contract gives the same output there.
+        --
+        -- It leaves a state that agrees on what the list names.
         ∀ other, BlockState.AgreesOnList output.body.builder.build mid.1.block other →
           ∃ o, checkedSystemCall env other (requestContracts fork)[j].2 .empty = .ok o ∧
             o = { out with state := o.state } ∧

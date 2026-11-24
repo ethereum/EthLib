@@ -9,17 +9,11 @@ public import EthLib.Execution.Proofs.Transactions.Rebuild
 /-!
 # Proofs: the access list of a block rebuilds the state after it
 
-Take a block state that can be rebuilt.
+From Glamsterdam, the list that the header commits to rebuilds the state after the block.
 
-No account with nonce 0 in it has the code hash of a delegation indicator.
+It needs only a rebuildable state before the block, and fewer than 2^32 - 1 transactions.
 
-Each system call, each transaction that enters the block, and the withdrawals keep that property.
-
-The access-list builder follows each of them.
-
-So, from Glamsterdam, the list that the header commits to rebuilds the state after the block.
-
-It needs only the property of the state before the block, and fewer than 2^32 - 1 transactions.
+Each call of the body keeps that property, and the access-list builder follows each of them.
 
 Source: [EIP-7928, Recording Semantics by Change Type][eip7928].
 
@@ -83,20 +77,14 @@ theorem keepsFollowable_rebuildableBlock {fork : Fork} (hfork : .dencun ≤ fork
 
 /-- From Glamsterdam, the list that the header commits to rebuilds the state after the block.
 
-The state before the block must be rebuildable.
-
-No account with nonce 0 there has the code hash of a delegation indicator.
-
-An account missing from a state reads as the empty account.
-
-The nonce is in 64 bits, as the list holds it.
-
-The block has fewer than 2^32 - 1 transactions.
-
 From Hegota the transition is not yet specified, so this holds from Glamsterdam up to Hegota. -/
 theorem stateTransition_rebuild_of_rebuildableBlock {fork : Fork} {chain : BlockChain}
     {block : Block fork Transaction} {checkSeal : Bool} {post : State}
+    -- The state before the block must be rebuildable.
+    --
+    -- No account with nonce 0 there has the code hash of a delegation indicator.
     (hFork : .glamsterdam ≤ fork) (hstart : RebuildableBlock ⟨chain.state, ∅, ∅, ∅, ∅⟩)
+    -- The block has fewer than 2^32 - 1 transactions.
     (hlength : block.transactions.length < 2 ^ 32 - 1)
     (h : stateTransition chain block checkSeal = .ok post) :
     ∃ hashes output,
@@ -105,10 +93,12 @@ theorem stateTransition_rebuild_of_rebuildableBlock {fork : Fork} {chain : Block
         ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
       BlockAccessList.hash output.body.builder.build =
         .ok (block.header.blockAccessListHash hFork) ∧
+      -- An account missing from a state reads as the empty account.
       ∀ address,
         ((post.getAccountOptional address).getD EMPTY_ACCOUNT).balance =
           output.body.builder.build.balanceAfter address
             ((chain.state.getAccountOptional address).getD EMPTY_ACCOUNT).balance ∧
+        -- The nonce is in 64 bits, as the list holds it.
         UInt64.ofNat ((post.getAccountOptional address).getD EMPTY_ACCOUNT).nonce =
           output.body.builder.build.nonceAfter address
             (UInt64.ofNat ((chain.state.getAccountOptional address).getD EMPTY_ACCOUNT).nonce) ∧

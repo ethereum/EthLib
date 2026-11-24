@@ -14,20 +14,6 @@ On such a state, the transition of a block never aborts for a missing code.
 
 Nor does it keep a transaction out of the block for the missing code of its sender.
 
-The system calls, the transactions and the requests each keep every code available.
-
-The DAO transfer, the withdrawals and the rewards change only balances.
-
-The record of a call in the block access list reads the new code of each account it changed.
-
-That read finds the code, so joining a call to the body never fails.
-
-The checks of the block and of its output never fail with an abort or with an error of the state.
-
-Nor do they keep a transaction out of the block.
-
-The abort from Hegotá on is for a fork whose rules are not yet specified, not for a missing code.
-
 So a block that passes its transition leaves a state that holds its codes.
 -/
 
@@ -83,6 +69,9 @@ private theorem recordAccountWrite_ok (b : AccessListBuilder) {tx : TransactionS
     ∃ b', b.recordAccountWrite tx address written = .ok b' := by
   have account : tx.getAccount address = written.getD State.EMPTY_ACCOUNT := by
     simp [TransactionState.getAccount, TransactionState.getAccountOptional, hw]
+  -- The record of a call in the block access list reads the new code of each account it changed.
+  --
+  -- That read finds the code, so joining a call to the body never fails.
   obtain ⟨code, hcode⟩ := available address
   rw [account] at hcode
   unfold AccessListBuilder.recordAccountWrite
@@ -224,6 +213,7 @@ private theorem onBlock_hasCodes {block block' : BlockState}
 private theorem daoTransfer_hasCodes {config : ChainConfig} {number : Nat}
     {start state : BlockState} (available : HasCodes (.ofBlock start))
     (h : daoTransfer config fork number start = .ok state) : HasCodes (.ofBlock state) := by
+  -- The DAO transfer changes only balances.
   unfold daoTransfer at h
   split at h
   · refine onBlock_hasCodes (fun tx hdao => ?_) h
@@ -236,6 +226,7 @@ private theorem daoTransfer_hasCodes {config : ChainConfig} {number : Nat}
 private theorem payRewards_hasCodes {tx tx' : TransactionState} {coinbase : Address}
     {number : Nat} {ommers : List (Address × Nat)} (available : HasCodes tx)
     (h : payRewards fork tx coinbase number ommers = .ok tx') : HasCodes tx' := by
+  -- The rewards change only balances.
   unfold payRewards at h
   split at h
   · cases h
@@ -389,6 +380,7 @@ private theorem startSystemCalls_ne_missingCode {env : BlockEnvironment fork}
 private theorem withdrawalState_hasCodes {block : BlockState} {withdrawals : List Withdrawal}
     {tx : TransactionState} (available : HasCodes (.ofBlock block))
     (h : withdrawalState fork block withdrawals = .ok tx) : HasCodes tx :=
+  -- The withdrawals change only balances.
   foldlM_ok_invariant HasCodes (fun _ _ _ fit step => Transactions.hasCodes_createEther step fit)
     available h
 
@@ -471,12 +463,19 @@ private theorem errorsMeet_stateTransition_missing {chain : BlockChain}
     {block : Block fork Transaction} {checkSeal : Bool} (available : chain.state.HasCodes) :
     ErrorsMeet (¬Missing ·) (stateTransition chain block checkSeal) :=
   errorsMeet_stateTransition_of_plain
+    -- An error of the checks is no abort, no error of the state and no excluded transaction.
+    --
+    -- So it is no missing code.
     (fun _ ha hs _ hi ⟨_, h⟩ => by
       rcases h with h | h | ⟨_, h⟩
       · exact ha _ h
       · exact hs _ h
       · exact hi _ _ h)
+    -- The abort from Hegotá on is for a fork whose rules are not yet specified.
+    --
+    -- It is not for a missing code.
     (fun _ ⟨_, h⟩ => by rcases h with h | h | ⟨_, h⟩ <;> cases h)
+    -- The system calls, the transactions and the requests each keep every code available.
     fun _ => (leaves _ _ _).errorsMeet_applyBody
       ((State.State.hasCodes_ofState_iff _).mpr available)
 

@@ -10,17 +10,9 @@ public import EthLib.Execution.Proofs.Blocks.Transition
 
 From Glamsterdam, a header commits to the block access list of its body.
 
-For each account in the list, take its last change of balance, nonce and code.
+On the state before, the last change of each balance, nonce, code and word gives the state after.
 
-For each key of its storage, take its last change of word.
-
-Applied to the state before the block, these give the state after the block.
-
-A field with no change in the list keeps its value from before the block.
-
-So a client that holds a list with the hash in the header can apply it to the state before.
-
-That needs no run of the transactions, as long as the hash has no known collision.
+So a client that holds a list of the header's hash needs no run, barring a known hash collision.
 
 This holds when the calls of the body keep a property of block states that makes each one fit.
 
@@ -60,11 +52,7 @@ private theorem BodyState.tracks_beginIndex {body : BodyState} {base : BlockStat
 
 /-- The calls of a body at `fork` keep a property `P` of block states, and the builder follows each.
 
-Take a block state with `P`.
-
-A system call on it is one that the builder follows, and the block state after it has `P`.
-
-So is a transaction that enters the block, and so are the withdrawals.
+On a block state with `P`, each call is one that the builder follows, and the state after has `P`.
 
 These are assumptions on the calls, which this file does not prove. -/
 structure KeepsFollowable (env : BlockEnvironment fork) (P : BlockState → Prop) : Prop where
@@ -187,14 +175,14 @@ private theorem onBlock_pure {block block' : BlockState}
 
 Before Dencun, a SELFDESTRUCT can wipe storage that the list does not name.
 
-So the property is not expected to hold there, and the theorem starts at Dencun.
-
-The calls of the body keep a property of block states that the start has.
-
-The block has fewer than 2^32 - 1 transactions, so each position fits in 32 bits. -/
+So the property is not expected to hold there, and the theorem starts at Dencun. -/
 theorem applyBody_tracks {config : ChainConfig} {env : BlockEnvironment fork}
     {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
+    -- The calls of the body keep a property of block states.
     {P : BlockState → Prop} (hDencun : .dencun ≤ fork) (hkeep : KeepsFollowable env P)
+    -- The start has that property.
+    --
+    -- The block has fewer than 2^32 - 1 transactions, so each position fits in 32 bits.
     (hstart : P start) (hlength : block.transactions.length < 2 ^ 32 - 1)
     (h : applyBody config env block start = .ok output) :
     output.body.builder.Tracks start output.block := by
@@ -240,43 +228,46 @@ theorem applyBody_tracks {config : ChainConfig} {env : BlockEnvironment fork}
 
 /-- From Glamsterdam, the list that a block commits to rebuilds the state after the block.
 
-The hash in the header is the hash of the list that the builder built after the body.
-
-The last change of each field in that list, or its value before the block, is its value after.
-
-An account missing from a state reads as the empty account, so an empty account counts as none.
-
-The nonce is in 64 bits, as the list holds it, which loses nothing below 2^64.
-
-A state whose nonces are at most 2^64 - 1 keeps that bound through the block.
-
-So on such a state the 64-bit nonces equal the nonces after the block, as a corollary shows.
-
-The calls of the body keep a property of block states that the state before the block has.
-
-That excludes storage at an account that is empty or missing, since deleting it wipes its storage.
-
-Storage at an account with a balance alone needs no exclusion: a creation there fails, by EIP-7610.
-
-The block has fewer than 2^32 - 1 transactions.
-
 From Hegota the transition is not yet specified, so this holds from Glamsterdam up to Hegota. -/
 theorem stateTransition_rebuild {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} {P : BlockState → Prop} (hFork : .glamsterdam ≤ fork)
+    -- The calls of the body keep a property of block states.
+    --
+    -- That excludes storage at an account that is empty or missing: deleting it wipes its storage.
+    --
+    -- Storage at an account with a balance alone needs no exclusion.
+    --
+    -- A creation there fails, by EIP-7610.
     (hkeep : ∀ hashes, recentHashes chain.recent = .ok hashes →
       KeepsFollowable (blockEnvironment chain.config hashes block.header) P)
+    -- The state before the block has that property.
+    --
+    -- The block has fewer than 2^32 - 1 transactions.
     (hstart : P ⟨chain.state, ∅, ∅, ∅, ∅⟩) (hlength : block.transactions.length < 2 ^ 32 - 1)
     (h : stateTransition chain block checkSeal = .ok post) :
     ∃ hashes output,
       recentHashes chain.recent = .ok hashes ∧
       applyBody chain.config (blockEnvironment chain.config hashes block.header) block
         ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+      -- The hash in the header is the hash of the list that the builder built after the body.
       BlockAccessList.hash output.body.builder.build =
         .ok (block.header.blockAccessListHash hFork) ∧
+      -- Each field ends at its last change in that list, or else at its value before the block.
+      --
+      -- An account missing from a state reads as the empty account.
+      --
+      -- So an empty account counts as none.
       ∀ address,
         ((post.getAccountOptional address).getD EMPTY_ACCOUNT).balance =
           output.body.builder.build.balanceAfter address
             ((chain.state.getAccountOptional address).getD EMPTY_ACCOUNT).balance ∧
+        -- The nonce is in 64 bits, as the list holds it, which loses nothing below 2^64.
+        --
+        -- A state whose nonces are at most 2^64 - 1 keeps that bound through the block.
+        --
+        -- So on such a state the 64-bit nonces equal the nonces after the block.
+        --
+        -- A corollary shows it.
         UInt64.ofNat ((post.getAccountOptional address).getD EMPTY_ACCOUNT).nonce =
           output.body.builder.build.nonceAfter address
             (UInt64.ofNat ((chain.state.getAccountOptional address).getD EMPTY_ACCOUNT).nonce) ∧

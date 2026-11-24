@@ -16,14 +16,6 @@ When the first run ends with every read in the sets, the second gives the same o
 
 Only the states of the two outputs differ, and they agree.
 
-A system call runs one message with no authorization, so the result for a message applies.
-
-A call that must succeed first checks that its contract has code.
-
-The run records that contract as read, so the sets name its code hash.
-
-The withdrawals only credit balances, and each credit reads the account it credits.
-
 The sets play the part of a block access list in [EIP-7928, Scope and Inclusion][bal].
 
 [bal]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
@@ -128,6 +120,7 @@ theorem systemCall_agrees {env : BlockEnvironment fork} {block other : BlockStat
     simp only [hfork, ↓reduceIte]
     obtain ⟨o, ho, h⟩ := bind_ok_iff.mp h
     cases h
+    -- A system call runs one message with no authorization, so the result for a message applies.
     obtain ⟨o', ho', hsame, hag⟩ := Transactions.processMessageCall_agrees covers
       (AgreesOn.ofBlock hagree) rfl (CodeOrigin.ofBlock block)
       (TransactionState.NoNewCandidate.ofBlock block) (fun _ ht => by cases ht; rfl) ho hreads
@@ -162,6 +155,9 @@ theorem checkedSystemCall_agrees {env : BlockEnvironment fork} {block other : Bl
   · cases h
   rename_i herr
   cases h
+  -- A call that must succeed first checks that its contract has code.
+  --
+  -- The run records that contract as read, so the sets name its code hash.
   have ha : account target := hreads.account _ (mem_accountReads_systemCall hsc)
   have hfresh := AgreesOn.ofBlock hagree
   have hcode : codeAt other target = codeAt block target := by
@@ -225,6 +221,7 @@ theorem withdrawalState_agrees {block other : BlockState} {withdrawals : List Wi
     (hreads : ReadsIn account slot tx) :
     ∃ tx', withdrawalState fork other withdrawals = .ok tx' ∧
       AgreesOn account allStorage slot code tx tx' :=
+  -- The withdrawals only credit balances, and each credit reads the account it credits.
   foldlM_createEther_agrees _ withdrawals (AgreesOn.ofBlock hagree) h hreads
 
 end EthLib.Execution.Blocks

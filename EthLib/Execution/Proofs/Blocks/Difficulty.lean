@@ -7,21 +7,9 @@ public import EthLib.Execution.Blocks.Difficulty
 
 Before Paris, the difficulty is never below the minimum, and from Paris on it is 0.
 
-Each fork delays the bomb at least as much as the forks before it.
-
 From Byzantium to Paris, a fork changes the difficulty only through its delay of the bomb.
 
-So a later delay gives the difficulty of an earlier fork at a block number lowered by the change.
-
-Before Paris, the difficulty of a block is at least the parent's less 99 steps.
-
-For a block no earlier than its parent, it is at most the parent's plus two steps and the bomb.
-
-If the minimum difficulty is larger than that sum, the minimum is the bound instead.
-
-A step is the parent's difficulty over 2048.
-
-A later timestamp never raises the difficulty.
+The difficulty is bounded around the parent's, and a later timestamp never raises it.
 
 The official difficulty vectors are in the Python suite, through the bindings.
 -/
@@ -144,7 +132,7 @@ This holds for a block no earlier than its parent.
 
 A step is the parent's difficulty over 2048, rounded down.
 
-The minimum still applies. -/
+If the minimum difficulty is larger than that sum, the minimum is the bound instead. -/
 theorem blockDifficulty_le (fork : Fork) (number : Nat) {timestamp parentTimestamp : Nat}
     (parentDifficulty : Nat)
     (parentHasOmmers : Bool) (hts : parentTimestamp ≤ timestamp) :

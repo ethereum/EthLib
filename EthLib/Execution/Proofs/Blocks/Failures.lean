@@ -8,23 +8,9 @@ public import EthLib.Execution.Proofs.Blocks.Transition
 
 A result meets a property on its errors when each error that it fails with has the property.
 
-A sequence, a map and a change of error keep that, so a proof follows the steps of a definition.
-
-The body of a block meets a property when each of its leaves does, on states that keep invariants.
-
-The checks of a block before its body fail with no abort and no error of the state.
-
-Nor do they fail for a system call or for a transaction kept out of the block.
-
-Nor do the recent hashes, the roots and the checks of its output.
-
-So the transition of a block fails only with errors of a property when its body does.
+The transition of a block fails only with errors of a property when its body does.
 
 The property must also hold for the other errors of the block, and for the abort from Hegotá on.
-
-A failed system call can be left out of the property as well, since the checks never give one.
-
-So can a transaction kept out of the block, for the same reason.
 -/
 
 @[expose] public section
@@ -38,7 +24,10 @@ open EthLib.Execution.Transactions (Transaction checkInclusion processTransactio
 
 variable {fork : Fork}
 
-/-! ## Results whose errors meet a property -/
+/-! ## Results whose errors meet a property
+
+A sequence, a map and a change of error keep that, so a proof follows the steps of a definition.
+-/
 
 /-- Whether every failure of a result meets a property. -/
 def ErrorsMeet {α : Type} (P : BlockError → Prop) (r : Except BlockError α) : Prop :=
@@ -205,21 +194,20 @@ theorem checkBlock_eq_error {config : ChainConfig} {checkSeal : Bool} {recent : 
     (∀ error, e ≠ .aborted error) ∧ ∀ error, e ≠ .state error :=
   ⟨(plain_checkBlock e h).1, (plain_checkBlock e h).2.1⟩
 
-/-! ## The body of a block -/
+/-! ## The body of a block
+
+The body of a block meets a property when each of its leaves does, on states that keep invariants.
+-/
 
 /-- The facts at the leaves of the body of a block that keep its errors in a property.
 
-A first invariant holds on the block state before the withdrawals, and a second one after them.
-
-A third one holds on the state that each call, transaction and withdrawal ends on.
-
-Its join to the body then fails in the property.
-
-Each step keeps its invariant, and the withdrawals pass from the first to the second.
-
 An invariant that always holds needs no proof that the steps keep it. -/
 structure BodyLeaves (config : ChainConfig) (env : BlockEnvironment fork)
+    -- A first invariant holds on the block state before the withdrawals, and a second one after.
     (block : Block fork Transaction) (P : BlockError → Prop) (Inv Inv' : BlockState → Prop)
+    -- A third one holds on the state that each call, transaction and withdrawal ends on.
+    --
+    -- Any failure of its join to the body then meets the property.
     (Out : TransactionState → Prop) : Prop where
   /-- An error that is no abort, state error, failed call or excluded transaction meets it. -/
   plain : ∀ e, (∀ x, e ≠ .aborted x) → (∀ x, e ≠ .state x) →
@@ -470,22 +458,18 @@ end BodyLeaves
 
 /-! ## The transition -/
 
-/-- The transition of a block fails only with errors of a property when its body does.
-
-The body must meet it in the environment that the header gives with each list of recent hashes.
-
-The property must hold for every error that is no abort, no state error and no failed system call.
-
-It need not hold for a failed system call or a transaction kept out of the block.
-
-The checks never give one, so only the body must meet it there.
-
-It must hold for the abort from Hegotá on, for a fork whose rules are not yet specified. -/
+/-- The transition of a block fails only with errors of a property when its body does. -/
 theorem errorsMeet_stateTransition_of_plain {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {P : BlockError → Prop}
+    -- The property must hold for every error that is no abort, no state error and no failed call.
     (plain : ∀ e, (∀ x, e ≠ .aborted x) → (∀ x, e ≠ .state x) →
+      -- It need not hold for a failed system call or a transaction kept out of the block.
+      --
+      -- The checks never give one, so only the body must meet it there.
       (∀ a x, e ≠ .systemCallFailed a x) → (∀ i x, e ≠ .invalidTransaction i x) → P e)
+    -- It must hold for the abort from Hegotá on, for a fork whose rules are not yet specified.
     (hegota : .hegota ≤ fork → P (.aborted (.forkNotYetSpecified fork)))
+    -- The body must meet it in the environment from the header and each list of recent hashes.
     (body : ∀ hashes, ErrorsMeet P (applyBody chain.config
       (blockEnvironment chain.config hashes block.header) block ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
     ErrorsMeet P (stateTransition chain block checkSeal) := by
@@ -493,6 +477,11 @@ theorem errorsMeet_stateTransition_of_plain {chain : BlockChain} {block : Block 
     fun hx e h => plain e (hx e h).1 (hx e h).2.1 (hx e h).2.2.1 (hx e h).2.2.2
   have trie : ∀ {β : Type} (x : Except Trie.TrieError β), ErrorsMeet P (x.mapError .trie) :=
     fun _ => other (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩)
+  -- The checks of a block before its body fail with no abort and no error of the state.
+  --
+  -- Nor do they fail for a system call or for a transaction kept out of the block.
+  --
+  -- Nor do the recent hashes, the roots and the checks of its output.
   have rest : ErrorsMeet P (do
       checkBlock chain.config checkSeal chain.recent block
       let result ← runBody chain block
