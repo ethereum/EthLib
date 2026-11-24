@@ -109,19 +109,13 @@ def signingHash7702 (tx : SetCodeTransaction) : Except RlpError Hash32 :=
 
 /-- The chain and the recovery id that the `v` of a legacy transaction holds at `fork`.
 
-A `v` of 27 or 28 is the recovery id plus 27, and signs no chain.
-
 From Spurious Dragon, `v = 35 + 2 c + y` signs the chain `c` with the recovery id `y`.
 
-[EIP-155](https://eips.ethereum.org/EIPS/eip-155#specification) adds that form.
-
-A chain of 2^64 or more is invalid.
-
-No EIP fixes that bound, and EIP-2294, which is Stagnant, only suggests one.
-
-Any other `v` is invalid. -/
+[EIP-155](https://eips.ethereum.org/EIPS/eip-155#specification) adds that form. -/
 def legacyRecovery (fork : Fork) (v : U256) : Except TransactionError (Option U256 × Fin 2) :=
   -- Yellow Paper, Appendix F: `v = T_w - 27` for `T_w` in `{27, 28}`.
+  --
+  -- Such a `v` is the recovery id plus 27, and signs no chain.
   if v.toNat = 27 then .ok (none, 0)
   else if v.toNat = 28 then .ok (none, 1)
   -- From Spurious Dragon, by EIP-155: `T_w = 2beta + 35 + v` (Yellow Paper, §4.2).
@@ -130,11 +124,15 @@ def legacyRecovery (fork : Fork) (v : U256) : Except TransactionError (Option U2
   --
   -- The source checks `T_w` against the chain of the network; that check is made elsewhere.
   --
-  -- The bound `beta < 2^64` is EthLib's own.
+  -- The bound `beta < 2^64` is EthLib's own: a chain of 2^64 or more is invalid.
+  --
+  -- No EIP fixes that bound, and EIP-2294, which is Stagnant, only suggests one.
   else if fork ≥ .spuriousDragon then
     if 35 ≤ v.toNat ∧ (v.toNat - 35) / 2 < 2 ^ 64 then
       .ok (some (BitVec.ofNat 256 ((v.toNat - 35) / 2)), Fin.ofNat 2 ((v.toNat - 35) % 2))
+    -- Any other `v` is invalid: one below 35, or one whose chain is `2^64` or more.
     else .error .invalidSignature
+  -- Before Spurious Dragon, any other `v` is invalid.
   else .error .invalidSignature
 
 /-- The recovery id of a typed transaction: its parity, which must be 0 or 1. -/

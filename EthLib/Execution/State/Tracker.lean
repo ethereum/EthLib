@@ -11,42 +11,7 @@ The changes that a block and a transaction make to the state, kept apart from th
 
 The state is `sigma` of the [Yellow Paper][yp], §4.1, held as layers of writes.
 
-A block reads the state before the block, then the writes of the block so far.
-
-A transaction reads its own writes first, then those of its block.
-
-When the transaction ends, its writes move into its block.
-
-A snapshot of the writes of a transaction restores them when a call fails.
-
-Transient storage lives for one transaction, as [EIP-1153][eip1153] specifies.
-
-From Paris, a change that leaves an account empty deletes it.
-
-[EIP-7523][eip7523] forbids an empty account after the Merge.
-
-From Spurious Dragon to Paris, an empty account stays until the end of its transaction.
-
-Then [EIP-161][eip161] deletes it if the transaction touched it.
-
-Before Spurious Dragon, an empty account stays.
-
-A transaction also records the accounts and the storage keys it reads.
-
-From Glamsterdam, the block access list of [EIP-7928][eip7928] holds them.
-
-It holds them even when the call that read them reverts, so a rollback keeps them.
-
-From Glamsterdam, [EIP-8246][eip8246] clears an account that SELFDESTRUCT marked.
-
-That clear keeps the balance.
-
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
-[eip1153]: https://eips.ethereum.org/EIPS/eip-1153#specification
-[eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification
-[eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
-[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
-[eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
 -/
 
 @[expose] public section
@@ -162,7 +127,11 @@ structure TransactionState where
   createdAccounts : Std.ExtTreeSet Address
   /-- The addresses whose earlier storage the transaction wiped. -/
   storageClears : Std.ExtTreeSet Address
-  /-- The transient storage of each address. -/
+  /-- The transient storage of each address.
+
+  It lives for one transaction, as [EIP-1153][eip1153] specifies.
+
+  [eip1153]: https://eips.ethereum.org/EIPS/eip-1153#specification -/
   transientStorage : StorageMap
   /-- The addresses whose account the transaction read.
 
@@ -313,7 +282,13 @@ def isAccountAlive (tx : TransactionState) (address : Address) : Bool :=
 
 /-! ## The record of reads -/
 
-/-- Record a read of the account at an address. -/
+/-- Record a read of the account at an address.
+
+From Glamsterdam, the block access list of [EIP-7928][eip7928] holds the reads of a transaction.
+
+It holds them even when the call that read them reverts, so a rollback keeps them.
+
+[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion -/
 def recordAccountRead (tx : TransactionState) (address : Address) : TransactionState :=
   -- EIP-7928: each address that the transaction accesses enters the block access list.
   { tx with accountReads := tx.accountReads.insert address }
@@ -401,7 +376,11 @@ The change reads the account first.
 
 An address with no account starts from the empty account.
 
-From Paris, a change that leaves the account empty deletes it. -/
+From Paris, a change that leaves an account empty deletes it.
+
+[EIP-7523][eip7523] forbids an empty account after the Merge.
+
+[eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification -/
 def modifyState (fork : Fork) (tx : TransactionState) (address : Address)
     (f : Account → Except StateError Account) : Except StateError TransactionState := do
   let tx := tx.recordAccountRead address
@@ -461,7 +440,11 @@ def setCode (fork : Fork) (tx : TransactionState) (address : Address) (code : By
 
 From Glamsterdam, the end of a transaction does this to each account that SELFDESTRUCT marked.
 
-From Paris, an account that this leaves empty is deleted. -/
+That is [EIP-8246][eip8246], whose clear keeps the balance.
+
+From Paris, an account that this leaves empty is deleted.
+
+[eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification -/
 def clearAccountPreservingBalance (fork : Fork) (tx : TransactionState) (address : Address) :
     Except StateError TransactionState :=
   -- EIP-8246, step 2.4: all storage is cleared.
@@ -483,9 +466,15 @@ def touchAccount (tx : TransactionState) (address : Address) : TransactionState 
   -- From Spurious Dragon, EIP-161 deletes it at the end of the transaction if it is still empty.
   if tx.accountExists address then tx else tx.setAccount address (some EMPTY_ACCOUNT)
 
-/-- Delete each touched account that is empty, as EIP-161 asks from Spurious Dragon.
+/-- Delete each touched account that is empty, as [EIP-161][eip161] asks from Spurious Dragon.
 
-Before Spurious Dragon, nothing is deleted. -/
+From Spurious Dragon to Paris, an empty account stays until the end of its transaction.
+
+Then this deletes it if the transaction touched it.
+
+Before Spurious Dragon, nothing is deleted.
+
+[eip161]: https://eips.ethereum.org/EIPS/eip-161#specification -/
 def destroyTouchedEmptyAccounts (fork : Fork) (tx : TransactionState) (touched : List Address) :
     TransactionState :=
   -- EIP-161 starts at Spurious Dragon.
@@ -518,6 +507,8 @@ def writeSlots (base slots : Std.ExtTreeMap Bytes32 U256) : Std.ExtTreeMap Bytes
   slots.foldl (fun acc key value => acc.insert key value) base
 
 /-- Move the writes of a transaction into its block, and start the next transaction.
+
+A transaction does this when it ends.
 
 A wipe of the transaction drops the block's writes to that storage first.
 

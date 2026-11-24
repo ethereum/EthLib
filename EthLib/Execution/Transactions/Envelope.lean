@@ -14,13 +14,11 @@ A legacy transaction is the RLP list of its fields, so its first byte is at leas
 
 A typed transaction is its type, then the RLP list of its fields.
 
-[EIP-2718](https://eips.ethereum.org/EIPS/eip-2718#transactions) keeps each type at most `0x7f`.
+[EIP-2718][eip-2718] keeps each type at most `0x7f`.
 
 So the first byte tells the two forms apart.
 
-A fork accepts only the types that it or an earlier fork added.
-
-The hash of a transaction is the Keccak-256 hash of its bytes.
+[eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#transactions
 -/
 
 @[expose] public section
@@ -244,7 +242,9 @@ def decodePayload (type : UInt8) (payload : ByteArray) : Except TransactionError
 
 A first byte of at least `0xc0` starts a legacy transaction, which every fork accepts.
 
-Any other first byte is a type, which the fork must have. -/
+Any other first byte is a type, which the fork must have.
+
+A fork accepts only the types that it or an earlier fork added. -/
 def decodeTransaction (fork : Fork) (bytes : ByteArray) : Except TransactionError Transaction :=
   if h : 0 < bytes.size then
     let first := bytes[0]

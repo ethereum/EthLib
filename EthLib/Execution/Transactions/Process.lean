@@ -10,55 +10,7 @@ public import EthLib.Execution.Transactions.Inclusion
 
 The run of a transaction that may enter its block: its message, then the settlement of its gas.
 
-The sender first buys the gas, and its nonce grows by one.
-
-The message gets the gas limit minus the intrinsic gas.
-
-From Glamsterdam, that gas splits into execution gas and a reservoir of state gas, by EIP-8037.
-
-A call runs the code of its recipient, and a creation runs the data as init code.
-
-A creation goes to the address that the sender and its nonce before the transaction give.
-
-It fails at once, with no gas left, when that address has code, a nonce or storage.
-
-[EIP-684][eip684] forbids the code and the nonce, and [EIP-7610][eip7610] the storage.
-
-From Berlin, the transaction starts with some addresses and storage keys accessed.
-
-From Pectra, the authorizations of a set code transaction apply before its message.
-
-From Pectra, a recipient whose code is a delegation indicator runs the code of its delegate.
-
-The delegate is then accessed, and the message runs no precompile.
-
-From Glamsterdam, the first frame pays some gas before its code runs, in a fixed order.
-
-A lack of gas there halts the message before its frame runs.
-
-The authorizations are then undone, all the execution gas is used, and the reservoir comes back.
-
-The nonce and the fee of the sender stay.
-
-A message that fails keeps no log, no refund and no account to delete.
-
-Once the message ends, the sender gets back its gas left and its refund.
-
-From Glamsterdam, the gas left includes the reservoir left.
-
-Then the beneficiary gets its fee.
-
-Then each account that SELFDESTRUCT marked is deleted.
-
-From Glamsterdam, such an account loses its nonce, code and storage, and keeps its balance.
-
-It is deleted only when that leaves it empty, by EIP-8246.
-
-From Spurious Dragon to Paris, each touched account that is empty is deleted too.
-
-Section 6.2 of the Yellow Paper, Shanghai version, defines the run of a transaction.
-
-Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
+Source: section 6.2 of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`][yp].
 
 The step comments write its equations in ASCII.
 
@@ -77,8 +29,6 @@ The run records what it reads, for the block access list of EIP-7928.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
-[eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
 [eip2930]: https://eips.ethereum.org/EIPS/eip-2930#specification
 [eip3651]: https://eips.ethereum.org/EIPS/eip-3651#specification
@@ -111,15 +61,17 @@ def precompileAddresses (fork : Fork) : List Address :=
   (Precompiles.ADDRESSES.filter (Precompiles.isPrecompile fork)).map
     fun address => toAddressMasked (BitVec.ofNat 256 address)
 
-/-- The addresses that a message from `sender` has accessed when it starts, at `fork`.
+/-- The addresses that a message from `sender` to `target` has accessed when it starts, at `fork`.
 
-They are the sender, and `target`: the recipient or the created address.
+From Berlin, [EIP-2929][eip2929] starts the message with these addresses accessed.
 
-Then come the precompiles and the addresses of the access list `accesses`.
+They include the addresses of the access list `accesses` of [EIP-2930][eip2930].
 
-From Shapella, the beneficiary `coinbase` is one of them.
+From Shapella, [EIP-3651][eip3651] adds the beneficiary `coinbase`.
 
-Before Berlin, no access counts, so the set is empty. -/
+[eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
+[eip2930]: https://eips.ethereum.org/EIPS/eip-2930#specification
+[eip3651]: https://eips.ethereum.org/EIPS/eip-3651#specification -/
 def startAccessedAddressesOf (fork : Fork) (coinbase sender target : Address)
     (accesses : List Access) : Std.ExtTreeSet Address :=
   if fork ≥ .berlin then
@@ -141,6 +93,7 @@ def startAccessedAddressesOf (fork : Fork) (coinbase sender target : Address)
     --
     -- The Berlin paper has no `H_c`.
     if fork ≥ .shapella then accessed.insert coinbase else accessed
+  -- Before Berlin, no access counts, so the set is empty.
   else ∅
 
 /-- The addresses that a transaction has accessed when its message starts, at `fork`.
@@ -284,29 +237,19 @@ def FirstFrame.ofMeter {fork : Fork} (message : Message fork) (state : Transacti
 
 /-- The first frame of a transaction at `fork`, on the chain `chainId`, or the error that stops it.
 
-The meter starts with the gas and the reservoir of the message.
+Its sources:
 
-A creation fails at an address with code, a nonce or storage.
+- [EIP-684][eip684], no creation at an address with code or a nonce;
+- [EIP-7610][eip7610], no creation at an address with storage;
+- [EIP-7702][eip7702], the authorizations and the delegated recipient;
+- [EIP-2780][eip2780], the gas that the frame pays before its code, from Glamsterdam.
 
-From Glamsterdam, it pays the state gas of a new account when the address had none before.
+An error comes with the state so far, whose reads stay, by EIP-7928.
 
-A call first applies the authorizations `auths`, then commits the state gas they paid.
-
-From Glamsterdam, a call that moves ether to an account not alive pays for a new account.
-
-From Pectra, a recipient whose code is a delegation indicator runs the code of its delegate.
-
-The delegate is then accessed, and the message runs no precompile.
-
-From Glamsterdam, that access pays the price of an account access, cold or warm.
-
-The accounts `paidWrites` have their first write paid already.
-
-It reads the created address, or the authorities, the recipient and the delegate, in this order.
-
-A call reads the recipient before its state gas only when it moves ether.
-
-An error comes with the state so far, whose reads stay, by EIP-7928. -/
+[eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
+[eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
+[eip2780]: https://eips.ethereum.org/EIPS/eip-2780#runtime-gas-costs -/
 def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
     (state : TransactionState) (substate : Substate) (auths : List Authorization)
     (paidWrites : Std.ExtTreeSet Address) :
@@ -314,7 +257,16 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
   -- From Glamsterdam, the meter holds the gas left, the state gas left and its baseline.
   --
   -- Before Glamsterdam the meter is a counter of the gas left.
+  --
+  -- It starts with the gas and the reservoir of the message.
+  --
+  -- From Glamsterdam, the first frame then pays some gas before its code runs, in a fixed order.
+  --
+  -- That is EIP-2780, in Last Call.
   let meter : Meter := GasMeter.start message.gas message.reservoir
+  -- The preparation reads the created address, or the authorities, the recipient and the delegate.
+  --
+  -- It reads them in that order.
   match message.target with
   | none =>
     let address := message.currentTarget
@@ -323,6 +275,8 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
     -- A creation fails when the created address has code, a nonce or storage.
     --
     -- That failure leaves no execution gas, at every fork.
+    --
+    -- EIP-684 forbids the code and the nonce, and EIP-7610 the storage.
     unless state.accountDeployable address do throw (.addressCollision address, state)
     -- From Glamsterdam, it pays the state gas of a new account.
     --
@@ -332,15 +286,23 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
       else pure meter
     return .ofMeter message state substate 0 meter
   | some target =>
-    -- The authorizations of EIP-7702 apply, then the state gas that they paid is committed.
+    -- From Pectra, the authorizations of a set code transaction apply before its message.
+    --
+    -- They apply by EIP-7702, then the state gas that they paid is committed.
+    --
+    -- The given paid accounts have their first write paid already.
     --
     -- Without authorizations, the fold leaves all as it was and the commit changes nothing.
     let done ← applyAuthorizations fork chainId state substate.accessedAddresses meter paidWrites
       auths
     let meter := GasMeter.commit done.meter
     -- A call with a nonzero value reads its recipient.
+    --
+    -- It reads it before the state gas charge below.
     let state := if message.value ≠ 0 then done.state.recordAccountRead target else done.state
-    -- From Glamsterdam, it pays the state gas of a new account when its recipient is not alive.
+    -- From Glamsterdam, a call that moves ether pays the state gas of a new account.
+    --
+    -- It pays it when its recipient is not alive.
     let meter ←
       if fork ≥ .glamsterdam ∧ message.value ≠ 0 ∧ !state.isAccountAlive target then
         (GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS).mapError (·, state)
@@ -378,11 +340,7 @@ The observer sees each step of its frames.
 
 It first prepares the first frame, which applies the authorizations `auths` of a call.
 
-A failure there halts the message before its frame runs, and undoes the authorizations.
-
-That halt keeps what the preparation read.
-
-From Spurious Dragon to Paris, a recipient left empty is touched. -/
+A failure there halts the message before its frame runs, and undoes the authorizations. -/
 @[specialize]
 def processMessageCallWith {fork : Fork} [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
     [MonadExceptOf EvmError M] (observe : StepObserver M fork Meter) (chainId : Nat)
@@ -392,6 +350,8 @@ def processMessageCallWith {fork : Fork} [LawfulGasMeter Meter] {M : Type → Ty
   -- The first frame.
   match prepareFirstFrame (Meter := Meter) chainId message state substate auths paidWrites with
   -- An exceptional halt there puts the state back to before the preparation, and keeps its reads.
+  --
+  -- The nonce and the fee of the sender, paid before the message, stay.
   | .error (e, read) =>
     -- An error that aborts the whole execution, such as missing code, propagates instead.
     if e.aborts then throw e else pure (.ofHalt (state.withReadsOf read) message.reservoir e)
@@ -407,6 +367,8 @@ def processMessageCallWith {fork : Fork} [LawfulGasMeter Meter] {M : Type → Ty
       let ⟨evm, _⟩ ← processMessageWith fork observe first.message first.state first.substate
         first.meter first.held
       -- From Spurious Dragon to Paris, the recipient joins `A_t`, for the deletion of EIP-161.
+      --
+      -- So a recipient left empty is touched.
       let touched := evm.substate.touchedAccounts
       let touched := if fork ≥ .spuriousDragon ∧ fork < .paris ∧
         evm.state.accountExistsAndIsEmpty target then touched.insert target else touched
@@ -436,7 +398,9 @@ structure TransactionOutput where
   blockGas : BlockGas
   /-- The logs of the transaction, oldest first. -/
   logs : Array Log
-  /-- The logs that a simulation reports for the transaction, oldest first. -/
+  /-- The logs that a simulation reports for the transaction, oldest first.
+
+  No rule reads them. -/
   simulatedLogs : Array Log
   /-- The error that stopped its message, or none when the message succeeded. -/
   error : Option EvmError
@@ -444,11 +408,15 @@ structure TransactionOutput where
 
   It is empty after any other error, from Byzantium.
 
-  Before Byzantium, a creation whose code deposit fails keeps the code that it returned. -/
+  Before Byzantium, a creation whose code deposit fails keeps the code that it returned.
+
+  No rule reads it. -/
   messageOutput : ByteArray
   /-- The gas that it used before its refund.
 
-  It is the gas used with no refund: from Pectra it is at least the call data floor. -/
+  It is the gas used with no refund: from Pectra it is at least the call data floor.
+
+  No rule reads it. -/
   gasBeforeRefund : Nat
 
 /-- The block state, with the writes of the transaction. -/
@@ -457,9 +425,18 @@ def TransactionOutput.block (output : TransactionOutput) : BlockState :=
 
 /-- The state after the end of a transaction at `fork`: the deletions of its accounts.
 
-Each account to delete goes, then each touched account that is empty.
+Each account that SELFDESTRUCT marked is handled first.
 
-From Glamsterdam, an account to delete keeps its balance, and goes only when that is 0. -/
+Then, from Spurious Dragon to Paris, each touched empty one goes, by [EIP-161][eip161].
+
+From Glamsterdam, a marked account loses its nonce, code and storage, and keeps its balance.
+
+It goes only when that leaves it empty.
+
+That rule is [EIP-8246][eip8246], in Last Call.
+
+[eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
+[eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification -/
 def deleteAccounts (fork : Fork) (state : TransactionState) (output : CallOutput) :
     Except State.StateError TransactionState := do
   -- Each account to delete, the paper's `sigma'[i] = {}` for `i in A_s`.
@@ -492,12 +469,6 @@ It runs in the monad `M`, and the observer sees each step of its frames.
 
 The checks of the transaction gave `included`.
 
-The gas past the intrinsic gas splits into the execution gas and the reservoir of the message.
-
-The sender gets back the gas left and the reservoir left, with its refund.
-
-Each call runs the precompile that the given map assigns to its code address.
-
 A simulation can lift the cap on the execution gas, and charge a fee cap of 0 at a base fee of 0. -/
 @[specialize]
 def runTransactionWith {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
@@ -512,12 +483,15 @@ def runTransactionWith {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasM
   let target ← liftExcept (messageTarget sender (state.getAccount sender).nonce tx)
   -- The nonce of the sender grows by one, and the sender buys the gas.
   let state ← liftExcept ((buyGas env state sender tx lifted).mapError EvmError.state)
+  -- Each call runs the precompile that the given map assigns to its code address.
   let txEnv : TransactionEnvironment fork :=
     { origin := sender, gasPrice := included.gasPrice,
       blobVersionedHashes := fun _ => tx.blobHashes, precompiles }
-  -- The gas past the intrinsic gas, split into execution gas and a reservoir from Glamsterdam.
+  -- The gas limit minus the intrinsic gas: the paper's `g = T_g - g_0` before Glamsterdam.
   --
-  -- Before Glamsterdam, it is the paper's `g = T_g - g_0`.
+  -- From Glamsterdam, it splits into execution gas and a reservoir of state gas, by EIP-8037.
+  --
+  -- That EIP is in Last Call.
   let gas := allocateGas fork tx included.intrinsicGas lifted
   -- The message of the transaction.
   let message ← liftExcept (transactionMessage env txEnv state sender target gas.execution tx)
@@ -531,7 +505,9 @@ def runTransactionWith {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasM
   -- The gas that the transaction adds to its block, and its state gas from Glamsterdam.
   let blockGas := transactionBlockGas fork sender tx gasLeft output.refund output.stateGasUsed
   let gasBeforeRefund := gasUsed fork sender tx gasLeft 0
-  -- The refund to the sender and the fee of the beneficiary: the paper's `g*` and `sigma*`.
+  -- The sender gets back the gas left, with the reservoir left, and its refund.
+  --
+  -- Then the beneficiary gets its fee: the paper's `g*` and `sigma*`.
   let (state, gasUsed) ← liftExcept
     ((settleGas env output.state sender tx gasLeft output.refund lifted).mapError EvmError.state)
   -- Then the deletions, the paper's `sigma'`.
@@ -558,29 +534,15 @@ It runs in the monad `M`, and the observer sees each step of its frames.
 
 The checks of the transaction gave `included`.
 
-It returns the state of the transaction, whose writes then join the block.
-
-It also returns the gas used, the gas it adds to its block, the logs, and the error of the message.
-
-It also returns the output of the message and the gas used before the refund.
-
-It also returns the logs that a simulation reports.
-
-No rule reads these three.
-
 If the observer never fails, the run fails only with an error that aborts the whole execution.
 
 Missing code is such an error.
 
+From Hegotá it fails, since the rules of that fork are not yet specified here.
+
 By default a call runs the precompile at its own address.
 
-A simulation can move a precompile to another address, and lift the cap on the execution gas.
-
-Up to BPO5, the gas meter is one counter of the gas left.
-
-From Glamsterdam, the meter of EIP-8037 also meters state gas.
-
-From Hegotá it fails, since the rules of that fork are not yet specified here. -/
+A simulation can move a precompile to another address, and lift the cap on the execution gas. -/
 @[specialize]
 def processTransactionWith {fork : Fork} {M : Type → Type} [Monad M] [MonadExceptOf EvmError M]
     (observe : TransactionObserver M fork) (env : BlockEnvironment fork) (block : BlockState)
@@ -588,7 +550,9 @@ def processTransactionWith {fork : Fork} {M : Type → Type} [Monad M] [MonadExc
     (lifted : LiftedRules := {}) : M TransactionOutput :=
   -- No EIP fixes the rules of Hegotá yet.
   if .hegota ≤ fork then throw (.forkNotYetSpecified fork)
-  -- The gas meter of EIP-8037, with state gas, from Glamsterdam; before, a counter of gas left.
+  -- The gas meter of EIP-8037, with state gas, from Glamsterdam.
+  --
+  -- Up to BPO5, the meter is one counter of the gas left.
   else if fork ≥ .glamsterdam then
     runTransactionWith StateGasMeter observe env block included tx precompiles lifted
   else runTransactionWith Nat observe env block included tx precompiles lifted

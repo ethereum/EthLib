@@ -10,13 +10,11 @@ public import EthLib.Execution.Transactions.Signature
 
 The gas that a transaction pays before it runs, and the rules that a transaction must pass alone.
 
-The intrinsic gas pays for the transaction itself, before it runs.
+Source: §6.2 of the Yellow Paper, Shanghai version, [`Paper.tex` at `efc5f9a`][yp].
 
-It prices the call data, a contract creation, the access list and the authorizations.
+The step comments write the terms of the intrinsic gas `g_0` in the notation of §6.2, in ASCII.
 
-Section 6.2 of the Yellow Paper, Shanghai version, defines it, and later EIPs add terms.
-
-Source: [`Paper.tex` at `efc5f9a`][yp].
+Later EIPs add terms.
 
 The rules here need no state.
 
@@ -36,8 +34,6 @@ Glamsterdam changes the intrinsic gas, the floor and the bounds on the gas limit
 These EIPs are in Last Call, so their rules may still change.
 
 Hegotá has no rules of its own here yet, so the exports reject it.
-
-The step comments write the terms of `g_0` in the notation of §6.2, in ASCII.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
@@ -176,22 +172,22 @@ A transaction that calls its own sender pays neither of the last two.
 [eip-2780]: https://eips.ethereum.org/EIPS/eip-2780#intrinsic-gas-costs -/
 def baseCost (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
   if fork ≥ .glamsterdam then
-    -- EIP-2780: the sender pays `TX_BASE_COST`.
+    -- EIP-2780: the sender pays `TX_BASE_COST`, 12000 gas.
     TX_BASE_COST +
       -- The charge for the recipient depends on its kind.
       match tx.to with
-      -- A contract creation costs `CREATE_ACCESS`.
+      -- A contract creation costs `CREATE_ACCESS`, 12000 gas.
       --
       -- A creation pays no value charge, which `CREATE_ACCESS` covers.
       | none => CREATE_ACCESS
       | some to =>
         -- A transfer to the sender itself costs nothing, for its value too.
         if to = sender then 0
-        -- Any other recipient costs `COLD_ACCOUNT_ACCESS`.
+        -- Any other recipient costs `COLD_ACCOUNT_ACCESS`, 3000 gas to touch it.
         --
-        -- A nonzero value then costs `TX_VALUE_COST`, and a zero value nothing.
+        -- A nonzero value then costs `TX_VALUE_COST`, 6000 gas more, and a zero value nothing.
         else (gasSchedule fork).COLD_ACCOUNT_ACCESS + if tx.value = 0 then 0 else TX_VALUE_COST
-  -- `G_transaction`, a term of `g_0`.
+  -- `G_transaction`, a term of `g_0`: 21000.
   else TX_BASE
 
 /-- The price of an authorization at `fork`.
@@ -208,20 +204,24 @@ def authorizationCost (fork : Fork) : Nat :=
 
 It is 32000 from Homestead, by [EIP-2](https://eips.ethereum.org/EIPS/eip-2#specification).
 
-From Shapella, it adds 2 gas per 32-byte word of init code.
+From Shapella, [EIP-3860][eip-3860] adds the price of init code.
 
-[EIP-3860](https://eips.ethereum.org/EIPS/eip-3860#specification) adds that price.
+From Glamsterdam, the base holds the price of the deployment, so only the init code remains.
 
-From Glamsterdam, the base holds the price of the deployment, so only the init code remains. -/
+[eip-3860]: https://eips.ethereum.org/EIPS/eip-3860#specification -/
 def createCost (fork : Fork) (size : Nat) : Nat :=
   -- `G_txcreate + R(||T_i||)` if `T_t = {}`, a term of `g_0`; the caller checks `T_t = {}`.
   --
   -- `G_txcreate` is dropped from Glamsterdam, where the base holds `CREATE_ACCESS`.
   (if fork ≥ .glamsterdam then 0 else (gasSchedule fork).TX_CREATE) +
     -- `R(x) = G_initcodeword * ceil(x / 32)`, which EIP-3860 adds at Shapella.
+    --
+    -- That is 2 gas per 32-byte word of init code.
     if fork ≥ .shapella then initCodeCost size else 0
 
-/-- The intrinsic gas of a transaction from `sender`, at `fork`.
+/-- The intrinsic gas of a transaction from `sender`, at `fork`: what it pays before it runs.
+
+It prices the call data, a contract creation, the access list and the authorizations.
 
 Only the base reads the sender, and only from Glamsterdam. -/
 def intrinsicGas (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
@@ -311,7 +311,7 @@ def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
         (fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG)
       .error (.invalidBlobVersionedHash index (tx.blobVersionedHashes.getD index 0))
     else .ok ()
-  -- A set code transaction fails without an authorization.
+  -- A set code transaction fails without an authorization, as EIP-7702 asks.
   --
   -- A blob or set code transaction always has a recipient here, so a check of it is moot.
   | .setCode tx => if tx.authorizations.isEmpty then .error .emptyAuthorizationList else .ok ()
@@ -384,6 +384,8 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
   let minimum := minimumGas fork sender tx
   let coversMinimum := ensure (minimum ≤ tx.gas.toNat) (.insufficientGas minimum tx.gas.toNat)
   -- From Shapella, the init code of a creation is at most the largest init code size of the fork.
+  --
+  -- EIP-7954 raises that bound at Glamsterdam.
   let initCodeFits := ensure (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork)
     (.initCodeTooLarge tx.data.size)
   -- The nonce is below `2^64 - 1`.

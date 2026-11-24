@@ -11,18 +11,6 @@ The state of every account, and the roots that commit to it.
 
 Source: section 4.1 of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`][yp].
 
-The storage of an account maps 32-byte keys to words.
-
-A key with the word zero is absent from the storage (§9.1, not stated in §4.1).
-
-The storage root is the root of a secured trie.
-
-There, each key with a nonzero word holds the RLP encoding of the word.
-
-The state root is the root of a secured trie too.
-
-There, each address holds the RLP encoding of its account with its storage root.
-
 The hash is an argument, and Ethereum passes Keccak-256.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
@@ -55,6 +43,8 @@ def storageEntries (storage : Std.ExtTreeMap Bytes32 U256) :
   -- `L_I((k, v)) = (KEC(k), RLP(v))`, with `KEC(k)` taken by the secured trie.
   --
   -- Not in §4.1: a word of 0 is no entry, since a slot never written reads 0 (§9.1).
+  --
+  -- So a key with the word zero has no entry in the trie.
   (storage.filter fun _ value => value != 0).toList.mapM fun (key, value) => do
     return (⟨key.toArray⟩, ← Codec.encode value)
 
