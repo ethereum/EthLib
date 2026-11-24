@@ -8,35 +8,7 @@ public import EthLib.Serialization.Ssz.Typed.Rooted
 
 A rooted fork-chosen list holds its elements together with every level of their Merkle tree.
 
-Before the switch fork the list has a limit.
-
-Its levels reach only as high as its leaves need, so a write costs a hash per level of that tree.
-
-Writing or appending one element then rehashes only the path above its leaf.
-
-An append that fills the tree first adds one level on top.
-
-The root lifts the top of the levels to the depth that the limit sets, with zero subtrees.
-
-Then it mixes in the length.
-
-From the switch on, the list is progressive.
-
-Its leaves then fill a spine of trees of one, four, sixteen leaves and so on.
-
-The list keeps the levels of each of these trees.
-
-A write rehashes the path in the one tree that holds its leaf.
-
-An append past the last tree opens a new one.
-
-The root folds the tops of the trees along the spine, then mixes in the length.
-
-A decoded list builds its trees on the first read of the root or the first write.
-
-A list of basic elements packs them into shared leaves, several to a leaf.
-
-The progressive spine follows [EIP-7916][eip7916].
+From the switch fork on, the list follows the progressive spine of [EIP-7916][eip7916].
 
 Its root mixes in the length as [EIP-7916][eip7916-root] states for a progressive list.
 
@@ -64,6 +36,8 @@ From the switch on, there are none.
 def forkListLevels (switch fork : Fork) (leaves : Array Bytes) : List (Array Bytes) :=
   -- Before the switch: the levels of depth `d(n)` over `n` leaves, the least deep tree.
   --
+  -- They reach only as high as the leaves need, so a write costs a hash per level of that tree.
+  --
   -- EthLib's choice: the depth that the limit sets is reached only at the root, with zero subtrees.
   if fork < switch then buildLevels 0 leaves (depthFor leaves.size) else []
 
@@ -74,6 +48,8 @@ Each tree stands over one run of the progressive spine, so a run at `level` has 
 -/
 def spineLevels (leaves : Array Bytes) (start level : Nat) : List (List (Array Bytes)) :=
   -- EIP-7916: level `k` takes the next `4^k` chunks, in a tree of `4^k` leaves, so depth `2k`.
+  --
+  -- So the leaves fill a spine of trees of one, four, sixteen leaves and so on.
   (progressiveWindows (leaves.toList.drop start) level).map fun (window, windowLevel) =>
     buildLevels 0 window.toArray (2 * windowLevel)
 
@@ -311,6 +287,8 @@ def set (l : RootedForkList switch fork α limit) (index : Nat) (a : α)
   let spine := l.spine.get
   let data := l.data.set index a inside
   -- The leaf that holds the element changes, then its path to the top, one parent per level.
+  --
+  -- A list of basic elements packs them into shared leaves, several to a leaf.
   let node := leafNode data index a
   -- Only one of the two holds trees: the levels before the switch, the spine from it on.
   let before := fork < switch
@@ -412,11 +390,14 @@ instance {switch fork : Fork} {α : Type} [SszType α] {limit : Nat} :
     SszType (RootedForkList switch fork α limit) where
   desc := desc (ForkList switch fork α limit)
   toValue l := toValue l.toForkList
+  -- A decoded list builds its trees on the first read of the root or the first write.
   ofValue value := ofForkList <$> ofValue value
   root l :=
     -- List[type, N]: `H(r || len)`, `r` the root of the leaves at the depth of the capacity.
     --
     -- The kept levels reach depth `d(n)` over `n` leaves, so the top is raised to the full depth.
+    --
+    -- The raise pairs the top with zero subtrees.
     if fork < switch then
       let depth := depthFor (leafCount α l.data.size)
       let full := depthFor (leafCapacity α limit)

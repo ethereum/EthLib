@@ -9,13 +9,9 @@ The fewest and the most bytes that an encoding of a type can have.
 
 The request and response protocols of the consensus layer ask a payload to lie within them.
 
-A static type has one size, so its two bounds are equal.
-
-A dynamic type takes its largest size from its limits.
-
-Each variable-size element or field adds an offset of 4 bytes.
-
 No primary source writes these bounds as functions, so EthLib states them, one rule per comment.
+
+A static type has one size, so its two bounds are equal.
 -/
 
 @[expose] public section

@@ -13,18 +13,6 @@ The file is [`Paper.tex` at `efc5f9a`][paper].
 
 An encoding is a prefix, then a payload.
 
-The payload of a byte string is its bytes.
-
-The payload of a list is the encodings of its items, one after another.
-
-A single byte below `0x80` is the one exception: it is its own encoding, with no prefix.
-
-For example, the list of the byte strings `cat` and `dog` encodes as `c8 83 63 61 74 83 64 6f 67`.
-
-Its prefix `c8` is `0xc0 + 8`, and each byte string is the prefix `83 = 0x80 + 3`, then 3 bytes.
-
-A payload of `2^64` bytes or more has no encoding.
-
 [paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
@@ -78,6 +66,8 @@ def isSingleLowByte (data : ByteArray) : Bool :=
 /-- `R_b` of the Yellow Paper: the encoding of a byte string. -/
 def encodeBytes (data : ByteArray) : Except RlpError ByteArray :=
   -- `R_b` case 1: `x` itself, if `||x|| = 1` and `x[0] < 128`.
+  --
+  -- This is the only encoding with no prefix.
   if isSingleLowByte data then
     .ok data
   -- `R_b` cases 2 to 4: the prefix of `||x||`, then `x`, or no encoding.
@@ -101,6 +91,12 @@ def encode : Item → Except RlpError ByteArray
   -- The empty list has `s(x) = ()`, the empty sequence, so it encodes as `c0`.
   --
   -- The paper also writes `∅` for an empty value elsewhere, so this reading is EthLib's choice.
+  --
+  -- The list of the byte strings `cat` and `dog` encodes as `c8 83 63 61 74 83 64 6f 67`.
+  --
+  -- Its prefix `c8` is `0xc0 + 8`.
+  --
+  -- Each byte string is the prefix `83 = 0x80 + 3`, then 3 bytes.
   | .list items => do
       let payload ← joinEncodings items
       return (← lengthPrefix .list payload.size) ++ payload

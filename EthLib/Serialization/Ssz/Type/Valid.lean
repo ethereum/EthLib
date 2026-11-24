@@ -219,8 +219,6 @@ Most rules here are the illegal types of SSZ, and of the EIPs for progressive co
 A few more are EthLib's own, and keep one field name or selector from meaning two things.
 
 The proofs of the codec and the trees assume these rules.
-
-For example, a shape encoding to nothing at every value would let two values share one encoding.
 -/
 def Desc.wellFormed : Desc → Except Err Unit
   -- SSZ defines uintN for N in 8, 16, 32, 64, 128 and 256, so six byte widths and no others.
@@ -244,6 +242,8 @@ def Desc.wellFormed : Desc → Except Err Unit
     -- Illegal: a Container with no fields.
     --
     -- A struct of no fields encodes to nothing, whatever value it holds.
+    --
+    -- A shape encoding to nothing at every value would let two values share one encoding.
     if fields.isEmpty then throw .containerEmpty
     -- EthLib's own: names are data here, so every field needs exactly one name.
     if names.length != fields.length then throw (.layoutFieldCount names.length fields.length)

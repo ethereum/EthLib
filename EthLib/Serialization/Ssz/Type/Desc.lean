@@ -5,14 +5,6 @@ The SSZ type universe, written as data.
 
 The core typing rules are stated in EthLib's own terms, one rule per comment.
 
-The basic types are the boolean and the unsigned integers, and every other type is composite.
-
-Every list, bitlist and byte list, progressive or not, is variable-size, as is a compatible union.
-
-A vector or a container is variable-size when one of its parts is.
-
-Every other type is fixed-size.
-
 [EIP-7916][eip7916] adds the progressive list and the progressive bitlist.
 
 [EIP-7495][eip7495] adds the progressive container, and [EIP-8016][eip8016] the compatible union.
@@ -35,6 +27,8 @@ An SSZ type.
 Types are data here rather than Lean types.
 
 One definition of serialization or of merkleization then covers the whole universe.
+
+The basic types are the boolean and the unsigned integers, and every other type is composite.
 -/
 inductive Desc where
   /-- A true or false value. -/

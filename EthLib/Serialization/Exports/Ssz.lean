@@ -13,9 +13,9 @@ C-ABI exports for SSZ, callable from the Python C extension.
 
 A type and a value cross the boundary as Python values in their tagged form.
 
-Each constructor is a tagged `dict`, and the type `bool` is the `str` that names it.
+A tagged form is a `dict` of one key, the name of a constructor.
 
-An integer is an `int`, and bytes are `bytes` or a `str` of `0x` and hex.
+The type `bool` is the exception: it is a `str`.
 
 A rejected input comes back as the code of its error and a message that names the fault.
 
@@ -84,8 +84,10 @@ def pair (value : PyValue) : Except String (PyValue × PyValue) := do
 /-- The type that a tagged value names, reading at most `fuel` levels of nesting. -/
 def descOf : Nat → PyValue → Except String Desc
   | 0, _ => throw "the type is nested too deeply"
+  -- The type `bool` is the `str` that names it.
   | _ + 1, .str "bool" => return .bool
   | fuel + 1, document => do
+    -- Every other type is a tagged `dict`.
     let (key, body) ← tagged document
     let fields (body : PyValue) : Except String (List String × List Desc) := do
       let entries ← (← itemsOf body).toList.mapM pair
@@ -132,6 +134,7 @@ def valueOf : Nat → PyValue → Except String Value
     let (key, body) ← tagged document
     match key, body with
     | "bool", body => return .bool (← boolOf body)
+    -- An integer is an `int`.
     | "uint", body => return .uint (← natOf body)
     | "bytes", .bytes data => return .bytes data.data
     | "bytes", body => do
@@ -220,20 +223,17 @@ def hashTreeRootExport (args : PyValue) : Result PyValue := pyExport hashTreeRoo
 
 A part is a position, a word for a mixed-in node, or the name of a field of a container.
 
-The word `__len__` names the length.
-
-The word `__active_fields__` names the field layout of a progressive container.
-
-The word `__selector__` names the selector of a union.
-
 A container takes the names of its fields only; a position given for a field is refused. -/
 def pathStep (shape : Option Desc) (part : PyValue) : Result PathStep :=
   match part, shape with
   | .int position, some (.container _ _) | .int position, some (.progressiveContainer _ _ _) =>
     rejectArgument "path" s!"no field {position}"
   | .int position, _ => return .position position
+  -- The word `__len__` names the length.
   | .str "__len__", _ => return .length
+  -- The word `__active_fields__` names the field layout of a progressive container.
   | .str "__active_fields__", _ => return .activeFields
+  -- The word `__selector__` names the selector of a union.
   | .str "__selector__", _ => return .selector
   | .str name, some (.container names _) | .str name, some (.progressiveContainer _ names _) =>
     if names.contains name then return .position (names.idxOf name)
