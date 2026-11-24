@@ -11,41 +11,13 @@ public import EthLib.Base.Proofs.Except
 /-!
 # Proofs: the JSON decoders of the Engine API
 
-A shared reader, run as an Engine decoding, returns what the reader returns.
+A shared reader run as an Engine decoding returns the value that the reader returns.
 
-A reader that rejects its input becomes an invalid parameter, for the same reason.
+A reader that rejects its input fails with an invalid parameter, for the same reason.
 
-A decoded payload has version 1, 2 or 3 of the structure.
+A payload that the shared decoder reads has version 1, 2 or 3.
 
-It holds the withdrawals exactly from version 2.
-
-It holds the two blob gas fields exactly in version 3.
-
-A payload of version 4 decodes only when its object holds exactly the fields of that version.
-
-Its access list and its slot must then decode.
-
-The rest must decode as a payload of an earlier version.
-
-A field from a fork decodes exactly when it is present from that fork on and absent before.
-
-A field decodes from an option exactly when reading the field back gives that option.
-
-The decoders read back the payloads that the writers write.
-
-The extra data must then hold at most 32 bytes.
-
-A JSON value reads as a payload status exactly when it is an object of this form.
-
-Its members that are not `null` are among `status`, `latestValidHash` and `validationError`.
-
-The status is one of the five status names, and it must be present.
-
-The hash is 32 bytes in lowercase hex, and the error a string.
-
-The hash and the error may be absent.
-
-From Bogota, the decoders read back a payload status of version 2 and an inclusion list.
+The decoders read back the payloads and statuses that the writers write, within their bounds.
 -/
 
 public section
@@ -65,7 +37,9 @@ open EthLib.Execution.Blocks (MAX_EXTRA_DATA_BYTES)
     (liftM r : Decode α) = .ok a ↔ r = .ok a := by
   cases r <;> simp [liftM, monadLift, MonadLift.monadLift, lift, Except.mapError]
 
-/-- A shared reader that rejects its input fails as a decoding with an invalid parameter. -/
+/-- A shared reader that rejects its input fails as a decoding with an invalid parameter.
+
+The invalid parameter carries the reason of the reader. -/
 @[simp] theorem liftM_error {α : Type} (reason : String) :
     (liftM (.error reason : Read α) : Decode α) = .error (.invalidParams reason) := rfl
 
@@ -563,6 +537,8 @@ A member whose value is `null` counts as absent.
 Its other members are `status` and, if present, `latestValidHash` and `validationError`.
 
 The value of `status` is the name of the status.
+
+The status is one of the five status names.
 
 The latest valid hash is `0x` and 64 lowercase hex digits, or absent.
 

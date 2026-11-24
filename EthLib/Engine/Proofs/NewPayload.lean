@@ -9,45 +9,13 @@ import EthLib.Execution.Proofs.Blocks.Transition
 /-!
 # Proofs: the checks of `engine_newPayload`
 
-Each fork from Paris to Glamsterdam has a version of the method, and no other fork has one.
+A fork has a version of the method exactly when it is from Paris on.
 
-A version takes exactly the forks whose parameters are its own.
+The decoders read back its parameters at a version that takes their fork, within their bounds.
 
-Version 5 takes Glamsterdam alone.
+Without its parent's state, a payload is never valid.
 
-Below version 5 the payload decodes exactly as a structure of a version that the method takes.
-
-From version 5 it decodes exactly as a payload of version 4, with its access list and its slot.
-
-From version 4, a request list passes its check exactly when two conditions hold.
-
-Each request has more than one byte, so its first byte is its type.
-
-The types strictly increase along the list.
-
-Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
-
-The decoder reads back the parameters that the writer writes, at a version that takes the fork.
-
-The decoder of version 6 reads back its parameters too, with their inclusion list.
-
-A payload that fails the checks is invalid, or has an invalid block hash at version 1.
-
-It has an invalid block hash exactly when its block hash is wrong and the version is 1.
-
-Its latest valid hash is null.
-
-So without the parent's state a payload is never valid: it is syncing, or it failed the checks.
-
-If the last block of a chain is not the parent, a payload that passes the checks is syncing.
-
-If it is the parent, a payload whose block passes the state transition is valid.
-
-A block that fails it without an abort makes the payload invalid, with the block error.
-
-A block and a state come back exactly for a valid payload.
-
-Decoded parameters whose payload gives a block at the active fork pass the checks.
+With it, a payload is valid exactly when the method gives back its block and the state after it.
 -/
 
 public section

@@ -8,15 +8,7 @@ public import EthLib.Engine.Proofs.PreparePayload
 
 The Engine API and the Beacon API write the same fields of payload attributes, from one list.
 
-Each name of the Beacon API is that of the Engine API in snake case.
-
-Each value is the same, as decimal text instead of hexadecimal for an integer.
-
-The event names the slot of the state, its proposer, and the root of its latest block header.
-
-Its parent block hash is the head of the forkchoice update, and its attributes are those given.
-
-For the update of a proposer, the event and the attributes name one parent, before and from Gloas.
+The event names the slot, the proposer and the parent that the update of a proposer names.
 -/
 
 @[expose] public section

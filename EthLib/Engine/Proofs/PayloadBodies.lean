@@ -10,37 +10,9 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 A request is too large exactly when it asks for more bodies than the node takes.
 
-So a request of at most 32 bodies is never too large.
+An answer holds the stored body of each requested hash or canonical block, in order.
 
-The withdrawals of a body are `null` exactly for a block before Shapella.
-
-Its block access list is `null` exactly for a block before Glamsterdam, or when it was pruned.
-
-By hash, an answer has one entry per requested hash, in order.
-
-Each entry is the body that the store holds for its hash, or `null` where it holds none.
-
-By range, a request with `start` or `count` at 0 is invalid, whatever the store.
-
-`start` is checked first, so a request with both at 0 fails on `start`.
-
-An answer has `count` entries, or fewer when the range passes the latest known block.
-
-Entry `i` is the body of canonical block `start + i`, which is at most the latest known block.
-
-When the range reaches the latest known block, the last entry is that block's entry.
-
-The store holds the body of that block, so the entry is not `null`.
-
-A range that starts past the latest known block has an empty answer.
-
-The decoders read back the parameters that the writers write.
-
-They read no JSON value other than what the writers write.
-
-A body reads back from its JSON at its version, and so does each answer.
-
-The withdrawals and the access list come back as `null` where they were `null`.
+Each answer reads back from its JSON.
 -/
 
 public section
@@ -173,7 +145,9 @@ theorem getElem_of_bodiesByHash_eq_ok {store : BodyStore} {hashes : List Hash32}
 
 /-! ## By range -/
 
-/-- A request by range with `start` at 0 is invalid, whatever the store. -/
+/-- A request by range with `start` at 0 is invalid, whatever the store.
+
+`start` is checked first, so a request with both at 0 fails on `start`. -/
 theorem bodiesByRange_of_start_eq_zero (store : BodyStore) (count : UInt64) :
     bodiesByRange store 0 count = .error (.invalidParams "start: below 1") := rfl
 

@@ -12,37 +12,15 @@ public import EthLib.Engine.PreparePayload
 /-!
 # Proofs: the forkchoice update of a proposer
 
-The terminal block search finds a block of the chain that reaches the terminal total difficulty.
+The terminal block search finds a block that reaches the terminal total difficulty.
 
-Its parent is the zero hash, or a block of the chain below that difficulty.
+The forkchoice update of a proposer is given field by field, before and from Gloas.
 
-The search finds none only when each block that reaches the difficulty has a parent that does too.
+A block whose payload follows that update passes the checks of its parent, mix and time.
 
-It fails only on a block that reaches the difficulty and whose parent the chain does not hold.
+From Gloas, a bid built from such a payload passes the checks of its parent hash and parent root.
 
-A forkchoice update states its head, its time, its mix, its withdrawals and its parent root.
-
-Before the merge, the fork choice accepts a first payload on its head, on conditions.
-
-With a configured terminal block hash, the block must be of the slot of the state.
-
-Without one, the hashes of the chain must differ and no block may name the zero hash as its parent.
-
-A block whose payload follows the update passes the parent, mix, time and withdrawal checks.
-
-It must pass the header step on the state of the proposer.
-
-Its execution part then fails only on the blob count, the execution layer, a hash, or an accessor.
-
-From Gloas, take a bid built on the state of the proposer, from a payload that follows the update.
-
-The bid passes the checks of its parent hash, its parent root and its mix, in the bid step.
-
-The block that carries the bid must carry the requests of the stored payload, from a full parent.
-
-The hashes of the latest bid must differ, and the latest block hash must be its parent hash.
-
-The state must also record the root of its latest block header as the root of the slot before.
+It passes the check of its mix too.
 -/
 
 @[expose] public section

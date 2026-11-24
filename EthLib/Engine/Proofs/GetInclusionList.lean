@@ -9,17 +9,9 @@ public import EthLib.Consensus.Gossip.InclusionList
 
 Every answer keeps the two rules of the method.
 
-Each transaction has at least one byte.
-
-The lengths of the transactions add up to at most 8192 bytes.
-
-The answer keeps the order of the candidates.
-
-So a list of candidates that already keeps both rules is the answer itself.
+It keeps the order of the candidates.
 
 An inclusion list that carries an answer passes the two reject checks of its gossip.
-
-They are the check of the total size and the check of empty transactions.
 
 An empty answer, which comes when no candidate fits, is ignored by gossip all the same.
 -/
