@@ -52,6 +52,9 @@ public import EthLib.Cryptography.Proofs.Sponge.Commute
 public import EthLib.Cryptography.Proofs.Sponge.Fresh
 public import EthLib.Cryptography.Proofs.Sponge.Ideal
 public import EthLib.Cryptography.Proofs.Sponge.Real
+public import EthLib.Cryptography.Proofs.Sponge.Switch
+public import EthLib.Cryptography.Proofs.Sponge.Bound
+public import EthLib.Cryptography.Proofs.Sponge.Indifferentiability
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
