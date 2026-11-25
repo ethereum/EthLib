@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Pow
 public import EthLib.Cryptography.Proofs.AltBn128.Fp12
 
 /-!
@@ -67,7 +68,7 @@ theorem frobeniusCoefficients_getElem (k : Fin 12) :
       ofFp2Hom ((⟨9, 1⟩ : Fp2) ^ ((Fp.modulus - 1) / 6)) from rfl, map_pow, ← w_pow_six,
       ← pow_mul, pow_succ, mul_comm]
   simp only [frobeniusCoefficients, Fin.getElem_fin, Vector.getElem_ofFn, hwp]
-  exact powBits_eq_pow 4 _ _ (by omega)
+  exact Base.powBits_eq_pow 4 _ _ (by omega)
 
 /-- A sum by a left fold over `Fin n` is the sum over `Fin n`. -/
 private theorem foldl_add_eq_sum {n : ℕ} (g : Fin n → Fp12) (x : Fp12) :
@@ -178,10 +179,10 @@ end Fp12
 
 /-- The final exponentiation raises its argument to `(p^12 - 1) / q`. -/
 theorem finalExponentiation_eq_pow (f : Fp12) : finalExponentiation f = f ^ FINAL_EXPONENT := by
-  have hu (a : Fp12) : Fp12.powBits 64 a BN_U = a ^ BN_U :=
-    Fp12.powBits_eq_pow 64 a BN_U (by decide)
-  have hs (a : Fp12) (e : ℕ) (he : e < 64) : Fp12.powBits 6 a e = a ^ e :=
-    Fp12.powBits_eq_pow 6 a e he
+  have hu (a : Fp12) : Base.powBits 64 a BN_U = a ^ BN_U :=
+    Base.powBits_eq_pow 64 a BN_U (by decide)
+  have hs (a : Fp12) (e : ℕ) (he : e < 64) : Base.powBits 6 a e = a ^ e :=
+    Base.powBits_eq_pow 6 a e he
   unfold finalExponentiation
   simp only [hu, hs _ 36 (by decide), hs _ 30 (by decide), hs _ 18 (by decide),
     hs _ 12 (by decide), hs _ 6 (by decide), hs _ 2 (by decide), Fp12.inverse_eq_inv,

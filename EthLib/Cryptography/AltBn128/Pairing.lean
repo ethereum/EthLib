@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Pow
 public import EthLib.Cryptography.AltBn128.Curve
 public import EthLib.Cryptography.Fp2
 
@@ -189,12 +190,7 @@ instance : Add Fp12 := ⟨add⟩
 instance : Sub Fp12 := ⟨sub⟩
 instance : Mul Fp12 := ⟨mul⟩
 
-/-- `a^e`, for `e < 2^fuel`, by square and multiply on the bits of `e`. -/
-def powBits : Nat → Fp12 → Nat → Fp12
-  | 0, _, _ => one
-  | fuel + 1, a, e =>
-    let half := powBits fuel (a * a) (e / 2)
-    if e % 2 = 1 then a * half else half
+instance : One Fp12 := ⟨one⟩
 
 /-- `c a`, coefficient by coefficient. -/
 def scale (c : Fp) (a : Fp12) : Fp12 := Vector.ofFn fun k => c * a[k]
@@ -209,7 +205,7 @@ def frobeniusGamma : Fp2 := Fp2.powNat ⟨9, 1⟩ ((Fp.modulus - 1) / 6)
 Each exponent `k` is below `2^4`, so four bits of square and multiply reach it. -/
 def frobeniusCoefficients : Vector Fp12 12 :=
   let wp := wPow 1 * ofFp2 frobeniusGamma
-  Vector.ofFn fun k => powBits 4 wp k.val
+  Vector.ofFn fun k => Base.powBits 4 wp k.val
 
 /-- The `p`-th power.
 
@@ -368,9 +364,9 @@ def finalExponentiation (f : Fp12) : Fp12 :=
   -- §5: `m^x`, `m^(x^2) = (m^x)^x` and `m^(x^3) = (m^(x^2))^x`.
   --
   -- `u` is below `2^64`, so 64 bits of square and multiply reach it.
-  let fu := Fp12.powBits 64 f BN_U
-  let fu2 := Fp12.powBits 64 fu BN_U
-  let fu3 := Fp12.powBits 64 fu2 BN_U
+  let fu := Base.powBits 64 f BN_U
+  let fu2 := Base.powBits 64 fu BN_U
+  let fu3 := Base.powBits 64 fu2 BN_U
   -- §3: after the first part, the element is unitary, so an inversion is a conjugation.
   --
   -- The conjugation is the power `p^6`, since `m^(p^6) = m^(-1)` for a unitary `m`.
@@ -380,7 +376,7 @@ def finalExponentiation (f : Fp12) : Fp12 :=
   -- §3: its power is `(m^(p^3))^lambda3 * (m^(p^2))^lambda2 * (m^p)^lambda1 * m^lambda0`.
   --
   -- The coefficients in the digits are at most 36, below `2^6`.
-  let small (a : Fp12) (e : Nat) := Fp12.powBits 6 a e
+  let small (a : Fp12) (e : Nat) := Base.powBits 6 a e
   -- §5: `m^lambda0`, with `lambda0(x) = -36 x^3 - 30 x^2 - 18 x - 2`.
   let y0 := conj (small fu3 36 * small fu2 30 * small fu 18 * small f 2)
   -- §5: `m^lambda1`, with `lambda1(x) = -36 x^3 - 18 x^2 - 12 x + 1`.

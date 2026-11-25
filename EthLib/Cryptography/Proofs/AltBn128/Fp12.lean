@@ -101,8 +101,6 @@ theorem toQuot_mul (a b : Fp12) : toQuot (a * b) = toQuot a * toQuot b := by
 
 /-! ## The ring -/
 
-instance : One Fp12 := ⟨one⟩
-
 /-- `n` as an element of `Fp12`: the element `n` of `Fp`. -/
 instance : NatCast Fp12 := ⟨fun n => ofFp n⟩
 
@@ -398,18 +396,6 @@ noncomputable def primeFrobenius : Fp12 →+* Fp12 := _root_.frobenius Fp12 Fp.m
 
 theorem primeFrobenius_apply (a : Fp12) : primeFrobenius a = a ^ Fp.modulus :=
   frobenius_def _ a
-
-/-- Square and multiply computes `a^e`, when `e < 2^fuel`. -/
-theorem powBits_eq_pow (fuel : Nat) (a : Fp12) (e : Nat) (he : e < 2 ^ fuel) :
-    powBits fuel a e = a ^ e := by
-  induction fuel generalizing a e with
-  | zero =>
-    obtain rfl : e = 0 := by simpa using he
-    rfl
-  | succ fuel ih =>
-    have h2 : e / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at he; omega
-    rw [powBits, ih _ _ h2, ← pow_two, ← pow_mul]
-    split <;> [rw [← pow_succ']; skip] <;> congr 1 <;> omega
 
 /-! ## The polynomial -/
 
