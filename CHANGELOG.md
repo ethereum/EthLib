@@ -1061,6 +1061,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `engine_getBlobs` types its versioned hashes as `Cryptography.Kzg.VersionedHash` ([#4563](https://github.com/ethereum/EthLib/issues/4563)).
+  - `Engine.BlobPool.lookup` takes a versioned hash.
+    `Engine.getBlobsParams` returns versioned hashes, read with `Execution.Rpc.versionedHash`, and `Engine.getBlobsParamsJson` writes them with `Execution.Rpc.versionedHashJson`.
+    `Engine.getBlobsV1` to `Engine.getBlobsV4` take a list of versioned hashes.
+  - The 21 theorems of `Engine/Proofs/GetBlobs.lean` that take the hashes of a request take them as versioned hashes, with the same claims.
+    In `getBlobsParams_eq_ok_iff`, each hash `h` is written as the hex string of `h.bytes`.
+  - `Execution.Rpc.versionedHash_eq_ok_iff` and `Execution.Rpc.array_versionedHash_eq_ok_iff` (`Execution/Proofs/Rpc/Json.lean`) are new: a versioned hash, or a list of them, decodes exactly from its hex strings.
+  - The C export keeps taking each pool entry's hash as 32 bytes, and its answers and error messages stay the same.
+    `Engine.Exports.pooledOf` (`Engine/Exports/GetBlobs.lean`) returns that hash as a versioned hash.
+  Migration: wrap 32 bytes with `VersionedHash.mk`, and read them back with `.bytes`.
 - In Lean, one reader and one writer of a versioned hash serve the JSON forms of the RPC and the Engine APIs ([#4562](https://github.com/ethereum/EthLib/issues/4562)).
   - `Execution.Rpc.versionedHash` and `Execution.Rpc.versionedHashJson` (`Execution/Rpc/Json.lean`) are new.
     `versionedHash_versionedHashJson` and `array_versionedHash_listJson` (`Execution/Proofs/Rpc/Json.lean`) say that the reader reads back what the writer writes.

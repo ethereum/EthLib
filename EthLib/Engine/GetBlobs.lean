@@ -36,7 +36,7 @@ open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Engine.Json
 open EthLib.Serialization.JsonRpc
-open EthLib.Execution.Rpc (withdrawal)
+open EthLib.Execution.Rpc (withdrawal versionedHash versionedHashJson)
 
 /-- The fewest versioned hashes that every pool must take in one request. -/
 def MIN_BLOBS_REQUEST_LIMIT : Nat := 128
@@ -64,7 +64,7 @@ structure BlobPool where
   --
   -- The method checks none of this.
   /-- What the pool holds for a versioned hash, if anything. -/
-  lookup : Bytes32 → Option PooledBlob
+  lookup : VersionedHash → Option PooledBlob
   /-- Whether the pool serves its data at all; a syncing node may not. -/
   serving : Bool
   /-- The most versioned hashes that one request may name. -/
@@ -168,30 +168,30 @@ def getBlobsParamCount (version : Nat) : Nat :=
 
 /-- The parameters of a version: the versioned hashes, and from version 4 the bitarray. -/
 def getBlobsParams (version : Nat) (params : Json) :
-    Decode (List Bytes32 × Option CellBitarray) := do
+    Decode (List VersionedHash × Option CellBitarray) := do
   let params ← paramsArray params
   let count := getBlobsParamCount version
   match params, decide (count = 2) with
   -- Versions 1 to 3, request: one parameter, an `Array of DATA` of 32 bytes each.
-  | [hashes], false => return (← array "hashes" (fixed "versioned hash" 32) hashes, none)
+  | [hashes], false => return (← array "hashes" (versionedHash "versioned hash") hashes, none)
   -- Version 4, request: that array, then the bitarray of cell indices, `DATA` of 16 bytes.
   | [hashes, bits], true =>
-    return (← array "hashes" (fixed "versioned hash" 32) hashes,
+    return (← array "hashes" (versionedHash "versioned hash") hashes,
       some (← fixed "indices_bitarray" CELL_BITARRAY_BYTES bits))
   -- The source names no error for other parameters, and EthLib gives `-32602`, invalid params.
   | _, _ => invalid s!"params: got {params.length}, expected {count}"
 
 /-- The parameters as JSON: the versioned hashes, then the bitarray when there is one. -/
-def getBlobsParamsJson (hashes : List Bytes32) (bits : Option CellBitarray) : Json :=
+def getBlobsParamsJson (hashes : List VersionedHash) (bits : Option CellBitarray) : Json :=
   -- The consensus layer also writes the parameters as JSON.
   --
   -- The request of the version: the array of versioned hashes, then from version 4 the bitarray.
-  .arr (([listJson (dataJson ·.toList) hashes] ++ bits.toList.map (dataJson ·.toList)).toArray)
+  .arr (([listJson versionedHashJson hashes] ++ bits.toList.map (dataJson ·.toList)).toArray)
 
 /-- Version 1 at the active fork of the node: a blob and its proof for each hash, or `null`.
 
 From Fusaka the version is an unsupported fork. -/
-def getBlobsV1 (pool : BlobPool) (fork : Fork) (hashes : List Bytes32) :
+def getBlobsV1 (pool : BlobPool) (fork : Fork) (hashes : List VersionedHash) :
     Except EngineError (List (Option BlobAndProofV1)) := do
   -- The source orders no two checks.
   --
@@ -211,7 +211,7 @@ def getBlobsV1 (pool : BlobPool) (fork : Fork) (hashes : List Bytes32) :
   return hashes.map fun h => if pool.serving then (pool.lookup h).bind PooledBlob.toV1 else none
 
 /-- Version 2: each blob with its cell proofs, or `null` alone if one is missing. -/
-def getBlobsV2 (pool : BlobPool) (hashes : List Bytes32) :
+def getBlobsV2 (pool : BlobPool) (hashes : List VersionedHash) :
     Except EngineError (Option (List BlobAndProofV2)) := do
   -- Version 2, step 3: more hashes than the pool takes is `-38004`, too large request.
   checkRequestSize pool.maxRequest hashes.length
@@ -225,7 +225,7 @@ def getBlobsV2 (pool : BlobPool) (hashes : List Bytes32) :
   else return none
 
 /-- Version 3: each blob with its cell proofs, with `null` in place of each missing blob. -/
-def getBlobsV3 (pool : BlobPool) (hashes : List Bytes32) :
+def getBlobsV3 (pool : BlobPool) (hashes : List VersionedHash) :
     Except EngineError (Option (List (Option BlobAndProofV2))) := do
   -- Version 3, step 4: more hashes than the pool takes is `-38004`, too large request.
   checkRequestSize pool.maxRequest hashes.length
@@ -241,7 +241,7 @@ def getBlobsV3 (pool : BlobPool) (hashes : List Bytes32) :
 /-- Version 4: for each blob of which the pool holds a cell, the selected cells.
 
 A blob of which the pool holds no cell is `null`. -/
-def getBlobsV4 (pool : BlobPool) (hashes : List Bytes32) (bits : CellBitarray) :
+def getBlobsV4 (pool : BlobPool) (hashes : List VersionedHash) (bits : CellBitarray) :
     Except EngineError (Option (List (Option BlobCellsAndProofsV1))) := do
   -- Version 4, step 5: more hashes than the pool takes is `-38004`, too large request.
   checkRequestSize pool.maxRequest hashes.length
