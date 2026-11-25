@@ -3811,8 +3811,24 @@ Under synchrony, `ProposalAt.mem_view` puts the block in the view of every hones
 `Execution.blockTimeliness_eq_true` shows that a store whose clock is in the slot of a held block, before the attestations are due, has recorded that block as timely; the store must not hold the block at the start.
 `Store.addBlock_proposerBoostRoot` shows that such a timely block takes the boost when no block holds it, the head of the store is its parent, and the store holds that parent at an earlier slot; and `Execution.proposerBoostRoot_of_le` keeps a nonzero boost while the clock stays in one slot.
 `Store.ForwardReachable.not_parentRoot_of_current` shows that no held block builds on a block of the current slot, which is the leaf condition of `Store.getHead_eq_of_boost`.
-That lemma is about one store: no theorem yet shows that the head of an honest receiver is the parent of the block when it receives the block, or that no other block of the slot took the boost first.
-So no theorem yet gives the head of every up-to-date honest store at the attestation deadline.
+`Execution.proposerBoostRoot_of_held` follows the store of one validator through an execution: a store that holds a block in its slot, before the attestations are due, boosted it when it took it and keeps the boost for the rest of the slot.
+It assumes that before the store held the block, whenever its clock was in that slot, its head was the parent of the block and nothing was boosted.
+`getHead_eq_of_proposal` (`Consensus/Proofs/ForkChoice/HonestProposalHead.lean`) joins the steps above before Gloas.
+Take an honest proposal and an honest receiver that holds the block before the attestations of the slot are due.
+Later in the slot, the head of the receiver is the block, when the votes against it weigh less than the proposer score and the block is viable.
+As a separate step toward the hypothesis that the receiver holds the block, `ProposalAt.contains_of_synchronous` shows that under synchrony an up-to-date receiver, `Δ` after the start, holds a block at the root of the proposal when its handler accepts the proposal.
+The theorem keeps these hypotheses:
+
+- the receiver holds the block itself at its root, which another block with the same root would break;
+- before it holds the block, in the slot, the head of the receiver is the parent and nothing is boosted, which rules out another block of the slot that took the boost first;
+- the root of the block is not 32 zero bytes, the value that means no boost;
+- the attestation deadline lies strictly inside the slot;
+- the store holds the state of the justified checkpoint, the block is viable, and the votes against it weigh less than the proposer score;
+- the receiver holds no block at the parent root of the anchor.
+
+No theorem yet derives, from the network model, that the head of the receiver is the parent with nothing boosted before it takes the block, or that it takes the block before the deadline.
+So the theorem covers each honest store that meets these hypotheses separately, and no theorem yet gives the head of every up-to-date honest store at the attestation deadline.
+From Gloas the boost and the head work on payload nodes, and no such theorem is stated.
 
 `Execution.finalized_prefix_or_accountable` proves the narrower historical family used by those duty proofs: one honest store's later justified checkpoint reads back its earlier finalized checkpoint, or accountable-safety evidence exists.
 `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` compose this family with the duty proofs, leaving the original statements unchanged.

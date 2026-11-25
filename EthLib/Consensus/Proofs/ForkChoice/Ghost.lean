@@ -1582,6 +1582,28 @@ theorem isAncestor_getHead_of_majority {nodes : List ForkChoiceNode} {node head 
   isAncestor_getHead_of_majority_withBoost lower before justifiedState tree viable votes
     (by rw [boostScore_of_zero noBoost, Nat.add_zero]; exact majority) found
 
+/-- The root of the head of a store names a block that the store holds. -/
+theorem getHead_known {config : Config} {store : Store preset fork} {head : ForkChoiceNode}
+    (found : store.getHead config = .ok head) :
+    ∃ block, store.blocks[head.root]? = some block := by
+  unfold getHead at found
+  cases tree : store.getFilteredNodeTree config with
+  | error fault => simp [tree, bind, Except.bind] at found
+  | ok nodes =>
+    -- The walk starts at the justified block, which the store holds.
+    have justified := filterNodeTree_known (config := config)
+      (show store.filterNodeTree config ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok nodes
+        from tree)
+    simp only [tree, bind, Except.bind] at found
+    split at found
+    · simp only [pure, Except.pure, Except.ok.injEq] at found
+      subst found
+      exact justified
+    -- The walk ends at its start, or at a viable node, which the store holds.
+    · rcases getHeadFrom_mem found with rfl | member
+      · exact justified
+      · exact (filterNodeTree_mem tree _ member).2.1
+
 end Store
 
 end EthLib.Consensus

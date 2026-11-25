@@ -501,6 +501,123 @@ theorem Execution.proposerBoostRoot_of_le
     rw [Handles.proposerBoostRoot_of_ne_zero moved (keep nowOk ▸ boosted) nowOk nextOk,
       keep nowOk]
 
+/-- Along an execution, a store keeps its time of genesis, and never sets its clock back. -/
+private theorem Execution.clock_of_le
+    (e : Execution (forkChoice config checks sources signed sends) J) (u : ν) {j k : ℕ}
+    (le : j ≤ k) :
+    ((e.world k).state u).genesisTimeMs = ((e.world j).state u).genesisTimeMs ∧
+      ((e.world j).state u).timeMs ≤ ((e.world k).state u).timeMs ∧
+      ∀ slot, ((e.world j).state u).getCurrentSlot config = .ok slot →
+        ∃ later, ((e.world k).state u).getCurrentSlot config = .ok later ∧ slot ≤ later := by
+  induction k, le using Nat.le_induction with
+  | base => exact ⟨rfl, UInt64.le_refl _, fun slot ok => ⟨slot, ok, UInt64.le_refl _⟩⟩
+  | succ k _ ih =>
+    obtain ⟨genesis, forward, slots⟩ := ih
+    rcases e.state_succ k u with same | ⟨-, moved⟩
+    · rw [same]
+      exact ⟨genesis, forward, slots⟩
+    obtain ⟨genesis', forward', slots'⟩ := Handles.clock moved
+    refine ⟨genesis'.trans genesis, UInt64.le_trans forward forward', fun slot ok => ?_⟩
+    obtain ⟨mid, midOk, low⟩ := slots slot ok
+    obtain ⟨later, laterOk, high⟩ := slots' mid midOk
+    exact ⟨later, laterOk, UInt64.le_trans low high⟩
+
+/-- A store boosts a block that it took on its head before the deadline, for the rest of the slot.
+
+It assumes that before the store holds the block, in the slot, its head is the parent, unboosted. -/
+theorem Execution.proposerBoostRoot_of_held
+    (e : Execution (forkChoice config checks sources signed sends) J) {u : ν} {k n : ℕ}
+    (later : k ≤ n) (lower : ∀ m ≤ k, ((e.world m).state u).ParentsBelow) {root : Root}
+    (nonzero : root ≠ Vector.replicate 32 0) {block : BeaconBlock preset fork}
+    {elapsed due : UInt64} (fresh : (e.start u).blocks[root]? = none)
+    (held : ((e.world k).state u).blocks[root]? = some block)
+    (current : ((e.world k).state u).getCurrentSlot config = .ok block.slot)
+    (into : ((e.world k).state u).getTimeIntoSlotMs config = .ok elapsed)
+    (dueOk : getAttestationDueMs config fork = .ok due) (early : elapsed < due)
+    -- Before the store holds the block, in its slot, the head is the parent and nothing is boosted.
+    (headed : ∀ m ≤ k, ((e.world m).state u).blocks[root]? = none →
+      ((e.world m).state u).getCurrentSlot config = .ok block.slot →
+      (∃ head, ((e.world m).state u).getHead config = .ok head ∧ head.root = block.parentRoot) ∧
+        ((e.world m).state u).proposerBoostRoot = Vector.replicate 32 0)
+    (stays : ((e.world n).state u).getCurrentSlot config = .ok block.slot) :
+    ((e.world n).state u).proposerBoostRoot = root := by
+  classical
+  -- Take the first event whose store holds the root.
+  have exists_held : ∃ j, ((e.world j).state u).blocks[root]? ≠ none := ⟨k, by simp [held]⟩
+  have first := Nat.find_spec exists_held
+  have firstLe : Nat.find exists_held ≤ k := Nat.find_min' exists_held (by simp [held])
+  have positive : Nat.find exists_held ≠ 0 := by
+    intro zero
+    rw [zero] at first
+    simp [Execution.world_zero, World.initial, fresh] at first
+  obtain ⟨m, hm⟩ := Nat.exists_eq_succ_of_ne_zero positive
+  have absent : ((e.world m).state u).blocks[root]? = none := by
+    simpa using Nat.find_min exists_held (show m < Nat.find exists_held by omega)
+  rw [hm] at first firstLe
+  -- The entry at that event stays up to the event that holds the block, so it is the block.
+  obtain ⟨entry, entryFound⟩ := Option.ne_none_iff_exists'.mp first
+  have found := e.blocks_of_le firstLe entryFound
+  rw [held, Option.some.injEq] at found
+  subst found
+  -- The move at the previous event is a new block that the block handler accepts.
+  rcases e.state_succ m u with same | ⟨-, moved⟩
+  · rw [same, absent] at entryFound
+    cases entryFound
+  rcases moved.blocks_or_onBlock with same | ⟨sb, step⟩
+  · rw [same, absent] at entryFound
+    cases entryFound
+  rcases Store.onBlock_same_or_insert step with same | ⟨blockRoot, hashed, new, blocks, -⟩
+  · rw [same, absent] at entryFound
+    cases entryFound
+  rw [blocks, getElem?_insert_root] at entryFound
+  split at entryFound
+  rotate_left
+  · rw [absent] at entryFound
+    cases entryFound
+  rename_i rootEq
+  subst rootEq
+  rw [Option.some.injEq] at entryFound
+  subst entryFound
+  have new' : ¬ ((e.world m).state u).blocks.contains blockRoot := by simpa using new
+  have clock := Store.onBlock_sameClock step
+  -- The handler refuses a block from a later slot, and the clock never goes back.
+  obtain ⟨now, nowOk, notFuture⟩ := (Store.onBlock_checks hashed new' step).1
+  obtain ⟨genesis, forward, slots⟩ := e.clock_of_le u (show m ≤ k by omega)
+  obtain ⟨later', laterOk, grows⟩ := slots now nowOk
+  rw [current, Except.ok.injEq] at laterOk
+  subst laterOk
+  have same : now = sb.message.slot := UInt64.le_antisymm grows notFuture
+  subst same
+  -- The clock is no further into the slot than at the later event.
+  obtain ⟨start, startOk⟩ : ∃ start,
+      computeTimeAtSlotMs config ((e.world m).state u).genesisTimeMs sb.message.slot =
+        .ok start := by
+    unfold Store.getTimeIntoSlotMs at into
+    rw [current, genesis] at into
+    simp only [bind_ok_iff, mapError_ok_iff] at into
+    obtain ⟨_, same, start, startOk, -⟩ := into
+    obtain rfl := Except.ok.inj same
+    exact ⟨start, startOk⟩
+  have intoBefore : ((e.world m).state u).getTimeIntoSlotMs config =
+      .ok (((e.world m).state u).timeMs - start) := by
+    simp [Store.getTimeIntoSlotMs, nowOk, startOk, Except.mapError, bind, Except.bind,
+      pure, Except.pure]
+  have le := getTimeIntoSlotMs_le genesis forward nowOk current intoBefore into
+  -- Before the block, the head is its parent and nothing is boosted.
+  obtain ⟨⟨head, headOk, onHead⟩, unboosted⟩ := headed m (by omega) new nowOk
+  obtain ⟨parent, parentFound⟩ := Store.getHead_known headOk
+  rw [onHead] at parentFound
+  have below := lower (m + 1) (by omega) blockRoot sb.message parent
+    (by rw [blocks, getElem?_insert_root]; simp)
+    (moved.blocks_of_found parentFound)
+  simp only [Store.onBlock, hashed, new', bind, Except.bind, Except.mapError, ↓reduceIte,
+    Bool.false_eq_true] at step
+  have boost := Store.addBlock_proposerBoostRoot unboosted nowOk intoBefore dueOk
+    (UInt64.lt_of_le_of_lt le early) headOk onHead parentFound below step
+  -- The boost stays while the clock stays in the slot.
+  rw [e.proposerBoostRoot_of_le (show m + 1 ≤ n by omega) (boost ▸ nonzero)
+    (clock.getCurrentSlot ▸ nowOk) stays, boost]
+
 /-- An up-to-date store holds each block of its view that its block handler accepts. -/
 theorem UpToDate.contains_of_onBlock {store : Store preset fork}
     (upToDate : UpToDate config checks sources time view store)
