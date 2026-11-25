@@ -186,15 +186,17 @@ def writeFrames (st : FrameState) : List ByteArray → Except FrameError ByteArr
     let (frame, st) ← writeFrame st data
     return frame ++ (← writeFrames st rest)
 
-/-- The frame data of the frames that fill `input`, one after another in one direction.
+/-- The frame data of the frames that fill `input` from offset `pos`, in one direction.
 
 Each frame takes at least 32 bytes, so `fuel` frames cover an input of `fuel` bytes. -/
-def readFrames : Nat → FrameState → ByteArray → Except FrameError (List ByteArray)
-  | fuel + 1, st, input =>
-    if input.size = 0 then .ok [] else do
-      let (data, st, rest) ← readFrame st input
-      return data :: (← readFrames fuel st rest)
-  | 0, _, input => if input.size = 0 then .ok [] else .error (.tooShort 32 input.size)
+def readFrames : Nat → FrameState → ByteArray → Nat → Except FrameError (List ByteArray)
+  | fuel + 1, st, input, pos =>
+    -- Each frame starts where the one before ends, so no rest of the input is copied.
+    if input.size - pos = 0 then .ok [] else do
+      let (data, st, next) ← readFrameAt st input pos
+      return data :: (← readFrames fuel st input next)
+  | 0, _, input, pos =>
+    if input.size - pos = 0 then .ok [] else .error (.tooShort 32 (input.size - pos))
 
 /-- The frames of the frame data in the RLP list `frames`, from the start of a direction.
 
@@ -213,7 +215,7 @@ The input must hold whole frames only. -/
 @[export eth_rlpx_read_frames]
 def readFramesExport (aesSecret macSecret macInit input : ByteArray) : Result ByteArray := do
   let st ← readFrameState aesSecret macSecret macInit
-  let datas ← toResult none (readFrames input.size st input)
+  let datas ← toResult none (readFrames input.size st input 0)
   match Serialization.Rlp.Codec.encode datas with
   | .ok bytes => pure bytes
   | .error _ => rejectArgument none "frame data does not fit in RLP"
