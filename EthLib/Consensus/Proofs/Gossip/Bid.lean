@@ -53,26 +53,14 @@ theorem isGasLimitTargetCompatible_close {parent gasLimit target : UInt64}
 
 /-! ## Seen keys -/
 
-/-- A bid whose slot, parents and builder have a valid bid already is ignored. -/
-theorem validateExecutionPayloadBid_of_seen
-    (known : (signed.message.slot, signed.message.parentBlockHash, signed.message.parentBlockRoot,
-      signed.message.builderIndex) ∈ seen.executionPayloadBids) :
-    validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
-      .ok (.ignore "already seen valid bid for this slot, parent, and builder") := by
-  simp [validateExecutionPayloadBid, known, pure, Except.pure]
-
-/-- After a valid bid, a bid of the same builder for the same slot and parents is ignored. -/
-theorem validateExecutionPayloadBid_recordExecutionPayloadBid
-    {other : SignedExecutionPayloadBid preset fork}
-    (sameSlot : other.message.slot = signed.message.slot)
-    (sameHash : other.message.parentBlockHash = signed.message.parentBlockHash)
-    (sameRoot : other.message.parentBlockRoot = signed.message.parentBlockRoot)
-    (sameBuilder : other.message.builderIndex = signed.message.builderIndex) :
-    validateExecutionPayloadBid config checks (seen.recordExecutionPayloadBid signed) store gloas
-        other currentTimeMs =
-      .ok (.ignore "already seen valid bid for this slot, parent, and builder") :=
-  validateExecutionPayloadBid_of_seen (by
-    simp [Seen.recordExecutionPayloadBid, sameSlot, sameHash, sameRoot, sameBuilder])
+/-- A valid bid adds one to the count of the bids of its builder for its slot and parents. -/
+theorem executionPayloadBidCount_recordExecutionPayloadBid :
+    (seen.recordExecutionPayloadBid signed).executionPayloadBidCount
+        (signed.message.slot, signed.message.parentBlockHash, signed.message.parentBlockRoot,
+          signed.message.builderIndex) =
+      seen.executionPayloadBidCount (signed.message.slot, signed.message.parentBlockHash,
+        signed.message.parentBlockRoot, signed.message.builderIndex) + 1 := by
+  simp [Seen.recordExecutionPayloadBid, Seen.executionPayloadBidCount]
 
 /-- After a valid bid, the best value for its slot and parents is its own value. -/
 theorem bestExecutionPayloadBidFor_recordExecutionPayloadBid :
@@ -81,12 +69,8 @@ theorem bestExecutionPayloadBidFor_recordExecutionPayloadBid :
       some signed.message.value := by
   simp [Seen.recordExecutionPayloadBid, Seen.bestExecutionPayloadBidFor]
 
-/-- A bid whose value does not beat the best value for its slot and parents is ignored.
-
-That check comes after the check of the seen key. -/
+/-- A bid whose value does not beat the best value for its slot and parents is ignored. -/
 theorem validateExecutionPayloadBid_of_not_best {best : Gwei}
-    (fresh : (signed.message.slot, signed.message.parentBlockHash, signed.message.parentBlockRoot,
-      signed.message.builderIndex) ∉ seen.executionPayloadBids)
     (recorded : seen.bestExecutionPayloadBidFor
       (signed.message.slot, signed.message.parentBlockHash, signed.message.parentBlockRoot) =
         some best)
@@ -97,7 +81,7 @@ theorem validateExecutionPayloadBid_of_not_best {best : Gwei}
     rw [UInt64.lt_iff_toNat_lt]
     rw [UInt64.le_iff_toNat_le] at low
     omega
-  simp [validateExecutionPayloadBid, fresh, recorded, notBelow, pure, Except.pure]
+  simp [validateExecutionPayloadBid, recorded, notBelow, pure, Except.pure]
 
 /-- A valid bid beats the best value recorded for its slot and parents, if there is one.
 
@@ -109,18 +93,14 @@ theorem lt_value_of_validateExecutionPayloadBid_eq_accept {best : Gwei}
       (signed.message.slot, signed.message.parentBlockHash, signed.message.parentBlockRoot) =
         some best) :
     best < signed.message.value := by
-  by_cases seenKey : (signed.message.slot, signed.message.parentBlockHash,
-      signed.message.parentBlockRoot, signed.message.builderIndex) ∈ seen.executionPayloadBids
-  · rw [validateExecutionPayloadBid_of_seen seenKey] at valid
+  by_cases below : best < signed.message.value
+  · exact below
+  · have low : signed.message.value ≤ best := by
+      rw [UInt64.lt_iff_toNat_lt] at below
+      rw [UInt64.le_iff_toNat_le]
+      omega
+    rw [validateExecutionPayloadBid_of_not_best recorded low] at valid
     cases valid
-  · by_cases below : best < signed.message.value
-    · exact below
-    · have low : signed.message.value ≤ best := by
-        rw [UInt64.lt_iff_toNat_lt] at below
-        rw [UInt64.le_iff_toNat_le]
-        omega
-      rw [validateExecutionPayloadBid_of_not_best seenKey recorded low] at valid
-      cases valid
 
 /-! ## The inclusion lists of Heze -/
 
@@ -334,7 +314,6 @@ theorem builderMayExit_of_validateExecutionPayloadBid_eq_accept
         builderMayExit store gloas advanced signed.message builder = .ok false := by
   unfold validateExecutionPayloadBid at valid
   replace valid := (andThenM_eq_ok_accept.mp valid).2
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
   obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
   replace valid := (andThenM_eq_ok_accept.mp valid).2
   replace valid := (andThenM_eq_ok_accept.mp valid).2
@@ -380,12 +359,101 @@ theorem builderMayExit_of_validateExecutionPayloadBid_eq_accept
   replace valid := (andThenM_eq_ok_accept.mp valid).2
   obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
   replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
   obtain ⟨exiting, exit, valid⟩ := bind_ok_iff.mp valid
   have staying := (andThenM_eq_ok_accept.mp valid).1
   refine ⟨state, advanced, builder, rfl, slots, found, ?_⟩
   cases exiting
   · exact exit
   · simp at staying
+
+/-- A valid bid finds its builder below its bid limit for its slot and parents.
+
+The limit is read in the state of the parent block, advanced to the slot of the bid.
+
+So once the count has reached the limit, no bid with that key is valid. -/
+theorem lt_limit_of_validateExecutionPayloadBid_eq_accept
+    (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
+      .ok accept) :
+    ∃ state advanced limit,
+      store.blockStates[signed.message.parentBlockRoot]? = some state ∧
+        processSlots config checks state signed.message.slot = .ok advanced ∧
+        getBuilderBidLimit advanced gloas signed.message.builderIndex = .ok limit ∧
+        seen.executionPayloadBidCount (signed.message.slot, signed.message.parentBlockHash,
+          signed.message.parentBlockRoot, signed.message.builderIndex) < limit.toNat := by
+  unfold validateExecutionPayloadBid at valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  cases known : store.blocks[signed.message.parentBlockRoot]? with
+  | none => simp [known, pure, Except.pure] at valid
+  | some _ =>
+  simp only [known] at valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  cases held : store.blockStates[signed.message.parentBlockRoot]? with
+  | none => simp [held, pure, Except.pure] at valid
+  | some state =>
+  simp only [held] at valid
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨dependentRoot, -, valid⟩ := bind_ok_iff.mp valid
+  cases preferred : seen.proposerPreferencesFor (signed.message.slot, dependentRoot) with
+  | none => simp [preferred, pure, Except.pure] at valid
+  | some _ =>
+  simp only [preferred] at valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  cases payload : seen.executionPayloadGasLimitFor signed.message.parentBlockHash with
+  | none => simp [payload, pure, Except.pure] at valid
+  | some _ =>
+  simp only [payload] at valid
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨advanced, slots, valid⟩ := bind_ok_iff.mp valid
+  replace slots : processSlots config checks state signed.message.slot = .ok advanced := by
+    revert slots
+    cases processSlots config checks state signed.message.slot <;> simp [Except.mapError]
+  cases found : (advanced.builders gloas).data[signed.message.builderIndex.toNat]? with
+  | none => simp [found, pure, Except.pure] at valid
+  | some builder =>
+  simp only [found] at valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨limit, bounded, valid⟩ := bind_ok_iff.mp valid
+  have under := (andThenM_eq_ok_accept.mp valid).1
+  replace bounded : getBuilderBidLimit advanced gloas signed.message.builderIndex = .ok limit := by
+    revert bounded
+    cases getBuilderBidLimit advanced gloas signed.message.builderIndex <;>
+      simp [Except.mapError]
+  refine ⟨state, advanced, limit, rfl, slots, bounded, ?_⟩
+  simpa using under
+
+/-- After a valid bid, the count of its builder for its slot and parents is at most its limit.
+
+So each valid bid keeps the count of its key within the limit. -/
+theorem executionPayloadBidCount_le_limit_of_validateExecutionPayloadBid_eq_accept
+    (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
+      .ok accept) :
+    ∃ state advanced limit,
+      store.blockStates[signed.message.parentBlockRoot]? = some state ∧
+        processSlots config checks state signed.message.slot = .ok advanced ∧
+        getBuilderBidLimit advanced gloas signed.message.builderIndex = .ok limit ∧
+        (seen.recordExecutionPayloadBid signed).executionPayloadBidCount (signed.message.slot,
+          signed.message.parentBlockHash, signed.message.parentBlockRoot,
+          signed.message.builderIndex) ≤ limit.toNat := by
+  obtain ⟨state, advanced, limit, held, slots, bounded, under⟩ :=
+    lt_limit_of_validateExecutionPayloadBid_eq_accept valid
+  refine ⟨state, advanced, limit, held, slots, bounded, ?_⟩
+  rw [executionPayloadBidCount_recordExecutionPayloadBid]
+  omega
 
 /-- For a valid bid on the latest payload, the store holds the envelope of its parent block.
 
@@ -420,7 +488,7 @@ section Chain
 variable {timely onHead compatible active covered exiting valid : Bool}
   {parent : BeaconBlock preset fork} {state advanced : BeaconState preset fork}
   {lookahead : Epoch} {dependentRoot : Root} {preferences : ProposerPreferences}
-  {parentGasLimit : UInt64} {randao : Bytes32} {builder : Builder}
+  {parentGasLimit : UInt64} {randao : Bytes32} {builder : Builder} {limit : UInt64}
   {listCheck : ValidationResult}
 
 /-- The outcome of a bid is its chain of checks, in order.
@@ -448,6 +516,7 @@ theorem validateExecutionPayloadBid_eq
     (slots : processSlots config checks state signed.message.slot = .ok advanced)
     (found : (advanced.builders gloas).data[signed.message.builderIndex.toNat]? = some builder)
     (activity : isActiveBuilder advanced gloas signed.message.builderIndex = .ok active)
+    (bidLimit : getBuilderBidLimit advanced gloas signed.message.builderIndex = .ok limit)
     (funds : canBuilderCoverBid advanced gloas signed.message.builderIndex signed.message.value =
       .ok covered)
     (exit : builderMayExit store gloas advanced signed.message builder = .ok exiting)
@@ -455,11 +524,7 @@ theorem validateExecutionPayloadBid_eq
     (signature : verifyExecutionPayloadBidSignature config checks advanced gloas signed =
       .ok valid) :
     validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
-      .ok ((ignoreUnless (!seen.executionPayloadBids.contains (signed.message.slot,
-            signed.message.parentBlockHash, signed.message.parentBlockRoot,
-            signed.message.builderIndex))
-          "already seen valid bid for this slot, parent, and builder").andThen fun _ =>
-        (ignoreUnless ((seen.bestExecutionPayloadBidFor (signed.message.slot,
+      .ok ((ignoreUnless ((seen.bestExecutionPayloadBidFor (signed.message.slot,
             signed.message.parentBlockHash, signed.message.parentBlockRoot)).all
             (· < signed.message.value))
           "bid is not the highest value bid seen for this slot and parent").andThen fun _ =>
@@ -487,13 +552,17 @@ theorem validateExecutionPayloadBid_eq
         (rejectUnless (builder.version == PAYLOAD_BUILDER_VERSION)
           "builder is not a payload builder").andThen fun _ =>
         (rejectUnless active "builder is not active").andThen fun _ =>
+        (ignoreUnless (decide (seen.executionPayloadBidCount (signed.message.slot,
+            signed.message.parentBlockHash, signed.message.parentBlockRoot,
+            signed.message.builderIndex) < limit.toNat))
+          "builder has reached its bid limit for this slot and parent").andThen fun _ =>
         (ignoreUnless covered "builder cannot cover bid value").andThen fun _ =>
         (ignoreUnless (!exiting) "builder may exit").andThen fun _ =>
         listCheck.andThen fun _ =>
         rejectUnless valid "invalid bid signature") := by
   unfold validateExecutionPayloadBid
   simp only [clock, known, held, reach, dependent, preferred, payload, gas, branch, mix, slots,
-    found, activity, funds, exit, lists, signature, bind, Except.bind, pure, Except.pure,
+    found, activity, bidLimit, funds, exit, lists, signature, bind, Except.bind, pure, Except.pure,
     Except.mapError, ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM,
     rejectUnless_andThen, apply_ite (Except.ok (ε := ForkChoiceError))]
   cases listCheck <;> simp only [ValidationResult.andThenM, ValidationResult.andThen, pure,
@@ -518,6 +587,7 @@ theorem validateExecutionPayloadBid_eq_accept
     (slots : processSlots config checks state signed.message.slot = .ok advanced)
     (found : (advanced.builders gloas).data[signed.message.builderIndex.toNat]? = some builder)
     (activity : isActiveBuilder advanced gloas signed.message.builderIndex = .ok active)
+    (bidLimit : getBuilderBidLimit advanced gloas signed.message.builderIndex = .ok limit)
     (funds : canBuilderCoverBid advanced gloas signed.message.builderIndex signed.message.value =
       .ok covered)
     (exit : builderMayExit store gloas advanced signed.message builder = .ok exiting)
@@ -525,9 +595,7 @@ theorem validateExecutionPayloadBid_eq_accept
     (signature : verifyExecutionPayloadBidSignature config checks advanced gloas signed =
       .ok valid) :
     validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs = .ok accept ↔
-      (signed.message.slot, signed.message.parentBlockHash, signed.message.parentBlockRoot,
-          signed.message.builderIndex) ∉ seen.executionPayloadBids ∧
-        (seen.bestExecutionPayloadBidFor (signed.message.slot, signed.message.parentBlockHash,
+      (seen.bestExecutionPayloadBidFor (signed.message.slot, signed.message.parentBlockHash,
           signed.message.parentBlockRoot)).all (· < signed.message.value) = true ∧
         timely = true ∧ signed.message.executionPayment = 0 ∧
         signed.message.blockHash ≠ signed.message.parentBlockHash ∧
@@ -538,10 +606,13 @@ theorem validateExecutionPayloadBid_eq_accept
         computeEpochAtSlot preset signed.message.slot ≤ lookahead ∧
         signed.message.feeRecipient = preferences.feeRecipient ∧ compatible = true ∧
         onHead = true ∧ signed.message.prevRandao = randao ∧
-        builder.version = PAYLOAD_BUILDER_VERSION ∧ active = true ∧ covered = true ∧
+        builder.version = PAYLOAD_BUILDER_VERSION ∧ active = true ∧
+        seen.executionPayloadBidCount (signed.message.slot, signed.message.parentBlockHash,
+          signed.message.parentBlockRoot, signed.message.builderIndex) < limit.toNat ∧
+        covered = true ∧
         exiting = false ∧ listCheck = accept ∧ valid = true := by
   rw [validateExecutionPayloadBid_eq clock known held reach dependent preferred payload gas branch
-    mix slots found activity funds exit lists signature]
+    mix slots found activity bidLimit funds exit lists signature]
   simp only [Except.ok.injEq, andThen_eq_accept, ignoreUnless_eq_accept, rejectUnless_eq_accept]
   simp
 
@@ -564,6 +635,7 @@ theorem validateExecutionPayloadBid_ignored {reason : String}
     (slots : processSlots config checks state signed.message.slot = .ok advanced)
     (found : (advanced.builders gloas).data[signed.message.builderIndex.toNat]? = some builder)
     (activity : isActiveBuilder advanced gloas signed.message.builderIndex = .ok active)
+    (bidLimit : getBuilderBidLimit advanced gloas signed.message.builderIndex = .ok limit)
     (funds : canBuilderCoverBid advanced gloas signed.message.builderIndex signed.message.value =
       .ok covered)
     (exit : builderMayExit store gloas advanced signed.message builder = .ok exiting)
@@ -572,24 +644,26 @@ theorem validateExecutionPayloadBid_ignored {reason : String}
       .ok valid)
     (ignored : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
       .ok (.ignore reason)) :
-    (signed.message.slot, signed.message.parentBlockHash, signed.message.parentBlockRoot,
-          signed.message.builderIndex) ∈ seen.executionPayloadBids ∨
-        (seen.bestExecutionPayloadBidFor (signed.message.slot, signed.message.parentBlockHash,
+    (seen.bestExecutionPayloadBidFor (signed.message.slot, signed.message.parentBlockHash,
           signed.message.parentBlockRoot)).all (· < signed.message.value) = false ∨
         timely = false ∨ lookahead < computeEpochAtSlot preset signed.message.slot ∨
         signed.message.feeRecipient ≠ preferences.feeRecipient ∨ compatible = false ∨
-        onHead = false ∨ covered = false ∨ exiting = true ∨
+        onHead = false ∨
+        limit.toNat ≤ seen.executionPayloadBidCount (signed.message.slot,
+          signed.message.parentBlockHash, signed.message.parentBlockRoot,
+          signed.message.builderIndex) ∨
+        covered = false ∨ exiting = true ∨
         ∃ reason, listCheck = .ignore reason := by
   rw [validateExecutionPayloadBid_eq clock known held reach dependent preferred payload gas branch
-    mix slots found activity funds exit lists signature] at ignored
+    mix slots found activity bidLimit funds exit lists signature] at ignored
   refine Classical.byContradiction fun none => ?_
   simp only [not_or, Bool.not_eq_false, Bool.not_eq_true, ne_eq, Decidable.not_not,
     UInt64.not_lt] at none
-  obtain ⟨fresh, best, current, inside, fee, gasOk, branchOk, coveredOk, staying, noIgnore⟩ :=
-    none
+  obtain ⟨best, current, inside, fee, gasOk, branchOk, underLimit, coveredOk, staying,
+    noIgnore⟩ := none
   simp only [Except.ok.injEq, ignoreUnless_andThen, rejectUnless_andThen, best, current,
-    inside, fee, gasOk, branchOk, coveredOk, staying, beq_self_eq_true, decide_true, Bool.not_false,
-    Bool.not_eq_true', ite_true] at ignored
+    inside, fee, gasOk, branchOk, coveredOk, staying, beq_self_eq_true, decide_true,
+    Bool.not_false, ite_true] at ignored
   repeat' split at ignored
   all_goals cases valid <;> cases listCheck <;> simp_all [ValidationResult.andThen, rejectUnless]
 

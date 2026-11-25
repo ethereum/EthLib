@@ -637,3 +637,80 @@ source = "EIP-8282 section Motivation: the validator and builder registries are 
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials]"'
 upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+# The bid cases of v1.7.0-beta.4 that rest on one forwarded bid per builder, slot and parent.
+# The later rule of consensus-specs forwards up to a limit of bids that the balance of the builder sets.
+# EthLib follows that rule, so a second bid of a builder passes, and a poor builder reaches its limit first.
+# A later release with that rule replaces these cases.
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder"
+reason = "The case expects a second bid of a builder for a slot and parent to be ignored, and EthLib forwards it while the builder is under its bid limit"
+source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder]"'
+upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover"
+reason = "The case leaves the builder with less than one ether it does not owe, and EthLib ignores the bid at the bid limit, before the check that the builder can cover it"
+source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover]"'
+upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder"
+reason = "The case expects a second bid of a builder for a slot and parent to be ignored, and EthLib forwards it while the builder is under its bid limit"
+source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder]"'
+upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover"
+reason = "The case leaves the builder with less than one ether it does not owe, and EthLib ignores the bid at the bid limit, before the check that the builder can cover it"
+source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover]"'
+upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder"
+reason = "The case expects a second bid of a builder for a slot and parent to be ignored, and EthLib forwards it while the builder is under its bid limit"
+source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder]"'
+upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover"
+reason = "The case leaves the builder with less than one ether it does not owe, and EthLib ignores the bid at the bid limit, before the check that the builder can cover it"
+source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover]"'
+upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder"
+reason = "The case expects a second bid of a builder for a slot and parent to be ignored, and EthLib forwards it while the builder is under its bid limit"
+source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder]"'
+upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover"
+reason = "The case leaves the builder with less than one ether it does not owe, and EthLib ignores the bid at the bid limit, before the check that the builder can cover it"
+source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover]"'
+upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"

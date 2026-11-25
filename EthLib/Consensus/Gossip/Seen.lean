@@ -75,7 +75,8 @@ structure Seen where
   /-- From Gloas: the slot and the committee member of each valid payload vote. -/
   payloadAttestationValidators : List (Slot × ValidatorIndex) := []
   /-- From Gloas: the slot, the parent payload, the parent block and the builder of each valid bid.
-  -/
+
+  A key appears once for each valid bid, so it counts them. -/
   executionPayloadBids : List (Slot × Hash32 × Root × BuilderIndex) := []
   /-- From Gloas: the value of the latest valid bid, by its slot, parent payload and parent block.
 
