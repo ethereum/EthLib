@@ -146,11 +146,6 @@ theorem finalized_le_currentJustified {state : BeaconState preset fork}
     state.finalizedCheckpoint.epoch ≤ state.currentJustifiedCheckpoint.epoch :=
   UInt64.le_trans ordered.1 ordered.2
 
-private theorem le_of_not_lt' {a b : UInt64} (h : ¬ a < b) : b ≤ a := by
-  rw [UInt64.lt_iff_toNat_lt] at h
-  rw [UInt64.le_iff_toNat_le]
-  omega
-
 /-- Replacing the checkpoints by an ordered pair keeps them ordered. -/
 theorem updateCheckpoints_ordered {justified finalized : Checkpoint}
     (ordered : store.EpochsOrdered) (le : finalized.epoch ≤ justified.epoch) :
@@ -162,7 +157,7 @@ theorem updateCheckpoints_ordered {justified finalized : Checkpoint}
     simp only [j, f, ↓reduceIte] <;> refine ⟨?_, o2⟩
   · exact le
   · exact UInt64.le_trans o1 (UInt64.le_of_lt j)
-  · exact UInt64.le_trans le (le_of_not_lt' j)
+  · exact UInt64.le_trans le (UInt64.not_lt.mp j)
   · exact o1
 
 /-- Replacing the unrealized checkpoints by an ordered pair keeps them ordered. -/
@@ -176,7 +171,7 @@ theorem updateUnrealizedCheckpoints_ordered {justified finalized : Checkpoint}
     simp only [j, f, ↓reduceIte] <;> refine ⟨o1, ?_⟩
   · exact le
   · exact UInt64.le_trans o2 (UInt64.le_of_lt j)
-  · exact UInt64.le_trans le (le_of_not_lt' j)
+  · exact UInt64.le_trans le (UInt64.not_lt.mp j)
   · exact o2
 
 /-- Replacing the checkpoints leaves a justified epoch at least that of the given one. -/

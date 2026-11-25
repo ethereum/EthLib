@@ -174,13 +174,6 @@ private theorem committeesAttestersOf_honest {honest : Finset ValidatorIndex} {s
 
 /-! ## The committee bits of the aggregate -/
 
-/-- Positions below `2^64` keep their order as 64-bit numbers. -/
-private theorem toUInt64_lt_toUInt64 {a b : Nat} (lt : a < b) (small : b < 2 ^ 64) :
-    a.toUInt64 < b.toUInt64 := by
-  rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small,
-    UInt64.toNat_ofNat_of_lt' (Nat.lt_trans lt small)]
-  exact lt
-
 /-- The indices of the set bits from a start increase strictly, and are at least the start. -/
 private theorem filterMap_zipIdx_increasing (bits : List Bool) (start : Nat)
     (small : start + bits.length ≤ 2 ^ 64) :
@@ -224,7 +217,8 @@ private theorem getCommitteeIndices_ofFn_contains {count : UInt64} {positions : 
   refine List.Pairwise.eq_of_mem_iff
     (filterMap_zipIdx_increasing _ 0 (by simpa using small.le)).1 ?_ fun index => ?_
   · refine List.pairwise_map.mpr (increasing.imp_of_mem fun first second lt => ?_)
-    exact toUInt64_lt_toUInt64 lt (Nat.lt_trans (inside _ second) small)
+    have below := Nat.lt_trans (inside _ second) small
+    exact (UInt64.ofNat_lt_iff_lt (Nat.lt_trans lt below) below).mpr lt
   · simp only [List.mem_filterMap, Option.ite_none_right_eq_some, Option.some.injEq,
       List.mem_zipIdx_iff_getElem?, Prod.exists, Vector.toList_ofFn, List.getElem?_ofFn,
       List.mem_map]
@@ -560,8 +554,8 @@ private theorem selected_exists {honest : Finset ValidatorIndex} {slot : Slot}
   -- The positions are below a 64-bit count, so their indices keep their order.
   refine List.pairwise_map.mpr ((List.pairwise_map.mp increasing).imp_of_mem
     fun first second lt => ?_)
-  exact UInt64.le_of_lt (toUInt64_lt_toUInt64 lt
-    (Nat.lt_trans (good _ second).1 (UInt64.toNat_lt _)))
+  have below := Nat.lt_trans (good _ second).1 (UInt64.toNat_lt _)
+  exact UInt64.le_of_lt ((UInt64.ofNat_lt_iff_lt (Nat.lt_trans lt below) below).mpr lt)
 
 /-- The count of committees of a slot is at most the largest number, when that is positive. -/
 theorem toNat_getCommitteeCountPerSlot_le (state : BeaconState preset fork)
