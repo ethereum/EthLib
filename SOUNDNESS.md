@@ -6863,13 +6863,13 @@ A reward there is a 64-bit product divided by a nonzero multiple of the weight d
 A penalty there is a 64-bit product divided by 64.
 So `attestationRewards_flags_lt_of_altair` shows that each part of a vote lies strictly between `-2^58` and `2^58`.
 `idealAttestationRewards_lt_of_altair` shows that each ideal part of a vote lies from 0 to below `2^58`, and that each ideal inactivity part is 0.
-`getInactivityPenaltyDeltas_getD_le_of_altair` bounds each inactivity penalty by `2^64 - 1` over the score bias times the penalty quotient of the fork, rounded down.
+`getInactivityPenaltyDeltas_getD_le_of_altair` bounds each inactivity penalty by `floor((2^64 - 1) / (B * Q))`, with `B` the score bias and `Q` the penalty quotient of the fork.
 So `attestationRewards_inactivity_le_of_altair` shows that each inactivity part lies from minus that bound to 0.
 `attestationRewardsResponse_ne_rewardOutOfRange_of_altair` combines these three bounds with `attestationRewardsResponse_eq_rewardOutOfRange_iff`.
 So from Altair, with a quotient of at least 2, the answer never gets the error of that check, for every configuration.
 The exports read only the mainnet and minimal presets, which set that quotient to `3 * 2^24` at Altair and `2^24` from Bellatrix.
 A caller can replace the score bias of the configuration, but not the quotient, so only a preset built by hand breaks that condition.
-With a quotient and a score bias of 1, an inactivity penalty is the effective balance times the inactivity score.
+When both the quotient and the score bias are 1, an inactivity penalty is the effective balance times the inactivity score.
 A state built by hand can bring that product strictly between `2^63` and `2^64`, and the answer can then get the error of that check.
 No theorem states that case.
 A sync committee reward never leaves the range, and `syncCommitteeRewards_reward_lt` shows that each lies strictly between `-2^58` and `2^58`.

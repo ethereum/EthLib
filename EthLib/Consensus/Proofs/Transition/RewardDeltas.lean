@@ -355,7 +355,7 @@ theorem addFlagDelta_getD_self_lt {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.le
       rw [addDelta_getD_self addedOk]
       omega
   · split at computed
-    -- No step pays for the head flag.
+    -- A validator that did not set the head flag pays no penalty.
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       subst computed
       omega
@@ -516,7 +516,7 @@ theorem getInactivityPenaltyDeltas_getD_of_altair {config : Config} (altair : .a
 
 /-- One step of the inactivity penalties from Altair adds at most a bound to its validator.
 
-That bound is `2^64 - 1` over the score bias times the penalty quotient, rounding down. -/
+That bound is `floor((2^64 - 1) / (B * Q))`, for score bias `B` and penalty quotient `Q`. -/
 private theorem addInactivityScorePenalty_getD_self_le {config : Config}
     {altair : .altair ≤ fork} {targetMatched : Array Bool} {penalties next : Array Gwei}
     {index : ValidatorIndex}
@@ -544,9 +544,9 @@ private theorem addInactivityScorePenalty_getD_self_le {config : Config}
       exact Nat.add_le_add_left (Nat.div_le_div_right (by omega)) _
     · cases computed
 
-/-- Each inactivity penalty from Altair is at most `2^64 - 1` over the score bias times a quotient.
+/-- From Altair, each inactivity penalty is at most `floor((2^64 - 1) / (B * Q))`.
 
-That quotient is the inactivity penalty quotient of the fork, and the division rounds down. -/
+Here `B` is the inactivity score bias and `Q` the inactivity penalty quotient of the fork. -/
 theorem getInactivityPenaltyDeltas_getD_le_of_altair {config : Config} (altair : .altair ≤ fork)
     {rewards penalties : Array Gwei}
     (computed : getInactivityPenaltyDeltas config state = .ok (rewards, penalties)) (j : Nat) :

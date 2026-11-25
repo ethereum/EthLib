@@ -1337,7 +1337,7 @@ theorem attestationRewards_flags_lt_of_altair {config : Config} (altair : .altai
 
 /-- For a state from Altair, each computed inactivity part lies from minus a bound to zero.
 
-That bound is `2^64 - 1` over the score bias times the penalty quotient, rounding down. -/
+That bound is `floor((2^64 - 1) / (B * Q))`, for score bias `B` and penalty quotient `Q`. -/
 theorem attestationRewards_inactivity_le_of_altair {config : Config} (altair : .altair ≤ fork)
     {ids : List ValidatorId} {entries : List AttestationRewards}
     (answered : attestationRewards config state ids = .ok entries)
@@ -1393,7 +1393,7 @@ theorem idealAttestationRewards_lt_of_altair (altair : .altair ≤ fork)
 
 /-- For a state from Altair, the answer never gets the error of an amount out of range, code 500.
 
-It needs the inactivity penalty quotient of the fork to be at least 2. -/
+It assumes that the inactivity penalty quotient of the fork is at least 2. -/
 theorem attestationRewardsResponse_ne_rewardOutOfRange_of_altair (altair : .altair ≤ fork)
     (quotient : 2 ≤ (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
     (config : Config) (epoch : Epoch) (ids : List ValidatorId) :
