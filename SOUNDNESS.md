@@ -2562,9 +2562,11 @@ It searches only a secured trie, and it is proved to return only collisions.
 `findKeyCollision_of_nodup` proves that the key search returns none for keys with distinct hashes.
 
 Both theorems assume that the keys of each trie are distinct, as the keys of a map are.
-The variants `root_binding_foldl_trieSet` and `verifyProof_sound_foldl_trieSet` apply to tries built by setting any list of key-value pairs from an empty trie.
+The variants `root_binding_setPairs` and `verifyProof_sound_setPairs` apply to tries built by setting any list of key-value pairs from an empty trie.
 Later entries replace earlier values of the same key, and an empty value removes its key.
-`nodup_keys_foldl_trieSet` proves that this construction gives distinct keys, as the trie of Yellow Paper Appendix D (Shanghai version) assumes, so callers need no distinctness hypothesis.
+`trieGet_setPairs` (`Execution/Proofs/Trie/Root.lean`) proves that each key then has the value of its last pair.
+`size_ne_zero_of_mem_setPairs` proves that the trie holds no empty value, which its root would reject.
+`nodup_keys_setPairs` proves that this construction gives distinct keys, as the trie of Yellow Paper Appendix D (Shanghai version) assumes, so callers need no distinctness hypothesis.
 This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
 `root_of_rootExport` (`Execution/Proofs/Exports/Trie.lean`) proves that the export returns the root of this trie, built from its decoded pairs.
 `rootExport_of_root` proves the converse, so the two variants apply to the output of Python `trie.root`.

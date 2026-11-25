@@ -6,7 +6,6 @@ public import EthLib.Execution.Trie.HexPrefix
 public import EthLib.Execution.Trie.Proof
 public import EthLib.Execution.Trie.Range
 public import EthLib.Serialization.Rlp.Codec
-public import Std.Data.HashMap.Basic
 
 /-!
 # Exports: the Merkle Patricia trie
@@ -48,42 +47,6 @@ instance : ExportError TrieError where
   -- A trie error comes back with its code and a message.
   code := TrieError.code
   message := fun e => s!"{repr e}"
-
-/-- Set one pair in a log of keys and a table from each key to its place in the log and its value.
-
-An empty value removes its key, a key already set keeps its place, and a new key goes last. -/
-private def setPairStep (state : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray))
-    (pair : ByteArray × ByteArray) : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray) :=
-  let (log, table) := state
-  let (key, value) := pair
-  -- An empty value removes its key.
-  if value.size = 0 then (log, table.erase key)
-  else match table[key]? with
-    -- A key already set keeps its place, with the new value.
-    | some (place, _) => (log, table.insert key (place, value))
-    -- A new key goes last.
-    --
-    -- Its place is read before the push, so the push updates the log in place.
-    | none =>
-      let place := log.size
-      (log.push key, table.insert key (place, value))
-
-/-- The keys of a log with their values in a table, at the places that the table gives them. -/
-private def logEntries (log : Array ByteArray) (table : Std.HashMap ByteArray (Nat × ByteArray)) :
-    List (ByteArray × ByteArray) :=
-  -- A place of the log holds its key's value when the table still puts the key there.
-  log.toList.zipIdx.filterMap fun (key, place) =>
-    match table[key]? with
-    | some (p, value) => if p = place then some (key, value) else none
-    | none => none
-
-/-- The keys and values left by setting the pairs in order, each where it was when last added.
-
-An empty value removes its key, and a key set again after its removal goes last. -/
-def setPairs (pairs : List (ByteArray × ByteArray)) : List (ByteArray × ByteArray) :=
-  -- Each pair costs one lookup in the table, where the trie would walk all its entries.
-  let (log, table) := pairs.foldl setPairStep (#[], ∅)
-  logEntries log table
 
 /-- The root of the trie that sets the pairs of `input` in order, from an empty trie.
 

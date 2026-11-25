@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Hash32
 public import EthLib.Execution.Trie.HexPrefix
 public import EthLib.Serialization.Rlp.Encode
+public import Std.Data.HashMap.Basic
 
 /-!
 # `Trie.Root`
@@ -196,27 +197,55 @@ def patricialize (hash : ByteArray → Hash32) (obj : List (List Nibble × ByteA
 
 It records whether each key is hashed before it becomes a path.
 
-It lists the keys and their values, in the order they were first set. -/
+It lists the keys and their values, in the order they were last added. -/
 structure Trie where
   /-- Whether each key is hashed before it becomes a path. -/
   secured : Bool
-  /-- The keys and their values, in the order they were first set. -/
+  /-- The keys and their values, in the order they were last added. -/
   data : List (ByteArray × ByteArray)
 
 /-- Whether two byte strings are equal, compared byte by byte in place. -/
 def sameBytes (a b : ByteArray) : Bool :=
   a.data == b.data
 
-/-- Set `key` to `value`, or remove `key` when `value` is the empty byte string.
+/-- Set one pair in a log of keys and a table from each key to its place in the log and its value.
+-/
+def setPairStep (state : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray))
+    (pair : ByteArray × ByteArray) : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray) :=
+  let (log, table) := state
+  let (key, value) := pair
+  -- An empty value removes its key.
+  if value.size = 0 then (log, table.erase key)
+  else match table[key]? with
+    -- A key already set keeps its place, with the new value.
+    | some (place, _) => (log, table.insert key (place, value))
+    -- A new key goes last.
+    --
+    -- Its place is read before the push, so the push updates the log in place.
+    | none =>
+      let place := log.size
+      (log.push key, table.insert key (place, value))
 
-A key already present keeps its place, and a new key goes last. -/
-def trieSet (trie : Trie) (key value : ByteArray) : Trie :=
-  if value.size = 0 then
-    { trie with data := trie.data.filter fun (k, _) => !sameBytes k key }
-  else if trie.data.any fun (k, _) => sameBytes k key then
-    { trie with data := trie.data.map fun (k, v) => if sameBytes k key then (k, value) else (k, v) }
-  else
-    { trie with data := trie.data ++ [(key, value)] }
+/-- The keys of a log with their values in a table, at the places that the table gives them. -/
+def logEntries (log : Array ByteArray) (table : Std.HashMap ByteArray (Nat × ByteArray)) :
+    List (ByteArray × ByteArray) :=
+  -- A place of the log holds its key's value when the table still puts the key there.
+  --
+  -- A key removed and set again is in the log twice, and only its last place holds its value.
+  log.toList.zipIdx.filterMap fun (key, place) =>
+    match table[key]? with
+    | some (p, value) => if p = place then some (key, value) else none
+    | none => none
+
+/-- The entries of a trie that sets the pairs in order from no entries. -/
+def setPairs (pairs : List (ByteArray × ByteArray)) : List (ByteArray × ByteArray) :=
+  -- An empty value removes its key, a key already set keeps its place, and a new key goes last.
+  --
+  -- So a key set again after its removal goes last.
+  --
+  -- Each pair costs one lookup in the table, where a search of the entries would walk them all.
+  let (log, table) := pairs.foldl setPairStep (#[], ∅)
+  logEntries log table
 
 /-- The value of `key`, or the empty byte string when `key` is not set. -/
 def trieGet (trie : Trie) (key : ByteArray) : ByteArray :=
