@@ -112,6 +112,18 @@ The arguments are the chain configuration and the request. -/
 def newPayloadExport (args : PyValue) : Result PyValue :=
   pyExport newPayloadOf args
 
+/-- The transition configuration of a terminal total difficulty, with no terminal block. -/
+def transitionOf (terminalTotalDifficulty : Nat) : Result TransitionConfiguration := do
+  -- The terminal total difficulty must be below `2^256`, or the export raises with code 0.
+  unless terminalTotalDifficulty < 2 ^ 256 do
+    rejectArgument none
+      s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256"
+  -- The terminal block hash and number are zero, since no check of these exports reads them.
+  return {
+    terminalTotalDifficulty := BitVec.ofNat 256 terminalTotalDifficulty
+    terminalBlockHash := 0
+    terminalBlockNumber := 0 }
+
 /-- The payload status of an `engine_newPayload` request, on a chain that holds the parent.
 
 The arguments are the chain configuration, the state, the recent blocks, two totals and the request.
@@ -124,15 +136,8 @@ def newPayloadOnChainOf
       PyValue) :
     Result (PyValue × Option ByteArray × Option ByteArray) := do
   let (config, state, recent, terminalTotalDifficulty, totalDifficulty, request) := args
-  -- The terminal total difficulty must be below `2^256`, or the export raises with code 0.
-  unless terminalTotalDifficulty < 2 ^ 256 do
-    rejectArgument none
-      s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256"
-  -- The terminal block hash and number are zero, since the check of the method does not read them.
-  let transition : TransitionConfiguration := {
-    terminalTotalDifficulty := BitVec.ofNat 256 terminalTotalDifficulty
-    terminalBlockHash := 0
-    terminalBlockNumber := 0 }
+  -- The terminal total difficulty must be below `2^256`.
+  let transition ← transitionOf terminalTotalDifficulty
   -- The state takes the form of the state root export.
   --
   -- The recent blocks are a list, each the fork name, the header and its ommers.
