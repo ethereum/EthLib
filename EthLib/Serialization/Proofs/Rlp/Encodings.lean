@@ -2,6 +2,7 @@ module
 
 public import Batteries.Data.List.Basic
 public import EthLib.Serialization.Proofs.Rlp.Canonical
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the encodings of the items of a list
@@ -90,7 +91,7 @@ private theorem splitItems_of_decodeItems (n : Nat) {input : ByteArray} {pos sto
         subst h
         -- The bytes of the first item are its encoding.
         obtain ⟨e, hEncode, hBytes⟩ := encode_of_decodeItem bounded hFirst
-        have hE : input.extract pos next = e := byteArray_eq_of_toList _ _ hBytes
+        have hE : input.extract pos next = e := Base.byteArray_eq_of_toList hBytes
         obtain ⟨encodings, hSplit, hAll⟩ :=
           ih (pos := next) (done := done.push (input.extract pos next)) (by omega) hRest
         refine ⟨e :: encodings, ?_, .cons hEncode hAll⟩

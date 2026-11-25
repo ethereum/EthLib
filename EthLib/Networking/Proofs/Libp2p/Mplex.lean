@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Libp2p.Mplex
 public import EthLib.Networking.Proofs.Encoding.Uvarint
 import EthLib.Base.Proofs.CodeInjective
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: mplex frames
@@ -67,9 +68,7 @@ theorem decode_encode {frame : Frame} (h : frame.Valid) (rest : List UInt8) :
     rw [← hl]; simp
   have hdr : (frame.data.data.toList ++ rest).drop frame.data.size = rest := by
     rw [← hl]; simp
-  have hba : (⟨frame.data.data.toList.toArray⟩ : ByteArray) = frame.data := by
-    cases frame.data
-    rfl
+  have hba := Base.byteArray_mk_toArray_toList frame.data
   rw [hass]
   simp only [decode]
   rw [EthLib.Networking.Proofs.Encoding.Uvarint.decode_encode hhb]

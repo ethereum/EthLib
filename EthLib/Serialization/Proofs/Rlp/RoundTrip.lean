@@ -20,7 +20,7 @@ No encoding is a proper prefix of another.
 
 namespace EthLib.Serialization.Rlp
 
-open EthLib.Base (byteArray_getElem_eq_get!)
+open EthLib.Base (byteArray_eq_of_toList byteArray_getElem_eq_get!)
 
 /-- The short prefix `offset + length` reads back as its kind and its length. -/
 theorem readPrefix_short (kind : PayloadKind) (length : Nat) (h : length < 56) (input : ByteArray)
@@ -203,7 +203,7 @@ theorem readItem_bytes {input : ByteArray} {pos stop : Nat} (data : ByteArray) {
   -- The bytes read are the bytes of the byte string.
   have hData : input.extract (pos + 1 + lengthBytes.length)
       (pos + 1 + lengthBytes.length + data.size) = data :=
-    byteArray_eq_of_toList _ _ hPayload
+    byteArray_eq_of_toList hPayload
   -- One byte below `0x80` would be its own encoding, which the byte string is not.
   have hOne : ¬ (data.size = 1 ∧ pos + 1 + lengthBytes.length < input.size ∧
       input.get! (pos + 1 + lengthBytes.length) < 0x80) := by

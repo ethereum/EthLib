@@ -1061,6 +1061,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, three lemmas about byte arrays and vectors move to `Base/Proofs/Bytes.lean`, where every codec proof can use them ([#4638](https://github.com/ethereum/EthLib/pull/4638)).
+  - `Rlp.byteArray_eq_of_toList` (`Serialization/Proofs/Rlp/Bytes.lean`) is now `Base.byteArray_eq_of_toList`, and its two byte arrays are implicit.
+  - `Proofs.Gossip.Topic.vector_four` (`Networking/Proofs/Gossip/Topic.lean`) is now `Base.vector_four`, for a vector of any type.
+  - `Proofs.ReqResp.Encoding.mk_toList` (`Networking/Proofs/ReqResp/Encoding.lean`) is now `Base.byteArray_mk_toArray_toList`.
+  Migration: import `EthLib.Base.Proofs.Bytes` and use the new names; pass the proof of equal lists alone to `byteArray_eq_of_toList`.
 - `engine_forkchoiceUpdated` accepts a request whose parameters omit the payload attributes, and reads it as one with `null` attributes, since the OpenRPC description makes them optional ([#4620](https://github.com/ethereum/EthLib/issues/4620)).
   `forkchoiceUpdatedParams_eq_ok_iff` (`Engine/Proofs/ForkchoiceUpdated.lean`) states the new case.
   A request with a wrong count of parameters now names the counts `1 or 2`, or from version 4 `1 to 3`, in its `-32602` message.

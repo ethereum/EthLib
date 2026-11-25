@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.Hex
 public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Gossip.Topic
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # `Networking.Proofs.Gossip.Topic`
@@ -21,7 +22,7 @@ namespace EthLib.Networking.Proofs.Gossip.Topic
 
 open EthLib.Networking.Gossip
 open EthLib.Base (dropPrefix?_append eq_append_of_dropPrefix? dropSuffix?_append
-  eq_append_of_dropSuffix?)
+  eq_append_of_dropSuffix? vector_four)
 
 /-! ## The fork digest -/
 
@@ -75,13 +76,6 @@ theorem hexByte?_eq_some_iff (hi lo : Char) (byte : UInt8) :
   simp only [Base.byteHexDigits, List.cons.injEq, and_true] at h
   obtain ⟨rfl, rfl⟩ := h
   exact hexByte?_hexDigitChar byte
-
-/-- A fork digest is its four bytes. -/
-theorem vector_four (v : Vector UInt8 4) : v = #v[v[0], v[1], v[2], v[3]] := by
-  apply Vector.ext
-  intro i hi
-  match i, hi with
-  | 0, _ | 1, _ | 2, _ | 3, _ => rfl
 
 /-- A fork digest has eight hex digits. -/
 theorem forkDigestChars_length (digest : Vector UInt8 4) :
