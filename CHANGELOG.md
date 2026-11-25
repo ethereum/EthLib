@@ -1069,6 +1069,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the onboarding of builders at the Gloas fork routes each pending deposit by its withdrawal credentials first ([#4151](https://github.com/ethereum/EthLib/issues/4151)).
+  - `Consensus.onboardDeposit` (`Consensus/Transition/Upgrade.lean`) keeps a deposit without builder credentials in the queue, even for the key of a builder.
+  - A builder deposit for the key of a builder tops it up, whatever its signature.
+  - For a new key, a builder deposit with a valid signature makes a builder, even for the key of a validator.
+    With an invalid signature it stays queued only for a validator or a pending validator of its key.
+  - `onboardDeposit_cases` keeps its statement, and `onboardDeposit_of_not_builder_credential` states the first step.
+  Migration: none for callers of the upgrade; a proof that unfolds the onboarding meets the new order of its steps.
 - In Lean, the gossip check of an envelope rejects a payload that disagrees with its block, its bid or the state after it, or holds an empty transaction ([#3513](https://github.com/ethereum/EthLib/issues/3513)).
   - `Consensus.validateExecutionPayloadEnvelope` checks the parent beacon block root, the RANDAO mix and the gas limit, then the parent hash, the timestamp, the empty transactions and the withdrawals.
   - `validateExecutionPayloadEnvelope_eq`, `validateExecutionPayloadEnvelope_ignored` and `validateExecutionPayloadEnvelope_eq_accept` take the time of the slot and the two roots of the withdrawals as hypotheses.

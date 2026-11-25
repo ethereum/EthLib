@@ -542,3 +542,98 @@ source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merge
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
 upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+# The fork cases of v1.7.0-beta.4 that route a deposit by the key of a validator at the fork to Gloas.
+# That release keeps a deposit for the key of a validator, or of a pending validator, in the queue first.
+# The later rule of consensus-specs routes a deposit by its withdrawal credentials first.
+# EthLib follows that rule, so these cases end with other builders and another queue.
+# A later release with that rule replaces these cases.
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_builder_deposit_followed_by_non_builder_credentials"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_builder_deposit_followed_by_non_builder_credentials]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_invalid_then_valid_validator_then_builder_deposit"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_invalid_then_valid_validator_then_builder_deposit]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_mixed_validity_validator_deposits_surrounding_builder_deposits"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_mixed_validity_validator_deposits_surrounding_builder_deposits]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_valid_then_invalid_validator_then_builder_deposit"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_valid_then_invalid_validator_then_builder_deposit]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_builder_deposit_followed_by_non_builder_credentials"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_builder_deposit_followed_by_non_builder_credentials]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_invalid_then_valid_validator_then_builder_deposit"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_invalid_then_valid_validator_then_builder_deposit]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_mixed_validity_validator_deposits_surrounding_builder_deposits"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_mixed_validity_validator_deposits_surrounding_builder_deposits]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_valid_then_invalid_validator_then_builder_deposit"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_valid_then_invalid_validator_then_builder_deposit]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials"
+reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
+source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials]"'
+upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
