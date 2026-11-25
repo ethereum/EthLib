@@ -17,7 +17,7 @@ MAINNET_GENESIS = bytes.fromhex("d4e56740f876aef8c010b86a40d5f56745a118d0906a34e
 # Section: Test Cases
 # File: EIPS/eip-2124.md
 # Repository: ethereum/EIPs
-# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92
 #
 # Each hash is CRC-32 of the genesis hash and the fork blocks passed so far.
 # Each block number enters as a big-endian uint64.

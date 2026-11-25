@@ -77,8 +77,8 @@ From Amsterdam they also hold the builder contracts named by [EIP-8282][builders
 
 [EIP-7773][eip-7773] schedules EIP-8282 for Amsterdam.
 
-[builders]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8282.md#constants
-[eip-7773]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7773.md
+[builders]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-8282.md#constants
+[eip-7773]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-7773.md
 -/
 def configSystemContracts (config : ChainConfig) (fork : Fork) : List (String × Address) :=
   -- EIP-7910, from Cancun: the beacon roots contract of EIP-4788.

@@ -16,7 +16,7 @@ from raising import raises
 from .chain import FIXTURES, ReplayChain, block_hash, replay_chain
 
 # The fixture pin and licence are in fixtures/README.md.
-# Other expectations apply EIP-7910 at EIPs commit 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445.
+# Other expectations apply EIP-7910 at EIPs commit b055feec322fbc37e9d77a393a50b3ff56b31c92.
 # The independent CRC-32 below applies EIP-2124 and EIP-6122 with Python's zlib.
 REQUEST = '{"jsonrpc":"2.0","id":1,"method":"eth_config"}'
 ZERO = bytes(32)

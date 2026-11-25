@@ -347,7 +347,7 @@ CODE_CHANGE: dict[str, object] = {
 
 
 def test_code_change_encoding() -> None:
-    # Source: ethereum/EIPs 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445, EIP-7928, RLP Encoding.
+    # Source: ethereum/EIPs b055feec322fbc37e9d77a393a50b3ff56b31c92, EIP-7928, RLP Encoding.
     # One account changes only its code to 0x6000 at index 0.
     # The change is c4 80 82 60 00; its list is c5 ..., the account df ..., the outer list e0 ... .
     expected = bytes.fromhex("e0df94" + "00" * 20 + "c0c0c0c0c5c480826000")
@@ -355,7 +355,7 @@ def test_code_change_encoding() -> None:
 
 
 def test_scalar_limits_and_bytecode_encoding() -> None:
-    # EIP-7928 at EIPs 46976b2a, RLP Encoding: integers are minimal; bytecode keeps its bytes.
+    # EIP-7928 at EIPs b055feec, RLP Encoding: integers are minimal; bytecode keeps its bytes.
     # One account changes slot 1 to zero and reads slot 2; indexes, balance and nonce are maximal.
     # Account contents are 101 bytes (f8 65); the outer contents are 103 bytes (f8 67).
     account = {

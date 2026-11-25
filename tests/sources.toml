@@ -104,7 +104,7 @@ commit = "e1fd7a77bb0ca87fb4726fb1fd4f424f30a04db9"
 directories = ["bindings/python/tests/secp256k1/tiny_secp256k1"]
 
 [repositories."ethereum/EIPs"]
-commit = "46976b2a9bf99f727fb87dc8c809e3a3cdc6b445"
+commit = "b055feec322fbc37e9d77a393a50b3ff56b31c92"
 directories = [
   "bindings/python/tests/consensus/deposit_tree",
   "bindings/python/tests/precompile/eips",

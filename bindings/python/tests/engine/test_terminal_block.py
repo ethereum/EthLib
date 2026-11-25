@@ -5,7 +5,7 @@
 # The total difficulty of its parent, its own total minus its difficulty, must not reach it.
 #
 # ethereum/execution-apis, src/engine/paris.md, commit 1ca0818569467cff85b7f41372f22e728d5daa14.
-# ethereum/EIPs, EIPS/eip-3675.md, commit 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445.
+# ethereum/EIPs, EIPS/eip-3675.md, commit b055feec322fbc37e9d77a393a50b3ff56b31c92.
 #
 # No official vector has a parent before Paris: the engine fixtures all start at Paris.
 

@@ -14,7 +14,7 @@ from .forks import ends
 #
 # File: assets/eip-7951/test-vectors.json
 # Repository: ethereum/EIPs
-# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92
 #
 # The EIP derives them from a Wycheproof set.
 #
