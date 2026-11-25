@@ -585,4 +585,22 @@ theorem SubmitBlockRequest.bid_unblind {request : SubmitBlockRequest preset fork
   simp only [BlindedBeaconBlockBody.unblind, computed, carries, ↓reduceIte]
   exact ⟨_, rfl, rfl⟩
 
+/-- Before Deneb, the block scoring rule sets no condition on a submission. -/
+theorem SubmitBlockRequest.servable_of_lt_deneb (request : SubmitBlockRequest preset fork)
+    (balanceDifference : U256) (before : fork < .dencun) :
+    request.servable balanceDifference = true := by
+  have notDeneb : ¬.dencun ≤ fork := Nat.not_le_of_lt before
+  simp [SubmitBlockRequest.servable, notDeneb]
+
+/-- From Deneb, the block scoring rule lets a submission be served exactly when its value passes.
+
+The change of the proposer's fee recipient is then the value plus the withdrawals to it, in Wei. -/
+theorem SubmitBlockRequest.servable_iff {request : SubmitBlockRequest preset fork}
+    {balanceDifference : U256} (deneb : .dencun ≤ fork) :
+    request.servable balanceDifference = true ↔
+      balanceDifference.toNat = request.message.value.toNat +
+        RelayApi.excludedWithdrawals request.executionPayload deneb
+          request.message.proposerFeeRecipient := by
+  simp only [SubmitBlockRequest.servable, deneb, ↓reduceDIte, RelayApi.verifyBidValue_iff]
+
 end EthLib.Consensus

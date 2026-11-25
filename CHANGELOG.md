@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `SubmitBlockRequest.servable` (`Consensus/RelayApi.lean`) says whether the block scoring rule lets a relay serve a submission ([#2131](https://github.com/ethereum/EthLib/issues/2131)).
+  From Deneb, its bid value must pass the check against the proposer's fee recipient.
+  `SubmitBlockRequest.servable_iff` (`Consensus/Proofs/RelayApi.lean`) states that check in Wei, and `SubmitBlockRequest.servable_of_lt_deneb` says that before Deneb the rule sets no condition.
+
 - In Lean, `RelayApi.verifyBidValue` (`Consensus/RelayApi.lean`) is the check of the Deneb builder specification that the value of a bid is the payment of its builder to the fee recipient ([#2125](https://github.com/ethereum/EthLib/issues/2125)).
   `verifyBidValue_iff` (`Consensus/Proofs/RelayApi.lean`) says that it passes exactly when the balance change of the fee recipient is the value plus the withdrawals to it, in Wei.
   In Python, `relay_verify_bid_value` runs it on an SSZ payload.
