@@ -23,8 +23,8 @@ A budget of `q - 1` from `S` leaves `q - K` hash calls after key generation.
 @[expose] public section
 
 open OracleComp OracleSpec
-open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary ofPublicKey ofSeed ofParam
-  gameAfterKeys)
+open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary ofPublicKey ofSeed ofParam scheme)
+open EthLib.Cryptography.SufCma (gameAfterKeys)
 
 open EthLib.Cryptography.Xmss.Unforgeability renaming Adversary → EthAdversary
 namespace XmssSecurity.Bridge
@@ -80,7 +80,7 @@ Its signer keeps the key that key generation returned, and each key that signing
 noncomputable def realAfterSeed (adversary : EthAdversary)
     (seed : MasterSeed) : OracleComp OracleWorld Bool :=
   (liftM (realKeygen seed) : OracleComp OracleWorld _) >>= fun keys =>
-    gameAfterKeys adversary keys.1 keys.2
+    gameAfterKeys scheme adversary keys.1 keys.2
 
 /-- The real game with `S` sampled uniformly rather than hashed from the key's seed. -/
 noncomputable def innerGame (adversary : EthAdversary) : OracleComp OracleWorld Bool :=
@@ -98,8 +98,8 @@ theorem evalDist_afterKeygen (adversary : EthAdversary) {seed : MasterSeed} {d :
   obtain ⟨top, htop, hkeys⟩ := h.realKeygen
   have herase :=
     (erases_pure_of_resolves (computation := realKeygen seed) hkeys).lift_hash.bind_known
-    (fun keys => gameAfterKeys adversary keys.1 keys.2) _
-    (Erases.refl _ (gameAfterKeys adversary (ofPublicKey ⟨result.1.1, d.parameter⟩)
+    (fun keys => gameAfterKeys scheme adversary keys.1 keys.2) _
+    (Erases.refl _ (gameAfterKeys scheme adversary (ofPublicKey ⟨result.1.1, d.parameter⟩)
       { schemeSeed := ofSeed seed, publicParam := ofParam d.parameter, top, cache := [] }))
   have hrun := (herase.evalDist_run cache le_rfl).map Prod.fst
   simp only [← StateT.run'_eq] at hrun
@@ -164,7 +164,7 @@ theorem afterKeygen_budget (adversary : EthAdversary) (q : Nat)
   have hrun := run_countHashQueries_lift_of_resolves (c := realKeygen seed) (queryCount_realKeygen seed)
     hkeys
   have hfirst := hashQueryBound_bind (realKeygen seed)
-    (fun keys => gameAfterKeys adversary keys.1 keys.2) cache (q - 1) hprep
+    (fun keys => gameAfterKeys scheme adversary keys.1 keys.2) cache (q - 1) hprep
     (((ofPublicKey (modelPublicKey d r),
       { schemeSeed := ofSeed seed, publicParam := ofParam d.parameter, top, cache := [] }),
       keygenQueries - 1), cache)

@@ -84,12 +84,12 @@ noncomputable def reasonRun (adversary : ReasonAdversary) :
 /-- The game against the counted random oracle of the theorem, from an empty cache. -/
 noncomputable def reasonExperiment (adversary : ReasonAdversary) :
     ProbComp ((Forgery × QueryLog SigningSpec × Bool) × Nat) :=
-  (simulateQ countedOracle (reasonRun adversary)).run.run' ∅
+  SufCma.countedRunIn (SufCma.randomOracleModel HashSpec) (reasonRun adversary)
 
 /-- The probability that the adversary forges, under the winning rule of the theorem. -/
 noncomputable def reasonForgeAdvantage (adversary : ReasonAdversary) : ℝ≥0∞ :=
   Pr{let result ← reasonExperiment adversary}[
-    (Valid result.1.2.1 ∧ ¬Contains result.1.2.1 result.1.1) ∧ result.1.2.2 = true]
+    (Valid result.1.2.1 ∧ ¬SufCma.Returned scheme result.1.2.1 result.1.1) ∧ result.1.2.2 = true]
 
 /-- The probability that some signing request of the game fails. -/
 noncomputable def signingFailure (adversary : ReasonAdversary) : ℝ≥0∞ :=
@@ -138,7 +138,7 @@ theorem toOption_withHiddenReason (request : SignRequest) (reply : Option Signat
 theorem hideReasons_ignoreReasons (adversary : Adversary) :
     hideReasons (ignoreReasons adversary) = adversary := by
   obtain ⟨main⟩ := adversary
-  simp only [hideReasons, ignoreReasons, Adversary.mk.injEq]
+  simp only [hideReasons, ignoreReasons, SufCma.Adversary.mk.injEq]
   funext pk
   rw [← QueryImpl.simulateQ_compose]
   have h : hideReasonsImpl ∘ₛ (toLeft ReasonSigningSpec + fun (request : SignRequest) =>
@@ -223,7 +223,7 @@ theorem keyedImpl_id :
 theorem keyedImpl_hiddenReply :
     (QueryImpl.ofLift OracleWorld
         (StateT SecretKey (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld))) +
-      signingOracle) ∘ₛ hideReasonsImpl = keyedImpl hiddenReply := by
+      SufCma.signingOracle scheme) ∘ₛ hideReasonsImpl = keyedImpl hiddenReply := by
   funext t
   rcases t with t | request
   · change simulateQ _ (liftM ((OracleWorld + SigningSpec).query (.inl t))) = _
@@ -236,8 +236,8 @@ theorem keyedImpl_hiddenReply :
     rw [simulateQ_map, simulateQ_spec_query]
     refine StateT.ext fun sk => ?_
     apply WriterT.ext
-    simp only [StateT.run_map, WriterT.run_map', QueryImpl.add_apply_inr, signingOracle,
-      keyedImpl, StateT.run_mk, WriterT.run_mk, Functor.map_map]
+    simp only [StateT.run_map, WriterT.run_map', QueryImpl.add_apply_inr, SufCma.signingOracle,
+      scheme, keyedImpl, StateT.run_mk, WriterT.run_mk, Functor.map_map]
     rfl
 
 /-- A computation of hash and coin queries, lifted to the adversary's oracles, logs nothing.
@@ -365,16 +365,17 @@ theorem reasonRun_eq (adversary : ReasonAdversary) :
   rw [simulateQ_map, StateT.run_map, run_romImpl_keyedImpl, Functor.map_map, Functor.map_map]
 
 /-- The theorem's game behind the reduction, once the keys exist, over the joined oracle. -/
-theorem gameCore_hideReasons_eq (adversary : ReasonAdversary) :
-    (simulateQ romImpl (gameCore (hideReasons adversary))).run' ∅ =
+theorem game_hideReasons_eq (adversary : ReasonAdversary) :
+    (simulateQ romImpl (SufCma.game scheme (hideReasons adversary))).run' ∅ =
       (simulateQ romImpl keys).run ∅ >>= fun p =>
-        (fun z => decide (Valid z.1.2 ∧ ¬Contains z.1.2 z.1.1.1) && z.1.1.2) <$>
+        (fun z => decide (Valid z.1.2 ∧ ¬SufCma.Returned scheme z.1.2 z.1.1.1) && z.1.1.2) <$>
           (simulateQ keyedRo (simulateQ (logReply passImpl signerEntry hiddenReply)
             (verifiedMain adversary p.1.1)).run).run (p.2, p.1.2) := by
-  have hrun : gameCore (hideReasons adversary) = keys >>= fun k =>
-      (fun x => decide (Valid x.2 ∧ ¬Contains x.2 x.1.1.1) && x.1.1.2) <$>
+  have hrun : SufCma.game scheme (hideReasons adversary) = keys >>= fun k =>
+      (fun x => decide (Valid x.2 ∧ ¬SufCma.Returned scheme x.2 x.1.1.1) && x.1.1.2) <$>
         ((simulateQ (keyedImpl hiddenReply) (verifiedMain adversary k.1)).run k.2).run := by
-    unfold gameCore gameAfterKeys checkForgery keys hideReasons
+    rw [game_eq]
+    unfold SufCma.gameAfterKeys SufCma.checkForgery keys hideReasons
     simp only [bind_assoc]
     refine bind_congr fun seed => bind_congr fun k => ?_
     rcases k with ⟨pk, sk⟩
@@ -416,21 +417,23 @@ The adversary forges at most as often as its reduction, plus the probability of 
 The reduction plays the theorem's game. -/
 theorem reasonForgeAdvantage_le (adversary : ReasonAdversary) :
     reasonForgeAdvantage adversary
-      ≤ forgeAdvantage (hideReasons adversary) + signingFailure adversary := by
+      ≤ SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) (hideReasons adversary) +
+        signingFailure adversary := by
   have hwin : reasonForgeAdvantage adversary
       = Pr{let x ← (simulateQ romImpl (reasonRun adversary)).run' ∅}[
-          (Valid x.2.1 ∧ ¬Contains x.2.1 x.1) ∧ x.2.2 = true] :=
-    prEvent_countedOracle _ fun x : Forgery × QueryLog SigningSpec × Bool =>
-      (Valid x.2.1 ∧ ¬Contains x.2.1 x.1) ∧ x.2.2 = true
+          (Valid x.2.1 ∧ ¬SufCma.Returned scheme x.2.1 x.1) ∧ x.2.2 = true] :=
+    SufCma.prEvent_countedRunIn _ _ fun x : Forgery × QueryLog SigningSpec × Bool =>
+      (Valid x.2.1 ∧ ¬SufCma.Returned scheme x.2.1 x.1) ∧ x.2.2 = true
   have hfail : signingFailure adversary
       = Pr{let x ← (simulateQ romImpl (reasonRun adversary)).run' ∅}[
           ∃ entry ∈ x.2.1, entry.2 = none] :=
-    prEvent_countedOracle _ fun x : Forgery × QueryLog SigningSpec × Bool =>
+    SufCma.prEvent_countedRunIn _ _ fun x : Forgery × QueryLog SigningSpec × Bool =>
       ∃ entry ∈ x.2.1, entry.2 = none
-  have hgame : forgeAdvantage (hideReasons adversary)
-      = Pr{let x ← (simulateQ romImpl (gameCore (hideReasons adversary))).run' ∅}[x = true] :=
-    prEvent_countedOracle _ fun x : Bool => x = true
-  rw [hwin, hfail, hgame, reasonRun_eq, gameCore_hideReasons_eq]
+  have hgame : SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) (hideReasons adversary)
+      = Pr{let x ← (simulateQ romImpl (SufCma.game scheme (hideReasons adversary))).run' ∅}[
+          x = true] :=
+    rfl
+  rw [hwin, hfail, hgame, reasonRun_eq, game_hideReasons_eq]
   simp only [map_bind]
   refine prEvent_bind_le_add ((simulateQ romImpl keys).run ∅) _ _ _ _ _ fun p => ?_
   rw [add_comm]
@@ -438,7 +441,7 @@ theorem reasonForgeAdvantage_le (adversary : ReasonAdversary) :
   have h := prEvent_logReply_and_not_bad_le keyedRo passImpl signerEntry hiddenReply
     (fun entry => entry.2 = none) signerEntry_hiddenReply hiddenReply_eq
     (verifiedMain adversary p.1.1) (p.2, p.1.2)
-    fun z => (Valid z.1.2 ∧ ¬Contains z.1.2 z.1.1.1) ∧ z.1.1.2 = true
+    fun z => (Valid z.1.2 ∧ ¬SufCma.Returned scheme z.1.2 z.1.1.1) ∧ z.1.1.2 = true
   simp only [prEvent_map] at h ⊢
   refine (le_of_eq ?_).trans (h.trans_eq ?_)
   · refine prEvent_congr _ _ _ fun z => ?_
@@ -454,18 +457,20 @@ Take an adversary whose reduction to the theorem's game has a budget of `q >= 1`
 
 It forges with probability at most `q / 2^127`, plus the probability that a request fails. -/
 theorem reasonForgeAdvantage_le_add (q : Nat) (hq : 1 ≤ q) (adversary : ReasonAdversary)
-    (hbound : HasHashQueryBound (hideReasons adversary) q) :
+    (hbound : SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec)
+      (hideReasons adversary) q) :
     reasonForgeAdvantage adversary
       ≤ q / ((2 ^ 127 : Nat) : ℝ≥0∞) + signingFailure adversary :=
   (reasonForgeAdvantage_le adversary).trans
-    (add_le_add_left (unforgeable q hq _ hbound) _)
+    (add_le_add_left ((unforgeable q hq _ hbound).trans_eq (SufCma.mul_inv_two_pow _ _)) _)
 
 /-- Each adversary of the theorem's game keeps its budget when read in this game.
 
 So the budget of the bound above holds for it. -/
 theorem hasHashQueryBound_hideReasons_ignoreReasons (adversary : Adversary) (q : Nat)
-    (hbound : HasHashQueryBound adversary q) :
-    HasHashQueryBound (hideReasons (ignoreReasons adversary)) q := by
+    (hbound : SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec) adversary q) :
+    SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec)
+      (hideReasons (ignoreReasons adversary)) q := by
   rwa [hideReasons_ignoreReasons]
 
 end EthLib.Cryptography.Xmss.Unforgeability

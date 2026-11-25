@@ -3,27 +3,20 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Xmss.Verify
-public import VCVio.OracleComp.QueryTracking.WriterCost
+public import EthLib.Cryptography.Proofs.SufCma
 
 /-!
-# Proofs: the security game of leanXMSS, for EthLib's algorithms
-
-Strong unforgeability under chosen-message attacks, in the random oracle model.
+# Proofs: leanXMSS in the strong-unforgeability game
 
 Source: the leanXMSS specification draft, section "Security".
 
-```text
-    S_0 uniform 32 bytes,   (pk, sk) = Gen(S_0)
-    adversary(pk): queries H, requests Sig(sk, idx, m), never the same idx twice
-    returns (m*, sigma*)
-    wins  iff  Ver(pk, m*, sigma*) = 1  and  no request for m* returned sigma*
+The scheme runs EthLib's own key generation, signing and verification.
 
-    every hash call is answered by one random oracle
-```
+Their `H` is a query to the hash oracle, and key generation samples the seed `S_0` uniformly.
 
-The algorithms are EthLib's own key generation, signing and verification.
+A request names a leaf index and a message.
 
-Their `H` is a query to the oracle.
+The rule of use is that no leaf index is requested twice.
 -/
 @[expose] public section
 
@@ -42,107 +35,77 @@ structure SignRequest where
   deriving DecidableEq
 
 /-- A claimed forgery: a message and a signature, which carries its leaf index. -/
-structure Forgery where
-  message : Message
-  signature : Signature
-  deriving DecidableEq
+abbrev Forgery := SufCma.Forgery Message Signature
 
 /-- The signing oracle answers a request with a signature, or nothing when signing fails. -/
-abbrev SigningSpec := SignRequest →ₒ Option Signature
+abbrev SigningSpec := SufCma.SigningSpec SignRequest Signature
 
 /-- An adaptive adversary.
 
 From the public key, it samples coins, queries `H`, requests signatures, and returns a forgery. -/
-structure Adversary where
-  main : PublicKey → OracleComp (XmssSecurity.OracleWorld + SigningSpec) Forgery
+abbrev Adversary := SufCma.Adversary XmssSecurity.HashSpec SignRequest Message PublicKey Signature
 
-/-- No leaf index was requested twice. -/
+/-- A query of the adversary that is a hash call, neither a coin nor a request. -/
+abbrev IsAdversaryHash := SufCma.IsAdversaryHash XmssSecurity.HashSpec SignRequest Signature
+
+/-- A query of the adversary that is a signing request. -/
+abbrev IsAdversaryRequest := SufCma.IsAdversaryRequest XmssSecurity.HashSpec SignRequest Signature
+
+/-- No leaf index was requested twice.
+
+It counts every request, answered or not. -/
 def Valid (log : QueryLog SigningSpec) : Prop :=
   (log.map fun entry => entry.1.leafIndex).Nodup
 
 instance (log : QueryLog SigningSpec) : Decidable (Valid log) :=
   inferInstanceAs (Decidable (List.Nodup _))
 
-/-- Some request for the forgery's message was answered with the forgery's signature.
-
-Any other signature of a signed message is a strong forgery. -/
-def Contains (log : QueryLog SigningSpec) (forgery : Forgery) : Prop :=
-  ∃ entry ∈ log, entry.1.message = forgery.message ∧ entry.2 = some forgery.signature
-
-instance (log : QueryLog SigningSpec) (forgery : Forgery) : Decidable (Contains log forgery) :=
-  inferInstanceAs (Decidable (∃ entry ∈ log, _ ∧ _))
-
-/-- `Sig(sk, idx, m)` on each request, recorded with its answer.
-
-The signer keeps its key across requests, as a real signer does.
-
-Each request signs with the key the request before it returned, and the oracle keeps the new key. -/
-def signingOracle : QueryImpl SigningSpec
-    (StateT SecretKey (WriterT (QueryLog SigningSpec) (OracleComp XmssSecurity.OracleWorld))) :=
-  fun request => StateT.mk fun sk => WriterT.mk
-    ((fun result => ((result.1.toOption, result.2), [⟨request, result.1.toOption⟩])) <$>
-      liftM (signWith H sk request.leafIndex request.message))
-
 /-- A uniform seed `S_0`: the lanes of a uniform 256-bit vector, converted one to one. -/
 noncomputable def sampleSeed : ProbComp Seed :=
   ofSeed <$> XmssSecurity.sampleMasterSeed
 
-/-- The check of a forgery, once the adversary returned it with the log of its requests.
+/-- leanXMSS as EthLib computes it, with `H` the hash oracle.
 
-It wins when the forgery verifies and no request for its message returned its signature. -/
-noncomputable def checkForgery (pk : PublicKey) (y : Forgery × QueryLog SigningSpec) :
-    OracleComp XmssSecurity.OracleWorld Bool := do
-  let verified ← liftM (verifyWith H pk y.1.message y.1.signature)
-  return decide (Valid y.2 ∧ ¬Contains y.2 y.1) && verified
+Key generation samples `S_0` uniformly.
 
-/-- The game once the keys exist: the adversary with its oracles, then the check of its forgery. -/
-noncomputable def gameAfterKeys (adversary : Adversary) (pk : PublicKey) (sk : SecretKey) :
-    OracleComp XmssSecurity.OracleWorld Bool :=
-  ((simulateQ (QueryImpl.ofLift XmssSecurity.OracleWorld
-    (StateT SecretKey (WriterT (QueryLog SigningSpec) (OracleComp XmssSecurity.OracleWorld))) +
-      signingOracle) (adversary.main pk)).run sk).run >>= fun x => checkForgery pk (x.1.1, x.2)
+The signer keeps its key across requests, as a real signer does.
 
-/-- The game: key generation, the adversary with its oracles, then the check of its forgery. -/
-noncomputable def gameCore (adversary : Adversary) : OracleComp XmssSecurity.OracleWorld Bool := do
-  let seed ← liftM sampleSeed
-  let (pk, sk) ← liftM (keyGenWith H seed)
-  gameAfterKeys adversary pk sk
+Its rule of use is that no leaf index is requested twice. -/
+noncomputable def scheme :
+    SufCma.Scheme XmssSecurity.HashSpec SignRequest Message PublicKey SecretKey Signature where
+  keyGen := liftM sampleSeed >>= fun seed => liftM (keyGenWith H seed)
+  sign sk request := (fun result => (result.1.toOption, result.2)) <$>
+    liftM (signWith H sk request.leafIndex request.message)
+  verify pk message signature := liftM (verifyWith H pk message signature)
+  message := SignRequest.message
+  Admissible := Valid
+  decidableAdmissible := inferInstance
+  admissible_singleton _ := List.nodup_singleton _
+  admissible_of_append_left log log' h := by
+    unfold Valid at h ⊢
+    rw [List.map_append] at h
+    exact h.of_append_left
+  admissible_congr log log' h := by
+    -- The leaf indices are read off the requests alone.
+    have hidx : (log.map fun entry => entry.1.leafIndex) =
+        log'.map fun entry => entry.1.leafIndex := by
+      simpa [List.map_map, Function.comp_def] using congrArg (List.map SignRequest.leafIndex) h
+    unfold Valid
+    rw [hidx]
 
-/-- The oracles of the game.
+/-- The scheme's rule of use is that no leaf index is requested twice. -/
+theorem scheme_admissible (log : QueryLog SigningSpec) : scheme.Admissible log ↔ Valid log :=
+  Iff.rfl
 
-Coins pass through for free.
+/-- A request asks to sign its message. -/
+theorem scheme_message (request : SignRequest) : scheme.message request = request.message :=
+  rfl
 
-`H` is a random oracle, sampled lazily, and each call costs 1, a repeated input included. -/
-noncomputable def countedOracle :=
-  (unifFwdImpl XmssSecurity.HashSpec + (randomOracle : QueryImpl XmssSecurity.HashSpec
-    (StateT (QueryCache XmssSecurity.HashSpec) ProbComp))).withAddCost
-    (fun | .inl _ => (0 : Nat) | .inr _ => 1)
-
-/-- The game against one random oracle, from an empty cache.
-
-It counts every hash call. -/
-noncomputable def experiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
-  (simulateQ countedOracle (gameCore adversary)).run.run' ∅
-
-/-- The probability that the adversary forges. -/
-noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
-  Pr{let result ← experiment adversary}[result.1 = true]
-
-/-! ## The statement -/
-
-/-- Every run of the game makes at most `q` hash calls.
-
-It counts key generation, signing, the adversary's queries and the final verification.
-
-It counts repeated inputs too, and a hash call is one call of `H`, whatever its input's length. -/
-def HasHashQueryBound (adversary : Adversary) (q : Nat) : Prop :=
-  ∀ result ∈ support (experiment adversary), result.2 ≤ q
-
-/-- An adversary with a budget of `q >= 1` hash calls forges with probability `<= q / 2^bits`.
-
-The budget counts every hash call of the game, the signer's included. -/
-def HasClassicalSecurityBits (bits : Nat) : Prop :=
-  ∀ q, 1 ≤ q → ∀ adversary, HasHashQueryBound adversary q →
-    forgeAdvantage adversary ≤ q / ((2 ^ bits : Nat) : ℝ≥0∞)
+/-- The game samples `S_0`, generates the keys, then runs the adversary and checks its forgery. -/
+theorem game_eq (adversary : Adversary) :
+    SufCma.game scheme adversary =
+      liftM sampleSeed >>= fun seed => liftM (keyGenWith H seed) >>= fun keys =>
+        SufCma.gameAfterKeys scheme adversary keys.1 keys.2 :=
+  bind_assoc _ _ _
 
 end EthLib.Cryptography.Xmss.Unforgeability

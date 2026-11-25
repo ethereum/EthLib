@@ -279,7 +279,8 @@ The bound says nothing from about `2^31` requests, since its last term is quadra
 
 It forges with probability at most `q / 2^127 + 2 Q / 2^256 + r (Q / 2^95 + 2 exp(-4000))`. -/
 theorem reasonForgeAdvantage_le_bounded (q : ℕ) (hq : 1 ≤ q) (adversary : ReasonAdversary)
-    (hbound : HasHashQueryBound (hideReasons adversary) q) {qH r : ℕ}
+    (hbound : SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec)
+      (hideReasons adversary) q) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
     reasonForgeAdvantage adversary ≤

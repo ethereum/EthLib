@@ -60,61 +60,46 @@ theorem liftM_keyGenWith_bind {β : Type} (S0 : MasterSeed)
   rfl
 
 /-- **The theorem's game is the real game of the security proof.** -/
-theorem gameCore_eq_realGame (adversary : Adversary) :
-    gameCore adversary = realGame adversary := by
-  unfold gameCore realGame realAfterSeed sampleSeed
+theorem game_eq_realGame (adversary : Adversary) :
+    SufCma.game scheme adversary = realGame adversary := by
+  rw [game_eq]
+  unfold realGame realAfterSeed sampleSeed
   rw [liftM_map, bind_map_left]
   -- The real game of the security proof samples `S_0`, queries that hash, then plays from `S`.
   refine bind_congr fun S0 => ?_
   -- Key generation hashes `S_0` into the scheme seed `S` first.
   rw [liftM_keyGenWith_bind]
   -- From `S`, it runs the rest of key generation and the same signer.
-  refine bind_congr fun S => bind_congr fun keys => ?_
-  rcases keys with ⟨pk, sk⟩
   rfl
 
 /-! ## The theorem -/
 
-/-- An event of the counted experiment is the event of the plain random oracle's run.
-
-It is stated for any game, so the kernel compares the two oracles once, not on a game. -/
-theorem prEvent_countedOracle {α : Type} (game : OracleComp OracleWorld α) (P : α → Prop) :
-    Pr{let result ← (simulateQ countedOracle game).run.run' ∅}[P result.1]
-      = Pr{let x ← (simulateQ romImpl game).run' ∅}[P x] := by
-  have h := congrArg (fun c : OracleComp OracleWorld α => (simulateQ romImpl c).run' ∅)
-    (XmssSecurity.countHashQueries_forget game)
-  simp only [simulateQ_map, StateT.run'_map'] at h
-  rw [← h, prEvent_map, XmssSecurity.simulateQ_countHashQueries]
+/-- The game against the random oracle runs from the empty cache. -/
+theorem run_randomOracleModel {α : Type} (game : OracleComp OracleWorld α) :
+    SufCma.runIn (SufCma.randomOracleModel HashSpec) game = (simulateQ romImpl game).run' ∅ :=
   rfl
 
 /-- The adversary forges as often as it wins the real game. -/
-theorem forgeAdvantage_eq (adversary : Adversary) :
-    forgeAdvantage adversary
+theorem advantage_eq (adversary : Adversary) :
+    SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) adversary
       = Pr{let x ← (simulateQ romImpl (realGame adversary)).run' ∅}[x = true] := by
-  unfold forgeAdvantage experiment
-  rw [← gameCore_eq_realGame]
-  exact prEvent_countedOracle _ fun x : Bool => x = true
+  rw [SufCma.advantage, run_randomOracleModel, game_eq_realGame]
 
 /-- A bound on the counted calls of a computation from the empty cache is one on its counted run.
 
-It reads the count as a natural number, as the experiment does. -/
+It reads the count as a natural number, as the counted run does. -/
 theorem hashQueryBound_iff_counted {α : Type} (oa : OracleComp OracleWorld α) {q : Nat} :
     XmssSecurity.HashQueryBound oa ∅ q ↔
-      ∀ result : α × Nat, result ∈ @support ProbComp (α × Nat) _
-        ((simulateQ countedOracle oa).run.run' ∅) → result.2 ≤ q := by
+      ∀ result ∈ support (SufCma.countedRunIn (SufCma.randomOracleModel HashSpec) oa),
+        result.2 ≤ q := by
   simp only [XmssSecurity.HashQueryBound, XmssSecurity.simulateQ_countHashQueries]
   exact Iff.rfl
 
 /-- The game's budget bounds the calls of the real game, which is the same computation. -/
 theorem hashQueryBound_realGame (adversary : Adversary) (q : Nat)
-    (h : HasHashQueryBound adversary q) : HashQueryBound (realGame adversary) ∅ q := by
-  -- Rewrite the experiment to its run first: the kernel would run the game to compare them.
-  have run : experiment adversary =
-      ((simulateQ countedOracle (gameCore adversary)).run.run' ∅ :
-        ProbComp (Bool × Nat)) := rfl
-  unfold HasHashQueryBound at h
-  rw [run] at h
-  rw [← gameCore_eq_realGame]
+    (h : SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec) adversary q) :
+    HashQueryBound (realGame adversary) ∅ q := by
+  rw [← game_eq_realGame]
   exact (hashQueryBound_iff_counted _).2 h
 
 /-- **leanXMSS as EthLib computes it is strongly unforgeable in the random oracle model.**
@@ -132,9 +117,12 @@ A signing request can make more than `2^32` calls, when its randomizer trials ke
 It can make more than `2^33` when it also builds a bottom tree.
 
 So `2^32` requests give `q > 2^64`, and over the key's lifetime the bound exceeds `2^-63`. -/
-theorem unforgeable : HasClassicalSecurityBits 127 := fun q hq adversary hbound =>
-  (forgeAdvantage_eq adversary).trans_le
-    (XmssSecurity.Bridge.realGame_security q hq adversary
-      (hashQueryBound_realGame adversary q hbound))
+theorem unforgeable :
+    SufCma.StronglyUnforgeableAllCalls scheme (SufCma.randomOracleModel HashSpec) 127 :=
+  fun q hq adversary hbound => by
+    rw [SufCma.mul_inv_two_pow]
+    exact (advantage_eq adversary).trans_le
+      (XmssSecurity.Bridge.realGame_security q hq adversary
+        (hashQueryBound_realGame adversary q hbound))
 
 end EthLib.Cryptography.Xmss.Unforgeability

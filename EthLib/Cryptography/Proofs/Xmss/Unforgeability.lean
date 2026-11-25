@@ -11,6 +11,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.AdversaryBudget
 
 Source: the leanXMSS specification draft, section "Security".
 
+The game is the generic strong-unforgeability game, with leanXMSS as its scheme.
+
 The theorem holds in the random oracle model.
 
 The game's signer keeps its key across requests, as a real signer does.

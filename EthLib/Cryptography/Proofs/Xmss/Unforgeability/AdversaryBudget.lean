@@ -20,20 +20,6 @@ open EthLib.Cryptography.Xmss.Constants (LOG_LIFETIME LAYER_HEIGHT)
 open XmssSecurity (OracleWorld HashSpec HashQueryBound simulateQ_countHashQueries
   countHashQueries_pure countHashQueries_query_bind)
 
-/-- A query of the game's hash, as opposed to a coin. -/
-def IsHashCall (t : OracleWorld.Domain) : Prop :=
-  t.isRight = true
-
-instance : DecidablePred IsHashCall := fun t =>
-  inferInstanceAs (Decidable (t.isRight = true))
-
-/-- On every public key and every run, the adversary makes at most `qH` calls of `H`.
-
-It makes at most `r` signing requests too; the calls that answer them are not counted. -/
-def HasAdversaryBudget (adversary : Adversary) (qH r : Nat) : Prop :=
-  ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH ∧
-    IsQueryBoundP (adversary.main pk) IsAdversaryRequest r
-
 /-! ## The calls of the game
 
 Key generation, each request and the final verification make at most a fixed number of calls.
@@ -43,17 +29,18 @@ The bounds are `205 * 2^16 + 1`, `2^33 + 205 * 2^16 + 407` and `384`.
 
 /-- Coins make no hash call. -/
 theorem isQueryBoundP_liftM_prob {α : Type} (oa : ProbComp α) :
-    IsQueryBoundP (liftM oa : OracleComp OracleWorld α) IsHashCall 0 :=
+    IsQueryBoundP (liftM oa : OracleComp OracleWorld α) (SufCma.IsHashCall HashSpec) 0 :=
   isQueryBoundP_liftM_isRight oa
 
 /-- A computation of at most `n` hash queries makes at most `n` hash calls among the game's. -/
 theorem isQueryBoundP_liftM_hash {α : Type} {n : Nat} :
     ∀ (oa : OracleComp HashSpec α), IsQueryBoundP oa (fun _ => True) n →
-      IsQueryBoundP (liftM oa : OracleComp OracleWorld α) IsHashCall n :=
+      IsQueryBoundP (liftM oa : OracleComp OracleWorld α) (SufCma.IsHashCall HashSpec) n :=
   fun oa h => XmssSecurity.isQueryBoundP_liftM_hashSpec oa
     -- Every hash query is a hash call of the game.
     ((isQueryBoundP_iff_isChargeBound _ _ _).2
-      (((isQueryBoundP_iff_isChargeBound _ _ _).1 h).mono_charge fun _ => by simp [IsHashCall]))
+      (((isQueryBoundP_iff_isChargeBound _ _ _).1 h).mono_charge fun _ => by
+        simp [SufCma.IsHashCall]))
 
 /-- `H` is one hash query. -/
 theorem isQueryBoundP_H (x : Array UInt64) : IsQueryBoundP (H x) (fun _ => True) 1 :=
@@ -81,30 +68,35 @@ theorem isQueryBoundP_run_signingOracle {α : Type}
     (sk : SecretKey) :
     IsQueryBoundP ((simulateQ (QueryImpl.ofLift OracleWorld
       (StateT SecretKey (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld))) +
-        signingOracle) oa).run sk).run IsHashCall (qH + r * requestQueries) := by
+        SufCma.signingOracle scheme) oa).run sk).run (SufCma.IsHashCall HashSpec)
+      (qH + r * requestQueries) := by
   refine isQueryBoundP_run_keyed _ (fun n sk => ?_) (fun x sk => ?_) (fun request sk => ?_) oa
     hh hr sk
   · rw [XmssSecurity.Bridge.run_keyedOracles_inl]
     exact (isQueryBoundP_map_iff _ _ _).2
       ((isQueryBoundP_query_iff (spec := OracleWorld) _ (.inl n) 0).2 fun h => by
-        simp [IsHashCall] at h)
+        simp [SufCma.IsHashCall] at h)
   · rw [XmssSecurity.Bridge.run_keyedOracles_inl]
     exact (isQueryBoundP_map_iff _ _ _).2
       ((isQueryBoundP_query_iff (spec := OracleWorld) _ (.inr x) 1).2 fun _ => Nat.one_pos)
-  · exact (isQueryBoundP_map_iff _ _ _).2
+  · rw [XmssSecurity.Bridge.run_keyedOracles_inr]
+    exact (isQueryBoundP_map_iff _ _ _).2
       (isQueryBoundP_liftM_hash _ (isQueryBoundP_signWith_requestQueries sk _ _))
 
 /-- The game makes at most `Q` hash calls, for `qH` calls of `H` and `r` requests. -/
-theorem isQueryBoundP_gameCore (adversary : Adversary) {qH r : Nat}
-    (hbudget : HasAdversaryBudget adversary qH r) :
-    IsQueryBoundP (gameCore adversary) IsHashCall (gameQueries qH r) := by
-  unfold gameCore gameAfterKeys checkForgery
+theorem isQueryBoundP_game (adversary : Adversary) {qH r : Nat}
+    (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
+    (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
+    IsQueryBoundP (SufCma.game scheme adversary) (SufCma.IsHashCall HashSpec)
+      (gameQueries qH r) := by
+  rw [game_eq]
+  unfold SufCma.gameAfterKeys SufCma.checkForgery
   refine (isQueryBoundP_bind (isQueryBoundP_liftM_prob sampleSeed) fun seed _ =>
     isQueryBoundP_bind
       (isQueryBoundP_liftM_hash _ (isQueryBoundP_keyGenWith_keyGenQueries seed))
       fun keys _ =>
       isQueryBoundP_bind (isQueryBoundP_run_signingOracle (adversary.main keys.1)
-        (hbudget keys.1).1 (hbudget keys.1).2 keys.2) fun z _ =>
+        (hh keys.1) (hr keys.1) keys.2) fun z _ =>
         isQueryBoundP_bind (m := 0) (isQueryBoundP_liftM_hash _
           (isQueryBoundP_verifyWith isQueryBoundP_H _ _ _)) fun _ _ =>
           isQueryBoundP_pure _ _ 0).mono ?_
@@ -112,32 +104,29 @@ theorem isQueryBoundP_gameCore (adversary : Adversary) {qH r : Nat}
   simp only [gameQueries, verifyQueries]
   omega
 
-/-! ## From the calls of the game to its counted experiment -/
+/-! ## From the calls of the game to its counted run -/
 
-/-- The counted experiment makes at most `Q` calls, for `qH` calls of `H` and `r` requests. -/
-theorem hasHashQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
-    (hbudget : HasAdversaryBudget adversary qH r) :
-    HasHashQueryBound adversary (gameQueries qH r) := by
-  have bound :=
-    XmssSecurity.hashQueryBound_of_isQueryBoundP _ (isQueryBoundP_gameCore adversary hbudget) ∅
-  -- Rewrite the experiment to its run first: the kernel would run the game to compare them.
-  have run : experiment adversary =
-      ((simulateQ countedOracle (gameCore adversary)).run.run' ∅ :
-        ProbComp (Bool × Nat)) := rfl
-  unfold HasHashQueryBound
-  rw [run]
-  exact (hashQueryBound_iff_counted _).1 bound
+/-- The counted run makes at most `Q` calls, for `qH` calls of `H` and `r` requests. -/
+theorem isGameQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
+    (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
+    (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
+    SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec) adversary
+      (gameQueries qH r) :=
+  (hashQueryBound_iff_counted _).1
+    (XmssSecurity.hashQueryBound_of_isQueryBoundP _ (isQueryBoundP_game adversary hh hr) ∅)
 
 /-! ## The bounds -/
 
 /-- With at most `qH` calls of `H` and `r` requests, a forgery has chance `<= Q / 2^127`.
 
 `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384` bounds the calls of the game. -/
-theorem forgeAdvantage_le_adversaryBudget (adversary : Adversary) {qH r : Nat}
-    (hbudget : HasAdversaryBudget adversary qH r) :
-    forgeAdvantage adversary ≤ (gameQueries qH r : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) :=
+theorem advantage_le_adversaryBudget (adversary : Adversary) {qH r : Nat}
+    (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
+    (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
+    SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) adversary ≤
+      (gameQueries qH r : ℝ≥0∞) * (2 : ℝ≥0∞)⁻¹ ^ 127 :=
   unforgeable _ (by simp only [gameQueries, keyGenQueries]; omega) adversary
-    (hasHashQueryBound_of_budget adversary hbudget)
+    (isGameQueryBound_of_budget adversary hh hr)
 
 /-- An upper bound on the calls of key generation, `2^32` requests and the final verification. -/
 def lifetimeQueries : Nat := gameQueries 0 (2 ^ LOG_LIFETIME)
@@ -147,12 +136,14 @@ def lifetimeQueries : Nat := gameQueries 0 (2 ^ LOG_LIFETIME)
 `C = 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`.
 
 It covers key generation, the signer and the verifier. -/
-theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
-    (hbudget : HasAdversaryBudget adversary qH r) (hr : r ≤ 2 ^ LOG_LIFETIME) :
-    forgeAdvantage adversary ≤
-      ((qH + lifetimeQueries : Nat) : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) := by
-  refine (forgeAdvantage_le_adversaryBudget adversary hbudget).trans
-    (ENNReal.div_le_div (Nat.cast_le.2 ?_) le_rfl)
+theorem advantage_le_lifetime (adversary : Adversary) {qH r : Nat}
+    (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
+    (hreq : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r)
+    (hr : r ≤ 2 ^ LOG_LIFETIME) :
+    SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) adversary ≤
+      ((qH + lifetimeQueries : Nat) : ℝ≥0∞) * (2 : ℝ≥0∞)⁻¹ ^ 127 := by
+  refine (advantage_le_adversaryBudget adversary hh hreq).trans
+    (mul_le_mul_of_nonneg_right (Nat.cast_le.2 ?_) (by positivity))
   simp only [lifetimeQueries, gameQueries]
   -- A key has `2^32` leaf indices, so it signs at most `2^32` requests.
   --
@@ -254,13 +245,22 @@ theorem isQueryBoundP_modelAdversary (adversary : Adversary) {qH : Nat}
   isQueryBoundP_memoize _ ∅ qH
     ((isQueryBoundP_map_iff _ _ _).2 (isQueryBoundP_simulateQ_adversaryImpl _ qH (h _)))
 
-/-- A forgery has chance at most `(qH + 2^19 + 1) / 2^127`, whatever the requests cost the signer.
+/-- **leanXMSS as EthLib computes it is strongly unforgeable, for the adversary's own calls.**
 
-The forger makes at most `qH` calls of `H` and at most `2^32` requests. -/
-theorem forgeAdvantage_le_ownQueries (adversary : Adversary) {qH r : Nat}
-    (hbudget : HasAdversaryBudget adversary qH r) (hr : r ≤ 2 ^ LOG_LIFETIME) :
-    forgeAdvantage adversary ≤
-      ((qH + 2 ^ 19 + 1 : Nat) : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) := by
+The adversary itself makes at most `q` calls of `H` and `2^32` requests.
+
+It forges with probability at most `(q + 2^19 + 1) * 2^-127`.
+
+Key generation, the signer and the final verification are not charged to `q`. -/
+theorem stronglyUnforgeable :
+    SufCma.StronglyUnforgeable scheme (SufCma.randomOracleModel HashSpec) (2 ^ LOG_LIFETIME)
+      (2 ^ 19 + 1) 127 := by
+  intro qH adversary hh hreq
+  rw [SufCma.mul_inv_two_pow, ← Nat.cast_add, ← Nat.add_assoc]
+  -- The request budget `r` is the key's lifetime.
+  obtain ⟨r, hr, hreq⟩ : ∃ r, r ≤ 2 ^ LOG_LIFETIME ∧
+      ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r :=
+    ⟨_, le_rfl, hreq⟩
   by_cases hbig : 2 ^ 127 ≤ qH + 2 ^ 19 + 1
   · -- From there on, the bound is at least one.
     refine (prEvent_le_one _).trans ?_
@@ -275,10 +275,10 @@ theorem forgeAdvantage_le_ownQueries (adversary : Adversary) {qH r : Nat}
     omega
   have hmodel := XmssSecurity.CappedChain.capped_forgeAdvantage_le_of_adversaryBound qH
     (XmssSecurity.Bridge.modelAdversary adversary)
-    (isQueryBoundP_modelAdversary adversary fun pk => (hbudget pk).1)
-  refine (forgeAdvantage_eq adversary).trans_le
+    (isQueryBoundP_modelAdversary adversary hh)
+  refine (advantage_eq adversary).trans_le
     ((XmssSecurity.Bridge.realGame_le_model (gameQueries qH r) (by omega) adversary
-      (hashQueryBound_realGame adversary _ (hasHashQueryBound_of_budget adversary hbudget))).trans
+      (hashQueryBound_realGame adversary _ (isGameQueryBound_of_budget adversary hh hreq))).trans
       ((add_le_add (add_le_add hmodel (XmssSecurity.Bridge.guesses_le (by omega)))
         (XmssSecurity.Bridge.guesses_le (by omega))).trans ?_))
   -- The model's bound is `(2 qH + 2^20) / 2^128`, and the two guesses add `2 / 2^128`.

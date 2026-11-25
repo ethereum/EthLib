@@ -363,8 +363,8 @@ theorem signingFailure_eq (adversary : ReasonAdversary) :
          let z ← (simulateQ romImpl (failGameOf (QueryImpl.id' OracleWorld)
            (schemeSeed (hashOf (QueryImpl.id' OracleWorld)) (ofSeed s0))
            (seedPrf (hashOf (QueryImpl.id' OracleWorld))) adversary)).run' ∅}[SomeFailure z] := by
-  refine (prEvent_countedOracle (reasonRun adversary) SomeFailure).trans ?_
-  rw [reasonRun_eq_failGameOf, XmssSecurity.Seeded.run'_lift_sample_bind]
+  refine (SufCma.prEvent_countedRunIn _ (reasonRun adversary) SomeFailure).trans ?_
+  rw [run_randomOracleModel, reasonRun_eq_failGameOf, XmssSecurity.Seeded.run'_lift_sample_bind]
   simp only [prEvent_norm]
 
 /-! ## The first hop: the scheme seed -/
@@ -591,22 +591,6 @@ theorem prEvent_seedGame_ideal_le (adversary : ReasonAdversary) {q : ℕ}
 
 /-! ## The budget -/
 
-/-- A hash query of the adversary. -/
-def IsAdversaryHash : (OracleWorld + ReasonSigningSpec).Domain → Prop
-  | .inl (.inr _) => True
-  | _ => False
-
-/-- A signing request of the adversary. -/
-def IsAdversaryRequest : (OracleWorld + ReasonSigningSpec).Domain → Prop
-  | .inr _ => True
-  | _ => False
-
-instance : DecidablePred IsAdversaryHash := fun t => by
-  rcases t with (_ | _) | _ <;> simp only [IsAdversaryHash] <;> infer_instance
-
-instance : DecidablePred IsAdversaryRequest := fun t => by
-  rcases t with (_ | _) | _ <;> simp only [IsAdversaryRequest] <;> infer_instance
-
 /-- Key generation: the scheme seed, the parameter, and the top tree of `2^16` keys. -/
 def keyGenQueries : ℕ := 205 * 2 ^ 16 + 1
 
@@ -669,16 +653,19 @@ theorem isQueryBoundP_run_keyed {R : Type}
     rw [isQueryBoundP_query_bind_iff] at hh hr
     simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind, WriterT.run_bind']
     rcases t with (n | x) | request
-    · simp only [IsAdversaryHash, IsAdversaryRequest, ite_false] at hh hr
+    · simp only [IsAdversaryHash, IsAdversaryRequest, SignatureAlg.IsHashQuery,
+        SignatureAlg.IsSignQuery, ite_false] at hh hr
       exact (isQueryBoundP_bind (n := 0) (hcoin n sk) fun u _ =>
         (isQueryBoundP_map_iff _ _ _).2 (ih u.1.1 (hh.2 u.1.1) (hr.2 u.1.1) u.1.2)).mono
         (by omega)
-    · simp only [IsAdversaryHash, IsAdversaryRequest, ite_true, ite_false] at hh hr
+    · simp only [IsAdversaryHash, IsAdversaryRequest, SignatureAlg.IsHashQuery,
+        SignatureAlg.IsSignQuery, ite_true, ite_false] at hh hr
       have : 0 < qH := by simpa using hh.1
       exact (isQueryBoundP_bind (n := 1) (hhash x sk) fun u _ =>
         (isQueryBoundP_map_iff _ _ _).2 (ih u.1.1 (hh.2 u.1.1) (hr.2 u.1.1) u.1.2)).mono
         (by omega)
-    · simp only [IsAdversaryHash, IsAdversaryRequest, ite_true, ite_false] at hh hr
+    · simp only [IsAdversaryHash, IsAdversaryRequest, SignatureAlg.IsHashQuery,
+        SignatureAlg.IsSignQuery, ite_true, ite_false] at hh hr
       have : 0 < r := by simpa using hr.1
       refine (isQueryBoundP_bind (hreq request sk)
         fun u _ => (isQueryBoundP_map_iff _ _ _).2

@@ -119,7 +119,7 @@ theorem simulateQ_countHashQueries {α : Type} (computation : OracleComp OracleW
   congr 2
   funext input
   -- Each side's cost is 0 on a uniform query and 1 on a hash query.
-  cases input <;> simp [countedRomImpl]
+  cases input <;> simp [countedRomImpl, EthLib.Cryptography.SufCma.hashCost]
 
 theorem countHashQueries_forget {α : Type} (computation : OracleComp OracleWorld α) :
     Prod.fst <$> countHashQueries computation = computation :=
