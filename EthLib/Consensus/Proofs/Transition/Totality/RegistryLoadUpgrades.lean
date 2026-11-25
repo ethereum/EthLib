@@ -188,19 +188,17 @@ private theorem foldlM_queueCompoundingExcess_load {fork : Fork} {electra : .pec
             excessCount preset count after.balances.data ≤
           (state.pendingDeposits electra).data.size +
             excessCount preset count state.balances.data := by
-  intro indices
-  induction indices with
-  | nil =>
-    intro state after _ computed
-    simp only [List.foldlM, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact Nat.le_refl _
-  | cons head rest ih =>
-    intro state after sized computed
-    rw [List.foldlM_cons] at computed
-    obtain ⟨middle, first, tail⟩ := bind_ok_iff.mp computed
-    obtain ⟨sized', step⟩ := queueCompoundingExcess_load sized first
-    exact Nat.le_trans (ih sized' tail) step
+  intro indices state after sized computed
+  -- Each step keeps the size, and the bound composes by transitivity.
+  exact (foldlM_ok_invariant
+    (fun b : BeaconState preset fork => b.validators.data.size = count ∧
+      (b.pendingDeposits electra).data.size + excessCount preset count b.balances.data ≤
+        (state.pendingDeposits electra).data.size +
+          excessCount preset count state.balances.data)
+    (fun _ _ _ held ok =>
+      let ⟨sized', step⟩ := queueCompoundingExcess_load held.1 ok
+      ⟨sized', step.trans held.2⟩)
+    ⟨sized, Nat.le_refl _⟩ computed).2
 
 /-- The positions of some indexed entries of a list, once sorted, are distinct and in range. -/
 private theorem sortedPositions_nodup {α : Type} {xs : List α} (small : xs.length < 2 ^ 64)
@@ -269,24 +267,16 @@ private theorem foldlM_onboardDeposit_size {validatorKeys : List Cryptography.Bl
       deposits.foldlM (onboardDeposit config checks validatorKeys) (state, kept) =
           .ok (after, kept') →
       kept'.size ≤ kept.size + deposits.length := by
-  intro deposits
-  induction deposits with
-  | nil =>
-    intro state after kept kept' folded
-    cases folded
-    exact Nat.le_refl _
-  | cons deposit rest ih =>
-    intro state after kept kept' folded
-    rw [List.foldlM_cons] at folded
-    obtain ⟨⟨middle, middleKept⟩, step, folded⟩ := bind_ok_iff.mp folded
-    have bound := ih folded
-    rcases onboardDeposit_cases step with ⟨-, rfl⟩ | ⟨rfl, -⟩ | ⟨-, rfl, -⟩
-    · simp only [Array.size_push, List.length_cons] at bound ⊢
-      omega
-    · simp only [List.length_cons]
-      omega
-    · simp only [List.length_cons]
-      omega
+  intro deposits state after kept kept' folded
+  -- Each step keeps at most one more deposit, for a weight of one per deposit read.
+  have bound := foldlM_ok_weighted
+    (fun (pair : BeaconState preset .glamsterdam × Array PendingDeposit) c =>
+      pair.2.size ≤ kept.size + c) (fun _ => 1)
+    (fun ⟨_, _⟩ _ ⟨_, _⟩ _ held step => by
+      rcases onboardDeposit_cases step with ⟨-, rfl⟩ | ⟨rfl, -⟩ | ⟨-, rfl, -⟩ <;>
+        simp only [Array.size_push] at held ⊢ <;> omega)
+    (c := 0) (Nat.le_refl _) folded
+  simpa using bound
 
 /-- The onboarding of builders never raises the validators plus the pending deposits. -/
 private theorem onboardBuilders_registryLoad_le {state after : BeaconState preset .glamsterdam}
