@@ -93,4 +93,14 @@ theorem ite_lt_eq_error_iff {ε α : Type} {a bound : Nat} {e other : ε} {x : �
     exact eq_comm
   · simp [below]
 
+/-- A computation gives a value as an option exactly when it succeeds with that value. -/
+theorem toOption_eq_some_iff {ε α : Type} {x : Except ε α} {a : α} :
+    x.toOption = some a ↔ x = .ok a := by
+  cases x <;> simp [Except.toOption]
+
+/-- A computation whose option holds a value has succeeded with that value. -/
+theorem toOption_eq_some {ε α : Type} {x : Except ε α} {a : α} (h : x.toOption = some a) :
+    x = .ok a :=
+  toOption_eq_some_iff.mp h
+
 end EthLib.Base

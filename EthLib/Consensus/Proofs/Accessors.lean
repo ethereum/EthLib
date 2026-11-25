@@ -84,7 +84,7 @@ theorem toNat_toUInt64_of_lt {state : BeaconState preset fork}
     i.toUInt64.toNat = i := by
   have bound : state.validators.data.size ≤ _ := within
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-  rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
+  exact Uint64.toNat_toUInt64 (by omega)
 
 /-- An index whose position holds a validator active in an epoch is active in that epoch. -/
 theorem mem_getActiveValidatorIndices_of_isActiveAt {state : BeaconState preset fork}

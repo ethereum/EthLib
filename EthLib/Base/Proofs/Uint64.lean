@@ -78,9 +78,13 @@ theorem ofNatChecked_ok_iff {n : Nat} {a : UInt64} :
     simp only [reduceCtorEq, false_iff, not_and]
     omega
 
+/-- A number below `2^64` keeps its value as a 64-bit integer. -/
+theorem toNat_toUInt64 {n : Nat} (h : n < 2 ^ 64) : n.toUInt64.toNat = n := by
+  rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' h]
+
 /-- Below `2^64` the conversion succeeds, and it returns the plain conversion. -/
 theorem ofNatChecked_of_lt {n : Nat} (h : n < 2 ^ 64) : ofNatChecked n = .ok n.toUInt64 :=
-  ofNatChecked_ok_iff.mpr ⟨h, by rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' h]⟩
+  ofNatChecked_ok_iff.mpr ⟨h, toNat_toUInt64 h⟩
 
 /-- The conversion of the value of a 64-bit integer returns that integer. -/
 theorem ofNatChecked_toNat (a : UInt64) : ofNatChecked a.toNat = .ok a :=
