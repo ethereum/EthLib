@@ -23,7 +23,11 @@ namespace EthLib.Execution.Evm.Precompiles.Bls12381
 open EthLib.Base (bind_ok_iff mapError_ok_iff ByteOrder.length_toList_toBE)
 open EthLib.Cryptography.Bls (G1)
 
-/-- The raw bytes of a G1 point have 96 bytes, and its padded encoding 128. -/
+/-- The raw bytes of a G1 point have 96 bytes. -/
+theorem length_g1ToBytes (point : G1) : (g1ToBytes point).length = 96 := by
+  simp [g1ToBytes]
+
+/-- The padded encoding of a G1 point has 128 bytes. -/
 theorem length_padG1_g1ToBytes (point : G1) : (padG1 (g1ToBytes point)).length = 128 := by
   simp [padG1, g1ToBytes, zeroPad, PAD_BYTES]
 

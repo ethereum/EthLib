@@ -61,7 +61,7 @@ theorem bytesToG1_of_bls12MapFpToG1_eq_ok {data : ByteArray} {gas : Nat} {out : 
       bytesToG1 raw true = .ok q ∧ G1.toPoint q = G1.toPoint P := by
   obtain ⟨P, hvalid, hsub, rfl⟩ := inSubgroup_of_bls12MapFpToG1_eq_ok h
   obtain ⟨q, hq, hqP⟩ := bytesToG1_g1ToBytes hvalid fun _ => hsub
-  have hlength : (g1ToBytes P).length = 96 := by simp [g1ToBytes]
+  have hlength := length_g1ToBytes P
   exact ⟨P, _, q, rfl, by rw [List.toList_toArray, unpadG1_padG1 hlength], hq, hqP⟩
 
 /-- With enough gas, MAP_FP_TO_G1 accepts and maps the padded encoding of every `u` in `Fp`. -/
@@ -114,7 +114,7 @@ theorem bytesToG2_of_bls12MapFp2ToG2_eq_ok {data : ByteArray} {gas : Nat} {out :
       bytesToG2 raw true = .ok q ∧ G2.toPoint q = G2.toPoint P := by
   obtain ⟨P, hvalid, hsub, rfl⟩ := inSubgroup_of_bls12MapFp2ToG2_eq_ok h
   obtain ⟨q, hq, hqP⟩ := bytesToG2_g2ToBytes hvalid fun _ => hsub
-  have hlength : (g2ToBytes P).length = 192 := by simp [g2ToBytes]
+  have hlength := length_g2ToBytes P
   exact ⟨P, _, q, rfl, by rw [List.toList_toArray, unpadG2_padG2 hlength], hq, hqP⟩
 
 /-- With enough gas, MAP_FP2_TO_G2 accepts and maps the padded encoding of every `u` in `Fp2`.

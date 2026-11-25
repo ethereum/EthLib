@@ -99,13 +99,12 @@ theorem bls12G1Add_g1ToBytes {p0 p1 : G1} (h0 : G1.Valid p0) (h1 : G1.Valid p1) 
     unfold g1ToBytes
     rw [h]
   have hlen : (padG1 (g1ToBytes p0)).length = 128 := length_padG1_g1ToBytes p0
-  have hraw (p : G1) : (g1ToBytes p).length = 96 := by simp [g1ToBytes]
   rw [← hsum]
   refine (bls12G1Add_eq_ok_iff _ _ _).mpr ⟨?_, hgas, g1ToBytes p0, g1ToBytes p1, q0, q1,
     ?_, ?_, hq0, hq1, rfl⟩
   · simp [ByteArray.size, hlen, length_padG1_g1ToBytes]
-  · simpa [List.take_left' hlen] using unpadG1_padG1 (hraw p0)
-  · simpa [List.drop_left' hlen] using unpadG1_padG1 (hraw p1)
+  · simpa [List.take_left' hlen] using unpadG1_padG1 (length_g1ToBytes p0)
+  · simpa [List.drop_left' hlen] using unpadG1_padG1 (length_g1ToBytes p1)
 
 /-- G2ADD on the encodings of two valid points, with enough gas, returns the encoding of their sum.
 
@@ -125,13 +124,12 @@ theorem bls12G2Add_g2ToBytes {p0 p1 : G2} (h0 : G2.Valid p0) (h1 : G2.Valid p1) 
     unfold g2ToBytes
     rw [h]
   have hlen : (padG2 (g2ToBytes p0)).length = 256 := length_padG2_g2ToBytes p0
-  have hraw (p : G2) : (g2ToBytes p).length = 192 := by simp [g2ToBytes]
   rw [← hsum]
   refine (bls12G2Add_eq_ok_iff _ _ _).mpr ⟨?_, hgas, g2ToBytes p0, g2ToBytes p1, q0, q1,
     ?_, ?_, hq0, hq1, rfl⟩
   · simp [ByteArray.size, hlen, length_padG2_g2ToBytes]
-  · simpa [List.take_left' hlen] using unpadG2_padG2 (hraw p0)
-  · simpa [List.drop_left' hlen] using unpadG2_padG2 (hraw p1)
+  · simpa [List.take_left' hlen] using unpadG2_padG2 (length_g2ToBytes p0)
+  · simpa [List.drop_left' hlen] using unpadG2_padG2 (length_g2ToBytes p1)
 
 /-! ## The generators -/
 
