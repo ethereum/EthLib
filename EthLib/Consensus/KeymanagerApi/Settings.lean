@@ -15,9 +15,9 @@ The client takes its defaults at its start, as the source says.
 
 The source does not say how a graffiti string fills the 32 bytes of a block, so it is kept as is.
 
-[`feerecipient`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/fee_recipient.yaml
-[`gas_limit`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/gas_limit.yaml
-[`graffiti`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/graffiti.yaml
+[`feerecipient`]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/fee_recipient.yaml
+[`gas_limit`]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/gas_limit.yaml
+[`graffiti`]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/graffiti.yaml
 -/
 
 @[expose] public section
@@ -180,7 +180,7 @@ def graffitiCalls : SettingCalls String where
 
 The empty configuration resolves as the client's own, as the [source] says of a set of `{}`.
 
-[source]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/builder_config.yaml
+[source]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/builder_config.yaml
 -/
 def builderConfigSetting : Setting BuilderConfigSetting where
   mappings state := state.builderConfigs

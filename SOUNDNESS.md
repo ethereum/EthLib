@@ -7738,7 +7738,7 @@ EthLib gives that case no status (`getValidatorRegistration_notHeld`), and the m
 ### Keymanager API
 
 The Keymanager API, as `ethereum/keymanager-APIs` defines it, is the set of calls that a management tool makes to a validator client.
-EthLib cites its commit `3e7c64e`.
+EthLib cites its commit `2d8a028`.
 The source has no test vectors, so the Python suite reads the examples of its schemas; `tests/consensus/README.md` lists them.
 [`ARCHITECTURE.md`](ARCHITECTURE.md#interfaces) accepts this specification only with feedback from the implementers that use it: validator clients and key-management tools.
 The points that the source leaves open are listed below, with the reading that EthLib takes, until they answer.
@@ -7798,8 +7798,8 @@ The Python suite runs the example of the issue and the cases of the source's use
 The source leaves six points about the import open, and EthLib takes these readings:
 
 - Which keys' slashing protection data is loaded.
-  The [import flow](https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/flows/README.md#import) loads it "only if there is a keystore that matches, and passes other validations".
-  The [use case](https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/use-cases/README.md#add-a-key) says that data of keys that are not imported "will still be imported".
+  The [import flow](https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/flows/README.md#import) loads it "only if there is a keystore that matches, and passes other validations".
+  The [use case](https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/use-cases/README.md#add-a-key) says that data of keys that are not imported "will still be imported".
   Step 3 of the flow allows the data to be "loaded in its entirety, or imported on a per-key basis", and its step 4 loads it only for a matching keystore.
   EthLib takes the per-key reading of step 4: it loads the entries of each imported key, and no others.
   So the data of a keystore that is a duplicate is not loaded either.
@@ -7808,7 +7808,8 @@ The source leaves six points about the import open, and EthLib takes these readi
   EthLib compares against the local keys only, so a remote key of the same public key does not make a keystore a duplicate.
 - Which public key identifies a keystore.
   ERC-2335 makes the `pubkey` field optional, so EthLib derives the key from the decrypted secret, and checks only the form of the field.
-  The keystore example of the source writes that field with a `0x` marker, which the vectors of ERC-2335 do not, so the reader refuses it.
+  The keystore example of the source writes that field without a `0x` marker, as the vectors of ERC-2335 do, so the reader takes it.
+  The password example of the source does not unlock it, so the suite checks only that the checksum fails.
 - Whether a key imported through the API is read-only: EthLib imports it as one that can be deleted.
 - Whether the genesis validators root of the data must match the chain: this import does not compare it, since the conditions of EIP-3076 do not ask for it.
   The import of a file alone, in § Slashing protection, refuses another chain, but this call does not use it.
@@ -7854,7 +7855,7 @@ The source leaves six points about the settings open, and EthLib takes these rea
 - The gas limit calls "may return a 400 status code if no external builder is configured"; that is a choice of the client and is not modelled.
 - The fee recipient and the gas limit "are not used on Phase0 or Altair networks"; the calls take no fork, so they behave the same at every fork.
 
-The calls on `/eth/v1/validator/{pubkey}/builder_config` get, set and delete the builder configuration of a key (`Consensus/KeymanagerApi/BuilderConfig.lean`), as [`builder_config.yaml`](https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/builder_config.yaml) defines them.
+The calls on `/eth/v1/validator/{pubkey}/builder_config` get, set and delete the builder configuration of a key (`Consensus/KeymanagerApi/BuilderConfig.lean`), as [`builder_config.yaml`](https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/builder_config.yaml) defines them.
 A stored configuration may leave out any field, and a get answers it resolved against the configuration of the client, which the client fixes at its start.
 An omitted list of builders is that of the client, and an omitted term of an entry is the default of the key and then that of the client.
 Omitted authentication data is the default data of the URL of the entry, and omitted builder keys are the empty list.

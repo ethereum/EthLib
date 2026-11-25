@@ -19,7 +19,7 @@ The source does not say which of its codes applies to a validator not in the sta
 
 This call does not check that the validator is active; the chain does when it processes the exit.
 
-[`voluntary_exit.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/voluntary_exit.yaml
+[`voluntary_exit.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/voluntary_exit.yaml
 [EIP-7044]: https://eips.ethereum.org/EIPS/eip-7044#specification
 -/
 

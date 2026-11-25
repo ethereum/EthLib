@@ -362,7 +362,7 @@ checked = "relay-specs at a4e0a50d holds no generator code, and its README names
 [[directories."tests/consensus/keymanager_api"]]
 cases = ["**"]
 generator = "not established"
-checked = "keymanager-APIs at 3e7c64e holds no program that writes the OpenAPI document or the types files, and the README names none"
+checked = "keymanager-APIs at 2d8a028 holds no program that writes the OpenAPI document or the types files, and the README names none"
 
 [[directories."tests/consensus/remote_signing_api"]]
 cases = ["**"]

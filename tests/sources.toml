@@ -55,7 +55,7 @@ commit = "a4e0a50d9d46bfe881fd74cc7e0db366371f4eed"
 directories = ["tests/consensus/relay_api"]
 
 [repositories."ethereum/keymanager-APIs"]
-commit = "3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e"
+commit = "2d8a02843cbf91f7ebc6274bf68a89b908019130"
 directories = ["tests/consensus/keymanager_api"]
 
 [repositories."ethereum/remote-signing-api"]

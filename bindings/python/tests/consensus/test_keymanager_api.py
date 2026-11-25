@@ -441,11 +441,11 @@ def test_failure_does_not_stop_the_others():
 
 
 def test_example_keystore_of_the_source():
-    """The keystore example of the source writes its public key with `0x`, which is refused."""
+    """The keystore example of the source reads, but the password example does not unlock it."""
     example = _load("types/keystore.yaml")["example"]
     password = "ABCDEFGH01234567ABCDEFGH01234567"
     responses, _, pubkeys = _run([_import([example], [password])], 2**30, 2**24)
-    error = {"status": "error", "message": "the keystore did not decrypt, with code 2"}
+    error = {"status": "error", "message": "the keystore did not decrypt, with code 8"}
     assert responses == [(200, {"data": [error]})]
     assert pubkeys == []
 

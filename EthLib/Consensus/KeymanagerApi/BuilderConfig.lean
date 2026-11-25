@@ -17,8 +17,8 @@ The operator may leave out fields, and the [schema] says how each one resolves.
 
 A get gives the resolved configuration, so a set of that answer fixes every value.
 
-[the source]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/builder_config.yaml
-[schema]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/builder_entry.yaml
+[the source]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/builder_config.yaml
+[schema]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/types/builder_entry.yaml
 -/
 
 @[expose] public section
