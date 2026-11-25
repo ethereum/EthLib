@@ -305,6 +305,7 @@ public import EthLib.Consensus.Proofs.Transition.RetiredValidator
 public import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.RootLinks
 public import EthLib.Consensus.Proofs.Transition.RunKept
+public import EthLib.Consensus.Proofs.Transition.Schedule
 public import EthLib.Consensus.Proofs.Transition.SlashedExit
 public import EthLib.Consensus.Proofs.Transition.SlashedFlags
 public import EthLib.Consensus.Proofs.Transition.SlashedPersistence
