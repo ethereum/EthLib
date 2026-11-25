@@ -145,17 +145,6 @@ theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true
 private theorem toFin_aMontgomery : Montgomery.toFin aMontgomery = a :=
   Montgomery.toFin_ofFin a
 
-/-- The chain on scalar words is the shared chain, with the scalars shifted by `s`. -/
-theorem mulAddAux_eq (p q pq : Jacobian.Coords Montgomery) (k l : Word64.Raw)
-    (fuel s : Nat) :
-    mulAdd.chain p q pq k l fuel s =
-      Jacobian.Coords.mulAddAux aMontgomery p q pq fuel (k.val >>> s) (l.val >>> s) := by
-  induction fuel generalizing s with
-  | zero => simp only [mulAdd.chain, Jacobian.Coords.mulAddAux]
-  | succ fuel ih =>
-    simp only [mulAdd.chain, Jacobian.Coords.mulAddAux, ih, Word64.Raw.bit_iff,
-      Nat.shiftRight_succ]
-
 /-- The chain in Montgomery form is the shared chain on `Fp`, for every input. -/
 theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
     mulAdd k p l q =
@@ -170,8 +159,9 @@ theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
       (toJacobian p).toCoords := fun p => by
     simp only [Jacobian.Coords.map, Montgomery.toFin_ofFin]
   simp only [mulAdd]
-  rw [mulAddAux_eq, hk, hl, Nat.shiftRight_zero, Nat.shiftRight_zero,
-    ← Jacobian.Coords.mulAdd.eq_1, ShortWeierstrass.Point.ofCoords_map hf Montgomery.toFin_inv,
+  rw [Word64.Raw.bit_eq_testBit, Word64.Raw.bit_eq_testBit, hk, hl,
+    ← Jacobian.Coords.mulAddAux.eq_1, ← Jacobian.Coords.mulAdd.eq_1,
+    ShortWeierstrass.Point.ofCoords_map hf Montgomery.toFin_inv,
     Jacobian.Coords.map_mulAdd hf, toFin_aMontgomery, he, he]
   rfl
 

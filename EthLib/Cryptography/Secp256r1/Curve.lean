@@ -75,27 +75,12 @@ On points of the curve it is the sum of the two products. -/
 def mulAdd (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
   let p' := (toJacobian p).toCoords.map Montgomery.ofFin
   let q' := (toJacobian q).toCoords.map Montgomery.ofFin
+  -- The shared chain reads the bits of each scalar from its four words.
+  --
+  -- Halving a 256-bit scalar at each step would allocate a big integer, at a dominant cost.
   ShortWeierstrass.Point.ofCoords Montgomery.inv Montgomery.toFin
-    (chain p' q' (Jacobian.Coords.add aMontgomery p' q') (Word64.rawOfNat k.val)
-      (Word64.rawOfNat l.val) 256 0)
-where
-  /-- `(k / 2^s) P + (l / 2^s) Q`, for `k, l < 2^(s + fuel)`, high bits first.
-
-  `pq` is `P + Q`, and the scalars are four words each.
-
-  It is the shared chain of the simultaneous multiplication, with the same doublings and sums. -/
-  chain (p q pq : Jacobian.Coords Montgomery) (k l : Word64.Raw) :
-      Nat → Nat → Jacobian.Coords Montgomery
-    | 0, _ => Jacobian.Coords.infinity
-    | fuel + 1, s =>
-      let acc := Jacobian.Coords.double aMontgomery (chain p q pq k l fuel (s + 1))
-      -- The chain reads bit `s` of the words instead of halving the scalars.
-      --
-      -- Halving a 256-bit integer at each step allocates a big integer, which would dominate.
-      if k.bit s then
-        if l.bit s then Jacobian.Coords.add aMontgomery acc pq
-        else Jacobian.Coords.add aMontgomery acc p
-      else if l.bit s then Jacobian.Coords.add aMontgomery acc q else acc
+    (Jacobian.Coords.mulAddBits aMontgomery p' q' (Jacobian.Coords.add aMontgomery p' q')
+      (Word64.rawOfNat k.val).bit (Word64.rawOfNat l.val).bit 256 0)
 
 end Point
 

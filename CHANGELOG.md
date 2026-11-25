@@ -1058,6 +1058,11 @@ Not yet released.
     `secured_foldl_trieSet` is removed, since that trie holds its flag by definition.
   - `Trie.Exports.setPairs` and `Trie.Exports.setPairs_eq` are removed; the root export calls `Trie.setPairs`.
     `root_of_rootExport` and `rootExport_of_root` (`Execution/Proofs/Exports/Trie.lean`) are stated on `⟨secured != 0, setPairs pairs⟩`.
+- In Lean, the shared chain of `k P + l Q` reads the bits of its scalars through two functions, `Jacobian.Coords.mulAddBits` (`Cryptography/Jacobian.lean`), and P-256 computes its sum on it ([#4487](https://github.com/ethereum/EthLib/issues/4487)).
+  - `Jacobian.Coords.mulAddAux` is `mulAddBits` on `Nat.testBit`, with the same value on every input; unfolding it gives `mulAddBits`.
+    `Jacobian.Coords.mulAddAux_succ` (`Cryptography/Proofs/Jacobian.lean`) states its old recursion; rewrite with it where a proof unfolded the old body.
+  - `Secp256r1.Point.mulAdd.chain` and `Secp256r1.Point.mulAddAux_eq` are removed.
+    `Word64.Raw.bit_eq_testBit` (`Cryptography/Proofs/Word64.lean`) says that the bits of four words are the bits of their value.
 - In Lean, the duplicate checks of TLS extensions share one linear scan, `Base.firstRepeated` (`Base/List.lean`), the first element of a list that occurs again later ([#4517](https://github.com/ethereum/EthLib/pull/4517)).
   - `Libp2p.Tls.firstRepeated` is removed; use `Base.firstRepeated`, which gives the same value on every list.
     `Base.firstRepeated_nil` and `Base.firstRepeated_cons` state its old recursion, `Base.firstRepeated_eq_none_iff` relates it to `List.Nodup`, and `Base.two_le_count_of_firstRepeated` says what it finds occurs twice (`Base/Proofs/List.lean`).
