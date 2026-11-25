@@ -88,7 +88,7 @@ Here the secret key also keeps what signing reads: the scheme seed, the public p
 `sign` returns the signature and an updated key.
 A signature at leaf index `idx` needs bottom tree `b = floor(idx / 2^16)` and the signature of its root by top key `b`.
 That top signature is the same for all `2^16` indices of the tree.
-So the key keeps up to 8 bottom trees, each with that top signature, and drops the one it used longest ago.
+So the key keeps up to 4 bottom trees, each with that top signature, and drops the one it used longest ago.
 A signature in a kept tree costs one one-time signature; otherwise it costs one bottom tree and the top key's search.
 Signing never rebuilds the top tree.
 
@@ -164,7 +164,7 @@ Then the cache still holds none when each search starts, so each search fails wi
 **Domain separation.**
 Every hash call names its call site: what it computes, and the arguments that kind of call takes, such as the layer, the key and the position.
 The hash reads the call site as a 16-byte address, so that two calls never hash the same input by accident (`Address.lean`, `TweakableHash.lean`).
-Two different call sites never share an address, whatever their kinds (`CallSite.encode_injective`).
+Two different call sites never share an address, whatever their kinds (`Address.encode_injective`).
 The type code keeps the kinds apart, and the top layer's bit keeps the two layers apart (`layerHi_inj`).
 Finally, a hash input determines its public parameter, call site and payload (`thInput_inj`).
 
