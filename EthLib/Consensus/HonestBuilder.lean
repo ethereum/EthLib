@@ -7,35 +7,9 @@ public import EthLib.Consensus.Transition.Payload
 
 From Gloas: the bid and the envelope of an honest builder, and the signatures on them.
 
-A builder bids for a payload that it built, on a state.
+The payload comes from the execution layer, and the choices of the builder read the fork choice.
 
-The bid takes its parent hash, block hash, RANDAO mix and gas limit from the payload.
-
-Its parent root is the root of the latest block header of the state.
-
-It commits to the root of the requests of the payload.
-
-It asks for no payment on the execution layer.
-
-A proposer may build its own payload, with a bid from the reserved builder index.
-
-That bid has no value, and the signature at infinity.
-
-Once a block carries the bid, the envelope reveals the payload and its requests.
-
-It names the builder of the bid, the root of the block and the parent of the block.
-
-A builder signs a bid under the builder domain of the epoch of the bid's slot.
-
-It signs an envelope under the builder domain of the current epoch of the state.
-
-The payload, its requests and the commitments of its blobs come from the execution layer.
-
-The builder chooses the slot, the fee recipient and the value of its bid.
-
-Those choices read the fork choice and the network, so they are all inputs here.
-
-The gossip of the bid and of the envelope is not specified here.
+So both are inputs here, and the gossip of the bid and of the envelope is in other modules.
 
 [EIP-7732] describes the honest builder.
 
@@ -125,13 +99,23 @@ inductive BuilderSigningError where
   /-- The BLS signature fails. -/
   | bls (error : BlsError)
 
-/-- The signature of a bid by a builder with a secret key. -/
-def getExecutionPayloadBidSignature (config : Config) (state : BeaconState preset fork)
-    (bid : ExecutionPayloadBid preset fork) (key : Signatures.SecretKey) :
-    Except BuilderSigningError BLSSignature := do
-  -- The signing root under `DOMAIN_BEACON_BUILDER`, at the epoch of the slot of the bid.
-  let root ← (builderSigningRoot config state bid
-    (some (computeEpochAtSlot preset bid.slot))).mapError .root
+/-- The root that a builder signs for its bid, on the chain of a state of any fork. -/
+def executionPayloadBidSigningRoot {stateFork : Base.Fork} (config : Config)
+    (state : BeaconState preset stateFork) (bid : ExecutionPayloadBid preset fork) :
+    Except Err Root := do
+  -- The fork version that the fork schedule gives the epoch of the slot of the bid.
+  let version := config.computeForkVersion (computeEpochAtSlot preset bid.slot)
+  -- The domain `DOMAIN_BEACON_BUILDER` at that version, for the genesis validators root.
+  let domain ← computeDomain config DOMAIN_BEACON_BUILDER version state.genesisValidatorsRoot
+  -- The signing root of the bid under that domain.
+  computeSigningRoot bid domain
+
+/-- The signature of a bid by a builder with a secret key, on the chain of a state of any fork. -/
+def getExecutionPayloadBidSignature {stateFork : Base.Fork} (config : Config)
+    (state : BeaconState preset stateFork) (bid : ExecutionPayloadBid preset fork)
+    (key : Signatures.SecretKey) : Except BuilderSigningError BLSSignature := do
+  -- The signing root of the bid.
+  let root ← (liftSsz (executionPayloadBidSigningRoot config state bid)).mapError .root
   -- The BLS signature of that root with the key.
   (Signatures.sign key (packBytes root)).mapError .bls
 
@@ -140,8 +124,7 @@ def getExecutionPayloadEnvelopeSignature (config : Config) (state : BeaconState 
     (envelope : ExecutionPayloadEnvelope preset fork) (key : Signatures.SecretKey) :
     Except BuilderSigningError BLSSignature := do
   -- The signing root under `DOMAIN_BEACON_BUILDER`, at the current epoch of the state.
-  let root ← (builderSigningRoot config state envelope
-    (some (computeEpochAtSlot preset state.slot))).mapError .root
+  let root ← (builderSigningRoot config state envelope).mapError .root
   -- The BLS signature of that root with the key.
   (Signatures.sign key (packBytes root)).mapError .bls
 

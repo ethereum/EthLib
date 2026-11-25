@@ -4341,6 +4341,9 @@ The theorems are in `Consensus/Proofs/HonestBuilder.lean`.
 `getExecutionPayloadBid_eq_ok_iff` states each field of a bid.
 `getExecutionPayloadEnvelope_eq_ok_iff` states each field of an envelope.
 `checkBidBuilder_of_getSelfBuiltExecutionPayloadBid` shows that a self-built bid passes the checks of the builder of a bid on every state.
+A builder signs a bid at the fork version that the configuration gives to the epoch of its slot.
+So it may sign from a state of an earlier fork.
+`verifyExecutionPayloadBidSignature_of_sign` shows that such a bid passes its check in a state whose current epoch takes that version, on the same chain.
 `getExecutionPayloadEnvelope_checks` takes a block from Gloas that passes block processing, with a bid that a builder built from a payload.
 The block must commit to the root of the state after it.
 The theorem shows that the envelope of that payload passes the checks of the block root and of the parent root against that state.
@@ -7932,11 +7935,12 @@ A sync committee message is signed in the current epoch of the state, so its the
 `verifyRegistrationSignature_of_requestSigningRoot` shows that a registration gets the root that the check of a registration verifies.
 `isValidDepositSignature_of_requestSigningRoot` shows the same for a deposit whose genesis fork version is that of the configuration.
 The kinds that Gloas adds sign under the domain types that the source names.
-`getExecutionPayloadBidSignature_eq_of_requestSigningRoot` and `getPayloadAttestationMessageSignature_eq_of_requestSigningRoot` show that a bid and the data of a payload attestation get the roots that their duties sign.
+`getPayloadAttestationMessageSignature_eq_of_requestSigningRoot` shows that the data of a payload attestation gets the root that its member signs.
 `verifyBuilderRequestAuthSignature_of_requestSigningRoot` shows that the authentication of a Builder API request gets the root that its check verifies.
-Two kinds differ from their duties, and their theorems take a hypothesis each, which Gap A lists.
+Three kinds differ from their duties, and their theorems take a hypothesis each, which Gap A lists.
 An envelope is signed by its builder in the current epoch of the state, and by the request in the epoch of the slot of its payload; `getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot` assumes that the two epochs take the same fork version.
 Proposer preferences are signed at the fork version that the configuration gives to the proposal epoch, and the request takes the version of its fork info; `proposerPreferencesSigningRoot_eq_of_requestSigningRoot` assumes that the two agree.
+A bid is signed in the same way, at the version that the configuration gives to the epoch of its slot; `getExecutionPayloadBidSignature_eq_of_requestSigningRoot` assumes that the fork info gives that version.
 
 Each kind has one domain type (`RequestType.domainType`), and `requestDomain_prefix` shows that the domain of a request starts with it, whatever the fork info.
 `requestDomain_ne` shows that two requests whose kinds have different domain types never share a domain.
@@ -8270,9 +8274,10 @@ The root of a voluntary exit request (`voluntaryExitDomain_of_requestSigningRoot
 From Deneb that is the version of Capella (EIP-7044), and the Remote-signing API does not say whether the client sends it or the signer substitutes it.
 The hypothesis stays until the implementers of remote signers answer it.
 
-Two roots of the kinds that Gloas adds hold under a hypothesis, which the Remote-signing API leaves open.
+Three roots of the kinds that Gloas adds hold under a hypothesis, which the Remote-signing API leaves open.
 The root of an envelope (`getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot`) assumes that the epoch of the slot of its payload and the current epoch of the state take the same fork version; the source names the domain type of an envelope, not its epoch.
 The root of proposer preferences (`proposerPreferencesSigningRoot_eq_of_requestSigningRoot`) assumes that the fork info gives, at the proposal epoch, the version that the configuration gives; when that epoch is in the next fork, the two differ, and the source does not say which the signer uses.
+The root of a bid (`getExecutionPayloadBidSignature_eq_of_requestSigningRoot`) assumes the same at the epoch of the slot of the bid; a builder that sends the fork of its head state before a fork gets the version of the old fork ([remote-signing-api#37](https://github.com/ethereum/remote-signing-api/issues/37)).
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 

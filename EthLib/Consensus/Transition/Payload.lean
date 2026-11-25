@@ -43,14 +43,11 @@ open Base Cryptography.Bls Serialization.Ssz.SszType
 
 variable {preset : Preset} {fork : Base.Fork}
 
-/-- The root that a builder signs for a message, under the builder domain of an epoch.
-
-The epoch is by default the current epoch of the state. -/
+/-- The root that a builder signs for a message, under the builder domain of the current epoch. -/
 def builderSigningRoot {α : Type} [Serialization.Ssz.SszType α] (config : Config)
-    (state : BeaconState preset fork) (message : α) (epoch : Option Epoch := none) :
-    Except TransitionError Root := do
-  -- The signing root of the message under `DOMAIN_BEACON_BUILDER` at the epoch.
-  let domain ← liftAccessor (getDomain config state DOMAIN_BEACON_BUILDER epoch)
+    (state : BeaconState preset fork) (message : α) : Except TransitionError Root := do
+  -- The signing root of the message under `DOMAIN_BEACON_BUILDER` at the current epoch.
+  let domain ← liftAccessor (getDomain config state DOMAIN_BEACON_BUILDER)
   liftSsz (computeSigningRoot message domain)
 
 /-- Whether a signed bid carries the signature of its builder, in the current epoch. -/

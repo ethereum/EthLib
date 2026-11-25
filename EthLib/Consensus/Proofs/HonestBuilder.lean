@@ -164,19 +164,20 @@ theorem getExecutionPayloadEnvelope_checks {config : Config} {checks : Signature
 
 end Build
 
-/-- The domain of the current epoch is the default domain of a state. -/
-theorem getDomain_currentEpoch (config : Config) (domainType : DomainType) :
-    getDomain config state domainType (some (getCurrentEpoch state)) =
-      getDomain config state domainType :=
-  rfl
+/-- The root that a builder signs for a bid is the root of its check in a scheduled state.
 
-/-- A bid for a slot of the current epoch is signed under the domain of its check. -/
-theorem builderSigningRoot_bid {config : Config} {bid : ExecutionPayloadBid preset fork}
-    (current : computeEpochAtSlot preset bid.slot = getCurrentEpoch state) :
-    builderSigningRoot config state bid (some (computeEpochAtSlot preset bid.slot)) =
-      builderSigningRoot config state bid := by
-  rw [current]
-  rfl
+The checking state must give its current epoch the version that the schedule gives the bid. -/
+theorem builderSigningRoot_bid {config : Config} {signerFork : Base.Fork}
+    {signer : BeaconState preset signerFork} {bid : ExecutionPayloadBid preset fork} {root : Root}
+    (chain : signer.genesisValidatorsRoot = state.genesisValidatorsRoot)
+    (scheduled : state.forkVersions.versionAt (getCurrentEpoch state) =
+      config.computeForkVersion (computeEpochAtSlot preset bid.slot))
+    (rooted : executionPayloadBidSigningRoot config signer bid = .ok root) :
+    builderSigningRoot config state bid = .ok root := by
+  unfold executionPayloadBidSigningRoot at rooted
+  obtain ⟨domain, domained, rooted⟩ := bind_ok_iff.mp rooted
+  simp [builderSigningRoot, getDomain, liftAccessor, liftSsz, scheduled, ← chain, domained,
+    rooted, bind, Except.bind, Except.mapError]
 
 /-- A signature by a secret key, of a root that has a value, verifies under its public key.
 
@@ -199,25 +200,28 @@ private theorem verify_of_signed {key : Signatures.SecretKey}
 
 /-- A bid signed with the key of its builder passes the check of its signature.
 
-The bid must be for a slot of the current epoch, and its builder must have the public key. -/
+The builder may sign from a state of any fork on the chain, such as the last state before Gloas.
+
+The checking state must give its current epoch the version that the schedule gives the bid. -/
 theorem verifyExecutionPayloadBidSignature_of_sign {config : Config}
-    (gloas : .glamsterdam ≤ fork) {signed : SignedExecutionPayloadBid preset fork}
-    {key : Signatures.SecretKey} {builder : Builder}
+    (gloas : .glamsterdam ≤ fork) {signerFork : Base.Fork} {signer : BeaconState preset signerFork}
+    {signed : SignedExecutionPayloadBid preset fork} {key : Signatures.SecretKey}
+    {builder : Builder}
     (registered : getBuilder state gloas signed.message.builderIndex = .ok builder)
     (owned : builder.pubkey = Signatures.skToPk key)
-    (current : computeEpochAtSlot preset signed.message.slot = getCurrentEpoch state)
-    (signedBy : getExecutionPayloadBidSignature config state signed.message key =
+    (chain : signer.genesisValidatorsRoot = state.genesisValidatorsRoot)
+    (scheduled : state.forkVersions.versionAt (getCurrentEpoch state) =
+      config.computeForkVersion (computeEpochAtSlot preset signed.message.slot))
+    (signedBy : getExecutionPayloadBidSignature config signer signed.message key =
       .ok signed.signature) :
     verifyExecutionPayloadBidSignature config .bls state gloas signed = .ok true := by
   unfold getExecutionPayloadBidSignature at signedBy
-  -- A bid is signed under the domain of the epoch of its slot, and checked under the current one.
-  --
-  -- The two domains agree when the bid is for a slot of the current epoch.
-  rw [builderSigningRoot_bid current] at signedBy
   obtain ⟨root, rooted, verifies⟩ := verify_of_signed signedBy
+  -- The bid is signed under the scheduled version, and checked under the version of the state.
+  have checked := builderSigningRoot_bid chain scheduled (liftSsz_ok.mp rooted)
   unfold verifyExecutionPayloadBidSignature
   rw [show liftAccessor (getBuilder state gloas signed.message.builderIndex) = .ok builder by
-    rw [registered]; rfl, rooted]
+    rw [registered]; rfl, checked]
   show Except.ok (Signatures.verify builder.pubkey (packBytes root)
     signed.signature) = .ok true
   rw [owned]
