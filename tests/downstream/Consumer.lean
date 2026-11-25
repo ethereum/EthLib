@@ -48,7 +48,7 @@ example {α : Type} [Serialization.Ssz.SszType α] [Serialization.Ssz.LawfulSszT
     {root : Vector UInt8 32} :
     Serialization.Ssz.SszType.hashTreeRoot a = .ok root ↔
       Serialization.Ssz.hashTreeRoot (Serialization.Ssz.SszType.desc α)
-        (Serialization.Ssz.SszType.toValue a) = .ok root.toArray :=
+        (Serialization.Ssz.SszType.toValue a) = .ok ⟨root.toArray⟩ :=
   Serialization.Ssz.SszType.hashTreeRoot_ok_iff
 
 -- An SSZ export consumer relates the writer's result to its JSON reference.
