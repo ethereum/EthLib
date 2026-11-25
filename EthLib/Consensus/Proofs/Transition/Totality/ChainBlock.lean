@@ -184,17 +184,12 @@ theorem advanceSlotsAcross_slot :
     rw [advanceSlotsAcross_slot count rest, reachedSlot]
     omega
 
-/-- A sum of terms, each at most a bound, is at most the number of terms times the bound. -/
-private theorem sum_map_le_length_mul {α : Type} (items : List α) (term : α → Nat) (bound : Nat)
-    (each : ∀ item ∈ items, term item ≤ bound) : (items.map term).sum ≤ items.length * bound := by
-  simpa using List.sum_le_length_nsmul (items.map term) bound (by simpa using each)
-
 /-- Each withdrawal request costs at most the cap in increments, plus one. -/
 private theorem partialExitCost_le {fork : Fork} (cap : Nat) (body : BeaconBlockBody preset fork) :
     partialExitCost preset cap body ≤ (blockWithdrawalRequests body).length *
       (cap / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) := by
   unfold partialExitCost
-  exact sum_map_le_length_mul _ _ _ fun request _ =>
+  exact Base.sum_map_le fun request _ =>
     Nat.add_le_add_right (Nat.div_le_div_right (min_le_right _ _)) 1
 
 /-- Within their caps, the validators from a position on cost at most the largest cap each.
@@ -205,10 +200,10 @@ private theorem exitCostFrom_le {fork : Fork} {state : BeaconState preset fork}
     exitCostFrom preset state count ≤ (state.validators.data.size - count) *
       (preset.largestEffectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) := by
   unfold exitCostFrom
-  have bound := sum_map_le_length_mul (state.validators.data.toList.drop count)
-    (fun validator =>
+  have bound := Base.sum_map_le (xs := state.validators.data.toList.drop count)
+    (f := fun validator =>
       validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1)
-    (preset.largestEffectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1)
+    (high := preset.largestEffectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1)
     fun validator inside => by
       have registered := Array.mem_toList_iff.mp (List.mem_of_mem_drop inside)
       exact Nat.add_le_add_right (Nat.div_le_div_right
