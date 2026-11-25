@@ -1061,6 +1061,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, one reader and one writer of a versioned hash serve the JSON forms of the RPC and the Engine APIs ([#4562](https://github.com/ethereum/EthLib/issues/4562)).
+  - `Execution.Rpc.versionedHash` and `Execution.Rpc.versionedHashJson` (`Execution/Rpc/Json.lean`) are new.
+    `versionedHash_versionedHashJson` and `array_versionedHash_listJson` (`Execution/Proofs/Rpc/Json.lean`) say that the reader reads back what the writer writes.
+  - `Rpc.transactionOfJson`, `Rpc.transactionFields`, `Rpc.genericTransaction`, `Engine.newPayloadParams` and `Engine.newPayloadParamsJson` unfold to them.
+    Each accepts and writes the same JSON as before, with the same error messages.
 - In Lean, `StaticStep` (`Execution/Proofs/Evm/Instructions/Static.lean`) has a new last field `accesses` ([#4568](https://github.com/ethereum/EthLib/pull/4568)).
   It says that the step keeps every accessed address and storage key of the substate, as `Substate.AccessesLe`.
   An anonymous constructor of a step that keeps the substate adds `.refl _` at the end.

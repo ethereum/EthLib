@@ -4,6 +4,7 @@ public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.Json
 import EthLib.Base.Proofs.Toolchain.JsonBasic
+import EthLib.Execution.Proofs.Rpc.Json
 import EthLib.Execution.Proofs.Blocks.Transition
 import EthLib.Base.Proofs.CodeInjective
 
@@ -553,17 +554,13 @@ open EthLib.Serialization.JsonRpc (listJson dataJson array fixed bytes array_lis
 /-- The hashes, the root and the requests read back from their JSON. -/
 private theorem params_read_back (hashes : List VersionedHash) (beaconRoot : Hash32)
     (requests : List ByteArray) :
-    array "expectedBlobVersionedHashes"
-        (fun j => VersionedHash.mk <$> fixed "versioned hash" 32 j)
-        (listJson (dataJson ·.bytes.toList) hashes) = .ok hashes ∧
+    array "expectedBlobVersionedHashes" (Execution.Rpc.versionedHash "versioned hash")
+        (listJson Execution.Rpc.versionedHashJson hashes) = .ok hashes ∧
       fixed "parentBeaconBlockRoot" 32 (dataJson beaconRoot.toList) = .ok beaconRoot ∧
       array "executionRequests" (bytes "request")
         (listJson (dataJson ·.data.toList) requests) = .ok requests := by
-  refine ⟨?_, fixed_dataJson _ beaconRoot false, ?_⟩
-  · rw [array_listJson]
-    simpa using mapM_eq_ok_map (g := id) fun x _ => by
-      rw [fixed_dataJson "versioned hash" x.bytes false]
-      rfl
+  refine ⟨Execution.Rpc.array_versionedHash_listJson _ _ hashes,
+    fixed_dataJson _ beaconRoot false, ?_⟩
   · rw [array_listJson]
     refine (mapM_eq_ok_map (g := id) fun r _ => ?_).trans (by simp)
     rw [dataJson, bytes_hexString]
@@ -577,7 +574,8 @@ private theorem newPayloadParams_arr {version : Nat} {pj : Lean.Json} {any : Jso
     (hnull : pj.isNull = false) (hp : payloadParam version pj = .ok (any, amsterdam))
     (hashes : List VersionedHash) (beaconRoot : Hash32) (requests : List ByteArray) :
     newPayloadParams version (.arr ([pj] ++
-      (if 3 ≤ version then [listJson (dataJson ·.bytes.toList) hashes, dataJson beaconRoot.toList]
+      (if 3 ≤ version then
+          [listJson Execution.Rpc.versionedHashJson hashes, dataJson beaconRoot.toList]
         else []) ++
       (if 4 ≤ version then [listJson (dataJson ·.data.toList) requests] else [])).toArray) =
       .ok (any, amsterdam, if 3 ≤ version then some hashes else none,
@@ -585,7 +583,7 @@ private theorem newPayloadParams_arr {version : Nat} {pj : Lean.Json} {any : Jso
         if 4 ≤ version then some requests else none) := by
   -- Each value after the payload reads back, and none of them is null.
   obtain ⟨hh, hb, hr⟩ := params_read_back hashes beaconRoot requests
-  have nh : (listJson (dataJson ·.bytes.toList) hashes).isNull = false :=
+  have nh : (listJson Execution.Rpc.versionedHashJson hashes).isNull = false :=
     Base.Toolchain.Json.isNull_arr _
   have nr : (listJson (dataJson ·.data.toList) requests).isNull = false :=
     Base.Toolchain.Json.isNull_arr _
@@ -737,7 +735,7 @@ theorem newPayloadV6Params_json {fork : Fork} (payload : ExecutionPayload fork)
   obtain ⟨hh, hb, hr⟩ := params_read_back hashes beaconRoot requests
   have np : (Json.executionPayloadV4Json payload accessList slot).isNull = false :=
     Base.Toolchain.Json.isNull_mkObj _
-  have nh : (listJson (dataJson ·.bytes.toList) hashes).isNull = false :=
+  have nh : (listJson Execution.Rpc.versionedHashJson hashes).isNull = false :=
     Base.Toolchain.Json.isNull_arr _
   have nr : (listJson (dataJson ·.data.toList) requests).isNull = false :=
     Base.Toolchain.Json.isNull_arr _
