@@ -4,6 +4,7 @@
 # A case listed here must fail, and every other runnable case must pass.
 # So a fixed disagreement fails until its entry is removed.
 # The archive cases of bindings/python/tests/consensus/test_fork_choice.py read this file too.
+# So do the gossip cases of test_gossip_validation.py and test_beacon_api_publish.py there.
 #
 # Each entry gives the suite, the case, the reason, and the source that supports the reason.
 # It also gives a class, the command that reproduces it, and its state upstream.
@@ -499,3 +500,45 @@ source = "execution-apis 166e334, src/engine/paris.md, engine_newPayloadV1, spec
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_forkchoice_behaviour.py::test_out_of_order_payload_delivery[fork_Shanghai-blockchain_test_engine_reorg]]"'
 upstream = "As of 2026-11-21, ethereum/execution-specs#4048 is open. It asks to add ACCEPTED to the outcomes that the case allows for the resent payload"
+
+# The envelope cases of v1.7.0-beta.4 that fill a payload with the most withdrawals.
+# The generator replaces the withdrawals of a valid payload, so they no longer match the state.
+# The later rule of consensus-specs rejects an envelope whose withdrawals differ from the expected ones.
+# EthLib follows that rule, so it rejects these envelopes.
+# A later release that keeps the expected withdrawals replaces these cases.
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/gloas/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals"
+reason = "The case replaces the withdrawals of the payload, and EthLib rejects an envelope whose withdrawals are not those the state expects"
+source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merged 2026-11-12), specs/gloas/p2p-interface.md, validate_execution_payload_envelope_gossip, adds the reject check on the withdrawals root, and changes this case in test_gossip_execution_payload_envelope.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
+upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals"
+reason = "The case replaces the withdrawals of the payload, and EthLib rejects an envelope whose withdrawals are not those the state expects"
+source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merged 2026-11-12), specs/gloas/p2p-interface.md, validate_execution_payload_envelope_gossip, adds the reject check on the withdrawals root, and changes this case in test_gossip_execution_payload_envelope.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
+upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/gloas/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals"
+reason = "The case replaces the withdrawals of the payload, and EthLib rejects an envelope whose withdrawals are not those the state expects"
+source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merged 2026-11-12), specs/gloas/p2p-interface.md, validate_execution_payload_envelope_gossip, adds the reject check on the withdrawals root, and changes this case in test_gossip_execution_payload_envelope.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
+upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals"
+reason = "The case replaces the withdrawals of the payload, and EthLib rejects an envelope whose withdrawals are not those the state expects"
+source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merged 2026-11-12), specs/gloas/p2p-interface.md, validate_execution_payload_envelope_gossip, adds the reject check on the withdrawals root, and changes this case in test_gossip_execution_payload_envelope.py. The pinned v1.7.0-beta.4 archive predates that commit"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
+upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"

@@ -10,7 +10,7 @@ From Gloas: gossip validation of the envelopes of payloads and of the votes on p
 
 A builder reveals the payload of a block in a signed envelope, after the block.
 
-The envelope must match the bid of that block, and its signer must have signed it.
+The envelope must match that block, its bid and the state after it, and be signed by its signer.
 
 A member of the payload timeliness committee votes on whether the payload of a block came on time.
 
@@ -83,9 +83,17 @@ def validateExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks
   -- REJECT unless the payload is for the slot of the block.
   (rejectUnless (block.slot == payload.slotNumber gloas)
     "block's slot does not match payload's slot number").andThenM fun _ =>
+  -- REJECT unless the envelope names the parent of the block.
+  (rejectUnless (envelope.parentBeaconBlockRoot == block.parentRoot)
+    "envelope's parent beacon block root does not match the block's").andThenM fun _ =>
   -- REJECT unless the envelope names the builder of the bid of the block.
   (rejectUnless (envelope.builderIndex == bid.builderIndex)
     "envelope's builder index does not match the bid's builder index").andThenM fun _ =>
+  -- REJECT unless the payload has the RANDAO mix and the gas limit of the bid.
+  (rejectUnless (payload.prevRandao == bid.prevRandao)
+    "payload's previous randao does not match the bid's previous randao").andThenM fun _ =>
+  (rejectUnless (payload.gasLimit == bid.gasLimit)
+    "payload's gas limit does not match the bid's gas limit").andThenM fun _ =>
   -- REJECT unless the payload has the block hash of the bid.
   (rejectUnless (payload.blockHash == bid.blockHash)
     "payload's block hash does not match the bid's block hash").andThenM fun _ => do
@@ -98,7 +106,22 @@ def validateExecutionPayloadEnvelope (config : Config) (checks : SignatureChecks
   -- REJECT unless the payload holds at most `MAX_WITHDRAWALS_PER_PAYLOAD` withdrawals.
   let withdrawals := payload.withdrawals (Nat.le_trans (by decide) gloas)
   (rejectUnless (withdrawals.data.size ≤ preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat)
-    "too many withdrawals").andThenM fun _ => do
+    "too many withdrawals").andThenM fun _ =>
+  -- REJECT unless the payload extends the latest block hash of the state after the block.
+  (rejectUnless (payload.parentHash == state.latestBlockHash gloas)
+    "payload's parent hash does not match the latest block hash").andThenM fun _ => do
+  -- REJECT unless the timestamp of the payload is the time of the slot of the block.
+  let time ← (computeTimeAtSlot config state.genesisTime block.slot).mapError .arith
+  (rejectUnless (payload.timestamp == time) "incorrect execution payload timestamp").andThenM
+    fun _ =>
+  -- REJECT when a transaction of the payload is empty.
+  (rejectUnless (!payload.hasEmptyTransaction) "payload contains an empty transaction").andThenM
+    fun _ => do
+  -- REJECT unless the withdrawals are those that the state expects, compared by their roots.
+  let withdrawalsRoot ← (SszType.hashTreeRoot withdrawals).mapError .ssz
+  let expectedRoot ← (SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas)).mapError .ssz
+  (rejectUnless (withdrawalsRoot == expectedRoot)
+    "payload's withdrawals do not match the expected withdrawals").andThenM fun _ => do
   -- REJECT unless the signer of the envelope signed it, in the state after the block.
   let valid ←
     (verifyExecutionPayloadEnvelopeSignature config checks state gloas signed).mapError .transition

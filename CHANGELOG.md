@@ -1069,6 +1069,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the gossip check of an envelope rejects a payload that disagrees with its block, its bid or the state after it, or holds an empty transaction ([#3513](https://github.com/ethereum/EthLib/issues/3513)).
+  - `Consensus.validateExecutionPayloadEnvelope` checks the parent beacon block root, the RANDAO mix and the gas limit, then the parent hash, the timestamp, the empty transactions and the withdrawals.
+  - `validateExecutionPayloadEnvelope_eq`, `validateExecutionPayloadEnvelope_ignored` and `validateExecutionPayloadEnvelope_eq_accept` take the time of the slot and the two roots of the withdrawals as hypotheses.
+    The accept theorem states the seven new conditions.
+  - The parity registry lists the four envelope cases of v1.7.0-beta.4 that fill a payload with other withdrawals, and the gossip tests expect them to fail.
+  Migration: pass the time of the slot and the two withdrawal roots to those three theorems.
 - In Lean, the decoders of mplex, multistream-select and yamux read the body of a frame with `Encoding.ByteReader.bytes` ([#4657](https://github.com/ethereum/EthLib/pull/4657)).
   `Libp2p.Mplex.decode`, `Libp2p.Multistream.decode` and `Libp2p.Yamux.decode` return the same frame, rest and error for every input.
   Their theorems keep their statements, and a proof that unfolds one of them now meets the shared reader.
