@@ -1,8 +1,10 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryCounting
+public import EthLib.Cryptography.Proofs.HashSig.Counted
 public import VCVio.OracleComp.QueryTracking.SubSpec
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+
+open EthLib.Cryptography.HashSig (counted counted_bind counted_forget counted_map simulate_withCost)
 
 @[expose] public section
 
@@ -13,7 +15,7 @@ set_option backward.isDefEq.respectTransparency false
 
 noncomputable def countHashQueries {α : Type} (computation : OracleComp OracleWorld α) :
     OracleComp OracleWorld (α × Nat) :=
-  QueryCounting.counted (fun input : OracleWorld.Domain => input matches .inr _) computation
+  counted (fun input : OracleWorld.Domain => input matches .inr _) computation
 
 def HashQueryBound {α : Type} (computation : OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) (q : Nat) : Prop :=
@@ -35,11 +37,11 @@ theorem countHashQueries_bind {α β : Type} (first : OracleComp OracleWorld α)
       let a ← countHashQueries first
       let b ← countHashQueries (next a.1)
       pure (b.1, a.2 + b.2)) :=
-  QueryCounting.counted_bind (fun input : OracleWorld.Domain => input matches .inr _) first next
+  counted_bind (fun input : OracleWorld.Domain => input matches .inr _) first next
 
 theorem countHashQueries_map {α β : Type} (first : OracleComp OracleWorld α) (f : α → β) :
     countHashQueries (f <$> first) = (fun result => (f result.1, result.2)) <$> countHashQueries first :=
-  QueryCounting.counted_map (fun input : OracleWorld.Domain => input matches .inr _) first f
+  counted_map (fun input : OracleWorld.Domain => input matches .inr _) first f
 
 theorem probComp_support_nonempty {α : Type} (computation : ProbComp α) :
     (support computation).Nonempty := by
@@ -113,7 +115,7 @@ theorem hashQueryBound_of_sampling_bind {α β : Type} (first : ProbComp α)
 
 theorem simulateQ_countHashQueries {α : Type} (computation : OracleComp OracleWorld α) :
     simulateQ romImpl (countHashQueries computation) = (simulateQ countedRomImpl computation).run := by
-  rw [countHashQueries, QueryCounting.simulate_withCost]
+  rw [countHashQueries, simulate_withCost]
   congr 2
   funext input
   -- Each side's cost is 0 on a uniform query and 1 on a hash query.
@@ -121,7 +123,7 @@ theorem simulateQ_countHashQueries {α : Type} (computation : OracleComp OracleW
 
 theorem countHashQueries_forget {α : Type} (computation : OracleComp OracleWorld α) :
     Prod.fst <$> countHashQueries computation = computation :=
-  QueryCounting.counted_forget _ computation
+  counted_forget _ computation
 
 theorem countHashQueries_run_forget {α : Type} (computation : OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) :

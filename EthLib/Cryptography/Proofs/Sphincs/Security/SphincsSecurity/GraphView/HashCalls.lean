@@ -219,7 +219,8 @@ open OracleComp OracleSpec
 namespace SphincsSecurity.Security.Prefix
 
 variable [Params]
-open Concrete QueryCap
+open Concrete
+open EthLib.Cryptography.HashSig (counted counted_pure counted_query_bind)
 
 attribute [local irreducible] encodingAttemptLimit digestAttemptLimit Seeded.finishSign
   Seeded.signAttempt
@@ -336,7 +337,7 @@ namespace SphincsSecurity.Security.Prefix
 variable [Params]
 open Concrete Completeness SeedModel
 open SeedCoupling
-open QueryCap
+open EthLib.Cryptography.HashSig (counted counted_pure counted_query_bind)
 
 set_option maxHeartbeats 40000
 attribute [local irreducible] digestAttemptLimit encodingAttemptLimit

@@ -1091,6 +1091,15 @@ Not yet released.
   - `funding_epoch_prefix`, `reservedReplay_epochPrefixDeposits_facts`, `epochPrefix_slashedSpan`, `reservedReplay_epochNext` and `reservedReplay_epochNext_lowered` take the structure in place of the six to eight stage hypotheses, and their conclusions read its fields.
   - `epochDepositTrace` (`Consensus/Proofs/DirectSafety/Apriori/Reserved/Epoch.lean`) is removed for `EpochPrefix.depositTrace`.
   Migration: build the structure from the stage equations, or take it from `funding_epoch_site`.
+
+- In Lean, the leanXMSS and leanSPHINCS proofs count their queries with one shared construction ([#3628](https://github.com/ethereum/EthLib/issues/3628)).
+  - `HashSig.counted` and its lemmas `counted_pure`, `counted_query_bind`, `counted_query`, `simulate_withCost`, `counted_forget`, `counted_bind` and `counted_map` are new, in `Cryptography/Proofs/HashSig/Counted.lean`.
+  - The two copies are removed: `XmssSecurity.QueryCounting` with its module `Xmss/Security/XmssSecurity/Proof/QueryCounting.lean`, and `SphincsSecurity.QueryCap` from `Sphincs/Security/SphincsSecurity/Base/Prelude.lean`.
+    They were the same definition, and each had all but one of these lemmas.
+  - Statements that named a removed copy now name the shared one, with the same meaning.
+  - `Sphincs.Unforgeability.Bridge.fst_map_counted` is removed, since it restated `HashSig.counted_forget`.
+  Migration: use the names of `EthLib.Cryptography.HashSig`, from `EthLib.Cryptography.Proofs.HashSig.Counted`.
+
 - In Lean, the decoders of mplex, multistream-select and yamux read the body of a frame with `Encoding.ByteReader.bytes` ([#4657](https://github.com/ethereum/EthLib/pull/4657)).
   `Libp2p.Mplex.decode`, `Libp2p.Multistream.decode` and `Libp2p.Yamux.decode` return the same frame, rest and error for every input.
   Their theorems keep their statements, and a proof that unfolds one of them now meets the shared reader.

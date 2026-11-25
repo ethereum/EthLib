@@ -30,6 +30,7 @@ public import Mathlib.RingTheory.Polynomial.Pochhammer
 public import Mathlib.Tactic.DeriveFintype
 public import Mathlib.Tactic.IrreducibleDef
 public import Mathlib.Topology.Algebra.InfiniteSum.NatInt
+public import EthLib.Cryptography.Proofs.HashSig.Counted
 public import VCVio.OracleComp.Constructions.SampleableType.Measure
 public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 public import VCVio.OracleComp.QueryTracking.QueryBound
@@ -44,84 +45,12 @@ public import VCVio.ProgramLogic.Relational.Quantitative
 /-!
 # Oracle and sampling lemmas
 
-This module counts the queries of a computation that satisfy a predicate.
-
-It splits a uniform table along an injection into two independent uniform tables.
+This module splits a uniform table along an injection into two independent uniform tables.
 
 It also shows that one cell of a uniform table can be sampled first, apart from the rest.
 -/
 
 @[expose] public section
-
-namespace SphincsSecurity.QueryCap
-
-open _root_.OracleComp OracleSpec
-
-variable {Index : Type} {spec : OracleSpec Index} {Result Next : Type}
-  (selected : Index → Prop) [DecidablePred selected]
-
-/-- The computation, paired with the number of its queries that satisfy the predicate. -/
-noncomputable def counted (computation : OracleComp spec Result) :
-    OracleComp spec (Result × Nat) :=
-  OracleComp.construct (fun result => pure (result, 0))
-    (fun input _ next => do
-      let answer ← liftM (spec.query input)
-      let result ← next answer
-      pure (result.1, (if selected input then 1 else 0) + result.2)) computation
-
-theorem counted_pure (result : Result) :
-    counted selected (pure result : OracleComp spec Result) = pure (result, 0) := rfl
-
-theorem counted_query_bind (input : spec.Domain)
-    (next : spec.Range input → OracleComp spec Result) :
-    counted selected (liftM (spec.query input) >>= next) = (do
-      let answer ← liftM (spec.query input)
-      let result ← counted selected (next answer)
-      pure (result.1, (if selected input then 1 else 0) + result.2)) := rfl
-
-theorem counted_query (input : spec.Domain) :
-    counted selected (liftM (spec.query input)) =
-      (fun answer => (answer, if selected input then 1 else 0)) <$>
-        (liftM (spec.query input) : OracleComp spec _) := by
-  change (do
-    let answer ← liftM (spec.query input)
-    pure (answer, (if selected input then 1 else 0) + 0)) = _
-  simp only [Nat.add_zero, pure_bind, bind_pure_comp]
-
-theorem simulate_withCost {m : Type → Type} [Monad m] [LawfulMonad m]
-    (impl : QueryImpl spec m) (computation : OracleComp spec α) :
-    simulateQ impl (counted selected computation) =
-      (simulateQ (impl.withAddCost (fun input => if selected input then 1 else (0 : Nat)))
-        computation).run := by
-  induction computation using OracleComp.inductionOn with
-  | pure value => rfl
-  | query_bind input next ih =>
-      simp only [counted_query_bind, simulateQ_bind, simulateQ_spec_query, simulateQ_pure, ih,
-        WriterT.run_bind]
-      simp [QueryImpl.withAddCost, QueryImpl.withCost,
-        WriterT.run_bind, WriterT.run_liftM, WriterT.run_tell, map_eq_bind_pure_comp, bind_assoc]
-      rfl
-
-theorem counted_bind (computation : OracleComp spec Result)
-    (next : Result → OracleComp spec Next) :
-    counted selected (computation >>= next) = (do
-      let first ← counted selected computation
-      let second ← counted selected (next first.1)
-      pure (second.1, first.2 + second.2)) := by
-  induction computation using OracleComp.inductionOn with
-  | pure result => simp only [pure_bind, counted_pure, zero_add, Prod.mk.eta, bind_pure]
-  | query_bind input continuation ih =>
-      simp only [bind_assoc, counted_query_bind, ih, pure_bind, Nat.add_assoc]
-
-theorem counted_map (computation : OracleComp spec Result) (f : Result → Next) :
-    counted selected (f <$> computation) =
-      (fun result => (f result.1, result.2)) <$> counted selected computation := by
-  rw [show f <$> computation = computation >>= fun result => pure (f result) from
-      (bind_pure_comp f computation).symm,
-    counted_bind]
-  simp only [counted_pure, Nat.add_zero, bind_pure_comp, map_pure]
-
-end SphincsSecurity.QueryCap
 
 namespace SphincsSecurity.UniformTableSplit
 
