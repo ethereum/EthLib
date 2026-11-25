@@ -1061,6 +1061,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean and Python, the column sidecars of a block with no blob are now none, in place of one sidecar with an empty column per column ([#4149](https://github.com/ethereum/EthLib/issues/4149)).
+  The check of a sidecar rejects one with no blob, so the empty sidecars were never valid.
+  This holds at Fulu and from Gloas, from a block or from one of its sidecars.
+  `getDataColumnSidecars_spec` (`Consensus/Proofs/DataAvailability/Column.lean`) now counts no sidecar when there is no row.
+  Migration: expect an empty list for a block with no blob.
+
 - In Lean, a builder signs its bid at the fork version that the configuration gives to the epoch of the bid's slot ([#3514](https://github.com/ethereum/EthLib/issues/3514)).
   - `Consensus.executionPayloadBidSigningRoot` (`Consensus/HonestBuilder.lean`) is new, and `getExecutionPayloadBidSignature` signs it from a state of any fork.
   - `Consensus.builderSigningRoot` (`Consensus/Transition/Payload.lean`) loses its optional epoch and always takes the current epoch of the state.

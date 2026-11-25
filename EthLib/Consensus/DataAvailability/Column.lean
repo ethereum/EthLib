@@ -302,9 +302,9 @@ def getDataColumnSidecars (preset : Preset) {fork : Fork}
   if beforeGloas : fork < .glamsterdam then
     let count := (kzgCommitments beforeGloas).data.size
     if cellsAndKzgProofs.length ≠ count then throw (.count count cellsAndKzgProofs.length)
+  -- With no rows there is no sidecar, since the check of a sidecar rejects one with no blob.
+  if cellsAndKzgProofs.isEmpty then return []
   -- Sidecar `i` serves column `i`, for each `i < NUMBER_OF_COLUMNS`.
-  --
-  -- With no rows, each of these sidecars has an empty column.
   (List.range preset.NUMBER_OF_COLUMNS.toNat).mapM fun column => do
     -- Cell `i` of every row, in the order of the blobs; a row without it is an error.
     let cells ← cellsAndKzgProofs.mapM fun (cells, _) =>
