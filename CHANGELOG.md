@@ -1140,6 +1140,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the genesis rule is defined at Phase 0 only ([#4623](https://github.com/ethereum/EthLib/issues/4623)).
+  - `initializeBeaconStateFromEth1` (`Consensus/Transition/Genesis.lean`) takes a last argument `phase0 : fork = .phase0` in place of `before : fork < .altair`.
+    Its value at Phase 0 is the same.
+  - `lt_altair_of_phase0` (`Consensus/Transition/Genesis.lean`) states that Phase 0 comes before Altair.
+  - `Genesis` (`Consensus/Proofs/Transition/Trace.lean`) holds the new proof, `Genesis.phase0` reads it, and `Genesis.before` still gives the fact that the fork comes before Altair.
+  - Each theorem about the genesis rule takes the new proof as an implicit argument.
+  - `Run.onSchedule_of_genesis` (`Consensus/Proofs/Transition/Schedule.lean`) drops its hypothesis that the genesis fork is Phase 0.
+  - In Python, `initialize_genesis` at Berlin or London now raises an error of code 0, `no genesis at <fork>`, in place of returning a state.
+  Migration: pass a proof of `fork = .phase0` to the genesis rule, and use `lt_altair_of_phase0` where the old proof was used.
+
 - In Lean, `Execution.State.storageRoot`, `stateEntries` and `stateRoot` are the new `storageRootM`, `stateEntriesM` and `stateRootM` with a plain hash, in the identity monad.
   The monadic forms let the random oracle experiments run these roots with a hash that queries the oracle.
   The roots are unchanged, but the three definitions unfold to the monadic forms.

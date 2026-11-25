@@ -111,13 +111,16 @@ def forkIndex? (env : Environment) (e : Expr) : Option Nat := do
   guard (info.induct == forkType)
   return info.cidx
 
-/-- A bound on a fork variable, `.x ≤ v`, `.x < v`, `v ≤ .x` or `v < .x`, as the forks it allows. -/
+/-- A bound on a fork variable, as the forks it allows.
+
+The bound is `.x ≤ v`, `.x < v`, `v ≤ .x`, `v < .x`, `v = .x` or `.x = v`. -/
 def bound? (env : Environment) (t : Expr) : Option (FVarId × (Nat → Bool)) :=
   match t.getAppFnArgs with
   | (``LE.le, #[ty, _, a, b]) => if ty.isConstOf forkType then le a b else none
   | (``LT.lt, #[ty, _, a, b]) => if ty.isConstOf forkType then lt a b else none
   | (``GE.ge, #[ty, _, a, b]) => if ty.isConstOf forkType then le b a else none
   | (``GT.gt, #[ty, _, a, b]) => if ty.isConstOf forkType then lt b a else none
+  | (``Eq, #[ty, a, b]) => if ty.isConstOf forkType then eq a b else none
   | _ => none
 where
   le (a b : Expr) : Option (FVarId × (Nat → Bool)) :=
@@ -129,6 +132,11 @@ where
     match a, b with
     | .fvar v, _ => (forkIndex? env b).map fun i => (v, (· < i))
     | _, .fvar v => (forkIndex? env a).map fun i => (v, (i < ·))
+    | _, _ => none
+  eq (a b : Expr) : Option (FVarId × (Nat → Bool)) :=
+    match a, b with
+    | .fvar v, _ => (forkIndex? env b).map fun i => (v, (· == i))
+    | _, .fvar v => (forkIndex? env a).map fun i => (v, (· == i))
     | _, _ => none
 
 /-- The beacon forks at which a statement holds, as positions in the fork type.

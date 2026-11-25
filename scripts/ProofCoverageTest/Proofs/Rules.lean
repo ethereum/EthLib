@@ -27,8 +27,9 @@ theorem sync_eq {fork : Fork} (altair : fork ≥ .altair) (n : Nat) : sync fork 
 /-- A constructor in place of the fork: Glamsterdam only. -/
 theorem payload_glamsterdam : payload .glamsterdam (Nat.le_refl _) = 0 := rfl
 
-/-- A bound at Phase 0, at which the rule holds. -/
-theorem early_eq {fork : Fork} (before : fork < .altair) : early fork before = 0 := rfl
+/-- A bound below Altair, so Phase 0, at which the rule holds. -/
+theorem early_eq {fork : Fork} (_before : fork < .altair) (phase0 : fork = .phase0) :
+    early fork phase0 = 0 := rfl
 
 /-- Another hypothesis on the fork, so it touches nothing. -/
 theorem sync_odd {fork : Fork} (altair : .altair ≤ fork) (_h : fork ≠ .bellatrix) :

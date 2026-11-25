@@ -588,7 +588,7 @@ A pair is characterized when `coverage/characterizes.txt` claims that such a the
 The report reads statements only, never proofs, so a proof that unfolds a rule does not touch it.
 
 The forks at which a rule or a theorem holds come from its type.
-A binder such as `.altair ≤ fork` or `fork < .pectra` keeps the forks that the bound allows.
+A binder such as `.altair ≤ fork`, `fork < .pectra` or `fork = .phase0` keeps the forks that the bound allows.
 A type with no fork variable holds at the forks that it names, such as `.glamsterdam`, or at every fork if it names none.
 Any other hypothesis on the fork alone, such as `fork ≠ .altair`, leaves the forks unread.
 Such a declaration counts at no fork, and `lake exe proof-coverage` lists it.

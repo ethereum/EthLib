@@ -4858,14 +4858,14 @@ theorem minimum_cap
 private theorem genesis_assigned_queues {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     AssignedPartials g.state ∧ AssignedTargets g.state ∧ AssignedProposers g.state := by
-  obtain ⟨_, _, _, before, initialized⟩ := genesis
+  have before := genesis.before
   refine ⟨?_, ?_, ?_⟩ <;> intro fork
   all_goals exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
 
 private theorem genesis_reached_queues {g : ForkedBeaconState preset} (reached : Prop)
     (genesis : Genesis (config := config) (checks := checks) g) :
     PartialsAt reached g.state ∧ TargetsAt reached g.state := by
-  obtain ⟨_, _, _, before, initialized⟩ := genesis
+  have before := genesis.before
   refine ⟨?_, ?_⟩ <;> intro fork
   all_goals exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
 
