@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Engine.GetBlobs
 public import EthLib.Engine.Proofs.Json
 import EthLib.Base.Proofs.Toolchain.JsonBasic
+import EthLib.Execution.Proofs.Rpc.Json
 
 /-!
 # Proofs: `engine_getBlobs`, versions 1 to 4
@@ -44,7 +45,7 @@ theorem selectedCells_sorted (bits : CellBitarray) :
 /-! ## The request limit -/
 
 /-- A request of at most 128 hashes is never too large. -/
-theorem checkRequestSize_eq_ok_of_length_le (pool : BlobPool) (hashes : List Bytes32)
+theorem checkRequestSize_eq_ok_of_length_le (pool : BlobPool) (hashes : List VersionedHash)
     (h : hashes.length ≤ MIN_BLOBS_REQUEST_LIMIT) :
     checkRequestSize pool.maxRequest hashes.length = .ok () :=
   (checkRequestSize_eq_ok_iff _ _).2 (Nat.le_trans h pool.le_maxRequest)
@@ -121,12 +122,12 @@ end PooledBlob
 /-! ## Version 1 -/
 
 /-- From Fusaka, version 1 is an unsupported fork. -/
-theorem getBlobsV1_of_fusaka (pool : BlobPool) {fork : Fork} (hashes : List Bytes32)
+theorem getBlobsV1_of_fusaka (pool : BlobPool) {fork : Fork} (hashes : List VersionedHash)
     (h : .fusaka ≤ fork) : getBlobsV1 pool fork hashes = .error (.unsupportedFork (some fork)) := by
   simp [getBlobsV1, h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- Before Fusaka, version 1 answers each hash in turn, or fails on a too large request. -/
-theorem getBlobsV1_of_lt_fusaka (pool : BlobPool) {fork : Fork} (hashes : List Bytes32)
+theorem getBlobsV1_of_lt_fusaka (pool : BlobPool) {fork : Fork} (hashes : List VersionedHash)
     (h : fork < .fusaka) :
     getBlobsV1 pool fork hashes = (checkRequestSize pool.maxRequest hashes.length).map fun _ =>
       hashes.map fun h => if pool.serving then (pool.lookup h).bind PooledBlob.toV1 else none := by
@@ -135,7 +136,7 @@ theorem getBlobsV1_of_lt_fusaka (pool : BlobPool) {fork : Fork} (hashes : List B
     simp [getBlobsV1, this, hc, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-- An answer of version 1 has one entry per requested hash. -/
-theorem getBlobsV1_length {pool : BlobPool} {fork : Fork} {hashes : List Bytes32}
+theorem getBlobsV1_length {pool : BlobPool} {fork : Fork} {hashes : List VersionedHash}
     {r : List (Option BlobAndProofV1)} (h : getBlobsV1 pool fork hashes = .ok r) :
     r.length = hashes.length := by
   by_cases hf : .fusaka ≤ fork
@@ -145,7 +146,7 @@ theorem getBlobsV1_length {pool : BlobPool} {fork : Fork} {hashes : List Bytes32
     subst h; simp
 
 /-- Each entry of version 1 is the blob and blob proof that the pool holds for its hash. -/
-theorem getBlobsV1_getElem? {pool : BlobPool} {fork : Fork} {hashes : List Bytes32}
+theorem getBlobsV1_getElem? {pool : BlobPool} {fork : Fork} {hashes : List VersionedHash}
     {r : List (Option BlobAndProofV1)} (h : getBlobsV1 pool fork hashes = .ok r) (i : Nat) :
     r[i]? = hashes[i]?.map fun h =>
       if pool.serving then (pool.lookup h).bind PooledBlob.toV1 else none := by
@@ -156,7 +157,7 @@ theorem getBlobsV1_getElem? {pool : BlobPool} {fork : Fork} {hashes : List Bytes
     subst h; simp
 
 /-- An entry of version 1 that is not `null` holds the pool's blob and blob proof for its hash. -/
-theorem getBlobsV1_lookup_of_getElem? {pool : BlobPool} {fork : Fork} {hashes : List Bytes32}
+theorem getBlobsV1_lookup_of_getElem? {pool : BlobPool} {fork : Fork} {hashes : List VersionedHash}
     {r : List (Option BlobAndProofV1)} (h : getBlobsV1 pool fork hashes = .ok r) {i : Nat}
     {x : BlobAndProofV1} (hx : r[i]? = some (some x)) :
     ∃ hash p, hashes[i]? = some hash ∧ pool.lookup hash = some p ∧
@@ -178,7 +179,7 @@ theorem getBlobsV1_lookup_of_getElem? {pool : BlobPool} {fork : Fork} {hashes : 
 
 /-- After the size check, version 2 maps each hash to its blob and cell proofs, if the pool serves.
 -/
-theorem getBlobsV2_eq (pool : BlobPool) (hashes : List Bytes32) :
+theorem getBlobsV2_eq (pool : BlobPool) (hashes : List VersionedHash) :
     getBlobsV2 pool hashes = (checkRequestSize pool.maxRequest hashes.length).map fun _ =>
       if pool.serving then hashes.mapM fun h => (pool.lookup h).bind PooledBlob.toV2
       else none := by
@@ -187,7 +188,7 @@ theorem getBlobsV2_eq (pool : BlobPool) (hashes : List Bytes32) :
       simp [getBlobsV2, hc, hs, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-- The list answer of version 2 is the pool's blob and cell proofs for each hash in turn. -/
-theorem getBlobsV2_eq_some {pool : BlobPool} {hashes : List Bytes32}
+theorem getBlobsV2_eq_some {pool : BlobPool} {hashes : List VersionedHash}
     {l : List BlobAndProofV2} (h : getBlobsV2 pool hashes = .ok (some l)) :
     pool.serving = true ∧ hashes.mapM (fun h => (pool.lookup h).bind PooledBlob.toV2) = some l := by
   rw [getBlobsV2_eq] at h
@@ -199,13 +200,13 @@ theorem getBlobsV2_eq_some {pool : BlobPool} {hashes : List Bytes32}
     · cases h
 
 /-- A list answer of version 2 has one entry per requested hash. -/
-theorem getBlobsV2_length {pool : BlobPool} {hashes : List Bytes32}
+theorem getBlobsV2_length {pool : BlobPool} {hashes : List VersionedHash}
     {l : List BlobAndProofV2} (h : getBlobsV2 pool hashes = .ok (some l)) :
     l.length = hashes.length :=
   mapM_some_length (getBlobsV2_eq_some h).2
 
 /-- Each entry of a list answer of version 2 is the pool's blob and cell proofs for its hash. -/
-theorem getBlobsV2_getElem? {pool : BlobPool} {hashes : List Bytes32}
+theorem getBlobsV2_getElem? {pool : BlobPool} {hashes : List VersionedHash}
     {l : List BlobAndProofV2} (h : getBlobsV2 pool hashes = .ok (some l)) (i : Nat) :
     l[i]? = (hashes[i]?).bind fun h => (pool.lookup h).bind PooledBlob.toV2 :=
   mapM_some_getElem? (getBlobsV2_eq_some h).2 i
@@ -213,7 +214,7 @@ theorem getBlobsV2_getElem? {pool : BlobPool} {hashes : List Bytes32}
 /-- Version 2 answers a list exactly when the pool serves and holds each blob with all cell proofs.
 
 This holds for every request that is not too large. -/
-theorem getBlobsV2_isSome_iff {pool : BlobPool} {hashes : List Bytes32}
+theorem getBlobsV2_isSome_iff {pool : BlobPool} {hashes : List VersionedHash}
     {r : Option (List BlobAndProofV2)} (h : getBlobsV2 pool hashes = .ok r) :
     r.isSome ↔ pool.serving = true ∧
       ∀ hash ∈ hashes, ∃ p, pool.lookup hash = some p ∧ p.toV2.isSome := by
@@ -231,7 +232,7 @@ theorem getBlobsV2_isSome_iff {pool : BlobPool} {hashes : List Bytes32}
 /-! ## Version 3 -/
 
 /-- Version 3 answers each hash in turn when the pool serves, after the size check. -/
-theorem getBlobsV3_eq (pool : BlobPool) (hashes : List Bytes32) :
+theorem getBlobsV3_eq (pool : BlobPool) (hashes : List VersionedHash) :
     getBlobsV3 pool hashes = (checkRequestSize pool.maxRequest hashes.length).map fun _ =>
       if pool.serving then some (hashes.map fun h => (pool.lookup h).bind PooledBlob.toV2)
       else none := by
@@ -240,7 +241,7 @@ theorem getBlobsV3_eq (pool : BlobPool) (hashes : List Bytes32) :
       simp [getBlobsV3, hc, hs, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-- A list answer of version 3 comes exactly when the pool serves, for a request not too large. -/
-theorem getBlobsV3_isSome_iff {pool : BlobPool} {hashes : List Bytes32}
+theorem getBlobsV3_isSome_iff {pool : BlobPool} {hashes : List VersionedHash}
     {r : Option (List (Option BlobAndProofV2))} (h : getBlobsV3 pool hashes = .ok r) :
     r.isSome ↔ pool.serving = true := by
   rw [getBlobsV3_eq] at h
@@ -251,7 +252,7 @@ theorem getBlobsV3_isSome_iff {pool : BlobPool} {hashes : List Bytes32}
     cases hs : pool.serving <;> simp
 
 /-- The list answer of version 3 is the pool's blob and cell proofs for each hash, or `null`. -/
-theorem getBlobsV3_eq_some {pool : BlobPool} {hashes : List Bytes32}
+theorem getBlobsV3_eq_some {pool : BlobPool} {hashes : List VersionedHash}
     {l : List (Option BlobAndProofV2)} (h : getBlobsV3 pool hashes = .ok (some l)) :
     l = hashes.map fun h => (pool.lookup h).bind PooledBlob.toV2 := by
   rw [getBlobsV3_eq] at h
@@ -263,7 +264,7 @@ theorem getBlobsV3_eq_some {pool : BlobPool} {hashes : List Bytes32}
     · cases h
 
 /-- A list answer of version 3 has one entry per requested hash. -/
-theorem getBlobsV3_length {pool : BlobPool} {hashes : List Bytes32}
+theorem getBlobsV3_length {pool : BlobPool} {hashes : List VersionedHash}
     {l : List (Option BlobAndProofV2)} (h : getBlobsV3 pool hashes = .ok (some l)) :
     l.length = hashes.length := by
   simp [getBlobsV3_eq_some h]
@@ -271,7 +272,7 @@ theorem getBlobsV3_length {pool : BlobPool} {hashes : List Bytes32}
 /-! ## Version 4 -/
 
 /-- Version 4 answers each hash in turn when the pool serves, after the size check. -/
-theorem getBlobsV4_eq (pool : BlobPool) (hashes : List Bytes32) (bits : CellBitarray) :
+theorem getBlobsV4_eq (pool : BlobPool) (hashes : List VersionedHash) (bits : CellBitarray) :
     getBlobsV4 pool hashes bits = (checkRequestSize pool.maxRequest hashes.length).map fun _ =>
       if pool.serving then
         some (hashes.map fun h => (pool.lookup h).bind (·.toV4 (selectedCells bits)))
@@ -281,7 +282,7 @@ theorem getBlobsV4_eq (pool : BlobPool) (hashes : List Bytes32) (bits : CellBita
       simp [getBlobsV4, hc, hs, bind, Except.bind, pure, Except.pure, Except.map]
 
 /-- A list answer of version 4 comes exactly when the pool serves, for a request not too large. -/
-theorem getBlobsV4_isSome_iff {pool : BlobPool} {hashes : List Bytes32} {bits : CellBitarray}
+theorem getBlobsV4_isSome_iff {pool : BlobPool} {hashes : List VersionedHash} {bits : CellBitarray}
     {r : Option (List (Option BlobCellsAndProofsV1))}
     (h : getBlobsV4 pool hashes bits = .ok r) : r.isSome ↔ pool.serving = true := by
   rw [getBlobsV4_eq] at h
@@ -294,7 +295,7 @@ theorem getBlobsV4_isSome_iff {pool : BlobPool} {hashes : List Bytes32} {bits : 
 /-- The list answer of version 4 is, for each hash, the selected cells of what the pool holds.
 
 An entry is `null` when the pool holds nothing of that blob. -/
-theorem getBlobsV4_eq_some {pool : BlobPool} {hashes : List Bytes32} {bits : CellBitarray}
+theorem getBlobsV4_eq_some {pool : BlobPool} {hashes : List VersionedHash} {bits : CellBitarray}
     {l : List (Option BlobCellsAndProofsV1)}
     (h : getBlobsV4 pool hashes bits = .ok (some l)) :
     l = hashes.map fun h => (pool.lookup h).bind (·.toV4 (selectedCells bits)) := by
@@ -307,7 +308,7 @@ theorem getBlobsV4_eq_some {pool : BlobPool} {hashes : List Bytes32} {bits : Cel
     · cases h
 
 /-- A list answer of version 4 has one entry per requested hash. -/
-theorem getBlobsV4_length {pool : BlobPool} {hashes : List Bytes32} {bits : CellBitarray}
+theorem getBlobsV4_length {pool : BlobPool} {hashes : List VersionedHash} {bits : CellBitarray}
     {l : List (Option BlobCellsAndProofsV1)}
     (h : getBlobsV4 pool hashes bits = .ok (some l)) : l.length = hashes.length := by
   simp [getBlobsV4_eq_some h]
@@ -321,13 +322,13 @@ Before version 4 it has no other item.
 From version 4 its second and last item is the bitarray, `0x` and 32 lowercase hex digits.
 
 The bitarray is returned exactly from version 4. -/
-theorem getBlobsParams_eq_ok_iff {version : Nat} {params : Lean.Json} {hashes : List Bytes32}
+theorem getBlobsParams_eq_ok_iff {version : Nat} {params : Lean.Json} {hashes : List VersionedHash}
     {bits : Option CellBitarray} :
     getBlobsParams version params = .ok (hashes, bits) ↔
       version < 4 ∧ bits = none ∧
-          params = .arr #[.arr (hashes.map fun h => .str (hexString h.toList)).toArray] ∨
+          params = .arr #[.arr (hashes.map fun h => .str (hexString h.bytes.toList)).toArray] ∨
         4 ≤ version ∧ ∃ b, bits = some b ∧
-          params = .arr #[.arr (hashes.map fun h => .str (hexString h.toList)).toArray,
+          params = .arr #[.arr (hashes.map fun h => .str (hexString h.bytes.toList)).toArray,
             .str (hexString b.toList)] := by
   have count : decide (getBlobsParamCount version = 2) = decide (4 ≤ version) := by
     unfold getBlobsParamCount
@@ -343,10 +344,10 @@ theorem getBlobsParams_eq_ok_iff {version : Nat} {params : Lean.Json} {hashes : 
       | [_] => simp [bind, Except.bind, pure, Except.pure]
       | [h, b] =>
         simp only [Lean.Json.arr.injEq, Array.mk.injEq, List.cons.injEq, and_true,
-          ← Serialization.JsonRpc.array_fixed_false_eq_ok_iff (what := "hashes")
+          ← Execution.Rpc.array_versionedHash_eq_ok_iff (what := "hashes")
             (w := "versioned hash")]
         cases hh : Serialization.JsonRpc.array "hashes"
-          (Serialization.JsonRpc.fixed "versioned hash" 32 · false) h <;>
+          (Execution.Rpc.versionedHash "versioned hash") h <;>
           cases hb : Serialization.JsonRpc.fixed "indices_bitarray" CELL_BITARRAY_BYTES b false <;>
           cases bits <;>
           simp [hh, hb, bind, Except.bind, pure, Except.pure,
@@ -357,10 +358,10 @@ theorem getBlobsParams_eq_ok_iff {version : Nat} {params : Lean.Json} {hashes : 
       | [] => simp [bind, Except.bind, pure, Except.pure]
       | [h] =>
         simp only [Lean.Json.arr.injEq, Array.mk.injEq, List.cons.injEq, and_true,
-          ← Serialization.JsonRpc.array_fixed_false_eq_ok_iff (what := "hashes")
+          ← Execution.Rpc.array_versionedHash_eq_ok_iff (what := "hashes")
             (w := "versioned hash")]
         cases hh : Serialization.JsonRpc.array "hashes"
-          (Serialization.JsonRpc.fixed "versioned hash" 32 · false) h <;> cases bits <;>
+          (Execution.Rpc.versionedHash "versioned hash") h <;> cases bits <;>
           simp [hh, bind, Except.bind, pure, Except.pure]
       | _ :: _ :: _ => simp [bind, Except.bind, pure, Except.pure]
   | _ => simp [getBlobsParams, Serialization.JsonRpc.paramsArray, bind, Except.bind]
@@ -368,13 +369,13 @@ theorem getBlobsParams_eq_ok_iff {version : Nat} {params : Lean.Json} {hashes : 
 /-- The decoder of the parameters reads back the hashes and the bitarray that the writer writes.
 
 A bitarray is given exactly from version 4. -/
-theorem getBlobsParams_json {version : Nat} (hashes : List Bytes32)
+theorem getBlobsParams_json {version : Nat} (hashes : List VersionedHash)
     (bits : Option CellBitarray) (four : bits.isSome ↔ 4 ≤ version) :
     getBlobsParams version (getBlobsParamsJson hashes bits) = .ok (hashes, bits) := by
   apply getBlobsParams_eq_ok_iff.mpr
   cases bits <;> simp at four <;>
     simp [four, getBlobsParamsJson, Serialization.JsonRpc.listJson,
-      Serialization.JsonRpc.dataJson]
+      Serialization.JsonRpc.dataJson, Execution.Rpc.versionedHashJson]
 
 /-! ## The answer as JSON -/
 

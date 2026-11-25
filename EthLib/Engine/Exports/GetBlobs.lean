@@ -34,8 +34,8 @@ open EthLib.Cryptography.Kzg.Constants
 abbrev PoolEntry :=
   Bytes32 × Option Blob × Option KZGProof × Option (List (Option (Cell × KZGProof)))
 
-/-- The pooled blob of an entry, whose list of cells must have one item per cell. -/
-def pooledOf (entry : PoolEntry) : Result (Bytes32 × PooledBlob) := do
+/-- The hash and the pooled blob of an entry, whose list of cells must have one item per cell. -/
+def pooledOf (entry : PoolEntry) : Result (VersionedHash × PooledBlob) := do
   -- An entry holds the hash, the blob or `None`, the blob proof or `None`, and the cells or `None`.
   let (hash, blob, proof, cells) := entry
   let cells ← match cells with
@@ -44,7 +44,8 @@ def pooledOf (entry : PoolEntry) : Result (Bytes32 × PooledBlob) := do
     -- The cells are a list of 128 items, each a cell and its proof, or `None`.
     | some cells => toResult none (exactArray CELLS_PER_EXT_BLOB cells.toArray fun count =>
       UnreadArgument.mk s!"pool: {count} cells, not {CELLS_PER_EXT_BLOB}")
-  return (hash, ⟨blob, proof, cells⟩)
+  -- The 32 bytes of the hash are the versioned hash under which the pool holds the blob.
+  return (⟨hash⟩, ⟨blob, proof, cells⟩)
 
 /-- The version of a method name `engine_getBlobsV1` to `engine_getBlobsV4`. -/
 def getBlobsVersion (method : String) : Option Nat := methodVersion "getBlobs" method
@@ -57,7 +58,7 @@ def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Res
   -- A malformed pool has code 0.
   let entries ← entries.mapM pooledOf
   -- A pool holds each blob once, so two entries with one hash are malformed input.
-  unless (Base.firstRepeated (entries.map (·.1))).isNone do
+  unless (Base.firstRepeated (entries.map (·.1.bytes))).isNone do
     rejectArgument none "pool: two entries with one versioned hash"
   -- The method is specified up to Glamsterdam, the fork of its version 4.
   --
