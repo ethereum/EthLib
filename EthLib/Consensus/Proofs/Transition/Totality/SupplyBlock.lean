@@ -2291,22 +2291,32 @@ theorem processBlock_supply_le_cap_of_requestsStart {engine : ExecutionEngine pr
   unfold blockRewardCap
   omega
 
-/-- A bound on the rewards that one block pays, for a sum of effective balances within a budget.
-
-It takes the base reward of one increment at a total active balance of one increment, its largest.
-
-It puts the budget in place of the total active balance and of the sum of the effective balances.
-
-The factors 2, 54 and 448 are those of the cap on the rewards of a block. -/
-def blockRewardBound (preset : Preset) (budget : Nat) : Nat :=
-  let perIncrement := preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
+/-- The base reward of one increment at a total active balance of one increment, its largest. -/
+def Preset.largestPerIncrement (preset : Preset) : Nat :=
+  preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat.sqrt
-  let participant := budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement *
-    SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat / preset.SLOTS_PER_EPOCH.toNat /
-      preset.SYNC_COMMITTEE_SIZE.toNat
-  2 * (budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * perIncrement * 54 / 448 +
-    preset.SYNC_COMMITTEE_SIZE.toNat * (participant + participant * PROPOSER_WEIGHT.toNat /
-      (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))
+
+/-- A bound on the weight of the flags, for a sum of effective balances within a budget.
+
+It takes the largest base reward of one increment.
+
+The factor 2 counts the previous and the current epoch.
+
+The factor 54 is the sum of the weights of the three flags. -/
+def flagWeightBound (preset : Preset) (budget : Nat) : Nat :=
+  2 * (budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * preset.largestPerIncrement * 54
+
+/-- A bound on what the sync aggregate of one block pays, for effective balances within a budget.
+
+It puts the budget in place of the total active balance.
+
+It takes the largest base reward of one increment. -/
+def syncRewardBound (preset : Preset) (budget : Nat) : Nat :=
+  let participant := budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+    preset.largestPerIncrement * SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat /
+      preset.SLOTS_PER_EPOCH.toNat / preset.SYNC_COMMITTEE_SIZE.toNat
+  preset.SYNC_COMMITTEE_SIZE.toNat * (participant + participant * PROPOSER_WEIGHT.toNat /
+    (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))
 
 /-- A base reward of one increment at a total of at least one increment is at most its largest.
 
@@ -2314,8 +2324,7 @@ That largest value is the one at a total of exactly one increment. -/
 private theorem baseRewardPerIncrement_bound {total per : Gwei}
     (computed : getBaseRewardPerIncrement preset total = .ok per)
     (low : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ total.toNat) :
-    per.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat /
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat.sqrt := by
+    per.toNat ≤ preset.largestPerIncrement := by
   unfold getBaseRewardPerIncrement liftArith at computed
   cases product : Uint64.mulChecked preset.EFFECTIVE_BALANCE_INCREMENT
       preset.BASE_REWARD_FACTOR with
@@ -2328,21 +2337,48 @@ private theorem baseRewardPerIncrement_bound {total per : Gwei}
   subst computed
   obtain ⟨-, productNat⟩ := Uint64.mulChecked_ok_iff.mp product
   obtain ⟨-, perNat⟩ := Uint64.divChecked_ok_iff.mp divided
-  rw [perNat, productNat, Uint64.toNat_integerSquareroot]
+  rw [perNat, productNat, Uint64.toNat_integerSquareroot, Preset.largestPerIncrement]
   by_cases zero : preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0
   · simp [zero]
   · exact Nat.div_le_div_left (Nat.sqrt_le_sqrt low) (Nat.sqrt_pos.mpr (Nat.pos_of_ne_zero zero))
 
-/-- The reward bound of a block covers its cap, for a sum of effective balances within the budget.
+/-- The base reward of one increment that a block reads is at most its largest value. -/
+theorem blockPerIncrement_le (state : BeaconState preset fork) :
+    blockPerIncrement preset state ≤ preset.largestPerIncrement := by
+  unfold blockPerIncrement
+  split
+  · cases totalState : getTotalActiveBalance state with
+    | error => simp
+    | ok total =>
+      cases perState : getBaseRewardPerIncrement preset total with
+      | error => simp only [perState]; exact Nat.zero_le _
+      | ok per =>
+        simpa [perState] using baseRewardPerIncrement_bound perState
+          (getTotalActiveBalance_bounds totalState).1
+  · exact Nat.zero_le _
+
+/-- The weight of the flags is within its bound, for a sum of effective balances within the budget.
+
+It reads the base reward of one increment of the state. -/
+theorem flagRewardWeight_le_flagWeightBound {state : BeaconState preset fork} {budget : Nat}
+    (budgeted : effectiveBalanceSum state ≤ budget) :
+    flagRewardWeight preset (blockPerIncrement preset state) state ≤
+      flagWeightBound preset budget := by
+  refine (flagRewardWeight_le _ state).trans ?_
+  unfold flagWeightBound
+  exact Nat.mul_le_mul_right 54 (Nat.mul_le_mul
+    (Nat.mul_le_mul_left 2 (Nat.div_le_div_right budgeted)) (blockPerIncrement_le state))
+
+/-- The sync bound covers the cap of the sync aggregate, for effective balances within the budget.
 
 The budget must cover one increment. -/
-theorem blockRewardCap_le {state : BeaconState preset fork} {budget : Nat}
+theorem syncRewardCap_le {state : BeaconState preset fork} {budget : Nat}
     (budgeted : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) ≤ budget) :
-    blockRewardCap preset state ≤ blockRewardBound preset budget := by
+    syncRewardCap preset state ≤ syncRewardBound preset budget := by
   have sumLe : effectiveBalanceSum state ≤ budget := le_trans (le_max_right _ _) budgeted
   have incLe : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ budget :=
     le_trans (le_max_left _ _) budgeted
-  unfold blockRewardCap blockRewardBound blockPerIncrement syncRewardCap
+  unfold syncRewardCap syncRewardBound
   by_cases altair : .altair ≤ fork
   · simp only [altair, ↓reduceIte]
     cases totalState : getTotalActiveBalance state with
@@ -2351,11 +2387,29 @@ theorem blockRewardCap_le {state : BeaconState preset fork} {budget : Nat}
       obtain ⟨low, high⟩ := getTotalActiveBalance_bounds totalState
       have totalLe : total.toNat ≤ budget := le_trans high (max_le incLe sumLe)
       cases perState : getBaseRewardPerIncrement preset total with
-      | error => simp only [perState]; omega
+      | error => simp only [perState]; exact Nat.zero_le _
       | ok per =>
         have perLe := baseRewardPerIncrement_bound perState low
         simp only [perState]
         gcongr
   · simp [altair]
+
+/-- The cap on the rewards of a block is within the bounds on the flags and on the sync aggregate.
+
+The flags count over 448, the proposer share.
+
+The sum of the effective balances must be within the budget, which must cover one increment. -/
+theorem blockRewardCap_le {state : BeaconState preset fork} {budget : Nat}
+    (budgeted : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) ≤ budget) :
+    blockRewardCap preset state ≤
+      flagWeightBound preset budget / 448 + syncRewardBound preset budget := by
+  have sumLe : effectiveBalanceSum state ≤ budget := le_trans (le_max_right _ _) budgeted
+  have flags : 2 * (effectiveBalanceSum state / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
+      blockPerIncrement preset state * 54 ≤ flagWeightBound preset budget := by
+    unfold flagWeightBound
+    exact Nat.mul_le_mul_right 54 (Nat.mul_le_mul
+      (Nat.mul_le_mul_left 2 (Nat.div_le_div_right sumLe)) (blockPerIncrement_le state))
+  unfold blockRewardCap
+  exact Nat.add_le_add (Nat.div_le_div_right flags) (syncRewardCap_le budgeted)
 
 end EthLib.Consensus
