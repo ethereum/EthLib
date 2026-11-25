@@ -37,14 +37,14 @@ theorem mem_support_counted_iff {α : Type} (oa : OracleComp OracleWorld α)
     (hcost : ∀ input, cost input = if isHashCall input then 1 else 0) (result : α × Nat) :
     result ∈ support ((simulateQ (HashSpec.romImpl.withAddCost cost) oa).run.run' ∅) ↔
       ∃ f : QueryImpl HashSpec Id, result ∈ support
-        (simulateQ (unifFwdAnswerImpl f) (SphincsSecurity.QueryCap.counted isHashCall oa)) := by
+        (simulateQ (unifFwdAnswerImpl f) (HashSig.counted isHashCall oa)) := by
   rw [show cost = fun input ↦ if isHashCall input then 1 else 0 from funext hcost,
-    ← SphincsSecurity.QueryCap.simulate_withCost]
+    ← HashSig.simulate_withCost]
   have hrun : result ∈ support
-      ((simulateQ HashSpec.romImpl (SphincsSecurity.QueryCap.counted isHashCall oa)).run' ∅) ↔
+      ((simulateQ HashSpec.romImpl (HashSig.counted isHashCall oa)).run' ∅) ↔
         ∃ cache, (result, cache) ∈ support
           ((simulateQ HashSpec.romImpl
-            (SphincsSecurity.QueryCap.counted isHashCall oa)).run ∅) := by
+            (HashSig.counted isHashCall oa)).run ∅) := by
     rw [StateT.run'_eq, support_map]
     exact ⟨fun ⟨⟨_, cache⟩, h, hx⟩ ↦ ⟨cache, hx ▸ h⟩, fun ⟨cache, h⟩ ↦ ⟨_, h, rfl⟩⟩
   refine hrun.trans ((exists_agreesWithFn_mem_support_simulateQ_unifFwdAnswerImpl_iff _ ∅
@@ -62,10 +62,10 @@ theorem hashCalls_map {β γ : Type} (oc : OracleComp HashSpec β) (g : β → �
 
 Coins stay uniform. -/
 noncomputable def countedRun {α : Type} (oa : OracleComp OracleWorld α) : ProbComp (α × Nat) :=
-  simulateQ (unifFwdAnswerImpl f) (SphincsSecurity.QueryCap.counted isHashCall oa)
+  simulateQ (unifFwdAnswerImpl f) (HashSig.counted isHashCall oa)
 
 theorem countedRun_pure {α : Type} (x : α) : countedRun f (pure x) = pure (x, 0) := by
-  simp only [countedRun, SphincsSecurity.QueryCap.counted_pure, simulateQ_pure]
+  simp only [countedRun, HashSig.counted_pure, simulateQ_pure]
 
 theorem countedRun_bind {α β : Type} (oa : OracleComp OracleWorld α)
     (k : α → OracleComp OracleWorld β) :
@@ -73,11 +73,11 @@ theorem countedRun_bind {α β : Type} (oa : OracleComp OracleWorld α)
       let first ← countedRun f oa
       let second ← countedRun f (k first.1)
       pure (second.1, first.2 + second.2)) := by
-  simp only [countedRun, SphincsSecurity.QueryCap.counted_bind, simulateQ_bind, simulateQ_pure]
+  simp only [countedRun, HashSig.counted_bind, simulateQ_bind, simulateQ_pure]
 
 theorem countedRun_map {α β : Type} (oa : OracleComp OracleWorld α) (g : α → β) :
     countedRun f (g <$> oa) = (fun r ↦ (g r.1, r.2)) <$> countedRun f oa := by
-  simp only [countedRun, SphincsSecurity.QueryCap.counted_map, simulateQ_map]
+  simp only [countedRun, HashSig.counted_map, simulateQ_map]
 
 /-- A run of a mapped computation is a run of the computation, with its result mapped. -/
 theorem mem_support_countedRun_map {α β : Type} (oa : OracleComp OracleWorld α) (g : α → β)
@@ -164,9 +164,9 @@ theorem countedRun_liftM {β : Type} (oc : OracleComp HashSpec β) :
     have hq : countedRun f (liftM (HashSpec.query t) : OracleComp OracleWorld _) =
         pure (f t, 1) := by
       change simulateQ (unifFwdAnswerImpl f)
-        (SphincsSecurity.QueryCap.counted isHashCall
+        (HashSig.counted isHashCall
           (liftM (OracleWorld.query (.inr t)))) = _
-      rw [SphincsSecurity.QueryCap.counted_query]
+      rw [HashSig.counted_query]
       simp only [simulateQ_map, simulateQ_spec_query, unifFwdAnswerImpl, isHashCall,
         Sum.isRight_inr, ↓reduceIte]
       rfl

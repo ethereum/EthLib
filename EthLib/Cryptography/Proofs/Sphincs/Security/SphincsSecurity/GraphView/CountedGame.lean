@@ -3,6 +3,8 @@ module
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Cost
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.HashCalls
 
+open EthLib.Cryptography.HashSig (counted simulate_withCost)
+
 @[expose] public section
 
 section
@@ -57,9 +59,9 @@ theorem fixedWorldCost_lift_hash (f : QueryImpl HashSpec Id)
   apply WriterT.ext
   have hcount : (simulateQ (fixedWorldCost f)
       (liftM computation : OracleComp OracleWorld α)).run =
-      simulateQ (fixedHashWorld f) (QueryCap.counted SourceHash
+      simulateQ (fixedHashWorld f) (counted SourceHash
         (liftM computation : OracleComp OracleWorld α)) := by
-    rw [QueryCap.simulate_withCost]
+    rw [simulate_withCost]
     congr 2
     funext input
     cases input <;> simp [fixedWorldCost, QueryImpl.withAddCost_apply, SourceHash]

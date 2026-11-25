@@ -149,7 +149,7 @@ noncomputable def adversaryGameCore (adversary : Adversary) :
   let (((forgery, calls), log) : (Forgery × Nat) × QueryLog SigningSpec) ←
     (simulateQ (QueryImpl.ofLift OracleWorld
       (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + signingOracle sk)
-      (SphincsSecurity.QueryCap.counted IsAdversaryHashCall (adversary.main pk))).run
+      (HashSig.counted IsAdversaryHashCall (adversary.main pk))).run
   let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
   return (decide (Valid log ∧ ¬Contains log forgery) && verified, calls, log.length)
 

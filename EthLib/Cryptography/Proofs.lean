@@ -25,6 +25,7 @@ public import EthLib.Cryptography.Proofs.HashSig.Interchange
 public import EthLib.Cryptography.Proofs.HashSig.Calls
 public import EthLib.Cryptography.Proofs.HashSig.FailedSearch
 public import EthLib.Cryptography.Proofs.HashSig.ProgrammedTable
+public import EthLib.Cryptography.Proofs.HashSig.Counted
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum

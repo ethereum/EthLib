@@ -37,27 +37,13 @@ theorem isTotalQueryBound_H (x : ByteArray) : IsTotalQueryBound (H x) 1 :=
 
 /-! ## The game with the adversary's counter -/
 
-/-- Forgetting the count gives the computation back. -/
-theorem fst_map_counted {ι : Type} {spec : OracleSpec ι} {α : Type} (p : ι → Prop)
-    [DecidablePred p] (oa : OracleComp spec α) :
-    Prod.fst <$> SphincsSecurity.QueryCap.counted p oa = oa := by
-  induction oa using OracleComp.inductionOn with
-  | pure x => rfl
-  | query_bind t k ih =>
-    rw [SphincsSecurity.QueryCap.counted_query_bind]
-    simp only [map_bind, map_pure]
-    refine bind_congr fun a => ?_
-    conv_rhs => rw [← ih a]
-    rw [map_eq_bind_pure_comp]
-    rfl
-
 /-- The game is the game with the adversary's counter, its count forgotten. -/
 theorem gameCore_eq_map (adversary : Adversary) :
     gameCore adversary = Prod.fst <$> adversaryGameCore adversary := by
   unfold gameCore adversaryGameCore
   simp only [map_bind, map_pure]
   refine bind_congr fun seed => bind_congr fun ⟨sk, pk⟩ => ?_
-  conv_lhs => rw [← fst_map_counted IsAdversaryHashCall (adversary.main pk)]
+  conv_lhs => rw [← HashSig.counted_forget IsAdversaryHashCall (adversary.main pk)]
   rw [simulateQ_map, WriterT.run_map, bind_map_left]
 
 /-- Coins make no hash call. -/
@@ -71,9 +57,9 @@ theorem countedRun_liftM_coins {α : Type} (p : ProbComp α) :
     have hq : countedRun f (liftM (unifSpec.query t) : OracleComp OracleWorld _) =
         (fun x => (x, 0)) <$> (liftM (unifSpec.query t) : ProbComp _) := by
       change simulateQ (unifFwdAnswerImpl f)
-        (SphincsSecurity.QueryCap.counted isHashCall
+        (HashSig.counted isHashCall
           (liftM (OracleWorld.query (.inl t)))) = _
-      rw [SphincsSecurity.QueryCap.counted_query]
+      rw [HashSig.counted_query]
       simp only [simulateQ_map, simulateQ_spec_query, unifFwdAnswerImpl, isHashCall,
         Sum.isRight_inl]
       rfl
@@ -85,8 +71,8 @@ theorem countedRun_query (t : OracleWorld.Domain) :
     countedRun f (liftM (OracleWorld.query t)) =
       (fun u => (u, if isHashCall t then 1 else 0)) <$> unifFwdAnswerImpl f t := by
   change simulateQ (unifFwdAnswerImpl f)
-    (SphincsSecurity.QueryCap.counted isHashCall (liftM (OracleWorld.query t))) = _
-  rw [SphincsSecurity.QueryCap.counted_query, simulateQ_map, simulateQ_spec_query]
+    (HashSig.counted isHashCall (liftM (OracleWorld.query t))) = _
+  rw [HashSig.counted_query, simulateQ_map, simulateQ_spec_query]
 
 /-- A run of a bound computation is a run of the first part, then of the rest. -/
 theorem mem_support_countedRun_bind {α β : Type} (oa : OracleComp OracleWorld α)
@@ -105,18 +91,18 @@ theorem calls_run_counted {α : Type} (s : QueryImpl SigningSpec (OracleComp Ora
     (A : OracleComp (OracleWorld + SigningSpec) α) :
     ∀ r ∈ support (countedRun f (simulateQ (QueryImpl.ofLift OracleWorld
         (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + QueryImpl.withLogging s)
-        (SphincsSecurity.QueryCap.counted IsAdversaryHashCall A)).run),
+        (HashSig.counted IsAdversaryHashCall A)).run),
       r.2 ≤ r.1.1.2 + r.1.2.length * S := by
   induction A using OracleComp.inductionOn with
   | pure a =>
     intro r hr
-    rw [SphincsSecurity.QueryCap.counted_pure, simulateQ_pure, WriterT.run_pure',
+    rw [HashSig.counted_pure, simulateQ_pure, WriterT.run_pure',
       countedRun_pure, support_pure, Set.mem_singleton_iff] at hr
     subst hr
     exact Nat.zero_le _
   | query_bind t k ih =>
     intro r hr
-    rw [SphincsSecurity.QueryCap.counted_query_bind] at hr
+    rw [HashSig.counted_query_bind] at hr
     rcases t with t | msg
     · simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind,
         QueryImpl.add_apply_inl, QueryImpl.ofLift_apply, simulateQ_pure, WriterT.run_pure',
@@ -210,7 +196,7 @@ theorem calls_game {Seed' SK PK : Type} (seeds : ProbComp Seed')
           (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
             QueryImpl.withLogging (fun msg => liftM (signer keys.1 msg) :
               QueryImpl SigningSpec (OracleComp OracleWorld)))
-          (SphincsSecurity.QueryCap.counted IsAdversaryHashCall (main keys.2))).run
+          (HashSig.counted IsAdversaryHashCall (main keys.2))).run
       let verified ← liftM (verify keys.2 run.1.1)
       pure (win run.1.1 run.2 verified, run.1.2, run.2.length))),
       r.2 ≤ r.1.2.1 + K + r.1.2.2 * S + V := by
@@ -243,7 +229,7 @@ theorem adversaryGameCore_eq (adversary : Adversary) :
           (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
             QueryImpl.withLogging (fun msg => liftM (signerOf keys.1 msg) :
               QueryImpl SigningSpec (OracleComp OracleWorld)))
-          (SphincsSecurity.QueryCap.counted IsAdversaryHashCall (adversary.main keys.2))).run
+          (HashSig.counted IsAdversaryHashCall (adversary.main keys.2))).run
       let verified ← liftM (verifierOf keys.2 run.1.1)
       pure (verdictOf run.1.1 run.2 verified, run.1.2, run.2.length)) := by
   unfold adversaryGameCore signingOracle signerOf verifierOf verdictOf
