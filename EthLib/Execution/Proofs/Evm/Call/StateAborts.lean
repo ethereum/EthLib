@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ErrorsMeet
 public import EthLib.Execution.Proofs.Evm.Call.NoncesFit
 public import EthLib.Execution.Proofs.Evm.Interpreter
 import EthLib.Execution.Proofs.Evm.Call.ContractAddress
@@ -22,7 +23,7 @@ The numbers that its environment pushes as words must fit them.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork)
+open EthLib.Base (ErrorsMeet Fork)
 open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -57,42 +58,8 @@ private theorem Harmless.state {e : EvmError} (h : Harmless e) (aborts : e.abort
   cases e <;> first | exact ⟨_, rfl⟩ | exact h.elim | cases aborts
 
 /-- The result fails only with a harmless error. -/
-private def Fine {α : Type} (r : Except EvmError α) : Prop :=
-  ∀ e, r = .error e → Harmless e
-
-/-- A success is fine. -/
-private theorem Fine.ok {α : Type} (a : α) : Fine (.ok a : Except EvmError α) :=
-  fun _ h => by cases h
-
-/-- A pure result is fine. -/
-private theorem Fine.pure {α : Type} (a : α) : Fine (Pure.pure a : Except EvmError α) :=
-  fun _ h => by cases h
-
-/-- A throw of a harmless error is fine. -/
-private theorem Fine.throw {α : Type} {e : EvmError} (h : Harmless e) :
-    Fine (MonadExcept.throw e : Except EvmError α) :=
-  fun _ he => by cases he; exact h
-
-/-- A failure with a harmless error is fine. -/
-private theorem Fine.error {α : Type} {e : EvmError} (h : Harmless e) :
-    Fine (.error e : Except EvmError α) :=
-  fun _ he => by cases he; exact h
-
-/-- A sequence is fine when its first part is, and its rest after it. -/
-private theorem Fine.bind {α β : Type} {x : Except EvmError α} {f : α → Except EvmError β}
-    (hx : Fine x) (hf : ∀ a, x = .ok a → Fine (f a)) : Fine (x >>= f) := by
-  intro e h
-  rcases Base.bind_eq_error h with h | ⟨a, ha, h⟩
-  · exact hx e h
-  · exact hf a ha e h
-
-/-- A map of a fine result is fine. -/
-private theorem Fine.map {α β : Type} {x : Except EvmError α} (f : α → β) (hx : Fine x) :
-    Fine (f <$> x) := by
-  intro e h
-  cases hx' : x with
-  | error e' => rw [hx'] at h; cases h; exact hx _ hx'
-  | ok a => rw [hx'] at h; cases h
+private abbrev Fine {α : Type} (r : Except EvmError α) : Prop :=
+  ErrorsMeet Harmless r
 
 /-- Every failure of the state, as an error of the frame, is fine. -/
 private theorem Fine.mapError_state {α : Type} (x : Except State.StateError α) :
@@ -105,28 +72,28 @@ private theorem Fine.mapError_state {α : Type} (x : Except State.StateError α)
 omit [GasMeter Meter] in
 /-- A pop is fine. -/
 private theorem fine_popWord (evm : Evm fork Meter) : Fine (popWord evm) := by
-  refine Fine.bind (fun e h => ?_) fun _ _ => Fine.pure _
+  refine ErrorsMeet.bind (fun e h => ?_) fun _ _ => ErrorsMeet.pure _
   rw [(Stack.pop_eq_error_iff.mp h).2]
   trivial
 
 omit [GasMeter Meter] in
 /-- A push is fine. -/
 private theorem fine_pushWord (evm : Evm fork Meter) (x : Base.U256) : Fine (pushWord evm x) := by
-  refine Fine.bind (fun e h => ?_) fun _ _ => Fine.pure _
+  refine ErrorsMeet.bind (fun e h => ?_) fun _ _ => ErrorsMeet.pure _
   rw [(Stack.push_eq_error_iff.mp h).2]
   trivial
 
 /-- A charge of gas is fine. -/
 private theorem fine_chargeGas [LawfulGasMeter Meter] (evm : Evm fork Meter) (amount : Nat) :
     Fine (chargeGas evm amount) := by
-  refine Fine.bind (fun e h => ?_) fun _ _ => Fine.pure _
+  refine ErrorsMeet.bind (fun e h => ?_) fun _ _ => ErrorsMeet.pure _
   rw [LawfulGasMeter.charge_error h]
   trivial
 
 /-- A charge of state gas is fine. -/
 private theorem fine_chargeStateGas [LawfulGasMeter Meter] (evm : Evm fork Meter)
     (amount : Nat) : Fine (chargeStateGas evm amount) := by
-  refine Fine.bind (fun e h => ?_) fun _ _ => Fine.pure _
+  refine ErrorsMeet.bind (fun e h => ?_) fun _ _ => ErrorsMeet.pure _
   rw [LawfulGasMeter.chargeState_error h]
   trivial
 
@@ -134,24 +101,24 @@ private theorem fine_chargeStateGas [LawfulGasMeter Meter] (evm : Evm fork Meter
 private theorem fine_chargeGasAndMemory [LawfulGasMeter Meter] (evm : Evm fork Meter)
     (cost : Nat) (ranges : List (Base.U256 × Base.U256)) :
     Fine (chargeGasAndMemory evm cost ranges) :=
-  Fine.bind (fine_chargeGas _ _) fun _ _ => Fine.pure _
+  ErrorsMeet.bind (fine_chargeGas _ _) fun _ _ => ErrorsMeet.pure _
 
 /-- A check of gas is fine. -/
 private theorem fine_checkGas (evm : Evm fork Meter) (amount : Nat) :
     Fine (checkGas evm amount) := by
   unfold checkGas
   split
-  · exact Fine.throw trivial
-  · exact Fine.pure _
+  · exact ErrorsMeet.throw trivial
+  · exact ErrorsMeet.pure _
 
 omit [GasMeter Meter] in
 /-- The pops of the topics of a log are fine. -/
 private theorem fine_popTopics (n : Nat) : ∀ evm : Evm fork Meter, Fine (popTopics evm n) := by
   induction n with
-  | zero => exact fun _ => Fine.pure _
+  | zero => exact fun _ => ErrorsMeet.pure _
   | succ n ih =>
-    exact fun _ => Fine.bind (fine_popWord _) fun _ _ =>
-      Fine.bind (ih _) fun _ _ => Fine.pure _
+    exact fun _ => ErrorsMeet.bind (fine_popWord _) fun _ _ =>
+      ErrorsMeet.bind (ih _) fun _ _ => ErrorsMeet.pure _
 
 /-- The rest of an instruction that keeps its reads is fine when the rest is. -/
 private theorem Fine.keepReads {α : Type} {evm : Evm fork Meter} {halted : Evm fork Meter → α}
@@ -168,8 +135,8 @@ private theorem Fine.keepReads {α : Type} {evm : Evm fork Meter} {halted : Evm 
 /-- Walk a sequence of fine parts. -/
 local macro "fine" : tactic =>
   `(tactic| repeat' (first
-    | exact Fine.ok _
-    | exact Fine.pure _
+    | exact ErrorsMeet.ok _
+    | exact ErrorsMeet.pure _
     | exact fine_popWord _
     | exact fine_pushWord _ _
     | exact fine_chargeGas _ _
@@ -178,10 +145,10 @@ local macro "fine" : tactic =>
     | exact fine_checkGas _ _
     | exact fine_popTopics _ _
     | exact Fine.mapError_state _
-    | exact Fine.throw trivial
-    | exact Fine.error trivial
-    | refine Fine.bind ?_ fun _ _ => ?_
-    | refine Fine.map _ ?_
+    | exact ErrorsMeet.throw trivial
+    | exact ErrorsMeet.error trivial
+    | refine ErrorsMeet.bind ?_ fun _ _ => ?_
+    | refine ErrorsMeet.map _ ?_
     | refine Fine.keepReads ?_
     | split))
 
@@ -336,16 +303,16 @@ private theorem fine_launchCreate [LawfulGasMeter Meter] {evm : Evm fork Meter}
   dsimp only
   split
   · fine
-  refine Fine.bind ?_ fun _ _ => ?_
+  refine ErrorsMeet.bind ?_ fun _ _ => ?_
   -- Only CREATE encodes, to find the address of its new account from the sender and its nonce.
   · unfold creationAddress
     split
-    · exact Fine.ok _
+    · exact ErrorsMeet.ok _
     -- That encoding succeeds for every nonce below `2^256`.
     · obtain ⟨address, ha⟩ := createAddress_ok evm.message.currentTarget
         (Nat.lt_of_le_of_lt (read evm.message.currentTarget) (by decide))
       rw [ha]
-      exact Fine.ok _
+      exact ErrorsMeet.ok _
   · fine
 
 /-- A step of CREATE or CREATE2 from a frame whose nonces fit is fine. -/
@@ -354,12 +321,12 @@ private theorem fine_createStep [LawfulGasMeter Meter] {create2 : Bool} {evm : E
   unfold createStep
   dsimp only
   split
-  · exact Fine.bind (Fine.throw trivial) fun _ h => by cases h
-  refine Fine.bind (fine_popWord _) fun ⟨_, e1⟩ h1 => ?_
-  refine Fine.bind (fine_popWord _) fun ⟨_, e2⟩ h2 => ?_
-  refine Fine.bind (fine_popWord _) fun ⟨_, e3⟩ h3 => ?_
-  refine Fine.bind (by unfold popSalt; fine) fun ⟨_, e4⟩ h4 => ?_
-  refine Fine.bind (fine_chargeGasAndMemory _ _ _) fun e5 h5 => ?_
+  · exact ErrorsMeet.bind (ErrorsMeet.throw trivial) fun _ h => by cases h
+  refine ErrorsMeet.bind (fine_popWord _) fun ⟨_, e1⟩ h1 => ?_
+  refine ErrorsMeet.bind (fine_popWord _) fun ⟨_, e2⟩ h2 => ?_
+  refine ErrorsMeet.bind (fine_popWord _) fun ⟨_, e3⟩ h3 => ?_
+  refine ErrorsMeet.bind (by unfold popSalt; fine) fun ⟨_, e4⟩ h4 => ?_
+  refine ErrorsMeet.bind (fine_chargeGasAndMemory _ _ _) fun e5 h5 => ?_
   dsimp only at h2 h3 h4 h5
   have salted : SameContext e3 e4 := by
     unfold popSalt at h4
@@ -376,9 +343,9 @@ private theorem fine_createStep [LawfulGasMeter Meter] {create2 : Bool} {evm : E
     exact same ▸ hfit
   unfold genericCreate
   split
-  · exact Fine.error trivial
+  · exact ErrorsMeet.error trivial
   split
-  · exact Fine.error trivial
+  · exact ErrorsMeet.error trivial
   exact fine_launchCreate fit
 
 /-- An instruction that may send a message, from a frame whose nonces fit, is fine. -/
@@ -409,10 +376,10 @@ private theorem fine_step [LawfulGasMeter Meter] {evm : Evm fork Meter}
   split
   · dsimp only
     split
-    · exact Fine.throw trivial
+    · exact ErrorsMeet.throw trivial
     · rename_i op decoded
       split
-      · exact Fine.map _ (fine_instruction (by assumption) evm hwords)
+      · exact ErrorsMeet.map _ (fine_instruction (by assumption) evm hwords)
       · rename_i hi
         split
         · exact fine_messageInstruction (by assumption) hfit
@@ -426,7 +393,7 @@ private theorem fine_step [LawfulGasMeter Meter] {evm : Evm fork Meter}
             cases h
           · rw [hm] at h
             cases h
-  · exact Fine.map _ (Fine.ok _)
+  · exact ErrorsMeet.map _ (ErrorsMeet.ok _)
 
 /-- A step from a frame whose nonces fit aborts only with an error of the state.
 

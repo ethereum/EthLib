@@ -1061,6 +1061,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, whether every failure of a result meets a property is one predicate, `Base.ErrorsMeet` (`Base/Proofs/ErrorsMeet.lean`), for any error type ([#4630](https://github.com/ethereum/EthLib/pull/4630)).
+  - `Blocks.ErrorsMeet` (`Execution/Proofs/Blocks/Failures.lean`) and its lemmas `ok`, `pure`, `error`, `throw`, `bind`, `map` and `mapError` move to `Base.ErrorsMeet`, with the same bodies.
+    `ErrorsMeet.aborted`, `ErrorsMeet.onBlock` and `errorsMeet_firstFailure` stay in `Blocks`, and every theorem keeps its statement.
+  - `Evm.Logic.NoAbort` (`Execution/Proofs/Evm/Logic/NoAbort.lean`) now unfolds to `Base.ErrorsMeet`, and holds of the same results.
+  - `Evm.NoMiss` (`Execution/Proofs/Evm/Call/MissingCode.lean`) is new as a public definition, through `Base.ErrorsMeet`, and replaces a private copy of the transaction proofs.
+  Migration: open `EthLib.Base` to name `ErrorsMeet`, and import `EthLib.Base.Proofs.ErrorsMeet`.
 - In Lean and Python, the column sidecars of a block with no blob are now none, in place of one sidecar with an empty column per column ([#4149](https://github.com/ethereum/EthLib/issues/4149)).
   The check of a sidecar rejects one with no blob, so the empty sidecars were never valid.
   This holds at Fulu and from Gloas, from a block or from one of its sidecars.

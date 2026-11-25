@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ErrorsMeet
 public import EthLib.Execution.Proofs.Evm.Call.Codes
 
 /-!
@@ -12,7 +13,7 @@ Every change of the state in a step fails only with an error other than a missin
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork Hash32)
+open EthLib.Base (ErrorsMeet Fork Hash32)
 open EthLib.Execution.State (TransactionState)
 open EthLib.Execution.Transactions (HasCodes hasCodes_incrementNonce hasCodes_moveEther
   hasCodes_of_getCode hasCodes_touchAccount)
@@ -22,99 +23,76 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 /-! ## Results with no missing code -/
 
 /-- The result is not a failure for a missing code. -/
-private def NoMiss {α : Type} (r : Except EvmError α) : Prop :=
-  ∀ c, r ≠ .error (.state (.missingCode c))
-
-/-- A success has no missing code. -/
-private theorem NoMiss.ok {α : Type} (a : α) : NoMiss (.ok a : Except EvmError α) :=
-  fun _ h => by cases h
-
-/-- A pure result has no missing code. -/
-private theorem NoMiss.pure {α : Type} (a : α) : NoMiss (Pure.pure a : Except EvmError α) :=
-  fun _ h => by cases h
-
-/-- A throw of another error has no missing code. -/
-private theorem NoMiss.throw {α : Type} {e : EvmError} (h : ∀ c, e ≠ .state (.missingCode c)) :
-    NoMiss (MonadExcept.throw e : Except EvmError α) :=
-  fun c he => h c (by cases he; rfl)
-
-/-- A failure with another error has no missing code. -/
-private theorem NoMiss.error {α : Type} {e : EvmError} (h : ∀ c, e ≠ .state (.missingCode c)) :
-    NoMiss (.error e : Except EvmError α) :=
-  fun c he => h c (by cases he; rfl)
-
-/-- A sequence has no missing code when its first part has none, nor its rest after it. -/
-private theorem NoMiss.bind {α β : Type} {x : Except EvmError α} {f : α → Except EvmError β}
-    (hx : NoMiss x) (hf : ∀ a, x = .ok a → NoMiss (f a)) : NoMiss (x >>= f) := by
-  intro c h
-  rcases Base.bind_eq_error h with h | ⟨a, ha, h⟩
-  · exact hx c h
-  · exact hf a ha c h
-
-/-- A map of a result with no missing code has none. -/
-private theorem NoMiss.map {α β : Type} {x : Except EvmError α} (f : α → β) (hx : NoMiss x) :
-    NoMiss (f <$> x) := by
-  intro c h
-  cases hx' : x with
-  | error e => rw [hx'] at h; cases h; exact hx c hx'
-  | ok a => rw [hx'] at h; cases h
+def NoMiss {α : Type} (r : Except EvmError α) : Prop :=
+  ErrorsMeet (fun e => ∀ c, e ≠ .state (.missingCode c)) r
 
 omit [GasMeter Meter] in
 /-- A pop has no missing code. -/
 private theorem noMiss_popWord (evm : Evm fork Meter) : NoMiss (popWord evm) := by
-  refine NoMiss.bind (fun c h => ?_) fun _ _ => NoMiss.pure _
+  refine ErrorsMeet.bind (fun _ h c he => ?_) fun _ _ => ErrorsMeet.pure _
+  subst he
   cases (Stack.pop_eq_error_iff.mp h).2
 
 omit [GasMeter Meter] in
 /-- A push has no missing code. -/
 private theorem noMiss_pushWord (evm : Evm fork Meter) (x : Base.U256) :
     NoMiss (pushWord evm x) := by
-  refine NoMiss.bind (fun c h => ?_) fun _ _ => NoMiss.pure _
+  refine ErrorsMeet.bind (fun _ h c he => ?_) fun _ _ => ErrorsMeet.pure _
+  subst he
   cases (Stack.push_eq_error_iff.mp h).2
 
 /-- A charge of gas has no missing code. -/
 private theorem noMiss_chargeGas [LawfulGasMeter Meter] (evm : Evm fork Meter) (amount : Nat) :
     NoMiss (chargeGas evm amount) := by
-  refine NoMiss.bind (fun c h => ?_) fun _ _ => NoMiss.pure _
+  refine ErrorsMeet.bind (fun _ h c he => ?_) fun _ _ => ErrorsMeet.pure _
+  subst he
   -- A lawful meter fails a charge only for lack of gas, so no charge fails with a missing code.
   cases LawfulGasMeter.charge_error h
 
 /-- A charge of state gas has no missing code. -/
 private theorem noMiss_chargeStateGas [LawfulGasMeter Meter] (evm : Evm fork Meter)
     (amount : Nat) : NoMiss (chargeStateGas evm amount) := by
-  refine NoMiss.bind (fun c h => ?_) fun _ _ => NoMiss.pure _
+  refine ErrorsMeet.bind (fun _ h c he => ?_) fun _ _ => ErrorsMeet.pure _
+  subst he
   cases LawfulGasMeter.chargeState_error h
 
 /-- A charge of gas and of memory has no missing code. -/
 private theorem noMiss_chargeGasAndMemory [LawfulGasMeter Meter] (evm : Evm fork Meter)
     (cost : Nat) (ranges : List (Base.U256 × Base.U256)) :
     NoMiss (chargeGasAndMemory evm cost ranges) :=
-  NoMiss.bind (noMiss_chargeGas _ _) fun _ _ => NoMiss.pure _
+  ErrorsMeet.bind (noMiss_chargeGas _ _) fun _ _ => ErrorsMeet.pure _
 
 /-- A check of gas has no missing code. -/
 private theorem noMiss_checkGas (evm : Evm fork Meter) (amount : Nat) :
     NoMiss (checkGas evm amount) := by
   unfold checkGas
   split
-  · exact NoMiss.throw nofun
-  · exact NoMiss.pure _
+  · exact ErrorsMeet.throw nofun
+  · exact ErrorsMeet.pure _
 
 omit [GasMeter Meter] in
 /-- The pops of the topics of a log have no missing code. -/
 private theorem noMiss_popTopics (n : Nat) : ∀ evm : Evm fork Meter, NoMiss (popTopics evm n) := by
   induction n with
-  | zero => exact fun _ => NoMiss.pure _
+  | zero => exact fun _ => ErrorsMeet.pure _
   | succ n ih =>
-    exact fun _ => NoMiss.bind (noMiss_popWord _) fun _ _ =>
-      NoMiss.bind (ih _) fun _ _ => NoMiss.pure _
+    exact fun _ => ErrorsMeet.bind (noMiss_popWord _) fun _ _ =>
+      ErrorsMeet.bind (ih _) fun _ _ => ErrorsMeet.pure _
+
+/-- A result with no missing code is not a failure for a given missing code. -/
+private theorem NoMiss.ne {α : Type} {r : Except EvmError α} (h : NoMiss r) (c : Hash32) :
+    r ≠ .error (.state (.missingCode c)) :=
+  fun he => h _ he c rfl
+
+/-- A result that is never a failure for a missing code has no missing code. -/
+private theorem NoMiss.of_ne {α : Type} {r : Except EvmError α}
+    (h : ∀ c, r ≠ .error (.state (.missingCode c))) : NoMiss r :=
+  fun _ he c hc => h c (by cases hc; exact he)
 
 /-- A write of the state that fails with no missing code has none as an error of the frame. -/
 private theorem NoMiss.mapError_state {α : Type} {x : Except State.StateError α}
     (h : ∀ c, x ≠ .error (.missingCode c)) : NoMiss (x.mapError EvmError.state) := by
-  intro c hc
-  cases hx : x with
-  | error e => rw [hx] at hc; cases hc; exact h c hx
-  | ok a => rw [hx] at hc; cases hc
+  exact ErrorsMeet.mapError fun _ he c hc => h c (by cases hc; exact he)
 
 /-- A change of an account has no missing code when the change to the account has none. -/
 theorem modifyState_ne_missingCode {tx : TransactionState} {address : Base.Address}
@@ -187,28 +165,25 @@ private theorem selfdestructTransfer_ne_missingCode (tx : TransactionState)
 /-- The rest of an instruction that keeps its reads has no missing code when the rest has none. -/
 private theorem NoMiss.keepReads {α : Type} {evm : Evm fork Meter} {halted : Evm fork Meter → α}
     {rest : Except EvmError α} (h : NoMiss rest) : NoMiss (keepReads evm halted rest) := by
-  intro c hc
+  intro e hc c he
   unfold Evm.keepReads at hc
   split at hc
   · split at hc
     · cases hc
-      exact h c rfl
+      exact h _ rfl c he
     · cases hc
   · cases hc
 
 /-- A failure of encoding is not a missing code. -/
 private theorem NoMiss.mapError_encoding {α : Type} (x : Except Serialization.Rlp.RlpError α) :
     NoMiss (x.mapError EvmError.encoding) := by
-  intro c hc
-  cases hx : x with
-  | error e => rw [hx] at hc; cases hc
-  | ok a => rw [hx] at hc; cases hc
+  exact ErrorsMeet.mapError fun _ _ _ hc => by cases hc
 
 /-- Walk a sequence of parts, each with no missing code. -/
 local macro "no_miss" : tactic =>
   `(tactic| repeat' (first
-    | exact NoMiss.ok _
-    | exact NoMiss.pure _
+    | exact ErrorsMeet.ok _
+    | exact ErrorsMeet.pure _
     | exact noMiss_popWord _
     | exact noMiss_pushWord _ _
     | exact noMiss_chargeGas _ _
@@ -216,10 +191,10 @@ local macro "no_miss" : tactic =>
     | exact noMiss_chargeGasAndMemory _ _ _
     | exact noMiss_checkGas _ _
     | exact noMiss_popTopics _ _
-    | exact NoMiss.throw nofun
-    | exact NoMiss.error nofun
-    | refine NoMiss.bind ?_ fun _ _ => ?_
-    | refine NoMiss.map _ ?_
+    | exact ErrorsMeet.throw nofun
+    | exact ErrorsMeet.error nofun
+    | refine ErrorsMeet.bind ?_ fun _ _ => ?_
+    | refine ErrorsMeet.map _ ?_
     | refine NoMiss.keepReads ?_
     | exact NoMiss.mapError_state (setStorage_ne_missingCode _ _ _ _)
     | exact NoMiss.mapError_state (incrementNonce_ne_missingCode _ _)
@@ -329,9 +304,9 @@ private theorem noMiss_accountCode {evm : Evm fork Meter} (available : HasCodes 
 /-- EXTCODESIZE from a state that holds every code has no missing code. -/
 private theorem noMiss_extcodesizeStep [LawfulGasMeter Meter] {evm : Evm fork Meter}
     (available : HasCodes evm.state) : NoMiss (extcodesizeStep evm) := by
-  refine NoMiss.bind (noMiss_popWord _) fun ⟨w, e1⟩ h1 => ?_
-  refine NoMiss.bind (noMiss_chargeGas _ _) fun e2 h2 => ?_
-  refine NoMiss.bind (noMiss_accountCode (hasCodes_static ?_ available) _) fun _ _ => ?_
+  refine ErrorsMeet.bind (noMiss_popWord _) fun ⟨w, e1⟩ h1 => ?_
+  refine ErrorsMeet.bind (noMiss_chargeGas _ _) fun e2 h2 => ?_
+  refine ErrorsMeet.bind (noMiss_accountCode (hasCodes_static ?_ available) _) fun _ _ => ?_
   · exact (((StaticStep.of_sameContext (popWord_sameContext h1)).trans
       (staticStep_accessAddress e1 _)).trans (.of_sameContext (chargeGas_sameContext h2))).trans
       (staticStep_recordAccountRead _ _)
@@ -340,12 +315,12 @@ private theorem noMiss_extcodesizeStep [LawfulGasMeter Meter] {evm : Evm fork Me
 /-- EXTCODECOPY from a state that holds every code has no missing code. -/
 private theorem noMiss_extcodecopyStep [LawfulGasMeter Meter] {evm : Evm fork Meter}
     (available : HasCodes evm.state) : NoMiss (extcodecopyStep evm) := by
-  refine NoMiss.bind (noMiss_popWord _) fun ⟨_, e1⟩ h1 => ?_
-  refine NoMiss.bind (noMiss_popWord _) fun ⟨_, e2⟩ h2 => ?_
-  refine NoMiss.bind (noMiss_popWord _) fun ⟨_, e3⟩ h3 => ?_
-  refine NoMiss.bind (noMiss_popWord _) fun ⟨_, e4⟩ h4 => ?_
-  refine NoMiss.bind (noMiss_chargeGasAndMemory _ _ _) fun e5 h5 => ?_
-  refine NoMiss.bind (noMiss_accountCode (hasCodes_static ?_ available) _) fun _ _ => ?_
+  refine ErrorsMeet.bind (noMiss_popWord _) fun ⟨_, e1⟩ h1 => ?_
+  refine ErrorsMeet.bind (noMiss_popWord _) fun ⟨_, e2⟩ h2 => ?_
+  refine ErrorsMeet.bind (noMiss_popWord _) fun ⟨_, e3⟩ h3 => ?_
+  refine ErrorsMeet.bind (noMiss_popWord _) fun ⟨_, e4⟩ h4 => ?_
+  refine ErrorsMeet.bind (noMiss_chargeGasAndMemory _ _ _) fun e5 h5 => ?_
+  refine ErrorsMeet.bind (noMiss_accountCode (hasCodes_static ?_ available) _) fun _ _ => ?_
   · exact (((((((StaticStep.of_sameContext (popWord_sameContext h1)).trans
       (.of_sameContext (popWord_sameContext h2))).trans
       (.of_sameContext (popWord_sameContext h3))).trans
@@ -371,14 +346,14 @@ private theorem noMiss_accountStep [LawfulGasMeter Meter] {op : Op}
 /-- The access to a delegate from a state that holds every code has no missing code. -/
 private theorem noMiss_accessDelegation {evm : Evm fork Meter} (available : HasCodes evm.state)
     (address : Base.Address) (known : Nat) : NoMiss (accessDelegation evm address known) := by
-  refine NoMiss.bind (noMiss_accountCode available _) fun code _ => ?_
+  refine ErrorsMeet.bind (noMiss_accountCode available _) fun code _ => ?_
   dsimp only
   split
-  · refine NoMiss.bind (noMiss_checkGas _ _) fun _ _ => ?_
-    refine NoMiss.bind (noMiss_accountCode (hasCodes_static
+  · refine ErrorsMeet.bind (noMiss_checkGas _ _) fun _ _ => ?_
+    refine ErrorsMeet.bind (noMiss_accountCode (hasCodes_static
       ((staticStep_accessAddress _ _).trans (staticStep_recordAccountRead _ _)) available) _)
-      fun _ _ => NoMiss.pure _
-  · exact NoMiss.pure _
+      fun _ _ => ErrorsMeet.pure _
+  · exact ErrorsMeet.pure _
 
 /-- SELFDESTRUCT has no missing code. -/
 private theorem noMiss_selfdestructOpStep [LawfulGasMeter Meter] {op : Op}
@@ -421,14 +396,14 @@ private theorem noMiss_instruction [LawfulGasMeter Meter] {op : Op}
 private theorem noMiss_callStep [LawfulGasMeter Meter] {kind : CallKind} {evm : Evm fork Meter}
     (available : HasCodes evm.state) : NoMiss (callStep kind evm) := by
   unfold callStep
-  refine NoMiss.bind (by simp only [popCallOperands, popCallValue]; no_miss)
+  refine ErrorsMeet.bind (by simp only [popCallOperands, popCallValue]; no_miss)
     fun ⟨call, e1⟩ h1 => ?_
   dsimp only
   split
-  · exact NoMiss.bind (NoMiss.throw nofun) fun _ h => by cases h
-  refine NoMiss.bind (noMiss_checkGas _ _) fun _ _ => ?_
-  refine NoMiss.keepReads (NoMiss.bind (noMiss_accessDelegation (hasCodes_static ?_ available) _ _)
-    fun _ _ => ?_)
+  · exact ErrorsMeet.bind (ErrorsMeet.throw nofun) fun _ h => by cases h
+  refine ErrorsMeet.bind (noMiss_checkGas _ _) fun _ _ => ?_
+  refine NoMiss.keepReads (ErrorsMeet.bind
+    (noMiss_accessDelegation (hasCodes_static ?_ available) _ _) fun _ _ => ?_)
   · exact (((staticStep_popCallOperands h1).1.trans (staticStep_accessAddress e1 _)).trans
       (staticStep_recordAccountRead _ _))
   · simp only [payCall, finishCall, genericCall, skipCall]
@@ -470,11 +445,11 @@ theorem step_ne_missingCode [LawfulGasMeter Meter] {evm : Evm fork Meter}
     split
     · nofun
     · split
-      · exact NoMiss.map _ (noMiss_instruction (by assumption) available) codeHash
+      · exact NoMiss.ne (ErrorsMeet.map _ (noMiss_instruction (by assumption) available)) codeHash
       · split
-        · exact noMiss_messageInstruction (by assumption) available codeHash
+        · exact (noMiss_messageInstruction (by assumption) available).ne codeHash
         · nofun
-  · exact NoMiss.map _ (NoMiss.ok _) codeHash
+  · exact NoMiss.ne (ErrorsMeet.map _ (ErrorsMeet.ok _)) codeHash
 
 /-! ## A run of a frame -/
 
@@ -508,24 +483,24 @@ private theorem runFrame_ne_missingCode [LawfulGasMeter Meter] {bound : Nat}
     ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
   all_goals (intros; rename_i available)
   case case1 _ _ hstep _ =>
-    intro c h
+    refine NoMiss.of_ne fun c h => ?_
     cases h
     exact step_ne_missingCode available c hstep
   case case3 hstep _ ih => exact ih ((stepRules_hasCodes.step hstep).2.1 available)
   case case4 hstep _ _ ran =>
-    intro c h
+    refine NoMiss.of_ne fun c h => ?_
     cases h
-    exact never _ _ _ ((stepRules_hasCodes.step hstep).1.2.1 available) c ran
+    exact NoMiss.ne (never _ _ _ ((stepRules_hasCodes.step hstep).1.2.1 available)) c ran
   case case5 hstep _ _ _ _ _ resumed _ =>
-    intro c h
+    refine NoMiss.of_ne fun c h => ?_
     cases h
-    exact noMiss_resume hstep c resumed
+    exact NoMiss.ne (noMiss_resume hstep) c resumed
   -- After its child, the caller still holds every code, so every frame of the run does.
   case case7 hstep _ _ _ ran _ resumed _ ih =>
     refine ih ?_
     rw [(sameContext_of_step_eq_child hstep resumed).state, state_incorporateChild]
     exact keeps _ _ _ _ ran ((stepRules_hasCodes.step hstep).1.2.1 available)
-  all_goals exact NoMiss.ok _
+  all_goals exact ErrorsMeet.ok _
 
 /-- No call or creation from a state that holds every code aborts for a missing code.
 
@@ -547,7 +522,8 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
           | some _ => processMessage (Meter := Meter) fork child caller.state caller.substate.child
           | none => processCreateMessage (Meter := Meter) fork child caller.state
             caller.substate.child) := by
-      intro caller child lt available c h
+      intro caller child lt available
+      refine NoMiss.of_ne fun c h => ?_
       split at h
       · exact (ih child.gas lt).1 child _ _ _ _ rfl available c h
       · exact (ih child.gas lt).2 child _ _ _ _ rfl available c h
@@ -564,7 +540,8 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
     have call : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
         (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
         HasCodes state → NoMiss (processMessage fork message state substate meter held) := by
-      intro message state substate meter held hn available c h
+      intro message state substate meter held hn available
+      refine NoMiss.of_ne fun c h => ?_
       have start : HasCodes (startState fork message state) := by
         unfold startState
         split
@@ -585,10 +562,10 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
             e ≠ .state (.missingCode c) := fun entered _ _ hrun he => by
           subst he
           exact runFrame_ne_missingCode (fun caller child lt => never caller child (hn ▸ lt))
-            (fun caller child _ ended ran => keeps caller child ended ran) entered c hrun
+            (fun caller child _ ended ran => keeps caller child ended ran) entered _ hrun c rfl
         split at hdo
         · rcases Base.bind_eq_error hdo with hm | ⟨entry, hentry, hdo⟩
-          · exact NoMiss.mapError_state (moveEther_ne_missingCode _ _ _ _) c hm
+          · exact NoMiss.ne (NoMiss.mapError_state (moveEther_ne_missingCode _ _ _ _)) c hm
           have entered := hasCodes_moveEther (Base.mapError_ok_iff.mp hentry) start
           repeat' split at hdo
           all_goals first
@@ -602,13 +579,14 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
             | (cases hdo; done)
             | (rename_i hrun; cases hdo; exact ran start hrun rfl)
       · cases h
-    refine ⟨fun message state substate meter held hn available c => call message state substate
-      meter held hn available c, fun message state substate meter held hn available c h => ?_⟩
+    refine ⟨fun message state substate meter held hn available c =>
+      NoMiss.ne (call message state substate meter held hn available) c,
+      fun message state substate meter held hn available c h => ?_⟩
     rw [processCreateMessage_unfold] at h
     rcases Base.bind_eq_error h with hp | ⟨prepared, hprep, h⟩
     · unfold prepareCreation at hp
       split at hp
-      · exact NoMiss.mapError_state (incrementNonce_ne_missingCode _ _) c hp
+      · exact NoMiss.ne (NoMiss.mapError_state (incrementNonce_ne_missingCode _ _)) c hp
       · cases hp
     have marked : HasCodes ((state.destroyStorage message.currentTarget).markAccountCreated
         message.currentTarget) := hasCodes_of_getCode (fun _ => rfl) (fun _ => .inl rfl) available
@@ -619,7 +597,7 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
       · cases hprep
         exact marked
     rcases Base.bind_eq_error h with hm | ⟨⟨evm, used⟩, -, h⟩
-    · exact call message prepared substate meter held hn ready c hm
+    · exact NoMiss.ne (call message prepared substate meter held hn ready) c hm
     split at h
     split at h
     · rename_i hdep
@@ -629,8 +607,8 @@ theorem processMessage_ne_missingCode_of_gas [LawfulGasMeter Meter] (n : Nat) :
       repeat' split at hdep
       all_goals first
         | (cases hdep; done)
-        | exact NoMiss.bind (NoMiss.mapError_state (setCode_ne_missingCode _ _ _))
-            (fun _ _ => NoMiss.pure _) c hdep
+        | exact NoMiss.ne (ErrorsMeet.bind (NoMiss.mapError_state (setCode_ne_missingCode _ _ _))
+            (fun _ _ => ErrorsMeet.pure _)) c hdep
     · cases h
 
 /-- A call from a state that holds the code of every account never aborts for a missing code. -/

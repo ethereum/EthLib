@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ErrorsMeet
 public import EthLib.Execution.Proofs.Evm.Logic.RunMono
 
 /-!
@@ -26,7 +27,7 @@ At a later fork they hold of that meter, not of the meter of the fork.
 
 namespace EthLib.Execution.Evm.Logic
 
-open EthLib.Base (Fork U256)
+open EthLib.Base (ErrorsMeet Fork U256)
 open GasCosts
 
 variable {fork : Fork}
@@ -36,46 +37,30 @@ variable {fork : Fork}
 Every instruction of `Logic/RunMono.lean` never aborts, except SSTORE, whose write may fail.
 -/
 
-/-- The result `r` is no error that aborts the whole run.
-
-The loop of the interpreter returns only such an error.
-
-An error of the state aborts, and so does an opcode with no instruction.
-
-An encoding error aborts too, and so does a fork with no specification.
-
-So does a number from the environment that no word holds, which an instruction would push. -/
-def NoAbort {α : Type} (r : Except EvmError α) : Prop := ∀ e, r = .error e → e.aborts = false
+/-- The result `r` is no error that aborts the whole run. -/
+def NoAbort {α : Type} (r : Except EvmError α) : Prop :=
+  -- The loop of the interpreter returns only such an error.
+  --
+  -- An error of the state aborts, and so does an opcode with no instruction.
+  --
+  -- An encoding error aborts too, and so does a fork with no specification.
+  --
+  -- So does a number from the environment that no word holds, which an instruction would push.
+  ErrorsMeet (·.aborts = false) r
 
 /-- A success does not abort. -/
 theorem NoAbort.ok {α : Type} (a : α) : NoAbort (.ok a : Except EvmError α) :=
-  fun _ h => by cases h
+  ErrorsMeet.ok a
 
 /-- A sequence of two results that do not abort does not abort. -/
 theorem NoAbort.bind {α β : Type} {x : Except EvmError α} {f : α → Except EvmError β}
-    (hx : NoAbort x) (hf : ∀ a, NoAbort (f a)) : NoAbort (x >>= f) := by
-  intro e h
-  cases hx' : x with
-  | error e' =>
-    rw [hx'] at h
-    cases h
-    exact hx _ hx'
-  | ok a =>
-    rw [hx'] at h
-    exact hf a e h
+    (hx : NoAbort x) (hf : ∀ a, NoAbort (f a)) : NoAbort (x >>= f) :=
+  ErrorsMeet.bind hx fun a _ => hf a
 
 /-- A map of a result that does not abort does not abort. -/
 theorem NoAbort.map {α β : Type} {x : Except EvmError α} (f : α → β) (hx : NoAbort x) :
-    NoAbort (f <$> x) := by
-  intro e h
-  cases hx' : x with
-  | error e' =>
-    rw [hx'] at h
-    cases h
-    exact hx _ hx'
-  | ok a =>
-    rw [hx'] at h
-    cases h
+    NoAbort (f <$> x) :=
+  ErrorsMeet.map f hx
 
 /-- A pop fails only with a stack underflow. -/
 theorem noAbort_popWord (evm : Evm fork Nat) : NoAbort (popWord evm) := by
@@ -194,7 +179,7 @@ So do a jump to an invalid destination and a write in a static frame.
 That halt is no error of the loop. -/
 theorem NoAbort.error {α : Type} {e : EvmError} (h : e.aborts = false) :
     NoAbort (.error e : Except EvmError α) :=
-  fun _ he => by cases he; exact h
+  ErrorsMeet.error h
 
 /-- A three-operand instruction of the stack fails only out of gas or of stack. -/
 theorem noAbort_ternaryOp (cost : Nat) (f : U256 → U256 → U256 → U256) (evm : Evm fork Nat) :
