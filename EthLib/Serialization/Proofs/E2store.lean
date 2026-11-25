@@ -2,7 +2,6 @@ module
 
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Bytes
-public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Serialization.E2store
 
 /-!

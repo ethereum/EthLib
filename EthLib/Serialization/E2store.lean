@@ -2,7 +2,6 @@ module
 
 public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
-public import EthLib.Base.ByteOrder
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 /-!

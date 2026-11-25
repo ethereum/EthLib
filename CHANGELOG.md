@@ -1061,6 +1061,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Ssz.wellFormed_vector_element` (`Serialization/Proofs/Ssz/Type/Legality.lean`) is removed ([#4621](https://github.com/ethereum/EthLib/pull/4621)).
+  It stated the same fact as `Ssz.wellFormed_vector` (`Serialization/Proofs/Ssz/Codec/Admits.lean`), with the same hypothesis and conclusion.
+  Migration: use `Ssz.wellFormed_vector`, from `EthLib.Serialization.Proofs.Ssz.Codec.Admits`.
 - In Lean, SSZ holds its bytes as a `ByteArray` in place of an `Array UInt8` ([#4560](https://github.com/ethereum/EthLib/pull/4560)).
   A node of a Merkle tree, an encoding and a byte value of SSZ now have the type that SHA-256 and the bindings use.
   So no step copies them from one type to the other.
