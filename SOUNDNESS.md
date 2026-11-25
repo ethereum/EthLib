@@ -1368,7 +1368,8 @@ The JSON reader of the tokens is the one in Base, and the Unicode escape of [RFC
 `Base.Json.string_eq_some_iff` proves that, with more fuel than characters after the position, a string reads exactly as what the characters before its first unescaped quotation mark stand for.
 Those characters follow the grammar of §7, with no lone surrogate escape.
 So each two-character escape stands for its character in the table of §7.
-That includes the escapes of the solidus, the backspace, the form feed and the tab, which the printer of EthLib never writes, so the round trip of the printer and the reader does not cover them.
+That includes the escapes of the solidus, the backspace, the form feed and the tab.
+The printer of EthLib never writes those escapes, so the round trip of the printer and the reader does not cover them.
 The rest of the total JSON reader has no theorem of full agreement with RFC 8259.
 These theorems do not establish HMAC unforgeability.
 
