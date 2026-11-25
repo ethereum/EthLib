@@ -104,6 +104,15 @@ nat_of_py(
     return NULL;
   }
   if (!overflow) return lean_uint64_to_nat((uint64_t) small);
+  /* An int from 2^63 to 2^64 - 1, such as half of all uint64 values, still fits a machine word. */
+  unsigned long long word = PyLong_AsUnsignedLongLong(obj);
+  if (!(word == (unsigned long long) -1 && PyErr_Occurred())) {
+    /* It counts its 8 bytes, as the text of a wider int counts its own. */
+    if (!take_bytes(budget, 8)) return NULL;
+    return lean_uint64_to_nat(word);
+  }
+  if (!PyErr_ExceptionMatches(PyExc_OverflowError)) return NULL;
+  PyErr_Clear();
   /* The method of `int` itself, so that a subclass cannot change the width it reports. */
   PyObject* bits = PyObject_CallMethod((PyObject*) &PyLong_Type, "bit_length", "O", obj);
   if (!bits) return NULL;

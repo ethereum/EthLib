@@ -127,6 +127,13 @@ def test_a_subclass_of_int_comes_back_as_an_int() -> None:
     assert same(_native.pyvalue_echo(Kind.BLOCK), 3)
 
 
+def test_a_subclass_of_int_of_64_bits_comes_back_as_an_int() -> None:
+    class Word(IntEnum):
+        TOP = 2**63
+
+    assert same(_native.pyvalue_echo(Word.TOP), 2**63)
+
+
 def test_the_deepest_nesting_passes() -> None:
     value = nested(MAX_DEPTH)
     assert same(_native.pyvalue_echo(value), value)
@@ -155,6 +162,17 @@ def test_a_wider_int_fails() -> None:
 def test_a_huge_int_fails_at_once() -> None:
     with raises(ValueError, f"cannot pass an int of more than {MAX_INT_BITS} bits to Lean"):
         _native.pyvalue_echo(1 << 8_000_000)
+
+
+@pytest.mark.parametrize("value", [2**63 - 1, 2**63, 2**64 - 1, 2**64])
+def test_an_int_at_the_edge_of_a_word_comes_back_unchanged(value: int) -> None:
+    assert same(_native.pyvalue_echo(value), value)
+
+
+# The bytes alone fit the budget, so only the 8 bytes of the int can exceed it.
+def test_an_int_of_64_bits_counts_its_bytes() -> None:
+    with raises(ValueError, f"cannot pass more than {MAX_BYTES} bytes to Lean in one call"):
+        _native.pyvalue_echo([2**63, bytes(MAX_BYTES - 7)])
 
 
 def test_a_negative_int_fails() -> None:
