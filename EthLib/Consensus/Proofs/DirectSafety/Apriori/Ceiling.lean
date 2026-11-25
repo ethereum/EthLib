@@ -848,8 +848,7 @@ private theorem unassigned_assignment_budget {g x u : ForkedBeaconState preset}
       unassignedPreStake x + fundingCarry x +
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat *
           ((getCurrentEpoch u.state).toNat - (getCurrentEpoch x.state).toNat + 1) := by
-  have bound := shared.unassigned_assignment_resources genesis head caps.activation
-    caps.compounding aligned electra early
+  have bound := shared.unassigned_assignment_resources genesis head caps aligned electra early
   dsimp only at bound
   change _ ≤ _ at bound
   have initial := unassigned_resources_eq_pre shared genesis finite
@@ -915,15 +914,15 @@ private theorem newly_slashed_initial_classification {g x y : ForkedBeaconState 
         decide (getCurrentEpoch x.state < v.exitEpoch)) = true ∨
     ∃ v, x.state.validators.data[i]? = some v ∧ v.slashed = false ∧
       v.exitEpoch ≤ getCurrentEpoch x.state ∧ getCurrentEpoch x.state < v.withdrawableEpoch := by
-  have assigned := (shared.append tail).slashed_activation_assigned genesis caps.activation
-    caps.compounding aligned early finite i w after slashed
+  have assigned := (shared.append tail).slashed_activation_assigned genesis caps aligned early
+      finite i w after slashed
   cases before : x.state.validators.data[i]? with
   | none => exact .inl (by simp [after, assigned])
   | some v =>
     have unslashed : v.slashed = false := by simpa [before] using initialFlag
     by_cases exited : v.exitEpoch ≤ getCurrentEpoch x.state
     · exact .inr ⟨v, rfl, unslashed, exited,
-        tail.newly_slashed_initial_exited_unwithdrawable caps.activation caps.compounding
+        tail.newly_slashed_initial_exited_unwithdrawable caps
           i v w before after unslashed slashed exited⟩
     · have live := UInt64.not_le.mp exited
       exact .inl (by simp [after, assigned, live])
@@ -1103,7 +1102,7 @@ private theorem newly_slashed_epoch_prefix {x m : ForkedBeaconState preset}
     w.slashed = true ∧ w.exitEpoch = u.exitEpoch ∧
       (getCurrentEpoch x.state).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
         w.withdrawableEpoch.toNat := by
-  have lower := pre.newly_slashed_withdrawableEpoch caps.activation caps.compounding
+  have lower := pre.newly_slashed_withdrawableEpoch caps
     delay i v u initial middle unslashed slashed
   have located : s.validators.data[i]? = some u := by rwa [same]
   have kept := trace.slashed_withdrawableEpoch_mono i u w located site slashed lower.1
@@ -1262,8 +1261,7 @@ private theorem epoch_delayed_slashing_nondebit {x m n : ForkedBeaconState prese
         (newly_slashed_epoch_not_due (getCurrentEpoch x.state)
           (getCurrentEpoch registered) w kept.2.2 (by rwa [epoch]))
     · -- A key slashed at the start keeps its slash and its withdrawable epoch.
-      obtain ⟨flag, -, lower⟩ := Run.slashed_withdrawableEpoch_mono_epoch pre caps.activation
-        caps.compounding cachedOk fixed
+      obtain ⟨flag, -, lower⟩ := Run.slashed_withdrawableEpoch_mono_epoch pre caps cachedOk fixed
         i.toNat v w initial found vslashed (assigned vslashed)
       refine sites.2.2.2.2.2.1 rfl i w found flag ?_
       intro due
@@ -2133,12 +2131,12 @@ private theorem FloorTrace.slot_transport {g x y : ForkedBeaconState preset}
   obtain ⟨last, done, balance, debt, slashed, raised⟩ := trace.slot_update advanceOk i
     (Array.getElem?_eq_some_iff.mp initial).1 balance high
   have tail : Run config checks x y := Run.nil.snoc (.slot ok)
-  obtain ⟨z, located, mono⟩ := tail.validatorCap_mono caps.activation caps.compounding
+  obtain ⟨z, located, mono⟩ := tail.validatorCap_mono caps
     i v initial
   have equal := Option.some.inj (located.symm.trans final)
   subst z
-  have endpoint := (shared.append tail).effectiveBalance_capped genesis caps.activation
-    caps.compounding w (Array.mem_of_getElem? final)
+  have endpoint := (shared.append tail).effectiveBalance_capped genesis caps w
+      (Array.mem_of_getElem? final)
   have old := capped.trans (UInt64.le_iff_toNat_le.mp mono)
   have current : effectiveAt y i ≤ (withdrawalMaxEffectiveBalance preset y.fork w).toNat := by
     simpa [effectiveAt, final] using UInt64.le_iff_toNat_le.mp endpoint
@@ -2308,7 +2306,7 @@ theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
         (retained.imp_right (fun r => ⟨r, delay⟩)) balance budget capped effective
         positive quotient_le
     have tail : Run config checks ⟨fork, s⟩ ⟨fork, t⟩ := .snoc .nil (.block engine signed due ok)
-    obtain ⟨z, located, mono⟩ := tail.validatorCap_mono caps.activation caps.compounding
+    obtain ⟨z, located, mono⟩ := tail.validatorCap_mono caps
       i.toNat u middle
     have same := Option.some.inj (located.symm.trans final)
     subst z

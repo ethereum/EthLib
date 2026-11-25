@@ -1761,8 +1761,7 @@ A slashed withdrawable epoch cannot decrease along the run, the cache step and t
 This is the slashed-span premise of the reserved replay of the epoch. -/
 theorem epochPrefix_slashedSpan {x outer : ForkedBeaconState preset}
     {s reset deposited : BeaconState preset outer.fork} (run : Run config checks x outer)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (cached : processSlot outer.state = .ok s)
     (epoch : EpochPrefix config checks s reset)
     (depositsOk : EpochStage.Edge config checks .pendingDeposits reset deposited) :
@@ -1771,7 +1770,7 @@ theorem epochPrefix_slashedSpan {x outer : ForkedBeaconState preset}
       v.exitEpoch ≠ FAR_FUTURE_EPOCH →
         w.slashed = true ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH ∧
           v.withdrawableEpoch ≤ w.withdrawableEpoch :=
-  Run.slashed_withdrawableEpoch_mono_epoch run activation compounding cached
+  Run.slashed_withdrawableEpoch_mono_epoch run caps cached
     (epoch.depositTrace depositsOk)
 
 /-- Support at the epoch after `c` is support at `c`, or an activation exactly at that epoch.

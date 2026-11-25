@@ -477,7 +477,7 @@ private theorem ChainHolds.of_processUpgrades {start : RunStart} {step : BlockSt
   have freshAfter := freshBounded.of_processUpgrades budgeted firstLe computed
   have supplyLe := freshAfter.supply
   refine ⟨?_, (processUpgrades_invariant holds.invariant computed).1,
-    processUpgrades_shaped run.activation run.compounding computed holds.shaped,
+    processUpgrades_shaped run.caps computed holds.shaped,
     holds.wellFormed.of_processUpgrades computed, holds.resolved.of_processUpgrades computed,
     holds.early.of_processUpgrades computed, holds.voted.of_processUpgrades computed,
     by rw [slotEq]; exact holds.counted, ?_, ?_⟩
@@ -622,7 +622,7 @@ theorem ChainHolds.advanceSlotAcross_exists_ok
         bounded.of_upgradeNext (bounded.effective_le advancedRun (by omega))
           (by rw [epochEq]; exact advancedRun.first_le_ceilingAt fits advancedHolds.started)
           nextOk,
-        upgradeNext_shaped advancedRun.activation advancedRun.compounding nextOk shaped,
+        upgradeNext_shaped advancedRun.caps nextOk shaped,
         PendingResolved.of_altair altair _, PendingVoted.of_altair altair _⟩)
   exact ⟨after, by simp only [advanceSlotAcross, advancedOk, bind, Except.bind]; exact afterOk⟩
 

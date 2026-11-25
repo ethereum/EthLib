@@ -1088,6 +1088,12 @@ Not yet released.
 - In Lean, `Engine.toOption_eq_some` (`Engine/Proofs/ExecutionEngine.lean`) moves to `Base.toOption_eq_some` (`Base/Proofs/Except.lean`), with the same statement ([#4671](https://github.com/ethereum/EthLib/pull/4671)).
   `Base.toOption_eq_some_iff` states both directions, and `Base.Uint64.toNat_toUInt64` (`Base/Proofs/Uint64.lean`) says that a number below `2^64` keeps its value as a 64-bit integer.
   Migration: open `EthLib.Base`, or write `Base.toOption_eq_some`.
+- In Lean, the theorems that need the effective-balance caps of a preset in order take one hypothesis `caps : CapOrder preset` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  - `CapOrder`, `CapOrder.mainnet` and `CapOrder.minimal` move from `Consensus/Proofs/Transition/BalanceDrift.lean` to `Consensus/Proofs/Transition/Totality/Bound.lean`, beside the positive divisors of a preset, with the same names.
+  - Twenty-six public theorems that took the two orderings `activation` and `compounding` as separate hypotheses take `caps` in their place, among them `Run.effectiveBalance_capped`, `Run.validatorCap_mono`, `Run.slashed_withdrawableEpoch_mono_epoch`, `Run.scheduled_activation_reserve`, `minimum_cap` and `epochPrefix_slashedSpan`.
+    They state the same facts.
+  - `RunConditions` (`Consensus/Proofs/Transition/Totality/RunStep.lean`) holds one field `caps` in place of its fields `activation` and `compounding`.
+  Migration: pass `⟨activation, compounding⟩`, or `CapOrder.mainnet` or `CapOrder.minimal`, where the two orderings were passed, and read `conditions.caps.activation` and `conditions.caps.compounding` in place of `conditions.activation` and `conditions.compounding`.
 - In Lean, the onboarding of builders at the Gloas fork routes each pending deposit by its withdrawal credentials first ([#4151](https://github.com/ethereum/EthLib/issues/4151)).
   - `Consensus.onboardDeposit` (`Consensus/Transition/Upgrade.lean`) keeps a deposit without builder credentials in the queue, even for the key of a builder.
   - A builder deposit for the key of a builder tops it up, whatever its signature.

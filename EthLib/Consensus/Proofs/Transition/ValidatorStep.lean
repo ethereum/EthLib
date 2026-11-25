@@ -991,8 +991,7 @@ private theorem UnassignedEligibleBalance.sync {f : Fork}
 
 /-- Ordered preset caps and retained compounding credentials make a validator's cap monotone. -/
 private theorem withdrawalMaxEffectiveBalance_mono {f h : Fork} {v w : Validator}
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (forks : f ≤ h)
     (credentials : hasCompoundingWithdrawalCredential v = true →
       hasCompoundingWithdrawalCredential w = true) :
@@ -1005,12 +1004,12 @@ private theorem withdrawalMaxEffectiveBalance_mono {f h : Fork} {v w : Validator
     · rw [ite_eq_left (credentials compound)]
       exact UInt64.le_refl _
     · split
-      · exact compounding
+      · exact caps.compounding
       · exact UInt64.le_refl _
   · split
     · split
-      · exact UInt64.le_trans activation compounding
-      · exact activation
+      · exact UInt64.le_trans caps.activation caps.compounding
+      · exact caps.activation
     · exact UInt64.le_refl _
 
 private theorem capped_setValidatorAt {f : Fork} {s t : BeaconState preset f}
@@ -4360,8 +4359,7 @@ private theorem CapStepR.slot {f : Fork} {s t : BeaconState preset f}
 
 private theorem CapStep.carry {f h : Fork} {s : BeaconState preset f}
     {t : BeaconState preset h} (same : t.validators.data = s.validators.data)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (forks : f ≤ h) (slot : t.slot = s.slot := by rfl)
     (proposers : h < .glamsterdam → AssignedProposers s → AssignedProposers t := by
       intro _ _
@@ -4377,9 +4375,9 @@ private theorem CapStep.carry {f h : Fork} {s : BeaconState preset f}
       | (have impossible := electra; simp +decide at impossible)
       | simp [carryFields] at member) : CapStepR config s t where
   capped capped v member := UInt64.le_trans (capped v (same ▸ member))
-    (withdrawalMaxEffectiveBalance_mono activation compounding forks id)
+    (withdrawalMaxEffectiveBalance_mono caps forks id)
   monotone _i v found := ⟨v, same ▸ found,
-    withdrawalMaxEffectiveBalance_mono activation compounding forks id⟩
+    withdrawalMaxEffectiveBalance_mono caps forks id⟩
   forward := by
     rw [getCurrentEpoch, getCurrentEpoch, slot]
     exact UInt64.le_refl _
@@ -4577,8 +4575,7 @@ private theorem ScheduledFree.compoundingExcess {config : Config}
 
 private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (ok : upgradeNext config checks s = .ok t) :
     CapStepR config s.state t.val.state ∧
       (t.val.fork < .glamsterdam → ∀ c, PartialsAt c s.state → PartialsAt c t.val.state) ∧
@@ -4597,7 +4594,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
       throwThe, MonadExceptOf.throw, reduceCtorEq] at ok
   · obtain ⟨_, upgraded, rfl⟩ := ok
     exact ⟨CapStep.carry (upgradeToAltair_spec upgraded).1
-      activation compounding (by change Fork.phase0 ≤ .altair; decide) frame.slot,
+      caps (by change Fork.phase0 ≤ .altair; decide) frame.slot,
       fun _ _ _ impossible => (by decide : ¬ Fork.pectra ≤ .altair) impossible |>.elim,
       fun _ _ held => held.transfer (upgradeToAltair_spec upgraded).1
         (fun _ _ b _ _ read low => ⟨b, by
@@ -4612,17 +4609,17 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
         (upgradeToAltair_spec upgraded).1
         (upgradeToAltair_spec upgraded).2.1⟩
   · subst ok
-    exact ⟨CapStep.carry rfl activation compounding (by change Fork.altair ≤ .bellatrix; decide),
+    exact ⟨CapStep.carry rfl caps (by change Fork.altair ≤ .bellatrix; decide),
       fun _ _ _ impossible => (by decide : ¬ Fork.pectra ≤ .bellatrix) impossible |>.elim,
       (fun _ _ held => held.transfer rfl (fun _ _ b _ _ read low => ⟨b, read, low⟩)),
       fun _ _ held => held.reframe (Nat.le_refl _) (Nat.le_refl _) rfl rfl⟩
   · subst ok
-    exact ⟨CapStep.carry rfl activation compounding (by change Fork.bellatrix ≤ .shapella; decide),
+    exact ⟨CapStep.carry rfl caps (by change Fork.bellatrix ≤ .shapella; decide),
       fun _ _ _ impossible => (by decide : ¬ Fork.pectra ≤ .shapella) impossible |>.elim,
       (fun _ _ held => held.transfer rfl (fun _ _ b _ _ read low => ⟨b, read, low⟩)),
       fun _ _ held => held.reframe (Nat.le_refl _) (Nat.le_refl _) rfl rfl⟩
   · subst ok
-    exact ⟨CapStep.carry rfl activation compounding (by change Fork.shapella ≤ .dencun; decide),
+    exact ⟨CapStep.carry rfl caps (by change Fork.shapella ≤ .dencun; decide),
       fun _ _ _ impossible => (by decide : ¬ Fork.pectra ≤ .dencun) impossible |>.elim,
       (fun _ _ held => held.transfer rfl (fun _ _ b _ _ read low => ⟨b, read, low⟩)),
       fun _ _ held => held.reframe (Nat.le_refl _) (Nat.le_refl _) rfl rfl⟩
@@ -4671,7 +4668,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
         · cases computed; exact ⟨CapStepR.refl _, id, (fun _ => id), rfl⟩))
       ⟨CapStepR.refl _, id, (fun _ => id), rfl⟩ compounded
     refine ⟨(CapStep.carry (s := state) (by rfl)
-      activation compounding (by decide) (by rfl)
+      caps (by decide) (by rfl)
       (by intro _ _ fulu; exact (by decide : ¬ Fork.fusaka ≤ .pectra) fulu |>.elim)
       (by intro _ _ _ electra entry member
           simp [carryFields, show ¬ Fork.pectra ≤ .dencun by decide] at member)).trans
@@ -4686,7 +4683,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
         intro v member
         exact UInt64.le_trans (capped v member) (by
           simpa [withdrawalMaxEffectiveBalance, show ¬ Fork.pectra ≤ .dencun by decide]
-            using activation)
+            using caps.activation)
       exact compoundedStep.2.2.1 (queuedStep.2.1 bound)
         (queuedStep.2.2.1 bound (held.transfer rfl
           (fun _ _ b _ _ read low => ⟨b, read, low⟩)))
@@ -4697,7 +4694,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
         intro v member
         exact UInt64.le_trans (capped v member) (by
           simpa [withdrawalMaxEffectiveBalance, show ¬ Fork.pectra ≤ .dencun by decide]
-            using activation)
+            using caps.activation)
       have kept := queuePreActivation_fold_assigned _ _ queued
       have waiting := ScheduledFree.preActivation
         (held.reframe (Nat.le_refl _) (Nat.le_refl _) rfl rfl) kept.1 kept.2.1 kept.2.2
@@ -4709,7 +4706,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
         ⟨waiting, queuedStep.2.1 bound⟩ compounded).1
   · obtain ⟨_, upgraded, rfl⟩ := ok
     refine ⟨CapStep.carry (upgradeToFulu_spec upgraded).1
-      activation compounding (by change Fork.pectra ≤ .fusaka; decide) frame.slot
+      caps (by change Fork.pectra ≤ .fusaka; decide) frame.slot
       (fun _ _ => ?_) (fun _ _ held => ?_), ?_, fun _ _ held =>
         held.transfer (upgradeToFulu_spec upgraded).1
           (fun _ _ b _ _ read low => ⟨b, by
@@ -4746,7 +4743,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
       exact UInt64.le_refl _
   · obtain ⟨_, upgraded, rfl⟩ := ok
     exact ⟨CapStep.carry (upgradeToGloas_spec upgraded).1
-      activation compounding (by change Fork.fusaka ≤ .glamsterdam; decide) frame.slot
+      caps (by change Fork.fusaka ≤ .glamsterdam; decide) frame.slot
       (fun early => (Nat.lt_irrefl _ early).elim)
       (fun early => (Nat.lt_irrefl _ early).elim),
       (fun early => (Nat.lt_irrefl _ early).elim),
@@ -4755,7 +4752,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
   · obtain ⟨_, upgraded, rfl⟩ := ok
     obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact ⟨CapStep.carry (upgradeHezeFields_lists state).1
-      activation compounding (by change Fork.glamsterdam ≤ .hegota; decide) frame.slot
+      caps (by change Fork.glamsterdam ≤ .hegota; decide) frame.slot
       (fun early => ((by decide : ¬ Fork.hegota < .glamsterdam) early).elim)
       (fun early => ((by decide : ¬ Fork.hegota < .glamsterdam) early).elim),
       (fun early => ((by decide : ¬ Fork.hegota < .glamsterdam) early).elim),
@@ -4785,8 +4782,7 @@ private theorem preKeyCharge_upgrade {s : ForkedBeaconState preset}
     exact ((by decide : ¬ Fork.hegota < .glamsterdam) early).elim
 
 private theorem CapStep.upgrades {s t : ForkedBeaconState preset}
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (ok : processUpgrades config checks s = .ok t) :
     CapStepR config s.state t.state ∧
       (t.fork < .glamsterdam → ∀ c, PartialsAt c s.state → PartialsAt c t.state) ∧
@@ -4803,7 +4799,7 @@ private theorem CapStep.upgrades {s t : ForkedBeaconState preset}
   fun_induction processUpgrades config checks s generalizing t with
   | case1 s due ih =>
     obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    obtain ⟨first, partials, funded, scheduled⟩ := CapStepR.upgrade activation compounding nextOk
+    obtain ⟨first, partials, funded, scheduled⟩ := CapStepR.upgrade caps nextOk
     obtain ⟨last, assigned, retained, charge, reserve⟩ := ih next rest
     exact ⟨first.trans last,
       (fun early c => assigned early c ∘ partials (Nat.lt_of_le_of_lt last.forks early) c),
@@ -4823,25 +4819,23 @@ private theorem CapStep.upgrades {s t : ForkedBeaconState preset}
 
 private theorem CapStep.step {s t : ForkedBeaconState preset}
     (step : Step config checks s t)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (early : t.fork < .glamsterdam) :
     CapStepR config s.state t.state ∧ (∀ c, PartialsAt c s.state → PartialsAt c t.state) := by
   cases step with
   | block engine signed due ok =>
-    have block := CapStepR.block compounding (applySignedBlock_ok ok).2.1
+    have block := CapStepR.block caps.compounding (applySignedBlock_ok ok).2.1
     exact ⟨block.1, block.2.1 early⟩
   | slot ok =>
     obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
     obtain ⟨first, partials, _⟩ := CapStepR.slot slotOk
-    obtain ⟨last, assigned, _⟩ := CapStep.upgrades activation compounding upgrades
+    obtain ⟨last, assigned, _⟩ := CapStep.upgrades caps upgrades
     exact ⟨first.trans last, fun c => assigned early c ∘ partials c⟩
 
 /-- Each step of a run is a cap step, at every fork. -/
 private theorem CapStepR.run_all {s t : ForkedBeaconState preset}
     (run : Run config checks s t)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA) :
+    (caps : CapOrder preset) :
     CapStepR config s.state t.state := by
   induction run with
   | nil => exact CapStepR.refl _
@@ -4849,22 +4843,21 @@ private theorem CapStepR.run_all {s t : ForkedBeaconState preset}
     refine ih.trans ?_
     cases step with
     | block engine signed due ok =>
-      exact (CapStepR.block compounding (applySignedBlock_ok ok).2.1).1
+      exact (CapStepR.block caps.compounding (applySignedBlock_ok ok).2.1).1
     | slot ok =>
       obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
-      exact (CapStepR.slot slotOk).1.trans (CapStep.upgrades activation compounding upgrades).1
+      exact (CapStepR.slot slotOk).1.trans (CapStep.upgrades caps upgrades).1
 
 /-- A validator's withdrawal cap is at least the maximum effective balance before Electra. -/
 theorem minimum_cap
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     {h : Fork} (v : Validator) :
     preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v := by
   unfold withdrawalMaxEffectiveBalance getMaxEffectiveBalance
   split
   · split
-    · exact UInt64.le_trans activation compounding
-    · exact activation
+    · exact UInt64.le_trans caps.activation caps.compounding
+    · exact caps.activation
   · exact UInt64.le_refl _
 
 private theorem genesis_assigned_queues {g : ForkedBeaconState preset}
@@ -4884,8 +4877,7 @@ private theorem genesis_reached_queues {g : ForkedBeaconState preset} (reached :
 private theorem CapStep.run_of {g s t : ForkedBeaconState preset}
     (run : Run config checks s t)
     (shared : Run config checks g s)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (base : CapStepR config g.state s.state ∧
       (∀ c, PartialsAt c g.state → PartialsAt c s.state) ∧
       (Invariant g.state → Invariant s.state) ∧
@@ -4911,7 +4903,7 @@ private theorem CapStep.run_of {g s t : ForkedBeaconState preset}
     obtain ⟨⟨first, assigned, invariant, funded⟩, carried⟩ :=
       ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)
     refine ⟨?_, next pre step early first assigned invariant funded carried⟩
-    obtain ⟨last, partials⟩ := CapStep.step step activation compounding early
+    obtain ⟨last, partials⟩ := CapStep.step step caps early
     refine ⟨first.trans last, fun c => partials c ∘ assigned c, ?_, ?_⟩
     · intro held
       cases step with
@@ -4931,7 +4923,7 @@ private theorem CapStep.run_of {g s t : ForkedBeaconState preset}
       have assigned := (assigned False initialPartials.at).old
       cases step with
       | block engine signed due ok =>
-        exact (CapStepR.block compounding (applySignedBlock_ok ok).2.1).2.2.1 early
+        exact (CapStepR.block caps.compounding (applySignedBlock_ok ok).2.1).2.2.1 early
           ((shared.append pre).activationExitOrder genesis) valid.exitsOrdered assigned
           finiteBefore capped
           valid.balancesMatch
@@ -4942,21 +4934,20 @@ private theorem CapStep.run_of {g s t : ForkedBeaconState preset}
       | slot ok =>
         obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
         obtain ⟨slotStep, _, slotFunded, _⟩ := CapStepR.slot slotOk
-        obtain ⟨upStep, _, upFunded, _⟩ := CapStep.upgrades activation compounding upgrades
+        obtain ⟨upStep, _, upFunded, _⟩ := CapStep.upgrades caps upgrades
         exact upFunded early (slotStep.capped capped)
-          (slotFunded (Nat.lt_of_le_of_lt upStep.forks early) activation aligned.1
-            (minimum_cap activation compounding) valid.balancesMatch targets held)
+          (slotFunded (Nat.lt_of_le_of_lt upStep.forks early) caps.activation aligned.1
+            (minimum_cap caps) valid.balancesMatch targets held)
 
 private theorem CapStepR.run {s t : ForkedBeaconState preset}
     (run : Run config checks s t)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (early : t.fork < .glamsterdam) :
     CapStepR config s.state t.state ∧ (∀ c, PartialsAt c s.state → PartialsAt c t.state) ∧
       (Invariant s.state → Invariant t.state) ∧
       (Genesis (config := config) (checks := checks) s → MaxEffectiveBalancesAligned preset →
         getCurrentEpoch t.state < FAR_FUTURE_EPOCH → UnassignedEligibleBalance t.state) :=
-  (CapStep.run_of run .nil activation compounding
+  (CapStep.run_of run .nil caps
     ⟨CapStepR.refl _, fun _ => id, id,
       fun genesis _ _ => genesis_unassigned_eligible_balance genesis⟩
     (fun _ => True) trivial
@@ -4976,26 +4967,25 @@ private theorem genesis_scheduled_reserve {g : ForkedBeaconState preset}
 
 private theorem run_scheduled_walk {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset)
     (early : x.fork < .glamsterdam) (finite : getCurrentEpoch x.state < FAR_FUTURE_EPOCH) :
     UnassignedEligibleBalance x.state ∧ ScheduledFree x.state := by
   let Q := fun {a} (_ : Run config checks g a) =>
     getCurrentEpoch a.state < FAR_FUTURE_EPOCH → ScheduledFree a.state
-  have whole := CapStep.run_of run .nil activation compounding
+  have whole := CapStep.run_of run .nil caps
     ⟨CapStepR.refl _, fun _ => id, id, fun h _ _ => genesis_unassigned_eligible_balance h⟩
     Q (fun _ => genesis_scheduled_reserve genesis)
     (fun {a b} pre step before first assigned invariant funded held => by
       intro finiteB
-      have last := (CapStep.step step activation compounding before).1
+      have last := (CapStep.step step caps before).1
       have finiteA := UInt64.lt_of_le_of_lt last.forward finiteB
       have valid := invariant genesis.invariant
       have capped := first.capped genesis.effectiveBalance_capped
       obtain ⟨partials, targets⟩ := genesis_reached_queues True genesis
       cases step with
       | block engine signed due ok =>
-        exact (CapStepR.block compounding (applySignedBlock_ok ok).2.1).2.2.2.2
+        exact (CapStepR.block caps.compounding (applySignedBlock_ok ok).2.1).2.2.2.2
           before (pre.activationExitOrder genesis) valid.exitsOrdered (assigned True partials)
           capped valid.balancesMatch
           (by obtain ⟨_, _, _, _, initialized⟩ := genesis
@@ -5006,35 +4996,33 @@ private theorem run_scheduled_walk {g x : ForkedBeaconState preset}
       | slot ok =>
         obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
         have slot := CapStepR.slot slotOk
-        have upgrade := CapStep.upgrades activation compounding upgrades
+        have upgrade := CapStep.upgrades caps upgrades
         exact upgrade.2.2.2.2 before (fun _ => slot.1.capped capped)
-          (slot.2.2.2 (Nat.lt_of_le_of_lt last.forks before) valid finiteA activation aligned
-            (minimum_cap activation compounding)
+          (slot.2.2.2 (Nat.lt_of_le_of_lt last.forks before) valid finiteA caps.activation aligned
+            (minimum_cap caps)
             (first.targetsAt (Nat.lt_of_le_of_lt last.forks before) True targets)
             (funded genesis aligned finiteA) (held finiteA))) early
   exact ⟨whole.1.2.2.2 genesis aligned finite, whole.2 finite⟩
 
 theorem run_scheduled_reserve {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset)
     (early : x.fork < .glamsterdam) (finite : getCurrentEpoch x.state < FAR_FUTURE_EPOCH) :
     ScheduledEligibleBalance x.state :=
-  fun _ => (run_scheduled_walk run genesis activation compounding aligned early finite).2
+  fun _ => (run_scheduled_walk run genesis caps aligned early finite).2
 
 /-- A key without an activation epoch keeps its effective balance funded.
 
 From Electra, the eligible keys that are not yet active also keep their activation reserve. -/
 theorem run_eligible_balance {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset) (early : x.fork < .glamsterdam)
     (finite : getCurrentEpoch x.state < FAR_FUTURE_EPOCH) :
     UnassignedEligibleBalance x.state ∧ ScheduledEligibleBalanceElectra x.state := by
   obtain ⟨unassigned, scheduled⟩ :=
-    run_scheduled_walk run genesis activation compounding aligned early finite
+    run_scheduled_walk run genesis caps aligned early finite
   refine ⟨unassigned, fun _ i v found guard future => ?_⟩
   by_cases far : v.activationEpoch = FAR_FUTURE_EPOCH
   · obtain ⟨⟨b, read, low⟩, minimum, unslashed⟩ := unassigned i v found far
@@ -5045,12 +5033,11 @@ theorem run_eligible_balance {g x : ForkedBeaconState preset}
 
 theorem run_unassigned_eligible_balance {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset) (early : x.fork < .glamsterdam)
     (finite : getCurrentEpoch x.state < FAR_FUTURE_EPOCH) :
     UnassignedEligibleBalance x.state :=
-  (run_eligible_balance run genesis activation compounding aligned early finite).1
+  (run_eligible_balance run genesis caps aligned early finite).1
 
 private theorem preKeyCharge_assigned {f h : Fork} {s : BeaconState preset f}
     {t : BeaconState preset h} (lifecycle : RegistryLifecycle s t)
@@ -5115,7 +5102,7 @@ private theorem preKeyCharge_epoch {f : Fork} {s t : BeaconState preset f}
     (electra : .pectra ≤ f) (early : f < .glamsterdam)
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
     (aligned : MaxEffectiveBalancesAligned preset)
-    (caps : ∀ {h : Fork} (v : Validator),
+    (minimum : ∀ {h : Fork} (v : Validator),
       preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v)
     (valid : Invariant s) (ordered : ActivationExitOrder s) (targets : AssignedTargets s)
     (held : UnassignedEligibleBalance s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH)
@@ -5183,7 +5170,7 @@ private theorem preKeyCharge_epoch {f : Fork} {s t : BeaconState preset f}
           simpa only [total, cap, Nat.add_assoc] using paid
         omega
       · have keywise := preKeyCharge_epochEdge edge pending electra early activation
-          (funded early activation aligned.1 caps valid.balancesMatch targets held)
+          (funded early activation aligned.1 minimum valid.balancesMatch targets held)
           (previous.targets early targets) (UInt64.lt_of_le_of_lt checkpoint finite)
           candidate
         have summed := Finset.sum_le_sum (s := Finset.range b.validators.data.size)
@@ -5273,8 +5260,7 @@ private theorem preKeyCharge_upgrades {s t : ForkedBeaconState preset}
   rw [total, carry]
 
 private theorem preKeyCharge_step {s t : ForkedBeaconState preset}
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (electra : .pectra ≤ s.fork) (early : t.fork < .glamsterdam)
     (candidate : Nat → Bool)
     (blocks : ∀ (engine : ExecutionEngine preset s.fork)
@@ -5312,7 +5298,7 @@ private theorem preKeyCharge_step {s t : ForkedBeaconState preset}
   | slot ok =>
     obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
     have bound := preKeyCharge_slot electra candidate epochs slotOk
-    have up := CapStep.upgrades activation compounding upgrades
+    have up := CapStep.upgrades caps upgrades
     have unchanged := preKeyCharge_upgrades (s := ⟨s.fork, advanced⟩) electra early candidate
       (up.2.2.2.1 electra early candidate) upgrades
     have slot := processUpgrades_slot upgrades
@@ -5326,8 +5312,7 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
     (shared : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
     (head : Run config checks x u)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset)
     (electra : .pectra ≤ x.fork) (early : u.fork < .glamsterdam)
     (candidate : Nat → Bool)
@@ -5359,11 +5344,11 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
       total a ≤ total x + cap *
         ((getCurrentEpoch a.state).toNat - (getCurrentEpoch x.state).toNat)
   have before := Nat.lt_of_le_of_lt (fork_le_of_chainSteps head.chainSteps) early
-  have result := CapStep.run_of head shared activation compounding
-    (CapStepR.run shared activation compounding before) Q
+  have result := CapStep.run_of head shared caps
+    (CapStepR.run shared caps before) Q
     ⟨electra, UInt64.le_refl _, by simp [total]⟩
     (fun {a b} pre step early first partials invariant funded previous => by
-      have last := (CapStep.step step activation compounding early).1
+      have last := (CapStep.step step caps early).1
       refine ⟨Nat.le_trans previous.1 last.forks,
         UInt64.le_trans previous.2.1 last.forward, ?_⟩
       obtain ⟨_, initialTargets, initialProposers⟩ := genesis_assigned_queues genesis
@@ -5375,9 +5360,9 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
       have capped := first.capped
         (Genesis.effectiveBalance_capped ⟨_, _, _, phase0, initialized⟩)
       have targets := first.targets earlyA initialTargets
-      have paid := preKeyCharge_step activation compounding previous.1 early candidate
+      have paid := preKeyCharge_step caps previous.1 early candidate
         (fun engine block after ok => by
-          have charge := (CapStepR.block compounding ok).2.2.2.1 previous.1 earlyA
+          have charge := (CapStepR.block caps.compounding ok).2.2.2.1 previous.1 earlyA
             (first.proposers earlyA initialProposers) valid.balancesMatch
             (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
               reachable.chainSteps).2
@@ -5395,8 +5380,8 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
           have cacheTargets : AssignedTargets cached := by
             obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cacheOk
             exact targets
-          have epoch := preKeyCharge_epoch previous.1 earlyA activation aligned
-            (minimum_cap activation compounding) cacheValid
+          have epoch := preKeyCharge_epoch previous.1 earlyA caps.activation aligned
+            (minimum_cap caps) cacheValid
             (by simpa only [ActivationExitOrder, validators] using ordered) cacheTargets
             (held.transfer (congrArg (·.data) validators) (fun i v amount found pending read low =>
               ⟨amount, by rw [balances]; exact read, low⟩))
@@ -5602,8 +5587,7 @@ theorem CapStep.slot {f : Fork} {s t : BeaconState preset f}
 
 theorem CapStep.upgrade {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (ok : upgradeNext config checks s = .ok t) :
     CapStep config s.state t.val.state ∧
       (t.val.fork < .glamsterdam → AssignedPartials s.state → AssignedPartials t.val.state) ∧
@@ -5612,7 +5596,7 @@ theorem CapStep.upgrade {s : ForkedBeaconState preset}
           v.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset s.fork v) →
         UnassignedEligibleBalance s.state → UnassignedEligibleBalance t.val.state) ∧
       (ScheduledEligibleBalance s.state → ScheduledEligibleBalance t.val.state) := by
-  obtain ⟨step, partials, funded, scheduled⟩ := CapStepR.upgrade activation compounding ok
+  obtain ⟨step, partials, funded, scheduled⟩ := CapStepR.upgrade caps ok
   exact ⟨step.toCapStep, fun early held => (partials early False held.at).old, funded,
     fun held early =>
       scheduled (Nat.lt_trans early (by decide))
@@ -5628,18 +5612,17 @@ Proved only before Gloas: an unassigned validator keeps its eligible balance.
 That needs a run from genesis, aligned caps and a finite epoch. -/
 theorem CapStep.run {s t : ForkedBeaconState preset}
     (run : Run config checks s t)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA) :
+    (caps : CapOrder preset) :
     CapStep config s.state t.state ∧
       (t.fork < .glamsterdam → AssignedPartials s.state → AssignedPartials t.state) ∧
       (Invariant s.state → Invariant t.state) ∧
       (t.fork < .glamsterdam → Genesis (config := config) (checks := checks) s →
         MaxEffectiveBalancesAligned preset →
         getCurrentEpoch t.state < FAR_FUTURE_EPOCH → UnassignedEligibleBalance t.state) :=
-  ⟨(CapStepR.run_all run activation compounding).toCapStep,
-    fun early held => ((CapStepR.run run activation compounding early).2.1 False held.at).old,
+  ⟨(CapStepR.run_all run caps).toCapStep,
+    fun early held => ((CapStepR.run run caps early).2.1 False held.at).old,
     fun held => Run.invariant held run,
-    fun early => (CapStepR.run run activation compounding early).2.2.2⟩
+    fun early => (CapStepR.run run caps early).2.2.2⟩
 
 /-- Every stage of an epoch trace is a cap step. -/
 theorem CapStep.epochTrace {f : Fork} {s t : BeaconState preset f}

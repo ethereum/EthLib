@@ -366,7 +366,8 @@ private theorem RunBounded.of_processBlock {fork : Fork} {engine : ExecutionEngi
   -- The effective balances rise by at most the largest cap for each new validator.
   have sizeLe := processBlock_validators_size_le computed
   have joinsLe := bounded.joins
-  have effectiveAfter := processBlock_effectiveBalanceSum_le baseRun.compounding capped computed
+  have effectiveAfter := processBlock_effectiveBalanceSum_le baseRun.caps.compounding capped
+      computed
   have risen : (after.validators.data.size - state.validators.data.size) *
       preset.largestEffectiveBalance ≤ step.effective :=
     (Nat.mul_le_mul_right _ (by omega)).trans covers.effective
@@ -647,7 +648,7 @@ theorem ChainHolds.of_stateTransitionAcross {fork : Fork} {engine : ExecutionEng
   have le : (getCurrentEpoch advanced).toNat - startEpoch ≤ epochs := by omega
   have baseRun := conditions.at (elapsed := (getCurrentEpoch advanced).toNat - startEpoch)
     (Nat.le_of_succ_le raised) (by omega)
-  have shaped := stateTransitionAcross_shaped conditions.run.activation conditions.run.compounding
+  have shaped := stateTransitionAcross_shaped conditions.run.caps
     computed holds.shaped
   have budgeted : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum advanced) ≤
       budget :=

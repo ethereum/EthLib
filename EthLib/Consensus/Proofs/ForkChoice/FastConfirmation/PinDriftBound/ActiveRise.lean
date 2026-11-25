@@ -1143,7 +1143,7 @@ private theorem voter_not_withdrawn (h : Setting config checks g split fin pulle
   have far := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
   have beyond : (getCurrentEpoch pulled).toNat + 1 < wP.withdrawableEpoch.toNat := by
     by_cases slashedP : wP.slashed = true
-    · have newly := (tail.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
+    · have newly := (tail.newly_slashed_withdrawableEpoch h.caps
         (Internal.Setting.delay h) v.toNat uS wP foundS foundP cleanS slashedP).2
       have newly' : (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
           wP.withdrawableEpoch.toNat := newly

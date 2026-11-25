@@ -2188,7 +2188,7 @@ theorem effectiveFall_le
       | none => simp [effective, balanceAt, state, read]
       | some val =>
         have capped := ((history.append boundary).append tailP).effectiveBalance_capped genesis
-          caps.activation caps.compounding val (Array.mem_of_getElem? read)
+          caps val (Array.mem_of_getElem? read)
         have top : withdrawalMaxEffectiveBalance preset P.fork val ≤
             preset.MAX_EFFECTIVE_BALANCE_ELECTRA := by
           simp only [withdrawalMaxEffectiveBalance, electraP, ↓reduceIte, getMaxEffectiveBalance]
@@ -2287,8 +2287,8 @@ theorem effectiveFall_le
         simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at isActiveS
         rw [sEpochR]
         exact UInt64.lt_of_lt_of_le isActiveS.2 ordered
-      have capS := (histX.append pre).effectiveBalance_capped genesis caps.activation
-        caps.compounding valS (Array.mem_of_getElem? foundS)
+      have capS := (histX.append pre).effectiveBalance_capped genesis caps valS
+          (Array.mem_of_getElem? foundS)
       have tEpoch : getCurrentEpoch t = getCurrentEpoch R.state := by
         rw [← sEpochR]
         simp only [getCurrentEpoch, processBlock_slot (applySignedBlock_ok ok).2.1]
@@ -2347,7 +2347,7 @@ theorem effectiveFall_le
       rw [this, hEB]
     have histZ := histT.append toZ
     have invZ := reach_invariant genesis histZ
-    have capZ := histZ.effectiveBalance_capped genesis caps.activation caps.compounding valZ
+    have capZ := histZ.effectiveBalance_capped genesis caps valZ
       (Array.mem_of_getElem? foundZ)
     have nextZ : (getCurrentEpoch z'.state).toNat = (getCurrentEpoch z.state).toNat + 1 := by
       rw [z'Epoch, zEpochR]; exact next

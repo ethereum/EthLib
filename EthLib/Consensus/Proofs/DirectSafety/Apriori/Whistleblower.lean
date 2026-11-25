@@ -251,8 +251,7 @@ private theorem slashing_credits_le_newly_slashed {config : Config} {checks : Si
     {g x y : ForkedBeaconState preset} (shared : Run config checks g x)
     (tail : Run config checks x y) (genesis : Genesis (config := config) (checks := checks) g)
     (regime : .pectra ≤ x.fork ∨ y.fork < .pectra) (early : y.fork < .glamsterdam)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
     (events.map fun e => if e.source = .slashings then e.creditLimit else 0).sum ≤
@@ -266,7 +265,7 @@ private theorem slashing_credits_le_newly_slashed {config : Config} {checks : Si
   let keys := (Finset.range y.state.validators.data.size).filter fun i =>
     !(x.state.validators.data[i]?.map (·.slashed)).getD false &&
       (y.state.validators.data[i]?.map (·.slashed)).getD false
-  apply le_trans (slashing_credits_le shared tail genesis early compounding high endEpoch keys
+  apply le_trans (slashing_credits_le shared tail genesis early caps.compounding high endEpoch keys
     (fun _ => (if .pectra ≤ x.fork then preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
         else preset.MAX_EFFECTIVE_BALANCE.toNat) /
       (if .pectra ≤ x.fork then preset.WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA.toNat
@@ -313,7 +312,7 @@ private theorem slashing_credits_le_newly_slashed {config : Config} {checks : Si
     cases found : a.state.validators.data[i]? with
     | none => simp [effectiveAt, found]
     | some v =>
-      have bounded := (shared.append pre).effectiveBalance_capped genesis activation compounding
+      have bounded := (shared.append pre).effectiveBalance_capped genesis caps
         v (Array.mem_of_getElem? found)
       have largest : withdrawalMaxEffectiveBalance preset a.fork v ≤
           (if .pectra ≤ x.fork then preset.MAX_EFFECTIVE_BALANCE_ELECTRA
@@ -323,7 +322,7 @@ private theorem slashing_credits_le_newly_slashed {config : Config} {checks : Si
         · simp only [sameRegime.mpr electra, electra, ↓reduceIte]
           split
           · exact UInt64.le_refl _
-          · exact compounding
+          · exact caps.compounding
         · simp [electra, mt sameRegime.mp electra]
       simpa [effectiveAt, found, apply_ite UInt64.toNat] using UInt64.le_iff_toNat_le.mp
         (UInt64.le_trans bounded largest)
@@ -347,7 +346,7 @@ private theorem slashing_credits_le_allowance {g x y : ForkedBeaconState preset}
         (unassignedPreStake x) (fundingCarry x) (exitedSlashableCount x)
         (driftHorizon x high) (preElectraEpochs config x high) := by
   have charged := slashing_credits_le_newly_slashed shared tail genesis regime early
-    caps.activation caps.compounding high endEpoch replayed
+    caps high endEpoch replayed
   have classified := newly_slashed_count_le shared genesis tail caps aligned early finite
   have index : (getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat ≤
       driftHorizon x high + 1 := by unfold driftHorizon; omega
@@ -549,8 +548,7 @@ private theorem pooled_of_step {u v : ForkedBeaconState preset}
   simp only [pooled, found, Option.map_some, Option.getD_some, unslashed, Bool.not_false,
     Bool.true_and, decide_eq_true_eq]
   by_contra withdrawn
-  have kept := (EthLib.Consensus.Internal.CapStep.run (Run.nil.snoc step) caps.activation
-    caps.compounding).1
+  have kept := (EthLib.Consensus.Internal.CapStep.run (Run.nil.snoc step) caps).1
   obtain ⟨z, read, _⟩ := kept.monotone i w found
   have exited : w.exitEpoch ≤ getCurrentEpoch u.state :=
     UInt64.le_trans (holds.exitsOrdered w (Array.mem_of_getElem? found))
@@ -1409,7 +1407,7 @@ private theorem scheduled_reserve_le_pre {g x : ForkedBeaconState preset}
       simp only [isActiveValidator, Bool.and_eq_false_iff, decide_eq_false_iff_not]
       exact Or.inl (UInt64.not_le.mpr chosen.1)
     have reserve := UInt64.le_iff_toNat_le.mp
-      (shared.scheduled_activation_reserve genesis caps.activation caps.compounding aligned
+      (shared.scheduled_activation_reserve genesis caps aligned
         early i v found chosen.1 chosen.2)
     simpa only [selected, ↓reduceIte, inactive, Bool.not_false, live, decide_true,
       Bool.true_and, effectiveAt, actualBalanceAt, found, Option.map_some, Option.getD_some] using

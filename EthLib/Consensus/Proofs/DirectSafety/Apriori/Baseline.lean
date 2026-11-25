@@ -462,7 +462,7 @@ theorem RoundLedger.sourceFalling_of_firstDown
     cases flag : v'.slashed
     · rfl
     · exact absurd unset' (run_slashed_exit_assigned (shared.append (ledger.stops i).pre)
-        supported.1 caps.activation caps.compounding delay i v' atStop flag)
+        supported.1 caps delay i v' atStop flag)
   have split₁ := (pre.snoc_append_eq step rest).symm.trans split
   -- The stop's assigning step cannot lie inside `pre`, where the exit is still FAR at its end.
   --

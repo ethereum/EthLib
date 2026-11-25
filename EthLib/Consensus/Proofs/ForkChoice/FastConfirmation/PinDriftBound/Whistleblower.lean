@@ -595,8 +595,8 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
         have := getCurrentEpoch_succ_lt_farFuture h.twoSlots a.state
         omega)
     obtain ⟨u, found, far, reached⟩ := Step.slashed_activated step
-      (Nat.le_trans electra (fork_le_of_chainSteps pre'.chainSteps)) bEarly h.caps.activation
-      h.caps.compounding (Internal.Setting.delay h) finite v.toNat
+      (Nat.le_trans electra (fork_le_of_chainSteps pre'.chainSteps)) bEarly h.caps
+          (Internal.Setting.delay h) finite v.toNat
       (((shared.append fromFin).append pre').exit_activated h.genesis v.toNat) flag
     have := ahead a before u found far
     have := UInt64.le_iff_toNat_le.mp reached
@@ -917,7 +917,7 @@ private theorem slashedC_retained (h : Setting config checks g split fin pulled 
   have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
   simp only at finSplit
   have shallow := h.shallow
-  have slashC := tailC.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
+  have slashC := tailC.newly_slashed_withdrawableEpoch h.caps
     (Internal.Setting.delay h) i.toNat vS wC foundS foundC unslashedS slashedAtC
   have late : (getCurrentEpoch pulled).toNat + 1 <
       wC.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
@@ -1165,7 +1165,7 @@ private theorem newlySlashed_inactive_charged
   by_cases unset : u.exitEpoch = FAR_FUTURE_EPOCH
   · have assigned : wc.exitEpoch ≠ FAR_FUTURE_EPOCH :=
       run_slashed_exit_assigned ((toFin.append fromFin).append tailC) h.genesis
-        h.caps.activation h.caps.compounding (Internal.Setting.delay h) i wc foundC markedC
+        h.caps (Internal.Setting.delay h) i wc foundC markedC
     obtain ⟨c, inRun, index, -⟩ :=
       tailC.departure_charge_of_assigned i u wc foundS foundC unset assigned
     exact ⟨c, inRun, index⟩
@@ -1197,7 +1197,7 @@ private theorem newlySlashed_inactive_charged
       have openS : (getCurrentEpoch split).toNat < u.withdrawableEpoch.toNat := by
         by_cases exited : u.exitEpoch ≤ getCurrentEpoch split
         · exact UInt64.lt_iff_toNat_lt.mp (tailC.newly_slashed_initial_exited_unwithdrawable
-            h.caps.activation h.caps.compounding i u wc foundS foundC cleanU markedC exited)
+            h.caps i u wc foundS foundC cleanU markedC exited)
         · have later := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp exited)
           rcases delayS with ⟨same, -⟩ | same
           · exact absurd same unset
@@ -2131,7 +2131,7 @@ private theorem created_credC_le (h : Setting config checks g split fin pulled a
     | some w => exact ⟨w, rfl⟩
   have markedC : wc.slashed = true := by simpa [foundC] using slashedC
   have assignedC := run_slashed_exit_assigned ((shared.append fromFin).append tailC) h.genesis
-    h.caps.activation h.caps.compounding (Internal.Setting.delay h) i wc foundC markedC
+    h.caps (Internal.Setting.delay h) i wc foundC markedC
   obtain ⟨c, inRun, index, -⟩ := Internal.Run.charge_of_exit tailC electra h.early i
     (fun v found => absurd (Array.getElem?_eq_some_iff.mp found).1 created) wc foundC assignedC
   have late := DirectSafety.Run.departureCharges_epoch_ge_start tailC electra h.early c inRun
@@ -2152,7 +2152,7 @@ private theorem created_credC_le (h : Setting config checks g split fin pulled a
     cases s : u.slashed
     · rfl
     · exact absurd unset (run_slashed_exit_assigned ((shared.append fromFin).append pre)
-        h.genesis h.caps.activation h.caps.compounding (Internal.Setting.delay h) i u foundA
+        h.genesis h.caps (Internal.Setting.delay h) i u foundA
           s)
   -- the events of C's run are those before the step and those from it
   obtain ⟨e1, replayed1⟩ := pre.balanceEvents_ok aEarly highC
@@ -2682,7 +2682,7 @@ private theorem whistle_exited (h : Setting config checks g split fin pulled anc
     | none => simp [foundC] at flags
     | some w =>
       have marked : w.slashed = true := by simpa [foundC] using flags.2
-      have assigned := (Internal.CapStep.run tailC h.caps.activation h.caps.compounding).1.appended
+      have assigned := (Internal.CapStep.run tailC h.caps).1.appended
         (Internal.Setting.delay h) i w (Nat.le_of_not_lt created) foundC marked
       obtain ⟨c, inRun, index, -⟩ := Internal.Run.charge_of_exit tailC electra h.early i
         (fun v found => absurd (Array.getElem?_eq_some_iff.mp found).1 created) w foundC assigned
@@ -3862,7 +3862,7 @@ private theorem inc_le_ebUp (h : Setting config checks g split fin pulled anc co
     unfold PinTerms.capAt
     simp only [Array.getElem?_eq_getElem inside, Option.map_some, Option.getD_some]
     exact Nat.le_trans incMeb (UInt64.le_iff_toNat_le.mp
-      (Internal.minimum_cap h.caps.activation h.caps.compounding _))
+      (Internal.minimum_cap h.caps _))
   have floor : ∀ T : ℕ, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T →
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T - T % preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
     fun T le => by

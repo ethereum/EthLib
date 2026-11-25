@@ -683,10 +683,9 @@ private theorem scheduled_effective_le_cap {g x y : ForkedBeaconState preset}
     (assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH) :
     effectiveAt y i ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat := by
   obtain ⟨genesis, _, caps, _, early, endEpoch, guard⟩ := supported
-  obtain ⟨w, read, credentials⟩ := tail.compounding_of_exit_assigned caps.activation
-    caps.compounding i v found assigned
-  have cap := (shared.append tail).effectiveBalance_capped genesis caps.activation
-    caps.compounding w (Array.mem_of_getElem? read)
+  obtain ⟨w, read, credentials⟩ := tail.compounding_of_exit_assigned caps i v found assigned
+  have cap := (shared.append tail).effectiveBalance_capped genesis caps w
+      (Array.mem_of_getElem? read)
   have atEnd : effectiveAt y i = w.effectiveBalance.toNat := by simp [effectiveAt, read]
   -- Before Electra, the guard keeps the whole window before the fork.
   --

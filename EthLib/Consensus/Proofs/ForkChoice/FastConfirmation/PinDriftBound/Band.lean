@@ -109,7 +109,7 @@ theorem slashed_waits {g : ForkedBeaconState preset}
   by_cases inside : i < split.validators.data.size
   · have oldFound := Array.getElem?_eq_getElem inside
     cases oldSlashed : split.validators.data[i].slashed
-    · exact (toPulled.newly_slashed_withdrawableEpoch caps.activation caps.compounding
+    · exact (toPulled.newly_slashed_withdrawableEpoch caps
         withdrawDelay i _ validator oldFound found oldSlashed slashed).2
     -- A run keeps every slashing.
     --
@@ -125,7 +125,7 @@ theorem slashed_waits {g : ForkedBeaconState preset}
       ⟨_, Array.getElem?_eq_getElem arrived⟩
     have unslashedAtN := PinDrift.Internal.fresh_unslashed (toSplit.append pre) step genesis
       (Nat.le_of_not_lt notYet) arrivedFound
-    have delayed := (post.newly_slashed_withdrawableEpoch caps.activation caps.compounding
+    have delayed := (post.newly_slashed_withdrawableEpoch caps
       withdrawDelay i w validator arrivedFound found unslashedAtN slashed).2
     have forward : (getCurrentEpoch split).toNat ≤ (getCurrentEpoch n.state).toNat :=
       UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps (pre.snoc step).chainSteps)

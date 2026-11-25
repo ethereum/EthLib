@@ -83,14 +83,13 @@ private theorem slashed_effective_le_cap {g x w : ForkedBeaconState preset}
   have xEarly : x.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   -- The slashing assigned an exit, so the credentials of the validator stay as they were.
-  have assigned := run_slashed_exit_assigned shared genesis caps.activation caps.compounding
+  have assigned := run_slashed_exit_assigned shared genesis caps
     delay i vx fx slashed
-  obtain ⟨u, read, credentials⟩ := tail.compounding_of_exit_assigned caps.activation
-    caps.compounding i vx fx assigned
+  obtain ⟨u, read, credentials⟩ := tail.compounding_of_exit_assigned caps i vx fx assigned
   rw [fw] at read
   cases read
-  have cap := (shared.append tail).effectiveBalance_capped genesis caps.activation
-    caps.compounding vw (Array.mem_of_getElem? fw)
+  have cap := (shared.append tail).effectiveBalance_capped genesis caps vw
+      (Array.mem_of_getElem? fw)
   -- The cap at `w` is at most the cap at `x`, on either side of Electra.
   have kept : withdrawalMaxEffectiveBalance preset w.fork vw ≤
       withdrawalMaxEffectiveBalance preset x.fork vx := by

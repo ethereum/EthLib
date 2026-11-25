@@ -1112,7 +1112,7 @@ theorem effectiveWeight_le_cap {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (caps : CapOrder preset) (early : x.fork < .pectra) (key : Cryptography.Bls.BLSPubkey) :
     effectiveWeight x.state key ≤ preset.MAX_EFFECTIVE_BALANCE.toNat := by
-  have capped := run.effectiveBalance_capped genesis caps.activation caps.compounding
+  have capped := run.effectiveBalance_capped genesis caps
   unfold effectiveWeight
   cases found : x.state.validators.data.toList.find? (fun v => v.pubkey == key) with
   | none => simp

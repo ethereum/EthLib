@@ -845,7 +845,7 @@ private theorem cfloor_endpoint_of (h : Setting config checks g split fin pulled
     exact endpointFloor r1 r2 whole
   · intro p member
     obtain ⟨r1, r2, -⟩ := pathEndpoint member
-    obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps.activation h.caps.compounding
+    obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps
       i.toNat val initial
     simpa [PinTerms.capAt, found] using UInt64.le_iff_toNat_le.mp mono
 
@@ -2984,8 +2984,8 @@ theorem newly_slashed_unwithdrawable {g m n : ForkedBeaconState preset}
     (getCurrentEpoch m.state).toNat < old.withdrawableEpoch.toNat := by
   by_cases exited : old.exitEpoch ≤ getCurrentEpoch m.state
   · exact UInt64.lt_iff_toNat_lt.mp
-      ((Run.nil.snoc step).newly_slashed_initial_exited_unwithdrawable caps.activation
-        caps.compounding i old new foundOld foundNew clean marked exited)
+      ((Run.nil.snoc step).newly_slashed_initial_exited_unwithdrawable caps i old new foundOld
+          foundNew clean marked exited)
   · have ordered := UInt64.le_iff_toNat_le.mp
       ((Run.invariant genesis.invariant toM).exitsOrdered old (Array.mem_of_getElem? foundOld))
     have before := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp exited)
@@ -3286,7 +3286,7 @@ theorem slash_exit_charge (h : Setting config checks g split fin pulled anc coun
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
   have assigned : new.exitEpoch ≠ FAR_FUTURE_EPOCH :=
     run_slashed_exit_assigned (((shared.append fromFin).append pre).snoc step) h.genesis
-      h.caps.activation h.caps.compounding (Internal.Setting.delay h) i new foundB slashed
+      h.caps (Internal.Setting.delay h) i new foundB slashed
   have inStep : (⟨i, new.exitEpoch.toNat, old.effectiveBalance.toNat⟩ : DepartureCharge) ∈
       step.departureCharges := by
     apply List.mem_filterMap.mpr
