@@ -6,7 +6,7 @@ public import VCVio.OracleComp.QueryTracking.QueryBound.Basic
 /-!
 # Proofs: how many calls a Merkle climb makes
 
-A climb calls its node hash once per sibling, whatever oracle the hash queries.
+A climb makes at most one oracle query per sibling, when each node hash makes at most one.
 -/
 
 @[expose] public section

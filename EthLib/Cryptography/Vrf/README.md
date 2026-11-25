@@ -114,11 +114,11 @@ Every hash with 32-byte outputs has collisions, so the theorem names the one the
 The search reads only the index and the two openings.
 It is an efficient algorithm, so the theorem is a security reduction: whoever finds two outputs at one index also finds a Keccak-256 collision.
 The search makes at most 68 Keccak-256 calls, no more than verifying the two openings.
-The count is read from the definitions, and no theorem proves it.
+A theorem bounds the two checks by 68 calls (`extractOutputs_queryBound`), but the count of the search is read from the definitions.
 
 In the random oracle model, two outputs at one index are unlikely (`prEvent_outputsWin_le_of_adversary`, `Uniqueness.lean`).
 There Keccak-256 is a random oracle on byte strings, for the leaves, the nodes and the outputs.
-An adversary queries it at most `q` times, then outputs a root, an index and two openings.
+An adversary makes at most `q` classical queries to it, then outputs a root, an index and two openings.
 Both openings verify, with two different outputs, with probability at most `(q + 68)^2 / 2^256`.
 The 68 counts the queries of the two checks: for each, the leaf, 32 nodes and the output.
 With `q = 2^64`, that is below `2^-127`.
@@ -184,7 +184,7 @@ It is selected when the opening verifies and the mixed value of its output is in
 That happens with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
 The first term is one fresh uniform value per allowed index, and the second is a mix query that already used `r`.
 Here `q` counts every evaluation of the mix by the holder, including its own Keccak-256 calls on mix inputs, as the random oracle assumption requires.
-No theorem bounds the third term, since the bound on two outputs takes the tree hash as a random oracle.
+No theorem bounds the third term: the bound on two outputs takes the tree hash as a random oracle, and this theorem takes it as Keccak-256 itself.
 With one index, `|S| = 2^200` (a selection of one in `2^56`) and `q = 2^64`, the first two terms are below `2^-55`.
 The theorem does not cover a holder that registers a root without knowing a tree under it.
 Nor does it cover randomness that the holder knows at registration or can bias.

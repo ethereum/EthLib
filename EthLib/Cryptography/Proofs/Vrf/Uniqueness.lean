@@ -143,7 +143,7 @@ theorem cached_of_climb {cache : HashSpec.QueryCache} {f : QueryImpl HashSpec Id
 
 /-- A replayed check caches its leaf input and the node input of each pair its climb hashes.
 
-The cached answers are those of the table, and it assumes that the table agrees with the cache. -/
+The cached answers are those of the table, when the table agrees with the cache. -/
 theorem cached_of_verifyWith {cache : HashSpec.QueryCache} {f : QueryImpl HashSpec Id}
     (hf : cache.AgreesWithFn f) {root : Digest} {i : UInt32} {o : Opening} {r : Option Digest}
     (hrun : simulateQ cache.toPartialImpl (verifyWith oracleHash root i o) = some r) :
