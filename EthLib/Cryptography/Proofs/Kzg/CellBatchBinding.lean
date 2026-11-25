@@ -8,25 +8,11 @@ import EthLib.Cryptography.Proofs.Bls.PairingAte
 /-!
 # Proofs: the batch check of cell proofs, as a root of an error polynomial
 
-A cell `k` claims 64 values of the polynomial of commitment `i_k` on the coset of cell index `j_k`.
+Take a well-formed setup.
 
-The coset is `h ω^m` for `m < 64`, with the shift `h` and a primitive 64th root `ω`.
+Then the batch check accepts exactly when its challenge is a root of the error polynomial.
 
-Let `I_k` be the polynomial of degree below 64 with these values on the coset.
-
-The vanishing polynomial of the coset is `X^64 - h^64`.
-
-Let the cell have commitment `c_{i_k}` and proof `w_k`.
-
-The cell is valid when `c_{i_k} - I_k(τ) = w_k (τ^64 - h^64)`.
-
-Its error is the difference of the two sides.
-
-The error polynomial is `P(X) = sum_k e_k X^k`.
-
-For a well-formed setup, the batch check accepts exactly when its challenge `r` is a root of `P`.
-
-So an accepted batch has every cell valid, or `r` is a root of a nonzero `P`.
+That polynomial is zero exactly when every cell is valid.
 
 The binding of cells, with a bilinear variant of strong Diffie–Hellman, is in another file.
 -/
@@ -46,6 +32,9 @@ open Polynomial
 
 /-- Point `m` of the coset of cell index `j`: entry `64 j + m` of the bit-reversed domain. -/
 def cellPoint (cellIndex m : Nat) : Fr :=
+  -- As a set, the coset is `h ω^m` for `m < 64`, with the shift `h` and a primitive 64th root `ω`.
+  --
+  -- In bit-reversed order, point `m` is `h ω^(rev m)`.
   (rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB)[FIELD_ELEMENTS_PER_CELL * cellIndex + m]!
 
 /-- The shift `h` of the coset of cell index `j`, so that point `m` is `h ω^(rev m)`. -/
@@ -59,6 +48,9 @@ noncomputable def cellInterpolant (cellIndex : Nat) (evals : CosetEvals) : Fr[X]
 
 /-- The error of a cell: zero exactly when `c - I(τ) = w (τ^64 - h^64)`. -/
 def cellError (τ c w h : Fr) (interpolant : Fr[X]) : Fr :=
+  -- The vanishing polynomial of the coset is `X^64 - h^64`.
+  --
+  -- The error is the difference of the two sides of `c - I(τ) = w (τ^64 - h^64)`.
   c - interpolant.eval τ - w * (τ ^ FIELD_ELEMENTS_PER_CELL - h ^ FIELD_ELEMENTS_PER_CELL)
 
 /-- The error polynomial of a batch of cells.
@@ -69,6 +61,9 @@ It has cell index `cellIndices[k]` and values `cosetsEvals[k]`. -/
 noncomputable def cellErrorPoly (τ : Fr) (c w : Nat → Fr)
     (commitmentIndices : Array CommitmentIndex) (cellIndices : Array CellIndex)
     (cosetsEvals : Array CosetEvals) : Fr[X] :=
+  -- Cell `k` claims 64 values of the polynomial of its commitment on the coset of its cell index.
+  --
+  -- The error polynomial is `P(X) = sum_k e_k X^k`, for the error `e_k` of cell `k`.
   errorPoly (fun k => cellError τ (c commitmentIndices[k]!) (w k) (cellShift cellIndices[k]!)
     (cellInterpolant cellIndices[k]! cosetsEvals[k]!)) cellIndices.size
 
@@ -295,8 +290,10 @@ theorem verifyCellKzgProofBatchImpl_ok_iff_root {s : TrustedSetup}
     {commitmentIndices : Array CommitmentIndex} {cellIndices : Array CellIndex}
     {cosetsEvals : Array CosetEvals} {proofs : Array KZGProof} {commitmentsG1 proofsG1 : Array G1}
     {c w : Nat → Fr} {b : Bool}
+    -- The commitments and the proofs decode.
     (hCd : commitments.mapM (uncompressG1 ·.bytes) = .ok commitmentsG1)
     (hPd : proofs.mapM uncompressG1 = .ok proofsG1)
+    -- The points represent `c i` and `w k`.
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
     (hP : ∀ k < proofsG1.size, G1.Represents proofsG1[k]! (w k))
     (h : verifyCellKzgProofBatchImpl s commitments commitmentIndices cellIndices cosetsEvals
@@ -536,7 +533,7 @@ In a batch `x`, let commitment `i` represent `c x i`, and proof `k` represent `w
 
 The adversary makes `q` queries, then outputs a batch of at most `n` cells.
 
-The event is that the challenge of that batch is a root of its error polynomial, which is not zero.
+The event is that the challenge is a root of the error polynomial of the batch, which is not zero.
 
 Its probability is at most `(q + 1) (n - 1) / r`. -/
 theorem prEvent_cellErrorPoly_root_le (τ : Fr) (c w : CellBatch → Nat → Fr) {n : Nat}

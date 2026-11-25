@@ -22,12 +22,6 @@ The CPython extension under `bindings/python/` calls them on converted Python va
 The loader must initialize the Lean runtime before the first call.
 
 Each input is a `ByteArray` or an `Array`.
-
-A single output is a `ByteArray`, and several outputs are arrays of them, or pairs.
-
-Booleans come back as `UInt8`.
-
-An operation that can fail returns its value, or the code and the message of its error.
 -/
 
 public section
@@ -57,13 +51,12 @@ private def embeddedSetupThunk : Thunk (Except KzgError TrustedSetup) :=
 
 /-- The embedded trusted setup, read from its thunk.
 
-Every export reads the setup here, so no other code reaches the thunk.
-
-The attributes stop each caller from caching the setup in a constant of its own.
-
-So exactly one cached copy holds the setup, and it is persistent before any thread reads it.
-
-A second copy would mark the setup persistent while another thread may still change its counts. -/
+Every export reads the setup here, so no other code reaches the thunk. -/
+-- The attributes stop each caller from caching the setup in a constant of its own.
+--
+-- So exactly one cached copy holds the setup, and it is persistent before any thread reads it.
+--
+-- A second copy would mark the setup persistent while another thread may still change its counts.
 @[never_extract, noinline]
 def embeddedSetup (_ : Unit) : Except KzgError TrustedSetup := embeddedSetupThunk.get
 
@@ -138,7 +131,13 @@ def constBytesPerCell (_ : Unit) : UInt64 :=
 def constCellsPerExtBlob (_ : Unit) : UInt64 :=
   UInt64.ofNat CELLS_PER_EXT_BLOB
 
-/-! ## Operations -/
+/-! ## Operations
+
+A single output is a `ByteArray`, and several outputs are arrays of them, or pairs.
+
+Booleans come back as `UInt8`.
+
+An operation that can fail returns its value, or the code and the message of its error. -/
 
 @[export eth_kzg_blob_to_kzg_commitment]
 def blobToKzgCommitmentExport (blob : ByteArray) : Result ByteArray :=

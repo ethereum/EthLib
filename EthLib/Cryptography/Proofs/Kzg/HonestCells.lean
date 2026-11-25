@@ -7,34 +7,13 @@ public import EthLib.Cryptography.Proofs.Kzg.Verify
 /-!
 # Proofs: the cells and proofs of a blob are valid openings
 
-A cell of index `j` holds values `e` on its coset, with shift `h`.
-
-Its opening for a commitment is valid at the secret `τ` when three conditions hold.
-
-- The commitment and the proof decode to points that represent scalars `c` and `w`.
-- The cell decodes to the values `e`.
-- Let `I` interpolate `e` on the coset; then `c - I(τ) = w (τ^64 - h^64)`.
-
 This file shows that the cells and proofs that the code computes for a blob are valid openings.
-
-The setup is any well-formed setup of `τ`, so the setup of the PeerDAS games is one of them.
-
-- The commitment represents `f(τ)`, for the polynomial `f` of the blob.
-- The proof of cell `j` represents `q(τ)`, where `q` is the quotient of `f` by `X^64 - h^64`.
-- The remainder of that division takes the values of the cell on its coset.
-  It has degree below 64, so it is the polynomial that interpolates the cell.
-
-Give each point the scalar that it represents, as a function of its bytes.
-
-Then a batch of valid openings has a zero error polynomial.
-
-Conversely, let the batch check return a verdict, with a zero error polynomial.
-
-Then every entry is valid.
 
 The batch check of cells accepts every batch of valid openings.
 
-So the batch check accepts the cells and proofs of blobs, and so does the verifier of the games.
+So it accepts the cells and proofs of blobs, and so does the verifier of the PeerDAS games.
+
+The setup is any well-formed setup of `τ`, so the setup of the PeerDAS games is one of them.
 -/
 
 @[expose] public section
@@ -48,13 +27,12 @@ open scoped EthLib.Cryptography.Bls.Fr Polynomial
 
 /-- **A valid opening of one cell, at the secret `τ`.**
 
-The cell index is below 128, and the cell decodes to values `e`.
+The opening of a cell for a commitment is valid when three conditions hold.
 
-The commitment and the proof pass KZG validation, as points that represent `c` and `w`.
-
-Let `I` interpolate `e` on the coset of the cell, with shift `h`.
-
-Then `c - I(τ) = w (τ^64 - h^64)`. -/
+- The cell index is below 128, and the cell decodes to values `e` on its coset.
+- The commitment and the proof pass KZG validation, as points that represent `c` and `w`.
+- Let `I` interpolate `e` on the coset of the cell, with shift `h`.
+  Then `c - I(τ) = w (τ^64 - h^64)`. -/
 def CellOpeningValid (τ : Fr) (commitment : Bytes48) (cellIndex : CellIndex) (cell : Cell)
     (proof : Bytes48) : Prop :=
   cellIndex < CELLS_PER_EXT_BLOB ∧ ∃ e C c P w, cellToCosetEvals cell = .ok e ∧
@@ -208,8 +186,13 @@ theorem cellOpeningValid_computeCellsAndKzgProofs {s : TrustedSetup} {τ : Fr}
     have hcell : (fk20CellsAndProofs s fc).1[j]! = codewordCell (blobPolynomial poly) j := by
       rw [← Except.ok.inj hcc, getElem!_pos _ j (by rw [Array.size_ofFn]; exact hj),
         Array.getElem_ofFn]
+    -- The commitment represents `f(τ)`, for the polynomial `f` of the blob.
     obtain ⟨C, hCv, hCr⟩ := validateKzgG1Point_compressG1 (represents_blobCommitment hs hblob)
+    -- The proof of cell `j` represents `q(τ)`, where `q` is the quotient of `f` by `X^64 - h^64`.
     obtain ⟨P, hPv, hPr⟩ := validateKzgG1Point_compressG1 (represents_msm_monomial hs hqsz)
+    -- The remainder of that division takes the values of the cell on its coset.
+    --
+    -- It has degree below 64, so it is the polynomial that interpolates the cell.
     refine ⟨hj, cellValues (blobPolynomial poly) j, C, _, P, _, ?_, hCv, hCr, ?_, hPr,
       eval_sub_cellInterpolant hj hdiv τ⟩
     · rw [hcell]
@@ -415,6 +398,7 @@ theorem CellOpening.verifies_computeCellsAndKzgProofs (τ : Fr)
       .ok (cells, proofs)) {j : Nat} (hj : j < CELLS_PER_EXT_BLOB) :
     (⟨j, cells[j]!, proofs[j]!⟩ : CellOpening).Verifies (TrustedSetup.ofPowers (setupPowers τ))
       commitment :=
+  -- The setup of the games is a well-formed setup of `τ`.
   (CellOpening.verifies_iff (wellFormed_ofPowers τ)).mpr
     (cellOpeningValid_computeCellsAndKzgProofs (wellFormed_ofPowers τ) hC hP hj)
 

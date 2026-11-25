@@ -95,47 +95,48 @@ def cosetForCell (cellIndex : CellIndex) : Except KzgError Coset := do
 
 /-- Interpolate one cell: the polynomial `I` of degree below 64 with the values on the coset.
 
-The coset has the shift `h`, and it is a shifted FFT domain, in bit-reversed order.
+The coset has the shift `h`, and the values are in bit-reversed order.
 
-- Point `j` is `h * v^(rev(j))`, for a 64-th root of unity `v` and the 6-bit reversal `rev`.
-- `J(Y) = I(h * Y)` takes the cell's values on the 64-th roots of unity.
-- So `J` is the inverse FFT of the bit-reversed values.
-- Then `I_i = J_i * h^(-i)`.
-
-It returns the same polynomial as Lagrange interpolation.
-
-Lagrange needs `64 * 63` field inversions.
-
-This needs one inverse FFT and one inversion. -/
+It returns the same polynomial as Lagrange interpolation. -/
 def interpolateCosetEvals (h : Fr) (evals : CosetEvals) : Except KzgError PolynomialCoeff := do
-  -- An inverse FFT on the coset, in place of Lagrange interpolation on its points.
-  --
   -- There must be as many values as points, the 64 points of a coset.
   if evals.size ≠ FIELD_ELEMENTS_PER_CELL then
     throw (.inputLengthMismatch "ys" FIELD_ELEMENTS_PER_CELL evals.size)
+  -- The coset has the shift `h`, and it is a shifted FFT domain, in bit-reversed order.
+  --
+  -- - Point `j` is `h * v^(rev(j))`, for a 64-th root of unity `v` and the 6-bit reversal `rev`.
+  -- - `J(Y) = I(h * Y)` takes the cell's values on the 64-th roots of unity.
+  -- - So `J` is the inverse FFT of the bit-reversed values.
+  --
+  -- An inverse FFT on the coset, in place of Lagrange interpolation on its points.
+  --
+  -- Lagrange needs `64 * 63` field inversions.
+  --
+  -- This needs one inverse FFT and one inversion.
   let j := fftField (bitReversalPermutation evals) (computeRootsOfUnity FIELD_ELEMENTS_PER_CELL) (inv := true)
+  -- Then `I_i = J_i * h^(-i)`.
   return shiftVals j h.inverse
 
 /-- The values of a polynomial on the extended domain, in bit-reversed order.
 
-Cell `i` holds the values on its coset.
-
-That coset is the `i`-th block of 64 points of the bit-reversed domain.
-
-So the values are the 64 of cell 0, then the 64 of cell 1, up to cell 127.
-
-One FFT of size 8192 gives every value, in `O(n log n)` field operations.
-
-Horner's rule at each point would take `O(n^2)`.
+The values are the 64 of cell 0, then the 64 of cell 1, up to cell 127.
 
 The polynomial has at most 8192 coefficients. -/
 def extendedEvaluations (polynomialCoeff : PolynomialCoeff) : Array Fr :=
   let padded := polynomialCoeff ++
     Array.replicate (FIELD_ELEMENTS_PER_EXT_BLOB - polynomialCoeff.size) Fr.zero
+  -- One FFT of size 8192 gives every value, in `O(n log n)` field operations.
+  --
+  -- Horner's rule at each point would take `O(n^2)`.
+  --
+  -- Cell `i` holds the values on its coset.
+  --
+  -- That coset is the `i`-th block of 64 points of the bit-reversed domain.
   bitReversalPermutation (fftField padded (computeRootsOfUnity FIELD_ELEMENTS_PER_EXT_BLOB))
 
 /-- The cells of the extended blob, cut from its values in bit-reversed order. -/
 def cellsOfExtendedEvaluations (evals : Array Fr) : Array Cell :=
+  -- The values split into 128 cells of 64 values each, one cell per coset.
   (Array.range CELLS_PER_EXT_BLOB).map fun i =>
     cosetEvalsToCell (evals.extract (i * FIELD_ELEMENTS_PER_CELL) ((i + 1) * FIELD_ELEMENTS_PER_CELL))
 
@@ -152,36 +153,11 @@ def computeCells (blob : Blob) : Except KzgError (Array Cell) := do
 
 /-- Compute cells and proofs for a polynomial in coefficient form.
 
-The direct method proves each cell on its own.
+The polynomial has at most 4096 coefficients, the size of the monomial setup.
 
-It divides `f` by the cell's vanishing polynomial, then commits to the quotient.
+The proofs use the FK20 method.
 
-That costs one multi-scalar multiplication of 4032 points per cell.
-
-The 128 quotients share their structure, so this computes them together.
-
-- Cell `k` is the coset `h_k * mu_64`.
-- Its vanishing polynomial is `Z_k = X^64 - c_k`, with `c_k = h_k^64`.
-- The quotient is `q_k = f / Z_k = sum_{d >= 1} c_k^(d - 1) * (f >> 64 d)`.
-- Here `(f >> m)_i = f_(i + m)`.
-- The proof is `[q_k(s)] = sum_{d = 1}^{63} c_k^(d - 1) * H_d`.
-- The point `H_d` is `sum_i f_(i + 64 d) * [s^i]`.
-
-The points `H_d` do not depend on the cell.
-
-So 63 multi-scalar multiplications serve all 128 proofs.
-
-Each `c_k` is a 128-th root of unity, taken in bit-reversed order.
-
-So the proofs are the values of `sum_d H_d * Y^(d - 1)` at those roots.
-
-One FFT in G1 computes them all.
-
-This is the Toeplitz structure of FK20.
-
-See Feist and Khovratovich, "Fast amortized KZG proofs", <https://eprint.iacr.org/2023/033>.
-
-The polynomial has at most 4096 coefficients, the size of the monomial setup. -/
+See Feist and Khovratovich, "Fast amortized KZG proofs", <https://eprint.iacr.org/2023/033>. -/
 def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
     (polynomialCoeff : PolynomialCoeff) : Except KzgError (Array Cell × Array KZGProof) := do
   let n := FIELD_ELEMENTS_PER_CELL
@@ -191,6 +167,27 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
   -- Here one FFT gives all the cells, and the FK20 method below gives all the proofs.
   let cells := cellsOfExtendedEvaluations (extendedEvaluations polynomialCoeff)
 
+  -- The direct method divides the polynomial `f` by the cell's vanishing polynomial.
+  --
+  -- It then commits to the quotient.
+  --
+  -- That costs one multi-scalar multiplication of 4032 points per cell.
+  --
+  -- The 128 quotients share their structure, so this computes them together.
+  --
+  -- - Cell `k` is the coset `h_k * mu_64`.
+  -- - Its vanishing polynomial is `Z_k = X^64 - c_k`, with `c_k = h_k^64`.
+  -- - The quotient is `q_k = f / Z_k = sum_{d >= 1} c_k^(d - 1) * (f >> 64 d)`.
+  -- - Here `(f >> m)_i = f_(i + m)`.
+  -- - The proof is `[q_k(s)] = sum_{d = 1}^{63} c_k^(d - 1) * H_d`.
+  -- - The point `H_d` is `sum_i f_(i + 64 d) * [s^i]`.
+  --
+  -- The points `H_d` do not depend on the cell.
+  --
+  -- So 63 multi-scalar multiplications serve all 128 proofs.
+  --
+  -- This is the Toeplitz structure of FK20.
+  --
   -- Phase 1: `H_d` for each shift `d` that leaves a coefficient.
   --
   -- With 4096 coefficients, `d` runs from 1 to 63, and `H_d` sums `4096 - 64 d` points.
@@ -213,6 +210,12 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
     let hs := tasks.map Task.get
 
     -- Phase 2: evaluate sum_d H_d * Y^(d - 1) at the 128-th roots of unity.
+    --
+    -- Each `c_k` is a 128-th root of unity, taken in bit-reversed order.
+    --
+    -- So the proofs are the values of `sum_d H_d * Y^(d - 1)` at those roots.
+    --
+    -- One FFT in G1 computes them all.
     --
     -- The bit reversal puts the proofs in cell order.
     let padded := hs ++ Array.replicate (CELLS_PER_EXT_BLOB - hs.size) Bls.G1.zero

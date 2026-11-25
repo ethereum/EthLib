@@ -6,29 +6,15 @@ public import EthLib.Cryptography.Proofs.Bls.TargetGroup
 /-!
 # Proofs: two cells with different values give a bilinear strong Diffie–Hellman solution
 
-Let two valid cells at one cell index open one commitment to different values.
+Two valid cells at one cell index that open one commitment to different values give a solution.
 
-Let their values first differ at the point `x` of the coset, by `δ ≠ 0`.
-
-Let `D` be the difference of the polynomials of the two cells, and `Z = X^64 - h^64`.
-
-Validity gives `D(τ) = (w - w') Z(τ)`, for the scalars `w` and `w'` of the two proofs.
-
-Both `D - δ` and `Z` vanish at `x`, so they are `X - x` times quotients `q` and `z`.
-
-Then `1 / (τ - x) = ((w - w') z(τ) - q(τ)) / δ`.
-
-Pairings of the two proofs and of the setup points give that scalar in the target group.
-
-So the search returns `(-x, e(g1, g2)^(1 / (τ - x)))`, a bilinear strong Diffie–Hellman solution.
-
-The problem is Definition 2.4 of the extended KZG paper, CACR 2010-10.
+The problem is Definition 2.4 of the [extended KZG paper, CACR 2010-10][kzg].
 
 The setup holds powers of `τ` in both groups, so the instance is the asymmetric variant.
 
 The argument follows the proof of Theorem 3.4, the binding of batch openings, in Appendix C.3.
 
-<https://cacr.uwaterloo.ca/techreports/2010/cacr2010-10.pdf>
+[kzg]: https://cacr.uwaterloo.ca/techreports/2010/cacr2010-10.pdf
 -/
 
 @[expose] public section
@@ -140,26 +126,28 @@ noncomputable def quotientAt (p : Fr[X]) (x : Fr) : Fr[X] := (p - C (p.eval x)) 
 
 /-- The search of a bilinear strong Diffie–Hellman solution in two cells at one cell index.
 
-The cells have values `evals` and `evals'`, and proofs `P` and `P'`.
-
 Equal values give nothing.
 
-Otherwise, let the values first differ at point `x` of the coset, by `δ`.
+Otherwise it returns `-x` and a product of pairings, for the first point `x` where values differ.
 
-Let `D` be the difference of the two polynomials of the cells, and `Z = X^64 - h^64`.
-
-Let `q` and `z` be the quotients of `D - δ` and `Z` by `X - x`.
-
-The search returns `-x` and the product of the pairings that represent `((w - w') z(τ) - q(τ)) / δ`.
+With both cells valid for one commitment, that product represents `1 / (τ - x)`.
 
 The pairings read only the two proofs and the points of the setup. -/
 noncomputable def findBsdh {GT : Type} [CommMonoid GT] (M : TargetGroup GT) (s : TrustedSetup)
     (cellIndex : CellIndex) (evals evals' : CosetEvals) (P P' : G1) : Option (Fr × GT) :=
+  -- The cells have values `evals` and `evals'`, and proofs `P` and `P'`.
   (firstDiff evals evals').map fun m =>
+    -- When the values differ, let them first differ at point `x` of the coset, by `δ`.
     let x := cellPoint cellIndex m
     let δ := evals'[m]! - evals[m]!
+    -- Let `D` be the difference of the two polynomials of the cells, and `Z = X^64 - h^64`.
+    --
+    -- Let `q` and `z` be the quotients of `D - δ` and `Z` by `X - x`.
     let q := quotientAt (cellInterpolant cellIndex evals' - cellInterpolant cellIndex evals) x
     let z := quotientAt (X ^ FIELD_ELEMENTS_PER_CELL) x
+    -- The search returns `-x` and the product of the pairings.
+    --
+    -- That product represents `((w - w') z(τ) - q(τ)) / δ`.
     (-x, (∏ k : Fin FIELD_ELEMENTS_PER_CELL,
         M.pair (G1.mul (G1.add P (G1.neg P')) (z.coeff k * δ⁻¹))
           s.g2Monomial[Fin.castLE cell_le_g2 k]) *
@@ -247,6 +235,7 @@ theorem findBsdh_valid {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Tru
     (hv' : c - (cellInterpolant cellIndex evals').eval τ =
       w' * (τ ^ FIELD_ELEMENTS_PER_CELL - cellShift cellIndex ^ FIELD_ELEMENTS_PER_CELL)) :
     ∃ sol, findBsdh M s cellIndex evals evals' P P' = some sol ∧ IsBsdhSolution M τ sol := by
+  -- Let their values first differ at the point `x` of the coset, by `δ ≠ 0`.
   obtain ⟨m, hm⟩ := Option.isSome_iff_exists.mp (firstDiff_isSome hsz hsz' hne)
   obtain ⟨hm64, hdiff⟩ := firstDiff_spec hm
   rw [findBsdh, hm, Option.map_some]
@@ -255,6 +244,7 @@ theorem findBsdh_valid {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Tru
   -- Name the point, the difference of the values and the two quotients.
   generalize hx : cellPoint cellIndex m = x
   generalize hδ : evals'[m]! - evals[m]! = δ
+  -- Let `D` be the difference of the polynomials of the two cells, and `Z = X^64 - h^64`.
   generalize hD : cellInterpolant cellIndex evals' - cellInterpolant cellIndex evals = D
   generalize hq : quotientAt D x = q
   generalize hz : quotientAt (X ^ FIELD_ELEMENTS_PER_CELL) x = z
@@ -263,6 +253,7 @@ theorem findBsdh_valid {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Tru
     rw [← hD, ← hx, eval_sub, eval_cellInterpolant_cellPoint hci hm64,
       eval_cellInterpolant_cellPoint hci hm64]
     exact hδ
+  -- Both `D - δ` and `Z` vanish at `x`, so they are `X - x` times quotients `q` and `z`.
   have hDτ : (cellInterpolant cellIndex evals').eval τ -
       (cellInterpolant cellIndex evals).eval τ = (τ - x) * q.eval τ + δ := by
     have h := congrArg (eval τ) (quotientAt_spec D x)
@@ -276,6 +267,9 @@ theorem findBsdh_valid {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Tru
     rw [← hx, cellPoint_pow hci hm64] at h
     rw [← hx, h]
     exact add_sub_cancel_right _ _
+  -- Validity gives `D(τ) = (w - w') Z(τ)`, for the scalars `w` and `w'` of the two proofs.
+  --
+  -- Then `1 / (τ - x) = ((w - w') z(τ) - q(τ)) / δ`.
   obtain ⟨htx, hinv⟩ := bsdh_scalar hδ0 hDτ hZτ hv hv'
   refine ⟨htx, ?_⟩
   have hzdeg : z.natDegree < FIELD_ELEMENTS_PER_CELL :=
@@ -286,6 +280,8 @@ theorem findBsdh_valid {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Tru
     exact (lt_of_le_of_lt (natDegree_sub_le _ _)
       (max_lt (natDegree_cellInterpolant_lt hci _) (natDegree_cellInterpolant_lt hci _))).le
   -- Each product of pairings represents one of the two terms.
+  --
+  -- Pairings of the two proofs and of the setup points give that scalar in the target group.
   have h1 := M.represents_prod_pair (ι := Fin FIELD_ELEMENTS_PER_CELL) Finset.univ fun k _ =>
     ⟨(hP.add hP'.neg).mul (z.coeff k * δ⁻¹), hs.monomial_g2 (Fin.castLE cell_le_g2 k)⟩
   have h2 := M.represents_prod_pair (ι := Fin FIELD_ELEMENTS_PER_CELL) Finset.univ fun k _ =>
@@ -299,6 +295,9 @@ theorem findBsdh_valid {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Tru
   show M.Represents (_ * _) (τ + -x)⁻¹
   have key : (τ + -x)⁻¹ = _ := hinv.trans (congrArg₂ (· + ·) e1 e2)
   rw [key]
+  -- So the search returns `(-x, e(g1, g2)^(1 / (τ - x)))`.
+  --
+  -- That is a bilinear strong Diffie–Hellman solution.
   exact h1.mul h2
 
 /-! ## Binding of the batch check of cells -/

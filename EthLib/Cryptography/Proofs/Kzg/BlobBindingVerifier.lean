@@ -11,7 +11,7 @@ It also fixes each value to the decoded blob's evaluation.
 
 The batch challenge is then the verifier's own hash of those openings.
 
-When a successful challenge loop takes the concrete hashes as challenges, its openings are that batch.
+A successful challenge loop with the concrete hashes as challenges has that batch as openings.
 -/
 
 @[expose] public section
@@ -248,8 +248,11 @@ Let the blob verifier return a verdict on the submission.
 
 Then the verdict is true exactly when the game's equation holds at the concrete batch challenge. -/
 theorem verifyBlobKzgProofBatch_ok_iff_game {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    -- The openings of the challenge loop match the submitted blobs.
     {out : List BlobOpening} {openings : List Opening} (hm : Matches out openings)
+    -- Their challenges are the concrete hashes.
     (hz : openings.map Opening.z = out.map fun o => computeChallenge o.blob ⟨o.commitment.bytes⟩)
+    -- Their point annotations are correct.
     (ha : ∀ o ∈ openings, o.commitment.Valid τ ∧ o.proof.Valid τ) {b : Bool}
     (h : verifyBlobKzgProofBatch s (BlobOpening.toInput out).blobs
       (BlobOpening.toInput out).commitments (BlobOpening.toInput out).proofs = .ok b) :

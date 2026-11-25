@@ -8,23 +8,15 @@ public import EthLib.Cryptography.Proofs.Bls.Represents
 /-!
 # Proofs: a commitment is the blob's polynomial at the setup secret
 
-A setup of the secret `τ` holds `[τ^i]_1`, `[τ^i]_2` and `[L_i(τ)]_1`, with `L_i` a Lagrange basis.
-
 A blob's commitment sums its values times the Lagrange points, which gives `[p(τ)]_1`.
 
 Two blobs whose decoded values differ share a commitment only when `τ` is a root of `p - p'`.
 
-Here `p` and `p'` are their interpolants, and `p - p'` is not zero and has degree below 4096.
+Here `p` and `p'` are their interpolants.
 
-These theorems give no bound on the cost of finding two such blobs when `τ` is secret.
+The scheme is PolyCommit_DL, §3.2 of [Kate, Zaverucha and Goldberg, ASIACRYPT 2010][kzg].
 
-A polynomial of degree below 4096, committed with the monomial points, also gives `[p(τ)]_1`.
-
-The setup built from the powers `[τ^i]_1` and `[τ^i]_2` is a well-formed setup of `τ`.
-
-The scheme is PolyCommit_DL, §3.2 of Kate, Zaverucha and Goldberg, ASIACRYPT 2010:
-
-<https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf>
+[kzg]: https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf
 -/
 
 @[expose] public section
@@ -36,17 +28,17 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
-/-- The setup of the secret `τ`.
+/-- The setup is well-formed for the secret `τ`: it holds `[τ^i]_1`, `[τ^i]_2` and `[L_i(τ)]_1`.
 
 The monomial points represent the powers of `τ`, in `G1` and in `G2`.
 
-Lagrange point `i` represents basis polynomial `i` of the blob domain, at `τ`.
-
-The domain is the 4096-th roots of unity in bit-reversed order.
-
-The decoder bit-reverses the Lagrange points, so point `i` belongs to domain point `i`. -/
+Lagrange point `i` represents basis polynomial `i` of the blob domain, at `τ`. -/
 structure TrustedSetup.WellFormed (s : TrustedSetup) (τ : Fr) : Prop where
-  /-- Lagrange point `i` represents `[L_i(τ)]_1`. -/
+  /-- Lagrange point `i` represents `[L_i(τ)]_1`, with `L_i` a Lagrange basis.
+
+  The domain is the 4096-th roots of unity in bit-reversed order.
+
+  The decoder bit-reverses the Lagrange points, so point `i` belongs to domain point `i`. -/
   lagrange_g1 : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB,
     G1.Represents s.g1LagrangeBrp[i] ((Lagrange.basis Finset.univ evalDomain i).eval τ)
   /-- Monomial point `i` of `G1` represents `[τ^i]_1`. -/
@@ -185,7 +177,9 @@ theorem eval_interpolant_eq_of_blobToKzgCommitment_eq {s : TrustedSetup} {τ : F
 
 Here `s` is a well-formed setup of `τ`, and `p` and `p'` are the two interpolants.
 
-The theorem also proves that `p - p'` is not zero and has degree below 4096. -/
+The theorem also proves that `p - p'` is not zero and has degree below 4096.
+
+It gives no bound on the cost of finding two such blobs when `τ` is secret. -/
 theorem blobToKzgCommitment_binding {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     {blob blob' : Blob} {poly poly' : Polynomial} {c : KZGCommitment}
     (hblob : blobToPolynomial blob = .ok poly) (hblob' : blobToPolynomial blob' = .ok poly')
