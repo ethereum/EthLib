@@ -225,7 +225,7 @@ inductive PayloadError where
   /-- The expected versioned hashes are not those of the blob transactions, in order.
 
   `expected` are the hashes of the request, and `actual` those of the transactions. -/
-  | wrongVersionedHashes (expected actual : List Hash32)
+  | wrongVersionedHashes (expected actual : List Cryptography.Kzg.VersionedHash)
   /-- The block of the payload fails the state transition, with `error`. -/
   | invalidBlock (error : Execution.Blocks.BlockError)
   /-- The block access list is not the RLP encoding of a block access list. -/

@@ -50,7 +50,7 @@ structure GenericTransaction where
   /-- The access list of EIP-2930. -/
   accessList : Option (List Access) := none
   /-- The versioned hashes of the blobs of EIP-4844. -/
-  blobVersionedHashes : Option (List Hash32) := none
+  blobVersionedHashes : Option (List Cryptography.Kzg.VersionedHash) := none
   /-- The blobs, which a call does not read. -/
   blobs : Option (List ByteArray) := none
   /-- The commitments of the blobs, which a call does not read. -/
@@ -102,7 +102,8 @@ def genericTransaction (j : Json) : Read GenericTransaction := do
     maxFeePerGas := ← opt "maxFeePerGas" uint
     maxFeePerBlobGas := ← opt "maxFeePerBlobGas" uint
     accessList := ← opt "accessList" fun what => array what access
-    blobVersionedHashes := ← opt "blobVersionedHashes" fun what => array what (hash32 "blob hash")
+    blobVersionedHashes := ← opt "blobVersionedHashes" fun what =>
+      array what fun j => Cryptography.Kzg.VersionedHash.mk <$> hash32 "blob hash" j
     blobs := ← opt "blobs" fun what => array what (bytes "blob")
     commitments := ← opt "commitments" fun what => array what (bytes "commitment")
     proofs := ← opt "proofs" fun what => array what (bytes "proof")

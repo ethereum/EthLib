@@ -108,7 +108,7 @@ Its proofs pass the KZG check. -/
 theorem getPayload_bundle {config : ChainConfig} {setup : TrustedSetup}
     {store : PayloadStore} {version : Nat} {id : PayloadId} {r : GetPayloadResponse}
     (h : getPayload config setup store version id = .ok r) (hv : 3 ≤ version) :
-    r.stored.bundle.commitments.map versionedHash =
+    r.stored.bundle.commitments.map kzgCommitmentToVersionedHash =
         ExecutionPayload.blobVersionedHashes r.stored.built.block.transactions ∧
       r.stored.bundle.commitments.length = r.stored.bundle.blobs.length ∧
       r.stored.bundle.proofs.length =
@@ -523,7 +523,7 @@ theorem checkNewPayload_of_getPayload {r : GetPayloadResponse} {version' : Nat}
         (if hf : .glamsterdam ≤ r.stored.fork then
           some (r.stored.built.blockAccessList hf, r.stored.built.block.header.slotNumber hf)
         else none)
-        (r.stored.bundle.commitments.map versionedHash)
+        (r.stored.bundle.commitments.map kzgCommitmentToVersionedHash)
         ((sinceValue r.stored.built.block.header.parentBeaconBlockRoot).getD 0)
         r.stored.built.requests) =
       .ok (.ok ⟨r.stored.fork, accepts, r.stored.built.block⟩) := by
@@ -540,7 +540,7 @@ theorem checkNewPayload_of_getPayload {r : GetPayloadResponse} {version' : Nat}
     (if hf : .glamsterdam ≤ r.stored.fork then
       some (r.stored.built.blockAccessList hf, r.stored.built.block.header.slotNumber hf)
     else none)
-    (r.stored.bundle.commitments.map versionedHash)
+    (r.stored.bundle.commitments.map kzgCommitmentToVersionedHash)
     ((sinceValue r.stored.built.block.header.parentBeaconBlockRoot).getD 0)
     r.stored.built.requests accepts below (payloadOfBlock_extraData hPay)
     (by

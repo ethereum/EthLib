@@ -32,8 +32,8 @@ open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
 
 /-- Hashes in hex, between brackets and separated by commas. -/
-def hashList (hashes : List Hash32) : String :=
-  "[" ++ ", ".intercalate (hashes.map fun hash => hexString hash.toList) ++ "]"
+def hashList (hashes : List Cryptography.Kzg.VersionedHash) : String :=
+  "[" ++ ", ".intercalate (hashes.map fun hash => hexString hash.bytes.toList) ++ "]"
 
 /-- A message for the reason of an invalid payload, on one line. -/
 def reasonMessage : PayloadError → String

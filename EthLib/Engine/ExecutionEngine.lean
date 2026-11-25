@@ -125,7 +125,7 @@ def newPayloadRequestJson (r : Consensus.NewPayloadRequest preset fork)
   -- Parameter 2, from Deneb: `expectedBlobVersionedHashes`.
   --
   -- The default for an earlier fork is never written, since versions 1 and 2 omit it.
-  let hashes := ((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD []
+  let hashes := ((sinceValue r.versionedHashes).map (·.data.toList)).getD []
   -- Parameter 3, from Deneb: `parentBeaconBlockRoot`, with the same unwritten default.
   let root := (sinceValue r.parentBeaconBlockRoot).getD 0
   -- From Heze the caller gives the transactions of the inclusion list, from the slot before.
@@ -213,8 +213,7 @@ def executionEngine (chain : BlockChain) : Consensus.ExecutionEngine preset fork
         --
         -- Before Deneb there is no expected array, so nothing to check.
         (sinceValue request.versionedHashes).all fun hashes =>
-          ExecutionPayload.blobVersionedHashes block.transactions ==
-            hashes.data.toList.map (·.bytes)
+          ExecutionPayload.blobVersionedHashes block.transactions == hashes.data.toList
       -- A payload without a block has no valid versioned hashes.
       | none => false
     -- Request lists that cannot be made give no valid versioned hashes.

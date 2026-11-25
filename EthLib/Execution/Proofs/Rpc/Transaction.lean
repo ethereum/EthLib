@@ -343,8 +343,9 @@ private theorem transactionOfJson_extra (extra : List (String × Lean.Json)) (g 
       byteJson,
       u256Json, accessListJson, uint_quantityJson, uint256_quantityJson, uint64_toDigits,
       bytes_dataJson, byte_quantityJson _ hy, yParity_byte hy,
-      array_of_items _ (bytes32 "blob hash") (fun (k : Bytes32) => dataJson k.toList) _
-      (fun k _ => fixed_dataJson "blob hash" k false),
+      array_of_items _ (fun j => Cryptography.Kzg.VersionedHash.mk <$> bytes32 "blob hash" j)
+        (fun h => dataJson h.bytes.toList) _
+        (fun k _ => by rw [bytes32, fixed_dataJson "blob hash" k.bytes false]; rfl),
       address_dataJson,
       array_of_items _ access accessJson _ (fun a _ => access_accessJson a),
       ty3, Nat.reduceLT, ↓reduceIte, Nat.reduceEqDiff]

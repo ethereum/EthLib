@@ -305,11 +305,11 @@ def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
       .error (.blobCountExceeded tx.blobVersionedHashes.length)
     -- It fails when the first byte of a versioned hash is not the KZG version `0x01`.
     else if tx.blobVersionedHashes.any
-        (fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) then
+        (fun h => h.bytes[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) then
       -- Some hash has the wrong version, so the first such hash has an index below the length.
       let index := tx.blobVersionedHashes.findIdx
-        (fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG)
-      .error (.invalidBlobVersionedHash index (tx.blobVersionedHashes.getD index 0))
+        (fun h => h.bytes[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG)
+      .error (.invalidBlobVersionedHash index (tx.blobVersionedHashes.getD index ⟨0⟩))
     else .ok ()
   -- A set code transaction fails without an authorization, as EIP-7702 asks.
   --

@@ -77,10 +77,10 @@ def blockhashStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := d
   return advance evm
 
 /-- The versioned hash at `index` in a list, read as a word, or 0 past the end. -/
-def blobHash (hashes : List Hash32) (index : U256) : U256 :=
+def blobHash (hashes : List Cryptography.Kzg.VersionedHash) (index : U256) : U256 :=
   -- EIP-4844: the versioned hash at `index` of the transaction, read as a big-endian word.
   match hashes[index.toNat]? with
-  | some hash => U256.fromBeBytes hash
+  | some hash => U256.fromBeBytes hash.bytes
   -- And 0 for an index at or past the count of versioned hashes.
   | none => 0
 

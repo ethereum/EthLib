@@ -110,7 +110,7 @@ def transactionFields (gasPrice : Nat) : Transaction → List (String × Json)
         ("maxFeePerGas", u256Json tx.maxFeePerGas),
         ("maxFeePerBlobGas", u256Json tx.maxFeePerBlobGas),
         ("blobVersionedHashes",
-          listJson (fun (h : Bytes32) => dataJson h.toList) tx.blobVersionedHashes)]
+          listJson (fun h => dataJson h.bytes.toList) tx.blobVersionedHashes)]
   | .setCode tx =>
     typedFields 4 tx.chainId tx.nonce.toNat tx.gas tx.value tx.data tx.accessList tx.yParity
         tx.r tx.s ++
@@ -179,7 +179,8 @@ def transactionOfJson (j : Json) : Read Transaction := do
     return .blob { chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to, value, data,
                    accessList, yParity, r, s
                    maxFeePerBlobGas := ← uint256 "maxFeePerBlobGas" (← get "maxFeePerBlobGas")
-                   blobVersionedHashes := ← array "blobVersionedHashes" (bytes32 "blob hash")
+                   blobVersionedHashes := ← array "blobVersionedHashes"
+                     (fun j => Cryptography.Kzg.VersionedHash.mk <$> bytes32 "blob hash" j)
                      (← get "blobVersionedHashes") }
   if type = 4 then
     -- A set-code transaction holds its nonce in 64 bits.

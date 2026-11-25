@@ -91,7 +91,7 @@ def transactionErrorText : TransactionError → String
   | .noBlobData => "a blob transaction carries no blob"
   | .blobCountExceeded count => s!"{count} blobs are above the limit"
   | .invalidBlobVersionedHash index hash =>
-    s!"versioned hash {index}, {hexString hash.toList}, has the wrong version"
+    s!"versioned hash {index}, {hexString hash.bytes.toList}, has the wrong version"
   | .emptyAuthorizationList => "a set code transaction carries no authorization"
   | .intrinsicGasAboveLimit gas =>
     s!"intrinsic gas or floor {gas} is above the limit of a transaction"

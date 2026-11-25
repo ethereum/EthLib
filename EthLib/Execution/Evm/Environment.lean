@@ -4,6 +4,7 @@ public import EthLib.Base.Address
 public import EthLib.Base.Fork
 public import EthLib.Base.Hash32
 public import EthLib.Base.U256
+public import EthLib.Cryptography.Kzg.Types
 public import EthLib.Execution.Fees.BlobBaseFee
 
 /-!
@@ -100,7 +101,7 @@ structure TransactionEnvironment (fork : Fork) where
   /-- The price per gas that the sender pays. -/
   gasPrice : Nat
   /-- The versioned hashes of the blobs of the transaction, from Dencun. -/
-  blobVersionedHashes : Since .dencun fork (List Hash32)
+  blobVersionedHashes : Since .dencun fork (List Cryptography.Kzg.VersionedHash)
   /-- The address of the precompile that a call to each address runs, if any.
 
   By default a call runs the precompile at its own address.

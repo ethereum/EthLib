@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Address
 public import EthLib.Base.Fork
 public import EthLib.Base.Hash32
+public import EthLib.Cryptography.Kzg.Types
 public import EthLib.Execution.ErrorFormat
 public import EthLib.Serialization.Rlp.Item
 
@@ -189,7 +190,7 @@ structure BlobTransaction where
   /-- The most wei per unit of blob gas that the sender pays. -/
   maxFeePerBlobGas : U256
   /-- The versioned hash of each blob. -/
-  blobVersionedHashes : List Bytes32
+  blobVersionedHashes : List Cryptography.Kzg.VersionedHash
   /-- The parity of `y` of the signature point. -/
   yParity : U256
   /-- The first integer of the signature. -/
@@ -326,7 +327,7 @@ inductive TransactionError where
   /-- A blob transaction carries `count` blobs, more than the limit. -/
   | blobCountExceeded (count : Nat)
   /-- The versioned hash `hash` at `index`, counted from 0, has the wrong version. -/
-  | invalidBlobVersionedHash (index : Nat) (hash : Hash32)
+  | invalidBlobVersionedHash (index : Nat) (hash : Cryptography.Kzg.VersionedHash)
   /-- A set code transaction carries no authorization. -/
   | emptyAuthorizationList
   /-- The intrinsic gas or the floor, `gas`, is above the limit of the gas of a transaction. -/
@@ -361,7 +362,7 @@ def TransactionError.reprPrec : TransactionError → Nat → Std.Format
     transactionErrorFormat "blobCountExceeded" [namedArg "count" count] p
   | .invalidBlobVersionedHash index hash, p =>
     transactionErrorFormat "invalidBlobVersionedHash"
-      [namedArg "index" index, namedArg "hash" hash] p
+      [namedArg "index" index, namedArg "hash" hash.bytes] p
   | .emptyAuthorizationList, p => transactionErrorFormat "emptyAuthorizationList" [] p
   | .intrinsicGasAboveLimit gas, p =>
     transactionErrorFormat "intrinsicGasAboveLimit" [namedArg "gas" gas] p

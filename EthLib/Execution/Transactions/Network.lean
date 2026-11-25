@@ -60,7 +60,7 @@ inductive NetworkError where
   /-- The commitment at `index`, counted from 0, hashes to `expected`, not to its versioned hash.
 
   That versioned hash, at the same position, is `actual`. -/
-  | versionedHashMismatch (index : Nat) (expected actual : Bytes32)
+  | versionedHashMismatch (index : Nat) (expected actual : VersionedHash)
   /-- A blob, a commitment or a proof is not a valid KZG input. -/
   | kzg (error : KzgError)
   /-- The proofs do not show that the commitments match the blobs. -/
@@ -143,17 +143,12 @@ def decodeNetwork (fork : Fork) (bytes : ByteArray) :
       NetworkBlobTransaction.ofItem fork item
     else .error (.transaction (.unsupportedType type))
 
-/-- The versioned hash of a commitment: `0x01`, then the last 31 bytes of its SHA-256 hash. -/
-def versionedHash (commitment : KZGCommitment) : Bytes32 :=
-  -- EIP-4844: the version `0x01`, then the last 31 bytes of the SHA-256 hash of the commitment.
-  (Cryptography.Kzg.kzgCommitmentToVersionedHash commitment).bytes
-
 /-- Whether each commitment hashes to the versioned hash at its position. -/
-def hashesMatch (hashes : List Bytes32) (commitments : List KZGCommitment) : Bool :=
+def hashesMatch (hashes : List VersionedHash) (commitments : List KZGCommitment) : Bool :=
   -- EIP-4844: the versioned hash at index `i` is the versioned hash of commitment `i`.
   --
   -- The pairs stop at the shorter list, and the counts are checked apart.
-  (hashes.zip commitments).all fun (h, c) => decide (versionedHash c = h)
+  (hashes.zip commitments).all fun (h, c) => decide (kzgCommitmentToVersionedHash c = h)
 
 /-- The number of proofs at `fork` for `count` blobs: one per blob, or one per cell from Fusaka. -/
 def proofCount (fork : Fork) (count : Nat) : Nat :=
@@ -163,7 +158,7 @@ def proofCount (fork : Fork) (count : Nat) : Nat :=
   if fork ≥ .fusaka then CELLS_PER_EXT_BLOB * count else count
 
 /-- Whether the counts of versioned hashes, commitments and proofs match the count of blobs. -/
-def blobCountsMatch (fork : Fork) (hashes : List Bytes32) (blobs : List Blob)
+def blobCountsMatch (fork : Fork) (hashes : List VersionedHash) (blobs : List Blob)
     (commitments : List KZGCommitment) (proofs : List KZGProof) : Bool :=
   -- One blob and one commitment per versioned hash, and the proofs that the fork asks per blob.
   hashes.length == blobs.length && commitments.length == blobs.length &&
@@ -210,17 +205,20 @@ Check blobs, commitments and proofs at `fork` against the versioned hashes they 
 
 The counts match, each commitment hashes to its versioned hash, and the proofs verify.
 -/
-def validateBlobs (setup : TrustedSetup) (fork : Fork) (hashes : List Bytes32) (blobs : List Blob)
-    (commitments : List KZGCommitment) (proofs : List KZGProof) : Except NetworkError Unit := do
+def validateBlobs (setup : TrustedSetup) (fork : Fork) (hashes : List VersionedHash)
+    (blobs : List Blob) (commitments : List KZGCommitment) (proofs : List KZGProof) :
+    Except NetworkError Unit := do
   -- EIP-4844 and EIP-7594: the counts of versioned hashes, blobs, commitments and proofs match.
   unless blobCountsMatch fork hashes blobs commitments proofs do
     throw (.countMismatch hashes.length blobs.length commitments.length proofs.length)
   -- Commitment `i` hashes to versioned hash `i`.
   unless hashesMatch hashes commitments do
     -- Some pair does not match, so the first such pair has an index below both lengths.
-    let index := (hashes.zip commitments).findIdx fun (h, c) => !decide (versionedHash c = h)
+    let index := (hashes.zip commitments).findIdx fun (h, c) =>
+      !decide (kzgCommitmentToVersionedHash c = h)
     let commitment := commitments.getD index ⟨Vector.replicate 48 0⟩
-    throw (.versionedHashMismatch index (versionedHash commitment) (hashes.getD index 0))
+    throw (.versionedHashMismatch index (kzgCommitmentToVersionedHash commitment)
+      (hashes.getD index ⟨0⟩))
   -- The commitments match the blobs and the proofs.
   unless ← (verifyBlobBundle setup fork blobs commitments proofs).mapError .kzg do
     throw .proofRejected
