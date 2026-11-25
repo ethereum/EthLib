@@ -249,19 +249,19 @@ theorem isQueryBoundP_modelAdversary (adversary : Adversary) {qH : Nat}
 
 The adversary itself makes at most `q` calls of `H` and `2^32` requests.
 
-It forges with probability at most `(q + 2^19 + 1) * 2^-127`.
+It forges with probability at most `(q + 530) * 2^-127`.
 
 Key generation, the signer and the final verification are not charged to `q`. -/
 theorem stronglyUnforgeable :
     SufCma.StronglyUnforgeable scheme (SufCma.randomOracleModel HashSpec) (2 ^ LOG_LIFETIME)
-      (2 ^ 19 + 1) 127 := by
+      530 127 := by
   intro qH adversary hh hreq
-  rw [SufCma.mul_inv_two_pow, ← Nat.cast_add, ← Nat.add_assoc]
+  rw [SufCma.mul_inv_two_pow, ← Nat.cast_add]
   -- The request budget `r` is the key's lifetime.
   obtain ⟨r, hr, hreq⟩ : ∃ r, r ≤ 2 ^ LOG_LIFETIME ∧
       ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r :=
     ⟨_, le_rfl, hreq⟩
-  by_cases hbig : 2 ^ 127 ≤ qH + 2 ^ 19 + 1
+  by_cases hbig : 2 ^ 127 ≤ qH + 530
   · -- From there on, the bound is at least one.
     refine (prEvent_le_one _).trans ?_
     rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (ENNReal.natCast_ne_top _)),
@@ -281,12 +281,11 @@ theorem stronglyUnforgeable :
       (hashQueryBound_realGame adversary _ (isGameQueryBound_of_budget adversary hh hreq))).trans
       ((add_le_add (add_le_add hmodel (XmssSecurity.Bridge.guesses_le (by omega)))
         (XmssSecurity.Bridge.guesses_le (by omega))).trans ?_))
-  -- The model's bound is `(2 qH + 2^20) / 2^128`, and the two guesses add `2 / 2^128`.
+  -- The model's bound is `(2 qH + 1058) / 2^128`, and the two guesses add `2 / 2^128`.
   rw [← ENNReal.add_div, ← ENNReal.add_div]
   rw [show ((2 ^ 128 : Nat) : ℝ≥0∞) = 2 * ((2 ^ 127 : Nat) : ℝ≥0∞) by norm_num]
-  rw [show ((2 * qH + XmssSecurity.lowerOrderSlack : Nat) : ℝ≥0∞) + 1 + 1 =
-      2 * ((qH + 2 ^ 19 + 1 : Nat) : ℝ≥0∞) by
-    simp only [XmssSecurity.lowerOrderSlack]; push_cast; ring]
+  rw [show ((2 * qH + 1058 : Nat) : ℝ≥0∞) + 1 + 1 = 2 * ((qH + 530 : Nat) : ℝ≥0∞) by
+    push_cast; ring]
   exact (ENNReal.mul_div_mul_left _ _ (by norm_num) (by norm_num)).le
 
 end EthLib.Cryptography.Xmss.Unforgeability
