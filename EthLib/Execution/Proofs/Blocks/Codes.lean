@@ -264,53 +264,6 @@ private def Missing (e : BlockError) : Prop :=
   ∃ c, e = .aborted (.state (.missingCode c)) ∨ e = .state (.missingCode c) ∨
     ∃ index, e = .invalidTransaction index (.missingCode c)
 
-/-- A move of ether never fails for a missing code. -/
-private theorem moveEther_ne_missingCode (tx : TransactionState) (sender recipient : Address)
-    (amount : U256) (c : Hash32) :
-    tx.moveEther fork sender recipient amount ≠ .error (.missingCode c) := by
-  intro h
-  rcases Base.bind_eq_error h with h | ⟨a, -, h⟩
-  · exact modifyState_ne_missingCode
-      (fun account c h => by unfold State.Account.debit at h; split at h <;> cases h) c h
-  · exact modifyState_ne_missingCode
-      (fun account c h => by unfold State.Account.credit at h; split at h <;> cases h) c h
-
-/-- A creation of ether never fails for a missing code. -/
-private theorem createEther_ne_missingCode (tx : TransactionState) (address : Address)
-    (amount : U256) (c : Hash32) :
-    tx.createEther fork address amount ≠ .error (.missingCode c) :=
-  modifyState_ne_missingCode
-    (fun account c h => by unfold State.Account.credit at h; split at h <;> cases h) c
-
-/-- A fold whose steps never fail for a missing code never fails for one. -/
-private theorem foldlM_ne_missingCode {α β : Type} {g : β → α → Except State.StateError β}
-    (step : ∀ b x c, g b x ≠ .error (.missingCode c)) (xs : List α) (b : β) (c : Hash32) :
-    xs.foldlM g b ≠ .error (.missingCode c) := fun h =>
-  foldlM_error_of_step (fun _ => True) (· ≠ .missingCode c) (fun _ _ _ _ _ => trivial)
-    (fun b x _ _ he => by rintro rfl; exact step b x c he) trivial h rfl
-
-/-- The rewards never fail for a missing code. -/
-private theorem payRewards_ne_missingCode (tx : TransactionState) (coinbase : Address)
-    (number : Nat) (ommers : List (Address × Nat)) (c : Hash32) :
-    payRewards fork tx coinbase number ommers ≠ .error (.missingCode c) := by
-  unfold payRewards
-  split
-  · nofun
-  · intro h
-    rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-    · exact createEther_ne_missingCode _ _ _ c h
-    · exact foldlM_ne_missingCode (fun _ _ c => createEther_ne_missingCode _ _ _ c) _ _ c h
-
-/-- The withdrawals never fail for a missing code. -/
-private theorem withdrawalState_ne_missingCode (block : BlockState) (withdrawals : List Withdrawal)
-    (c : Hash32) : withdrawalState fork block withdrawals ≠ .error (.missingCode c) :=
-  foldlM_ne_missingCode (fun _ _ c => createEther_ne_missingCode _ _ _ c) _ _ c
-
-/-- The DAO transfer never fails for a missing code. -/
-private theorem applyDaoFork_ne_missingCode (tx : TransactionState) (c : Hash32) :
-    applyDaoFork fork tx ≠ .error (.missingCode c) :=
-  foldlM_ne_missingCode (fun _ _ c => moveEther_ne_missingCode _ _ _ _ c) _ _ c
-
 /-- An error of the state that is never a missing code gives no missing code of the block. -/
 private theorem notMissing_state {α : Type} {x : Except State.StateError α}
     (h : ∀ c, x ≠ .error (.missingCode c)) : ∀ e, x = .error e → ¬Missing (.state e) :=
@@ -330,51 +283,6 @@ private theorem notMissing_aborted {α : Type} {x : Except EvmError α}
       exact h c he
     · cases hc
     · cases hc
-
-/-- A system call that joins a body that holds every code never aborts for a missing code. -/
-private theorem systemCall_join_ne_missingCode {env : BlockEnvironment fork} {body : BodyState}
-    {target : Address} {data : ByteArray} (available : HasCodes (.ofBlock body.block))
-    (c : Hash32) :
-    (do
-      let out ← systemCall env body.block target data
-      (body.join out.state).mapError EvmError.state : Except EvmError BodyState) ≠
-      .error (.state (.missingCode c)) := by
-  intro h
-  rcases Base.bind_eq_error h with h | ⟨out, hout, h⟩
-  · exact systemCall_ne_missingCode env target data available c h
-  · obtain ⟨b, hb⟩ := BodyState.join_ok_of_hasCodes body (systemCall_hasCodes available hout)
-    rw [hb] at h
-    cases h
-
-/-- The system calls at the start of a block never abort for a missing code. -/
-private theorem startSystemCalls_ne_missingCode {env : BlockEnvironment fork}
-    {parentHash : Hash32} {body : BodyState} (available : HasCodes (.ofBlock body.block))
-    (c : Hash32) :
-    startSystemCalls env parentHash body ≠ .error (.state (.missingCode c)) := by
-  have second : ∀ mid : BodyState, HasCodes (.ofBlock mid.block) →
-      (if Fork.pectra ≤ fork then do
-        let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
-        Except.mapError EvmError.state (mid.join out.state)
-      else pure mid) ≠ .error (.state (.missingCode c)) := by
-    intro mid codes h
-    split at h
-    · exact systemCall_join_ne_missingCode codes c h
-    · cases h
-  intro h
-  unfold startSystemCalls at h
-  dsimp only at h
-  split at h
-  · rcases Base.bind_eq_error h with h | ⟨out, hout, h⟩
-    · exact systemCall_ne_missingCode env _ _ available c h
-    · rcases Base.bind_eq_error h with h | ⟨mid, hmid, h⟩
-      · obtain ⟨b, hb⟩ := BodyState.join_ok_of_hasCodes body (systemCall_hasCodes available hout)
-        rw [hb] at h
-        cases h
-      · exact second mid (join_systemCall_hasCodes available hout (mapError_ok_iff.mp hmid)) h
-  · rcases Base.bind_eq_error h with h | ⟨mid, hmid, h⟩
-    · cases h
-    · cases hmid
-      exact second _ available h
 
 /-- The withdrawals on a state that holds every code end on one. -/
 private theorem withdrawalState_hasCodes {block : BlockState} {withdrawals : List Withdrawal}
@@ -396,9 +304,18 @@ private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
     · exact ha _ h
     · exact hs _ h
     · exact hi _ _ h
-  dao _ _ := notMissing_state (applyDaoFork_ne_missingCode _)
+  dao _ _ := notMissing_state fun _ => foldlM_ne_error_of_step (fun _ _ h => by
+    rcases TransactionState.error_moveEther h with h | h <;> cases h) _ _
   dao_inv _ _ available h := daoTransfer_hasCodes available h
-  start _ available := notMissing_aborted (startSystemCalls_ne_missingCode available)
+  start _ available := notMissing_aborted fun c =>
+    startSystemCalls_ne_error (fun s => HasCodes (.ofBlock s))
+      (fun _ target data codes => systemCall_ne_missingCode env target data codes c)
+      (fun b _ _ _ codes called h => by
+        obtain ⟨_, hb⟩ := BodyState.join_ok_of_hasCodes b (systemCall_hasCodes codes called)
+        rw [hb] at h
+        cases h)
+      (fun _ _ _ _ _ codes called joined => join_systemCall_hasCodes codes called joined)
+      available
   start_inv _ _ available h := startSystemCalls_hasCodes available h
   inclusion _ _ _ available _ he := fun ⟨_, h⟩ => by
     rcases h with h | h | ⟨_, h⟩ <;> cases h
@@ -411,7 +328,7 @@ private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
     obtain ⟨b, hb⟩ := BodyState.join_ok_of_hasCodes body available
     rw [hb] at h
     cases h
-  withdraw _ _ _ := notMissing_state (withdrawalState_ne_missingCode _ _)
+  withdraw _ _ _ := notMissing_state fun _ => withdrawalState_ne_error nofun
   withdraw_out _ _ _ available h := withdrawalState_hasCodes available h
   withdraw_inv _ _ _ _ available withdrawn joined :=
     BodyState.hasCodes_join joined (withdrawalState_hasCodes available withdrawn)
@@ -428,7 +345,7 @@ private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
   call_failed _ _ _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h | ⟨_, h⟩ <;> cases h
   call_out _ _ _ _ available h := systemCall_hasCodes available h
   call_inv _ _ _ _ _ available called joined := join_systemCall_hasCodes available called joined
-  rewards _ _ := notMissing_state fun c => payRewards_ne_missingCode _ _ _ _ c
+  rewards _ _ := notMissing_state fun _ => payRewards_ne_error nofun
 
 /-- The body of a block on a block state that holds every code never aborts for a missing code.
 

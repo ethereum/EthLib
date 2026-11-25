@@ -18,30 +18,14 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State (BlockState State TransactionState)
-open EthLib.Execution.Transactions (Transaction getCode_ne_insufficientBalance
-  modifyState_ne_insufficientBalance)
+open EthLib.Execution.Transactions (Transaction getCode_ne_insufficientBalance)
 
 variable {fork : Fork}
 
 /-! ## Changes of the state with no short balance -/
 
 /-- Whether an error of a block is a short balance, in a call or outside one. -/
-private def Short (e : BlockError) : Prop :=
-  ∃ a, e = .aborted (.state (.insufficientBalance a)) ∨ e = .state (.insufficientBalance a)
-
-/-- A credit of an account never fails for a short balance. -/
-private theorem credit_ne_insufficientBalance (address : Address) (amount : U256)
-    (other : Address) (account : State.Account) :
-    State.Account.credit address amount account ≠ .error (.insufficientBalance other) := by
-  intro h
-  unfold State.Account.credit at h
-  split at h <;> cases h
-
-/-- A creation of ether never fails for a short balance. -/
-private theorem createEther_ne_insufficientBalance (tx : TransactionState) (address : Address)
-    (amount : U256) (other : Address) :
-    tx.createEther fork address amount ≠ .error (.insufficientBalance other) :=
-  modifyState_ne_insufficientBalance (credit_ne_insufficientBalance _ _ _)
+private abbrev Short : BlockError → Prop := StateErrorOf .insufficientBalance
 
 /-- A move of the whole balance of an account never fails for a short balance. -/
 private theorem moveEther_whole_ne_insufficientBalance (tx : TransactionState)
@@ -54,96 +38,7 @@ private theorem moveEther_whole_ne_insufficientBalance (tx : TransactionState)
     with ⟨hlt, -⟩ | ⟨-, mid, hmid, -⟩
   · exact absurd hlt (BitVec.lt_irrefl _)
   · rw [hmid] at h
-    exact modifyState_ne_insufficientBalance (credit_ne_insufficientBalance _ _ _) h
-
-/-- A fold whose steps never fail for a short balance never fails for one. -/
-private theorem foldlM_ne_insufficientBalance {α β : Type}
-    {g : β → α → Except State.StateError β} {other : Address}
-    (step : ∀ b x, g b x ≠ .error (.insufficientBalance other)) (xs : List α) (b : β) :
-    xs.foldlM g b ≠ .error (.insufficientBalance other) := fun h =>
-  foldlM_error_of_step (fun _ => True) (· ≠ .insufficientBalance other)
-    (fun _ _ _ _ _ => trivial) (fun b x _ _ he => by rintro rfl; exact step b x he) trivial h rfl
-
-/-- The rewards never fail for a short balance. -/
-private theorem payRewards_ne_insufficientBalance (tx : TransactionState) (coinbase : Address)
-    (number : Nat) (ommers : List (Address × Nat)) (other : Address) :
-    payRewards fork tx coinbase number ommers ≠ .error (.insufficientBalance other) := by
-  unfold payRewards
-  split
-  · nofun
-  · intro h
-    rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-    · exact createEther_ne_insufficientBalance _ _ _ _ h
-    · exact foldlM_ne_insufficientBalance
-        (fun _ _ => createEther_ne_insufficientBalance _ _ _ _) _ _ h
-
-/-- The withdrawals never fail for a short balance. -/
-private theorem withdrawalState_ne_insufficientBalance (block : BlockState)
-    (withdrawals : List Withdrawal) (other : Address) :
-    withdrawalState fork block withdrawals ≠ .error (.insufficientBalance other) :=
-  foldlM_ne_insufficientBalance (fun _ _ => createEther_ne_insufficientBalance _ _ _ _) _ _
-
-/-- The DAO transfer never fails for a short balance. -/
-private theorem applyDaoFork_ne_insufficientBalance (tx : TransactionState) (other : Address) :
-    applyDaoFork fork tx ≠ .error (.insufficientBalance other) :=
-  foldlM_ne_insufficientBalance (fun _ _ => moveEther_whole_ne_insufficientBalance _ _ _ _) _ _
-
-/-- The join of a call to the body never fails for a short balance. -/
-private theorem join_ne_insufficientBalance (body : BodyState) (tx : TransactionState)
-    (other : Address) : body.join tx ≠ .error (.insufficientBalance other) := by
-  have code := fun hash => getCode_ne_insufficientBalance tx hash other
-  have write : ∀ (b : AccessListBuilder) address written,
-      b.recordAccountWrite tx address written ≠ .error (.insufficientBalance other) := by
-    intro b address written h
-    unfold AccessListBuilder.recordAccountWrite at h
-    dsimp only at h
-    split at h
-    · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
-      · exact code _ h
-      · cases h
-    · cases h
-  have record : ∀ b : AccessListBuilder,
-      b.recordTransaction tx ≠ .error (.insufficientBalance other) := by
-    intro b h
-    unfold AccessListBuilder.recordTransaction at h
-    simp only [bind, Except.bind] at h
-    split at h
-    · rename_i he
-      cases h
-      rw [Std.ExtTreeMap.foldlM_eq_foldlM_toList] at he
-      exact foldlM_ne_insufficientBalance
-        (g := fun a (x : Address × Option State.Account) => a.recordAccountWrite tx x.1 x.2)
-        (fun a x => write a x.1 x.2) _ _ he
-    · cases h
-  intro h
-  unfold BodyState.join at h
-  rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
-  · exact record _ h
-  · cases h
-
-/-- A state step that never fails for a short balance gives none to the block. -/
-private theorem notShort_state {α : Type} {x : Except State.StateError α}
-    (h : ∀ a, x ≠ .error (.insufficientBalance a)) : ∀ e, x = .error e → ¬Short (.state e) :=
-  fun e he ⟨a, hc⟩ => by
-    rcases hc with hc | hc
-    · cases hc
-    · cases hc
-      exact h a he
-
-/-- A call that never aborts for a short balance gives none to the block. -/
-private theorem notShort_aborted {α : Type} {x : Except EvmError α}
-    (h : ∀ a, x ≠ .error (.state (.insufficientBalance a))) :
-    ∀ e, x = .error e → ¬Short (.aborted e) :=
-  fun e he ⟨a, hc⟩ => by
-    rcases hc with hc | hc
-    · cases hc
-      exact h a he
-    · cases hc
-
-/-- An error that is neither an abort nor an error of the state is no short balance. -/
-private theorem notShort_plain {e : BlockError} (ha : ∀ x, e ≠ .aborted x)
-    (hs : ∀ x, e ≠ .state x) : ¬Short e :=
-  fun ⟨_, h⟩ => h.elim (ha _) (hs _)
+    cases TransactionState.error_createEther h
 
 /-! ## The calls of a block -/
 
@@ -160,83 +55,38 @@ private theorem systemCall_ne_insufficientBalance (env : BlockEnvironment fork)
     · exact Transactions.processMessageCall_ne_insufficientBalance funded other h
     · cases h
 
-/-- A system call that joins the body never fails for a short balance. -/
-private theorem systemCall_join_ne_insufficientBalance {env : BlockEnvironment fork}
-    {body : BodyState} {target : Address} {data : ByteArray} (other : Address) :
-    (do
-      let out ← systemCall env body.block target data
-      (body.join out.state).mapError EvmError.state : Except EvmError BodyState) ≠
-      .error (.state (.insufficientBalance other)) := by
-  intro h
-  rcases Base.bind_eq_error h with h | ⟨out, -, h⟩
-  · exact systemCall_ne_insufficientBalance env _ _ _ other h
-  · cases hj : body.join out.state with
-    | error e' =>
-      rw [hj] at h
-      cases h
-      exact join_ne_insufficientBalance _ _ _ hj
-    | ok _ =>
-      rw [hj] at h
-      cases h
-
-/-- The system calls at the start of a block never fail for a short balance. -/
-private theorem startSystemCalls_ne_insufficientBalance {env : BlockEnvironment fork}
-    {parentHash : Hash32} {body : BodyState} (other : Address) :
-    startSystemCalls env parentHash body ≠ .error (.state (.insufficientBalance other)) := by
-  have second : ∀ mid : BodyState,
-      (if Fork.pectra ≤ fork then do
-        let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
-        Except.mapError EvmError.state (mid.join out.state)
-      else pure mid) ≠ .error (.state (.insufficientBalance other)) := by
-    intro mid h
-    split at h
-    · exact systemCall_join_ne_insufficientBalance other h
-    · cases h
-  intro h
-  unfold startSystemCalls at h
-  dsimp only at h
-  split at h
-  · rcases Base.bind_eq_error h with h | ⟨out, -, h⟩
-    · exact systemCall_ne_insufficientBalance env _ _ _ other h
-    · rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-      · cases hj : body.join out.state with
-        | error e' =>
-          rw [hj] at h
-          cases h
-          exact join_ne_insufficientBalance _ _ _ hj
-        | ok _ =>
-          rw [hj] at h
-          cases h
-      · exact second mid h
-  · rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-    · cases h
-    · exact second mid h
-
 /-! ## The body of a block -/
 
 /-- The leaves of the body of a block never fail for a short balance. -/
 private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) :
     BodyLeaves config env block (¬Short ·) (fun _ => True) (fun _ => True) (fun _ => True) where
-  plain _ ha hs _ _ := notShort_plain ha hs
+  plain _ ha hs _ _ := StateErrorOf.not_plain ha hs
   -- The DAO transfer moves the whole balance of each account it drains.
-  dao _ _ := notShort_state (applyDaoFork_ne_insufficientBalance _)
+  dao _ _ := StateErrorOf.not_state fun _ =>
+    foldlM_ne_error_of_step (fun _ _ => moveEther_whole_ne_insufficientBalance _ _ _ _) _ _
   -- A system call moves no value.
-  start body _ := notShort_aborted fun a => startSystemCalls_ne_insufficientBalance (body := body) a
+  start _ _ := StateErrorOf.not_aborted fun a =>
+    startSystemCalls_ne_error (fun _ => True)
+      (fun block target data _ => systemCall_ne_insufficientBalance env block target data a)
+      (fun b _ _ out _ _ => b.join_ne_error (getCode_ne_insufficientBalance out.state · a))
+      (fun _ _ _ _ _ _ _ _ => trivial) trivial
   inclusion _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
   -- Each transaction runs only once it passes its checks on the state it runs on.
   process _ _ _ _ included :=
-    notShort_aborted (Transactions.processTransaction_ne_insufficientBalance included)
-  join body tx _ := notShort_state (join_ne_insufficientBalance body tx)
+    StateErrorOf.not_aborted (Transactions.processTransaction_ne_insufficientBalance included)
+  join body tx _ := StateErrorOf.not_state fun a =>
+    body.join_ne_error (getCode_ne_insufficientBalance tx · a)
   -- The withdrawals create ether, and take none.
-  withdraw _ _ _ := notShort_state (withdrawalState_ne_insufficientBalance _ _)
-  code _ _ _ := notShort_aborted fun a h => by
+  withdraw _ _ _ := StateErrorOf.not_state fun _ => withdrawalState_ne_error nofun
+  code _ _ _ := StateErrorOf.not_aborted fun a h => by
     obtain ⟨_, h, ⟨⟩⟩ := mapError_eq_error h
     exact getCode_ne_insufficientBalance _ _ _ h
-  call s target data _ := notShort_aborted (systemCall_ne_insufficientBalance env s target data)
+  call s target data _ :=
+    StateErrorOf.not_aborted (systemCall_ne_insufficientBalance env s target data)
   call_failed _ _ _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
   -- The rewards create ether, and take none.
-  rewards _ _ := notShort_state fun a => payRewards_ne_insufficientBalance _ _ _ _ a
+  rewards _ _ := StateErrorOf.not_state fun _ => payRewards_ne_error nofun
 
 /-- The body of a block never fails with the state error for a short balance.
 
@@ -257,7 +107,7 @@ theorem stateTransition_ne_insufficientBalance (chain : BlockChain) (block : Blo
         .error (.aborted (.state (.insufficientBalance address))) ∧
       stateTransition chain block checkSeal ≠ .error (.state (.insufficientBalance address)) := by
   have fails : ErrorsMeet (¬Short ·) (stateTransition chain block checkSeal) :=
-    errorsMeet_stateTransition (fun _ ha hs => notShort_plain ha hs)
+    errorsMeet_stateTransition (fun _ ha hs => StateErrorOf.not_plain ha hs)
       (fun _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
       fun _ => (leaves _ _ _).errorsMeet_applyBody trivial
   exact ⟨fun h => fails _ h ⟨address, .inl rfl⟩, fun h => fails _ h ⟨address, .inr rfl⟩⟩

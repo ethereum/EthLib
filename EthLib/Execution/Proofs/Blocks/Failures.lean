@@ -12,6 +12,8 @@ A result meets a property on its errors when each error that it fails with has t
 The transition of a block fails only with errors of a property when its body does.
 
 The property must also hold for the other errors of the block, and for the abort from Hegotá on.
+
+The steps outside the transactions fail only with the state errors that their parts give.
 -/
 
 @[expose] public section
@@ -496,5 +498,133 @@ theorem errorsMeet_stateTransition {chain : BlockChain} {block : Block fork Tran
       (blockEnvironment chain.config hashes block.header) block ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
     ErrorsMeet P (stateTransition chain block checkSeal) :=
   errorsMeet_stateTransition_of_plain (fun e ha hs _ _ => plain e ha hs) hegota body
+
+/-! ## Errors of the state of one kind -/
+
+/-- Whether an error of a block is a state error of one kind, in a call or outside one. -/
+def StateErrorOf {κ : Type} (kind : κ → State.StateError) (e : BlockError) : Prop :=
+  ∃ a, e = .aborted (.state (kind a)) ∨ e = .state (kind a)
+
+namespace StateErrorOf
+
+variable {κ : Type} {kind : κ → State.StateError}
+
+/-- A state step that never fails with an error of the kind gives none to the block. -/
+theorem not_state {α : Type} {x : Except State.StateError α} (h : ∀ a, x ≠ .error (kind a)) :
+    ∀ e, x = .error e → ¬StateErrorOf kind (.state e) :=
+  fun e he ⟨a, hc⟩ => by
+    rcases hc with hc | hc
+    · cases hc
+    · cases hc
+      exact h a he
+
+/-- A call that never aborts with an error of the kind gives none to the block. -/
+theorem not_aborted {α : Type} {x : Except EvmError α}
+    (h : ∀ a, x ≠ .error (.state (kind a))) : ∀ e, x = .error e → ¬StateErrorOf kind (.aborted e) :=
+  fun e he ⟨a, hc⟩ => by
+    rcases hc with hc | hc
+    · cases hc
+      exact h a he
+    · cases hc
+
+/-- An error that is neither an abort nor an error of the state is of no kind. -/
+theorem not_plain {e : BlockError} (ha : ∀ x, e ≠ .aborted x) (hs : ∀ x, e ≠ .state x) :
+    ¬StateErrorOf kind e :=
+  fun ⟨_, h⟩ => h.elim (ha _) (hs _)
+
+end StateErrorOf
+
+/-- The join of a state to the body fails with an error only when a read of a code fails with it. -/
+theorem BodyState.join_ne_error (body : BodyState) {tx : TransactionState} {e : State.StateError}
+    (code : ∀ hash, tx.getCode hash ≠ .error e) : body.join tx ≠ .error e := by
+  have write : ∀ (b : AccessListBuilder) address written,
+      b.recordAccountWrite tx address written ≠ .error e := by
+    intro b address written h
+    unfold AccessListBuilder.recordAccountWrite at h
+    dsimp only at h
+    split at h
+    · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
+      · exact code _ h
+      · cases h
+    · cases h
+  have record : ∀ b : AccessListBuilder, b.recordTransaction tx ≠ .error e := by
+    intro b h
+    unfold AccessListBuilder.recordTransaction at h
+    simp only [bind, Except.bind] at h
+    split at h
+    · rename_i he
+      cases h
+      rw [Std.ExtTreeMap.foldlM_eq_foldlM_toList] at he
+      exact foldlM_ne_error_of_step
+        (g := fun a (x : Address × Option State.Account) => a.recordAccountWrite tx x.1 x.2)
+        (fun a x => write a x.1 x.2) _ _ he
+    · cases h
+  intro h
+  unfold BodyState.join at h
+  rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
+  · exact record _ h
+  · cases h
+
+/-- The rewards fail with no error other than a balance that would overflow. -/
+theorem payRewards_ne_error {tx : TransactionState} {coinbase : Address} {number : Nat}
+    {ommers : List (Address × Nat)} {e : State.StateError} (ne : ∀ a, e ≠ .balanceOverflow a) :
+    payRewards fork tx coinbase number ommers ≠ .error e := by
+  have create : ∀ (tx : TransactionState) a v, tx.createEther fork a v ≠ .error e :=
+    fun _ _ _ h => ne _ (TransactionState.error_createEther h)
+  unfold payRewards
+  split
+  · nofun
+  · intro h
+    rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
+    · exact create _ _ _ h
+    · exact foldlM_ne_error_of_step (fun _ _ => create _ _ _) _ _ h
+
+/-- The withdrawals fail with no error other than a balance that would overflow. -/
+theorem withdrawalState_ne_error {block : BlockState} {withdrawals : List Withdrawal}
+    {e : State.StateError} (ne : ∀ a, e ≠ .balanceOverflow a) :
+    withdrawalState fork block withdrawals ≠ .error e :=
+  foldlM_ne_error_of_step (fun _ _ h => ne _ (TransactionState.error_createEther h)) _ _
+
+/-- The system calls at the start of a block never fail with a given error of the state.
+
+No call and no join may fail with it, from a block state that holds an invariant.
+
+Each call, followed by its join, must keep the invariant. -/
+theorem startSystemCalls_ne_error {env : BlockEnvironment fork} {parentHash : Hash32}
+    {body : BodyState} {e : State.StateError} (Inv : BlockState → Prop)
+    (call : ∀ block target data, Inv block → systemCall env block target data ≠ .error (.state e))
+    (join : ∀ (b : BodyState) target data out, Inv b.block →
+      systemCall env b.block target data = .ok out → b.join out.state ≠ .error e)
+    (keep : ∀ (b b' : BodyState) target data out, Inv b.block →
+      systemCall env b.block target data = .ok out → b.join out.state = .ok b' → Inv b'.block)
+    (start : Inv body.block) :
+    startSystemCalls env parentHash body ≠ .error (.state e) := by
+  -- The second call, from the body that the first one leaves.
+  have second : ∀ mid : BodyState, Inv mid.block →
+      (if Fork.pectra ≤ fork then do
+        let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
+        Except.mapError EvmError.state (mid.join out.state)
+      else pure mid) ≠ .error (.state e) := by
+    intro mid hm h
+    split at h
+    · rcases Base.bind_eq_error h with h | ⟨out, hout, h⟩
+      · exact call _ _ _ hm h
+      · obtain ⟨_, h, ⟨⟩⟩ := mapError_eq_error h
+        exact join _ _ _ _ hm hout h
+    · cases h
+  intro h
+  unfold startSystemCalls at h
+  dsimp only at h
+  split at h
+  · rcases Base.bind_eq_error h with h | ⟨out, hout, h⟩
+    · exact call _ _ _ start h
+    · rcases Base.bind_eq_error h with h | ⟨mid, hmid, h⟩
+      · obtain ⟨_, h, ⟨⟩⟩ := mapError_eq_error h
+        exact join _ _ _ _ start hout h
+      · exact second mid (keep _ _ _ _ _ start hout (mapError_ok_iff.mp hmid)) h
+  · rcases Base.bind_eq_error h with h | ⟨mid, hmid, h⟩
+    · cases h
+    · cases hmid
+      exact second _ start h
 
 end EthLib.Execution.Blocks

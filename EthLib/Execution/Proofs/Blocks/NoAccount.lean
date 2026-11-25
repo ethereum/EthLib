@@ -24,130 +24,12 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State (BlockState State TransactionState)
-open EthLib.Execution.Transactions (Transaction getCode_ne_noAccount modifyState_ne_noAccount)
+open EthLib.Execution.Transactions (Transaction getCode_ne_noAccount)
 
 variable {fork : Fork}
 
-/-! ## State changes that never fail for an absent account -/
-
 /-- Whether an error of a block is an absent account, in a call or outside one. -/
-private def Absent (e : BlockError) : Prop :=
-  ∃ a, e = .aborted (.state (.noAccount a)) ∨ e = .state (.noAccount a)
-
-/-- A credit of an account never fails for no account. -/
-private theorem credit_ne_noAccount (address : Address) (amount : U256)
-    (other : Address) (account : State.Account) :
-    State.Account.credit address amount account ≠ .error (.noAccount other) := by
-  intro h
-  unfold State.Account.credit at h
-  split at h <;> cases h
-
-/-- A credit of new ether never fails for no account. -/
-private theorem createEther_ne_noAccount (tx : TransactionState) (address : Address)
-    (amount : U256) (other : Address) :
-    tx.createEther fork address amount ≠ .error (.noAccount other) :=
-  modifyState_ne_noAccount (credit_ne_noAccount _ _ _)
-
-/-- A move of ether never fails for no account. -/
-private theorem moveEther_ne_noAccount (tx : TransactionState)
-    (sender recipient : Address) (amount : U256) (other : Address) :
-    tx.moveEther fork sender recipient amount ≠ .error (.noAccount other) := by
-  intro h
-  unfold State.TransactionState.moveEther at h
-  rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
-  · refine modifyState_ne_noAccount (fun _ h => ?_) h
-    unfold State.Account.debit at h
-    split at h <;> cases h
-  · exact modifyState_ne_noAccount (credit_ne_noAccount _ _ _) h
-
-/-- A fold whose steps never fail for no account never fails for one. -/
-private theorem foldlM_ne_noAccount {α β : Type}
-    {g : β → α → Except State.StateError β} {other : Address}
-    (step : ∀ b x, g b x ≠ .error (.noAccount other)) (xs : List α) (b : β) :
-    xs.foldlM g b ≠ .error (.noAccount other) := fun h =>
-  foldlM_error_of_step (fun _ => True) (· ≠ .noAccount other)
-    (fun _ _ _ _ _ => trivial) (fun b x _ _ he => by rintro rfl; exact step b x he) trivial h rfl
-
-/-- The rewards never fail for no account. -/
-private theorem payRewards_ne_noAccount (tx : TransactionState) (coinbase : Address)
-    (number : Nat) (ommers : List (Address × Nat)) (other : Address) :
-    payRewards fork tx coinbase number ommers ≠ .error (.noAccount other) := by
-  unfold payRewards
-  split
-  · nofun
-  · intro h
-    rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-    · exact createEther_ne_noAccount _ _ _ _ h
-    · exact foldlM_ne_noAccount
-        (fun _ _ => createEther_ne_noAccount _ _ _ _) _ _ h
-
-/-- The withdrawals never fail for no account. -/
-private theorem withdrawalState_ne_noAccount (block : BlockState)
-    (withdrawals : List Withdrawal) (other : Address) :
-    withdrawalState fork block withdrawals ≠ .error (.noAccount other) :=
-  foldlM_ne_noAccount (fun _ _ => createEther_ne_noAccount _ _ _ _) _ _
-
-/-- The DAO transfer never fails for no account. -/
-private theorem applyDaoFork_ne_noAccount (tx : TransactionState) (other : Address) :
-    applyDaoFork fork tx ≠ .error (.noAccount other) :=
-  foldlM_ne_noAccount (fun _ _ => moveEther_ne_noAccount _ _ _ _ _) _ _
-
-/-- The join of a call to the body never fails for no account. -/
-private theorem join_ne_noAccount (body : BodyState) (tx : TransactionState)
-    (other : Address) : body.join tx ≠ .error (.noAccount other) := by
-  have code := fun hash => getCode_ne_noAccount tx hash other
-  have write : ∀ (b : AccessListBuilder) address written,
-      b.recordAccountWrite tx address written ≠ .error (.noAccount other) := by
-    intro b address written h
-    unfold AccessListBuilder.recordAccountWrite at h
-    dsimp only at h
-    split at h
-    · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
-      · exact code _ h
-      · cases h
-    · cases h
-  have record : ∀ b : AccessListBuilder,
-      b.recordTransaction tx ≠ .error (.noAccount other) := by
-    intro b h
-    unfold AccessListBuilder.recordTransaction at h
-    simp only [bind, Except.bind] at h
-    split at h
-    · rename_i he
-      cases h
-      rw [Std.ExtTreeMap.foldlM_eq_foldlM_toList] at he
-      exact foldlM_ne_noAccount
-        (g := fun a (x : Address × Option State.Account) => a.recordAccountWrite tx x.1 x.2)
-        (fun a x => write a x.1 x.2) _ _ he
-    · cases h
-  intro h
-  unfold BodyState.join at h
-  rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
-  · exact record _ h
-  · cases h
-
-/-- A state step that never fails for no account gives none to the block. -/
-private theorem notAbsent_state {α : Type} {x : Except State.StateError α}
-    (h : ∀ a, x ≠ .error (.noAccount a)) : ∀ e, x = .error e → ¬Absent (.state e) :=
-  fun e he ⟨a, hc⟩ => by
-    rcases hc with hc | hc
-    · cases hc
-    · cases hc
-      exact h a he
-
-/-- A call that never aborts for no account gives none to the block. -/
-private theorem notAbsent_aborted {α : Type} {x : Except EvmError α}
-    (h : ∀ a, x ≠ .error (.state (.noAccount a))) :
-    ∀ e, x = .error e → ¬Absent (.aborted e) :=
-  fun e he ⟨a, hc⟩ => by
-    rcases hc with hc | hc
-    · cases hc
-      exact h a he
-    · cases hc
-
-/-- An error that is neither an abort nor an error of the state is no absent account. -/
-private theorem notAbsent_plain {e : BlockError} (ha : ∀ x, e ≠ .aborted x)
-    (hs : ∀ x, e ≠ .state x) : ¬Absent e :=
-  fun ⟨_, h⟩ => h.elim (ha _) (hs _)
+private abbrev Absent : BlockError → Prop := StateErrorOf .noAccount
 
 /-! ## The calls of a block -/
 
@@ -166,77 +48,30 @@ private theorem systemCall_ne_noAccount (env : BlockEnvironment fork)
     · exact Transactions.processMessageCall_ne_noAccount own other h
     · cases h
 
-/-- A system call that joins the body never fails for no account. -/
-private theorem systemCall_join_ne_noAccount {env : BlockEnvironment fork}
-    {body : BodyState} {target : Address} {data : ByteArray} (other : Address) :
-    (do
-      let out ← systemCall env body.block target data
-      (body.join out.state).mapError EvmError.state : Except EvmError BodyState) ≠
-      .error (.state (.noAccount other)) := by
-  intro h
-  rcases Base.bind_eq_error h with h | ⟨out, -, h⟩
-  · exact systemCall_ne_noAccount env _ _ _ other h
-  · cases hj : body.join out.state with
-    | error e' =>
-      rw [hj] at h
-      cases h
-      exact join_ne_noAccount _ _ _ hj
-    | ok _ =>
-      rw [hj] at h
-      cases h
-
-/-- The system calls at the start of a block never fail for no account. -/
-private theorem startSystemCalls_ne_noAccount {env : BlockEnvironment fork}
-    {parentHash : Hash32} {body : BodyState} (other : Address) :
-    startSystemCalls env parentHash body ≠ .error (.state (.noAccount other)) := by
-  have second : ∀ mid : BodyState,
-      (if Fork.pectra ≤ fork then do
-        let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
-        Except.mapError EvmError.state (mid.join out.state)
-      else pure mid) ≠ .error (.state (.noAccount other)) := by
-    intro mid h
-    split at h
-    · exact systemCall_join_ne_noAccount other h
-    · cases h
-  intro h
-  unfold startSystemCalls at h
-  dsimp only at h
-  split at h
-  · rcases Base.bind_eq_error h with h | ⟨out, -, h⟩
-    · exact systemCall_ne_noAccount env _ _ _ other h
-    · rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-      · cases hj : body.join out.state with
-        | error e' =>
-          rw [hj] at h
-          cases h
-          exact join_ne_noAccount _ _ _ hj
-        | ok _ =>
-          rw [hj] at h
-          cases h
-      · exact second mid h
-  · rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-    · cases h
-    · exact second mid h
-
 /-! ## The body of a block -/
 
 /-- The leaves of the body of a block never fail for no account. -/
 private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) :
     BodyLeaves config env block (¬Absent ·) (fun _ => True) (fun _ => True) (fun _ => True) where
-  plain _ ha hs _ _ := notAbsent_plain ha hs
-  dao _ _ := notAbsent_state (applyDaoFork_ne_noAccount _)
-  start body _ := notAbsent_aborted fun a => startSystemCalls_ne_noAccount (body := body) a
+  plain _ ha hs _ _ := StateErrorOf.not_plain ha hs
+  dao _ _ := StateErrorOf.not_state fun _ => foldlM_ne_error_of_step (fun _ _ h => by
+    rcases TransactionState.error_moveEther h with h | h <;> cases h) _ _
+  start _ _ := StateErrorOf.not_aborted fun a =>
+    startSystemCalls_ne_error (fun _ => True)
+      (fun block target data _ => systemCall_ne_noAccount env block target data a)
+      (fun b _ _ out _ _ => b.join_ne_error (getCode_ne_noAccount out.state · a))
+      (fun _ _ _ _ _ _ _ _ => trivial) trivial
   inclusion _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
-  process _ _ _ _ _ := notAbsent_aborted Transactions.processTransaction_ne_noAccount
-  join body tx _ := notAbsent_state (join_ne_noAccount body tx)
-  withdraw _ _ _ := notAbsent_state (withdrawalState_ne_noAccount _ _)
-  code _ _ _ := notAbsent_aborted fun a h => by
+  process _ _ _ _ _ := StateErrorOf.not_aborted Transactions.processTransaction_ne_noAccount
+  join body tx _ := StateErrorOf.not_state fun a => body.join_ne_error (getCode_ne_noAccount tx · a)
+  withdraw _ _ _ := StateErrorOf.not_state fun _ => withdrawalState_ne_error nofun
+  code _ _ _ := StateErrorOf.not_aborted fun a h => by
     obtain ⟨_, h, ⟨⟩⟩ := mapError_eq_error h
     exact getCode_ne_noAccount _ _ _ h
-  call s target data _ := notAbsent_aborted (systemCall_ne_noAccount env s target data)
+  call s target data _ := StateErrorOf.not_aborted (systemCall_ne_noAccount env s target data)
   call_failed _ _ _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
-  rewards _ _ := notAbsent_state fun a => payRewards_ne_noAccount _ _ _ _ a
+  rewards _ _ := StateErrorOf.not_state fun _ => payRewards_ne_error nofun
 
 /-- The body of a block never fails with the state error for an absent account.
 
@@ -256,7 +91,7 @@ theorem stateTransition_ne_noAccount (chain : BlockChain) (block : Block fork Tr
     stateTransition chain block checkSeal ≠ .error (.aborted (.state (.noAccount address))) ∧
       stateTransition chain block checkSeal ≠ .error (.state (.noAccount address)) := by
   have fails : ErrorsMeet (¬Absent ·) (stateTransition chain block checkSeal) :=
-    errorsMeet_stateTransition (fun _ ha hs => notAbsent_plain ha hs)
+    errorsMeet_stateTransition (fun _ ha hs => StateErrorOf.not_plain ha hs)
       (fun _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
       fun _ => (leaves _ _ _).errorsMeet_applyBody trivial
   exact ⟨fun h => fails _ h ⟨address, .inl rfl⟩, fun h => fails _ h ⟨address, .inr rfl⟩⟩
