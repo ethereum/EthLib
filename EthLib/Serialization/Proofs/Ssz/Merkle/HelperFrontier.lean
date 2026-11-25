@@ -49,7 +49,8 @@ theorem rejectClaimPaths_valid {indices : List Nat} :
 theorem rejectRelated_valid {indices : List Nat} (accepted : rejectRelated indices = .ok ()) :
     ∀ index ∈ indices, 2 ≤ index := by
   -- The last check runs over every claim.
-  by_cases empty : indices.isEmpty <;> by_cases same : indices.eraseDups.length = indices.length <;>
+  by_cases empty : indices.isEmpty <;>
+    by_cases same : (EthLib.Base.firstRepeated indices).isSome <;>
     simp_all [rejectRelated, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
   all_goals exact rejectClaimPaths_valid accepted
 

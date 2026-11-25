@@ -1040,6 +1040,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, more duplicate checks use the one-pass scan `Base.firstRepeated` ([#4545](https://github.com/ethereum/EthLib/pull/4545)).
+  It replaces the test of `List.Nodup` and the comparison of a list with its repeats removed.
+  - They cover the key shares of a QUIC TLS ClientHello and the indices of an SSZ multiproof request.
+    They also cover the stores of the Engine exports, and the slots, overrides and addresses of the RPC requests.
+    Each gives the same answer on every input.
+  - `Base.isNone_firstRepeated` (`Base/Proofs/List.lean`) is new: the scan finds nothing exactly when the list has no repeat, as a test.
+    Unfolding `Ssz.rejectRelated` now gives the scan; `rejectRelated_eq` keeps its statement.
 - In Lean, the JSON-RPC reader of hex bytes, `JsonRpc.bytesOf` (`Serialization/JsonRpc.lean`), reads the digits with `Base.hexBytes?`, with the same bytes and the same error messages ([#4488](https://github.com/ethereum/EthLib/issues/4488)).
   - Unfolding it now gives a check of the parity, a check that no character is an uppercase letter when uppercase is refused, and `Base.hexBytes?`, not a loop over indices; its public lemmas keep their statements.
   - `Base.hexBytesFrom?_eq_some_iff` (`Base/Proofs/Hex.lean`) is new: decoding succeeds exactly on pairs of hex digits, and appends the byte of each pair.

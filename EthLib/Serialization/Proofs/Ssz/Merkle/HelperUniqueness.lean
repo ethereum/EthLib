@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperFrontier
+import EthLib.Base.Proofs.List
 
 /-! A multiproof assigns exactly one supplied node to each claimed or helper index. -/
 
@@ -26,14 +27,13 @@ decreasing_by have := List.length_filter_le (fun item => !item == head) rest; si
 /-- Duplicate-index rejection leaves each claim with exactly one supplied value. -/
 theorem rejectRelated_nodup {indices : List Nat}
     (accepted : rejectRelated indices = .ok ()) : indices.Nodup := by
-  -- An unchanged length after deduplication means no claim was repeated.
-  by_cases same : indices.eraseDups.length = indices.length
-  · exact (eraseDups_sublist_nodup indices).1.eq_of_length same ▸ (eraseDups_sublist_nodup indices).2
-  · cases indices with
-    | nil => simp at same
-    | cons head rest =>
-      simp only [List.length_cons] at same
-      simp [rejectRelated, same, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at accepted
+  -- A repeated claim is what the scan finds, and then the check refuses the request.
+  cases scan : EthLib.Base.firstRepeated indices with
+  | none => exact (EthLib.Base.firstRepeated_eq_none_iff indices).mp scan
+  | some _ =>
+    simp [rejectRelated, scan, Bind.bind, Except.bind, throw, throwThe,
+      MonadExceptOf.throw] at accepted
+    split at accepted <;> cases accepted
 
 /-- Sorting the deduplicated helper frontier preserves uniqueness. -/
 theorem getHelperIndices_nodup {indices helpers : List Nat}

@@ -90,7 +90,8 @@ def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyVal
   -- A malformed store has code 0.
   let entries ← entries.mapM storedPayloadOf
   -- The supplied store is a snapshot of completed builds, with no payload ID twice.
-  unless (entries.map (·.1)).Nodup do rejectArgument none "store: two entries with one payload ID"
+  unless (Base.firstRepeated (entries.map (·.1))).isNone do
+    rejectArgument none "store: two entries with one payload ID"
   let request := request.toJson
   -- A request without a method, or with a malformed method name, has code 0.
   let some method := (request.getObjValAs? String "method").toOption

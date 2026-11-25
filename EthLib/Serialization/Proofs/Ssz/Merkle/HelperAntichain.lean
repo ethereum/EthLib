@@ -40,7 +40,7 @@ private theorem rejectRelated_paths {indices : List Nat}
     rejectClaimPaths indices indices = .ok () := by
   -- An accepted request has already passed emptiness and duplicate checks before its paths are inspected.
   have nonempty := rejectRelated_nonempty accepted
-  by_cases same : indices.eraseDups.length = indices.length <;>
+  by_cases same : (EthLib.Base.firstRepeated indices).isSome <;>
     simp_all [rejectRelated, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A successful request excludes every strict ancestor of each claimed node. -/

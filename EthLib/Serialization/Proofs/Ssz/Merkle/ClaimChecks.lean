@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperUniqueness
+import EthLib.Base.Proofs.List
 
 /-!
 The index checks of a multiproof, read one claim at a time.
@@ -127,13 +128,12 @@ theorem rejectRelated_eq (indices : List Nat) :
       else rejectClaimPaths indices indices := by
   by_cases empty : indices = []
   · subst empty; rfl
-  -- Duplicates are detected by the length lost when they are removed.
+  -- The scan finds a repeated index exactly when the indices are not distinct.
+  have scan : (EthLib.Base.firstRepeated indices).isSome = !decide indices.Nodup := by
+    rw [← EthLib.Base.isNone_firstRepeated, ← Option.not_isSome, Bool.not_not]
   by_cases nodup : indices.Nodup
-  · have : (indices.eraseDups.length != indices.length) = false := by
-      simp [(eraseDups_length_iff indices).mpr nodup]
-    simp [rejectRelated, empty, nodup, this]
-  · have : (indices.eraseDups.length != indices.length) = true := by
-      simp only [bne_iff_ne, ne_eq]; exact fun h => nodup ((eraseDups_length_iff indices).mp h)
-    simp [rejectRelated, empty, nodup, this, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+  · simp [rejectRelated, empty, nodup, scan]
+  · simp [rejectRelated, empty, nodup, scan, bind, Except.bind, throw, throwThe,
+      MonadExceptOf.throw]
 
 end EthLib.Serialization.Ssz

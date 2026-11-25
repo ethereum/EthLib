@@ -587,8 +587,10 @@ def checkClientHello (config : Config) (hello : ClientHello) : Except Error Unit
   -- §4.3.8: each share is for a supported group, in the same order, and no group twice.
   --
   -- Servers MAY abort with illegal_parameter on a violation, and this server does.
+  --
+  -- The groups are checked for a repeat in one pass, since a peer can send many shares.
   ensure ((keyShares.map (·.group)).Sublist offeredGroups ∧
-    (keyShares.map (·.group)).Nodup) .illegalParameter
+    (Base.firstRepeated (keyShares.map (·.group))).isNone) .illegalParameter
   -- §4.3.3: a server that authenticates with a certificate needs signature algorithms.
   --
   -- Without them it MUST abort with missing_extension.
