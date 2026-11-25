@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Except
+public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Quic.Tls.Messages
 public import EthLib.Networking.Proofs.Quic.Tls.Wire
 
@@ -573,45 +574,40 @@ theorem decode_eq_ok_iff {hashLength : Nat} {input rest : ByteArray} {message : 
 
 /-! ## The value of the duplicate extension error -/
 
-private theorem eraseDups_of_nodup {α : Type} [BEq α] [LawfulBEq α] :
-    ∀ (l : List α), l.Nodup → l.eraseDups = l
-  | [], _ => rfl
-  | a :: t, n => by
-    rw [List.nodup_cons] at n
-    have f : t.filter (fun b => !b == a) = t :=
-      List.filter_eq_self.mpr (fun b hb => by
-        simp
-        intro e
-        subst e
-        exact n.1 hb)
-    rw [List.eraseDups_cons, f, eraseDups_of_nodup t n.2]
+/-- The empty block names the type 0, as no type repeats in it. -/
+theorem repeatedKind_nil : repeatedKind [] = ⟨0, by decide⟩ :=
+  rfl
+
+/-- A block passes the duplicate check exactly when no extension type occurs twice in it. -/
+theorem uniqueExtensions_eq_true_iff (es : List Extension) :
+    uniqueExtensions es = true ↔ (es.map (·.kind)).Nodup := by
+  simp [uniqueExtensions, Option.isNone_iff_eq_none, Base.firstRepeated_eq_none_iff]
+
+/-- The repeated type of a block: the first type when a later extension has it, else the rest's. -/
+theorem repeatedKind_cons (e : Extension) (rest : List Extension) :
+    repeatedKind (e :: rest) =
+      if rest.any (·.kind == e.kind) then e.kind else repeatedKind rest := by
+  -- The scan of the types takes the first one when the later types hold it.
+  simp only [repeatedKind, List.map_cons, Base.firstRepeated_cons]
+  by_cases h : e.kind ∈ rest.map (·.kind)
+  · have : rest.any (·.kind == e.kind) = true := by
+      simp only [List.mem_map] at h
+      obtain ⟨b, hb, hk⟩ := h
+      exact List.any_eq_true.mpr ⟨b, hb, by simp [hk]⟩
+    simp [h, this]
+  · have : rest.any (·.kind == e.kind) = false := by
+      simp only [List.mem_map, not_exists, not_and] at h
+      simpa using fun b hb hk => h b hb hk
+    simp only [h, this, ite_false, Bool.false_eq_true]
 
 /-- A block with a repeated extension type names a type that occurs at least twice in it. -/
 theorem repeatedKind_spec (es : List Extension) (h : uniqueExtensions es = false) :
     2 ≤ (es.map (·.kind)).count (repeatedKind es) := by
-  have notNodup : ¬ (es.map (·.kind)).Nodup := by
-    intro n
-    simp [uniqueExtensions, eraseDups_of_nodup _ n] at h
-  clear h
-  induction es with
-  | nil => simp at notNodup
-  | cons a t ih =>
-    by_cases m : t.any (·.kind == a.kind) = true
-    · simp only [repeatedKind, m, ite_true, List.map_cons]
-      have mm : a.kind ∈ t.map (·.kind) := by
-        simp at m
-        obtain ⟨b, hb, e⟩ := m
-        exact List.mem_map.mpr ⟨b, hb, e⟩
-      have := List.count_pos_iff.mpr mm
-      simp only [List.count_cons, beq_self_eq_true, ite_true]
-      omega
-    · have m' : a.kind ∉ t.map (·.kind) := by
-        simp at m ⊢
-        intro b hb e
-        exact m b hb e
-      simp only [repeatedKind, m, Bool.false_eq_true, ite_false, List.map_cons]
-      have := ih (by simpa [List.nodup_cons, m'] using notNodup)
-      simp only [List.count_cons]
-      split <;> omega
+  -- The block has a repeated type, so the search finds one, which occurs at least twice.
+  cases found : Base.firstRepeated (es.map (·.kind)) with
+  | none => simp [uniqueExtensions, found] at h
+  | some kind =>
+    simp only [repeatedKind, found, Option.getD_some]
+    exact Base.two_le_count_of_firstRepeated found
 
 end EthLib.Networking.Quic.Tls

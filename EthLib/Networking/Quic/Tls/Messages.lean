@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.List
 public import EthLib.Networking.Quic.Tls.Wire
 
 /-!
@@ -56,14 +57,12 @@ def encodeExtension (extension : Extension) : Except Error (List UInt8) := do
 def uniqueExtensions (extensions : List Extension) : Bool :=
   -- There MUST NOT be more than one extension of the same type in a given extension block.
   --
-  -- So removing the repeated types leaves the list as long as it was.
-  (extensions.map (·.kind)).eraseDups.length == extensions.length
+  -- So no type of the block occurs again later in it.
+  (Base.firstRepeated (extensions.map (·.kind))).isNone
 
 /-- The first extension type that occurs again later in a block, or 0 when none does. -/
-def repeatedKind : List Extension → CodePoint
-  | [] => ⟨0, by decide⟩
-  | extension :: rest =>
-    if rest.any (·.kind == extension.kind) then extension.kind else repeatedKind rest
+def repeatedKind (extensions : List Extension) : CodePoint :=
+  (Base.firstRepeated (extensions.map (·.kind))).getD ⟨0, by decide⟩
 
 /-- Read an extension block, preserving its order and rejecting duplicate types (§4.3). -/
 def readExtensions (minimum : Nat) : Reader (List Extension) := do

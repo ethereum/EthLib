@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.List
+import Std.Data.HashSet.Lemmas
 
 /-!
 # `Base.Proofs.List`
@@ -334,5 +335,57 @@ theorem flatMap_inj_of_length {α β : Type} {f : α → List β} {n : Nat} (pos
       simp only [List.flatMap_cons] at h
       obtain ⟨hxy, hl⟩ := List.append_inj h (by rw [length, length])
       rw [inj x y hxy, ih hl]
+
+/-- The set built by the pass that finds a repeated element holds exactly the list's elements. -/
+private theorem foldr_later_contains {α : Type} [BEq α] [LawfulBEq α] [Hashable α]
+    (l : List α) (y : α) :
+    (l.foldr (init := ((∅ : Std.HashSet α), (none : Option α))) fun x (later, found) =>
+      (later.insert x, if later.contains x then some x else found)).1.contains y =
+      decide (y ∈ l) := by
+  induction l with
+  | nil => simp
+  | cons x l ih =>
+    -- Inserting the head adds it to the set of the tail.
+    simp only [List.foldr_cons, Std.HashSet.contains_insert, ih, List.mem_cons]
+    by_cases h : x = y <;> simp [h, Ne.symm]
+
+/-- No element of the empty list occurs again. -/
+@[simp] theorem firstRepeated_nil {α : Type} [BEq α] [Hashable α] :
+    firstRepeated ([] : List α) = none :=
+  rfl
+
+/-- The first element that occurs again: the head when the tail holds it, else that of the tail. -/
+theorem firstRepeated_cons {α : Type} [BEq α] [LawfulBEq α] [Hashable α] (x : α) (l : List α) :
+    firstRepeated (x :: l) = if x ∈ l then some x else firstRepeated l := by
+  -- One step of the pass looks the head up in the set of the tail, which holds the tail.
+  simp only [firstRepeated, List.foldr_cons, foldr_later_contains, decide_eq_true_eq]
+
+/-- A list has no element that occurs again exactly when no element occurs twice in it. -/
+theorem firstRepeated_eq_none_iff {α : Type} [BEq α] [LawfulBEq α] [Hashable α] (l : List α) :
+    firstRepeated l = none ↔ l.Nodup := by
+  induction l with
+  | nil => simp [firstRepeated]
+  | cons x l ih =>
+    -- The head repeats exactly when the tail holds it, and otherwise the tail decides.
+    rw [firstRepeated_cons, List.nodup_cons]
+    by_cases hx : x ∈ l <;> simp [hx, ih]
+
+/-- The element that occurs again occurs at least twice. -/
+theorem two_le_count_of_firstRepeated {α : Type} [BEq α] [LawfulBEq α] [Hashable α]
+    {l : List α} {x : α} (h : firstRepeated l = some x) : 2 ≤ l.count x := by
+  induction l with
+  | nil => simp [firstRepeated] at h
+  | cons y l ih =>
+    rw [firstRepeated_cons] at h
+    by_cases hy : y ∈ l
+    · -- The head is the repeated element, once at the front and once in the tail.
+      obtain rfl : y = x := Option.some.inj (by simpa [hy] using h)
+      have := List.count_pos_iff.mpr hy
+      simp only [List.count_cons_self]
+      omega
+    · -- Otherwise the tail already holds the element twice.
+      have := ih (by simpa [hy] using h)
+      have : l.count x ≤ (y :: l).count x := List.count_le_count_cons
+      omega
 
 end EthLib.Base
