@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.List
 public import EthLib.Execution.Network.Message
 
 /-!
@@ -193,8 +194,10 @@ def sendEth (session : EthSession) (m : Message) : Option EthSession :=
   -- A hash twice in one message counts as a resend; the hashes then count as sent.
   | .transactions _, true =>
     let hashes := m.transactionHashes
-    if hashes ≠ [] ∧ hashes.Nodup ∧
-        ∀ h ∈ hashes, h ∉ session.sentTxs ∧ h ∉ session.receivedTxs then
+    -- The hashes sent and received so far, in a search tree, so each test costs a logarithm.
+    let known := Std.TreeSet.ofList (session.sentTxs ++ session.receivedTxs)
+    -- The message is checked for a repeat in one pass.
+    if hashes ≠ [] ∧ (firstRepeated hashes).isNone ∧ hashes.all (!known.contains ·) then
       some { session with sentTxs := session.sentTxs ++ hashes }
     else none
   -- PooledTransactions answers a request, so a resend is not refused; its hashes count as sent.
