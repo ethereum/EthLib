@@ -47,14 +47,17 @@ section Affine
 variable {F : Type} [Add F] [Sub F] [Mul F] [Neg F] [OfNat F 0] [OfNat F 2] [OfNat F 3]
   [DecidableEq F] [Params F]
 
-/-- Whether a point satisfies the equation `y^2 = x^3 + a x + b`.
-
-The point at infinity always does.
+/-- The right side `x^3 + a x + b` of the equation.
 
 When `a = 0`, the term `a x` is skipped. -/
+@[inline] def rhs (x : F) : F := if (a : F) = 0 then x * x * x + b else x * x * x + a * x + b
+
+/-- Whether a point satisfies the equation `y^2 = x^3 + a x + b`.
+
+The point at infinity always does. -/
 @[specialize] def isOnCurve : Point F → Bool
   | infinity => true
-  | affine x y => y * y == if (a : F) = 0 then x * x * x + b else x * x * x + a * x + b
+  | affine x y => y * y == rhs x
 
 /-- The negative of a point, from rule 3 of SEC 1 v2 §2.2.1: `-(x, y) = (x, -y)`. -/
 def neg : Point F → Point F

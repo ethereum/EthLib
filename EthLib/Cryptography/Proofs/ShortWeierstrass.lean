@@ -279,7 +279,7 @@ def toPoint [DecidableEq K] [(curve A B).IsElliptic] : Point F → (curve A B).P
 /-- The curve test, as an equation in the field. -/
 theorem isOnCurve_affine (hf : Embedding f A B) (x y : F) :
     (affine x y).isOnCurve = true ↔ f y * f y = f x * f x * f x + A * f x + B := by
-  simp only [isOnCurve, beq_iff_eq]
+  simp only [isOnCurve, rhs, beq_iff_eq]
   rw [← hf.injective.eq_iff]
   split_ifs with ha
   · -- When `a = 0`, the rule skips the term `a x`, which is `0` in the field.

@@ -9,6 +9,14 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Cryptography/Sec1.lean` writes the point encoding of SEC 1 v2 once, for every short Weierstrass curve over an odd prime field ([#4695](https://github.com/ethereum/EthLib/pull/4695)).
+  `Sec1.encode` and `Sec1.decode` are the conversions of §2.3.3 and §2.3.4, with the typed error `Sec1.Sec1Error`, and `Sec1.validatePublicKey` is the public key validation of §3.2.2.1.
+  `Sec1.decode_eq_ok_iff` (`Cryptography/Proofs/Sec1.lean`) says that octets decode to a point exactly when they are one of its encodings, so decoding is canonical.
+  `Sec1.decode_encode` is the round trip, and `Sec1.decompress_eq_ok_iff` says that decompression finds the point of the requested parity exactly when one exists.
+  They assume a prime `p` and a square root that obeys `Sec1.IsSqrt`, which `Sec1.isSqrt_sqrt3Mod4` proves for `α^((p + 1) / 4)` when `p = 3 mod 4`.
+  `Sec1.eq_of_decode_eq_ok` says that two octet strings of one length that decode to one point are equal.
+  `Sec1.validatePublicKey_eq_ok_iff` states the checks of validation, and `Sec1.validatePublicKey_eq_ok_iff_nsmul` says that, through a map onto a field, validation accepts exactly the points of the curve other than `O` with `n Q = 0`.
+
 - In Lean, `SubmitBlockRequest.servable` (`Consensus/RelayApi.lean`) says whether the block scoring rule lets a relay serve a submission ([#2131](https://github.com/ethereum/EthLib/issues/2131)).
   From Deneb, its bid value must pass the check against the proposer's fee recipient.
   `SubmitBlockRequest.servable_iff` (`Consensus/Proofs/RelayApi.lean`) states that check in Wei, and `SubmitBlockRequest.servable_of_lt_deneb` says that before Deneb the rule sets no condition.
@@ -1069,6 +1077,8 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `ShortWeierstrass.Point.isOnCurve` (`Cryptography/ShortWeierstrass.lean`) compares `y * y` with `ShortWeierstrass.Point.rhs x`, the right side `x^3 + a x + b` of the equation, which SEC 1 decompression shares ([#4695](https://github.com/ethereum/EthLib/pull/4695)).
+  A proof that unfolds the curve test also unfolds `rhs`.
 - In Lean, one ring isomorphism `Montgomery.toZModEquiv` maps the Montgomery elements of every modulus to `ZMod p` (`Cryptography/Proofs/Montgomery/ZMod.lean`) ([#4685](https://github.com/ethereum/EthLib/issues/4685)).
   The elements are a commutative ring and a finite type by transport, with `Montgomery.card_eq`.
   `Montgomery.field` gives a field for a prime modulus, with the division in context.
