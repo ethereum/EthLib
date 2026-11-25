@@ -3121,25 +3121,6 @@ private theorem CapStep.requests {f : Fork} {s t : BeaconState preset f}
     (trans (fold (fun _ _ _ => CapStepR.withdrawalRequest) withdrawals)
       (fold (fun _ _ _ => CapStepR.consolidationRequest order) consolidations))
 
-private theorem _root_.EthLib.Consensus.AssignedProposers.selected {f : Fork}
-    {s : BeaconState preset f} (held : AssignedProposers s) {proposer : ValidatorIndex}
-    (ok : getBeaconProposerIndex s = .ok proposer) :
-    ∃ v, s.validators.data[proposer.toNat]? = some v ∧
-      v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-  unfold getBeaconProposerIndex at ok
-  split at ok
-  · rename_i fulu
-    split at ok
-    · cases ok
-    · cases ok
-      exact held fulu _ (by apply List.getElem_mem)
-  · obtain ⟨seed, _, rest⟩ := bind_ok_iff.mp ok
-    obtain ⟨active, checked, drawn⟩ := bind_ok_iff.mp rest
-    obtain ⟨v, found, live⟩ :=
-      (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp
-        (List.mem_toArray.mp (mem_of_computeProposerIndex drawn))
-    exact ⟨v, found, assigned_of_active live⟩
-
 private theorem preKeyCharge_slash {f : Fork} {s t : BeaconState preset f}
     {index : ValidatorIndex} (candidate : Nat → Bool) (proposers : AssignedProposers s)
     (early : f < .glamsterdam)

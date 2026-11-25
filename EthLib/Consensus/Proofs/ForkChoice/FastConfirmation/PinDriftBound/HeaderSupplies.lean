@@ -2011,7 +2011,7 @@ theorem budget_sync (h : Setting config checks g split fin pulled anc counted V)
     cases step with
     | slot _ => trivial
     | @block f before after engine signed due ok =>
-      obtain ⟨pre, post, -, -, -⟩ :=
+      obtain ⟨pre, -, -, -, -⟩ :=
         DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
       intro p found inK
       obtain ⟨v, inEK, same⟩ := Finset.mem_image.mp (hPK ▸ inK)
@@ -2032,7 +2032,6 @@ theorem budget_sync (h : Setting config checks g split fin pulled anc counted V)
         foundFin (by rw [kept]; exact exited)
       have look := Run.lookaheadActive h.facts.covers h.genesis
         (toFin.append (pre.snoc (Step.block engine signed due ok)))
-        (Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early)
       have active := look.proposer_active (Nat.le_trans h.fulu
         (fork_le_of_chainSteps (pre.snoc (Step.block engine signed due ok)).chainSteps)) found
       rw [← same, inactive] at active

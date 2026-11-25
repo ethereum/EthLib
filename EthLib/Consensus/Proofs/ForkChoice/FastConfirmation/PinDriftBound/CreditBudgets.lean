@@ -1891,7 +1891,7 @@ private theorem block_idle_step {g : ForkedBeaconState preset}
   by_contra nonzero
   rcases keys v (Nat.pos_of_ne_zero nonzero) with member | ⟨altair, w, found, seat⟩
   · obtain ⟨p, read, same⟩ := proposer v member
-    have active := (Run.lookaheadActive covers genesis shared early).proposer_active fulu read
+    have active := (Run.lookaheadActive covers genesis shared).proposer_active fulu read
     rw [same] at active
     obtain ⟨w, found, isActive⟩ := isActiveAt_eq_true_iff.mp active
     rw [notActive w found] at isActive
@@ -3447,12 +3447,12 @@ theorem exited_not_proposer (h : Setting config checks g split fin pulled anc co
     {i : ℕ} {w : Validator} (foundPulled : pulled.validators.data[i]? = some w)
     (exited : w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat)
     (u : ForkedBeaconState preset) (run : Run config checks ⟨fork, fin⟩ u) (p : ValidatorIndex) :
-    u.fork < .glamsterdam → getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i := by
-  intro early proposer same
+    getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i := by
+  intro proposer same
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨w0, foundFin, kept⟩ := Internal.exit_kept_of_le_fin h foundPulled exited
   have inactive := Internal.inactive_of_exited h.twoSlots run foundFin (by rw [kept]; exact exited)
-  have look := Run.lookaheadActive h.facts.covers h.genesis (toFin.append run) early
+  have look := Run.lookaheadActive h.facts.covers h.genesis (toFin.append run)
   have active := look.proposer_active
     (Nat.le_trans h.fulu (fork_le_of_chainSteps run.chainSteps)) proposer
   rw [same, inactive] at active
@@ -3940,8 +3940,7 @@ theorem bands_seats (h : Setting config checks g split fin pulled anc counted V)
       · obtain ⟨w, found, exited⟩ := exited_of_exitBeforeFin exit
         exact .inr (.inl ⟨Internal.syncCr_gross_shared h fromFin tailC highC replayedFC v.toNat
           credit,
-          fun u run p early proposer => Internal.exited_not_proposer h found exited u run p early
-            proposer⟩)
+          fun u run p _ proposer => Internal.exited_not_proposer h found exited u run p proposer⟩)
       · exact .inr (.inr (seatQ v seat)))
     (fun i hi => by
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi

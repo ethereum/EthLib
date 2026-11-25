@@ -17,6 +17,8 @@ From Fulu the state keeps the proposers of the current epoch and the next `MIN_S
 Each was drawn active in its epoch, so its activation epoch is assigned.
 
 No later step clears an assigned activation epoch.
+
+So from Fulu, the proposer of each state of a run from genesis is a validator of the registry.
 -/
 
 @[expose] public section
@@ -174,5 +176,49 @@ theorem Run.assignedProposers {g x : ForkedBeaconState preset}
     have before := (initializeBeaconStateFromEth1_ok initialized).1
     exact fun fulu => (Nat.not_le_of_lt before (Nat.le_trans (by decide) fulu)).elim
   | snoc pre step ih => exact assignedProposers_chainStep step.chainStep ih
+
+/-- A proposer read from a state that holds the property names an assigned validator.
+
+Before Fulu the proposer is drawn from the active validators, so it is assigned too. -/
+theorem AssignedProposers.selected {f : Fork} {s : BeaconState preset f}
+    (held : AssignedProposers s) {proposer : ValidatorIndex}
+    (ok : getBeaconProposerIndex s = .ok proposer) :
+    ∃ v, s.validators.data[proposer.toNat]? = some v ∧
+      v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+  unfold getBeaconProposerIndex at ok
+  split at ok
+  · -- From Fulu the proposer is an entry of the lookahead.
+    rename_i fulu
+    split at ok
+    · cases ok
+    · cases ok
+      exact held fulu _ (by apply List.getElem_mem)
+  · -- Before Fulu the proposer is drawn from the active validators of the epoch.
+    obtain ⟨seed, _, rest⟩ := bind_ok_iff.mp ok
+    obtain ⟨active, checked, drawn⟩ := bind_ok_iff.mp rest
+    obtain ⟨v, found, live⟩ :=
+      (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp
+        (List.mem_toArray.mp (mem_of_computeProposerIndex drawn))
+    exact ⟨v, found, Internal.assigned_of_active live⟩
+
+/-- From Fulu, a state that a run reaches from genesis has a proposer for its slot.
+
+That proposer is a validator of the registry.
+
+An epoch of the preset must have at least one slot. -/
+theorem Run.getBeaconProposerIndex_ok {g x : ForkedBeaconState preset}
+    (nonzero : preset.SLOTS_PER_EPOCH ≠ 0) (genesis : Genesis config checks g)
+    (run : Run config checks g x) (fulu : .fusaka ≤ x.fork) :
+    ∃ proposer, getBeaconProposerIndex x.state = .ok proposer ∧
+      proposer.toNat < x.state.validators.data.size := by
+  -- From Fulu the proposer is an entry of the lookahead, so the read succeeds.
+  have read : ∃ proposer, getBeaconProposerIndex x.state = .ok proposer := by
+    unfold getBeaconProposerIndex
+    simp only [fulu, nonzero, ↓reduceDIte]
+    exact ⟨_, rfl⟩
+  obtain ⟨proposer, read⟩ := read
+  -- Each entry of the lookahead names a validator of the registry.
+  obtain ⟨_, found, -⟩ := (run.assignedProposers genesis).selected read
+  exact ⟨proposer, read, (Array.getElem?_eq_some_iff.mp found).1⟩
 
 end EthLib.Consensus

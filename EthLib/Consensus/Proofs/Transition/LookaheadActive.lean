@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
+import EthLib.Consensus.Proofs.Transition.ProposerLookahead
 
 /-!
 # Proofs: each proposer of the lookahead is active in its epoch along a run
@@ -142,56 +143,63 @@ private theorem LookaheadActive.advanceSlot
     simp only [getCurrentEpoch_toNat]
     exact nextSlot_epoch_of_inside sum ‹_›
 
-/-- The upgrades keep the invariant, and Fulu starts it. -/
+/-- The upgrades keep the invariant, and Fulu starts it.
+
+From Fulu, an upgrade copies the registry, the slot and the lookahead. -/
 private theorem LookaheadActive.upgradeNext {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (ok : upgradeNext config checks pre = .ok post) (early : post.val.fork < .glamsterdam) :
+    (h : LookaheadActive pre.state) (ok : upgradeNext config checks pre = .ok post) :
     LookaheadActive post.val.state := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork <;>
-    simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
-      throwThe, MonadExceptOf.throw, reduceCtorEq] at ok <;>
-    first
-      | (obtain ⟨_, upgraded, rfl⟩ := ok
-         first
-           | exact LookaheadActive.upgradeToFulu upgraded
-           | exact fun fulu => absurd fulu (by dsimp only; decide)
-           | exact absurd early (by dsimp only; decide))
+  by_cases early : .fusaka ≤ pre.fork
+  · -- From Fulu, each entry and the validator it names are those of the state before.
+    intro late k inside e he
+    have held := h early k inside e (by
+      rw [he]
+      simp only [getCurrentEpoch, (upgradeFrame_upgradeNext ok).slot])
+    rw [upgradeNext_proposerLookahead ok early]
+    unfold isActiveAt at held ⊢
+    rw [upgradeNext_validators_of_electra (Nat.le_trans (by decide) early) ok]
+    exact held
+  · -- Before Fulu, only the upgrade to Fulu reaches a fork with a lookahead.
+    obtain ⟨fork, state⟩ := pre
+    change ¬ .fusaka ≤ fork at early
+    cases fork <;>
+      simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
+        throwThe, MonadExceptOf.throw, reduceCtorEq] at ok <;>
+      first
+        | (obtain ⟨_, upgraded, rfl⟩ := ok
+           first
+             | exact LookaheadActive.upgradeToFulu upgraded
+             | exact fun fulu => absurd fulu (by dsimp only; decide)
+             | exact absurd (by decide) early)
 
 /-- A step of a chain keeps the invariant. -/
 private theorem LookaheadActive.chainStep
     (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     {x y : ForkedBeaconState preset} (step : ChainStep config checks x y)
-    (early : y.fork < .glamsterdam) (h : LookaheadActive x.state) : LookaheadActive y.state := by
+    (h : LookaheadActive x.state) : LookaheadActive y.state := by
   cases step with
   | slot ok =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
     exact processUpgrades_induction (config := config) (checks := checks)
-      (forked := ⟨x.fork, advanced⟩)
-      (property := fun u => u.fork < .glamsterdam → LookaheadActive u.state)
-      (fun _ stepOk later => LookaheadActive.upgradeNext stepOk later)
-      (fun _ => h.advanceSlot covers advancedOk) upgraded early
+      (forked := ⟨x.fork, advanced⟩) (property := fun u => LookaheadActive u.state)
+      (fun held stepOk => held.upgradeNext stepOk) (h.advanceSlot covers advancedOk) upgraded
   | block engine signed validated ok =>
     exact h.processBlock covers (applySignedBlock_ok ok).2.1
 
 /-- Along a run from genesis, each proposer of the lookahead is active in its epoch.
 
-The run must end before Gloas.
-
 The preset must have `MAX_SEED_LOOKAHEAD` above `MIN_SEED_LOOKAHEAD`. -/
 theorem Run.lookaheadActive {g x : ForkedBeaconState preset}
     (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
-    (genesis : Genesis config checks g)
-    (run : Run config checks g x) (early : x.fork < .glamsterdam) :
+    (genesis : Genesis config checks g) (run : Run config checks g x) :
     LookaheadActive x.state := by
   induction run with
   | nil =>
     obtain ⟨_, _, _, initialized⟩ := genesis
     have before := (initializeBeaconStateFromEth1_ok initialized).1
     exact fun fulu => (Nat.not_le_of_lt before (Nat.le_trans (by decide) fulu)).elim
-  | snoc pre step ih =>
-    exact LookaheadActive.chainStep covers step.chainStep early
-      (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early))
+  | snoc pre step ih => exact LookaheadActive.chainStep covers step.chainStep ih
 
 /-- A proposer read from the lookahead of a state is active in the epoch of the state. -/
 theorem LookaheadActive.proposer_active {state : BeaconState preset fork}

@@ -2089,7 +2089,7 @@ private theorem whist_seat (h : Setting config checks g split fin pulled anc cou
         have gross := Internal.syncCr_gross_shared h fromFin tail high replayedF i credit
         rcases hBS i gross with proposer | seat
         · exfalso
-          obtain ⟨u, run, p, early, found, same⟩ := hProposer i proposer
+          obtain ⟨u, run, p, -, found, same⟩ := hProposer i proposer
           obtain ⟨w, foundW, exit⟩ : ∃ w, pulled.validators.data[i]? = some w ∧
               w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat := by
             have flag : ((pulled.validators.data[i]?).any fun v =>
@@ -2099,7 +2099,7 @@ private theorem whist_seat (h : Setting config checks g split fin pulled anc cou
             | some w =>
               rw [found] at flag
               exact ⟨w, rfl, of_decide_eq_true (by simpa using flag)⟩
-          exact Internal.exited_not_proposer h foundW exit u run p early found same
+          exact Internal.exited_not_proposer h foundW exit u run p found same
         · exact seat
       · simp only [exited] at nonzero
         exact absurd rfl nonzero
