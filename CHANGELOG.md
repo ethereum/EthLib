@@ -1061,6 +1061,18 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, a Gloas builder keeps the first preferences of a proposer for a slot, and may refuse preferences from a key that is not the proposer of the slot ([#3860](https://github.com/ethereum/EthLib/issues/3860)).
+  This follows `ethereum/builder-specs` at `0911550`.
+  - `BuilderApi.preferencesFailures` and `BuilderApi.PreferencesStore.submit` (`Consensus/BuilderApi/RequestAuth.lean`) take the key of the proposer that the builder knows for each slot, before the key of the path.
+    `BuilderApi.lookaheadProposerKey` reads it from the lookahead of a Gloas state, and `fun _ => none` skips the check.
+  - `BuilderApi.AuthFailure.notProposer` is a new failure, with status 400.
+  - `PreferencesStore.submit` leaves the store as it was when it already keeps preferences for the key and slot.
+    `PreferencesStore.submit_of_accepted` (`Consensus/Proofs/BuilderApi/RequestAuth.lean`) takes that as a hypothesis.
+    `PreferencesStore.submit_of_kept` says that such a submission leaves the store as it was.
+  - `notProposer_mem_iff` says when the new failure fires, `notProposer_mem_of_lookahead` applies it to the lookahead, and `PreferencesStore.submit_of_notProposer` says that the store is then unchanged.
+  - `RelayApi.lookaheadSchedule` and `RelayApi.validatorPubkey?` move to `Consensus/Accessors.lean`, as `lookaheadSchedule` and `validatorPubkey?`, with the same bodies.
+  - In Python, `builder_preferences_failures` takes the SSZ bytes of the builder's state as an optional `state`, and lists `not_proposer` among its failures.
+  Migration: pass `fun _ => none` to keep the earlier checks, and drop the `RelayApi.` prefix of the two moved definitions.
 - In Lean, the gossip check of a voluntary exit ignores an exit whose validator has a pending partial withdrawal, from Electra ([#4171](https://github.com/ethereum/EthLib/issues/4171)).
   - `Consensus.pendingBalanceToWithdraw` (`Consensus/Transition/Operations.lean`) is new: the balance a validator has queued to withdraw, 0 before Electra.
   - `Consensus.checkNoPendingWithdrawal` now unfolds to a check of that balance, and gives the same result at every fork.

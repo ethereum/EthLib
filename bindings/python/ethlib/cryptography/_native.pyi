@@ -884,7 +884,7 @@ def consensus_builder_request_auth_failures(name: str, fork: str, config: dict[s
     """From Gloas: the failed checks of a request for a bid, by name, in order."""
     ...
 
-def consensus_builder_preferences_failures(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]:
+def consensus_builder_preferences_failures(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, state: bytes | None, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]:
     """From Gloas: the failed checks of a request that submits preferences, by name, in order."""
     ...
 

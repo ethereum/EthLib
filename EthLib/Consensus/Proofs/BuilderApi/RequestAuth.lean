@@ -8,6 +8,10 @@ public import EthLib.Consensus.BuilderApi.RequestAuth
 A request for a bid fails no check exactly when its header, data, slot and signature all hold.
 
 A submission of preferences for a slot that has passed always fails, and leaves the store as it was.
+
+So does a submission from a key that the builder knows is not the proposer of the slot.
+
+A submission for a key and slot whose preferences the store keeps leaves the store as it was.
 -/
 
 @[expose] public section
@@ -57,26 +61,62 @@ theorem allowedStatus_badSignature (status : Nat) :
 
 /-- A request that submits preferences for a passed slot fails on that slot, when its checks run. -/
 theorem preferencesFailures_of_passed {config : Config} {checks : SignatureChecks}
-    {agreed : ByteArray} {currentSlot : Slot} {pubkey : BLSPubkey}
-    {versionHeader : Option String} {request : BuilderPreferencesRequest}
+    {agreed : ByteArray} {currentSlot : Slot} {proposerOf : Slot → Option BLSPubkey}
+    {pubkey : BLSPubkey} {versionHeader : Option String} {request : BuilderPreferencesRequest}
     {failures : List AuthFailure} (passed : request.auth.message.slot < currentSlot)
-    (checked : preferencesFailures config checks agreed currentSlot pubkey versionHeader request =
-      .ok failures) :
+    (checked : preferencesFailures config checks agreed currentSlot proposerOf pubkey
+      versionHeader request = .ok failures) :
     .slotPassed ∈ failures := by
   unfold preferencesFailures signatureFailures at checked
   rcases h : verifyBuilderRequestAuthSignature config checks request.auth pubkey with e | b
   · simp [h, Functor.map, Except.map] at checked
   · cases b <;> simp [h, passed, Functor.map, Except.map] at checked <;> simp [← checked]
 
+/-- Preferences fail on the proposer exactly when the builder knows another proposer of their slot.
+
+This holds whenever the checks run. -/
+theorem notProposer_mem_iff {config : Config} {checks : SignatureChecks} {agreed : ByteArray}
+    {currentSlot : Slot} {proposerOf : Slot → Option BLSPubkey} {pubkey : BLSPubkey}
+    {versionHeader : Option String} {request : BuilderPreferencesRequest}
+    {failures : List AuthFailure}
+    (checked : preferencesFailures config checks agreed currentSlot proposerOf pubkey
+      versionHeader request = .ok failures) :
+    .notProposer ∈ failures ↔
+      ∃ key, proposerOf request.auth.message.slot = some key ∧ key ≠ pubkey := by
+  unfold preferencesFailures signatureFailures headerFailures dataFailures at checked
+  rcases h : verifyBuilderRequestAuthSignature config checks request.auth pubkey with e | b
+  · simp [h, Functor.map, Except.map] at checked
+  · cases b <;> simp [h, Functor.map, Except.map] at checked <;> subst checked <;>
+      cases proposerOf request.auth.message.slot <;> simp <;> split <;> simp
+
+/-- From Gloas, preferences fail on the proposer when the lookahead names another validator.
+
+This holds whenever the checks run, for a builder that reads the lookahead of its state. -/
+theorem notProposer_mem_of_lookahead {config : Config} {checks : SignatureChecks}
+    {agreed : ByteArray} {currentSlot : Slot} {preset : Preset} {fork : Fork}
+    {state : BeaconState preset fork} {gloas : .glamsterdam ≤ fork} {pubkey key : BLSPubkey}
+    {versionHeader : Option String} {request : BuilderPreferencesRequest} {index : ValidatorIndex}
+    {failures : List AuthFailure}
+    (scheduled : lookaheadSchedule state (Nat.le_trans (by decide) gloas)
+      request.auth.message.slot = some index)
+    (keyed : validatorPubkey? state index = some key) (other : key ≠ pubkey)
+    (checked : preferencesFailures config checks agreed currentSlot
+      (lookaheadProposerKey state gloas) pubkey versionHeader request = .ok failures) :
+    .notProposer ∈ failures :=
+  (notProposer_mem_iff checked).mpr
+    ⟨key, by simp [lookaheadProposerKey, scheduled, keyed], other⟩
+
 /-- The checks of a request that submits preferences do not read the preferences.
 
 The signature does not cover the preferences. -/
 theorem preferencesFailures_preferences (config : Config) (checks : SignatureChecks)
-    (agreed : ByteArray) (currentSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
-    (request : BuilderPreferencesRequest) (preferences : BuilderPreferences) :
-    preferencesFailures config checks agreed currentSlot pubkey versionHeader
+    (agreed : ByteArray) (currentSlot : Slot) (proposerOf : Slot → Option BLSPubkey)
+    (pubkey : BLSPubkey) (versionHeader : Option String) (request : BuilderPreferencesRequest)
+    (preferences : BuilderPreferences) :
+    preferencesFailures config checks agreed currentSlot proposerOf pubkey versionHeader
         { request with preferences } =
-      preferencesFailures config checks agreed currentSlot pubkey versionHeader request :=
+      preferencesFailures config checks agreed currentSlot proposerOf pubkey versionHeader
+        request :=
   rfl
 
 /-- A store with preferences kept under a key and a slot changes no entry under any other pair. -/
@@ -94,34 +134,80 @@ theorem PreferencesStore.get_keep (store : PreferencesStore) (pubkey : BLSPubkey
       intro e; exact h ⟨(Prod.mk.inj e).1, (Prod.mk.inj e).2⟩
     simp [List.lookup_cons, this]
 
-/-- A submission that fails no check keeps its preferences under the key and its slot. -/
-theorem PreferencesStore.submit_of_accepted {config : Config} {checks : SignatureChecks}
-    {agreed : ByteArray} {currentSlot : Slot} {pubkey : BLSPubkey}
-    {versionHeader : Option String} {request : BuilderPreferencesRequest}
-    (store : PreferencesStore)
-    (accepted : preferencesFailures config checks agreed currentSlot pubkey versionHeader request =
-      .ok []) :
-    store.submit config checks agreed currentSlot pubkey versionHeader request =
-      .ok (store.keep pubkey request.auth.message.slot request.preferences) := by
-  simp [PreferencesStore.submit, accepted, bind, Except.bind, pure, Except.pure]
+/-- A submission that fails no check keeps its preferences under the key and its slot.
 
-/-- A submission for a slot that has passed leaves the store as it was. -/
-theorem PreferencesStore.submit_of_passed {config : Config} {checks : SignatureChecks}
-    {agreed : ByteArray} {currentSlot : Slot} {pubkey : BLSPubkey}
-    {versionHeader : Option String} {request : BuilderPreferencesRequest}
-    {store after : PreferencesStore} (passed : request.auth.message.slot < currentSlot)
-    (submitted : store.submit config checks agreed currentSlot pubkey versionHeader request =
-      .ok after) :
+This needs no preferences kept for that key and slot before. -/
+theorem PreferencesStore.submit_of_accepted {config : Config} {checks : SignatureChecks}
+    {agreed : ByteArray} {currentSlot : Slot} {proposerOf : Slot → Option BLSPubkey}
+    {pubkey : BLSPubkey} {versionHeader : Option String} {request : BuilderPreferencesRequest}
+    (store : PreferencesStore)
+    (accepted : preferencesFailures config checks agreed currentSlot proposerOf pubkey
+      versionHeader request = .ok [])
+    (fresh : store.get pubkey request.auth.message.slot = none) :
+    store.submit config checks agreed currentSlot proposerOf pubkey versionHeader request =
+      .ok (store.keep pubkey request.auth.message.slot request.preferences) := by
+  simp [PreferencesStore.submit, accepted, fresh, bind, Except.bind, pure, Except.pure]
+
+/-- A submission that some check fails leaves the store as it was. -/
+private theorem PreferencesStore.submit_of_failed {config : Config} {checks : SignatureChecks}
+    {agreed : ByteArray} {currentSlot : Slot} {proposerOf : Slot → Option BLSPubkey}
+    {pubkey : BLSPubkey} {versionHeader : Option String} {request : BuilderPreferencesRequest}
+    {store after : PreferencesStore} {failure : AuthFailure}
+    (failed : ∀ failures, preferencesFailures config checks agreed currentSlot proposerOf pubkey
+      versionHeader request = .ok failures → failure ∈ failures)
+    (submitted : store.submit config checks agreed currentSlot proposerOf pubkey versionHeader
+      request = .ok after) :
     after = store := by
   unfold PreferencesStore.submit at submitted
-  cases checked : preferencesFailures config checks agreed currentSlot pubkey versionHeader
-      request with
+  cases checked : preferencesFailures config checks agreed currentSlot proposerOf pubkey
+      versionHeader request with
   | error e => simp [checked, bind, Except.bind] at submitted
   | ok failures =>
     have nonempty : failures ≠ [] := by
       rintro rfl
-      simpa using preferencesFailures_of_passed passed checked
+      simpa using failed _ checked
     simp [checked, nonempty, bind, Except.bind, pure, Except.pure] at submitted
+    exact submitted.symm
+
+/-- A submission for a slot that has passed leaves the store as it was. -/
+theorem PreferencesStore.submit_of_passed {config : Config} {checks : SignatureChecks}
+    {agreed : ByteArray} {currentSlot : Slot} {proposerOf : Slot → Option BLSPubkey}
+    {pubkey : BLSPubkey} {versionHeader : Option String} {request : BuilderPreferencesRequest}
+    {store after : PreferencesStore} (passed : request.auth.message.slot < currentSlot)
+    (submitted : store.submit config checks agreed currentSlot proposerOf pubkey versionHeader
+      request = .ok after) :
+    after = store :=
+  submit_of_failed (fun _ => preferencesFailures_of_passed passed) submitted
+
+/-- A submission whose key is not the proposer the builder knows leaves the store unchanged. -/
+theorem PreferencesStore.submit_of_notProposer {config : Config} {checks : SignatureChecks}
+    {agreed : ByteArray} {currentSlot : Slot} {proposerOf : Slot → Option BLSPubkey}
+    {pubkey key : BLSPubkey} {versionHeader : Option String} {request : BuilderPreferencesRequest}
+    {store after : PreferencesStore} (scheduled : proposerOf request.auth.message.slot = some key)
+    (other : key ≠ pubkey)
+    (submitted : store.submit config checks agreed currentSlot proposerOf pubkey versionHeader
+      request = .ok after) :
+    after = store :=
+  submit_of_failed (fun _ checked => (notProposer_mem_iff checked).mpr ⟨key, scheduled, other⟩)
+    submitted
+
+/-- A submission for a key and slot whose preferences the store keeps leaves the store as it was.
+
+So a replay of a request, with another cap, cannot replace the kept preferences. -/
+theorem PreferencesStore.submit_of_kept {config : Config} {checks : SignatureChecks}
+    {agreed : ByteArray} {currentSlot : Slot} {proposerOf : Slot → Option BLSPubkey}
+    {pubkey : BLSPubkey} {versionHeader : Option String} {request : BuilderPreferencesRequest}
+    {store after : PreferencesStore} {kept : BuilderPreferences}
+    (stored : store.get pubkey request.auth.message.slot = some kept)
+    (submitted : store.submit config checks agreed currentSlot proposerOf pubkey versionHeader
+      request = .ok after) :
+    after = store := by
+  unfold PreferencesStore.submit at submitted
+  cases checked : preferencesFailures config checks agreed currentSlot proposerOf pubkey
+      versionHeader request with
+  | error e => simp [checked, bind, Except.bind] at submitted
+  | ok failures =>
+    simp [checked, stored, bind, Except.bind, pure, Except.pure] at submitted
     exact submitted.symm
 
 /-- A bid honors preferences just kept for its proposer at its slot exactly when within the cap. -/

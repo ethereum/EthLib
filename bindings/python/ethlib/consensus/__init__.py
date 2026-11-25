@@ -224,10 +224,11 @@ def builder_preferences_failures(
     data: bytes,
     # `Any`, because `dict` is invariant in its values.
     config: dict[str, Any] | None = None,
+    state: bytes | None = None,
 ) -> list[str]:
     """The names of the checks that fail on a Gloas request that submits preferences, in order."""
     return _native.consensus_builder_preferences_failures(
-        name, fork, config, agreed, current_slot, pubkey, version_header, data
+        name, fork, config, agreed, current_slot, state, pubkey, version_header, data
     )
 
 

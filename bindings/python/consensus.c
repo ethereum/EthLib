@@ -1287,7 +1287,7 @@ py_consensus_builder_preferences_failures(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_builder_preferences_failures, args, 8, SSZ_ERROR);
+  return call_pyvalue_export(eth_consensus_builder_preferences_failures, args, 9, SSZ_ERROR);
 }
 
 PyObject*

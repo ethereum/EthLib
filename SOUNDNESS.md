@@ -7382,7 +7382,7 @@ Points that remain open:
 ### Builder API
 
 The Builder API connects a proposer to the builders that bid for its payload, as `ethereum/builder-specs` defines it.
-EthLib cites commit `ea92eff` of that repository.
+EthLib cites commit `0911550` of that repository.
 For Bellatrix to Fulu, its specification text matches release `v0.6.1`, except for formatting, `deprecated` flags, notes that point to the Gloas replacements and links pinned to consensus-specs releases.
 Its pseudocode also corrects that of the release, so that it states the rules that EthLib follows.
 EthLib specifies the messages, their signatures, their SSZ encodings and the version names of their JSON bodies; it leaves out the transport.
@@ -7409,7 +7409,7 @@ That payload then names the fee recipient that the proposer checked, which the c
 The theorem shows that the payload names the fee recipient, not that the fee recipient receives the value of the bid, which is a fact of the execution layer.
 
 A builder answers a signed blinded block with a success, 200 at the first endpoint and 202 at the second, exactly when the block is valid for it, and with 400 otherwise (`submitBlindedBlockStatus_eq_success_iff`, `submitBlindedBlockStatus_eq_400_iff`, `Consensus/Proofs/BuilderApi/Submit.lean`).
-A block is valid when it unblinds with the builder's payload and the full block passes the state transition from the builder's state, under signature checks that the export sets to BLS, as the [Bellatrix builder document](https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#blinded-block-processing) asks.
+A block is valid when it unblinds with the builder's payload and the full block passes the state transition from the builder's state, under signature checks that the export sets to BLS, as the [Bellatrix builder document](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/builder.md#blinded-block-processing) asks.
 A block that names the proposer of its slot, and whose signature fails on the state of that slot, gets 400 (`submitBlindedBlockStatus_of_signature`), so the separate signature check of the source adds nothing to the transition.
 That theorem assumes a logs bloom of positive size, as every preset of the source has.
 The source does not say what a builder answers for a block whose header is not that of its payload; EthLib reads it as invalid, with 400.
@@ -7483,12 +7483,19 @@ The theorems say that a payment is recorded, not that it is later paid out, whic
 
 From Gloas, a proposer authenticates a request for a bid, and a request that submits preferences, with a signed message.
 `authFailures` and `preferencesFailures` (`Consensus/BuilderApi/RequestAuth.lean`) list every check of the authentication that fails, in the order header, data, slot, signature.
+For preferences, the check of the proposer comes before the signature.
 The source also refuses a malformed body and a request for a bid without its timing headers; those rules are outside these checks.
 The version header must name the fork of the body's type, and these bodies exist from Gloas only, so EthLib requires `gloas` there, which is stricter than the version check of other bodies.
 `authFailures_nil_iff` (`Consensus/Proofs/BuilderApi/RequestAuth.lean`) shows that a request for a bid fails no check exactly when the header is `gloas`, the data is not empty and equals the agreed data, the slot is that of the path, and the signature verifies.
 `authFailures_signature_only` shows that a request for a bid whose only failed check is the signature fails with that check alone, and `allowedStatus_badSignature` that such a request gets 401 and no other status.
 `preferencesFailures_of_passed` shows that preferences for a slot before the builder's current slot fail whenever the checks run, and `PreferencesStore.submit_of_passed` that such a submission leaves the store as it was.
-`PreferencesStore.submit_of_accepted` and `PreferencesStore.get_keep` show that a submission that fails no check keeps its preferences under the key of the path and the slot of the request, and that no other entry changes.
+`PreferencesStore.submit_of_accepted` and `PreferencesStore.get_keep` show that a submission that fails no check, for a key and slot with no preferences kept, keeps its preferences under the key of the path and the slot of the request, and that no other entry changes.
+`PreferencesStore.submit_of_kept` shows that a submission for a key and slot whose preferences the store keeps leaves the store as it was, as the source requires.
+The source says that a builder should refuse, with 400, preferences for a slot at which the builder's `state.proposer_lookahead` names another proposer.
+`preferencesFailures` takes the key of the proposer that the builder knows for each slot, and `lookaheadProposerKey` reads it from the lookahead of a Gloas state.
+The lookahead covers the current and next epoch of the state; for any other slot the source gives no proposer to compare, so EthLib applies no check there.
+The check is a SHOULD, so a builder that knows no proposer still conforms.
+`notProposer_mem_iff` shows that a request fails on the proposer exactly when the builder knows another key for its slot, and `PreferencesStore.submit_of_notProposer` that such a submission leaves the store as it was.
 `bidHonorsPreferences_keep` shows that a bid honors preferences kept for its proposer at its slot exactly when its execution payment is within their cap.
 When no data was agreed out of band, `agreedData` takes the default data of the builder's URL, `defaultAuthData` (`Consensus/BuilderApi/AuthData.lean`).
 The source takes the host with Python's `urlsplit` in its pseudocode, not by a standard, so EthLib states the grammar that it reads:
@@ -7522,14 +7529,17 @@ The default data has no bound of its own, but a request carries at most 4096 byt
 `defaultAuthData_eq_iff_of_ipv6` shows that two URLs whose hosts are IPv6 literals give the same data exactly when they name the same address, so every spelling that EthLib reads as an address signs the same bytes.
 `urlHost_eq_of_defaultAuthData_eq` shows that two URLs that give the same data have the same host.
 `defaultAuthData_nonempty` and `defaultAuthData_ascii` show that the default data is never empty, so it never fails the rule against empty data, and that each of its bytes is ASCII.
-The source leaves two points open:
+The source leaves three points open:
 
 - When a request fails a check that gives 400 and the signature, which gives 401, the source does not say which status wins; `AllowedStatus` allows both.
   When no check of the authentication fails, the other rules of the source decide the status.
 - A slot that "has already passed" is defined no more precisely; EthLib reads it as a slot before the builder's current slot.
+- A submission for a key and slot already kept is ignored with 202, but the source does not say whether the checks of the authentication still run first.
+  EthLib runs them, so such a request may fail with 400 or 401, and the store is unchanged either way.
 
 The signature covers the data and the slot, not the preferences of the request; `preferencesFailures_preferences` shows that a request with the same authentication and another cap passes the same checks.
-So a replay before its slot passes, or a copy with another cap, is accepted and replaces the kept preferences, although the source means the slot rule to stop a replay from rolling them back.
+The store keeps the first preferences for a key and slot, so such a copy, replayed after the original, cannot replace them.
+A copy with another cap that reaches the builder first is kept, and the original is then ignored; only a signature over the preferences would stop this ([ethereum/builder-specs#183](https://github.com/ethereum/builder-specs/issues/183)).
 
 From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
 `BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
@@ -7577,11 +7587,11 @@ The rule names no slot, so EthLib keeps the submissions of one slot in a store, 
 From Bellatrix to Fulu, a relay serves a submission to proposers as a bid of the Builder API.
 `SubmitBlockRequest.bid_total` shows that the bid always computes, and `SubmitBlockRequest.bid_header` that it holds the header of the payload.
 `SubmitBlockRequest.bid_value_pubkey` shows that it holds the value of the bid trace and the key it is served under.
-`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#bidding) require.
+`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#bidding) require.
 `SubmitBlockRequest.bid_requests` shows that from Electra it holds the requests of the submission.
 `SubmitBlockRequest.bid_unblind` shows that a blinded body that carries the header of the bid unblinds to a body that holds the payload of the submission.
 The source does not fix the key that signs the served bid, so it is an input.
-From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
+From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
 That check needs the balance change of the fee recipient from a simulation of the payload.
 It subtracts the amounts of the withdrawals to the fee recipient, each converted from Gwei to Wei, from that change in Wei.
 EthLib does not yet specify this check, so it does not say which submissions a relay may serve; [#2125](https://github.com/ethereum/EthLib/issues/2125) tracks the check.
