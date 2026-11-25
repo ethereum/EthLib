@@ -184,7 +184,8 @@ It is selected when the opening verifies and the mixed value of its output is in
 That happens with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
 The first term is one fresh uniform value per allowed index, and the second is a mix query that already used `r`.
 Here `q` counts every evaluation of the mix by the holder, including its own Keccak-256 calls on mix inputs, as the random oracle assumption requires.
-No theorem bounds the third term: the bound on two outputs takes the tree hash as a random oracle, and this theorem takes it as Keccak-256 itself.
+No theorem bounds the third term.
+The bound on two outputs takes the tree hash as a random oracle, while this theorem takes it as Keccak-256 itself.
 With one index, `|S| = 2^200` (a selection of one in `2^56`) and `q = 2^64`, the first two terms are below `2^-55`.
 The theorem does not cover a holder that registers a root without knowing a tree under it.
 Nor does it cover randomness that the holder knows at registration or can bias.

@@ -561,7 +561,8 @@ A selection therefore compares `mixOutput`, the hash of the output with randomne
 The mix is a random oracle, and the tree hash is Keccak-256 itself.
 The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
 The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
-No theorem bounds that last chance: the uniqueness bound above takes the tree hash as a random oracle, and this theorem takes it as Keccak-256 itself.
+No theorem bounds that last chance.
+The uniqueness bound above takes the tree hash as a random oracle, while this theorem takes it as Keccak-256 itself.
 The theorem says nothing about a holder that registers a root without knowing a tree under it.
 That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
 It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
