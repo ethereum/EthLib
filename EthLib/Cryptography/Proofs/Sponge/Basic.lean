@@ -60,6 +60,16 @@ theorem absorbAll_cons {m : Type → Type} [Monad m]
     (bs : List (Dg × E)) :
     absorbAll π s (B :: bs) = (π (absorb s B) >>= fun y => absorbAll π y bs) := rfl
 
+/-- The sponge over a pure function, in a lawful monad, returns the pure hash. -/
+theorem absorbAll_pure {m : Type → Type} [Monad m] [LawfulMonad m]
+    (π : SpongeState Dg E C → SpongeState Dg E C) (s : SpongeState Dg E C)
+    (bs : List (Dg × E)) :
+    absorbAll (fun x => (pure (π x) : m _)) s bs =
+      pure (Id.run (absorbAll (fun x => (pure (π x) : Id _)) s bs)) := by
+  induction bs generalizing s with
+  | nil => rfl
+  | cons B bs ih => simp only [absorbAll_cons, pure_bind, ih]
+
 /-- Absorbing keeps the capacity. -/
 @[simp] theorem absorb_snd (s : SpongeState Dg E C) (B : Dg × E) : (absorb s B).2 = s.2 := rfl
 

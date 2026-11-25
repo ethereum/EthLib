@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.ProjectionInLaw
+public import EthLib.Cryptography.Proofs.Sponge.Absorb
 public import EthLib.Cryptography.Proofs.Sponge.Games
 
 /-!
@@ -33,27 +34,6 @@ def toPerm (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) :
       ((unifSpec + PermSpec (SpongeState Dg E C)).query (.inr (.inl x)))) m :
         PermComp (SpongeState Dg E C) Dg)
 
-/-- Running the sponge's calls of the permutation is the sponge over the forward answers. -/
-theorem simulateQ_absorbAll {m : Type → Type} [Monad m] [LawfulMonad m]
-    (impl : QueryImpl (unifSpec + PermSpec (SpongeState Dg E C)) m)
-    (s : SpongeState Dg E C) (bs : List (Dg × E)) :
-    simulateQ impl (absorbAll (fun x => (liftM ((unifSpec + PermSpec (SpongeState Dg E C)).query
-      (.inr (.inl x))) : PermComp (SpongeState Dg E C) _)) s bs) =
-      absorbAll (fun x => impl (.inr (.inl x))) s bs := by
-  induction bs generalizing s with
-  | nil => simp [absorbAll]
-  | cons B bs ih => simp [absorbAll_cons, ih]
-
-/-- The sponge over a pure function, in a lawful monad, returns the pure hash. -/
-theorem absorbAll_pure {m : Type → Type} [Monad m] [LawfulMonad m]
-    (π : SpongeState Dg E C → SpongeState Dg E C) (s : SpongeState Dg E C)
-    (bs : List (Dg × E)) :
-    absorbAll (fun x => (pure (π x) : m _)) s bs =
-      pure (Id.run (absorbAll (fun x => (pure (π x) : Id _)) s bs)) := by
-  induction bs generalizing s with
-  | nil => rfl
-  | cons B bs ih => simp only [absorbAll_cons, pure_bind, ih]
-
 /-- **The real world unfolds into the permutation model.** -/
 theorem simulateQ_permImpl_toPerm (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
     (π : Equiv.Perm (SpongeState Dg E C)) {α : Type}
@@ -73,18 +53,6 @@ theorem simulateQ_permImpl_toPerm (P : Padding Msg (Dg × E)) (iv : SpongeState 
       pure (spongeHash P iv π m)
     rw [absorbAll_pure, map_pure]
     rfl
-
-/-- The sponge asks the permutation once per block. -/
-theorem isQueryBoundP_absorbAll (s : SpongeState Dg E C) (bs : List (Dg × E)) :
-    IsQueryBoundP (absorbAll (fun x => (liftM ((unifSpec + PermSpec (SpongeState Dg E C)).query
-      (.inr (.inl x))) : PermComp (SpongeState Dg E C) _)) s bs) (·.isRight = true)
-      bs.length := by
-  induction bs generalizing s with
-  | nil => exact isQueryBoundP_pure _ _ _
-  | cons B bs ih =>
-    rw [absorbAll_cons, List.length_cons, add_comm]
-    exact isQueryBoundP_bind ((isQueryBoundP_query_iff _ _ _).2 fun _ => Nat.one_pos)
-      fun y _ => ih y
 
 /-- **A game of cost `N` unfolds into at most `N` calls of the permutation.** -/
 theorem isQueryBoundP_toPerm (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) {α : Type}
@@ -137,7 +105,7 @@ theorem prEvent_real_le_funImpl {α : Type}
        let a ← simulateQ (realImpl (spongeHash P iv) π) oa}[p a] ≤
       Pr{let a ← (simulateQ (funImpl P iv) oa).run' ([], false)}[p a] +
         (N.choose 2 : ℝ≥0∞) / FinEnum.card (SpongeState Dg E C) := by
-  simp_rw [← simulateQ_permImpl_toPerm, prEvent_let_let]
+  simp_rw [← simulateQ_permImpl_toPerm, prEvent_bind_assoc]
   have hl := (uniformSample_bind_simulateQ_permImpl_evalDistEq
     (simulateQ (toPerm P iv) oa)).prEvent_eq p
   refine (le_of_eq hl).trans <|
@@ -156,7 +124,7 @@ theorem prEvent_funImpl_le_real {α : Type}
       Pr{let π ← $ᵗ (Equiv.Perm (SpongeState Dg E C))
          let a ← simulateQ (realImpl (spongeHash P iv) π) oa}[p a] +
         (N.choose 2 : ℝ≥0∞) / FinEnum.card (SpongeState Dg E C) := by
-  simp_rw [← simulateQ_permImpl_toPerm, prEvent_let_let]
+  simp_rw [← simulateQ_permImpl_toPerm, prEvent_bind_assoc]
   have hl := (uniformSample_bind_simulateQ_permImpl_evalDistEq
     (simulateQ (toPerm P iv) oa)).prEvent_eq p
   refine le_of_le_of_eq ?_ (congrArg (· + _) hl.symm)

@@ -70,8 +70,9 @@ variable {ι' : Type} {spec' : OracleSpec ι'} {α : Type}
 /-- Along a run within a budget of weights, a size grows by at most the budget.
 
 Each step from a state of the invariant raises the size by at most the weight of its query. -/
-theorem size_le_of_mem_support_run (impl : QueryImpl spec (StateT σ (OracleComp spec')))
-    (inv : σ → Prop) (w : ι → ℕ) (size : σ → ℕ)
+theorem size_le_of_mem_support_run_weightBudget
+    (impl : QueryImpl spec (StateT σ (OracleComp spec'))) (inv : σ → Prop) (w : ι → ℕ)
+    (size : σ → ℕ)
     (hinv : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), inv z.2)
     (hsize : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), size z.2 ≤ size s + w t)
     {oa : OracleComp spec α} {Q : ℕ}
@@ -94,8 +95,11 @@ theorem size_le_of_mem_support_run (impl : QueryImpl spec (StateT σ (OracleComp
 
 /-- **The union bound over a budget of weights.**
 
-A step of weight `w` turns bad with chance at most `w δ`, so a run of budget `Q` at most `Q δ`. -/
-theorem prEvent_run_bad_le (impl : QueryImpl spec (StateT σ ProbComp)) (bad inv : σ → Prop)
+A run of budget `Q` from a good state turns bad with chance at most `Q δ`.
+
+Each step of weight `w` must turn bad with chance at most `w δ` while its size stays within `N`. -/
+theorem prEvent_bad_le_of_weightBudget (impl : QueryImpl spec (StateT σ ProbComp))
+    (bad inv : σ → Prop)
     (w : ι → ℕ) (size : σ → ℕ) (N : ℕ) (δ : ℝ≥0∞)
     (hinv : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), inv z.2)
     (hsize : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), size z.2 ≤ size s + w t)

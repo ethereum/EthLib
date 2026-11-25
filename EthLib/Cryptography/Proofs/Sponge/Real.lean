@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sponge.Ideal
+public import EthLib.Cryptography.Proofs.ProjectionInLaw
 public import EthLib.Cryptography.Proofs.Sponge.InvMain
 
 /-!
@@ -231,7 +231,7 @@ theorem uInv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
     exact ⟨fun β hβ => by rw [hsim]; exact hU.1 β hβ, fun m hm => by rw [hsim]; exact hU.2 m hm⟩
   · obtain ⟨w, c₁, d, hw, hd, hz1⟩ := combHash_support P iv m cs c hz
     obtain ⟨-, -, hagree, -⟩ := allWalk_support P _ [] iv cs.all (P.pad m) c hw
-    obtain ⟨-, -, hagree'⟩ := randomOracle_run_support _ c₁ hd
+    obtain ⟨-, -, hagree'⟩ := caches_of_mem_support_randomOracle_run _ c₁ hd
     rw [hz1]
     have hmono : ∀ β, usedPath P cs.sim.chains cs.hashed β = true →
         usedPath P cs.sim.chains (m :: cs.hashed) β = true := fun β h =>
@@ -287,12 +287,18 @@ theorem absorbAll_indep_flag (s : SpongeState Dg E C) (bs : List (Dg × E))
   | nil => simp
   | cons B bs ih =>
     simp only [absorbAll_cons, StateT.run_bind, map_bind]
-    rw [indepPermOracle_inl_run, indepPermOracle_inl_run]
-    split
-    · simp only [pure_bind]
-      exact ih _ _ _
-    · simp only [bind_map_left]
-      exact bind_congr fun b => (ih _ _ _).trans (ih _ _ _).symm
+    -- The rest of the run reads only the answer and the cache of the first query.
+    have h : ∀ f', ((indepPermOracle (A := SpongeState Dg E C) (.inl (absorb s B))).run (A, f') >>=
+        fun z => Prod.map id Prod.fst <$> (absorbAll (fun x => indepPermOracle
+          (A := SpongeState Dg E C) (.inl x)) z.1 bs).run z.2) =
+        ((Prod.map id Prod.fst <$> (indepPermOracle (.inl (absorb s B))).run (A, f')) >>=
+          fun w => Prod.map id Prod.fst <$> (absorbAll (fun x => indepPermOracle
+            (A := SpongeState Dg E C) (.inl x)) w.1 bs).run (w.2, false)) := fun f' => by
+      rw [bind_map_left]
+      exact bind_congr fun z => ih _ _ _
+    refine (h f).trans ?_
+    rw [indepPermOracle_run_map_fst]
+    exact (h false).symm
 
 omit [DecidableEq Dg] [DecidableEq E] [DecidableEq Msg]
   [SampleableType Dg] [SampleableType E] [SampleableType C] in
@@ -317,10 +323,10 @@ theorem funImpl_flag (iv : SpongeState Dg E C) (t : (GameSpec (SpongeState Dg E 
   rcases t with (n | x | y) | m
   · rw [funImpl_inl, passthrough_add_inl_run, passthrough_add_inl_run]
     simp [Functor.map_map]
-  · rw [funImpl_inl, indepPermImpl_inr, indepPermOracle_inl_run, indepPermOracle_inl_run]
-    split <;> simp [Functor.map_map]
-  · rw [funImpl_inl, indepPermImpl_inr, indepPermOracle_inr_run, indepPermOracle_inr_run]
-    split <;> simp [Functor.map_map]
+  · rw [funImpl_inl, indepPermImpl_inr]
+    exact indepPermOracle_run_map_fst (A := SpongeState Dg E C) (.inl x) A f
+  · rw [funImpl_inl, indepPermImpl_inr]
+    exact indepPermOracle_run_map_fst (A := SpongeState Dg E C) (.inr y) A f
   · rw [funImpl_inr]
     simp only [sponge, StateT.run_map, Functor.map_map]
     have h := congrArg (fun X => Prod.map SpongeState.out id <$> X)

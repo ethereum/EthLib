@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sponge.Proj
 public import EthLib.Cryptography.Proofs.Sponge.Support
 
 /-!
@@ -218,9 +217,10 @@ theorem visRun_true_evalDistEq_false {α : Type}
                 simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
               obtain ⟨p, hp, w, hw, e, he, rfl⟩ := hz
               have hpm := visImpl_hash_support P iv false m vs
-                (fst_mem_support_of_mem_support_run hp)
+                (fst_mem_support_of_mem_support_run_romImpl hp)
               have hwm := visImpl_hashed_mono P iv false (k p.1.1) p.1.2 m
-                (by rw [hpm]; exact List.mem_cons_self) (fst_mem_support_of_mem_support_run hw)
+                (by rw [hpm]; exact List.mem_cons_self)
+                (fst_mem_support_of_mem_support_run_romImpl hw)
               simpa using (endPhase_support P w.1.2.2.1 w.2 he).2 m hwm i hi
             refine (EvalDistEq.bind_left (skel_run_of_cached P [] (P.pad m) z.2 hcached)
               _).trans ?_

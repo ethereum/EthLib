@@ -23,8 +23,8 @@ variable {ι : Type} {hs : OracleSpec.{0, 0} ι}
 abbrev queryRight (t : ι) : OracleComp (unifSpec + hs) (hs.Range t) :=
   (unifSpec + hs).query (.inr t)
 
-/-- An output reachable in the random-oracle model is reachable with any answers. -/
-theorem fst_mem_support_of_mem_support_run [DecidableEq ι]
+/-- An output reachable in the random-oracle model is a possible output of the computation. -/
+theorem fst_mem_support_of_mem_support_run_romImpl [DecidableEq ι]
     [∀ t : hs.Domain, SampleableType (hs.Range t)] {β : Type}
     {X : OracleComp (unifSpec + hs) β} {c : hs.QueryCache} {z : β × hs.QueryCache}
     (hz : z ∈ support ((simulateQ hs.romImpl X).run c)) : z.1 ∈ support X :=
@@ -36,42 +36,33 @@ theorem fst_mem_support_of_mem_support_run [DecidableEq ι]
 
 section LeftCache
 
-variable {τ D R : Type} {O : OracleSpec.{0, 0} τ}
-
-/-- The part of a cache of the oracles `(D →ₒ R) + O` for the left oracle. -/
-def leftCache (c : ((D →ₒ R) + O).QueryCache) : (D →ₒ R).QueryCache :=
-  QueryCache.ofFn fun m => c (.inl m)
-
-@[simp] theorem leftCache_apply (c : ((D →ₒ R) + O).QueryCache) (m : D) :
-    leftCache c m = c (.inl m) := rfl
-
-variable [DecidableEq D] [DecidableEq τ]
+variable {τ D R : Type} {O : OracleSpec.{0, 0} τ} [DecidableEq D] [DecidableEq τ]
 
 /-- Caching an answer of the left oracle commutes with forgetting `O`. -/
-theorem leftCache_cacheQuery_inl (c : ((D →ₒ R) + O).QueryCache) (m : D) (d : R) :
-    leftCache (c.cacheQuery (.inl m) d) = (leftCache c).cacheQuery m d := by
+theorem QueryCache.fst_cacheQuery_inl (c : ((D →ₒ R) + O).QueryCache) (m : D) (d : R) :
+    (c.cacheQuery (.inl m) d).fst = c.fst.cacheQuery m d := by
   refine QueryCache.ext fun m' => ?_
   by_cases h : m' = m
   · subst h
     simp
-  · rw [leftCache_apply, QueryCache.cacheQuery_of_ne _ _ (by simpa using h),
-      QueryCache.cacheQuery_of_ne _ _ h, leftCache_apply]
+  · rw [QueryCache.fst_apply, QueryCache.cacheQuery_of_ne _ _ (by simpa using h),
+      QueryCache.cacheQuery_of_ne _ _ h, QueryCache.fst_apply]
 
 /-- Caching an answer of `O` leaves the part of the left oracle alone. -/
-theorem leftCache_cacheQuery_inr (c : ((D →ₒ R) + O).QueryCache) (x : τ) (t : O.Range x) :
-    leftCache (c.cacheQuery (.inr x) t) = leftCache c := by
+theorem QueryCache.fst_cacheQuery_inr (c : ((D →ₒ R) + O).QueryCache) (x : τ) (t : O.Range x) :
+    (c.cacheQuery (.inr x) t).fst = c.fst := by
   refine QueryCache.ext fun m' => ?_
-  rw [leftCache_apply, QueryCache.cacheQuery_of_ne _ _ (by simp), leftCache_apply]
+  rw [QueryCache.fst_apply, QueryCache.cacheQuery_of_ne _ _ (by simp), QueryCache.fst_apply]
 
 variable [SampleableType R] [∀ t, SampleableType (O.Range t)]
 
 /-- A query of the left oracle, seen through the part of its cache. -/
-theorem leftCache_randomOracle_inl (m : D) (c : ((D →ₒ R) + O).QueryCache) :
-    (fun w => (w.1, leftCache w.2)) <$> (((D →ₒ R) + O).randomOracle (.inl m)).run c =
-      ((D →ₒ R).randomOracle m).run (leftCache c) := by
+theorem fst_randomOracle_inl (m : D) (c : ((D →ₒ R) + O).QueryCache) :
+    (fun w => (w.1, w.2.fst)) <$> (((D →ₒ R) + O).randomOracle (.inl m)).run c =
+      ((D →ₒ R).randomOracle m).run c.fst := by
   rw [randomOracle.run_eq, randomOracle.run_eq]
   rcases h : c (.inl m) with _ | d
-  · simp [h, leftCache_cacheQuery_inl]
+  · simp [h, QueryCache.fst_cacheQuery_inl]
   · simp [h]
 
 end LeftCache
@@ -86,8 +77,8 @@ theorem run_queryRight (t : ι) (c : hs.QueryCache) :
   simp [queryRight]
 
 /-- A query of a random oracle keeps the cache, caches its answer and changes no other entry. -/
-theorem randomOracle_run_support (t : ι) (c : hs.QueryCache) {z : hs.Range t × hs.QueryCache}
-    (hz : z ∈ support ((hs.randomOracle t).run c)) :
+theorem caches_of_mem_support_randomOracle_run (t : ι) (c : hs.QueryCache)
+    {z : hs.Range t × hs.QueryCache} (hz : z ∈ support ((hs.randomOracle t).run c)) :
     c ≤ z.2 ∧ z.2 t = some z.1 ∧ ∀ t', t' ≠ t → z.2 t' = c t' :=
   ⟨QueryImpl.withCaching_cache_le _ t c z hz, QueryImpl.withCaching_run_caches _ t c z hz,
     fun _ ht' => by

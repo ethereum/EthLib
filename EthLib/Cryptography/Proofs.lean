@@ -42,6 +42,7 @@ public import EthLib.Cryptography.Proofs.IndependentOutside
 public import EthLib.Cryptography.Proofs.OneCallPermutation
 public import EthLib.Cryptography.Proofs.Indifferentiability
 public import EthLib.Cryptography.Proofs.Sponge.Simulator
+public import EthLib.Cryptography.Proofs.Sponge.Absorb
 public import EthLib.Cryptography.Proofs.Sponge.Games
 public import EthLib.Cryptography.Proofs.Sponge.Support
 public import EthLib.Cryptography.Proofs.Sponge.Proj
@@ -56,6 +57,7 @@ public import EthLib.Cryptography.Proofs.Sponge.Ideal
 public import EthLib.Cryptography.Proofs.Sponge.Real
 public import EthLib.Cryptography.Proofs.Sponge.Switch
 public import EthLib.Cryptography.Proofs.Sponge.Bound
+public import EthLib.Cryptography.Proofs.Sponge.Agree
 public import EthLib.Cryptography.Proofs.Sponge.Indifferentiability
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.ProgrammedPermutation

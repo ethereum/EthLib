@@ -2,7 +2,8 @@ module
 
 public import EthLib.Cryptography.Proofs.BadOnBudget
 public import EthLib.Cryptography.Proofs.Sponge.Commute
-public import EthLib.Cryptography.Proofs.Sponge.Ideal
+public import EthLib.Cryptography.Proofs.Sponge.Fresh
+public import EthLib.Cryptography.Proofs.Sponge.Proj
 
 /-!
 # Proofs: a collision in the visible game is unlikely
@@ -93,21 +94,13 @@ theorem coll_congr {H : Finset (List (Dg × E))} {K : List C} {c c' : ACache Msg
   simp only [Coll, h]
 
 omit [DecidableEq Dg] [DecidableEq E] [DecidableEq Msg] in
-/-- A uniform draw lands in a list with chance at most its length over the size of the set. -/
-theorem prEvent_uniform_mem_le {S : Type} [Fintype S] [DecidableEq S] [SampleableType S]
-    (l : List S) : Pr{let u ← $ᵗ S}[u ∈ l] ≤ l.length / (Fintype.card S : ℝ≥0∞) := by
-  rw [SampleableType.prEvent_uniformSample]
-  gcongr
-  calc (Finset.univ.filter fun u : S => u ∈ l).card
-      ≤ l.toFinset.card := Finset.card_le_card fun u hu => by simpa using hu
-    _ ≤ l.length := List.toFinset_card_le l
-
-omit [DecidableEq Dg] [DecidableEq E] [DecidableEq Msg] in
 /-- The capacity of a uniform state lands in a list with chance at most its length over `|C|`. -/
 theorem prEvent_cap_mem_le [DecidableEq C] (L : List C) :
     Pr{let t ← $ᵗ (SpongeState Dg E C)}[t.2 ∈ L] ≤ L.length / (Fintype.card C : ℝ≥0∞) :=
   SampleableType.prEvent_uniformSample_prod_le_of_forall_fst (fun t : SpongeState Dg E C => t.2 ∈ L)
-    fun _ => prEvent_uniform_mem_le L
+    fun _ => by
+      simpa [List.mem_iff_get, eq_comm] using
+        SampleableType.prEvent_uniformSample_exists_eq_le L.get
 
 /-- **A path value makes a collision with chance at most `(|K| + |H|) / |C|`.** -/
 theorem prEvent_coll_pathValue [DecidableEq C] (H : Finset (List (Dg × E))) (K : List C)
@@ -118,7 +111,7 @@ theorem prEvent_coll_pathValue [DecidableEq C] (H : Finset (List (Dg × E))) (K 
   have hro : ∀ m, ∀ w ∈ support (((ASpec Msg Dg E C).randomOracle (.inl m)).run c),
       ¬Coll H K w.2 ∧ ∀ β, w.2 (.inr β) = c (.inr β) := by
     intro m w hw
-    obtain ⟨-, -, hagree⟩ := randomOracle_run_support _ c hw
+    obtain ⟨-, -, hagree⟩ := caches_of_mem_support_randomOracle_run _ c hw
     have h : ∀ β, w.2 (.inr β) = c (.inr β) := fun β => hagree _ (by simp)
     exact ⟨(coll_congr h).not.mpr hc, h⟩
   -- The answer of the oracle on paths at `β`.
@@ -259,7 +252,8 @@ theorem vsize_visF (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
     (s : VState Dg E C Msg × ACache Msg Dg E C) {z} (hz : z ∈ support ((visF P iv t).run s)) :
     vsize P z.2.1 ≤ vsize P s.1 + queryCost (fun m => (P.pad m).length) t := by
   obtain ⟨w, hw, rfl⟩ := visF_support P iv t s hz
-  obtain ⟨h1, h2, -⟩ := visImpl_false_support P iv t s.1 (fst_mem_support_of_mem_support_run hw)
+  obtain ⟨h1, h2, -⟩ :=
+    visImpl_false_support P iv t s.1 (fst_mem_support_of_mem_support_run_romImpl hw)
   rcases t with (n | q) | m
   · simp only [vsize, queryCost] at h1 h2 ⊢
     rw [h1]
@@ -342,42 +336,32 @@ section Hidden
 
 variable [DecidableEq Dg] [DecidableEq E] (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
 
-/-- The nonempty prefixes of a list of blocks. -/
-def prefixesOf (bs : List (Dg × E)) : List (List (Dg × E)) :=
-  (List.range bs.length).map fun i => bs.take (i + 1)
-
 omit [DecidableEq Dg] [DecidableEq E] in
-/-- The nonempty prefixes of a list are its prefixes that are not empty. -/
-theorem mem_prefixesOf {bs β : List (Dg × E)} : β ∈ prefixesOf bs ↔ β ≠ [] ∧ β <+: bs := by
-  simp only [prefixesOf, List.mem_map, List.mem_range]
-  constructor
-  · rintro ⟨i, hi, rfl⟩
-    refine ⟨?_, List.take_prefix _ _⟩
-    simp only [ne_eq, List.take_eq_nil_iff, Nat.add_one_ne_zero, false_or]
-    rintro rfl
-    simp at hi
-  · rintro ⟨hne, hp⟩
-    have hl := hp.length_le
-    have h0 : β.length ≠ 0 := by simpa using hne
-    refine ⟨β.length - 1, by omega, ?_⟩
-    rw [Nat.sub_add_cancel (by omega)]
-    exact (List.prefix_iff_eq_take.mp hp).symm
+/-- The prefixes of a list after the empty one are its nonempty prefixes. -/
+theorem mem_tail_inits {bs β : List (Dg × E)} : β ∈ bs.inits.tail ↔ β ≠ [] ∧ β <+: bs := by
+  cases bs with
+  | nil => simp
+  | cons B bs =>
+    rw [List.inits_cons, List.tail_cons]
+    cases β with
+    | nil => simp
+    | cons B' β => simp [List.mem_inits, List.cons_prefix_cons, and_comm, eq_comm]
 
 /-- The hidden paths of a visible state. -/
 def hiddenSet (vs : VState Dg E C Msg) : Finset (List (Dg × E)) :=
-  ((vs.2.1.flatMap fun m => prefixesOf (P.pad m)).filter fun β => β ∉ vPaths vs.1).toFinset
+  ((vs.2.1.flatMap fun m => (P.pad m).inits.tail).filter fun β => β ∉ vPaths vs.1).toFinset
 
 /-- The hidden paths of a visible state are the paths that are hidden. -/
 theorem mem_hiddenSet {vs : VState Dg E C Msg} {β : List (Dg × E)} :
     β ∈ hiddenSet P vs ↔ Hidden P vs β := by
-  simp [hiddenSet, Hidden, HPath, mem_prefixesOf]
+  simp [hiddenSet, Hidden, HPath, mem_tail_inits]
 
 /-- There are at most as many hidden paths as hashed blocks. -/
 theorem card_hiddenSet_le (vs : VState Dg E C Msg) :
     (hiddenSet P vs).card ≤ (vs.2.1.map fun m => (P.pad m).length).sum := by
   unfold hiddenSet
   refine (List.toFinset_card_le _).trans ((List.length_filter_le _ _).trans (le_of_eq ?_))
-  simp only [List.length_flatMap, prefixesOf, List.length_map, List.length_range]
+  simp [List.length_flatMap]
 
 omit [DecidableEq Dg] [DecidableEq E] in
 /-- The capacity of a cached path value is that of the answer of the oracle on paths. -/
@@ -448,7 +432,7 @@ theorem prEvent_visF_bad_le (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
     · exact zero_le
     · obtain ⟨w, hw, rfl⟩ := visF_support P iv _ s hz
       obtain ⟨-, -, h3⟩ := visImpl_false_support P iv _ s.1
-        (fst_mem_support_of_mem_support_run hw)
+        (fst_mem_support_of_mem_support_run_romImpl hw)
       obtain ⟨q, hq⟩ := h3 h (by simpa using hb)
       simp at hq
   · simp only [queryCost, Nat.cast_one, one_mul]
@@ -482,13 +466,9 @@ theorem prEvent_visF_bad_le (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
     · exact zero_le
     · obtain ⟨w, hw, rfl⟩ := visF_support P iv _ s hz
       obtain ⟨-, -, h3⟩ := visImpl_false_support P iv _ s.1
-        (fst_mem_support_of_mem_support_run hw)
+        (fst_mem_support_of_mem_support_run_romImpl hw)
       obtain ⟨q, hq⟩ := h3 h (by simpa using hb)
       simp at hq
-
-/-- The arithmetic of the bound on hidden collisions. -/
-theorem hidden_arith {v h q : ℕ} (hq : v + h ≤ q) : h * (2 * v + 1 + h) ≤ q * (q + 1) := by
-  nlinarith
 
 /-- **The collision bound.**
 
@@ -512,7 +492,7 @@ theorem prEvent_visRun_le {α : Type} (oa : OracleComp (GameSpec (SpongeState Dg
   -- The visible collisions along the run.
   have hbad : Pr{let z ← (simulateQ (visF P iv) oa).run (vs₀, ∅)}[z.2.1.2.2 = true] ≤
       N * ((2 * N + 1 : ℕ) / (Fintype.card C : ℝ≥0∞)) :=
-    prEvent_run_bad_le (visF P iv) (fun s => s.1.2.2 = true)
+    prEvent_bad_le_of_weightBudget (visF P iv) (fun s => s.1.2.2 = true)
       (fun s => VStruct P iv s.1.1 s.2) (queryCost (fun m => (P.pad m).length))
       (fun s => vsize P s.1) N ((2 * N + 1 : ℕ) / (Fintype.card C : ℝ≥0∞))
       (fun t s hs z hz => vStruct_visF P iv t s hs hz)
@@ -528,7 +508,7 @@ theorem prEvent_visRun_le {α : Type} (oa : OracleComp (GameSpec (SpongeState Dg
     have hV := simulateQ_run_preserves_inv_of_query (visF P iv)
       (fun s => VStruct P iv s.1.1 s.2) (fun t s hs z hz => vStruct_visF P iv t s hs hz) oa _
       hinit z hz
-    have hsize := size_le_of_mem_support_run (visF P iv)
+    have hsize := size_le_of_mem_support_run_weightBudget (visF P iv)
       (fun s => VStruct P iv s.1.1 s.2) (queryCost (fun m => (P.pad m).length))
       (fun s => vsize P s.1) (fun t s hs z hz => vStruct_visF P iv t s hs hz)
       (fun t s _ z hz => vsize_visF P iv t s hz) hN hinit z hz
@@ -549,7 +529,7 @@ theorem prEvent_visRun_le {α : Type} (oa : OracleComp (GameSpec (SpongeState Dg
       calc (h : ℝ≥0∞) * ((2 * z.2.1.1.edges.length + 1 : ℕ) + (hiddenSet P z.2.1).card)
           ≤ (h : ℝ≥0∞) * ((2 * z.2.1.1.edges.length + 1 : ℕ) + h) := by gcongr
         _ = ((h * (2 * z.2.1.1.edges.length + 1 + h) : ℕ) : ℝ≥0∞) := by push_cast; ring
-        _ ≤ _ := by exact_mod_cast hidden_arith hsize
+        _ ≤ _ := Nat.cast_le.mpr (by nlinarith [hsize])
   · rw [Nat.cast_add, ENNReal.add_div]
     gcongr
     refine hbad.trans (le_of_eq ?_)

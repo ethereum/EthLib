@@ -22,15 +22,6 @@ variable {Dg E C Msg : Type} {P : Padding Msg (Dg × E)} {iv : SpongeState Dg E 
 
 /-! ## Monotonicity -/
 
-/-- The states at the ends of paths stay as the cache grows. -/
-theorem svC_mono {c c' : ACache Msg Dg E C} (h : c ≤ c') {β : List (Dg × E)}
-    {s : SpongeState Dg E C} (hs : svC P iv c β = some s) : svC P iv c' β = some s := by
-  unfold svC at hs ⊢
-  split at hs
-  · simp_all
-  · simp only [*, ite_false]
-    exact cachedPathValue_mono P h hs
-
 /-- A value cached before a step is the value after. -/
 theorem cachedPathValue_eq_of_le {c c' : ACache Msg Dg E C} (h : c ≤ c') {β : List (Dg × E)}
     {v v' : SpongeState Dg E C} (hv : cachedPathValue P c β = some v)

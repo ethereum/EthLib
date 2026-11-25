@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sponge.InvFwd
+public import EthLib.Cryptography.Proofs.Sponge.Inv
 
 /-!
 # Proofs: the simulator over path values asks the oracle on paths only at rooted paths
@@ -177,7 +177,7 @@ theorem vStruct_idealT (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
   · rw [idealT_hash_run] at hz
     simp only [support_map, Set.mem_image] at hz
     obtain ⟨w, hw, rfl⟩ := hz
-    obtain ⟨hc, -, hagree⟩ := randomOracle_run_support _ c hw
+    obtain ⟨hc, -, hagree⟩ := caches_of_mem_support_randomOracle_run _ c hw
     exact hV.mono hc (fun β => hagree _ (by simp)) rfl fun e he => he
 
 end Run

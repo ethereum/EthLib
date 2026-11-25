@@ -154,7 +154,8 @@ theorem combInv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : 
   obtain ⟨hS, hcond⟩ := hI
   obtain ⟨w, c₁, d, hw, hd, hz1⟩ := combHash_support P iv m cs c hz
   obtain ⟨hcc₁, hcached, -, us, hdet⟩ := allWalk_support P _ [] iv cs.all (P.pad m) c hw
-  obtain ⟨hc₁c', hd', -⟩ := randomOracle_run_support (hs := ASpec Msg Dg E C) (.inl m) c₁ hd
+  obtain ⟨hc₁c', hd', -⟩ :=
+    caches_of_mem_support_randomOracle_run (hs := ASpec Msg Dg E C) (.inl m) c₁ hd
   simp only [List.nil_append] at hcached hdet
   set c' := z.2 with hc'
   have hcc' : c ≤ c' := le_trans hcc₁ hc₁c'

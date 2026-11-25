@@ -64,8 +64,8 @@ theorem bind_fst_evalDistEq {β γ : Type} {X : ProbComp (α × β)} {Y : ProbCo
   rw [← bind_map_left]
   exact EvalDistEq.bind_left h R
 
-/-- A draw, then a run, as one computation. -/
-theorem prEvent_let_let {β γ : Type} (mx : ProbComp β) (f : β → ProbComp γ) (q : γ → Prop) :
+/-- The chance of an event after a draw, then a run, is its chance after their bind. -/
+theorem prEvent_bind_assoc {β γ : Type} (mx : ProbComp β) (f : β → ProbComp γ) (q : γ → Prop) :
     Pr{let b ← mx; let c ← f b}[q c] = Pr{let c ← mx >>= f}[q c] := by
   simp [map_bind]
 

@@ -44,6 +44,16 @@ noncomputable def svC (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
     (c : ACache Msg Dg E C) (β : List (Dg × E)) : Option (SpongeState Dg E C) :=
   if β = [] then some iv else cachedPathValue P c β
 
+/-- The states at the ends of paths stay as the cache grows. -/
+theorem svC_mono {P : Padding Msg (Dg × E)} {iv : SpongeState Dg E C} {c c' : ACache Msg Dg E C}
+    (h : c ≤ c') {β : List (Dg × E)} {s : SpongeState Dg E C} (hs : svC P iv c β = some s) :
+    svC P iv c' β = some s := by
+  unfold svC at hs ⊢
+  split at hs
+  · simp_all
+  · simp only [*, ite_false]
+    exact cachedPathValue_mono P h hs
+
 /-- **A hidden collision.**
 
 The value of a hidden path has a visible capacity, or that of another hidden path. -/

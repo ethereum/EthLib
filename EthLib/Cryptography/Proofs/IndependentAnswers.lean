@@ -178,6 +178,16 @@ theorem indepPermOracle_inr_run (b : A) (c : PermCache A) (f : Bool) :
       | none => (fun a => (a, ((a, b) :: c, f || decide (a ∈ c.map Prod.fst)))) <$>
         (uniformOutside [] b : ProbComp A) := rfl
 
+/-- The answer and the cache of a query do not depend on the flag. -/
+theorem indepPermOracle_run_map_fst (q : (PermSpec A).Domain) (c : PermCache A) (f : Bool) :
+    Prod.map id Prod.fst <$> (indepPermOracle q).run (c, f) =
+      Prod.map id Prod.fst <$> (indepPermOracle q).run (c, false) := by
+  rcases q with a | b
+  · rw [indepPermOracle_inl_run, indepPermOracle_inl_run]
+    split <;> simp [Functor.map_map]
+  · rw [indepPermOracle_inr_run, indepPermOracle_inr_run]
+    split <;> simp [Functor.map_map]
+
 /-- A query of the permutation keeps the state, or adds one pair and keeps a raised flag. -/
 theorem indepPermOracle_step (q : (PermSpec A).Domain) (s : IndepState A) (z)
     (hz : z ∈ support ((indepPermOracle q).run s)) :

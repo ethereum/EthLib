@@ -139,6 +139,14 @@ theorem uniformFrom_toList_evalDistEq_bind {X Y : Type} [DecidableEq Y] [Fintype
       (by simpa using hx)]
     exact (Finset.sum_eq_zero fun y _ => hzero x y (by simp [hx])).symm
 
+/-! ## Lookups in a list -/
+
+/-- A lookup gives one result whichever decision of equality it uses. -/
+theorem lookup_eq_of_decidableEq {α β : Type} [DecidableEq α] {l : List (α × β)} {a : α}
+    {r : Option β} (h : l.lookup a = r) (i : DecidableEq α) :
+    @List.lookup α β (@instBEqOfDecidableEq α i) a l = r := by
+  convert h
+
 end EthLib.Cryptography
 
 namespace EthLib.Cryptography.LazyPermutation
@@ -294,12 +302,6 @@ theorem lookup_swap_eq_none_of_forall {c : PermCache A} {b : A} (h : ∀ a, (a, 
   cases hb : (c.map Prod.swap).lookup b with
   | none => rfl
   | some a => exact absurd (mem_of_lookup_swap_eq_some hb) (h a)
-
-/-- A lookup gives one result whichever decision of equality it uses. -/
-theorem lookup_eq_of_decidableEq {α β : Type} [DecidableEq α] {l : List (α × β)} {a : α}
-    {r : Option β} (h : l.lookup a = r) (i : DecidableEq α) :
-    @List.lookup α β (@instBEqOfDecidableEq α i) a l = r := by
-  convert h
 
 end Lookup
 

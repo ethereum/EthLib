@@ -45,8 +45,8 @@ theorem pathValue_support (β : List (Dg × E)) (c : ACache Msg Dg E C)
     simp only [simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure, StateT.run_pure,
       mem_support_bind_iff, support_pure, Set.mem_singleton_iff] at hz
     obtain ⟨⟨d, c₁⟩, h₁, ⟨t, c₂⟩, h₂, rfl⟩ := hz
-    obtain ⟨hc₁, hd, hc₁'⟩ := randomOracle_run_support _ c h₁
-    obtain ⟨hc₂, ht, hc₂'⟩ := randomOracle_run_support _ c₁ h₂
+    obtain ⟨hc₁, hd, hc₁'⟩ := caches_of_mem_support_randomOracle_run _ c h₁
+    obtain ⟨hc₂, ht, hc₂'⟩ := caches_of_mem_support_randomOracle_run _ c₁ h₂
     refine ⟨le_trans hc₁ hc₂, ?_, fun t' ht' => ?_⟩
     · simp only [cachedPathValue, hm]
       rw [hc₂' (.inl m) (by simp), hd, ht]
@@ -55,7 +55,7 @@ theorem pathValue_support (β : List (Dg × E)) (c : ACache Msg Dg E C)
       rw [hc₂' t' (by rintro rfl; exact ht' rfl), hc₁' t' (by rintro rfl; exact ht' hm)]
   · next hm =>
     rw [run_queryRight] at hz
-    obtain ⟨hc, ht, hc'⟩ := randomOracle_run_support _ c hz
+    obtain ⟨hc, ht, hc'⟩ := caches_of_mem_support_randomOracle_run _ c hz
     refine ⟨hc, ?_, fun t' ht' => hc' t' (by rintro rfl; exact ht' rfl)⟩
     simp only [cachedPathValue, hm]
     exact ht
@@ -81,6 +81,31 @@ theorem drawSt_run (c : ACache Msg Dg E C) :
       (drawSt (Msg := Msg) (Dg := Dg) (E := E) (C := C))).run c =
       (fun u => (u, c)) <$> ($ᵗ (SpongeState Dg E C)) :=
   simulateQ_romImpl_liftM_run _ _
+
+/-- The value of a path that pads a message, at a path the oracle on paths has not answered. -/
+theorem pathValue_run_fresh_some {β : List (Dg × E)} {m : Msg} (hm : P.unpad β = some m)
+    (c : ACache Msg Dg E C) (hβ : c (.inr β) = none) :
+    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =
+      (((ASpec Msg Dg E C).randomOracle (.inl m)).run c >>= fun w =>
+        ($ᵗ (SpongeState Dg E C)) >>= fun t =>
+          pure (((w.1, t.1.2), t.2), w.2.cacheQuery (.inr β) t)) := by
+  simp only [pathValue, hm, simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure,
+    StateT.run_pure]
+  refine bind_congr_of_forall_mem_support _ fun w hw => ?_
+  have hwβ : w.2 (.inr β) = none := by
+    rw [(caches_of_mem_support_randomOracle_run _ c hw).2.2 _ (by simp)]
+    exact hβ
+  rw [randomOracle.run_eq]
+  simp [hwβ]
+
+/-- The value of a path that pads no message, at a path the oracle on paths has not answered. -/
+theorem pathValue_run_fresh_none {β : List (Dg × E)} (hm : P.unpad β = none)
+    (c : ACache Msg Dg E C) (hβ : c (.inr β) = none) :
+    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =
+      (($ᵗ (SpongeState Dg E C)) >>= fun t => pure (t, c.cacheQuery (.inr β) t)) := by
+  simp only [pathValue, hm, run_queryRight]
+  rw [randomOracle.run_eq]
+  simp [hβ]
 
 variable [DecidableEq C] [XorOp Dg] [XorOp E]
 

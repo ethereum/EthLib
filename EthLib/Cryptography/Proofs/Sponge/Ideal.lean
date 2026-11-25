@@ -66,36 +66,9 @@ theorem ideal_hash_run (m : Msg) (σ : SimState Dg E C) (c : (Msg →ₒ Dg).Que
       (fun w => ((w.1, σ), w.2)) <$> ((Msg →ₒ Dg).randomOracle m).run c := by
   simp [idealImpl]
 
-omit [XorOp Dg] [XorOp E] [DecidableEq C] in
-/-- The value of a path that pads a message, at a path the oracle on paths has not answered. -/
-theorem pathValue_run_fresh_some {β : List (Dg × E)} {m : Msg} (hm : P.unpad β = some m)
-    (c : ACache Msg Dg E C) (hβ : c (.inr β) = none) :
-    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =
-      (((ASpec Msg Dg E C).randomOracle (.inl m)).run c >>= fun w =>
-        ($ᵗ (SpongeState Dg E C)) >>= fun t =>
-          pure (((w.1, t.1.2), t.2), w.2.cacheQuery (.inr β) t)) := by
-  simp only [pathValue, hm, simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure,
-    StateT.run_pure]
-  refine bind_congr_of_forall_mem_support _ fun w hw => ?_
-  have hwβ : w.2 (.inr β) = none := by
-    rw [(randomOracle_run_support _ c hw).2.2 _ (by simp)]
-    exact hβ
-  rw [randomOracle.run_eq]
-  simp [hwβ]
-
-omit [XorOp Dg] [XorOp E] [DecidableEq C] in
-/-- The value of a path that pads no message, at a path the oracle on paths has not answered. -/
-theorem pathValue_run_fresh_none {β : List (Dg × E)} (hm : P.unpad β = none)
-    (c : ACache Msg Dg E C) (hβ : c (.inr β) = none) :
-    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =
-      (($ᵗ (SpongeState Dg E C)) >>= fun t => pure (t, c.cacheQuery (.inr β) t)) := by
-  simp only [pathValue, hm, run_queryRight]
-  rw [randomOracle.run_eq]
-  simp [hβ]
-
 /-- The state of the simulator over path values, with the oracle on paths forgotten. -/
 def projT (s : SimState Dg E C × ACache Msg Dg E C) :
-    SimState Dg E C × (Msg →ₒ Dg).QueryCache := (s.1, leftCache s.2)
+    SimState Dg E C × (Msg →ₒ Dg).QueryCache := (s.1, s.2.fst)
 
 /-- The simulator over path values, with its random oracles folded into the state. -/
 noncomputable abbrev foldIdealT :
@@ -124,7 +97,7 @@ theorem idealT_step_evalDistEq (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domai
     simp [projT, Functor.map_map]
   · rw [idealT_fwd_run]
     change _ =ᵈ (fun y => (y.1.1, y.1.2, y.2)) <$> (simulateQ (Msg →ₒ Dg).romImpl
-      ((simulator P (.inl x)).run σ)).run (leftCache c)
+      ((simulator P (.inl x)).run σ)).run c.fst
     simp only [simulator, StateT.run_mk]
     rcases hy : σ.edges.lookup x with _ | y
     · rcases hch : chainOf σ.chains x with _ | ⟨s, β⟩
@@ -141,29 +114,29 @@ theorem idealT_step_evalDistEq (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domai
         · rw [pathValue_run_fresh_none P hm c hfresh, rootedAnswer_run_none P hm]
           simp only [bind_assoc, pure_bind, map_bind, map_pure, bind_map_left]
           refine (EvalDistEq.bind_const _ _).trans ?_
-          simp [leftCache_cacheQuery_inr, projT]
+          simp [QueryCache.fst_cacheQuery_inr, projT]
         · rw [pathValue_run_fresh_some P hm c hfresh, rootedAnswer_run_some P hm,
-            ← leftCache_randomOracle_inl]
+            ← fst_randomOracle_inl]
           simp only [bind_assoc, pure_bind, map_bind, map_pure, bind_map_left]
           refine (EvalDistEq.bind_const _ _).trans (EvalDistEq.bind_right _ fun w => ?_)
-          simp only [Prod.map_apply, id_eq, projT, leftCache_cacheQuery_inr]
+          simp only [Prod.map_apply, id_eq, projT, QueryCache.fst_cacheQuery_inr]
           -- The digest is the hash, and the rest of the value is uniform on both sides.
           exact uniform_rest_evalDistEq fun ec => pure ((((w.1, ec.1), ec.2),
             (⟨(x, ((w.1, ec.1), ec.2)) :: σ.edges,
               (((w.1, ec.1), ec.2), β ++ [blockTo s x]) :: σ.chains⟩ : SimState Dg E C),
-            leftCache w.2))
+            w.2.fst))
     · -- A recorded state.
       simp only [visFwd, hy, simulateQ_pure, StateT.run_pure, map_bind, map_pure]
       exact EvalDistEq.bind_const _ _
   · rw [idealT_inv_run]
     change _ =ᵈ (fun y => (y.1.1, y.1.2, y.2)) <$> (simulateQ (Msg →ₒ Dg).romImpl
-      ((simulator P (.inr y)).run σ)).run (leftCache c)
+      ((simulator P (.inr y)).run σ)).run c.fst
     simp only [simulator, StateT.run_mk, visInv]
     rcases hx : (σ.edges.map Prod.swap).lookup y with _ | x
     · simp [simulateQ_romImpl_liftM_run, Functor.map_map, projT]
     · simp only [simulateQ_pure, StateT.run_pure, Functor.map_map]
       exact EvalDistEq.map_const _ _
-  · rw [idealT_hash_run, ideal_hash_run, projT, ← leftCache_randomOracle_inl]
+  · rw [idealT_hash_run, ideal_hash_run, projT, ← fst_randomOracle_inl]
     simp [projT, Functor.map_map]
 
 /-- **The simulator over path values is the simulator**, on a whole run, in law. -/
