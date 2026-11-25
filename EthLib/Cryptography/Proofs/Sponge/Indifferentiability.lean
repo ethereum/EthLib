@@ -14,7 +14,7 @@ It is a version of Theorem 2 of [Bertoni et al., Eurocrypt 2008][sponge], §4.3,
 
 Its simulator is simpler.
 
-Its capacity term is about `3 N^2 / |C|`, against about `N^2 / (2 |C|)` for their Lemma 5.
+Its capacity term is about `3 N^2 / |C|`; the term of their Lemma 5 is about `N^2 / (2 |C|)`.
 
 [sponge]: https://keccak.team/files/SpongeIndifferentiability.pdf
 -/

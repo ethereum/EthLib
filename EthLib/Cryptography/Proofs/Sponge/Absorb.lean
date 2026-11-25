@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Proofs.Sponge.Basic
 /-!
 # Proofs: the sponge's calls of the permutation
 
-Run in the permutation model, the sponge asks the permutation once per absorbed block.
+Run in the permutation model, the sponge asks the permutation at most once per absorbed block.
 
 Answered by an oracle, those calls are the sponge over the oracle's forward answers.
 -/
@@ -30,7 +30,7 @@ theorem simulateQ_absorbAll {m : Type → Type} [Monad m] [LawfulMonad m]
   | nil => simp [absorbAll]
   | cons B bs ih => simp [absorbAll_cons, ih]
 
-/-- The sponge asks the permutation once per block. -/
+/-- The sponge asks the permutation at most once per block. -/
 theorem isQueryBoundP_absorbAll (s : SpongeState Dg E C) (bs : List (Dg × E)) :
     IsQueryBoundP (absorbAll (fun x => (liftM ((unifSpec + PermSpec (SpongeState Dg E C)).query
       (.inr (.inl x))) : PermComp (SpongeState Dg E C) _)) s bs) (·.isRight = true)

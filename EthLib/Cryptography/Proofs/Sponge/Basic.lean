@@ -62,7 +62,7 @@ theorem absorbAll_cons {m : Type → Type} [Monad m]
     (bs : List (Dg × E)) :
     absorbAll π s (B :: bs) = (π (absorb s B) >>= fun y => absorbAll π y bs) := rfl
 
-/-- The sponge over a pure function, in a lawful monad, returns the pure hash. -/
+/-- Absorbing with a pure function, in a lawful monad, returns the absorption computed in `Id`. -/
 theorem absorbAll_pure {m : Type → Type} [Monad m] [LawfulMonad m]
     (π : SpongeState Dg E C → SpongeState Dg E C) (s : SpongeState Dg E C)
     (bs : List (Dg × E)) :
