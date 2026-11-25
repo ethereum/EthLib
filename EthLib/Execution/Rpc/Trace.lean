@@ -193,7 +193,9 @@ structure TraceConfig where
 structure Tracer where
   /-- The entries so far, oldest first. -/
   logs : Array StructLog := #[]
-  /-- For each account, the slots that the trace has seen, with their last values. -/
+  /-- For each account, the slots that the trace has seen, with their last values.
+
+  It stays as it was when the configuration disables the storage. -/
   slots : List (Address × List (Bytes32 × U256)) := []
   /-- The refund counters of the frames that called the current one, outermost first. -/
   refunds : List Int := []
@@ -275,13 +277,17 @@ def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter 
     -- A step past the end of its code runs STOP, and adds an entry too.
     let op := stepOp evm
     let account := evm.message.currentTarget
-    let storageOp := op = some .sload ∨ op = some .sstore
     let touched := touchedSlot op evm result
-    let seen := (tracer.slots.lookup account).getD []
-    let seen := match touched with
+    -- Only a trace that prints the storage keeps the slots it has seen.
+    --
+    -- Each update walks every seen slot, so a trace without the storage keeps none.
+    let keep := config.disableStorage = false ∧ (op = some .sload ∨ op = some .sstore)
+    let seen := if config.disableStorage then [] else
+      let seen := (tracer.slots.lookup account).getD []
+      match touched with
       | some (key, value) => setSlot seen key value
       | none => seen
-    let slots := if storageOp then (account, seen) :: tracer.slots.filter (·.1 != account)
+    let slots := if keep then (account, seen) :: tracer.slots.filter (·.1 != account)
       else tracer.slots
     let callers := tracer.refunds.take evm.message.depth
     let entry : StructLog :=

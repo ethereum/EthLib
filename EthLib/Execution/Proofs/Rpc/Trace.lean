@@ -357,12 +357,38 @@ theorem record_slots_of_stepError {fork : Fork} {Meter : Type} [GasMeter Meter]
   · rfl
   · simp only [ht]
     split
-    · by_cases ha : a = evm.message.currentTarget
+    · rename_i hop
+      -- This branch updates the slots, so the configuration enables the storage.
+      have hd : config.disableStorage = false := hop.1
+      by_cases ha : a = evm.message.currentTarget
       · subst ha
-        simp [List.lookup]
+        simp [List.lookup, hd]
       · have hne : (a == evm.message.currentTarget) = false := by simpa using ha
         simp [List.lookup, hne, lookup_filter_ne ha]
     · rfl
+
+/-- With the storage disabled, a step leaves the slots that the logger has seen as they were. -/
+theorem record_slots_of_disableStorage {fork : Fork} {Meter : Type} [GasMeter Meter]
+    (config : TraceConfig) (evm : Evm fork Meter) (result : Except EvmError (StepResult fork Meter))
+    (tracer : Tracer) (h : config.disableStorage = true) :
+    (tracer.record config evm result).slots = tracer.slots := by
+  unfold Tracer.record
+  split <;> simp [h]
+
+/-- With the storage disabled, the entries and the refunds of a step do not read the seen slots. -/
+theorem record_logs_of_disableStorage {fork : Fork} {Meter : Type} [GasMeter Meter]
+    (config : TraceConfig) (evm : Evm fork Meter) (result : Except EvmError (StepResult fork Meter))
+    (tracer : Tracer) (h : config.disableStorage = true)
+    (slots : List (Address × List (Bytes32 × U256))) :
+    ({ tracer with slots }.record config evm result).logs = (tracer.record config evm result).logs ∧
+      ({ tracer with slots }.record config evm result).refunds =
+        (tracer.record config evm result).refunds := by
+  unfold Tracer.record
+  simp only [h, ite_true, true_or]
+  -- The two tracers have the same entries, so the step adds an entry to both or to neither.
+  by_cases c : evm.code.size = 0 ∨ (config.limit ≠ 0 ∧ config.limit ≤ tracer.logs.size)
+  · simp only [c, ite_true]; constructor <;> first | trivial | rfl
+  · simp only [c, ite_false]; constructor <;> first | trivial | rfl
 
 /-- A step of a frame within the depth limit adds only an entry of depth from 1 to 1025. -/
 private theorem depth_mem_record {fork : Fork} {Meter : Type} [GasMeter Meter]
