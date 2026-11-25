@@ -6451,7 +6451,9 @@ The statuses of validators and builders are in `Consensus/BeaconApi/Validators.l
 `validatorStatus_unique` shows that it is the only status that does, when the activation, exit and withdrawable epochs of the validator do not decrease.
 Each order is needed: `validatorStatus_order_needed` gives a validator with its exit before its activation that meets two conditions at once.
 `validatorStatus_exit_order_needed` does the same with its withdrawable epoch before its exit.
-No theorem yet shows that every validator of a reachable state meets that hypothesis.
+On a state that a run from genesis reaches, every validator meets both orders (`Run.activationExitOrder`, `Run.exitWithdrawableOrder`).
+So the status of each validator is the only one that holds (`validatorStatus_unique_of_run`, `Consensus/Proofs/BeaconApi/ValidatorsReachable.lean`).
+The validators answer gives each entry that status (`stateValidators_status_unique_of_run`).
 `validatorStatus_active_iff` shows, with no hypothesis, that the group of the status is active exactly when the validator is active.
 `builderStatus_unique` shows that the status of a builder of the state is the only one whose condition holds.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_validators.py`) checks each of the nine statuses and the three builder statuses on hand-made inputs.

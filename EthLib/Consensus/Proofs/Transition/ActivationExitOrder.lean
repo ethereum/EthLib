@@ -11,6 +11,8 @@ import EthLib.Consensus.Proofs.Transition.EpochPending
 
 Every validator in a reachable state activates no later than it exits.
 
+It also exits no later than it can withdraw.
+
 A new validator has no exit epoch.
 
 An exit is only assigned to a validator whose activation epoch has passed.
@@ -73,17 +75,18 @@ private def Delayed (config : Config) (v : Validator) : Prop :=
 private def ExitDelay (config : Config) (s : BeaconState preset fork) : Prop :=
   ∀ v ∈ s.validators.data, Delayed config v
 
-/-- A validator that is not slashed has no withdrawable epoch before its exit is assigned.
+/-- A validator has no withdrawable epoch before its exit is assigned.
 
-After that it can withdraw at most the withdrawal delay after its exit. -/
+After that, if it is not slashed, it can withdraw at most the withdrawal delay after its exit. -/
 private def Upper (config : Config) (v : Validator) : Prop :=
-  v.slashed = false →
-    (v.exitEpoch = FAR_FUTURE_EPOCH → v.withdrawableEpoch = FAR_FUTURE_EPOCH) ∧
-    (v.exitEpoch ≠ FAR_FUTURE_EPOCH →
+  (v.exitEpoch = FAR_FUTURE_EPOCH → v.withdrawableEpoch = FAR_FUTURE_EPOCH) ∧
+    (v.slashed = false → v.exitEpoch ≠ FAR_FUTURE_EPOCH →
       v.withdrawableEpoch.toNat ≤
         v.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
 
-/-- Every validator that is not slashed has its withdrawable epoch within the delay of its exit. -/
+/-- Every validator has no withdrawable epoch before its exit is assigned.
+
+After that, every validator that is not slashed meets the delay bound. -/
 private def ExitUpper (config : Config) (s : BeaconState preset fork) : Prop :=
   ∀ v ∈ s.validators.data, Upper config v
 
@@ -244,7 +247,7 @@ private theorem append {v : Validator}
   · rw [finalized]; exact h w member
   · exact fun assigned => absurd unassigned assigned
   · exact h w member
-  · exact fun _ => ⟨fun _ => unwithdrawable, fun assigned => absurd pending assigned⟩
+  · exact ⟨fun _ => unwithdrawable, fun _ assigned => absurd pending assigned⟩
   · have : getCurrentEpoch after = getCurrentEpoch state := by simp only [getCurrentEpoch, slot]
     rw [this]; exact h w member
   · exact fun assigned => absurd pending assigned
@@ -283,11 +286,11 @@ private theorem initiateValidatorExit {i : ValidatorIndex} {v : Validator}
           omega)
         (fun held => held)
         -- The new exit leaves the withdrawable epoch exactly the delay after it.
-        (fun _ _ => by
+        (fun _ => by
           have sum := (Uint64.addChecked_ok_iff.mp delayed).2
           have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
           have below := (Uint64.addChecked_ok_iff.mp delayed).1
-          refine ⟨fun exitFar => UInt64.toNat_inj.mp ?_, fun _ => ?_⟩
+          refine ⟨fun exitFar => UInt64.toNat_inj.mp ?_, fun _ _ => ?_⟩
           · have exitNat := congrArg UInt64.toNat exitFar
             dsimp only at *
             omega
@@ -327,8 +330,14 @@ private theorem slashValidator {i : ValidatorIndex} {v : Validator}
       split
       · assumption
       · exact UInt64.le_refl _) (fun g => g) (fun held => held)
-      -- The slashed validator is out of reach of the bound.
-      (fun _ unslashed => by simp at unslashed))
+      (fun held => ⟨fun far => by
+        -- An unassigned exit keeps the largest withdrawable epoch.
+        rw [held.1 far, UInt64.max_def]
+        split
+        · exact UInt64.le_antisymm (far_max _) (by assumption)
+        · rfl,
+        -- The slashed validator is out of reach of the bound.
+        fun unslashed => by simp at unslashed⟩))
   have second := (of_data (config := config) (state := marked)
     (t := { marked with slashings })).trans
     ((decreaseBalance lowered).trans ((increaseBalance raised).trans (increaseBalance paid)))
@@ -489,11 +498,11 @@ private theorem queueConsolidation {electra : .pectra ≤ fork}
           omega)
       (fun held => held)
       -- The source's new exit leaves the withdrawable epoch exactly the delay after it.
-      (fun _ _ => by
+      (fun _ => by
         have sum := (Uint64.addChecked_ok_iff.mp delayed).2
         have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
         have below := (Uint64.addChecked_ok_iff.mp delayed).1
-        refine ⟨fun exitFar => UInt64.toNat_inj.mp ?_, fun _ => ?_⟩
+        refine ⟨fun exitFar => UInt64.toNat_inj.mp ?_, fun _ _ => ?_⟩
         · have exitNat := congrArg UInt64.toNat exitFar
           dsimp only at *
           omega
@@ -1066,10 +1075,26 @@ theorem Run.withdrawable_eq_exit_delay {first last : ForkedBeaconState preset}
   have held := run.activationExitDelay genesis
   have member := Array.mem_of_getElem? found
   by_cases exited : v.exitEpoch = FAR_FUTURE_EPOCH
-  · exact .inl ⟨exited, ((held.2.2.2.2.1 v member) unslashed).1 exited⟩
-  · have upper := ((held.2.2.2.2.1 v member) unslashed).2 exited
+  · exact .inl ⟨exited, (held.2.2.2.2.1 v member).1 exited⟩
+  · have upper := (held.2.2.2.2.1 v member).2 unslashed exited
     have lower := held.2.2.1 v member exited
     exact .inr (by omega)
+
+/-- From genesis, every validator exits no later than it can withdraw. -/
+theorem Run.exitWithdrawableOrder {first last : ForkedBeaconState preset}
+    (run : Run config checks first last)
+    (genesis : Genesis (config := config) (checks := checks) first) :
+    ∀ v ∈ last.state.validators.data, v.exitEpoch ≤ v.withdrawableEpoch := by
+  intro v member
+  have held := run.activationExitDelay genesis
+  by_cases exited : v.exitEpoch = FAR_FUTURE_EPOCH
+  -- An unassigned exit leaves the withdrawable epoch unassigned too.
+  · rw [(held.2.2.2.2.1 v member).1 exited]
+    exact ActivationExitOrder.far_max _
+  -- An assigned exit waits the withdrawal delay.
+  · have delayed := held.2.2.1 v member exited
+    rw [UInt64.le_iff_toNat_le]
+    omega
 
 /-- From genesis, a validator with an assigned exit has reached its activation epoch. -/
 theorem Run.exit_activated {first last : ForkedBeaconState preset}
