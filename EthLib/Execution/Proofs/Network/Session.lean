@@ -2,6 +2,8 @@ module
 
 public import EthLib.Base.Except
 public import EthLib.Execution.Network.Session
+import EthLib.Base.Proofs.List
+import Std.Data.TreeSet.Lemmas
 
 /-!
 # Proofs: the eth session
@@ -183,7 +185,15 @@ private theorem sendEth_transactions (session next : EthSession) (txs : List Enc
   · cases h
   · -- The send goes through only when the hashes are fresh.
     split at h
-    · assumption
+    · rename_i fresh
+      obtain ⟨hne, hscan, hall⟩ := fresh
+      refine ⟨hne, ?_, fun x hx => ?_⟩
+      · simpa [Message.transactionHashes] using hscan
+      -- A hash outside the search tree is in neither list.
+      · have hx' := List.all_eq_true.mp hall x hx
+        simp only [Std.TreeSet.contains_ofList, Bool.not_eq_true', List.contains_eq_mem,
+          decide_eq_false_iff_not, List.mem_append, not_or] at hx'
+        exact hx'
     · cases h
 
 /-- Before the peer's Status, this node may send nothing but Status. -/
