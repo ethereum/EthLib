@@ -115,15 +115,9 @@ theorem foldlM_validators_size_le {α ε : Type}
     {items : List α} {s t : BeaconState preset fork}
     (ok : items.foldlM action s = .ok t) :
     t.validators.data.size ≤ s.validators.data.size + items.length := by
-  induction items generalizing s with
-  | nil => cases ok; simp
-  | cons a rest ih =>
-    simp only [List.foldlM_cons, bind_ok_iff] at ok
-    obtain ⟨middle, first, last⟩ := ok
-    have one := bound s a middle first
-    have remaining := ih last
-    simp only [List.length_cons]
-    omega
+  simpa using foldlM_ok_weighted
+    (fun b c => b.validators.data.size ≤ s.validators.data.size + c) (fun _ => 1)
+    (fun b x b' c held step => by have := bound b x b' step; omega) (c := 0) (by simp) ok
 
 /-- The pending deposits of an epoch never raise the validators plus the pending deposits. -/
 theorem processPendingDeposits_registryLoad_le {electra : .pectra ≤ fork}
