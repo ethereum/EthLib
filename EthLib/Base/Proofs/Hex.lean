@@ -161,6 +161,70 @@ theorem hexBytesFrom?_map_toUpper :
   | high :: low :: rest, out => by
     simp only [List.map_cons, hexBytesFrom?, hexValue?_toUpper, hexBytesFrom?_map_toUpper rest]
 
+/-- Decoding succeeds exactly on pairs of hex digits, and appends the byte of each pair.
+
+Byte `i` is sixteen times the digit at `2 i` plus the digit at `2 i + 1`. -/
+theorem hexBytesFrom?_eq_some_iff :
+    ∀ {cs : List Char} {out r : ByteArray},
+      hexBytesFrom? cs out = some r ↔
+        ∃ xs : List UInt8, cs.length = 2 * xs.length ∧ r = out ++ ⟨xs.toArray⟩ ∧
+          ∀ (i : Nat) (hi : i < xs.length), ∃ u v : UInt8,
+            cs[2 * i]?.bind (hexValue? ·) = some u ∧ cs[2 * i + 1]?.bind (hexValue? ·) = some v ∧
+              xs[i] = 16 * u + v
+  | [], out, r => by
+    simp only [hexBytesFrom?, Option.some.injEq, List.length_nil]
+    constructor
+    · rintro rfl
+      exact ⟨[], rfl, by apply ByteArray.ext; simp, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
+    · rintro ⟨xs, hl, rfl, -⟩
+      obtain rfl : xs = [] := List.eq_nil_of_length_eq_zero (by omega)
+      apply ByteArray.ext
+      simp
+  | [_], out, r => by
+    simp only [hexBytesFrom?, reduceCtorEq, List.length_singleton, false_iff, not_exists]
+    intro xs hl
+    omega
+  | high :: low :: rest, out, r => by
+    simp only [hexBytesFrom?, Option.bind_eq_bind]
+    constructor
+    · intro h
+      obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+      obtain ⟨xs, hl, hr, hidx⟩ := hexBytesFrom?_eq_some_iff.mp h
+      refine ⟨(16 * u + v) :: xs, by simp [hl]; omega, ?_, fun i hi => ?_⟩
+      · rw [hr]
+        apply ByteArray.ext
+        simp
+      · cases i with
+        | zero => exact ⟨u, v, by simpa using hu, by simpa using hv, rfl⟩
+        | succ i =>
+          obtain ⟨a, b, ha, hb, hx⟩ := hidx i (by simpa using hi)
+          refine ⟨a, b, ?_, ?_, by simpa using hx⟩
+          · rw [show 2 * (i + 1) = 2 * i + 2 by omega]
+            simpa using ha
+          · rw [show 2 * (i + 1) + 1 = 2 * i + 1 + 2 by omega]
+            simpa using hb
+    · rintro ⟨xs, hl, rfl, hidx⟩
+      cases xs with
+      | nil => simp at hl
+      | cons x xs =>
+        obtain ⟨u, v, hu, hv, hx⟩ := hidx 0 (by simp)
+        simp only [List.getElem?_cons_zero, Option.bind_some, Nat.mul_zero, Nat.zero_add,
+          List.getElem?_cons_succ] at hu hv
+        rw [hu, Option.bind_some, hv, Option.bind_some]
+        apply hexBytesFrom?_eq_some_iff.mpr
+        refine ⟨xs, by simp at hl; omega, ?_, fun i hi => ?_⟩
+        · simp only [List.getElem_cons_zero] at hx
+          rw [← hx]
+          apply ByteArray.ext
+          simp
+        · obtain ⟨a, b, ha, hb, hxi⟩ := hidx (i + 1) (by simpa using hi)
+          refine ⟨a, b, ?_, ?_, by simpa using hxi⟩
+          · rw [show 2 * (i + 1) = 2 * i + 2 by omega] at ha
+            simpa using ha
+          · rw [show 2 * (i + 1) + 1 = 2 * i + 1 + 2 by omega] at hb
+            simpa using hb
+
 /-- A byte is sixteen times its high digit plus its low digit. -/
 theorem toUInt8_div_add_mod (byte : UInt8) :
     16 * (byte.toNat / 16).toUInt8 + (byte.toNat % 16).toUInt8 = byte := by
