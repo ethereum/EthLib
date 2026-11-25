@@ -32,13 +32,13 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
   -- Steps that keep the state change other parts of a frame freely.
   --
   -- So the relation cannot see those parts.
-  /-- A step that only adds reads keeps the relation.
+  /-- A step that only adds reads and accesses keeps the relation.
 
   So the relation sees only the state up to its reads, the message, the code and the substate.
 
-  Of the substate, it sees only the touched accounts, the accounts to delete and the logs.
+  Of the substate, it sees the touched accounts, the accounts to delete and the logs.
 
-  It cannot see the refund counter, the accesses, the gas, the memory or the stack. -/
+  It cannot see the refund counter, the gas, the memory or the stack. -/
   static : ∀ {a b}, StaticStep a b → R a b
   /-- A write of storage that changes the refund counter keeps the relation. -/
   sstore : ∀ (evm : Evm fork Meter) (address : Address) (key : Bytes32) (value : U256)
@@ -261,7 +261,7 @@ theorem finishCall (rules : OrdinaryStepRules fork R) {kind : CallKind} {call : 
   · cases h
   dsimp only at h
   have pre : StaticStep evm (callerFrame evm expandBy) :=
-    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (rules.static ((pre.trans (.of_sameContext (sameContext_refillStateGas _ _))).trans
@@ -584,7 +584,7 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
   · cases h
   dsimp only at h
   have pre : StaticStep evm (callerFrame evm expandBy) :=
-    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
   split at h
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial

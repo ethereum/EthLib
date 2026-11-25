@@ -48,7 +48,7 @@ theorem staticStep_runPrecompile {address : Nat} {evm after : Evm fork Meter}
     · cases h
       exact staticStep_exceptionalHalt _ _
     · cases h
-      exact ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      exact ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
 
 omit [GasMeter Meter] in
 /-- The frame that starts a static message is a static frame. -/
@@ -426,14 +426,14 @@ theorem staticTouchResult_genericCall {evm : Evm fork Meter} {message : Message 
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      exact (⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩ : StaticStep evm
+      exact (⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩ : StaticStep evm
         (refillStateGas evm newAccount)).trans
         (staticStep_skipCall hs)
   · cases h
-    refine ⟨⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩, hmsg, ?_⟩
+    refine ⟨⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩, hmsg, ?_⟩
     intro touched child after hres kept parent hrec
     have pre : StaticStep evm evm :=
-      ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
     exact pre.trans_touchStep (staticTouchStep_resumeCall hres kept parent hrec)
 
 /-- A paid call in a static frame gives a static step, or a static touch child.
@@ -455,7 +455,7 @@ theorem staticTouchResult_finishCall {kind : CallKind} {call : CallOperands} {ca
   rename_i hnot
   dsimp only at h
   have pre : StaticStep evm (callerFrame evm expandBy) :=
-    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
   split at h
   · cases hs : skipCall (refillStateGas (callerFrame evm expandBy) newAccount) subCall
         (GasMeter.reservoir evm.gas) with
@@ -465,7 +465,7 @@ theorem staticTouchResult_finishCall {kind : CallKind} {call : CallOperands} {ca
       subst h
       have refill : StaticStep (callerFrame evm expandBy)
           (refillStateGas (callerFrame evm expandBy) newAccount) :=
-        ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+        ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
       exact (pre.trans refill).trans (staticStep_skipCall hs)
   · refine StaticTouchResult.lift pre (staticTouchResult_genericCall ?_ h)
     have hcall : kind = .call → call.value = 0 := by
@@ -736,7 +736,7 @@ theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
           split at hdo
           · cases hdo
             exact stepCore h1 hp1
-              (.of_staticStep ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+              (.of_staticStep ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩)
           · split at hdo
             · rename_i after hrp
               cases hdo
@@ -744,7 +744,7 @@ theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
             · cases hdo
               exact stepCore h1 hp1
                 (.of_staticStep
-                  ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+                  ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩)
     have hval := congrArg Subtype.val rolled
     simp only at hval
     rw [← hval]

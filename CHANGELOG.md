@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `processMessage_accessesLe` (`Execution/Proofs/Evm/Call/AccessesGrow.lean`) says that every call and creation ends with every access of the substate it is sent with ([#4568](https://github.com/ethereum/EthLib/pull/4568)).
+  That holds whether its frame fails or not.
+  `Substate.AccessesLe` (`Execution/Proofs/Evm/Instructions/Static.lean`) is the relation: one substate holds every accessed address and storage key of another.
+  `accessesLe_processMessage` and `accessesLe_processCreateMessage` state it for one call and one creation.
+  `stepRules_accessesLe` says that each step keeps every accessed address and storage key, so the step rules carry the accesses.
+
 - In Lean, `Node.validRecord_isSome` (`Engine/Proofs/Node/Replay.lean`) says that every valid block of a node reached from a starting block has a record, so its body runs again ([#4557](https://github.com/ethereum/EthLib/pull/4557)).
   `Node.view_isSome` says that such a node has a chain view, and `Node.Reachable.validRecord_eq` that the record of a valid block stays the same in every later node.
   `Node.Reachable.chainAt_eq` (`Engine/Proofs/Node/Ancestry.lean`) says that the chain at a valid block stays the same in later nodes.
@@ -1049,6 +1055,10 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, `StaticStep` (`Execution/Proofs/Evm/Instructions/Static.lean`) has a new last field `accesses` ([#4568](https://github.com/ethereum/EthLib/pull/4568)).
+  It says that the step keeps every accessed address and storage key of the substate, as `Substate.AccessesLe`.
+  An anonymous constructor of a step that keeps the substate adds `.refl _` at the end.
 
 - In Lean, the chain view of the RPC export runs each block from Paris on the last 255 recent blocks ([#4553](https://github.com/ethereum/EthLib/pull/4553)).
   So building it costs time linear in its blocks.
