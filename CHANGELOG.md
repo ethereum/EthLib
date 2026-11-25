@@ -1061,6 +1061,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- `engine_forkchoiceUpdated` accepts a request whose parameters omit the payload attributes, and reads it as one with `null` attributes, since the OpenRPC description makes them optional ([#4620](https://github.com/ethereum/EthLib/issues/4620)).
+  `forkchoiceUpdatedParams_eq_ok_iff` (`Engine/Proofs/ForkchoiceUpdated.lean`) states the new case.
+  A request with a wrong count of parameters now names the counts `1 or 2`, or from version 4 `1 to 3`, in its `-32602` message.
+
 - In Lean, a Gloas builder keeps the first preferences of a proposer for a slot, and may refuse preferences from a key that is not the proposer of the slot ([#3860](https://github.com/ethereum/EthLib/issues/3860)).
   This follows `ethereum/builder-specs` at `0911550`.
   - `BuilderApi.preferencesFailures` and `BuilderApi.PreferencesStore.submit` (`Consensus/BuilderApi/RequestAuth.lean`) take the key of the proposer that the builder knows for each slot, before the key of the path.

@@ -447,14 +447,15 @@ def forkchoiceUpdatedParams (version : Nat) (params : Json) :
   let (state, attributes, custody) ← match params, decide (4 ≤ version) with
     -- The OpenRPC description makes the attributes optional in every version.
     --
-    -- EthLib still asks for them, as `null` when there are none.
+    -- A request without them reads as one with `null`.
+    | [state], _ => pure (state, Json.null, Json.null)
     | [state, attributes], _ => pure (state, attributes, Json.null)
     -- Version 4, parameter 3: the custody columns, which the OpenRPC description makes optional.
     --
-    -- EIP-8070 makes them optional too, so versions 4 and 5 take two or three parameters.
+    -- EIP-8070 makes them optional too, so versions 4 and 5 take one to three parameters.
     | [state, attributes, custody], true => pure (state, attributes, custody)
     -- Any other count of parameters is `-32602`.
-    | _, four => invalid s!"params: got {params.length}, expected {if four then "2 or 3" else "2"}"
+    | _, four => invalid s!"params: got {params.length}, expected {if four then "1 to 3" else "1 or 2"}"
   -- Parameter 1: `ForkchoiceStateV1`.
   let state ← forkchoiceStateOfJson state
   -- Parameter 2: `Object|null`, and EthLib gives `-32602` to any other value.

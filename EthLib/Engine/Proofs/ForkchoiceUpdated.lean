@@ -513,11 +513,11 @@ theorem forkchoiceStateOfJson_eq_ok_iff {j : Lean.Json} {s : ForkchoiceState} :
 
 /-- The parameters decode exactly when they are a JSON array of the state and the attributes.
 
-From version 4 the custody columns may follow them.
+The attributes may be absent, and from version 4 the custody columns may follow them.
 
 The first value must decode as a forkchoice state.
 
-The second value must be `null` or an object.
+The second value, `null` when absent, must be `null` or an object.
 
 The custody columns, `null` when absent, must decode.
 
@@ -526,7 +526,8 @@ theorem forkchoiceUpdatedParams_eq_ok_iff {version : Nat} {params : Lean.Json}
     {r : ForkchoiceState × Option Lean.Json} :
     forkchoiceUpdatedParams version params = .ok r ↔
       ∃ stateJson attributes custody s,
-        (params = .arr #[stateJson, attributes] ∧ custody = .null ∨
+        ((params = .arr #[stateJson, attributes] ∨ params = .arr #[stateJson] ∧ attributes = .null) ∧
+            custody = .null ∨
           4 ≤ version ∧ params = .arr #[stateJson, attributes, custody]) ∧
         forkchoiceStateOfJson stateJson = .ok s ∧
         (∃ columns, custodyColumnsOfJson custody = .ok columns) ∧
@@ -546,11 +547,14 @@ theorem forkchoiceUpdatedParams_eq_ok_iff {version : Nat} {params : Lean.Json}
       by_cases h4 : 4 ≤ version
       · cases hs : forkchoiceStateOfJson stateJson <;> cases hc : custodyColumnsOfJson custody <;>
           cases attributes <;>
-          simp [paramsArray, h4, hs, hc, bind, Except.bind, pure, Except.pure, eq_comm,
-            and_assoc]
+          simp [paramsArray, h4, hs, hc, bind, Except.bind, pure, Except.pure, and_assoc] <;>
+          exact eq_comm
       · simp [paramsArray, h4, bind, Except.bind, pure, Except.pure]
+    | [stateJson] =>
+      cases hs : forkchoiceStateOfJson stateJson <;>
+        simp [paramsArray, hs, hNull, bind, Except.bind, pure, Except.pure, and_assoc] <;>
+        exact eq_comm
     | [] => simp [paramsArray, bind, Except.bind, pure, Except.pure]
-    | [_] => simp [paramsArray, bind, Except.bind, pure, Except.pure]
     | _ :: _ :: _ :: _ :: _ => simp [paramsArray, bind, Except.bind, pure, Except.pure]
   | _ => simp [paramsArray, bind, Except.bind]
 
@@ -1236,7 +1240,7 @@ theorem forkchoiceUpdatedParams_json {fork : Fork} (version : Nat) (state : Fork
       optionJson (dataJson ·.toList) custody, state, Or.inr ⟨h4, by simp [h4]⟩,
       forkchoiceStateOfJson_json state, ⟨custody, custodyColumnsOfJson_json custody⟩, hlast⟩
   · exact ⟨forkchoiceStateJson state, optionJson payloadAttributesJson attributes, .null, state,
-      Or.inl ⟨by simp [h4], rfl⟩, forkchoiceStateOfJson_json state, ⟨none, rfl⟩, hlast⟩
+      Or.inl ⟨Or.inl (by simp [h4]), rfl⟩, forkchoiceStateOfJson_json state, ⟨none, rfl⟩, hlast⟩
 
 /-- The status of every answer of an update is valid, invalid or syncing. -/
 private theorem forkchoiceUpdated_status {result : PayloadStatus × Option Hash32}
