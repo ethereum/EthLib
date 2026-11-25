@@ -48,6 +48,10 @@ public import EthLib.Cryptography.Proofs.Sponge.InvLemmas
 public import EthLib.Cryptography.Proofs.Sponge.InvFwd
 public import EthLib.Cryptography.Proofs.Sponge.InvHash
 public import EthLib.Cryptography.Proofs.Sponge.InvMain
+public import EthLib.Cryptography.Proofs.Sponge.Commute
+public import EthLib.Cryptography.Proofs.Sponge.Fresh
+public import EthLib.Cryptography.Proofs.Sponge.Ideal
+public import EthLib.Cryptography.Proofs.Sponge.Real
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
