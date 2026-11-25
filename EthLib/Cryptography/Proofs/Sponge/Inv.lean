@@ -14,7 +14,7 @@ A hidden collision is the value of a path that only the sponge asked, at a capac
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -42,15 +42,16 @@ def Hidden (P : Padding Msg (Dg × E)) (vs : VState Dg E C Msg) (β : List (Dg �
 /-- The state at the end of a path: `iv` for the empty path, the cached value otherwise. -/
 noncomputable def svC (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
     (c : ACache Msg Dg E C) (β : List (Dg × E)) : Option (SpongeState Dg E C) :=
-  if β = [] then some iv else valC P c β
+  if β = [] then some iv else cachedPathValue P c β
 
 /-- **A hidden collision.**
 
 The value of a hidden path has a visible capacity, or that of another hidden path. -/
-def EC (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (vs : VState Dg E C Msg)
+def HiddenCollision (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (vs : VState Dg E C Msg)
     (c : ACache Msg Dg E C) : Prop :=
-  ∃ β v, Hidden P vs β ∧ valC P c β = some v ∧
-    (v.2 ∈ knownC iv vs.1 ∨ ∃ γ w, Hidden P vs γ ∧ γ ≠ β ∧ valC P c γ = some w ∧ w.2 = v.2)
+  ∃ β v, Hidden P vs β ∧ cachedPathValue P c β = some v ∧
+    (v.2 ∈ knownC iv vs.1 ∨
+      ∃ γ w, Hidden P vs γ ∧ γ ≠ β ∧ cachedPathValue P c γ = some w ∧ w.2 = v.2)
 
 section Edges
 
@@ -60,7 +61,7 @@ variable [XorOp Dg] [XorOp E]
 def HiddenEdge (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (vs : VState Dg E C Msg)
     (c : ACache Msg Dg E C) (e : SpongeState Dg E C × SpongeState Dg E C) : Prop :=
   ∃ β B s v, Hidden P vs (β ++ [B]) ∧ svC P iv c β = some s ∧
-    valC P c (β ++ [B]) = some v ∧ e = (absorb s B, v)
+    cachedPathValue P c (β ++ [B]) = some v ∧ e = (absorb s B, v)
 
 /-- A rooted pair of the simulator: from a rooted state, one block on, to a rooted state. -/
 def RootedEdge (σ : SimState Dg E C) (e : SpongeState Dg E C × SpongeState Dg E C) : Prop :=
@@ -72,7 +73,7 @@ def GEdge (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg 
   e ∈ cs.sim.edges ∨ HiddenEdge P iv cs.vis c e
 
 /-- The facts of the combined game that hold on every run. -/
-structure Struct (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg E C Msg)
+structure CombStruct (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg E C Msg)
     (c : ACache Msg Dg E C) : Prop where
   /-- The initial state is rooted at the empty path. -/
   root : (iv, []) ∈ cs.sim.chains
@@ -82,7 +83,7 @@ structure Struct (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CSt
   chainEdge : ∀ p ∈ cs.sim.chains, p.2 ≠ [] → ∃ q ∈ cs.sim.chains, ∃ B,
     p.2 = q.2 ++ [B] ∧ (absorb q.1 B, p.1) ∈ cs.sim.edges
   /-- The value of every prefix of a hashed padding is cached. -/
-  hCached : ∀ β, HPath P cs.hashed β → valC P c β ≠ none
+  hCached : ∀ β, HPath P cs.hashed β → cachedPathValue P c β ≠ none
 
 /-- The facts about the state of the simulator that hold until a collision. -/
 structure VisCons (σ : SimState Dg E C) : Prop where
@@ -96,7 +97,7 @@ structure VisCons (σ : SimState Dg E C) : Prop where
   vClass : ∀ e ∈ σ.edges, RootedEdge σ e ∨ ∀ p ∈ σ.chains, p.1.2 ≠ e.1.2
 
 /-- The facts of the combined game that hold until a collision. -/
-structure Cons (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg E C Msg)
+structure CombCons (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg E C Msg)
     (c : ACache Msg Dg E C) : Prop where
   /-- The state of the simulator is consistent. -/
   vis : VisCons cs.sim
@@ -108,9 +109,9 @@ structure Cons (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CStat
 /-- **The invariant of the combined game.**
 
 The facts of every run hold, and so do the others while no collision has happened. -/
-def Inv (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg E C Msg)
+def CombInv (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg E C Msg)
     (c : ACache Msg Dg E C) : Prop :=
-  Struct P iv cs c ∧ (cs.bad = false → ¬ EC P iv cs.vis c → Cons P iv cs c)
+  CombStruct P iv cs c ∧ (cs.bad = false → ¬ HiddenCollision P iv cs.vis c → CombCons P iv cs c)
 
 end Edges
 
@@ -156,7 +157,7 @@ theorem mem_knownC_cons {σ : SimState Dg E C} {x y : SpongeState Dg E C}
 
 /-- The capacity of a rooted state is visible. -/
 theorem chain_cap_mem_knownC [XorOp Dg] [XorOp E] (P : Padding Msg (Dg × E))
-    {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hS : Struct P iv cs c)
+    {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hS : CombStruct P iv cs c)
     {p : SpongeState Dg E C × List (Dg × E)} (hp : p ∈ cs.sim.chains) :
     p.1.2 ∈ knownC iv cs.sim := by
   by_cases h : p.2 = []
@@ -169,4 +170,4 @@ theorem chain_cap_mem_knownC [XorOp Dg] [XorOp E] (P : Padding Msg (Dg × E))
 
 end Known
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

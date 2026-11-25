@@ -12,7 +12,7 @@ The visible game without the queries of the sponge is the simulator over path va
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -40,7 +40,7 @@ theorem combIdeal_proj (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
   · simp only [combIdeal, combStep, combFwd, visImpl, StateT.run_map, StateT.run_mk,
       map_bind, map_pure]
     rfl
-  · simp only [combIdeal, combStep, combInv, visImpl, StateT.run_map, StateT.run_mk,
+  · simp only [combIdeal, combStep, combInverse, visImpl, StateT.run_map, StateT.run_mk,
       map_bind, map_pure]
     rfl
   · simp only [combIdeal, combStep, combHash, visImpl, StateT.run_map, StateT.run_mk,
@@ -71,4 +71,4 @@ theorem map_run_visImpl_false {α : Type}
       (simulateQ (idealTImpl P) oa).run vs.1 :=
   OracleComp.map_run_simulateQ_eq_of_query_map_eq _ _ _ (visImpl_false_proj P iv) oa vs
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

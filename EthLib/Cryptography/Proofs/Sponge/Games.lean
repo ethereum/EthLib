@@ -20,7 +20,7 @@ It is in their §4.3.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -39,6 +39,23 @@ abbrev coinQuery {σ : Type} (n : ℕ) :
   (liftM ((unifSpec + ASpec Msg Dg E C).query (.inl n)) :
     OracleComp (unifSpec + ASpec Msg Dg E C) (Fin (n + 1)))
 
+/-! ## Cached values of paths -/
+
+/-- The cache of the random oracles of the intermediate games. -/
+abbrev ACache (Msg Dg E C : Type) := (ASpec Msg Dg E C).QueryCache
+
+/-- The cached value of a path, when the answers it reads are cached. -/
+noncomputable def cachedPathValue (P : Padding Msg (Dg × E)) (c : ACache Msg Dg E C)
+    (β : List (Dg × E)) : Option (SpongeState Dg E C) :=
+  match P.unpad β with
+  | some m => (c (.inl m)).bind fun d => (c (.inr β)).map fun t => ((d, t.1.2), t.2)
+  | none => c (.inr β)
+
+/-- The oracle points that the value of the path `β` reads. -/
+def ValPt (P : Padding Msg (Dg × E)) (β : List (Dg × E)) : (ASpec Msg Dg E C).Domain → Prop
+  | .inl m => P.unpad β = some m
+  | .inr γ => γ = β
+
 section Setting
 
 variable [SampleableType Dg] [SampleableType E] [SampleableType C]
@@ -48,7 +65,7 @@ noncomputable abbrev drawSt : OracleComp (unifSpec + ASpec Msg Dg E C) (SpongeSt
   liftM ($ᵗ (SpongeState Dg E C))
 
 /-- The value at a path: the oracle on paths, with the hash as digest when the path pads. -/
-noncomputable def val (P : Padding Msg (Dg × E)) (β : List (Dg × E)) :
+noncomputable def pathValue (P : Padding Msg (Dg × E)) (β : List (Dg × E)) :
     OracleComp (unifSpec + ASpec Msg Dg E C) (SpongeState Dg E C) :=
   match P.unpad β with
   -- The path pads the message `m`: the digest is the hash of `m`, the rest comes from the path.
@@ -85,7 +102,7 @@ noncomputable def visFwd (P : Padding Msg (Dg × E)) (x u : SpongeState Dg E C)
   | none =>
     match chainOf σ.chains x with
     | some (s, β) => do
-      let v ← val P (β ++ [blockTo s x])
+      let v ← pathValue P (β ++ [blockTo s x])
       pure (v, σ.recordRooted x v (β ++ [blockTo s x]), some (β ++ [blockTo s x], v))
     -- A new state that is not rooted gets the uniform draw `u`.
     | none => pure (u, σ.record x u, none)
@@ -152,7 +169,7 @@ noncomputable def allWalk (P : Padding Msg (Dg × E)) (used : List (Dg × E) →
   | _, s, A, [] => pure (s, A)
   | pre, s, A, B :: bs => do
     -- Each block draws the value of the path so far and a uniform state.
-    let v ← val P (pre ++ [B])
+    let v ← pathValue P (pre ++ [B])
     let u ← drawSt
     match A.lookup (absorb s B) with
     | some y => allWalk P used (pre ++ [B]) y A bs
@@ -166,7 +183,7 @@ noncomputable def skel (P : Padding Msg (Dg × E)) :
     List (Dg × E) → List (Dg × E) → OracleComp (unifSpec + ASpec Msg Dg E C) Unit
   | _, [] => pure ()
   | pre, B :: bs => do
-    let _ ← val (C := C) P (pre ++ [B])
+    let _ ← pathValue (C := C) P (pre ++ [B])
     let _ ← drawSt (Msg := Msg) (C := C)
     skel P (pre ++ [B]) bs
 
@@ -214,7 +231,7 @@ def invOut (iv : SpongeState Dg E C) (cs : CState Dg E C Msg) (y u : SpongeState
     cs.bad || hitsKnown iv cs.sim ((cs.sim.edges.map Prod.swap).lookup y).isNone u.2⟩)
 
 /-- The combined inverse step. -/
-noncomputable def combInv (iv : SpongeState Dg E C) (y : SpongeState Dg E C) :
+noncomputable def combInverse (iv : SpongeState Dg E C) (y : SpongeState Dg E C) :
     StateT (CState Dg E C Msg) (OracleComp (unifSpec + ASpec Msg Dg E C))
       (SpongeState Dg E C × SpongeState Dg E C) := StateT.mk fun cs => do
   let u ← drawSt
@@ -244,7 +261,7 @@ noncomputable def combStep (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
     let u ← coinQuery n
     pure (u, u)
   | .inl (.inr (.inl x)) => combFwd P iv x
-  | .inl (.inr (.inr y)) => combInv iv y
+  | .inl (.inr (.inr y)) => combInverse iv y
   | .inr m => combHash P iv m
 
 /-- The combined game with the real answers: the real world over random functions. -/
@@ -288,6 +305,20 @@ noncomputable def visImpl (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) 
     let d ← queryRight (hs := ASpec Msg Dg E C) (.inl m)
     pure (d, (vs.1, m :: vs.2.1, vs.2.2))
 
+/-! ## The walk of the full view as a function -/
+
+/-- The walk of the full view, as a function of the path values `vf` and the uniform draws `us`. -/
+def detWalk (used : List (Dg × E) → Bool) (vf : List (Dg × E) → SpongeState Dg E C) :
+    List (Dg × E) → SpongeState Dg E C → PermCache (SpongeState Dg E C) → List (Dg × E) →
+      List (SpongeState Dg E C) → SpongeState Dg E C × PermCache (SpongeState Dg E C)
+  | _, s, A, [], _ => (s, A)
+  | pre, s, A, B :: bs, us =>
+    match A.lookup (absorb s B) with
+    | some y => detWalk used vf (pre ++ [B]) y A bs us.tail
+    | none =>
+      let y := if used (pre ++ [B]) then us.headD s else vf (pre ++ [B])
+      detWalk used vf (pre ++ [B]) y ((absorb s B, y) :: A) bs us.tail
+
 end Setting
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

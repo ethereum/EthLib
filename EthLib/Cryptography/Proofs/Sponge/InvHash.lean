@@ -14,7 +14,7 @@ So without a collision, the walk ends in the value of the padded path, whose dig
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -147,10 +147,10 @@ variable [DecidableEq Msg] [SampleableType Dg] [SampleableType E] [SampleableTyp
   [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E]
 
 /-- **The hash step keeps the invariant.** -/
-theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv P iv cs c)
+theorem combInv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : CombInv P iv cs c)
     (m : Msg) {z : ((Dg × Dg) × CState Dg E C Msg) × ACache Msg Dg E C}
     (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
-      ((combHash P iv m).run cs)).run c)) : Inv P iv z.1.2 z.2 := by
+      ((combHash P iv m).run cs)).run c)) : CombInv P iv z.1.2 z.2 := by
   obtain ⟨hS, hcond⟩ := hI
   obtain ⟨w, c₁, d, hw, hd, hz1⟩ := combHash_support P iv m cs c hz
   obtain ⟨hcc₁, hcached, -, us, hdet⟩ := allWalk_support P _ [] iv cs.all (P.pad m) c hw
@@ -177,11 +177,12 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
       exact ⟨by simpa [List.take_eq_nil_iff] using List.ne_nil_of_length_pos (by omega),
         List.take_prefix _ _⟩
   -- The values of the paths along the padded message.
-  set vf : List (Dg × E) → SpongeState Dg E C := fun β => (valC P c' β).getD iv with hvf
-  have hvfc : ∀ i < pm.length, valC P c' (pm.take (i + 1)) = some (vf (pm.take (i + 1))) := by
+  set vf : List (Dg × E) → SpongeState Dg E C := fun β => (cachedPathValue P c' β).getD iv with hvf
+  have hvfc : ∀ i < pm.length,
+      cachedPathValue P c' (pm.take (i + 1)) = some (vf (pm.take (i + 1))) := by
     intro i hi
     obtain ⟨v, hv⟩ := Option.ne_none_iff_exists'.mp (hcached i hi)
-    have h' := valC_mono P hc₁c' hv
+    have h' := cachedPathValue_mono P hc₁c' hv
     rw [h']
     simp [hvf, h']
   have hw_eq : w = detWalk (usedPath P cs.sim.chains cs.hashed) vf [] iv cs.all pm us :=
@@ -189,7 +190,7 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
       obtain ⟨v, hv⟩ := Option.ne_none_iff_exists'.mp (hcached i hi)
       rw [hv]
       have := hvfc i hi
-      rw [valC_mono P hc₁c' hv] at this
+      rw [cachedPathValue_mono P hc₁c' hv] at this
       exact this
   have hsv : ∀ i ≤ pm.length, svC P iv c' (pm.take i) = some (walkState vf [] iv pm i) := by
     intro i hi
@@ -198,7 +199,7 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
     · rw [svC_of_ne_nil (by simp [List.take_eq_nil_iff, hpm0]), hvfc i (by omega)]
       simp [walkState]
   -- The facts of every run.
-  have hS' : Struct P iv cs' c' := by
+  have hS' : CombStruct P iv cs' c' := by
     refine ⟨hS.root, fun p hp => svC_mono hcc' (hS.chainVal p hp), hS.chainEdge,
       fun β hβ => ?_⟩
     rcases hPath_cons_iff.mp (hhashed ▸ hβ) with h | h
@@ -206,17 +207,17 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
       rw [hvfc i hi]
       simp
     · obtain ⟨v, hv⟩ := Option.ne_none_iff_exists'.mp (hS.hCached β h)
-      rw [valC_mono P hcc' hv]
+      rw [cachedPathValue_mono P hcc' hv]
       simp
   refine ⟨hS', fun hbad hEC' => ?_⟩
   have hHid : ∀ β, Hidden P cs.vis β → Hidden P cs'.vis β := fun β hβ =>
     ⟨hPath_cons_iff.mpr (Or.inr hβ.1), hβ.2⟩
-  have hEC : ¬ EC P iv cs.vis c := by
+  have hEC : ¬ HiddenCollision P iv cs.vis c := by
     rintro ⟨β, v, hβ, hv, h⟩
-    refine hEC' ⟨β, v, hHid β hβ, valC_mono P hcc' hv, ?_⟩
+    refine hEC' ⟨β, v, hHid β hβ, cachedPathValue_mono P hcc' hv, ?_⟩
     rcases h with h | ⟨γ, w', hγ, hne, hw', hwv⟩
     · exact Or.inl h
-    · exact Or.inr ⟨γ, w', hHid γ hγ, hne, valC_mono P hcc' hw', hwv⟩
+    · exact Or.inr ⟨γ, w', hHid γ hγ, hne, cachedPathValue_mono P hcc' hw', hwv⟩
   have hC := hcond hbad hEC
   have hV' : VisCons cs'.sim := hC.vis
   -- The target pairs.
@@ -273,7 +274,7 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
       obtain rfl := svC_eq_of_le hcc' hs₀ (hsv i (by omega))
       have := hvfc i hi
       rw [List.take_succ_eq_append_getElem hi] at this
-      obtain rfl := valC_eq_of_le hcc' hv₀ this
+      obtain rfl := cachedPathValue_eq_of_le hcc' hv₀ this
       refine (hC.allMem _).mpr (Or.inr ⟨pm.take i, pm[i], _, _, hhid, hs₀, hv₀, ?_⟩)
       rw [List.take_succ_eq_append_getElem hi]
   obtain ⟨hw1, hwG, hwA, hwN⟩ := detWalk_spec (usedPath P cs.sim.chains cs.hashed) vf G hfun
@@ -287,7 +288,7 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
     have hv := hvfc (pm.length - 1) (by omega)
     rw [Nat.sub_add_cancel hlen, List.take_length] at hv
     rw [hw1]
-    simp only [valC, hpm, P.unpad_pad, hd'] at hv
+    simp only [cachedPathValue, hpm, P.unpad_pad, hd'] at hv
     simp only [Option.bind_some, Option.map_eq_some_iff] at hv
     obtain ⟨t, -, ht⟩ := hv
     rw [← ht]
@@ -312,10 +313,10 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
         obtain ⟨v₀, hv₀⟩ := Option.ne_none_iff_exists'.mp (hS.hCached _ h)
         obtain ⟨s₀, hs₀⟩ := svC_known hS (knownPath_init hS (Or.inr hhid))
         obtain rfl := svC_eq_of_le hcc' hs₀ ht
-        obtain rfl := valC_eq_of_le hcc' hv₀ hv
+        obtain rfl := cachedPathValue_eq_of_le hcc' hv₀ hv
         exact hwA _ ((hC.allMem _).mpr (Or.inr ⟨γ, G', _, _, hhid, hs₀, hv₀, rfl⟩))
   · simp [hcs', hashOut, hdig, hC.noDiff]
 
 end Walk
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

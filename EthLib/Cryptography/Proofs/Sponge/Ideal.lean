@@ -15,7 +15,7 @@ So the two have one law once the answers of the oracle on paths are forgotten.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -68,13 +68,13 @@ theorem ideal_hash_run (m : Msg) (σ : SimState Dg E C) (c : (Msg →ₒ Dg).Que
 
 omit [XorOp Dg] [XorOp E] [DecidableEq C] in
 /-- The value of a path that pads a message, at a path the oracle on paths has not answered. -/
-theorem val_run_fresh_some {β : List (Dg × E)} {m : Msg} (hm : P.unpad β = some m)
+theorem pathValue_run_fresh_some {β : List (Dg × E)} {m : Msg} (hm : P.unpad β = some m)
     (c : ACache Msg Dg E C) (hβ : c (.inr β) = none) :
-    (simulateQ (ASpec Msg Dg E C).romImpl (val P β)).run c =
+    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =
       (((ASpec Msg Dg E C).randomOracle (.inl m)).run c >>= fun w =>
         ($ᵗ (SpongeState Dg E C)) >>= fun t =>
           pure (((w.1, t.1.2), t.2), w.2.cacheQuery (.inr β) t)) := by
-  simp only [val, hm, simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure,
+  simp only [pathValue, hm, simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure,
     StateT.run_pure]
   refine bind_congr_of_forall_mem_support _ fun w hw => ?_
   have hwβ : w.2 (.inr β) = none := by
@@ -85,11 +85,11 @@ theorem val_run_fresh_some {β : List (Dg × E)} {m : Msg} (hm : P.unpad β = so
 
 omit [XorOp Dg] [XorOp E] [DecidableEq C] in
 /-- The value of a path that pads no message, at a path the oracle on paths has not answered. -/
-theorem val_run_fresh_none {β : List (Dg × E)} (hm : P.unpad β = none)
+theorem pathValue_run_fresh_none {β : List (Dg × E)} (hm : P.unpad β = none)
     (c : ACache Msg Dg E C) (hβ : c (.inr β) = none) :
-    (simulateQ (ASpec Msg Dg E C).romImpl (val P β)).run c =
+    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =
       (($ᵗ (SpongeState Dg E C)) >>= fun t => pure (t, c.cacheQuery (.inr β) t)) := by
-  simp only [val, hm, run_queryRight]
+  simp only [pathValue, hm, run_queryRight]
   rw [randomOracle.run_eq]
   simp [hβ]
 
@@ -138,11 +138,11 @@ theorem idealT_step_evalDistEq (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domai
         simp only [visFwd, hy, hch, simulateQ_bind, StateT.run_bind, simulateQ_pure,
           StateT.run_pure]
         rcases hm : P.unpad (β ++ [blockTo s x]) with _ | m
-        · rw [val_run_fresh_none P hm c hfresh, rootedAnswer_run_none P hm]
+        · rw [pathValue_run_fresh_none P hm c hfresh, rootedAnswer_run_none P hm]
           simp only [bind_assoc, pure_bind, map_bind, map_pure, bind_map_left]
           refine (EvalDistEq.bind_const _ _).trans ?_
           simp [leftCache_cacheQuery_inr, projT]
-        · rw [val_run_fresh_some P hm c hfresh, rootedAnswer_run_some P hm,
+        · rw [pathValue_run_fresh_some P hm c hfresh, rootedAnswer_run_some P hm,
             ← leftCache_randomOracle_inl]
           simp only [bind_assoc, pure_bind, map_bind, map_pure, bind_map_left]
           refine (EvalDistEq.bind_const _ _).trans (EvalDistEq.bind_right _ fun w => ?_)
@@ -201,4 +201,4 @@ theorem idealTGame_evalDistEq_idealGame {α : Type}
 
 end Setting
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

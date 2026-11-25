@@ -14,7 +14,7 @@ The pairs the full view should hold then form a partial bijection.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -31,12 +31,12 @@ theorem HPath.ne_nil {L : List Msg} {β : List (Dg × E)} (h : HPath P L β) : �
 
 /-- The state at the end of a nonempty path is its value. -/
 theorem svC_of_ne_nil {c : ACache Msg Dg E C} {β : List (Dg × E)} (h : β ≠ []) :
-    svC P iv c β = valC P c β := by
+    svC P iv c β = cachedPathValue P c β := by
   simp [svC, h]
 
 /-- The state at the end of a hidden path is its value. -/
 theorem svC_of_hidden {vs : VState Dg E C Msg} {c : ACache Msg Dg E C} {β : List (Dg × E)}
-    (h : Hidden P vs β) : svC P iv c β = valC P c β :=
+    (h : Hidden P vs β) : svC P iv c β = cachedPathValue P c β :=
   svC_of_ne_nil h.1.ne_nil
 
 /-- Without its last block, a prefix of a hashed padding is empty or such a prefix. -/
@@ -55,8 +55,8 @@ theorem exists_chain_of_mem_vPaths {σ : SimState Dg E C} {β : List (Dg × E)}
 
 /-- The value of a hidden path has no visible capacity. -/
 theorem hidden_cap_notMem {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
-    (hEC : ¬ EC P iv cs.vis c) {β : List (Dg × E)} {v : SpongeState Dg E C}
-    (hβ : Hidden P cs.vis β) (hv : valC P c β = some v) : v.2 ∉ knownC iv cs.sim :=
+    (hEC : ¬ HiddenCollision P iv cs.vis c) {β : List (Dg × E)} {v : SpongeState Dg E C}
+    (hβ : Hidden P cs.vis β) (hv : cachedPathValue P c β = some v) : v.2 ∉ knownC iv cs.sim :=
   fun h => hEC ⟨β, v, hβ, hv, Or.inl h⟩
 
 section Xor
@@ -64,11 +64,11 @@ section Xor
 variable [XorOp Dg] [XorOp E] {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
 
 /-- The empty path is rooted. -/
-theorem nil_mem_vPaths (hS : Struct P iv cs c) : ([] : List (Dg × E)) ∈ vPaths cs.sim :=
+theorem nil_mem_vPaths (hS : CombStruct P iv cs c) : ([] : List (Dg × E)) ∈ vPaths cs.sim :=
   List.mem_map.mpr ⟨(iv, []), hS.root, rfl⟩
 
 /-- Known paths stay known without their last block. -/
-theorem knownPath_init (hS : Struct P iv cs c) {β : List (Dg × E)} {B : Dg × E}
+theorem knownPath_init (hS : CombStruct P iv cs c) {β : List (Dg × E)} {B : Dg × E}
     (h : KnownPath P cs (β ++ [B])) : KnownPath P cs β := by
   rcases h with h | h
   · obtain ⟨v, hv⟩ := exists_chain_of_mem_vPaths h
@@ -88,7 +88,7 @@ theorem chain_eq_of_cap (hC : VisCons cs.sim) {p q : SpongeState Dg E C × List 
   List.inj_on_of_nodup_map hC.chainCap hp hq h
 
 /-- Rooted states with the same path are the same. -/
-theorem chain_eq_of_path (hS : Struct P iv cs c) (hC : VisCons cs.sim)
+theorem chain_eq_of_path (hS : CombStruct P iv cs c) (hC : VisCons cs.sim)
     {p q : SpongeState Dg E C × List (Dg × E)} (hp : p ∈ cs.sim.chains)
     (hq : q ∈ cs.sim.chains) (h : p.2 = q.2) : p = q := by
   have h1 := hS.chainVal p hp
@@ -100,7 +100,8 @@ theorem chain_eq_of_path (hS : Struct P iv cs c) (hC : VisCons cs.sim)
 /-- **Capacities determine known paths.**
 
 Without a collision, the states at the ends of distinct known paths have distinct capacities. -/
-theorem sv_cap_inj (hS : Struct P iv cs c) (hC : VisCons cs.sim) (hEC : ¬ EC P iv cs.vis c)
+theorem sv_cap_inj (hS : CombStruct P iv cs c) (hC : VisCons cs.sim)
+    (hEC : ¬ HiddenCollision P iv cs.vis c)
     {β γ : List (Dg × E)} {s s' : SpongeState Dg E C} (hβ : KnownPath P cs β)
     (hγ : KnownPath P cs γ) (hs : svC P iv c β = some s) (hs' : svC P iv c γ = some s')
     (h : s.2 = s'.2) : β = γ := by
@@ -132,33 +133,17 @@ theorem sv_cap_inj (hS : Struct P iv cs c) (hC : VisCons cs.sim) (hEC : ¬ EC P 
     exact hEC ⟨β, s, hβ, (svC_of_hidden hβ) ▸ hs, Or.inr ⟨γ, s', hγ, Ne.symm hne,
       (svC_of_hidden hγ) ▸ hs', h.symm⟩⟩
 
-variable [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E]
-
-/-- **States of the sponge determine known paths.** -/
-theorem node_inj (hS : Struct P iv cs c) (hC : VisCons cs.sim) (hEC : ¬ EC P iv cs.vis c)
-    {β γ : List (Dg × E)} {B B' : Dg × E} {s s' : SpongeState Dg E C}
-    (hβ : KnownPath P cs (β ++ [B])) (hγ : KnownPath P cs (γ ++ [B']))
-    (hs : svC P iv c β = some s) (hs' : svC P iv c γ = some s')
-    (h : absorb s B = absorb s' B') : β = γ ∧ B = B' := by
-  have hcap : s.2 = s'.2 := by simpa using congrArg Prod.snd h
-  obtain rfl := sv_cap_inj hS hC hEC (knownPath_init hS hβ) (knownPath_init hS hγ) hs hs' hcap
-  rw [hs] at hs'
-  obtain rfl := Option.some.inj hs'
-  exact ⟨rfl, absorb_injective s h⟩
-
-omit [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
 /-- A rooted pair of the simulator is the step into the value of its rooted path. -/
-theorem rootedEdge_spec (hS : Struct P iv cs c) {e : SpongeState Dg E C × SpongeState Dg E C}
+theorem rootedEdge_spec (hS : CombStruct P iv cs c) {e : SpongeState Dg E C × SpongeState Dg E C}
     (h : RootedEdge cs.sim e) :
     ∃ β B s, (β ++ [B]) ∈ vPaths cs.sim ∧ svC P iv c β = some s ∧
-      valC P c (β ++ [B]) = some e.2 ∧ e.1 = absorb s B := by
+      cachedPathValue P c (β ++ [B]) = some e.2 ∧ e.1 = absorb s B := by
   obtain ⟨s, β, B, hs, hv, he⟩ := h
   refine ⟨β, B, s, List.mem_map.mpr ⟨_, hv, rfl⟩, hS.chainVal _ hs, ?_, he⟩
   simpa [svC] using hS.chainVal _ hv
 
-omit [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
 /-- The query of a pair that is not rooted is no state of the sponge on a known path. -/
-theorem unrooted_ne_node (hS : Struct P iv cs c) (hEC : ¬ EC P iv cs.vis c)
+theorem unrooted_ne_node (hS : CombStruct P iv cs c) (hEC : ¬ HiddenCollision P iv cs.vis c)
     {e : SpongeState Dg E C × SpongeState Dg E C} (he : e ∈ cs.sim.edges)
     (hun : ∀ p ∈ cs.sim.chains, p.1.2 ≠ e.1.2) {β : List (Dg × E)} {B : Dg × E}
     {s : SpongeState Dg E C} (hβ : KnownPath P cs β) (hs : svC P iv c β = some s) :
@@ -175,33 +160,9 @@ theorem unrooted_ne_node (hS : Struct P iv cs c) (hEC : ¬ EC P iv cs.vis c)
     rw [← hcap]
     exact fst_mem_knownC iv he
 
-/-- The pairs the full view should hold have distinct queries. -/
-theorem gEdge_fst_inj (hS : Struct P iv cs c) (hC : VisCons cs.sim) (hEC : ¬ EC P iv cs.vis c)
-    {e e' : SpongeState Dg E C × SpongeState Dg E C} (he : GEdge P iv cs c e)
-    (he' : GEdge P iv cs c e') (h : e.1 = e'.1) : e = e' := by
-  rcases he with he | ⟨β, B, s, v, hβ, hs, hv, rfl⟩ <;>
-    rcases he' with he' | ⟨β', B', s', v', hβ', hs', hv', rfl⟩
-  · exact List.inj_on_of_nodup_map hC.vKeys he he' h
-  · rcases hC.vClass e he with hr | hun
-    · obtain ⟨γ, G, t, hγ, ht, -, hx⟩ := rootedEdge_spec hS hr
-      obtain ⟨rfl, rfl⟩ := node_inj hS hC hEC (Or.inl hγ) (Or.inr hβ') ht hs' (hx ▸ h)
-      exact absurd hγ hβ'.2
-    · exact absurd h (unrooted_ne_node hS hEC he hun (knownPath_init hS (Or.inr hβ')) hs')
-  · rcases hC.vClass e' he' with hr | hun
-    · obtain ⟨γ, G, t, hγ, ht, -, hx⟩ := rootedEdge_spec hS hr
-      obtain ⟨rfl, rfl⟩ := node_inj hS hC hEC (Or.inl hγ) (Or.inr hβ) ht hs (hx ▸ h.symm)
-      exact absurd hγ hβ.2
-    · exact absurd h.symm (unrooted_ne_node hS hEC he' hun (knownPath_init hS (Or.inr hβ)) hs)
-  · obtain ⟨rfl, rfl⟩ := node_inj hS hC hEC (Or.inr hβ) (Or.inr hβ') hs hs' h
-    rw [hs] at hs'
-    obtain rfl := Option.some.inj hs'
-    rw [hv] at hv'
-    obtain rfl := Option.some.inj hv'
-    rfl
-
-omit [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
 /-- The pairs the full view should hold have distinct answers. -/
-theorem gEdge_snd_inj (hS : Struct P iv cs c) (hC : VisCons cs.sim) (hEC : ¬ EC P iv cs.vis c)
+theorem gEdge_snd_inj (hS : CombStruct P iv cs c) (hC : VisCons cs.sim)
+    (hEC : ¬ HiddenCollision P iv cs.vis c)
     {e e' : SpongeState Dg E C × SpongeState Dg E C} (he : GEdge P iv cs c e)
     (he' : GEdge P iv cs c e') (h : e.2 = e'.2) : e = e' := by
   rcases he with he | ⟨β, B, s, v, hβ, hs, hv, rfl⟩ <;>
@@ -225,6 +186,46 @@ theorem gEdge_snd_inj (hS : Struct P iv cs c) (hC : VisCons cs.sim) (hEC : ¬ EC
     obtain rfl := Option.some.inj hs'
     rfl
 
+variable [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E]
+
+/-- **States of the sponge determine known paths.** -/
+theorem node_inj (hS : CombStruct P iv cs c) (hC : VisCons cs.sim)
+    (hEC : ¬ HiddenCollision P iv cs.vis c)
+    {β γ : List (Dg × E)} {B B' : Dg × E} {s s' : SpongeState Dg E C}
+    (hβ : KnownPath P cs (β ++ [B])) (hγ : KnownPath P cs (γ ++ [B']))
+    (hs : svC P iv c β = some s) (hs' : svC P iv c γ = some s')
+    (h : absorb s B = absorb s' B') : β = γ ∧ B = B' := by
+  have hcap : s.2 = s'.2 := by simpa using congrArg Prod.snd h
+  obtain rfl := sv_cap_inj hS hC hEC (knownPath_init hS hβ) (knownPath_init hS hγ) hs hs' hcap
+  rw [hs] at hs'
+  obtain rfl := Option.some.inj hs'
+  exact ⟨rfl, absorb_injective s h⟩
+
+/-- The pairs the full view should hold have distinct queries. -/
+theorem gEdge_fst_inj (hS : CombStruct P iv cs c) (hC : VisCons cs.sim)
+    (hEC : ¬ HiddenCollision P iv cs.vis c)
+    {e e' : SpongeState Dg E C × SpongeState Dg E C} (he : GEdge P iv cs c e)
+    (he' : GEdge P iv cs c e') (h : e.1 = e'.1) : e = e' := by
+  rcases he with he | ⟨β, B, s, v, hβ, hs, hv, rfl⟩ <;>
+    rcases he' with he' | ⟨β', B', s', v', hβ', hs', hv', rfl⟩
+  · exact List.inj_on_of_nodup_map hC.vKeys he he' h
+  · rcases hC.vClass e he with hr | hun
+    · obtain ⟨γ, G, t, hγ, ht, -, hx⟩ := rootedEdge_spec hS hr
+      obtain ⟨rfl, rfl⟩ := node_inj hS hC hEC (Or.inl hγ) (Or.inr hβ') ht hs' (hx ▸ h)
+      exact absurd hγ hβ'.2
+    · exact absurd h (unrooted_ne_node hS hEC he hun (knownPath_init hS (Or.inr hβ')) hs')
+  · rcases hC.vClass e' he' with hr | hun
+    · obtain ⟨γ, G, t, hγ, ht, -, hx⟩ := rootedEdge_spec hS hr
+      obtain ⟨rfl, rfl⟩ := node_inj hS hC hEC (Or.inl hγ) (Or.inr hβ) ht hs (hx ▸ h.symm)
+      exact absurd hγ hβ.2
+    · exact absurd h.symm (unrooted_ne_node hS hEC he' hun (knownPath_init hS (Or.inr hβ)) hs)
+  · obtain ⟨rfl, rfl⟩ := node_inj hS hC hEC (Or.inr hβ) (Or.inr hβ') hs hs' h
+    rw [hs] at hs'
+    obtain rfl := Option.some.inj hs'
+    rw [hv] at hv'
+    obtain rfl := Option.some.inj hv'
+    rfl
+
 end Xor
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

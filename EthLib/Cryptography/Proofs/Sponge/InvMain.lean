@@ -14,7 +14,7 @@ The random oracles of the game are folded into its state, so the run is a run ov
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -26,7 +26,7 @@ variable {Dg E C Msg : Type} [XorOp Dg] [XorOp E]
 omit [DecidableEq Dg] [DecidableEq E] [DecidableEq C] [DecidableEq Msg] [SampleableType Dg]
   [SampleableType E] [SampleableType C] in
 /-- The first state satisfies the invariant. -/
-theorem inv_init : Inv P iv (CState.init iv : CState Dg E C Msg) ∅ := by
+theorem combInv_init : CombInv P iv (CState.init iv : CState Dg E C Msg) ∅ := by
   refine ⟨⟨List.mem_singleton_self _, fun p hp => ?_, fun p hp hne => ?_, fun β hβ => ?_⟩,
     fun _ _ => ⟨⟨by simp [CState.init, SimState.init], by simp [CState.init, SimState.init],
       by simp [CState.init, SimState.init], by simp [CState.init, SimState.init]⟩,
@@ -59,7 +59,8 @@ theorem combStep_coin_support (n : ℕ) (cs : CState Dg E C Msg) (c : ACache Msg
 abbrev Selector (Dg E C Msg : Type) :=
   (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain) →
     (GameSpec (SpongeState Dg E C) Msg Dg).Range t ×
-      (GameSpec (SpongeState Dg E C) Msg Dg).Range t → (GameSpec (SpongeState Dg E C) Msg Dg).Range t
+      (GameSpec (SpongeState Dg E C) Msg Dg).Range t →
+        (GameSpec (SpongeState Dg E C) Msg Dg).Range t
 
 /-- The combined game with its random oracles folded into the state, answering as `sel` picks. -/
 noncomputable abbrev foldComb (sel : Selector Dg E C Msg) :
@@ -100,40 +101,41 @@ theorem foldReal_eq : foldReal P iv = foldComb P iv (fun _ => Prod.fst) := rfl
 variable [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E]
 
 /-- **Every step of the combined game keeps the invariant.** -/
-theorem inv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
-    {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv P iv cs c)
+theorem combInv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
+    {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : CombInv P iv cs c)
     {z : ((_ × _) × CState Dg E C Msg) × ACache Msg Dg E C}
     (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
-      ((combStep P iv t).run cs)).run c)) : Inv P iv z.1.2 z.2 := by
+      ((combStep P iv t).run cs)).run c)) : CombInv P iv z.1.2 z.2 := by
   rcases t with (n | x | y) | m
   · obtain ⟨h1, h2⟩ := combStep_coin_support P iv n cs c hz
     rw [h1, h2]
     exact hI
-  · exact inv_combFwd hI x hz
-  · obtain ⟨u, rfl⟩ := combInv_support iv y cs c hz
-    exact inv_invOut u hI y
-  · exact inv_combHash hI m hz
+  · exact combInv_combFwd hI x hz
+  · obtain ⟨u, rfl⟩ := combInverse_support iv y cs c hz
+    exact combInv_invOut u hI y
+  · exact combInv_combHash hI m hz
 
 /-- The invariant holds after every step of the folded game, with either answer. -/
-theorem inv_foldComb_step (sel : Selector Dg E C Msg)
+theorem combInv_foldComb_step (sel : Selector Dg E C Msg)
     (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
-    (s : CState Dg E C Msg × ACache Msg Dg E C) (hs : Inv P iv s.1 s.2)
-    {z} (hz : z ∈ support ((foldComb P iv sel t).run s)) : Inv P iv z.2.1 z.2.2 := by
+    (s : CState Dg E C Msg × ACache Msg Dg E C) (hs : CombInv P iv s.1 s.2)
+    {z} (hz : z ∈ support ((foldComb P iv sel t).run s)) : CombInv P iv z.2.1 z.2.2 := by
   obtain ⟨w, hw, hz2⟩ := mem_support_foldComb_run P iv sel t s hz
   rw [hz2]
-  exact inv_combStep P iv t hs hw
+  exact combInv_combStep P iv t hs hw
 
 /-- **Answers differ only after a collision.**
 
 On every run of the folded game from the first state, a differing answer means a collision. -/
-theorem diff_imp_bad_or_EC (sel : Selector Dg E C Msg) {α : Type}
+theorem bad_or_hiddenCollision_of_diff (sel : Selector Dg E C Msg) {α : Type}
     (oa : OracleComp (GameSpec (SpongeState Dg E C) Msg Dg) α)
     {z} (hz : z ∈ support ((simulateQ (foldComb P iv sel) oa).run
       ((CState.init iv : CState Dg E C Msg), ∅))) :
-    z.2.1.diff = true → z.2.1.bad = true ∨ EC P iv z.2.1.vis z.2.2 := by
+    z.2.1.diff = true → z.2.1.bad = true ∨ HiddenCollision P iv z.2.1.vis z.2.2 := by
   have hI := simulateQ_run_preserves_inv_of_query (spec' := unifSpec) _
-    (fun s => Inv P iv s.1 s.2) (fun t s hs z hz => inv_foldComb_step P iv sel t s hs hz) oa _
-    (inv_init P iv) z hz
+    (fun s => CombInv P iv s.1 s.2)
+    (fun t s hs z hz => combInv_foldComb_step P iv sel t s hs hz) oa _
+    (combInv_init P iv) z hz
   intro hdiff
   by_contra h
   push Not at h
@@ -141,4 +143,4 @@ theorem diff_imp_bad_or_EC (sel : Selector Dg E C Msg) {α : Type}
   rw [hC.noDiff] at hdiff
   exact Bool.false_ne_true hdiff
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

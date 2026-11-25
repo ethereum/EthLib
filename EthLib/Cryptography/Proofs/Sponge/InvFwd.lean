@@ -14,7 +14,7 @@ An inverse query is recorded or new, with the same conclusion.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -29,13 +29,14 @@ theorem svC_mono {c c' : ACache Msg Dg E C} (h : c ≤ c') {β : List (Dg × E)}
   split at hs
   · simp_all
   · simp only [*, ite_false]
-    exact valC_mono P h hs
+    exact cachedPathValue_mono P h hs
 
 /-- A value cached before a step is the value after. -/
-theorem valC_eq_of_le {c c' : ACache Msg Dg E C} (h : c ≤ c') {β : List (Dg × E)}
-    {v v' : SpongeState Dg E C} (hv : valC P c β = some v) (hv' : valC P c' β = some v') :
+theorem cachedPathValue_eq_of_le {c c' : ACache Msg Dg E C} (h : c ≤ c') {β : List (Dg × E)}
+    {v v' : SpongeState Dg E C} (hv : cachedPathValue P c β = some v)
+    (hv' : cachedPathValue P c' β = some v') :
     v = v' := by
-  rw [valC_mono P h hv] at hv'
+  rw [cachedPathValue_mono P h hv] at hv'
   exact Option.some.inj hv'
 
 /-- The state at the end of a path, cached before a step, is the state after. -/
@@ -54,10 +55,10 @@ theorem hiddenEdge_mono {vs vs' : VState Dg E C Msg} {c c' : ACache Msg Dg E C} 
     (hH : ∀ β, Hidden P vs β → Hidden P vs' β) {e : SpongeState Dg E C × SpongeState Dg E C}
     (he : HiddenEdge P iv vs c e) : HiddenEdge P iv vs' c' e := by
   obtain ⟨β, B, s, v, hβ, hs, hv, rfl⟩ := he
-  exact ⟨β, B, s, v, hH _ hβ, svC_mono hc hs, valC_mono P hc hv, rfl⟩
+  exact ⟨β, B, s, v, hH _ hβ, svC_mono hc hs, cachedPathValue_mono P hc hv, rfl⟩
 
 /-- The state at the end of a known path is cached. -/
-theorem svC_known {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hS : Struct P iv cs c)
+theorem svC_known {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hS : CombStruct P iv cs c)
     {β : List (Dg × E)} (h : KnownPath P cs β) : ∃ s, svC P iv c β = some s := by
   rcases h with h | h
   · obtain ⟨s, hs⟩ := exists_chain_of_mem_vPaths h
@@ -66,22 +67,22 @@ theorem svC_known {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hS : Struct 
     exact ⟨v, (svC_of_hidden h).trans hv⟩
 
 /-- The facts of every run read only the simulator and the hashed messages. -/
-theorem Struct.of_eq {cs cs' : CState Dg E C Msg} {c : ACache Msg Dg E C}
-    (h : Struct P iv cs c) (h1 : cs'.sim = cs.sim) (h2 : cs'.hashed = cs.hashed) :
-    Struct P iv cs' c := by
+theorem CombStruct.of_eq {cs cs' : CState Dg E C Msg} {c : ACache Msg Dg E C}
+    (h : CombStruct P iv cs c) (h1 : cs'.sim = cs.sim) (h2 : cs'.hashed = cs.hashed) :
+    CombStruct P iv cs' c := by
   obtain ⟨a, b, d, e⟩ := h
   exact ⟨h1 ▸ a, h1 ▸ b, h1 ▸ d, h2 ▸ e⟩
 
 /-- Hidden pairs after a step were hidden before, when hidden paths were and the cache grew. -/
 theorem hiddenEdge_back {cs : CState Dg E C Msg} {vs' : VState Dg E C Msg}
-    {c c' : ACache Msg Dg E C} (hS : Struct P iv cs c) (hc : c ≤ c')
+    {c c' : ACache Msg Dg E C} (hS : CombStruct P iv cs c) (hc : c ≤ c')
     (hH : ∀ δ, Hidden P vs' δ → Hidden P cs.vis δ) {e : SpongeState Dg E C × SpongeState Dg E C}
     (he : HiddenEdge P iv vs' c' e) : HiddenEdge P iv cs.vis c e := by
   obtain ⟨γ, G, t, w, hδ, ht, hw, rfl⟩ := he
   have hδ0 := hH _ hδ
   obtain ⟨w₀, hw₀⟩ := Option.ne_none_iff_exists'.mp (hS.hCached _ hδ0.1)
   obtain ⟨t₀, ht₀⟩ := svC_known hS (knownPath_init hS (Or.inr hδ0))
-  obtain rfl := valC_eq_of_le hc hw₀ hw
+  obtain rfl := cachedPathValue_eq_of_le hc hw₀ hw
   obtain rfl := svC_eq_of_le hc ht₀ ht
   exact ⟨γ, G, t₀, w₀, hδ0, ht₀, hw₀, rfl⟩
 
@@ -113,69 +114,44 @@ theorem visCons_cons {σ : SimState Dg E C} (hV : VisCons σ) {x y : SpongeState
         · exact hun p hpo
         · exact hold e he p hp hpo
 
-variable [DecidableEq Dg] [DecidableEq E] [DecidableEq C] [Zero Dg] [Zero E]
-  [LawfulXor Dg] [LawfulXor E]
+variable [DecidableEq Dg] [DecidableEq E] [DecidableEq C]
 
 /-! ## Lookups in the full view -/
 
-/-- The full view answers a forward query with the pair it should hold. -/
-theorem lookup_all {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
-    (hS : Struct P iv cs c) (hC : Cons P iv cs c) (hEC : ¬ EC P iv cs.vis c)
-    {x y : SpongeState Dg E C} (h : GEdge P iv cs c (x, y)) : cs.all.lookup x = some y :=
-  lookup_eq_some_of_mem ((hC.allMem _).mpr h) fun e he hex => by
-    rw [gEdge_fst_inj hS hC.vis hEC ((hC.allMem e).mp he) h hex]
-
-omit [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
 /-- The full view answers an inverse query with the pair it should hold. -/
 theorem lookup_swap_all {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
-    (hS : Struct P iv cs c) (hC : Cons P iv cs c) (hEC : ¬ EC P iv cs.vis c)
+    (hS : CombStruct P iv cs c) (hC : CombCons P iv cs c) (hEC : ¬ HiddenCollision P iv cs.vis c)
     {x y : SpongeState Dg E C} (h : GEdge P iv cs c (x, y)) :
     (cs.all.map Prod.swap).lookup y = some x :=
   lookup_swap_eq_some_of_mem ((hC.allMem _).mpr h) fun e he hey => by
     rw [gEdge_snd_inj hS hC.vis hEC ((hC.allMem e).mp he) h hey]
 
-omit [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
 /-- The full view has no forward answer where it should hold no pair. -/
 theorem lookup_all_none {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
-    (hC : Cons P iv cs c) {x : SpongeState Dg E C} (h : ∀ y, ¬ GEdge P iv cs c (x, y)) :
+    (hC : CombCons P iv cs c) {x : SpongeState Dg E C} (h : ∀ y, ¬ GEdge P iv cs c (x, y)) :
     cs.all.lookup x = none :=
   lookup_eq_none_of_forall fun y hy => h y ((hC.allMem _).mp hy)
 
-omit [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
 /-- The full view has no inverse answer where it should hold no pair. -/
 theorem lookup_swap_all_none {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
-    (hC : Cons P iv cs c) {y : SpongeState Dg E C} (h : ∀ x, ¬ GEdge P iv cs c (x, y)) :
+    (hC : CombCons P iv cs c) {y : SpongeState Dg E C} (h : ∀ x, ¬ GEdge P iv cs c (x, y)) :
     (cs.all.map Prod.swap).lookup y = none :=
   lookup_swap_eq_none_of_forall fun x hx => h x ((hC.allMem _).mp hx)
 
-/-! ## The three forward cases -/
+/-! ## The steps that keep the invariant without injectivity of absorption -/
 
 variable (u : SpongeState Dg E C)
 
-/-- **A recorded query.** -/
-theorem inv_fwd_recorded {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
-    (hI : Inv P iv cs c) {x y : SpongeState Dg E C} (hy : cs.sim.edges.lookup x = some y) :
-    Inv P iv (fwdOut P iv cs x u (y, cs.sim, none)).2 c := by
-  obtain ⟨hS, hcond⟩ := hI
-  refine ⟨hS.of_eq rfl rfl, fun hbad hEC => ?_⟩
-  simp only [fwdOut, hy, Option.isNone_some, Bool.false_and, Bool.or_false] at hbad hEC ⊢
-  have hC := hcond hbad hEC
-  have hA := lookup_all hS hC hEC (Or.inl (mem_of_lookup_eq_some hy))
-  simp only [hA]
-  refine ⟨hC.vis, hC.allMem, ?_⟩
-  simp [hC.noDiff]
-
-omit [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
 /-- **A new query that is not rooted.** -/
-theorem inv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
-    (hI : Inv P iv cs c) {x : SpongeState Dg E C} (hy : cs.sim.edges.lookup x = none)
+theorem combInv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
+    (hI : CombInv P iv cs c) {x : SpongeState Dg E C} (hy : cs.sim.edges.lookup x = none)
     (hch : chainOf cs.sim.chains x = none) :
-    Inv P iv (fwdOut P iv cs x u (u, cs.sim.record x u, none)).2 c := by
+    CombInv P iv (fwdOut P iv cs x u (u, cs.sim.record x u, none)).2 c := by
   obtain ⟨hS, hcond⟩ := hI
   set cs' := (fwdOut P iv cs x u (u, cs.sim.record x u, none)).2
     with hcs'
   have hHid : ∀ β, Hidden P cs'.vis β ↔ Hidden P cs.vis β := fun β => Iff.rfl
-  have hS' : Struct P iv cs' c :=
+  have hS' : CombStruct P iv cs' c :=
     ⟨hS.root, hS.chainVal, fun p hp hne => by
       obtain ⟨q, hq, B, h1, h2⟩ := hS.chainEdge p hp hne
       exact ⟨q, hq, B, h1, List.mem_cons_of_mem _ h2⟩, hS.hCached⟩
@@ -183,7 +159,7 @@ theorem inv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
   have hbad0 : cs.bad = false ∧ u.2 ∉ knownC iv cs.sim := by
     simpa [hcs', fwdOut, hy] using hbad
   -- The visible capacities only grow, so there was no hidden collision before.
-  have hEC : ¬ EC P iv cs.vis c := by
+  have hEC : ¬ HiddenCollision P iv cs.vis c := by
     rintro ⟨β, v, hβ, hv, h⟩
     refine hEC' ⟨β, v, (hHid β).mpr hβ, hv, ?_⟩
     rcases h with h | ⟨γ, w, hγ, hne, hw, hwv⟩
@@ -223,22 +199,120 @@ theorem inv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
       · exact Or.inr ((hC.allMem e).mpr (Or.inr h))
   · simp [hcs', fwdOut, hA, hC.noDiff]
 
+/-- **The inverse step keeps the invariant.** -/
+theorem combInv_invOut {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : CombInv P iv cs c)
+    (y : SpongeState Dg E C) : CombInv P iv (invOut iv cs y u).2 c := by
+  obtain ⟨hS, hcond⟩ := hI
+  rcases hx : (cs.sim.edges.map Prod.swap).lookup y with _ | x
+  · -- A new inverse query.
+    set cs' := (invOut iv cs y u).2 with hcs'
+    have hsim : cs'.sim = ⟨(u, y) :: cs.sim.edges, cs.sim.chains⟩ := by
+      simp [hcs', invOut, visInv, hx]
+    have hhashed : cs'.hashed = cs.hashed := rfl
+    have hHid : ∀ β, Hidden P cs'.vis β ↔ Hidden P cs.vis β := by
+      intro β
+      simp [Hidden, CState.vis, hsim, hhashed, vPaths]
+    have hS' : CombStruct P iv cs' c := by
+      refine ⟨?_, ?_, fun p hp hne => ?_, hhashed ▸ hS.hCached⟩
+      · rw [hsim]; exact hS.root
+      · rw [hsim]; exact hS.chainVal
+      · rw [hsim] at hp ⊢
+        obtain ⟨q, hq, B, h1, h2⟩ := hS.chainEdge p hp hne
+        exact ⟨q, hq, B, h1, List.mem_cons_of_mem _ h2⟩
+    refine ⟨hS', fun hbad hEC' => ?_⟩
+    have hbad0 : cs.bad = false ∧ u.2 ∉ knownC iv cs.sim := by
+      simpa [hcs', invOut, hx] using hbad
+    have hK' : ∀ k, k ∈ knownC iv cs.sim → k ∈ knownC iv cs'.sim := fun k hk => by
+      rw [hsim]
+      exact (mem_knownC_cons iv).mpr (Or.inl hk)
+    have hEC : ¬ HiddenCollision P iv cs.vis c := by
+      rintro ⟨β, v, hβ, hv, h⟩
+      refine hEC' ⟨β, v, (hHid β).mpr hβ, hv, ?_⟩
+      rcases h with h | ⟨γ, w, hγ, hne, hw, hwv⟩
+      · exact Or.inl (hK' _ h)
+      · exact Or.inr ⟨γ, w, (hHid γ).mpr hγ, hne, hw, hwv⟩
+    have hC := hcond hbad0.1 hEC
+    have hnoG : ∀ x, ¬ GEdge P iv cs c (x, y) := by
+      rintro x (h | ⟨β, B, s, v, hβ, hs, hv, hxy⟩)
+      · exact notMem_of_lookup_swap_eq_none hx x h
+      · simp only [Prod.mk.injEq] at hxy
+        obtain ⟨-, rfl⟩ := hxy
+        refine hEC' ⟨β ++ [B], y, (hHid _).mpr hβ, hv, Or.inl ?_⟩
+        change y.2 ∈ knownC iv cs'.sim
+        rw [hsim]
+        exact (mem_knownC_cons iv).mpr (Or.inr (Or.inr rfl))
+    have hA := lookup_swap_all_none hC hnoG
+    have hall' : cs'.all = (u, y) :: cs.all := by simp [hcs', invOut, hA]
+    have hcap : ∀ p ∈ cs.sim.chains, p.1.2 ∈ knownC iv cs.sim := fun p hp =>
+      chain_cap_mem_knownC iv P hS hp
+    refine ⟨?_, fun e => ?_, ?_⟩
+    · rw [hsim]
+      exact visCons_cons hC.vis
+        (fun h => by
+          obtain ⟨e, he, he'⟩ := List.mem_map.mp h
+          exact hbad0.2 (he' ▸ fst_mem_knownC iv he))
+        (notMem_map_snd_of_lookup_swap_eq_none hx) (Or.inl rfl)
+        (Or.inr fun p hp h => hbad0.2 (h ▸ hcap p hp)) (fun e _ p hp hpo => absurd hp hpo)
+    · change e ∈ cs'.all ↔ e ∈ cs'.sim.edges ∨ HiddenEdge P iv cs'.vis c e
+      have hHE : ∀ e, HiddenEdge P iv cs'.vis c e ↔ HiddenEdge P iv cs.vis c e := by
+        intro e
+        simp only [HiddenEdge, hHid]
+      rw [hall', hHE e, hsim]
+      simp only [List.mem_cons]
+      rw [hC.allMem e]
+      simp only [GEdge]
+      tauto
+    · simp [hcs', invOut, hA, hx, hC.noDiff, visInv]
+  · -- A recorded inverse query.
+    refine ⟨hS.of_eq (by simp [invOut, visInv, hx]) rfl, fun hbad hEC => ?_⟩
+    simp only [invOut, visInv, hx, Option.isNone_some, Bool.false_and, Bool.or_false]
+      at hbad hEC ⊢
+    have hC := hcond hbad hEC
+    have hA := lookup_swap_all hS hC hEC (Or.inl (mem_of_lookup_swap_eq_some hx))
+    simp only [hA]
+    refine ⟨hC.vis, hC.allMem, ?_⟩
+    simp [hC.noDiff]
+
+/-! ## The steps that need injectivity of absorption -/
+
+variable [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E]
+
+/-- The full view answers a forward query with the pair it should hold. -/
+theorem lookup_all {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
+    (hS : CombStruct P iv cs c) (hC : CombCons P iv cs c) (hEC : ¬ HiddenCollision P iv cs.vis c)
+    {x y : SpongeState Dg E C} (h : GEdge P iv cs c (x, y)) : cs.all.lookup x = some y :=
+  lookup_eq_some_of_mem ((hC.allMem _).mpr h) fun e he hex => by
+    rw [gEdge_fst_inj hS hC.vis hEC ((hC.allMem e).mp he) h hex]
+
+/-- **A recorded query.** -/
+theorem combInv_fwd_recorded {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
+    (hI : CombInv P iv cs c) {x y : SpongeState Dg E C} (hy : cs.sim.edges.lookup x = some y) :
+    CombInv P iv (fwdOut P iv cs x u (y, cs.sim, none)).2 c := by
+  obtain ⟨hS, hcond⟩ := hI
+  refine ⟨hS.of_eq rfl rfl, fun hbad hEC => ?_⟩
+  simp only [fwdOut, hy, Option.isNone_some, Bool.false_and, Bool.or_false] at hbad hEC ⊢
+  have hC := hcond hbad hEC
+  have hA := lookup_all hS hC hEC (Or.inl (mem_of_lookup_eq_some hy))
+  simp only [hA]
+  refine ⟨hC.vis, hC.allMem, ?_⟩
+  simp [hC.noDiff]
+
 variable [DecidableEq Msg] [SampleableType Dg] [SampleableType E] [SampleableType C]
 
 /-- **A new rooted query**: its path is hidden, or new to both views. -/
-theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
-    (hI : Inv P iv cs c) {x s v : SpongeState Dg E C} {β : List (Dg × E)}
+theorem combInv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
+    (hI : CombInv P iv cs c) {x s v : SpongeState Dg E C} {β : List (Dg × E)}
     (hy : cs.sim.edges.lookup x = none) (hch : chainOf cs.sim.chains x = some (s, β))
     (hv : (v, c') ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
-      (val P (β ++ [blockTo s x]))).run c)) :
-    Inv P iv (fwdOut P iv cs x u (v,
+      (pathValue P (β ++ [blockTo s x]))).run c)) :
+    CombInv P iv (fwdOut P iv cs x u (v,
       cs.sim.recordRooted x v (β ++ [blockTo s x]), some (β ++ [blockTo s x], v))).2 c' := by
   obtain ⟨hS, hcond⟩ := hI
   have hsβ := mem_of_chainOf_eq_some hch
   have hsx := cap_eq_of_chainOf_eq_some hch
   set B := blockTo s x with hB
   have hxB : absorb s B = x := absorb_blockTo hsx
-  obtain ⟨hcc, hvv, -⟩ := val_support P (β ++ [B]) c hv
+  obtain ⟨hcc, hvv, -⟩ := pathValue_support P (β ++ [B]) c hv
   simp only at hcc hvv
   set cs' := (fwdOut P iv cs x u (v,
     cs.sim.recordRooted x v (β ++ [B]), some (β ++ [B], v))).2 with hcs'
@@ -247,7 +321,7 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
   have hvP : vPaths cs'.sim = (β ++ [B]) :: vPaths cs.sim := rfl
   have hne : β ++ [B] ≠ [] := by simp
   -- The facts of every run.
-  have hS' : Struct P iv cs' c' := by
+  have hS' : CombStruct P iv cs' c' := by
     refine ⟨List.mem_cons_of_mem _ hS.root, fun p hp => ?_, fun p hp hpne => ?_,
       fun δ hδ => ?_⟩
     · rcases List.mem_cons.mp hp with rfl | hp
@@ -259,7 +333,7 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
       · obtain ⟨q, hq, B', h1, h2⟩ := hS.chainEdge p hp hpne
         exact ⟨q, List.mem_cons_of_mem _ hq, B', h1, List.mem_cons_of_mem _ h2⟩
     · obtain ⟨w, hw⟩ := Option.ne_none_iff_exists'.mp (hS.hCached δ hδ)
-      rw [valC_mono P hcc hw]
+      rw [cachedPathValue_mono P hcc hw]
       simp
   refine ⟨hS', fun hbad hEC' => ?_⟩
   have hbad0 : cs.bad = false ∧ v.2 ∉ knownC iv cs.sim := by
@@ -272,15 +346,15 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
     simp only [Hidden, CState.vis, hhashed, hvP, List.mem_cons, not_or]
     tauto
   -- There was no hidden collision before.
-  have hEC : ¬ EC P iv cs.vis c := by
+  have hEC : ¬ HiddenCollision P iv cs.vis c := by
     rintro ⟨β₀, v₀, hβ₀, hv₀, h⟩
-    have hv₀' := valC_mono P hcc hv₀
+    have hv₀' := cachedPathValue_mono P hcc hv₀
     by_cases h0 : β₀ = β ++ [B]
     · subst h0
-      obtain rfl := valC_eq_of_le hcc hv₀ hvv
+      obtain rfl := cachedPathValue_eq_of_le hcc hv₀ hvv
       rcases h with h | ⟨γ, w, hγ, hγne, hw, hwv⟩
       · exact hbad0.2 h
-      · refine hEC' ⟨γ, w, (hHid' γ).mpr ⟨hγ, hγne⟩, valC_mono P hcc hw, Or.inl ?_⟩
+      · refine hEC' ⟨γ, w, (hHid' γ).mpr ⟨hγ, hγne⟩, cachedPathValue_mono P hcc hw, Or.inl ?_⟩
         rw [hwv]
         exact hvK'
     · refine hEC' ⟨β₀, v₀, (hHid' β₀).mpr ⟨hβ₀, h0⟩, hv₀', ?_⟩
@@ -288,9 +362,9 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
       · exact Or.inl (hK' _ h)
       · by_cases hγ0 : γ = β ++ [B]
         · subst hγ0
-          obtain rfl := valC_eq_of_le hcc hw hvv
+          obtain rfl := cachedPathValue_eq_of_le hcc hw hvv
           exact Or.inl (hwv ▸ hvK')
-        · exact Or.inr ⟨γ, w, (hHid' γ).mpr ⟨hγ, hγ0⟩, hγne, valC_mono P hcc hw, hwv⟩
+        · exact Or.inr ⟨γ, w, (hHid' γ).mpr ⟨hγ, hγ0⟩, hγne, cachedPathValue_mono P hcc hw, hwv⟩
   have hC := hcond hbad0.1 hEC
   -- The new path was not rooted.
   have hnotV : β ++ [B] ∉ vPaths cs.sim := by
@@ -340,13 +414,14 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
       exact hδ0.2 rfl
     · rintro ⟨he, hne'⟩
       obtain ⟨γ, G, t, w, hδ, ht, hw, rfl⟩ := he
-      refine ⟨γ, G, t, w, (hHid' _).mpr ⟨hδ, ?_⟩, svC_mono hcc ht, valC_mono P hcc hw, rfl⟩
+      refine ⟨γ, G, t, w, (hHid' _).mpr ⟨hδ, ?_⟩, svC_mono hcc ht,
+        cachedPathValue_mono P hcc hw, rfl⟩
       intro hδB
       obtain ⟨rfl, hGB⟩ := List.append_inj' hδB rfl
       obtain rfl : G = B := List.singleton_inj.mp hGB
       rw [hS.chainVal _ hsβ] at ht
       obtain rfl := Option.some.inj ht
-      obtain rfl := valC_eq_of_le hcc hw hvv
+      obtain rfl := cachedPathValue_eq_of_le hcc hw hvv
       exact hne' (by rw [hxB])
   -- A hidden pair at `x` comes from the new path, which is then hidden.
   have hxv_eq : ∀ w, HiddenEdge P iv cs.vis c (x, w) → Hidden P cs.vis (β ++ [B]) := by
@@ -364,7 +439,7 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
   · -- The simulator reaches a state the sponge has been through: the full view holds it.
     have hHB : Hidden P cs.vis (β ++ [B]) := ⟨hH, hnotV⟩
     obtain ⟨v₀, hv₀⟩ := Option.ne_none_iff_exists'.mp (hS.hCached _ hH)
-    obtain rfl := valC_eq_of_le hcc hv₀ hvv
+    obtain rfl := cachedPathValue_eq_of_le hcc hv₀ hvv
     have hG : GEdge P iv cs c (x, v₀) :=
       Or.inr ⟨β, B, s, v₀, hHB, hS.chainVal _ hsβ, hv₀, by rw [hxB]⟩
     have hA := lookup_all hS hC hEC hG
@@ -413,11 +488,11 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
 
 omit u in
 /-- **The forward step keeps the invariant.** -/
-theorem inv_combFwd {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv P iv cs c)
+theorem combInv_combFwd {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : CombInv P iv cs c)
     (x : SpongeState Dg E C)
     {z : ((SpongeState Dg E C × SpongeState Dg E C) × CState Dg E C Msg) × ACache Msg Dg E C}
     (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
-      ((combFwd P iv x).run cs)).run c)) : Inv P iv z.1.2 z.2 := by
+      ((combFwd P iv x).run cs)).run c)) : CombInv P iv z.1.2 z.2 := by
   obtain ⟨u, r, hr, hz1⟩ := combFwd_support P iv x cs c hz
   rw [hz1]
   rcases visFwd_support P x u cs.sim c hr with ⟨y, hy, hrz⟩ | ⟨s, β, hy, hch, hv, hrz⟩ |
@@ -425,91 +500,15 @@ theorem inv_combFwd {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv P
   · simp only [Prod.mk.injEq] at hrz
     obtain ⟨rfl, hc⟩ := hrz
     rw [hc]
-    exact inv_fwd_recorded u hI hy
+    exact combInv_fwd_recorded u hI hy
   · simp only at hrz hv
     rw [hrz]
-    exact inv_fwd_rooted u hI hy hch hv
+    exact combInv_fwd_rooted u hI hy hch hv
   · simp only [Prod.mk.injEq] at hrz
     obtain ⟨rfl, hc⟩ := hrz
     rw [hc]
-    exact inv_fwd_unrooted u hI hy hch
-
-omit [DecidableEq Msg] [SampleableType Dg] [SampleableType E] [SampleableType C]
-  [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
-/-- **The inverse step keeps the invariant.** -/
-theorem inv_invOut {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv P iv cs c)
-    (y : SpongeState Dg E C) : Inv P iv (invOut iv cs y u).2 c := by
-  obtain ⟨hS, hcond⟩ := hI
-  rcases hx : (cs.sim.edges.map Prod.swap).lookup y with _ | x
-  · -- A new inverse query.
-    set cs' := (invOut iv cs y u).2 with hcs'
-    have hsim : cs'.sim = ⟨(u, y) :: cs.sim.edges, cs.sim.chains⟩ := by
-      simp [hcs', invOut, visInv, hx]
-    have hhashed : cs'.hashed = cs.hashed := rfl
-    have hHid : ∀ β, Hidden P cs'.vis β ↔ Hidden P cs.vis β := by
-      intro β
-      simp [Hidden, CState.vis, hsim, hhashed, vPaths]
-    have hS' : Struct P iv cs' c := by
-      refine ⟨?_, ?_, fun p hp hne => ?_, hhashed ▸ hS.hCached⟩
-      · rw [hsim]; exact hS.root
-      · rw [hsim]; exact hS.chainVal
-      · rw [hsim] at hp ⊢
-        obtain ⟨q, hq, B, h1, h2⟩ := hS.chainEdge p hp hne
-        exact ⟨q, hq, B, h1, List.mem_cons_of_mem _ h2⟩
-    refine ⟨hS', fun hbad hEC' => ?_⟩
-    have hbad0 : cs.bad = false ∧ u.2 ∉ knownC iv cs.sim := by
-      simpa [hcs', invOut, hx] using hbad
-    have hK' : ∀ k, k ∈ knownC iv cs.sim → k ∈ knownC iv cs'.sim := fun k hk => by
-      rw [hsim]
-      exact (mem_knownC_cons iv).mpr (Or.inl hk)
-    have hEC : ¬ EC P iv cs.vis c := by
-      rintro ⟨β, v, hβ, hv, h⟩
-      refine hEC' ⟨β, v, (hHid β).mpr hβ, hv, ?_⟩
-      rcases h with h | ⟨γ, w, hγ, hne, hw, hwv⟩
-      · exact Or.inl (hK' _ h)
-      · exact Or.inr ⟨γ, w, (hHid γ).mpr hγ, hne, hw, hwv⟩
-    have hC := hcond hbad0.1 hEC
-    have hnoG : ∀ x, ¬ GEdge P iv cs c (x, y) := by
-      rintro x (h | ⟨β, B, s, v, hβ, hs, hv, hxy⟩)
-      · exact notMem_of_lookup_swap_eq_none hx x h
-      · simp only [Prod.mk.injEq] at hxy
-        obtain ⟨-, rfl⟩ := hxy
-        refine hEC' ⟨β ++ [B], y, (hHid _).mpr hβ, hv, Or.inl ?_⟩
-        change y.2 ∈ knownC iv cs'.sim
-        rw [hsim]
-        exact (mem_knownC_cons iv).mpr (Or.inr (Or.inr rfl))
-    have hA := lookup_swap_all_none hC hnoG
-    have hall' : cs'.all = (u, y) :: cs.all := by simp [hcs', invOut, hA]
-    have hcap : ∀ p ∈ cs.sim.chains, p.1.2 ∈ knownC iv cs.sim := fun p hp =>
-      chain_cap_mem_knownC iv P hS hp
-    refine ⟨?_, fun e => ?_, ?_⟩
-    · rw [hsim]
-      exact visCons_cons hC.vis
-        (fun h => by
-          obtain ⟨e, he, he'⟩ := List.mem_map.mp h
-          exact hbad0.2 (he' ▸ fst_mem_knownC iv he))
-        (notMem_map_snd_of_lookup_swap_eq_none hx) (Or.inl rfl)
-        (Or.inr fun p hp h => hbad0.2 (h ▸ hcap p hp)) (fun e _ p hp hpo => absurd hp hpo)
-    · change e ∈ cs'.all ↔ e ∈ cs'.sim.edges ∨ HiddenEdge P iv cs'.vis c e
-      have hHE : ∀ e, HiddenEdge P iv cs'.vis c e ↔ HiddenEdge P iv cs.vis c e := by
-        intro e
-        simp only [HiddenEdge, hHid]
-      rw [hall', hHE e, hsim]
-      simp only [List.mem_cons]
-      rw [hC.allMem e]
-      simp only [GEdge]
-      tauto
-    · simp [hcs', invOut, hA, hx, hC.noDiff, visInv]
-  · -- A recorded inverse query.
-    refine ⟨hS.of_eq (by simp [invOut, visInv, hx]) rfl, fun hbad hEC => ?_⟩
-    simp only [invOut, visInv, hx, Option.isNone_some, Bool.false_and, Bool.or_false]
-      at hbad hEC ⊢
-    have hC := hcond hbad hEC
-    have hA := lookup_swap_all hS hC hEC (Or.inl (mem_of_lookup_swap_eq_some hx))
-    simp only [hA]
-    refine ⟨hC.vis, hC.allMem, ?_⟩
-    simp [hC.noDiff]
+    exact combInv_fwd_unrooted u hI hy hch
 
 end Xor
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

@@ -17,7 +17,7 @@ This is the switching lemma of [Bellare, Rogaway, Eurocrypt 2006][br], §2.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec ENNReal LazyPermutation Indifferentiability
 

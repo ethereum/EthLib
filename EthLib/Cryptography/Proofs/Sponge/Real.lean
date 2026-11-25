@@ -13,7 +13,7 @@ That value is a uniform state too, so the real side answers as the oracle with i
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -38,21 +38,21 @@ theorem uniform_digest_evalDistEq :
   exact EvalDistEq.bind_right _ fun d => EvalDistEq.bind_const _ _
 
 /-- **The value of a path asked by nobody is a uniform state.** -/
-theorem val_fresh_evalDistEq {β : List (Dg × E)} {c : ACache Msg Dg E C}
+theorem pathValue_fresh_evalDistEq {β : List (Dg × E)} {c : ACache Msg Dg E C}
     (h : FreshVal P c β) :
-    Prod.fst <$> (simulateQ (ASpec Msg Dg E C).romImpl (val P β)).run c =ᵈ
+    Prod.fst <$> (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =ᵈ
       ($ᵗ (SpongeState Dg E C)) := by
   rcases hm : P.unpad β with _ | m
-  · rw [val_run_fresh_none P hm c h.1]
+  · rw [pathValue_run_fresh_none P hm c h.1]
     simp
-  · rw [val_run_fresh_some P hm c h.1, randomOracle.run_eq]
+  · rw [pathValue_run_fresh_some P hm c h.1, randomOracle.run_eq]
     simp only [h.2 m hm, bind_assoc, pure_bind, map_bind, map_pure]
     exact uniform_digest_evalDistEq
 
 omit [DecidableEq Dg] [DecidableEq E] [DecidableEq Msg]
   [SampleableType Dg] [SampleableType E] [SampleableType C] in
 /-- Asking the value of one path leaves every other path asked by nobody. -/
-theorem freshVal_of_val_support {β γ : List (Dg × E)} {c c' : ACache Msg Dg E C}
+theorem freshVal_of_pathValue_support {β γ : List (Dg × E)} {c c' : ACache Msg Dg E C}
     (hne : γ ≠ β) (hagree : ∀ t, ¬ ValPt (C := C) P β t → c' t = c t) (h : FreshVal P c γ) :
     FreshVal P c' γ := by
   refine ⟨by rw [hagree (.inr γ) (by simpa [ValPt] using hne)]; exact h.1, fun m hm => ?_⟩
@@ -83,14 +83,14 @@ theorem allWalk_evalDistEq (used : List (Dg × E) → Bool) (pre : List (Dg × E
   | cons B bs ih =>
     -- The rest of the walk, from any cache that the first value can leave.
     have hrest : ∀ w ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
-        (val P (pre ++ [B]))).run c), ∀ (y : SpongeState Dg E C)
+        (pathValue P (pre ++ [B]))).run c), ∀ (y : SpongeState Dg E C)
         (A' : PermCache (SpongeState Dg E C)) (f' : Bool),
         Prod.fst <$> (simulateQ (ASpec Msg Dg E C).romImpl
           (allWalk P used (pre ++ [B]) y A' bs)).run w.2 =ᵈ
           Prod.map id Prod.fst <$> (absorbAll (fun x => indepPermOracle
             (A := SpongeState Dg E C) (.inl x)) y bs).run (A', f') := by
       intro w hw y A' f'
-      obtain ⟨-, -, hagree⟩ := val_support P _ c hw
+      obtain ⟨-, -, hagree⟩ := pathValue_support P _ c hw
       refine ih (pre ++ [B]) y A' w.2 f' fun i hi hu => ?_
       have hne : pre ++ [B] ++ bs.take (i + 1) ≠ pre ++ [B] := by
         intro h
@@ -102,7 +102,7 @@ theorem allWalk_evalDistEq (used : List (Dg × E) → Bool) (pre : List (Dg × E
           simp at hi
       have := hfresh (i + 1) (by simp; omega) (by simpa [List.take_succ_cons] using hu)
       simp only [List.take_succ_cons] at this
-      exact freshVal_of_val_support P hne hagree (by simpa using this)
+      exact freshVal_of_pathValue_support P hne hagree (by simpa using this)
     simp only [allWalk, absorbAll_cons, simulateQ_bind, StateT.run_bind, drawSt_run,
       bind_map_left, map_bind]
     rw [indepPermOracle_inl_run]
@@ -115,7 +115,7 @@ theorem allWalk_evalDistEq (used : List (Dg × E) → Bool) (pre : List (Dg × E
         refine EvalDistEq.trans ?_ (EvalDistEq.bind_left
           (uniformOutside_nil_evalDistEq (A := SpongeState Dg E C) (absorb s B)).symm _)
         refine EvalDistEq.trans ?_ (EvalDistEq.bind_const
-          ((simulateQ (ASpec Msg Dg E C).romImpl (val P (pre ++ [B]))).run c) _)
+          ((simulateQ (ASpec Msg Dg E C).romImpl (pathValue P (pre ++ [B]))).run c) _)
         exact EvalDistEq.bind_congr_of_support _ fun w hw => EvalDistEq.bind_right _ fun u =>
           hrest w hw u _ _
       · -- A path asked by nobody: its value is a uniform state.
@@ -123,7 +123,7 @@ theorem allWalk_evalDistEq (used : List (Dg × E) → Bool) (pre : List (Dg × E
         simp only [hu, Bool.false_eq_true, ↓reduceIte]
         refine EvalDistEq.trans ?_ (EvalDistEq.bind_left
           (uniformOutside_nil_evalDistEq (A := SpongeState Dg E C) (absorb s B)).symm _)
-        refine EvalDistEq.trans ?_ (bind_fst_evalDistEq (val_fresh_evalDistEq P
+        refine EvalDistEq.trans ?_ (bind_fst_evalDistEq (pathValue_fresh_evalDistEq P
           (by simpa using hfresh 0 (by simp) (by simpa using hu))) _)
         exact EvalDistEq.bind_congr_of_support _ fun w hw =>
           (EvalDistEq.bind_const _ _).trans (hrest w hw w.1 _ _)
@@ -203,7 +203,7 @@ theorem uInv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
     · -- A new rooted state: its path becomes rooted, so used.
       dsimp only at hv hrz
       rw [hrz]
-      obtain ⟨-, -, hagree⟩ := val_support P _ c hv
+      obtain ⟨-, -, hagree⟩ := pathValue_support P _ c hv
       have hmono : ∀ γ, usedPath P cs.sim.chains cs.hashed γ = true →
           usedPath P ((r.1, β ++ [blockTo s x]) :: cs.sim.chains) cs.hashed γ = true :=
         fun γ h => usedPath_mono P (fun p hp => List.mem_cons_of_mem _ hp) (fun _ h => h) h
@@ -224,7 +224,7 @@ theorem uInv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
       obtain ⟨rfl, hc⟩ := hrz
       rw [hc]
       exact hU
-  · obtain ⟨u, rfl⟩ := combInv_support iv y cs c hz
+  · obtain ⟨u, rfl⟩ := combInverse_support iv y cs c hz
     have hsim : (invOut iv cs y u).2.sim.chains = cs.sim.chains := by
       simp only [invOut, visInv]
       split <;> rfl
@@ -398,7 +398,7 @@ theorem combReal_step_evalDistEq (t : (GameSpec (SpongeState Dg E C) Msg Dg).Dom
             simp only [Bool.not_eq_true] at hu
             simp only [hu, Bool.false_eq_true, ↓reduceIte]
             refine (EvalDistEq.bind_const _ _).trans ?_
-            refine (bind_fst_evalDistEq (val_fresh_evalDistEq P (freshVal_of_uInv P hU hu))
+            refine (bind_fst_evalDistEq (pathValue_fresh_evalDistEq P (freshVal_of_uInv P hU hu))
               (fun v => pure (v, (x, v) :: cs.all))).trans ?_
             simp only [bind_pure_comp]
             exact EvalDistEq.rfl
@@ -410,7 +410,7 @@ theorem combReal_step_evalDistEq (t : (GameSpec (SpongeState Dg E C) Msg Dg).Dom
       refine (EvalDistEq.bind_right _ fun u => EvalDistEq.bind_const _ _).trans ?_
       exact EvalDistEq.bind_const _ _
   · rw [funImpl_inl, indepPermImpl_inr, indepPermOracle_inr_run]
-    simp only [combStep, combInv, StateT.run_mk, simulateQ_bind, StateT.run_bind, drawSt_run,
+    simp only [combStep, combInverse, StateT.run_mk, simulateQ_bind, StateT.run_bind, drawSt_run,
       simulateQ_pure, StateT.run_pure, bind_map_left, map_bind, map_pure, invOut]
     rcases hA : (cs.all.map Prod.swap).lookup y with _ | x
     · -- A new answer: uniform on both sides.
@@ -449,4 +449,4 @@ theorem combReal_run_evalDistEq {α : Type}
 
 end Step
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

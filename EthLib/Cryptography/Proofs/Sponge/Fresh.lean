@@ -12,7 +12,7 @@ So the value of a new rooted state is a new uniform draw.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -90,7 +90,7 @@ theorem vStruct_visFwd {σ : SimState Dg E C} {c : ACache Msg Dg E C} (hV : VStr
   · rw [hrz]
     have hsβ := mem_of_chainOf_eq_some hch
     have hsx := cap_eq_of_chainOf_eq_some hch
-    obtain ⟨hcc, hvv, hagree⟩ := val_support P _ c hv
+    obtain ⟨hcc, hvv, hagree⟩ := pathValue_support P _ c hv
     have hnot := rootedPath_notMem hV hy hch
     refine ⟨List.mem_cons_of_mem _ hV.root, fun p hp => ?_, fun p hp hne => ?_,
       List.nodup_cons.mpr ⟨hnot, hV.pathsNodup⟩, fun γ hγ => ?_⟩
@@ -182,4 +182,4 @@ theorem vStruct_idealT (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
 
 end Run
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

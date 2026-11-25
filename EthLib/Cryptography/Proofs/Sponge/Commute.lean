@@ -15,7 +15,7 @@ The joint law of the output, the visible state and the cache stays the same.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
@@ -46,7 +46,7 @@ omit [XorOp Dg] [XorOp E] [DecidableEq C] in
 theorem skel_support (pre bs : List (Dg × E)) (c : ACache Msg Dg E C)
     {z : Unit × ACache Msg Dg E C}
     (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl (skel (C := C) P pre bs)).run c)) :
-    c ≤ z.2 ∧ ∀ i < bs.length, valC P z.2 (pre ++ bs.take (i + 1)) ≠ none := by
+    c ≤ z.2 ∧ ∀ i < bs.length, cachedPathValue P z.2 (pre ++ bs.take (i + 1)) ≠ none := by
   induction bs generalizing pre c with
   | nil =>
     simp only [skel, simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
@@ -58,17 +58,17 @@ theorem skel_support (pre bs : List (Dg × E)) (c : ACache Msg Dg E C)
     rw [drawSt_run] at h₂
     simp only [support_map, Set.mem_image] at h₂
     obtain ⟨u, -, rfl⟩ := h₂
-    obtain ⟨hc₁, hv, -⟩ := val_support P _ c h₁
+    obtain ⟨hc₁, hv, -⟩ := pathValue_support P _ c h₁
     obtain ⟨hc, hcached⟩ := ih (pre ++ [B]) c₁ hz
     refine ⟨le_trans hc₁ hc, fun i hi => ?_⟩
     rcases i with _ | i
-    · simp [valC_mono P hc hv]
+    · simp [cachedPathValue_mono P hc hv]
     · simpa [List.take_succ_cons] using hcached i (by simp at hi; omega)
 
 omit [XorOp Dg] [XorOp E] [DecidableEq C] in
 /-- Queries of path values at cached paths change nothing. -/
 theorem skel_run_of_cached (pre bs : List (Dg × E)) (c : ACache Msg Dg E C)
-    (h : ∀ i < bs.length, valC P c (pre ++ bs.take (i + 1)) ≠ none) :
+    (h : ∀ i < bs.length, cachedPathValue P c (pre ++ bs.take (i + 1)) ≠ none) :
     (simulateQ (ASpec Msg Dg E C).romImpl (skel (C := C) P pre bs)).run c =ᵈ
       (pure ((), c) : ProbComp (Unit × ACache Msg Dg E C)) := by
   induction bs generalizing pre with
@@ -76,7 +76,8 @@ theorem skel_run_of_cached (pre bs : List (Dg × E)) (c : ACache Msg Dg E C)
   | cons B bs ih =>
     obtain ⟨v, hv⟩ := Option.ne_none_iff_exists'.mp (h 0 (by simp))
     simp only [List.take_succ_cons, List.take_zero] at hv
-    simp only [skel, simulateQ_bind, StateT.run_bind, val_run_of_valC P _ c hv, pure_bind,
+    simp only [skel, simulateQ_bind, StateT.run_bind, pathValue_run_of_cachedPathValue P _ c hv,
+      pure_bind,
       drawSt_run, bind_map_left]
     refine (EvalDistEq.bind_right _ fun u => ih (pre ++ [B]) fun i hi => ?_).trans ?_
     · simpa [List.take_succ_cons] using h (i + 1) (by simp; omega)
@@ -87,7 +88,8 @@ omit [XorOp Dg] [XorOp E] [DecidableEq C] in
 theorem endPhase_support (ms : List Msg) (c : ACache Msg Dg E C)
     {z : Unit × ACache Msg Dg E C}
     (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl (endPhase (C := C) P ms)).run c)) :
-    c ≤ z.2 ∧ ∀ m ∈ ms, ∀ i < (P.pad m).length, valC P z.2 ((P.pad m).take (i + 1)) ≠ none := by
+    c ≤ z.2 ∧ ∀ m ∈ ms, ∀ i < (P.pad m).length,
+      cachedPathValue P z.2 ((P.pad m).take (i + 1)) ≠ none := by
   induction ms generalizing c with
   | nil =>
     simp only [endPhase, simulateQ_pure, StateT.run_pure, support_pure,
@@ -103,7 +105,7 @@ theorem endPhase_support (ms : List Msg) (c : ACache Msg Dg E C)
     rcases List.mem_cons.mp hm' with rfl | hm'
     · obtain ⟨v, hv⟩ := Option.ne_none_iff_exists'.mp (h2 i hi)
       simp only [List.nil_append] at hv
-      rw [valC_mono P h3 hv]
+      rw [cachedPathValue_mono P h3 hv]
       simp
     · exact h4 m' hm' i hi
 
@@ -210,7 +212,7 @@ theorem visRun_true_evalDistEq_false {α : Type}
             refine EvalDistEq.bind_congr_of_support _ fun z hz => ?_
             -- After the end phase, the postponed queries hit the cache.
             have hcached : ∀ i < (P.pad m).length,
-                valC P z.2 ([] ++ (P.pad m).take (i + 1)) ≠ none := by
+                cachedPathValue P z.2 ([] ++ (P.pad m).take (i + 1)) ≠ none := by
               intro i hi
               simp only [hY, visRun, simulateQ_bind, StateT.run_bind, mem_support_bind_iff,
                 simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
@@ -226,4 +228,4 @@ theorem visRun_true_evalDistEq_false {α : Type}
 
 end Setting
 
-end EthLib.Cryptography.Sponge
+end EthLib.Cryptography.Sponge.Indiff

@@ -18,7 +18,7 @@ Together they occur with chance at most `(N (2N + 1) + N (N + 1)) / |C|` for a g
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sponge
+namespace EthLib.Cryptography.Sponge.Indiff
 
 open OracleComp OracleSpec ENNReal LazyPermutation Indifferentiability
 
@@ -110,9 +110,9 @@ theorem prEvent_cap_mem_le [DecidableEq C] (L : List C) :
     fun _ => prEvent_uniform_mem_le L
 
 /-- **A path value makes a collision with chance at most `(|K| + |H|) / |C|`.** -/
-theorem prEvent_coll_val [DecidableEq C] (H : Finset (List (Dg × E))) (K : List C)
+theorem prEvent_coll_pathValue [DecidableEq C] (H : Finset (List (Dg × E))) (K : List C)
     (β : List (Dg × E)) (c : ACache Msg Dg E C) (hc : ¬Coll H K c) :
-    Pr{let z ← (simulateQ (ASpec Msg Dg E C).romImpl (val P β)).run c}[Coll H K z.2] ≤
+    Pr{let z ← (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c}[Coll H K z.2] ≤
       (K.length + H.card) / (Fintype.card C : ℝ≥0∞) := by
   -- The hash part of the value leaves the answers of the oracle on paths alone.
   have hro : ∀ m, ∀ w ∈ support (((ASpec Msg Dg E C).randomOracle (.inl m)).run c),
@@ -138,7 +138,7 @@ theorem prEvent_coll_val [DecidableEq C] (H : Finset (List (Dg × E))) (K : List
             rw [List.length_append]
             exact_mod_cast Nat.add_le_add_left (length_collCaps_le H c') _
     · simp [hc']
-  unfold val
+  unfold pathValue
   split
   · next m hm =>
     simp only [simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure, StateT.run_pure]
@@ -164,7 +164,7 @@ theorem prEvent_coll_skel [DecidableEq C] (H : Finset (List (Dg × E))) (K : Lis
       exact prEvent_bind_le_of_forall_le _ _ _ fun u => ih _ w.2 hw
     · rw [List.length_cons, Nat.cast_add, Nat.cast_one, add_one_mul, add_comm]
       gcongr
-      exact prEvent_coll_val P H K _ c hc
+      exact prEvent_coll_pathValue P H K _ c hc
 
 /-- The end phase makes a collision with chance at most `(|K| + |H|) / |C|` a hashed block. -/
 theorem prEvent_coll_endPhase [DecidableEq C] (H : Finset (List (Dg × E))) (K : List C)
@@ -273,14 +273,14 @@ theorem vsize_visF (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
 
 omit [XorOp Dg] [XorOp E] in
 /-- The capacity of a new path value lands in a list with chance at most its length over `|C|`. -/
-theorem prEvent_val_cap_le (β : List (Dg × E)) (c : ACache Msg Dg E C) (h : c (.inr β) = none)
+theorem prEvent_pathValue_cap_le (β : List (Dg × E)) (c : ACache Msg Dg E C) (h : c (.inr β) = none)
     (L : List C) :
-    Pr{let w ← (simulateQ (ASpec Msg Dg E C).romImpl (val P β)).run c}[w.1.2 ∈ L] ≤
+    Pr{let w ← (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c}[w.1.2 ∈ L] ≤
       L.length / (Fintype.card C : ℝ≥0∞) := by
   rcases hm : P.unpad β with _ | m
-  · rw [val_run_fresh_none P hm c h, bind_pure_comp, prEvent_map]
+  · rw [pathValue_run_fresh_none P hm c h, bind_pure_comp, prEvent_map]
     exact prEvent_cap_mem_le L
-  · rw [val_run_fresh_some P hm c h]
+  · rw [pathValue_run_fresh_some P hm c h]
     refine prEvent_bind_le_of_forall_le _ _ _ fun w => ?_
     rw [bind_pure_comp, prEvent_map]
     exact prEvent_cap_mem_le L
@@ -293,7 +293,7 @@ theorem visFwd_run_rooted {σ : SimState Dg E C} {x s : SpongeState Dg E C} {β 
     (simulateQ (ASpec Msg Dg E C).romImpl (visFwd P x u σ)).run c =
       (fun w => ((w.1, (⟨(x, w.1) :: σ.edges, (w.1, β ++ [blockTo s x]) :: σ.chains⟩ :
         SimState Dg E C), some (β ++ [blockTo s x], w.1)), w.2)) <$>
-        (simulateQ (ASpec Msg Dg E C).romImpl (val P (β ++ [blockTo s x]))).run c := by
+        (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P (β ++ [blockTo s x]))).run c := by
   simp only [visFwd, hy, hch]
   rw [simulateQ_bind, StateT.run_bind]
   simp [map_eq_bind_pure_comp]
@@ -325,6 +325,16 @@ theorem visImpl_false_inv_run (y : SpongeState Dg E C) (vs : VState Dg E C Msg)
   simp
 
 end Visible
+
+/-- The visible capacities: two per pair and that of the initial state. -/
+theorem length_knownC (iv : SpongeState Dg E C) (σ : SimState Dg E C) :
+    (knownC iv σ).length = 2 * σ.edges.length + 1 := by
+  simp only [knownC, List.length_cons, List.length_flatMap, List.length_nil]
+  induction σ.edges with
+  | nil => simp
+  | cons e l ih =>
+    simp only [List.map_cons, List.sum_cons, List.length_cons] at ih ⊢
+    omega
 
 /-! ## The hidden paths -/
 
@@ -371,14 +381,33 @@ theorem card_hiddenSet_le (vs : VState Dg E C Msg) :
 
 omit [DecidableEq Dg] [DecidableEq E] in
 /-- The capacity of a cached path value is that of the answer of the oracle on paths. -/
-theorem valC_cap {c : ACache Msg Dg E C} {β : List (Dg × E)} {v : SpongeState Dg E C}
-    (h : valC P c β = some v) : ∃ t, c (.inr β) = some t ∧ t.2 = v.2 := by
-  unfold valC at h
+theorem cachedPathValue_cap {c : ACache Msg Dg E C} {β : List (Dg × E)} {v : SpongeState Dg E C}
+    (h : cachedPathValue P c β = some v) : ∃ t, c (.inr β) = some t ∧ t.2 = v.2 := by
+  unfold cachedPathValue at h
   split at h
   · obtain ⟨d, -, h⟩ := Option.bind_eq_some_iff.mp h
     obtain ⟨t, ht, rfl⟩ := Option.map_eq_some_iff.mp h
     exact ⟨t, ht, rfl⟩
   · exact ⟨v, h, rfl⟩
+
+/-- A hidden collision is a collision among the answers at hidden paths. -/
+theorem coll_of_hiddenCollision {vs : VState Dg E C Msg} {c : ACache Msg Dg E C}
+    (h : HiddenCollision P iv vs c) :
+    Coll (hiddenSet P vs) (knownC iv vs.1) c := by
+  obtain ⟨β, v, hβ, hv, h⟩ := h
+  obtain ⟨t, ht, htv⟩ := cachedPathValue_cap P hv
+  refine ⟨β, (mem_hiddenSet P).mpr hβ, t, ht, ?_⟩
+  rcases h with h | ⟨γ, w, hγ, hne, hw, hwv⟩
+  · exact Or.inl (htv ▸ h)
+  · obtain ⟨t', ht', htw⟩ := cachedPathValue_cap P hw
+    exact Or.inr ⟨γ, (mem_hiddenSet P).mpr hγ, hne, t', ht', by rw [htw, hwv, htv]⟩
+
+/-- No hidden path has an answer of the oracle on paths before the end phase. -/
+theorem not_coll_of_vStruct [XorOp Dg] [XorOp E] {vs : VState Dg E C Msg}
+    {c : ACache Msg Dg E C}
+    (hV : VStruct P iv vs.1 c) (K : List C) : ¬Coll (hiddenSet P vs) K c := by
+  rintro ⟨β, hβ, t, ht, -⟩
+  exact ((mem_hiddenSet P).mp hβ).2 (hV.tFresh β (by rw [ht]; simp))
 
 end Hidden
 
@@ -436,7 +465,7 @@ theorem prEvent_visF_bad_le (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
         · simp only [visFwd_run_rooted P hy hch, Functor.map_map]
           refine prEvent_bind_le_of_forall_le _ _ _ fun u => ?_
           rw [prEvent_map]
-          refine (prEvent_mono _ _ _ fun w hw => ?_).trans (prEvent_val_cap_le P _ s.2
+          refine (prEvent_mono _ _ _ fun w hw => ?_).trans (prEvent_pathValue_cap_le P _ s.2
             (by by_contra h'; exact rootedPath_notMem hV hy hch (hV.tFresh _ h')) _)
           simpa [hb] using hw
       · simp only [visFwd, hy, simulateQ_pure, StateT.run_pure, map_pure]
@@ -457,41 +486,6 @@ theorem prEvent_visF_bad_le (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
       obtain ⟨q, hq⟩ := h3 h (by simpa using hb)
       simp at hq
 
-omit [XorOp Dg] [XorOp E] [DecidableEq Dg] [DecidableEq E] [DecidableEq C] [SampleableType Dg]
-  [SampleableType E] [SampleableType C] [Fintype C] [Zero Dg] [Zero E] [LawfulXor Dg]
-  [LawfulXor E] in
-/-- The visible capacities: two per pair and that of the initial state. -/
-theorem length_knownC (σ : SimState Dg E C) :
-    (knownC iv σ).length = 2 * σ.edges.length + 1 := by
-  simp only [knownC, List.length_cons, List.length_flatMap, List.length_nil]
-  induction σ.edges with
-  | nil => simp
-  | cons e l ih =>
-    simp only [List.map_cons, List.sum_cons, List.length_cons] at ih ⊢
-    omega
-
-omit [XorOp Dg] [XorOp E] [DecidableEq C] [DecidableEq Msg] [SampleableType Dg]
-  [SampleableType E] [SampleableType C] [Fintype C] [Zero Dg] [Zero E] [LawfulXor Dg]
-  [LawfulXor E] in
-/-- A hidden collision is a collision among the answers at hidden paths. -/
-theorem coll_of_EC {vs : VState Dg E C Msg} {c : ACache Msg Dg E C} (h : EC P iv vs c) :
-    Coll (hiddenSet P vs) (knownC iv vs.1) c := by
-  obtain ⟨β, v, hβ, hv, h⟩ := h
-  obtain ⟨t, ht, htv⟩ := valC_cap P hv
-  refine ⟨β, (mem_hiddenSet P).mpr hβ, t, ht, ?_⟩
-  rcases h with h | ⟨γ, w, hγ, hne, hw, hwv⟩
-  · exact Or.inl (htv ▸ h)
-  · obtain ⟨t', ht', htw⟩ := valC_cap P hw
-    exact Or.inr ⟨γ, (mem_hiddenSet P).mpr hγ, hne, t', ht', by rw [htw, hwv, htv]⟩
-
-omit [DecidableEq C] [DecidableEq Msg] [SampleableType Dg] [SampleableType E]
-  [SampleableType C] [Fintype C] [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
-/-- No hidden path has an answer of the oracle on paths before the end phase. -/
-theorem not_coll_of_vStruct {vs : VState Dg E C Msg} {c : ACache Msg Dg E C}
-    (hV : VStruct P iv vs.1 c) (K : List C) : ¬Coll (hiddenSet P vs) K c := by
-  rintro ⟨β, hβ, t, ht, -⟩
-  exact ((mem_hiddenSet P).mp hβ).2 (hV.tFresh β (by rw [ht]; simp))
-
 /-- The arithmetic of the bound on hidden collisions. -/
 theorem hidden_arith {v h q : ℕ} (hq : v + h ≤ q) : h * (2 * v + 1 + h) ≤ q * (q + 1) := by
   nlinarith
@@ -507,7 +501,7 @@ theorem prEvent_visRun_le {α : Type} (oa : OracleComp (GameSpec (SpongeState Dg
     {N : ℕ} (hN : WithinCost (fun m => (P.pad m).length) oa N) :
     Pr{let z ← (simulateQ (ASpec Msg Dg E C).romImpl
         (visRun P iv false oa (SimState.init iv, [], false))).run ∅}[
-      z.1.2.2.2 = true ∨ EC P iv z.1.2 z.2] ≤
+      z.1.2.2.2 = true ∨ HiddenCollision P iv z.1.2 z.2] ≤
       ((N * (2 * N + 1) + N * (N + 1) : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞) := by
   set vs₀ : VState Dg E C Msg := (SimState.init iv, [], false)
   have hfold := simulateQ_mapStateTBase_run_eq_map_flattenStateT (ASpec Msg Dg E C).romImpl
@@ -546,7 +540,7 @@ theorem prEvent_visRun_le {α : Type} (oa : OracleComp (GameSpec (SpongeState Dg
         (not_coll_of_vStruct P iv hV _)).trans ?_)
     · rcases hw with hw | hw
       · exact absurd hw hzb
-      · exact coll_of_EC P iv hw
+      · exact coll_of_hiddenCollision P iv hw
     · rw [mul_div_assoc']
       gcongr
       have h1 := card_hiddenSet_le P z.2.1
