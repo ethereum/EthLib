@@ -80,7 +80,7 @@ def readScalar (bytes : Vector UInt8 32) (error : Error) : Except Error Secp256r
 /-- A field coordinate as 32 big-endian octets, with leading zeros, RFC 9846 §7.4.2. -/
 def coordinate (value : Secp256r1.Fp) : Vector UInt8 32 :=
   -- §7.4.2: the octet string Z has constant length, and its leading zeros stay.
-  ⟨value.toBytes.toArray, by simp [Secp256r1.Fp.toBytes]⟩
+  ⟨value.toBytes.toArray, by simpa using ShortWeierstrass.length_coordinateToBytes value⟩
 
 /-- Read an uncompressed P-256 key share, RFC 9846 §4.3.8.2 and SEC 1 v2 §2.3.4. -/
 def readP256Share (peer : ByteArray) : Except Error Secp256r1.Point :=

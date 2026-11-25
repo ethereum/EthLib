@@ -20,7 +20,7 @@ open Point
 /-- The 64 bytes of `ECDSAPUBKEY` follow the prefix `04` in the uncompressed encoding. -/
 theorem encodeUncompressed_eq (x y : Fp) :
     (affine x y).encodeUncompressed = ⟨#[0x04]⟩ ++ publicKeyBytes x y := by
-  simp only [encodeUncompressed, publicKeyBytes]
+  simp only [encodeUncompressed, encodeUncompressed_coords, publicKeyBytes]
   apply ByteArray.ext
   simp
 

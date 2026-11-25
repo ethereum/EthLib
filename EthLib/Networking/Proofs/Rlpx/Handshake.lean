@@ -35,9 +35,9 @@ theorem decodePublicKey_encodePublicKey {p : Point} (hp : p.isOnCurve = true)
   | affine x y =>
     have h := decode_encodeUncompressed hp hinf
     simp only [decodePublicKey, encodePublicKey, Except.mapError]
-    simp only [encodeUncompressed] at h
+    simp only [encodeUncompressed, encodeUncompressed_coords] at h
     have he : (⟨#[0x04] ++ (x.toBytes ++ y.toBytes).toArray⟩ : ByteArray) =
-        ⟨(0x04 :: x.toBytes ++ y.toBytes).toArray⟩ := by
+        ⟨(0x04 :: (x.toBytes ++ y.toBytes)).toArray⟩ := by
       simp
     rw [he, h]
 
@@ -63,7 +63,7 @@ theorem decodePublicKey_eq_ok_iff {bytes : Vector UInt8 64} {p : Point} :
           rw [size_encodeCompressed] at hsize
           simp [ByteArray.size] at hsize
         · have hlist := congrArg (fun b : ByteArray => b.data.toList) hunc
-          simp only [encodeUncompressed, Array.toList_append] at hlist
+          simp only [encodeUncompressed, encodeUncompressed_coords, Array.toList_append] at hlist
           have htail : bytes.toList = x.toBytes ++ y.toBytes := List.cons.inj hlist |>.2
           exact Vector.toList_inj.mp (by simpa [encodePublicKey] using htail.symm)
   · rintro ⟨hon, hinf, rfl⟩

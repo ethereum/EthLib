@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256r1.Curve
 public import EthLib.Base.ByteOrder
+public import EthLib.Cryptography.ShortWeierstrass.Encoding
 
 /-!
 # `Secp256r1.Encoding`
@@ -19,15 +20,11 @@ The cofactor is one, so a decoded point also passes the subgroup check of SEC 1 
 
 namespace EthLib.Cryptography.Secp256r1
 
-/-- A coordinate as 32 big-endian bytes, by SEC 1 v2 §2.3.5. -/
-def Fp.toBytes (x : Fp) : List UInt8 :=
-  -- Step 1: `q = p` is an odd prime, so `M` is the integer `a` as `mlen = 32` octets, by §2.3.7.
-  (Base.ByteOrder.toBE 32 x.val).toList
+/-- A coordinate as 32 big-endian bytes, by SEC 1 v2 §2.3.5, as for every curve. -/
+abbrev Fp.toBytes (x : Fp) : List UInt8 := ShortWeierstrass.coordinateToBytes x
 
 /-- The uncompressed encoding `04 ‖ x ‖ y` of an affine point, by SEC 1 v2 §2.3.3. -/
-def encodeUncompressed (x y : Fp) : List UInt8 :=
-  -- Steps 3.1 to 3.3: `X` from `x_P`, `Y` from `y_P`, and `M = 04 || X || Y`.
-  4 :: (x.toBytes ++ y.toBytes)
+abbrev encodeUncompressed (x y : Fp) : List UInt8 := ShortWeierstrass.encodeUncompressed x y
 
 /-- Decode an uncompressed point, by SEC 1 v2 §2.3.4.
 
@@ -42,16 +39,14 @@ def decodeUncompressed (bytes : List UInt8) : Option Point :=
   | 4 :: coords =>
     -- Step 3 applies only when `M` has `2 * 32 + 1` octets.
     if coords.length = 64 then
-      let x := Base.ByteOrder.ofBE (coords.take 32)
-      let y := Base.ByteOrder.ofBE (coords.drop 32)
       -- Steps 3.3 and 3.4: `x_P` and `y_P` by §2.3.6, "invalid" unless in `[0, p-1]`.
-      if hx : x < Fp.modulus then
-        if hy : y < Fp.modulus then
-          let point := Point.affine ⟨x, hx⟩ ⟨y, hy⟩
-          -- Steps 3.5 and 3.6: `(x_P, y_P)` must satisfy the curve equation.
-          if point.isOnCurve then some point else none
-        else none
-      else none
+      match ShortWeierstrass.coordinateOfBytes? (coords.take 32),
+          ShortWeierstrass.coordinateOfBytes? (coords.drop 32) with
+      | some x, some y =>
+        let point := Point.affine x y
+        -- Steps 3.5 and 3.6: `(x_P, y_P)` must satisfy the curve equation.
+        if point.isOnCurve then some point else none
+      | _, _ => none
     else none
   | _ => none
 
