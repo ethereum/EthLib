@@ -5623,7 +5623,13 @@ Its latest valid hash is the latest valid block of the parent's chain, or zero w
 It is `null` when the chain of the parent holds no valid block, which the source allows when the node cannot determine that block.
 `forkchoiceUpdatedStep_of_invalid_head` shows that an update to a block that the node knows as invalid answers `INVALID` with the same function on the chain of the head, and applies nothing.
 It takes a chain that passes the terminal block check; otherwise the update answers `INVALID` with the zero hash (`forkchoiceUpdated_of_not_terminal`).
-No theorem yet equates the hash of that update with the hash of the earlier answer to the payload; the Python tests check it on a chain.
+On a node reached from a starting block, the latest valid block of the chain of a known invalid block that fails that check is of proof of work, so its latest valid hash is that zero hash too.
+An invalid head of such a node descends through invalid blocks to its latest valid block, and the update answers the latest valid hash of the head (`forkchoiceUpdatedStep_of_invalid_head_of_grounded`, `Proofs/Node/LatestValid.lean`).
+On a node reached from a starting block, `forkchoiceUpdatedStep_of_newPayloadStep_invalid` shows that every later update to a payload that passed the checks before execution and was answered `INVALID` answers `INVALID` with the same latest valid hash and leaves the node as it was.
+It rests on an invariant that every node reached from a starting block keeps (`Grounded`, `Proofs/Node/Grounded.lean`, `grounded_of_start`, `Reachable.grounded`).
+An invalid block descends through invalid blocks, without repeat, to a valid block.
+A valid block from Paris on sits on a valid parent, which is terminal if it is of proof of work, unless the node knows no block of proof of work.
+The latest valid hash of a known invalid block therefore never changes (`Reachable.latestValidHash`).
 Validation keeps every known block that is not accepted as it was (`validateHead_lookup`).
 The source requires no single answer for such a child outside the terminal case, and the reorg tests of execution-spec-tests accept `INVALID` or `SYNCING`; the node gives `INVALID`, which carries the most information.
 A node starts from one block; a total difficulty below the difficulty of a block of proof of work gives no node.
