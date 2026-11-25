@@ -443,6 +443,12 @@ theorem nodup_keys_foldl_trieSet (secured : Bool) (pairs : List (ByteArray × By
       exact ih _ (nodup_keys_trieSet hkeys entry.1 entry.2)
   exact preserve pairs ⟨secured, []⟩ List.nodup_nil
 
+/-- Setting a key does not change whether the trie hashes its keys. -/
+theorem secured_trieSet (trie : Trie) (key value : ByteArray) :
+    (trieSet trie key value).secured = trie.secured := by
+  simp only [trieSet]
+  split <;> first | rfl | (split <;> rfl)
+
 /-- Setting pairs does not change whether the trie hashes its keys. -/
 theorem secured_foldl_trieSet (pairs : List (ByteArray × ByteArray)) (trie : Trie) :
     (pairs.foldl (fun trie (key, value) => trieSet trie key value) trie).secured
@@ -450,9 +456,7 @@ theorem secured_foldl_trieSet (pairs : List (ByteArray × ByteArray)) (trie : Tr
   induction pairs generalizing trie with
   | nil => rfl
   | cons entry rest ih =>
-    rw [List.foldl_cons, ih]
-    simp only [trieSet]
-    split <;> first | rfl | (split <;> rfl)
+    rw [List.foldl_cons, ih, secured_trieSet]
 
 /-! ## Error codes -/
 

@@ -3,6 +3,7 @@ module
 public import EthLib.Base.ExecutionConfig
 public import EthLib.Base.Proofs.ChainConfig
 public import EthLib.Base.Proofs.Json
+import EthLib.Base.Proofs.List
 
 /-!
 # Proofs: the fork times and blob schedules of a configuration file
@@ -72,14 +73,6 @@ private theorem eq_filter_append {α : Type} {R : α → α → Prop} {p : α �
 private theorem append_filter_of_forall_false {α : Type} {front l : List α} {p : α → Bool}
     (h : ∀ x ∈ l, p x = false) : front ++ l.filter p = front := by
   rw [List.filter_eq_nil_iff.2 fun x hx => by simp [h x hx], List.append_nil]
-
-/-- Two maps that agree on a list keep the same elements of it. -/
-private theorem filterMap_congr {α β : Type} {f g : α → Option β} :
-    ∀ {l : List α}, (∀ a ∈ l, f a = g a) → l.filterMap f = l.filterMap g
-  | [], _ => rfl
-  | a :: l, h => by
-    rw [List.filterMap_cons, List.filterMap_cons, h a (by simp),
-      filterMap_congr fun b hb => h b (by simp [hb])]
 
 /-- Looking up each key of a sorted list of keys, in order, lists the elements back. -/
 private theorem filterMap_find? {α : Type} {key : α → Fork} :
