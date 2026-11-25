@@ -5643,7 +5643,12 @@ The RPC export runs a body with the same function (`BlockRecord.ofRun`).
 `lookup_of_mem_view` shows that each is the kept block, with the kept state after it.
 `canonical_hashes_of_view` shows that its canonical chain is the chain of the head, so the theorems on the tags of the last forkchoice update apply to it.
 There is no view when a body fails to run again; `view_of_start` shows that a node that starts from a block has a view, for a block whose header hash is not its own parent hash.
-No theorem yet shows that a body that ran once runs again.
+A body that ran once runs again on a node reached from a starting block (`validRecord_isSome`, `Proofs/Node/Replay.lean`).
+The chain that ends at a valid block stays the same in every later node (`Reachable.chainAt_eq`, `Proofs/Node/Ancestry.lean`), so the record of a valid block, with its receipts and logs, is the same in every later node (`Reachable.validRecord_eq`).
+Such a node has a view under any network ID and trusted setup (`view_isSome`).
+These theorems assume that the last node they read knows no block under the parent hash of its starting block.
+The node records a block only when it knows its parent, so a block under that hash would close a cycle of block hashes, which EthLib cannot rule out without an assumption on Keccak.
+The assumption also excludes a starting block whose header hash is its own parent hash, as `view_of_start` does.
 Step 4 of payload validation asks that validation be idempotent: a payload answered `VALID` never becomes `INVALID`, nor the reverse.
 Each step keeps every block that the node knows as valid or invalid, and the configuration (`newPayloadStep_lookup`, `forkchoiceUpdatedStep_lookup`, `newPayloadStep_config`).
 So every node that the steps reach from a node keeps them too (`Reachable.lookup`, `Reachable.validState`, `Reachable.invalid`, `Reachable.config`).
