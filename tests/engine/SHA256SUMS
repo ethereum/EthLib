@@ -1,4 +1,4 @@
-# Source: ethereum/execution-apis at 1ca0818569467cff85b7f41372f22e728d5daa14
+# Source: ethereum/execution-apis at 166e334c73d96ffce916ea84e97addbcd8b3727a
 # Source: ethereum/execution-specs at 391d8a05d5cb182542ac7e7330c858b6ee03f990
 e9b16ff06ba3b00321d6386ff1c2e68dbc5b334402bfb85dcfe545e7a1f12a73  forkchoice.json
 031e8ac1721fe0ced8137545d5695b4e3e830a0b74ad31def2eefc7ac83223f3  new_payload.json

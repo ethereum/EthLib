@@ -5,7 +5,7 @@
 # A block is terminal when its total difficulty reaches the terminal total difficulty.
 # The total difficulty of its parent must not reach it.
 #
-# ethereum/execution-apis, src/engine/paris.md, commit 1ca0818569467cff85b7f41372f22e728d5daa14.
+# ethereum/execution-apis, src/engine/paris.md, commit 166e334c73d96ffce916ea84e97addbcd8b3727a.
 # ethereum/EIPs, EIPS/eip-3675.md, commit b055feec322fbc37e9d77a393a50b3ff56b31c92.
 #
 # No official vector has a block of proof of work: the engine fixtures all start at Paris.

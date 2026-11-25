@@ -69,21 +69,22 @@ def _request(payload: Mapping[str, Any], *block: str) -> str:
 
 def test_every_fixture_is_vendored() -> None:
     """The suite holds every fixture of the method at the pinned commit."""
-    assert len(SIMULATE) == 101
+    assert len(SIMULATE) == 103
 
 
 @pytest.mark.parametrize("path", SIMULATE, ids=lambda path: path.stem)
 def test_fixture(path: Path) -> None:
-    """The view answers the code or the blocks of the fixture; the source fixes no message."""
-    (exchange,) = read_fixture(path).exchanges
-    (text,) = replay_chain().serve([exchange.request])
-    assert text is not None
-    response = json.loads(text)
-    if "error" in exchange.response:
-        assert response["error"]["code"] == exchange.response["error"]["code"]
-    else:
-        assert "result" in response, response.get("error")
-        assert _blocks(response) == _blocks(exchange.response)
+    """The view answers the code or the blocks of each request; the source fixes no message."""
+    exchanges = read_fixture(path).exchanges
+    texts = replay_chain().serve([exchange.request for exchange in exchanges])
+    for exchange, text in zip(exchanges, texts, strict=True):
+        assert text is not None
+        response = json.loads(text)
+        if "error" in exchange.response:
+            assert response["error"]["code"] == exchange.response["error"]["code"]
+        else:
+            assert "result" in response, response.get("error")
+            assert _blocks(response) == _blocks(exchange.response)
 
 
 # The identity precompile, an address that it can move to, and code that returns the word 42.

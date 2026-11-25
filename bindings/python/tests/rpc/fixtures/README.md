@@ -5,7 +5,7 @@ These directories keep the layout of the source, one directory for each method.
 
 The directory `error-groups` holds the groups of error codes of the API, from `src/error-groups/` of the source.
 
-- Source: [`ethereum/execution-apis`](https://github.com/ethereum/execution-apis) at commit `1ca0818569467cff85b7f41372f22e728d5daa14`.
+- Source: [`ethereum/execution-apis`](https://github.com/ethereum/execution-apis) at commit `166e334c73d96ffce916ea84e97addbcd8b3727a`.
 - Authors: the contributors of `ethereum/execution-apis`.
 - Licence: CC0 1.0 Universal.
 

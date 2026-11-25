@@ -3,7 +3,7 @@
 # Rules of the two methods.
 #
 # Repository: ethereum/execution-apis
-# Commit: 1ca0818569467cff85b7f41372f22e728d5daa14
+# Commit: 166e334c73d96ffce916ea84e97addbcd8b3727a
 # Files: src/engine/common.md, src/engine/identification.md
 
 import json
