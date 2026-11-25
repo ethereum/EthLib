@@ -210,9 +210,12 @@ theorem funding_before_of {fork : Fork} {s t : BeaconState preset fork}
       potential s + fundingCarry ⟨fork, s⟩ +
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
         (events.map fundingCredit).sum := by
-  obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents, limit,
-    trace, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
-    consolidatedOk, rewardReplay, equal⟩ := funding_epoch_site ok replayed
+  obtain ⟨reset, deposited, ⟨⟨justified, scored, rewarded, registered, slashed, justifiedOk,
+    scoredOk, rewardedOk, registeredOk, slashedOk, resetOk⟩, rewardEvents, limit, rewardReplay, _⟩,
+    depositedOk, consolidatedOk, equal⟩ := funding_epoch_site ok replayed
+  have stages : EpochPrefix config checks s reset :=
+    ⟨_, _, _, _, _, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk⟩
+  have trace := stages.trace
   -- Justification, inactivity and the eth1 reset keep the funding, as epoch stages.
   have justifiedFunding := ordinary justifiedOk ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have scoredFunding := ordinary scoredOk ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
@@ -236,8 +239,8 @@ theorem funding_before_of {fork : Fork} {s t : BeaconState preset fork}
     have resetActivation := kept (fun edge => edge.activationExitOrder) activation
     have resetPending := kept (fun edge => edge.pendingConsolidationInvariant) pending
     -- After justification, the stages up to the eth1 reset are mutator frames.
-    obtain ⟨carry, frame, resetMatch⟩ := funding_epoch_prefix electra early trace justifiedOk
-      scoredOk rewardedOk registeredOk slashedOk resetOk matched
+    obtain ⟨carry, frame, resetMatch⟩ := funding_epoch_prefix electra early
+      ⟨_, _, _, _, _, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk⟩ matched
     simp only [EpochStage.Edge, electra, ↓reduceDIte] at depositedOk consolidatedOk
     have resetOrder : ExitsOrdered reset := frame.exitsOrdered <| by
       simpa only [ExitsOrdered, (processJustificationAndFinalization_keeps

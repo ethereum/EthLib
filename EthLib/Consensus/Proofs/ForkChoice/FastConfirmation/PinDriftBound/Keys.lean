@@ -2284,14 +2284,9 @@ private theorem slot_step_targets {g x m last : ForkedBeaconState preset}
   · simp only [epochIfLast, boundary, ↓reduceIte] at epochOk
     obtain ⟨middle, updated, recorded, recordOk, updatedOk, -, balances, cutOk⟩ :=
       epochBalanceReplay_result_before cached epoched beforeFork epochOk
-    obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents,
-      limit, trace6, -, -, -, -, -, -,
-      depositedOk, consolidatedOk, rewardReplay, recordedEq⟩ := funding_epoch_site cutOk recordOk
-    have trace7 : EpochTrace (EpochStage.action config checks)
-        [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset,
-          .pendingDeposits] cached deposited :=
-      EpochTrace.append_iff.mpr
-        ⟨reset, trace6, .cons (EpochStage.action_cases.mpr depositedOk) .nil⟩
+    obtain ⟨reset, deposited, ⟨stages, rewardEvents, limit, rewardReplay, _⟩, depositedOk,
+      consolidatedOk, recordedEq⟩ := funding_epoch_site cutOk recordOk
+    have trace7 := stages.depositTrace depositedOk
     simp only [EpochStage.Edge, mFork, ↓reduceDIte] at consolidatedOk
     simp only [mFork, ↓reduceDIte] at recordedEq
     -- The facts about the run before the step.
@@ -2373,7 +2368,7 @@ private theorem slot_step_targets {g x m last : ForkedBeaconState preset}
     · have eventsEq : events = recorded ++ crossings :=
         Except.ok.inj (replayed.symm.trans (Step.balanceEvents_epoch_slot ok cachedOk nextOk
           boundary recordOk slotOk crossingOk))
-      have rewardsNo := rewards_noConsolidations (pre := (scored, [])) (by simp) rewardReplay
+      have rewardsNo := rewards_noConsolidations (pre := (stages.scored, [])) (by simp) rewardReplay
       have f1 : rewardEvents.filter (fun e => decide (e.source = .consolidations)) = [] :=
         List.filter_eq_nil_iff.mpr fun e member => by simpa using rewardsNo e member
       have f2 : crossings.filter (fun e => decide (e.source = .consolidations)) = [] :=

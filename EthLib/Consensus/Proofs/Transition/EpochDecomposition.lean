@@ -249,6 +249,79 @@ theorem processEpoch_trace {config : Config} {checks : SignatureChecks}
     EpochTrace (action config checks) epochStages state after :=
   run_ok_iff.mp ((processEpoch_eq_run config checks state).symm.trans computed)
 
+/-- The six stages of an epoch before the pending deposits, with the state after each one.
+
+They run from the state `s` to the state `reset`. -/
+structure EpochPrefix (config : Config) (checks : SignatureChecks)
+    (s reset : BeaconState preset fork) where
+  /-- The state after justification and finalization. -/
+  justified : BeaconState preset fork
+  /-- The state after the inactivity score updates. -/
+  scored : BeaconState preset fork
+  /-- The state after the rewards and penalties. -/
+  rewarded : BeaconState preset fork
+  /-- The state after the registry updates. -/
+  registered : BeaconState preset fork
+  /-- The state after the slashings. -/
+  slashed : BeaconState preset fork
+  justifiedOk : Edge config checks .justification s justified
+  scoredOk : Edge config checks .inactivity justified scored
+  rewardedOk : processRewardsAndPenalties config scored = .ok rewarded
+  registeredOk : processRegistryUpdates config rewarded = .ok registered
+  slashedOk : processSlashings registered = .ok slashed
+  -- The reset of the votes on the deposit contract, before Heze.
+  resetOk : Edge config checks .eth1Reset slashed reset
+
+/-- The six stages of an epoch before the pending deposits form one trace. -/
+theorem EpochPrefix.trace {config : Config} {checks : SignatureChecks}
+    {s reset : BeaconState preset fork} (epoch : EpochPrefix config checks s reset) :
+    EpochTrace (action config checks)
+      [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset] s reset :=
+  .cons (action_cases.mpr epoch.justifiedOk) <| .cons (action_cases.mpr epoch.scoredOk) <|
+    .cons (action_cases.mpr epoch.rewardedOk) <| .cons (action_cases.mpr epoch.registeredOk) <|
+    .cons (action_cases.mpr epoch.slashedOk) <| .cons (action_cases.mpr epoch.resetOk) .nil
+
+/-- The six stages, then the pending deposits, form one trace. -/
+theorem EpochPrefix.depositTrace {config : Config} {checks : SignatureChecks}
+    {s reset deposited : BeaconState preset fork} (epoch : EpochPrefix config checks s reset)
+    (depositsOk : Edge config checks .pendingDeposits reset deposited) :
+    EpochTrace (action config checks)
+      [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset,
+        .pendingDeposits] s deposited :=
+  (append_iff (xs := [.justification, .inactivity, .rewards, .registry, .slashings,
+    .eth1Reset]) (ys := [.pendingDeposits])).mpr
+    ⟨reset, epoch.trace, .cons (action_cases.mpr depositsOk) .nil⟩
+
+/-- The six stages, then the pending deposits and consolidations, reach the payments. -/
+theorem EpochPrefix.epochBeforePayments {config : Config} {checks : SignatureChecks}
+    {s reset deposited consolidated : BeaconState preset fork}
+    (epoch : EpochPrefix config checks s reset)
+    (depositsOk : Edge config checks .pendingDeposits reset deposited)
+    (consolidationsOk : Edge config checks .pendingConsolidations deposited consolidated) :
+    epochBeforePayments config checks s = .ok consolidated := by
+  rw [epochBeforePayments_eq_run]
+  exact run_ok_iff.mpr ((append_iff (xs := [.justification, .inactivity, .rewards, .registry,
+    .slashings, .eth1Reset, .pendingDeposits]) (ys := [.pendingConsolidations])).mpr
+    ⟨deposited, epoch.depositTrace depositsOk,
+      .cons (action_cases.mpr consolidationsOk) .nil⟩)
+
+/-- A trace of the six stages of an epoch before the pending deposits names its states. -/
+theorem EpochPrefix.of_trace {config : Config} {checks : SignatureChecks}
+    {s reset : BeaconState preset fork}
+    (trace : EpochTrace (action config checks)
+      [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset] s reset) :
+    Nonempty (EpochPrefix config checks s reset) := by
+  cases trace; rename_i justified justifiedOk trace
+  cases trace; rename_i scored scoredOk trace
+  cases trace; rename_i rewarded rewardedOk trace
+  cases trace; rename_i registered registeredOk trace
+  cases trace; rename_i slashed slashedOk trace
+  cases trace; rename_i resetOk trace
+  cases trace
+  exact ⟨⟨justified, scored, rewarded, registered, slashed, action_cases.mp justifiedOk,
+    action_cases.mp scoredOk, action_cases.mp rewardedOk, action_cases.mp registeredOk,
+    action_cases.mp slashedOk, action_cases.mp resetOk⟩⟩
+
 /-- Split an epoch trace after the effective balance updates.
 
 It names the state after each of the first ten stages, with the equation of each stage.
