@@ -97,34 +97,17 @@ theorem cached_of_climbBranchM {cache : HashOracle.QueryCache} {f : QueryImpl Ha
     ∀ x ∈ branchMessages index level node branch (tableHash f),
       cache x = some (f x) := by
   -- Each level queries its pair, and the levels above climb from the parent of the table.
-  have climbed : ∀ (branch : List Bytes) (p : Cryptography.Merkle.Position) (node : Bytes)
-      {root : Bytes},
-      simulateQ cache.toPartialImpl
-          (Cryptography.Merkle.climb (fun _ => combineM queryHash) p node branch) =
-        some root →
-      ∀ x ∈ Cryptography.Merkle.climbPairs (fun _ => combineM (m := Id) (tableHash f)) p
-          node branch,
-        cache (x.1 ++ x.2) = some (f (x.1 ++ x.2)) := by
-    intro branch
-    induction branch with
-    | nil =>
-      intro _ _ _ _ x hx
-      simp [Cryptography.Merkle.climbPairs] at hx
-    | cons sibling rest ih =>
-      intro p node root hrun x hx
-      simp only [Cryptography.Merkle.climb, simulateQ_bind] at hrun
-      obtain ⟨parent, hparent, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  have climbed := Cryptography.Merkle.RandomOracle.climbPairs_of_replay
+    (impl := cache.toPartialImpl) (hash := fun _ => combineM queryHash)
+    (table := fun _ => combineM (m := Id) (tableHash f))
+    (P := fun a b => cache (a ++ b) = some (f (a ++ b))) fun _ a b parent hparent => by
       -- The replayed parent is the parent with the table, which agrees with the cache.
       have heval := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hparent
       rw [evalWithAnswerFn_combineM] at heval
-      simp only [Cryptography.Merkle.climbPairs, List.mem_cons] at hx
-      rcases hx with rfl | hx
-      · -- This level queried its pair, so the cache holds the answer of the table.
-        simp only [combineM] at hparent
-        obtain ⟨digest, hdigest⟩ := cached_of_queryHash hparent
-        rw [hdigest, hf hdigest]
-      · rw [← heval] at hrun
-        exact ih p.parent _ hrun x hx
+      -- This level queried its pair, so the cache holds the answer of the table.
+      simp only [combineM] at hparent
+      obtain ⟨digest, hdigest⟩ := cached_of_queryHash hparent
+      exact ⟨by rw [hdigest, hf hdigest], heval.symm⟩
   intro x hx
   simp only [branchMessages, List.mem_map] at hx
   obtain ⟨pair, hpair, rfl⟩ := hx

@@ -41,6 +41,15 @@ The theorems below turn a Merkle collision into one of these. -/
 def Collision (c : (D →ₒ R).QueryCache) : Prop :=
   ∃ x y r, x ≠ y ∧ c x = some r ∧ c y = some r
 
+omit [DecidableEq D] in
+/-- Two different inputs with one answer of a table are a collision of a cache that holds both. -/
+theorem collision_of_cached {c : (D →ₒ R).QueryCache} {f : QueryImpl (D →ₒ R) Id} {a b : D}
+    (hdistinct : a ≠ b) (hequal : f a = f b)
+    -- The cache gives both inputs the answers of the table.
+    (ha : c a = some (f a)) (hb : c b = some (f b)) :
+    Collision c :=
+  ⟨a, b, f a, hdistinct, ha, hb.trans (congrArg some hequal.symm)⟩
+
 /-- A fresh answer can create a collision only by matching an old answer.
 
 So a fresh query creates a collision with probability at most the cache size over `N`. -/

@@ -1,6 +1,7 @@
 module
 
-public import EthLib.Cryptography.Proofs.Vrf.Unpredictability
+public import EthLib.Cryptography.Proofs.Vrf.Oracle
+public import EthLib.Cryptography.Proofs.Vrf.Verify
 public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
 
@@ -22,14 +23,8 @@ namespace EthLib.Cryptography.Vrf
 
 open EthLib.Cryptography.Vrf.Constants
 open OracleSpec OracleComp ENNReal
-open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith experimentWith_queryBound
-  prEvent_experimentWith_le)
-
-/-! ## The hash as an oracle -/
-
-/-- One call to the hash oracle, the only oracle that the extraction calls. -/
-def oracleHash (x : ByteArray) : OracleComp HashSpec Digest :=
-  liftM (HashSpec.query x)
+open EthLib.Cryptography.Merkle.RandomOracle (Collision collision_of_cached climbPairs_of_replay
+  experimentWith experimentWith_queryBound prEvent_experimentWith_le)
 
 /-! ## The experiment -/
 
@@ -103,23 +98,14 @@ theorem cached_of_climb {cache : HashSpec.QueryCache} {f : QueryImpl HashSpec Id
     ∀ (p : Merkle.Position) (b : Digest) {top : Digest},
       simulateQ cache.toPartialImpl (Merkle.climb (nodeWith oracleHash) p b t) = some top →
       ∀ x ∈ Merkle.climbPairs (nodeWith (m := Id) (fun x => pure (f x))) p b t,
-        cache (nodeInput x.1 x.2) = some (f (nodeInput x.1 x.2)) := by
-  induction t with
-  | nil =>
-    intro _ _ _ _ x hx
-    simp [Merkle.climbPairs] at hx
-  | cons v t ih =>
-    intro p b top hrun x hx
-    simp only [Merkle.climb, simulateQ_bind] at hrun
-    obtain ⟨parent, hparent, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+        cache (nodeInput x.1 x.2) = some (f (nodeInput x.1 x.2)) :=
+  climbPairs_of_replay (impl := cache.toPartialImpl) (hash := nodeWith oracleHash)
+    (table := nodeWith (m := Id) fun x => pure (f x))
+    (P := fun a b => cache (nodeInput a b) = some (f (nodeInput a b))) (fun _ _ _ _ hparent => by
     -- The replay read the parent from the cache, so the table gives the same parent.
     simp only [nodeWith, oracleHash, simulateQ_spec_query, QueryCache.toPartialImpl_apply]
       at hparent
-    simp only [Merkle.climbPairs, List.mem_cons] at hx
-    rcases hx with rfl | hx
-    · rw [hparent, hf hparent]
-    · rw [← hf hparent] at hrun
-      exact ih p.parent _ hrun x hx
+    exact ⟨by rw [hparent, hf hparent], (hf hparent).symm⟩) t
 
 /-- A replayed check caches its leaf input and the node input of each pair its climb hashes.
 
@@ -177,10 +163,6 @@ theorem collision_of_extractOutputs {cache : HashSpec.QueryCache} {claim : Openi
   obtain ⟨_, hrun₂, -⟩ := Option.bind_eq_some_iff.mp hrun
   obtain ⟨hleaf₁, hnodes₁⟩ := cached_of_verifyWith hf hrun₁
   obtain ⟨hleaf₂, hnodes₂⟩ := cached_of_verifyWith hf hrun₂
-  -- Two different cached inputs with one answer of the table are a collision of the cache.
-  have hcollision : ∀ {a b : ByteArray}, cache a = some (f a) → cache b = some (f b) →
-      a ≠ b → f a = f b → Collision cache := fun ha hb hab heq =>
-    ⟨_, _, _, hab, ha, hb.trans (congrArg some heq.symm)⟩
   -- Two different outputs come from two different secrets, so the search finds a collision.
   rcases secret_unique_of_climb_eq (H := fun x => f x) (i := claim.index) (o := claim.first)
       (o' := claim.second) (hroot.trans hroot'.symm) with hs | ⟨pair, hpair, hdistinct, hequal⟩
@@ -191,11 +173,11 @@ theorem collision_of_extractOutputs {cache : HashSpec.QueryCache} {claim : Openi
     next c hc =>
     cases hpair
     obtain ⟨hx, hy⟩ := Merkle.findCollision_mem_climbPairs _ hc
-    exact hcollision (hnodes₁ _ hx) (hnodes₂ _ hy) hdistinct hequal
+    exact collision_of_cached hdistinct hequal (hnodes₁ _ hx) (hnodes₂ _ hy)
   · -- The two leaf inputs.
     split at hpair
     · cases hpair
-      exact hcollision hleaf₁ hleaf₂ hdistinct hequal
+      exact collision_of_cached hdistinct hequal hleaf₁ hleaf₂
     · cases hpair
 
 /-! ## The bound -/

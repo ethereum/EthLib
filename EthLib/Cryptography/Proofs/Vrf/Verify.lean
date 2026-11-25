@@ -70,9 +70,13 @@ theorem verify_opening (secrets : UInt32 → Digest) (i : UInt32) :
 
 /-! ## Uniqueness -/
 
+/-- Two different inputs with one hash under `H`. -/
+def IsHashCollisionWith (H : ByteArray → Digest) (p : ByteArray × ByteArray) : Prop :=
+  p.1 ≠ p.2 ∧ H p.1 = H p.2
+
 /-- Two different inputs with one Keccak-256 hash. -/
 def IsHashCollision (p : ByteArray × ByteArray) : Prop :=
-  p.1 ≠ p.2 ∧ hash p.1 = hash p.2
+  IsHashCollisionWith hash p
 
 /-- The collision two openings at index `i` run into, with `H` in place of Keccak-256, if any.
 
@@ -97,8 +101,7 @@ def findHashCollision (i : UInt32) (o o' : Opening) : Option (ByteArray × ByteA
 /-- A collision of the node hash with `H` gives two different node inputs with one hash. -/
 theorem nodeInput_collision_of_valid {H : ByteArray → Digest} {c : Merkle.Collision Digest}
     (h : c.Valid fun _ left right => (pure (H (nodeInput left right)) : Id Digest)) :
-    nodeInput c.x.1 c.x.2 ≠ nodeInput c.y.1 c.y.2 ∧
-      H (nodeInput c.x.1 c.x.2) = H (nodeInput c.y.1 c.y.2) := by
+    IsHashCollisionWith H (nodeInput c.x.1 c.x.2, nodeInput c.y.1 c.y.2) := by
   obtain ⟨hne, heq⟩ := h
   refine ⟨fun he => hne ?_, heq⟩
   -- A node input determines its two children.
@@ -113,7 +116,7 @@ theorem isHashCollision_of_collision {c : Merkle.Collision Digest} (h : c.Valid 
 /-- Every pair that the search with `H` returns is two different inputs with one hash. -/
 theorem findHashCollisionWith_valid {H : ByteArray → Digest} {i : UInt32} {o o' : Opening}
     {p : ByteArray × ByteArray} (h : findHashCollisionWith H i o o' = some p) :
-    p.1 ≠ p.2 ∧ H p.1 = H p.2 := by
+    IsHashCollisionWith H p := by
   unfold findHashCollisionWith at h
   split at h
   · -- A node collision, which the Merkle search proves valid.
@@ -175,7 +178,7 @@ theorem secret_unique_of_climb_eq {H : ByteArray → Digest} {i : UInt32} {o o' 
       (Merkle.climb (m := Id) (fun _ left right => pure (H (nodeInput left right)))
         ⟨0, i.toNat⟩ (H (leafInput o'.secret)) o'.path.toList).run) :
     o.secret = o'.secret ∨
-      ∃ p, findHashCollisionWith H i o o' = some p ∧ p.1 ≠ p.2 ∧ H p.1 = H p.2 := by
+      ∃ p, findHashCollisionWith H i o o' = some p ∧ IsHashCollisionWith H p := by
   have binding := Merkle.climb_binding _ _ _ ⟨0, i.toNat⟩ _ _ (by simp) hroot
   -- The search succeeds unless the secrets are equal.
   have found : o.secret = o'.secret ∨ (findHashCollisionWith H i o o').isSome := by

@@ -1096,6 +1096,22 @@ Not yet released.
   - `Evm.Logic.NoAbort` (`Execution/Proofs/Evm/Logic/NoAbort.lean`) now unfolds to `Base.ErrorsMeet`, and holds of the same results.
   - `Evm.NoMiss` (`Execution/Proofs/Evm/Call/MissingCode.lean`) is new as a public definition, through `Base.ErrorsMeet`, and replaces a private copy of the transaction proofs.
   Migration: open `EthLib.Base` to name `ErrorsMeet`, and import `EthLib.Base.Proofs.ErrorsMeet`.
+
+- In Lean, the VRF proofs share their cache lemmas with the SSZ proofs, and name a collision of any hash ([#4575](https://github.com/ethereum/EthLib/issues/4575)).
+  - `Merkle.RandomOracle.climbPairs_of_replay` (`Cryptography/Proofs/Merkle/RandomOracle/Basic.lean`) is new: a climb that a partial table replays to the end meets a property on every pair it hashes.
+    `Vrf.cached_of_climb` and the branch bound of SSZ now follow from it.
+  - `Merkle.RandomOracle.collision_of_cached` (`Cryptography/Proofs/Merkle/RandomOracle/Collision.lean`) is new: two different cached inputs with one answer of a table are a collision of the cache.
+    `Ssz.RandomOracle.collision_of_cached` keeps its statement and follows from it.
+  - `Vrf.IsHashCollisionWith` (`Cryptography/Proofs/Vrf/Verify.lean`) is new, and `Vrf.IsHashCollision` is now that predicate with Keccak-256.
+    `nodeInput_collision_of_valid`, `findHashCollisionWith_valid` and `secret_unique_of_climb_eq` state their collision with it, in place of a written-out conjunction with the same meaning.
+  - `Vrf.HashSpec`, `Vrf.oracleHash` and `Vrf.natCard_digest` move to the new module `Cryptography/Proofs/Vrf/Oracle.lean`.
+    The uniqueness proof imports it, in place of the whole unpredictability proof.
+  - `Merkle.isTotalQueryBound_climb` (`Cryptography/Proofs/Merkle/QueryBound.lean`) is new: a climb makes at most one query per sibling in all.
+    It replaces `Sphincs.Unforgeability.climb_isTotalQueryBound`, which is removed, and follows from the climb bound of a predicate.
+    `Merkle.RandomOracle.climb_queryBound` keeps its statement and follows from it.
+  - `Merkle.isQueryBoundP_climb_zero` (`Cryptography/Proofs/Merkle/QueryBound.lean`) replaces `climb_isQueryBoundP_zero` (`Cryptography/Proofs/QueryAvoidance.lean`), which is removed: a climb makes no query that `p` accepts when no node hash makes one.
+  Migration: import `EthLib.Cryptography.Proofs.Vrf.Oracle` for the hash oracle, unfold `IsHashCollisionWith` where a proof reads the conjunction, and use the Merkle climb bound with the hash as a named argument.
+
 - In Lean and Python, the column sidecars of a block with no blob are now none, in place of one sidecar with an empty column per column ([#4149](https://github.com/ethereum/EthLib/issues/4149)).
   The check of a sidecar rejects one with no blob, so the empty sidecars were never valid.
   This holds at Fulu and from Gloas, from a block or from one of its sidecars.
