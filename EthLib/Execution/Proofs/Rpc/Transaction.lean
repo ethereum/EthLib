@@ -46,15 +46,6 @@ private theorem byte_quantityJson (what : String) {n : Nat} (h : n < 256) :
   have := byte_byteJson what n.toUInt8
   simpa [byteJson, Nat.mod_eq_of_lt h] using this
 
-/-- The reader of byte strings reads back a byte string that holds its bytes as data. -/
-private theorem bytes_dataJson (what : String) (b : ByteArray) :
-    bytes what (dataJson b.data.toList) = .ok b := by
-  rw [dataJson, bytes_hexString]
-  congr 1
-  apply ByteArray.ext
-  apply Array.toList_inj.mp
-  simp
-
 /-- The reader of a list reads back a list whose items each read back from their writer. -/
 private theorem array_of_items {α : Type} (what : String) (f : Lean.Json → Read α)
     (g : α → Lean.Json) (items : List α) (h : ∀ x ∈ items, f (g x) = .ok x) :

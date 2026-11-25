@@ -83,14 +83,6 @@ theorem wellFormed_compatibleUnion_iff (selectors : List Nat) (options : List De
     · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
 
-/-- The element of a legal vector is legal. -/
-theorem wellFormed_vector_element {element : Desc} {length : Nat}
-    (sound : (Desc.vector element length).wellFormed = .ok ()) : element.wellFormed = .ok () := by
-  -- An empty vector is refused outright, and otherwise the element's own check is what remains.
-  by_cases z : length = 0
-  · simp [Desc.wellFormed, z, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at sound
-  · simpa [Desc.wellFormed, z] using sound
-
 /-- A list with no repeated entry reports no duplicate. -/
 theorem firstDuplicate_of_nodup {α : Type} [BEq α] [LawfulBEq α] :
     ∀ items : List α, items.Nodup → firstDuplicate items = none

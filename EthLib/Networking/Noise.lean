@@ -2,7 +2,6 @@ module
 
 public import EthLib.Base.Bytes
 public import EthLib.Base.ByteOrder
-public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Cryptography.Hash.Hmac
