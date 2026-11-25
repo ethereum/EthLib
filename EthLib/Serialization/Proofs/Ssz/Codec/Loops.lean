@@ -16,6 +16,43 @@ The two smallest cases of the hex reader are here too.
 
 namespace EthLib.Serialization.Ssz
 
+/-! ## The composite arms of the encoder -/
+
+/-- A vector of its length encodes its elements as a sequence. -/
+theorem serialize_vector_seq (element : Desc) (length : Nat) (elements : List Value) :
+    serialize (.vector element length) (.seq elements) =
+      if elements.length == length then serializeSequence element elements
+      else .error (.scope length elements.length) :=
+  rfl
+
+/-- A list within its limit encodes its elements as a sequence. -/
+theorem serialize_list_seq (element : Desc) (limit : Nat) (elements : List Value) :
+    serialize (.list element limit) (.seq elements) =
+      if elements.length ≤ limit then serializeSequence element elements
+      else .error (.overLimit limit elements.length) :=
+  rfl
+
+/-- A progressive list within its bound encodes its elements as a sequence. -/
+theorem serialize_progressiveList_seq (element : Desc) (limit : Option Nat)
+    (elements : List Value) :
+    serialize (.progressiveList element limit) (.seq elements) = (do
+      boundCheck limit elements.length
+      serializeSequence element elements) :=
+  rfl
+
+/-- A container encodes its values as a struct. -/
+theorem serialize_container_seq (names : List String) (fields : List Desc)
+    (values : List Value) :
+    serialize (.container names fields) (.seq values) = serializeStruct fields values :=
+  rfl
+
+/-- A progressive container encodes its values as a struct of its declared fields. -/
+theorem serialize_progressiveContainer_seq (active : List Bool) (names : List String)
+    (fields : List Desc) (values : List Value) :
+    serialize (.progressiveContainer active names fields) (.seq values) =
+      serializeStruct fields values :=
+  rfl
+
 /-! ## Widths -/
 
 /-- The width loop from some width adds that width to the width from none. -/

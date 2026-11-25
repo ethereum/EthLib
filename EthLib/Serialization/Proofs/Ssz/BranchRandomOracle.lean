@@ -317,7 +317,7 @@ theorem hashTreeRootAtM_bytes48 {m : Type → Type} [Monad m] [LawfulMonad m]
     simp [size, bytesPerChunk]
   simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count,
+  simp only [layoutChunksWithM, MerkleLayout.packing, Option.getD_none, Leaves.count,
     Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, Nat.lt_irrefl,
     ↓reduceIte, ExceptT.run_lift]
   rw [count, show depthFor 2 = 1 from depthFor_pow 1, subtreeAtM_two hasher count, combineM,
@@ -403,11 +403,12 @@ theorem hashTreeRootM_bytes48List {m : Type → Type} [Monad m] [LawfulMonad m]
         (some (lengthWord vectors.length)) =
       .ok (.nesting ((vectors.map SszType.toValue).map fun value => some (.byteVector 48, value))
         (some limit) (some (lengthWord vectors.length))) := rfl
-    simp only [hashTreeRootAtM, merkleLayout, List.length_map, gt_iff_lt, over, ↓reduceIte, layout]
+    rw [hashTreeRootAtM_succ]
+    simp only [merkleLayout, List.length_map, gt_iff_lt, over, ↓reduceIte, layout]
     rw [lift]
     simp only [ExceptT.run_bind, ExceptT.run_mk, pure_bind]
-    simp only [layoutChunksAtM, MerkleLayout.nesting, Option.getD_none, Leaves.count,
-      List.length_map, List.drop_zero, Nat.sub_zero, merkleizeBoundedUncheckedM]
+    simp only [layoutChunksAtM, layoutChunksWithM, MerkleLayout.nesting, Option.getD_none,
+      Leaves.count, List.length_map, List.drop_zero, Nat.sub_zero, merkleizeBoundedUncheckedM]
     rw [List.take_of_length_le (by simp)]
     simp only [List.mapM_map, Function.comp_def, ExceptT.run_bind, mapM_hashTreeRootAtM_bytes48,
       bind_map_left, bind_assoc, pure_bind, ExceptT.run_pure]
@@ -439,12 +440,13 @@ theorem hashTreeRootM_bytes48Vector {m : Type → Type} [Monad m] [LawfulMonad m
   have layout : sequenceLayout (.byteVector 48) (vectors.map SszType.toValue)
       (some vectors.length) = .ok (.nesting ((vectors.map SszType.toValue).map fun value =>
         some (.byteVector 48, value)) (some vectors.length)) := rfl
-  simp only [hashTreeRootAtM, merkleLayout, List.length_map, bne_self_eq_false,
+  rw [hashTreeRootAtM_succ]
+  simp only [merkleLayout, List.length_map, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, layout]
   rw [lift]
   simp only [ExceptT.run_bind, ExceptT.run_mk, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.nesting, Option.getD_none, Leaves.count,
-    List.length_map, List.drop_zero, Nat.sub_zero, merkleizeBoundedUncheckedM]
+  simp only [layoutChunksAtM, layoutChunksWithM, MerkleLayout.nesting, Option.getD_none,
+    Leaves.count, List.length_map, List.drop_zero, Nat.sub_zero, merkleizeBoundedUncheckedM]
   rw [List.take_of_length_le (by simp)]
   simp only [List.mapM_map, Function.comp_def, ExceptT.run_bind, mapM_hashTreeRootAtM_bytes48,
     bind_map_left, bind_assoc, pure_bind, ExceptT.run_pure]
@@ -694,7 +696,7 @@ theorem hashTreeRootM_bytes96 {m : Type → Type} [Monad m] [LawfulMonad m]
   show (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 96) (.bytes bytes.toArray)).run = _
   simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count,
+  simp only [layoutChunksWithM, MerkleLayout.packing, Option.getD_none, Leaves.count,
     Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, Nat.lt_irrefl,
     ↓reduceIte, ExceptT.run_lift]
   rw [count, show depthFor 3 = 2 by simp [depthFor],
@@ -715,7 +717,7 @@ theorem hashTreeRootM_bytes32 {m : Type → Type} [Monad m] [LawfulMonad m]
   show (hashTreeRootAtM hasher 1 (.byteVector 32) (.bytes bytes.toArray)).run = _
   simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
+  simp only [layoutChunksWithM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
     merkleizeBoundedUncheckedM, count, show depthFor 1 = 0 from depthFor_pow 0]
   simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk,
     Array.extract_eq_self_of_le]
@@ -736,7 +738,7 @@ theorem hashTreeRootM_uint64 {m : Type → Type} [Monad m] [LawfulMonad m]
     rfl
   show (hashTreeRootAtM hasher 1 (.uint 8) (.uint value.toNat)).run = _
   simp only [hashTreeRootAtM, merkleLayout, fixedLeaf, encoded, pure_bind, liftM_pure]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
+  simp only [layoutChunksWithM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
     merkleizeBoundedUncheckedM, count, show depthFor 1 = 0 from depthFor_pow 0]
   simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk,
     Array.extract_eq_self_of_le]

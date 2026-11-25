@@ -148,7 +148,7 @@ theorem encodeFixedElements_eq {α : Type} [SszType α] [LawfulSszType α]
     (fixed : (desc α).isFixed) (items : Array α) :
     encodeFixedElements items =
       (do return ⟨← serializeSequence (desc α) (items.toList.map toValue)⟩) := by
-  simp only [encodeFixedElements, serializeSequence, fixed, assemble_inline_eq]
+  simp only [encodeFixedElements, serializeSequence, assembleSequence, fixed, assemble_inline_eq]
   rw [encodeElementsOnto_eq, List.drop_zero]
   cases serializeEach (desc α) (items.toList.map toValue) with
   | error fault => rfl
@@ -222,7 +222,7 @@ instance {α : Type} [SszType α] [LawfulSszType α] {limit : Nat} :
   encode_eq l := by
     by_cases fixed : (desc α).isFixed
     · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue,
-        Ssz.serialize, List.length_map, Array.length_toList, l.bound, ite_true]
+        serialize_list_seq, List.length_map, Array.length_toList, l.bound, ite_true]
     · simp only [encode, fixed, Bool.false_eq_true, ite_false]
       rfl
 
@@ -315,7 +315,7 @@ instance {α : Type} [SszType α] [LawfulSszType α] : LawfulSszType (Progressiv
   encode_eq l := by
     by_cases fixed : (desc α).isFixed
     · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue,
-        Ssz.serialize, boundCheck, bind, Except.bind, pure, Except.pure]
+        serialize_progressiveList_seq, boundCheck, bind, Except.bind, pure, Except.pure]
     · simp only [encode, fixed, Bool.false_eq_true, ite_false]
       rfl
 

@@ -145,7 +145,7 @@ theorem hashTreeRootM_beaconBlockHeader {m : Type → Type} [Monad m] [LawfulMon
   unfold hashTreeRootAtM
   simp only [merkleLayout, List.length_cons, List.length_nil, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, liftM_pure, pure_bind, List.zip_cons_cons, List.zip_nil_left,
-    List.map_cons, List.map_nil, MerkleLayout.nesting, layoutChunksAtM, Leaves.count,
+    List.map_cons, List.map_nil, MerkleLayout.nesting, layoutChunksWithM, Leaves.count,
     Option.getD_none, List.drop_zero, Nat.sub_zero, List.take_succ_cons, List.take_zero,
     List.mapM_cons, List.mapM_nil]
   simp only [ExceptT.run_bind, ExceptT.run_pure, bind_assoc, slot, proposer, parent, state, body,

@@ -45,7 +45,7 @@ theorem serializeSequence_bytes (data : Bytes) :
       if data.size ≥ 2 ^ (8 * bytesPerOffset) then .error (.offsetOverflow data.size)
       else .ok data := by
   -- Treat each original byte as one fixed-width integer payload.
-  unfold serializeSequence byteValues
+  unfold serializeSequence assembleSequence byteValues
   rw [serializeEach_bytes]
   simp only [Bind.bind, Except.bind, Desc.isFixed, Desc.fixedSize, Option.isSome_some]
   -- The sequence contains exactly one inline slot for each byte.
@@ -68,6 +68,7 @@ theorem serialize_byteVector_alias (data : Bytes) (length : Nat) :
     serialize (.byteVector length) (.bytes data) =
       serialize (.vector (.uint 1) length) (.seq (byteValues data)) := by
   -- The count is checked first on both paths, then the same size bound.
+  rw [serialize_vector_seq]
   by_cases counted : data.size = length <;>
     simp [serialize, counted, serializeSequence_bytes, Bind.bind, Except.bind, pure,
       Except.pure, throw, throwThe, MonadExceptOf.throw]
@@ -77,9 +78,10 @@ theorem serialize_byteList_alias (data : Bytes) (limit : Nat) :
     serialize (.byteList limit) (.bytes data) =
       serialize (.list (.uint 1) limit) (.seq (byteValues data)) := by
   -- The limit is checked first on both paths, then the same size bound.
+  rw [serialize_list_seq]
   by_cases within : data.size ≤ limit <;>
-    simp [serialize, within, Nat.not_lt.mpr, serializeSequence_bytes, Bind.bind, Except.bind,
-      pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+    simp [serialize, within, Nat.not_lt.mpr, serializeSequence_bytes, Bind.bind, Except.bind, pure,
+      Except.pure, throw, throwThe, MonadExceptOf.throw]
 
 /-- One-byte slices decode to the integers their bytes hold. -/
 private theorem deserializeEach_bytes :

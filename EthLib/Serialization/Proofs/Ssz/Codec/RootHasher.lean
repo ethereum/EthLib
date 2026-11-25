@@ -17,6 +17,20 @@ namespace EthLib.Serialization.Ssz
 
 open EthLib.Base
 
+/-- One more unit of budget roots the layout of the value, with a hasher in any monad. -/
+theorem hashTreeRootAtM_succ {m : Type → Type} [Monad m] (hasher : Hasher m) (budget : Nat)
+    (shape : Desc) (value : Value) :
+    hashTreeRootAtM hasher (budget + 1) shape value = (do
+      let layout ← merkleLayout shape value
+      let chunks ← layoutChunksAtM hasher budget layout
+      let root ← match layout.limit with
+        | none => ExceptT.lift (merkleizeProgressiveUncheckedM hasher chunks.toList)
+        | some capacity => merkleizeBoundedUncheckedM hasher chunks (some capacity)
+      match layout.mixin with
+      | none => return root
+      | some word => ExceptT.lift (mixInM hasher root word)) :=
+  rfl
+
 /-- A spent budget gives no root. -/
 theorem hashTreeRootAt_zero (shape : Desc) (value : Value) :
     hashTreeRootAt 0 shape value = .error .proofIncomplete := by
@@ -56,7 +70,7 @@ theorem layoutChunksAt_eq (budget : Nat) (layout : MerkleLayout) (start : Nat)
           | none => pure zeroChunk
           | some (shape, value) => hashTreeRootAt budget shape value
         return chunks.toArray : Except Err (Array Bytes)) := by
-  simp only [layoutChunksAt, layoutChunksAtM, ExceptT.run]
+  simp only [layoutChunksAt, layoutChunksAtM, layoutChunksWithM, ExceptT.run]
   cases layout.leaves with
   | packed chunks => rfl
   | nested values =>
@@ -104,7 +118,7 @@ theorem layoutChunksAtM_id_eq (hasher : Hasher Id) (budget : Nat) (layout : Merk
           | none => pure zeroChunk
           | some (shape, value) => (hashTreeRootAtM hasher budget shape value).run
         return chunks.toArray : Except Err (Array Bytes)) := by
-  simp only [layoutChunksAtM, ExceptT.run]
+  simp only [layoutChunksAtM, layoutChunksWithM, ExceptT.run]
   cases layout.leaves with
   | packed chunks => rfl
   | nested values =>

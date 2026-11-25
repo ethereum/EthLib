@@ -149,7 +149,8 @@ private theorem sequence_complete (element : Desc) (values : List Value) (sizes 
   -- The structural bound now guarantees that the complete header and body can be assembled.
   obtain ⟨bytes, assembled, sized⟩ := assemble_complete
     (parts.map fun _ => element.isFixed) parts _ ((sequence_width element parts).trans measured) bounded
-  exact ⟨bytes, by simp [serializeSequence, encoded, assembled, Bind.bind, Except.bind], sized⟩
+  exact ⟨bytes, by
+    simp [serializeSequence, assembleSequence, encoded, assembled, Bind.bind, Except.bind], sized⟩
 
 /-- Collecting field encodings preserves the sum of each field's size contribution. -/
 private theorem collect_fields (sizes : Desc → Value → Nat) :
@@ -191,7 +192,8 @@ private theorem struct_complete (fields : List Desc) (values : List Value)
   -- The shared assembly theorem turns that bounded sum into an actual encoding.
   obtain ⟨bytes, assembled, sized⟩ := assemble_complete
     (fields.map Desc.isFixed) parts _ ((fields_width fields parts).trans measured) bounded
-  exact ⟨bytes, by simp [serializeStruct, encoded, assembled, Bind.bind, Except.bind], sized⟩
+  exact ⟨bytes, by
+    simp [serializeStruct, assembleStruct, encoded, assembled, Bind.bind, Except.bind], sized⟩
 
 /-- Collected encodings witness representability and preserve the sum of child sizes. -/
 private theorem each_representable (element : Desc) (sizes : Value → Nat)
@@ -235,7 +237,7 @@ private theorem sequence_representable (element : Desc) (values : List Value) (b
   cases collected : serializeEach element values with
   | error fault => simp [serializeSequence, collected, Bind.bind, Except.bind] at wrote
   | ok parts =>
-    simp only [serializeSequence, collected, Bind.bind, Except.bind] at wrote
+    simp only [serializeSequence, assembleSequence, collected, Bind.bind, Except.bind] at wrote
     -- Recover structural witnesses for every collected child before accounting for assembly.
     obtain ⟨children, counted⟩ := each_representable element sizes measure reflect values parts collected
     have measured := (sequence_width element parts).trans counted
@@ -295,7 +297,7 @@ private theorem struct_representable (fields : List Desc) (values : List Value) 
   cases collected : serializeFields fields values with
   | error fault => simp [serializeStruct, collected, Bind.bind, Except.bind] at wrote
   | ok parts =>
-    simp only [serializeStruct, collected, Bind.bind, Except.bind] at wrote
+    simp only [serializeStruct, assembleStruct, collected, Bind.bind, Except.bind] at wrote
     -- Collect child witnesses and their exact contribution to the container.
     obtain ⟨children, counted⟩ := fields_representable sizes measure fields values parts reflect collected
     have measured := (fields_width fields parts).trans counted
@@ -341,31 +343,31 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
     intro (.vector counted admissible)
     obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
       (fun held member => ih held member (admissible held member)) bounded
-    exact ⟨bytes, by simp [Ssz.serialize, counted, encoded], sized⟩
+    exact ⟨bytes, by simp [serialize_vector_seq, counted, encoded], sized⟩
   | list each bounded ih =>
     intro (.list within admissible)
     obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
       (fun held member => ih held member (admissible held member)) bounded
-    exact ⟨bytes, by simp [Ssz.serialize, within, encoded], sized⟩
+    exact ⟨bytes, by simp [serialize_list_seq, within, encoded], sized⟩
   | @progressiveList _ limit _ _ each bounded ih =>
     intro (.progressiveList within admissible)
     obtain ⟨bytes, encoded, sized⟩ := sequence_complete _ _ _
       (fun held member => ih held member (admissible held member)) bounded
     exact ⟨bytes, by
-      simpa only [Ssz.serialize, boundCheck_of_withinBound limit _ within, Bind.bind,
-        Except.bind] using encoded, sized⟩
+      simpa only [serialize_progressiveList_seq, boundCheck_of_withinBound limit _ within,
+        Bind.bind, Except.bind] using encoded, sized⟩
   -- For containers, matched field-value counts ensure that every declared field is encoded.
   | container each bounded ih =>
     intro (.container paired admissible)
     obtain ⟨bytes, encoded, sized⟩ := struct_complete _ _ _ paired
       (fun pair member => ih pair member (admissible pair member)) bounded
-    exact ⟨bytes, by simpa only [Ssz.serialize] using encoded, sized⟩
+    exact ⟨bytes, by simpa only [serialize_container_seq] using encoded, sized⟩
   -- Inactive Merkle positions add no bytes to the serialized container.
   | progressiveContainer each bounded ih =>
     intro (.progressiveContainer paired admissible)
     obtain ⟨bytes, encoded, sized⟩ := struct_complete _ _ _ paired
       (fun pair member => ih pair member (admissible pair member)) bounded
-    exact ⟨bytes, by simpa only [Ssz.serialize] using encoded, sized⟩
+    exact ⟨bytes, by simpa only [serialize_progressiveContainer_seq] using encoded, sized⟩
   | @compatibleUnion selectors options selector option data size named inner ih =>
     intro (.compatibleUnion ranged found admissible)
     -- The size witness and admissibility refer to the same uniquely selected option.

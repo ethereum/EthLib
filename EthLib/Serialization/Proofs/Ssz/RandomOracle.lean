@@ -190,7 +190,7 @@ theorem evalWithAnswerFn_layoutChunksAtM (f : QueryImpl HashOracle Id) (budget :
     evalWithAnswerFn f (layoutChunksAtM oracleHasher budget layout start stop).run =
       (layoutChunksAtM (Hasher.ofHash (m := Id) (tableHash f)) budget layout start stop).run := by
   rw [layoutChunksAtM_id_eq]
-  simp only [layoutChunksAtM]
+  simp only [layoutChunksAtM, layoutChunksWithM]
   cases layout.leaves with
   | packed chunks => rfl
   | nested values =>
@@ -215,8 +215,8 @@ theorem evalWithAnswerFn_hashTreeRootAtM (f : QueryImpl HashOracle Id) (budget :
     exact evalWithAnswerFn_exceptT_throw f _
   | succ budget ih =>
     rw [hashTreeRootAtM_id_succ]
-    simp only [hashTreeRootAtM, evalWithAnswerFn_exceptT_bind, evalWithAnswerFn_exceptT_liftExcept,
-      evalWithAnswerFn_layoutChunksAtM f budget ih]
+    simp only [hashTreeRootAtM_succ, evalWithAnswerFn_exceptT_bind,
+      evalWithAnswerFn_exceptT_liftExcept, evalWithAnswerFn_layoutChunksAtM f budget ih]
     show Except.bind _ _ = Except.bind _ _
     congr 1
     funext layout

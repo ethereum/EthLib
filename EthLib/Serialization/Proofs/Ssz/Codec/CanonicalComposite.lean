@@ -149,7 +149,7 @@ theorem canonical_vector {element : Desc} {count : Nat} {data : Bytes} {value : 
   -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
   cases domain with
   | vector sized _ =>
-    simp [serialize, sized, serializeSequence,
+    simp [serialize, sized, assembleSequence,
       serializeEach_of_deserializeEach canonical slices values decoded,
       Bind.bind, Except.bind, vectorSlices_assemble positive parts]
 
@@ -168,7 +168,7 @@ theorem canonical_list {element : Desc} {limit : Nat} {data : Bytes} {value : Va
   -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
   cases domain with
   | list within _ =>
-    simp [serialize, within, serializeSequence,
+    simp [serialize, within, assembleSequence,
       serializeEach_of_deserializeEach canonical slices values decoded,
       Bind.bind, Except.bind, listSlices_assemble parts]
 
@@ -187,7 +187,7 @@ theorem canonical_progressiveList {element : Desc} {limit : Option Nat} {data : 
   -- Re-encoding each element recovers its slice, and canonical assembly recovers the whole byte string.
   have counted : values.length = slices.length :=
     (deserializeEach_length slices values decoded).symm
-  simp [serialize, serializeSequence,
+  simp [serialize, assembleSequence,
     boundCheck_of_withinBound limit _ (counted ▸ listSlices_within parts),
     serializeEach_of_deserializeEach canonical slices values decoded,
     Bind.bind, Except.bind, listSlices_assemble parts]
