@@ -30,57 +30,8 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- A read of code never fails for a short balance. -/
 theorem getCode_ne_insufficientBalance (state : TransactionState) (codeHash : Hash32)
-    (address : Address) : state.getCode codeHash ≠ .error (.insufficientBalance address) := by
-  intro h
-  unfold State.TransactionState.getCode at h
-  repeat' split at h
-  all_goals try cases h
-  unfold State.State.getCode at h
-  repeat' split at h
-  all_goals cases h
-
-/-- A change of one account fails for a short balance only when its function does. -/
-theorem modifyState_ne_insufficientBalance {state : TransactionState}
-    {address other : Address} {f : State.Account → Except State.StateError State.Account}
-    (hf : ∀ account, f account ≠ .error (.insufficientBalance other)) :
-    state.modifyState fork address f ≠ .error (.insufficientBalance other) := fun h =>
-  hf _ (State.TransactionState.modifyState_eq_error.mp h)
-
-/-- A credit of ether never fails for a short balance. -/
-private theorem creditEther_ne_insufficientBalance (state : TransactionState)
-    (address : Address) (amount : Nat) (other : Address) :
-    creditEther fork state address amount ≠ .error (.insufficientBalance other) := by
-  unfold creditEther
-  split
-  · exact modifyState_ne_insufficientBalance fun _ h => by
-      unfold State.Account.credit at h
-      split at h <;> cases h
-  · nofun
-
-/-- The deletions at the end of a transaction never fail for a short balance. -/
-private theorem deleteAccounts_ne_insufficientBalance (state : TransactionState)
-    (output : CallOutput) (other : Address) :
-    deleteAccounts fork state output ≠ .error (.insufficientBalance other) := by
-  have fold : ∀ (l : List Address) (init : TransactionState),
-      l.foldlM (fun state address =>
-        if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
-        else pure (state.destroyAccount address)) init ≠ .error (.insufficientBalance other) := by
-    intro l
-    induction l with
-    | nil => exact fun _ h => by cases h
-    | cons address rest ih =>
-      intro init h
-      rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-      · split at h
-        · exact modifyState_ne_insufficientBalance (fun _ h => by cases h) h
-        · cases h
-      · exact ih mid h
-  intro h
-  unfold deleteAccounts at h
-  rcases Base.bind_eq_error h with h | ⟨deleted, -, h⟩
-  · rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at h
-    exact fold _ _ h
-  · cases h
+    (address : Address) : state.getCode codeHash ≠ .error (.insufficientBalance address) :=
+  fun h => by cases State.TransactionState.error_getCode h
 
 /-- A sender that holds the fee and an amount more buys the gas, and keeps that amount. -/
 private theorem buyGas_ok {env : BlockEnvironment fork} {state : TransactionState}
@@ -204,97 +155,6 @@ private theorem funded_prepareFirstFrame {chainId : Nat} {message : Message fork
           exact Funded.of_balance funded rfl rfl rfl
             ((read _ _ _).trans ((read _ _ _).trans base))
 
-/-- The charge of an authorization never fails for a short balance. -/
-private theorem chargeAuthorization_ne_insufficientBalance [LawfulGasMeter Meter]
-    {done : Delegations Meter} {authority : Address} {auth : Authorization}
-    (address : Address) :
-    chargeAuthorization done authority auth ≠ .error (.state (.insufficientBalance address)) := by
-  intro h
-  unfold chargeAuthorization at h
-  repeat' first
-    | (rcases Base.bind_eq_error h with h | ⟨_, -, h⟩)
-    | split at h
-  all_goals first
-    | cases h
-    | cases LawfulGasMeter.charge_error h
-    | cases LawfulGasMeter.chargeState_error h
-    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
-       cases hee
-       exact getCode_ne_insufficientBalance _ _ _ he')
-
-/-- One authorization never fails for a short balance. -/
-private theorem applyAuthorization_ne_insufficientBalance [LawfulGasMeter Meter] {chainId : Nat}
-    {done : Delegations Meter} {auth : Authorization} (address : Address)
-    (read : TransactionState) :
-    applyAuthorization fork chainId done auth ≠
-      .error (.state (.insufficientBalance address), read) := by
-  intro h
-  unfold applyAuthorization at h
-  dsimp only at h
-  repeat' first
-    | (rcases Base.bind_eq_error h with h | ⟨_, -, h⟩)
-    | split at h
-  all_goals first
-    | cases h
-    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
-       simp only [Function.comp_apply, Prod.mk.injEq, EvmError.state.injEq] at hee
-       obtain ⟨rfl, -⟩ := hee
-       first
-         | (unfold authorityAccepts at he'
-            rcases Base.bind_eq_error he' with he' | ⟨_, -, he'⟩
-            · exact getCode_ne_insufficientBalance _ _ _ he'
-            · cases he')
-         | (unfold payAuthorization at he'
-            split at he'
-            · rcases Base.bind_eq_error he' with he' | ⟨_, -, he'⟩
-              · exact chargeAuthorization_ne_insufficientBalance _ he'
-              · cases he'
-            · cases he')
-         | (unfold delegate at he'
-            rcases Base.bind_eq_error he' with he' | ⟨_, -, he'⟩
-            · unfold State.TransactionState.setCode at he'
-              exact modifyState_ne_insufficientBalance (fun _ h => by cases h) he'
-            rcases Base.bind_eq_error he' with he' | ⟨_, -, he'⟩
-            · exact modifyState_ne_insufficientBalance (fun _ h => by cases h) he'
-            · cases he'))
-
-/-- A list of authorizations never fails for a short balance. -/
-private theorem foldlM_applyAuthorization_ne_insufficientBalance [LawfulGasMeter Meter]
-    {chainId : Nat}
-    (address : Address) (read : TransactionState) :
-    ∀ {auths : List Authorization} {start : Delegations Meter},
-      auths.foldlM (applyAuthorization fork chainId) start ≠
-        .error (.state (.insufficientBalance address), read)
-  | [], _, h => by cases h
-  | _ :: _, _, h => by
-    rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
-    · exact applyAuthorization_ne_insufficientBalance address read h
-    · exact foldlM_applyAuthorization_ne_insufficientBalance address read h
-
-/-- The first frame of a message never fails for a short balance. -/
-private theorem prepareFirstFrame_ne_insufficientBalance [LawfulGasMeter Meter] {chainId : Nat}
-    {message : Message fork} {state : TransactionState} {substate : Substate}
-    {auths : List Authorization} {paid : Std.ExtTreeSet Address} (address : Address)
-    (read : TransactionState) :
-    prepareFirstFrame (Meter := Meter) chainId message state substate auths paid ≠
-      .error (.state (.insufficientBalance address), read) := by
-  intro h
-  unfold prepareFirstFrame at h
-  split at h <;> dsimp only at h <;>
-  repeat' first
-    | (rcases Base.bind_eq_error h with h | ⟨_, -, h⟩)
-    | split at h
-  all_goals first
-    | (cases h; done)
-    | exact foldlM_applyAuthorization_ne_insufficientBalance address read h
-    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
-       simp only [Prod.mk.injEq, EvmError.state.injEq] at hee
-       obtain ⟨rfl, -⟩ := hee
-       first
-         | cases LawfulGasMeter.charge_error he'
-         | cases LawfulGasMeter.chargeState_error he'
-         | exact getCode_ne_insufficientBalance _ _ _ he')
-
 /-- A message whose caller holds its value never fails for a balance below an amount. -/
 theorem processMessageCall_ne_insufficientBalance [LawfulGasMeter Meter]
     {chainId : Nat} {message : Message fork} {state : TransactionState} {substate : Substate}
@@ -310,7 +170,7 @@ theorem processMessageCall_ne_insufficientBalance [LawfulGasMeter Meter]
     dsimp only at h
     split at h
     · cases h
-      exact prepareFirstFrame_ne_insufficientBalance address read hprep
+      exact prepareFirstFrame_ne_state (fun _ h => by cases h) read hprep
     · cases h
   · rw [hprep] at h
     dsimp only at h
@@ -381,21 +241,13 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
   rcases Base.bind_eq_error h with h | ⟨⟨settled, used⟩, -, h⟩
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
-    unfold settleGas at he
-    rw [paidBaseFee_empty] at he
-    rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
-    · exact creditEther_ne_insufficientBalance _ _ _ _ he
-    rcases Base.bind_eq_error he with he | ⟨paid, -, he⟩
-    · unfold payBeneficiary at he
-      split at he
-      · cases he
-      · exact creditEther_ne_insufficientBalance _ _ _ _ he
-    · cases he
+    obtain ⟨_, he⟩ := error_settleGas he
+    cases he
   -- The deletions never check a balance.
   rcases Base.bind_eq_error h with h | ⟨deleted, -, h⟩
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
-    exact deleteAccounts_ne_insufficientBalance _ _ _ he
+    exact deleteAccounts_ne_error _ _ _ he
   · cases h
 
 end

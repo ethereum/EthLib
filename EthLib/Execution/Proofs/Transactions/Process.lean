@@ -13,6 +13,8 @@ The theorems say what a transaction starts with and what its first frame is.
 
 They also give the gas that its run uses and the gas that it adds to its block.
 
+They also say which state errors the first frame and the deletions at the end can give.
+
 Sources:
 
 - [EIP-3529][e3529]: the cap of a fifth on the refund, from London.
@@ -847,5 +849,101 @@ theorem runTransaction_gasUsed_le {env : BlockEnvironment fork} {block : State.B
     rfl
   rw [hUsed]
   exact gasUsed_le_gasUsed_zero _ _ _ _ _
+
+/-! ## Failures of the state outside the frames -/
+
+/-- The deletions at the end of a transaction never fail. -/
+theorem deleteAccounts_ne_error (state : State.TransactionState) (output : CallOutput)
+    (e : State.StateError) : deleteAccounts fork state output ≠ .error e := by
+  intro h
+  unfold deleteAccounts at h
+  rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
+  · rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at h
+    refine foldlM_ne_error_of_step (fun _ _ h => ?_) _ _ h
+    split at h
+    · cases State.TransactionState.modifyState_eq_error.mp h
+    · cases h
+  · cases h
+
+section FirstFrame
+
+variable {e : State.StateError} (ne : ∀ c, e ≠ .missingCode c)
+include ne
+
+/-- The charge of an authorization fails with a state error only for a missing code. -/
+private theorem chargeAuthorization_ne_state {done : Delegations Meter} {authority : Address}
+    {auth : Authorization} : chargeAuthorization done authority auth ≠ .error (.state e) := by
+  intro h
+  unfold chargeAuthorization at h
+  repeat' first
+    | (rcases Base.bind_eq_error h with h | ⟨_, -, h⟩)
+    | split at h
+  all_goals first
+    | (cases h; done)
+    | (cases LawfulGasMeter.charge_error h; done)
+    | (cases LawfulGasMeter.chargeState_error h; done)
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
+       cases hee
+       exact ne _ (State.TransactionState.error_getCode he'))
+
+/-- One authorization fails with a state error only for a missing code. -/
+private theorem applyAuthorization_ne_state {done : Delegations Meter} {auth : Authorization}
+    (read : State.TransactionState) :
+    applyAuthorization fork chainId done auth ≠ .error (.state e, read) := by
+  intro h
+  unfold applyAuthorization at h
+  dsimp only at h
+  repeat' first
+    | (rcases Base.bind_eq_error h with h | ⟨_, -, h⟩)
+    | split at h
+  all_goals first
+    | (cases h; done)
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
+       simp only [Function.comp_apply, Prod.mk.injEq, EvmError.state.injEq] at hee
+       obtain ⟨rfl, -⟩ := hee
+       first
+         | (unfold authorityAccepts at he'
+            rcases Base.bind_eq_error he' with he' | ⟨_, -, he'⟩
+            · exact ne _ (State.TransactionState.error_getCode he')
+            · cases he')
+         | (unfold payAuthorization at he'
+            split at he'
+            · rcases Base.bind_eq_error he' with he' | ⟨_, -, he'⟩
+              · exact chargeAuthorization_ne_state ne he'
+              · cases he'
+            · cases he')
+         | (unfold delegate at he'
+            rcases Base.bind_eq_error he' with he' | ⟨_, -, he'⟩
+            · unfold State.TransactionState.setCode at he'
+              cases State.TransactionState.modifyState_eq_error.mp he'
+            rcases Base.bind_eq_error he' with he' | ⟨_, -, he'⟩
+            · cases State.TransactionState.modifyState_eq_error.mp he'
+            · cases he'))
+
+/-- The first frame of a message fails with a state error only for a missing code. -/
+theorem prepareFirstFrame_ne_state (read : State.TransactionState) :
+    prepareFirstFrame (Meter := Meter) chainId message state substate auths paid ≠
+      .error (.state e, read) := by
+  have applied : ∀ (l : List Authorization) (start : Delegations Meter),
+      l.foldlM (applyAuthorization fork chainId) start ≠ .error (.state e, read) :=
+    fun _ _ => foldlM_ne_error_of_step (fun _ _ => applyAuthorization_ne_state ne read) _ _
+  intro h
+  unfold prepareFirstFrame at h
+  split at h <;> dsimp only at h <;>
+  repeat' first
+    | (rcases Base.bind_eq_error h with h | ⟨_, -, h⟩)
+    | split at h
+  all_goals first
+    | (cases h; done)
+    | exact applied _ _ h
+    | (obtain ⟨e', he', hee⟩ := Base.mapError_eq_error h
+       simp only [Prod.mk.injEq, EvmError.state.injEq] at hee
+       obtain ⟨rfl, -⟩ := hee
+       first
+         | (cases LawfulGasMeter.charge_error he'; done)
+         | (cases LawfulGasMeter.chargeState_error he'; done)
+         | exact ne _ (State.TransactionState.error_getCode he'))
+
+end FirstFrame
 
 end EthLib.Execution.Transactions

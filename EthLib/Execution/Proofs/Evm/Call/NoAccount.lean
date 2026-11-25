@@ -127,17 +127,6 @@ private theorem runFrame_ne_noAccount [LawfulGasMeter Meter] {bound : Nat}
 
 /-! ## Calls and creations -/
 
-/-- A change of an account never fails for no account when the change to the account never does. -/
-private theorem modifyState_ne_noAccount {tx : TransactionState} {address other : Address}
-    {f : State.Account → Except State.StateError State.Account}
-    (hf : ∀ account, f account ≠ .error (.noAccount other)) :
-    tx.modifyState fork address f ≠ .error (.noAccount other) := by
-  intro h
-  rcases Base.bind_eq_error h with h | ⟨a, -, h⟩
-  · exact hf _ h
-  · dsimp only at h
-    split at h <;> cases h
-
 /-- A move of ether never fails for no account. -/
 private theorem moveEther_ne_noAccount (tx : TransactionState) (sender recipient : Address)
     (amount : Base.U256) (address : Address) :
@@ -149,11 +138,7 @@ private theorem moveEther_ne_noAccount (tx : TransactionState) (sender recipient
   | error e =>
     rw [hx] at h
     cases h
-    rcases Base.bind_eq_error hx with h | ⟨a, -, h⟩
-    · exact modifyState_ne_noAccount
-        (fun _ => by unfold State.Account.debit; split <;> nofun) h
-    · exact modifyState_ne_noAccount
-        (fun _ => by unfold State.Account.credit; split <;> nofun) h
+    rcases State.TransactionState.error_moveEther hx with h | h <;> cases h
 
 /-- No call or creation fails for a write of storage at an address with no account.
 

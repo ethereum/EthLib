@@ -1069,6 +1069,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Transactions.modifyState_ne_noAccount` and `Transactions.modifyState_ne_insufficientBalance` (`Execution/Proofs/Transactions/NoAccount.lean` and `Funded.lean`) are removed ([#4676](https://github.com/ethereum/EthLib/pull/4676)).
+  `TransactionState.modifyState_eq_error` gives each of them in one line.
+  New lemmas say which state error each step of a transaction can give: `TransactionState.error_getCode`, `error_creditEther`, `error_buyGas`, `error_settleGas`, `deleteAccounts_ne_error` and `prepareFirstFrame_ne_state`.
+  Migration: write `fun h => hf _ (TransactionState.modifyState_eq_error.mp h)` in place of either lemma.
 - In Lean, the SSZ type check finds a repeated field name or union selector with the one-pass scan `Base.firstRepeated` ([#4518](https://github.com/ethereum/EthLib/issues/4518)).
   - `Ssz.firstDuplicate` (`Serialization/Ssz/Type/Valid.lean`) is removed, with `firstDuplicate_of_nodup` (`Serialization/Proofs/Ssz/Type/Legality.lean`) and `nodup_of_firstDuplicate` (`Serialization/Proofs/Ssz/Codec/JsonRoundTrip.lean`).
     `Desc.wellFormed` unfolds to the scan, and refuses the same declarations with the same errors.

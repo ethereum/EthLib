@@ -137,6 +137,43 @@ theorem baseFeeOf_of_lt_london {fork : Fork} (hFork : fork < .london)
 /-! ## The beneficiary -/
 
 open EthLib.Execution.State (TransactionState)
+open EthLib.Execution.Evm (BlockEnvironment)
+
+/-- A credit of ether fails only for a balance that would overflow at its address. -/
+theorem error_creditEther {fork : Fork} {state : TransactionState} {address : Address}
+    {amount : Nat} {e : State.StateError} (h : creditEther fork state address amount = .error e) :
+    e = .balanceOverflow address := by
+  unfold creditEther at h
+  split at h
+  · exact TransactionState.error_createEther h
+  · exact (Except.error.inj h).symm
+
+/-- The purchase of gas fails only with a short balance of the sender. -/
+theorem error_buyGas {fork : Fork} {env : BlockEnvironment fork} {state : TransactionState}
+    {sender : Address} {tx : Transaction} {lifted : LiftedRules} {e : State.StateError}
+    (h : buyGas env state sender tx lifted = .error e) : e = .insufficientBalance sender := by
+  unfold buyGas at h
+  obtain ⟨mid, hmid⟩ := TransactionState.incrementNonce_isOk fork state sender
+  simp only [hmid, bind, Except.bind] at h
+  have h := TransactionState.modifyState_eq_error.mp h
+  split at h
+  · cases h
+  · exact (Except.error.inj h).symm
+
+/-- The settlement of gas fails only for a balance that would overflow. -/
+theorem error_settleGas {fork : Fork} {env : BlockEnvironment fork} {state : TransactionState}
+    {sender : Address} {tx : Transaction} {gasLeft refund : Nat} {lifted : LiftedRules}
+    {e : State.StateError} (h : settleGas env state sender tx gasLeft refund lifted = .error e) :
+    ∃ address, e = .balanceOverflow address := by
+  unfold settleGas at h
+  rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
+  · exact ⟨_, error_creditEther h⟩
+  rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
+  · unfold payBeneficiary at h
+    split at h
+    · cases h
+    · exact ⟨_, error_creditEther h⟩
+  · cases h
 
 /-- From Spurious Dragon to Paris, a fee of 0 to an absent beneficiary leaves the state as it is.
 
