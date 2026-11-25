@@ -45,8 +45,10 @@ theorem slackFinalized_activeSetAt_of_chainSteps_of_subset
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state)
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
     (meets : ∀ forked after,

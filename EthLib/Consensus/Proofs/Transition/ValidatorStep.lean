@@ -51,7 +51,7 @@ theorem Genesis.effectiveBalance_capped {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     ∀ validator ∈ g.state.validators.data,
       validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset g.fork validator := by
-  obtain ⟨hash, time, deposits, initialized⟩ := genesis
+  obtain ⟨hash, time, deposits, _, initialized⟩ := genesis
   exact (initializeBeaconStateFromEth1_withinBudget 0 (Nat.le_refl _) initialized).capped
 
 namespace Internal
@@ -202,7 +202,7 @@ private theorem genesis_unassigned_eligible_balance {g : ForkedBeaconState prese
     (genesis : Genesis (config := config) (checks := checks) g) :
     UnassignedEligibleBalance g.state := by
   intro i v found pending
-  obtain ⟨_, _, _, initialized⟩ := genesis
+  obtain ⟨_, _, _, _, initialized⟩ := genesis
   obtain ⟨funded, unassigned, unslashed⟩ := initializeBeaconStateFromEth1_unassigned_eligibility
     initialized i v found pending
   refine ⟨funded, ?_, unslashed⟩
@@ -4870,16 +4870,14 @@ theorem minimum_cap
 private theorem genesis_assigned_queues {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     AssignedPartials g.state ∧ AssignedTargets g.state ∧ AssignedProposers g.state := by
-  obtain ⟨_, _, _, initialized⟩ := genesis
-  have before := (initializeBeaconStateFromEth1_ok initialized).1
+  obtain ⟨_, _, _, before, initialized⟩ := genesis
   refine ⟨?_, ?_, ?_⟩ <;> intro fork
   all_goals exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
 
 private theorem genesis_reached_queues {g : ForkedBeaconState preset} (reached : Prop)
     (genesis : Genesis (config := config) (checks := checks) g) :
     PartialsAt reached g.state ∧ TargetsAt reached g.state := by
-  obtain ⟨_, _, _, initialized⟩ := genesis
-  have before := (initializeBeaconStateFromEth1_ok initialized).1
+  obtain ⟨_, _, _, before, initialized⟩ := genesis
   refine ⟨?_, ?_⟩ <;> intro fork
   all_goals exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
 
@@ -4925,7 +4923,7 @@ private theorem CapStep.run_of {g s t : ForkedBeaconState preset}
       have finiteBefore := UInt64.lt_of_le_of_lt last.forward finite
       have held := funded genesis aligned finiteBefore
       have genesisWitness := genesis
-      obtain ⟨_, _, _, initialized⟩ := genesisWitness
+      obtain ⟨_, _, _, _, initialized⟩ := genesisWitness
       obtain ⟨initialPartials, initialTargets, _⟩ := genesis_assigned_queues genesis
       have valid := invariant genesis.invariant
       have capped := first.capped genesis.effectiveBalance_capped
@@ -4967,7 +4965,7 @@ private theorem CapStepR.run {s t : ForkedBeaconState preset}
 private theorem genesis_scheduled_reserve {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     ScheduledFree g.state := by
-  obtain ⟨hash, time, deposits, initialized⟩ := genesis
+  obtain ⟨hash, time, deposits, _, initialized⟩ := genesis
   intro i v found future assigned
   have classified := initializeBeaconStateFromEth1_activation_epochs initialized v
     (Array.mem_of_getElem? found)
@@ -5000,7 +4998,7 @@ private theorem run_scheduled_walk {g x : ForkedBeaconState preset}
         exact (CapStepR.block compounding (applySignedBlock_ok ok).2.1).2.2.2.2
           before (pre.activationExitOrder genesis) valid.exitsOrdered (assigned True partials)
           capped valid.balancesMatch
-          (by obtain ⟨_, _, _, initialized⟩ := genesis
+          (by obtain ⟨_, _, _, _, initialized⟩ := genesis
               exact (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
                 pre.chainSteps).2)
           (fun altair => (pre.syncCommittee_activation_bounded genesis altair).1)
@@ -5370,12 +5368,12 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
         UInt64.le_trans previous.2.1 last.forward, ?_⟩
       obtain ⟨_, initialTargets, initialProposers⟩ := genesis_assigned_queues genesis
       have valid := invariant genesis.invariant
-      obtain ⟨_, _, _, initialized⟩ := genesis
+      obtain ⟨_, _, _, phase0, initialized⟩ := genesis
       have earlyA := Nat.lt_of_le_of_lt last.forks early
       have reachable := shared.append pre
-      have ordered := reachable.activationExitOrder ⟨_, _, _, initialized⟩
+      have ordered := reachable.activationExitOrder ⟨_, _, _, phase0, initialized⟩
       have capped := first.capped
-        (Genesis.effectiveBalance_capped ⟨_, _, _, initialized⟩)
+        (Genesis.effectiveBalance_capped ⟨_, _, _, phase0, initialized⟩)
       have targets := first.targets earlyA initialTargets
       have paid := preKeyCharge_step activation compounding previous.1 early candidate
         (fun engine block after ok => by
@@ -5384,7 +5382,7 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
             (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
               reachable.chainSteps).2
             (fun altair => (reachable.syncCommittee_activation_assigned
-              ⟨_, _, _, initialized⟩ altair).1) candidate
+              ⟨_, _, _, phase0, initialized⟩ altair).1) candidate
           have summed := Finset.sum_le_sum (s := Finset.range after.validators.data.size)
             (fun i _ => charge i)
           rw [preKeyCharge_sum_range candidate a.state
@@ -5392,7 +5390,7 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
           rw [blockLaw _ _ engine block earlyA ok]
           omega)
         (fun cached after cacheOk finiteA validators balances slot carry ok => by
-          have held := funded ⟨_, _, _, initialized⟩ aligned finiteA
+          have held := funded ⟨_, _, _, phase0, initialized⟩ aligned finiteA
           have cacheValid := (frame_processSlot cacheOk).invariant valid
           have cacheTargets : AssignedTargets cached := by
             obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cacheOk

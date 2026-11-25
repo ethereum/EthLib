@@ -230,7 +230,7 @@ theorem Run.onSchedule_of_genesis (ordered : config.ForkEpochsOrdered)
     {g x : ForkedBeaconState preset} (genesis : Genesis config checks g)
     (phase0 : g.fork = .phase0) (altair : 0 < config.ALTAIR_FORK_EPOCH)
     (run : Run config checks g x) : OnSchedule config x := by
-  obtain ⟨_, _, _, initialized⟩ := genesis
+  obtain ⟨_, _, _, _, initialized⟩ := genesis
   have zero := (initializeBeaconStateFromEth1_checkpoints initialized).1
   exact run.onSchedule ordered ((onSchedule_iff_of_phase0 ordered phase0 zero).mpr altair)
 

@@ -194,32 +194,28 @@ It takes the hash and the time of the block, and every deposit up to and includi
 
 The genesis time and the deposit count must fit in 64 bits, and every deposit must be valid. -/
 def initializeBeaconStateFromEth1 (config : Config) (checks : SignatureChecks)
-    (eth1BlockHash : Hash32) (eth1Timestamp : UInt64) (deposits : Array Deposit) :
-    Except TransitionError (BeaconState preset fork) :=
-  -- Genesis is defined at Phase 0 only.
-  if altair : .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
-    have before : fork < .altair := Nat.lt_of_not_le altair
-    have beforeHeze : fork < .hegota := Nat.lt_trans before (by decide)
-    -- The genesis time is `t + GENESIS_DELAY`, for the time `t` of the block.
-    let genesisTime ← liftAccessor (liftArith (addChecked eth1Timestamp config.GENESIS_DELAY))
-    -- The deposit count of the vote is the number of deposits, a 64-bit integer.
-    ensure (deposits.size < 2 ^ 64) (.accessor (.arith .overflow))
-    -- The empty state at the genesis fork version, whose header holds the root of the empty body.
-    --
-    -- Its vote holds the block hash, and every RANDAO mix is the block hash.
-    let bodyRoot ← liftSsz (hashTreeRoot (emptyBody (preset := preset) before))
-    let state := emptyGenesisState config before genesisTime eth1BlockHash
-      deposits.size.toUInt64 bodyRoot
-    -- The deposits apply in order.
-    let leaves := deposits.map (·.data)
-    let state ← deposits.toList.zipIdx.foldlM (genesisDeposit config checks beforeHeze leaves)
-      state
-    -- Then each validator in order takes its effective balance, and may be active at genesis.
-    let state ← (List.range state.validators.data.size).foldlM activateAtGenesis state
-    -- The root of the registry becomes the genesis validators root, which tells chains apart.
-    let genesisValidatorsRoot ← liftSsz (hashTreeRoot state.validators)
-    return { state with genesisValidatorsRoot }
+    (eth1BlockHash : Hash32) (eth1Timestamp : UInt64) (deposits : Array Deposit)
+    (before : fork < .altair) : Except TransitionError (BeaconState preset fork) := do
+  have beforeHeze : fork < .hegota := Nat.lt_trans before (by decide)
+  -- The genesis time is `t + GENESIS_DELAY`, for the time `t` of the block.
+  let genesisTime ← liftAccessor (liftArith (addChecked eth1Timestamp config.GENESIS_DELAY))
+  -- The deposit count of the vote is the number of deposits, a 64-bit integer.
+  ensure (deposits.size < 2 ^ 64) (.accessor (.arith .overflow))
+  -- The empty state at the genesis fork version, whose header holds the root of the empty body.
+  --
+  -- Its vote holds the block hash, and every RANDAO mix is the block hash.
+  let bodyRoot ← liftSsz (hashTreeRoot (emptyBody (preset := preset) before))
+  let state := emptyGenesisState config before genesisTime eth1BlockHash
+    deposits.size.toUInt64 bodyRoot
+  -- The deposits apply in order.
+  let leaves := deposits.map (·.data)
+  let state ← deposits.toList.zipIdx.foldlM (genesisDeposit config checks beforeHeze leaves)
+    state
+  -- Then each validator in order takes its effective balance, and may be active at genesis.
+  let state ← (List.range state.validators.data.size).foldlM activateAtGenesis state
+  -- The root of the registry becomes the genesis validators root, which tells chains apart.
+  let genesisValidatorsRoot ← liftSsz (hashTreeRoot state.validators)
+  return { state with genesisValidatorsRoot }
 
 /-- Whether a candidate state launches the chain. -/
 def isValidGenesisState (config : Config) (state : BeaconState preset fork) : Bool :=

@@ -934,8 +934,8 @@ private def Holds (config : Config) (s : BeaconState preset fork) : Prop :=
 private theorem genesis {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     Holds config g.state := by
-  obtain ⟨hash, time, deposits, ok⟩ := genesis
-  obtain ⟨before, genesisTime, root, deposited, activated, finalRoot, depositedOk, activatedOk,
+  obtain ⟨hash, time, deposits, _, ok⟩ := genesis
+  obtain ⟨genesisTime, root, deposited, activated, finalRoot, depositedOk, activatedOk,
     equal⟩ := initializeBeaconStateFromEth1_ok ok
   have first := Kept.foldlM (config := config) (fun _ _ _ ok => Kept.genesisDeposit ok) depositedOk
   have second := Kept.foldlM (config := config) (fun _ _ _ ok => Kept.activateAtGenesis ok)

@@ -32,8 +32,14 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 It need not be valid for launch. -/
 def Genesis (config : Config) (checks : SignatureChecks) (g : ForkedBeaconState preset) : Prop :=
-  ∃ hash time deposits,
-    initializeBeaconStateFromEth1 config checks hash time deposits = .ok g.state
+  ∃ hash time deposits before,
+    initializeBeaconStateFromEth1 config checks hash time deposits before = .ok g.state
+
+/-- A genesis state built from deposits is before Altair. -/
+theorem Genesis.before {g : ForkedBeaconState preset} (genesis : Genesis config checks g) :
+    g.fork < .altair :=
+  let ⟨_, _, _, before, _⟩ := genesis
+  before
 
 private theorem header_deposit {fork : Fork} {before after : BeaconState preset fork}
     {early : fork < .hegota} {deposit : Deposit}
@@ -49,8 +55,8 @@ theorem genesis_header {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) :
     g.state.latestBlockHeader.slot = 0 ∧
       g.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 := by
-  obtain ⟨hash, time, deposits, initialized⟩ := genesis
-  obtain ⟨before, time, root, deposited, activated, finalRoot, dep, act, stateEq⟩ :=
+  obtain ⟨hash, time, deposits, before, initialized⟩ := genesis
+  obtain ⟨time, root, deposited, activated, finalRoot, dep, act, stateEq⟩ :=
     initializeBeaconStateFromEth1_ok initialized
   have depositedHeader : deposited.latestBlockHeader =
       (emptyGenesisState config before time hash deposits.size.toUInt64 root).latestBlockHeader :=

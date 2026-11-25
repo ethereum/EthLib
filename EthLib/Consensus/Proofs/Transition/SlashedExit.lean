@@ -159,7 +159,7 @@ theorem run_slashed_exit_assigned {g x : ForkedBeaconState preset}
     (i : Nat) (w : Validator) (found : x.state.validators.data[i]? = some w)
     (slashed : w.slashed = true) : w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
   have kept := (CapStep.run run activation compounding).1
-  obtain ⟨_, _, _, initialized⟩ := genesis
+  obtain ⟨_, _, _, _, initialized⟩ := genesis
   have clean := initializeBeaconStateFromEth1_unslashed initialized
   by_cases inside : i < g.state.validators.data.size
   · have before : g.state.validators.data[i]? = some g.state.validators.data[i] :=

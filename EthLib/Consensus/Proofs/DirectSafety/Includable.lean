@@ -588,7 +588,7 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
   · right
     have slashable := slashableTurn slashedFlag
     -- The versions and the genesis root of the turn are those of the signatures.
-    obtain ⟨hash, time, deposits, initialized⟩ := genesis
+    obtain ⟨hash, time, deposits, _, initialized⟩ := genesis
     obtain ⟨run1⟩ := pair.run1
     obtain ⟨run2⟩ := pair.run2
     have toAdvanced := shared.chainSteps.trans slotsSteps

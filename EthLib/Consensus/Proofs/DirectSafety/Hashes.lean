@@ -263,7 +263,7 @@ private theorem run_header_state {g a : ForkedBeaconState preset}
   induction run with
   | nil =>
     obtain ⟨zeroSlot, zeroRoot⟩ := genesis_header genesis
-    obtain ⟨_, _, _, initialized⟩ := genesis
+    obtain ⟨_, _, _, _, initialized⟩ := genesis
     have stateSlot := (initializeBeaconStateFromEth1_checkpoints initialized).1
     right
     refine ⟨zeroRoot, zeroSlot.trans stateSlot.symm, ?_⟩
@@ -340,7 +340,7 @@ private theorem run_root_chain {g a : ForkedBeaconState preset}
         (run.headers.filter fun h => h.slot.toNat ≤ slot.toNat) header := by
   induction run with
   | nil =>
-    obtain ⟨_, _, _, initialized⟩ := genesis
+    obtain ⟨_, _, _, _, initialized⟩ := genesis
     have zero := (initializeBeaconStateFromEth1_checkpoints initialized).1
     have before := (getBlockRootAtSlot_ok_iff.mp read).1
     rw [zero] at before

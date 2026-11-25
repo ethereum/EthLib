@@ -18,7 +18,7 @@ The configuration of a name holds, with the replacements that a `dict` gives.
 
 The exports take the tuple of their arguments as typed Python values.
 
-An input that does not decode, or an unknown name, has code 0.
+An input that does not decode, an unknown name, or a fork after Phase 0 has code 0.
 -/
 
 @[expose] public section
@@ -26,7 +26,7 @@ An input that does not decode, or an unknown name, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue UnreadArgument pyExport toResult)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 
 /-- The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes. -/
 def initializeGenesisOf
@@ -37,10 +37,13 @@ def initializeGenesisOf
   let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let deposits ← deposits.mapM (decodeInput Deposit)
-  let state : BeaconState preset fork ← toResult none
-    (initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits)
-  toResult none ((SszType.serialize state).mapError fun e =>
-    UnreadArgument.mk s!"state rejected: {reprStr e}")
+  -- Genesis is defined at Phase 0 only.
+  if before : fork < .altair then
+    let state : BeaconState preset fork ← toResult none
+      (initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before)
+    toResult none ((SszType.serialize state).mapError fun e =>
+      UnreadArgument.mk s!"state rejected: {reprStr e}")
+  else rejectArgument none s!"no genesis at {fork.name}"
 
 /-- The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.
 

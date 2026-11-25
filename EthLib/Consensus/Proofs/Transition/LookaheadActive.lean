@@ -196,8 +196,7 @@ theorem Run.lookaheadActive {g x : ForkedBeaconState preset}
     LookaheadActive x.state := by
   induction run with
   | nil =>
-    obtain ⟨_, _, _, initialized⟩ := genesis
-    have before := (initializeBeaconStateFromEth1_ok initialized).1
+    obtain ⟨_, _, _, before, initialized⟩ := genesis
     exact fun fulu => (Nat.not_le_of_lt before (Nat.le_trans (by decide) fulu)).elim
   | snoc pre step ih => exact LookaheadActive.chainStep covers step.chainStep ih
 

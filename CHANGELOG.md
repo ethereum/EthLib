@@ -1186,6 +1186,15 @@ Not yet released.
   - `Vrf.leaves` is removed: leaf `j` is `leafWith` with Keccak-256.
   - The theorems `Vrf.rootWith_hash`, `Vrf.openingWith_hash` and `Vrf.verifyWith_hash` are removed, since each restated a definition.
   Migration: use the forms with the hash as an argument, at `Id` with `fun x => pure (hash x)`, where the removed names were used.
+- In Lean, the genesis rule takes the fact that its fork comes before Altair ([#3612](https://github.com/ethereum/EthLib/issues/3612)).
+  - `initializeBeaconStateFromEth1` (`Consensus/Transition/Genesis.lean`) takes a last argument `before : fork < .altair`, and no longer throws `forkNotYetSpecified` at Altair and later forks.
+    Its value at Phase 0 is the same.
+  - `Genesis` (`Consensus/Proofs/Transition/Trace.lean`) holds that proof beside the block hash, the time and the deposits, and `Genesis.before` reads it.
+  - `initializeBeaconStateFromEth1_ok` and `initializeBeaconStateFromEth1_frame` no longer return the proof, and `initializeBeaconStateFromEth1_invariant` states only the invariant.
+    Each theorem about the genesis rule takes the proof as an implicit argument.
+  - In Python, `initialize_genesis` at Altair or a later fork now raises an error of code 0, `no genesis at <fork>`, in place of the transition error of code 1.
+    The epoch-step export answers a step that a fork removes the same way.
+  Migration: pass the proof to the genesis rule, and read it from a `Genesis` hypothesis with `Genesis.before`.
 - In Lean, SSZ holds its bytes as a `ByteArray` in place of an `Array UInt8` ([#4560](https://github.com/ethereum/EthLib/pull/4560)).
   A node of a Merkle tree, an encoding and a byte value of SSZ now have the type that SHA-256 and the bindings use.
   So no step copies them from one type to the other.

@@ -1827,8 +1827,7 @@ private theorem Run.pendingConsolidationsOrdered_apart {g x : ForkedBeaconState 
       PendingApart x.state := by
   induction run with
   | nil =>
-    obtain ⟨_, _, _, ok⟩ := genesis
-    have before := (initializeBeaconStateFromEth1_invariant ok).1
+    obtain ⟨_, _, _, before, ok⟩ := genesis
     have notElectra : ¬ Fork.pectra ≤ _ := Nat.not_le_of_lt (Nat.lt_trans before (by decide))
     exact ⟨⟨fun electra => absurd electra notElectra, fun electra => absurd electra notElectra⟩,
       fun electra => absurd electra notElectra⟩

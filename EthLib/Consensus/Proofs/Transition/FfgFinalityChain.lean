@@ -111,8 +111,10 @@ The genesis block of the model is the block of the zero root, the root of its ch
 theorem initializeBeaconStateFromEth1_slackFinalityInvariant {fork : Fork}
     {state : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state) :
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state) :
     SlackFinalityInvariant V U W (block (Vector.replicate 32 0)) attested block
       ⟨fork, state⟩ := by
   obtain ⟨bitsEq, finalizedEq⟩ := initializeBeaconStateFromEth1_finality computed
@@ -139,8 +141,10 @@ theorem slackFinalized_of_chainSteps (positive : 0 < preset.SLOTS_PER_EPOCH.toNa
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
     -- The genesis state built from deposits exists only before Altair.
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state)
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
     -- The step asks the sets and weights to match for both recent epochs at each end of an epoch.
@@ -172,8 +176,10 @@ theorem slackFinalized_activeSetAt_of_chainSteps
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
     -- The genesis state built from deposits exists only before Altair.
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state)
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
     -- Each step on any run between them must meet the bounds on the stake and the blocks.
@@ -213,8 +219,10 @@ theorem slackFinalized_chainRoot_of_chainSteps
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
     -- The genesis state built from deposits exists only before Altair.
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state)
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
     -- Each step on any run between them must meet the bound on the stake.
