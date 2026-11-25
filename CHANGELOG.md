@@ -1069,6 +1069,10 @@ Not yet released.
 - In Lean, a send of Transactions in an eth session checks its hashes with a search tree ([#4559](https://github.com/ethereum/EthLib/pull/4559)).
   - `Execution.Network.sendEth` (`Execution/Network/Session.lean`) unfolds to the scan `Base.firstRepeated` and lookups in a `Std.TreeSet` of the hashes sent and received, instead of `List.Nodup` and list membership.
     It gives the same verdict on every input, and the session keeps its lists.
+- In Lean, the container lookup of the SSZ and JSON exports builds only the codec and the spelling of the container it names ([#4566](https://github.com/ethereum/EthLib/issues/4566)).
+  - `Consensus.Exports.containerOf` (`Consensus/Exports/Ssz.lean`) matches on the name, the preset and the fork together, and each arm binds the preset and the fork it reads.
+    The compiler no longer lifts every codec to the top of the function, so a call no longer builds them all.
+    It gives the same container for every name, preset and fork, and its type is unchanged.
 - In Lean, the chain theorem charges the rewards that blocks pay for attestations once in each epoch, not in each block ([#2601](https://github.com/ethereum/EthLib/issues/2601)).
   So `chainConditions_mainnet` and the mainnet corollaries of `ChainRun.lean` cover 64 epochs, up from 16.
   - `BlockStep` (`Totality/ChainHolds.lean`) has a new field `rewards`, the rise of the supply in each epoch from those rewards.

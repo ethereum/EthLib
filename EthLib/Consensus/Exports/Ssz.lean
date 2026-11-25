@@ -31,17 +31,9 @@ C-ABI exports that read the bytes of a beacon container, for the static SSZ test
 
 The container is named as the source names it, at a preset and a fork.
 
-The export decodes the bytes, then returns the pair of the root and the bytes encoded again.
-
 The static SSZ and Merkle proof exports take and return typed Python values.
 
-A name with no container at the fork comes back as code 0, since no error type covers it.
-
-From Glamsterdam on, a container whose form EthLib does not hold yet fails with code 0 too.
-
 Another export upgrades an attestation, indexed attestation or attester slashing of Fulu to Gloas.
-
-From Bellatrix to Fulu the names also cover the containers of the Builder API and the Relay API.
 -/
 
 public section
@@ -76,160 +68,174 @@ attribute [instance] BeaconContainer.codec BeaconContainer.spelling
 /-- Whether EthLib holds the light client containers at a fork: from Altair. -/
 def lightClientAt (fork : Fork) : Bool := .altair ≤ fork
 
-/-- The container of a name at a preset and a fork, if the fork has one.
-
-Altair replaces the pending attestations of a state by participation flags.
-
-Capella stops adding historical batches, and adds historical summaries instead.
-
-Fulu carries blobs in data column sidecars instead of blob sidecars.
-
-The light client containers start at Altair; EthLib does not yet hold their Gloas form. -/
-def containerOf (preset : Preset) (fork : Fork) : String → Option BeaconContainer
-  | "Fork" => some ⟨ForkVersions⟩
-  | "ForkData" => some ⟨ForkData⟩
-  | "SigningData" => some ⟨SigningData⟩
-  | "Checkpoint" => some ⟨Checkpoint⟩
-  | "Validator" => some ⟨Validator⟩
-  | "AttestationData" => some ⟨AttestationData⟩
-  | "PendingAttestation" => if fork < .altair then some ⟨PendingAttestation preset⟩ else none
-  | "Eth1Data" => some ⟨Eth1Data⟩
-  | "HistoricalBatch" => if fork < .shapella then some ⟨HistoricalBatch preset⟩ else none
-  | "DepositMessage" => some ⟨DepositMessage⟩
-  | "DepositData" => some ⟨DepositData⟩
-  | "BeaconBlockHeader" => some ⟨BeaconBlockHeader⟩
-  | "SignedBeaconBlockHeader" => some ⟨SignedBeaconBlockHeader⟩
-  | "Eth1Block" => some ⟨Eth1Block⟩
-  | "ProposerSlashing" => some ⟨ProposerSlashing⟩
-  | "Deposit" => some ⟨Deposit⟩
-  | "VoluntaryExit" => some ⟨VoluntaryExit⟩
-  | "SignedVoluntaryExit" => some ⟨SignedVoluntaryExit⟩
-  | "Attestation" => some ⟨Attestation preset fork⟩
-  | "IndexedAttestation" => some ⟨IndexedAttestation preset fork⟩
-  | "AttesterSlashing" => some ⟨AttesterSlashing preset fork⟩
-  | "AggregateAndProof" => some ⟨AggregateAndProof preset fork⟩
-  | "SignedAggregateAndProof" => some ⟨SignedAggregateAndProof preset fork⟩
-  | "SingleAttestation" => if .pectra ≤ fork then some ⟨SingleAttestation⟩ else none
-  | "SyncCommittee" => if .altair ≤ fork then some ⟨SyncCommittee preset⟩ else none
-  | "SyncAggregate" => if .altair ≤ fork then some ⟨SyncAggregate preset⟩ else none
-  | "SyncCommitteeMessage" => if .altair ≤ fork then some ⟨SyncCommitteeMessage⟩ else none
-  | "SyncCommitteeContribution" =>
+/-- The container of a name at a preset and a fork, if the fork has one. -/
+def containerOf (preset : Preset) (fork : Fork) (name : String) : Option BeaconContainer :=
+  -- The compiler lifts out of a match each instance built only from the function's arguments.
+  --
+  -- Each arm binds the preset and the fork it reads, so a lookup builds only what it returns.
+  match name, preset, fork with
+  | "Fork", _, _ => some ⟨ForkVersions⟩
+  | "ForkData", _, _ => some ⟨ForkData⟩
+  | "SigningData", _, _ => some ⟨SigningData⟩
+  | "Checkpoint", _, _ => some ⟨Checkpoint⟩
+  | "Validator", _, _ => some ⟨Validator⟩
+  | "AttestationData", _, _ => some ⟨AttestationData⟩
+  -- Altair replaces the pending attestations of a state by participation flags.
+  | "PendingAttestation", preset, fork =>
+    if fork < .altair then some ⟨PendingAttestation preset⟩ else none
+  | "Eth1Data", _, _ => some ⟨Eth1Data⟩
+  -- Capella stops adding historical batches, and adds historical summaries instead.
+  | "HistoricalBatch", preset, fork =>
+    if fork < .shapella then some ⟨HistoricalBatch preset⟩ else none
+  | "DepositMessage", _, _ => some ⟨DepositMessage⟩
+  | "DepositData", _, _ => some ⟨DepositData⟩
+  | "BeaconBlockHeader", _, _ => some ⟨BeaconBlockHeader⟩
+  | "SignedBeaconBlockHeader", _, _ => some ⟨SignedBeaconBlockHeader⟩
+  | "Eth1Block", _, _ => some ⟨Eth1Block⟩
+  | "ProposerSlashing", _, _ => some ⟨ProposerSlashing⟩
+  | "Deposit", _, _ => some ⟨Deposit⟩
+  | "VoluntaryExit", _, _ => some ⟨VoluntaryExit⟩
+  | "SignedVoluntaryExit", _, _ => some ⟨SignedVoluntaryExit⟩
+  | "Attestation", preset, fork => some ⟨Attestation preset fork⟩
+  | "IndexedAttestation", preset, fork => some ⟨IndexedAttestation preset fork⟩
+  | "AttesterSlashing", preset, fork => some ⟨AttesterSlashing preset fork⟩
+  | "AggregateAndProof", preset, fork => some ⟨AggregateAndProof preset fork⟩
+  | "SignedAggregateAndProof", preset, fork => some ⟨SignedAggregateAndProof preset fork⟩
+  | "SingleAttestation", _, fork => if .pectra ≤ fork then some ⟨SingleAttestation⟩ else none
+  | "SyncCommittee", preset, fork => if .altair ≤ fork then some ⟨SyncCommittee preset⟩ else none
+  | "SyncAggregate", preset, fork => if .altair ≤ fork then some ⟨SyncAggregate preset⟩ else none
+  | "SyncCommitteeMessage", _, fork => if .altair ≤ fork then some ⟨SyncCommitteeMessage⟩ else none
+  | "SyncCommitteeContribution", preset, fork =>
     if .altair ≤ fork then some ⟨SyncCommitteeContribution preset⟩ else none
-  | "ContributionAndProof" =>
+  | "ContributionAndProof", preset, fork =>
     if .altair ≤ fork then some ⟨ContributionAndProof preset⟩ else none
-  | "SignedContributionAndProof" =>
+  | "SignedContributionAndProof", preset, fork =>
     if .altair ≤ fork then some ⟨SignedContributionAndProof preset⟩ else none
-  | "SyncAggregatorSelectionData" =>
+  | "SyncAggregatorSelectionData", _, fork =>
     if .altair ≤ fork then some ⟨SyncAggregatorSelectionData⟩ else none
-  | "HistoricalSummary" => if .shapella ≤ fork then some ⟨HistoricalSummary⟩ else none
-  | "BLSToExecutionChange" => if .shapella ≤ fork then some ⟨BLSToExecutionChange⟩ else none
-  | "SignedBLSToExecutionChange" =>
+  | "HistoricalSummary", _, fork => if .shapella ≤ fork then some ⟨HistoricalSummary⟩ else none
+  | "BLSToExecutionChange", _, fork =>
+    if .shapella ≤ fork then some ⟨BLSToExecutionChange⟩ else none
+  | "SignedBLSToExecutionChange", _, fork =>
     if .shapella ≤ fork then some ⟨SignedBLSToExecutionChange⟩ else none
-  | "PendingDeposit" => if .pectra ≤ fork then some ⟨PendingDeposit⟩ else none
-  | "PendingPartialWithdrawal" => if .pectra ≤ fork then some ⟨PendingPartialWithdrawal⟩ else none
-  | "PendingConsolidation" => if .pectra ≤ fork then some ⟨PendingConsolidation⟩ else none
-  | "DepositRequest" => if .pectra ≤ fork then some ⟨DepositRequest⟩ else none
-  | "WithdrawalRequest" => if .pectra ≤ fork then some ⟨WithdrawalRequest⟩ else none
-  | "ConsolidationRequest" => if .pectra ≤ fork then some ⟨ConsolidationRequest⟩ else none
-  | "ExecutionRequests" => if .pectra ≤ fork then some ⟨ExecutionRequests preset fork⟩ else none
-  | "BeaconBlockBody" => some ⟨BeaconBlockBody preset fork⟩
-  | "BeaconBlock" => some ⟨BeaconBlock preset fork⟩
-  | "SignedBeaconBlock" => some ⟨SignedBeaconBlock preset fork⟩
-  | "BeaconState" => some ⟨BeaconState preset fork⟩
-  | "LightClientHeader" =>
+  | "PendingDeposit", _, fork => if .pectra ≤ fork then some ⟨PendingDeposit⟩ else none
+  | "PendingPartialWithdrawal", _, fork =>
+    if .pectra ≤ fork then some ⟨PendingPartialWithdrawal⟩ else none
+  | "PendingConsolidation", _, fork => if .pectra ≤ fork then some ⟨PendingConsolidation⟩ else none
+  | "DepositRequest", _, fork => if .pectra ≤ fork then some ⟨DepositRequest⟩ else none
+  | "WithdrawalRequest", _, fork => if .pectra ≤ fork then some ⟨WithdrawalRequest⟩ else none
+  | "ConsolidationRequest", _, fork => if .pectra ≤ fork then some ⟨ConsolidationRequest⟩ else none
+  | "ExecutionRequests", preset, fork =>
+    if .pectra ≤ fork then some ⟨ExecutionRequests preset fork⟩ else none
+  | "BeaconBlockBody", preset, fork => some ⟨BeaconBlockBody preset fork⟩
+  | "BeaconBlock", preset, fork => some ⟨BeaconBlock preset fork⟩
+  | "SignedBeaconBlock", preset, fork => some ⟨SignedBeaconBlock preset fork⟩
+  | "BeaconState", preset, fork => some ⟨BeaconState preset fork⟩
+  -- The light client containers start at Altair.
+  --
+  -- EthLib does not yet hold their Gloas form.
+  | "LightClientHeader", preset, fork =>
     if lightClientAt fork then some ⟨LightClientHeader preset fork⟩ else none
-  | "LightClientBootstrap" =>
+  | "LightClientBootstrap", preset, fork =>
     if lightClientAt fork then some ⟨LightClientBootstrap preset fork⟩ else none
-  | "LightClientUpdate" =>
+  | "LightClientUpdate", preset, fork =>
     if lightClientAt fork then some ⟨LightClientUpdate preset fork⟩ else none
-  | "LightClientFinalityUpdate" =>
+  | "LightClientFinalityUpdate", preset, fork =>
     if lightClientAt fork then some ⟨LightClientFinalityUpdate preset fork⟩ else none
-  | "LightClientOptimisticUpdate" =>
+  | "LightClientOptimisticUpdate", preset, fork =>
     if lightClientAt fork then some ⟨LightClientOptimisticUpdate preset fork⟩ else none
-  | "BlobSidecar" => if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobSidecar preset⟩ else none
-  | "BlobIdentifier" => if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobIdentifier⟩ else none
-  | "DataColumnSidecar" =>
+  -- Fulu carries blobs in data column sidecars instead of blob sidecars.
+  | "BlobSidecar", preset, fork =>
+    if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobSidecar preset⟩ else none
+  | "BlobIdentifier", _, fork =>
+    if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobIdentifier⟩ else none
+  | "DataColumnSidecar", preset, fork =>
     if .fusaka ≤ fork then some ⟨DataColumnSidecar preset fork⟩ else none
-  | "DataColumnsByRootIdentifier" =>
+  | "DataColumnsByRootIdentifier", preset, fork =>
     if .fusaka ≤ fork then some ⟨DataColumnsByRootIdentifier preset⟩ else none
-  | "MatrixEntry" => if .fusaka ≤ fork then some ⟨MatrixEntry⟩ else none
-  | "PartialDataColumnSidecar" =>
+  | "MatrixEntry", _, fork => if .fusaka ≤ fork then some ⟨MatrixEntry⟩ else none
+  | "PartialDataColumnSidecar", preset, fork =>
     if .fusaka ≤ fork then some ⟨PartialDataColumnSidecar preset fork⟩ else none
-  | "PartialDataColumnPartsMetadata" =>
+  | "PartialDataColumnPartsMetadata", preset, fork =>
     if .fusaka ≤ fork then some ⟨PartialDataColumnPartsMetadata preset fork⟩ else none
-  | "PartialDataColumnHeader" =>
+  | "PartialDataColumnHeader", preset, fork =>
     if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnHeader preset fork⟩
     else none
-  | "PartialDataColumnGroupID" =>
+  | "PartialDataColumnGroupID", _, fork =>
     if .fusaka ≤ fork then some ⟨PartialDataColumnGroupID fork⟩ else none
-  | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
-  | "PowBlock" => if .bellatrix ≤ fork then some ⟨PowBlock⟩ else none
-  | "ExecutionPayload" =>
+  | "Withdrawal", _, fork => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
+  | "PowBlock", _, fork => if .bellatrix ≤ fork then some ⟨PowBlock⟩ else none
+  | "ExecutionPayload", preset, fork =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
-  | "ExecutionPayloadHeader" =>
+  | "ExecutionPayloadHeader", preset, fork =>
     if .bellatrix ≤ fork ∧ fork < .glamsterdam then some ⟨ExecutionPayloadHeader preset fork⟩
     else none
-  | "Builder" => if .glamsterdam ≤ fork then some ⟨Builder⟩ else none
-  | "BuilderPendingPayment" => if .glamsterdam ≤ fork then some ⟨BuilderPendingPayment⟩ else none
-  | "BuilderPendingWithdrawal" =>
+  | "Builder", _, fork => if .glamsterdam ≤ fork then some ⟨Builder⟩ else none
+  | "BuilderPendingPayment", _, fork =>
+    if .glamsterdam ≤ fork then some ⟨BuilderPendingPayment⟩ else none
+  | "BuilderPendingWithdrawal", _, fork =>
     if .glamsterdam ≤ fork then some ⟨BuilderPendingWithdrawal⟩ else none
-  | "BuilderDepositRequest" => if .glamsterdam ≤ fork then some ⟨BuilderDepositRequest⟩ else none
-  | "BuilderExitRequest" => if .glamsterdam ≤ fork then some ⟨BuilderExitRequest⟩ else none
-  | "PayloadAttestationData" =>
+  | "BuilderDepositRequest", _, fork =>
+    if .glamsterdam ≤ fork then some ⟨BuilderDepositRequest⟩ else none
+  | "BuilderExitRequest", _, fork => if .glamsterdam ≤ fork then some ⟨BuilderExitRequest⟩ else none
+  | "PayloadAttestationData", _, fork =>
     if .glamsterdam ≤ fork then some ⟨PayloadAttestationData⟩ else none
-  | "PayloadAttestationMessage" =>
+  | "PayloadAttestationMessage", _, fork =>
     if .glamsterdam ≤ fork then some ⟨PayloadAttestationMessage⟩ else none
-  | "PayloadAttestation" => if .glamsterdam ≤ fork then some ⟨PayloadAttestation preset⟩ else none
-  | "IndexedPayloadAttestation" =>
+  | "PayloadAttestation", preset, fork =>
+    if .glamsterdam ≤ fork then some ⟨PayloadAttestation preset⟩ else none
+  | "IndexedPayloadAttestation", preset, fork =>
     if .glamsterdam ≤ fork then some ⟨IndexedPayloadAttestation preset⟩ else none
-  | "NewPayloadRequest" =>
+  | "NewPayloadRequest", preset, fork =>
     if .bellatrix ≤ fork then some ⟨NewPayloadRequest preset fork⟩ else none
-  | "ExecutionPayloadBid" =>
+  | "ExecutionPayloadBid", preset, fork =>
     if .glamsterdam ≤ fork then some ⟨ExecutionPayloadBid preset fork⟩ else none
-  | "SignedExecutionPayloadBid" =>
+  | "SignedExecutionPayloadBid", preset, fork =>
     if .glamsterdam ≤ fork then some ⟨SignedExecutionPayloadBid preset fork⟩ else none
-  | "ExecutionPayloadEnvelope" =>
+  | "ExecutionPayloadEnvelope", preset, fork =>
     if .glamsterdam ≤ fork then some ⟨ExecutionPayloadEnvelope preset fork⟩ else none
-  | "SignedExecutionPayloadEnvelope" =>
+  | "SignedExecutionPayloadEnvelope", preset, fork =>
     if .glamsterdam ≤ fork then some ⟨SignedExecutionPayloadEnvelope preset fork⟩ else none
-  | "ProposerPreferences" => if .glamsterdam ≤ fork then some ⟨ProposerPreferences⟩ else none
-  | "SignedProposerPreferences" =>
+  | "ProposerPreferences", _, fork =>
+    if .glamsterdam ≤ fork then some ⟨ProposerPreferences⟩ else none
+  | "SignedProposerPreferences", _, fork =>
     if .glamsterdam ≤ fork then some ⟨SignedProposerPreferences⟩ else none
-  | "InclusionList" => if .hegota ≤ fork then some ⟨InclusionList⟩ else none
-  | "SignedInclusionList" => if .hegota ≤ fork then some ⟨SignedInclusionList⟩ else none
-  | "ValidatorRegistrationV1" =>
+  | "InclusionList", _, fork => if .hegota ≤ fork then some ⟨InclusionList⟩ else none
+  | "SignedInclusionList", _, fork => if .hegota ≤ fork then some ⟨SignedInclusionList⟩ else none
+  -- From Bellatrix to Fulu the names also cover the containers of the Builder and Relay APIs.
+  | "ValidatorRegistrationV1", _, fork =>
     if HasBuilderApi fork then some ⟨ValidatorRegistrationV1⟩ else none
-  | "SignedValidatorRegistrationV1" =>
+  | "SignedValidatorRegistrationV1", _, fork =>
     if HasBuilderApi fork then some ⟨SignedValidatorRegistrationV1⟩ else none
-  | "BuilderBid" =>
+  | "BuilderBid", preset, fork =>
     if HasBuilderApi fork then some ⟨BuilderBid preset fork⟩ else none
-  | "SignedBuilderBid" =>
+  | "SignedBuilderBid", preset, fork =>
     if HasBuilderApi fork then some ⟨SignedBuilderBid preset fork⟩ else none
-  | "BlindedBeaconBlockBody" =>
+  | "BlindedBeaconBlockBody", preset, fork =>
     if HasBuilderApi fork then some ⟨BlindedBeaconBlockBody preset fork⟩ else none
-  | "BlindedBeaconBlock" =>
+  | "BlindedBeaconBlock", preset, fork =>
     if HasBuilderApi fork then some ⟨BlindedBeaconBlock preset fork⟩ else none
-  | "SignedBlindedBeaconBlock" =>
+  | "SignedBlindedBeaconBlock", preset, fork =>
     if HasBuilderApi fork then some ⟨SignedBlindedBeaconBlock preset fork⟩ else none
-  | "BlobsBundle" =>
+  | "BlobsBundle", preset, fork =>
     if .dencun ≤ fork ∧ fork < .glamsterdam then some ⟨BuilderBlobsBundle preset fork⟩ else none
-  | "ExecutionPayloadAndBlobsBundle" =>
+  | "ExecutionPayloadAndBlobsBundle", preset, fork =>
     if .dencun ≤ fork ∧ fork < .glamsterdam then some ⟨ExecutionPayloadAndBlobsBundle preset fork⟩
     else none
-  | "BuilderRequestAuth" => if .glamsterdam ≤ fork then some ⟨BuilderRequestAuth⟩ else none
-  | "SignedBuilderRequestAuth" =>
+  | "BuilderRequestAuth", _, fork => if .glamsterdam ≤ fork then some ⟨BuilderRequestAuth⟩ else none
+  | "SignedBuilderRequestAuth", _, fork =>
     if .glamsterdam ≤ fork then some ⟨SignedBuilderRequestAuth⟩ else none
-  | "BuilderPreferences" => if .glamsterdam ≤ fork then some ⟨BuilderPreferences⟩ else none
-  | "BuilderPreferencesRequest" =>
+  | "BuilderPreferences", _, fork => if .glamsterdam ≤ fork then some ⟨BuilderPreferences⟩ else none
+  | "BuilderPreferencesRequest", _, fork =>
     if .glamsterdam ≤ fork then some ⟨BuilderPreferencesRequest⟩ else none
-  | "BuilderEntry" => if .glamsterdam ≤ fork then some ⟨BuilderEntry⟩ else none
-  | "BuilderConfig" => if .glamsterdam ≤ fork then some ⟨BuilderConfig⟩ else none
-  | "BidTrace" => if HasBuilderApi fork then some ⟨BidTrace⟩ else none
-  | "SubmitBlockRequest" =>
+  | "BuilderEntry", _, fork => if .glamsterdam ≤ fork then some ⟨BuilderEntry⟩ else none
+  | "BuilderConfig", _, fork => if .glamsterdam ≤ fork then some ⟨BuilderConfig⟩ else none
+  | "BidTrace", _, fork => if HasBuilderApi fork then some ⟨BidTrace⟩ else none
+  | "SubmitBlockRequest", preset, fork =>
     if HasBuilderApi fork then some ⟨SubmitBlockRequest preset fork⟩ else none
-  | "BuilderSubmitNewBlockRequest" =>
+  | "BuilderSubmitNewBlockRequest", preset, fork =>
     if HasBuilderApi fork then some ⟨BuilderSubmitNewBlockRequest preset fork⟩ else none
-  | _ => none
+  | _, _, _ => none
 
 /-- The containers whose form EthLib holds from Glamsterdam on.
 
@@ -273,10 +279,13 @@ def sszStaticOf (args : String × String × String × ByteArray) : Result (Root 
   let (name, fork, type, data) := args
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
+  -- A name with no container at the fork comes back as code 0, since no error type covers it.
   let some container := containerOf preset fork type
     | rejectArgument none s!"no container {type} at {fork.name}"
+  -- From Glamsterdam on, a container whose form EthLib does not hold yet fails with code 0 too.
   if !specifiedAt fork type then
     rejectArgument none s!"{type} not yet specified at {fork.name}"
+  -- Decode the bytes, then return the pair of the root and the bytes encoded again.
   let value ← toResult "input rejected" (SszType.deserialize container.type data)
   let root ← toResult "root rejected" (SszType.hashTreeRoot value)
   let bytes ← toResult "value rejected" (SszType.serialize value)
@@ -296,8 +305,10 @@ def merkleProofOf (args : String × String × String × ByteArray × UInt64) :
   let (name, fork, type, data, gindex) := args
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
+  -- A name with no container at the fork comes back as code 0, since no error type covers it.
   let some container := containerOf preset fork type
     | rejectArgument none s!"no container {type} at {fork.name}"
+  -- From Glamsterdam on, a container whose form EthLib does not hold yet fails with code 0 too.
   if !specifiedAt fork type then
     rejectArgument none s!"{type} not yet specified at {fork.name}"
   let value ← toResult "input rejected" (SszType.deserialize container.type data)
