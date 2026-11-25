@@ -4195,9 +4195,8 @@ private theorem intervalGain_boundary_carry (x : ForkedBeaconState preset)
   have filtered (vs : List Validator) :
       ((vs.filter selected).map (·.effectiveBalance.toNat)).sum =
         (vs.map fun v => if selected v then v.effectiveBalance.toNat else 0).sum := by
-    induction vs with
-    | nil => simp
-    | cons v rest ih => cases h : selected v <;> simp [h, ih]
+    simpa only [Bool.decide_eq_true] using
+      (Base.sum_map_ite_eq_sum_filter (selected · = true) (·.effectiveBalance.toNat) vs).symm
   have forget : (x.state.validators.data.toList.zipIdx.map fun (v, _) =>
       if selected v then v.effectiveBalance.toNat else 0) =
       x.state.validators.data.toList.map
