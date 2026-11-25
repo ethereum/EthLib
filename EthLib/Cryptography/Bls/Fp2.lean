@@ -25,7 +25,7 @@ namespace Fp2
 -- The constants and operations of the generic extension keep their names here.
 --
 -- The ones read with field notation are left out, since an alias would hide the generic one.
-export Cryptography.Fp2 (mk zero i ofFp add sub neg mul powNat)
+export Cryptography.Fp2 (mk zero i ofFp ofNats add sub neg mul powNat)
 
 variable {F : Type} [FieldOps F]
 
@@ -38,12 +38,6 @@ abbrev one : Fp2 F := Cryptography.Fp2.one
 @[inline] def mulByOnePlusI (a : Fp2 F) : Fp2 F :=
   -- `(c0 + c1 i)(1 + i) = (c0 - c1) + (c0 + c1) i`, since `i^2 = -1`.
   ⟨a.c0 - a.c1, a.c0 + a.c1⟩
-
-/-- The element `c0 + c1 * i`, from its two coordinates as integers.
-
-The specifications write the constants of `Fp2` this way, as pairs of integers below `p`. -/
-def ofNats {B : Type} [BaseField B] (c0 c1 : Nat) : Fp2 B :=
-  ⟨BaseField.ofNat c0, BaseField.ofNat c1⟩
 
 end Fp2
 

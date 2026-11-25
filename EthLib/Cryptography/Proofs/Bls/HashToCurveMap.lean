@@ -71,7 +71,7 @@ theorem map_simpleSwu (f : Hom F G) (u : Fp2 F) :
     | none => rfl
 
 theorem map_ofNats (f : Hom F G) (c0 c1 : Nat) :
-    (Fp2.ofNats c0 c1 : Fp2 F).map f = Fp2.ofNats c0 c1 := by
+    Fp2.map f (Fp2.ofNats c0 c1 : Fp2 F) = Fp2.ofNats c0 c1 := by
   simp only [Fp2.ofNats, Fp2.map, f.map_ofNat]
 
 theorem map_k10 (f : Hom F G) : (k10 : Fp2 F).map f = k10 := map_ofNats f _ _
