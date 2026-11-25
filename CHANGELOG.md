@@ -1040,6 +1040,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the discv5 node state reads its lists of pairs with core `List.lookup` ([#4489](https://github.com/ethereum/EthLib/issues/4489)).
+  - `Discv5.lookupKey` is removed; write `pairs.lookup key`, which gives the same value on every list, since the keys compare by their decidable equality.
+  - `lookupKey_setKey_self`, `lookupKey_setKey_of_ne`, `lookupKey_eraseKey_self` and `lookupKey_challenges_receiveHandshake` (`Networking/Proofs/Discv5/Node.lean`) are `lookup_setKey_self`, `lookup_setKey_of_ne`, `lookup_eraseKey_self` and `lookup_challenges_receiveHandshake`, stated with `List.lookup`.
 - In Lean, the shared byte reader builds the error of a truncated field only when a field is truncated ([#4526](https://github.com/ethereum/EthLib/pull/4526)).
   So the QUIC, TLS and protobuf readers cost their fields, not the input.
   - `Encoding.ByteReader.bytes`, `vector` and `uint` (`Networking/Encoding/ByteReader.lean`) take the error as a function of the count of bytes left.

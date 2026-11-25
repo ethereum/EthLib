@@ -28,25 +28,36 @@ open EthLib.Cryptography.Secp256k1
 /-! ## Lists of pairs -/
 
 /-- A key that was just set has the value it was set to. -/
-theorem lookupKey_setKey_self {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) (key : κ)
-    (value : α) : lookupKey (setKey pairs key value) key = some value := by
-  simp [lookupKey, setKey]
+theorem lookup_setKey_self {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) (key : κ)
+    (value : α) : (setKey pairs key value).lookup key = some value := by
+  simp [setKey]
 
 /-- Setting a key leaves the value of every other key as it was. -/
-theorem lookupKey_setKey_of_ne {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) {key other : κ}
+theorem lookup_setKey_of_ne {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) {key other : κ}
     (value : α) (ne : other ≠ key) :
-    lookupKey (setKey pairs key value) other = lookupKey pairs other := by
-  simp only [lookupKey, setKey, List.find?_cons, decide_eq_true_eq, Ne.symm ne,
-    List.find?_filter, decide_false]
+    (setKey pairs key value).lookup other = pairs.lookup other := by
+  -- The new pair has the set key, so the lookup of another key reads the filtered list.
+  have hne : (other == key) = false := beq_false_of_ne ne
+  simp only [setKey, List.lookup, hne]
   -- The filter removes only entries of the set key, never one of the other key.
-  congr 2
-  funext x
-  by_cases h : x.1 = other <;> simp [h, ne]
+  induction pairs with
+  | nil => rfl
+  | cons p rest ih =>
+    obtain ⟨k, v⟩ := p
+    by_cases hk : k = key
+    · subst hk
+      simpa [List.filter, List.lookup, hne] using ih
+    · by_cases ho : other = k
+      · subst ho
+        simp [List.filter, List.lookup, hk]
+      · simpa [List.filter, List.lookup, hk, beq_false_of_ne ho] using ih
 
 /-- A key that was just erased has no value. -/
-theorem lookupKey_eraseKey_self {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) (key : κ) :
-    lookupKey (eraseKey pairs key) key = none := by
-  simp [lookupKey, eraseKey, List.find?_filter]
+theorem lookup_eraseKey_self {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) (key : κ) :
+    (eraseKey pairs key).lookup key = none := by
+  simp [eraseKey]
+  -- Every pair that the filter keeps has a key other than the erased one.
+  exact fun _ _ _ h e => h e.symm
 
 /-- Sealing in a session gives the same session with its counter raised by one. -/
 theorem sealInSession_next {node : Local} {rand : Randoms} {peer : NodeId}
@@ -64,8 +75,8 @@ theorem sealInSession_next {node : Local} {rand : Randoms} {peer : NodeId}
 /-- Answering in a session keeps the keys of the session stored under that key, and its side. -/
 theorem answerIn_keys (node : Local) (rand : Randoms) (state : NodeState) (key : SessionKey)
     (session : Session) (plaintext : ByteArray)
-    (stored : lookupKey state.sessions key = some session) :
-    (lookupKey (answerIn node rand state key session plaintext).1.sessions key).map
+    (stored : state.sessions.lookup key = some session) :
+    ((answerIn node rand state key session plaintext).1.sessions.lookup key).map
         (fun s => (s.incomingKey, s.outgoingKey)) =
       some (session.incomingKey, session.outgoingKey) := by
   unfold answerIn
@@ -73,7 +84,7 @@ theorem answerIn_keys (node : Local) (rand : Randoms) (state : NodeState) (key :
   · simp [stored]
   · split
     · rename_i bytes next sealed
-      simp [sealInSession_next sealed, lookupKey_setKey_self, Session.incomingKey,
+      simp [sealInSession_next sealed, lookup_setKey_self, Session.incomingKey,
         Session.outgoingKey]
     · simp [stored]
 
@@ -144,7 +155,7 @@ theorem decode_sealInSession {node : Local} {rand : Randoms} {peer : NodeId}
 
 /-- No session of a peer at an endpoint opens a packet: there is none, or its key fails. -/
 def NoOpen (state : NodeState) (key : SessionKey) (packet : Packet) : Prop :=
-  ∀ session, lookupKey state.sessions key = some session →
+  ∀ session, state.sessions.lookup key = some session →
     (openPacket SessionError.packet SessionError.decryption session.incomingKey packet).toOption =
       none
 
@@ -152,9 +163,9 @@ def NoOpen (state : NodeState) (key : SessionKey) (packet : Packet) : Prop :=
 theorem receiveMessage_pending {node : Local} {rand : Randoms} {state : NodeState}
     {key : SessionKey} {nonce : Vector UInt8 12} {packet : Packet} {challenge : SentChallenge}
     (noOpen : NoOpen state key packet)
-    (pending : lookupKey state.challenges key = some challenge) :
+    (pending : state.challenges.lookup key = some challenge) :
     receiveMessage node rand state key nonce packet = (state, [challenge.packet]) := by
-  cases hs : lookupKey state.sessions key with
+  cases hs : state.sessions.lookup key with
   | none => simp [receiveMessage, hs, pending]
   | some session => simp [receiveMessage, hs, noOpen session hs, pending]
 
@@ -165,18 +176,18 @@ theorem receiveMessage_resend {node : Local} {rand rand' : Randoms} {state state
     {key : SessionKey} {nonce nonce' : Vector UInt8 12} {packet packet' : Packet}
     {whoareyou : ByteArray}
     (noOpen : NoOpen state key packet) (noOpen' : NoOpen state key packet')
-    (noChallenge : lookupKey state.challenges key = none)
+    (noChallenge : state.challenges.lookup key = none)
     (first : receiveMessage node rand state key nonce packet = (state', [whoareyou])) :
     receiveMessage node rand' state' key nonce' packet' = (state', [whoareyou]) := by
   cases hm : makeWhoareyou key.id rand.maskingIv nonce rand.idNonce (node.knownSeq key.id) with
   | error e =>
-    cases hs : lookupKey state.sessions key with
+    cases hs : state.sessions.lookup key with
     | none => simp [receiveMessage, hs, noChallenge, hm] at first
     | some session => simp [receiveMessage, hs, noOpen session hs, noChallenge, hm] at first
   | ok r =>
     have unopened : receiveMessage node rand state key nonce packet =
         ({ state with challenges := setKey state.challenges key ⟨r.1, r.2⟩ }, [r.1]) := by
-      cases hs : lookupKey state.sessions key with
+      cases hs : state.sessions.lookup key with
       | none => simp [receiveMessage, hs, noChallenge, hm]
       | some session => simp [receiveMessage, hs, noOpen session hs, noChallenge, hm]
     rw [unopened] at first
@@ -184,7 +195,7 @@ theorem receiveMessage_resend {node : Local} {rand rand' : Randoms} {state state
     obtain ⟨rfl, rfl⟩ := first
     exact receiveMessage_pending
       (state := { state with challenges := setKey state.challenges key ⟨r.1, r.2⟩ })
-      noOpen' (lookupKey_setKey_self _ _ _)
+      noOpen' (lookup_setKey_self _ _ _)
 
 /-- A message that no session opens, with no pending challenge, gets a new WHOAREYOU.
 
@@ -193,27 +204,27 @@ theorem receiveMessage_new {node : Local} {rand : Randoms} {state : NodeState}
     {key : SessionKey} {nonce : Vector UInt8 12} {packet : Packet}
     {whoareyou challengeData : ByteArray}
     (noOpen : NoOpen state key packet)
-    (noChallenge : lookupKey state.challenges key = none)
+    (noChallenge : state.challenges.lookup key = none)
     (made : makeWhoareyou key.id rand.maskingIv nonce rand.idNonce (node.knownSeq key.id) =
       .ok (whoareyou, challengeData)) :
     receiveMessage node rand state key nonce packet =
       ({ state with challenges := setKey state.challenges key ⟨whoareyou, challengeData⟩ },
         [whoareyou]) := by
-  cases hs : lookupKey state.sessions key with
+  cases hs : state.sessions.lookup key with
   | none => simp [receiveMessage, hs, noChallenge, made]
   | some session => simp [receiveMessage, hs, noOpen session hs, noChallenge, made]
 
 /-- A WHOAREYOU from an endpoint with no pending request changes nothing and gets no answer. -/
 theorem receiveWhoareyou_unsolicited {node : Local} {rand : Randoms} {state : NodeState}
     {endpoint : Endpoint} {bytes : ByteArray}
-    (noRequest : lookupKey state.requests endpoint = none) :
+    (noRequest : state.requests.lookup endpoint = none) :
     receiveWhoareyou node rand state endpoint bytes = (state, []) := by
   simp [receiveWhoareyou, noRequest]
 
 /-- A WHOAREYOU that mirrors another nonce than that of the pending request changes nothing. -/
 theorem receiveWhoareyou_other_nonce {node : Local} {rand : Randoms} {state : NodeState}
     {endpoint : Endpoint} {bytes : ByteArray} {request : Request} {challenge : Challenge}
-    (pending : lookupKey state.requests endpoint = some request)
+    (pending : state.requests.lookup endpoint = some request)
     (read : readWhoareyou node.nodeId bytes = .ok challenge)
     (other : challenge.nonce ≠ request.nonce) :
     receiveWhoareyou node rand state endpoint bytes = (state, []) := by
@@ -224,7 +235,7 @@ theorem receiveWhoareyou_other_nonce {node : Local} {rand : Randoms} {state : No
 So a handshake packet sent again, while no new challenge is stored, opens nothing. -/
 theorem receiveHandshake_unchallenged {node : Local} {rand : Randoms} {state : NodeState}
     {key : SessionKey} {record bytes : ByteArray}
-    (noChallenge : lookupKey state.challenges key = none) :
+    (noChallenge : state.challenges.lookup key = none) :
     receiveHandshake node rand state key record bytes = (state, []) := by
   simp [receiveHandshake, noChallenge]
 
@@ -236,17 +247,17 @@ theorem answerIn_challenges (node : Local) (rand : Randoms) (state : NodeState) 
   split <;> (try split) <;> rfl
 
 /-- A handshake that opens removes the challenge it answers from the store. -/
-theorem lookupKey_challenges_receiveHandshake {node : Local} {rand : Randoms}
+theorem lookup_challenges_receiveHandshake {node : Local} {rand : Randoms}
     {state : NodeState} {key : SessionKey} {record bytes : ByteArray}
     {challenge : SentChallenge} {srcKey : Point} {received : HandshakeReceived}
-    (stored : lookupKey state.challenges key = some challenge)
+    (stored : state.challenges.lookup key = some challenge)
     (known : (node.publicKeyOf key.id <|> recordKey key.id record) = some srcKey)
     (opens : openHandshake node.staticKey challenge.challengeData node.nodeId srcKey bytes =
       .ok received) :
-    lookupKey (receiveHandshake node rand state key record bytes).1.challenges key = none := by
+    (receiveHandshake node rand state key record bytes).1.challenges.lookup key = none := by
   simp only [receiveHandshake, stored, known, opens]
   rw [answerIn_challenges]
-  exact lookupKey_eraseKey_self _ _
+  exact lookup_eraseKey_self _ _
 
 /-- In the state right after a handshake opens, any handshake packet under its key changes nothing.
 
@@ -254,13 +265,13 @@ So the same packet, sent again at once, opens no second session and gets no answ
 theorem receiveHandshake_replay {node : Local} {rand rand' : Randoms}
     {state : NodeState} {key : SessionKey} {record bytes record' bytes' : ByteArray}
     {challenge : SentChallenge} {srcKey : Point} {received : HandshakeReceived}
-    (stored : lookupKey state.challenges key = some challenge)
+    (stored : state.challenges.lookup key = some challenge)
     (known : (node.publicKeyOf key.id <|> recordKey key.id record) = some srcKey)
     (opens : openHandshake node.staticKey challenge.challengeData node.nodeId srcKey bytes =
       .ok received) :
     let next := (receiveHandshake node rand state key record bytes).1
     receiveHandshake node rand' next key record' bytes' = (next, []) :=
-  receiveHandshake_unchallenged (lookupKey_challenges_receiveHandshake stored known opens)
+  receiveHandshake_unchallenged (lookup_challenges_receiveHandshake stored known opens)
 
 /-! ## Steps -/
 
@@ -270,7 +281,7 @@ theorem step_resend {node : Local} {rand : Randoms} {state : NodeState} {endpoin
     (decoded : Packet.decode node.nodeId bytes = .ok packet)
     (message : packet.header.authdata = .message srcId)
     (noOpen : NoOpen state ⟨srcId, endpoint⟩ packet)
-    (pending : lookupKey state.challenges ⟨srcId, endpoint⟩ = some challenge) :
+    (pending : state.challenges.lookup ⟨srcId, endpoint⟩ = some challenge) :
     step node rand state endpoint bytes = (state, [challenge.packet]) := by
   simp only [step, decoded, message]
   exact receiveMessage_pending noOpen pending
@@ -282,8 +293,8 @@ theorem step_endpoint {node : Local} {rand : Randoms} {state : NodeState} {endpo
     {bytes : ByteArray} {packet : Packet} {srcId : NodeId} {whoareyou challengeData : ByteArray}
     (decoded : Packet.decode node.nodeId bytes = .ok packet)
     (message : packet.header.authdata = .message srcId)
-    (noSession : lookupKey state.sessions ⟨srcId, endpoint⟩ = none)
-    (noChallenge : lookupKey state.challenges ⟨srcId, endpoint⟩ = none)
+    (noSession : state.sessions.lookup ⟨srcId, endpoint⟩ = none)
+    (noChallenge : state.challenges.lookup ⟨srcId, endpoint⟩ = none)
     (made : makeWhoareyou srcId rand.maskingIv packet.header.nonce rand.idNonce
       (node.knownSeq srcId) = .ok (whoareyou, challengeData)) :
     step node rand state endpoint bytes =
@@ -300,7 +311,7 @@ theorem step_whoareyou_unsolicited {node : Local} {rand : Randoms} {state : Node
     {enrSeq : UInt64}
     (decoded : Packet.decode node.nodeId bytes = .ok packet)
     (isWhoareyou : packet.header.authdata = .whoareyou idNonce enrSeq)
-    (noRequest : lookupKey state.requests endpoint = none) :
+    (noRequest : state.requests.lookup endpoint = none) :
     step node rand state endpoint bytes = (state, []) := by
   simp only [step, decoded, isWhoareyou]
   exact receiveWhoareyou_unsolicited noRequest
@@ -321,16 +332,16 @@ theorem handshake_agree {nodeA nodeB : Local} {randA randB : Randoms}
     {session : Session}
     (keyOfB : nodeA.publicKeyOf nodeB.nodeId = some (Point.mul nodeB.staticKey Point.generator))
     (keyOfA : nodeB.publicKeyOf nodeA.nodeId = some (Point.mul nodeA.staticKey Point.generator))
-    (pending : lookupKey stateA.requests endpointB = some request)
+    (pending : stateA.requests.lookup endpointB = some request)
     (toB : request.id = nodeB.nodeId)
     (made : makeWhoareyou nodeA.nodeId maskingIv request.nonce idNonce seq =
       .ok (whoareyou, challengeData))
-    (kept : lookupKey stateB.challenges ⟨nodeA.nodeId, endpointA⟩ =
+    (kept : stateB.challenges.lookup ⟨nodeA.nodeId, endpointA⟩ =
       some ⟨whoareyou, challengeData⟩)
     (stepA : step nodeA randA stateA endpointB whoareyou = (stateA', [handshake]))
     (stepB : step nodeB randB stateB endpointA handshake = (stateB', replies))
-    (sessionA : lookupKey stateA'.sessions ⟨nodeB.nodeId, endpointB⟩ = some session) :
-    (lookupKey stateB'.sessions ⟨nodeA.nodeId, endpointA⟩).map
+    (sessionA : stateA'.sessions.lookup ⟨nodeB.nodeId, endpointB⟩ = some session) :
+    (stateB'.sessions.lookup ⟨nodeA.nodeId, endpointA⟩).map
         (fun s => (s.incomingKey, s.outgoingKey)) =
       some (session.outgoingKey, session.incomingKey) := by
   obtain ⟨-, readA⟩ := Proofs.Discv5.Session.readWhoareyou_makeWhoareyou made
@@ -340,7 +351,7 @@ theorem handshake_agree {nodeA nodeB : Local} {randA randB : Randoms}
   · rename_i packet keys sealed
     simp only [Prod.mk.injEq, List.cons.injEq, and_true] at stepA
     obtain ⟨rfl, rfl⟩ := stepA
-    simp only [lookupKey_setKey_self, Option.some.injEq] at sessionA
+    simp only [lookup_setKey_self, Option.some.injEq] at sessionA
     subst sessionA
     obtain ⟨signature, ephemeral, message, decodedB⟩ := decode_sealHandshake sealed
     have opened := Proofs.Discv5.Handshake.openHandshake_sealHandshake sealed
@@ -351,7 +362,7 @@ theorem handshake_agree {nodeA nodeB : Local} {randA randB : Randoms}
       { stateB with
         sessions := setKey stateB.sessions keyA ⟨keys, false, 0⟩
         challenges := eraseKey stateB.challenges keyA }
-      keyA ⟨keys, false, 0⟩ request.plaintext (lookupKey_setKey_self _ _ _)
+      keyA ⟨keys, false, 0⟩ request.plaintext (lookup_setKey_self _ _ _)
     rw [stepB] at answered
     simpa [Session.incomingKey, Session.outgoingKey] using answered
   · simp at stepA
