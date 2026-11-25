@@ -213,7 +213,7 @@ BLOB_RULES = (
 )
 
 
-def _blobs(*entries: tuple[int, int]) -> dict[str, list[dict[str, int]]]:
+def _blobs(*entries: tuple[int, int]) -> dict[str, object]:
     return {"BLOB_SCHEDULE": [{"EPOCH": e, "MAX_BLOBS_PER_BLOCK": m} for e, m in entries]}
 
 
@@ -225,9 +225,18 @@ def _blobs(*entries: tuple[int, int]) -> dict[str, list[dict[str, int]]]:
         pytest.param(_blobs((FULU + 2, 21), (FULU + 1, 15)), id="descending"),
     ],
 )
-def test_blob_schedule_valid(replacements: dict) -> None:
+def test_blob_schedule_valid(replacements: dict[str, object]) -> None:
     """A blob schedule that meets the rules of Fulu is read."""
     consensus.compute_fork_digest("mainnet", bytes(32), FULU, replacements)
+
+
+@pytest.mark.parametrize("epoch", [FULU, FULU + 1, FULU + 2])
+def test_blob_schedule_order(epoch: int) -> None:
+    """The order of a blob schedule with distinct epochs does not change the fork digest."""
+    ascending = _blobs((FULU + 1, 15), (FULU + 2, 21))
+    descending = _blobs((FULU + 2, 21), (FULU + 1, 15))
+    expected = consensus.compute_fork_digest("mainnet", bytes(32), epoch, ascending)
+    assert consensus.compute_fork_digest("mainnet", bytes(32), epoch, descending) == expected
 
 
 @pytest.mark.parametrize(
@@ -240,7 +249,7 @@ def test_blob_schedule_valid(replacements: dict) -> None:
         pytest.param({"FULU_FORK_EPOCH": 412673}, id="fulu-after-mainnet-entry"),
     ],
 )
-def test_blob_schedule_invalid(replacements: dict) -> None:
+def test_blob_schedule_invalid(replacements: dict[str, object]) -> None:
     """A blob schedule that breaks a rule of Fulu fails with code 0."""
     with raises(SszError, BLOB_RULES) as error:
         consensus.compute_fork_digest("mainnet", bytes(32), FULU, replacements)
@@ -256,26 +265,33 @@ GAS_RULES = (
 )
 
 
-def _gas(*entries: tuple[int, int]) -> dict:
+def _gas(*entries: tuple[int, int]) -> dict[str, object]:
     schedule = [{"EPOCH": e, "GAS_LIMIT": g} for e, g in entries]
     return {"GLOAS_FORK_EPOCH": GLOAS, "GAS_LIMIT_SCHEDULE": schedule}
 
 
 @pytest.mark.parametrize(
-    "replacements, valid",
+    "replacements",
     [
-        pytest.param(_gas(), True, id="empty"),
-        pytest.param(_gas((GLOAS, 60_000_000), (GLOAS + 9, 90_000_000)), True, id="from-gloas"),
-        pytest.param(_gas((GLOAS + 9, 90_000_000), (GLOAS, 60_000_000)), True, id="descending"),
-        pytest.param(_gas((GLOAS - 1, 60_000_000)), False, id="before-gloas"),
-        pytest.param(_gas((GLOAS, 60_000_000), (GLOAS, 90_000_000)), False, id="shared-epoch"),
+        pytest.param(_gas(), id="empty"),
+        pytest.param(_gas((GLOAS, 60_000_000), (GLOAS + 9, 90_000_000)), id="from-gloas"),
+        pytest.param(_gas((GLOAS + 9, 90_000_000), (GLOAS, 60_000_000)), id="descending"),
     ],
 )
-def test_gas_limit_schedule(replacements: dict, valid: bool) -> None:
+def test_gas_limit_schedule_valid(replacements: dict[str, object]) -> None:
+    """A gas limit schedule that meets the rules of Gloas is read."""
+    consensus.compute_fork_digest("mainnet", bytes(32), FULU, replacements)
+
+
+@pytest.mark.parametrize(
+    "replacements",
+    [
+        pytest.param(_gas((GLOAS - 1, 60_000_000)), id="before-gloas"),
+        pytest.param(_gas((GLOAS, 60_000_000), (GLOAS, 90_000_000)), id="shared-epoch"),
+    ],
+)
+def test_gas_limit_schedule_invalid(replacements: dict[str, object]) -> None:
     """A gas limit schedule that breaks a rule of Gloas fails with code 0."""
-    if valid:
-        consensus.compute_fork_digest("mainnet", bytes(32), FULU, replacements)
-        return
     with raises(SszError, GAS_RULES) as error:
         consensus.compute_fork_digest("mainnet", bytes(32), FULU, replacements)
     assert error.value.code == 0

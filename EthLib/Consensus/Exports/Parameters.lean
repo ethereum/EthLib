@@ -133,7 +133,8 @@ def checkSchedules (preset : Preset) (config : Config) : Result Config := do
 
 /-- The configuration of a name, with some of its values replaced by those of a JSON object. -/
 def configWith (name replacements : ByteArray) : Result Config := do
-  let config ← configOf (← nameOf name)
+  let name ← nameOf name
+  let config ← configOf name
   -- An empty replacement keeps the configuration of the name.
   if replacements.isEmpty then return config
   let some text := String.fromUTF8? replacements | rejectArgument none "configuration is not UTF-8"
@@ -142,7 +143,8 @@ def configWith (name replacements : ByteArray) : Result Config := do
     UnreadArgument.mk s!"configuration: {e}")
   let replaced ← toResult none ((fromJson? ((toJson config).mergeObj replaced)).mapError fun e =>
     UnreadArgument.mk s!"configuration: {e}")
-  checkSchedules (← presetOf (← nameOf name)) replaced
+  -- A schedule that breaks the rules of its fork has code 0.
+  checkSchedules (← presetOf name) replaced
 
 /-- The configuration of a name, with some of its values replaced by those of a `dict`. -/
 def configWithValue (name : String) (replacements : Option PyValue) : Result Config := do

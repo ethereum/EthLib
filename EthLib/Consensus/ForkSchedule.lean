@@ -132,20 +132,24 @@ def largestBlobLimit (config : Config) : UInt64 :=
 
 /-- From Fulu: whether the blob schedule of a configuration meets the rules of Fulu.
 
-[EIP-7892] adds the schedule.
+[EIP-7892] adds the schedule, with entries after Electra.
+
+The Fulu configuration states the rules.
 
 [EIP-7892]: https://eips.ethereum.org/EIPS/eip-7892#consensus-layer-configuration -/
 def blobScheduleValid (preset : Preset) (config : Config) : Bool :=
-  -- A schedule that breaks one of these rules is not a valid configuration; it may be empty.
+  -- A schedule that breaks one of these rules makes the configuration invalid.
   --
-  -- The specification only recommends entries in increasing order of epoch, so any order passes.
+  -- The schedule may be empty.
   --
-  -- Fulu: "There MUST NOT exist multiple blob schedule entries with the same epoch value."
+  -- Increasing order of epoch is only recommended, so any order passes.
+  --
+  -- Fulu: no two entries share an epoch.
   decide (config.BLOB_SCHEDULE.map (·.EPOCH)).Nodup &&
     config.BLOB_SCHEDULE.all fun entry =>
-      -- "The epoch value in each entry MUST be greater than or equal to `FULU_FORK_EPOCH`."
+      -- Fulu: each entry starts at or after the first epoch of Fulu.
       config.FULU_FORK_EPOCH ≤ entry.EPOCH &&
-        -- Fulu: the limit in each entry "MUST be less than or equal to" the commitment bound.
+        -- Fulu: the limit of each entry is at most the number of blob commitments in a block.
         entry.MAX_BLOBS_PER_BLOCK ≤ preset.MAX_BLOB_COMMITMENTS_PER_BLOCK
 
 /-- From Gloas: the gas limit that the schedule recommends at an epoch, if any.
@@ -168,17 +172,21 @@ def getScheduledGasLimit (config : Config) (epoch : Epoch) : Option UInt64 :=
 
 /-- From Gloas: whether the gas limit schedule of a configuration meets the rules of Gloas.
 
-[EIP-8261] adds the schedule.
+[EIP-8261] adds the schedule and ignores it before Gloas.
+
+The Gloas configuration states the rules.
 
 [EIP-8261]: https://eips.ethereum.org/EIPS/eip-8261#gas-limit-schedule -/
 def gasLimitScheduleValid (config : Config) : Bool :=
-  -- A schedule that breaks one of these rules is not a valid configuration; it may be empty.
+  -- A schedule that breaks one of these rules makes the configuration invalid.
   --
-  -- The specification only recommends entries in increasing order of epoch, so any order passes.
+  -- The schedule may be empty.
   --
-  -- Gloas: "There MUST NOT exist multiple gas limit schedule entries with the same epoch value."
+  -- Increasing order of epoch is only recommended, so any order passes.
+  --
+  -- Gloas: no two entries share an epoch.
   decide (config.GAS_LIMIT_SCHEDULE.map (·.EPOCH)).Nodup &&
-    -- "The epoch value in each entry MUST be greater than or equal to `GLOAS_FORK_EPOCH`."
+    -- Gloas: each entry starts at or after the first epoch of Gloas, so none is left to ignore.
     config.GAS_LIMIT_SCHEDULE.all fun entry => config.GLOAS_FORK_EPOCH ≤ entry.EPOCH
 
 end Config

@@ -1096,6 +1096,9 @@ Not yet released.
   In Lean, `Config.blobScheduleValid` and `Config.gasLimitScheduleValid` in `EthLib.Consensus.ForkSchedule` are the checks.
   `blobScheduleValid_iff` and `gasLimitScheduleValid_iff` in `EthLib.Consensus.Proofs.ForkSchedule` state the rules that each accepts.
   `getBlobParameters_perm` states that a blob schedule with distinct epochs gives the same limits in any order.
+  `getBlobParameters_le_of_blobScheduleValid` bounds the limit of a valid schedule by `MAX_BLOB_COMMITMENTS_PER_BLOCK`.
+  `getBlobParameters_sharedEpoch` shows two entries at one epoch whose order sets the limit.
+  `latestStarted_perm` gives the order-free result for any schedule with distinct first epochs, and `getScheduledGasLimit_perm` now follows from it.
 
 - In Lean, `phase0PeriodEpochs` (`Consensus/WeakSubjectivity.lean`), and so the Phase 0 to Deneb weak subjectivity period, takes the epochs for the churn of validators alone when balances are large, no longer the longer of those and the epochs for top-ups ([consensus-specs#5866](https://github.com/ethereum/consensus-specs/issues/5866)).
   The period is shorter only where the epochs for top-ups were the longer, for instance beyond about 4.39 million validators of 32 ether.
