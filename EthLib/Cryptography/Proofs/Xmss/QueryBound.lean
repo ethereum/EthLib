@@ -69,62 +69,6 @@ theorem isQueryBoundP_findFirst {κ β : Type} (trial : Nat → κ)
     | none => exact isQueryBoundP_findFirst trial test htest (c + 1) fuel
     | some x => exact isQueryBoundP_pure _ _ _
 
-/-! ## Merkle trees -/
-
-section Merkle
-
-variable {α : Type} {hash : Merkle.Position → α → α → OracleComp spec α}
-  {leaves : Nat → OracleComp spec α} {c : Nat}
-
-/-- A node at `level` costs its `2^level` leaves of cost `c` and its `2^level - 1` hashes. -/
-theorem isQueryBoundP_merkleNode (hleaves : ∀ j, IsQueryBoundP (leaves j) p c)
-    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
-    ∀ q : Merkle.Position,
-      IsQueryBoundP (Merkle.node hash leaves q) p (2 ^ q.level * (c + 1) - 1) := by
-  rintro ⟨level, j⟩
-  induction level generalizing j with
-  | zero => exact (hleaves j).mono (by simp)
-  | succ level ih =>
-    rw [Merkle.node_succ]
-    have h1 : 1 ≤ 2 ^ level * (c + 1) := Nat.one_le_iff_ne_zero.2 (by positivity)
-    have h2 : 2 ^ (level + 1) * (c + 1) = 2 * (2 ^ level * (c + 1)) := by ring
-    refine (isQueryBoundP_bind (ih _) fun _ _ =>
-      isQueryBoundP_bind (ih _) fun _ _ => hhash _ _ _).mono ?_
-    simp only at h1 h2 ⊢
-    omega
-
-/-- A build at `level` costs as the node at its position. -/
-theorem isQueryBoundP_merkleBuild (hleaves : ∀ j, IsQueryBoundP (leaves j) p c)
-    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) (q : Merkle.Position) :
-    IsQueryBoundP (Merkle.build hash leaves q) p (2 ^ q.level * (c + 1) - 1) :=
-  isQueryBoundP_merkleNode
-    (fun j => (isQueryBoundP_bind (m := 0) (hleaves j) fun _ _ => isQueryBoundP_pure _ _ 0).mono
-      (le_of_eq (Nat.add_zero _)))
-    (fun _ _ _ => (isQueryBoundP_bind (m := 0) (hhash _ _ _) fun _ _ =>
-      isQueryBoundP_pure _ _ 0).mono (le_of_eq (Nat.add_zero _))) q
-
-/-- The `n` siblings above a node at `level` cost the nodes they are. -/
-theorem isQueryBoundP_merkleSiblings (hleaves : ∀ j, IsQueryBoundP (leaves j) p c)
-    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
-    ∀ (q : Merkle.Position) (n : Nat), IsQueryBoundP (Merkle.siblings hash leaves q n) p
-      (2 ^ (q.level + n) * (c + 1) - 2 ^ q.level * (c + 1))
-  | q, 0 => by simp [Merkle.siblings]
-  | q, n + 1 => by
-    simp only [Merkle.siblings]
-    have h1 : 1 ≤ 2 ^ q.level * (c + 1) := Nat.one_le_iff_ne_zero.2 (by positivity)
-    have h2 : 2 ^ (q.level + 1) * (c + 1) = 2 * (2 ^ q.level * (c + 1)) := by ring
-    have h3 : 2 ^ (q.level + 1) * (c + 1) ≤ 2 ^ (q.level + 1 + n) * (c + 1) :=
-      Nat.mul_le_mul_right _ (Nat.pow_le_pow_right (by norm_num) (by omega))
-    have h4 : q.level + (n + 1) = q.level + 1 + n := by omega
-    rw [h4]
-    refine (isQueryBoundP_bind (isQueryBoundP_merkleNode hleaves hhash q.sibling) fun _ _ =>
-      isQueryBoundP_bind (isQueryBoundP_merkleSiblings hleaves hhash q.parent n)
-        fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
-    simp only [Merkle.Position.sibling_level, Merkle.Position.parent_level]
-    omega
-
-end Merkle
-
 end Loops
 
 /-! ## The algorithms -/
@@ -173,7 +117,7 @@ theorem isQueryBoundP_node (hH : ∀ x, IsQueryBoundP (H x) p 1)
       (publicParam : PublicParam)
     (layer : Layer) (level j : Nat) :
     IsQueryBoundP (node H publicParam prf layer level j) p (2 ^ level * 205 - 1) :=
-  isQueryBoundP_merkleNode (c := 204) (fun _ => isQueryBoundP_otsPublicLeaf hH hprf _ _ _)
+  Merkle.isQueryBoundP_node (c := 204) (fun _ => isQueryBoundP_otsPublicLeaf hH hprf _ _ _)
     (fun _ _ _ => isQueryBoundP_th hH _ _ _) ⟨level, j⟩
 
 /-- A build at `level` is `2^level` leaves and `2^level - 1` hashes. -/
@@ -182,7 +126,7 @@ theorem isQueryBoundP_build (hH : ∀ x, IsQueryBoundP (H x) p 1)
       (publicParam : PublicParam)
     (layer : Layer) (level j : Nat) :
     IsQueryBoundP (build H publicParam prf layer level j) p (2 ^ level * 205 - 1) :=
-  isQueryBoundP_merkleBuild (c := 204) (fun _ => isQueryBoundP_otsPublicLeaf hH hprf _ _ _)
+  Merkle.isQueryBoundP_build (c := 204) (fun _ => isQueryBoundP_otsPublicLeaf hH hprf _ _ _)
     (fun _ _ _ => isQueryBoundP_th hH _ _ _) ⟨level, j⟩
 
 /-- A key's path is the `16` nodes beside it, one per level. -/
@@ -191,7 +135,7 @@ theorem isQueryBoundP_path (hH : ∀ x, IsQueryBoundP (H x) p 1)
       (publicParam : PublicParam)
     (layer : Layer) (e : Nat) :
     IsQueryBoundP (path H publicParam prf layer e) p (2 ^ 16 * 205 - 205) := by
-  have h := isQueryBoundP_merkleSiblings (c := 204) (hash := nodeHash H publicParam layer)
+  have h := Merkle.isQueryBoundP_siblings (c := 204) (hash := nodeHash H publicParam layer)
     (leaves := leaves H publicParam prf layer)
       (fun _ => isQueryBoundP_otsPublicLeaf hH hprf publicParam layer _)
     (fun _ _ _ => isQueryBoundP_th hH publicParam _ _) ⟨0, e⟩ LAYER_HEIGHT

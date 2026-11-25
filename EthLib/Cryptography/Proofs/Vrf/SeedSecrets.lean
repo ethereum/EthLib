@@ -242,7 +242,7 @@ theorem isQueryBoundP_run_logKeys_holderOf {α : Type} (oa : OracleComp Adversar
       refine (isQueryBoundP_bind (n := 2 ^ 33) ?_ fun u _ => ih u _ (hh.2 u) (ho.2 u)).mono ?_
       · simp only [holderOf]
         rw [isQueryBoundP_map_iff]
-        have hpath := isQueryBoundP_siblings (hash := nodeWith hashS)
+        have hpath := Merkle.isQueryBoundP_siblings (hash := nodeWith hashS)
           (leaves := leafOf hashS secretS)
           isQueryBoundP_leafOf isQueryBoundP_nodeWith ⟨0, i.toNat⟩ VRF_TREE_HEIGHT
         exact (isQueryBoundP_bind hpath fun _ _ => isQueryBoundP_bind (n := 0)
@@ -257,7 +257,7 @@ theorem isQueryBoundP_seedGameD (adversary : AdaptiveAdversary) {qh qo : ℕ}
     (hh : ∀ r, IsQueryBoundP (adversary r) IsHashQuery qh)
     (ho : ∀ r, IsQueryBoundP (adversary r) IsOpenQuery qo) :
     IsQueryBoundP (seedGameD adversary) IsHashS (qh + (qo + 1) * 2 ^ 33) := by
-  have hroot := isQueryBoundP_node (hash := nodeWith hashS) (leaves := leafOf hashS secretS)
+  have hroot := Merkle.isQueryBoundP_node (hash := nodeWith hashS) (leaves := leafOf hashS secretS)
     isQueryBoundP_leafOf isQueryBoundP_nodeWith ⟨VRF_TREE_HEIGHT, 0⟩
   rw [seedGameD, gameOf, rootOf, Merkle.root]
   refine (isQueryBoundP_bind hroot fun r _ =>
