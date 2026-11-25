@@ -9,9 +9,11 @@ Not yet released.
 
 ### Proof additions
 
-- In Lean, `Run.getBeaconProposerIndex_ok` in `EthLib.Consensus.Proofs.Transition.LookaheadActive` says that, from Fulu, each state that a run reaches from genesis has a proposer for its slot.
+- In Lean, `Run.getBeaconProposerIndex_ok` in `EthLib.Consensus.Proofs.Transition.AssignedProposers` says that, from Fulu, each state that a run reaches from genesis has a proposer for its slot ([#4493](https://github.com/ethereum/EthLib/pull/4493)).
   That proposer is a validator of the registry.
-  It needs a preset with at least one slot in an epoch, and with `MAX_SEED_LOOKAHEAD` above `MIN_SEED_LOOKAHEAD`.
+  It needs a preset with at least one slot in an epoch.
+  `AssignedProposers.selected`, in the same module, says that a proposer read from a state that holds `AssignedProposers` is an assigned validator of the registry.
+  Before Fulu that proposer is drawn from the active validators.
 
 - In Lean, `DirectSafety.twoRunsForgeAdvantage_le_coCdhAdvantage` (`Consensus/Proofs/DirectSafety/SignedForgery.lean`) bounds a forged header call of two runs against `n` honest keys by `n * q` times a co-CDH solver ([#3433](https://github.com/ethereum/EthLib/issues/3433)).
   `Security.multiByteForgeAdvantage_le_coCdhAdvantage` (`Cryptography/Proofs/Bls/Security/MultiKeyBytes.lean`) carries the BLS bound against `n` keys to EthLib's bytes.
@@ -1044,8 +1046,7 @@ Not yet released.
   - `ofBE.horner`, `ofBE.go`, `ofBE.horner_eq` and `ofBE.go_eq_horner` are new.
     `foldl_ofBE` and `ofBE_lt` keep their statements.
 - In Lean, `Run.lookaheadActive` in `EthLib.Consensus.Proofs.Transition.LookaheadActive` drops its premise that the run ends before Gloas.
-  The upgrades to Gloas and to Heze copy the registry, the slot and the lookahead.
-  So each entry of the lookahead stays active in its epoch.
+  The upgrades to Gloas and to Heze copy the registry, the slot and the lookahead, so each entry stays active in its epoch.
   Migration: delete the `early` argument.
 - In Lean, SHA-256 and RIPEMD-160 pad through one shared Merkle-Damgård padding in `EthLib/Cryptography/Hash/Padding.lean`, which takes each hash's length bytes ([#4447](https://github.com/ethereum/EthLib/pull/4447)).
   - `Sha256.paddingZeros` and `Ripemd160.paddingZeros` are `Padding.paddingZeros`, and `Sha256.LENGTH_SIZE_BYTES` is removed.

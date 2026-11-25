@@ -3,8 +3,8 @@ module
 public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
-public import EthLib.Consensus.Proofs.Transition.ProposerLookahead
 public import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
+import EthLib.Consensus.Proofs.Transition.ProposerLookahead
 
 /-!
 # Proofs: each proposer of the lookahead is active in its epoch along a run
@@ -12,8 +12,6 @@ public import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 From Fulu the state keeps the proposers of the current epoch and of the epochs after it.
 
 Along a run from genesis, each of them is active in its epoch.
-
-So from Fulu each state of such a run has a proposer for its slot, in the registry.
 -/
 
 @[expose] public section
@@ -219,29 +217,5 @@ theorem LookaheadActive.proposer_active {state : BeaconState preset fork}
     have small := toNat_mod_lt (i := state.slot) nonzero
     exact h fulu _ (Nat.lt_of_lt_of_le small (Nat.le_mul_of_pos_left _ (Nat.succ_pos _)))
       _ (by rw [Nat.div_eq_of_lt small]; rfl)
-
-/-- From Fulu, a state that a run reaches from genesis has a proposer for its slot.
-
-That proposer is a validator of the registry.
-
-An epoch of the preset must have at least one slot.
-
-The preset must have `MAX_SEED_LOOKAHEAD` above `MIN_SEED_LOOKAHEAD`. -/
-theorem Run.getBeaconProposerIndex_ok {g x : ForkedBeaconState preset}
-    (nonzero : preset.SLOTS_PER_EPOCH ≠ 0)
-    (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
-    (genesis : Genesis config checks g) (run : Run config checks g x) (fulu : .fusaka ≤ x.fork) :
-    ∃ proposer, getBeaconProposerIndex x.state = .ok proposer ∧
-      proposer.toNat < x.state.validators.data.size := by
-  -- From Fulu the proposer is an entry of the lookahead, so the read succeeds.
-  have read : ∃ proposer, getBeaconProposerIndex x.state = .ok proposer := by
-    unfold getBeaconProposerIndex
-    simp only [fulu, nonzero, ↓reduceDIte]
-    exact ⟨_, rfl⟩
-  obtain ⟨proposer, read⟩ := read
-  -- That entry is active in the epoch of the state, so the registry holds its validator.
-  obtain ⟨_, found, -⟩ := isActiveAt_eq_true_iff.mp
-    ((run.lookaheadActive covers genesis).proposer_active fulu read)
-  exact ⟨proposer, read, (Array.getElem?_eq_some_iff.mp found).1⟩
 
 end EthLib.Consensus

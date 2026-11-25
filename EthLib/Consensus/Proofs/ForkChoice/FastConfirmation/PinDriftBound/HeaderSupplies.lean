@@ -2011,7 +2011,7 @@ theorem budget_sync (h : Setting config checks g split fin pulled anc counted V)
     cases step with
     | slot _ => trivial
     | @block f before after engine signed due ok =>
-      obtain ⟨pre, _, -, -, -⟩ :=
+      obtain ⟨pre, -, -, -, -⟩ :=
         DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
       intro p found inK
       obtain ⟨v, inEK, same⟩ := Finset.mem_image.mp (hPK ▸ inK)

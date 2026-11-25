@@ -99,7 +99,7 @@ private theorem exited_proposer_credits_zero
           DirectSafety.Apriori.Internal.Run.contains_step_facts member early
         exact block_proposer_credit_zero h.genesis h.parameters.lookahead (toFin.append pre)
           (Nat.le_trans h.fulu (fork_le_of_chainSteps pre.chainSteps)) mEarly i
-          (fun p read => Internal.exited_not_proposer h foundPulled exited _ pre p mEarly read)
+          (fun p read => Internal.exited_not_proposer h foundPulled exited _ pre p read)
             blockP _
           sources
   exact ⟨zero _ fun x hx => .inl (by simpa using hx),

@@ -3447,8 +3447,8 @@ theorem exited_not_proposer (h : Setting config checks g split fin pulled anc co
     {i : ℕ} {w : Validator} (foundPulled : pulled.validators.data[i]? = some w)
     (exited : w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat)
     (u : ForkedBeaconState preset) (run : Run config checks ⟨fork, fin⟩ u) (p : ValidatorIndex) :
-    u.fork < .glamsterdam → getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i := by
-  intro _ proposer same
+    getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i := by
+  intro proposer same
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨w0, foundFin, kept⟩ := Internal.exit_kept_of_le_fin h foundPulled exited
   have inactive := Internal.inactive_of_exited h.twoSlots run foundFin (by rw [kept]; exact exited)
@@ -3940,8 +3940,7 @@ theorem bands_seats (h : Setting config checks g split fin pulled anc counted V)
       · obtain ⟨w, found, exited⟩ := exited_of_exitBeforeFin exit
         exact .inr (.inl ⟨Internal.syncCr_gross_shared h fromFin tailC highC replayedFC v.toNat
           credit,
-          fun u run p early proposer => Internal.exited_not_proposer h found exited u run p early
-            proposer⟩)
+          fun u run p _ proposer => Internal.exited_not_proposer h found exited u run p proposer⟩)
       · exact .inr (.inr (seatQ v seat)))
     (fun i hi => by
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
