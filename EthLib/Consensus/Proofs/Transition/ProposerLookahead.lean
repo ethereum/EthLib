@@ -192,7 +192,7 @@ theorem upgradeNext_proposerLookahead {pre : ForkedBeaconState preset}
   case glamsterdam =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     rfl
   -- Every earlier fork is before Fulu, and Heze and the blob forks have no next fork.
   all_goals first

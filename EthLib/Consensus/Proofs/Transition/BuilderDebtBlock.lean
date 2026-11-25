@@ -67,7 +67,7 @@ theorem builderDebtCovered_upgradeToGloas {pre : BeaconState preset .fusaka}
 theorem BuilderDebtCovered.upgradeToHeze {pre : BeaconState preset .glamsterdam}
     {post : BeaconState preset .hegota} (holds : BuilderDebtCovered pre (by decide))
     (computed : upgradeToHeze config pre = .ok post) : BuilderDebtCovered post (by decide) := by
-  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  obtain rfl := upgradeToHeze_ok_iff.mp computed
   -- The upgrade copies every field that the invariant reads, and the bid keeps its value.
   have position : parentPaymentPosition (upgradeHezeFields config pre) =
       parentPaymentPosition pre := rfl

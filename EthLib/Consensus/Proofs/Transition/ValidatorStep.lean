@@ -4753,7 +4753,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
       (fun early => (Nat.lt_irrefl _ early).elim),
       fun early => (Nat.lt_irrefl _ early).elim⟩
   · obtain ⟨_, upgraded, rfl⟩ := ok
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact ⟨CapStep.carry (upgradeHezeFields_lists state).1
       activation compounding (by change Fork.glamsterdam ≤ .hegota; decide) frame.slot
       (fun early => ((by decide : ¬ Fork.hegota < .glamsterdam) early).elim)

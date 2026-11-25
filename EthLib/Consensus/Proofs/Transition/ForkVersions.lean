@@ -139,7 +139,7 @@ theorem upgradeNext_forkVersions {pre : ForkedBeaconState preset}
   case glamsterdam =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     rfl
   all_goals
     simp only [upgradeNext] at computed

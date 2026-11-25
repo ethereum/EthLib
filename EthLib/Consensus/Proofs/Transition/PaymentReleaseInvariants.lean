@@ -38,7 +38,7 @@ theorem ValuedBidAtLatestBlock.upgradeToHeze {pre : BeaconState preset .glamster
     {post : BeaconState preset .hegota} (holds : ValuedBidAtLatestBlock pre (by decide))
     (computed : upgradeToHeze config pre = .ok post) :
     ValuedBidAtLatestBlock post (by decide) := by
-  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  obtain rfl := upgradeToHeze_ok_iff.mp computed
   exact holds
 
 /-- From Gloas, one slot keeps a latest bid with a value at the slot of the latest block. -/
@@ -155,7 +155,7 @@ theorem WeightedPaymentsFunded.upgradeToHeze {pre : BeaconState preset .glamster
     {post : BeaconState preset .hegota} (holds : WeightedPaymentsFunded pre (by decide))
     (computed : upgradeToHeze config pre = .ok post) :
     WeightedPaymentsFunded post (by decide) := by
-  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  obtain rfl := upgradeToHeze_ok_iff.mp computed
   exact holds
 
 /-- From Gloas, one slot keeps an amount for each payment with weight.
@@ -228,7 +228,7 @@ theorem GenesisFirstHalfEmpty.upgradeToHeze {pre : BeaconState preset .glamsterd
     {post : BeaconState preset .hegota} (holds : GenesisFirstHalfEmpty pre (by decide))
     (computed : upgradeToHeze config pre = .ok post) :
     GenesisFirstHalfEmpty post (by decide) := by
-  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  obtain rfl := upgradeToHeze_ok_iff.mp computed
   exact holds
 
 /-- From Gloas, one slot keeps the first half of the genesis window empty.

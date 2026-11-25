@@ -768,34 +768,11 @@ theorem upgradeHezeFields_kept (pre : BeaconState preset .glamsterdam) :
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
     rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- The upgrade to Heze succeeds exactly when the two deposit indices are equal.
-
-The first counts the processed deposits, and the second is the index of the first deposit request.
-
-The result is then the state with the carried fields. -/
+/-- The upgrade to Heze always succeeds, with the carried fields. -/
 theorem upgradeToHeze_ok_iff {pre : BeaconState preset .glamsterdam}
     {post : BeaconState preset .hegota} :
-    upgradeToHeze config pre = .ok post ↔
-      pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide) ∧
-        post = upgradeHezeFields config pre := by
-  simp only [upgradeToHeze, bind_ok_iff, ensure_ok_iff, pure, Except.pure, Except.ok.injEq]
-  constructor
-  · rintro ⟨_, equal, rfl⟩
-    exact ⟨equal, rfl⟩
-  · rintro ⟨equal, rfl⟩
-    exact ⟨(), equal, rfl⟩
-
-/-- The upgrade to Heze fails exactly when the two deposit indices differ, with both indices. -/
-theorem upgradeToHeze_error_iff {pre : BeaconState preset .glamsterdam}
-    {error : TransitionError} :
-    upgradeToHeze config pre = .error error ↔
-      pre.eth1DepositIndex (by decide) ≠ pre.depositRequestsStartIndex (by decide) ∧
-        error = .depositIndicesDiffer (pre.eth1DepositIndex (by decide))
-          (pre.depositRequestsStartIndex (by decide)) := by
-  dsimp only [upgradeToHeze, ensure]
-  by_cases equal : pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide)
-  · simp [equal, bind, Except.bind, pure, Except.pure]
-  · simp [equal, bind, Except.bind, eq_comm]
+    upgradeToHeze config pre = .ok post ↔ post = upgradeHezeFields config pre := by
+  simp only [upgradeToHeze, pure, Except.pure, Except.ok.injEq, eq_comm]
 
 /-! ## Each upgrade is an upgrade frame -/
 
@@ -835,7 +812,7 @@ theorem upgradeFrame_upgradeToGloas {pre : BeaconState preset .fusaka}
 theorem upgradeFrame_upgradeToHeze {pre : BeaconState preset .glamsterdam}
     {after : BeaconState preset .hegota} (computed : upgradeToHeze config pre = .ok after) :
     UpgradeFrame config pre after := by
-  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  obtain rfl := upgradeToHeze_ok_iff.mp computed
   exact UpgradeFrame.of_carried (by decide) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
     fun _ current => by cases current <;> rfl
 
@@ -1174,7 +1151,7 @@ private theorem banded_upgradeNext {forked : ForkedBeaconState preset}
     obtain ⟨validators, balances, -⟩ := upgradeToGloas_spec upgraded
     exact banded_carry validators balances (by decide) holds
   · obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     obtain ⟨validators, balances, -⟩ := upgradeHezeFields_lists (config := config) state
     exact banded_carry validators balances (by decide) holds
 

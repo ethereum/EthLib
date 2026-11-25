@@ -470,7 +470,7 @@ theorem upgradeNext_shaped {pre : ForkedBeaconState preset}
       (fun _ c member => ⟨by decide, consolidations ▸ member⟩)
   · obtain ⟨_, upgraded, rfl⟩ := computed
     dsimp only at shaped capped matched ⊢
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact shaped.of_carried capped matched (by decide) (by decide) rfl rfl rfl rfl
       (fun _ c member => ⟨by decide, member⟩)
 

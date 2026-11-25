@@ -95,10 +95,6 @@ private theorem latestBlockHeader_upgradeNext {pre : ForkedBeaconState preset}
     obtain ⟨_, _, onboarded⟩ := bind_ok_iff.mp rest
     obtain ⟨⟨_, _, rfl⟩, _⟩ := onboardBuildersFromPendingDeposits_spec onboarded
     rfl
-  case glamsterdam =>
-    obtain ⟨after, upgraded, rfl⟩ := computed
-    obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
-    rfl
 
 /-- The upgrades due at a slot keep the latest block header. -/
 theorem latestBlockHeader_processUpgrades {forked after : ForkedBeaconState preset}

@@ -62,8 +62,7 @@ def UpgradeReady (forked : ForkedBeaconState preset) : Prop :=
       (∀ offset ≤ preset.MIN_SEED_LOOKAHEAD.toNat,
         PtcDrawable pre (getCurrentEpoch pre + offset.toUInt64)) ∧
       pendingAmount (pre.pendingDeposits (by decide)).data.toList < 2 ^ 64
-  | ⟨.glamsterdam, pre⟩ =>
-    pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide)
+  | ⟨.glamsterdam, _⟩ => True
   | _ => False
 
 /-- The upgrade to the next fork succeeds under the conditions of that upgrade. -/
@@ -94,10 +93,10 @@ theorem upgradeNext_exists_ok {forked : ForkedBeaconState preset}
       look slotRoom perEpoch drawable funded
     exact ⟨⟨⟨.glamsterdam, post⟩, (by decide : Fork.fusaka < .glamsterdam)⟩,
       by simp [upgradeNext, ok]⟩
-  -- The upgrade to Heze succeeds exactly when the two deposit indices are equal.
+  -- The upgrade to Heze always succeeds.
   | glamsterdam =>
     have ok : upgradeToHeze config pre = .ok (upgradeHezeFields config pre) :=
-      upgradeToHeze_ok_iff.mpr ⟨ready, rfl⟩
+      upgradeToHeze_ok_iff.mpr rfl
     exact ⟨⟨⟨.hegota, upgradeHezeFields config pre⟩, (by decide : Fork.glamsterdam < .hegota)⟩,
       by simp [upgradeNext, ok]⟩
   | _ => exact ready.elim

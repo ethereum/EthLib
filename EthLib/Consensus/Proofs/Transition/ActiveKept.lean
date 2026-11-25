@@ -1381,7 +1381,7 @@ theorem activeKept_upgradeNext {pre : ForkedBeaconState preset}
   case glamsterdam =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact ActiveKept.of_validators (upgradeHezeFields_lists _).1 _
   all_goals
     simp only [upgradeNext] at computed
@@ -1533,7 +1533,7 @@ theorem upgradeNext_validators_of_electra {pre : ForkedBeaconState preset}
   case glamsterdam =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact (upgradeHezeFields_lists _).1
   all_goals
     simp only [upgradeNext] at computed

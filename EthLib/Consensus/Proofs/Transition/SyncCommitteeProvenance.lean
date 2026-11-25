@@ -1311,7 +1311,7 @@ private theorem upgradeNextStep {pre : ForkedBeaconState preset}
   case glamsterdam =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
-    obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact ⟨fun holds _ => holds (by dsimp; decide), fun _ _ => ⟨rfl, rfl⟩⟩
   all_goals simp only [Consensus.upgradeNext] at ok; cases ok
 

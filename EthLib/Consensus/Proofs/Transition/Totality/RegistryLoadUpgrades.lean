@@ -370,7 +370,7 @@ theorem upgradeToHeze_registryLoad_le {pre : BeaconState preset .glamsterdam}
     {after : BeaconState preset .hegota} (computed : upgradeToHeze config pre = .ok after) :
     registryLoad after ≤ registryLoad pre := by
   -- The upgrade to Heze carries the queue over unchanged.
-  obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp computed
+  obtain rfl := upgradeToHeze_ok_iff.mp computed
   unfold registryLoad
   rw [dite_eq_left (by decide), dite_eq_left (by decide)]
   exact Nat.le_refl _

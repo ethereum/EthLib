@@ -121,16 +121,24 @@ def test_undecodable_state():
     assert info.value.code == 0
 
 
-def test_heze_needs_every_contract_deposit():
+def test_heze_upgrades_with_an_unset_start_index():
     case = FILES / "minimal/heze/fork/fork/pyspec_tests/fork_base_state"
-    pre = bytearray(snappy.decompress((case / "pre.ssz_snappy").read_bytes()))
+    pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
+    preset = consensus.preset("minimal")
     # The fixed fields and offsets of the Gloas state that come before eth1_deposit_index.
-    roots = consensus.preset("minimal")["SLOTS_PER_HISTORICAL_ROOT"]
-    at = 8 + 32 + 8 + 16 + 112 + 2 * 32 * roots + 4 + 72 + 4
-    processed = int.from_bytes(pre[at : at + 8], "little")
-    pre[at : at + 8] = (processed + 1).to_bytes(8, "little")
-    with raises(
-        consensus.TransitionError, "EthLib.Consensus.TransitionError.depositIndicesDiffer 65 64"
-    ) as info:
-        consensus.upgrade_state("minimal", "hegota", bytes(pre))
-    assert info.value.code == 33
+    roots = preset["SLOTS_PER_HISTORICAL_ROOT"]
+    processed_at = 8 + 32 + 8 + 16 + 112 + 2 * 32 * roots + 4 + 72 + 4
+    # Then the fields up to deposit_requests_start_index: two offsets, the RANDAO mixes and the
+    # slashings, two offsets, the justification bits and three checkpoints, an offset, the two
+    # sync committees, the latest block hash, two withdrawal indices and an offset.
+    committee = preset["SYNC_COMMITTEE_SIZE"] * 48 + 48
+    start_at = processed_at + 8 + 8 + 32 * preset["EPOCHS_PER_HISTORICAL_VECTOR"]
+    start_at += 8 * preset["EPOCHS_PER_SLASHINGS_VECTOR"] + 8 + 1 + 3 * 40 + 4
+    start_at += 2 * committee + 32 + 16 + 4
+    processed = int.from_bytes(pre[processed_at : processed_at + 8], "little")
+    assert int.from_bytes(pre[start_at : start_at + 8], "little") == processed
+    # A network that starts at Fulu or later never sets the start index: it stays 2^64 - 1.
+    unset = pre[:start_at] + (2**64 - 1).to_bytes(8, "little") + pre[start_at + 8 :]
+    # Heze drops both indices, so the upgrade succeeds and gives the same state.
+    upgraded = consensus.upgrade_state("minimal", "hegota", pre)
+    assert consensus.upgrade_state("minimal", "hegota", unset) == upgraded

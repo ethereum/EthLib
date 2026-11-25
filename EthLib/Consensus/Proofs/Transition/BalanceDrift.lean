@@ -1034,7 +1034,7 @@ private theorem balanceDrift_upgrade_upper {s : ForkedBeaconState preset}
   · obtain ⟨_, upgraded, rfl⟩ := ok
     simp only [effectiveAt, (upgradeToGloas_spec upgraded).1, Nat.le_refl]
   · obtain ⟨_, upgraded, rfl⟩ := ok
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact Nat.le_refl _
 
 theorem balanceDrift_upgrades_upper {s t : ForkedBeaconState preset}
@@ -1394,7 +1394,7 @@ private theorem balanceDrift_upgrade_active {s : ForkedBeaconState preset}
   · obtain ⟨_, upgraded, rfl⟩ := ok
     simp only [effectiveAt, (upgradeToGloas_spec upgraded).1]
   · obtain ⟨_, upgraded, rfl⟩ := ok
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     rfl
 
 theorem balanceDrift_upgrades_active {s t : ForkedBeaconState preset}

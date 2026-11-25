@@ -115,9 +115,6 @@ def UpgradeDraws (forked : ForkedBeaconState preset) : Prop :=
       ∀ members, slotCommitteeMembers pre slot = .ok members →
         ∃ index ∈ members, ∃ validator, getValidator pre index = .ok validator ∧
           validator.effectiveBalance.toNat = drawCap preset .fusaka
-  -- The upgrade to Heze also needs its two deposit indices equal, which no draw gives.
-  | ⟨.glamsterdam, pre⟩ =>
-    pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide)
   | _ => True
 
 /-- The states that the upgrades due at a slot pass through, from a given state.
@@ -249,9 +246,6 @@ def UpgradeDrawsEnd (forked : ForkedBeaconState preset) : Prop :=
       pre.validators.data.size ≤ 2 ^ 40 →
       preset.PTC_SIZE.toNat * pre.validators.data.size < 2 ^ 64 →
       PtcDrawsEnd pre (getCurrentEpoch pre + offset.toUInt64)
-  -- The upgrade to Heze also needs its two deposit indices equal, which no draw gives.
-  | ⟨.glamsterdam, pre⟩ =>
-    pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide)
   | _ => True
 
 /-- The draws of a run of slots end, at each state they read.
@@ -285,10 +279,6 @@ def DrawsEnd (config : Config) (checks : SignatureChecks) (forked : ForkedBeacon
     ((reached.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot reached.state = .ok cached → EpochDrawsEnd config checks cached) ∧
     -- The upgrades due at the next slot read the states they pass through.
-    --
-    -- This hypothesis also carries the condition of the upgrade to Heze.
-    --
-    -- Its two deposit indices must be equal.
     ∀ advanced, advanceSlot config checks reached.state = .ok advanced →
       ∀ upgrading, UpgradesPass config checks ⟨reached.fork, advanced⟩ upgrading →
         upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading

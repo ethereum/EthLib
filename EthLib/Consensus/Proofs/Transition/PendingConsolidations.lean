@@ -483,7 +483,7 @@ private theorem upgradeNext_pending (P : ∀ {f : Fork}, BeaconState preset f �
     exact carried (s := state) (show Fork.pectra ≤ .fusaka by decide)
       (show Fork.pectra ≤ .glamsterdam by decide) rfl rfl rfl rfl holds
   · obtain ⟨_, upgraded, rfl⟩ := ok
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact carried (s := state) (show Fork.pectra ≤ .glamsterdam by decide)
       (show Fork.pectra ≤ .hegota by decide) rfl rfl rfl rfl holds
 
