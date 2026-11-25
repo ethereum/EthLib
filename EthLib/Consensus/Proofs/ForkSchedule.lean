@@ -12,6 +12,8 @@ The fork at an epoch is the latest consensus fork that has started by then.
 So it never moves back as the epoch grows, whatever the order of the configured epochs.
 
 The forks of the mainnet and minimal configurations start in the order of the timeline.
+
+The checks of the two schedules accept exactly the schedules that meet the rules of their forks.
 -/
 
 @[expose] public section
@@ -57,6 +59,26 @@ theorem latestStarted_spec {α : Type} (first : α → Epoch) (entries : List α
     refine .inr ⟨rfl, fun other mem => ?_⟩
     have := List.find?_eq_none.mp found other (List.mem_mergeSort.mpr mem)
     simpa using this
+
+/-- When the entries have distinct first epochs, their order does not change the latest started. -/
+theorem latestStarted_perm {α : Type} {first : α → Epoch} {entries others : List α}
+    (perm : entries.Perm others) (distinct : (entries.map first).Nodup) (epoch : Epoch) :
+    latestStarted first entries epoch = latestStarted first others epoch := by
+  rcases latestStarted_spec first entries epoch with
+    ⟨entry, found, member, entryStarted, latest⟩ | ⟨found, early⟩ <;>
+  rcases latestStarted_spec first others epoch with
+    ⟨entry', found', member', entryStarted', latest'⟩ | ⟨found', early'⟩
+  · rw [found, found']
+    have mem' : entry' ∈ entries := perm.mem_iff.mpr member'
+    have mem : entry ∈ others := perm.mem_iff.mp member
+    -- Both are latest among the same entries, so they share a first epoch, hence are equal.
+    have same : entry = entry' :=
+      List.inj_on_of_nodup_map distinct member mem'
+        (UInt64.le_antisymm (latest' entry mem entryStarted) (latest entry' mem' entryStarted'))
+    rw [same]
+  · exact absurd entryStarted (UInt64.not_le.mpr (early' entry (perm.mem_iff.mp member)))
+  · exact absurd entryStarted' (UInt64.not_le.mpr (early entry' (perm.mem_iff.mpr member')))
+  · rw [found, found']
 
 namespace Config
 
@@ -219,6 +241,58 @@ theorem getBlobParameters_le_largestBlobLimit (epoch : Epoch) :
   · exact entries entry member
   · exact electra
 
+/-- The rules that a valid blob schedule meets, and no others.
+
+No two entries share a first epoch.
+
+Each entry starts at or after the first epoch of Fulu.
+
+Its limit is at most the largest number of blob commitments in a block. -/
+theorem blobScheduleValid_iff (preset : Preset) :
+    config.blobScheduleValid preset = true ↔
+      (config.BLOB_SCHEDULE.map (·.EPOCH)).Nodup ∧
+        ∀ entry ∈ config.BLOB_SCHEDULE, config.FULU_FORK_EPOCH ≤ entry.EPOCH ∧
+          entry.MAX_BLOBS_PER_BLOCK ≤ preset.MAX_BLOB_COMMITMENTS_PER_BLOCK := by
+  simp [blobScheduleValid, List.all_eq_true]
+
+/-- With the same Electra epoch and limit, reordering distinct epochs keeps the blob parameters. -/
+theorem getBlobParameters_perm {other : Config}
+    (perm : config.BLOB_SCHEDULE.Perm other.BLOB_SCHEDULE)
+    (electra : other.ELECTRA_FORK_EPOCH = config.ELECTRA_FORK_EPOCH)
+    (limit : other.MAX_BLOBS_PER_BLOCK_ELECTRA = config.MAX_BLOBS_PER_BLOCK_ELECTRA)
+    (distinct : (config.BLOB_SCHEDULE.map (·.EPOCH)).Nodup) (epoch : Epoch) :
+    config.getBlobParameters epoch = other.getBlobParameters epoch := by
+  unfold getBlobParameters
+  rw [latestStarted_perm perm distinct, electra, limit]
+
+/-- With a valid blob schedule, the limit of a started entry is at most the commitment bound.
+
+That bound is the largest number of blob commitments in a block.
+
+So a block within the limit of the schedule also fits its list of commitments. -/
+theorem getBlobParameters_le_of_blobScheduleValid {preset : Preset}
+    (valid : config.blobScheduleValid preset = true) {epoch : Epoch}
+    (started : ∃ entry ∈ config.BLOB_SCHEDULE, entry.EPOCH ≤ epoch) :
+    (config.getBlobParameters epoch).maxBlobsPerBlock ≤ preset.MAX_BLOB_COMMITMENTS_PER_BLOCK := by
+  obtain ⟨-, bounded⟩ := (blobScheduleValid_iff preset).mp valid
+  rcases getBlobParameters_spec (config := config) epoch with
+    ⟨entry, member, -, found, -⟩ | ⟨early, -⟩
+  · rw [found]
+    exact (bounded entry member).2
+  · obtain ⟨entry, member, before⟩ := started
+    exact absurd before (UInt64.not_le.mpr (early entry member))
+
+/-- Two entries with one first epoch make the blob limit depend on their order.
+
+So the rule that the epochs are distinct is needed for the order to be free. -/
+theorem getBlobParameters_sharedEpoch :
+    { config with BLOB_SCHEDULE := [⟨5, 1⟩, ⟨5, 2⟩] }.getBlobParameters 5 = ⟨5, 1⟩ ∧
+      { config with BLOB_SCHEDULE := [⟨5, 2⟩, ⟨5, 1⟩] }.getBlobParameters 5 = ⟨5, 2⟩ := by
+  -- Both lists are already sorted by descending epoch, so the stable sort keeps them.
+  simp only [getBlobParameters, latestStarted]
+  rw [List.mergeSort_of_pairwise (by decide), List.mergeSort_of_pairwise (by decide)]
+  simp
+
 /-- The fork at an epoch is Gloas exactly from the first epoch of Gloas. -/
 theorem forkAtEpoch_eq_glamsterdam_iff (epoch : Epoch) :
     config.forkAtEpoch epoch = .glamsterdam ↔
@@ -303,20 +377,29 @@ theorem getScheduledGasLimit_perm {other : Config}
     (perm : config.GAS_LIMIT_SCHEDULE.Perm other.GAS_LIMIT_SCHEDULE)
     (distinct : (config.GAS_LIMIT_SCHEDULE.map (·.EPOCH)).Nodup) (epoch : Epoch) :
     config.getScheduledGasLimit epoch = other.getScheduledGasLimit epoch := by
-  rcases getScheduledGasLimit_spec (config := config) epoch with
-    ⟨entry, member, entryStarted, found, latest⟩ | ⟨early, found⟩ <;>
-  rcases getScheduledGasLimit_spec (config := other) epoch with
-    ⟨entry', member', entryStarted', found', latest'⟩ | ⟨early', found'⟩
-  · rw [found, found']
-    have mem' : entry' ∈ config.GAS_LIMIT_SCHEDULE := perm.mem_iff.mpr member'
-    have mem : entry ∈ other.GAS_LIMIT_SCHEDULE := perm.mem_iff.mp member
-    have same : entry = entry' :=
-      List.inj_on_of_nodup_map distinct member mem'
-        (UInt64.le_antisymm (latest' entry mem entryStarted) (latest entry' mem' entryStarted'))
-    rw [same]
-  · exact absurd entryStarted (UInt64.not_le.mpr (early' entry (perm.mem_iff.mp member)))
-  · exact absurd entryStarted' (UInt64.not_le.mpr (early entry' (perm.mem_iff.mpr member')))
-  · rw [found, found']
+  unfold getScheduledGasLimit
+  rw [latestStarted_perm perm distinct]
+
+/-- The rules that a valid gas limit schedule meets, and no others.
+
+No two entries share a first epoch, and each entry starts at or after the first epoch of Gloas. -/
+theorem gasLimitScheduleValid_iff :
+    config.gasLimitScheduleValid = true ↔
+      (config.GAS_LIMIT_SCHEDULE.map (·.EPOCH)).Nodup ∧
+        ∀ entry ∈ config.GAS_LIMIT_SCHEDULE, config.GLOAS_FORK_EPOCH ≤ entry.EPOCH := by
+  simp [gasLimitScheduleValid, List.all_eq_true]
+
+/-- The blob schedule of the mainnet configuration meets the rules of Fulu. -/
+theorem blobScheduleValid_mainnet : mainnet.blobScheduleValid .mainnet = true := by decide
+
+/-- The blob schedule of the minimal configuration meets the rules of Fulu. -/
+theorem blobScheduleValid_minimal : minimal.blobScheduleValid .minimal = true := by decide
+
+/-- The gas limit schedule of the mainnet configuration meets the rules of Gloas. -/
+theorem gasLimitScheduleValid_mainnet : mainnet.gasLimitScheduleValid = true := by decide
+
+/-- The gas limit schedule of the minimal configuration meets the rules of Gloas. -/
+theorem gasLimitScheduleValid_minimal : minimal.gasLimitScheduleValid = true := by decide
 
 end Config
 

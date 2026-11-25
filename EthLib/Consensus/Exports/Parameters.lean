@@ -119,33 +119,50 @@ def configOf : String → Result Config
   -- No error type covers an unknown name, so it has code 0 and a message.
   | name => rejectArgument none s!"no configuration is named {name}"
 
+/-- A configuration, if its blob schedule and its gas limit schedule meet the rules of their forks.
+
+The specification forbids a schedule that breaks them, so such a configuration fails with code 0. -/
+def checkSchedules (preset : Preset) (config : Config) : Result Config := do
+  unless config.blobScheduleValid preset do
+    rejectArgument none ("configuration: a blob schedule needs distinct epochs, " ++
+      "each at least FULU_FORK_EPOCH, and limits of at most MAX_BLOB_COMMITMENTS_PER_BLOCK")
+  unless config.gasLimitScheduleValid do
+    rejectArgument none
+      "configuration: a gas limit schedule needs distinct epochs, each at least GLOAS_FORK_EPOCH"
+  return config
+
 /-- The configuration of a name, with some of its values replaced by those of a JSON object. -/
 def configWith (name replacements : ByteArray) : Result Config := do
-  let config ← configOf (← nameOf name)
+  let name ← nameOf name
+  let config ← configOf name
   -- An empty replacement keeps the configuration of the name.
   if replacements.isEmpty then return config
   let some text := String.fromUTF8? replacements | rejectArgument none "configuration is not UTF-8"
   -- The object names its values as the configuration file does.
   let replaced ← toResult none ((Base.Json.ofText text).mapError fun e =>
     UnreadArgument.mk s!"configuration: {e}")
-  toResult none ((fromJson? ((toJson config).mergeObj replaced)).mapError fun e =>
+  let replaced ← toResult none ((fromJson? ((toJson config).mergeObj replaced)).mapError fun e =>
     UnreadArgument.mk s!"configuration: {e}")
+  -- A schedule that breaks the rules of its fork has code 0.
+  checkSchedules (← presetOf name) replaced
 
 /-- The configuration of a name, with some of its values replaced by those of a `dict`. -/
 def configWithValue (name : String) (replacements : Option PyValue) : Result Config := do
-  let config ← configOf name
-  match replacements with
-  -- None or an empty `dict` keeps the configuration of the name.
-  | none | some (.dict #[]) => return config
-  -- The `dict` names its values as the configuration file does.
-  --
-  -- Each value replaces its key in the JSON form of the configuration, bytes as `0x` and hex.
-  | some (.dict entries) =>
-    toResult none
-      ((fromJson? ((toJson config).mergeObj (PyValue.dict entries).toJson)).mapError fun e =>
-        UnreadArgument.mk s!"configuration: {e}")
-  -- Any other value than a `dict` has code 0.
-  | some _ => rejectArgument none "configuration: expected a dict"
+  let base ← configOf name
+  let config ← match replacements with
+    -- None or an empty `dict` keeps the configuration of the name.
+    | none | some (.dict #[]) => pure base
+    -- The `dict` names its values as the configuration file does.
+    --
+    -- Each value replaces its key in the JSON form of the configuration, bytes as `0x` and hex.
+    | some (.dict entries) =>
+      toResult none
+        ((fromJson? ((toJson base).mergeObj (PyValue.dict entries).toJson)).mapError fun e =>
+          UnreadArgument.mk s!"configuration: {e}")
+    -- Any other value than a `dict` has code 0.
+    | some _ => rejectArgument none "configuration: expected a dict"
+  -- A schedule that breaks the rules of its fork has code 0 as well.
+  checkSchedules (← presetOf name) config
 
 /-- The fork of a name, for the forks from Phase 0 to Hegotá, whose beacon chain is Heze. -/
 def forkOf (name : ByteArray) : Result Fork := do

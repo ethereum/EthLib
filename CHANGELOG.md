@@ -1126,6 +1126,20 @@ Not yet released.
   `Bls.Fp.toZMod` and `Bls.Fr.toZMod` are now that isomorphism, and their scoped field instances are `Montgomery.field`.
   `Bls.Fp.ofZMod`, `Bls.Fr.ofZMod` and their lemmas `toZMod_ofZMod` and `ofZMod_toZMod` are removed: use `Montgomery.ofZMod`, `Montgomery.toZMod_ofZMod` and `Montgomery.ofZMod_toZMod`.
   The finite type instances of `Bls.Fp` and `Bls.Fr` are removed for the one of the Montgomery elements.
+- The configuration readers of the consensus exports refuse a schedule that breaks the rules of its fork, with code 0.
+  This holds for the blob schedule and the gas limit schedule.
+  The Fulu and Gloas specifications say that no two entries of one schedule share an epoch.
+  No entry may start before the fork that adds the schedule.
+  The Fulu specification also says that the limit of each blob schedule entry is at most `MAX_BLOB_COMMITMENTS_PER_BLOCK`.
+  The readers took such a configuration, and of two blob schedule entries at one epoch the first in the list set the limit.
+  So a replacement that moves `FULU_FORK_EPOCH` of mainnet past epoch 412672, the first entry of its schedule, now fails unless it also replaces `BLOB_SCHEDULE`.
+  Likewise, while `GLOAS_FORK_EPOCH` is in the far future, a `GAS_LIMIT_SCHEDULE` entry at an earlier epoch now fails for every export that reads a configuration.
+  In Lean, `Config.blobScheduleValid` and `Config.gasLimitScheduleValid` in `EthLib.Consensus.ForkSchedule` are the checks.
+  `blobScheduleValid_iff` and `gasLimitScheduleValid_iff` in `EthLib.Consensus.Proofs.ForkSchedule` state the rules that each accepts.
+  `getBlobParameters_perm` states that a blob schedule with distinct epochs gives the same limits in any order.
+  `getBlobParameters_le_of_blobScheduleValid` bounds the limit of a valid schedule by `MAX_BLOB_COMMITMENTS_PER_BLOCK`.
+  `getBlobParameters_sharedEpoch` shows two entries at one epoch whose order sets the limit.
+  `latestStarted_perm` gives the order-free result for any schedule with distinct first epochs, and `getScheduledGasLimit_perm` now follows from it.
 
 - In Lean, `phase0PeriodEpochs` (`Consensus/WeakSubjectivity.lean`), and so the Phase 0 to Deneb weak subjectivity period, takes the epochs for the churn of validators alone when balances are large, no longer the longer of those and the epochs for top-ups ([consensus-specs#5866](https://github.com/ethereum/consensus-specs/issues/5866)).
   The period is shorter only where the epochs for top-ups were the longer, for instance beyond about 4.39 million validators of 32 ether.

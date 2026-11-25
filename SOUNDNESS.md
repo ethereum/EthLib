@@ -3392,6 +3392,25 @@ The caller gives the number of blobs of each transaction, and the check trusts i
 Together, `checkCells_eq_ok_iff` and `CellMask.count_le_count_of_subset` give that a response that passes has no more cells for each blob than the request asks for.
 No export calls the cells check, so no test of the bindings runs it.
 
+### The schedules of a configuration
+
+From Fulu, a configuration holds a blob schedule, and from Gloas a gas limit schedule.
+The Fulu and Gloas specifications say that no two entries of one schedule share an epoch.
+They also say that no entry starts before the fork that adds the schedule.
+They only recommend that the entries ascend by epoch, so neither check asks for that order.
+The Fulu specification also says that the limit of each blob schedule entry is at most `MAX_BLOB_COMMITMENTS_PER_BLOCK`.
+EIP-8261 has clients ignore gas limit schedule entries before Gloas, while the Gloas configuration forbids them, and the readers follow the stricter rule.
+`Config.blobScheduleValid_iff` and `Config.gasLimitScheduleValid_iff` (`Consensus/Proofs/ForkSchedule.lean`) state that the two checks accept exactly the schedules that meet these rules.
+`Config.getBlobParameters_perm` states that the order of a blob schedule with distinct epochs does not change the blob limit.
+`Config.getScheduledGasLimit_perm` states the same for the gas limit.
+Both follow from `latestStarted_perm`, which states it for any schedule with distinct first epochs.
+`Config.getBlobParameters_sharedEpoch` shows that the rule is needed: of two entries at one epoch, the first in the list sets the limit.
+`Config.getBlobParameters_le_of_blobScheduleValid` states that, in a valid blob schedule, the limit of a started entry is at most the commitment bound.
+So a block within that limit also fits its list of commitments.
+The configuration readers of the exports refuse a configuration whose schedule breaks a rule.
+The mainnet and minimal configurations pass both checks, by `Config.blobScheduleValid_mainnet` and its three companions.
+`bindings/python/tests/consensus/test_parameters.py` runs the reader of a `dict` on schedules at and past each bound.
+
 ### Fork digests
 
 A peer names the fork of a response chunk, and of a gossip topic, by a fork digest of four bytes.
