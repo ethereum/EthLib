@@ -238,7 +238,7 @@ private theorem isTreeNode_of_known {node : ForkChoiceNode} {block : BeaconBlock
     simpa using allowed
 
 /-- The block of a node of the tree is known. -/
-private theorem known_of_isTreeNode {node : ForkChoiceNode} (tree : isTreeNode store node = true) :
+theorem known_of_isTreeNode {node : ForkChoiceNode} (tree : isTreeNode store node = true) :
     ∃ block, store.blocks[node.root]? = some block := by
   simp only [isTreeNode, Bool.and_eq_true] at tree
   rw [Std.TreeMap.contains_eq_isSome_getElem?, Option.isSome_iff_exists] at tree

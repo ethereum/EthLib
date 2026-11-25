@@ -14,6 +14,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Duties
 public import EthLib.Consensus.Proofs.BeaconApi.DutiesReachable
 public import EthLib.Consensus.Proofs.BeaconApi.Config
 public import EthLib.Consensus.Proofs.BeaconApi.Debug
+public import EthLib.Consensus.Proofs.BeaconApi.DebugReachable
 public import EthLib.Consensus.Proofs.BeaconApi.BuilderConfig
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.BeaconApi.Events

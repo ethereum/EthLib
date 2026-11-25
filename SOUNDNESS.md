@@ -6681,6 +6681,33 @@ These cases of code 500 remain without a theorem:
 - A dependent root can get code 500, by an overflow, at a slot of the state within `SLOTS_PER_HISTORICAL_ROOT` of `2^64`.
   So can a proposer answer for an epoch whose slots pass 64 bits.
 
+Over all the answers, these cases of code 500 remain on an input that a run or the handlers reach:
+
+- The head of the store, which the headers answer without filters, the attestation data answer and, from Gloas, the payload attestation data answer need.
+  `getHead_exists` and `getHead_exists_of_gloas` give it when the viable nodes are computed and the store holds the state of the justified checkpoint.
+  That state can be missing on a reachable store, as described with the debug answers below.
+  They also take conditions on the configuration, and a cap of `2 * 10^17` Gwei on the weights of the justified state.
+  From Gloas they also take the registries of the held states within the limit, and every active equivocator registered in the justified state.
+- The registration of every equivocator that is active in a held state, in the justified state, from Gloas.
+  No theorem shows it on a reachable store.
+- The empty slots from the state of the head up to a requested slot, for the attestation data answer.
+  No theorem carries the conditions of the totality theorems to the states of a store.
+- The state of the justified checkpoint, for the fork choice answer, described with the debug answers below.
+- Before Fulu, a failed draw of the proposers of the current epoch, and a reachable state with no active validator, described above.
+
+These others are out of reach, or depend on what the node holds rather than on the chain:
+
+- An overflow at a slot within two epochs of `2^64`, or within `SLOTS_PER_HISTORICAL_ROOT` slots of it for a dependent root.
+  At 12 seconds a slot, `2^64` slots last about `7 * 10^12` years.
+- A registry of more than `2^40` validators.
+  Before Gloas the type of the registry excludes it.
+  From Gloas only the epoch step adds validators, at most `MAX_PENDING_DEPOSITS_PER_EPOCH` in each epoch, 16 on mainnet, since blocks apply no deposit and builder deposits go to the builders.
+  So `2^40` new validators take at least `2^36` epochs, about `8 * 10^5` years, and `Run.registryWithinLimit` gives the bound that the head theorems take along a run whose start leaves room.
+- An overflow of the block rewards, which needs amounts that add up to `2^64` Gwei, about `1.8 * 10^10` ether.
+- Weights of the justified state above `2 * 10^17` Gwei, which is `2 * 10^8` ether, above the supply of ether; no theorem bounds the balances, though.
+- A fault in the construction of an aggregate, which depends on the attestations of the pool of the node.
+- An input that an answer takes from the node, such as the blobs of a block.
+
 The answers that hand a validator its data are in `Consensus/BeaconApi/ValidatorData.lean`: attestation data, payload attestation data, aggregates and sync committee contributions.
 `produceAttestationData_head` (`Consensus/Proofs/BeaconApi/ValidatorData.lean`) shows that the attestation data votes for the head of the store, at the requested slot, and that the head is not optimistic.
 `produceAttestationData_index` shows that for a store in Electra or Fulu the index of the data is 0.
@@ -7107,6 +7134,16 @@ The debug answers show the tree of the fork choice and its leaves (`Consensus/Be
 `mem_chainHeads_iff` describes the list exactly: a root is listed exactly when one of its nodes is a leaf of the tree, and `chainHeads_nodup` that each root is listed once.
 `nodeView_ptcCounts` shows that the three counts of the payload committee in a view are those of its block, so every node of one block has the same counts.
 `ptcCounts_le` bounds each count by the size of the committee, and puts the votes for on time among the recorded votes; `ptcCounts_preGloas` gives zero before Gloas.
+`forkChoiceResponse_exists_ok` (`Consensus/Proofs/BeaconApi/DebugReachable.lean`) shows that before Gloas the fork choice answer never gets code 500 on a store that the handlers build with a forward clock.
+It takes the hypotheses of `getHead_exists` except the viable nodes.
+They are the state of the justified checkpoint, the bounds on its stake and on the boost, an epoch of at least one slot, and the two facts on the anchor block and the blocks of the store.
+`forkChoiceResponse_exists_ok_of_gloas` shows the same from Gloas under the hypotheses of `getHead_exists_of_gloas`, when the optimistic store holds the blocks of the store, as the exports build it.
+The state of the justified checkpoint stays a hypothesis of both.
+The handlers store the state of a checkpoint only for the anchor and when an attestation targets it.
+A block, or the pull-up at the start of an epoch, can move the justified checkpoint to one whose state no handler stored.
+That happens even when each attestation of the blocks goes through the attestation handler, when each attestation with that target votes for a head block that the store lacks, since the handler then refuses it.
+By their definitions, the weights of the head computation then fail, and so does the answer; no theorem states it.
+The source has the same gap, reported as [consensus-specs#5865](https://github.com/ethereum/consensus-specs/issues/5865); EthLib keeps the reading of the source until it is settled.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_debug.py`) builds the stores of pinned fork choice cases of Capella, Deneb and Gloas.
 It checks the blocks, slots and parent roots against the bytes of the cases, the checkpoints, the full nodes and the committee counts against their steps and checks, the heads before Gloas against the blocks without children, and the validity of an optimistic block.
 It checks that the weights before Gloas lead from the justified block to the head of the case.
@@ -7339,6 +7376,8 @@ Points that remain open:
   The flag of a head is set when a leaf of its block ends at an optimistic payload, as the validity of that leaf in the fork choice answer.
 - The execution block hash is zero before Bellatrix, where a block has no payload.
 - The fork choice answer fails with code 500 when the store lacks a state after a block, the justified checkpoint state, or another input of the weights of the head computation.
+  Before Gloas, on a store that the handlers build, only the justified checkpoint state can be missing, under the bounds of the head computation (`forkChoiceResponse_exists_ok`).
+  From Gloas, `forkChoiceResponse_exists_ok_of_gloas` also assumes that the committee windows and the head reads fit, every weight of the weak-head test at most the cap, the registries of the held states within the limit, every active equivocator registered in the justified state, and an optimistic store with the blocks of the store.
   The heads answer fails only when the optimistic store cannot read the payload chain of a block; the exports build that store from the blocks of the store.
 - The store holds the blocks of one fork, so a store at the Gloas transition, with a full node for each block before Gloas, is out of reach.
 - The extra data "may differ between clients"; EthLib gives an empty object.
