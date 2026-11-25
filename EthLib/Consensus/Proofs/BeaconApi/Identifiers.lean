@@ -188,6 +188,21 @@ theorem resolveBlockId_slot {config : Config} {store : Store preset fork} {slot 
           exact ⟨head, node, block, rfl, ha, resolved, resolved ▸ hb, hs⟩
         · simp [hh, ha, hb, hs, Except.toOption] at resolved
 
+/-- A state that an identifier names is one that the store keeps, under the root of its block. -/
+theorem blockStates_of_resolveStateId {config : Config} {store : Store preset fork}
+    {stateId : StateId} {root : Root} {state : BeaconState preset fork}
+    (resolved : resolveStateId config store stateId = some (root, state)) :
+    store.blockStates[root]? = some state := by
+  have after {named : Root} (found : stateAfter store named = some (root, state)) :
+      store.blockStates[root]? = some state := by
+    simp only [stateAfter, Option.map_eq_some_iff, Prod.mk.injEq] at found
+    obtain ⟨_, kept, rfl, rfl⟩ := found
+    exact kept
+  cases stateId <;> simp only [resolveStateId, Option.bind_eq_some_iff] at resolved
+  all_goals first
+    | exact after resolved
+    | exact Exists.elim resolved fun _ found => after found.2
+
 /-- A block on the chain of a head, at or below the finalized block on that chain, is finalized.
 
 The finalized block must be the ancestor of the head at some slot at or above the block. -/

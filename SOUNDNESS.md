@@ -7117,12 +7117,23 @@ Points that remain open:
 - The source does not say what a block before Altair, which has no sync aggregate, gives; EthLib answers with code 400 and the example message of the source.
 - The source does not order the entries of the sync committee rewards; EthLib lists them in increasing order of index.
 - The source does not say whether the genesis fork version is the one of the configuration or the one that the genesis state holds; EthLib reads the configuration, which the domain of a deposit uses, so a chain that starts at a later fork reports a version that its genesis state does not hold.
-- `forkSchedule_upgrade` assumes that the state before the upgrade holds the version of its own fork.
+- `forkSchedule_upgrade` (`Consensus/Proofs/BeaconApi/Config.lean`) assumes that the state before the upgrade holds the version of its own fork.
   `currentVersion_of_chainSteps` shows it for each state of a chain whose first state holds the version of its fork.
   `currentVersion_of_genesis_chainSteps` discharges that for the genesis state that deposits build, which is before Altair.
-  `Store.Reachable.blockStatesFromParents` links each state that a store keeps to the state of its parent by a state transition.
-  No theorem yet shows that this transition keeps the fork versions, or that an anchor holds the version of its fork.
-  So the answers of the API are not covered.
+  In a reachable store, `Store.Reachable.blockStatesFromParents` (`Consensus/Proofs/ForkChoice/BlockStates.lean`) links the state of each block but the anchor to the state of its parent by a state transition.
+  `stateTransition_forkVersions` (`Consensus/Proofs/Transition/ForkVersions.lean`) shows that this transition keeps the fork versions.
+  So `Store.Reachable.blockState_forkVersions` (`Consensus/Proofs/BeaconApi/StateForkReachable.lean`) shows that the state after each block of such a store holds the fork versions of the anchor state.
+  `getForkchoiceStore` checks only that the state root of the anchor block is the root of the anchor state, not the versions of that state.
+  So `Store.Reachable.blockState_currentVersion` assumes that the anchor state holds the version of its fork.
+  It shows that each such state holds it too, so `forkSchedule_upgrade` applies to an upgrade of such a state, which the store itself never performs.
+  `stateFork_mem_forkSchedule_of_reachable` assumes instead a chain from the genesis state that deposits build, ending at the anchor state; that genesis state is before Altair.
+  It shows that the fork of each such state is an entry of the fork schedule.
+  `blockStates_of_resolveStateId` (`Consensus/Proofs/BeaconApi/Identifiers.lean`) shows that a state that an identifier names is one that the store keeps.
+  So `stateFork_mem_forkSchedule_of_resolveStateId` shows that, under that chain, the fork answer to each state identifier that names a state is an entry of the fork schedule.
+  These theorems show membership only, not that the answer is the entry in effect at the epoch of the state.
+  The store holds the blocks of one fork and never upgrades a state.
+  So a state at or after the epoch of the next fork keeps the versions of the anchor state.
+  For an anchor state from checkpoint sync, the node cannot check that such a chain reaches it, so that chain, or the versions of the anchor state, remain an assumption.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
 - The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.
   [beacon-APIs#682](https://github.com/ethereum/beacon-APIs/pull/682), which proposed one, was closed without a merge: a node may refuse an old epoch, or serve its true mix from historical blocks.
