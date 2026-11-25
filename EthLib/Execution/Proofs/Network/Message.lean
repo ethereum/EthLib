@@ -462,6 +462,31 @@ theorem kept_of_decode {version : EthVersion} {id : Nat} {data : ByteArray} {m :
     -- The data is the encoding of the item, so the reader pairs each one with its encoding.
     exact ((ofItem_eq_ok_iff (encode_decode data _ hd)).mp h).2.2.2
 
+/-- A message of the form of a version reads back from its ID and the bytes of its encoding.
+
+Its transactions, headers and access lists must keep the bytes of their own encodings. -/
+theorem decode_encode {version : EthVersion} {m : Message} {data : ByteArray}
+    (hm : m.FitsVersion version) (hk : m.Kept) (h : m.encode = .ok data) :
+    decode version m.id data = .ok m := by
+  -- The encoder writes the RLP item of the message, so the RLP decoder reads that item back.
+  have hd : Serialization.Rlp.encode m.toItem = .ok data := by
+    unfold encode at h
+    cases he : Serialization.Rlp.encode m.toItem <;> simp_all [Except.mapError]
+  simp [decode, Serialization.Rlp.decode_encode _ _ hd, ofItem_toItem hm hk hd, Except.mapError,
+    bind, Except.bind]
+
+/-- Two messages of the form of a version, with one ID and one encoding, are the same message.
+
+The transactions, headers and access lists of each must keep the bytes of their own encodings. -/
+theorem eq_of_encode_eq {version : EthVersion} {m₁ m₂ : Message} {data : ByteArray}
+    (hm₁ : m₁.FitsVersion version) (hk₁ : m₁.Kept) (h₁ : m₁.encode = .ok data)
+    (hm₂ : m₂.FitsVersion version) (hk₂ : m₂.Kept) (h₂ : m₂.encode = .ok data)
+    (hid : m₁.id = m₂.id) : m₁ = m₂ := by
+  -- Both decode from the same ID and the same bytes, and decoding is a function.
+  have e₂ := decode_encode hm₂ hk₂ h₂
+  rw [← hid, decode_encode hm₁ hk₁ h₁] at e₂
+  exact Except.ok.inj e₂
+
 /-- eth/68 rejects BlockRangeUpdate, which eth/69 adds. -/
 theorem ofItem_blockRangeUpdate_eth68 (item : Item) (data : ByteArray) :
     ofItem .eth68 BLOCK_RANGE_UPDATE_ID item data = .error (.unknownId BLOCK_RANGE_UPDATE_ID) := by

@@ -230,6 +230,30 @@ theorem kept_of_decode {version : SnapVersion} {id : Nat} {data : ByteArray} {m 
     -- The data is the encoding of the item, so the reader pairs each list with its encoding.
     exact ((ofItem_eq_ok_iff (encode_decode data _ hd)).mp h).2.2.2
 
+/-- A message whose ID a version uses reads back from its ID and the bytes of its encoding.
+
+Its access lists must keep the bytes of their own encodings. -/
+theorem decode_encode {version : SnapVersion} {m : SnapMessage} {data : ByteArray}
+    (hm : usesId version m.id) (hk : m.Kept) (h : m.encode = .ok data) :
+    decode version m.id data = .ok m := by
+  -- The encoder writes the RLP item of the message, so the RLP decoder reads that item back.
+  have hd : Serialization.Rlp.encode m.toItem = .ok data := by
+    unfold encode at h
+    cases he : Serialization.Rlp.encode m.toItem <;> simp_all [Except.mapError]
+  simp [decode, Serialization.Rlp.decode_encode _ _ hd, ofItem_toItem hm hk hd, Except.mapError,
+    bind, Except.bind]
+
+/-- Two messages whose ID a version uses, with one ID and one encoding, are the same message.
+
+The access lists of each must keep the bytes of their own encodings. -/
+theorem eq_of_encode_eq {version : SnapVersion} {m₁ m₂ : SnapMessage} {data : ByteArray}
+    (hm₁ : usesId version m₁.id) (hk₁ : m₁.Kept) (h₁ : m₁.encode = .ok data)
+    (hk₂ : m₂.Kept) (h₂ : m₂.encode = .ok data) (hid : m₁.id = m₂.id) : m₁ = m₂ := by
+  -- Both decode from the same ID and the same bytes, and decoding is a function.
+  have e₂ := decode_encode (hid ▸ hm₁) hk₂ h₂
+  rw [← hid, decode_encode hm₁ hk₁ h₁] at e₂
+  exact Except.ok.inj e₂
+
 /-- snap/2 rejects GetTrieNodes and TrieNodes, which it removes. -/
 theorem ofItem_snap2_trieNodes (item : Item) (data : ByteArray) :
     ofItem .snap2 0x06 item data = .error (.unknownId 0x06) ∧
