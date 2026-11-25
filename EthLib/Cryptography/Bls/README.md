@@ -42,6 +42,8 @@ A client calls the proof-of-possession scheme of the draft and the two Ethereum 
 | Source | Lean | C export |
 | --- | --- | --- |
 | `KeyGen` | `keyGen` | `eth_bls_key_gen` |
+| `SkToPk` | `skToPk` | `eth_bls_sk_to_pk` |
+| `KeyValidate` | `G1.keyValidate` | `eth_bls_key_validate` |
 | `Sign` | `sign` | `eth_bls_sign` |
 | `Verify` | `verify` | `eth_bls_verify` |
 | `Aggregate` | `aggregate` | `eth_bls_aggregate` |
@@ -52,10 +54,13 @@ A client calls the proof-of-possession scheme of the draft and the two Ethereum 
 | Ethereum key aggregation | `ethAggregatePubkeys` | `eth_bls_aggregate_pubkeys` |
 | Ethereum fast aggregate verification | `ethFastAggregateVerify` | `eth_bls_fast_aggregate_verify` |
 
-All of them but key generation live in `Signatures.lean`,
+All of them but key generation and key validation live in `Signatures.lean`,
 on top of the core operations of the draft.
 Key validation and the subgroup checks live in `Compress.lean`.
 The exports `eth_bls_decode_g1` and `eth_bls_decode_g2` run that decoding and subgroup check alone, so a client can test them against published cases.
+The exports `eth_bls_bytes48_to_g1`, `eth_bls_g1_add` and `eth_bls_g1_neg` decode, add and negate compressed `G1` points without the subgroup check.
+They serve callers that pass `G1` points as their 48-byte compressed encodings.
+Every decoding accepts the point at infinity only in its canonical encoding, `0xc0` then 47 zero bytes.
 
 A secret key is an element of `Fr` other than zero, and the exports read it as 32 big-endian bytes.
 No function here runs in constant time.

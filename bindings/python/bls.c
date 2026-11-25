@@ -313,6 +313,95 @@ py_bls_decode_g2(
   return except_into_pybytes(eth_bls_decode_g2(point), BLS_ERROR);
 }
 
+/* ---- Keys and the group G1 ------------------------------------------- */
+
+extern lean_object*
+eth_bls_key_validate(
+  lean_object* pubkey
+);
+
+extern lean_object*
+eth_bls_sk_to_pk(
+  lean_object* secret_key
+);
+
+extern lean_object*
+eth_bls_bytes48_to_g1(
+  lean_object* point
+);
+
+extern lean_object*
+eth_bls_g1_add(
+  lean_object* lhs,
+  lean_object* rhs
+);
+
+extern lean_object*
+eth_bls_g1_neg(
+  lean_object* point
+);
+
+PyObject*
+py_bls_key_validate(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *pk_obj;
+  if (!PyArg_ParseTuple(args, "O", &pk_obj)) return NULL;
+  lean_object *pk;
+  if (parse_bytes(pk_obj, "pubkey", &pk)) return NULL;
+  return except_into_pybool(eth_bls_key_validate(pk), BLS_ERROR);
+}
+
+PyObject*
+py_bls_sk_to_pk(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *sk_obj;
+  if (!PyArg_ParseTuple(args, "O", &sk_obj)) return NULL;
+  lean_object *sk;
+  if (parse_bytes(sk_obj, "secret_key", &sk)) return NULL;
+  return except_into_pybytes(eth_bls_sk_to_pk(sk), BLS_ERROR);
+}
+
+PyObject*
+py_bls_bytes48_to_g1(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *point_obj;
+  if (!PyArg_ParseTuple(args, "O", &point_obj)) return NULL;
+  lean_object *point;
+  if (parse_bytes(point_obj, "point", &point)) return NULL;
+  return except_into_pybytes(eth_bls_bytes48_to_g1(point), BLS_ERROR);
+}
+
+PyObject*
+py_bls_g1_add(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *lhs_obj, *rhs_obj;
+  if (!PyArg_ParseTuple(args, "OO", &lhs_obj, &rhs_obj)) return NULL;
+  lean_object *lhs, *rhs;
+  if (parse_bytes(lhs_obj, "lhs", &lhs)) return NULL;
+  if (parse_bytes(rhs_obj, "rhs", &rhs)) { lean_dec(lhs); return NULL; }
+  return except_into_pybytes(eth_bls_g1_add(lhs, rhs), BLS_ERROR);
+}
+
+PyObject*
+py_bls_g1_neg(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *point_obj;
+  if (!PyArg_ParseTuple(args, "O", &point_obj)) return NULL;
+  lean_object *point;
+  if (parse_bytes(point_obj, "point", &point)) return NULL;
+  return except_into_pybytes(eth_bls_g1_neg(point), BLS_ERROR);
+}
+
 /* ---- Hash to curve ---------------------------------------------------- */
 
 extern lean_object*
