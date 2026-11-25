@@ -97,8 +97,14 @@ decreasing_by omega
 
 section BaseField
 
--- The square root and the sign also read the square root and the sign of the base field.
+-- The constants, the square root and the sign also read the base field's own operations.
 variable {F : Type} [BaseField F]
+
+/-- The element `c0 + c1 * i`, from its two coordinates as integers.
+
+The specifications write the constants of `Fp2` this way, as pairs of integers below `p`. -/
+def ofNats (c0 c1 : Nat) : Fp2 F :=
+  ⟨BaseField.ofNat c0, BaseField.ofNat c1⟩
 
 /-- A square root, by the [complex method][source] of Adj and Rodríguez-Henríquez, §V.A.
 
