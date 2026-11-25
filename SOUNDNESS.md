@@ -8189,7 +8189,12 @@ Before Altair the rewards and penalties need `RewardsFitBeforeAltair`, a set of 
 They read the root of the block at the slot of each vote that matches the target.
 So they assume that each recent pending attestation is as inclusion in a block stored it (`PendingWellFormed`).
 Its slot is then in the epoch of its list, its inclusion delay is not zero, and its proposer is a validator of the registry.
-Slots keep it (`PendingWellFormed.of_advanceSlot`), but no theorem yet shows that block processing does, and the nonzero delay needs a least inclusion delay of one slot, as mainnet and minimal have.
+Slots keep it (`PendingWellFormed.of_advanceSlot`).
+Block processing keeps it too (`PendingWellFormed.of_processBlock`, `Consensus/Proofs/Transition/Totality/PendingBlock.lean`), when the least inclusion delay is at least one slot, as on mainnet and minimal.
+`pendingWellFormed_of_chainSteps` carries it across every slot and block of a chain, under the same least inclusion delay.
+The facts of a run and of a chain hold it as a field.
+The empty genesis state meets the facts of a run (`runHolds_emptyGenesisState`), and so the facts of a chain on the pending attestations.
+So from that state, the theorems of a run need no hypothesis on the pending attestations, and those of a chain need only a positive least inclusion delay.
 The inactivity penalty before Altair multiplies an effective balance by the delay of finality, which is at most the current epoch.
 So the bound on the current epoch limits the length of the run that the theorem covers.
 A proposer can earn a share of the base reward of each signer that it included.
