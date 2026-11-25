@@ -75,6 +75,25 @@ instance : Neg (Fp6 F) := ⟨neg⟩
   -- (c0 + c1·v + c2·v^2) · v = c0·v + c1·v^2 + c2·v^3 = ξ·c2 + c0·v + c1·v^2
   ⟨a.c2.mulByOnePlusI, a.c0, a.c1⟩
 
+/-- The product with `b0 + b1 v`, an element with no `v^2` term.
+
+It is the product, with five products in `Fp2` in place of six. -/
+@[inline] def mulBy01 (a : Fp6 F) (b0 b1 : Fp2 F) : Fp6 F :=
+  let t0 := a.c0 * b0
+  let t1 := a.c1 * b1
+  -- `c0 = a0 b0 + ξ a2 b1`, since `b2 = 0`.
+  let c0 := (a.c2 * b1).mulByOnePlusI + t0
+  -- `c1 = a0 b1 + a1 b0`, by one Karatsuba product.
+  let c1 := (a.c0 + a.c1) * (b0 + b1) - t0 - t1
+  -- `c2 = a1 b1 + a2 b0`.
+  let c2 := a.c2 * b0 + t1
+  ⟨c0, c1, c2⟩
+
+/-- The product with `b1 v`, with three products in `Fp2`. -/
+@[inline] def mulBy1 (a : Fp6 F) (b1 : Fp2 F) : Fp6 F :=
+  -- `(a0 + a1 v + a2 v^2) b1 v = ξ a2 b1 + a0 b1 v + a1 b1 v^2`.
+  ⟨(a.c2 * b1).mulByOnePlusI, a.c0 * b1, a.c1 * b1⟩
+
 /-- Multiplicative inverse via the norm of `Fp6` over `Fp2`.
 
 The caller must pass a nonzero `a`. -/

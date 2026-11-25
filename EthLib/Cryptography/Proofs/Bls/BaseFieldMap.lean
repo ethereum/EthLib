@@ -169,6 +169,14 @@ theorem map_isZero (f : Hom F G) (a : Fp6 F) : (map f a).isZero = a.isZero := by
 theorem map_mulByV (f : Hom F G) (a : Fp6 F) : map f a.mulByV = (map f a).mulByV := by
   simp only [map, mulByV, Fp2.map_mulByOnePlusI]
 
+theorem map_mulBy01 (f : Hom F G) (a : Fp6 F) (b0 b1 : Fp2 F) :
+    map f (a.mulBy01 b0 b1) = (map f a).mulBy01 (b0.map f) (b1.map f) := by
+  simp only [map, mulBy01, Fp2.map_add, Fp2.map_sub, Fp2.map_mul, Fp2.map_mulByOnePlusI]
+
+theorem map_mulBy1 (f : Hom F G) (a : Fp6 F) (b1 : Fp2 F) :
+    map f (a.mulBy1 b1) = (map f a).mulBy1 (b1.map f) := by
+  simp only [map, mulBy1, Fp2.map_mul, Fp2.map_mulByOnePlusI]
+
 theorem map_inverse (f : Hom F G) (a : Fp6 F) : map f a.inverse = (map f a).inverse := by
   simp only [map, inverse, Fp2.map_add, Fp2.map_sub, Fp2.map_mul, Fp2.map_mulByOnePlusI,
     Fp2.map_inverse]
@@ -213,7 +221,7 @@ theorem map_isOne (f : Hom F G) (a : Fp12 F) : (map f a).isOne = a.isOne := by
   simp only [isOne, map, ← Fp6.map_one f, Fp6.map_beq, Fp6.map_isZero]
 
 theorem map_square (f : Hom F G) (a : Fp12 F) : map f a.square = (map f a).square := by
-  simp only [square, map_mul]
+  simp only [map, square, Fp6.map_add, Fp6.map_sub, Fp6.map_mul, Fp6.map_mulByV]
 
 theorem map_cyclotomicSquare (f : Hom F G) (a : Fp12 F) :
     map f a.cyclotomicSquare = (map f a).cyclotomicSquare := by
