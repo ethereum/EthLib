@@ -215,6 +215,37 @@ private theorem chain_of_not_lower {root : Root} {block parent : BeaconBlock pre
     rw [dite_eq_right notLower]
     rfl
 
+variable {store} in
+/-- The payload chain of a known block can be read when each known parent is at a lower slot. -/
+theorem payloadChain_exists
+    -- Each known parent of a known block is at a lower slot.
+    (lower : ∀ (root : Root) (block parent : BeaconBlock preset fork),
+      store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
+        parent.slot < block.slot)
+    {root : Root} {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :
+    ∃ roots, store.payloadChain root = .ok roots := by
+  -- The chain of a known block exists, by induction on its slot.
+  have chainOk : ∀ (n : ℕ) (root : Root) (block : BeaconBlock preset fork),
+      block.slot.toNat = n → store.blocks[root]? = some block →
+        ∃ roots, store.chain root = .ok roots := by
+    intro n
+    induction n using Nat.strong_induction_on with
+    | _ n ih =>
+    intro root block hn found
+    cases parentFound : store.blocks[block.parentRoot]? with
+    | none => exact ⟨_, chain_of_parent_unknown store found parentFound⟩
+    | some parent =>
+      have below := lower root block parent found parentFound
+      obtain ⟨rest, restOk⟩ := ih parent.slot.toNat
+        (hn ▸ UInt64.lt_iff_toNat_lt.mp below) _ parent rfl parentFound
+      exact ⟨root :: rest, by
+        rw [chain_of_lower store found parentFound below, restOk]; rfl⟩
+  obtain ⟨roots, rootsOk⟩ := chainOk _ root block rfl found
+  by_cases gloas : .glamsterdam ≤ fork
+  · exact ⟨store.payloadsOnChain gloas none roots, by
+      simp [payloadChain, rootsOk, gloas, bind, Except.bind, pure, Except.pure]⟩
+  · exact ⟨roots, by simp [payloadChain, rootsOk, gloas, bind, Except.bind, pure, Except.pure]⟩
+
 /-- Each root of the chain of a known block is a known block at a slot at most its slot. -/
 private theorem chain_slot_le {root : Root} {all : List Root} {block : BeaconBlock preset fork}
     (chained : store.chain root = .ok all) (known : store.blocks[root]? = some block) :
