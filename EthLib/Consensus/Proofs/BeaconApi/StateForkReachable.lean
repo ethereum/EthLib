@@ -78,7 +78,7 @@ theorem stateFork_mem_forkSchedule_of_reachable {checks : SignatureChecks} {gene
 /--
 Consider a chain from the genesis state that deposits build, ending at the anchor state.
 
-In a store that the handlers build from it, each state identifier gets a fork in the schedule.
+In a store that the handlers build from it, the fork answer to each named state is in the schedule.
 -/
 theorem stateFork_mem_forkSchedule_of_resolveStateId {checks : SignatureChecks}
     {genesisFork : Fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}

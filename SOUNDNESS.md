@@ -7133,7 +7133,7 @@ Points that remain open:
   These theorems show membership only, not that the answer is the entry in effect at the epoch of the state.
   The store holds the blocks of one fork and never upgrades a state.
   So a state at or after the epoch of the next fork keeps the versions of the anchor state.
-  For an anchor state that no such chain reaches, such as one from checkpoint sync, its versions remain an assumption.
+  For an anchor state from checkpoint sync, the node cannot check that such a chain reaches it, so that chain, or the versions of the anchor state, remain an assumption.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
 - The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.
   [beacon-APIs#682](https://github.com/ethereum/beacon-APIs/pull/682), which proposed one, was closed without a merge: a node may refuse an old epoch, or serve its true mix from historical blocks.
