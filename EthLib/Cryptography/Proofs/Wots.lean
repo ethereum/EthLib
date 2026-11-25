@@ -75,6 +75,24 @@ theorem chain_map_monad {m' : Type → Type} [Monad m'] (φ : ∀ {β : Type}, m
 
 end Chain
 
+section ChainRun
+
+variable {α : Type} {n : Nat} (step : Fin n → α → Id α)
+
+/-- A walk of `s + 1` steps is one step, then a walk of `s` steps from the next position. -/
+theorem chain_succ_run (start : Nat) :
+    ∀ (s : Nat) (h : start + (s + 1) ≤ n) (b : α), (chain step start (s + 1) h b).run
+      = (chain step (start + 1) s (by omega) (step ⟨start, by omega⟩ b).run).run
+  | 0, _, _ => rfl
+  | s + 1, h, b => by
+    rw [chain_succ, Id.run_bind, chain_succ_run start s (by omega) b, chain_succ, Id.run_bind]
+    -- The last step leaves `start + (s + 1)`, the same as `start + 1 + s`.
+    have hpos : (⟨start + (s + 1), by omega⟩ : Fin n) = ⟨start + 1 + s, by omega⟩ :=
+      Fin.ext (show start + (s + 1) = start + 1 + s by omega)
+    rw [hpos]
+
+end ChainRun
+
 /-! ## The search -/
 
 /-- The search returns a trial in its window whose test gives a codeword, and no earlier one does.

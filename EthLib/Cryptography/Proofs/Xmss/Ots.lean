@@ -99,11 +99,60 @@ theorem randomizerBase_seedPrf (publicParam : PublicParam) (layer : Layer) (e : 
 
 end SeedPrf
 
+/-! ## Each call is one tweakable hash
+
+Each hash call of a one-time key is `Th(P, A, M)` at its address, with its payload. -/
+
+section Calls
+
+variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
+
+/-- A step of chain `i` from position `mu` hashes the value, then `LE_128(i)`, at `A_chain`. -/
+theorem chainStep_eq_th (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
+    (mu : Fin (CHAIN_LENGTH - 1)) (value : Digest) :
+    chainStep H publicParam layer e i mu value
+      = th H publicParam (.chain layer e mu)
+          (value.toArray ++ (⟨i.val.toUInt64, 0⟩ : Lanes2).toArray) :=
+  rfl
+
+/-- A key's leaf hashes the 58 chain ends, in chain order, at `A_leaf`. -/
+theorem otsLeafHash_eq_th (publicParam : PublicParam) (layer : Layer) (e : UInt32)
+    (ends : Vector Digest V) :
+    otsLeafHash H publicParam layer e ends
+      = th H publicParam (.leaf layer e) (digestLanes ends) :=
+  rfl
+
+/-- The signed digest hashes the message, then the randomizer, at `A_msg`. -/
+theorem messageDigest_eq_th (publicParam : PublicParam) (layer : Layer) (e : UInt32)
+    (msg : Array UInt64) (rho : Randomizer) :
+    messageDigest H publicParam layer e msg rho
+      = th H publicParam (.msg layer e) (msg ++ rho.toArray) :=
+  rfl
+
+end Calls
+
 /-! ## Chains -/
 
 /-- Walking no steps leaves the value alone. -/
 @[simp] theorem chain_zero (h : start + 0 < CHAIN_LENGTH) :
     (chain (pureHash f) publicParam layer e i start 0 h value).run = value := rfl
+
+/-- A walk of `s + 1` steps is a walk of `s` steps, then the step from position `start + s`. -/
+theorem chain_succ {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4) {s : Nat}
+    (h : start + (s + 1) < CHAIN_LENGTH) :
+    chain H publicParam layer e i start (s + 1) h value = (do
+      let previous ← chain H publicParam layer e i start s (by omega) value
+      chainStep H publicParam layer e i ⟨start + s, by simp only [CHAIN_LENGTH] at *; omega⟩
+        previous) :=
+  rfl
+
+/-- With a pure hash, a walk of `s + 1` steps is the step from `start`, then a walk of `s` steps. -/
+theorem chain_succ_run {s : Nat} (h : start + (s + 1) < CHAIN_LENGTH) :
+    (chain (pureHash f) publicParam layer e i start (s + 1) h value).run
+      = (chain (pureHash f) publicParam layer e i (start + 1) s (by omega)
+          (chainStep (pureHash f) publicParam layer e i
+            ⟨start, by simp only [CHAIN_LENGTH] at *; omega⟩ value).run).run :=
+  Wots.chain_succ_run _ start s _ value
 
 /-! ## An honest signature leads to the key's leaf -/
 

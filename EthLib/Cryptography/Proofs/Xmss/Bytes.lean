@@ -80,10 +80,8 @@ theorem th_bytes (publicParam : PublicParam) (address : Address) (M : Array UInt
     (th hashId publicParam address M).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes ++ packBytes address.encode.bytes
         ++ ⟨(lanesBytes M).toArray⟩)).toList.take 16 := by
-  show (halfOf 0 (hash (thInput publicParam address M))).bytes.toList = _
-  rw [toList_bytes_halfOf, hash_bytes, thInput_eq_append, Hash.Keccak.lanesBytes_append,
-    Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.lanesBytes_lanes2,
-    mk_append, mk_append, ← packBytes_eq_mk, ← packBytes_eq_mk]
+  rw [th_run, toList_bytes_halfOf, hash_bytes, lanesBytes_thInput, mk_append, mk_append,
+    ← packBytes_eq_mk, ← packBytes_eq_mk]
   rfl
 
 /-- A derivation from the scheme seed `S` is Keccak-256 of `P | A | S | suffix`, all 32 bytes. -/
@@ -157,10 +155,7 @@ theorem chainStep_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32)
       (keccak256 (packBytes publicParam.bytes ++ packBytes
         (Address.chain layer e mu).encode.bytes ++ packBytes v.bytes
         ++ packBytes (Base.ByteOrder.toLE 16 i.val))).toList.take 16 := by
-  rw [chainStep, th_bytes,
-    show (#[v.lo, v.hi, i.val.toUInt64, 0] : Array UInt64) =
-      v.toArray ++ (⟨i.val.toUInt64, 0⟩ : Lanes2).toArray from rfl,
-    Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2,
+  rw [chainStep_eq_th, th_bytes, Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2,
     lanesBytes_index _ (by have := i.isLt; simp only [V] at this; omega), mk_append,
     ← packBytes_eq_mk, ← packBytes_eq_mk]
   rfl
@@ -186,7 +181,7 @@ theorem otsLeafHash_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt3
     (otsLeafHash hashId publicParam layer e ends).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes ++ packBytes (Address.leaf layer e).encode.bytes
         ++ packDigests ends)).toList.take 16 := by
-  rw [otsLeafHash, th_bytes, packDigests_eq_mk]
+  rw [otsLeafHash_eq_th, th_bytes, packDigests_eq_mk]
 
 /-- The leaf of key `e`: each chain walked from its derived start to position 3, then hashed.
 
@@ -209,7 +204,7 @@ theorem messageDigest_bytes (publicParam : PublicParam) (layer : Layer) (e : UIn
     (messageDigest hashId publicParam layer e msg rho).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes ++ packBytes (Address.msg layer e).encode.bytes
         ++ ⟨(lanesBytes msg).toArray⟩ ++ packBytes rho.bytes)).toList.take 16 := by
-  rw [messageDigest, th_bytes, Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2,
+  rw [messageDigest_eq_th, th_bytes, Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2,
     mk_append, ← packBytes_eq_mk]
   rfl
 
