@@ -156,4 +156,13 @@ theorem prEvent_batchErrorPoly_root_le (τ : Fr) (c w : OpeningBatch → Nat →
     (fun _ hx => (natDegree_batchErrorPoly_le τ _ _ _ _ _).trans (Nat.sub_le_sub_right hx 1))
     adversary hq
 
+/-- The proof at a position of the proofs of some bytes holds the bytes there. -/
+theorem bytes_getElem!_map_mk_proof (a : Array Bytes48) (i : Nat) :
+    (a.map KZGProof.mk)[i]!.bytes = a[i]! := by
+  by_cases h : i < a.size
+  · rw [getElem!_pos a i h, getElem!_pos (a.map KZGProof.mk) i (by simpa using h)]
+    simp
+  · rw [getElem!_neg a i h, getElem!_neg (a.map KZGProof.mk) i (by simpa using h)]
+    rfl
+
 end EthLib.Cryptography.Kzg

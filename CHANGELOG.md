@@ -1069,6 +1069,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Cryptography.Kzg.KZGProof` is now a structure over its 48 bytes, as `KZGCommitment` is ([#4605](https://github.com/ethereum/EthLib/issues/4605)).
+  `EthLib.Cryptography.Kzg.Types` defines it, so Lean rejects a commitment, a public key or other 48 bytes where a proof is expected.
+  `bytesToKzgProof`, `computeKzgProof`, `computeBlobKzgProof`, `computeCellsAndKzgProofs` and `recoverCellsAndKzgProofs` return the structure.
+  `computeVerifyKzgProofBatchChallenge`, `verifyKzgProofBatch`, `computeVerifyCellKzgProofBatchChallenge` and `verifyCellKzgProofBatchImpl` take arrays of the structure.
+  The KZG operations that read untrusted bytes, such as `verifyBlobKzgProof` and `verifyCellKzgProofBatch`, still take `Bytes48`, and `parseProof` (`Cryptography/Exports/Kzg.lean`) returns those bytes.
+  A theorem about a proof changes its statement only where the type forces it, with `.bytes` or `KZGProof.mk`.
+  The SSZ, RLP, JSON and Python forms are those of the bytes, so no encoding and no C or Python signature changes.
+  Migration: build a proof with `KZGProof.mk`, and read its bytes with `.bytes`.
 - In Lean, `Engine.toOption_eq_some` (`Engine/Proofs/ExecutionEngine.lean`) moves to `Base.toOption_eq_some` (`Base/Proofs/Except.lean`), with the same statement ([#4671](https://github.com/ethereum/EthLib/pull/4671)).
   `Base.toOption_eq_some_iff` states both directions, and `Base.Uint64.toNat_toUInt64` (`Base/Proofs/Uint64.lean`) says that a number below `2^64` keeps its value as a 64-bit integer.
   Migration: open `EthLib.Base`, or write `Base.toOption_eq_some`.

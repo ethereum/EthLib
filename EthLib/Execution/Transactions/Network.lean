@@ -34,6 +34,11 @@ open EthLib.Serialization.Rlp
 Source: "Networking" of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking). -/
 instance : Codec KZGCommitment := .wrapper KZGCommitment.mk KZGCommitment.bytes
 
+/-- A KZG proof is the RLP string of its 48 bytes.
+
+Source: "Networking" of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking). -/
+instance : Codec KZGProof := .wrapper KZGProof.mk KZGProof.bytes
+
 /-- The version of the network form from Fusaka on. -/
 def WRAPPER_VERSION : Nat := 1
 
@@ -190,10 +195,11 @@ def verifyBlobBundle (setup : TrustedSetup) (fork : Fork) (blobs : List Blob)
     verifyCellKzgProofBatch setup
       (commitments.toArray.flatMap fun c => Array.replicate CELLS_PER_EXT_BLOB c.bytes)
       (Array.flatten (Array.replicate blobs.length indices))
-      cells.toArray.flatten proofs.toArray
+      cells.toArray.flatten (proofs.toArray.map (·.bytes))
   -- EIP-4844: the batch check of blobs, one proof per blob.
   else
-    verifyBlobKzgProofBatch setup blobs.toArray (commitments.toArray.map (·.bytes)) proofs.toArray
+    verifyBlobKzgProofBatch setup blobs.toArray (commitments.toArray.map (·.bytes))
+      (proofs.toArray.map (·.bytes))
 
 /-- Whether the network form's proofs show that its commitments match its blobs. -/
 def proofsVerify (setup : TrustedSetup) (fork : Fork) (w : NetworkBlobTransaction) :

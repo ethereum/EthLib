@@ -144,10 +144,10 @@ Let the code compute the commitment of the blob, and its cells and proofs.
 Then cell `j` and proof `j` are a valid opening of cell index `j`, for every `j` below 128. -/
 theorem cellOpeningValid_computeCellsAndKzgProofs {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {blob : Blob} {commitment : Bytes48} {cells : Array Cell}
-    {proofs : Array Bytes48} (hC : blobToKzgCommitment s blob = .ok ⟨commitment⟩)
+    {proofs : Array KZGProof} (hC : blobToKzgCommitment s blob = .ok ⟨commitment⟩)
     (hP : computeCellsAndKzgProofs s blob = .ok (cells, proofs)) {j : Nat}
     (hj : j < CELLS_PER_EXT_BLOB) :
-    CellOpeningValid τ commitment j cells[j]! proofs[j]! := by
+    CellOpeningValid τ commitment j cells[j]! proofs[j]!.bytes := by
   cases hblob : blobToPolynomial blob with
   | error e =>
     rw [computeCellsAndKzgProofs, hblob] at hP
@@ -231,7 +231,7 @@ theorem errorPoly_eq_zero_of_cellOpeningValid {τ : Fr} {y : CellBatchInput}
     rw [getElem!_pos y.cells k hkc] at he
     exact Except.ok.inj ((hevk k hkc hke).symm.trans he)
   simp only [CellBatchInput.toCellBatch, decodeCells_of_ok hev, hek, (hdidx k hk').2,
-    scalarOf_eq hCv hCr, scalarOf_eq hWv hWr]
+    bytes_getElem!_map_mk_proof, scalarOf_eq hCv hCr, scalarOf_eq hWv hWr]
   exact hval
 
 /-- **A batch with a zero error polynomial holds only valid openings.**
@@ -258,7 +258,8 @@ theorem cellOpeningValid_of_errorPoly_eq_zero {s : TrustedSetup} {τ : Fr} {y : 
   have hv := (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mp hz k (by
     simp only [CellBatchInput.toCellBatch]
     omega)
-  simp only [CellBatchInput.toCellBatch, decodeCells_of_ok hev, (hdidx k hk).2] at hv
+  simp only [CellBatchInput.toCellBatch, decodeCells_of_ok hev, (hdidx k hk).2,
+    bytes_getElem!_map_mk_proof] at hv
   have hkc : k < y.cells.size := by omega
   have hke : k < evals.size := by omega
   have hevk' := hevk k hkc hke
@@ -352,7 +353,7 @@ theorem verifyCellKzgProofBatch_computeCellsAndKzgProofs
     (h₁ : cells.size = bs.size) (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
     (hblobs : ∀ k < bs.size, ∃ blob cs qs, blobToKzgCommitment s blob = .ok ⟨bs[k]!⟩ ∧
       computeCellsAndKzgProofs s blob = .ok (cs, qs) ∧ cellIndices[k]! < CELLS_PER_EXT_BLOB ∧
-      cells[k]! = cs[cellIndices[k]!]! ∧ ps[k]! = qs[cellIndices[k]!]!) :
+      cells[k]! = cs[cellIndices[k]!]! ∧ ps[k]! = qs[cellIndices[k]!]!.bytes) :
     verifyCellKzgProofBatch s bs cellIndices cells ps = .ok true := by
   refine verifyCellKzgProofBatch_of_cellOpeningValid hs h₁ h₂ h₃ fun k hk => ?_
   obtain ⟨blob, cs, qs, hC, hP, hj, hcell, hproof⟩ := hblobs k hk
@@ -392,12 +393,12 @@ Let the code compute the commitment of a blob, and its cells and proofs, with th
 
 Then the opening of cell `j` by cell `j` and proof `j` verifies, for every `j` below 128. -/
 theorem CellOpening.verifies_computeCellsAndKzgProofs (τ : Fr)
-    {blob : Blob} {commitment : Bytes48} {cells : Array Cell} {proofs : Array Bytes48}
+    {blob : Blob} {commitment : Bytes48} {cells : Array Cell} {proofs : Array KZGProof}
     (hC : blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) blob = .ok ⟨commitment⟩)
     (hP : computeCellsAndKzgProofs (TrustedSetup.ofPowers (setupPowers τ)) blob =
       .ok (cells, proofs)) {j : Nat} (hj : j < CELLS_PER_EXT_BLOB) :
-    (⟨j, cells[j]!, proofs[j]!⟩ : CellOpening).Verifies (TrustedSetup.ofPowers (setupPowers τ))
-      commitment :=
+    (⟨j, cells[j]!, proofs[j]!.bytes⟩ : CellOpening).Verifies
+      (TrustedSetup.ofPowers (setupPowers τ)) commitment :=
   -- The setup of the games is a well-formed setup of `τ`.
   (CellOpening.verifies_iff (wellFormed_ofPowers τ)).mpr
     (cellOpeningValid_computeCellsAndKzgProofs (wellFormed_ofPowers τ) hC hP hj)

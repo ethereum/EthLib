@@ -151,7 +151,8 @@ def isDataAvailable (config : Config) (sources : BlockSources preset fork)
   else
     let some (blobs, proofs) := sources.blobsAndProofs root | throw (.blobsUnavailable root)
     (verifyBlobKzgProofBatch sources.setup blobs
-      ((block.body.blobKzgCommitments range).data.map (·.bytes)) proofs).mapError .kzg
+      ((block.body.blobKzgCommitments range).data.map (·.bytes))
+      (proofs.map (·.bytes))).mapError .kzg
 
 /-- Check that the data of a block is available.
 

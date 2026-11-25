@@ -79,7 +79,7 @@ theorem bytesToKzgCommitment_ok_iff {b : Bytes48} {c : KZGCommitment} :
 
 /-- `bytesToKzgProof` succeeds exactly on valid bytes, and returns them unchanged. -/
 theorem bytesToKzgProof_ok_iff {b : Bytes48} {p : KZGProof} :
-    bytesToKzgProof b = .ok p ↔ validateKzgG1 b ∧ p = b := by
+    bytesToKzgProof b = .ok p ↔ validateKzgG1 b ∧ p = ⟨b⟩ := by
   rw [bytesToKzgProof]
   split
   · rename_i h

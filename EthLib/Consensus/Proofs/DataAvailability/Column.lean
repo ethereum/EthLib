@@ -244,7 +244,7 @@ theorem verifyPartialDataColumnSidecarKzgProofs_of_all {preset : Preset} {fork :
     verifyPartialDataColumnSidecarKzgProofs setup sidecar commitments columnIndex =
       Cryptography.Kzg.verifyCellKzgProofBatch setup (commitments.data.map (·.bytes))
         (Array.replicate commitments.data.size columnIndex.toNat) sidecar.partialColumn.data
-        sidecar.kzgProofs.data := by
+        (sidecar.kzgProofs.data.map (·.bytes)) := by
   unfold verifyPartialDataColumnSidecarKzgProofs
   rw [PartialDataColumnSidecar.blobIndices_of_all all, oneEach]
   -- Every index below the count has its commitment, so the lookup gives the list back.
@@ -842,7 +842,7 @@ theorem verifyDataColumnSidecarKzgProofs_eq_verify {preset : Preset} {fork : For
     (bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)) :
     verifyDataColumnSidecarKzgProofs setup sidecar bidCommitments =
       ColumnBatch.verify setup ⟨(sidecar.commitments bidCommitments).data.map (·.bytes),
-        sidecar.index.toNat, sidecar.column.data, sidecar.kzgProofs.data⟩ :=
+        sidecar.index.toNat, sidecar.column.data, sidecar.kzgProofs.data.map (·.bytes)⟩ :=
   rfl
 
 end Matrix

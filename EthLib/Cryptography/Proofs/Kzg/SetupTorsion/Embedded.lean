@@ -103,7 +103,7 @@ theorem computeCellsAndKzgProofs_blob_spec_ofHex
       (fk20CellsAndProofs setup polynomialCoeff).1[cellIndex]! =
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff)) ∧
       (fk20CellsAndProofs setup polynomialCoeff).2[cellIndex]! =
-        compressG1 (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) :=
+        ⟨compressG1 (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient)⟩ :=
   computeCellsAndKzgProofs_blob_spec hblob (TrustedSetup.ofHex_valid hsetup)
     (fun _ ht => TrustedSetup.ofHex_torsion hsetup (Nat.lt_of_lt_of_le ht (Nat.sub_le _ _))) hcoset
 
@@ -131,7 +131,7 @@ theorem recoverCellsAndKzgProofs_spec_ofHex
       (fk20CellsAndProofs setup p).1[cellIndex]! =
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff p)) ∧
       (fk20CellsAndProofs setup p).2[cellIndex]! =
-        compressG1 (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) :=
+        ⟨compressG1 (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient)⟩ :=
   recoverCellsAndKzgProofs_spec hp hlen hmin hbound hasc hdec hmatch
     (TrustedSetup.ofHex_valid hsetup)
     (fun _ ht => TrustedSetup.ofHex_torsion hsetup (Nat.lt_of_lt_of_le ht (Nat.sub_le _ _))) hcoset

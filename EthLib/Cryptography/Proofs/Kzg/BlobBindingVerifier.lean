@@ -57,7 +57,7 @@ theorem eval_batchErrorAt_eq_errorPoly {τ : Fr} {y : BlobBatchInput}
   have hc := congrArg (·.commitments.map KZGCommitment.bytes) hbatch
   have hz := congrArg OpeningBatch.zs hbatch
   have hy := congrArg OpeningBatch.ys hbatch
-  have hp := congrArg OpeningBatch.proofs hbatch
+  have hp := congrArg (·.proofs.map KZGProof.bytes) hbatch
   simp only [Opening.toBatch, OpeningData.toBatch, List.map_map, Function.comp_def,
     Opening.data, BlobBatchInput.toOpeningBatch, List.map_toArray, Array.map_map,
     Array.map_id_fun', id_eq] at hc hz hy hp
@@ -84,7 +84,7 @@ theorem validated_of_verifyBlobKzgProofBatch {s : TrustedSetup} {y : BlobBatchIn
   obtain ⟨hcsz, hc⟩ := Base.array_mapM_ok hcs
   obtain ⟨hpsz, hp⟩ := Base.array_mapM_ok hps
   have hc' := congrArg (·.commitments.map KZGCommitment.bytes) hbatch
-  have hp' := congrArg OpeningBatch.proofs hbatch
+  have hp' := congrArg (·.proofs.map KZGProof.bytes) hbatch
   simp only [Opening.toBatch, OpeningData.toBatch, List.map_map, Function.comp_def,
     Opening.data, BlobBatchInput.toOpeningBatch, List.map_toArray, Array.map_map,
     Array.map_id_fun', id_eq] at hc' hp'
@@ -228,8 +228,14 @@ theorem Matches.toBatch_eq_toOpeningBatch {out : List BlobOpening} {openings : L
     simp only [List.map_map, Function.comp_def] at hmk
     rw [hmk]
     simp [BlobOpening.toInput]
-  rw [hcm, hpb, hch, hev]
-  rfl
+  -- The batch holds the proofs of the submitted bytes.
+  have hpm : (openings.map fun x => KZGProof.mk x.proof.bytes).toArray =
+      (BlobOpening.toInput out).proofs.map KZGProof.mk := by
+    have hmk := congrArg (List.map KZGProof.mk) hpb
+    simp only [List.map_map, Function.comp_def] at hmk
+    rw [hmk]
+    simp [BlobOpening.toInput]
+  rw [hcm, hpm, hch, hev]
 
 /-- A successful challenge loop with the concrete hashes as challenges gives the concrete batch. -/
 theorem toBatch_eq_toOpeningBatch_of_mem_support_challengeOpenings {out : List BlobOpening}

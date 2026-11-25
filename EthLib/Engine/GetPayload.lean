@@ -257,7 +257,7 @@ def blobsBundleJson (b : BlobsBundle) : Lean.Json :=
   -- An object of JSON is an unordered collection of members.
   Lean.Json.mkObj [("blobs", listJson (dataJson ·.toList) b.blobs),
     ("commitments", listJson (dataJson ·.bytes.toList) b.commitments),
-    ("proofs", listJson (dataJson ·.toList) b.proofs)]
+    ("proofs", listJson (dataJson ·.bytes.toList) b.proofs)]
 
 /-- The three fields of a blobs bundle. -/
 def blobsBundleFields : List String := ["blobs", "commitments", "proofs"]
@@ -275,7 +275,7 @@ def blobsBundleOfJson (version : Nat) (j : Lean.Json) : Json.Decode BlobsBundle 
     blobs := ← array "blobs" (fixed "blob" _) (← get "blobs")
     -- Each commitment and each proof is 48 bytes.
     commitments := (← array "commitments" (fixed "commitment" 48) (← get "commitments")).map .mk
-    proofs := ← array "proofs" (fixed "proof" 48) (← get "proofs") }
+    proofs := (← array "proofs" (fixed "proof" 48) (← get "proofs")).map .mk }
   -- The length rules of the version of the bundle.
   unless bundle.lengthsHold version do Json.invalid "blobsBundle: lengths do not match"
   return bundle

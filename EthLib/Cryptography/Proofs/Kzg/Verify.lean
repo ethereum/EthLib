@@ -114,7 +114,7 @@ theorem verifyKzgProof_computeKzgProof {s : TrustedSetup} {τ : Fr}
     {zBytes yBytes : Bytes32}
     (hC : blobToKzgCommitment s blob = .ok C)
     (hP : computeKzgProof s blob zBytes = .ok (P, yBytes)) :
-    verifyKzgProof s C.bytes zBytes yBytes P = .ok true := by
+    verifyKzgProof s C.bytes zBytes yBytes P.bytes = .ok true := by
   cases hblob : blobToPolynomial blob with
   | error e =>
     have herr : blobToKzgCommitment s blob = .error e := by
@@ -138,7 +138,7 @@ theorem verifyKzgProof_computeKzgProof {s : TrustedSetup} {τ : Fr}
     | ok z =>
       obtain ⟨Q, hQs, hQv, hImpl⟩ := computeKzgProofImpl_eq s hsize z
       have hcomp : computeKzgProof s blob zBytes =
-          .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray Q),
+          .ok (⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray Q)⟩,
             blsFieldToBytes ((interpolant poly).eval z)) := by
         unfold computeKzgProof
         rw [hblob, hz]
@@ -160,7 +160,7 @@ theorem computeBlobKzgProof_eq {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed �
         (quotientPoly poly (computeChallenge blob
           ⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)⟩)).eval (evalDomain i)) ∧
       computeBlobKzgProof s blob (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) =
-        .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray Q)) := by
+        .ok ⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray Q)⟩ := by
   have hsize := size_blobToPolynomial blob poly hblob
   obtain ⟨C', hC', -⟩ := validateKzgG1Point_compressG1 (represents_lagrange_msm hs (τ := τ) hsize)
   have hbytes : bytesToKzgCommitment (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) =
@@ -213,7 +213,7 @@ Then `(blob, C, P)` is a valid blob opening at `τ`. -/
 theorem blobOpeningValid_computeBlobKzgProof {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     {blob : Blob} {C : KZGCommitment} {P : KZGProof} (hC : blobToKzgCommitment s blob = .ok C)
     (hP : computeBlobKzgProof s blob C.bytes = .ok P) :
-    BlobOpeningValid τ blob C.bytes P := by
+    BlobOpeningValid τ blob C.bytes P.bytes := by
   cases hblob : blobToPolynomial blob with
   | error e =>
     unfold blobToKzgCommitment at hC
@@ -291,7 +291,7 @@ theorem verifyBlobKzgProof_computeBlobKzgProof {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blob : Blob} {C : KZGCommitment} {P : KZGProof}
     (hC : blobToKzgCommitment s blob = .ok C)
     (hP : computeBlobKzgProof s blob C.bytes = .ok P) :
-    verifyBlobKzgProof s blob C.bytes P = .ok true := by
+    verifyBlobKzgProof s blob C.bytes P.bytes = .ok true := by
   exact verifyBlobKzgProof_of_blobOpeningValid hs
     (blobOpeningValid_computeBlobKzgProof hs hC hP)
 

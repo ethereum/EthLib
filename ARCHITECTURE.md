@@ -275,7 +275,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   A KZG commitment and a KZG proof are both 48 bytes.
   In consensus-specs, a Merkle root and the hash of an execution block are two classes of 32 bytes.
   A one-field structure over `Vector UInt8 n` keeps such types apart, because Lean then rejects one where the other is expected.
-  `KZGCommitment` and `VersionedHash` take this form.
+  `KZGCommitment`, `KZGProof` and `VersionedHash` take this form.
   Their wire encodings are those of their bytes.
   Another type takes the form only by a pull request that converts it and reports the cost of its port.
   That cost is the conversions at call sites, the edited theorems and the breaking change for Lean importers.
