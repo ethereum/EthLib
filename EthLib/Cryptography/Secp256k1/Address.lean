@@ -24,7 +24,7 @@ def publicKeyBytes (x y : Fp) : ByteArray :=
   -- Appendix F: `p_u` is 64 bytes, from two integers below `2^256`.
   --
   -- Each is 32 big-endian bytes, as in the uncompressed SEC 1 encoding without its `04` prefix.
-  ⟨(x.toBytes ++ y.toBytes).toArray⟩
+  x.toBytes ++ y.toBytes
 
 /-- The address of the public key `(x, y)`: the last 20 bytes of its Keccak-256 hash. -/
 def address (x y : Fp) : Base.Address :=

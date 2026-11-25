@@ -80,7 +80,7 @@ def encodePublicKey : Point → Vector UInt8 64
   -- EthLib writes it as 64 zero bytes: `(0, 0)` is off the curve, so no decoder accepts it.
   | .infinity => Vector.replicate 64 0
   -- `x || y`, each coordinate in 32 big-endian bytes.
-  | .affine x y => ⟨(x.toBytes ++ y.toBytes).toArray, by simp [Fp.length_toBytes]⟩
+  | .affine x y => ⟨(x.toBytes ++ y.toBytes).data, by simp [Sec1.fieldToBytes, sec1]⟩
 
 /-- The public key of 64 bytes `x || y`, which must lie on the curve. -/
 def decodePublicKey (bytes : Vector UInt8 64) : Except HandshakeError Point :=

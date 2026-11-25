@@ -1,9 +1,9 @@
 module
 
-public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Except
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Secp256k1.Encoding
-public import EthLib.Cryptography.Proofs.ShortWeierstrass.Encoding
+public import EthLib.Cryptography.Proofs.Sec1
 public import EthLib.Cryptography.Proofs.Secp256k1.Sqrt
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 
@@ -15,146 +15,48 @@ The decoder accepts exactly the two encodings of the points other than `O`.
 It returns the point that was encoded.
 
 So the encodings are canonical: no other bytes decode to a point.
+
+Each fact follows from the one for every curve, with the law of the square root of `Fp`.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Secp256k1
 
-/-! ## Coordinates -/
-
-theorem Fp.ofBytes_toBytes (x : Fp) : Fp.ofBytes x.toBytes = .ok x := by
-  simp only [Fp.ofBytes, Fp.toBytes,
-    ShortWeierstrass.coordinateOfBytes?_coordinateToBytes (by decide) x]
-
-/-- 32 bytes that read as a coordinate are that coordinate's bytes. -/
-theorem Fp.toBytes_of_ofBytes {l : List UInt8} {x : Fp} (hl : l.length = 32) (h : Fp.ofBytes l = .ok x) :
-    x.toBytes = l := by
-  simp only [Fp.ofBytes] at h
-  split at h
-  · cases h
-    exact ShortWeierstrass.coordinateToBytes_of_coordinateOfBytes? hl (by assumption)
-  · cases h
-
-/-- The shared uncompressed form `04 ‖ x ‖ y`, written with the coordinate bytes of this curve. -/
-theorem encodeUncompressed_coords (x y : Fp) :
-    ShortWeierstrass.encodeUncompressed x y = 0x04 :: (x.toBytes ++ y.toBytes) := rfl
-
-/-! ## Decompression -/
+/-- The square root of `Fp` returns a root of each square, and `none` for each non-square. -/
+theorem isSqrt_sqrt : Sec1.IsSqrt Fp.sqrt :=
+  ⟨fun h => Fp.toZMod.injective (by rw [map_mul]; exact Fp.sqrt_mul_self h),
+    fun h β hβ => Fp.sqrt_eq_none_iff.mp h (Fp.toZMod β) (by rw [← map_mul, hβ])⟩
 
 /-- `y` and `-y` have opposite parities, unless `y = 0`. -/
 theorem Fp.val_neg_mod_two {y : Fp} (hy : y ≠ 0) : (-y).val % 2 ≠ y.val % 2 :=
   EthLib.Cryptography.Secp256k1.val_neg_mod_two (y := Fp.toZMod y) (fun h => hy (Fp.toZMod.injective (h.trans Fp.toZMod_zero.symm)))
 
-/-- Two points of the curve with the same `x` and the same parity of `y` are equal. -/
-theorem Fp.eq_of_parity {x y1 y2 : Fp} (h1 : (Point.affine x y1).isOnCurve = true)
-    (h2 : (Point.affine x y2).isOnCurve = true) (hpar : y1.val % 2 = y2.val % 2) : y1 = y2 :=
-  Fp.toZMod.injective (y_eq_of_parity ((Point.isOnCurve_affine x y1).mp h1) ((Point.isOnCurve_affine x y2).mp h2) hpar)
-
-/-- The right-hand side of the equation, `x^3 + 7`, in `ZMod p`. -/
-private theorem toZMod_rhs (x : Fp) : Fp.toZMod (x * x * x + b) = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + 7 := by
-  rw [map_add, map_mul, map_mul]
-  rfl
-
-/-- A root of `x^3 + 7` gives a point of the curve. -/
-private theorem isOnCurve_of_sqrt {x c : Fp} (h : (x * x * x + b).sqrt = some c) :
-    (Point.affine x c).isOnCurve = true := by
-  rw [Point.isOnCurve_affine, ← toZMod_rhs]
-  exact Fp.sqrt_mul_self h
-
-/-- A root of `x^3 + 7` is not `0`, since `-7` is not a cube. -/
-private theorem sqrt_ne_zero {x c : Fp} (h : (x * x * x + b).sqrt = some c) : c ≠ 0 := by
-  rintro rfl
-  have h0 := (Point.isOnCurve_affine x 0).mp (isOnCurve_of_sqrt h)
-  exact cube_ne_neg_seven (Fp.toZMod x) (by rw [Fp.toZMod_zero] at h0; linear_combination -h0)
-
 /-- Decompression gives the point of the curve with coordinate `x` and the given parity, if any. -/
 theorem decompress_eq_ok_iff {x : Fp} {odd : Bool} {p : Point} :
     Point.decompress x odd = .ok p ↔
       ∃ y : Fp, p = .affine x y ∧ (Point.affine x y).isOnCurve = true ∧ decide (y.val % 2 = 1) = odd := by
-  unfold Point.decompress
-  cases hs : (x * x * x + b).sqrt with
-  | none =>
-    dsimp only [Option.elim]
-    refine ⟨fun h => (by cases h), ?_⟩
-    rintro ⟨y, rfl, hc, -⟩
-    -- `y` would be a root of `x^3 + 7`.
-    refine absurd ((Fp.sqrt_eq_none_iff.mp hs) (Fp.toZMod y) ?_) (fun h => h)
-    rw [toZMod_rhs]
-    exact (Point.isOnCurve_affine x y).mp hc
-  | some beta =>
-    dsimp only [Option.elim]
-    have hon := isOnCurve_of_sqrt hs
-    have hne := Fp.val_neg_mod_two (sqrt_ne_zero hs)
-    have honneg : (Point.affine x (-beta)).isOnCurve = true := Point.isOnCurve_neg hon
-    have h2 := Nat.mod_two_eq_zero_or_one beta.val
-    have h2' := Nat.mod_two_eq_zero_or_one (-beta).val
-    constructor
-    · rintro ⟨⟩
-      split
-      · exact ⟨beta, rfl, hon, by assumption⟩
-      · refine ⟨-beta, rfl, honneg, ?_⟩
-        rename_i hpar
-        cases odd <;> simp_all
-    · rintro ⟨y, rfl, hc, hpar⟩
-      -- The parity picks the root `y` among `beta` and `-beta`.
-      have hy : (if decide (beta.val % 2 = 1) = odd then beta else -beta) = y := by
-        split
-        · rename_i hb
-          exact Fp.eq_of_parity hon hc (by cases odd <;> simp_all)
-        · rename_i hb
-          exact Fp.eq_of_parity honneg hc (by cases odd <;> simp_all)
-      rw [hy]
+  rw [Point.decompress, Base.mapError_ok_iff]
+  exact Sec1.decompress_eq_ok_iff isSqrt_sqrt
 
 namespace Point
 
-/-! ## Round trips -/
-
-/-- A byte array is the array of its bytes. -/
-private theorem byteArray_eq {bytes : ByteArray} {l : List UInt8} (h : bytes.data.toList = l) :
-    bytes = ⟨l.toArray⟩ := by
-  subst h
-  rfl
-
-/-- The prefix of the compressed form is `03` exactly when `y` is odd. -/
-private theorem prefix_eq_three (y : Fp) :
-    ((if y.val % 2 = 0 then (0x02 : UInt8) else 0x03) == 0x03) = decide (y.val % 2 = 1) := by
-  rcases Nat.mod_two_eq_zero_or_one y.val with h | h <;> simp [h]
+/-- Validation keeps a point of the curve other than `O`, since the cofactor is 1. -/
+private theorem validatePublicKey_eq_ok {p : Point} (hp : p.isOnCurve = true)
+    (hinf : p ≠ infinity) : Sec1.validatePublicKey Fn.modulus 1 p = .ok p :=
+  Sec1.validatePublicKey_eq_ok_iff.mpr ⟨rfl, hinf, hp, Or.inl rfl⟩
 
 theorem decode_encodeCompressed {p : Point} (hp : p.isOnCurve = true) (hinf : p ≠ infinity) :
     decode p.encodeCompressed = .ok p := by
-  cases p with
-  | infinity => exact absurd rfl hinf
-  | affine x y =>
-    have hd : decompress x (decide (y.val % 2 = 1)) = .ok (affine x y) := decompress_eq_ok_iff.mpr ⟨y, rfl, hp, rfl⟩
-    have htag : (if y.val % 2 = 0 then (0x02 : UInt8) else 0x03) = 0x02
-        ∨ (if y.val % 2 = 0 then (0x02 : UInt8) else 0x03) = 0x03 := by
-      split <;> simp
-    have hne : ¬((if y.val % 2 = 0 then (0x02 : UInt8) else 0x03) = 0x00 ∧ x.toBytes = []) := by
-      rintro ⟨-, h⟩
-      have := Fp.length_toBytes x
-      rw [h] at this
-      cases this
-    simp only [decode, encodeCompressed, List.toList_toArray, Fp.length_toBytes, ite_eq_right hne, ite_eq_left htag,
-      Fp.ofBytes_toBytes, prefix_eq_three, hd, bind, Except.bind, ite_true]
+  rw [decode, Sec1.decode_encode isSqrt_sqrt true hp, Base.ok_bind,
+    validatePublicKey_eq_ok hp hinf]
+  rfl
 
 theorem decode_encodeUncompressed {p : Point} (hp : p.isOnCurve = true) (hinf : p ≠ infinity) :
     decode p.encodeUncompressed = .ok p := by
-  cases p with
-  | infinity => exact absurd rfl hinf
-  | affine x y =>
-    have hlen : (x.toBytes ++ y.toBytes).length = 64 := by simp [Fp.length_toBytes]
-    have hne : ¬((0x04 : UInt8) = 0x00 ∧ x.toBytes ++ y.toBytes = []) := by
-      rintro ⟨h, -⟩
-      cases h
-    have htake : (x.toBytes ++ y.toBytes).take 32 = x.toBytes := by
-      rw [List.take_append_of_le_length (by rw [Fp.length_toBytes]), List.take_of_length_le (by rw [Fp.length_toBytes])]
-    have hdrop : (x.toBytes ++ y.toBytes).drop 32 = y.toBytes := by
-      rw [List.drop_append_of_le_length (by rw [Fp.length_toBytes]), List.drop_of_length_le (by rw [Fp.length_toBytes]),
-        List.nil_append]
-    simp only [decode, encodeUncompressed, encodeUncompressed_coords, List.toList_toArray, hlen,
-      hne, htake, hdrop, Fp.ofBytes_toBytes, hp, bind, Except.bind, ite_true, ite_false,
-      (by decide : ¬(64 : Nat) = 32)]
+  rw [decode, Sec1.decode_encode isSqrt_sqrt false hp, Base.ok_bind,
+    validatePublicKey_eq_ok hp hinf]
+  rfl
 
 /-- The decoder accepts exactly the encodings of the points other than `O`.
 
@@ -166,67 +68,36 @@ theorem decode_eq_ok_iff (bytes : ByteArray) (p : Point) :
       p.isOnCurve = true ∧ p ≠ infinity ∧ (bytes = p.encodeCompressed ∨ bytes = p.encodeUncompressed) := by
   constructor
   · intro h
-    unfold decode at h
-    cases hl : bytes.data.toList with
-    | nil => rw [hl] at h; cases h
-    | cons tag rest =>
-      rw [hl] at h
-      dsimp only at h
-      split_ifs at h with h0 h32 htag h64 h4
-      · -- Compressed: `x` read from the bytes, then the point with the parity of the prefix.
-        cases hx : Fp.ofBytes rest with
-        | error e => rw [hx] at h; cases h
-        | ok x =>
-          -- A rewrite, not a reduction, so the kernel never evaluates the square root.
-          rw [hx, Base.ok_bind] at h
-          obtain ⟨y, rfl, hc, hpar⟩ := decompress_eq_ok_iff.mp h
-          refine ⟨hc, by simp, Or.inl ?_⟩
-          -- The prefix is `02` for an even `y` and `03` for an odd one.
-          have hprefix : (if y.val % 2 = 0 then (0x02 : UInt8) else 0x03) = tag := by
-            rcases htag with rfl | rfl <;> rcases Nat.mod_two_eq_zero_or_one y.val with hy | hy <;>
-              simp only [hy] at hpar ⊢ <;> simp at hpar ⊢
-          rw [byteArray_eq hl, encodeCompressed, Fp.toBytes_of_ofBytes h32 hx, hprefix]
-      · -- Uncompressed: both coordinates, on the curve.
-        cases hx : Fp.ofBytes (rest.take 32) with
-        | error e => rw [hx] at h; cases h
-        | ok x =>
-          cases hy : Fp.ofBytes (rest.drop 32) with
-          | error e => rw [hx, hy] at h; cases h
-          | ok y =>
-            rw [hx, hy] at h
-            dsimp only [bind, Except.bind] at h
-            split at h
-            · rename_i hc
-              cases h
-              refine ⟨hc, by simp, Or.inr ?_⟩
-              rw [byteArray_eq hl, encodeUncompressed, encodeUncompressed_coords, h4,
-                Fp.toBytes_of_ofBytes (by simp [h64]) hx, Fp.toBytes_of_ofBytes (by simp [h64]) hy,
-                List.take_append_drop]
-            · cases h
-  · rintro ⟨hp, hinf, h | h⟩ <;> subst h
-    · exact decode_encodeCompressed hp hinf
-    · exact decode_encodeUncompressed hp hinf
+    rw [decode, Base.mapError_ok_iff] at h
+    cases hd : Sec1.decode sec1 bytes with
+    | error e => rw [hd] at h; cases h
+    | ok q =>
+      rw [hd, Base.ok_bind, Sec1.validatePublicKey_eq_ok_iff] at h
+      obtain ⟨rfl, hinf, hon, -⟩ := h
+      obtain ⟨-, c, hc⟩ := (Sec1.decode_eq_ok_iff isSqrt_sqrt).mp hd
+      refine ⟨hon, hinf, ?_⟩
+      cases c
+      · exact Or.inr hc
+      · exact Or.inl hc
+  · rintro ⟨hon, hinf, rfl | rfl⟩
+    · exact decode_encodeCompressed hon hinf
+    · exact decode_encodeUncompressed hon hinf
 
-theorem size_encodeCompressed (x y : Fp) : (affine x y).encodeCompressed.size = 33 := by
-  simp [encodeCompressed, ByteArray.size, Fp.length_toBytes]
+theorem size_encodeCompressed (x y : Fp) : (affine x y).encodeCompressed.size = 33 :=
+  Sec1.size_encode_true sec1 x y
 
-theorem size_encodeUncompressed (x y : Fp) : (affine x y).encodeUncompressed.size = 65 := by
-  simp [encodeUncompressed, encodeUncompressed_coords, ByteArray.size, Fp.length_toBytes]
+theorem size_encodeUncompressed (x y : Fp) : (affine x y).encodeUncompressed.size = 65 :=
+  Sec1.size_encode_false sec1 x y
 
 /-- `O`, encoded as the single byte `00`, is not a public key. -/
-theorem decode_infinity : decode infinity.encodeCompressed = .error .pointAtInfinity := rfl
+theorem decode_infinity : decode infinity.encodeCompressed = .error .pointAtInfinity := by
+  rw [decode, Sec1.decode_encode isSqrt_sqrt true rfl, Base.ok_bind]
+  rfl
 
 /-- An uncompressed pair off the curve is rejected. -/
 theorem decode_notOnCurve {x y : Fp} (h : (affine x y).isOnCurve = false) :
-    decode ⟨(0x04 :: x.toBytes ++ y.toBytes).toArray⟩ = .error .notOnCurve := by
-  have hlen : (x.toBytes ++ y.toBytes).length = 64 := by simp [Fp.length_toBytes]
-  have htake : (x.toBytes ++ y.toBytes).take 32 = x.toBytes := by
-    rw [List.take_append_of_le_length (by rw [Fp.length_toBytes]), List.take_of_length_le (by rw [Fp.length_toBytes])]
-  have hdrop : (x.toBytes ++ y.toBytes).drop 32 = y.toBytes := by
-    rw [List.drop_append_of_le_length (by rw [Fp.length_toBytes]), List.drop_of_length_le (by rw [Fp.length_toBytes]),
-      List.nil_append]
-  simp only [decode, List.cons_append, hlen, htake, hdrop, Fp.ofBytes_toBytes, h, bind,
-    Except.bind, (by decide : ¬(64 : Nat) = 32), ite_true, ite_false, Bool.false_eq_true]
+    decode (affine x y).encodeUncompressed = .error .notOnCurve := by
+  rw [decode, Sec1.decode_encode_false_of_isOnCurve_eq_false h]
   rfl
 
 end Point
