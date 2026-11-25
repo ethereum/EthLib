@@ -3639,13 +3639,13 @@ A store built from an anchor starts with none, by `Store.getForkchoiceStore_equi
 In the model an honest validator signs a vote only after checking it against its own votes in its view.
 Each of its votes in a sent message stays in its view, so no two of them can be slashed together.
 `Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
-`Execution.isSlashableAttestationData_honest` (`Consensus/Proofs/ForkChoice/HonestEquivocators.lean`) shows that, when slots last a positive time, no two votes of the same honest validator in sent messages can be slashed together.
-The check before signing is the last condition of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`), a rule on the votes in the validator's view.
+
+`Execution.isSlashableAttestationData_honest` (`Consensus/Proofs/ForkChoice/HonestEquivocators.lean`) proves that no two votes of one honest validator in sent messages can be slashed together, when slots last a positive time.
+The check before signing that gives it is the last condition of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`), a rule on the votes in the validator's view.
 `Votes` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`) requires an honest validator to send its assigned vote at each attestation deadline at or after both the start of the execution and the time `stable` that it takes.
-If that check forbids the vote required at such a deadline, the execution does not satisfy that duty.
-So no theorem that takes `Votes` covers that execution.
-This can happen after exits shrink the active set, or after an attester slashing empties the filtered tree: the vote required at such a deadline can then surround an earlier vote of the same validator, and the check of `MaySign` forbids it.
-The safety of the votes already sent does not assume the duty.
+The store of the validator fixes the data of that vote, and no theorem shows that the check of `MaySign` allows it.
+An execution in which the check forbids that vote at every event of such a deadline does not satisfy `Votes`, so no theorem that takes `Votes` covers it.
+`Execution.isSlashableAttestationData_honest` does not take `Votes`, so it holds for such an execution too.
 
 `Store.parentVotersOf` in `Consensus/Proofs/ForkChoice/FastConfirmation/Sets.lean` names the committee members whose recorded votes the discount for empty slots counts.
 They are active and not slashed in the source of balances, are not known equivocators, and vote for the pending parent node or the parent payload node that the child builds on.
@@ -4376,12 +4376,13 @@ The theorems are in `Consensus/Proofs/SlashingProtection.lean`.
 These theorems hold for every function that gives the signing root of a message.
 They assume only that every check of the signer passed.
 So a slashable pair of signed messages needs two different messages of one type with one signing root.
-If `computeSigningRoot` (`Consensus/Signing.lean`) succeeds for each of two slashable votes that the signer accepted for one key, and returns the root that the caller supplied for that vote in its domain, the pair gives a SHA-256 collision.
-A slashable pair is two different votes, by `isSlashableAttestationData_self` (`Consensus/Proofs/Transition/Block.lean`), so `computeSigningRoot_ne_or_collision` (`Consensus/Proofs/Signing.lean`) gives the collision, with `AttestationData.commitmentSized` (`Consensus/Proofs/Containers/Misc.lean`) for its size premises.
-No theorem states that composition, or shows that the signer implements the check of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`).
+Suppose one run of the signer accepted two slashable votes for one key, and the root that its caller supplied for each vote is the one that `computeSigningRoot` (`Consensus/Signing.lean`) returns for that vote in its domain.
+Then `signingRoot_eq_of_signAttestations` gives the two votes one signing root.
+They are different votes, by `isSlashableAttestationData_self` (`Consensus/Proofs/Transition/Block.lean`), so `computeSigningRoot_ne_or_collision` (`Consensus/Proofs/Signing.lean`) gives a SHA-256 collision, with `AttestationData.commitmentSized` (`Consensus/Proofs/Containers/Misc.lean`) for its size premises.
+No theorem states this argument, or shows that the signer implements the check of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`).
 
-When the node hash is a random oracle, `prEvent_signingRoot_le_two_pow` (`Consensus/Proofs/SigningRandomOracle.lean`) bounds the chance of finding such a pair whose counts fit their words, with the signing roots computed by the oracle.
-Since the signer compares the roots that its caller supplies, no theorem composes the signer theorems with this bound.
+When the node hash is a random oracle, `prEvent_signingRoot_le_two_pow` (`Consensus/Proofs/SigningRandomOracle.lean`) bounds the chance of finding two different messages of one type with one signing root whose counts fit their words, with the signing roots computed by the oracle.
+The signer takes its signing roots as an argument, so no theorem composes the signer theorems with this bound.
 Its adversary outputs two objects of one type, each with a domain, and the two domains may differ.
 `computeSigningRoot_eq_hashTreeRoot` (`Consensus/Proofs/Signing.lean`) shows that the signing root of an object of a lawful type is the root of one value.
 That value is the signing data with the object in place of its root.
