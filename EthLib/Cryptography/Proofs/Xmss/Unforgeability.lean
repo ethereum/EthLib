@@ -89,5 +89,5 @@ A second bound on the failure needs no hop.
 
 A failed request leaves in the cache `2^31` trials that all missed the code.
 
-So the variant game's bound is also `q / 2^127 + Q exp(-2000)`.
+So the variant game's bound is also at most `q / 2^127 + Q exp(-2000)`, below the bound above.
 -/

@@ -55,7 +55,7 @@ theorem prEvent_trialMiss :
 theorem toNat_zero_randomizer : (⟨0, 0⟩ : Randomizer).toNat = 0 := by
   simp [Hash.Keccak.Lanes2.toNat]
 
-/-- The trials below `2^31` of all blocks hash distinct inputs. -/
+/-- Two trials below `2^31` hash one input only when they are one trial of one block. -/
 theorem blockPoint_inj (block block' : PublicParam × Address × Array UInt64 × Fin (2 ^ 97))
     (j j' : ℕ) (hj : j < 2 ^ 31) (hj' : j' < 2 ^ 31)
     (h : blockPoint block j = blockPoint block' j') : block = block' ∧ j = j' := by
@@ -173,7 +173,7 @@ theorem trialInput_congr (publicParam : PublicParam) (layer : Layer) (e : UInt32
   simp only [trialInput, h]
 
 /-- A trial of the first `2^31` after `c` is in the window of `2^32`, when `c + 2^31 <= 2^32`. -/
-theorem lt_max_trials {c j : ℕ} (hc : c + 2 ^ 31 ≤ 2 ^ 32) (hj : j < 2 ^ 31) :
+theorem add_lt_max_randomizer_trials {c j : ℕ} (hc : c + 2 ^ 31 ≤ 2 ^ 32) (hj : j < 2 ^ 31) :
     c + j < MAX_RANDOMIZER_TRIALS := by
   have hmax : MAX_RANDOMIZER_TRIALS = 2 ^ 32 := by simp only [MAX_RANDOMIZER_TRIALS]
   omega
@@ -191,7 +191,7 @@ theorem missedBlock_of_findCodeword_none (publicParam : PublicParam) (layer : La
         TrialMiss u := by
   intro j hj
   obtain ⟨y, hy, hmiss⟩ := cached_of_findCodeword_none publicParam layer e msg base C hz hnone
-    (c + j) (lt_max_trials hc hj)
+    (c + j) (add_lt_max_randomizer_trials hc hj)
   rw [trialInput_congr publicParam layer e msg (hwin j hj)] at hy
   rw [blockPoint_eq_trialInput publicParam layer e msg hb j]
   exact ⟨y, hy, hmiss⟩
@@ -463,7 +463,7 @@ theorem failedSearch_of_mem_support_reasonRun (adversary : ReasonAdversary)
     (hz : z ∈ support ((simulateQ HashSpec.romImpl (reasonRun adversary)).run ∅))
     (h : SomeFailure z.1) :
     HashSig.FailedSearch blockPoint TrialMiss (2 ^ 31) z.2 := by
-  -- The lemma's hypothesis must match this one term for term, or a kernel replay runs the game.
+  -- The run must match the next lemma's hypothesis term for term, or the kernel replays the game.
   rw [reasonRun_eq_failGameOf] at hz
   exact failedSearch_of_mem_support_sampled _ _ adversary z hz h
 
@@ -505,31 +505,24 @@ theorem prEvent_failedBlock_le {α : Type} (oa : OracleComp OracleWorld α) {n :
     (fun p p' j j' hj hj' h => blockPoint_inj p p' j j' hj hj' h) _ ?_ oa n hcalls
   exact fun _ => le_rfl
 
-/-- With uniform digests, `2^31` trials all miss the code with probability below `exp(-2000)`.
+/-- `2^31` trials all miss the code with probability at most `exp(-2000)`, if one trial is uniform.
 
-`(1 - p)^(2^31) <= exp(-p)^(2^31) = exp(-2^31 p)`, and `2^31 p >= 2000`. -/
+All `2^32` trials miss with probability at most `exp(-4000)`, and this is its square root. -/
 theorem block_trials_fail_probability :
     (1 - (CODE_SIZE : ℝ) / 2 ^ 128) ^ (2 ^ 31) ≤ Real.exp (-2000) := by
-  -- One trial succeeds with probability `p = |C| / 2^128 = 2^-20.0045`.
-  set p : ℝ := (CODE_SIZE : ℝ) / 2 ^ 128
-  -- So `2^31` trials expect 2041.6 codewords.
-  have hmean : (2000 : ℝ) ≤ 2 ^ 31 * p := by
-    simp only [p, CODE_SIZE]
+  have hp : 0 ≤ 1 - (CODE_SIZE : ℝ) / 2 ^ 128 := by norm_num [CODE_SIZE]
+  have hall := all_trials_fail_probability
+  -- The `2^32` trials are two runs of `2^31`, and `exp(-4000)` is `exp(-2000)` squared.
+  have hmax : MAX_RANDOMIZER_TRIALS = 2 ^ 31 * 2 := by
+    simp only [MAX_RANDOMIZER_TRIALS]
     norm_num
-  have hp : 0 ≤ 1 - p := by
-    simp only [p, CODE_SIZE]
+  have hexp : Real.exp (-4000) = Real.exp (-2000) ^ 2 := by
+    rw [← Real.exp_nat_mul]
     norm_num
-  calc (1 - p) ^ (2 ^ 31)
-      ≤ Real.exp (-p) ^ (2 ^ 31) :=
-        pow_le_pow_left₀ hp (by linarith [Real.add_one_le_exp (-p)]) _
-    _ = Real.exp (-(2 ^ 31 * p)) := by
-        rw [← Real.exp_nat_mul]
-        congr 1
-        push_cast
-        ring
-    _ ≤ Real.exp (-2000) := Real.exp_le_exp.mpr (by linarith)
+  rw [hmax, pow_mul, hexp] at hall
+  exact (pow_le_pow_iff_left₀ (pow_nonneg hp _) (Real.exp_pos _).le two_ne_zero).1 hall
 
-/-- All `2^31` uniform trials of a block miss the code with probability below `exp(-2000)`. -/
+/-- All `2^31` uniform trials of a block miss the code with probability at most `exp(-2000)`. -/
 theorem trialMiss_pow_le_exp :
     (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ (2 ^ 31) ≤
       ENNReal.ofReal (Real.exp (-2000)) := by
@@ -581,7 +574,7 @@ theorem signingFailure_le_exp (adversary : ReasonAdversary) {qH r : ℕ}
 
 /-- **leanXMSS with a signer that reveals its reasons, with a failure term linear in `Q`.**
 
-It needs the adversary's reduction to the theorem's game to have a budget of `q >= 1` hash calls.
+It needs the adversary's reduction to the unforgeability game to make at most `q >= 1` hash calls.
 
 It also needs at most `qH` hash queries and `r` requests, which bound the game's hash calls by `Q`.
 
