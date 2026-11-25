@@ -17,12 +17,12 @@ namespace EthLib.Networking.Encoding.ByteReader
 open EthLib.Base
 
 /-- Reading as many bytes as a field holds returns that field and the bytes after it. -/
-@[simp] theorem bytes_append {ε : Type} (truncated : ε) (field rest : List UInt8) :
+@[simp] theorem bytes_append {ε : Type} (truncated : Nat → ε) (field rest : List UInt8) :
     bytes truncated field.length (field ++ rest) = .ok (field, rest) := by
   simp [bytes]
 
 /-- Reading as many bytes as an object holds returns that object and the bytes after it. -/
-@[simp] theorem vector_append {ε : Type} (truncated : ε) {n : Nat} (value : Vector UInt8 n)
+@[simp] theorem vector_append {ε : Type} (truncated : Nat → ε) {n : Nat} (value : Vector UInt8 n)
     (rest : List UInt8) : vector truncated n (value.toList ++ rest) = .ok (value, rest) := by
   have length : value.toList.length = n := by simp
   simp only [vector, ← length, bytes_append, bind, StateT.bind, Except.bind, StateT.lift,
@@ -30,7 +30,7 @@ open EthLib.Base
   rfl
 
 /-- Reading a written integer returns it modulo the field width, and the bytes after it. -/
-@[simp] theorem uint_encode {ε : Type} (truncated : ε) (n value : Nat) (rest : List UInt8) :
+@[simp] theorem uint_encode {ε : Type} (truncated : Nat → ε) (n value : Nat) (rest : List UInt8) :
     uint truncated n ((ByteOrder.toBE n value).toList ++ rest) = .ok (value % 256 ^ n, rest) := by
   simp [uint, bytes, ByteOrder.ofBE_toBE,
     StateT.bind, StateT.pure, bind, Except.bind, pure, Except.pure]
@@ -42,7 +42,7 @@ open EthLib.Base
   simp [require, holds]
 
 /-- A successful byte read consumes exactly the returned field. -/
-theorem bytes_ok_iff {ε : Type} (truncated : ε) (n : Nat)
+theorem bytes_ok_iff {ε : Type} (truncated : Nat → ε) (n : Nat)
     (input field rest : List UInt8) :
     bytes truncated n input = .ok (field, rest) ↔
       field.length = n ∧ input = field ++ rest := by
@@ -56,8 +56,28 @@ theorem bytes_ok_iff {ε : Type} (truncated : ε) (n : Nat)
   · rintro ⟨rfl, rfl⟩
     exact bytes_append truncated field rest
 
+/-- A byte read fails exactly when the input is shorter than the field.
+
+The error is then the one built from the count of bytes left. -/
+theorem bytes_error_iff {ε : Type} (truncated : Nat → ε) (n : Nat) (input : List UInt8)
+    (error : ε) :
+    bytes truncated n input = .error error ↔ input.length < n ∧ error = truncated input.length := by
+  simp only [bytes, List.length_take]
+  split
+  -- A field that is all there gives no error.
+  · simp only [reduceCtorEq, false_iff, not_and]
+    intro short
+    omega
+  -- A field cut short gives the error of the bytes left.
+  · constructor
+    · intro h
+      cases h
+      exact ⟨by omega, rfl⟩
+    · rintro ⟨-, rfl⟩
+      rfl
+
 /-- An object read succeeds exactly when the input is the bytes of the object, then the rest. -/
-theorem vector_ok_iff {ε : Type} (truncated : ε) {n : Nat} (input rest : List UInt8)
+theorem vector_ok_iff {ε : Type} (truncated : Nat → ε) {n : Nat} (input rest : List UInt8)
     (value : Vector UInt8 n) :
     vector truncated n input = .ok (value, rest) ↔ input = value.toList ++ rest := by
   constructor
@@ -67,7 +87,7 @@ theorem vector_ok_iff {ε : Type} (truncated : ε) {n : Nat} (input rest : List 
     | ok result =>
       obtain ⟨field, trailing⟩ := result
       obtain ⟨length, rfl⟩ := (bytes_ok_iff truncated n input field trailing).mp read
-      have made : exactArray field.length field.toArray (fun _ => truncated) =
+      have made : exactArray field.length field.toArray truncated =
           .ok ⟨field.toArray, by simp⟩ := exactArray_of_size_eq _ (by simp)
       subst length
       simp [vector, read, made, StateT.bind, StateT.lift, bind, Except.bind] at accepted
@@ -77,7 +97,7 @@ theorem vector_ok_iff {ε : Type} (truncated : ε) {n : Nat} (input rest : List 
     exact vector_append truncated value rest
 
 /-- A successful integer read consumes its unique encoding at the given width. -/
-theorem uint_ok_iff {ε : Type} (truncated : ε) (n value : Nat)
+theorem uint_ok_iff {ε : Type} (truncated : Nat → ε) (n value : Nat)
     (input rest : List UInt8) :
     uint truncated n input = .ok (value, rest) ↔
       value < 256 ^ n ∧ input = (ByteOrder.toBE n value).toList ++ rest := by

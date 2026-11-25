@@ -142,12 +142,12 @@ theorem encodeBody_finished_length (hashLength : Nat) (data : ByteArray)
 /-- The legacy version bytes read as `0x0303`. -/
 @[simp] theorem uint_legacy (rest : List UInt8) :
     uint 2 (3 :: 3 :: rest) = .ok (0x0303, rest) := by
-  exact uint_encode (Wire.Error.truncated 2 (3 :: 3 :: rest).length) 2 0x0303 rest
+  exact uint_encode (Wire.Error.truncated 2) 2 0x0303 rest
 
 /-- The compression vector reads back unchanged. -/
 @[simp] theorem bytes_compression (rest : List UInt8) :
     bytes 2 (1 :: 0 :: rest) = .ok ([1, 0], rest) := by
-  exact bytes_append (Wire.Error.truncated 2 (1 :: 0 :: rest).length) [1, 0] rest
+  exact bytes_append (Wire.Error.truncated 2) [1, 0] rest
 
 /-- Every successfully encoded message body recovers all fields with arbitrary trailing bytes. -/
 theorem readBody_encodeBody {hashLength : Nat} {message : Message} {body : List UInt8}
@@ -186,8 +186,7 @@ theorem readBody_encodeBody {hashLength : Nat} {message : Message} {body : List 
     have length := EthLib.Base.ensure_ok_iff.mp size
     have read : bytes data.size (data.data.toList ++ rest) =
         .ok (data.data.toList, rest) := by
-      exact bytes_append
-        (Wire.Error.truncated data.size (data.data.toList ++ rest).length) data.data.toList rest
+      exact bytes_append (Wire.Error.truncated data.size) data.data.toList rest
     simp [readBody, Message.type, ← length, read]
 
 /-- A successful frame always has a body within the uint24 bound. -/

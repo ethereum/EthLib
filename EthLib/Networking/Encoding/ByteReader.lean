@@ -9,6 +9,8 @@ public import EthLib.Base.Bytes
 A reader consumes a prefix of a byte list and returns the bytes after it.
 
 Each wire format supplies its own error type, and the error it reports for a truncated field.
+
+That error takes the count of bytes left, and is built only when a field is truncated.
 -/
 
 @[expose] public section
@@ -21,18 +23,19 @@ open EthLib.Base
 abbrev Reader (ε α : Type) := StateT (List UInt8) (Except ε) α
 
 /-- Read exactly `n` bytes, without padding a truncated field. -/
-def bytes {ε : Type} (truncated : ε) (n : Nat) : Reader ε (List UInt8) := fun input =>
+def bytes {ε : Type} (truncated : Nat → ε) (n : Nat) : Reader ε (List UInt8) := fun input =>
   let field := input.take n
-  if field.length = n then .ok (field, input.drop n) else .error truncated
+  -- Only a truncated field counts the bytes left, so a read costs its field, not the input.
+  if field.length = n then .ok (field, input.drop n) else .error (truncated input.length)
 
 /-- Read exactly `n` bytes as an object of `n` bytes, without padding a truncated field. -/
-def vector {ε : Type} (truncated : ε) (n : Nat) : Reader ε (Vector UInt8 n) := do
+def vector {ε : Type} (truncated : Nat → ε) (n : Nat) : Reader ε (Vector UInt8 n) := do
   let field ← bytes truncated n
   -- The read above returns exactly `n` bytes, so the length check never fails.
-  StateT.lift (exactArray n field.toArray fun _ => truncated)
+  StateT.lift (exactArray n field.toArray truncated)
 
 /-- Read a big-endian integer of the given byte width. -/
-def uint {ε : Type} (truncated : ε) (n : Nat) : Reader ε Nat := do
+def uint {ε : Type} (truncated : Nat → ε) (n : Nat) : Reader ε Nat := do
   return ByteOrder.ofBE (← bytes truncated n)
 
 /-- Reject a field that does not meet its format constraint, without consuming input. -/

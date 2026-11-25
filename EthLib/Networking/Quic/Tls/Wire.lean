@@ -65,13 +65,12 @@ abbrev require (condition : Prop) [Decidable condition] (error : Error) : Reader
   Encoding.ByteReader.require condition error
 
 /-- Read exactly `n` bytes, without padding an incomplete field. -/
-abbrev bytes (n : Nat) : Reader (List UInt8) := fun input =>
-  Encoding.ByteReader.bytes (.truncated n input.length) n input
+abbrev bytes (n : Nat) : Reader (List UInt8) := Encoding.ByteReader.bytes (.truncated n) n
 
 /-- Read a big-endian integer of the given width, RFC 9846 §3.3. -/
-abbrev uint (width : Nat) : Reader Nat := fun input =>
+abbrev uint (width : Nat) : Reader Nat :=
   -- §3.3: the given number of bytes, in network byte (big-endian) order.
-  Encoding.ByteReader.uint (.truncated width input.length) width input
+  Encoding.ByteReader.uint (.truncated width) width
 
 /-- A two-byte protocol identifier, without an algorithm-selection policy. -/
 abbrev CodePoint := Fin (2 ^ 16)
@@ -84,8 +83,7 @@ def codePoint : Reader CodePoint := do
   if h : n < 2 ^ 16 then return ⟨n, h⟩ else throw .length
 
 /-- Read a fixed-size byte vector. -/
-abbrev vector (n : Nat) : Reader (Vector UInt8 n) := fun input =>
-  Encoding.ByteReader.vector (.truncated n input.length) n input
+abbrev vector (n : Nat) : Reader (Vector UInt8 n) := Encoding.ByteReader.vector (.truncated n) n
 
 /-- Read a vector whose encoded byte length lies between the inclusive bounds (§3.4). -/
 def blob (width minimum maximum : Nat) : Reader (List UInt8) := do
