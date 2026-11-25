@@ -156,9 +156,9 @@ open scoped Classical in
 
 The trusted set is the active validators of the state at the checkpoint, weighed by its balances.
 
-It assumes large balances, and top-ups that fit within the period.
+It assumes large balances, without which the theorem gives nothing.
 
-Without them, the theorem gives nothing.
+The model has no top-up, which raises the balance of a validator that already exists.
 
 Take two finalized checkpoints whose blocks conflict, and each justified checkpoint between them.
 
@@ -186,29 +186,10 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
     (ht : t = total.toNat / N / ETH_TO_GWEI.toNat)
     -- The largest balance `T` is in ether.
     (hT : T = preset.MAX_EFFECTIVE_BALANCE.toNat / ETH_TO_GWEI.toNat)
-    -- Assume large balances, `230 T < 320 t`, so that the rule weighs churn against top-ups.
+    -- Assume large balances, `230 T < 320 t`, where the rule takes its epochs for churn.
     --
     -- With large balances, the epochs that the rule gives for churn always fit the decayed margin.
     (largeBalances : 230 * T < 320 * t)
-    -- The rule takes the churn of `delta` validators in an epoch, and `Delta` top-ups in an epoch.
-    --
-    -- A top-up raises the balance of a validator that already exists.
-    --
-    -- The model has no such change.
-    --
-    -- The rule takes the longer of its epochs for churn and for top-ups.
-    --
-    -- So the top-ups must fit too.
-    --
-    -- Assume its epochs for top-ups move at most `N t / 20` ether at the churn of validators.
-    --
-    -- When they do not, or with small balances, the period can exceed what the churn allows.
-    --
-    -- Then the theorem gives nothing.
-    --
-    -- A model with top-ups would be needed.
-    (topUps : 20 * (230 * N / (600 * (preset.MAX_DEPOSITS.toNat * preset.SLOTS_PER_EPOCH.toNat)) *
-      (getValidatorChurnLimit config state).toNat * T) ≤ N * t)
     {V : Models.Ffg.Checkpoint β → Finset ValidatorIndex} {genesis : β}
     {votes : Set (Vote ValidatorIndex β)} {c₁ c₂ : Models.Ffg.Checkpoint β}
     -- Take a finalized checkpoint.
@@ -264,7 +245,7 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
     state.validators.bound (Nat.lt_trans before (by decide))
   simp only [computeWeakSubjectivityPeriod, notGloas, notElectra, ↓reduceIte,
     computeWeakSubjectivityPeriodPhase0, bind_ok_iff, mapError_ok_iff] at periodOk
-  obtain ⟨total', totalOk', average, averageOk, Delta, DeltaOk, epochs, epochsOk, periodOk⟩ :=
+  obtain ⟨total', totalOk', average, averageOk, _, _, epochs, epochsOk, periodOk⟩ :=
     periodOk
   rw [totalOk, Except.ok.injEq] at totalOk'
   subst totalOk'
@@ -276,8 +257,6 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
     rw [UInt64.toNat_div, hAverage, hNat, ht]
   have hT' : (preset.MAX_EFFECTIVE_BALANCE / ETH_TO_GWEI).toNat = T := by
     rw [UInt64.toNat_div, hT]
-  have hDelta : Delta.toNat = preset.MAX_DEPOSITS.toNat * preset.SLOTS_PER_EPOCH.toNat :=
-    (mulChecked_ok_iff.mp DeltaOk).2
   have hEpochs :
       period.toNat - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat = epochs.toNat := by
     rw [(addChecked_ok_iff.mp periodOk).2]
@@ -301,8 +280,8 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
     rw [ht, hT]
     exact Nat.div_le_div_right (Nat.div_le_of_le_mul activeLe)
   have fit := churn_le_of_phase0PeriodEpochs_eq_ok epochsOk
-  rw [hNat, ht', hT', hDelta] at fit
-  have fit := fit largeBalances averageLe topUps
+  rw [hNat, ht', hT'] at fit
+  have fit := fit largeBalances averageLe
   -- Each justified set changes by at most `3 n δ` largest balances.
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, bound⟩ :=
     accountable_safety_of_change h₁ h₂ hc

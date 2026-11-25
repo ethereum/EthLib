@@ -3517,11 +3517,13 @@ The rule counts `N` active validators of average balance `t` ether, rounded down
 The theorem assumes each justified set gains and loses at most `delta` validators for each of the `n` epochs of churn, with `delta` the churn at the checkpoint.
 It also assumes every effective balance at most `T`, with `T` a whole number of ether.
 With large balances, `230 T < 320 t`, the rule's epochs for churn always satisfy `20 n delta T ≤ N t`, and so keep the margin.
-`churn_le_of_phase0PeriodEpochs_eq_ok` gives that inequality for the epochs of the rule.
-The rule takes the longer of those and its epochs for top-ups, so the theorem also assumes that the epochs for top-ups satisfy the same inequality.
-Top-ups change a balance, which the model leaves out, and in the model a longer period only allows more churn.
-The rule does not imply that hypothesis: with `N = 2^23` validators of 32 ether, `delta = 128` and `Delta = 512`, the rule takes 6280 epochs for top-ups, while the churn allows 3276.
+`churn_le_of_phase0PeriodEpochs_eq_ok` gives that inequality for the epochs of the rule, so the theorem needs no assumption on top-ups.
+Top-ups change a balance, which the model leaves out.
+EthLib differs from the source here, which takes the longer of the epochs for churn and the epochs for top-ups ([consensus-specs#5866](https://github.com/ethereum/consensus-specs/issues/5866)).
+A top-up only speeds an attack, and a validator at the largest balance needs none, so the longer of the two can exceed the time of an attack.
+With `N = 2^23` validators of 32 ether, `delta = 128` and `Delta = 512`, the source takes 6280 epochs for top-ups, while the churn allows 3276.
 Over 6280 epochs, the churn of validators alone lowers the bound of Gasper Theorem 8.3 to about 14% of the stake.
+EthLib takes the epochs for churn alone, which are the same wherever they are the longer, as in every row of the Phase 0 table of the source.
 With small balances, `230 T ≥ 320 t`, no theorem relates the period to the margin.
 The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
 

@@ -1069,6 +1069,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `phase0PeriodEpochs` (`Consensus/WeakSubjectivity.lean`), and so the Phase 0 to Deneb weak subjectivity period, takes the epochs for the churn of validators alone when balances are large, no longer the longer of those and the epochs for top-ups ([consensus-specs#5866](https://github.com/ethereum/consensus-specs/issues/5866)).
+  The period is shorter only where the epochs for top-ups were the longer, for instance beyond about 4.39 million validators of 32 ether.
+  `phase0PeriodEpochs_eq_ok` gives the new closed form, and `churn_le_of_phase0PeriodEpochs_eq_ok` and `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` lose their hypothesis on the top-ups.
 - In Lean, a builder may have several bids forwarded for one slot and parent, up to a limit that its balance sets ([#3512](https://github.com/ethereum/EthLib/issues/3512)).
   - `Consensus.getBuilderBidLimit` (`Consensus/Gossip/Bid.lean`) is new: the balance that the builder does not owe, in whole ether.
   - `Seen.executionPayloadBidCount` counts the valid bids of a key, and a valid bid adds one (`executionPayloadBidCount_recordExecutionPayloadBid`).
