@@ -22,13 +22,6 @@ namespace EthLib.Cryptography.Hash.Keccak
 open OracleComp OracleSpec ENNReal EthLib.Cryptography.LazyPermutation
   EthLib.Cryptography.Indifferentiability
 
-/-- Keccak-256 with the permutation `f` in place of Keccak-f[1600]. -/
-def keccak256With (f : State → State) (msg : ByteArray) : Vector UInt8 DIGEST_LEN_256 :=
-  Internal.squeeze256 (Internal.spongeAbsorb f RATE_256 msg.size (Internal.laneAt msg))
-
-/-- With Keccak-f[1600], it is Keccak-256. -/
-theorem keccak256With_keccakF : keccak256With keccakF = keccak256 := rfl
-
 /-- The cost of a Keccak-256 call: one permutation call for each block of the padded message. -/
 def keccak256Cost (msg : ByteArray) : ℕ :=
   -- A hash call on `len` bytes costs `len / 136 + 1` permutation calls.
@@ -64,7 +57,8 @@ EthLib does not prove it.
 
 Theorems that use it take it as an argument. -/
 def Keccak256Indifferentiable : Prop :=
-  Indifferentiable keccak256With keccak256Cost (spongeBound 1088 512)
+  Indifferentiable (fun π msg => Id.run (keccak256With (fun S => pure (π S)) msg)) keccak256Cost
+    (spongeBound 1088 512)
 
 /-- **The hypothesis from the exact term of Bertoni et al.**
 
@@ -74,7 +68,8 @@ Their Theorem 2 allows every bound above that term, for a cost below `2^c`.
 
 The closed form bounds the exact term, so the hypothesis follows. -/
 theorem keccak256Indifferentiable_of_spongeExact
-    (h : Indifferentiable keccak256With keccak256Cost (spongeExact 1088 512)) :
+    (h : Indifferentiable (fun π msg => Id.run (keccak256With (fun S => pure (π S)) msg))
+      keccak256Cost (spongeExact 1088 512)) :
     Keccak256Indifferentiable :=
   indifferentiable_spongeBound h
 
@@ -95,7 +90,8 @@ theorem keccak256_realProb_le (h : Keccak256Indifferentiable)
     (hδ : ∀ (σ : Type) (s₀ : σ) (S : QueryImpl (PermSpec State)
       (StateT σ (OracleComp (RomSpec ByteArray (Vector UInt8 DIGEST_LEN_256))))),
       AsksOnce S → romProb (romGame S s₀ game) ≤ δ) :
-    realProb keccak256With game ≤ δ + spongeBound 1088 512 N :=
+    realProb (fun π msg => Id.run (keccak256With (fun S => pure (π S)) msg)) game ≤
+      δ + spongeBound 1088 512 N :=
   -- The image then asks the random oracle at most `N` times, by the theorem on its calls.
   realProb_le_of_romProb_le h hN hδ
 

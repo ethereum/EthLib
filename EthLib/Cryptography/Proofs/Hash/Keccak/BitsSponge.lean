@@ -216,15 +216,16 @@ theorem absorbBlock_ofLanes {rate : Nat} (hlanes : 8 ∣ rate)
 /-- Absorbing `n` blocks of `rate` bytes from byte `start` is absorbing their bits in order. -/
 theorem absorbBlocks_ofLanes {rate : Nat} (hlanes : 8 ∣ rate)
     (bytes : ByteArray) (n start : Nat) (a : Keccak.State) :
-    ofLanes (Keccak.Internal.absorbBlocks Keccak.keccakF rate (Keccak.Internal.laneAt bytes) n
-      start a) =
+    ofLanes (Id.run (Keccak.Internal.absorbBlocks (fun S => pure (Keccak.keccakF S)) rate
+      (Keccak.Internal.laneAt bytes) n start a)) =
       (List.range n).foldl
         (fun s j => permutation (absorb s (blockBits rate bytes (start + rate * j))))
         (ofLanes a) := by
   induction n generalizing start a with
   | zero => rfl
   | succ n ih =>
-    rw [Keccak.Internal.absorbBlocks, ih, permutation_ofLanes, absorbBlock_ofLanes hlanes,
+    rw [Keccak.Internal.absorbBlocks, Id.run_bind, Id.run_pure, ih, permutation_ofLanes,
+      absorbBlock_ofLanes hlanes,
       List.range_succ_eq_map, List.foldl_cons, List.foldl_map]
     simp only [Nat.mul_zero, Nat.add_zero, Nat.succ_eq_add_one, Nat.mul_add, Nat.mul_one,
       Nat.add_assoc, Nat.add_comm rate]
@@ -263,8 +264,8 @@ theorem paddedBlock_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray)
 
 /-- The lane sponge at `rate` bytes absorbs every message to the state of the bit model. -/
 theorem absorbAll_eq {rate : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate) (msg : ByteArray) :
-    ofLanes (Keccak.Internal.spongeAbsorb Keccak.keccakF rate msg.size
-        (Keccak.Internal.laneAt msg)) =
+    ofLanes (Id.run (Keccak.Internal.spongeAbsorb (fun S => pure (Keccak.keccakF S)) rate
+        msg.size (Keccak.Internal.laneAt msg))) =
       absorbAll (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) msg := by
   have zero : ofLanes Keccak.State.zero = (fun _ _ _ => false) := by
     funext x y z
@@ -386,13 +387,15 @@ theorem sponge_eq_of_squeeze {rate outBytes : Nat} (hr : 0 < rate) (hlanes : 8 �
     (hout : outBytes ≤ rate) (sq : Keccak.State → Vector UInt8 outBytes)
     (hsq : ∀ (a : Keccak.State) (i : Fin outBytes), (sq a)[i] = outputByte (ofLanes a) i.val)
     (msg : ByteArray) :
-    sq (Keccak.Internal.spongeAbsorb Keccak.keccakF rate msg.size (Keccak.Internal.laneAt msg)) =
+    sq (Id.run (Keccak.Internal.spongeAbsorb (fun S => pure (Keccak.keccakF S)) rate msg.size
+      (Keccak.Internal.laneAt msg))) =
       sponge (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) (Nat.mul_le_mul_left 8 hout)
         msg := by
   apply Vector.ext
   intro i hi
   have out := hsq
-    (Keccak.Internal.spongeAbsorb Keccak.keccakF rate msg.size (Keccak.Internal.laneAt msg))
+    (Id.run (Keccak.Internal.spongeAbsorb (fun S => pure (Keccak.keccakF S)) rate msg.size
+      (Keccak.Internal.laneAt msg)))
     ⟨i, hi⟩
   simp only [Fin.getElem_fin, absorbAll_eq hr hlanes] at out
   simpa only [sponge, squeezeBytes, Vector.getElem_ofFn] using out

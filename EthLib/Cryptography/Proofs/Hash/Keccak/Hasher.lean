@@ -37,8 +37,8 @@ theorem absorbBlock_congr {rate : Nat} (lanes : 8 ∣ rate) (S : State) {a b : B
   simp only [absorbBlock, hlane]
 
 /-- Absorbing `n` blocks reads only their `rate * n` bytes. -/
-theorem absorbBlocks_congr (f : State → State) {rate : Nat} (lanes : 8 ∣ rate) (n : Nat)
-    (S : State) {a b : ByteArray} {s t : Nat}
+theorem absorbBlocks_congr {m : Type → Type} [Monad m] (f : State → m State) {rate : Nat}
+    (lanes : 8 ∣ rate) (n : Nat) (S : State) {a b : ByteArray} {s t : Nat}
     (h : ∀ j < rate * n, byteAtOrZero a (s + j) = byteAtOrZero b (t + j)) :
     absorbBlocks f rate (laneAt a) n s S = absorbBlocks f rate (laneAt b) n t S := by
   induction n generalizing s t S with
@@ -46,7 +46,7 @@ theorem absorbBlocks_congr (f : State → State) {rate : Nat} (lanes : 8 ∣ rat
   | succ n ih =>
     rw [absorbBlocks, absorbBlocks,
       absorbBlock_congr lanes S (fun j hj => h j (by rw [Nat.mul_succ]; omega))]
-    apply ih
+    refine congrArg _ (funext fun T => ih T ?_)
     intro j hj
     rw [Nat.add_assoc, Nat.add_assoc, Nat.add_comm rate j]
     exact h _ (by rw [Nat.mul_succ]; omega)
@@ -114,12 +114,15 @@ theorem absorb_absorb (h : Hasher256) (a b : ByteArray) :
   rw [hcount]
   congr 1
   · -- The first `q` blocks lie inside the first piece, and the next `n` follow them.
-    have hfirst : absorbBlocks keccakF RATE_256 (laneAt bytes) q 0 h.state
-        = absorbBlocks keccakF RATE_256 (laneAt (bytes ++ b)) q 0 h.state :=
-      absorbBlocks_congr _ lanes_rate _ _ fun j hj => by
-        rw [Nat.zero_add, byteAtOrZero_append, ite_eq_left (by omega)]
-    rw [absorbBlocks_add, Nat.zero_add, hfirst]
-    exact absorbBlocks_congr _ lanes_rate _ _ fun j _ => by rw [Nat.zero_add, hrest]
+    have hfirst : Id.run (absorbBlocks (fun S => pure (keccakF S)) RATE_256 (laneAt bytes) q 0
+          h.state)
+        = Id.run (absorbBlocks (fun S => pure (keccakF S)) RATE_256 (laneAt (bytes ++ b)) q 0
+          h.state) :=
+      congrArg Id.run (absorbBlocks_congr _ lanes_rate _ _ fun j hj => by
+        rw [Nat.zero_add, byteAtOrZero_append, ite_eq_left (by omega)])
+    rw [absorbBlocks_add, Id.run_bind, Nat.zero_add, hfirst]
+    exact congrArg Id.run
+      (absorbBlocks_congr _ lanes_rate _ _ fun j _ => by rw [Nat.zero_add, hrest])
   · -- Both keep the bytes after the last whole block.
     apply eq_of_byteAtOrZero
     · simp only [ByteArray.size_extract, Nat.min_self, hsize, Nat.mul_add]
@@ -144,12 +147,15 @@ theorem digest_absorb_empty (msg : ByteArray) :
     have := Nat.div_add_mod msg.size RATE_256
     omega
   -- The whole blocks lie inside the message.
-  have hfirst : absorbBlocks keccakF RATE_256 (laneAt msg) q 0 State.zero
-      = absorbBlocks keccakF RATE_256 (laneAt (pad RATE_256 msg)) q 0 State.zero :=
-    (absorbBlocks_pad keccakF RATE_256 msg q 0 State.zero (by rw [Nat.zero_add]; exact hle)).symm
-  rw [hpend, padding_mod, absorbBlocks_add, Nat.zero_add, hfirst]
+  have hfirst : Id.run (absorbBlocks (fun S => pure (keccakF S)) RATE_256 (laneAt msg) q 0
+        State.zero)
+      = Id.run (absorbBlocks (fun S => pure (keccakF S)) RATE_256 (laneAt (pad RATE_256 msg)) q 0
+        State.zero) :=
+    congrArg Id.run (absorbBlocks_pad _ RATE_256 msg q 0 State.zero
+      (by rw [Nat.zero_add]; exact hle)).symm
+  rw [hpend, padding_mod, absorbBlocks_add, Id.run_bind, Nat.zero_add, hfirst]
   -- The last block is the bytes after them, then the padding.
-  refine congrArg squeeze256 (absorbBlocks_congr _ lanes_rate _ _ fun j _ => ?_)
+  refine congrArg squeeze256 (congrArg Id.run (absorbBlocks_congr _ lanes_rate _ _ fun j _ => ?_))
   rw [pad, byteAtOrZero_append, byteAtOrZero_append, ByteArray.size_extract, Nat.min_self, byteAtOrZero_extract,
     Nat.min_self, Nat.zero_add]
   by_cases hj : RATE_256 * q + j < msg.size

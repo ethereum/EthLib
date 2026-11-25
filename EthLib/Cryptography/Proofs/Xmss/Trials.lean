@@ -31,10 +31,11 @@ theorem keccakTrials_eq : keccakTrials = hashTrials hashId := by
     simp only [hashTrials, Trials.mk.injEq]
     funext rho
     -- The state of the whole input is the state of the fixed lanes, with the two lanes XORed in.
-    have key : stateBeforeLastPermutation keccakF RATE_256 (8 * (before ++ rho.toArray).size)
-        (laneOfArray (before ++ rho.toArray)) =
-        ((stateBeforeLastPermutation keccakF RATE_256 (8 * (before.size + 2))
-          (laneOfArray before)).xorLane ((8 * before.size) % RATE_256 / 8 + 1) rho.hi).xorLane
+    have key : Id.run (stateBeforeLastPermutation (fun S => pure (keccakF S)) RATE_256
+        (8 * (before ++ rho.toArray).size) (laneOfArray (before ++ rho.toArray))) =
+        ((Id.run (stateBeforeLastPermutation (fun S => pure (keccakF S)) RATE_256
+          (8 * (before.size + 2)) (laneOfArray before))).xorLane
+            ((8 * before.size) % RATE_256 / 8 + 1) rho.hi).xorLane
           ((8 * before.size) % RATE_256 / 8) rho.lo := by
       have hsize : (before ++ rho.toArray).size = before.size + 2 := by
         simp [Hash.Keccak.Lanes2.toArray]
@@ -46,13 +47,14 @@ theorem keccakTrials_eq : keccakTrials = hashTrials hashId := by
           _ ⟨before.size + 1, rfl⟩ (by simp only [RATE_256] at hlast ⊢; omega),
         Hash.Keccak.stateBeforeLastPermutation_xorLane _ (by decide) Hash.Keccak.lanes_rate _ _ _
           _ ⟨before.size, rfl⟩ (by simp only [RATE_256] at hlast ⊢; omega),
-        Hash.Keccak.State.xorLane_comm]
+        Id.run_map, Id.run_map, Hash.Keccak.State.xorLane_comm]
       congr 2
       simp only [RATE_256] at hlast ⊢
       omega
     show _ = (pure (codeword? (halfOf 0 (hash (before ++ rho.toArray)))) : Id _)
-    simp only [hash, Hash.Keccak.keccak256Lanes, Hash.Keccak.Internal.keccak256Read,
-      Hash.Keccak.Internal.spongeAbsorb, key]
+    simp only [hash, Hash.Keccak.keccak256Lanes, Hash.Keccak.keccak256LanesWith,
+      Hash.Keccak.Internal.keccak256Read, Hash.Keccak.Internal.spongeAbsorb, Id.run_map,
+      Id.run_bind, key]
     rfl
   · rfl
 

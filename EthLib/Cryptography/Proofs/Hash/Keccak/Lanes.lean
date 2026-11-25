@@ -351,23 +351,32 @@ theorem laneOfArray_append_two (before : Array UInt64) (lo hi : UInt64) (q : Nat
 
 /-- Keccak-256 of a message read a lane at a time is Keccak-256 of the message.
 
-The reader gives the message's lanes at every multiple of 8, as reading the bytes does. -/
-theorem keccak256Read_eq (msg : ByteArray) (read : Nat → UInt64)
-    (h : ∀ q, 8 ∣ q → read q = laneAt msg q) :
-    (keccak256Read msg.size read).bytes = keccak256 msg := by
-  rw [keccak256, keccak256Read, keccak256Read]
+The reader gives the message's lanes at every multiple of 8, as reading the bytes does.
+
+It holds over every permutation, in every monad. -/
+theorem keccak256Read_eq_keccak256With {m : Type → Type} [Monad m] (f : State → m State)
+    (msg : ByteArray) (read : Nat → UInt64) (h : ∀ q, 8 ∣ q → read q = laneAt msg q) :
+    Lanes4.bytes <$> keccak256Read f msg.size read = keccak256With f msg := by
+  rw [keccak256With, keccak256Read, keccak256Read]
   unfold spongeAbsorb
-  rw [stateBeforeLastPermutation_congr keccakF lanes_rate msg.size h]
+  rw [stateBeforeLastPermutation_congr f lanes_rate msg.size h]
+  rfl
+
+/-- Keccak-256 of a string of lanes is Keccak-256 of its bytes, over every permutation. -/
+theorem keccak256LanesWith_lanesBytes {m : Type → Type} [Monad m] (f : State → m State)
+    (a : Array UInt64) :
+    Lanes4.bytes <$> keccak256LanesWith f a = keccak256With f ⟨(lanesBytes a).toArray⟩ := by
+  have hsize : (ByteArray.mk (lanesBytes a).toArray).size = 8 * a.size := by
+    simp [ByteArray.size]
+  rw [keccak256LanesWith, ← hsize]
+  refine keccak256Read_eq_keccak256With f _ _ fun q hq => ?_
+  obtain ⟨j, rfl⟩ := hq
+  exact (laneAt_lanesBytes a j).symm
 
 /-- Keccak-256 of a string of lanes is Keccak-256 of its bytes. -/
 theorem keccak256Lanes_lanesBytes (a : Array UInt64) :
-    (keccak256Lanes a).bytes = keccak256 ⟨(lanesBytes a).toArray⟩ := by
-  have hsize : (ByteArray.mk (lanesBytes a).toArray).size = 8 * a.size := by
-    simp [ByteArray.size]
-  rw [keccak256Lanes, ← hsize]
-  refine keccak256Read_eq _ _ fun q hq => ?_
-  obtain ⟨j, rfl⟩ := hq
-  exact (laneAt_lanesBytes a j).symm
+    (keccak256Lanes a).bytes = keccak256 ⟨(lanesBytes a).toArray⟩ :=
+  congrArg Id.run (keccak256LanesWith_lanesBytes (m := Id) (fun S => pure (keccakF S)) a)
 
 /-! ## The values of two lanes -/
 
