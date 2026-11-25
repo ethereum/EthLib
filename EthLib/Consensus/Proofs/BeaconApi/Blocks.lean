@@ -279,28 +279,6 @@ theorem selectHeaders_mem {headers : List SignedBeaconBlockHeader} {slot : Optio
   · rintro parent rfl
     exact (by simpa using parentOk : parent = header.message.parentRoot).symm
 
-/-- Each output of a successful map comes from an input. -/
-private theorem exists_of_mapM_ok {α β ε : Type} {f : α → Except ε β} :
-    ∀ {xs : List α} {ys : List β}, xs.mapM f = .ok ys → ∀ y ∈ ys, ∃ x ∈ xs, f x = .ok y
-  | [], ys, computed, y, mem => by
-    simp [List.mapM_nil, pure, Except.pure] at computed
-    subst computed
-    simp at mem
-  | x :: xs, ys, computed, y, mem => by
-    rw [List.mapM_cons] at computed
-    cases fx : f x with
-    | error e => simp [fx, bind, Except.bind] at computed
-    | ok b =>
-      cases rest : xs.mapM f with
-      | error e => simp [fx, rest, bind, Except.bind] at computed
-      | ok bs =>
-        simp [fx, rest, bind, Except.bind, pure, Except.pure] at computed
-        subst computed
-        rcases List.mem_cons.1 mem with rfl | inRest
-        · exact ⟨x, List.mem_cons_self .., fx⟩
-        · obtain ⟨x', inXs, found⟩ := exists_of_mapM_ok rest y inRest
-          exact ⟨x', List.mem_cons_of_mem _ inXs, found⟩
-
 /-- Each entry of the headers answer is the answer for a held header that matches the filters. -/
 theorem headersOf_mem {config : Config} {store : Store preset fork}
     {headers : List SignedBeaconBlockHeader} {slot : Option Slot} {parentRoot : Option Root}
@@ -315,7 +293,7 @@ theorem headersOf_mem {config : Config} {store : Store preset fork}
   | error e => simp [chosen, bind, Except.bind] at computed
   | ok slot' =>
     simp only [chosen, bind, Except.bind] at computed
-    obtain ⟨header, selected, answered⟩ := exists_of_mapM_ok computed response mem
+    obtain ⟨header, selected, answered⟩ := mapM_ok_mem computed response mem
     obtain ⟨held, slotOk, parentOk⟩ := selectHeaders_mem selected
     refine ⟨header, held, answered, ?_, parentOk⟩
     rintro s rfl

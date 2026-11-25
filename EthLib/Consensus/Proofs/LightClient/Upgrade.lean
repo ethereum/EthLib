@@ -46,22 +46,6 @@ theorem LightClientHeader.toGloas_beacon {config : Config} {post : Fork}
     | (cases computed; done)
     | (cases computed; rfl)
 
-/-- Nodes that convert to 32-byte vectors are the bytes of those vectors. -/
-private theorem mapM_toChunk_eq_map :
-    ∀ {nodes : List Bytes} {chunks : List Bytes32},
-    nodes.mapM toChunk = .ok chunks → nodes = chunks.map fun node => ⟨node.toArray⟩
-  | [], chunks, built => by
-    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at built
-    subst built
-    rfl
-  | node :: rest, chunks, built => by
-    simp only [List.mapM_cons, Base.bind_ok_iff] at built
-    obtain ⟨chunk, converted, tail, restBuilt, done⟩ := built
-    simp only [pure, Except.pure, Except.ok.injEq] at done
-    subst done
-    have same : node = ⟨chunk.toArray⟩ := toChunk_ok_iff.mp converted
-    rw [List.map_cons, same, mapM_toChunk_eq_map restBuilt]
-
 /-- A branch vector holds the list it was made from. -/
 theorem branchVector_toList {depth : Nat} {branch : List Bytes32}
     {vector : Vector Bytes32 depth} (made : branchVector depth branch = .ok vector) :
@@ -187,7 +171,8 @@ private theorem computeMerkleProof_append {α : Type} [SszType α] (value : α)
   -- The proof is the built branch, each node read back as a vector.
   have same : nodes = proof.map fun node => ⟨node.toArray⟩ := by
     simp only [computeMerkleProof, built, bind, Except.bind] at proved
-    exact mapM_toChunk_eq_map proved
+    simpa using (map_of_mapM_ok (p := fun node : Bytes32 => (⟨node.toArray⟩ : Bytes)) (q := id)
+      (fun _ _ step => (toChunk_ok_iff.mp step).symm) proved).symm
   subst same
   apply isValidNormalizedMerkleBranch_of_verify deep
   rw [List.map_append]
