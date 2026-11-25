@@ -2677,7 +2677,9 @@ On eth, the message must have a form of the version that reads it.
 On snap, the version must use its ID.
 Each transaction, header or access list that the message holds must keep the bytes of its own encoding.
 `Message.eq_of_encode_eq` and `SnapMessage.eq_of_encode_eq` state that two such messages with one ID and one encoding are equal.
-No theorem says anything about a sequence of frames beyond one step, or about timeouts.
+`readFrames_writeFrames` (`Networking/Proofs/Exports/Rlpx.lean`) states that a reader in step with the writer reads back the data of a whole stream of frames, in order.
+After an honest handshake, `readFrames_of_respond_initiator` and `readFrames_of_respond_recipient` apply it to each direction of the session.
+No theorem says anything about timeouts.
 
 The source leaves three points open, and the session reads them as follows.
 It reads a Disconnect sent instead of Hello uncompressed, as it reads Hello, though "All messages following Hello are compressed" could be read otherwise.
