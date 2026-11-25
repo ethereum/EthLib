@@ -97,6 +97,13 @@ theorem verifyWith_run {pk : PublicKey} {m : Message} {sig : Signature} :
     -- The two sides decide the same equality, one inside `some`.
     | some root => simp
 
+/-- `Ver(pk, m, sigma)` is the verifier over a hash, at Keccak-256 in the identity monad.
+
+So every theorem proved for any hash applies to the deployed verifier. -/
+theorem verify_eq_verifyWith (pk : PublicKey) (m : Message) (sig : Signature) :
+    verify pk m sig = (verifyWith hashId pk m sig).run :=
+  rfl
+
 /-! ## Acceptance -/
 
 /-- Acceptance, unfolded.
@@ -122,11 +129,11 @@ theorem verify_of_layerRoot_none {pk : PublicKey} {m : Message} {sig : Signature
   rw [verifyWith_run, h]
   simp
 
-/-! ## Verifying in pieces
+/-! ## A layer in pieces
 
-A known answer evaluates the verifier hash by hash.
+A layer's root is stated through its codeword, its chain ends, its leaf and its path.
 
-These lemmas let each piece be checked on its own, with its value stated. -/
+So a proof that computes each piece, such as a circuit's, reaches the root by rewriting. -/
 
 /-- Chain `i` walked from the position its digit names to position 3. -/
 def chainEnd (f : Array UInt64 → Lanes4) (publicParam : PublicParam) (layer : Layer) (e : UInt32)
@@ -135,7 +142,49 @@ def chainEnd (f : Array UInt64 → Lanes4) (publicParam : PublicParam) (layer : 
     (by have := x[i].isLt; omega)
     y[i]).run
 
-/-- A layer's root, from its codeword, its chain ends, its leaf and its path. -/
+/-- A chain end is the chain walked from its digit, for the step count that reaches position 3.
+
+A circuit fixes the count from the digit: `3 - x_i` steps. -/
+theorem chainEnd_eq_chain {publicParam : PublicParam} {layer : Layer} {e : UInt32}
+    {x : Vector (Fin CHAIN_LENGTH) V} {y : Vector Digest V} {i : Fin V} {k : Nat}
+    (hk : (x[i] : Nat) + k = CHAIN_LENGTH - 1) :
+    chainEnd f publicParam layer e x y i
+      = (chain (pureHash f) publicParam layer e i x[i] k (by simp only [CHAIN_LENGTH] at *; omega)
+          y[i]).run := by
+  -- Both walks start at the digit, and their step counts agree.
+  unfold chainEnd
+  congr 2
+  omega
+
+/-- A layer reaches a root exactly when its digest is a codeword and the path leads its leaf there.
+
+The leaf is the hash of the chains walked from the codeword's digits to their ends. -/
+theorem layerRoot_eq_some_iff {publicParam : PublicParam} {layer : Layer} {e : Nat}
+    {msg : Array UInt64} {sig : LayerSignature} {root : Digest} :
+    (layerRoot (pureHash f) publicParam layer e msg sig).run = some root ↔
+      ∃ x, codeword? (messageDigest (pureHash f) publicParam layer
+          (UInt32.ofNat e) msg sig.randomizer).run = some x ∧
+        (fold (pureHash f) publicParam layer e
+          (otsLeafHash (pureHash f) publicParam layer (UInt32.ofNat e)
+            (Vector.ofFn (chainEnd f publicParam layer (UInt32.ofNat e) x sig.chainValues))).run
+          sig.path).run = root := by
+  rw [layerRoot_run, otsLeaf_run, Option.map_map, Option.map_eq_some_iff]
+  -- The walked chains are the chain ends, by their definition.
+  exact Iff.rfl
+
+/-- A layer reaches no root exactly when its digest is not a codeword.
+
+Climbing the path never fails, so only the codeword test can. -/
+theorem layerRoot_eq_none_iff {publicParam : PublicParam} {layer : Layer} {e : Nat}
+    {msg : Array UInt64} {sig : LayerSignature} :
+    (layerRoot (pureHash f) publicParam layer e msg sig).run = none ↔
+      codeword? (messageDigest (pureHash f) publicParam layer
+        (UInt32.ofNat e) msg sig.randomizer).run = none := by
+  rw [layerRoot_run, otsLeaf_run, Option.map_map, Option.map_eq_none_iff]
+
+/-- A layer's root, from its codeword, its chain ends, its leaf and its path, each named.
+
+It is the converse direction of the equivalence above, with every piece given its value. -/
 theorem layerRoot_eq {publicParam : PublicParam} {layer : Layer} {e : Nat} {msg : Array UInt64}
     {sig : LayerSignature} {x : Vector (Fin CHAIN_LENGTH) V} {ends : Vector Digest V}
     {leaf root : Digest}
@@ -148,10 +197,9 @@ theorem layerRoot_eq {publicParam : PublicParam} {layer : Layer} {e : Nat} {msg 
     (hroot : (fold (pureHash f) publicParam layer e leaf sig.path).run = root) :
     (layerRoot (pureHash f) publicParam layer e msg sig).run = some root := by
   -- The recovered ends are the stated ones, chain by chain.
-  have hv : (Vector.ofFn fun i => (chain (pureHash f) publicParam layer (UInt32.ofNat e) i x[i]
-      (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega) sig.chainValues[i]).run) = ends :=
-    Vector.ext fun i hi => by simpa [chainEnd] using hends ⟨i, hi⟩
-  rw [layerRoot_run, otsLeaf_run, hx, Option.map_some, hv, hleaf, Option.map_some, hroot]
+  have hv : Vector.ofFn (chainEnd f publicParam layer (UInt32.ofNat e) x sig.chainValues) = ends :=
+    Vector.ext fun i hi => by simpa using hends ⟨i, hi⟩
+  exact layerRoot_eq_some_iff.mpr ⟨x, hx, by rw [hv, hleaf, hroot]⟩
 
 /-- Acceptance, from the two layers' roots. -/
 theorem verify_of_layerRoot {pk : PublicKey} {m : Message} {sig : Signature} {bottomRoot : Digest}

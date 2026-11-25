@@ -309,3 +309,60 @@ example {d : Cryptography.Xmss.Digest}
         d.toNat / 4 ^ i % 4 = 0) ∧
       Cryptography.Xmss.Internal.digitSum x = Cryptography.Xmss.Constants.TARGET_SUM :=
   Cryptography.Xmss.codeword?_eq_some h
+
+-- A leanXMSS circuit takes a digest as a codeword exactly when it spells the digits summing to 106.
+example {d : Cryptography.Xmss.Digest}
+    {x : Vector (Fin Cryptography.Xmss.Constants.CHAIN_LENGTH) Cryptography.Xmss.Constants.V} :
+    Cryptography.Xmss.codeword? d = some x ↔
+      d.toNat = ∑ i : Fin Cryptography.Xmss.Constants.V, (x[i] : Nat) * 4 ^ i.val ∧
+        ∑ i : Fin Cryptography.Xmss.Constants.V, (x[i] : Nat) =
+          Cryptography.Xmss.Constants.TARGET_SUM :=
+  Cryptography.Xmss.codeword?_eq_some_iff
+
+-- A leanXMSS circuit walks each chain from its digit for the steps that reach its end.
+example (f : Array UInt64 → Cryptography.Xmss.Lanes4) (P : Cryptography.Xmss.PublicParam)
+    (layer : Cryptography.Xmss.Layer) (e : UInt32)
+    (x : Vector (Fin Cryptography.Xmss.Constants.CHAIN_LENGTH) Cryptography.Xmss.Constants.V)
+    (y : Vector Cryptography.Xmss.Digest Cryptography.Xmss.Constants.V)
+    (i : Fin Cryptography.Xmss.Constants.V) (k : Nat)
+    (hk : (x[i] : Nat) + k = Cryptography.Xmss.Constants.CHAIN_LENGTH - 1) :
+    Cryptography.Xmss.chainEnd f P layer e x y i
+      = (Cryptography.Xmss.chain (Cryptography.Xmss.pureHash f) P layer e i x[i] k
+          (by simp only [Cryptography.Xmss.Constants.CHAIN_LENGTH] at *; omega) y[i]).run :=
+  Cryptography.Xmss.chainEnd_eq_chain hk
+
+-- A leanXMSS circuit that reaches a layer's root has decoded a codeword and climbed to the root.
+example (f : Array UInt64 → Cryptography.Xmss.Lanes4) (P : Cryptography.Xmss.PublicParam)
+    (layer : Cryptography.Xmss.Layer) (e : Nat) (msg : Array UInt64)
+    (sig : Cryptography.Xmss.LayerSignature) (root : Cryptography.Xmss.Digest) :
+    (Cryptography.Xmss.layerRoot (Cryptography.Xmss.pureHash f) P layer e msg sig).run
+        = some root ↔
+      ∃ x, Cryptography.Xmss.codeword? (Cryptography.Xmss.messageDigest
+          (Cryptography.Xmss.pureHash f) P layer (UInt32.ofNat e) msg sig.randomizer).run
+            = some x ∧
+        (Cryptography.Xmss.fold (Cryptography.Xmss.pureHash f) P layer e
+          (Cryptography.Xmss.otsLeafHash (Cryptography.Xmss.pureHash f) P layer (UInt32.ofNat e)
+            (Vector.ofFn (Cryptography.Xmss.chainEnd f P layer (UInt32.ofNat e) x
+              sig.chainValues))).run
+          sig.path).run = root :=
+  Cryptography.Xmss.layerRoot_eq_some_iff
+
+-- A leanXMSS circuit rejects a layer exactly when its digest is not a codeword.
+example (f : Array UInt64 → Cryptography.Xmss.Lanes4) (P : Cryptography.Xmss.PublicParam)
+    (layer : Cryptography.Xmss.Layer) (e : Nat) (msg : Array UInt64)
+    (sig : Cryptography.Xmss.LayerSignature) :
+    (Cryptography.Xmss.layerRoot (Cryptography.Xmss.pureHash f) P layer e msg sig).run = none ↔
+      Cryptography.Xmss.codeword? (Cryptography.Xmss.messageDigest
+        (Cryptography.Xmss.pureHash f) P layer (UInt32.ofNat e) msg sig.randomizer).run = none :=
+  Cryptography.Xmss.layerRoot_eq_none_iff
+
+-- A leanXMSS circuit proves the deployed verifier through the one over a hash, at Keccak-256.
+example (pk : Cryptography.Xmss.PublicKey) (m : Cryptography.Xmss.Message)
+    (sig : Cryptography.Xmss.Signature) :
+    Cryptography.Xmss.verify pk m sig
+      = (Cryptography.Xmss.verifyWith Cryptography.Xmss.hashId pk m sig).run :=
+  Cryptography.Xmss.verify_eq_verifyWith pk m sig
+
+-- A leaf index is a 32-bit word, so a leanXMSS circuit uses it as the bottom key unchanged.
+example (idx : Cryptography.Xmss.LeafIndex) : UInt32.ofNat idx.toNat = idx :=
+  UInt32.ofNat_toNat

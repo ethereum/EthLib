@@ -29,22 +29,7 @@ namespace EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 open OracleSpec OracleComp ENNReal
 
-/-! ## Digests and their digits -/
-
-/-- There are `2^128` digests of 16 bytes. -/
-theorem card_digest : Fintype.card Digest = 2 ^ 128 :=
-  Hash.Keccak.card_lanes2
-
-/-- Every string of 64 digits is the digits of exactly one digest. -/
-theorem digits_bijective : Function.Bijective (Internal.digits) := by
-  -- The digits are those of the digest's bytes, and the bytes determine the digest.
-  have hinj : Function.Injective Internal.digits := by
-    rw [digits_eq_digits4]
-    exact fun a b h => Hash.Keccak.Lanes2.bytes_injective (Wots.digits4_bijective.1 h)
-  refine (Fintype.bijective_iff_injective_and_card _).mpr ⟨hinj, ?_⟩
-  rw [card_digest, Fintype.card_congr (arrayVectorEquivFin _ _), Fintype.card_fun, Fintype.card_fin,
-    Fintype.card_fin]
-  norm_num [DIGITS, CHAIN_LENGTH]
+/-! ## The codewords among the digests -/
 
 /-- Exactly `|C|` digests are codewords.
 
@@ -64,15 +49,7 @@ theorem card_codeword : Nat.card {d : Digest // (codeword? d).isSome} = CODE_SIZ
       rw [← h']
       exact (Option.some_get _).symm
     exact eq_of_codeword h1 (Option.some_get _).symm
-  · obtain ⟨y, hy⟩ := digits_bijective.2
-      (Vector.ofFn fun i : Fin DIGITS => if h : i.val < V then x.1[i.val] else ⟨0, by decide⟩)
-    have hcw : codeword? y = some x.1 := by
-      simp only [codeword?_eq_digits, hy]
-      simp only [List.all_eq_true, beq_iff_eq, Bool.and_eq_true]
-      simp
-      refine ⟨fun z hz => ?_, x.2⟩
-      obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hz
-      simp [List.getElem_drop]
+  · obtain ⟨y, hcw⟩ := exists_codeword (by rw [← digitSum_eq_sum]; exact x.2)
     refine ⟨⟨y, by rw [hcw]; rfl⟩, Subtype.ext ?_⟩
     simp [hcw]
 
