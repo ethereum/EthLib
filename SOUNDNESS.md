@@ -4385,7 +4385,7 @@ It also builds the self-built bid of that block and compares it with the bid of 
 `Consensus/SlashingProtection.lean` holds the slashing protection of a signer, and the interchange file of EIP-3076 that moves it between clients.
 At the pinned text of the EIP its status is Last Call.
 A signer checks a block against the first two conditions of the EIP, and a vote against the last three.
-The theorems are in `Consensus/Proofs/SlashingProtection.lean`.
+The theorems are in `Consensus/Proofs/SlashingProtection.lean` unless another file is named.
 
 `checkBlockSigning_eq_ok_iff` and `checkAttestationSigning_eq_ok_iff` state exactly when each check passes.
 `signBlocks` and `signAttestations` model a signer that checks each message against its record and then records it, from any starting file.
@@ -4395,13 +4395,24 @@ The theorems are in `Consensus/Proofs/SlashingProtection.lean`.
 These theorems hold for every function that gives the signing root of a message.
 They assume only that every check of the signer passed.
 So a slashable pair of signed messages needs two different messages of one type with one signing root.
-Suppose one run of the signer accepted two slashable votes for one key, and the root that its caller supplied for each vote is the one that `computeSigningRoot` (`Consensus/Signing.lean`) returns for that vote in its domain.
-Then `signingRoot_eq_of_signAttestations` gives the two votes one signing root.
-They are different votes, by `isSlashableAttestationData_self` (`Consensus/Proofs/Transition/Block.lean`), so `computeSigningRoot_ne_or_collision` (`Consensus/Proofs/Signing.lean`) gives a SHA-256 collision, with `AttestationData.commitmentSized` (`Consensus/Proofs/Containers/Misc.lean`) for its size premises.
-No theorem states this argument, or shows that the signer implements the check of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`).
+`notSlashable_or_collision_of_importAndSignAttestations` (`Consensus/Proofs/SlashingProtectionCollision.lean`) states the result for votes.
+Take one run of a signer that may import files, and two votes that it signed for one key.
+Let the root that its caller supplied for each vote be the one that `computeSigningRoot` (`Consensus/Signing.lean`) returns for that vote in some domain.
+The two domains may differ.
+Then the two votes are not slashable together, or the search `findMessageCollision` over the messages of their two signing roots returns a SHA-256 collision.
+The proof gives the two votes one signing root by `signingRoot_eq_of_importAndSignAttestations`.
+They are different votes, by `isSlashableAttestationData_self` (`Consensus/Proofs/Transition/Block.lean`), so `computeSigningRoot_ne_or_findMessageCollision` (`Consensus/Proofs/Signing.lean`) gives the collision, with `AttestationData.commitmentSized` (`Consensus/Proofs/Containers/Misc.lean`) for its size premises.
+`eq_or_collision_of_importAndSignBlocks` states the same for two block headers of one slot: they are equal, or the search returns a collision.
+Its size premises come from `BeaconBlockHeader.commitmentSized`.
+A run of `signAttestations` or `signBlocks` is such a run, by `importAndSignAttestations_map_signAttestation` and `importAndSignBlocks_map_signBlock`.
+Both theorems compare two messages that the run signs.
+A signed message is compared with a vote or block of the starting or an imported file only through its record.
+A record holds a slot or epochs and maybe a signing root, not the message.
+The theorems on the record below cover that comparison.
+No theorem shows that the signer implements the check of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`).
 
 When the node hash is a random oracle, `prEvent_signingRoot_le_two_pow` (`Consensus/Proofs/SigningRandomOracle.lean`) bounds the chance of finding two different messages of one type with one signing root whose counts fit their words, with the signing roots computed by the oracle.
-The signer takes its signing roots as an argument, so no theorem composes the signer theorems with this bound.
+The collision theorems above compute the signing roots with SHA-256, while this bound computes them with the oracle, so no theorem composes the signer theorems with this bound.
 Its adversary outputs two objects of one type, each with a domain, and the two domains may differ.
 `computeSigningRoot_eq_hashTreeRoot` (`Consensus/Proofs/Signing.lean`) shows that the signing root of an object of a lawful type is the root of one value.
 That value is the signing data with the object in place of its root.

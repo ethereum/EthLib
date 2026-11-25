@@ -238,6 +238,28 @@ theorem computeSigningRoot_ne_or_collision {α : Type} [SszType α] [LawfulSszTy
         exact bMember
   · exact .inl same
 
+/-- Two different objects of one type have two different signing roots, or SHA-256 collides.
+
+The search over the messages of their two signing roots returns the collision.
+
+The domains may differ. -/
+theorem computeSigningRoot_ne_or_findMessageCollision {α : Type} [SszType α] [LawfulSszType α]
+    {first second : α}
+    {firstDomain secondDomain : Domain} {firstRoot secondRoot : Root}
+    -- Every variable-size count in both objects must fit its 256-bit word.
+    (firstSized : CommitmentSized (desc α) (toValue first))
+    (secondSized : CommitmentSized (desc α) (toValue second))
+    (differ : first ≠ second)
+    (firstSigned : computeSigningRoot first firstDomain = .ok firstRoot)
+    (secondSigned : computeSigningRoot second secondDomain = .ok secondRoot) :
+    firstRoot ≠ secondRoot ∨ ∃ x y, findMessageCollision (signingMessages first firstDomain)
+      (signingMessages second secondDomain) = some (x, y) ∧ MessageCollision x y := by
+  rcases computeSigningRoot_ne_or_collision firstSized secondSized differ firstSigned
+      secondSigned with differ | ⟨a, aMember, b, bMember, collision⟩
+  · exact .inl differ
+  · obtain ⟨x, y, found⟩ := findMessageCollision_of_collision aMember bMember collision
+    exact .inr ⟨x, y, found, (findMessageCollision_valid found).2.2⟩
+
 /-- The inputs of the binary hashes in the root of the signing data of an object root and a domain.
 
 They are those of the tree of the signing data, which holds the object root and the domain. -/
