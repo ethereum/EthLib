@@ -3374,9 +3374,10 @@ No export calls the cells check, so no test of the bindings runs it.
 ### The schedules of a configuration
 
 From Fulu, a configuration holds a blob schedule, and from Gloas a gas limit schedule.
-The Fulu and Gloas specifications say that no two entries of one schedule share an epoch, and that no entry starts before the fork that adds the schedule.
-The Fulu specification also says that the limit of each blob schedule entry is at most `MAX_BLOB_COMMITMENTS_PER_BLOCK`.
+The Fulu and Gloas specifications say that no two entries of one schedule share an epoch.
+They also say that no entry starts before the fork that adds the schedule.
 They only recommend that the entries ascend by epoch, so neither check asks for that order.
+The Fulu specification also says that the limit of each blob schedule entry is at most `MAX_BLOB_COMMITMENTS_PER_BLOCK`.
 EIP-8261 has clients ignore gas limit schedule entries before Gloas, while the Gloas configuration forbids them, and the readers follow the stricter rule.
 `Config.blobScheduleValid_iff` and `Config.gasLimitScheduleValid_iff` (`Consensus/Proofs/ForkSchedule.lean`) state that the two checks accept exactly the schedules that meet these rules.
 `Config.getBlobParameters_perm` states that the order of a blob schedule with distinct epochs does not change the blob limit.
