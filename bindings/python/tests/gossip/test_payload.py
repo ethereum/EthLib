@@ -4,6 +4,7 @@ from ethlib.errors import GossipError
 from ethlib.networking import gossip
 from raising import raises
 
+# The payload cap of the mainnet configuration: 10 MiB.
 MAX_PAYLOAD_SIZE = 10 * 1024 * 1024
 MAX_COMPRESSED = 32 + MAX_PAYLOAD_SIZE + MAX_PAYLOAD_SIZE // 6
 
@@ -35,7 +36,16 @@ def _code(error: GossipError) -> int:
 
 
 def test_accepts_within_bounds() -> None:
-    assert gossip.decode_payload(32, COMPRESSED) == PAYLOAD
+    assert gossip.decode_payload(MAX_PAYLOAD_SIZE, 32, COMPRESSED) == PAYLOAD
+
+
+def test_configured_cap() -> None:
+    # A network that sets a cap of 31 bytes refuses the 32-byte payload that the type allows.
+    with raises(
+        GossipError,
+        "gossip payload rejected: EthLib.Networking.Gossip.PayloadError.payloadTooLong 32 31",
+    ):
+        gossip.decode_payload(31, 2**64 - 1, COMPRESSED)
 
 
 def test_type_bound() -> None:
@@ -43,7 +53,7 @@ def test_type_bound() -> None:
         GossipError,
         "gossip payload rejected: EthLib.Networking.Gossip.PayloadError.payloadTooLong 32 31",
     ) as caught:
-        gossip.decode_payload(31, COMPRESSED)
+        gossip.decode_payload(MAX_PAYLOAD_SIZE, 31, COMPRESSED)
     assert _code(caught.value) == 4
 
 
@@ -55,7 +65,7 @@ def test_not_snappy() -> None:
             "(EthLib.Networking.Snappy.SnappyError.lengthMismatch 0 1)"
         ),
     ) as caught:
-        gossip.decode_payload(32, bytes(32))
+        gossip.decode_payload(MAX_PAYLOAD_SIZE, 32, bytes(32))
     assert _code(caught.value) == 3
 
 
@@ -70,11 +80,11 @@ def test_payload_cap() -> None:
             "10485761 10485760"
         ),
     ) as caught:
-        gossip.decode_payload(2**64 - 1, data)
+        gossip.decode_payload(MAX_PAYLOAD_SIZE, 2**64 - 1, data)
     assert _code(caught.value) == 4
-    assert gossip.decode_payload(2**64 - 1, _literal_block(bytes(MAX_PAYLOAD_SIZE))) == bytes(
-        MAX_PAYLOAD_SIZE
-    )
+    assert gossip.decode_payload(
+        MAX_PAYLOAD_SIZE, 2**64 - 1, _literal_block(bytes(MAX_PAYLOAD_SIZE))
+    ) == bytes(MAX_PAYLOAD_SIZE)
 
 
 def test_compressed_length() -> None:
@@ -85,7 +95,7 @@ def test_compressed_length() -> None:
             "12233419 12233418"
         ),
     ) as caught:
-        gossip.decode_payload(2**64 - 1, bytes(MAX_COMPRESSED + 1))
+        gossip.decode_payload(MAX_PAYLOAD_SIZE, 2**64 - 1, bytes(MAX_COMPRESSED + 1))
     assert _code(caught.value) == 2
 
 
@@ -100,5 +110,5 @@ def test_declared_length_rejected_unread() -> None:
             "10485761 10485760"
         ),
     ) as caught:
-        gossip.decode_payload(2**64 - 1, data)
+        gossip.decode_payload(MAX_PAYLOAD_SIZE, 2**64 - 1, data)
     assert _code(caught.value) == 4

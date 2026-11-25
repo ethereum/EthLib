@@ -19,8 +19,6 @@ They can change until the EIPs are final.
 The values of Heze come from EIP-7805, a Draft on 2026-11-03.
 
 The parameters of the attestation subnets come from the networking layer, which reads them too.
-
-The payload cap is the same on every network, so only the networking layer defines it.
 -/
 
 @[expose] public section
@@ -181,6 +179,8 @@ structure Config extends Networking.Gossip.SubnetParameters where
   DEPOSIT_NETWORK_ID : UInt64
   /-- The address of the deposit contract. -/
   DEPOSIT_CONTRACT_ADDRESS : ExecutionAddress
+  /-- The largest payload of a gossip message, a request or a response chunk, in SSZ bytes. -/
+  MAX_PAYLOAD_SIZE : UInt64
   /-- Before Deneb: the most blocks in one request. -/
   MAX_REQUEST_BLOCKS : UInt64
   /-- The most slots during which an attestation can propagate. -/
@@ -303,6 +303,8 @@ def mainnet : Config where
   DEPOSIT_NETWORK_ID := 1
   DEPOSIT_CONTRACT_ADDRESS := #v[0x00, 0x00, 0x00, 0x00, 0x21, 0x9a, 0xb5, 0x40, 0x35, 0x6c,
     0xbb, 0x83, 0x9c, 0xbe, 0x05, 0x30, 0x3d, 0x77, 0x05, 0xfa]
+  -- 10 MiB.
+  MAX_PAYLOAD_SIZE := 10 * 2 ^ 20
   MAX_REQUEST_BLOCKS := 2 ^ 10
   EPOCHS_PER_SUBNET_SUBSCRIPTION := 2 ^ 8
   ATTESTATION_PROPAGATION_SLOT_RANGE := 32

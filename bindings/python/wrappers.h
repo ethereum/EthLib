@@ -47,7 +47,6 @@ extern size_t SECP256R1_SIGNATURE_LEN;
 
 extern size_t ENR_MAX_RECORD_SIZE;
 extern size_t RLPX_SECRETS_SIZE;
-extern size_t REQRESP_MAX_PAYLOAD_SIZE;
 extern size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */

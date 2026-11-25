@@ -60,7 +60,7 @@ def requestDesc (preset : Preset) (config : Config) (fork : Fork) (id : Protocol
 /-- The length bounds of the request payload of a protocol version at a fork, if it has one. -/
 def requestBounds (preset : Preset) (config : Config) (fork : Fork) (id : ProtocolId) :
     Option (UInt64 × UInt64) :=
-  (requestDesc preset config fork id).map Networking.ReqResp.payloadBounds
+  (requestDesc preset config fork id).map (Networking.ReqResp.payloadBounds config.MAX_PAYLOAD_SIZE)
 
 /-- Why a protocol or a topic has no length bound. -/
 inductive BoundsError where

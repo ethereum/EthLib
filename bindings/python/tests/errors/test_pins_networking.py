@@ -156,7 +156,7 @@ GENERATOR = bytes.fromhex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f
                 "length prefix is not a valid varint: "
                 "EthLib.Networking.Encoding.Varint.VarintError.unterminated"
             ),
-            lambda: reqresp.decode_payload(0, 10, b""),
+            lambda: reqresp.decode_payload(10 * 2**20, 0, 10, b""),
             id="reqresp-payload",
         ),
         # An ECIES message has at least 113 bytes.
@@ -412,7 +412,7 @@ GENERATOR = bytes.fromhex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f
                 "gossip payload rejected: EthLib.Networking.Gossip.PayloadError.snappy "
                 "(EthLib.Networking.Snappy.SnappyError.preambleTruncated)"
             ),
-            lambda: gossip.decode_payload(10, b"\xff"),
+            lambda: gossip.decode_payload(10 * 2**20, 10, b"\xff"),
             id="gossip-payload",
         ),
         # 0xff starts a protobuf varint that the input ends inside.
@@ -642,7 +642,7 @@ GENERATOR = bytes.fromhex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f
             ReqRespError,
             7,
             "response chunk has no response code",
-            lambda: reqresp.decode_response_chunk(0, 0, 10, b""),
+            lambda: reqresp.decode_response_chunk(10 * 2**20, 0, 0, 10, b""),
             id="reqresp-chunk",
         ),
         # A public key is 33 or 65 bytes.

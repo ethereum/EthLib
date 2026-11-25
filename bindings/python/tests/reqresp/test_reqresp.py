@@ -4,6 +4,7 @@ import random
 
 import pytest
 
+from ethlib import consensus
 from ethlib.networking import reqresp
 from raising import raises
 from snappy_reference import CASES as SPEC_CASES, SpecCase, decode_block, spec_object
@@ -13,6 +14,9 @@ from snappy_reference import CASES as SPEC_CASES, SpecCase, decode_block, spec_o
 # Each test names the rule that its message pins.
 
 STREAM_IDENTIFIER = bytes([0xFF, 0x06, 0x00, 0x00]) + b"sNaPpY"
+
+# The payload cap of the mainnet and minimal configurations: 10 MiB.
+MAX_PAYLOAD_SIZE = 10 * 2**20
 
 
 def _crc32c(data: bytes) -> int:
@@ -63,9 +67,10 @@ def test_crc32c_check_value():
     assert _crc32c(b"123456789") == 0xE3069283
 
 
-def test_max_payload_size():
-    # 10 MiB at every fork.
-    assert reqresp.MAX_PAYLOAD_SIZE == 10 * 2**20
+@pytest.mark.parametrize("name", ["mainnet", "minimal"])
+def test_max_payload_size(name: str):
+    # Both configurations carry the cap of 10 MiB.
+    assert consensus.config(name)["MAX_PAYLOAD_SIZE"] == MAX_PAYLOAD_SIZE
 
 
 def test_max_compressed_len():
@@ -84,96 +89,111 @@ def test_framed_payload_bytes():
     # The checksum 0x91a0ce90 is CRC-32C 0xf1dc778e, rotated right by 15 bits, plus 0xa282ead8.
     message = bytes.fromhex("04ff060000734e615070590108000090cea091deadbeef")
     assert message == _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    assert reqresp.decode_payload(0, 4, message) == PAYLOAD
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 4, message) == PAYLOAD
 
 
 def test_uncompressed_chunk():
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    assert reqresp.decode_payload(0, 100, message) == PAYLOAD
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message) == PAYLOAD
 
 
 def test_compressed_chunk():
     message = _varint(4) + STREAM_IDENTIFIER + _compressed_literal(PAYLOAD)
-    assert reqresp.decode_payload(0, 100, message) == PAYLOAD
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message) == PAYLOAD
 
 
 def test_two_chunks():
     chunks = _uncompressed(PAYLOAD[:1]) + _uncompressed(PAYLOAD[1:])
     message = _varint(4) + STREAM_IDENTIFIER + chunks
-    assert reqresp.decode_payload(0, 4, message) == PAYLOAD
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 4, message) == PAYLOAD
 
 
 def test_empty_payload():
-    assert reqresp.decode_payload(0, 0, _varint(0) + STREAM_IDENTIFIER) == b""
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 0, _varint(0) + STREAM_IDENTIFIER) == b""
 
 
 def test_length_above_type_bound():
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     with raises(ValueError, "declared length 4 is above 3"):
-        reqresp.decode_payload(0, 3, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 3, message)
 
 
 def test_length_above_payload_cap():
     # A declared length of 10 MiB + 1 exceeds the cap, before any frame is read.
     message = _varint(10 * 2**20 + 1) + STREAM_IDENTIFIER
     with raises(ValueError, "declared length 10485761 is above 10485760"):
-        reqresp.decode_payload(0, 2**30, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 2**30, message)
+
+
+def test_length_above_configured_cap():
+    # A network that sets a cap of 3 bytes refuses a payload of 4 that the type allows.
+    message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
+    with raises(ValueError, "declared length 4 is above 3"):
+        reqresp.decode_payload(3, 0, 100, message)
+
+
+def test_length_within_raised_cap():
+    # A network that sets a cap of 20 MiB reads a length of 10 MiB + 1 past the cap check.
+    # Its empty stream then holds no bytes, so the payload fails its declared length instead.
+    message = _varint(10 * 2**20 + 1) + STREAM_IDENTIFIER
+    with raises(ValueError, "payload has 0 bytes, not the declared 10485761"):
+        reqresp.decode_payload(20 * 2**20, 0, 2**30, message)
 
 
 def test_length_at_payload_cap():
     # A declared length of 10 MiB passes the cap, and fails later: the stream is empty.
     message = _varint(10 * 2**20) + STREAM_IDENTIFIER
     with raises(ValueError, "payload has 0 bytes, not the declared 10485760"):
-        reqresp.decode_payload(0, 2**30, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 2**30, message)
 
 
 def test_length_below_type_minimum():
     # The header rule bounds the declared length below too, by the smallest encoding of the type.
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     with raises(ValueError, "declared length 4 is below 5"):
-        reqresp.decode_payload(5, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 5, 100, message)
 
 
 def test_length_at_type_minimum():
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    assert reqresp.decode_payload(4, 100, message) == PAYLOAD
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 4, 100, message) == PAYLOAD
 
 
 def test_length_at_both_bounds():
     # A fixed-size type has one encoding size, so both bounds are equal.
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    assert reqresp.decode_payload(4, 4, message) == PAYLOAD
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 4, 4, message) == PAYLOAD
 
 
 def test_empty_payload_below_type_minimum():
     with raises(ValueError, "declared length 0 is below 1"):
-        reqresp.decode_payload(1, 100, _varint(0) + STREAM_IDENTIFIER)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 1, 100, _varint(0) + STREAM_IDENTIFIER)
 
 
 def test_stream_shorter_than_declared():
     message = _varint(5) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     with raises(ValueError, "payload has 4 bytes, not the declared 5"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_stream_longer_than_declared():
     message = _varint(3) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     with raises(ValueError, "payload has 4 bytes, not the declared 3"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_compressed_bytes_at_the_bound():
     # Declared length 4 allows 32 + 4 + 4 // 6 = 36 bytes.
     # The identifier (10), a padding chunk of 4 + 10 and the data chunk (12) make 36.
     message = _varint(4) + STREAM_IDENTIFIER + _chunk(0xFE, bytes(10)) + _uncompressed(PAYLOAD)
-    assert reqresp.decode_payload(0, 4, message) == PAYLOAD
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 4, message) == PAYLOAD
 
 
 def test_compressed_bytes_above_the_bound():
     # One more padding byte makes 37 bytes after the prefix.
     message = _varint(4) + STREAM_IDENTIFIER + _chunk(0xFE, bytes(11)) + _uncompressed(PAYLOAD)
     with raises(ValueError, "37 compressed bytes, more than 36"):
-        reqresp.decode_payload(0, 4, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 4, message)
 
 
 # A reader must reject any bytes that remain after it has read the declared n SSZ bytes.
@@ -196,41 +216,41 @@ def test_compressed_bytes_above_the_bound():
 def test_bytes_after_the_payload(after: bytes):
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD) + after
     with raises(ValueError, f"{len(after)} bytes follow the last chunk of the payload"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_bytes_after_a_compressed_payload():
     message = _varint(4) + STREAM_IDENTIFIER + _compressed_literal(PAYLOAD) + _chunk(0xFE, b"")
     with raises(ValueError, "4 bytes follow the last chunk of the payload"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_last_chunk_past_the_length_with_bytes_after():
     # The length is checked before the bytes after the chunk, so the overshoot is reported.
     message = _varint(3) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD) + _chunk(0xFE, b"")
     with raises(ValueError, "payload has 4 bytes, not the declared 3"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_bytes_after_an_empty_payload():
     # With n = 0 the reader reads the stream identifier alone, and a padding chunk after it remains.
     message = _varint(0) + STREAM_IDENTIFIER + _chunk(0xFE, bytes(18))
     with raises(ValueError, "22 bytes follow the last chunk of the payload"):
-        reqresp.decode_payload(0, 0, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 0, message)
 
 
 def test_chunks_before_the_last_data_chunk():
     # Chunks that add no bytes are read while bytes are still needed.
     padding = _chunk(0xFE, b"")
     message = _varint(4) + STREAM_IDENTIFIER + padding + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    assert reqresp.decode_payload(0, 100, message) == PAYLOAD
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message) == PAYLOAD
 
 
 def test_response_chunk_with_bytes_after():
     # A padding chunk after the payload of a response chunk is rejected too.
     chunk = bytes([0]) + _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     with raises(ValueError, "4 bytes follow the last chunk of the payload"):
-        reqresp.decode_response_chunk(0, 0, 100, chunk + _chunk(0xFE, b""))
+        reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 0, 0, 100, chunk + _chunk(0xFE, b""))
 
 
 # The messages of a varint and a framing error end with the inner error.
@@ -241,78 +261,78 @@ FRAME = "payload is not a valid Snappy framed stream: EthLib.Networking.Snappy.F
 def test_non_minimal_varint():
     message = bytes([0x84, 0x00]) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     with raises(ValueError, VARINT + "nonMinimal 2"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_varint_over_ten_bytes():
     message = bytes([0x80] * 10 + [0x00]) + STREAM_IDENTIFIER
     with raises(ValueError, VARINT + "tooLong"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_bad_checksum():
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD, checksum=0)
     with raises(ValueError, FRAME + "checksumMismatch 0 2443234960"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_missing_stream_identifier():
     message = _varint(4) + _uncompressed(PAYLOAD)
     with raises(ValueError, FRAME + "missingStreamIdentifier (some 1)"):
-        reqresp.decode_payload(0, 100, message)
+        reqresp.decode_payload(MAX_PAYLOAD_SIZE, 0, 100, message)
 
 
 def test_success_chunk_with_fork_digest():
     digest = bytes.fromhex("6a95a1a9")
     chunk = bytes([0]) + digest + _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    assert reqresp.decode_response_chunk(4, 0, 100, chunk) == (0, digest, PAYLOAD)
+    assert reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 4, 0, 100, chunk) == (0, digest, PAYLOAD)
 
 
 def test_success_chunk_without_context():
     chunk = bytes([0]) + _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    assert reqresp.decode_response_chunk(0, 0, 100, chunk) == (0, b"", PAYLOAD)
+    assert reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 0, 0, 100, chunk) == (0, b"", PAYLOAD)
 
 
 def test_error_chunk():
     # An error carries no context bytes, even on a method that sends a fork digest.
     message = b"bad request"
     chunk = bytes([1]) + _varint(len(message)) + STREAM_IDENTIFIER + _uncompressed(message)
-    assert reqresp.decode_response_chunk(4, 0, 0, chunk) == (1, b"", message)
+    assert reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 4, 0, 0, chunk) == (1, b"", message)
 
 
 def test_request_specific_code():
     chunk = bytes([200]) + _varint(1) + STREAM_IDENTIFIER + _uncompressed(b"x")
-    assert reqresp.decode_response_chunk(4, 0, 0, chunk) == (200, b"", b"x")
+    assert reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 4, 0, 0, chunk) == (200, b"", b"x")
 
 
 def test_error_message_too_long():
     message = bytes(reqresp.MAX_ERROR_MESSAGE_SIZE + 1)
     chunk = bytes([2]) + _varint(len(message)) + STREAM_IDENTIFIER + _uncompressed(message)
     with raises(ValueError, "declared length 257 is above 256"):
-        reqresp.decode_response_chunk(0, 0, 1000, chunk)
+        reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 0, 0, 1000, chunk)
 
 
 def test_context_truncated():
     with raises(ValueError, "response chunk has 2 context bytes, not the 4 of the method"):
-        reqresp.decode_response_chunk(4, 0, 100, bytes([0, 0x6A, 0x95]))
+        reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 4, 0, 100, bytes([0, 0x6A, 0x95]))
 
 
 def test_missing_code():
     with raises(ValueError, "response chunk has no response code"):
-        reqresp.decode_response_chunk(0, 0, 100, b"")
+        reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 0, 0, 100, b"")
 
 
 def test_success_chunk_below_type_minimum():
     digest = bytes.fromhex("6a95a1a9")
     chunk = bytes([0]) + digest + _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     with raises(ValueError, "declared length 4 is below 8"):
-        reqresp.decode_response_chunk(4, 8, 100, chunk)
+        reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 4, 8, 100, chunk)
 
 
 def test_empty_error_message_ignores_type_minimum():
     # An error chunk carries an error message, not the payload type, so it may be empty.
     chunk = bytes([1]) + _varint(0) + STREAM_IDENTIFIER
-    assert reqresp.decode_response_chunk(4, 8, 100, chunk) == (1, b"", b"")
+    assert reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, 4, 8, 100, chunk) == (1, b"", b"")
 
 
 # A frame decoder written here checks the encoders that compress.
@@ -399,7 +419,7 @@ PAYLOADS = [
 def test_encode_payload(data: bytes, chunks: list[tuple[int, int]]):
     payload = reqresp.encode_payload(data)
     assert _decode_payload(payload) == (data, chunks)
-    assert reqresp.decode_payload(len(data), len(data), payload) == data
+    assert reqresp.decode_payload(MAX_PAYLOAD_SIZE, len(data), len(data), payload) == data
 
 
 # The SSZ objects of the 50 ssz_snappy files of consensus-spec-tests that the Snappy tests read.
@@ -432,7 +452,10 @@ def test_encode_response_chunk(chunk: reqresp.ResponseChunk):
     assert encoded.startswith(head)
     assert _decode_payload(encoded[len(head) :])[0] == chunk.payload
     size = len(chunk.payload)
-    assert reqresp.decode_response_chunk(len(chunk.context), size, size, encoded) == chunk
+    assert (
+        reqresp.decode_response_chunk(MAX_PAYLOAD_SIZE, len(chunk.context), size, size, encoded)
+        == chunk
+    )
 
 
 def test_encode_response_chunk_keeps_any_context():

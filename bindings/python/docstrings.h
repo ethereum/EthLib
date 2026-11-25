@@ -1050,7 +1050,7 @@
   "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."
 
 #define DOC_reqresp_decode_payload \
-  "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type."
+  "The SSZ bytes of a payload, given the payload cap and the encoding bounds of its SSZ type."
 
 #define DOC_reqresp_decode_response_chunk \
   "One response chunk, given the number of context bytes that the method sends."
@@ -1455,7 +1455,7 @@
   "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest."
 
 #define DOC_gossip_decode_payload \
-  "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type."
+  "The SSZ bytes of the data of a gossip message, given the payload cap and the size bound of its type."
 
 #define DOC_gossip_rpc_decode \
   "The RPC that the bytes encode, under the `StrictNoSign` policy."

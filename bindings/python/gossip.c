@@ -12,6 +12,7 @@ eth_gossip_message_id(
 
 extern lean_object*
 eth_gossip_decode_payload(
+  uint64_t max_payload_size,
   uint64_t type_bound,
   lean_object* data
 );
@@ -84,13 +85,15 @@ py_gossip_decode_payload(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *bound_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OO", &bound_obj, &data_obj)) return NULL;
-  uint64_t type_bound;
+  PyObject *cap_obj, *bound_obj, *data_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &cap_obj, &bound_obj, &data_obj)) return NULL;
+  uint64_t max_payload_size, type_bound;
+  if (parse_uint64(cap_obj, "max_payload_size", &max_payload_size)) return NULL;
   if (parse_uint64(bound_obj, "type_bound", &type_bound)) return NULL;
   lean_object* data = bytes_arg(data_obj, "data");
   if (!data) return NULL;
-  return except_into_pybytes(eth_gossip_decode_payload(type_bound, data), GOSSIP_ERROR);
+  return except_into_pybytes(
+    eth_gossip_decode_payload(max_payload_size, type_bound, data), GOSSIP_ERROR);
 }
 
 PyObject*

@@ -100,7 +100,7 @@ def responseBounds (preset : Preset) (config : Config) (chunkFork : Fork) (id : 
     Option (UInt64 × UInt64) :=
   -- The least and the largest length of the type of the chunk, none when it has no type.
   (responseDesc preset config chunkFork id).map fun shape =>
-    let bounds := Networking.ReqResp.payloadBounds shape
+    let bounds := Networking.ReqResp.payloadBounds config.MAX_PAYLOAD_SIZE shape
     -- With a size limit `L` for the protocol, the largest length `b` becomes `min(b, L)`.
     match id.protocol.sizeLimit preset config chunkFork with
     | some limit => (bounds.1, min bounds.2 limit)

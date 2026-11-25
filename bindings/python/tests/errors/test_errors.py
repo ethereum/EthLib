@@ -177,7 +177,7 @@ def test_reqresp_error_code() -> None:
         "length prefix is not a valid varint: "
         "EthLib.Networking.Encoding.Varint.VarintError.unterminated",
     ) as info:
-        reqresp.decode_payload(0, 100, b"\xff")
+        reqresp.decode_payload(10 * 2**20, 0, 100, b"\xff")
     # The code of a bad varint prefix.
     assert info.value.code == 1
 

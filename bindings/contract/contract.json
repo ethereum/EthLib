@@ -11539,8 +11539,9 @@
    "docstring":
    "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`.\n\nIt is the worst-case size of a Snappy block of `n` bytes, from `snappy.cc` of `google/snappy`:\n<https://github.com/google/snappy/blob/32ded457c0b1fe78ceb8397632c416568d6714a0/snappy.cc#L218>\n\nThe sum is a 64-bit integer, so a value of 2^64 or more is an error."},
   {"summary":
-   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.",
-   "signature": "(type_min: int, type_bound: int, data: bytes) -> bytes",
+   "The SSZ bytes of a payload, given the payload cap and the encoding bounds of its SSZ type.",
+   "signature":
+   "(max_payload_size: int, type_min: int, type_bound: int, data: bytes) -> bytes",
    "operation": "EthLib.Networking.ReqResp.decodePayload",
    "method": "reqresp_decode_payload",
    "errors":
@@ -11558,11 +11559,11 @@
       {"constructor": "trailingBytes", "code": 10}]}],
    "error_class": "ReqRespError",
    "docstring":
-   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.\n\nThe caller deserializes the bytes, since it knows their SSZ type.\n\nThe reader of a payload stops at the chunk that completes the declared length.\n\nAny byte after that chunk makes the payload invalid."},
+   "The SSZ bytes of a payload, given the payload cap and the encoding bounds of its SSZ type.\n\nThe caller deserializes the bytes, since it knows their SSZ type.\n\nThe reader of a payload stops at the chunk that completes the declared length.\n\nAny byte after that chunk makes the payload invalid."},
   {"summary":
    "One response chunk, given the number of context bytes that the method sends.",
    "signature":
-   "(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> tuple[int, bytes, bytes]",
+   "(max_payload_size: int, context_bytes: int, type_min: int, type_bound: int, data: bytes) -> tuple[int, bytes, bytes]",
    "operation": "EthLib.Networking.ReqResp.decodeResponseChunk",
    "method": "reqresp_decode_response_chunk",
    "errors":
@@ -11580,7 +11581,7 @@
       {"constructor": "trailingBytes", "code": 10}]}],
    "error_class": "ReqRespError",
    "docstring":
-   "One response chunk, given the number of context bytes that the method sends.\n\nA success carries that many context bytes, and its payload has the bounds of the message type.\n\nAn error carries no context bytes, and its payload is an error message of at most 256 bytes.\n\nA chunk is a response code, then context bytes, then a payload."},
+   "One response chunk, given the number of context bytes that the method sends.\n\nA success carries that many context bytes, and its payload has the bounds of the message type.\n\nBoth payloads are also at most the payload cap.\n\nAn error carries no context bytes, and its payload is an error message of at most 256 bytes.\n\nA chunk is a response code, then context bytes, then a payload."},
   {"summary":
    "A payload that decodes to `data`: its length as a varint, then a stream that compresses.",
    "signature": "(ssz_bytes: bytes) -> bytes",
@@ -14390,8 +14391,9 @@
    "docstring":
    "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.\n\nA missing topic or data field of the protobuf message is the empty byte string.\n\nGossipsub, the consensus publish-subscribe protocol, drops a message whose ID is in its seen cache.\n\nSo a second copy of the same data on one topic gets the same ID and is dropped."},
   {"summary":
-   "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.",
-   "signature": "(type_bound: int, data: bytes) -> bytes",
+   "The SSZ bytes of the data of a gossip message, given the payload cap and the size bound of its type.",
+   "signature":
+   "(max_payload_size: int, type_bound: int, data: bytes) -> bytes",
    "operation": "EthLib.Networking.Gossip.decodePayload",
    "method": "gossip_decode_payload",
    "errors":
@@ -14403,7 +14405,7 @@
       {"constructor": "payloadTooLong", "code": 4}]}],
    "error_class": "GossipError",
    "docstring":
-   "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
+   "The SSZ bytes of the data of a gossip message, given the payload cap and the size bound of its type.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
   {"summary": "The RPC that the bytes encode, under the `StrictNoSign` policy.",
    "signature": "(data: bytes) -> dict[str, Any]",
    "operation": "EthLib.Networking.Gossip.Exports.rpcDecodeExport",

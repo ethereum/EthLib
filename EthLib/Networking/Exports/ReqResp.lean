@@ -45,9 +45,6 @@ instance : ExportError ReqRespError where
 
 /-! ## Sizes -/
 
-@[export eth_reqresp_const_max_payload_size]
-def constMaxPayloadSize (_ : Unit) : UInt64 := MAX_PAYLOAD_SIZE
-
 @[export eth_reqresp_const_max_error_message_size]
 def constMaxErrorMessageSize (_ : Unit) : UInt64 := MAX_ERROR_MESSAGE_SIZE
 
@@ -58,21 +55,25 @@ def constMaxErrorMessageSize (_ : Unit) : UInt64 := MAX_ERROR_MESSAGE_SIZE
 def maxCompressedLenExport (n : UInt64) : Result UInt64 :=
   toResult none ((maxCompressedLen n).mapError ReqRespError.arith)
 
-/-- The SSZ bytes of a request or response payload. -/
+/-- The SSZ bytes of a request or response payload, given the payload cap of the network. -/
 @[export eth_reqresp_decode_payload]
-def decodePayloadExport (typeMin typeBound : UInt64) (bs : ByteArray) : Result ByteArray :=
-  toResult none (decodePayload typeMin typeBound bs)
+def decodePayloadExport (maxPayloadSize typeMin typeBound : UInt64) (bs : ByteArray) :
+    Result ByteArray :=
+  toResult none (decodePayload maxPayloadSize typeMin typeBound bs)
 
 /-- The code, the context bytes and the payload of one response chunk. -/
-def decodeResponseChunkOf (args : UInt64 × UInt64 × UInt64 × ByteArray) :
+def decodeResponseChunkOf (args : UInt64 × UInt64 × UInt64 × UInt64 × ByteArray) :
     Result (UInt8 × ByteArray × ByteArray) := do
-  let (contextBytes, typeMin, typeBound, bs) := args
-  let chunk ← toResult none (decodeResponseChunk contextBytes.toNat typeMin typeBound bs)
+  let (maxPayloadSize, contextBytes, typeMin, typeBound, bs) := args
+  let chunk ← toResult none
+    (decodeResponseChunk maxPayloadSize contextBytes.toNat typeMin typeBound bs)
   return (chunk.code.toByte, chunk.context, chunk.payload)
 
 /-- The code, the context bytes and the payload of one response chunk.
 
-The arguments are the number of context bytes, the bounds of the payload and the chunk. -/
+The arguments are the payload cap of the network and the number of context bytes.
+
+Then come the bounds of the payload and the chunk. -/
 @[export eth_reqresp_decode_response_chunk]
 def decodeResponseChunkExport (args : PyValue) : Result PyValue :=
   pyExport decodeResponseChunkOf args

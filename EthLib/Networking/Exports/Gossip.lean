@@ -79,10 +79,11 @@ They are typed values: the name of a fork is a `str`. -/
 def messageIdExport (args : PyValue) : Result PyValue :=
   pyExport messageIdOf args
 
-/-- The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type. -/
+/-- The SSZ bytes of the data of a gossip message, given the payload cap and the size bound. -/
 @[export eth_gossip_decode_payload]
-def decodePayloadExport (typeBound : UInt64) (data : ByteArray) : Result ByteArray :=
-  toResult "gossip payload rejected" (decodePayload typeBound data)
+def decodePayloadExport (maxPayloadSize typeBound : UInt64) (data : ByteArray) :
+    Result ByteArray :=
+  toResult "gossip payload rejected" (decodePayload maxPayloadSize typeBound data)
 
 /-- The RPC that the bytes encode, under the `StrictNoSign` policy. -/
 @[export eth_gossip_rpc_decode]
