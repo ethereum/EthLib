@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Exports.Keccak
 public import EthLib.Cryptography.Proofs.Bls
 public import EthLib.Cryptography.Proofs.Kzg
 public import EthLib.Cryptography.Proofs.Merkle
+public import EthLib.Cryptography.Proofs.Ecdsa.Curve
 public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
 public import EthLib.Cryptography.Proofs.Unicode
 public import EthLib.Cryptography.Proofs.EvalDistEq

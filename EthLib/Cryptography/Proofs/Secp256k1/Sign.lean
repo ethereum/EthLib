@@ -29,32 +29,19 @@ theorem signWith_spec {d e r s : Fn} {odd : Bool} :
       ∃ k : Fn, ∃ x y : Fp, k ≠ 0 ∧ mul k generator = .affine x y ∧ x.val < Fn.modulus ∧
         r = Fin.ofNat _ x.val ∧ r ≠ 0 ∧ s = k.inv * (e + r * d) ∧ s ≠ 0 ∧
         odd = decide (y.val % 2 = 1) := by
-  intro fuel
-  induction fuel with
-  | zero => intro state h; cases h
-  | succ fuel ih =>
-    intro state h
-    unfold signWith at h
-    dsimp only at h
+  intro fuel state h
+  unfold signWith at h
+  split at h
+  · cases h
+  · rename_i r' s' x y hw
     split at h
-    · rename_i ht
-      split at h
-      · exact ih h
-      · rename_i x y hR
-        split at h
-        · exact ih h
-        · rename_i hrs
-          split at h
-          · cases h
-          · rename_i hx
-            simp only [Except.ok.injEq, Prod.mk.injEq] at h
-            obtain ⟨rfl, rfl, rfl⟩ := h
-            refine ⟨⟨_, ht.2⟩, x, y, fun h0 => ?_, hR, by omega, rfl, fun h => hrs (Or.inl h), rfl,
-              fun h => hrs (Or.inr h), rfl⟩
-            have := congrArg Fin.val h0
-            simp at this
-            omega
-    · exact ih h
+    · cases h
+    · rename_i hx
+      simp only [Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl, rfl⟩ := h
+      -- The loop is that of every curve; this curve adds the bound on `x_R` and the parity.
+      obtain ⟨k, hk, hR, hr, hr0, hs, hs0⟩ := domain.signWith_spec hw
+      exact ⟨k, x, y, hk, hR, by omega, hr, hr0, hs, hs0, rfl⟩
 
 /-- The value of `-s`, for `s ≠ 0`. -/
 private theorem val_neg {s : Fn} (hs : s ≠ 0) : (-s).val = Fn.modulus - s.val := by

@@ -12,6 +12,7 @@ public import EthLib.Cryptography.Vrf
 public import EthLib.Cryptography.Secp256k1
 public import EthLib.Cryptography.Secp256r1
 public import EthLib.Cryptography.Rfc6979
+public import EthLib.Cryptography.Ecdsa.Curve
 public import EthLib.Cryptography.Ecdsa.Encoding
 public import EthLib.Cryptography.AltBn128
 public import EthLib.Cryptography.Aes

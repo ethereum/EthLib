@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Ecdsa.Curve
 public import EthLib.Cryptography.Secp256r1.Montgomery
 public import EthLib.Cryptography.ShortWeierstrass
 
@@ -98,36 +99,17 @@ where
 
 end Point
 
+/-- P-256 as ECDSA uses it: the base point `G`, its products, and the inverse mod `n`. -/
+@[inline] def domain : Cryptography.Ecdsa.Curve Fp.modulus Fn.modulus :=
+  ⟨Point.generator, Point.mul, Point.mulAdd, Fn.inv⟩
+
 /-- Whether `(r, s)` is a valid signature on the hash integer `e` under the public key `q`.
 
-It is the verifying operation of SEC 1 v2 §4.1.4.
+It is the verifying operation of SEC 1 v2 §4.1.4, that of every curve of cofactor 1.
 
 `e` acts mod `n`, like every scalar.
 
 The signature is valid when `R = (e / s) G + (r / s) q` is not `O` and its `x` is `r` mod `n`. -/
-def verify (q : Point) (e r s : Nat) : Bool :=
-  -- Step 1: if `r` and `s` are not both integers in `[1, n-1]`, output "invalid".
-  if hr : 0 < r ∧ r < Fn.modulus then
-    if hs : 0 < s ∧ s < Fn.modulus then
-      -- Not a step of §4.1.4: steps 1 and 3 of SEC 1 v2 §3.2.2.1, not `O` and on the curve.
-      --
-      -- Its step 2 holds by the type, and its step 4, `n Q = O`, since `h = 1`.
-      if q ≠ .infinity ∧ q.isOnCurve then
-        -- Steps 2 and 3 are done by the caller, which passes the integer `e` of the hash.
-        --
-        -- `e` is taken mod `n` here, which leaves `u1` of step 4 unchanged.
-        --
-        -- Step 4: `u1 = e s^(-1) mod n` and `u2 = r s^(-1) mod n`.
-        let sInv := Fn.inv ⟨s, hs.2⟩
-        let u1 := (Fin.ofNat _ e : Fn) * sInv
-        let u2 := (⟨r, hr.2⟩ : Fn) * sInv
-        -- Step 5: `R = (x_R, y_R) = u1 G + u2 Q_U`, and "invalid" if `R = O`.
-        match Point.mulAdd u1 .generator u2 q with
-        | .infinity => false
-        -- Steps 6 to 8: `v = x_R mod n`, and "valid" exactly when `v = r`.
-        | .affine x _ => x.val % Fn.modulus == r
-      else false
-    else false
-  else false
+def verify (q : Point) (e r s : Nat) : Bool := domain.verify q e r s
 
 end EthLib.Cryptography.Secp256r1

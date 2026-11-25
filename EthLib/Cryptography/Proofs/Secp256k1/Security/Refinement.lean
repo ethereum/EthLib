@@ -21,7 +21,7 @@ Source: [Fersch, Kiltz, Poettering][fkp], §1, §3.1 (ECDSA as GenDSA), Definiti
 
 namespace EthLib.Cryptography.Secp256k1.Security
 
-open Ecdsa Point
+open Secp256k1.Ecdsa Point
 
 /-- The scalars: the integers mod `n`, the prime order of the group of the curve. -/
 abbrev Scalar := ZMod Fn.modulus
