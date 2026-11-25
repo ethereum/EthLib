@@ -7,12 +7,9 @@ import EthLib.Base.Proofs.CodeInjective
 /-!
 # Proofs: multistream-select messages
 
-- Decoding reads back a message from its encoding, whatever bytes follow it.
-- The decoder accepts only these encodings, so each message has exactly one.
-- A peer echoes a proposal it supports, and answers `na` to any other.
-- Two peers agree on the first proposal that the listener supports, and on nothing if there is none.
-- That needs `na` outside the proposals, since the dialer could not tell it from a refusal.
-- Two errors with one code come from one constructor.
+The encoding of messages reads back.
+
+Two peers agree on the first proposal that the listener supports.
 -/
 
 @[expose] public section
@@ -88,7 +85,9 @@ theorem encode_decode {bytes rest : List UInt8} {message : ByteArray}
         rw [hr0]
       · simp [h0, h1, h2, throw, throwThe, MonadExceptOf.throw] at h
 
-/-- The decoder accepts exactly the encodings of messages that fit, then any bytes. -/
+/-- The decoder accepts exactly the encodings of messages that fit, then any bytes.
+
+So each message has exactly one encoding. -/
 theorem decode_eq_ok_iff {bytes rest : List UInt8} {message : ByteArray} :
     decode bytes = .ok (message, rest) ↔
       message.size + 1 < Uvarint.bound ∧ encode message ++ rest = bytes :=
@@ -201,7 +200,7 @@ theorem listen_awaitProposal_reply (supported : List ByteArray) (proposal : Byte
 
 /-- When the listener supports some proposal, both peers agree on the first one.
 
-No proposal may be `na`. -/
+No proposal may be `na`, since the dialer could not tell it from a refusal. -/
 theorem run_of_find_some {proposals supported : List ByteArray} {protocol : ByteArray}
     (hna : notAvailable ∉ proposals)
     (h : proposals.find? (supports supported) = some protocol) :

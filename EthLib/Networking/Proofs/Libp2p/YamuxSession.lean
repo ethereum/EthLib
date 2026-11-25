@@ -313,21 +313,15 @@ theorem send_window {isClient : Bool} {events : List (Bool × Frame)} {after : S
   simp only [Session.find?, List.lookup, Option.map_none, Option.getD_none] at h1
   omega
 
-/-- How the flags of one stream change along one accepted frame.
-
-The flags that are on stay on.
-
-Each turns on only by its own frame flag from its own side.
-
-FIN from this side, FIN from the peer and RST turn them on.
-
-The exception is a frame from the peer that this side drops after its own reset. -/
+/-- How the flags of one stream change along one accepted frame. -/
 def FlagStep (remote : Bool) (session after : Session) (frame : Frame) (id : UInt32) : Prop :=
+  -- The flags that are on stay on.
   (∀ s, session.find? id = some s → ∃ s', after.find? id = some s' ∧
     (s.localClosed = true → s'.localClosed = true) ∧
     (s.remoteClosed = true → s'.remoteClosed = true) ∧
     (s.localReset = true → s'.localReset = true) ∧
     (s.remoteReset = true → s'.remoteReset = true)) ∧
+  -- Each flag turns on only by its own frame flag from its own side.
   (∀ s', after.find? id = some s' →
     (s'.localClosed = true → (∃ s, session.find? id = some s ∧ s.localClosed = true) ∨
       (remote = false ∧ OnStream id frame ∧ frame.hasFlag fin = true)) ∧
@@ -336,11 +330,16 @@ def FlagStep (remote : Bool) (session after : Session) (frame : Frame) (id : UIn
     ((s'.localReset = true ∨ s'.remoteReset = true) →
       (∃ s, session.find? id = some s ∧ (s.localReset = true ∨ s.remoteReset = true)) ∨
         (OnStream id frame ∧ frame.hasFlag rst = true))) ∧
+  -- FIN from this side turns on its closed flag.
   (remote = false → OnStream id frame → frame.hasFlag fin = true →
     ∃ s', after.find? id = some s' ∧ s'.localClosed = true) ∧
+  -- FIN from the peer turns on its closed flag.
+  --
+  -- The exception is a frame from the peer that this side drops after its own reset.
   (remote = true → OnStream id frame → frame.hasFlag fin = true →
     (∃ s', after.find? id = some s' ∧ s'.remoteClosed = true) ∨
       ∃ s, session.find? id = some s ∧ s.localReset = true) ∧
+  -- RST turns on a reset flag.
   (OnStream id frame → frame.hasFlag rst = true →
     ∃ s', after.find? id = some s' ∧ (s'.localReset = true ∨ s'.remoteReset = true))
 

@@ -10,21 +10,9 @@ public import EthLib.Base.Except
 /-!
 # Certificate authentication checks
 
-These theorems describe the concrete checks that a successful authentication passes.
+These theorems describe the checks that a successful libp2p TLS authentication passes.
 
-- A chain of any length other than one is rejected.
-- A certificate outside its validity interval is rejected.
-- A certificate without the libp2p extension, or with another critical extension, is rejected.
-- The returned peer ID is that of the host key whose signature verifies over the certificate key.
-- A dialer that succeeds gets the peer ID it expected.
-- A certificate time reads exactly when it writes a valid date and time in an RFC 5280 form.
-- A GeneralizedTime before 2050 is accepted too.
-- Its value counts 86400 seconds for each day from 1970-01-01 in a calendar model, plus the time.
-- A validity reads as two such times in order.
-- The endpoints of a parsed certificate are what its own validity field reads as.
-- An SPKI reads as a P-256 key exactly when it is 26 fixed octets, then an uncompressed point.
-- An extension reads as an OID, then TRUE when critical, then an OCTET STRING.
-- An extension that encodes its default FALSE critical flag is rejected.
+They also describe the readers of certificate times, validity, extensions and P-256 keys.
 -/
 
 @[expose] public section
@@ -438,25 +426,24 @@ private theorem monthDays_le (year month : Nat) : monthDays year month ≤ 31 :=
 
 The forms are those of [RFC 5280 §4.1.2.5](https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.5).
 
-A UTCTime (tag 23) writes a year from 1950 to 2049 as its last two digits.
-
-A GeneralizedTime (tag 24) writes a year from 1 to 9999 as four digits.
-
-Both end in `Z` (byte 90).
-
 The reader takes seconds below 60, so no leap second, which RFC 5280 leaves open.
 
-It also takes a GeneralizedTime before 2050, which issuers must write as UTCTime.
-
-Then `t` counts 86400 seconds for each day from 1970-01-01, negative before it, plus the time. -/
+It also takes a GeneralizedTime before 2050, which issuers must write as UTCTime. -/
 theorem readTime_eq_ok_iff {value : Der.Value} {t : Int} :
     readTime value = .ok t ↔ ∃ year month day hour minute second,
+      -- Both forms end in `Z` (byte 90).
+      --
+      -- A UTCTime (tag 23) writes a year from 1950 to 2049 as its last two digits.
       ((value.tag = 0x17 ∧ 1950 ≤ year ∧ year < 2050 ∧ value.content.data.toList =
           decimalBytes 2 (year % 100) ++ timeBytes month day hour minute second) ∨
+        -- A GeneralizedTime (tag 24) writes a year from 1 to 9999 as four digits.
         (value.tag = 0x18 ∧ 0 < year ∧ year < 10000 ∧ value.content.data.toList =
           decimalBytes 4 year ++ timeBytes month day hour minute second)) ∧
       1 ≤ month ∧ month ≤ 12 ∧ 1 ≤ day ∧ day ≤ (monthLengths year).getD (month - 1) 0 ∧
       hour < 24 ∧ minute < 60 ∧ second < 60 ∧
+      -- `t` counts 86400 seconds for each day from 1970-01-01, negative before it, plus the time.
+      --
+      -- Its days are those of the proleptic Gregorian calendar, before 1970 too.
       t = 86400 * dayNumber year month day + 3600 * hour + 60 * minute + second := by
   by_cases h17 : value.tag = 0x17
   · simp only [readTime, h17, bind_ok_iff, ensure_ok_iff, pure, Except.pure, Except.ok.injEq,
@@ -557,16 +544,17 @@ private theorem der_ok_iff {α : Type} {x : Except Der.Error α} {a : α} :
 
 The fields are those of RFC 5280 §4.1, where the critical flag is a BOOLEAN DEFAULT FALSE.
 
-It reads as the OID content, a critical flag set when TRUE is present, and the string octets.
-
-TRUE is the BOOLEAN with the one octet FF (X.690 §11.1).
-
-An explicit FALSE is rejected, because DER omits a value equal to its default (X.690 §11.5). -/
+It reads as the OID content, a critical flag set when TRUE is present, and the string octets. -/
 theorem readExtension_eq_ok_iff {value : Der.Value} {ext : Extension} :
     readExtension value = .ok ext ↔ ∃ oid data, Der.oid oid = .ok ext.oid ∧ data.tag = 4 ∧
       data.content = ext.value ∧
       ((fields 0x30 value = .ok [oid, data] ∧ ext.critical = false) ∨
         ∃ critical, fields 0x30 value = .ok [oid, critical, data] ∧ critical.tag = 1 ∧
+          -- TRUE is the BOOLEAN with the one octet FF (X.690 §11.1).
+          --
+          -- DER omits a value equal to its default (X.690 §11.5).
+          --
+          -- So an explicit FALSE is rejected.
           critical.content.data.toList = [0xFF] ∧ ext.critical = true) := by
   unfold readExtension
   rw [bind_ok_iff]
@@ -703,17 +691,20 @@ private abbrev p256Algorithm : List UInt8 :=
 
 /-- A P-256 key reads from an SPKI exactly when the SPKI is 26 fixed octets, then its encoding.
 
-They are a SEQUENCE header, the DER of id-ecPublicKey with secp256r1, then a BIT STRING header.
-
-The two OIDs are `1.2.840.10045.2.1` of RFC 5480 §2.1.1 and `1.2.840.10045.3.1.7` of §2.1.1.1.
-
-The BIT STRING has no unused bits and holds an uncompressed point (RFC 5480 §2.2).
-
-So every other key type, curve, parameter form and length form is rejected.
+Every other key type, curve, parameter form and length form is rejected.
 
 So is an unused bit or a trailing octet. -/
 theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Point} :
     readP256 spki = .ok point ↔ ∃ key, Cryptography.Secp256r1.decodeUncompressed key = some point ∧
+      -- The 26 octets start with a SEQUENCE header and the DER of id-ecPublicKey with secp256r1.
+      --
+      -- They end with a BIT STRING header.
+      --
+      -- The key type OID is `1.2.840.10045.2.1` of RFC 5480 §2.1.1.
+      --
+      -- The curve OID is `1.2.840.10045.3.1.7` of RFC 5480 §2.1.1.1.
+      --
+      -- The BIT STRING has no unused bits and holds an uncompressed point (RFC 5480 §2.2).
       spki.data.toList = [0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
         0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00] ++
           key := by

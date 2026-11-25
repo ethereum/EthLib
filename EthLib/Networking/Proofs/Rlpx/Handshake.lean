@@ -13,14 +13,6 @@ import EthLib.Base.Proofs.Bytes
 An honest initiator and an honest recipient derive the same secrets.
 
 Each reading step accepts only public keys that lie on the curve and are not `O`.
-
-The key agreement checks this again, but a reader rejects a key off the curve before it runs.
-
-A reader of `auth` or `ack` ignores the list items after the fields it knows, as EIP-8 asks.
-
-Each side's egress MAC state is the other side's ingress MAC state.
-
-Two errors with one code come from one constructor.
 -/
 
 @[expose] public section
@@ -340,7 +332,9 @@ theorem finish_respond {initiator recipient : Keys} {sealingI sealingR : Sealing
     Except.pure, hnonce]
   rfl
 
-/-- Reading `auth` returns the initiator's static and ephemeral keys, both on the curve, not `O`. -/
+/-- Reading `auth` returns the initiator's static and ephemeral keys, both on the curve, not `O`.
+
+The key agreement checks this again, but a reader rejects a key off the curve before it runs. -/
 theorem readAuth_valid {staticKey : Fn} {packet : ByteArray}
     {auth : AuthMessage} {remoteStatic remoteEphemeral : Point}
     (h : readAuth staticKey packet = .ok (auth, remoteStatic, remoteEphemeral)) :

@@ -10,18 +10,6 @@ The block that the compressor writes decompresses to its input.
 
 Source: [`format_description.txt`][format] of `google/snappy`.
 
-- A proposal that counts matches the input on every byte the copy writes (§2.2).
-- After each step, the elements written so far decode to the input before the pending literal.
-- So the block of an input of at most 2^32 - 1 bytes decompresses to that input.
-
-The table of positions never enters the proofs.
-
-The compressor reads the input to count the bytes a proposal matches.
-
-So the theorem holds for every table.
-
-One input has many blocks, so the round trip goes one way only.
-
 [format]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt
 -/
 
@@ -33,7 +21,10 @@ open EthLib.Networking.Snappy
 open EthLib.Networking.Proofs.Snappy.Block
 open EthLib.Networking.Proofs.Snappy.Encode
 
-/-! ## The match length -/
+/-! ## The match length
+
+The compressor reads the input to count the bytes a proposal matches.
+-/
 
 /-- A count of agreeing bytes only grows, and stops within the input. -/
 theorem le_matchLength (src : ByteArray) (c j : Nat) (hc : c < j) (m : Nat)
@@ -63,7 +54,9 @@ theorem matchLength_get_of_le (src : ByteArray) (c j : Nat) (hc : c < j) (m : Na
   | case2 m h hne => intro k hmk hk; omega
   | case3 m h => intro k hmk hk; omega
 
-/-- Every byte in a match equals the byte `j - c` places before it. -/
+/-- Every byte in a match equals the byte `j - c` places before it.
+
+So a proposal that counts matches the input on every byte the copy writes (§2.2). -/
 theorem matchLength_get (src : ByteArray) (c j : Nat) (hc : c < j) :
     ∀ (m : Nat), m < matchLength src c j hc → ∀ (h1 : c + m < src.size) (h2 : j + m < src.size),
       src[c + m] = src[j + m] :=
@@ -116,6 +109,9 @@ The invariant: the bytes written so far take the empty output to the input befor
 A literal holds at most 2^32 bytes, so the input must have at most 2^32 bytes.
 -/
 theorem compressLoop_reads (src : ByteArray) (hmax : src.size ≤ 2 ^ 32)
+    -- The compressor checks each proposal against the input.
+    --
+    -- So the table of positions never enters the proofs, and the theorem holds for every table.
     (table : Array Nat) (i lit : Nat) (out : ByteArray) (hli : lit ≤ i) (his : i ≤ src.size)
     (hout : Reads src.size out.data.toList [] (src.data.toList.take lit)) :
     Reads src.size (compressLoop src table i lit out).data.toList [] src.data.toList := by
@@ -157,7 +153,9 @@ theorem compress_eq (src : ByteArray) :
         compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0 ByteArray.empty := by
   rw [compress, ← compressLoop_append, ByteArray.append_empty]
 
-/-- The block of an input of at most 2^32 - 1 bytes decompresses back to the input. -/
+/-- The block of an input of at most 2^32 - 1 bytes decompresses back to the input.
+
+One input has many blocks, so the round trip goes one way only. -/
 theorem decompress_compress {src : ByteArray} (h : src.size ≤ maxUncompressedLength) :
     decompress (compress src) = .ok src := by
   have hmax : src.size ≤ 2 ^ 32 := by simp only [maxUncompressedLength] at h; omega

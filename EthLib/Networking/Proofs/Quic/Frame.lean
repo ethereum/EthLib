@@ -178,15 +178,14 @@ theorem valid_of_decodeList {packet : Packet.PacketType} {input rest : List UInt
 
 They start from the smallest packet number of the range before them.
 
-The largest packet number of a range is its gap plus two below that smallest one.
-
-Its smallest packet number is its range length below its largest, RFC 9000 §19.3.1.
-
 The numbers are integers, so a range of an invalid frame can reach below 0.
 -/
 def ackedRangesFrom : Int → List AckRange → List (Int × Int)
   | _, [] => []
   | smallest, (gap, length) :: rest =>
+    -- The largest packet number of a range is its gap plus two below `smallest`.
+    --
+    -- Its smallest packet number is its range length below its largest, RFC 9000 §19.3.1.
     (smallest - gap.val - 2, smallest - gap.val - 2 - length.val) ::
       ackedRangesFrom (smallest - gap.val - 2 - length.val) rest
 

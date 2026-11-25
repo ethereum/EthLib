@@ -55,28 +55,25 @@ private theorem authenticatePayload_of_makePayload {k : Fn} {staticKey : Key}
 
 /-- Two honest libp2p peers complete XX, and each returns the identity of the other.
 
-The secrets `si`, `ei` and the identity secret `ki` are those of the initiator.
-
-The secrets `sr`, `er` and the identity secret `kr` are those of the responder.
-
-Making each identity payload must succeed.
-
-Each payload must fit in a message of at most 65535 bytes, with the keys and tags of its message.
-
-Message 1 carries an empty payload, since noise-libp2p puts no identity in it.
-
-Making a payload fails on the zero secret, so both identity secrets are nonzero.
-
 The initiator's remote has the responder's static key, identity key and extensions.
 
 The responder's remote has the initiator's, and the two pairs of ciphers are swapped. -/
 theorem libp2p_complete (si ei sr er : Key) (ki kr : Fn)
     (x₂ x₃ : Option ByteArray) (q₂ q₃ : ByteArray)
+    -- Making each identity payload must succeed.
     (hq₂ : makePayload kr (X25519.publicKey sr) x₂ = .ok q₂)
     (hq₃ : makePayload ki (X25519.publicKey si) x₃ = .ok q₃)
+    -- Each payload must fit in a message of at most 65535 bytes.
+    --
+    -- The keys and tags of its message count toward that bound.
     (h₂ : q₂.size + 96 ≤ 65535) (h₃ : q₃.size + 64 ≤ 65535) :
     ∃ (i₁ i₂ i₃ r₁ r₂ r₃ : Libp2pState) (m₁ m₂ m₃ : ByteArray)
       (remoteR remoteI : Remote) (c₁ c₂ : CipherState),
+      -- The secrets `si`, `ei` and the identity secret `ki` are those of the initiator.
+      --
+      -- The secrets `sr`, `er` and the identity secret `kr` are those of the responder.
+      --
+      -- Message 1 carries an empty payload, since noise-libp2p puts no identity in it.
       writeLibp2p (initializeLibp2p true si ei) ki none = .ok (i₁, m₁) ∧
       readLibp2p (initializeLibp2p false sr er) m₁ = .ok r₁ ∧
       writeLibp2p r₁ kr x₂ = .ok (r₂, m₂) ∧
@@ -93,6 +90,7 @@ theorem libp2p_complete (si ei sr er : Key) (ki kr : Fn)
       remoteI.extensions = x₃ := by
   obtain ⟨I₁, I₂, I₃, R₁, R₂, R₃, m₁, m₂, m₃, c₁, c₂, hw₁, hr₁, hw₂, hr₂, hw₃, hr₃, -, hsI, hsR,
     htI, htR⟩ := handshake_complete si ei sr er .empty .empty q₂ q₃ (by simp) h₂ h₃
+  -- Making a payload fails on the zero secret, so both identity secrets are nonzero.
   obtain ⟨hkr, -⟩ := makePayload_eq hq₂
   obtain ⟨hki, -⟩ := makePayload_eq hq₃
   obtain ⟨g₂, ha₂⟩ := authenticatePayload_of_makePayload hq₂

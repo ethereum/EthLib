@@ -10,15 +10,6 @@ import EthLib.Base.Proofs.CodeInjective
 Properties of the Snappy framing format, against `framing_format.txt` of `google/snappy`:
 
 <https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/framing_format.txt>
-
-- Chunks that each decode to their piece of the data decode back to the data.
-- The stream of uncompressed chunks decodes back to its data.
-- A stream that decodes starts with the stream identifier (§4.1).
-- After the identifier, one bad chunk rejects the whole stream.
-- A wrong checksum, more than 65536 bytes or a reserved unskippable type makes a chunk bad.
-- Padding and reserved skippable chunks add nothing.
-- Two streams that decode, one after the other, decode to their two outputs in turn.
-  A stream identifier after the first adds nothing (§4.1).
 -/
 
 @[expose] public section

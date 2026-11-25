@@ -12,14 +12,6 @@ import EthLib.Base.Proofs.CodeInjective
 
 Properties of Snappy block decompression, against `format_description.txt` of `google/snappy`:
 <https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
-
-- The preamble is a little-endian varint, and it reads back every length up to 2^32 - 1 (§1).
-- A copy writes exactly the bytes §2.2 describes, overlapping copies included.
-- A block cannot start with a copy (§2).
-- A block that decompresses yields exactly the length it declared, at most 2^32 - 1.
-- Its first five bytes alone declare that length.
-- The fuel that bounds the element loop never changes the result.
-- A literal element appends its data to the output (§2.1).
 -/
 
 @[expose] public section
@@ -31,7 +23,9 @@ open EthLib.Networking.Snappy
 
 /-! ## The preamble (§1) -/
 
-/-- The preamble reads back the varint of every length up to 2^32 - 1, whatever follows it. -/
+/-- The preamble reads back the varint of every length up to 2^32 - 1, whatever follows it.
+
+The preamble is a little-endian varint (§1). -/
 theorem readPreamble_encode {n : Nat} (rest : List UInt8) (hn : n ≤ maxUncompressedLength) :
     readPreamble (EthLib.Networking.Encoding.Varint.encodeAux n preambleMaxLength ++ rest) =
       .ok (n, rest) := by
@@ -109,13 +103,14 @@ The result `r`:
 - starts with the output `o` it was given,
 - is `n` bytes longer,
 - has each new byte equal to the byte `offset` places before it.
-
-The last rule is read on the bytes already written, so a copy longer than its offset repeats itself.
 -/
 theorem copyBytes_spec {o : List UInt8} {offset : Nat} (n : Nat)
     (hpos : 0 < offset) (hle : offset ≤ o.length) :
     ∃ r, copyBytes o.toByteArray offset n = .ok r.toByteArray ∧ r.length = o.length + n ∧ o <+: r ∧
       ∀ (j : Nat) (hj : o.length ≤ j) (hjr : j < r.length),
+        -- Each new byte is read from `r` itself, so it may be one that this copy wrote.
+        --
+        -- So a copy longer than its offset repeats itself.
         r[j] = r[j - offset]'(by omega) := by
   induction n generalizing o with
   | zero => exact ⟨o, rfl, rfl, List.prefix_refl o, fun j hj hjr => by omega⟩

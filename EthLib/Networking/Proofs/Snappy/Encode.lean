@@ -10,17 +10,6 @@ The decoder reads the elements that the encoder writes.
 
 Source: [`format_description.txt`][format] of `google/snappy`.
 
-Bytes `e` take the output `o` to the output `o'` in this sense.
-
-Start the element loop on `e`, followed by any bytes, with the output `o`.
-
-It then reaches the end of `e` with the output `o'`.
-
-- The bytes of a literal take the output `o` to `o` followed by the data (§2.1).
-- A copy takes a prefix of a list `L` to a longer prefix, if it repeats bytes of `L` (§2.2).
-- The copies that the encoder writes for one offset do the same, one after the other.
-- The literal that the encoder writes for a range of the input takes it from its start to its end.
-
 [format]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt
 -/
 
@@ -75,20 +64,15 @@ theorem reads_literal {declared : Nat} {o data : List UInt8} (hne : data ≠ [])
 
 /-! ## Copies (§2.2) -/
 
-/-- A list `r` that starts with the first `p` bytes of `L` is the first `p + n` bytes of `L`.
-
-The list `r` has `p + n` bytes, and `L` has at least as many.
-
-The offset is positive and at most `p`.
-
-Each byte of `r` from `p` on equals the byte `offset` places before it in `r`.
-
-Each byte of `L` from `p` up to `p + n` equals the byte `offset` places before it in `L`.
--/
+/-- A list `r` that starts with the first `p` bytes of `L` is the first `p + n` bytes of `L`. -/
 private theorem eq_take_of_repeat {L r : List UInt8} {p n offset : Nat} (hoff : 0 < offset)
+    -- The offset is positive and at most `p`.
     (hle : offset ≤ p)
+    -- The list `r` has `p + n` bytes, and `L` has at least as many.
     (hpn : p + n ≤ L.length) (hlen : r.length = p + n) (hpre : L.take p <+: r)
+    -- Each byte of `r` from `p` on equals the byte `offset` places before it in `r`.
     (hr : ∀ (j : Nat) (hj : p ≤ j) (hjr : j < r.length), r[j] = r[j - offset]'(by omega))
+    -- Each byte of `L` from `p` up to `p + n` equals the byte `offset` places before it in `L`.
     (hmatch : ∀ (j : Nat) (_hj : p ≤ j) (_hjn : j < p + n) (h1 : j < L.length)
       (h2 : j - offset < L.length), L[j] = L[j - offset]) :
     r = L.take (p + n) := by
