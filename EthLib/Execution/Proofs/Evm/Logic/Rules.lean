@@ -51,6 +51,13 @@ theorem Hoare.gas_eq {P : Evm fork Nat → Prop} {code : ByteArray} {pc : Nat}
     {ss : Substate} (h : Hoare fork P (At code message pc stack m gas st ss returnData))
     (hg : gas = gas') : Hoare fork P (At code message pc stack m gas' st ss returnData) := hg ▸ h
 
+/-- A triple over the steps from frames monotone in gas, whose postcondition holds of equal gas. -/
+theorem HoareG.gas_eq {P : Evm fork Nat → Prop} {code : ByteArray} {pc : Nat}
+    {stack : List U256} {m : ByteArray} {gas gas' : Nat} {st : State.TransactionState}
+    {ss : Substate} (h : HoareG fork P (At code message pc stack m gas st ss returnData))
+    (hg : gas = gas') : HoareG fork P (At code message pc stack m gas' st ss returnData) :=
+  hg ▸ h
+
 /-! ## The instruction table -/
 
 section Table
@@ -1337,14 +1344,23 @@ theorem stop (hlt : pc < code.size) (hbyte : code[pc] = 0x00) :
 
 /-- A frame at or past the end of its code stops as STOP does, at no price.
 
-It has no form over the steps from frames that are monotone in gas yet. -/
-theorem stop_of_size_le (hle : code.size ≤ pc) :
-    Spec fork (At code message pc stack memory gas state substate returnData)
+It holds over the steps from frames that are monotone in gas. -/
+theorem stop_of_size_leG (hle : code.size ≤ pc) :
+    SpecG fork (At code message pc stack memory gas state substate returnData)
       (Halted false .empty gas state substate) := by
   apply Triple.of_step
   rintro evm ⟨hcode, -, -, hpc, -, -, hg, hrun, herr, hout, hs, hss, -⟩
-  exact ⟨_, .next hrun (step_of_size_le (by rw [hcode, hpc]; exact hle)), rfl, rfl, herr, hout,
-    hg, hs, hss⟩
+  have past : evm.code.size ≤ evm.pc := by rw [hcode, hpc]; exact hle
+  refine ⟨_, ⟨.next hrun (step_of_size_le past), ?_⟩, rfl, rfl, herr, hout, hg, hs, hss⟩
+  -- With less gas the frame is still past the end of its code, and stops the same way.
+  rintro k low rfl
+  exact .inr ⟨_, step_of_size_le past, step_of_size_le past⟩
+
+/-- A frame at or past the end of its code stops as STOP does, at no price. -/
+theorem stop_of_size_le (hle : code.size ≤ pc) :
+    Spec fork (At code message pc stack memory gas state substate returnData)
+      (Halted false .empty gas state substate) :=
+  (stop_of_size_leG hle).toSpec
 
 /-- RETURN stops the frame with a range of memory as its output, and pays the growth of memory.
 
@@ -1606,7 +1622,65 @@ theorem sstore (hfork : .berlin ≤ fork) {key new : U256}
 
 The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the charge.
 
-It has no form over the steps from frames that are monotone in gas yet. -/
+It holds over the steps from frames that are monotone in gas. -/
+theorem sstore_of_accountG (hfork : .berlin ≤ fork)
+    {key new : U256} {rest : List U256} {cold : Bool}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
+    (hcold : decide (U256.toBeBytes key ∉
+      substate.accessedStorageKeys.getD message.currentTarget ∅) = cold)
+    (hstipend : CALL_STIPEND < gas)
+    (hgas : sstoreTotalCost fork
+      (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+      (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold ≤ gas)
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true) :
+    ∃ state' : State.TransactionState,
+      -- The write then gives a state that holds `new` in the slot.
+      state'.getStorage message.currentTarget (U256.toBeBytes key) = new ∧
+      -- That state keeps every other slot of every address.
+      (∀ other slot, other ≠ message.currentTarget ∨ slot ≠ U256.toBeBytes key →
+        state'.getStorage other slot = state.getStorage other slot) ∧
+      -- It also keeps the words before the transaction, the accounts, the codes and the block.
+      state'.getStorageOriginal = state.getStorageOriginal ∧
+      (∀ other, state'.getAccountOptional other = state.getAccountOptional other) ∧
+      (∀ codeHash, state'.getCode codeHash = state.getCode codeHash) ∧
+      state'.parent = state.parent ∧
+      HoareG fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
+        (At code message (pc + 1) rest memory
+          (gas - sstoreTotalCost fork
+            (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+            (state.getStorage message.currentTarget (U256.toBeBytes key)) new cold)
+          state'
+          { substate with
+            accessedStorageKeys := substate.accessedStorageKeys.insert message.currentTarget
+              ((substate.accessedStorageKeys.getD message.currentTarget ∅).insert
+                (U256.toBeBytes key))
+            refundCounter := substate.refundCounter + sstoreRefund fork
+              (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
+              (state.getStorage message.currentTarget (U256.toBeBytes key)) new } returnData) := by
+  -- Recording the read keeps the account, so the write succeeds.
+  obtain ⟨state', hset⟩ := State.TransactionState.exists_setStorage (U256.toBeBytes key) new
+    (tx := state.recordStorageRead message.currentTarget (U256.toBeBytes key))
+    (by rw [(State.TransactionState.recordStorageRead_reads state _ message.currentTarget _
+      (U256.toBeBytes key) default).1]; exact hacc)
+  refine ⟨state', State.TransactionState.getStorage_setStorage_self hset, fun other slot hne => ?_,
+    ?_, fun other => ?_, fun codeHash => ?_,
+    by rw [State.TransactionState.parent_setStorage hset]; rfl,
+    sstoreG hfork hlt hbyte hstatic hcold hstipend hgas hset⟩
+  · rw [State.TransactionState.getStorage_setStorage_of_ne hset hne]
+    exact (State.TransactionState.recordStorageRead_reads state _ other _ slot default).2.1
+  · rw [State.TransactionState.getStorageOriginal_setStorage hset]
+    funext other slot
+    exact (State.TransactionState.recordStorageRead_reads state _ other _ slot default).2.2.1
+  · rw [State.TransactionState.getAccountOptional_setStorage hset]
+    exact (State.TransactionState.recordStorageRead_reads state _ other _
+      (U256.toBeBytes key) default).1
+  · rw [State.TransactionState.getCode_setStorage hset]
+    exact (State.TransactionState.recordStorageRead_reads state _ message.currentTarget _
+      (U256.toBeBytes key) codeHash).2.2.2.1
+
+/-- From Berlin, with one counter of gas, SSTORE to a slot of the current account, which exists.
+
+The rest is as for SSTORE: a frame that may change the state, more than 2300 gas, and the charge. -/
 theorem sstore_of_account (hfork : .berlin ≤ fork)
     {key new : U256} {rest : List U256} {cold : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstatic : message.isStatic = false)
@@ -1641,26 +1715,9 @@ theorem sstore_of_account (hfork : .berlin ≤ fork)
             refundCounter := substate.refundCounter + sstoreRefund fork
               (state.getStorageOriginal message.currentTarget (U256.toBeBytes key))
               (state.getStorage message.currentTarget (U256.toBeBytes key)) new } returnData) := by
-  -- Recording the read keeps the account, so the write succeeds.
-  obtain ⟨state', hset⟩ := State.TransactionState.exists_setStorage (U256.toBeBytes key) new
-    (tx := state.recordStorageRead message.currentTarget (U256.toBeBytes key))
-    (by rw [(State.TransactionState.recordStorageRead_reads state _ message.currentTarget _
-      (U256.toBeBytes key) default).1]; exact hacc)
-  refine ⟨state', State.TransactionState.getStorage_setStorage_self hset, fun other slot hne => ?_,
-    ?_, fun other => ?_, fun codeHash => ?_,
-    by rw [State.TransactionState.parent_setStorage hset]; rfl,
-    sstore hfork hlt hbyte hstatic hcold hstipend hgas hset⟩
-  · rw [State.TransactionState.getStorage_setStorage_of_ne hset hne]
-    exact (State.TransactionState.recordStorageRead_reads state _ other _ slot default).2.1
-  · rw [State.TransactionState.getStorageOriginal_setStorage hset]
-    funext other slot
-    exact (State.TransactionState.recordStorageRead_reads state _ other _ slot default).2.2.1
-  · rw [State.TransactionState.getAccountOptional_setStorage hset]
-    exact (State.TransactionState.recordStorageRead_reads state _ other _
-      (U256.toBeBytes key) default).1
-  · rw [State.TransactionState.getCode_setStorage hset]
-    exact (State.TransactionState.recordStorageRead_reads state _ message.currentTarget _
-      (U256.toBeBytes key) codeHash).2.2.2.1
+  obtain ⟨state', h1, h2, h3, h4, h5, h6, h⟩ :=
+    sstore_of_accountG hfork hlt hbyte hstatic hcold hstipend hgas hacc
+  exact ⟨state', h1, h2, h3, h4, h5, h6, h.toHoare⟩
 
 /-- Recording the access of a slot twice records it once. -/
 theorem insert_insert_getD_self (substate : Substate) (address : Address) (key : Bytes32) :
@@ -1733,7 +1790,38 @@ theorem externalBaseCost_of_berlin (hfork : .berlin ≤ fork) (hglam : fork < .g
 
 /-- From Berlin, EXTCODESIZE pushes the size of the code of an account.
 
-It has no form over the steps from frames that are monotone in gas yet. -/
+It holds over the steps from frames that are monotone in gas. -/
+theorem extcodesize_of_berlin_leG (hfork : .berlin ≤ fork) {word : U256} {rest : List U256}
+    {cold : Bool} {c : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0x3b)
+    -- The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
+    (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
+    -- The address is cold when the transaction has not accessed it yet, by EIP-2929.
+    (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
+    -- Up to BPO5 the frame pays 2600 for a cold address and 100 for a warm one.
+    --
+    -- From Glamsterdam it pays the access to the address and a warm access to read the code.
+    --
+    -- That price is from EIP-8038.
+    (hgas : externalBaseCost fork cold ≤ gas) :
+    HoareG fork (At code message pc (word :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory
+        (gas - externalBaseCost fork cold)
+        -- It then adds the address to the accessed addresses, and records the read of the account.
+        (state.recordAccountRead (Base.toAddressMasked word))
+        { substate with
+          accessedAddresses :=
+            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
+  apply At.ruleG hlt hbyte (ofByte_of_decode (op := .extcodesize) rfl (Fork.frontier_le _)) rfl
+    runMono_extcodesize
+  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
+  have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
+    simp [accountCode, hs, hcode, Except.mapError]
+  rw [extcodesizeStep_of_accountCode hst found]
+  simp only [accessAddress, hfork, ↓reduceIte, hss, hcold, hg, charge_nat hgas]
+  exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, hmem, rfl, hrun, herr, hout, by simp [hs],
+    by simp, hrd⟩
+
+/-- From Berlin, EXTCODESIZE pushes the size of the code of an account. -/
 theorem extcodesize_of_berlin_le (hfork : .berlin ≤ fork) {word : U256} {rest : List U256}
     {cold : Bool} {c : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0x3b)
     -- The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
@@ -1753,15 +1841,31 @@ theorem extcodesize_of_berlin_le (hfork : .berlin ≤ fork) {word : U256} {rest 
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=
+            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) :=
+  (extcodesize_of_berlin_leG hfork hlt hbyte hcode hcold hgas).toHoare
+
+/-- From Berlin to before Glamsterdam, EXTCODESIZE pushes the size of the code of an account.
+
+It holds over the steps from frames that are monotone in gas. -/
+theorem extcodesizeG (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {word : U256}
+    {rest : List U256} {cold : Bool} {c : ByteArray} (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x3b)
+    -- The address is the low 20 bytes of the word, and the state holds the code `c` of its account.
+    (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
+    -- The address is cold when the transaction has not accessed it yet, by EIP-2929.
+    (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
+    -- The frame pays 2600 for a cold address and 100 for a warm one.
+    (hgas : (if cold then 2600 else 100) ≤ gas) :
+    HoareG fork (At code message pc (word :: rest) memory gas state substate returnData)
+      (At code message (pc + 1) (BitVec.ofNat 256 c.size :: rest) memory
+        (gas - if cold then 2600 else 100)
+        -- It then adds the address to the accessed addresses, and records the read of the account.
+        (state.recordAccountRead (Base.toAddressMasked word))
+        { substate with
+          accessedAddresses :=
             substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
-  apply At.rule hlt hbyte (ofByte_of_decode (op := .extcodesize) rfl (Fork.frontier_le _)) rfl
-  rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
-  have found : accountCode evm (Base.toAddressMasked word) = .ok c := by
-    simp [accountCode, hs, hcode, Except.mapError]
-  rw [extcodesizeStep_of_accountCode hst found]
-  simp only [accessAddress, hfork, ↓reduceIte, hss, hcold, hg, charge_nat hgas]
-  exact ⟨_, rfl, hc, hj, hm, by simp [hpc], rfl, hmem, rfl, hrun, herr, hout, by simp [hs],
-    by simp, hrd⟩
+  rw [← externalBaseCost_of_berlin hfork hglam cold] at hgas ⊢
+  exact extcodesize_of_berlin_leG hfork hlt hbyte hcode hcold hgas
 
 /-- From Berlin to before Glamsterdam, EXTCODESIZE pushes the size of the code of an account. -/
 theorem extcodesize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {word : U256}
@@ -1780,8 +1884,7 @@ theorem extcodesize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {wo
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=
-            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) := by
-  rw [← externalBaseCost_of_berlin hfork hglam cold] at hgas ⊢
-  exact extcodesize_of_berlin_le hfork hlt hbyte hcode hcold hgas
+            substate.accessedAddresses.insert (Base.toAddressMasked word) } returnData) :=
+  (extcodesizeG hfork hglam hlt hbyte hcode hcold hgas).toHoare
 
 end EthLib.Execution.Evm.Logic

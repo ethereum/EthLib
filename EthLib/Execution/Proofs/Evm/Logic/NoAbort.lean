@@ -34,7 +34,9 @@ variable {fork : Fork}
 
 /-! ## Results that do not abort
 
-Every instruction of `Logic/RunMono.lean` never aborts, except SSTORE, whose write may fail.
+Every instruction of `Logic/RunMono.lean` never aborts, except SSTORE and EXTCODESIZE.
+
+The write of SSTORE may fail, and so may the read of code of EXTCODESIZE.
 -/
 
 /-- The result `r` is no error that aborts the whole run. -/

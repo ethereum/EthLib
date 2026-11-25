@@ -66,6 +66,83 @@ When no key is `x`, the run goes on past the table.
 
 It pays 22 gas for each entry it tests, and keeps the word on the stack.
 
+The key takes `n` bytes and the destination `m` bytes, from 1 to 32 each, in every entry.
+
+It holds over the steps from frames that are monotone in gas. -/
+theorem branchTableG {n m : Fin 33} (hn : n.val ≠ 0) (hm : m.val ≠ 0) {x : U256}
+    -- The stack must have room for two words.
+    {rest : List U256} (hstack : rest.length + 2 < STACK_LIMIT) :
+    -- Each destination must be a valid destination of a jump.
+    ∀ {pc gas : Nat} {entries : List (U256 × U256)}, Table code n m pc entries →
+      -- The price holds at every fork with the one-counter meter.
+      22 * tested x entries ≤ gas →
+      HoareG fork (At code message pc (x :: rest) memory gas state substate returnData)
+        -- The stack keeps the word, and memory, the state and the substate stay as they are.
+        (At code message (branch x pc (entrySize n m) entries) (x :: rest) memory
+          (gas - 22 * tested x entries) state substate returnData)
+  | pc, gas, [], _, _ => Triple.of_imp fun _ h => h
+  | pc, gas, (key, dest) :: entries, ⟨⟨l0, b0⟩, ⟨l1, b1⟩, hkey, ⟨l2, b2⟩, ⟨l3, b3⟩, hdest,
+      ⟨l4, b4⟩, valid, table⟩, hgas => by
+    have h22 : 22 ≤ gas := by
+      simp only [tested] at hgas
+      split at hgas <;> omega
+    have h1 := dup1G (fork := fork) (code := code) (message := message) (memory := memory)
+      (state := state) (substate := substate) (returnData := returnData)
+      (pc := pc) (x := x) (rest := rest) (gas := gas)
+      l0 b0 (by omega) (by simp only [List.length_cons]; omega)
+    have h2 := pushG (fork := fork) (code := code) (message := message) (memory := memory)
+      (state := state) (substate := substate) (returnData := returnData)
+      (pc := pc + 1) (stack := x :: x :: rest)
+      (gas := gas - 3) (n := n) (word := key) hn l1 b1 (decode_push n hn) hkey (by omega)
+      (by simp only [List.length_cons]; omega)
+    have h3 := binaryG (fork := fork) (code := code) (message := message) (memory := memory)
+      (state := state) (substate := substate) (returnData := returnData)
+      (pc := pc + 1 + (1 + n)) (x := key) (y := x)
+      (rest := x :: rest) (gas := gas - 3 - 3) l2 b2
+      (ofByte_of_decode (op := .eq) rfl (Fork.frontier_le _)) instruction_eq
+      (by simp only [OPCODE_EQ, VERY_LOW]; omega)
+    have h4 := pushG (fork := fork) (code := code) (message := message) (memory := memory)
+      (state := state) (substate := substate) (returnData := returnData)
+      (pc := pc + 1 + (1 + n) + 1)
+      (stack := equal key x :: x :: rest) (gas := gas - 3 - 3 - OPCODE_EQ) (n := m) (word := dest)
+      hm l3 b3 (decode_push m hm) hdest (by simp only [OPCODE_EQ, VERY_LOW]; omega)
+      (by simp only [List.length_cons]; omega)
+    have h14 := ((h1.seq h2).seq h3).seq h4
+    by_cases hk : key = x
+    · have h5 := jumpi_takenG (fork := fork) (code := code) (message := message) (memory := memory)
+        (state := state) (substate := substate) (returnData := returnData)
+        (pc := pc + 1 + (1 + n) + 1 + (1 + m))
+        (destination := dest) (condition := equal key x) (rest := x :: rest)
+        (gas := gas - 3 - 3 - OPCODE_EQ - 3) l4 b4 (by simp only [OPCODE_EQ, VERY_LOW]; omega)
+        (by simp [equal, hk]) valid
+      have h := h14.seq h5
+      simp only [branch, tested, hk, ite_true]
+      exact HoareG.gas_eq h (by simp only [OPCODE_EQ, VERY_LOW]; omega)
+    · have heq : equal key x = 0 := by simp [equal, hk]
+      rw [heq] at h14
+      have h5 := jumpi_zeroG (fork := fork) (code := code) (message := message) (memory := memory)
+        (state := state) (substate := substate) (returnData := returnData)
+        (pc := pc + 1 + (1 + n) + 1 + (1 + m))
+        (destination := dest) (rest := x :: rest) (gas := gas - 3 - 3 - OPCODE_EQ - 3) l4 b4
+        (by simp only [OPCODE_EQ, VERY_LOW]; omega)
+      have hpc : pc + 1 + (1 + n) + 1 + (1 + m) + 1 = pc + entrySize n m := by
+        simp only [entrySize]
+        omega
+      rw [hpc] at h5
+      simp only [tested, hk, ite_false] at hgas
+      have h15 := HoareG.gas_eq (h14.seq h5) (gas' := gas - 22)
+        (by simp only [OPCODE_EQ, VERY_LOW]; omega)
+      have ih := branchTableG (x := x) (pc := pc + entrySize n m) (gas := gas - 22) hn hm hstack
+        table (by omega)
+      simp only [branch, tested, hk, ite_false]
+      exact HoareG.gas_eq (h15.seq ih) (by omega)
+
+/-- A table of keys sends the word `x` to the destination of the first entry with key `x`.
+
+When no key is `x`, the run goes on past the table.
+
+It pays 22 gas for each entry it tests, and keeps the word on the stack.
+
 The key takes `n` bytes and the destination `m` bytes, from 1 to 32 each, in every entry. -/
 theorem branchTable {n m : Fin 33} (hn : n.val ≠ 0) (hm : m.val ≠ 0) {x : U256}
     -- The stack must have room for two words.
@@ -77,63 +154,8 @@ theorem branchTable {n m : Fin 33} (hn : n.val ≠ 0) (hm : m.val ≠ 0) {x : U2
       Hoare fork (At code message pc (x :: rest) memory gas state substate returnData)
         -- The stack keeps the word, and memory, the state and the substate stay as they are.
         (At code message (branch x pc (entrySize n m) entries) (x :: rest) memory
-          (gas - 22 * tested x entries) state substate returnData)
-  | pc, gas, [], _, _ => Triple.of_imp fun _ h => h
-  | pc, gas, (key, dest) :: entries, ⟨⟨l0, b0⟩, ⟨l1, b1⟩, hkey, ⟨l2, b2⟩, ⟨l3, b3⟩, hdest,
-      ⟨l4, b4⟩, valid, table⟩, hgas => by
-    have h22 : 22 ≤ gas := by
-      simp only [tested] at hgas
-      split at hgas <;> omega
-    have h1 := dup1 (fork := fork) (code := code) (message := message) (memory := memory)
-      (state := state) (substate := substate) (returnData := returnData)
-      (pc := pc) (x := x) (rest := rest) (gas := gas)
-      l0 b0 (by omega) (by simp only [List.length_cons]; omega)
-    have h2 := push (fork := fork) (code := code) (message := message) (memory := memory)
-      (state := state) (substate := substate) (returnData := returnData)
-      (pc := pc + 1) (stack := x :: x :: rest)
-      (gas := gas - 3) (n := n) (word := key) hn l1 b1 (decode_push n hn) hkey (by omega)
-      (by simp only [List.length_cons]; omega)
-    have h3 := binary (fork := fork) (code := code) (message := message) (memory := memory)
-      (state := state) (substate := substate) (returnData := returnData)
-      (pc := pc + 1 + (1 + n)) (x := key) (y := x)
-      (rest := x :: rest) (gas := gas - 3 - 3) l2 b2
-      (ofByte_of_decode (op := .eq) rfl (Fork.frontier_le _)) instruction_eq
-      (by simp only [OPCODE_EQ, VERY_LOW]; omega)
-    have h4 := push (fork := fork) (code := code) (message := message) (memory := memory)
-      (state := state) (substate := substate) (returnData := returnData)
-      (pc := pc + 1 + (1 + n) + 1)
-      (stack := equal key x :: x :: rest) (gas := gas - 3 - 3 - OPCODE_EQ) (n := m) (word := dest)
-      hm l3 b3 (decode_push m hm) hdest (by simp only [OPCODE_EQ, VERY_LOW]; omega)
-      (by simp only [List.length_cons]; omega)
-    have h14 := ((h1.seq h2).seq h3).seq h4
-    by_cases hk : key = x
-    · have h5 := jumpi_taken (fork := fork) (code := code) (message := message) (memory := memory)
-        (state := state) (substate := substate) (returnData := returnData)
-        (pc := pc + 1 + (1 + n) + 1 + (1 + m))
-        (destination := dest) (condition := equal key x) (rest := x :: rest)
-        (gas := gas - 3 - 3 - OPCODE_EQ - 3) l4 b4 (by simp only [OPCODE_EQ, VERY_LOW]; omega)
-        (by simp [equal, hk]) valid
-      have h := h14.seq h5
-      simp only [branch, tested, hk, ite_true]
-      exact Hoare.gas_eq h (by simp only [OPCODE_EQ, VERY_LOW]; omega)
-    · have heq : equal key x = 0 := by simp [equal, hk]
-      rw [heq] at h14
-      have h5 := jumpi_zero (fork := fork) (code := code) (message := message) (memory := memory)
-        (state := state) (substate := substate) (returnData := returnData)
-        (pc := pc + 1 + (1 + n) + 1 + (1 + m))
-        (destination := dest) (rest := x :: rest) (gas := gas - 3 - 3 - OPCODE_EQ - 3) l4 b4
-        (by simp only [OPCODE_EQ, VERY_LOW]; omega)
-      have hpc : pc + 1 + (1 + n) + 1 + (1 + m) + 1 = pc + entrySize n m := by
-        simp only [entrySize]
-        omega
-      rw [hpc] at h5
-      simp only [tested, hk, ite_false] at hgas
-      have h15 := Hoare.gas_eq (h14.seq h5) (gas' := gas - 22)
-        (by simp only [OPCODE_EQ, VERY_LOW]; omega)
-      have ih := branchTable (x := x) (pc := pc + entrySize n m) (gas := gas - 22) hn hm hstack
-        table (by omega)
-      simp only [branch, tested, hk, ite_false]
-      exact Hoare.gas_eq (h15.seq ih) (by omega)
+          (gas - 22 * tested x entries) state substate returnData) :=
+  fun table hgas => (branchTableG hn hm hstack table hgas).toHoare
 
 /-- When no key of the table is `x`, the run goes past all its entries. -/
 theorem branch_of_forall_ne {x : U256} {size : Nat} :

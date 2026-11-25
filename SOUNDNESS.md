@@ -2195,8 +2195,7 @@ It needs the word not to depend on the gas.
 The opcode rules of `Logic/Rules.lean`, `Logic/Stack.lean` and `Logic/Log.lean` are proved over the steps from frames that are `GasMono`, such as `Logic.calldataloadG`.
 Each such rule has the hypotheses and the conclusion of the rule over `Step` of the same opcode, which follows from it by `Logic.HoareG.toHoare` or `Logic.SpecG.toSpec`.
 Of the opcode rules there, the one for GAS has no such form, since it pushes the gas left.
-Those for EXTCODESIZE, a frame past the end of its code and `Logic.sstore_of_account` have none yet.
-`Logic.branchTable` has no such form yet.
+`Logic.branchTableG` (`Logic/Branch.lean`) is the rule of a table of keys over these steps, and `Logic.branchTable` follows from it.
 `Logic.At.stuck` proves that a frame is stuck at an opcode whose instruction fails on every frame with the same message, stack and state, and at most the same gas.
 `Logic.sstore_stuck` proves that SSTORE is stuck in a static frame, or when the current address has no account.
 `Logic.sstore_low_stuck` proves that from Istanbul SSTORE is stuck with 2300 gas or less, by EIP-2200.
@@ -2204,7 +2203,8 @@ Those for EXTCODESIZE, a frame past the end of its code and `Logic.sstore_of_acc
 The facts of `Logic/NoAbort.lean` are for the one-counter meter too.
 `Logic.NoAbort` says that a result is no error that aborts the run.
 An error of the state aborts, and so do an opcode with no instruction, an encoding error, a fork with no specification and a number of the environment that no word holds.
-Each instruction of `Logic/RunMono.lean` except SSTORE never aborts, such as `Logic.noAbort_log` for LOG0 to LOG4.
+Each instruction of `Logic/RunMono.lean` except SSTORE and EXTCODESIZE never aborts, such as `Logic.noAbort_log` for LOG0 to LOG4.
+EXTCODESIZE can abort, since the state may lack the code of the account that it reads.
 `Logic.NoAbortLow` says that the step from every frame with less gas than a frame does not abort.
 `Logic.HoareGA` and `Logic.SpecGA` are triples over the steps of `Logic.StepG` from frames that are `Logic.NoAbortLow`.
 `Logic.HoareGA.toG` proves that such a triple is a triple over `Logic.StepG`.
