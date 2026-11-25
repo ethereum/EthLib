@@ -35,6 +35,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Cost
 public import EthLib.Cryptography.Proofs.Sphincs.Cost
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.AdversaryCalls
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.SigningFailure
 
 /-!
 # Proofs: leanSPHINCS
