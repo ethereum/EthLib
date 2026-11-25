@@ -1105,8 +1105,8 @@ Nothing in Lean shows that authentication can succeed; the Python tests check ve
 RFC 9000 §16 writes an integer below `2^62` in 1, 2, 4 or 8 bytes, and the two high bits of the first byte give the length.
 `Varint.decode_encodeWith` (`Networking/Proofs/Quic/Varint.lean`) proves the round trip for every value and every width that holds it, with arbitrary trailing bytes.
 `Varint.eq_encodeWith_of_decode` proves the converse: every input that decodes is the encoding of its value at the width its first byte selects, followed by the rest.
-`Varint.minWidth_le` and `Varint.length_encode_le` prove that the encoder picks the shortest width.
-`Varint.decode_nil` and `Varint.decode_error_iff` prove that the decoder fails, always as truncated, exactly when the input ends before the selected integer does.
+`Varint.minWidth_le` and `Varint.size_encode_le` prove that the encoder picks the shortest width.
+`Varint.decode_empty` and `Varint.decode_error_iff` prove that the decoder fails, always as truncated, exactly when the input ends before the selected integer does.
 The integer decoder accepts longer forms, and `Frame.decode` accepts only shortest frame types (§12.4).
 The Python suite checks the examples of RFC 9000 Appendix A.1, the bounds of Table 4 and the rejection of `2^62`.
 It also checks three longer forms of 37 and every proper prefix of one encoding of each width.
@@ -1156,7 +1156,7 @@ The no-PSK SHA-256 schedule takes a shared secret and encoded transcripts from i
 The Python suite checks the secrets and Finished values of RFC 8448 §3.
 The schedule's results do not cover message parsing, negotiation, peer authentication or the Diffie-Hellman exchange.
 The schedule does not check the shared secret, and the SHA-384 schedule of TLS_AES_256_GCM_SHA384 is absent.
-The certificate, group and signature policy questions of [#2163](https://github.com/ethereum/EthLib/issues/2163) remain open.
+Which groups and signature schemes beyond those of RFC 8446 §9.1 EthLib accepts, and whether it takes the RSA schemes, are open points that [#2163](https://github.com/ethereum/EthLib/issues/2163) left to the maintainers.
 These results establish neither cryptographic security nor constant-time execution.
 
 ### TLS 1.3 handshake codecs
@@ -1209,7 +1209,7 @@ Configuration rejects any listed algorithm that lacks a backend.
 The available groups are X25519 and P-256, and CertificateVerify supports only ecdsa_secp256r1_sha256.
 The caller also chooses the certificate policy described above and whether the server rejects a nonempty legacy session ID, the SHOULD of [RFC 9001 §8.4](https://www.rfc-editor.org/rfc/rfc9001#section-8.4).
 Local credentials must omit the deprecated unique-ID fields even when the receive policy tolerates them.
-EthLib does not settle the application profile left open by [RFC 9846 §9.1](https://www.rfc-editor.org/rfc/rfc9846#section-9.1), the RSA requirements or the other maintainer choices of [#2163](https://github.com/ethereum/EthLib/issues/2163).
+EthLib does not settle the application profile left open by [RFC 9846 §9.1](https://www.rfc-editor.org/rfc/rfc9846#section-9.1) or the RSA requirements, which [#2163](https://github.com/ethereum/EthLib/issues/2163) left to the maintainers.
 
 The steps require ALPN `libp2p` and mutual certificate authentication, as [libp2p TLS at 4facaf9](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/tls/tls.md) specifies.
 The client omits SNI, and the server ignores received SNI as its Future Extensibility section requires.
@@ -2058,7 +2058,6 @@ It sends no message, pushes 0, and gives back the gas it would pass on with the 
 Its return data is then empty.
 `meets_paidNoCode` (`Logic/Callee.lean`) proves that the runner ends a message with value to no code with no error.
 Its frame ends in the state that the move of the value gives.
-No rule covers CREATE, DELEGATECALL or STATICCALL.
 
 A triple under an assumption asks the runner to fail only with an error that aborts.
 It does not say on which message the runner fails.
@@ -2594,6 +2593,7 @@ Both assume that the state holds the code of every account.
 `foldlM_applyAuthorization_isOk` proves that the authorizations succeed, and from Glamsterdam take at most 227790 execution gas times their number.
 From Glamsterdam, it assumes that the meter holds that much gas for every authorization.
 From Glamsterdam, it also assumes that the state holds the code of every account before the transaction.
+`stateTransition_hasCodes` (`Execution/Proofs/Blocks/Codes.lean`) proves that a block that passes its transition from a state that holds its codes leaves a state that holds its codes.
 From Glamsterdam, it also assumes that every charge within the gas left succeeds and takes at most its amount.
 
 `chargesWithin_nat` proves this last condition for the meter up to BPO5.
@@ -3361,7 +3361,7 @@ That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum
 The caller gives the number of blobs of each transaction, and the check trusts it.
 
 `CellMask.has_eq_true_iff` states which index a bitmap marks: index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set, counting from the least significant bit.
-"Cells (0x15)" fixes no bit order, and the check reads the bitmaps only through the subset rule and the count.
+"Cells (0x15)" fixes no bit order ([devp2p#293](https://github.com/ethereum/devp2p/pull/293) proposes one), and the check reads the bitmaps only through the subset rule and the count.
 `CellMask.subset_eq_true_iff` states the subset rule in those marks: one bitmap is a subset of another exactly when the other marks each index that it marks.
 `CellMask.count_eq_sum` states that the count of a bitmap, the `popcount` of "Cells (0x15)", is the number of set bits of its 16 bytes.
 `CellMask.count_le_count_of_subset` states that a subset counts no more indices than the bitmap that holds it.
@@ -6289,7 +6289,7 @@ A transaction that the body of a block runs has a trace (`traceTransaction_ok`),
 The trace of a block has one entry per transaction, and each entry is the trace of that transaction alone, after those before it (`traceBlock_eq_ok`).
 A block whose transactions run after the start of its body has a trace (`traceBlock_ok`).
 So a block that passes its transition has a trace with one entry per receipt, and from Byzantium each entry failed exactly when its receipt says so (`stateTransition_traceBlock`).
-The Python suite runs the 13 vendored `tests/debug_trace*` fixtures; each success fixture is `speconly`, and EthLib matches it field for field.
+The Python suite runs the 13 vendored fixtures under `bindings/python/tests/rpc/fixtures/debug_trace*`; each success fixture is `speconly`, and EthLib matches it field for field.
 The [schema of an entry](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/opcode-tracer.yaml#L144-L199) gives `refund` only when it is not zero, and `storage` only at an SLOAD or SSTORE step that does not halt with an error.
 `record_storage` (`Proofs/Rpc/Trace.lean`) shows that an entry holds storage only at a step that read or wrote a slot, and `record_slots_of_stepError` that a step that fails changes the slots of no account.
 
@@ -7825,7 +7825,8 @@ With a read-only copy, the delete refuses the key and returns no data for it, so
 A delete of that key alone gives data, and an import of its keystore with that data into the new client imports it.
 Then the new client accepts a block or a vote of the key only if the old client accepted it (`checkBlock_of_move`, `checkAttestation_of_move`), and the old client no longer holds the key as a local key (`isActive_of_move`).
 The scope is one key and one move.
-The data passes from the delete to the import as a value: the round trip of its document is proved, and that of its text is not, as said above.
+The data passes from the delete to the import as a value.
+The round trips of its document and of its text, under the reader and printer of EthLib, are both proved, as said above.
 No step compares the genesis validators root of the data with that of either client.
 The Python suite runs a move between two clients, through the JSON text of the data.
 
@@ -7835,7 +7836,8 @@ Each is the status of its key on the state that the keys before it leave (`getEl
 After an import, each key with the status `imported` is a remote key (`mem_remoteKeys_importRemoteKeys`), and no remote key is lost (`remoteKeys_prefix_importRemoteKeys`).
 After a delete, no key with the status `deleted` is a remote key (`not_mem_remoteKeys_deleteRemoteKeys`).
 Importing one key that the client does not know imports it, deleting it then deletes it (`fst_deleteRemoteKeys_importRemoteKeys`), and the remote keys are those before (`remoteKeys_deleteRemoteKeys_importRemoteKeys`).
-The model takes the remote keys of a state to have distinct public keys.
+An import refuses a key that the client knows, and a delete removes every remote key with its public key.
+No theorem yet states that the remote keys of a reachable state have distinct public keys.
 The Python suite runs the example of issue #2139: an import of `a, b, b` onto `a`, then a delete of `b, c`.
 
 The source leaves five points about remote keys open, and EthLib takes these readings:
