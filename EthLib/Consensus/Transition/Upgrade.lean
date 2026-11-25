@@ -39,17 +39,7 @@ The new builder fields start empty, and every payload of the recent slots counts
 
 The window of payload committees is computed for the current epoch and the lookahead.
 
-Last, the pending deposits with builder credentials become builders.
-
-A deposit stays in the queue when a validator holds its key or a valid pending deposit names it.
-
-A deposit for a key that is already a builder adds to that builder's balance.
-
-A builder deposit with an invalid signature is dropped.
-
-Every other pending deposit stays in the queue, in its order.
-
-A 64-bit overflow of a builder balance is an error.
+Last, only pending deposits with builder credentials can fund builders, and the others stay queued.
 
 [EIP-7732] adds the fields and the onboarding of builders at the fork.
 
@@ -364,31 +354,38 @@ def onboardDeposit (config : Config) (checks : SignatureChecks)
     Except TransitionError (BeaconState preset .glamsterdam × Array PendingDeposit) := do
   let (state, kept) := step
   let gloas : Fork.glamsterdam ≤ .glamsterdam := by decide
-  -- A deposit for the key of a validator stays in the queue, as EIP-7732 specifies.
-  if deposit.pubkey ∈ validatorKeys then return (state, kept.push deposit)
+  -- A deposit without the builder prefix stays in the queue, even for the key of a builder.
+  if isBuilderWithdrawalCredential deposit.withdrawalCredentials = false then
+    return (state, kept.push deposit)
   match findBuilderByPubkey state gloas deposit.pubkey with
-  -- A deposit for the key of a builder adds its amount to the balance of that builder.
+  -- A builder deposit for the key of a builder tops up its balance, whatever its signature.
+  --
+  -- A 64-bit overflow of that balance is an error.
   | some index =>
     let _ ← liftAccessor (liftArith (ofNatChecked index.val))
     let builder := (state.builders gloas).data[index]
     let balance ← liftAccessor (liftArith (addChecked builder.balance deposit.amount))
     return (state.putBuilder gloas index index.isLt { builder with balance }, kept)
   | none =>
-    -- A deposit without the builder prefix stays in the queue.
-    if isBuilderWithdrawalCredential deposit.withdrawalCredentials = false then
-      return (state, kept.push deposit)
-    -- So does one whose key has a valid deposit among those kept so far, a pending validator.
-    if ← isPendingValidator config checks kept.toList deposit.pubkey then
-      return (state, kept.push deposit)
     -- A valid signature makes a payload builder, deposited at the slot of the deposit.
     --
-    -- An invalid one drops the deposit.
+    -- That holds even for the key of a validator, since the two registries are apart.
+    --
+    -- EIP-7732 keeps every deposit for the key of a validator in the queue.
+    --
+    -- This step follows the later rule of the consensus layer, which EIPs#12627 brings to the EIP.
     if ← isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
         deposit.amount deposit.signature then
       let state ← addBuilderToRegistry state gloas deposit.pubkey PAYLOAD_BUILDER_VERSION
         (credentialAddress deposit.withdrawalCredentials) deposit.amount deposit.slot
       return (state, kept)
-    else return (state, kept)
+    -- An invalid one stays in the queue as a top-up of a validator of its key.
+    if deposit.pubkey ∈ validatorKeys then return (state, kept.push deposit)
+    -- It also stays when a deposit kept so far has its key and a valid signature.
+    if ← isPendingValidator config checks kept.toList deposit.pubkey then
+      return (state, kept.push deposit)
+    -- Otherwise it is dropped.
+    return (state, kept)
 
 /-- The state after the pending deposits of builders become builders, at the fork. -/
 def onboardBuildersFromPendingDeposits (config : Config) (checks : SignatureChecks)

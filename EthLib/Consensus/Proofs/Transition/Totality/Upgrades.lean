@@ -151,8 +151,6 @@ private theorem onboardDeposit_ok {validatorKeys : List Cryptography.Bls.BLSPubk
       Uint64.addChecked_of_lt (Nat.lt_of_le_of_lt (Nat.add_le_add_right below _) funded)]
     simp only [liftAccessor, liftArith, Except.mapError, bind, Except.bind, pure, Except.pure]
     exact ⟨_, _, rfl, by simp [BeaconState.putBuilder]⟩
-  split
-  · exact ⟨_, _, rfl, by omega⟩
   obtain ⟨pending, pendingOk⟩ := isPendingValidator_total (config := config) (checks := checks)
     kept.toList deposit.pubkey
   obtain ⟨valid, validOk⟩ := isValidDepositSignature_exists_ok config checks
@@ -161,8 +159,9 @@ private theorem onboardDeposit_ok {validatorKeys : List Cryptography.Bls.BLSPubk
     (version := PAYLOAD_BUILDER_VERSION)
     (executionAddress := credentialAddress deposit.withdrawalCredentials)
     (amount := deposit.amount) (slot := deposit.slot) few
-  cases pending <;> cases valid <;>
-    simp only [pendingOk, validOk, addedOk, bind, Except.bind, pure, Except.pure,
+  by_cases known : deposit.pubkey ∈ validatorKeys <;>
+    cases pending <;> cases valid <;>
+    simp only [pendingOk, validOk, addedOk, known, bind, Except.bind, pure, Except.pure,
       Bool.false_eq_true, ↓reduceIte] <;>
     exact ⟨_, _, rfl, by omega⟩
 

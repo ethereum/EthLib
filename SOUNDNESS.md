@@ -8153,6 +8153,11 @@ The block must then have a gas limit at least as large, and the unbounded readin
 That case needs a chain whose gas limit reaches `2^256`, and it exists only before Fusaka.
 From Fusaka [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825#specification) caps the gas limit of a transaction at `2^24`, and from Glamsterdam [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#transaction-validation) caps it at `2^32 - 1`.
 
+At the fork to Gloas, a pending deposit with builder credentials and a valid signature makes a builder, even for the key of a validator (`onboardDeposit`, `Consensus/Transition/Upgrade.lean`).
+[EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#fork-transition) still says that the key of an existing or pending validator is never converted.
+EthLib follows the later rule of the consensus layer, which keeps the two registries apart, as [EIP-8282](https://eips.ethereum.org/EIPS/eip-8282#motivation) describes.
+[EIPs#12627](https://github.com/ethereum/EIPs/pull/12627), still open, brings that rule to EIP-7732.
+
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.

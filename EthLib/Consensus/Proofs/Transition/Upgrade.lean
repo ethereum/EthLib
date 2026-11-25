@@ -522,6 +522,7 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
   split at computed
   · cases computed
     exact .inl ⟨rfl, rfl⟩
+  rename_i credential
   split at computed
   · -- A known builder adds the amount to its balance.
     rename_i index _
@@ -534,15 +535,7 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
       (builder := { (state.builders (by decide)).data[index] with balance }) index.isLt
     simp only [Fin.getElem_fin] at summed this ⊢
     omega
-  split at computed
-  · cases computed
-    exact .inl ⟨rfl, rfl⟩
-  rename_i _ credential
-  obtain ⟨pending, -, rest⟩ := bind_ok_iff.mp computed
-  split at rest
-  · cases rest
-    exact .inl ⟨rfl, rfl⟩
-  obtain ⟨valid, checked, rest⟩ := bind_ok_iff.mp rest
+  obtain ⟨valid, checked, rest⟩ := bind_ok_iff.mp computed
   split at rest
   · -- A new key with a valid signature becomes a builder.
     obtain ⟨_, added, rest⟩ := bind_ok_iff.mp rest
@@ -555,12 +548,28 @@ theorem onboardDeposit_cases {validatorKeys : List BLSPubkey}
       exact ⟨_, rfl⟩
     · cases added
       exact ⟨_, rfl⟩
+  rename_i invalid
+  split at rest
   · cases rest
-    rename_i invalid
+    exact .inl ⟨rfl, rfl⟩
+  obtain ⟨pending, -, rest⟩ := bind_ok_iff.mp rest
+  split at rest
+  · cases rest
+    exact .inl ⟨rfl, rfl⟩
+  · cases rest
     simp only [Bool.not_eq_true] at invalid
     subst invalid
     refine .inr (.inr ⟨rfl, rfl, ?_, checked⟩)
     simpa using credential
+
+/-- A pending deposit without builder credentials stays in the queue, whatever its key. -/
+theorem onboardDeposit_of_not_builder_credential {validatorKeys : List BLSPubkey}
+    {state : BeaconState preset .glamsterdam} {kept : Array PendingDeposit}
+    {deposit : PendingDeposit}
+    (plain : isBuilderWithdrawalCredential deposit.withdrawalCredentials = false) :
+    onboardDeposit config checks validatorKeys (state, kept) deposit =
+      .ok (state, kept.push deposit) := by
+  simp [onboardDeposit, plain, pure, Except.pure]
 
 /-- A fold of the onboarding over some pending deposits changes only the builders of the state.
 
