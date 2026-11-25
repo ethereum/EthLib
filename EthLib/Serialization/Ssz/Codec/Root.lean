@@ -18,7 +18,22 @@ section
 
 variable {m : Type → Type} [Monad m] (hasher : Hasher m)
 
-mutual
+/-- The leaves in a half-open range, as nodes, each nested value rooted by the function given. -/
+def layoutChunksWithM (root : Desc → Value → ExceptT Err m Bytes) (layout : MerkleLayout)
+    (start : Nat := 0) (stop : Option Nat := none) : ExceptT Err m (Array Bytes) := do
+  -- An absent end means every leaf the shape produced.
+  let last := stop.getD layout.leaves.count
+  match layout.leaves with
+  | .packed chunks => return chunks.extract start last
+  | .nested values =>
+    let slots := (values.drop start).take (last - start)
+    let chunks ← slots.mapM fun slot =>
+      match slot with
+      -- A position carrying no value merkleizes as a zero leaf.
+      | none => pure zeroChunk
+      -- A nested value takes its own root as its chunk.
+      | some (shape, value) => root shape value
+    return chunks.toArray
 
 /--
 The SSZ Merkle root of a value, read against the type it is meant to fit.
@@ -35,8 +50,14 @@ def hashTreeRootAtM : Nat → Desc → Value → ExceptT Err m Bytes
   | budget + 1, shape, value => do
     -- The leaves, capacity and mixed-in word of the type.
     let layout ← merkleLayout shape value
-    -- The chunks: packed data, or the root of each nested value.
-    let chunks ← layoutChunksAtM budget layout
+    -- The chunks: packed data, or the root of each nested value, one budget step down.
+    --
+    -- The rooting goes to the chunks as a function, outside any mutual block.
+    --
+    -- So the recursion is structural.
+    --
+    -- The kernel can then evaluate a root, except through the progressive tree of EIP-7916.
+    let chunks ← layoutChunksWithM (hashTreeRootAtM budget) layout
     -- A bounded tree for a declared capacity, else the progressive tree of EIP-7916.
     let root ← match layout.limit with
       | none => ExceptT.lift (merkleizeProgressiveUncheckedM hasher chunks.toList)
@@ -47,31 +68,18 @@ def hashTreeRootAtM : Nat → Desc → Value → ExceptT Err m Bytes
     match layout.mixin with
     | none => return root
     | some word => ExceptT.lift (mixInM hasher root word)
+termination_by structural budget _ _ => budget
 
 /--
-The leaves in a half-open range, as nodes, each nested value rooted here.
+The leaves in a half-open range, as nodes, each nested value rooted under a budget.
 
 A range is asked for where a proof walks into one part of a tree.
 
 Building that proof then does not hash the whole value.
 -/
 def layoutChunksAtM (budget : Nat) (layout : MerkleLayout)
-    (start : Nat := 0) (stop : Option Nat := none) : ExceptT Err m (Array Bytes) := do
-  -- An absent end means every leaf the shape produced.
-  let last := stop.getD layout.leaves.count
-  match layout.leaves with
-  | .packed chunks => return chunks.extract start last
-  | .nested values =>
-    let slots := (values.drop start).take (last - start)
-    let chunks ← slots.mapM fun slot =>
-      match slot with
-      -- A position carrying no value merkleizes as a zero leaf.
-      | none => pure zeroChunk
-      -- A nested value takes its own root as its chunk.
-      | some (shape, value) => hashTreeRootAtM budget shape value
-    return chunks.toArray
-
-end
+    (start : Nat := 0) (stop : Option Nat := none) : ExceptT Err m (Array Bytes) :=
+  layoutChunksWithM (hashTreeRootAtM hasher budget) layout start stop
 
 /--
 The SSZ Merkle root of a value, read against the type it is meant to fit.

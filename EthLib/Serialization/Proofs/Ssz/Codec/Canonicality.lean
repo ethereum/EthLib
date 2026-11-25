@@ -51,7 +51,7 @@ theorem serialize_of_deserialize (shape : Desc) :
       have encoded := serializeFields_of_deserializeFields fields slices _
         (fun field member => ih field member (allWellFormed_mem fields fieldsLegal field member))
         decoded
-      simp [serialize, serializeStruct, encoded, Bind.bind, Except.bind,
+      simp [serialize, assembleStruct, encoded, Bind.bind, Except.bind,
         structSlices_assemble_inverse fields data slices parts]
   -- Only the selected option needs reconstruction, using its own canonical encoding.
   | compatibleUnion selectors options ih =>

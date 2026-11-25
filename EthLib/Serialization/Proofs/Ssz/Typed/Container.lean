@@ -273,7 +273,7 @@ theorem LawfulSszFields.roots_total {β : Type} [SszFields β] [LawfulSszFields 
 /-- The bytes of a struct are the untyped bytes of its fields' values. -/
 private theorem encodeStruct_eq {β : Type} [SszFields β] [LawfulSszFields β] (b : β) :
     encodeStruct b = (do return ⟨← serializeStruct (descs β) (toValues b)⟩) := by
-  simp only [encodeStruct, serializeStruct, LawfulSszFields.encodes_eq]
+  simp only [encodeStruct, serializeStruct, assembleStruct, LawfulSszFields.encodes_eq]
   cases serializeFields (descs β) (toValues b) with
   | error fault => rfl
   | ok parts =>
@@ -373,7 +373,7 @@ theorem LawfulSszType.container {σ β : Type} [SszFields β] [LawfulSszFields �
         | error other => exact absurd read (LawfulSszFields.ofValues_ne_error paired each)
         | ok b => simp [ofValue, read, Functor.map, Except.map]
     encode_eq := fun s => by
-      simp only [encode, encodeStruct_eq, desc, toValue, Ssz.serialize]
+      simp only [encode, encodeStruct_eq, desc, toValue, serialize_container_seq]
     decode_eq := fun data => by
       simp only [decode, decodeStruct_eq, desc, Ssz.deserialize]
       cases deserializeStruct (descs β) data.data <;> rfl }
@@ -430,7 +430,7 @@ theorem LawfulSszType.progressiveContainer {σ β : Type} [SszFields β] [Lawful
         | error other => exact absurd read (LawfulSszFields.ofValues_ne_error paired each)
         | ok b => simp [ofValue, read, Functor.map, Except.map]
     encode_eq := fun s => by
-      simp only [encode, encodeStruct_eq, desc, toValue, Ssz.serialize]
+      simp only [encode, encodeStruct_eq, desc, toValue, serialize_progressiveContainer_seq]
     decode_eq := fun data => by
       simp only [decode, decodeStruct_eq, desc, Ssz.deserialize]
       cases deserializeStruct (descs β) data.data <;> rfl }

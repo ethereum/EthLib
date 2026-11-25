@@ -126,9 +126,9 @@ instance : LawfulSszType (ForkList switch fork α limit) where
     by_cases fixed : (desc α).isFixed
     · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue]
       split
-      · simp [Ssz.serialize, boundCheck, bind, Except.bind, pure, Except.pure]
+      · simp [Ssz.serialize, serializeSequence, boundCheck, bind, Except.bind, pure, Except.pure]
       · rename_i before
-        simp [Ssz.serialize, l.bound (lt_of_not_switch before)]
+        simp [Ssz.serialize, serializeSequence, l.bound (lt_of_not_switch before)]
     · simp only [encode, fixed, Bool.false_eq_true, ite_false]
       rfl
 

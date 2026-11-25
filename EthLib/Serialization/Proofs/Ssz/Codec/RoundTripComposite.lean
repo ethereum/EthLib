@@ -289,7 +289,7 @@ theorem recovered_struct (fields : List Desc) (values : List Value)
       ∃ parts, serializeFields fields values = .ok parts
         ∧ assemble (fields.map Desc.isFixed) parts = .ok bytes := by
     intro bytes wrote
-    simp only [serializeStruct] at wrote
+    simp only [serializeStruct, assembleStruct] at wrote
     cases encoded : serializeFields fields values <;> rw [encoded] at wrote
     · simp [Bind.bind, Except.bind] at wrote
     · exact ⟨_, rfl, wrote⟩
@@ -322,7 +322,7 @@ theorem serializeSequence_size_lt {element : Desc} {elements : List Value} {byte
     (wrote : serializeSequence element elements = .ok bytes) :
     bytes.size < 2 ^ (8 * bytesPerOffset) := by
   -- Sequence assembly checks the combined size after encoding its elements.
-  unfold serializeSequence at wrote
+  unfold serializeSequence assembleSequence at wrote
   obtain ⟨parts, -, assembled⟩ := checksPassed wrote
   rw [assemble_size _ _ _ assembled]
   exact assemble_nameable _ _ _ assembled
@@ -339,7 +339,7 @@ theorem recovered_sequence (element : Desc) (elements : List Value) (width : Nat
       ∃ parts, parts.length = elements.length ∧ (∀ part ∈ parts, part.size = width)
         ∧ bytes = concatParts parts ∧ deserializeEach element parts = .ok elements := by
   intro bytes wrote
-  simp only [serializeSequence] at wrote
+  simp only [serializeSequence, assembleSequence] at wrote
   -- A successful sequence result includes successful encodings of every element.
   cases encoded : serializeEach element elements with
   | error _ => simp [encoded, Bind.bind, Except.bind] at wrote
@@ -368,7 +368,7 @@ theorem recovered_sequence_offset (element : Desc) (elements : List Value)
             < 2 ^ (8 * bytesPerOffset)
         ∧ deserializeEach element parts = .ok elements := by
   intro bytes wrote
-  simp only [serializeSequence] at wrote
+  simp only [serializeSequence, assembleSequence] at wrote
   -- Recover the element parts before interpreting their outer offset table.
   cases encoded : serializeEach element elements with
   | error _ => simp [encoded, Bind.bind, Except.bind] at wrote

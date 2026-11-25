@@ -220,8 +220,10 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
       ih pair.1 (List.of_mem_zip member).1 (each pair member)
     obtain ⟨reads, widths⟩ := recovered_struct fields values paired facts
     refine ⟨fun bytes wrote => ?_, fun width bytes fixed wrote => widths width bytes
-      (by simpa only [Desc.fixedSize] using fixed) (by simpa only [serialize] using wrote)⟩
-    obtain ⟨parts, sliced, decoded⟩ := reads bytes (by simpa only [serialize] using wrote)
+      (by simpa only [Desc.fixedSize] using fixed)
+      (by simpa only [serialize_container_seq, serialize_progressiveContainer_seq] using wrote)⟩
+    obtain ⟨parts, sliced, decoded⟩ := reads bytes
+      (by simpa only [serialize_container_seq, serialize_progressiveContainer_seq] using wrote)
     simp only [deserialize, deserializeStruct_of sliced decoded, Bind.bind, Except.bind]
     rfl
   | compatibleUnion _ ih =>

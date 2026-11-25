@@ -172,22 +172,16 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
   intro shape value
   -- Follow encoder execution, proving field pairing and element admissibility alongside the enclosing value.
   induction shape, value using serialize.induct
-    (motive2 := fun fields values => Desc.allWellFormed fields = .ok () →
-      (∃ bytes, serializeStruct fields values = .ok bytes) →
-        fields.length = values.length ∧ ∀ pair ∈ fields.zip values, Fits pair.1 pair.2)
-    (motive3 := fun fields values => Desc.allWellFormed fields = .ok () →
+    (motive_2 := fun fields values => Desc.allWellFormed fields = .ok () →
       (∃ parts, serializeFields fields values = .ok parts) →
         fields.length = values.length ∧ ∀ pair ∈ fields.zip values, Fits pair.1 pair.2)
-    (motive4 := fun fields values done => Desc.allWellFormed fields = .ok () →
+    (motive_3 := fun fields values done => Desc.allWellFormed fields = .ok () →
       (∃ parts, serializeFieldsFrom fields values done = .ok parts) →
         fields.length = values.length ∧ ∀ pair ∈ fields.zip values, Fits pair.1 pair.2)
-    (motive5 := fun element elements => element.wellFormed = .ok () →
-      (∃ bytes, serializeSequence element elements = .ok bytes) →
-        ∀ held ∈ elements, Fits element held)
-    (motive6 := fun element elements => element.wellFormed = .ok () →
+    (motive_4 := fun element elements => element.wellFormed = .ok () →
       (∃ parts, serializeEach element elements = .ok parts) →
         ∀ held ∈ elements, Fits element held)
-    (motive7 := fun element elements done => element.wellFormed = .ok () →
+    (motive_5 := fun element elements done => element.wellFormed = .ok () →
       (∃ parts, serializeEachFrom element elements done = .ok parts) →
         ∀ held ∈ elements, Fits element held) with
   -- Each accepted scalar check supplies exactly the admissibility condition.
@@ -211,31 +205,39 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
   | case13 _ _ _ count ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize, ite_eq_left count] at wrote
-    exact .vector (by simpa using count) (ih (wellFormed_vector sound) ⟨bytes, wrote⟩)
+    -- A sequence writes its elements before it lays them out, so the elements were written.
+    obtain ⟨parts, encoded, -⟩ := checksPassed wrote
+    exact .vector (by simpa using count) (ih (wellFormed_vector sound) ⟨parts, encoded⟩)
   -- A bounded list combines its accepted count with the element induction.
   | case15 _ _ _ within ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize, ite_eq_left within] at wrote
-    exact .list within (ih (wellFormed_list sound) ⟨bytes, wrote⟩)
+    obtain ⟨parts, encoded, -⟩ := checksPassed wrote
+    exact .list within (ih (wellFormed_list sound) ⟨parts, encoded⟩)
   -- A progressive list inherits admissibility from all of its elements.
   | case17 _ limit elements ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize] at wrote
     cases passed : boundCheck limit elements.length <;>
       simp only [passed, Bind.bind, Except.bind, reduceCtorEq] at wrote
+    obtain ⟨parts, encoded, -⟩ := checksPassed wrote
     exact .progressiveList (withinBound_of_boundCheck limit elements.length passed)
-      (ih (wellFormed_progressiveList sound) ⟨bytes, wrote⟩)
+      (ih (wellFormed_progressiveList sound) ⟨parts, encoded⟩)
   -- Ordinary containers require one admissible value per field.
   | case18 _ _ _ ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize] at wrote
-    obtain ⟨paired, each⟩ := ih (wellFormed_container sound) ⟨bytes, wrote⟩
+    -- A struct writes its fields before it lays them out, so the fields were written.
+    obtain ⟨parts, made, -⟩ := checksPassed wrote
+    obtain ⟨paired, each⟩ := ih (wellFormed_container sound) ⟨parts, made⟩
     exact .container paired each
   -- Progressive containers have the same field-value pairing requirement.
   | case19 _ _ _ _ ih =>
     intro sound ⟨bytes, wrote⟩
     rw [serialize] at wrote
-    obtain ⟨paired, each⟩ := ih (wellFormed_progressiveContainer sound) ⟨bytes, wrote⟩
+    -- A struct writes its fields before it lays them out, so the fields were written.
+    obtain ⟨parts, made, -⟩ := checksPassed wrote
+    obtain ⟨paired, each⟩ := ih (wellFormed_progressiveContainer sound) ⟨parts, made⟩
     exact .progressiveContainer paired each
   | case20 selectors options selector _ ih =>
     intro sound ⟨_, wrote⟩
@@ -255,16 +257,9 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     cases shape <;> cases value <;> simp_all [serialize]
     -- Each pairing the reduction leaves standing is excluded by a hypothesis of its own.
     all_goals (rename_i notMatch; exact absurd rfl (notMatch _ _ _ _ rfl rfl rfl))
-  | case22 _ _ ih =>
-    rename_i sound made
-    obtain ⟨_, wrote⟩ := made
-    -- A struct writes its fields before it lays them out, so the fields were written.
-    rw [serializeStruct] at wrote
-    obtain ⟨parts, made, -⟩ := checksPassed wrote
-    exact ih sound ⟨parts, made⟩
-  | case23 => exact ⟨rfl, by simp⟩
+  | case22 => exact ⟨rfl, by simp⟩
   -- Successful field collection proves both the first field and the remaining paired fields.
-  | case24 field fields value values ihHead ihTail =>
+  | case23 field fields value values ihHead ihTail =>
     rename_i sound made
     obtain ⟨_, wrote⟩ := made
     rw [serializeFields] at wrote
@@ -278,15 +273,15 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     · exact here ▸ ihHead (allWellFormed_mem (field :: fields) sound field List.mem_cons_self)
         ⟨head, wroteHead⟩
     · exact each pair later
-  | case25 fields values _ _ =>
+  | case24 fields values _ _ =>
     rename_i made
     obtain ⟨_, wrote⟩ := made
     cases fields <;> cases values <;> simp_all [serializeFields]
     -- A field list and a value list of different lengths pair with nothing.
     all_goals (rename_i notMatch; exact absurd rfl (notMatch _ _ _ _ rfl rfl rfl))
-  | case26 => exact ⟨rfl, by simp⟩
+  | case25 => exact ⟨rfl, by simp⟩
   -- The loop over the fields proves the same, one field at a time.
-  | case27 field fields value values done ihHead ihTail =>
+  | case26 field fields value values done ihHead ihTail =>
     rename_i sound made
     obtain ⟨_, wrote⟩ := made
     rw [serializeFieldsFrom] at wrote
@@ -299,21 +294,14 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     · exact here ▸ ihHead (allWellFormed_mem (field :: fields) sound field List.mem_cons_self)
         ⟨head, wroteHead⟩
     · exact each pair later
-  | case28 fields values done _ _ =>
+  | case27 fields values done _ _ =>
     rename_i made
     obtain ⟨_, wrote⟩ := made
     cases fields <;> cases values <;> simp_all [serializeFieldsFrom]
     all_goals (rename_i notMatch; exact absurd rfl (notMatch _ _ _ _ rfl rfl rfl))
-  | case29 _ _ ih =>
-    rename_i sound made held member
-    obtain ⟨_, wrote⟩ := made
-    -- A sequence writes its elements before it lays them out, so the elements were written.
-    rw [serializeSequence] at wrote
-    obtain ⟨parts, encoded, -⟩ := checksPassed wrote
-    exact ih sound ⟨parts, encoded⟩ held member
-  | case30 => simp_all
+  | case28 => simp_all
   -- Every collected sequence value is either the first element or belongs to the encoded suffix.
-  | case31 _ _ _ ihHead ihTail =>
+  | case29 _ _ _ ihHead ihTail =>
     rename_i sound made held member
     obtain ⟨_, wrote⟩ := made
     rw [serializeEach] at wrote
@@ -321,8 +309,8 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     rcases List.mem_cons.mp member with here | later
     · exact here ▸ ihHead sound ⟨head, wroteHead⟩
     · exact ihTail head sound ⟨_, wroteTail⟩ held later
-  | case32 => simp_all
-  | case33 _ _ _ _ ihHead ihTail =>
+  | case30 => simp_all
+  | case31 _ _ _ _ ihHead ihTail =>
     rename_i sound made held member
     obtain ⟨_, wrote⟩ := made
     rw [serializeEachFrom] at wrote

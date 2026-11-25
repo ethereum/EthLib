@@ -160,9 +160,10 @@ private theorem ExecutionPayloadHeader.hashTreeRoot_untyped {payloadFork : Fork}
     fun _ => rfl
   rcases named with rfl | rfl
   all_goals
-    refine hashTreeRoot_of_fieldRoots execution ?_ rfl rooted
-    simp +decide [SszFields.roots, SszFields.descs, SszFields.toValues, List.mapM_cons, bytes,
-      list, word, wide]
+    have untyped := hashTreeRoot_of_fieldRoots execution (rooted := rooted)
+      (by simp +decide [SszFields.roots, SszFields.descs, SszFields.toValues, List.mapM_cons,
+        bytes, list, word, wide]) rfl
+    exact untyped
 
 /-- The proof of a node of a value, then a branch from the value's root, proves the node.
 
