@@ -12,6 +12,8 @@ The grammar admits a lone surrogate ([§8.2][lone]), but this reader refuses one
 
 The reader refuses a string whose first character that needs an escape is below `0x20`.
 
+Given enough fuel, a string reads exactly as what its characters stand for.
+
 [json]: https://www.rfc-editor.org/rfc/rfc8259#section-7
 [lone]: https://www.rfc-editor.org/rfc/rfc8259#section-8.2
 -/
@@ -209,10 +211,11 @@ theorem string_eq_none_of_control {fuel : Nat} {p : text.Pos} {acc : String} {c 
     have hb : c ≠ '\\' := fun e => by subst e; revert h; decide
     simp [string, hq, get, hq', hb]
 
-
 /-! ## The characters a string stands for
 
 A string reads as the characters that its text stands for, as RFC 8259 §7 writes them.
+
+The one exception is a lone surrogate escape, which no case reads.
 
 Each character of the text is unescaped, or starts one of the escapes of the grammar.
 -/
@@ -234,7 +237,9 @@ def HexDigits (a b c d : Char) (n : Nat) : Prop :=
   ∃ va vb vc vd, hexValue? a = some va ∧ hexValue? b = some vb ∧ hexValue? c = some vc ∧
     hexValue? d = some vd ∧ n = 4096 * va.toNat + 256 * vb.toNat + 16 * vc.toNat + vd.toNat
 
-/-- The characters of a string between its quotation marks, and the characters they stand for. -/
+/-- The characters of a string between its quotation marks, and the characters they stand for.
+
+Not in RFC 8259: its grammar admits a lone surrogate escape (§8.2), and no case here takes one. -/
 inductive Unescapes : List Char → List Char → Prop
   /-- No characters stand for no characters. -/
   | nil : Unescapes [] []
@@ -242,8 +247,8 @@ inductive Unescapes : List Char → List Char → Prop
 
   That is `unescaped = %x20-21 / %x23-5B / %x5D-10FFFF`. -/
   | unescaped {c : Char} {cs ds : List Char} (low : 0x20 ≤ c.toNat) (quote : c ≠ '"')
-      (solidus : c ≠ '\\') (rest : Unescapes cs ds) : Unescapes (c :: cs) (c :: ds)
-  /-- A reverse solidus and the first character of a two-character escape stand for its second. -/
+      (backslash : c ≠ '\\') (rest : Unescapes cs ds) : Unescapes (c :: cs) (c :: ds)
+  /-- A reverse solidus, then a character of the escape table, stand for the one paired with it. -/
   | short {e d : Char} {cs ds : List Char} (mem : (e, d) ∈ escapePairs)
       (rest : Unescapes cs ds) : Unescapes ('\\' :: e :: cs) (d :: ds)
   /-- `\u` and four hex digits stand for the code point they write, outside the surrogates. -/
@@ -252,14 +257,14 @@ inductive Unescapes : List Char → List Char → Prop
       Unescapes ('\\' :: 'u' :: a :: b :: c :: d :: cs) (Char.ofNat n :: ds)
   /-- An escaped high surrogate, then an escaped low surrogate, stand for the code point of both.
 
-  Not in RFC 8259: the grammar admits a lone surrogate, but no constructor takes one. -/
+  That is the 12-character form of §7 for a character outside the Basic Multilingual Plane. -/
   | pair {a b c d w x y z : Char} {hi lo : Nat} {cs ds : List Char}
       (high : HexDigits a b c d hi) (low : HexDigits w x y z lo) (h1 : 0xd800 ≤ hi)
       (h2 : hi < 0xdc00) (h3 : 0xdc00 ≤ lo) (h4 : lo < 0xe000) (rest : Unescapes cs ds) :
       Unescapes ('\\' :: 'u' :: a :: b :: c :: d :: '\\' :: 'u' :: w :: x :: y :: z :: cs)
         (Char.ofNat (0x10000 + 1024 * (hi - 0xd800) + (lo - 0xdc00)) :: ds)
 
-/-- A character holds without an escape exactly when it is from U+0020 and no quote or solidus. -/
+/-- A character needs no escape exactly when it is from U+0020 and no quote or reverse solidus. -/
 private theorem plain_eq_true_iff {c : Char} :
     plain c = true ↔ 0x20 ≤ c.toNat ∧ c ≠ '"' ∧ c ≠ '\\' := by
   unfold plain
@@ -271,14 +276,14 @@ private theorem shortEscape_eq_some_iff {e d : Char} :
   unfold shortEscape escapePairs
   split <;> simp_all [eq_comm]
 
-/-- No two-character escape starts with `u`. -/
+/-- No two-character escape has `u` after the reverse solidus. -/
 private theorem ne_u_of_mem {e d : Char} (mem : (e, d) ∈ escapePairs) : e ≠ 'u' := by
   simp only [escapePairs, List.mem_cons, Prod.mk.injEq, List.not_mem_nil, or_false] at mem
   rcases mem with ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ | ⟨rfl, -⟩ |
     ⟨rfl, -⟩ <;> decide
 
-/-- The text read so far, then a piece, whether or not the text is empty. -/
-private theorem append_of_isEmpty (acc piece : String) :
+/-- Appending a piece gives the same text whether or not the text read so far is empty. -/
+theorem append_of_isEmpty (acc piece : String) :
     (if acc.isEmpty then piece else acc ++ piece) = acc ++ piece := by
   split
   · rename_i h
@@ -409,8 +414,8 @@ private theorem unicodeEscape_inv {p r : text.Pos} {ch : Char}
         subst h1 h2
         exact ⟨a, b, c, d, n, ep, dn, by omega, rfl⟩
 
-/-- A string that is read is the text of characters that stand for what it holds. -/
-private theorem unescapes_of_string : ∀ (fuel : Nat) {p q : text.Pos} {acc s : String},
+/-- A string that is read is the text of characters that stand for what it holds, at any fuel. -/
+theorem exists_unescapes_of_string_eq_some : ∀ (fuel : Nat) {p q : text.Pos} {acc s : String},
     string fuel p acc = some (s, q) →
       ∃ cs ds, after p = cs ++ '"' :: after q ∧ Unescapes cs ds ∧ s = acc ++ String.ofList ds
   | 0, _, _, _, _, h => by simp [string] at h
@@ -437,7 +442,7 @@ private theorem unescapes_of_string : ∀ (fuel : Nat) {p q : text.Pos} {acc s :
           · -- A Unicode escape, of one code unit or of a surrogate pair.
             rename_i hu
             obtain ⟨⟨ch, r⟩, hx, hr⟩ := Option.bind_eq_some_iff.1 h
-            obtain ⟨cs, ds, ea, un, es⟩ := unescapes_of_string n hr
+            obtain ⟨cs, ds, ea, un, es⟩ := exists_unescapes_of_string_eq_some n hr
             rcases unicodeEscape_inv hx with
               ⟨a, b, c, d, m, ep, dn, sc, rfl⟩ |
                 ⟨a, b, c, d, w, x, y, z, hi, lo, ep, dh, dl, h1, h2, h3, h4, hch⟩
@@ -455,7 +460,7 @@ private theorem unescapes_of_string : ∀ (fuel : Nat) {p q : text.Pos} {acc s :
                 simp
           · -- A two-character escape.
             obtain ⟨d, hd, hr⟩ := Option.bind_eq_some_iff.1 h
-            obtain ⟨cs, ds, ea, un, es⟩ := unescapes_of_string n hr
+            obtain ⟨cs, ds, ea, un, es⟩ := exists_unescapes_of_string_eq_some n hr
             refine ⟨'\\' :: (p.next hp).get hn :: cs, d :: ds, ?_,
               .short (shortEscape_eq_some_iff.1 hd) un, ?_⟩
             · rw [after_eq_get_cons hp, after_eq_get_cons hn, hs, ea]
@@ -466,14 +471,14 @@ private theorem unescapes_of_string : ∀ (fuel : Nat) {p q : text.Pos} {acc s :
       · -- A character without an escape.
         rw [string_of_plain hp hc] at h
         obtain ⟨cs, ds, ea, un, es⟩ := ih (p.next hp) String.Pos.lt_next _ h
-        obtain ⟨low, quote, solidus⟩ := plain_eq_true_iff.1 hc
-        refine ⟨p.get hp :: cs, p.get hp :: ds, ?_, .unescaped low quote solidus un, ?_⟩
+        obtain ⟨low, quote, backslash⟩ := plain_eq_true_iff.1 hc
+        refine ⟨p.get hp :: cs, p.get hp :: ds, ?_, .unescaped low quote backslash un, ?_⟩
         · rw [after_eq_get_cons hp, ea]
           rfl
         · rw [es, ← String.toList_inj]
           simp
 
-/-- The text of characters that stand for others is read as those, given one step per character. -/
+/-- Characters that stand for others are read as what they stand for, given more fuel than them. -/
 private theorem string_of_unescapes {cs ds : List Char} (un : Unescapes cs ds) :
     ∀ {fuel : Nat} {p : text.Pos} {acc : String} {X : List Char}, cs.length < fuel →
       after p = cs ++ '"' :: X →
@@ -486,10 +491,10 @@ private theorem string_of_unescapes {cs ds : List Char} (un : Unescapes cs ds) :
     refine ⟨_, e, ?_⟩
     rw [string_of_not_plain hp (by rw [g]; rfl)]
     simp [g]
-  | @unescaped c cs ds low quote solidus rest ih =>
+  | @unescaped c cs ds low quote backslash rest ih =>
     intro fuel p acc X hl h
     obtain ⟨hp, g, e⟩ := after_eq_cons (by simpa using h)
-    rw [string_of_plain hp (by rw [g]; exact plain_eq_true_iff.2 ⟨low, quote, solidus⟩)]
+    rw [string_of_plain hp (by rw [g]; exact plain_eq_true_iff.2 ⟨low, quote, backslash⟩)]
     obtain ⟨q, hq, hs⟩ :=
       ih (fuel := fuel) (acc := acc.push (p.get hp)) (by simp at hl; omega) e
     refine ⟨q, hq, ?_⟩
@@ -547,16 +552,15 @@ private theorem string_of_unescapes {cs ds : List Char} (un : Unescapes cs ds) :
     rw [← String.toList_inj]
     simp
 
-/-- A string reads as what the characters before its first unescaped quotation mark stand for.
-
-Those characters are the text from the position, up to that quotation mark, RFC 8259 §7.
-
-The fuel is more than the count of characters after the position. -/
+/-- With enough fuel, a string reads exactly as what its characters stand for, RFC 8259 §7. -/
 theorem string_eq_some_iff {fuel : Nat} {p q : text.Pos} {acc s : String}
+    -- More fuel than characters after the position.
+    --
+    -- The characters read are those before the first unescaped quotation mark.
     (hfuel : (after p).length < fuel) :
     string fuel p acc = some (s, q) ↔
       ∃ cs ds, after p = cs ++ '"' :: after q ∧ Unescapes cs ds ∧ s = acc ++ String.ofList ds := by
-  refine ⟨unescapes_of_string fuel, ?_⟩
+  refine ⟨exists_unescapes_of_string_eq_some fuel, ?_⟩
   rintro ⟨cs, ds, h, un, rfl⟩
   -- The characters before the quotation mark are fewer than the characters after the position.
   obtain ⟨r, hr, hs⟩ := string_of_unescapes un (fuel := fuel) (acc := acc)
