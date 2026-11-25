@@ -2288,10 +2288,10 @@ theorem capped_forgeAdvantage_le_of_adversaryBound
   · refine (capped_forgeAdvantage_le_exactFirstLane_add_secondLane adversary).trans
       ((add_le_add (hasExactFirstLaneBound_of_adversaryBound q adversary hadv)
         (hasSecondLaneBound_of_adversaryBound q adversary hadv hq)).trans ?_)
-    -- Lane 1 charges `q + 2^19`, lane 2 charges `q + 768`, and the sum fits `2q + 2^20`.
+    -- Lane 1 charges `q + 2^19`, lane 2 charges `q + 384`, and the sum fits `2q + 2^20`.
     rw [← ENNReal.add_div]
     apply ENNReal.div_le_div _ (by norm_num [digestBits])
-    exact_mod_cast (show q + firstLaneSlack + (q + 768) ≤ 2 * q + lowerOrderSlack by
+    exact_mod_cast (show q + firstLaneSlack + (q + 384) ≤ 2 * q + lowerOrderSlack by
       simp only [firstLaneSlack, lowerOrderSlack]; omega)
   · -- From `2^127` queries on, the bound is at least one.
     refine (prEvent_le_one _).trans ?_
