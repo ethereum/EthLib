@@ -17,6 +17,13 @@ Not yet released.
   `Sec1.eq_of_decode_eq_ok` says that two octet strings of one length that decode to one point are equal.
   `Sec1.validatePublicKey_eq_ok_iff` states the checks of validation, and `Sec1.validatePublicKey_eq_ok_iff_nsmul` says that, through a map onto a field, validation accepts exactly the points of the curve other than `O` with `n Q = 0`.
 
+- In Lean, Keccak-256 over a permutation oracle is related to Keccak-256 over a function, and its permutation calls are counted ([#2767](https://github.com/ethereum/EthLib/issues/2767)).
+  `mmap_absorbBlocks`, `mmap_stateBeforeLastPermutation`, `mmap_spongeAbsorb`, `mmap_keccak256LanesWith` and `mmap_keccak256With` (`Cryptography/Proofs/Hash/Keccak/Basic.lean`) say that a monad morphism maps the sponge over `f` to the sponge over its image of `f`.
+  The lemmas `absorbBlocks_pure` to `keccak256With_pure` keep their statements, and now follow from these at the embedding of the identity monad.
+  In `Cryptography/Proofs/Hash/Keccak/QueryBound.lean`, `simulateQ_keccak256LanesWith` and `simulateQ_keccak256With` apply this to answering the oracle's queries with a query implementation.
+  `simulateQ_keccak256LanesWith_of_pure` and `simulateQ_keccak256With_of_pure` say that when a function `g` answers each call, the hash is `pure` of its value over `g`, as in the real world of the random-permutation model.
+  `isQueryBoundP_absorbBlocks`, `isQueryBoundP_stateBeforeLastPermutation`, `isQueryBoundP_spongeAbsorb`, `isQueryBoundP_keccak256LanesWith` and `isQueryBoundP_keccak256With` say that the sponge makes at most `c` selected queries per block of the padded message when each call makes at most `c`.
+
 - In Lean, `SubmitBlockRequest.servable` (`Consensus/RelayApi.lean`) says whether the block scoring rule lets a relay serve a submission ([#2131](https://github.com/ethereum/EthLib/issues/2131)).
   From Deneb, its bid value must pass the check against the proposer's fee recipient.
   `SubmitBlockRequest.servable_iff` (`Consensus/Proofs/RelayApi.lean`) states that check in Wei, and `SubmitBlockRequest.servable_of_lt_deneb` says that before Deneb the rule sets no condition.
