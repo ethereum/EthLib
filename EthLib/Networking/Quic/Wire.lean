@@ -64,16 +64,13 @@ def Error.code : Error → UInt32
 abbrev Reader (α : Type) := Encoding.ByteReader.Reader Error α
 
 /-- Read exactly the requested bytes, without padding a truncated field. -/
-abbrev bytes (n : Nat) : Reader (List UInt8) := fun input =>
-  Encoding.ByteReader.bytes (.truncated n input.length) n input
+abbrev bytes (n : Nat) : Reader (List UInt8) := Encoding.ByteReader.bytes (.truncated n) n
 
 /-- Read a fixed-length byte vector without defaulting or padding. -/
-abbrev vector (n : Nat) : Reader (Vector UInt8 n) := fun input =>
-  Encoding.ByteReader.vector (.truncated n input.length) n input
+abbrev vector (n : Nat) : Reader (Vector UInt8 n) := Encoding.ByteReader.vector (.truncated n) n
 
 /-- Read a big-endian integer of the given byte width. -/
-abbrev uint (n : Nat) : Reader Nat := fun input =>
-  Encoding.ByteReader.uint (.truncated n input.length) n input
+abbrev uint (n : Nat) : Reader Nat := Encoding.ByteReader.uint (.truncated n) n
 
 /-- Read one byte. -/
 def byte : Reader UInt8 := fun input =>

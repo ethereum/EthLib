@@ -134,7 +134,7 @@ def readFixed (n : Nat) (bytes : List UInt8) : Except ProtobufError (Vector UInt
   -- The next `n` bytes, all in the input.
   --
   -- They are a lump of Non-varint Numbers, or the payload of a length-delimited record.
-  Encoding.ByteReader.vector (.truncated n bytes.length) n bytes
+  Encoding.ByteReader.vector (.truncated n) n bytes
 
 /-- A length-delimited value: a varint length, then that many bytes. -/
 def readLen (bytes : List UInt8) : Except ProtobufError (ByteArray × List UInt8) := do

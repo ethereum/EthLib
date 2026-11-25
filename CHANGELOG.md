@@ -1040,6 +1040,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the shared byte reader builds the error of a truncated field only when a field is truncated ([#4526](https://github.com/ethereum/EthLib/pull/4526)).
+  So the QUIC, TLS and protobuf readers cost their fields, not the input.
+  - `Encoding.ByteReader.bytes`, `vector` and `uint` (`Networking/Encoding/ByteReader.lean`) take the error as a function of the count of bytes left.
+    Pass the constructor without its last argument, such as `.truncated n` instead of `.truncated n input.length`.
+    Their lemmas take that function.
+    `bytes_error_iff` (`Networking/Proofs/Encoding/ByteReader.lean`) says that a read fails exactly when the input is shorter than the field.
+    The error is then that of the bytes left.
+  - The readers of `Quic.Tls.Wire`, `Quic.Wire` and `Protobuf.readFixed` give the same values and errors as before.
 - In Lean, the trie has one setter, `Trie.setPairs` (`Execution/Trie/Root.lean`) ([#4525](https://github.com/ethereum/EthLib/pull/4525)).
   It sets a list of pairs in order, in one pass, with a table of the keys.
   `Trie.setPairStep` and `Trie.logEntries`, its step and its reading of the table, are now public.
