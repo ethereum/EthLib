@@ -27,6 +27,7 @@ public import EthLib.Base.Proofs.Json.Text
 public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Nat
+public import EthLib.Base.Proofs.Toolchain.ArrayBinSearch
 public import EthLib.Base.Proofs.Toolchain.JsonBasic
 public import EthLib.Base.Proofs.Toolchain.ListControl
 public import EthLib.Base.Proofs.U256
