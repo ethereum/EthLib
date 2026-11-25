@@ -128,12 +128,18 @@ theorem openPacket_sealPacket {key r : Fn} {iv : Aes.Block} {body padding packet
       rw [ByteArray.size_append] at hlen
       generalize hn : body.size + padding.size + Ecies.OVERHEAD = n at hsize hc hlen
       -- The two bytes of the size read back as the size.
-      have hread : n / 256 % 256 * 256 + n % 256 = n := by omega
-      have hrest : c.data.toList.length = n := hlen
+      have hread : Base.ByteOrder.ofBE (Base.ByteOrder.toBE 2 n).toList = n :=
+        Base.ByteOrder.ofBE_toBE_of_lt (by omega)
       have hopen : openPacket key (sizeBytes n ++ c) =
           (Ecies.decrypt key (sizeBytes n) c).mapError .ecies := by
-        simp only [openPacket, sizeBytes, ByteArray.data_append, Array.toList_append]
-        simp [hread, hrest]
+        have hl := Base.ByteOrder.length_toList_toBE 2 n
+        unfold openPacket sizeBytes
+        simp only [ByteArray.data_append, Array.toList_append, Vector.toList_toArray]
+        generalize Base.ByteOrder.toBE 2 n = v at hread hl ⊢
+        obtain ⟨l⟩ := v
+        simp only [Vector.toList_mk] at hread hl ⊢
+        rcases l with _ | ⟨hi, _ | ⟨lo, _ | _⟩⟩ <;> simp at hl hread ⊢
+        simp [hread, hlen]
       rw [hopen, Ecies.decrypt_encrypt hc]
       rfl
 
