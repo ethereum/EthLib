@@ -137,9 +137,53 @@ open EthLib.Execution.State.TransactionState (SameOutside)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
+/-- The second substate holds every access of the first: each address and each storage key. -/
+structure Substate.AccessesLe (substate substate' : Substate) : Prop where
+  /-- Every address that the first substate accessed is accessed in the second. -/
+  addresses : ∀ address, address ∈ substate.accessedAddresses →
+    address ∈ substate'.accessedAddresses
+  /-- Every storage key that the first accessed is accessed in the second, at the same address. -/
+  storageKeys : ∀ address key, key ∈ substate.accessedStorageKeys.getD address ∅ →
+    key ∈ substate'.accessedStorageKeys.getD address ∅
+
+/-- Every substate holds its own accesses. -/
+theorem Substate.AccessesLe.refl (substate : Substate) : substate.AccessesLe substate :=
+  ⟨fun _ h => h, fun _ _ h => h⟩
+
+/-- Holding the accesses is transitive. -/
+theorem Substate.AccessesLe.trans {a b c : Substate} (hab : a.AccessesLe b) (hbc : b.AccessesLe c) :
+    a.AccessesLe c :=
+  ⟨fun x h => hbc.addresses x (hab.addresses x h),
+    fun x k h => hbc.storageKeys x k (hab.storageKeys x k h)⟩
+
+omit [GasMeter Meter] in
+/-- An access to an address keeps every access. -/
+theorem accessesLe_accessAddress (evm : Evm fork Meter) (address : Address) :
+    evm.substate.AccessesLe (accessAddress evm address).2.substate := by
+  unfold accessAddress
+  split
+  · exact ⟨fun _ h => Std.ExtTreeSet.mem_insert.mpr (.inr h), fun _ _ h => h⟩
+  · exact .refl _
+
+omit [GasMeter Meter] in
+/-- An access to a storage key keeps every access. -/
+theorem accessesLe_accessStorageKey (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
+    evm.substate.AccessesLe (accessStorageKey evm address key).2.substate := by
+  unfold accessStorageKey
+  split
+  · refine ⟨fun _ h => h, fun x k h => ?_⟩
+    by_cases hx : address = x
+    · subst hx
+      simp only [Std.ExtTreeMap.getD_insert_self]
+      exact Std.ExtTreeSet.mem_insert.mpr (.inr h)
+    · simpa [Std.ExtTreeMap.getD_insert, hx] using h
+  · exact .refl _
+
 /-- A step of a static frame keeps its state, up to the records of its reads.
 
-It keeps its message, its code and both lists of logs of its substate. -/
+It keeps its message, its code and both lists of logs of its substate.
+
+It only adds to the accesses of its substate. -/
 structure StaticStep (before after : Evm fork Meter) : Prop where
   -- The step only adds reads: every field but the reads stays, and no read is lost.
   tracker : before.state.ReadsMore after.state
@@ -152,6 +196,8 @@ structure StaticStep (before after : Evm fork Meter) : Prop where
   logs : after.substate.logs = before.substate.logs
   /-- The step keeps the logs that a simulation reports. -/
   simulatedLogs : after.substate.simulatedLogs = before.substate.simulatedLogs
+  /-- The step keeps every accessed address and storage key, and may add more. -/
+  accesses : before.substate.AccessesLe after.substate
 
 omit [GasMeter Meter] in
 /-- A static step keeps the state, up to the records of its reads. -/
@@ -173,7 +219,7 @@ theorem StaticStep.created {a b : Evm fork Meter} (h : StaticStep a b) :
 omit [GasMeter Meter] in
 /-- A frame keeps its state and message. -/
 theorem StaticStep.refl (evm : Evm fork Meter) : StaticStep evm evm :=
-  ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
 
 omit [GasMeter Meter] in
 /-- Two steps that each keep the state and the message keep them together. -/
@@ -181,36 +227,37 @@ theorem StaticStep.trans {a b c : Evm fork Meter} (hab : StaticStep a b) (hbc : 
     StaticStep a c :=
   ⟨hab.tracker.trans hbc.tracker, hbc.message.trans hab.message, hbc.code.trans hab.code,
     hbc.touched.trans hab.touched, hbc.toDelete.trans hab.toDelete,
-    hbc.logs.trans hab.logs, hbc.simulatedLogs.trans hab.simulatedLogs⟩
+    hbc.logs.trans hab.logs, hbc.simulatedLogs.trans hab.simulatedLogs,
+    hab.accesses.trans hbc.accesses⟩
 
 omit [GasMeter Meter] in
 /-- A step that keeps the message, the state and the substate is a static step. -/
 theorem StaticStep.of_sameContext {a b : Evm fork Meter} (h : SameContext a b) : StaticStep a b :=
   ⟨by rw [h.state]; exact .refl _, h.message, h.code, by rw [h.substate], by rw [h.substate],
-    by rw [h.substate], by rw [h.substate]⟩
+    by rw [h.substate], by rw [h.substate], by rw [h.substate]; exact .refl _⟩
 
 omit [GasMeter Meter] in
 /-- A change of the memory is a static step. -/
 theorem StaticStep.withMemory (evm : Evm fork Meter) (memory : ByteArray) :
-    StaticStep evm { evm with memory } := ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    StaticStep evm { evm with memory } := ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
 
 omit [GasMeter Meter] in
 /-- A move of the program counter is a static step. -/
 theorem StaticStep.advance {a b : Evm fork Meter} (h : StaticStep a b) (n : Nat := 1) :
     StaticStep a (Evm.advance b n) :=
-  ⟨h.tracker, h.message, h.code, h.touched, h.toDelete, h.logs, h.simulatedLogs⟩
+  ⟨h.tracker, h.message, h.code, h.touched, h.toDelete, h.logs, h.simulatedLogs, h.accesses⟩
 
 omit [GasMeter Meter] in
 /-- A record of the read of an account is a static step. -/
 theorem staticStep_recordAccountRead (evm : Evm fork Meter) (address : Address) :
     StaticStep evm (recordAccountRead evm address) :=
-  ⟨.recordAccountRead evm.state address, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ⟨.recordAccountRead evm.state address, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
 
 omit [GasMeter Meter] in
 /-- A record of the read of a storage key is a static step. -/
 theorem staticStep_recordStorageRead (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
     StaticStep evm (recordStorageRead evm address key) :=
-  ⟨.recordStorageRead evm.state address key, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ⟨.recordStorageRead evm.state address key, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
 
 omit [GasMeter Meter] in
 /-- An access to an address is a static step. -/
@@ -218,7 +265,7 @@ theorem staticStep_accessAddress (evm : Evm fork Meter) (address : Address) :
     StaticStep evm (accessAddress evm address).2 := by
   obtain ⟨_, h⟩ := accessAddress_snd evm address
   exact ⟨by rw [h]; exact .refl _, by rw [h], by rw [h], by rw [h], by rw [h], by rw [h],
-    by rw [h]⟩
+    by rw [h], accessesLe_accessAddress evm address⟩
 
 omit [GasMeter Meter] in
 /-- An access to a storage key is a static step. -/
@@ -226,11 +273,11 @@ theorem staticStep_accessStorageKey (evm : Evm fork Meter) (address : Address) (
     StaticStep evm (accessStorageKey evm address key).2 := by
   obtain ⟨_, h⟩ := accessStorageKey_snd evm address key
   exact ⟨by rw [h]; exact .refl _, by rw [h], by rw [h], by rw [h], by rw [h], by rw [h],
-    by rw [h]⟩
+    by rw [h], accessesLe_accessStorageKey evm address key⟩
 
 /-- An exceptional halt is a static step. -/
 theorem staticStep_exceptionalHalt (evm : Evm fork Meter) (e : EvmError) :
-    StaticStep evm (exceptionalHalt evm e) := ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    StaticStep evm (exceptionalHalt evm e) := ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl, .refl _⟩
 
 /-- BALANCE is a static step. -/
 theorem staticStep_balanceStep {evm after : Evm fork Meter} (h : balanceStep evm = .ok after) :
