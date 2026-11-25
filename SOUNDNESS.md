@@ -239,6 +239,8 @@ No theorem bounds the probability of finding a collision in a multiproof.
 Its verifier is the Merkle rebuild, which takes the node hash as an argument, but no experiment runs it against the oracle.
 
 `Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
+The specification hashes with SHA-256.
+In every bound of this section, the step from SHA-256 to the oracle is the idealisation of A4, not a theorem.
 The merkleization takes its hash in any monad, so the experiment runs the root of the specification with a hasher that queries the oracle.
 That hasher also computes the roots of the all-zero subtrees with the oracle, one query per level.
 The type is fixed before the run, and an adversary outputs two values of it.
@@ -283,7 +285,6 @@ The climbs queried every message they hash, so the cache holds both, by `cached_
 `prEvent_branchWins_le_of_adversary` states the bound with `Q = q + 2 * depth`, for an adversary that makes at most `q` queries.
 Beyond the adversary's own queries, `Q` grows with the depth, not with the `2^depth` leaves.
 With SHA-256 in place of the oracle, `branchWins_sha256_iff` shows that a win is two different leaves that `isValidMerkleBranch` accepts at one depth, index and root.
-The specification hashes with SHA-256, and the step from SHA-256 to the oracle is the idealisation of A4, not a theorem.
 
 `Consensus/Proofs/DataAvailability/BlobRandomOracle.lean` composes this bound with `verifyBlobSidecarInclusionProof`, the inclusion check of blob sidecars.
 The preset and the fork are fixed before the run, and an adversary outputs two blob sidecars.
@@ -307,7 +308,6 @@ Two different roots that climb to one body root give the inputs that `collision_
 At the mainnet depth of 17, `prEvent_blobWins_le_mainnet` bounds a win by `(q + 36)^2 / 2^256`.
 Beyond the adversary's own queries, `Q` grows with the depth only, not with the blobs or the body.
 With SHA-256 in place of the oracle, `blobWins_sha256_iff` shows that a win is two such sidecars that `verifyBlobSidecarInclusionProof` accepts.
-Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
 `Consensus/Proofs/DepositRandomOracle.lean` composes the branch bound with the deposit check of `processDeposit`, which runs before Heze.
 That check roots the deposit data, then runs `isValidMerkleBranch` from that root at the deposit index and the deposit root of the state.
@@ -333,7 +333,6 @@ With SHA-256 in place of the oracle, `depositWins_sha256_iff` shows that a win i
 Both checks read the index and the deposit root of the claim.
 `depositWins_of_processDeposit` (`Consensus/Proofs/DepositRandomOracleAccepted.lean`) gives such a win for two deposits with different data that `processDeposit` accepts at one state, by `processDeposit_ok`.
 It holds at every preset and every fork before Heze.
-Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
 `Consensus/Proofs/DataAvailability/DataColumnRandomOracle.lean` composes the branch bound with `verifyKzgCommitmentsInclusionProof`, the inclusion check of a list of commitments.
 Data column sidecars and partial data column headers read that check at Fulu and the BPO forks.
@@ -371,7 +370,6 @@ So the extraction reads no subtree index, and `not_columnWins_of_extractColumnHe
 `prEvent_columnWins_eq_zero` then gives a win probability of zero through `prEvent_experimentWith_eq_zero`, at every preset and every fork before Deneb or from Gloas, for any adversary.
 With SHA-256 in place of the oracle, `columnWins_sha256_iff` shows that a win is two such headers that `verifyKzgCommitmentsInclusionProof` accepts.
 It holds at every preset and every fork.
-Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
 `Consensus/Proofs/LightClient/SyncCommitteeRandomOracle.lean` composes the branch bound with the committee checks of the light client, from Altair.
 `initializeLightClientStore` proves the current sync committee of a bootstrap by a normalized branch against the state root of its header.
@@ -397,7 +395,6 @@ It needs a committee of at least one member, and holds at every index.
 `syncCommitteeWins_of_initializeLightClientStore` gives such a win for two accepted bootstraps with one state root, one slot and different committees, by `initializeLightClientStore_proves`.
 `syncCommitteeWins_of_validateNextSyncCommitteeBranch` gives one for two updates that pass the committee check, with one attested state root and slot and different next committees, by `validateNextSyncCommitteeBranch_proves`.
 Both read the index of the committee at the slot, as the checks do.
-Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
 `Consensus/Proofs/LightClient/FinalityRandomOracle.lean` composes the branch bound with the finality check of the light client, from Altair.
 `validateFinality` proves the finalized header of an update by a normalized branch against the attested state root.
@@ -428,7 +425,6 @@ That need serves only when one header is at the genesis slot and the other is no
 Two finalized headers at the genesis slot have one beacon header, since the check holds both to the empty header there, by `validateFinality_beacon_of_genesis` (`Consensus/Proofs/LightClient/Authenticate.lean`).
 A header past genesis whose root is zero bytes would share the leaf of the genesis slot, and no theorem bounds that case.
 Such a header is a preimage of zero bytes under SHA-256.
-Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 
 `isValidLightClientHeader` checks the execution branch of a header, from Capella, which also hashes with SHA-256.
 No theorem composes that check with the branch bound.
@@ -1145,7 +1141,7 @@ The QUIC proofs (`Networking/Proofs/Quic/Keys.lean`) state the Initial and packe
 The keys have their required lengths in their types for AES-128-GCM and ChaCha20-Poly1305 with SHA-256.
 The Python suite checks the secrets, keys and labels of RFC 9001 Appendix A.1, and the keys of Appendix A.5.
 Anyone who sees the client's first Destination Connection ID can compute the Initial secrets, as RFC 9001 §5.2 says.
-These results establish neither cryptographic security nor constant-time execution.
+These results establish no cryptographic security.
 
 ### TLS 1.3 key schedule
 
@@ -1157,7 +1153,7 @@ The Python suite checks the secrets and Finished values of RFC 8448 §3.
 The schedule's results do not cover message parsing, negotiation, peer authentication or the Diffie-Hellman exchange.
 The schedule does not check the shared secret, and the SHA-384 schedule of TLS_AES_256_GCM_SHA384 is absent.
 Which groups and signature schemes beyond those of RFC 8446 §9.1 EthLib accepts, and whether it takes the RSA schemes, are open points that [#2163](https://github.com/ethereum/EthLib/issues/2163) left to the maintainers.
-These results establish neither cryptographic security nor constant-time execution.
+These results establish no cryptographic security.
 
 ### TLS 1.3 handshake codecs
 
@@ -1234,7 +1230,7 @@ That is certificate validation only: a caller-built state in a Finished phase ca
 That is only the fact that the schedule is a function of those inputs; it does not prove that received key shares yield equal ECDHE secrets or that the peers saw one transcript.
 
 The cryptographic proofs (`Networking/Proofs/Quic/Tls/Crypto.lean`) prove agreement of honest X25519 exchanges, rejection of all-zero X25519 output, and verification of a generated P-256 CertificateVerify under the matching certificate key.
-No theorem proves P-256 ECDHE agreement here, handshake unforgeability or constant-time execution.
+No theorem proves P-256 ECDHE agreement here or handshake unforgeability.
 The step theorems do not establish a complete invariant over every state reachable from initialization.
 The Python tests use independently signed libp2p certificates with known private keys and check both groups, both suites and retries against independent shared-secret, signature, HKDF and HMAC calculations.
 They also check malformed negotiation, signatures, Finished values and post-handshake messages.
@@ -1280,7 +1276,7 @@ The other failures reject only this packet.
 `unprotect_eq_reservedBits_iff` proves that this error comes only from a packet whose payload authenticates.
 Initial packets require AES-128-GCM, as RFC 9001 §5 specifies.
 The Python suite compares complete packets and Retry tags with RFC 9001 Appendices A.2 to A.5.
-These operations do not track nonce reuse, key updates or AEAD usage limits, and the proofs establish no cryptographic security or constant-time execution.
+These operations do not track nonce reuse, key updates or AEAD usage limits, and the proofs establish no cryptographic security.
 
 ### Noise XX and libp2p identities
 
@@ -1290,7 +1286,7 @@ The state then stores that remote, and completion returns it without reading a m
 `Produced.complete_authenticates` adds, for states that the libp2p initialize, write and read functions produce, that the signature verifies on that static key and that the public key decodes to the stored point.
 A caller that edits the state can therefore complete with a remote whose signature does not verify.
 `Produced.complete_isOk` says that completion of such a state after message 3 succeeds.
-These are acceptance theorems, not a proof of protocol security, confidentiality or constant-time execution.
+These are acceptance theorems, not a proof of protocol security or confidentiality.
 They relate the identity to the transport keys only through the shared handshake state.
 The transcript of Noise §5.2 has its own theorems (`Networking/Proofs/Noise.lean`).
 `chainingKey_foldl_mixHash` and `cipher_foldl_mixHash` prove that a run of transcript mixes leaves the chaining key and the cipher unchanged.
@@ -1370,7 +1366,7 @@ The JSON reader of the tokens is the one in Base, and the Unicode escape of [RFC
 `Base.Json.unicodeEscape_eq_none_of_surrogate` proves that every other surrogate is refused: the grammar admits a lone surrogate ([§8.2](https://www.rfc-editor.org/rfc/rfc8259#section-8.2)), but this reader refuses one.
 `Base.Json.string_eq_none_of_control` proves that a string is refused when the first character in it that needs an escape is below `0x20` and unescaped.
 The total JSON reader has no theorem of full agreement with RFC 8259.
-These theorems do not establish HMAC unforgeability or constant-time execution.
+These theorems do not establish HMAC unforgeability.
 
 ### ERC-2335 keystores
 
@@ -8233,13 +8229,26 @@ Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
 
-EthLib makes no constant-time claim.
+EthLib makes no constant-time claim, for any operation.
 `Hash/Keccak.lean` says it "is not intended to be constant-time", and the field arithmetic uses Lean's `Nat`, which gives no timing guarantee.
 This matters where secret data is handled.
 
 XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
 The Python bindings expose all four, as `key_gen` and `sign` in each module, which take the secret seed.
-BLS key generation, signing and the proof of possession handle secret data, and the Python bindings expose all three.
+BLS key generation, signing, the proof of possession and the public key of a secret key handle secret data, and the Python bindings expose them as `key_gen`, `sign`, `pop_prove` and `sk_to_pk`.
+The validator duties sign with a BLS secret key, and the bindings expose them as `get_validator_signature`, `construct_attestation` and `construct_single_attestation`.
+The secp256k1 signing, ECDH and address functions take a private key, and the bindings expose them as `sign`, `ecdh` and `address`.
+Node records, DNS discovery roots and discv4 packets are signed with a secp256k1 private key, and the bindings expose them as `sign_v4`, `make_record_v4`, `enr_record`, `sign_root` and `encode`.
+The libp2p identity takes a secp256k1 secret, and the bindings expose it as `public_key`.
+X25519 takes a secret scalar, and the bindings expose it as `x25519` and `x25519_public_key`.
+ChaCha20-Poly1305 takes a secret key, and the bindings expose its cipher, its MAC and the AEAD, among them `chacha20_poly1305_encrypt` and `chacha20_poly1305_decrypt`.
+The VRF derives its secrets from a secret seed, and the bindings expose that as `secret` and `evaluate`.
+The handshakes of RLPx, discv5, Noise and TLS 1.3 take the secret keys of their parties, and the bindings expose them in the `rlpx`, `discv5`, `noise` and `quic.handshake` modules.
+After a handshake, its ciphers take the session secrets.
+The bindings expose them as `ecies_decrypt`, `write_frames` and `read_frames` for RLPx, and `encrypt_message`, `decrypt_message`, `seal_message` and `open_message` for discv5.
+For Noise they are `cipher_encrypt` and `cipher_decrypt`, and for QUIC `protect`, `unprotect`, `tls_key_schedule`, `tls_derive_secret` and `tls_finished`.
+The Engine API token takes the JWT secret, and the bindings expose it as `jwt_build` and `jwt_check`.
+ERC-2335 keystores take a password and a secret key, and the bindings expose them as `encrypt`, `decrypt` and `password_bytes`.
 The bindings `derive_master_sk`, `derive_child_sk` and `derive_path` handle secret seeds or keys.
 HMAC-SHA-256, HKDF and the Concatenation KDF take a secret key, input keying material or shared secret.
 The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `concat_kdf`.
