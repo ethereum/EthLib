@@ -39,6 +39,7 @@ public import EthLib.Cryptography.Proofs.IndependentAnswers
 public import EthLib.Cryptography.Proofs.IndependentOutside
 public import EthLib.Cryptography.Proofs.OneCallPermutation
 public import EthLib.Cryptography.Proofs.Indifferentiability
+public import EthLib.Cryptography.Proofs.Sponge.Simulator
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
