@@ -97,13 +97,15 @@ theorem blockHash_of_length_lt {hashes : List Hash32} {current n : Nat}
   · rfl
 
 /-- A blob index past the end of the list has hash 0. -/
-theorem blobHash_of_le {hashes : List Hash32} {index : U256} (h : hashes.length ≤ index.toNat) :
+theorem blobHash_of_le {hashes : List Cryptography.Kzg.VersionedHash} {index : U256}
+    (h : hashes.length ≤ index.toNat) :
     blobHash hashes index = 0 := by
   simp [blobHash, List.getElem?_eq_none h]
 
 /-- A blob index within the list has the hash at that index, read big-endian. -/
-theorem blobHash_of_lt {hashes : List Hash32} {index : U256} (h : index.toNat < hashes.length) :
-    blobHash hashes index = U256.fromBeBytes hashes[index.toNat] := by
+theorem blobHash_of_lt {hashes : List Cryptography.Kzg.VersionedHash} {index : U256}
+    (h : index.toNat < hashes.length) :
+    blobHash hashes index = U256.fromBeBytes hashes[index.toNat].bytes := by
   simp [blobHash, List.getElem?_eq_getElem h]
 
 /-- An opcode of the environment has an instruction exactly from the fork that adds it.

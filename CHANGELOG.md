@@ -3377,6 +3377,17 @@ Not yet released.
   The C and Python function signatures stay the same.
   Migration: build a value with `KZGCommitment.mk` or `VersionedHash.mk`, and read its bytes with `.bytes`.
 
+- In Lean, the execution layer now types its versioned hashes as `Cryptography.Kzg.VersionedHash` ([#4551](https://github.com/ethereum/EthLib/issues/4551)).
+  A blob transaction and the environment that BLOBHASH reads hold them.
+  So do the blob check of the network form, the `engine_newPayload` check and the RPC transaction objects.
+  So the Engine layer passes the hashes of a beacon block to the execution layer without converting them.
+  `Execution.Transactions.versionedHash` is removed: use `Cryptography.Kzg.kzgCommitmentToVersionedHash`, which returns the same 32 bytes as a versioned hash.
+  The errors `TransactionError.invalidBlobVersionedHash`, `NetworkError.versionedHashMismatch` and `Engine.PayloadError.wrongVersionedHashes` carry versioned hashes, and their messages stay the same.
+  The point evaluation precompile still reads its versioned hash as raw call data.
+  The RLP and JSON forms are those of the bytes, so no encoding changes.
+  The C and Python function signatures stay the same.
+  Migration: wrap 32 bytes with `VersionedHash.mk`, and read them back with `.bytes`.
+
 ## 0.3.0
 
 Released on 2026-11-06.

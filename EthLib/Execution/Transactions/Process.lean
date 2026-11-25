@@ -51,7 +51,7 @@ open EthLib.Execution.State (BlockState EMPTY_ACCOUNT TransactionState)
 /-! ## The start of the message -/
 
 /-- The versioned hashes of the blobs of a transaction, empty unless it carries blobs. -/
-def Transaction.blobHashes : Transaction → List Hash32
+def Transaction.blobHashes : Transaction → List Cryptography.Kzg.VersionedHash
   | .blob tx => tx.blobVersionedHashes
   | _ => []
 

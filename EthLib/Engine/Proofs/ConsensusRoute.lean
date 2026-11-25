@@ -179,7 +179,7 @@ The block comes from the payload at that fork, with the decoded root, requests, 
 Its blob transactions carry the decoded versioned hashes, when they are given. -/
 private theorem of_checkNewPayload_ok {config : ChainConfig} {version : Nat}
     {params : Lean.Json} {any : Json.AnyPayload} {amsterdam : Option (ByteArray × UInt64)}
-    {hashes : Option (List Hash32)} {beaconRoot : Option Hash32}
+    {hashes : Option (List Cryptography.Kzg.VersionedHash)} {beaconRoot : Option Hash32}
     {requests : Option (List ByteArray)}
     (hDecode : newPayloadParams version params =
       .ok (any, amsterdam, hashes, beaconRoot, requests))
@@ -280,10 +280,10 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
     by_cases electra : Fork.pectra ≤ fork <;> simp [sinceValue, electra, four]
   -- The hashes are written from Deneb, as those of the request.
   have hHashes : ∀ hs, (if 3 ≤ newPayloadVersion fork then
-      some (((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD [])
+      some (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
       else none) = some hs →
       ∀ deneb : Fork.dencun ≤ fork,
-        hs = (r.versionedHashes deneb).data.toList.map (·.bytes) := by
+        hs = (r.versionedHashes deneb).data.toList := by
     intro hs e deneb
     simp [sinceValue, deneb, three] at e
     exact e.symm
@@ -293,11 +293,11 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
   have decode : payload.extraData.size ≤ Execution.Blocks.MAX_EXTRA_DATA_BYTES →
       ∃ any', newPayloadParams (newPayloadVersion fork) (newPayloadParamsJson
           (newPayloadVersion fork) payload amsterdam
-          (((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD [])
+          (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
           ((sinceValue r.parentBeaconBlockRoot).getD 0) ((sinceValue requests).getD [])) =
         .ok (any', amsterdam,
           if 3 ≤ newPayloadVersion fork then
-            some (((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD [])
+            some (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
           else none,
           if 3 ≤ newPayloadVersion fork then
             some ((sinceValue r.parentBeaconBlockRoot).getD 0) else none,
@@ -331,9 +331,9 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
         (hAt _).symm.trans hPl, by rw [← hRoot]; exact hB, by rw [← hRequests]; exact hL,
         by rw [← hA1]; exact hA, by rw [← hA2]; exact hS, hBlock⟩, fun deneb => ?_, post, hST⟩
     have e : (if 3 ≤ newPayloadVersion fork then
-        some (((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD [])
+        some (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
         else none) =
-        some (((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD []) := by
+        some (((sinceValue r.versionedHashes).map (·.data.toList)).getD []) := by
       simp [three.mpr deneb]
     rw [hH _ e]
     exact hHashes _ e deneb
@@ -368,7 +368,7 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
           ((Consensus.NewPayloadRequest.requestsList_eq_ok_iff.mp hReq) electra)
       · simp [sinceValue, electra] at e
     have hHashesB : ∀ hs, (if 3 ≤ newPayloadVersion fork then
-        some (((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD [])
+        some (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
         else none) = some hs → ExecutionPayload.blobVersionedHashes b.transactions = hs := by
       intro hs e
       have deneb : Fork.dencun ≤ fork := three.mp (by
@@ -426,7 +426,7 @@ theorem newPayloadOnChain_valid_iff_accepts {transition : TransitionConfiguratio
         payload ((sinceValue r.executionPayload.blockAccessList).bind fun accessList =>
           (sinceValue r.executionPayload.slotNumber).bind fun slot =>
             pure (({ data := accessList.data } : ByteArray), slot))
-        (((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD [])
+        (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
         ((sinceValue r.parentBeaconBlockRoot).getD 0) ((sinceValue requests).getD [])) := by
       unfold newPayloadRequestJson
       simp only [hne, ne_eq, not_false_eq_true, guard, ite_true, pure_bind, hAny, hPay, hReq,
@@ -460,7 +460,7 @@ theorem newPayloadV6Params_newPayloadRequestJson (heze : .hegota ≤ fork)
       newPayloadV6Params params = .ok ((any,
         some (⟨(r.executionPayload.blockAccessList (Nat.le_trans (by decide) heze)).data⟩,
           r.executionPayload.slotNumber (Nat.le_trans (by decide) heze)),
-        some ((r.versionedHashes (Nat.le_trans (by decide) heze)).data.toList.map (·.bytes)),
+        some ((r.versionedHashes (Nat.le_trans (by decide) heze)).data.toList),
         some (r.parentBeaconBlockRoot (Nat.le_trans (by decide) heze)),
         some ((sinceValue requests).getD [])), list) ∧
       ∃ original, anyPayloadOf r.executionPayload = some original ∧
@@ -496,8 +496,8 @@ theorem newPayloadV6Params_newPayloadRequestJson (heze : .hegota ≤ fork)
     rw [(Json.AnyPayload.atFork_common hPay).2.2, (common_of_anyPayloadOf hAny).2.2]
     exact extra
   -- The hashes and the root are those of the request.
-  have hHashes : ((sinceValue r.versionedHashes).map (·.data.toList.map (·.bytes))).getD [] =
-      (r.versionedHashes dencun).data.toList.map (·.bytes) := by
+  have hHashes : ((sinceValue r.versionedHashes).map (·.data.toList)).getD [] =
+      (r.versionedHashes dencun).data.toList := by
     simp [sinceValue, dencun]
   have hRoot : (sinceValue r.parentBeaconBlockRoot).getD 0 = r.parentBeaconBlockRoot dencun := by
     simp [sinceValue, dencun]

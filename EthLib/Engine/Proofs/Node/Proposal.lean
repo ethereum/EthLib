@@ -27,9 +27,9 @@ public section
 namespace EthLib.Engine
 
 open EthLib.Base
-open EthLib.Cryptography.Kzg (TrustedSetup)
+open EthLib.Cryptography.Kzg (TrustedSetup kzgCommitmentToVersionedHash)
 open EthLib.Execution.Blocks (Block)
-open EthLib.Execution.Transactions (Transaction versionedHash)
+open EthLib.Execution.Transactions (Transaction)
 
 namespace Node
 
@@ -363,7 +363,7 @@ theorem newPayloadStep_of_getPayloadStep {builder : Builder} {status : PayloadSt
         (if hf : .glamsterdam ≤ r.stored.fork then
           some (r.stored.built.blockAccessList hf, r.stored.built.block.header.slotNumber hf)
         else none)
-        (r.stored.bundle.commitments.map versionedHash)
+        (r.stored.bundle.commitments.map kzgCommitmentToVersionedHash)
         ((sinceValue r.stored.built.block.header.parentBeaconBlockRoot).getD 0)
         r.stored.built.requests)).1 = .ok (⟨.valid, some r.payload.blockHash⟩, none) := by
   have hGet' : getPayload next.config setup next.store version' pid = .ok r := by

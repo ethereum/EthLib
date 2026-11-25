@@ -132,6 +132,14 @@ instance : Codec FeeMarketTransaction where
         s := ← Item.field 11 s }
     | items => .error (.wrongFieldCount 12 items.length)
 
+/-- A versioned hash is the RLP string of its 32 bytes.
+
+Source: [EIP-4844][eip-4844], "Blob transaction".
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#blob-transaction -/
+instance : Codec Cryptography.Kzg.VersionedHash :=
+  .wrapper Cryptography.Kzg.VersionedHash.mk Cryptography.Kzg.VersionedHash.bytes
+
 /-- The payload of a transaction of type 3 is the list of its fourteen fields, in order. -/
 instance : Codec BlobTransaction where
   -- EIP-4844: `(T_c, T_n, T_f, T_m, T_g, T_t, T_v, p, T_A)`, then the maximum fee per blob gas.

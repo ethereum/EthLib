@@ -163,7 +163,7 @@ theorem executionEngine_accepts_iff {chain : BlockChain}
         payloadBlock chain.config request.executionPayload request.parentBeaconBlockRoot
           requests = some ⟨f, b⟩ ∧
         (∀ deneb : .dencun ≤ fork, ExecutionPayload.blobVersionedHashes b.transactions =
-          (request.versionedHashes deneb).data.toList.map (·.bytes)) ∧
+          (request.versionedHashes deneb).data.toList) ∧
         ∃ post, stateTransition chain b (checkSeal := false) = .ok post := by
   unfold executionEngine
   rw [Consensus.ExecutionEngine.verifyAndNotifyNewPayload_default,
@@ -213,14 +213,14 @@ theorem executionEngine_accepts_newPayloadRequest_iff {chain : BlockChain}
             (fun _ => state.latestBlockHeader.parentRoot) requests = some ⟨f, b⟩ ∧
           (∀ deneb : .dencun ≤ fork, ExecutionPayload.blobVersionedHashes b.transactions =
             (body.blobKzgCommitments ⟨deneb, bellatrix.2⟩).data.toList.map
-              (Consensus.commitmentVersionedHash · |>.bytes)) ∧
+              Consensus.commitmentVersionedHash) ∧
           ∃ post, stateTransition chain b (checkSeal := false) = .ok post := by
   rw [executionEngine_accepts_iff]
   simp only [Consensus.NewPayloadRequest.requestsList_eq_ok_iff]
   refine exists_congr fun requests => and_congr Iff.rfl <| exists_congr fun f =>
     exists_congr fun b => and_congr Iff.rfl <| and_congr ?_ Iff.rfl
   exact forall_congr' fun deneb => by
-    simp [Consensus.BeaconBlockBody.newPayloadRequest, Function.comp_def]
+    simp [Consensus.BeaconBlockBody.newPayloadRequest]
 
 /-- From Bellatrix on, the version of the method at a fork takes some fork. -/
 theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork) :
@@ -306,7 +306,7 @@ theorem executionEngine_accepts_iff_of_gloas (gloas : .glamsterdam ≤ fork)
         payloadBlock chain.config request.executionPayload request.parentBeaconBlockRoot
           requests = some ⟨.glamsterdam, b⟩ ∧
         ExecutionPayload.blobVersionedHashes b.transactions =
-          (request.versionedHashes (Nat.le_trans (by decide) gloas)).data.toList.map (·.bytes) ∧
+          (request.versionedHashes (Nat.le_trans (by decide) gloas)).data.toList ∧
         ∃ post, stateTransition chain b (checkSeal := false) = .ok post := by
   rw [executionEngine_accepts_iff]
   constructor

@@ -41,6 +41,7 @@ open EthLib.Execution.Transactions
 open EthLib.Engine.Json
 open EthLib.Serialization.JsonRpc
 open EthLib.Execution.Rpc (withdrawal)
+open EthLib.Cryptography.Kzg (VersionedHash)
 
 /-- Whether a version of the method takes payloads of a fork. -/
 def acceptsFork (version : Nat) (fork : Fork) : Bool :=
@@ -120,8 +121,8 @@ def payloadParam (version : Nat) (j : Json) :
 
 /-- The parameters of a version of the method, each decoded. -/
 def newPayloadParams (version : Nat) (params : Json) :
-    Decode (AnyPayload × Option (ByteArray × UInt64) × Option (List Hash32) × Option Hash32 ×
-      Option (List ByteArray)) := do
+    Decode (AnyPayload × Option (ByteArray × UInt64) × Option (List VersionedHash) ×
+      Option Hash32 × Option (List ByteArray)) := do
   -- Version 3, step 1: the parameters strictly match those of the version, or `-32602`.
   --
   -- A `null` value counts as not provided, so it fails the match too.
@@ -140,7 +141,8 @@ def newPayloadParams (version : Nat) (params : Json) :
   let (any, amsterdam) ← payloadParam version (← param 0)
   -- Parameter 2, from version 3: `expectedBlobVersionedHashes`, an array of 32-byte data.
   let hashes ← if version ≥ 3 then
-    some <$> array "expectedBlobVersionedHashes" (fixed "versioned hash" 32) (← param 1)
+    some <$> array "expectedBlobVersionedHashes"
+      (fun j => VersionedHash.mk <$> fixed "versioned hash" 32 j) (← param 1)
     else pure none
   -- Parameter 3, from version 3: `parentBeaconBlockRoot`, 32 bytes of data.
   let beaconRoot ← if version ≥ 3 then
@@ -163,7 +165,7 @@ def newPayloadParams (version : Nat) (params : Json) :
 
 /-- The parameters of a version of the method as JSON, in the order that the version takes. -/
 def newPayloadParamsJson {fork : Fork} (version : Nat) (payload : ExecutionPayload fork)
-    (amsterdam : Option (ByteArray × UInt64)) (hashes : List Hash32) (beaconRoot : Hash32)
+    (amsterdam : Option (ByteArray × UInt64)) (hashes : List VersionedHash) (beaconRoot : Hash32)
     (requests : List ByteArray) : Json :=
   -- The consensus layer writes the parameters of each version as JSON, in this order.
   --
@@ -177,14 +179,14 @@ def newPayloadParamsJson {fork : Fork} (version : Nat) (payload : ExecutionPaylo
     | none => executionPayloadJson payload
   -- Parameters 2 and 3 from version 3, then parameter 4 from version 4.
   .arr ([payload] ++
-    (if 3 ≤ version then [listJson (dataJson ·.toList) hashes, dataJson beaconRoot.toList]
+    (if 3 ≤ version then [listJson (dataJson ·.bytes.toList) hashes, dataJson beaconRoot.toList]
       else []) ++
     (if 4 ≤ version then [listJson (dataJson ·.data.toList) requests] else [])).toArray
 
 /-- The parameters of version 6, from Bogota: those of version 5, then an inclusion list. -/
 def newPayloadV6Params (params : Json) :
-    Decode ((AnyPayload × Option (ByteArray × UInt64) × Option (List Hash32) × Option Hash32 ×
-      Option (List ByteArray)) × List ByteArray) := do
+    Decode ((AnyPayload × Option (ByteArray × UInt64) × Option (List VersionedHash) ×
+      Option Hash32 × Option (List ByteArray)) × List ByteArray) := do
   -- The five parameters of version 6, none of them `null`.
   let six ← newPayloadParams 6 params
   -- Parameter 5, the inclusion list, which the line above has read already.
@@ -195,7 +197,7 @@ def newPayloadV6Params (params : Json) :
 
 /-- The parameters of version 6 as JSON: those of version 5, then the inclusion list. -/
 def newPayloadV6ParamsJson {fork : Fork} (payload : ExecutionPayload fork)
-    (amsterdam : ByteArray × UInt64) (hashes : List Hash32) (beaconRoot : Hash32)
+    (amsterdam : ByteArray × UInt64) (hashes : List VersionedHash) (beaconRoot : Hash32)
     (requests : List ByteArray) (inclusionList : List ByteArray) : Json :=
   -- The parameters of version 5 are an array, and the inclusion list goes at its end.
   match newPayloadParamsJson 5 payload (some amsterdam) hashes beaconRoot requests with

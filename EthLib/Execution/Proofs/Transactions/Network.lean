@@ -156,11 +156,11 @@ theorem tx_of_decodeNetwork {fork : Fork} {bytes : ByteArray} {w : NetworkBlobTr
 /-! ## The check of the blobs -/
 
 /-- The commitments match exactly when each one hashes to the versioned hash at its position. -/
-theorem hashesMatch_iff {hashes : List Bytes32} {commitments : List KZGCommitment}
+theorem hashesMatch_iff {hashes : List VersionedHash} {commitments : List KZGCommitment}
     (hlen : hashes.length = commitments.length) :
     hashesMatch hashes commitments = true ↔
       ∀ (i : Nat) (hi : i < hashes.length),
-        versionedHash (commitments[i]'(hlen ▸ hi)) = hashes[i] := by
+        kzgCommitmentToVersionedHash (commitments[i]'(hlen ▸ hi)) = hashes[i] := by
   simp only [hashesMatch, List.all_eq_true, decide_eq_true_eq, Prod.forall]
   constructor
   · intro H i hi
@@ -173,9 +173,10 @@ theorem hashesMatch_iff {hashes : List Bytes32} {commitments : List KZGCommitmen
     exact H i hi.1
 
 /-- With one commitment per hash, the commitments match exactly when they hash to the list. -/
-theorem hashesMatch_iff_map {hashes : List Bytes32} {commitments : List KZGCommitment}
+theorem hashesMatch_iff_map {hashes : List VersionedHash} {commitments : List KZGCommitment}
     (hlen : hashes.length = commitments.length) :
-    hashesMatch hashes commitments = true ↔ commitments.map versionedHash = hashes := by
+    hashesMatch hashes commitments = true ↔
+      commitments.map kzgCommitmentToVersionedHash = hashes := by
   rw [hashesMatch_iff hlen, List.ext_getElem_iff]
   simp only [List.length_map, List.getElem_map]
   constructor
@@ -189,7 +190,7 @@ The check of blobs succeeds exactly when three conditions hold.
 
 The counts match, each commitment hashes to its versioned hash, and the proofs verify.
 -/
-theorem validateBlobs_eq_ok_iff (setup : TrustedSetup) (fork : Fork) (hashes : List Bytes32)
+theorem validateBlobs_eq_ok_iff (setup : TrustedSetup) (fork : Fork) (hashes : List VersionedHash)
     (blobs : List Blob) (commitments : List KZGCommitment) (proofs : List KZGProof) :
     validateBlobs setup fork hashes blobs commitments proofs = .ok () ↔
       blobCountsMatch fork hashes blobs commitments proofs = true ∧
@@ -203,7 +204,7 @@ theorem validateBlobs_eq_ok_iff (setup : TrustedSetup) (fork : Fork) (hashes : L
       MonadExceptOf.throw]
 
 /-- The counts match exactly with one hash and one commitment per blob, and the fork's proofs. -/
-theorem blobCountsMatch_iff (fork : Fork) (hashes : List Bytes32) (blobs : List Blob)
+theorem blobCountsMatch_iff (fork : Fork) (hashes : List VersionedHash) (blobs : List Blob)
     (commitments : List KZGCommitment) (proofs : List KZGProof) :
     blobCountsMatch fork hashes blobs commitments proofs = true ↔
       hashes.length = blobs.length ∧ commitments.length = blobs.length ∧

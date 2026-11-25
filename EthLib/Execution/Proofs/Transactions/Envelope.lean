@@ -85,6 +85,11 @@ instance : LawfulCodec FeeMarketTransaction where
         rfl, y10, rfl, y11, rfl, rfl⟩ := h
       rfl
 
+/-- A versioned hash keeps the laws of the RLP string of its 32 bytes. -/
+instance : LawfulCodec Cryptography.Kzg.VersionedHash :=
+  .wrapper Cryptography.Kzg.VersionedHash.mk Cryptography.Kzg.VersionedHash.bytes
+    (fun _ => rfl) (fun _ => rfl)
+
 instance : LawfulCodec BlobTransaction where
   ofItem_toItem _ := Item.fields_bind_eq_ok.mpr
     ⟨_, rfl, rfl, by simp [Item.field_toItem, bind, Except.bind, pure, Except.pure]⟩

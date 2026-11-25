@@ -354,7 +354,8 @@ def networkMessage : NetworkError → String
   | .countMismatch h b c p =>
     s!"{h} versioned hashes, {b} blobs, {c} commitments and {p} proofs do not match"
   | .versionedHashMismatch index expected actual =>
-    s!"commitment {index} hashes to {hexString expected.toList}, not to {hexString actual.toList}"
+    s!"commitment {index} hashes to {hexString expected.bytes.toList}, " ++
+      s!"not to {hexString actual.bytes.toList}"
   | .kzg e => s!"kzg: {e.message}"
   | .proofRejected => "the proofs do not verify"
 

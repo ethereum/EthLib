@@ -342,14 +342,14 @@ theorem checkContents_eq_ok_iff {fork : Fork} {tx : Transaction} :
         -- It has at most 6 blobs from Fusaka.
         (fork ≥ .fusaka → b.blobVersionedHashes.length ≤ MAX_BLOBS_PER_TRANSACTION) ∧
         -- Each of its versioned hashes starts with the KZG version byte.
-        ∀ h ∈ b.blobVersionedHashes, h[0] = Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) ∧
+        ∀ h ∈ b.blobVersionedHashes, h.bytes[0] = Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) ∧
       -- A set code transaction has at least one authorization.
       ∀ a, tx = .setCode a → a.authorizations ≠ [] := by
   cases tx with
   | blob b =>
     have key : checkContents fork (.blob b) = .ok () ↔ b.blobVersionedHashes ≠ [] ∧
         (fork ≥ .fusaka → b.blobVersionedHashes.length ≤ MAX_BLOBS_PER_TRANSACTION) ∧
-        ∀ h ∈ b.blobVersionedHashes, h[0] = Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG := by
+        ∀ h ∈ b.blobVersionedHashes, h.bytes[0] = Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG := by
       simp only [checkContents]
       by_cases hempty : b.blobVersionedHashes.isEmpty = true
       · simp [List.isEmpty_iff.mp hempty]
@@ -363,9 +363,8 @@ theorem checkContents_eq_ok_iff {fork : Fork} {tx : Transaction} :
       simp only [hcount, ↓reduceIte]
       have hle : fork ≥ .fusaka → b.blobVersionedHashes.length ≤ MAX_BLOBS_PER_TRANSACTION :=
         fun hf => Nat.not_lt.mp fun hlt => hcount ⟨hf, hlt⟩
-      by_cases hhash :
-          (b.blobVersionedHashes.any fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG)
-            = true
+      by_cases hhash : (b.blobVersionedHashes.any fun h =>
+          h.bytes[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) = true
       · simp only [hhash, ↓reduceIte, reduceCtorEq, false_iff, not_and]
         simp only [List.any_eq_true, bne_iff_ne, ne_eq] at hhash
         obtain ⟨x, hx, hbad⟩ := hhash

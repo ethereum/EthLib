@@ -199,7 +199,7 @@ def ofBlock (hParis : .paris ≤ fork) (b : Block fork Transaction) :
   else none
 
 /-- The versioned hashes of the blob transactions of a list, in order. -/
-def blobVersionedHashes (transactions : List Transaction) : List Bytes32 :=
+def blobVersionedHashes (transactions : List Transaction) : List Cryptography.Kzg.VersionedHash :=
   -- Version 3, step 3.1: the versioned hashes of each blob transaction, in the order of inclusion.
   transactions.flatMap fun
     | .blob tx => tx.blobVersionedHashes
