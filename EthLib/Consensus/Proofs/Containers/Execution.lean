@@ -19,17 +19,7 @@ At every fork, the payload is a lawful SSZ container, so its bytes decode back t
 
 Its SSZ type holds the fields that exist at that fork, in their order.
 
-Before Gloas it is a container, with the field types of Fulu, so Gloas changes nothing before it.
-
-From Gloas it is a progressive container, whose lists have no limit.
-
 So its bytes and its root are those of that plain list of fields.
-
-Before Gloas, the header of a payload has the root of the payload.
-
-Each list gives way to its own root, which leaves the root unchanged.
-
-A withdrawal and a block of proof of work are lawful containers too.
 -/
 
 @[expose] public section
@@ -38,6 +28,7 @@ namespace EthLib.Consensus
 
 open Base Serialization.Ssz SszType
 
+-- A withdrawal and a block of proof of work are lawful SSZ containers.
 instance : LawfulSszType Withdrawal :=
   .container (by decide) (fun _ => rfl) (fun _ => rfl)
 
@@ -79,13 +70,17 @@ def fieldValues (payload : ExecutionPayload preset fork) : List Value :=
   (if present : .glamsterdam ≤ fork then
     [toValue (payload.blockAccessList present), toValue (payload.slotNumber present)] else [])
 
-/-- The SSZ type of a payload at a fork: the container of its fields, progressive from Gloas. -/
+/-- The SSZ type of a payload at a fork: the container of its fields, progressive from Gloas.
+
+From Gloas its lists have no limit. -/
 def fieldsDesc (preset : Preset) (fork : Fork) : Desc :=
   if .glamsterdam ≤ fork then
     .progressiveContainer activeFields (names fork) (fieldDescs preset fork)
   else .container (names fork) (fieldDescs preset fork)
 
-/-- Before Gloas, the SSZ type of a payload is the container of the fields of that fork. -/
+/-- Before Gloas, the SSZ type of a payload is the container of the fields of that fork.
+
+Its field types are those of Fulu, so Gloas changes nothing before it. -/
 theorem fieldsDesc_of_lt (before : fork < .glamsterdam) :
     fieldsDesc preset fork = .container (names fork) (fieldDescs preset fork) := by
   simp [fieldsDesc, not_switch_of_lt before]

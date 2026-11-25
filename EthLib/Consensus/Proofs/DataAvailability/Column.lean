@@ -17,23 +17,9 @@ Each container has distinct field names, and converts to and from its fields.
 
 So its bytes decode back to it.
 
-The largest size of a sidecar covers the blob limit at every epoch.
+It also bounds the size of a sidecar, checks inclusion and builds the sidecars of a block.
 
-Two sidecars whose branches verify for one body root carry one root of commitments.
-
-Otherwise the two climbs to the body root hash two different messages to one SHA-256 output.
-
-The sidecars built from the rows of a block hold one column each, with the shared fields given.
-
-Before Gloas a build that succeeds has as many rows as commitments.
-
-Built from a block before Gloas, each one carries its header and passes its inclusion check.
-
-Built from a block from Gloas on, each one names the block by its root and its slot.
-
-The check of the proofs of a sidecar is the batch check of one column.
-
-The games of columns of PeerDAS state position-binding and code-binding for that check.
+It relates the proof check to the batch check of a column.
 -/
 
 @[expose] public section
@@ -512,7 +498,9 @@ That list has the root of the sidecar's list.
 
 Otherwise the search over the two climbs names two different 64-byte messages with one hash.
 
-This holds at Fulu and the BPO forks; the full node builds the branch at both presets. -/
+This holds at Fulu and the BPO forks.
+
+The full node builds the branch at both presets. -/
 theorem verifyDataColumnSidecarInclusionProof_body (fulu : .fusaka ≤ fork)
     (beforeGloas : fork < .glamsterdam) {sidecar : DataColumnSidecar preset fork}
     (valid : verifyDataColumnSidecarInclusionProof preset beforeGloas sidecar = true)
@@ -822,6 +810,8 @@ The column holds the commitments of the sidecar, its index, its cells and its pr
 Before Gloas, the type of the commitments allows at most `MAX_BLOB_COMMITMENTS_PER_BLOCK` of them.
 
 A check that returns a verdict has as many cells as commitments, so the column has at most as many.
+
+The games of columns of PeerDAS state position-binding and code-binding for that check.
 -/
 theorem verifyDataColumnSidecarKzgProofs_eq_verify {preset : Preset} {fork : Fork}
     (setup : TrustedSetup) (sidecar : DataColumnSidecar preset fork)
