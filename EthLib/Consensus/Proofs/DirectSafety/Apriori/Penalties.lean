@@ -78,14 +78,6 @@ theorem producer_le_cohort (x : ForkedBeaconState preset) (early : x.fork < .gla
   refine Finset.sum_le_sum fun i _ => ?_
   cases (x.state.validators.data[i.toNat]?.map (·.slashed)).getD true <;> simp
 
-/-- The sums over a list of events and over a set of keys commute. -/
-private theorem list_sum_comm (S : Finset Nat) (f : Nat → BalanceEvent preset → Nat) :
-    ∀ events : List (BalanceEvent preset),
-      (events.map fun e => ∑ j ∈ S, f j e).sum = ∑ j ∈ S, (events.map (f j)).sum
-  | [] => by simp
-  | e :: rest => by
-    simp only [List.map_cons, List.sum_cons, list_sum_comm S f rest, Finset.sum_add_distrib]
-
 /-- The debits of one event over a set of keys are at most its debits over the registry. -/
 theorem keys_debits_le (S : Finset Nat) (e : BalanceEvent preset) :
     ∑ j ∈ S, (actualBalanceAt e.before j - actualBalanceAt e.after j) ≤ e.debits := by
@@ -310,7 +302,11 @@ private theorem segment_penalties_core {g x m n : ForkedBeaconState preset}
   have penalties : ((during ++ later ++ crossings).map fun e =>
       ∑ j ∈ penaltyCohort x, penaltyDebit j e).sum = 0 :=
     penaltyDebits_zero _ ((free.append laterFree).append crossingsFree)
-  have passDebits := list_sum_comm (penaltyCohort x) penaltyDebit rewarded.2
+  -- The sums over the events and over the cohort commute.
+  have passDebits : (rewarded.2.map fun e => ∑ j ∈ penaltyCohort x, penaltyDebit j e).sum =
+      ∑ j ∈ penaltyCohort x, (rewarded.2.map (penaltyDebit j)).sum := by
+    simpa using Multiset.sum_map_sum (m := (rewarded.2 : Multiset (BalanceEvent preset)))
+      (s := penaltyCohort x) (f := fun e j => penaltyDebit j e)
   simp only [List.map_append, List.sum_append, sourceDebits_append,
     syncDebits_zero laterQuiet, syncDebits_zero crossingsQuiet, syncDebits_zero rewardQuiet]
     at debits penalties ⊢
