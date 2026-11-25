@@ -1306,11 +1306,12 @@ ACCOUNT_ANSWER = {
             ),
             id="engine-fcu-method",
         ),
-        # engine_forkchoiceUpdatedV1 takes two parameters, not none.
+        # engine_forkchoiceUpdatedV1 takes one or two parameters, not none.
         pytest.param(
             EngineError,
             32602,
-            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 2"',
+            "engine error: EthLib.Engine.EngineError.invalidParams"
+            ' "params: got 0, expected 1 or 2"',
             lambda: engine.forkchoice_updated(
                 CONFIG, [], "engine_forkchoiceUpdatedV1", [], terminal_total_difficulty=0
             ),
