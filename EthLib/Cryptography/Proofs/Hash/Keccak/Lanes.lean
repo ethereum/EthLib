@@ -319,6 +319,16 @@ theorem Lanes4.bytes_injective : Function.Injective Lanes4.bytes := by
   cases b
   simp_all
 
+/-- The four lanes read from 32 bytes have those bytes. -/
+theorem Lanes4.bytes_read_packBytes (d : Vector UInt8 32) :
+    (Lanes4.read (Base.packBytes d) 0).bytes = d := by
+  have h : 0 + 32 ≤ (Base.packBytes d).size := by simp
+  exact (Lanes4.bytes_read _ 0 h).trans (Base.readBytes_packBytes d h)
+
+/-- Every 32 bytes are the bytes of exactly one set of four lanes. -/
+theorem Lanes4.bytes_bijective : Function.Bijective Lanes4.bytes :=
+  ⟨Lanes4.bytes_injective, fun d => ⟨_, Lanes4.bytes_read_packBytes d⟩⟩
+
 /-! ## Strings of lanes with lanes appended -/
 
 /-- The lanes of a string with two lanes appended: its own, then the two, then zeros.
@@ -378,7 +388,7 @@ theorem keccak256Lanes_lanesBytes (a : Array UInt64) :
     (keccak256Lanes a).bytes = keccak256 ⟨(lanesBytes a).toArray⟩ :=
   congrArg Id.run (keccak256LanesWith_lanesBytes (m := Id) (fun S => pure (keccakF S)) a)
 
-/-! ## The values of two lanes -/
+/-! ## The values of two and four lanes -/
 
 /-- Two lanes are two 64-bit words. -/
 def lanes2Equiv : Lanes2 ≃ UInt64 × UInt64 where
@@ -395,5 +405,19 @@ theorem card_lanes2 : Fintype.card Lanes2 = 2 ^ 128 := by
   rw [Fintype.card_congr lanes2Equiv, Fintype.card_prod, ← FinEnum.card_eq_fintypeCard,
     FinEnum.card_UInt64]
   norm_num
+
+/-- Four lanes are four 64-bit words. -/
+def lanes4Equiv : Lanes4 ≃ UInt64 × UInt64 × UInt64 × UInt64 where
+  toFun w := (w.w0, w.w1, w.w2, w.w3)
+  invFun p := ⟨p.1, p.2.1, p.2.2.1, p.2.2.2⟩
+  left_inv _ := rfl
+  right_inv _ := rfl
+
+/-- Four lanes are their 32 bytes. -/
+def lanes4BytesEquiv : Lanes4 ≃ Vector UInt8 32 where
+  toFun := Lanes4.bytes
+  invFun d := Lanes4.read (Base.packBytes d) 0
+  left_inv w := Lanes4.bytes_injective (Lanes4.bytes_read_packBytes w.bytes)
+  right_inv := Lanes4.bytes_read_packBytes
 
 end EthLib.Cryptography.Hash.Keccak

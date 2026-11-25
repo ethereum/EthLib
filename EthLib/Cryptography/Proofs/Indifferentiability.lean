@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.LazyPermutation
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
+import VCVio.OracleComp.MapLens
 import VCVio.OracleComp.SimSemantics.StateT.Measure
 
 /-!
@@ -396,52 +397,33 @@ section Relabel
 
 variable {A' Dg' : Type}
 
-/-- A rewrite of a game that answers each call with one call of the same cost keeps its cost. -/
-private theorem withinCost_simulateQ {hashCost : Msg → ℕ}
-    (ρ : QueryImpl (GameSpec A' Msg Dg') (OracleComp (GameSpec A Msg Dg)))
-    (hρ : ∀ t, ∃ (t' : (GameSpec A Msg Dg).Domain)
-      (f : (GameSpec A Msg Dg).Range t' → (GameSpec A' Msg Dg').Range t),
-      queryCost hashCost t' = queryCost hashCost t ∧
-        ρ t = f <$> liftM ((GameSpec A Msg Dg).query t'))
+/-- A transport of a game that keeps the cost of each call keeps the cost of the game. -/
+private theorem withinCost_mapLens {hashCost : Msg → ℕ}
+    (l : PFunctor.Lens (GameSpec A' Msg Dg').toPFunctor (GameSpec A Msg Dg).toPFunctor)
+    (hl : ∀ t, queryCost hashCost (l.toFunA t) = queryCost hashCost t)
     {α : Type} {game : OracleComp (GameSpec A' Msg Dg') α} {N : ℕ}
-    (hN : WithinCost hashCost game N) : WithinCost hashCost (simulateQ ρ game) N := by
-  induction game using OracleComp.inductionOn generalizing N with
-  | pure x => exact isQueryBound_pure _ _ _ _
-  | query_bind t k ih =>
-    rw [WithinCost, isQueryBound_query_bind_iff] at hN
-    obtain ⟨hle, hk⟩ := hN
-    obtain ⟨t', f, hc, hρt⟩ := hρ t
-    rw [simulateQ_bind, simulateQ_spec_query, hρt, bind_map_left, WithinCost,
-      isQueryBound_query_bind_iff]
-    exact ⟨hc ▸ hle, fun u => hc ▸ ih (f u) (hk (f u))⟩
+    (hN : WithinCost hashCost game N) : WithinCost hashCost (game.mapLens l) N :=
+  IsQueryBound.mapLens l (by simpa only [WithinCost, hl] using hN)
 
-/-- A game over the states `A'`, played over the states `A` through the bijection `e`. -/
-private def stateImpl (e : A ≃ A') :
-    QueryImpl (GameSpec A' Msg Dg) (OracleComp (GameSpec A Msg Dg))
-  | .inl (.inl n) =>
-    (liftM ((GameSpec A Msg Dg).query (.inl (.inl n))) : OracleComp _ (Fin (n + 1)))
-  | .inl (.inr (.inl x)) =>
-    e <$> (liftM ((GameSpec A Msg Dg).query (.inl (.inr (.inl (e.symm x))))) : OracleComp _ A)
-  | .inl (.inr (.inr y)) =>
-    e <$> (liftM ((GameSpec A Msg Dg).query (.inl (.inr (.inr (e.symm y))))) : OracleComp _ A)
-  | .inr m => (liftM ((GameSpec A Msg Dg).query (.inr m)) : OracleComp _ Dg)
+/-- The calls of a game over the states `A'`, asked over the states `A` through the bijection. -/
+private def stateLens (e : A ≃ A') :
+    PFunctor.Lens (GameSpec A' Msg Dg).toPFunctor (GameSpec A Msg Dg).toPFunctor where
+  toFunA
+    | .inl (.inl n) => .inl (.inl n)
+    | .inl (.inr (.inl x)) => .inl (.inr (.inl (e.symm x)))
+    | .inl (.inr (.inr y)) => .inl (.inr (.inr (e.symm y)))
+    | .inr m => .inr m
+  toFunB
+    | .inl (.inl _) => id
+    | .inl (.inr (.inl _)) => e
+    | .inl (.inr (.inr _)) => e
+    | .inr _ => id
 
 /-- A simulator over the states `A`, run over the states `A'` through the bijection `e`. -/
 private def stateSim {M : Type → Type} [Functor M] (e : A ≃ A') (S : QueryImpl (PermSpec A) M) :
     QueryImpl (PermSpec A') M
   | .inl x => e <$> S (.inl (e.symm x))
   | .inr y => e <$> S (.inr (e.symm y))
-
-/-- The game played over the states `A` costs what the game over `A'` costs. -/
-private theorem withinCost_stateImpl (e : A ≃ A') {hashCost : Msg → ℕ} {α : Type}
-    {game : OracleComp (GameSpec A' Msg Dg) α} {N : ℕ} (hN : WithinCost hashCost game N) :
-    WithinCost hashCost (simulateQ (stateImpl e) game) N := by
-  refine withinCost_simulateQ _ (fun t => ?_) hN
-  rcases t with (n | x | y) | m
-  · exact ⟨.inl (.inl n), id, rfl, (id_map _).symm⟩
-  · exact ⟨.inl (.inr (.inl (e.symm x))), e, rfl, rfl⟩
-  · exact ⟨.inl (.inr (.inr (e.symm y))), e, rfl, rfl⟩
-  · exact ⟨.inr m, id, rfl, (id_map _).symm⟩
 
 /-- The relabelled simulator asks the random oracle at most once per call. -/
 private theorem asksOnce_stateSim {σ : Type} (e : A ≃ A')
@@ -455,33 +437,38 @@ private theorem asksOnce_stateSim {σ : Type} (e : A ≃ A')
 private theorem romGame_stateSim {σ : Type} (e : A ≃ A')
     (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg)))) (s₀ : σ)
     (game : OracleComp (GameSpec A' Msg Dg) Bool) :
-    romGame (stateSim e S) s₀ game = romGame S s₀ (simulateQ (stateImpl e) game) := by
-  rw [romGame, romGame,
-    QueryImpl.simulateQ_simulateQ_eq_of_apply (impl := idealImpl (stateSim e S))]
-  rintro ((n | x | y) | m) <;> simp [stateImpl, idealImpl, stateSim]
+    romGame (stateSim e S) s₀ game = romGame S s₀ (game.mapLens (stateLens e)) := by
+  rw [romGame, romGame, OracleComp.simulateQ_mapLens]
+  congr 2
+  funext t
+  rcases t with ((n | x | y) | m) <;> simp [stateLens, idealImpl, stateSim]
 
 /-- The real world of the relabelled hash is the real world of the relabelled game. -/
-private theorem realProb_stateImpl [FinEnum A] [FinEnum A'] (e : A ≃ A') (H : (A → A) → Msg → Dg)
+private theorem realProb_stateLens [FinEnum A] [FinEnum A'] (e : A ≃ A') (H : (A → A) → Msg → Dg)
     (game : OracleComp (GameSpec A' Msg Dg) Bool) :
     realProb (fun π msg => H (fun a => e.symm (π (e a))) msg) game =
-      realProb H (simulateQ (stateImpl e) game) := by
+      realProb H (game.mapLens (stateLens e)) := by
   have hrun : ∀ π : Equiv.Perm A,
       simulateQ (realImpl (fun π msg => H (fun a => e.symm (π (e a))) msg) (e.permCongr π)) game =
-        simulateQ (realImpl H π) (simulateQ (stateImpl e) game) := by
+        simulateQ (realImpl H π) (game.mapLens (stateLens e)) := by
     intro π
     have hH : (fun a => e.symm (e.permCongr π (e a))) = π := by
       funext a
       simp [Equiv.permCongr_apply]
-    refine (QueryImpl.simulateQ_simulateQ_eq_of_apply (fun t => ?_) game).symm
+    rw [OracleComp.simulateQ_mapLens]
+    congr 1
+    funext t
     rcases t with ((n | x | y) | m)
-    · simp [stateImpl]
+    · exact (id_map _).symm
+    · change (pure _ : ProbComp A') = e <$> (pure _ : ProbComp A)
+      rw [map_pure]
       rfl
-    · simp [stateImpl]
-      exact map_pure _ _
-    · simp [stateImpl]
-      exact map_pure _ _
-    · show (pure (H π m) : ProbComp Dg) = pure (H (fun a => e.symm (e.permCongr π (e a))) m)
-      rw [hH]
+    · change (pure _ : ProbComp A') = e <$> (pure _ : ProbComp A)
+      rw [map_pure]
+      rfl
+    · change (pure (H (fun a => e.symm (e.permCongr π (e a))) m) : ProbComp Dg) =
+        id <$> pure (H π m)
+      rw [id_map, hH]
   have hmap := SampleableType.map_uniformSample_evalDistEq_of_bijective (e.permCongr).bijective
   unfold realProb
   have h := (hmap.bind_left fun π => (fun b => b = true) <$>
@@ -489,108 +476,76 @@ private theorem realProb_stateImpl [FinEnum A] [FinEnum A'] (e : A ≃ A') (H : 
   simp only [id_map, bind_map_left, hrun] at h
   exact h.symm
 
-/-- A game whose digests are in `Dg'`, played with digests in `Dg` through the bijection `g`. -/
-private def digestImpl (g : Dg ≃ Dg') :
-    QueryImpl (GameSpec A Msg Dg') (OracleComp (GameSpec A Msg Dg))
-  | .inl t => (liftM ((GameSpec A Msg Dg).query (.inl t)) : OracleComp _ _)
-  | .inr m => g <$> (liftM ((GameSpec A Msg Dg).query (.inr m)) : OracleComp _ Dg)
+/-- The calls of a game with digests in `Dg'`, asked with digests in `Dg` through the bijection. -/
+private def digestLens (g : Dg ≃ Dg') :
+    PFunctor.Lens (GameSpec A Msg Dg').toPFunctor (GameSpec A Msg Dg).toPFunctor where
+  toFunA := id
+  toFunB
+    | .inl _ => id
+    | .inr _ => g
 
-/-- The random oracle with digests in `Dg`, asked through the oracle with digests in `Dg'`. -/
-private def romDigestImpl (g : Dg ≃ Dg') :
-    QueryImpl (RomSpec Msg Dg) (OracleComp (RomSpec Msg Dg'))
-  | .inl n => (liftM ((RomSpec Msg Dg').query (.inl n)) : OracleComp _ (Fin (n + 1)))
-  | .inr m => g.symm <$> (liftM ((RomSpec Msg Dg').query (.inr m)) : OracleComp _ Dg')
-
-/-- A simulator with digests in `Dg`, run with the random oracle of digests in `Dg'`. -/
-private def digestSim {σ : Type} (g : Dg ≃ Dg')
-    (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg)))) :
-    QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg'))) :=
-  fun q => StateT.mk fun s => simulateQ (romDigestImpl g) ((S q).run s)
-
-/-- Rewriting the calls of a stateful run commutes with the run. -/
-private theorem simulateQ_run_simulateQ {ι ι₁ ι₂ σ α : Type} {spec : OracleSpec ι}
-    {spec₁ : OracleSpec ι₁} {spec₂ : OracleSpec ι₂}
-    (impl : QueryImpl spec (StateT σ (OracleComp spec₁))) (τ : QueryImpl spec₁ (OracleComp spec₂))
-    (oa : OracleComp spec α) (s : σ) :
-    simulateQ τ ((simulateQ impl oa).run s) =
-      (simulateQ (fun t => StateT.mk fun s => simulateQ τ ((impl t).run s)) oa).run s := by
-  induction oa using OracleComp.inductionOn generalizing s with
-  | pure x => simp
-  | query_bind t k ih => simp [StateT.run_bind, ih]
-
-/-- The game played with digests in `Dg` costs what the game with digests in `Dg'` costs. -/
-private theorem withinCost_digestImpl (g : Dg ≃ Dg') {hashCost : Msg → ℕ} {α : Type}
-    {game : OracleComp (GameSpec A Msg Dg') α} {N : ℕ} (hN : WithinCost hashCost game N) :
-    WithinCost hashCost (simulateQ (digestImpl g) game) N := by
-  refine withinCost_simulateQ _ (fun t => ?_) hN
-  rcases t with t | m
-  · exact ⟨.inl t, id, rfl, (id_map _).symm⟩
-  · exact ⟨.inr m, g, rfl, rfl⟩
-
-/-- Rewriting the random oracle through the bijection keeps the bound on its calls. -/
-private theorem isQueryBoundP_romDigestImpl (g : Dg ≃ Dg') {α : Type}
-    {oa : OracleComp (RomSpec Msg Dg) α} {n : ℕ} (h : IsQueryBoundP oa (·.isRight = true) n) :
-    IsQueryBoundP (simulateQ (romDigestImpl g) oa) (·.isRight = true) n := by
-  induction oa using OracleComp.inductionOn generalizing n with
-  | pure x => simp
-  | query_bind t k ih =>
-    rw [isQueryBoundP_query_bind_iff] at h
-    obtain ⟨hn, hk⟩ := h
-    rw [simulateQ_bind, simulateQ_spec_query]
-    rcases t with i | m
-    · simpa [romDigestImpl] using fun u => ih u (hk u)
-    · simpa [romDigestImpl] using ⟨by simpa using hn, fun u => ih _ (hk _)⟩
+/-- The calls to the random oracle with digests in `Dg`, asked with digests in `Dg'`. -/
+private def romDigestLens (g : Dg ≃ Dg') :
+    PFunctor.Lens (RomSpec Msg Dg).toPFunctor (RomSpec Msg Dg').toPFunctor where
+  toFunA := id
+  toFunB
+    | .inl _ => id
+    | .inr _ => g.symm
 
 /-- The relabelled simulator asks the random oracle at most once per call. -/
-private theorem asksOnce_digestSim {σ : Type} (g : Dg ≃ Dg')
+private theorem asksOnce_mapStateTBase {σ : Type} (g : Dg ≃ Dg')
     {S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg)))} (hS : AsksOnce S) :
-    AsksOnce (digestSim g S) :=
-  fun q s => isQueryBoundP_romDigestImpl g (hS q s)
+    AsksOnce (((QueryImpl.id' _).comapLens (romDigestLens g)).mapStateTBase S) := by
+  intro t s
+  change IsQueryBoundP (simulateQ _ ((S t).run s)) _ 1
+  rw [← mapLens_eq_simulateQ]
+  exact IsQueryBoundP.mapLens _ (hS t s)
 
-/-- The relabelled simulator on the game is the rewritten image of the relabelled game. -/
-private theorem romGame_digestSim {σ : Type} (g : Dg ≃ Dg')
+/-- The relabelled simulator on the game is the transported image of the relabelled game. -/
+private theorem romGame_mapStateTBase {σ : Type} (g : Dg ≃ Dg')
     (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg)))) (s₀ : σ)
     (game : OracleComp (GameSpec A Msg Dg') Bool) :
-    romGame (digestSim g S) s₀ game =
-      simulateQ (romDigestImpl g) (romGame S s₀ (simulateQ (digestImpl g) game)) := by
-  rw [romGame, romGame, StateT.run'_eq, StateT.run'_eq, simulateQ_map, simulateQ_run_simulateQ,
-    ← QueryImpl.simulateQ_compose]
+    romGame (((QueryImpl.id' _).comapLens (romDigestLens g)).mapStateTBase S) s₀ game =
+      (romGame S s₀ (game.mapLens (digestLens g))).mapLens (romDigestLens g) := by
+  rw [romGame, romGame, StateT.run'_eq, StateT.run'_eq, mapLens_map, mapLens_eq_simulateQ,
+    QueryImpl.simulateQ_mapStateTBase_run, OracleComp.simulateQ_mapLens]
   congr 3
   funext t
   rcases t with ((n | q) | m) <;> apply StateT.ext <;> intro s
-  · simp [digestImpl, idealImpl, romDigestImpl]
-  · simp [digestImpl, idealImpl, digestSim]
-  · simp [digestImpl, idealImpl, romDigestImpl]
+  · simp [digestLens, idealImpl, romDigestLens, QueryImpl.mapStateTBase]
+  · simp [digestLens, idealImpl, QueryImpl.mapStateTBase]
+  · simp [digestLens, idealImpl, romDigestLens, QueryImpl.mapStateTBase]
 
 /-- The real world of the relabelled hash is the real world of the relabelled game. -/
-private theorem realProb_digestImpl [FinEnum A] (g : Dg ≃ Dg') (H : (A → A) → Msg → Dg)
+private theorem realProb_digestLens [FinEnum A] (g : Dg ≃ Dg') (H : (A → A) → Msg → Dg)
     (game : OracleComp (GameSpec A Msg Dg') Bool) :
-    realProb (fun π msg => g (H π msg)) game = realProb H (simulateQ (digestImpl g) game) := by
+    realProb (fun π msg => g (H π msg)) game = realProb H (game.mapLens (digestLens g)) := by
   have hrun : ∀ π : Equiv.Perm A, simulateQ (realImpl (fun π msg => g (H π msg)) π) game =
-      simulateQ (realImpl H π) (simulateQ (digestImpl g) game) := by
+      simulateQ (realImpl H π) (game.mapLens (digestLens g)) := by
     intro π
-    refine (QueryImpl.simulateQ_simulateQ_eq_of_apply (fun t => ?_) game).symm
+    rw [OracleComp.simulateQ_mapLens]
+    congr 1
+    funext t
     rcases t with t | m
-    · simp [digestImpl]
-      rfl
-    · simp [digestImpl]
-      exact map_pure _ _
+    · exact (id_map _).symm
+    · change (pure (g (H π m)) : ProbComp Dg') = g <$> pure (H π m)
+      rw [map_pure]
   unfold realProb
   simp only [hrun]
 
 /-- A random oracle read through a bijection of digests is a random oracle. -/
-private theorem romProb_romDigestImpl [DecidableEq Msg] [SampleableType Dg] [SampleableType Dg']
-    (g : Dg ≃ Dg') (oa : OracleComp (RomSpec Msg Dg) Bool) :
-    romProb (simulateQ (romDigestImpl g) oa) = romProb oa := by
+private theorem romProb_mapLens_romDigestLens [DecidableEq Msg] [SampleableType Dg]
+    [SampleableType Dg'] (g : Dg ≃ Dg') (oa : OracleComp (RomSpec Msg Dg) Bool) :
+    romProb (oa.mapLens (romDigestLens g)) = romProb oa := by
   -- A cache of digests in `Dg'` is read as a cache of digests in `Dg`.
   let read : (Msg →ₒ Dg').QueryCache → (Msg →ₒ Dg).QueryCache :=
     fun c => QueryCache.ofFn fun m => (c m).map g.symm
   have hstep : QueryImpl.IntertwinesOn (fun _ => True) (fun c => (pure (read c) : ProbComp _))
-      ((Msg →ₒ Dg').romImpl ∘ₛ romDigestImpl g) (Msg →ₒ Dg).romImpl := by
+      ((Msg →ₒ Dg').romImpl.comapLens (romDigestLens g)) (Msg →ₒ Dg).romImpl := by
     refine QueryImpl.IntertwinesOn.of_evalDistEq fun t c _ => ?_
     rcases t with n | m
-    · simp only [QueryImpl.apply_compose, romDigestImpl, OracleSpec.romImpl,
-        simulateQ_spec_query, roSim.run_apply_inl, pure_bind, bind_pure_comp]
+    · simp only [QueryImpl.comapLens_apply, romDigestLens, OracleSpec.romImpl,
+        roSim.run_apply_inl, id_map, pure_bind, bind_pure_comp]
       exact EvalDistEq.rfl
     · have hread : ∀ u, read (c.cacheQuery m u) = (read c).cacheQuery m (g.symm u) := by
         intro u
@@ -599,9 +554,8 @@ private theorem romProb_romDigestImpl [DecidableEq Msg] [SampleableType Dg] [Sam
         · subst hm
           simp [read]
         · simp [read, hm]
-      simp only [QueryImpl.apply_compose, romDigestImpl, OracleSpec.romImpl, simulateQ_map,
-        simulateQ_spec_query, StateT.run_map, pure_bind, bind_pure_comp, QueryImpl.add_apply_inr,
-        randomOracle.run_eq]
+      simp only [QueryImpl.comapLens_apply, romDigestLens, OracleSpec.romImpl, StateT.run_map,
+        id_eq, pure_bind, bind_pure_comp, QueryImpl.add_apply_inr, randomOracle.run_eq]
       have hrc : (read c) m = (c m).map g.symm := rfl
       rw [hrc]
       cases hc : c m with
@@ -615,38 +569,36 @@ private theorem romProb_romDigestImpl [DecidableEq Msg] [SampleableType Dg] [Sam
   have h := hstep.evalDist_simulateQ_run (fun _ _ _ _ _ => trivial) oa ∅ trivial
     (fun b _ => (pure b : ProbComp Bool))
   have hempty : read ∅ = ∅ := rfl
-  simp only [pure_bind, map_pure, bind_pure_comp, hempty, ← StateT.run'_eq,
-    QueryImpl.simulateQ_compose] at h
+  simp only [pure_bind, map_pure, bind_pure_comp, hempty, ← StateT.run'_eq] at h
   unfold romProb
+  rw [OracleComp.simulateQ_mapLens]
   exact (EvalDistEq.of_evalDist_eq h).prEvent_eq _
 
-/-- **Relabelling the states keeps indifferentiability**, with the same bound.
+/-- **Relabelling the states keeps indifferentiability**, with the same bound and costs.
 
-Let `e` be a bijection of states, and let the hash run with `π` read through `e`.
-
-Then it is as indifferentiable as the hash it relabels, for the same costs. -/
+The relabelled hash reads `π` through the bijection `e` of states. -/
 theorem Indifferentiable.relabel_state [FinEnum A] [FinEnum A'] [DecidableEq Msg]
     [SampleableType Dg] {H : (A → A) → Msg → Dg} {hashCost : Msg → ℕ} {ε : ℕ → ℝ≥0∞}
     (h : Indifferentiable H hashCost ε) (e : A ≃ A') :
     Indifferentiable (fun π msg => H (fun a => e.symm (π (e a))) msg) hashCost ε := by
   obtain ⟨σ, s₀, S, hS, hgame⟩ := h
   refine ⟨σ, s₀, stateSim e S, asksOnce_stateSim e hS, fun game N hN => ?_⟩
-  rw [realProb_stateImpl, romGame_stateSim]
-  exact hgame _ N (withinCost_stateImpl e hN)
+  rw [realProb_stateLens, romGame_stateSim]
+  refine hgame _ N (withinCost_mapLens _ (fun t => ?_) hN)
+  rcases t with ((n | x | y) | m) <;> rfl
 
-/-- **Relabelling the digests keeps indifferentiability**, with the same bound.
+/-- **Relabelling the digests keeps indifferentiability**, with the same bound and costs.
 
-Let `g` be a bijection of digests, applied to every output of the hash.
-
-Then the result is as indifferentiable as the hash, for the same costs. -/
+The relabelled hash applies the bijection `g` of digests to every output. -/
 theorem Indifferentiable.relabel_digest [FinEnum A] [DecidableEq Msg] [SampleableType Dg]
     [SampleableType Dg'] {H : (A → A) → Msg → Dg} {hashCost : Msg → ℕ} {ε : ℕ → ℝ≥0∞}
     (h : Indifferentiable H hashCost ε) (g : Dg ≃ Dg') :
     Indifferentiable (fun π msg => g (H π msg)) hashCost ε := by
   obtain ⟨σ, s₀, S, hS, hgame⟩ := h
-  refine ⟨σ, s₀, digestSim g S, asksOnce_digestSim g hS, fun game N hN => ?_⟩
-  rw [realProb_digestImpl, romGame_digestSim, romProb_romDigestImpl]
-  exact hgame _ N (withinCost_digestImpl g hN)
+  refine ⟨σ, s₀, ((QueryImpl.id' _).comapLens (romDigestLens g)).mapStateTBase S,
+    asksOnce_mapStateTBase g hS, fun game N hN => ?_⟩
+  rw [realProb_digestLens, romGame_mapStateTBase, romProb_mapLens_romDigestLens]
+  exact hgame _ N (withinCost_mapLens _ (fun _ => rfl) hN)
 
 end Relabel
 
