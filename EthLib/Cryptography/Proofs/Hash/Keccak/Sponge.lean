@@ -107,7 +107,9 @@ theorem bits13_xor (a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 : UInt64)
 
 /-- The state as a sponge state: lanes 0 to 3, lanes 4 to 16, then lanes 17 to 24.
 
-So bit `k` of the three parts together is bit `k` of the state string of FIPS 202 §3.1.2.
+Concatenate the capacity, the rest of the rate, then the digest, with bit 0 least significant.
+
+Bit `k` of the result is bit `k` of the state string of FIPS 202 §3.1.2.
 
 The first 1088 bits are the rate of Keccak-256, and the digest is its first 256 bits. -/
 def toSpongeState (S : State) : SpongeState256 :=
