@@ -7,17 +7,7 @@ public import EthLib.Consensus.Proofs.Churn
 
 The churn updates of exits or consolidations run in turn on one state, from Electra.
 
-They keep its slot and validators, so the first permitted epoch and the churn stay fixed.
-
-Each epoch that the queue moves past adds one full churn.
-
-The reserved balance plus the churn left equals the churn left at the start plus those churns.
-
-So reservations placed up to an epoch fit the churn left at the start, plus a churn per later epoch.
-
-The equalities ask that the first permitted epoch is at most the earliest open epoch at the start.
-
-The bounds also hold for an idle queue, whose earliest open epoch is before the first permitted one.
+Their reservations fit the churn left at the start, plus one full churn per later epoch.
 
 In a block, other writes to the registry and the pending queues come between these updates.
 
@@ -72,9 +62,14 @@ private theorem exitReservations_queue {config : Config} {electra : .pectra ≤ 
   obtain ⟨⟨queued, left⟩, queueOk, final⟩ := reserveOk
   simp only [Prod.mk.injEq] at final
   obtain ⟨rfl, rfl⟩ := final
+  -- The update keeps the slot and the validators of the state.
+  --
+  -- So the first permitted epoch and the churn stay fixed.
   exact ⟨ready, queueOk⟩
 
 /-- Exit reservations spend their sum, with one full churn for each later epoch of the queue.
+
+The reserved balance plus the churn left equals the churn left at the start plus those churns.
 
 The earliest open epoch at the start must be no earlier than the first permitted epoch. -/
 theorem computeExitEpochAndUpdateChurn_foldlM_spend {config : Config}
@@ -91,7 +86,9 @@ theorem computeExitEpochAndUpdateChurn_foldlM_spend {config : Config}
           churn.toNat :=
   churnQueue_foldlM_spend open_ (exitReservations_queue firstOk churnOk computed)
 
-/-- Exits placed up to an epoch fit the churn left at the start, plus a churn per later epoch. -/
+/-- Exits placed up to an epoch fit the churn left at the start, plus a churn per later epoch.
+
+This also holds for an idle queue, whose earliest open epoch is before the first permitted one. -/
 theorem computeExitEpochAndUpdateChurn_foldlM_le {config : Config}
     {electra : .pectra ≤ fork} {state after : BeaconState preset fork} {amounts : List Gwei}
     {first churn horizon : UInt64}
@@ -130,9 +127,14 @@ private theorem consolidationReservations_queue {config : Config} {electra : .pe
   obtain ⟨⟨queued, left⟩, queueOk, final⟩ := reserveOk
   simp only [Prod.mk.injEq] at final
   obtain ⟨rfl, rfl⟩ := final
+  -- The update keeps the slot and the validators of the state.
+  --
+  -- So the first permitted epoch and the churn stay fixed.
   exact ⟨ready, queueOk⟩
 
 /-- Consolidation reservations spend their sum, with one full churn per later queue epoch.
+
+The reserved balance plus the churn left equals the churn left at the start plus those churns.
 
 The earliest open epoch at the start must be no earlier than the first permitted epoch. -/
 theorem computeConsolidationEpochAndUpdateChurn_foldlM_spend {config : Config}
@@ -150,7 +152,9 @@ theorem computeConsolidationEpochAndUpdateChurn_foldlM_spend {config : Config}
           (state.earliestConsolidationEpoch electra).toNat) * churn.toNat :=
   churnQueue_foldlM_spend open_ (consolidationReservations_queue firstOk churnOk computed)
 
-/-- Consolidations up to an epoch fit the churn left at the start, plus a churn per later epoch. -/
+/-- Consolidations up to an epoch fit the churn left at the start, plus a churn per later epoch.
+
+This also holds for an idle queue, whose earliest open epoch is before the first permitted one. -/
 theorem computeConsolidationEpochAndUpdateChurn_foldlM_le {config : Config}
     {electra : .pectra ≤ fork} {state after : BeaconState preset fork} {amounts : List Gwei}
     {first churn horizon : UInt64}

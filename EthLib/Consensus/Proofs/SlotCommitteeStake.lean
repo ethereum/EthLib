@@ -15,15 +15,7 @@ A block includes an attestation one slot after the slot of the attestation at th
 
 So the test of an epoch at its end never counts the committees of its last slot.
 
-The committees of one slot cut a contiguous share of the shuffled active validators.
-
-That share holds at most the active count over the slots of an epoch, plus one validator.
-
-Those validators are active in the epoch of the slot, which a run fixes several epochs ahead.
-
-So the margin at the first state of the run asks two thirds without any such small set of them.
-
-Then the honest validators outside the committees of one slot keep two thirds at a later state.
+The honest validators outside the committees of one slot keep two thirds at a later state.
 -/
 
 @[expose] public section
@@ -80,6 +72,8 @@ theorem sum_size_le_of_mapM_getBeaconCommittee {fork : Base.Fork}
   set bound := fun place => active * (before * perSlot + place) / (perSlot * slots) with boundEq
   have mono : Monotone bound := fun _ _ le =>
     Nat.div_le_div_right (Nat.mul_le_mul_left _ (Nat.add_le_add_left le _))
+  -- The committees of the slot cut a contiguous share of the shuffled active validators.
+  --
   -- Each committee holds the gap between its bound and the next one.
   have lengthEq := mapM_ok_length committeesOk
   have sizes : committees.map Array.size =
@@ -132,8 +126,6 @@ Every validator active and slashed at `w` was slashed at `x`.
 
 The epoch of the slot is at most the largest seed lookahead after the current epoch of `x`.
 
-So the run keeps its active validators.
-
 The committees of the slot are read at `w`.
 
 Take any set of validators active at `x` in the epoch of the slot.
@@ -174,7 +166,9 @@ theorem quorum_without_slot_of_stakeMargin {g x w : ForkedBeaconState preset}
         (getActiveValidatorIndices w.state (getCurrentEpoch w.state)).toFinset ≤
       3 * stake (fun i => balanceAt w.state i.toNat)
         (honest \ (committees.flatMap Array.toList).toFinset) := by
-  -- The run fixes the activity of the epoch of the slot, so its active validators are those of `x`.
+  -- The run fixes the activity of each epoch up to the seed lookahead after that of `x`.
+  --
+  -- So the active validators of the epoch of the slot are those of `x`.
   have same := (activeKept_of_chainSteps tail.chainSteps).getActiveValidatorIndices_eq fixed
   -- Each member of the committees is active in the epoch of the slot.
   have inside : (committees.flatMap Array.toList).toFinset ⊆
@@ -193,6 +187,7 @@ theorem quorum_without_slot_of_stakeMargin {g x w : ForkedBeaconState preset}
     refine (List.toFinset_card_le _).trans ?_
     rw [List.length_flatMap]
     simpa using sum_size_le_of_mapM_getBeaconCommittee committeesOk
+  -- The margin at the first state of the run asks two thirds without any such small set.
   exact quorum_of_stakeMargin shared tail genesis parameters caps aligned twoSlots early window
     guard (fun i member => active i (Finset.mem_sdiff.mp member).1)
     (fun i member => unslashed i (Finset.mem_sdiff.mp member).1)

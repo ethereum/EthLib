@@ -9,17 +9,9 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 /-!
 # Proofs: how far the stake of honest validators moves in a window of epochs
 
-Honest validators that hold two thirds of the active stake at a state must hold it later too.
+Between two states, rewards, penalties, deposits and withdrawals move effective balances.
 
-Between the two states, rewards, penalties, deposits and withdrawals move effective balances.
-
-The a priori drift of accountable safety bounds that movement, from the first state alone.
-
-It leaves out the slashed validators, so the margin charges their room below their caps.
-
-So the margin is twice the drift and twice that room.
-
-With that margin at the first state, the honest two thirds hold at each later state of the window.
+Honest validators with two thirds of the active stake and a margin keep two thirds in the window.
 
 This holds at every fork from Altair until Gloas, while no active validator becomes slashed.
 -/
@@ -46,6 +38,8 @@ def slashedHeadroom (x : ForkedBeaconState preset) : ℕ :=
       else 0).getD 0
 
 /-- The stake margin of a window up to epoch `high + 1`, read at its first state.
+
+The drift leaves out the slashed validators, so the margin also charges their room below their caps.
 
 It is twice the a priori drift and twice the room of the slashed validators below their caps. -/
 noncomputable def stakeMargin (config : Config) (x : ForkedBeaconState preset) (high : ℕ) : ℕ :=
@@ -362,12 +356,13 @@ A run from a genesis state reaches `x`, and a branch continues it to `w`, before
 
 Both states are from Electra, or both are before it, and the preset orders its caps.
 
-The withdrawal delay is positive, so a slashing assigns an exit.
+The withdrawal delay is positive.
 
 Every validator active and slashed at `w` was slashed at `x`. -/
 theorem activeStake_le_add_referenceGain {g x w : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x w)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    -- A positive withdrawal delay makes a slashing assign an exit.
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (early : w.fork < .glamsterdam) (regime : .pectra ≤ x.fork ∨ w.fork < .pectra)
     (noSlashing : ∀ i ∈ getActiveValidatorIndices w.state (getCurrentEpoch w.state),
@@ -500,6 +495,7 @@ theorem quorum_of_stakeMargin {g x w : ForkedBeaconState preset}
     omega
   have gained := activeStake_le_add_referenceGain shared tail genesis caps delay early regime
     noSlashing
+  -- The a priori drift of accountable safety bounds the movement, from the first state alone.
   have drifted := stateDrift_le_drift shared tail genesis parameters caps aligned twoSlots early
     window guard
   unfold stateDrift at drifted

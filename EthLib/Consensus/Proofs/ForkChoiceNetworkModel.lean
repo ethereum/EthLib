@@ -10,19 +10,7 @@ The generic network execution is specialized to honest validators that run the f
 
 One definition says that a validator signed a vote for a target by a given time.
 
-The honest vote count reads it, and no theorem takes it as a separate hypothesis.
-
-The theorems on voting and the head take three further hypotheses.
-
-The delay fits between the attestation deadline and the start of the next slot.
-
-Honest stores are up to date at each slot start and just before it.
-
-Delayed blocks that pass validation also pass the rest of the block handler.
-
-Synchrony alone gives neither of the last two.
-
-Carried operations are separate moves and need not succeed for a block to be admitted.
+The theorems on voting and the head also take three hypotheses, defined below.
 -/
 
 @[expose] public section
@@ -36,7 +24,9 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
   {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
   {assignment : Assignment preset} {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
 
-/-- A validator signs a vote with a target, in a message sent by the time `last`. -/
+/-- A validator signs a vote with a target, in a message sent by the time `last`.
+
+The honest vote count reads it, and no theorem takes it as a separate hypothesis. -/
 def SignsTarget
     (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
       genesisTimeMs) J) (v : ValidatorIndex) (target : Checkpoint) (last : ℕ) : Prop :=
@@ -44,7 +34,9 @@ def SignsTarget
     (v, data) ∈ statements config checks anchorState anchorBlock m ∧ data.target = target
 
 variable (fork) in
-/-- A vote sent at its deadline, delayed by the bound, arrives before the next slot starts. -/
+/-- A vote sent at its deadline, delayed by the bound, arrives before the next slot starts.
+
+So the delay fits between the attestation deadline and the start of the next slot. -/
 def DelayFits (config : Config) (genesisTimeMs : UInt64) (Δ : ℕ) : Prop :=
   (∃ due, getAttestationDueMs config fork = .ok due) ∧
   ∀ slot next start due following, addChecked slot 1 = .ok next →
@@ -54,6 +46,8 @@ def DelayFits (config : Config) (genesisTimeMs : UInt64) (Δ : ℕ) : Prop :=
     start.toNat + due.toNat + Δ < following.toNat
 
 /-- Honest receivers process messages immediately before and at slot boundaries up to `last`.
+
+So honest stores are up to date at each slot start and just before it.
 
 This is a processing hypothesis, not a consequence of synchrony. -/
 def Prompt
@@ -70,7 +64,7 @@ def Prompt
 
 Synchrony puts the block in the view; success of the remaining block handler is assumed.
 
-The votes and slashings carried by the block need not succeed. -/
+The votes and slashings carried by the block are separate moves and need not succeed. -/
 def BlocksAdmitted
     (e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
       genesisTimeMs) J) (GST Δ last : ℕ) : Prop :=

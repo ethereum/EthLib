@@ -9,33 +9,13 @@ public import EthLib.Consensus.WeakSubjectivity
 /-!
 # Proofs: weak subjectivity
 
-From Electra, the period has a closed form on natural numbers.
+The period at each fork has a closed form, and it is at least the withdrawal delay.
 
-For a total active balance `t` and a churn `c`, it is the withdrawal delay plus `10 t / (200 c)`.
+A checkpoint within its period at some slot is within it at every earlier slot.
 
-The 64-bit computation gives that value exactly when nothing reaches `2^64` and `c` is not zero.
+On mainnet, the period is at most 3558 epochs in Electra and Fulu.
 
-Its epochs of churn, the period less the delay, times `c` are at most `SAFETY_DECAY / 200` of `t`.
-
-So a change of at most `3 c` for each of them, in total, keeps a margin of `1/3 - SAFETY_DECAY/100`.
-
-In Phase 0, a computed period is one of the two expressions of the rule, on natural numbers.
-
-In Phase 0, the period is at most the delay plus the larger of two terms.
-
-Both terms grow with the number of validators.
-
-At every fork, the period is at least the withdrawal delay.
-
-In Electra and Fulu, the period is at most a bound of the parameters alone: 3558 epochs on mainnet.
-
-From Gloas, the period is at most a bound of the parameters alone: 1658 epochs on mainnet.
-
-The check of a checkpoint needs a state that holds its root and is at its epoch.
-
-It then answers whether the current epoch is at most the end of the period.
-
-So a checkpoint within its period at some slot is within it at every earlier slot.
+From Gloas, it is at most 1658 epochs.
 -/
 
 @[expose] public section
@@ -59,7 +39,9 @@ theorem WeakSubjectivityError.code_injective (e₁ e₂ : WeakSubjectivityError)
 
 /-- From Electra: the period of a balance and a churn succeeds exactly when nothing overflows.
 
-The churn must also be nonzero, and the period is then the delay plus `10 t / (200 c)`. -/
+The churn must also be nonzero, and the period is then the delay plus `10 t / (200 c)`.
+
+Here `t` is the total active balance and `c` the churn. -/
 theorem balanceChurnPeriod_eq_ok_iff {minDelay total churn period : UInt64} :
     balanceChurnPeriod minDelay total churn = .ok period ↔
       10 * total.toNat < 2 ^ 64 ∧ 200 * churn.toNat < 2 ^ 64 ∧ 0 < churn.toNat ∧
@@ -112,17 +94,17 @@ Take a stake `x` and the epochs `n` of churn of the period, the period less the 
 
 Assume the total balance is at most `3 x + 2 n k`, with `k` three times the churn.
 
-Accountable safety gives that bound when each set changes by at most `n k` since the checkpoint.
-
-Then `x` is at least `1/3 - SAFETY_DECAY/100` of the total balance.
-
-With `SAFETY_DECAY` at 10 that is `7/30`, about 23.3%. -/
+Then `x` is at least `1/3 - SAFETY_DECAY/100` of the total balance. -/
 theorem safetyMargin_of_balanceChurnPeriod_eq_ok {minDelay total churn period : UInt64} {x : Nat}
     (h : balanceChurnPeriod minDelay total churn = .ok period)
+    -- Accountable safety gives this bound.
+    --
+    -- It holds when each set changes by at most `n k` since the checkpoint.
     (bound : total.toNat ≤
       3 * x + 2 * ((period.toNat - minDelay.toNat) * (3 * churn.toNat))) :
     (100 - 3 * SAFETY_DECAY.toNat) * total.toNat ≤ 300 * x := by
   have hchurn := churn_le_of_balanceChurnPeriod_eq_ok h
+  -- With `SAFETY_DECAY` at 10 the margin is `7/30`, about 23.3%.
   have hD : SAFETY_DECAY.toNat = 10 := rfl
   rw [hD] at hchurn ⊢
   rw [Nat.mul_left_comm (period.toNat - minDelay.toNat)] at bound
@@ -385,11 +367,9 @@ private theorem churnEpochs_le {N t T delta : Nat} (largeBalances : 230 * T < 32
 
 Take `N` validators of average balance `t` and largest balance `T`, in ether, with `t ≤ T`.
 
-With large balances the rule takes the longer of its epochs for churn and for top-ups.
+Assume the rule's epochs for top-ups move at most `N t / 20` ether.
 
-The epochs for churn always move at most `N t / 20` ether, at `delta` validators of `T` each.
-
-Assume the epochs for top-ups do too.
+The ether moved counts `delta` validators of `T` ether in each epoch.
 
 Then the epochs of the rule move at most `N t / 20` ether.
 
@@ -400,6 +380,7 @@ theorem churn_le_of_phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
     (topUps : 20 * (230 * N.toNat / (600 * Delta.toNat) * delta.toNat * T.toNat) ≤
       N.toNat * t.toNat) :
     20 * (epochs.toNat * delta.toNat * T.toNat) ≤ N.toNat * t.toNat := by
+  -- With large balances the rule takes the longer of its epochs for churn and for top-ups.
   have closed := phase0PeriodEpochs_eq_ok h
   simp only [largeBalances, ↓reduceIte] at closed
   rw [closed]
@@ -408,6 +389,7 @@ theorem churn_le_of_phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
     with order | order
   · rw [Nat.max_eq_right order]
     exact topUps
+  -- The epochs for churn always move at most `N t / 20` ether, at `delta` validators of `T` each.
   · rw [Nat.max_eq_left order]
     exact churnEpochs_le largeBalances averageLe
 
@@ -452,11 +434,7 @@ theorem roundToIncrement_bounds {amount floor increment : Nat} (hincrement : 0 <
 
 /-- In Electra and Fulu: the period is at most a bound that depends only on the parameters.
 
-The churn is at least its minimum, and at least the total over the quotient, less one increment.
-
-So the total is less than the quotient times the churn plus one increment.
-
-The epochs that the churn needs are then at most `10 Q (m + i) / (200 m)`.
+The epochs that the churn needs are at most `10 Q (m + i) / (200 m)`.
 
 Here `Q` is the churn quotient, `m` the minimum churn and `i` the increment.
 
@@ -492,6 +470,9 @@ theorem computeWeakSubjectivityPeriodElectra_le {config : Config}
   rw [hvalue]
   refine Nat.add_le_add_left ?_ _
   generalize hx : max m (t / Q) = x at hvalue hpos
+  -- The churn is at least its minimum.
+  --
+  -- It is also at least the total over the quotient, less one increment.
   obtain ⟨hlow, hhigh⟩ := roundToIncrement_bounds hincrement hwhole (hx ▸ Nat.le_max_left m (t / Q))
   generalize hc : x - x % i = c at hlow hhigh hpos
   -- The total is less than the quotient times one more than its share, so less than `Q (c + i)`.
@@ -598,11 +579,9 @@ private theorem gloasWeightedChurn_bounds {config : Config} {state : BeaconState
 
 /-- From Gloas: the period is at most a bound that depends only on the parameters.
 
-The exit churn is at least its minimum `m` and exceeds `t / Qe - i`.
+Here `Qe` and `Qc` are the quotients, `m` the minimum, `M` the activation cap and `i` the increment.
 
-The consolidation churn exceeds `t / Qc - i`.
-
-When `5 i + 2 ≤ 3 (min M m / 3)`, activations cover the rounding: `2 e + 3 c + 5 i ≤ 3 churn`.
+The activations must cover the rounding: `5 i + 2 ≤ 3 (min M m / 3)`.
 
 The epochs that the churn needs are then at most `30 Qe Qc / (200 (2 Qc + 3 Qe))`. -/
 theorem computeWeakSubjectivityPeriodGloas_le {config : Config}
@@ -629,6 +608,9 @@ theorem computeWeakSubjectivityPeriodGloas_le {config : Config}
       rw [zero, Nat.mod_zero] at hwhole
       rw [zero, hwhole] at hactFloor
       omega
+  -- The exit churn is at least its minimum `m` and exceeds `t / Qe - i`.
+  --
+  -- The consolidation churn exceeds `t / Qc - i`.
   obtain ⟨e, c, hem, -, hsum, hch⟩ :=
     gloasWeightedChurn_bounds gloas hincrement hwhole hexitQ hconsQ htotal hchurn
   generalize hQe : config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat = Qe at *
@@ -643,6 +625,7 @@ theorem computeWeakSubjectivityPeriodGloas_le {config : Config}
   have hminLe : min M m ≤ min M e := by omega
   have hactLe : 5 * i + 2 ≤ 3 * (min M e / 3) :=
     Nat.le_trans hactFloor (Nat.mul_le_mul_left 3 (Nat.div_le_div_right hminLe))
+  -- So the activations cover the rounding: `2 e + 3 c + 5 i ≤ 3 churn`.
   have hthree : 2 * e + 3 * c + 5 * i ≤ 3 * w := by omega
   have htotalBound : (2 * Qc + 3 * Qe) * t < Qe * Qc * (3 * w) :=
     Nat.lt_of_lt_of_le hsum (Nat.mul_le_mul_left (Qe * Qc) hthree)
