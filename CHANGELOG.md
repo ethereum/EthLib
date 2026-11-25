@@ -1069,6 +1069,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the RLPx handshake writes and reads the 2-byte size of a packet with `Base.ByteOrder.toBE` and `ofBE` ([#4653](https://github.com/ethereum/EthLib/pull/4653)).
+  `Rlpx.sizeBytes` and `Rlpx.openPacket` (`Networking/Rlpx/Handshake.lean`) unfold to the codec of `Base`, and compute the same bytes and the same check for every input.
+  `openPacket_sealPacket` keeps its statement, and a proof that unfolds `sizeBytes` or `openPacket` now meets the codec of `Base`.
 - In Lean and Python, the upgrade to Heze no longer checks that the two deposit indices of the state are equal, so it never fails ([#3516](https://github.com/ethereum/EthLib/issues/3516)).
   Both indices stopped changing at Fulu, so the check protected no deposit, and a network that starts at Fulu or later never sets the start index, so it would halt at Heze.
   The error `TransitionError.depositIndicesDiffer` and its code 33 are removed; code 33 is not reused, and the codes after it keep their values.
