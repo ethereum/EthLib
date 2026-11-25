@@ -10,23 +10,11 @@ An adversary outputs two blob sidecars, for a preset and a fork fixed before the
 
 It wins with one index, one body root and different commitments, if both proofs reach that root.
 
-The experiment climbs both proofs as the inclusion check does, with the oracle as the node hash.
+This file bounds the probability of a win, and relates a win to the inclusion check.
 
-A win exposes two different queried messages with one answer, so the birthday bound applies.
+Source: [Bellare and Rogaway, "Random Oracles are Practical", CCS 1993][br93], section 2, "Oracles".
 
-A win has probability at most `Q^2 / N`, where `Q` bounds all oracle calls and `N` counts digests.
-
-At the mainnet depth of 17, an adversary of `q` calls gives a bound of `(q + 36)^2 / 2^256`.
-
-Only the forks from Deneb and before Gloas put commitments in the body, where the climbs can run.
-
-At a fork before Deneb or from Gloas no outcome wins, and a win has probability zero.
-
-With SHA-256 as the node hash, a win is two such sidecars that the inclusion check accepts.
-
-Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
-
-<https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
+[br93]: https://cseweb.ucsd.edu/~mihir/papers/ro.pdf
 -/
 
 @[expose] public section
@@ -52,23 +40,30 @@ structure BlobOutcome (preset : Preset) where
 
 /-- The extraction for blob sidecars, with a node hash in any monad.
 
-It roots both commitments, then reads the subtree index from the blob index of the first sidecar.
+The experiment runs it with the oracle as the node hash.
 
-Then it climbs both proofs from their roots, at that index and at the depth of the proof.
-
-The preset fixes that depth, and the fork fixes the place of the commitments in the body.
-
-The experiment runs it with the oracle. -/
+Every hash is then an oracle call. -/
 def extractBlobSidecars {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray)
     (preset : Preset) (fork : Fork) (claim : BlobSidecar preset × BlobSidecar preset) :
     m (BlobOutcome preset) := do
+  -- Root both commitments.
   let firstRoot ← (hashTreeRootM (Hasher.ofHash hash) (SszType.desc KZGCommitment)
     (SszType.toValue claim.1.kzgCommitment)).run
   let secondRoot ← (hashTreeRootM (Hasher.ofHash hash) (SszType.desc KZGCommitment)
     (SszType.toValue claim.2.kzgCommitment)).run
+  -- Read the subtree index from the blob index of the first sidecar.
+  --
+  -- The fork fixes the place of the commitments in the body.
+  --
+  -- Only the forks from Deneb and before Gloas put commitments in the body, where climbs can run.
   let climbs ← (match blobKzgCommitmentGindex preset fork claim.1.index.toNat >>= getSubtreeIndex,
       firstRoot >>= toChunk, secondRoot >>= toChunk with
     | .ok index, .ok firstLeaf, .ok secondLeaf => do
+      -- Climb both proofs from their roots, at that index and at the depth of the proof.
+      --
+      -- The preset fixes that depth.
+      --
+      -- The climbs follow the inclusion check.
       let climbs ← extractBranches hash preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat
         ⟨index, firstLeaf, claim.1.kzgCommitmentInclusionProof.toList, secondLeaf,
           claim.2.kzgCommitmentInclusionProof.toList⟩
@@ -226,6 +221,7 @@ theorem prEvent_blobWins_le [SampleableType Hash32] (preset : Preset) (fork : Fo
     Pr{let z ← (simulateQ HashOracle.romImpl
       (experimentWith (extractBlobSidecars queryHash preset fork) adversary)).run ∅}[
         BlobWins z.1] ≤ Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  -- A win exposes two different queried messages with one answer, so the birthday bound applies.
   prEvent_experimentWith_le (extractBlobSidecars queryHash preset fork) BlobWins
     collision_of_extractBlobSidecars adversary hQ
 

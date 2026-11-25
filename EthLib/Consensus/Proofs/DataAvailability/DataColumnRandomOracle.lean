@@ -12,41 +12,11 @@ An adversary outputs two partial data column headers, for a preset and a fork fi
 
 It wins with one body root and different lists of commitments, if both proofs reach that root.
 
-The experiment roots both lists, then climbs both proofs as the inclusion check does.
+This file bounds the probability of a win, and relates a win to the inclusion check.
 
-Every hash is an oracle call.
+Source: [Bellare and Rogaway, "Random Oracles are Practical", CCS 1993][br93], section 2, "Oracles".
 
-Only the forks from Deneb and before Gloas put the list in the body, where the climbs can run.
-
-A win exposes two different queried messages with one answer, so the birthday bound applies.
-
-A win has probability at most `Q^2 / N`, where `Q` bounds all oracle calls and `N` counts digests.
-
-The collision, the bound and the count of the extraction need a fork before Gloas.
-
-At such a fork the list has a limit, the most blob commitments of a block.
-
-The count grows with that limit and the depth of the proofs, not with the commitments.
-
-At mainnet, an adversary of `q` calls gives a bound of `(q + 16392)^2 / 2^256` before Gloas.
-
-At a fork before Deneb or from Gloas no outcome wins, and a win has probability zero.
-
-With SHA-256 as the node hash, a win is two such headers that the inclusion check accepts.
-
-That result holds at every preset and fork.
-
-Before Gloas a data column sidecar carries the three fields of a partial header.
-
-They are the commitments, the block header and the proof.
-
-An adversary that outputs two sidecars gets the same bound, through the headers they carry.
-
-With SHA-256, its win is two sidecars that the inclusion check of a sidecar accepts.
-
-Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
-
-<https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
+[br93]: https://cseweb.ucsd.edu/~mihir/papers/ro.pdf
 -/
 
 @[expose] public section
@@ -71,24 +41,31 @@ structure ColumnOutcome (preset : Preset) (fork : Fork) where
 
 /-- The extraction for partial data column headers, with a node hash in any monad.
 
-It roots both lists of commitments, then reads the subtree index of the list in the body.
+The experiment runs it with the oracle.
 
-Then it climbs both proofs from their roots, at that index and at the depth of the proof.
-
-The preset fixes that depth, and the fork fixes the place of the list in the body.
-
-The experiment runs it with the oracle. -/
+Every hash is then an oracle call. -/
 def extractColumnHeaders {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray)
     (preset : Preset) (fork : Fork)
     (claim : PartialDataColumnHeader preset fork × PartialDataColumnHeader preset fork) :
     m (ColumnOutcome preset fork) := do
+  -- Root both lists of commitments.
   let firstRoot ← (hashTreeRootM (Hasher.ofHash hash)
     (SszType.desc (BlobKZGCommitments preset fork)) (SszType.toValue claim.1.kzgCommitments)).run
   let secondRoot ← (hashTreeRootM (Hasher.ofHash hash)
     (SszType.desc (BlobKZGCommitments preset fork)) (SszType.toValue claim.2.kzgCommitments)).run
+  -- Read the subtree index of the list in the body.
+  --
+  -- The fork fixes the place of the list in the body.
+  --
+  -- Only the forks from Deneb and before Gloas put the list in the body, where the climbs can run.
   let climbs ← (match blobKzgCommitmentsGindex preset fork >>= getSubtreeIndex,
       firstRoot >>= toChunk, secondRoot >>= toChunk with
     | .ok index, .ok firstLeaf, .ok secondLeaf => do
+      -- Climb both proofs from their roots, at that index and at the depth of the proof.
+      --
+      -- The preset fixes that depth.
+      --
+      -- The climbs follow the inclusion check.
       let climbs ← extractBranches hash preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat
         ⟨index, firstLeaf, claim.1.kzgCommitmentsInclusionProof.toList, secondLeaf,
           claim.2.kzgCommitmentsInclusionProof.toList⟩
@@ -217,9 +194,7 @@ Here `limit` is the most commitments of a block, and `depth` is that of the proo
 
 The tree of a list has `width` leaves, the least power of two at least `limit`.
 
-The root of a list makes one call per commitment, at most one per inner node, and one for the count.
-
-Each climb takes at most `depth` nodes of its proof.
+The count grows with that limit and the depth of the proofs, not with the commitments.
 
 It needs a fork before Gloas, where the list of commitments has a limit. -/
 theorem extractColumnHeaders_queryBound (preset : Preset) {fork : Fork}
@@ -232,6 +207,10 @@ theorem extractColumnHeaders_queryBound (preset : Preset) {fork : Fork}
   unfold extractColumnHeaders
   rw [desc_forkList beforeGloas]
   -- A commitment is rooted as its bytes.
+  --
+  -- The root of a list makes one call per commitment, and at most one per inner node.
+  --
+  -- It makes one more call for the count.
   have first := hashTreeRootM_bytes48List_queryBound preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
     (claim.1.kzgCommitments.data.toList.map (·.bytes))
   have second := hashTreeRootM_bytes48List_queryBound preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
@@ -242,6 +221,7 @@ theorem extractColumnHeaders_queryBound (preset : Preset) {fork : Fork}
         isQueryBoundP_bind (n := 2 * preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat) (m := 0) ?_
           fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
   split
+  -- Each climb takes at most `depth` nodes of its proof.
   · exact (isQueryBoundP_bind (extractBranches_queryBound _ _) fun _ _ =>
       isQueryBoundP_pure _ _ 0).mono (by omega)
   · exact isQueryBoundP_pure _ _ _
@@ -285,6 +265,7 @@ theorem prEvent_columnWins_le [SampleableType Hash32] (preset : Preset) {fork : 
     Pr{let z ← (simulateQ HashOracle.romImpl
       (experimentWith (extractColumnHeaders queryHash preset fork) adversary)).run ∅}[
         ColumnWins z.1] ≤ Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  -- A win exposes two different queried messages with one answer, so the birthday bound applies.
   prEvent_experimentWith_le (extractColumnHeaders queryHash preset fork) ColumnWins
     (collision_of_extractColumnHeaders beforeGloas) adversary hQ
 
