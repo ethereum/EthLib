@@ -68,7 +68,8 @@ theorem rootedPath_notMem {σ : SimState Dg E C} {c : ACache Msg Dg E C}
     (hy : σ.edges.lookup x = none) (hch : chainOf σ.chains x = some (s, β)) :
     β ++ [blockTo s x] ∉ σ.chains.map Prod.snd := by
   intro h
-  obtain ⟨hsβ, hsx⟩ := chainOf_some hch
+  have hsβ := mem_of_chainOf_eq_some hch
+  have hsx := cap_eq_of_chainOf_eq_some hch
   obtain ⟨⟨v₀, β'⟩, hv₀, rfl⟩ := List.mem_map.mp h
   obtain ⟨q, hq, B, h1, h2⟩ := hV.chainEdge _ hv₀ (by simp)
   obtain ⟨h3, h4⟩ := List.append_inj' h1 rfl
@@ -87,7 +88,8 @@ theorem vStruct_visFwd {σ : SimState Dg E C} {c : ACache Msg Dg E C} (hV : VStr
       ⟨hy, hch, rfl⟩
   · exact hV
   · rw [hrz]
-    obtain ⟨hsβ, hsx⟩ := chainOf_some hch
+    have hsβ := mem_of_chainOf_eq_some hch
+    have hsx := cap_eq_of_chainOf_eq_some hch
     obtain ⟨hcc, hvv, hagree⟩ := val_support P _ c hv
     have hnot := rootedPath_notMem hV hy hch
     refine ⟨List.mem_cons_of_mem _ hV.root, fun p hp => ?_, fun p hp hne => ?_,

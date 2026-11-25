@@ -47,26 +47,28 @@ theorem combStep_coin_support (n : ℕ) (cs : CState Dg E C Msg) (c : ACache Msg
     {z : ((Fin (n + 1) × Fin (n + 1)) × CState Dg E C Msg) × ACache Msg Dg E C}
     (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
       ((combStep P iv (.inl (.inl n))).run cs)).run c)) : z.1.2 = cs ∧ z.2 = c := by
-  simp [combStep, unifFwdImpl] at hz
+  simp only [add_apply_inl, combStep, bind_pure_comp, StateT.run_map, StateT.run_monadLift,
+    monadLift_self, Functor.map_map, simulateQ_map, simulateQ_query, OracleQuery.input_query,
+    OracleQuery.cont_query, QueryImpl.add_apply_inl, unifFwdImpl, QueryImpl.ofLift_eq_id',
+    PFunctor.Handler.liftTarget_apply, ofPFunctor_toPFunctor, QueryImpl.id'_apply, id_map,
+    MonadAttach.support_map, support_liftM, Set.range_id, Set.image_univ, Set.mem_range] at hz
   obtain ⟨a, rfl⟩ := hz
   exact ⟨rfl, rfl⟩
 
-/-- The combined game with its random oracles folded into the state, with chosen answers. -/
-noncomputable abbrev foldComb
-    (sel : (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain) →
-      (GameSpec (SpongeState Dg E C) Msg Dg).Range t ×
-        (GameSpec (SpongeState Dg E C) Msg Dg).Range t →
-          (GameSpec (SpongeState Dg E C) Msg Dg).Range t) :
+/-- A choice of one of the two answers of each query of the combined game. -/
+abbrev Selector (Dg E C Msg : Type) :=
+  (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain) →
+    (GameSpec (SpongeState Dg E C) Msg Dg).Range t ×
+      (GameSpec (SpongeState Dg E C) Msg Dg).Range t → (GameSpec (SpongeState Dg E C) Msg Dg).Range t
+
+/-- The combined game with its random oracles folded into the state, answering as `sel` picks. -/
+noncomputable abbrev foldComb (sel : Selector Dg E C Msg) :
     QueryImpl (GameSpec (SpongeState Dg E C) Msg Dg)
       (StateT (CState Dg E C Msg × ACache Msg Dg E C) ProbComp) :=
   ((ASpec Msg Dg E C).romImpl.mapStateTBase fun t => sel t <$> combStep P iv t).flattenStateT
 
 /-- The steps of the folded game reach the states of the combined step. -/
-theorem mem_support_foldComb_run
-    (sel : (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain) →
-      (GameSpec (SpongeState Dg E C) Msg Dg).Range t ×
-        (GameSpec (SpongeState Dg E C) Msg Dg).Range t →
-          (GameSpec (SpongeState Dg E C) Msg Dg).Range t)
+theorem mem_support_foldComb_run (sel : Selector Dg E C Msg)
     (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
     (s : CState Dg E C Msg × ACache Msg Dg E C) {z}
     (hz : z ∈ support ((foldComb P iv sel t).run s)) :
@@ -113,11 +115,7 @@ theorem inv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
   · exact inv_combHash hI m hz
 
 /-- The invariant holds after every step of the folded game, with either answer. -/
-theorem inv_foldComb_step
-    (sel : (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain) →
-      (GameSpec (SpongeState Dg E C) Msg Dg).Range t ×
-        (GameSpec (SpongeState Dg E C) Msg Dg).Range t →
-          (GameSpec (SpongeState Dg E C) Msg Dg).Range t)
+theorem inv_foldComb_step (sel : Selector Dg E C Msg)
     (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
     (s : CState Dg E C Msg × ACache Msg Dg E C) (hs : Inv P iv s.1 s.2)
     {z} (hz : z ∈ support ((foldComb P iv sel t).run s)) : Inv P iv z.2.1 z.2.2 := by
@@ -128,11 +126,7 @@ theorem inv_foldComb_step
 /-- **Answers differ only after a collision.**
 
 On every run of the folded game from the first state, a differing answer means a collision. -/
-theorem diff_imp_bad_or_EC
-    (sel : (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain) →
-      (GameSpec (SpongeState Dg E C) Msg Dg).Range t ×
-        (GameSpec (SpongeState Dg E C) Msg Dg).Range t →
-          (GameSpec (SpongeState Dg E C) Msg Dg).Range t) {α : Type}
+theorem diff_imp_bad_or_EC (sel : Selector Dg E C Msg) {α : Type}
     (oa : OracleComp (GameSpec (SpongeState Dg E C) Msg Dg) α)
     {z} (hz : z ∈ support ((simulateQ (foldComb P iv sel) oa).run
       ((CState.init iv : CState Dg E C Msg), ∅))) :

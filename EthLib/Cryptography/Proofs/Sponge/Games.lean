@@ -33,6 +33,12 @@ abbrev ASpec (Msg Dg E C : Type) := (Msg →ₒ Dg) + TSpec Dg E C
 
 variable {Dg E C Msg : Type}
 
+/-- A coin of the intermediate games, passed through, beside a state `σ`. -/
+abbrev coinQuery {σ : Type} (n : ℕ) :
+    StateT σ (OracleComp (unifSpec + ASpec Msg Dg E C)) (Fin (n + 1)) :=
+  (liftM ((unifSpec + ASpec Msg Dg E C).query (.inl n)) :
+    OracleComp (unifSpec + ASpec Msg Dg E C) (Fin (n + 1)))
+
 section Setting
 
 variable [SampleableType Dg] [SampleableType E] [SampleableType C]
@@ -80,25 +86,22 @@ noncomputable def visFwd (P : Padding Msg (Dg × E)) (x u : SpongeState Dg E C)
     match chainOf σ.chains x with
     | some (s, β) => do
       let v ← val P (β ++ [blockTo s x])
-      pure (v, ⟨(x, v) :: σ.edges, (v, β ++ [blockTo s x]) :: σ.chains⟩,
-        some (β ++ [blockTo s x], v))
+      pure (v, σ.recordRooted x v (β ++ [blockTo s x]), some (β ++ [blockTo s x], v))
     -- A new state that is not rooted gets the uniform draw `u`.
-    | none => pure (u, ⟨(x, u) :: σ.edges, σ.chains⟩, none)
+    | none => pure (u, σ.record x u, none)
 
 /-- The inverse step of the simulator, with the uniform draw `u` for a new query. -/
 def visInv (y u : SpongeState Dg E C) (σ : SimState Dg E C) :
     SpongeState Dg E C × SimState Dg E C :=
   match (σ.edges.map Prod.swap).lookup y with
   | some x => (x, σ)
-  | none => (u, ⟨(u, y) :: σ.edges, σ.chains⟩)
+  | none => (u, σ.record u y)
 
 /-- The simulator with the values of paths at rooted states, and a uniform draw at each call. -/
 noncomputable def idealTImpl (P : Padding Msg (Dg × E)) :
     QueryImpl (GameSpec (SpongeState Dg E C) Msg Dg)
       (StateT (SimState Dg E C) (OracleComp (unifSpec + ASpec Msg Dg E C)))
-  | .inl (.inl n) =>
-    (liftM ((unifSpec + ASpec Msg Dg E C).query (.inl n)) :
-      OracleComp (unifSpec + ASpec Msg Dg E C) (Fin (n + 1)))
+  | .inl (.inl n) => coinQuery n
   | .inl (.inr (.inl x)) => StateT.mk fun σ => do
     let u ← drawSt
     let r ← visFwd P x u σ
@@ -114,6 +117,10 @@ noncomputable def idealTImpl (P : Padding Msg (Dg × E)) :
 /-- The capacities a game sees: that of the initial state, and those of both ends of each pair. -/
 def knownC (iv : SpongeState Dg E C) (σ : SimState Dg E C) : List C :=
   iv.2 :: σ.edges.flatMap fun e => [e.1.2, e.2.2]
+
+/-- Whether a new answer of the simulator has a capacity `k` seen before the query. -/
+abbrev hitsKnown (iv : SpongeState Dg E C) (σ : SimState Dg E C) (new : Bool) (k : C) : Bool :=
+  new && decide (k ∈ knownC iv σ)
 
 /-- Whether the value of a path was asked: a rooted path, or a prefix of a hashed padding. -/
 def usedPath (P : Padding Msg (Dg × E)) (VC : List (SpongeState Dg E C × List (Dg × E)))
@@ -171,16 +178,17 @@ def fwdOut (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg
     (r : SpongeState Dg E C × SimState Dg E C × Option (List (Dg × E) × SpongeState Dg E C)) :
     (SpongeState Dg E C × SpongeState Dg E C) × CState Dg E C Msg :=
   -- The real answer: the recorded one, or the value of a new unused rooted path, or `u`.
-  let aR := match cs.all.lookup x with
+  let old := cs.all.lookup x
+  let aR := match old with
     | some y => y
     | none => match r.2.2 with
       | some (β, v) => if usedPath P cs.sim.chains cs.hashed β then u else v
       | none => u
-  let all' := match cs.all.lookup x with
+  let all' := match old with
     | some _ => cs.all
     | none => (x, aR) :: cs.all
   ((aR, r.1), ⟨all', r.2.1, cs.hashed, cs.diff || decide (aR ≠ r.1),
-    cs.bad || ((cs.sim.edges.lookup x).isNone && decide (r.1.2 ∈ knownC iv cs.sim))⟩)
+    cs.bad || hitsKnown iv cs.sim (cs.sim.edges.lookup x).isNone r.1.2⟩)
 
 /-- The combined forward step: the real and the ideal answer, from one uniform draw. -/
 noncomputable def combFwd (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
@@ -195,15 +203,15 @@ noncomputable def combFwd (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
 def invOut (iv : SpongeState Dg E C) (cs : CState Dg E C Msg) (y u : SpongeState Dg E C) :
     (SpongeState Dg E C × SpongeState Dg E C) × CState Dg E C Msg :=
   let r := visInv y u cs.sim
-  let aR := match (cs.all.map Prod.swap).lookup y with
+  let old := (cs.all.map Prod.swap).lookup y
+  let aR := match old with
     | some x => x
     | none => u
-  let all' := match (cs.all.map Prod.swap).lookup y with
+  let all' := match old with
     | some _ => cs.all
     | none => (u, y) :: cs.all
   ((aR, r.1), ⟨all', r.2, cs.hashed, cs.diff || decide (aR ≠ r.1),
-    cs.bad || (((cs.sim.edges.map Prod.swap).lookup y).isNone &&
-      decide (u.2 ∈ knownC iv cs.sim))⟩)
+    cs.bad || hitsKnown iv cs.sim ((cs.sim.edges.map Prod.swap).lookup y).isNone u.2⟩)
 
 /-- The combined inverse step. -/
 noncomputable def combInv (iv : SpongeState Dg E C) (y : SpongeState Dg E C) :
@@ -233,8 +241,7 @@ noncomputable def combStep (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
         ((GameSpec (SpongeState Dg E C) Msg Dg).Range t ×
           (GameSpec (SpongeState Dg E C) Msg Dg).Range t)
   | .inl (.inl n) => do
-    let u ← (liftM ((unifSpec + ASpec Msg Dg E C).query (.inl n)) :
-      OracleComp (unifSpec + ASpec Msg Dg E C) (Fin (n + 1)))
+    let u ← coinQuery n
     pure (u, u)
   | .inl (.inr (.inl x)) => combFwd P iv x
   | .inl (.inr (.inr y)) => combInv iv y
@@ -266,19 +273,16 @@ The flag `pre` says whether the sponge still asks the values of its paths. -/
 noncomputable def visImpl (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (pre : Bool) :
     QueryImpl (GameSpec (SpongeState Dg E C) Msg Dg)
       (StateT (VState Dg E C Msg) (OracleComp (unifSpec + ASpec Msg Dg E C)))
-  | .inl (.inl n) =>
-    (liftM ((unifSpec + ASpec Msg Dg E C).query (.inl n)) :
-      OracleComp (unifSpec + ASpec Msg Dg E C) (Fin (n + 1)))
+  | .inl (.inl n) => coinQuery n
   | .inl (.inr (.inl x)) => StateT.mk fun vs => do
     let u ← drawSt
     let r ← visFwd P x u vs.1
-    pure (r.1, (r.2.1, vs.2.1, vs.2.2 ||
-      ((vs.1.edges.lookup x).isNone && decide (r.1.2 ∈ knownC iv vs.1))))
+    pure (r.1, (r.2.1, vs.2.1, vs.2.2 || hitsKnown iv vs.1 (vs.1.edges.lookup x).isNone r.1.2))
   | .inl (.inr (.inr y)) => StateT.mk fun vs => do
     let u ← drawSt
     let r := visInv y u vs.1
-    pure (r.1, (r.2, vs.2.1, vs.2.2 ||
-      (((vs.1.edges.map Prod.swap).lookup y).isNone && decide (u.2 ∈ knownC iv vs.1))))
+    pure (r.1, (r.2, vs.2.1,
+      vs.2.2 || hitsKnown iv vs.1 ((vs.1.edges.map Prod.swap).lookup y).isNone u.2))
   | .inr m => StateT.mk fun vs => do
     if pre then skel P [] (P.pad m) else pure ()
     let d ← queryRight (hs := ASpec Msg Dg E C) (.inl m)

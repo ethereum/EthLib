@@ -167,7 +167,7 @@ omit [DecidableEq Msg] [SampleableType Dg] [SampleableType E] [SampleableType C]
 theorem usedPath_mono {VC VC' : List (SpongeState Dg E C × List (Dg × E))} {L L' : List Msg}
     (hVC : ∀ p ∈ VC, p ∈ VC') (hL : ∀ m ∈ L, m ∈ L') {β : List (Dg × E)}
     (h : usedPath P VC L β = true) : usedPath P VC' L' β = true := by
-  simp only [usedPath, Bool.or_eq_true, decide_eq_true_eq, List.any_eq_true] at h ⊢
+  rw [usedPath_eq_true_iff] at h ⊢
   rcases h with h | ⟨m, hm, h⟩
   · obtain ⟨p, hp, rfl⟩ := List.mem_map.mp h
     exact Or.inl (List.mem_map.mpr ⟨p, hVC p hp, rfl⟩)
@@ -179,8 +179,7 @@ omit [DecidableEq Msg] [SampleableType Dg] [SampleableType E] [SampleableType C]
 theorem usedPath_of_prefix {VC : List (SpongeState Dg E C × List (Dg × E))} {L : List Msg}
     {m : Msg} (hm : m ∈ L) {β : List (Dg × E)} (h : β ≠ [] ∧ β <+: P.pad m) :
     usedPath P VC L β = true := by
-  simp only [usedPath, Bool.or_eq_true, List.any_eq_true, decide_eq_true_eq]
-  exact Or.inr ⟨m, hm, h⟩
+  exact usedPath_eq_true_iff.mpr (Or.inr ⟨m, hm, h⟩)
 
 /-- **Every step of the combined game keeps the paths it asks used.** -/
 theorem uInv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)

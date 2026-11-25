@@ -193,10 +193,10 @@ theorem visFwd_support (x u : SpongeState Dg E C) (σ : SimState Dg E C) (c : AC
     (∃ s β, σ.edges.lookup x = none ∧ chainOf σ.chains x = some (s, β) ∧
       (z.1.1, z.2) ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
         (val P (β ++ [blockTo s x]))).run c) ∧
-      z.1 = (z.1.1, ⟨(x, z.1.1) :: σ.edges, (z.1.1, β ++ [blockTo s x]) :: σ.chains⟩,
+      z.1 = (z.1.1, σ.recordRooted x z.1.1 (β ++ [blockTo s x]),
         some (β ++ [blockTo s x], z.1.1))) ∨
     (σ.edges.lookup x = none ∧ chainOf σ.chains x = none ∧
-      z = ((u, ⟨(x, u) :: σ.edges, σ.chains⟩, none), c)) := by
+      z = ((u, σ.record x u, none), c)) := by
   unfold visFwd at hz
   split at hz
   · next y hy =>

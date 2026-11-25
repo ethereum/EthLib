@@ -20,21 +20,6 @@ open OracleComp OracleSpec LazyPermutation Indifferentiability
 
 variable {Dg E C Msg : Type}
 
-/-- The rooted state that the simulator finds is a rooted state with that capacity. -/
-theorem chainOf_some [DecidableEq C] {VC : List (SpongeState Dg E C × List (Dg × E))}
-    {x s : SpongeState Dg E C} {β : List (Dg × E)} (h : chainOf VC x = some (s, β)) :
-    (s, β) ∈ VC ∧ s.2 = x.2 := by
-  have h2 := List.find?_some h
-  simp only [decide_eq_true_eq] at h2
-  exact ⟨List.mem_of_find?_eq_some h, h2⟩
-
-/-- When the simulator finds no rooted state, none has that capacity. -/
-theorem chainOf_none [DecidableEq C] {VC : List (SpongeState Dg E C × List (Dg × E))}
-    {x : SpongeState Dg E C} (h : chainOf VC x = none) : ∀ p ∈ VC, p.1.2 ≠ x.2 := by
-  intro p hp hpx
-  have := List.find?_eq_none.mp h p hp
-  simp [hpx] at this
-
 /-! ## Paths -/
 
 /-- The rooted paths of the simulator, with the empty path. -/
@@ -43,6 +28,12 @@ def vPaths (σ : SimState Dg E C) : List (List (Dg × E)) := σ.chains.map Prod.
 /-- A nonempty prefix of the padding of a hashed message. -/
 def HPath (P : Padding Msg (Dg × E)) (hashed : List Msg) (β : List (Dg × E)) : Prop :=
   ∃ m ∈ hashed, β ≠ [] ∧ β <+: P.pad m
+
+/-- A path is used when it is rooted, or a nonempty prefix of a hashed padding. -/
+theorem usedPath_eq_true_iff [DecidableEq Dg] [DecidableEq E] {P : Padding Msg (Dg × E)}
+    {VC : List (SpongeState Dg E C × List (Dg × E))} {L : List Msg} {β : List (Dg × E)} :
+    usedPath P VC L β = true ↔ β ∈ VC.map Prod.snd ∨ HPath P L β := by
+  simp [usedPath, HPath]
 
 /-- A hidden path: a prefix of a hashed padding that the simulator has not rooted. -/
 def Hidden (P : Padding Msg (Dg × E)) (vs : VState Dg E C Msg) (β : List (Dg × E)) : Prop :=

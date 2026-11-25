@@ -88,11 +88,7 @@ theorem agreeUntilBad_foldReal_foldIdeal :
     exact ⟨h1, h2⟩
 
 /-- A differing answer stays recorded, with either answer. -/
-theorem preservesInv_foldComb_diff
-    (sel : (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain) →
-      (GameSpec (SpongeState Dg E C) Msg Dg).Range t ×
-        (GameSpec (SpongeState Dg E C) Msg Dg).Range t →
-          (GameSpec (SpongeState Dg E C) Msg Dg).Range t) :
+theorem preservesInv_foldComb_diff (sel : Selector Dg E C Msg) :
     QueryImpl.PreservesInv (foldComb P iv sel)
       fun s : CState Dg E C Msg × ACache Msg Dg E C => s.1.diff = true := by
   intro t s hs z hz

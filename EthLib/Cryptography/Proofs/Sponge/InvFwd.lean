@@ -170,9 +170,9 @@ omit [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E] in
 theorem inv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
     (hI : Inv P iv cs c) {x : SpongeState Dg E C} (hy : cs.sim.edges.lookup x = none)
     (hch : chainOf cs.sim.chains x = none) :
-    Inv P iv (fwdOut P iv cs x u (u, ⟨(x, u) :: cs.sim.edges, cs.sim.chains⟩, none)).2 c := by
+    Inv P iv (fwdOut P iv cs x u (u, cs.sim.record x u, none)).2 c := by
   obtain ⟨hS, hcond⟩ := hI
-  set cs' := (fwdOut P iv cs x u (u, ⟨(x, u) :: cs.sim.edges, cs.sim.chains⟩, none)).2
+  set cs' := (fwdOut P iv cs x u (u, cs.sim.record x u, none)).2
     with hcs'
   have hHid : ∀ β, Hidden P cs'.vis β ↔ Hidden P cs.vis β := fun β => Iff.rfl
   have hS' : Struct P iv cs' c :=
@@ -200,7 +200,7 @@ theorem inv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
         have := hS.chainVal _ ht
         rw [hs] at this
         obtain rfl := Option.some.inj this
-        exact chainOf_none hch _ ht rfl
+        exact cap_ne_of_chainOf_eq_none hch _ ht rfl
       · refine hEC' ⟨β, s, (hHid β).mpr hk, (svC_of_hidden hk) ▸ hs, Or.inl ?_⟩
         exact (mem_knownC_cons iv).mpr (Or.inr (Or.inl rfl))
   have hA := lookup_all_none hC hnoG
@@ -209,7 +209,7 @@ theorem inv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
       (fun h => by
         obtain ⟨e, he, rfl⟩ := List.mem_map.mp h
         exact hbad0.2 (snd_mem_knownC iv he))
-      (Or.inl rfl) (Or.inr (chainOf_none hch)) (fun e _ p hp hpo => absurd hp hpo)
+      (Or.inl rfl) (Or.inr (cap_ne_of_chainOf_eq_none hch)) (fun e _ p hp hpo => absurd hp hpo)
   · simp only [hcs', fwdOut, hA, GEdge, List.mem_cons]
     constructor
     · rintro (rfl | h)
@@ -231,16 +231,17 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
     (hy : cs.sim.edges.lookup x = none) (hch : chainOf cs.sim.chains x = some (s, β))
     (hv : (v, c') ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
       (val P (β ++ [blockTo s x]))).run c)) :
-    Inv P iv (fwdOut P iv cs x u (v, ⟨(x, v) :: cs.sim.edges,
-      (v, β ++ [blockTo s x]) :: cs.sim.chains⟩, some (β ++ [blockTo s x], v))).2 c' := by
+    Inv P iv (fwdOut P iv cs x u (v,
+      cs.sim.recordRooted x v (β ++ [blockTo s x]), some (β ++ [blockTo s x], v))).2 c' := by
   obtain ⟨hS, hcond⟩ := hI
-  obtain ⟨hsβ, hsx⟩ := chainOf_some hch
+  have hsβ := mem_of_chainOf_eq_some hch
+  have hsx := cap_eq_of_chainOf_eq_some hch
   set B := blockTo s x with hB
   have hxB : absorb s B = x := absorb_blockTo hsx
   obtain ⟨hcc, hvv, -⟩ := val_support P (β ++ [B]) c hv
   simp only at hcc hvv
-  set cs' := (fwdOut P iv cs x u (v, ⟨(x, v) :: cs.sim.edges,
-    (v, β ++ [B]) :: cs.sim.chains⟩, some (β ++ [B], v))).2 with hcs'
+  set cs' := (fwdOut P iv cs x u (v,
+    cs.sim.recordRooted x v (β ++ [B]), some (β ++ [B], v))).2 with hcs'
   have hsim : cs'.sim = ⟨(x, v) :: cs.sim.edges, (v, β ++ [B]) :: cs.sim.chains⟩ := rfl
   have hhashed : cs'.hashed = cs.hashed := rfl
   have hvP : vPaths cs'.sim = (β ++ [B]) :: vPaths cs.sim := rfl
@@ -390,8 +391,8 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
       · exact hH (hxv_eq y h).1
     have hA := lookup_all_none hC hnoG
     have hU : usedPath P cs.sim.chains cs.hashed (β ++ [B]) = false := by
-      simp only [usedPath, Bool.or_eq_false_iff, decide_eq_false_iff_not, List.any_eq_false]
-      exact ⟨hnotV, fun m hm hmem => hH ⟨m, hm, of_decide_eq_true hmem⟩⟩
+      rw [← Bool.not_eq_true, usedPath_eq_true_iff]
+      exact fun h => h.elim hnotV hH
     have hall' : cs'.all = (x, v) :: cs.all := by simp [hcs', fwdOut, hA, hU]
     refine ⟨hvis, fun e => ?_, ?_⟩
     · change e ∈ cs'.all ↔ e ∈ cs'.sim.edges ∨ HiddenEdge P iv cs'.vis c' e

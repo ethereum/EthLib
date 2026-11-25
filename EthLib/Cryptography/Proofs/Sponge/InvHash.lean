@@ -263,11 +263,8 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
     rw [List.nil_append] at hu ⊢
     by_cases hvis : pm.take (i + 1) ∈ vPaths cs.sim
     · exact (hC.allMem _).mpr (Or.inl (hvisEdge i hi hvis))
-    · have hH : HPath P cs.hashed (pm.take (i + 1)) := by
-        simp only [usedPath, Bool.or_eq_true, decide_eq_true_eq, List.any_eq_true] at hu
-        rcases hu with hu | ⟨m', hm', hu⟩
-        · exact absurd hu hvis
-        · exact ⟨m', hm', hu⟩
+    · have hH : HPath P cs.hashed (pm.take (i + 1)) :=
+        (usedPath_eq_true_iff.mp hu).resolve_left hvis
       have hhid : Hidden P cs.vis (pm.take i ++ [pm[i]]) := by
         rw [← List.take_succ_eq_append_getElem hi]
         exact ⟨hH, hvis⟩
