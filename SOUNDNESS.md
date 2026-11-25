@@ -6520,6 +6520,10 @@ So the root endpoint gives one root for the block, its header and its blinded fo
 `blobsOf_ok` shows that the blobs endpoint answers with `blockBlobs` over the commitments of the block, and `blockCommitments_before_deneb` that a block before Deneb has none.
 `blockBlobs_sublist` shows that the blobs answer keeps the order of the blobs of the block, and `blockBlobs_none` that it gives them all without hashes.
 `blockBlobs_versionedHash` shows that each blob it gives sits at the place of a commitment whose versioned hash is requested.
+With versioned hashes, `requestedBlobs_hashes` shows that the answer gives the requested hashes of the commitments once each, in block order.
+`requestedBlobs_nodup` shows that no two of its blobs have one hash.
+`requestedBlobs_sublist` shows that its blobs keep the order of the block, each with the hash of the commitment at its place.
+`requestedBlobs_first` shows that each is the first blob of the block with its hash.
 `blockBlobs_commitment` shows that each such blob commits to a commitment of the block whose versioned hash is requested, when each blob of the block commits to the commitment at its place.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_blocks.py`) checks the root of the random static block of each fork from Phase 0 to Heze against its pinned root.
 It checks that the blinded block, encoded again, has that pinned root too.

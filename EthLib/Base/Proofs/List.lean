@@ -144,6 +144,67 @@ theorem nodup_eraseDups {α : Type} [BEq α] [LawfulBEq α] (l : List α) : l.er
         simp at mem
       · exact Nat.le_trans (List.length_filter_le _ _) (by simpa using short)
 
+/-- Removing the duplicates of a list by a test keeps a part of it, in order. -/
+theorem eraseDupsBy_sublist {α : Type} (r : α → α → Bool) :
+    ∀ l : List α, (l.eraseDupsBy r).Sublist l
+  | [] => List.Sublist.slnil
+  | head :: tail => by
+    rw [List.eraseDupsBy_cons]
+    exact ((eraseDupsBy_sublist r _).trans List.filter_sublist).cons_cons head
+termination_by l => l.length
+decreasing_by exact Nat.lt_succ_of_le (List.length_filter_le _ _)
+
+/-- The keys of a list without repeated keys are its keys without duplicates. -/
+theorem map_eraseDupsBy {α β : Type} [BEq β] (key : α → β) :
+    ∀ l : List α, (l.eraseDupsBy fun a b => key a == key b).map key = (l.map key).eraseDups
+  | [] => rfl
+  | head :: tail => by
+    rw [List.eraseDupsBy_cons, List.map_cons, map_eraseDupsBy key, List.map_cons,
+      List.eraseDups_cons, List.filter_map]
+    congr 3
+termination_by l => l.length
+decreasing_by exact Nat.lt_succ_of_le (List.length_filter_le _ _)
+
+/-- An element that a filter keeps sits in the list after kept elements and dropped ones. -/
+theorem eq_append_cons_of_filter {α : Type} {p : α → Bool} {l before after : List α} {a : α}
+    (kept : l.filter p = before ++ a :: after) :
+    ∃ front back, l = front ++ a :: back ∧ ∀ x ∈ front, x ∈ before ∨ p x = false := by
+  obtain ⟨l₁, l₂, rfl, first, second⟩ := List.filter_eq_append_iff.1 kept
+  obtain ⟨m₁, m₂, rfl, dropped, -, -⟩ := List.filter_eq_cons_iff.1 second
+  refine ⟨l₁ ++ m₁, m₂, by simp, fun x mem => ?_⟩
+  rcases List.mem_append.1 mem with early | late
+  · by_cases keep : p x = true
+    · exact .inl (first ▸ List.mem_filter.2 ⟨early, keep⟩)
+    · exact .inr (by simpa using keep)
+  · exact .inr (by simpa using dropped x late)
+
+/-- Each element that removing repeated keys keeps is the first of its key in the list. -/
+theorem eq_append_cons_of_mem_eraseDupsBy {α β : Type} [BEq β] [LawfulBEq β] (key : α → β)
+    {a : α} : ∀ l : List α, a ∈ l.eraseDupsBy (fun x y => key x == key y) →
+      ∃ front back, l = front ++ a :: back ∧ ∀ x ∈ front, key x ≠ key a
+  | [], mem => by simp at mem
+  | head :: tail, mem => by
+    rw [List.eraseDupsBy_cons, List.mem_cons] at mem
+    rcases mem with rfl | later
+    · exact ⟨[], tail, rfl, by simp⟩
+    · -- The element is first of its key among the elements of another key than the head.
+      obtain ⟨front, back, split, first⟩ := eq_append_cons_of_mem_eraseDupsBy key _ later
+      have other : key a ≠ key head := by
+        have kept := (List.mem_filter.1 (split ▸ List.mem_append_right front
+          (List.mem_cons_self (a := a) (l := back))))
+        simpa using kept.2
+      obtain ⟨front', back', rfl, sorted⟩ := eq_append_cons_of_filter split
+      refine ⟨head :: front', back', rfl, fun x mem => ?_⟩
+      rcases List.mem_cons.1 mem with rfl | rest
+      · exact fun same => other same.symm
+      · rcases sorted x rest with known | dropped
+        · exact first x known
+        · -- A dropped element has the key of the head, which is not the key of the element.
+          have keyed : key x = key head := by simpa using dropped
+          exact fun same => other (same ▸ keyed)
+termination_by l => l.length
+decreasing_by exact Nat.lt_succ_of_le (List.length_filter_le _ _)
+
 /-- Two maps that agree on a list keep the same elements of it. -/
 theorem filterMap_congr {α β : Type} {f g : α → Option β} :
     ∀ {l : List α}, (∀ a ∈ l, f a = g a) → l.filterMap f = l.filterMap g
