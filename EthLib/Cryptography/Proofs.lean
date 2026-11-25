@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Hash
 public import EthLib.Cryptography.Proofs.Exports.Keccak
+public import EthLib.Cryptography.Proofs.Exports.Kzg
 public import EthLib.Cryptography.Proofs.Bls
 public import EthLib.Cryptography.Proofs.Kzg
 public import EthLib.Cryptography.Proofs.Merkle

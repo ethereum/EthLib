@@ -1461,15 +1461,32 @@ The KZG and PeerDAS proofs use `Bls.pairingLaws`, which proves the pairing law o
 Their theorems take no pairing-law hypothesis.
 
 Blobs, cells, commitments, proofs and field elements are byte vectors with their length in the type.
-`Proofs/Kzg/Core.lean` proves that parsing rejects bytes of any other length.
-It and `Proofs/Kzg/Cells.lean` prove that the operations reject other malformed inputs.
+The C exports read each of them at its length, and `Base.exactBytes_eq_error_iff` (`Base/Proofs/Bytes.lean`) states that a read rejects exactly the bytes of another length.
+`Proofs/Kzg/Core.lean` and `Proofs/Kzg/Cells.lean` prove that the operations reject other malformed inputs.
 An example is two lists of different lengths.
+
 The cell and commitment indices reach the operations through the C exports as one buffer each, 8 big-endian bytes per index.
 `unpackIndicesBE_eq_ok_iff` (`Proofs/Kzg/Cells.lean`) states that a buffer decodes to a list of indices exactly when it is their encodings in order.
 So each index below `2^64` decodes to its own value, never to a smaller one.
+This covers the decoding in Lean; the C code of the bindings that builds the buffer is outside the theorems.
 `verifyCellKzgProofBatch_cellIndexOutOfBounds` (`Proofs/Kzg/Cells.lean`) and `recoverCellsAndKzgProofs_cellIndexOutOfBounds` (`Proofs/Kzg/Recovery.lean`) state that those operations reject an index of `CELLS_PER_EXT_BLOB` or more in the decoded list, once their earlier checks pass.
-No theorem joins the decoding and this check at the C export.
-The batch challenge export checks the bounds of its indices itself, and no theorem states that check yet.
+
+`verifyCellKzgProofBatchExport_cellIndexOutOfBounds` (`Proofs/Exports/Kzg.lean`) joins the decoding and this check at the C export of the verification.
+It assumes a buffer that holds the 8-byte big-endian encodings of the indices in order, each below `2^64`.
+Each commitment, cell and proof must have its byte length, with one cell, one proof and one index per commitment.
+`recoverCellsAndKzgProofsExport_cellIndexOutOfBounds` (`Proofs/Exports/Kzg.lean`) joins the decoding and the check of the recovery at its C export.
+It assumes such a buffer, one cell of its byte length per index, and from `CELLS_PER_EXT_BLOB / 2` to `CELLS_PER_EXT_BLOB` indices.
+Both exports first decode the embedded setup.
+If it decodes, they give the error that names the first index of `CELLS_PER_EXT_BLOB` or more; otherwise they give the error of the setup.
+So neither theorem assumes that the embedded setup decodes.
+
+The batch challenge export decodes both of its buffers and checks the bounds of the indices itself.
+`computeVerifyCellKzgProofBatchChallengeExport_commitmentIndexOutOfBounds` (`Proofs/Exports/Kzg.lean`) states that the export gives the error that names the first commitment index that is not below the count of commitments.
+It assumes that both buffers hold the 8-byte big-endian encodings of their indices, each below `2^64`.
+It also assumes as many cell indices, coset evaluations and proofs as commitment indices, and that each commitment reads and decodes as a point.
+`computeVerifyCellKzgProofBatchChallengeExport_cellIndexOutOfBounds` (`Proofs/Exports/Kzg.lean`) states that the export gives the error that names the first cell index of `CELLS_PER_EXT_BLOB` or more.
+It makes the same assumptions on the buffers, the counts and the commitments.
+It also assumes that each commitment index is below the count of commitments.
 
 Each operation takes the trusted setup as an argument and returns `Except KzgError`, so the kernel can unfold it.
 `computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return.
