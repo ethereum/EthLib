@@ -28,7 +28,7 @@ theorem readNat_lt (data : ByteArray) (start size : Nat) :
 
 /-- A read of no bytes is `0`. -/
 theorem readNat_zero_size (data : ByteArray) (start : Nat) : readNat data start 0 = 0 := by
-  simp [readNat, bufferRead_eq, ByteOrder.ofBE]
+  simp [readNat, bufferRead_eq, ByteOrder.ofBE_eq_foldl]
 
 /-- A read depends only on the bytes it covers. -/
 theorem readNat_congr {d₁ d₂ : ByteArray} {start size : Nat}

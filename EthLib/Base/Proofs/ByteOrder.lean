@@ -157,26 +157,25 @@ theorem ofLE_ofFn_succ {k : Nat} (f : Fin (k + 1) → UInt8) :
 /-- Bytes appended on the right are the lower digits of a big-endian number. -/
 theorem ofBE_append (a b : List UInt8) :
     ofBE (a ++ b) = ofBE a * 256 ^ b.length + ofBE b := by
-  rw [ofBE, List.foldl_append, foldl_ofBE, Nat.mul_comm]
-  rfl
+  rw [ofBE_eq_foldl, List.foldl_append, foldl_ofBE, Nat.mul_comm, ← ofBE_eq_foldl]
 
 /-- A first byte of a big-endian number is worth `256 ^ k`, where `k` bytes follow it. -/
 theorem ofBE_cons (b : UInt8) (bytes : List UInt8) :
     ofBE (b :: bytes) = b.toNat * 256 ^ bytes.length + ofBE bytes := by
   rw [← List.singleton_append, ofBE_append]
-  simp [ofBE]
+  simp [ofBE_eq_foldl]
 
 /-- A last byte is the low digit of a big-endian number. -/
 @[simp] theorem ofBE_append_singleton (bytes : List UInt8) (b : UInt8) :
     ofBE (bytes ++ [b]) = 256 * ofBE bytes + b.toNat := by
-  rw [ofBE, List.foldl_append]
+  rw [ofBE_eq_foldl, List.foldl_append, ← ofBE_eq_foldl]
   rfl
 
 /-- A vector reads big-endian as its reversal reads little-endian. -/
 theorem ofBE_toList_eq_ofLE_reverse {n : Nat} (v : Vector UInt8 n) :
     ofBE v.toList = ofLE v.reverse := by
   -- A left fold is a right fold over the reversed list.
-  rw [ofLE_eq_foldr, Vector.toList_reverse, List.foldr_reverse, ofBE]
+  rw [ofLE_eq_foldr, Vector.toList_reverse, List.foldr_reverse, ofBE_eq_foldl]
   simp only [Nat.add_comm]
 
 /-! ## Big-endian writing -/

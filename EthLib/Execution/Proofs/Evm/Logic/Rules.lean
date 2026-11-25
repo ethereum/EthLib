@@ -242,7 +242,7 @@ theorem push1GA {byte : UInt8} (hlt : pc + 1 < code.size) (hop : code[pc]'(by om
         substate returnData) :=
   pushGA (n := 1) (by decide) (by omega) (by rw [hop]; decide) rfl
     (by simp [pushData, bufferRead_eq, Base.byteAtOrZero, hlt, hbyte,
-      Base.ByteOrder.ofBE]) hgas hstack
+      Base.ByteOrder.ofBE_eq_foldl]) hgas hstack
 
 /-- PUSH1 pushes the byte after it and costs 3, with room on the stack.
 

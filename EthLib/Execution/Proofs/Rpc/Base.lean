@@ -249,6 +249,7 @@ theorem bytesMax32_dataJson (what : String) (v : Bytes32) :
   rw [hdata, forIn_hex, foldl_byteHexDigits]
   · simp only [pure, Except.pure, Except.ok.injEq]
     -- The bytes of `v`, read as a number and written back on 32 bytes, are `v`.
+    rw [← ByteOrder.ofBE_eq_foldl]
     exact ByteOrder.toBE_ofBE v
   · intro c hc s
     simp only [List.mem_map, List.mem_flatMap, byteHexDigits, List.mem_cons, List.not_mem_nil,

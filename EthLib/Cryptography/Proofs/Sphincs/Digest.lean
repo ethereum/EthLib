@@ -117,7 +117,7 @@ theorem msbField_eq_ofBE {k : Nat} (x : Vector UInt8 k) :
     rw [Nat.mul_succ, msbField_add, msbField_eq_ofBE x n (by omega), Nat.zero_add,
       msbField_byte, List.take_add_one, EthLib.Base.ByteOrder.ofBE_append, Vector.getElem?_toList,
       Vector.getElem?_eq_getElem (by omega)]
-    simp [EthLib.Base.ByteOrder.ofBE]
+    simp [EthLib.Base.ByteOrder.ofBE_eq_foldl]
 
 /-- A sum scaled by `c` is the sum of its terms scaled by `c`. -/
 private theorem sum_map_mul_right (l : List Nat) (g : Nat → Nat) (c : Nat) :

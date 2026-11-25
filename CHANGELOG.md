@@ -1034,6 +1034,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `ByteOrder.ofBE` (`Base/ByteOrder.lean`) reads seven bytes at a time, and gives the same number on every list ([#4492](https://github.com/ethereum/EthLib/pull/4492)).
+  - Unfolding it now gives `ofBE.go`, not the fold of Horner's rule.
+    `ByteOrder.ofBE_eq_foldl` states the old fold; rewrite with it where a proof unfolded `ofBE`.
+  - `ofBE.horner`, `ofBE.go`, `ofBE.horner_eq` and `ofBE.go_eq_horner` are new.
+    `foldl_ofBE` and `ofBE_lt` keep their statements.
 - In Lean, SHA-256 and RIPEMD-160 pad through one shared Merkle-Damgård padding in `EthLib/Cryptography/Hash/Padding.lean`, which takes each hash's length bytes ([#4447](https://github.com/ethereum/EthLib/pull/4447)).
   - `Sha256.paddingZeros` and `Ripemd160.paddingZeros` are `Padding.paddingZeros`, and `Sha256.LENGTH_SIZE_BYTES` is removed.
     `Sha256.pad` and `Ripemd160.pad` are now `Padding.pad lengthBytes` of their own length bytes, and compute the same bytes.

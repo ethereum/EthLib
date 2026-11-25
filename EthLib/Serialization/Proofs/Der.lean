@@ -699,7 +699,7 @@ private theorem foldl_step_partial {width : Nat} (bytes : List UInt8) (i acc : N
     bytes.foldl (step width) (i, acc, ok) =
       (i + bytes.length, acc * 256 ^ bytes.length + ByteOrder.ofBE bytes, ok) := by
   induction bytes generalizing i acc with
-  | nil => simp [ByteOrder.ofBE]
+  | nil => simp [ByteOrder.ofBE_eq_foldl]
   | cons x xs ih =>
     simp only [List.length_cons] at h
     have hne : ¬ i + 1 = width := by omega
@@ -718,7 +718,7 @@ private theorem foldl_step_chunk {width : Nat} (chunk : List UInt8) (ok : Bool)
     omega
   · simp only [List.concat_eq_append, List.length_append, List.length_singleton] at h ⊢
     rw [List.foldl_append, foldl_step_partial init 0 0 ok (by omega)]
-    simp [step, h, ByteOrder.ofBE, Nat.mul_comm]
+    simp [step, h, ByteOrder.ofBE_eq_foldl, Nat.mul_comm]
 
 /-- A Unicode scalar value is at most 10FFFF and is not a surrogate, D800 to DFFF. -/
 private theorem unicodeScalar_iff (n : Nat) :

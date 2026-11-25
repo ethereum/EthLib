@@ -75,10 +75,10 @@ theorem pushData_ofNat (n size pc k : Nat) (h : pc + k < size) :
   rw [bufferRead_eq]
   congr 1
   induction k with
-  | zero => simp [ByteOrder.ofBE, Nat.mod_one]
+  | zero => simp [EthLib.Base.ByteOrder.ofBE_eq_foldl, Nat.mod_one]
   | succ k ih =>
-    rw [List.range_succ, List.map_append, ByteOrder.ofBE, List.foldl_append, ← ByteOrder.ofBE,
-      ih (by omega)]
+    rw [List.range_succ, List.map_append, EthLib.Base.ByteOrder.ofBE_eq_foldl, List.foldl_append,
+      ← EthLib.Base.ByteOrder.ofBE_eq_foldl, ih (by omega)]
     simp only [List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil, byteAtOrZero_ofNat,
       natByte, show pc + 1 + k < size by omega, ↓reduceIte, UInt8.toNat_ofNat']
     -- The data before the last byte is the number shifted one byte further.
