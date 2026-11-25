@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Node.forkchoiceUpdatedStep_of_newPayloadStep_invalid` (`Engine/Proofs/Node/LatestValid.lean`) says that a later update to a payload answered `INVALID` answers `INVALID` with the same latest valid hash ([#4555](https://github.com/ethereum/EthLib/pull/4555)).
+  That update leaves the node as it was.
+  The node is reached from a starting block, and the payload passed the checks before execution.
+  `Node.Grounded` (`Engine/Proofs/Node/Grounded.lean`) is the invariant behind it, and `Node.grounded_of_start` with `Node.Reachable.grounded` shows that every such node keeps it.
+
 - In Lean, `Run.getBeaconProposerIndex_ok` in `EthLib.Consensus.Proofs.Transition.AssignedProposers` says that, from Fulu, each state that a run reaches from genesis has a proposer for its slot ([#4493](https://github.com/ethereum/EthLib/pull/4493)).
   That proposer is a validator of the registry.
   It needs a preset with at least one slot in an epoch.
