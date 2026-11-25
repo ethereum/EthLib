@@ -1069,6 +1069,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, one ring isomorphism `Montgomery.toZModEquiv` maps the Montgomery elements of every modulus to `ZMod p` (`Cryptography/Proofs/Montgomery/ZMod.lean`) ([#4685](https://github.com/ethereum/EthLib/issues/4685)).
+  The elements are a commutative ring and a finite type by transport, with `Montgomery.card_eq`.
+  `Montgomery.field` gives a field for a prime modulus, with the division in context.
+  So `Bls.Fp` and `Bls.Fr` are commutative rings without `open scoped`, and only their fields stay scoped.
+  `Bls.Fp.toZMod` and `Bls.Fr.toZMod` are now that isomorphism, and their scoped field instances are `Montgomery.field`.
+  `Bls.Fp.ofZMod`, `Bls.Fr.ofZMod` and their lemmas `toZMod_ofZMod` and `ofZMod_toZMod` are removed: use `Montgomery.ofZMod`, `Montgomery.toZMod_ofZMod` and `Montgomery.ofZMod_toZMod`.
+  The finite type instances of `Bls.Fp` and `Bls.Fr` are removed for the one of the Montgomery elements.
+
 - In Lean, `phase0PeriodEpochs` (`Consensus/WeakSubjectivity.lean`), and so the Phase 0 to Deneb weak subjectivity period, takes the epochs for the churn of validators alone when balances are large, no longer the longer of those and the epochs for top-ups ([consensus-specs#5866](https://github.com/ethereum/consensus-specs/issues/5866)).
   The period is shorter only where the epochs for top-ups were the longer, for instance beyond about 4.39 million validators of 32 ether.
   `phase0PeriodEpochs_eq_ok` gives the new closed form, and `churn_le_of_phase0PeriodEpochs_eq_ok` and `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra` lose their hypothesis on the top-ups.

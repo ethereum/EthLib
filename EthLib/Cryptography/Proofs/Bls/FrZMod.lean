@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Fr
 public import EthLib.Cryptography.Proofs.Bls.Fr
 public import EthLib.Cryptography.Proofs.Pratt
-public import EthLib.Cryptography.Proofs.Montgomery
+public import EthLib.Cryptography.Proofs.Montgomery.ZMod
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.Tactic.NormNum.Prime
@@ -67,34 +67,13 @@ instance : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
 
 instance : Fact (Nat.Prime params.p) := ⟨modulus_prime⟩
 
-/-- The element of `Fr` that an element of `ZMod r` stands for. -/
-def ofZMod (z : ZMod modulus) : Fr := Fr.ofNat z.val
-
-/-- An element of `ZMod r` maps back to itself. -/
-theorem toZMod_ofZMod (z : ZMod modulus) : Montgomery.toZMod (ofZMod z) = z :=
-  (Montgomery.toZMod_ofNat z.val).trans (ZMod.natCast_zmod_val z)
-
-/-- An element of `Fr` maps back to itself. -/
-theorem ofZMod_toZMod (a : Fr) : ofZMod (Montgomery.toZMod a) = a :=
-  Montgomery.toZMod_injective (toZMod_ofZMod _)
-
 /-- `Fr` and Mathlib's `ZMod r` are isomorphic rings.
 
 The map sends an element to the integer mod `r` that it stands for. -/
-def toZMod : Fr ≃+* ZMod modulus where
-  toFun := Montgomery.toZMod
-  invFun := ofZMod
-  left_inv := ofZMod_toZMod
-  right_inv := toZMod_ofZMod
-  map_mul' := Montgomery.toZMod_mul
-  map_add' := Montgomery.toZMod_add
-
-/-- `Fr` is finite, through the isomorphism. -/
-instance : Fintype Fr := Fintype.ofEquiv _ toZMod.symm.toEquiv
+def toZMod : Fr ≃+* ZMod modulus := Montgomery.toZModEquiv
 
 /-- `Fr` has `r` elements. -/
-theorem card_eq : Fintype.card Fr = modulus :=
-  (Fintype.card_congr toZMod.toEquiv).trans (ZMod.card modulus)
+theorem card_eq : Fintype.card Fr = modulus := Montgomery.card_eq
 
 /-- With primality, `ZMod r` is a finite field, and `Fr` is one through the isomorphism. -/
 example : Field (ZMod modulus) := inferInstance
@@ -127,35 +106,16 @@ theorem isPrimitiveRoot_seven_pow {n : Nat} (hn : n ∣ modulus - 1) :
 
 /-- The field structure of `ZMod r`, carried to `Fr` by the isomorphism.
 
-The operations are those of the specification: the sum, the product, the power and the inverse.
-
-So `a / b` in the specification is the division of the field, by definition.
-
-It is scoped, as Mathlib scopes the ring instance of `Fin`, to avoid coercion loops.
-
 Activate with `open scoped EthLib.Cryptography.Bls.Fr`. -/
 scoped instance instField : Field Fr :=
-  -- The scalar actions and the casts from the integers and the rationals go through `ZMod r`.
+  -- The operations are those of the specification: the sum, the product, the power and the inverse.
   --
-  -- Proofs alone use them.
-  letI : SMul ℕ Fr := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
-  letI : SMul ℤ Fr := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
-  letI : SMul ℚ≥0 Fr := ⟨fun q a => ofZMod (q • Montgomery.toZMod a)⟩
-  letI : SMul ℚ Fr := ⟨fun q a => ofZMod (q • Montgomery.toZMod a)⟩
-  letI : Pow Fr ℤ := ⟨fun a n => ofZMod (Montgomery.toZMod a ^ n)⟩
-  letI : IntCast Fr := ⟨fun n => ofZMod n⟩
-  letI : NNRatCast Fr := ⟨fun q => ofZMod q⟩
-  letI : RatCast Fr := ⟨fun q => ofZMod q⟩
-  Function.Injective.field (Montgomery.toZMod : Fr → ZMod modulus) Montgomery.toZMod_injective
-    Montgomery.toZMod_zero Montgomery.toZMod_one Montgomery.toZMod_add Montgomery.toZMod_mul
-    Montgomery.toZMod_neg Montgomery.toZMod_sub Montgomery.toZMod_inv
-    (fun a b => by
-      change Montgomery.toZMod (a * b⁻¹) = _
-      rw [Montgomery.toZMod_mul, Montgomery.toZMod_inv, div_eq_mul_inv])
-    (fun _ _ => toZMod_ofZMod _) (fun _ _ => toZMod_ofZMod _) (fun _ _ => toZMod_ofZMod _)
-    (fun _ _ => toZMod_ofZMod _) Montgomery.toZMod_pow (fun _ _ => toZMod_ofZMod _)
-    Montgomery.toZMod_natCast (fun _ => toZMod_ofZMod _) (fun _ => toZMod_ofZMod _)
-    (fun _ => toZMod_ofZMod _)
+  -- So `a / b` in the specification is the division of the field, by definition.
+  --
+  -- It is scoped, since its division is the one of this specification.
+  Montgomery.field fun a b => by
+    change Montgomery.toZMod (a * b⁻¹) = _
+    rw [Montgomery.toZMod_mul, Montgomery.toZMod_inv, div_eq_mul_inv]
 
 @[simp] theorem zero_def : Fr.zero = (0 : Fr) := rfl
 
