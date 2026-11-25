@@ -87,7 +87,9 @@ theorem caches_of_mem_support_randomOracle_run (t : ι) (c : hs.QueryCache)
 
 /-! ## Commuting computations -/
 
-/-- Any two steps of the random-oracle model commute: answers and cache keep their joint law. -/
+/-- Any two steps of the random-oracle model commute: answers and cache keep their joint law.
+
+Each step is a coin draw or a query, so it is the general form of the swap of two queries. -/
 theorem romImpl_run_bind_comm (q q' : (unifSpec + hs).Domain) (c : hs.QueryCache) {β : Type}
     (f : (unifSpec + hs).Range q → (unifSpec + hs).Range q' → hs.QueryCache → ProbComp β) :
     ((hs.romImpl q).run c >>= fun v => (hs.romImpl q').run v.2 >>= fun w => f v.1 w.1 w.2) =ᵈ
@@ -104,7 +106,7 @@ theorem romImpl_run_bind_comm (q q' : (unifSpec + hs).Domain) (c : hs.QueryCache
     have : DiscreteMeasurableSpace β := ⟨fun _ => trivial⟩
     exact EvalDistEq.of_evalDist_eq (randomOracle.evalDist_run_bind_run_swap s t c f)
 
-/-- One query commutes with a computation that does not read its answer. -/
+/-- One query commutes, in law, with a computation that does not read its answer. -/
 theorem run_query_bind_comm (q : (unifSpec + hs).Domain) {γ δ : Type}
     (Y : OracleComp (unifSpec + hs) γ)
     (V : (unifSpec + hs).Range q → γ → OracleComp (unifSpec + hs) δ) (c : hs.QueryCache) :
@@ -125,7 +127,10 @@ theorem run_query_bind_comm (q : (unifSpec + hs).Domain) {γ δ : Type}
 
 /-- **Independent computations commute** in the random-oracle model.
 
-Running `X` then `Y` gives the joint law of outputs and cache of running `Y` then `X`. -/
+Running `X` then `Y` gives the joint law of outputs and cache of running `Y` then `X`.
+
+Both may draw coins and query, so it is the general form of commuting hash computations.
+-/
 theorem run_bind_bind_comm {β γ δ : Type} (X : OracleComp (unifSpec + hs) β)
     (Y : OracleComp (unifSpec + hs) γ) (W : β → γ → OracleComp (unifSpec + hs) δ)
     (c : hs.QueryCache) :

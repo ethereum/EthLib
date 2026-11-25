@@ -51,10 +51,12 @@ def absorbAll {m : Type → Type} [Monad m] (π : SpongeState Dg E C → m (Spon
     let y ← π (absorb s B)
     absorbAll π y bs
 
+/-- Absorbing no block keeps the state. -/
 @[simp] theorem absorbAll_nil {m : Type → Type} [Monad m]
     (π : SpongeState Dg E C → m (SpongeState Dg E C)) (s : SpongeState Dg E C) :
     absorbAll π s [] = pure s := rfl
 
+/-- Absorbing a first block permutes once, then absorbs the rest. -/
 theorem absorbAll_cons {m : Type → Type} [Monad m]
     (π : SpongeState Dg E C → m (SpongeState Dg E C)) (s : SpongeState Dg E C) (B : Dg × E)
     (bs : List (Dg × E)) :

@@ -321,13 +321,11 @@ theorem sum_range_natCast_div (Q : ℕ) (N : ℝ≥0∞) :
 
 /-- **The birthday bound between a random permutation and independent answers.**
 
-Take a run that asks the permutation, in either direction, at most `Q` times.
+A run asks the permutation, in either direction, at most `Q` times, from the empty cache.
 
-Compare an event of its output under the lazy permutation with the event under independent answers.
+Under independent answers, only the runs that raise no flag count.
 
-Both runs start from the empty cache, and the second counts only runs that raise no flag.
-
-The first chance exceeds the second by at most `Q (Q - 1) / 2` over `|A|`. -/
+An event is then at most `Q (Q - 1) / 2` over `|A|` more likely under the lazy permutation. -/
 theorem prEvent_lazyPermImpl_le_indepPermImpl {α : Type} (oa : PermComp A α) {Q : ℕ}
     (hQ : IsQueryBoundP oa (·.isRight = true) Q) (P : α → Prop) :
     Pr{let z ← (simulateQ lazyPermImpl oa).run' []}[P z] ≤

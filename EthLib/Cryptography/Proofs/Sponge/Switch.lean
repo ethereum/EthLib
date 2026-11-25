@@ -11,8 +11,11 @@ Each hash call of a game unfolds into the calls of the sponge to the permutation
 
 A uniform permutation then answers alike to independent uniform answers, up to the birthday bound.
 
-This is the PRP/PRF switching lemma of [Bellare, Rogaway, Eurocrypt 2006][br].
+The switch includes inverse queries, as in [Fersch, Kiltz, Poettering, CCS 2016][fkp], §4.2.
 
+It extends the PRP/PRF switching lemma of [Bellare, Rogaway, Eurocrypt 2006][br] to inverses.
+
+[fkp]: https://doi.org/10.1145/2976749.2978413
 [br]: https://eprint.iacr.org/2004/331
 -/
 
@@ -116,7 +119,7 @@ theorem prEvent_real_le_funImpl {α : Type}
 
 /-- **Independent answers answer as a uniform permutation, up to the birthday bound.**
 
-Both runs never fail, so the bound of the other direction holds for the complement. -/
+Neither run fails, so the bound of the other direction holds for the complement. -/
 theorem prEvent_funImpl_le_real {α : Type}
     {oa : OracleComp (GameSpec (SpongeState Dg E C) Msg Dg) α} {N : ℕ}
     (hN : WithinCost (fun m => (P.pad m).length) oa N) (p : α → Prop) :

@@ -161,7 +161,7 @@ theorem idealT_run_evalDistEq {α : Type}
 
 /-- **The simulator over path values is the ideal world.**
 
-Run in the random-oracle model from no answer, both give each output with one chance. -/
+Run in the random-oracle model from no answer, both give each output with the same chance. -/
 theorem idealTGame_evalDistEq_idealGame {α : Type}
     (oa : OracleComp (GameSpec (SpongeState Dg E C) Msg Dg) α) :
     (simulateQ (ASpec Msg Dg E C).romImpl

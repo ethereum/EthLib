@@ -12,7 +12,9 @@ A potential maps each budget to a bound in `[0, ∞]` on the chance that the run
 
 This is the union bound over the queries of the run.
 
-With a weight on each query, a size and the chance of each step grow with the weights.
+The budget can also count weights of queries.
+
+A run of budget `Q` then turns bad with chance at most `Q δ` when each unit of weight costs `δ`.
 -/
 
 @[expose] public section
@@ -103,7 +105,7 @@ theorem prEvent_bad_le_of_weightBudget (impl : QueryImpl spec (StateT σ ProbCom
     (w : ι → ℕ) (size : σ → ℕ) (N : ℕ) (δ : ℝ≥0∞)
     (hinv : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), inv z.2)
     (hsize : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), size z.2 ≤ size s + w t)
-    -- The step starts in a good state of the invariant, and its size stays within `N`.
+    -- The step starts in a good state of the invariant, with room for its weight below `N`.
     (hstep : ∀ t s, inv s → ¬bad s → size s + w t ≤ N →
       Pr{let z ← (impl t).run s}[bad z.2] ≤ w t * δ)
     {oa : OracleComp spec α} {Q : ℕ}

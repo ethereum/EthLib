@@ -438,7 +438,7 @@ theorem combReal_step_evalDistEq (t : (GameSpec (SpongeState Dg E C) Msg Dg).Dom
 
 /-- **The real side of the combined game is the real world over independent answers.**
 
-From the first states, both runs give each output with one chance. -/
+From the first states, both runs give each output with the same chance. -/
 theorem combReal_run_evalDistEq {α : Type}
     (oa : OracleComp (GameSpec (SpongeState Dg E C) Msg Dg) α) :
     (simulateQ (foldReal P iv) oa).run' ((CState.init iv : CState Dg E C Msg), ∅) =ᵈ

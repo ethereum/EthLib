@@ -102,7 +102,9 @@ theorem prEvent_cap_mem_le [DecidableEq C] (L : List C) :
       simpa [List.mem_iff_get, eq_comm] using
         SampleableType.prEvent_uniformSample_exists_eq_le L.get
 
-/-- **A path value makes a collision with chance at most `(|K| + |H|) / |C|`.** -/
+/-- **From a cache without a collision, a path value rarely makes one.**
+
+It does so with chance at most `(|K| + |H|) / |C|`. -/
 theorem prEvent_coll_pathValue [DecidableEq C] (H : Finset (List (Dg × E))) (K : List C)
     (β : List (Dg × E)) (c : ACache Msg Dg E C) (hc : ¬Coll H K c) :
     Pr{let z ← (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c}[Coll H K z.2] ≤
@@ -141,7 +143,9 @@ theorem prEvent_coll_pathValue [DecidableEq C] (H : Finset (List (Dg × E))) (K 
   · rw [run_queryRight]
     exact hT c hc
 
-/-- The queries of path values make a collision with chance at most `(|K| + |H|) / |C|` a block. -/
+/-- From a cache without a collision, the queries of path values rarely make one.
+
+They do so with chance at most `(|K| + |H|) / |C|` a block. -/
 theorem prEvent_coll_skel [DecidableEq C] (H : Finset (List (Dg × E))) (K : List C)
     (pre bs : List (Dg × E)) (c : ACache Msg Dg E C) (hc : ¬Coll H K c) :
     Pr{let z ← (simulateQ (ASpec Msg Dg E C).romImpl (skel (C := C) P pre bs)).run c}[
@@ -159,7 +163,9 @@ theorem prEvent_coll_skel [DecidableEq C] (H : Finset (List (Dg × E))) (K : Lis
       gcongr
       exact prEvent_coll_pathValue P H K _ c hc
 
-/-- The end phase makes a collision with chance at most `(|K| + |H|) / |C|` a hashed block. -/
+/-- From a cache without a collision, the end phase rarely makes one.
+
+It does so with chance at most `(|K| + |H|) / |C|` a hashed block. -/
 theorem prEvent_coll_endPhase [DecidableEq C] (H : Finset (List (Dg × E))) (K : List C)
     (ms : List Msg) (c : ACache Msg Dg E C) (hc : ¬Coll H K c) :
     Pr{let z ← (simulateQ (ASpec Msg Dg E C).romImpl (endPhase (C := C) P ms)).run c}[

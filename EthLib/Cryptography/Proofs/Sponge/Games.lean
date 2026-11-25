@@ -9,7 +9,7 @@ public import EthLib.Cryptography.Proofs.Sponge.Simulator
 
 The value at each rooted state comes from a random oracle on block paths.
 
-So the sponge and the game see one value at a path, whichever reaches it first.
+So the sponge and the simulator see one value at a path, whichever asks it first.
 
 The simulator simplifies Algorithm 3 of [Bertoni et al., Eurocrypt 2008][sponge], §4.3.
 

@@ -118,7 +118,7 @@ structure CombCons (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : C
 
 /-- **The invariant of the combined game.**
 
-The facts of every run hold, and so do the others while no collision has happened. -/
+The facts of every run hold, and the facts that need no collision hold while none has happened. -/
 def CombInv (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) (cs : CState Dg E C Msg)
     (c : ACache Msg Dg E C) : Prop :=
   CombStruct P iv cs c ∧ (cs.bad = false → ¬ HiddenCollision P iv cs.vis c → CombCons P iv cs c)

@@ -10,7 +10,7 @@ Take two stateful oracles, and a map from the states of the first to those of th
 
 When each step from a state of an invariant projects in law onto a step of the second, so do runs.
 
-Two rewrites of laws of a draw followed by a continuation come with them.
+It also rewrites the law of a draw followed by a continuation.
 -/
 
 @[expose] public section
