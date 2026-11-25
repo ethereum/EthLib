@@ -59,6 +59,20 @@ theorem wp_failedSearch_le_of_eq {α : Type} (T : Nat) (hT₁ : 1 ≤ T)
     (fun p p' j j' hj hj' he => searchPoint_inj p p' j j' (by omega) (by omega) he)
     hashCost (fun _ => le_rfl) oa n hn
 
+/-- The game leaves a failed search of `T` trials with probability at most `(q + C) (1 - p)^T`.
+
+The adversary makes at most `q` hash calls of its own and `r` signing requests.
+
+The bound on the searches is `1 <= T <= 2^32`, and `C` bounds the scheme's calls. -/
+theorem wp_failedSearch_gameCore_le (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MAX_COUNTER_TRIALS)
+    (adversary : Adversary) (q r : Nat) (h : HasAdversaryQueryBound adversary q r) :
+    wp ((simulateQ HashSpec.romImpl (gameCore adversary)).run ∅)
+      (fun x => propInd (HashSig.FailedSearch searchPoint SearchMiss T x.2)) ≤
+      ((q + schemeCalls r : Nat) : ℝ≥0∞) *
+        (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T :=
+  wp_failedSearch_le_of_eq T hT₁ hT (gameCore adversary) (experiment adversary)
+    (experiment_eq adversary) _ (hasHashQueryBound_of_adversary adversary q r h)
+
 /-- **The adversary forges at most as often as the wrapped one, plus a long-search term.**
 
 The adversary makes at most `q` hash calls of its own and `r` signing requests.
@@ -80,12 +94,7 @@ theorem forgeAdvantage_le_capSearches (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MA
   -- A long search somewhere in the honest game leaves a failed search in its final cache.
   --
   -- Such a failed search of `T` trials is unlikely.
-  have hFS : wp ((simulateQ HashSpec.romImpl (gameCore adversary)).run ∅)
-      (fun x => propInd (HashSig.FailedSearch searchPoint SearchMiss T x.2)) ≤
-      ((q + schemeCalls r : Nat) : ℝ≥0∞) *
-        (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T :=
-    wp_failedSearch_le_of_eq T hT₁ hT (gameCore adversary) (experiment adversary)
-      (experiment_eq adversary) _ (hasHashQueryBound_of_adversary adversary q r h)
+  have hFS := wp_failedSearch_gameCore_le T hT₁ hT adversary q r h
   rw [hE, hE]
   refine le_trans ?_ (add_le_add le_rfl hFS)
   rw [wp_run_gameCore, wp_run_gameCore, wp_run_gameCore, ← ExpectationWP.Lower.wp_add_of_oracle]

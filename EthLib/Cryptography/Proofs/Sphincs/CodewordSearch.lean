@@ -106,6 +106,21 @@ theorem prEvent_findCounter_none (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
   · rw [toNat_ofNat_trial (by omega)]
     exact hfresh j (by omega)
 
+/-- With uniform digests, all `2^32` counters miss the code with probability below `exp(-2^18)`. -/
+theorem searchMiss_pow_le_exp :
+    (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ MAX_COUNTER_TRIALS ≤
+      ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
+  rw [HashSig.ofReal_one_sub_div _ _ (by simp [CODE_SIZE]),
+    ← ENNReal.ofReal_pow (by norm_num [CODE_SIZE])]
+  -- One counter succeeds with probability `|C| / 2^128 = 2^-13.84`, about one in 14,670.
+  --
+  -- So `2^32` counters expect 292,764.7 codewords.
+  --
+  -- All of them fail with probability below `exp(-2^18)`.
+  --
+  -- That is below `2^-378193`.
+  exact ENNReal.ofReal_le_ofReal all_counters_fail_probability
+
 /-- **All `2^32` counters miss the code with probability below `exp(-2^18)`.**
 
 The hypotheses are those of the exact probability above. -/
@@ -117,17 +132,8 @@ theorem prEvent_findCounter_none_le (pkSeed : PkSeed) (key : OtsKey) (msg : Dige
     Pr{let z ← (simulateQ HashSig.HashSpec.romImpl (Internal.findCounter
         HashSig.queryH pkSeed key msg 0 MAX_COUNTER_TRIALS)).run' cache}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
-  rw [prEvent_findCounter_none pkSeed key msg cache hfresh,
-    HashSig.ofReal_one_sub_div _ _ (by simp [CODE_SIZE]),
-    ← ENNReal.ofReal_pow (by norm_num [CODE_SIZE])]
-  -- One counter succeeds with probability `|C| / 2^128 = 2^-13.84`, about one in 14,670.
-  --
-  -- So `2^32` counters expect 292,764.7 codewords.
-  --
-  -- All of them fail with probability below `exp(-2^18)`.
-  --
-  -- That is below `2^-378193`.
-  exact ENNReal.ofReal_le_ofReal all_counters_fail_probability
+  rw [prEvent_findCounter_none pkSeed key msg cache hfresh]
+  exact searchMiss_pow_le_exp
 
 /-- From an empty cache, all `2^32` counters miss the code with probability below `exp(-2^18)`. -/
 theorem prEvent_findCounter_none_le_empty (pkSeed : PkSeed) (key : OtsKey) (msg : Digest) :

@@ -175,6 +175,12 @@ Definitions that derive a secret take the derivation function as an argument too
   The count `q` includes the calls of key generation, of every signing request and of the final verification.
   The adversary forges with probability at most `q / 2^127` (`unforgeable`).
   The game is stated in `Unforgeability/Bridge/Statement.lean`.
+- Signing inside the unforgeability game (`Unforgeability/Bridge/SigningFailure.lean`).
+  Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run.
+  Some request of its game gets no signature with probability at most `(q + C) exp(-2^18)` (`signingFailure_le`, `signingFailure_le_exp`).
+  Here `C = 264193 + r * (470595 + 3 * 2^32) + 491` bounds the calls of key generation, of the `r` requests and of the verification.
+  A request with no signature leaves in the oracle's cache a search whose `2^32` counters all missed the code.
+  The bound counts every hash call of the run, so it needs no assumption on the cache when a request starts.
 - The security proof (`Security/`).
   It is a ported model of the scheme with its theorem for this configuration (`h26_layered`): 127 bits, up to 1,182,000,000 signatures.
   Its README gives the provenance and every change to the ported text.
@@ -199,6 +205,5 @@ Definitions that derive a secret take the derivation function as an argument too
 - Security for more than one key, or for more than `2^30` signing requests.
 - A bound for the game of `Unforgeability/Game.lean`.
   Its budget counts only the adversary's own queries and requests, and it has no signing limit.
-- That a later signature, or a signature inside the unforgeability game, fails with small probability.
-  The failure bound assumes a starting cache with no trial input of any key.
-  An earlier signature under the same key caches the trial inputs of its keys, and in the game the adversary's queries can too.
+- That signing fails with small probability when several keys share the oracle.
+  The bound for signing inside the game is for its one key.
