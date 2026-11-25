@@ -845,6 +845,177 @@ theorem verifyDataColumnSidecarKzgProofs_eq_verify {preset : Preset} {fork : For
         sidecar.index.toNat, sidecar.column.data, sidecar.kzgProofs.data.map (·.bytes)⟩ :=
   rfl
 
+/-- The column builder `getDataColumnSidecars` succeeds when each row has a cell per column.
+
+Each row also has a proof per column, and before Gloas there are as many rows as commitments.
+
+Rows computed from blobs have the 128 cells and proofs of `Kzg.Constants.CELLS_PER_EXT_BLOB`.
+
+So they are full under a preset with at most 128 columns. -/
+theorem getDataColumnSidecars_exists_ok {preset : Preset} {fork : Fork}
+    {header : Until .glamsterdam fork SignedBeaconBlockHeader}
+    {commitments : Until .glamsterdam fork (BlobKZGCommitments preset fork)}
+    {branch : Until .glamsterdam fork
+      (Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat)}
+    {root : Since .glamsterdam fork Root} {slot : Since .glamsterdam fork Slot}
+    {rows : List (Array Cell × Array KZGProof)}
+    -- Each row has a cell and a proof for every column.
+    (full : ∀ row ∈ rows, preset.NUMBER_OF_COLUMNS.toNat ≤ row.1.size ∧
+      preset.NUMBER_OF_COLUMNS.toNat ≤ row.2.size)
+    -- Before Gloas, there are as many rows as commitments.
+    (counted : ∀ beforeGloas : fork < .glamsterdam,
+      rows.length = (commitments beforeGloas).data.size) :
+    ∃ sidecars, getDataColumnSidecars preset header commitments branch root slot rows =
+      .ok sidecars := by
+  cases built : getDataColumnSidecars preset header commitments branch root slot rows with
+  | ok sidecars => exact ⟨sidecars, rfl⟩
+  | error e =>
+    exfalso
+    unfold getDataColumnSidecars at built
+    dsimp only at built
+    -- Before Gloas the count of rows is the count of commitments, so the count check passes.
+    by_cases before : fork < .glamsterdam
+    on_goal 1 =>
+      simp only [before, ↓reduceDIte, counted before, ne_eq, not_true_eq_false, ↓reduceIte]
+        at built
+    on_goal 2 => simp only [before, ↓reduceDIte] at built
+    all_goals
+      split at built
+      · cases built
+      obtain ⟨i, member, failed⟩ := exists_mem_of_mapM_error built
+      have inside : i < preset.NUMBER_OF_COLUMNS.toNat := List.mem_range.mp member
+      rcases bind_eq_error failed with bad | ⟨cells, picked, failed⟩
+      · obtain ⟨⟨cs, ps⟩, rowMember, step⟩ := exists_mem_of_mapM_error bad
+        simp only at step
+        split at step
+        · cases step
+        · rename_i missing
+          rw [Array.getElem?_eq_none_iff] at missing
+          have : preset.NUMBER_OF_COLUMNS.toNat ≤ cs.size := (full _ rowMember).1
+          omega
+      rcases bind_eq_error failed with bad | ⟨proofs, proved, failed⟩
+      · obtain ⟨⟨cs, ps⟩, rowMember, step⟩ := exists_mem_of_mapM_error bad
+        simp only at step
+        split at step
+        · cases step
+        · rename_i missing
+          rw [Array.getElem?_eq_none_iff] at missing
+          have : preset.NUMBER_OF_COLUMNS.toNat ≤ ps.size := (full _ rowMember).2
+          omega
+      -- Before Gloas the column has as many cells and proofs as commitments, within the limit.
+      have cellsBound : fork < .glamsterdam → cells.toArray.size ≤
+          preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat := fun before => by
+        rw [List.size_toArray, mapM_ok_length picked, counted before]
+        exact (commitments before).bound before
+      have proofsBound : fork < .glamsterdam → proofs.toArray.size ≤
+          preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat := fun before => by
+        rw [List.size_toArray, mapM_ok_length proved, counted before]
+        exact (commitments before).bound before
+      split at failed
+      · split at failed
+        · cases failed
+        · rename_i unbounded
+          exact unbounded (by first | exact fun _ => proofsBound before | exact fun b => b.elim)
+      · rename_i unbounded
+        exact unbounded (by first | exact fun _ => cellsBound before | exact fun b => b.elim)
+
+/-- Each sidecar of the column builder `getDataColumnSidecars` passes the batch check.
+
+The trusted setup must be well formed.
+
+The cells, the proofs and the commitments come from the same blobs, in order.
+
+Those commitments are the carried ones before Gloas, and those of the bid from Gloas. -/
+theorem verifyDataColumnSidecarKzgProofs_of_getDataColumnSidecars {preset : Preset} {fork : Fork}
+    {setup : TrustedSetup}
+    {τ : Cryptography.Bls.Fr} (wellFormed : setup.WellFormed τ)
+    {header : Until .glamsterdam fork SignedBeaconBlockHeader}
+    {commitments : Until .glamsterdam fork (BlobKZGCommitments preset fork)}
+    {branch : Until .glamsterdam fork
+      (Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat)}
+    {root : Since .glamsterdam fork Root} {slot : Since .glamsterdam fork Slot}
+    {bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)}
+    {blobs : List Blob} {rows : List (Array Cell × Array KZGProof)}
+    {sidecars : List (DataColumnSidecar preset fork)}
+    -- The rows are the cells and proofs of the blobs, in order.
+    (computed : blobs.mapM (computeCellsAndKzgProofs setup) = .ok rows)
+    -- Before Gloas, the carried commitments are those of the blobs, in order.
+    (carried : ∀ beforeGloas : fork < .glamsterdam,
+      blobs.mapM (blobToKzgCommitment setup) = .ok (commitments beforeGloas).data.toList)
+    -- From Gloas, the commitments of the bid are those of the blobs, in order.
+    (bid : ∀ gloas : .glamsterdam ≤ fork,
+      blobs.mapM (blobToKzgCommitment setup) = .ok (bidCommitments gloas).data.toList)
+    (built : getDataColumnSidecars preset header commitments branch root slot rows = .ok sidecars) :
+    ∀ sidecar ∈ sidecars,
+      verifyDataColumnSidecarKzgProofs setup sidecar bidCommitments = .ok true := by
+  obtain ⟨-, entries⟩ := getDataColumnSidecars_spec built
+  intro sidecar member
+  obtain ⟨i, inside, rfl⟩ := List.getElem_of_mem member
+  obtain ⟨indexed, cellsOf, proofsOf, carriedOf, -⟩ := entries i inside
+  -- The cells answer to the commitments of the blobs, carried or in the bid.
+  have committed : blobs.mapM (blobToKzgCommitment setup) =
+      .ok (sidecars[i].commitments bidCommitments).data.toList := by
+    unfold DataColumnSidecar.commitments
+    split
+    · rename_i before
+      rw [carriedOf]
+      exact carried before
+    · exact bid (not_lt_glamsterdam ‹_›)
+  have rowCount := mapM_ok_length computed
+  have commitCount := mapM_ok_length committed
+  have cellCount := congrArg List.length cellsOf
+  have proofCount := congrArg List.length proofsOf
+  simp only [List.length_map, Array.length_toList] at cellCount proofCount commitCount
+  unfold verifyDataColumnSidecarKzgProofs
+  refine verifyCellKzgProofBatch_computeCellsAndKzgProofs wellFormed (by simp; omega)
+    (by simp; omega) (by simp; omega) fun k hk => ?_
+  simp only [Array.size_map] at hk
+  have hb : k < blobs.length := by omega
+  have hr : k < rows.length := by omega
+  -- Entry `k` of the column is the cell at the index of the column in row `k`.
+  have cellK := congrArg (·[k]?) cellsOf
+  have proofK := congrArg (·[k]?) proofsOf
+  simp only [List.getElem?_map, List.getElem?_eq_getElem hr, Option.map_some] at cellK proofK
+  rw [List.getElem?_eq_getElem (by simp; omega)] at cellK proofK
+  simp only [Option.map_some, Option.some.injEq, Array.getElem_toList] at cellK proofK
+  have rowOk := mapM_ok_getElem computed k hb
+  have commitOk := mapM_ok_getElem committed k hb
+  have present : i < rows[k].1.size := by
+    rcases h : rows[k].1[i]? with _ | cell
+    · rw [h] at cellK; cases cellK
+    · exact (Array.getElem?_eq_some_iff.mp h).1
+  -- A computed row has the 128 cells and proofs of an extended blob.
+  have sizes : rows[k].1.size = Cryptography.Kzg.Constants.CELLS_PER_EXT_BLOB ∧
+      rows[k].2.size = Cryptography.Kzg.Constants.CELLS_PER_EXT_BLOB := by
+    obtain ⟨p, size, computedRow⟩ := computeCellsAndKzgProofs_ok_fk20 rowOk
+    rw [computedRow]
+    exact size_fk20CellsAndProofs setup (by rw [size]; decide)
+  -- Index `i` fits in 64 bits, since it is below the 128 cells of a row.
+  have small : (i.toUInt64).toNat = i := UInt64.toNat_ofNat_of_lt' (by
+    have : Cryptography.Kzg.Constants.CELLS_PER_EXT_BLOB = 128 := by decide
+    have : UInt64.size = 2 ^ 64 := rfl
+    omega)
+  have hc : k < sidecars[i].column.data.size := by omega
+  have hp : k < sidecars[i].kzgProofs.data.size := by omega
+  have hm : k < (sidecars[i].commitments bidCommitments).data.size := by omega
+  -- The index of every cell of the column is that of the column.
+  have position : (Array.replicate sidecars[i].column.data.size
+      (UInt64.toNat sidecars[i].index))[k]! = i := by
+    rw [getElem!_pos _ _ (by simp; omega), Array.getElem_replicate, indexed, small]
+  refine ⟨blobs[k], rows[k].1, rows[k].2, ?_, rowOk, ?_, ?_, ?_⟩
+  · rw [commitOk]
+    simp [getElem!_pos, hm]
+  · rw [position, ← sizes.1]
+    exact present
+  · rw [position, getElem!_pos sidecars[i].column.data k hc, getElem!_pos rows[k].1 i present]
+    rw [Array.getElem?_eq_getElem present, Option.some.injEq] at cellK
+    exact cellK
+  · have presentProof : i < rows[k].2.size := by rw [sizes.2, ← sizes.1]; exact present
+    rw [position, getElem!_pos (sidecars[i].kzgProofs.data.map (·.bytes)) k (by simp; omega),
+      getElem!_pos rows[k].2 i presentProof, Array.getElem_map]
+    rw [Array.getElem?_eq_getElem presentProof, Option.some.injEq] at proofK
+    rw [proofK]
+
 end Matrix
 
 end EthLib.Consensus

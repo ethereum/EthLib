@@ -1752,13 +1752,14 @@ Before Gloas, `getDataColumnSidecarsFromBlock_valid` shows that each sidecar bui
 The inclusion check of each such sidecar passes by `verifyKzgCommitmentsInclusionProof_built`.
 The signed header carries the root of the body (`signedHeader_eq_ok_iff`), and the built branch climbs to that root (`blobKzgCommitmentsInclusionProof_valid`).
 From Gloas, `getDataColumnSidecarsFromBlock_root` shows that each sidecar built from a block names the block by its root and its slot.
-No theorem states yet:
-
-- that a built sidecar passes its shape check, which also needs at least one blob.
-  Before Gloas that check needs at most the blob limit at the epoch of the header.
-  From Gloas it needs as many rows as the commitments of the bid, which the builder does not check.
-- that the batch check accepts a sidecar built from the cells and proofs of blobs.
-- that the builder succeeds when each row has a cell and a proof per column, with as many rows as commitments before Gloas.
+`getDataColumnSidecars_exists_ok` shows that the column builder `getDataColumnSidecars` succeeds when each row has a cell and a proof per column.
+Before Gloas it also needs as many rows as commitments.
+`verifyDataColumnSidecarKzgProofs_of_getDataColumnSidecars` shows that the batch check accepts each sidecar of the column builder.
+It needs a well-formed trusted setup, and cells, proofs and commitments that come from the same blobs, in order.
+Those commitments are the carried ones before Gloas, and those of the bid from Gloas.
+No theorem states yet that a built sidecar passes its shape check, which also needs at least one blob.
+Before Gloas that check needs at most the blob limit at the epoch of the header.
+From Gloas it needs as many rows as the commitments of the bid, which the builder does not check.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.

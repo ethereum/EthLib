@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, the column builder of PeerDAS ([EIP-7594](https://eips.ethereum.org/EIPS/eip-7594)) succeeds on full rows, and its sidecars pass the batch check of their cells ([#4615](https://github.com/ethereum/EthLib/issues/4615)).
+  `getDataColumnSidecars_exists_ok` (`Consensus/Proofs/DataAvailability/Column.lean`) needs each row to have a cell and a proof per column, and before Gloas as many rows as commitments.
+  `verifyDataColumnSidecarKzgProofs_of_getDataColumnSidecars` needs a well-formed trusted setup, and cells, proofs and commitments from the same blobs, in order.
+  Those commitments are the carried ones before Gloas, and those of the bid from Gloas.
+
 - In Lean, `Cryptography/Sec1.lean` writes the point encoding of SEC 1 v2 once, for every short Weierstrass curve over an odd prime field ([#4695](https://github.com/ethereum/EthLib/pull/4695)).
   `Sec1.encode` and `Sec1.decode` are the conversions of §2.3.3 and §2.3.4, with the typed error `Sec1.Sec1Error`, and `Sec1.validatePublicKey` is the public key validation of §3.2.2.1.
   `Sec1.decode_eq_ok_iff` (`Cryptography/Proofs/Sec1.lean`) says that octets decode to a point exactly when they are one of its encodings, so decoding is canonical.
