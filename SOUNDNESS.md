@@ -3719,8 +3719,19 @@ When the head of that store is already a block of the slot, the duty asks nothin
 It also asks that an honest validator send a block only as such a proposal, and in every slot, inside the range or not, at most one.
 The model signs no block, so a Byzantine validator may still send a block that names an honest proposer; `UnforgedProposals` lets only the named proposer send such a block first, and any validator send it again once it was sent, as an assumption on the adversary in place of the signature.
 A store whose head state cannot be advanced to the slot, or whose head is unknown, names no proposer and asks no proposal.
-No execution yet witnesses a proposal, which needs a block that the state transition accepts.
-So `Proposes` is shown satisfiable only where no honest store names its validator, as with checks or sources that refuse every block.
+`exists_proposes_execution` builds an execution where `Proposes` holds and the store of an honest validator names that validator as the proposer of slot one, so the duty is not vacuous.
+It covers one validator, one block at slot one and the forks before Bellatrix, with signature checks that accept every signature.
+It assumes four facts about the anchor and the block that need SHA-256 roots, without computing them:
+
+- the store starts from the anchor, whose block commits to the root of the anchor state;
+- the root of the anchor block is the parent root of the block, and the anchor block does not name that root as its own parent;
+- the block has a root, and that root differs from the root of the anchor block;
+- the state transition accepts the block on the anchor state, which also checks its proposer and its state root.
+
+Each is a statement about given values that the kernel could check with enough memory.
+The kernel needed more than 17 GB for the root of a Phase 0 state with one validator on the minimal preset, so none is checked here ([#3572](https://github.com/ethereum/EthLib/issues/3572)).
+The other hypotheses are small: the anchor is at slot zero, the block carries no vote, a slot lasts a positive time, an epoch has more than one slot, and the start of slot one and the attestation deadline fit in 64 bits.
+No concrete anchor and block are yet shown to meet the four root facts, so the gap of a witnessed proposal narrows to them.
 Under synchrony, `ProposalAt.mem_view` puts the block in the view of every honest validator `Δ` after the start of the slot.
 `Execution.blockTimeliness_eq_true` shows that a store whose clock is in the slot of a held block, before the attestations are due, has recorded that block as timely; the store must not hold the block at the start.
 `Store.addBlock_proposerBoostRoot` shows that such a timely block takes the boost when no block holds it, the head of the store is its parent, and the store holds that parent at an earlier slot; and `Execution.proposerBoostRoot_of_le` keeps a nonzero boost while the clock stays in one slot.

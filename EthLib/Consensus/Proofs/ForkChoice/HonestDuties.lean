@@ -299,8 +299,8 @@ private theorem computeSlotAtTimeMs_inside {config : Config} {genesisTimeMs due 
 
 /-- Before Gloas, a store that holds only an anchor block at slot zero has that block as head.
 
-The clock of the store is at slot zero, and both checkpoints are the anchor. -/
-theorem getHead_anchor {config : Config} {store : Store preset fork}
+The clock of the store is in epoch zero, and both checkpoints are the anchor. -/
+theorem getHead_anchor_of_epoch {config : Config} {store : Store preset fork}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {anchorRoot : Root} (before : fork < .glamsterdam)
     (blocks : store.blocks =
@@ -309,15 +309,12 @@ theorem getHead_anchor {config : Config} {store : Store preset fork}
       (∅ : Std.TreeMap Root (BeaconState preset fork)).insert anchorRoot anchorState)
     (justified : store.justifiedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩)
     (finalized : store.finalizedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩)
-    (current : store.getCurrentSlot config = .ok 0) (stateZero : anchorState.slot = 0)
+    (epoch : store.getCurrentStoreEpoch config = .ok 0) (stateZero : anchorState.slot = 0)
     (blockZero : anchorBlock.slot = 0) (parent : anchorBlock.parentRoot ≠ anchorRoot) :
     store.getHead config = .ok ⟨anchorRoot, .pending⟩ := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   have epochZero : getCurrentEpoch anchorState = 0 := by
     simp [getCurrentEpoch, computeEpochAtSlot, stateZero]
-  have epoch : store.getCurrentStoreEpoch config = .ok 0 := by
-    simp [Store.getCurrentStoreEpoch, current, computeEpochAtSlot, bind, Except.bind, pure,
-      Except.pure]
   -- The anchor block is not its own parent, so it has no child.
   have children : store.getNodeChildren ⟨anchorRoot, .pending⟩ = .ok [] := by
     simp [Store.getNodeChildren, notGloas, blocks, pure, Except.pure,
@@ -341,6 +338,26 @@ theorem getHead_anchor {config : Config} {store : Store preset fork}
   simp only [notGloas, false_and, ite_false, justified, bind, Except.bind]
   rw [Store.getHeadFrom, none]
   rfl
+
+/-- Before Gloas, a store that holds only an anchor block at slot zero has that block as head.
+
+The clock of the store is at slot zero, and both checkpoints are the anchor. -/
+theorem getHead_anchor {config : Config} {store : Store preset fork}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {anchorRoot : Root} (before : fork < .glamsterdam)
+    (blocks : store.blocks =
+      (∅ : Std.TreeMap Root (BeaconBlock preset fork)).insert anchorRoot anchorBlock)
+    (states : store.blockStates =
+      (∅ : Std.TreeMap Root (BeaconState preset fork)).insert anchorRoot anchorState)
+    (justified : store.justifiedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩)
+    (finalized : store.finalizedCheckpoint = ⟨getCurrentEpoch anchorState, anchorRoot⟩)
+    (current : store.getCurrentSlot config = .ok 0) (stateZero : anchorState.slot = 0)
+    (blockZero : anchorBlock.slot = 0) (parent : anchorBlock.parentRoot ≠ anchorRoot) :
+    store.getHead config = .ok ⟨anchorRoot, .pending⟩ :=
+  -- Slot zero is in epoch zero.
+  getHead_anchor_of_epoch before blocks states justified finalized
+    (by simp [Store.getCurrentStoreEpoch, current, computeEpochAtSlot, bind, Except.bind, pure,
+      Except.pure]) stateZero blockZero parent
 
 /-- Before Electra, a store reads a vote with the first seat of a committee as that seat alone.
 
@@ -409,30 +426,30 @@ private theorem readsAttestation_firstSeat {config : Config} {store : Store pres
     domainOk, rootOk, liftAccessor, liftSsz, SignatureChecks.acceptAll, bind, Except.bind, pure,
     Except.pure, Except.mapError]
 
-/-- The events of the witness: wait for the deadline, tick, vote, then let time go on. -/
-private def voteEvents {ν μ σ : Type*} (deadline : ℕ) (v : ν) (ticked : σ) (m : μ) :
+/-- The events of a witness: wait for a time, tick, send, then let time go on. -/
+def tickSendEvents {ν μ σ : Type*} (tickTime : ℕ) (v : ν) (ticked : σ) (m : μ) :
     ℕ → Event ν μ σ
-  | 0 => .wait deadline
+  | 0 => .wait tickTime
   | 1 => .move v ticked
   | 2 => .send v m
-  | n + 3 => .wait (deadline + n + 1)
+  | n + 3 => .wait (tickTime + n + 1)
 
-/-- After the tick, the clock is at the deadline, nothing is sent, and the validator has ticked. -/
-private theorem worldAt_vote_two {ν μ σ : Type*} [DecidableEq ν] {time deadline : ℕ}
+/-- After the tick, the clock is at the time, nothing is sent, and the validator has ticked. -/
+theorem worldAt_tickSend_two {ν μ σ : Type*} [DecidableEq ν] {time tickTime : ℕ}
     {state : ν → σ} {v : ν} {ticked : σ} {m : μ} :
-    worldAt (World.initial time state) (voteEvents deadline v ticked m) 2 =
-      ⟨deadline, ∅, fun _ => ∅, Function.update state v ticked⟩ := by
-  simp [worldAt, voteEvents, World.initial, World.apply]
+    worldAt (World.initial time state) (tickSendEvents tickTime v ticked m) 2 =
+      ⟨tickTime, ∅, fun _ => ∅, Function.update state v ticked⟩ := by
+  simp [worldAt, tickSendEvents, World.initial, World.apply]
 
-/-- After the vote, only the vote is sent, and the clock moves on by one at each event. -/
-private theorem worldAt_vote {ν μ σ : Type*} [DecidableEq ν] {time deadline : ℕ}
+/-- After the send, only that message is sent, and the clock moves on by one at each event. -/
+theorem worldAt_tickSend {ν μ σ : Type*} [DecidableEq ν] {time tickTime : ℕ}
     {state : ν → σ} {v : ν} {ticked : σ} {m : μ} (n : ℕ) :
-    worldAt (World.initial time state) (voteEvents deadline v ticked m) (n + 3) =
-      ⟨deadline + n, {m}, Function.update (fun _ => ∅) v {m}, Function.update state v ticked⟩ := by
+    worldAt (World.initial time state) (tickSendEvents tickTime v ticked m) (n + 3) =
+      ⟨tickTime + n, {m}, Function.update (fun _ => ∅) v {m}, Function.update state v ticked⟩ := by
   induction n with
   | zero =>
-    rw [worldAt, worldAt_vote_two]
-    simp only [voteEvents, World.apply, Nat.add_zero]
+    rw [worldAt, worldAt_tickSend_two]
+    simp only [tickSendEvents, World.apply, Nat.add_zero]
     congr 1
     · simp
     · funext u
@@ -442,7 +459,7 @@ private theorem worldAt_vote {ν μ σ : Type*} [DecidableEq ν] {time deadline 
       · simp [Function.update_of_ne same]
   | succ n ih =>
     rw [worldAt, ih]
-    simp [voteEvents, World.apply]
+    simp [tickSendEvents, World.apply]
     omega
 
 /-- Honest validators that vote have an execution, with one honest validator that votes.
@@ -583,7 +600,7 @@ theorem exists_votes_execution {anchorState : BeaconState preset fork}
       (Assignment.single v 0 0) store.genesisTimeMs) {v} :=
     { startTime := store.timeMs.toNat
       start := fun _ => store
-      events := voteEvents deadline v ticked (.attestation attestation)
+      events := tickSendEvents deadline v ticked (.attestation attestation)
       allowed := fun n => by
         match n with
         | 0 =>
@@ -596,22 +613,22 @@ theorem exists_votes_execution {anchorState : BeaconState preset fork}
           exact .tick (by rw [clock]; omega) fits onTicked
         | 2 =>
           refine ⟨fun x _ honest other => (other honest).elim, fun _ => ?_⟩
-          rw [worldAt_vote_two]
+          rw [worldAt_tickSend_two]
           intro x mem _
           refine .inr ?_
           rw [statementData x mem]
           simpa using maySign
         | n + 3 =>
-          rw [worldAt_vote]
+          rw [worldAt_tickSend]
           show deadline + n ≤ deadline + n + 1
           omega }
   have worldTwo :
       e.world 2 = ⟨deadline, ∅, fun _ => ∅, Function.update (fun _ => store) v ticked⟩ :=
-    worldAt_vote_two
+    worldAt_tickSend_two
   have later : ∀ n, e.world (n + 3) = ⟨deadline + n, {.attestation attestation},
       Function.update (fun _ => ∅) v {.attestation attestation},
       Function.update (fun _ => store) v ticked⟩ :=
-    worldAt_vote
+    worldAt_tickSend
   refine ⟨e, rfl, rfl, ⟨attestation, rfl⟩, ?_, ⟨positive, fun T => ⟨T + 3, ?_⟩, ?_⟩,
     fun n => e.reachable (fun u _ => .anchor anchored) n v rfl⟩
   · -- The only duty is in slot zero, at the deadline, and the vote of the third event does it.

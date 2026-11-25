@@ -5,6 +5,9 @@ public import EthLib.Consensus.Proofs.ForkChoice.HonestDuties
 import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 import EthLib.Consensus.Proofs.ForkChoice.StoreEntries
 import EthLib.Consensus.Proofs.Time
+import EthLib.Consensus.Proofs.Transition.Block
+import EthLib.Consensus.Proofs.Transition.PayloadInputs
+import EthLib.Consensus.Proofs.Transition.Slot
 
 /-!
 # Proofs: an honest proposal is timely and boosted
@@ -606,6 +609,376 @@ theorem ProposalAt.mem_view {J : Set ValidatorIndex}
   exact late
 
 end Duty
+
+/-! ## An execution where an honest validator proposes -/
+
+/-- Slot one is in epoch zero, when an epoch has more than one slot. -/
+private theorem computeEpochAtSlot_one {preset : Preset} (epochs : 1 < preset.SLOTS_PER_EPOCH) :
+    computeEpochAtSlot preset 1 = 0 := by
+  simp only [computeEpochAtSlot]
+  exact UInt64.toNat_inj.mp (by
+    simpa [UInt64.toNat_div] using Nat.div_eq_of_lt (UInt64.lt_iff_toNat_lt.mp epochs))
+
+/-- A store in slot zero ticks to the start of slot one by setting its clock and dropping the boost.
+
+Slot one must not start an epoch. -/
+private theorem onTick_slotOne {store : Store preset fork} {timeMs : UInt64}
+    (current : store.getCurrentSlot config = .ok 0)
+    (startOk : computeTimeAtSlotMs config store.genesisTimeMs 1 = .ok timeMs)
+    (slotted : computeSlotAtTimeMs config store.genesisTimeMs timeMs = .ok 1)
+    (epochs : 1 < preset.SLOTS_PER_EPOCH) :
+    store.onTick config timeMs =
+      .ok { store with timeMs, proposerBoostRoot := Vector.replicate 32 0 } := by
+  have zero : computeSlotAtTimeMs config store.genesisTimeMs store.timeMs = .ok 0 := by
+    unfold Store.getCurrentSlot at current
+    cases computed : computeSlotAtTimeMs config store.genesisTimeMs store.timeMs with
+    | error e => simp [computed, Except.mapError] at current
+    | ok s => simpa [computed, Except.mapError] using current
+  have since : computeSlotsSinceEpochStart preset 1 = .ok 1 := by
+    simp [computeSlotsSinceEpochStart, computeEpochAtSlot_one epochs, computeStartSlotAtEpoch,
+      Uint64.mulChecked, bind, Except.bind, pure, Except.pure]
+  -- The first tick enters slot one, which drops the boost and starts no epoch.
+  have first : store.onTickPerSlot config timeMs =
+      .ok { store with timeMs, proposerBoostRoot := Vector.replicate 32 0 } := by
+    simp [Store.onTickPerSlot, Store.getCurrentSlot, zero, slotted, since, bind, Except.bind,
+      pure, Except.pure, Except.mapError]
+  have caught : Store.catchUp config store 1 =
+      .ok { store with timeMs, proposerBoostRoot := Vector.replicate 32 0 } := by
+    rw [Store.catchUp.eq_1]
+    simp [Store.getCurrentSlot, zero, Uint64.addChecked, startOk, first, Store.slotsBefore,
+      slotted, bind, Except.bind, Except.mapError]
+    rw [Store.catchUp.eq_1]
+    simp [Store.getCurrentSlot, slotted, bind, Except.bind, Except.mapError, pure, Except.pure]
+  -- The second tick stays in slot one, so it changes nothing.
+  have again : ({ store with timeMs, proposerBoostRoot := Vector.replicate 32 0 } :
+      Store preset fork).onTickPerSlot config timeMs =
+      .ok { store with timeMs, proposerBoostRoot := Vector.replicate 32 0 } := by
+    simp [Store.onTickPerSlot, Store.getCurrentSlot, slotted, since, bind, Except.bind, pure,
+      Except.pure, Except.mapError]
+  simp [Store.onTick, slotted, caught, again, Except.mapError, bind, Except.bind]
+
+/-- Honest validators that propose have an execution, where a store names its validator.
+
+The witness covers one validator, one slot and the forks before Bellatrix.
+
+The facts on roots and on the state transition are hypotheses on given values.
+
+They are not computed here, since that computation is too large for the kernel. -/
+theorem exists_proposes_execution {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    {sources : BlockSources preset fork} (assignment : Assignment preset)
+    -- The store starts from an anchor.
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok store)
+    -- The block and the state of the anchor sit at slot zero.
+    (stateZero : anchorState.slot = 0) (blockZero : anchorBlock.slot = 0)
+    -- The fork is before Bellatrix.
+    (before : fork < .bellatrix) {signed : SignedBeaconBlock preset fork}
+    -- The block is at slot one.
+    (slotOne : signed.message.slot = 1)
+    -- Its parent is the anchor block.
+    (onAnchor : SszType.hashTreeRoot anchorBlock = .ok signed.message.parentRoot)
+    -- The anchor block does not name its own root as its parent.
+    (parent : anchorBlock.parentRoot ≠ signed.message.parentRoot) {root : Root}
+    -- The root of the block is not that of the anchor block.
+    (rooted : SszType.hashTreeRoot signed.message = .ok root)
+    (fresh : root ≠ signed.message.parentRoot) {post : BeaconState preset fork}
+    -- The state transition accepts the block on the anchor state, with its state root.
+    (transition : stateTransition config .acceptAll sources.engine anchorState signed = .ok post)
+    -- The block carries no vote.
+    (noAttestations : signed.message.body.attestations.data = #[])
+    (noSlashings : signed.message.body.attesterSlashings.data = #[])
+    -- A slot lasts a positive time, and slot one does not start an epoch.
+    (slots : 0 < config.SLOT_DURATION_MS) (epochs : 1 < preset.SLOTS_PER_EPOCH)
+    -- The start of slot one fits in 64 bits, and so does the attestation deadline.
+    (fits : store.genesisTimeMs.toNat + config.SLOT_DURATION_MS.toNat < 2 ^ 64) {due : UInt64}
+    (dueOk : getAttestationDueMs config fork = .ok due) {Δ : ℕ} (positive : 0 < Δ) :
+    -- Signature checks accept every signature, as the consensus test vectors with placeholders do.
+    ∃ e : Execution (honestForkChoice config .acceptAll sources anchorState anchorBlock
+        assignment store.genesisTimeMs) {signed.message.proposerIndex},
+      -- The execution starts at the time of the anchor.
+      e.startTime = store.timeMs.toNat ∧ e.start = (fun _ => store) ∧
+      -- The proposer sends the block at the start of slot one.
+      e.events 2 = .send signed.message.proposerIndex (.block signed) ∧
+      -- Its store then names it as the proposer of slot one.
+      IsProposer config .acceptAll ((e.world 2).state signed.message.proposerIndex) 1
+        signed.message.proposerIndex ∧
+      -- That send is its proposal of slot one, at the start of the slot.
+      ProposalAt e signed.message.proposerIndex 1
+        (store.genesisTimeMs.toNat + config.SLOT_DURATION_MS.toNat) 2 signed ∧
+      -- The validator does its duty to propose in slot one.
+      --
+      -- The execution is synchronous for every positive delay.
+      Proposes 1 2 e ∧ e.Synchronous Δ ∧
+      -- The store of the validator stays reachable from the anchor.
+      ∀ n, Store.Reachable config anchorState anchorBlock
+        ((e.world n).state signed.message.proposerIndex) := by
+  have notGloas : fork < .glamsterdam := Nat.lt_trans before (by decide)
+  have notGloas' : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt notGloas
+  have notBellatrix : ¬ .bellatrix ≤ fork := Nat.not_le_of_lt before
+  have notDeneb : ¬ .dencun ≤ fork := fun h => notBellatrix (Nat.le_trans (by decide) h)
+  set v := signed.message.proposerIndex with vDef
+  set parentRoot := signed.message.parentRoot with parentRootDef
+  obtain ⟨anchorRoot, blockRooted, blocks, states⟩ := getForkchoiceStore_maps anchored
+  obtain ⟨anchorRoot', blockRooted', -, -, justified, finalized, -, -⟩ :=
+    getForkchoiceStore_anchor anchored
+  rw [blockRooted, Except.ok.injEq] at blockRooted' onAnchor
+  subst blockRooted' onAnchor
+  -- The anchor sits at slot zero, so the clock of the store starts at genesis.
+  have clock : store.timeMs = store.genesisTimeMs := by
+    have timeOk := (getForkchoiceStore_timeMs anchored).2
+    have bounded := UInt64.toNat_lt store.genesisTimeMs
+    simp [stateZero, computeTimeAtSlotMs, Uint64.mulChecked, Uint64.addChecked, bind,
+      Except.bind, bounded] at timeOk
+    exact timeOk.symm
+  have epochZero : getCurrentEpoch anchorState = 0 := by
+    simp [getCurrentEpoch, computeEpochAtSlot, stateZero]
+  have positiveSlot : 0 < config.SLOT_DURATION_MS.toNat := by
+    simpa using UInt64.lt_iff_toNat_lt.mp slots
+  have clockNat : store.timeMs.toNat = store.genesisTimeMs.toNat := by
+    rw [clock]
+  -- Slot one starts at the time `start`, one slot after genesis.
+  set start := store.genesisTimeMs.toNat + config.SLOT_DURATION_MS.toNat with startDef
+  have round : start.toUInt64.toNat = start := by
+    simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat']
+    exact Nat.mod_eq_of_lt fits
+  have startOk : computeTimeAtSlotMs config store.genesisTimeMs 1 = .ok start.toUInt64 := by
+    have bounded := UInt64.toNat_lt config.SLOT_DURATION_MS
+    have sum : store.genesisTimeMs + config.SLOT_DURATION_MS = start.toUInt64 :=
+      UInt64.toNat_inj.mp (by rw [UInt64.toNat_add, round]; exact Nat.mod_eq_of_lt fits)
+    have fits' : store.genesisTimeMs.toNat + config.SLOT_DURATION_MS.toNat < 2 ^ 64 := fits
+    simp [computeTimeAtSlotMs, Uint64.mulChecked, Uint64.addChecked, bind, Except.bind, bounded,
+      sum]
+    exact fits'
+  have slotted : computeSlotAtTimeMs config store.genesisTimeMs start.toUInt64 = .ok 1 :=
+    computeSlotAtTimeMs_inside (due := 0) startOk (by simp [round]) slots
+  have startSlot : store.getCurrentSlot config = .ok 0 :=
+    stateZero ▸ getCurrentSlot_getForkchoiceStore slots anchored
+  -- The validator ticks its store to the start of slot one.
+  obtain ⟨ticked, tickedDef⟩ : ∃ ticked : Store preset fork,
+      ticked = { store with timeMs := start.toUInt64
+                            proposerBoostRoot := Vector.replicate 32 0 } :=
+    ⟨_, rfl⟩
+  have onTicked : store.onTick config start.toUInt64 = .ok ticked :=
+    tickedDef ▸ onTick_slotOne startSlot startOk slotted epochs
+  have tickedBlocks : ticked.blocks =
+      (∅ : Std.TreeMap Root (BeaconBlock preset fork)).insert parentRoot anchorBlock := by
+    rw [tickedDef, ← blocks]
+  have tickedStates : ticked.blockStates =
+      (∅ : Std.TreeMap Root (BeaconState preset fork)).insert parentRoot anchorState := by
+    rw [tickedDef, ← states]
+  have tickedGenesis : ticked.genesisTimeMs = store.genesisTimeMs := by rw [tickedDef]
+  have tickedTime : ticked.timeMs = start.toUInt64 := by rw [tickedDef]
+  have tickedSlot : ticked.getCurrentSlot config = .ok 1 := by
+    simp [Store.getCurrentSlot, tickedGenesis, tickedTime, slotted, Except.mapError]
+  have tickedEpoch : ticked.getCurrentStoreEpoch config = .ok 0 := by
+    simp [Store.getCurrentStoreEpoch, tickedSlot, computeEpochAtSlot_one epochs, bind,
+      Except.bind, pure, Except.pure]
+  have tickedJustified :
+      ticked.justifiedCheckpoint = ⟨getCurrentEpoch anchorState, parentRoot⟩ := by
+    rw [tickedDef, ← justified]
+  have tickedFinalized :
+      ticked.finalizedCheckpoint = ⟨getCurrentEpoch anchorState, parentRoot⟩ := by
+    rw [tickedDef, ← finalized]
+  have upToDate : UpToDate config .acceptAll sources start ∅ ticked := by
+    refine ⟨by rw [tickedTime, round], fun after handles => ?_⟩
+    cases handles with
+    | tick _ _ ticks =>
+      rw [show start.toUInt64 = ticked.timeMs from tickedTime.symm,
+        onTick_timeMs tickedSlot] at ticks
+      exact (Except.ok.inj ticks).symm
+    | _ => simp_all
+  -- The head of the ticked store is the anchor.
+  have head : ticked.getHead config = .ok ⟨parentRoot, .pending⟩ :=
+    getHead_anchor_of_epoch notGloas tickedBlocks tickedStates tickedJustified tickedFinalized
+      tickedEpoch stateZero blockZero parent
+  have anchorHeld : ticked.blocks[parentRoot]? = some anchorBlock := by
+    simp [tickedBlocks]
+  -- The transition goes through slot one, whose state names the validator as proposer.
+  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok transition
+  obtain ⟨headed, headedOk⟩ := processBlock_header_of_lt_gloas notGloas blockOk
+  obtain ⟨-, -, proposerOk, -⟩ := processBlockHeader_checks headedOk
+  rw [slotOne] at slotsOk
+  have names : IsProposer config .acceptAll ticked 1 v :=
+    ⟨_, anchorBlock, anchorState, advanced, head, anchorHeld, by simp [blockZero],
+      by simp [Store.blockState, tickedStates, pure, Except.pure],
+      by simp [lookaheadState, stateZero, slotsOk, Except.mapError], proposerOk⟩
+  -- The store holds only the anchor, so the block is new, and the handler accepts it.
+  have notHeld : ticked.blocks.contains root = false := by
+    simp [tickedBlocks, Ne.symm fresh]
+  have anchorAncestor : ticked.getAncestor ⟨parentRoot, .pending⟩ 0 = .ok ⟨parentRoot, .pending⟩ :=
+    Store.getAncestor_of_le anchorHeld (by simp [blockZero])
+  have accepted : ∃ after, ticked.onBlock config .acceptAll sources signed = .ok after := by
+    -- The block passes its checks, on the anchor state.
+    have valid : ticked.validateOnBlock config .acceptAll sources signed root = .ok post := by
+      simp [Store.validateOnBlock, Store.blockState, tickedStates, Store.validateParentPayload,
+        notGloas', tickedSlot, slotOne, tickedFinalized, epochZero, computeStartSlotAtEpoch,
+        Uint64.mulChecked, Store.getCheckpointBlock, anchorAncestor, validateDataAvailability,
+        notDeneb, ← parentRootDef, transition, bind, Except.bind, pure, Except.pure,
+        Except.mapError]
+      -- The merge check runs only at Bellatrix.
+      intro same
+      subst same
+      exact absurd (by decide) notBellatrix
+    have postSlot : post.slot = 1 := slotOne ▸ (stateTransition_slot transition).2
+    have dependent : computeShufflingDependentSlot preset 0 = .ok 0 := by
+      simp [computeShufflingDependentSlot, computeShufflingLookaheadStartSlot,
+        computeStartSlotAtEpoch, Uint64.mulChecked, Uint64.saturatingSub, bind, Except.bind, pure,
+        Except.pure]
+    -- With the block, the walk from either node down to slot zero ends at the anchor.
+    have anchorFound : ∀ blocks : Std.TreeMap Root (BeaconBlock preset fork),
+        blocks = ticked.blocks.insert root signed.message →
+        blocks[signed.message.parentRoot]? = some anchorBlock := by
+      rintro _ rfl
+      rw [← parentRootDef, Std.TreeMap.getElem?_insert]
+      split
+      · exact absurd (Std.LawfulEqCmp.eq_of_compare ‹_›) fresh
+      · exact anchorHeld
+    have anchorWalk : ∀ added : Store preset fork,
+        added.blocks = ticked.blocks.insert root signed.message →
+        added.getAncestor ⟨parentRoot, .pending⟩ 0 = .ok ⟨parentRoot, .pending⟩ :=
+      fun _ added => Store.getAncestor_of_le (anchorFound _ added) (by simp [blockZero])
+    have blockWalk : ∀ added : Store preset fork,
+        added.blocks = ticked.blocks.insert root signed.message →
+        added.getAncestor ⟨root, .pending⟩ 0 = .ok ⟨parentRoot, .pending⟩ := by
+      intro added addedBlocks
+      have found : added.blocks[root]? = some signed.message := by simp [addedBlocks]
+      rw [Store.getAncestor_step found (by simp [slotOne]) (anchorFound _ addedBlocks)
+        (by simp [blockZero, slotOne]), Store.getAncestor_of_le (anchorFound _ addedBlocks)
+          (by simp [blockZero])]
+      simp [Store.parentPayloadStatus, notGloas', parentRootDef]
+    have notMem : root ∉ ticked.blocks := by
+      intro mem
+      rw [Std.TreeMap.mem_iff_contains.mp mem] at notHeld
+      cases notHeld
+    -- The state after the block is in epoch zero, where justification changes nothing.
+    have justifiedPost : processJustificationAndFinalization post = .ok post := by
+      have low : getCurrentEpoch post ≤ GENESIS_EPOCH + 1 := by
+        simp [getCurrentEpoch, postSlot, computeEpochAtSlot_one epochs, GENESIS_EPOCH]
+      unfold processJustificationAndFinalization processJustificationAndFinalizationAltair
+      split <;> simp [pure, Except.pure]
+    simp only [Store.onBlock, rooted]
+    unfold Store.addBlock
+    simp [valid, head, Store.recordBlockPtcVotes, notGloas', Store.recordBlockTimeliness,
+      Store.block, Store.getTimeIntoSlotMs, Store.getCurrentSlot, tickedGenesis, tickedTime,
+      slotted, startOk, dueOk, Store.updateProposerBoostRoot, Store.getCurrentStoreEpoch,
+      computeEpochAtSlot_one epochs, Store.getShufflingDependentRoot, dependent,
+      anchorWalk, blockWalk, notMem, Store.computePulledUpTip, Store.blockState,
+      bind, Except.bind, pure, Except.pure, Except.mapError]
+    -- Whether or not the block takes the boost, the store then has a pulled-up tip.
+    have slotted' : computeSlotAtTimeMs config store.genesisTimeMs (UInt64.ofNat start) = .ok 1 :=
+      slotted
+    by_cases boosted : (1 = signed.message.slot ∧ 0 < due) ∧
+        ticked.proposerBoostRoot = Vector.replicate 32 0 <;>
+    · simp only [boosted, ↓reduceIte]
+      simp [justifiedPost, slotted', computeEpochAtSlot_one epochs, slotOne]
+  have silent : statements config .acceptAll anchorState anchorBlock (.block signed) = ∅ := by
+    simp [statements, noAttestations, noSlashings]
+  have slotNat : start ≠ store.timeMs.toNat := by
+    omega
+  -- The execution waits for slot one, ticks the store, proposes, then lets time go on.
+  let e : Execution (honestForkChoice config .acceptAll sources anchorState anchorBlock
+      assignment store.genesisTimeMs) {v} :=
+    { startTime := store.timeMs.toNat
+      start := fun _ => store
+      events := tickSendEvents start v ticked (.block signed)
+      allowed := fun n => by
+        match n with
+        | 0 =>
+          show store.timeMs.toNat ≤ start
+          omega
+        | 1 =>
+          refine ⟨rfl, ?_⟩
+          show Handles config .acceptAll sources start ∅ store ticked
+          exact .tick (by omega) fits onTicked
+        | 2 =>
+          -- The block carries no statement, so the proposer may send it.
+          refine ⟨fun x mem => ?_, fun _ x mem => ?_⟩ <;>
+          · change x ∈ statements config .acceptAll anchorState anchorBlock (.block signed) at mem
+            rw [silent] at mem
+            exact absurd mem (Set.notMem_empty x)
+        | n + 3 =>
+          rw [worldAt_tickSend]
+          show start + n ≤ start + n + 1
+          omega }
+  have worldOne : e.world 1 = ⟨start, ∅, fun _ => ∅, fun _ => store⟩ := rfl
+  have worldTwo :
+      e.world 2 = ⟨start, ∅, fun _ => ∅, Function.update (fun _ => store) v ticked⟩ :=
+    worldAt_tickSend_two
+  have later : ∀ n, e.world (n + 3) = ⟨start + n, {.block signed},
+      Function.update (fun _ => ∅) v {.block signed},
+      Function.update (fun _ => store) v ticked⟩ :=
+    worldAt_tickSend
+  have stateTwo : (e.world 2).state v = ticked := by
+    rw [worldTwo]
+    simp
+  have upToDateTwo :
+      UpToDate config .acceptAll sources start ((e.world 2).view v) ((e.world 2).state v) := by
+    rw [stateTwo, worldTwo]
+    exact upToDate
+  have proposal : ProposalAt e v 1 start 2 signed :=
+    { sends := rfl
+      atTime := by rw [worldTwo]
+      atStart := ⟨start.toUInt64, startOk, round.symm⟩
+      inSlot := slotOne
+      proposer := rfl
+      genesis := by rw [stateTwo, tickedGenesis]
+      upToDate := upToDateTwo
+      names := stateTwo ▸ names
+      onHead := stateTwo ▸ ⟨_, anchorBlock, head, rfl, anchorHeld,
+        by simp [Store.parentPayloadStatus, notGloas']⟩
+      fresh := fun other hashed => by
+        rw [rooted, Except.ok.injEq] at hashed
+        rw [stateTwo, ← hashed]
+        exact notHeld
+      accepted := stateTwo ▸ accepted }
+  -- The only send is the block, at the third event.
+  have only : ∀ k u (x : SignedBeaconBlock preset fork),
+      e.events k = .send u (Message.block x) →
+      k = 2 ∧ u = v ∧ x = signed := by
+    intro k u x sent
+    change tickSendEvents start v ticked (Message.block signed) k = _ at sent
+    match k with
+    | 0 | 1 => simp [tickSendEvents] at sent
+    | 2 =>
+      simp only [tickSendEvents, Event.send.injEq, Message.block.injEq] at sent
+      exact ⟨rfl, sent.1.symm, sent.2.symm⟩
+    | n + 3 => simp [tickSendEvents] at sent
+  have duty : Proposes 1 2 e := by
+    refine ⟨?_, fun u _ n m x y sent sent' _ => ?_, fun u _ n x sent => ?_⟩
+    · intro u honest slot startTime first last startTimeOk _
+      rw [Set.mem_singleton_iff] at honest
+      subst honest
+      have one : slot = 1 := by
+        have low := UInt64.le_iff_toNat_le.mp first
+        have high := UInt64.lt_iff_toNat_lt.mp last
+        exact UInt64.toNat_inj.mp (by simp at low high ⊢; omega)
+      subst one
+      rw [startOk, Except.ok.injEq] at startTimeOk
+      subst startTimeOk
+      rw [round]
+      refine ⟨2, by rw [worldTwo], by rw [stateTwo, tickedGenesis], upToDateTwo, ?_,
+        fun _ => ⟨signed, proposal⟩⟩
+      -- Before the tick, the clock of the store is at genesis, not at the start of slot one.
+      intro k lt atStart upToDate'
+      match k, lt with
+      | 0, _ => exact slotNat atStart.symm
+      | 1, _ =>
+        rw [worldOne] at upToDate'
+        exact slotNat upToDate'.1.symm
+    · obtain ⟨-, -, rfl⟩ := only n u x sent
+      obtain ⟨-, -, rfl⟩ := only m u y sent'
+      rfl
+    · obtain ⟨rfl, rfl, rfl⟩ := only n u x sent
+      exact ⟨1, start, proposal⟩
+  refine ⟨e, rfl, rfl, rfl, stateTwo ▸ names, proposal, duty, ⟨positive, fun T => ⟨T + 3, ?_⟩, ?_⟩,
+    fun n => e.reachable (fun u _ => .anchor anchored) n v rfl⟩
+  · rw [later]
+    show T ≤ start + T
+    omega
+  · intro n k le w honest u receiver m member _
+    rw [Set.mem_singleton_iff] at honest receiver
+    subst honest receiver
+    exact e.monotone_view _ le member
 
 end Models.Network
 
