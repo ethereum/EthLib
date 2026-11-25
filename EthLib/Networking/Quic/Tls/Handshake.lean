@@ -333,9 +333,12 @@ def validateConfig (config : Config) : Except Error Unit := do
   -- RFC 9846 §4.3.8: the shares follow the order of the groups, with at most one per group.
   --
   -- EthLib's check: no group is listed twice, and no group has two ephemeral keys.
+  --
+  -- Each list is checked for a repeat in one pass.
   ensure (config.initialShares.Sublist config.policy.groups ∧
-    config.policy.groups.Nodup ∧ config.initialShares.Nodup ∧
-    (config.ephemeralKeys.map (·.group)).Nodup) .configuration
+    (Base.firstRepeated config.policy.groups).isNone ∧
+    (Base.firstRepeated config.initialShares).isNone ∧
+    (Base.firstRepeated (config.ephemeralKeys.map (·.group))).isNone) .configuration
   -- Each group of the policy has an ephemeral key, for a first share or after a retry.
   config.policy.groups.forM fun group => do
     let _ ← ephemeral config group
