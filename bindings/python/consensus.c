@@ -1307,6 +1307,17 @@ py_consensus_relay_submission_bid(
 }
 
 extern lean_object*
+eth_consensus_relay_verify_bid_value(lean_object* args);
+
+PyObject*
+py_consensus_relay_verify_bid_value(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_verify_bid_value, args, 6, SSZ_ERROR);
+}
+
+extern lean_object*
 eth_consensus_relay_validators(lean_object* args);
 
 PyObject*

@@ -14,6 +14,8 @@ An unknown preset or fork, or a malformed key, has code 0.
 
 So does a fork outside Bellatrix to Fulu for the bid, and a fork other than Fulu for the list.
 
+The check of the value of a bid exists from Deneb to Fulu.
+
 The data API exports read and write the JSON of delivered payloads and received bids.
 
 They also say whether a filter keeps an entry, and sort delivered payloads by value.
@@ -50,6 +52,27 @@ def relaySubmissionBidOf (args : String × String × ByteArray × Cryptography.B
 The arguments are the name of the preset, the fork, the SSZ bytes of the submission and the key. -/
 @[export eth_consensus_relay_submission_bid]
 def relaySubmissionBidExport (args : PyValue) : Result PyValue := pyExport relaySubmissionBidOf args
+
+/-- From Deneb to Fulu: whether the value of a bid is the payment of its builder. -/
+def relayVerifyBidValueOf (args : String × String × ByteArray × ExecutionAddress × U256 × U256) :
+    Result Bool := do
+  let (name, fork, data, feeRecipient, bidValue, balanceDifference) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  if deneb : .dencun ≤ fork ∧ fork < .glamsterdam then
+    let payload ← toResult "input rejected"
+      (SszType.deserialize (ExecutionPayload preset fork) data)
+    return RelayApi.verifyBidValue payload deneb.1 feeRecipient bidValue balanceDifference
+  else rejectArgument none s!"no Relay API bid value check at {fork.name}"
+
+/-- From Deneb to Fulu: whether the value of a bid is the payment of its builder.
+
+The arguments are the preset, the fork, the SSZ bytes of the payload and the fee recipient.
+
+Then come the value of the bid and the change of the recipient's balance, both in Wei. -/
+@[export eth_consensus_relay_verify_bid_value]
+def relayVerifyBidValueExport (args : PyValue) : Result PyValue :=
+  pyExport relayVerifyBidValueOf args
 
 /-- At Fulu only: the list of validators that a relay serves, as a `list` of `dict`. -/
 def relayValidatorsOf (args : String × String × ByteArray × List ByteArray) :

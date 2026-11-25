@@ -394,6 +394,30 @@ def getValidatorRegistration (registry : Registry) (pubkey : Option String) : Re
       | some signed => .found signed
       | none => .notHeld
 
+/-! ## Block scoring -/
+
+/-- From Deneb: the sum of the withdrawals of a payload to an address, in Wei. -/
+def excludedWithdrawals (payload : ExecutionPayload preset fork) (deneb : .dencun ≤ fork)
+    (feeRecipient : ExecutionAddress) : Nat :=
+  let withdrawals := (payload.withdrawals (Nat.le_trans (by decide) deneb)).data.toList
+  -- A withdrawal amount is in Gwei, and one Gwei is `10^9` Wei.
+  ((withdrawals.filter (·.address = feeRecipient)).map (·.amount.toNat * 10 ^ 9)).sum
+
+/-- From Deneb: whether the value of a bid is the payment of its builder to the fee recipient.
+
+The [block scoring] rules define it, with the change of the recipient's balance over the payload.
+
+[block scoring]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#block-scoring-1
+-/
+def verifyBidValue (payload : ExecutionPayload preset fork) (deneb : .dencun ≤ fork)
+    (feeRecipient : ExecutionAddress) (bidValue balanceDifference : U256) : Bool :=
+  -- The withdrawals of the payload to the fee recipient are not part of the payment.
+  let excluded := excludedWithdrawals payload deneb feeRecipient
+  -- The payment is the balance difference less those withdrawals, as a 256-bit integer.
+  --
+  -- A subtraction below zero raises an error, so the check fails.
+  excluded ≤ balanceDifference.toNat && balanceDifference.toNat - excluded == bidValue.toNat
+
 end RelayApi
 
 /-- From Bellatrix to Fulu: the bid that a relay serves from a submission, under a key.

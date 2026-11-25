@@ -903,6 +903,8 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_default_auth_data},
   {"consensus_relay_submission_bid", py_consensus_relay_submission_bid,
    METH_VARARGS, DOC_consensus_relay_submission_bid},
+  {"consensus_relay_verify_bid_value", py_consensus_relay_verify_bid_value,
+   METH_VARARGS, DOC_consensus_relay_verify_bid_value},
   {"consensus_relay_validators", py_consensus_relay_validators,
    METH_VARARGS, DOC_consensus_relay_validators},
   {"consensus_keymanager_json", py_consensus_keymanager_json, METH_VARARGS,
