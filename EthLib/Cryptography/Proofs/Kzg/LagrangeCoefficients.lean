@@ -139,4 +139,12 @@ theorem TrustedSetup.WellFormed.of_lagrangeOfMonomial {s : TrustedSetup} {τ : F
   refine Finset.sum_congr rfl fun j _ => ?_
   rw [(hg1 j).2, G1.toPoint_mul_generator]
 
+/-- If each monomial point of `G1` has order dividing `r`, so does each Lagrange point. -/
+theorem TrustedSetup.LagrangeOfMonomial.torsion {s : TrustedSetup} (hl : s.LagrangeOfMonomial)
+    (hm : ∀ j : Fin FIELD_ELEMENTS_PER_BLOB, Fr.modulus • G1.toPoint s.g1Monomial[j] = 0)
+    (i : Fin FIELD_ELEMENTS_PER_BLOB) : Fr.modulus • G1.toPoint s.g1LagrangeBrp[i] = 0 := by
+  rw [hl i, Finset.smul_sum]
+  -- Each term is a multiple of a monomial point, which `r` sends to zero.
+  exact Finset.sum_eq_zero fun j _ => by rw [smul_comm, hm j, nsmul_zero]
+
 end EthLib.Cryptography.Kzg

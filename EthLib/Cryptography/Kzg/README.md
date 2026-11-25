@@ -248,7 +248,9 @@ The KZG proofs use the proved pairing law of BLS12-381 (`pairingLaws`, `Proofs/B
   if the setup decodes.
   The kernel checks each of the 4096 points from its `x` coordinate.
   No theorem says that the setup decodes, or that its points are powers of one secret.
-  No theorem says that its Lagrange points or its points of `G2` lie in the subgroup.
+  `TrustedSetup.ofHex_lagrangeTorsion` proves that each Lagrange point of `G1` has an order that divides `r`,
+  if the setup decodes.
+  No theorem says that its points of `G2` lie in the subgroup.
   Each KZG vector of the Python suite runs an operation that first decodes the setup.
   The Python suite also checks that each point decodes and lies in the subgroup,
   in `bindings/python/tests/kzg/test_trusted_setup.py`.

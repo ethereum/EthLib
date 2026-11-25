@@ -63,6 +63,8 @@ public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Checks.RoundC15
 The embedded setup holds 4096 monomial points and 4096 Lagrange points of `G1`.
 
 The kernel checks that the Lagrange points are the inverse transform of the monomial points.
+
+So the Lagrange points also have order dividing `r`, as the monomial points do.
 -/
 
 @[expose] public section
@@ -95,5 +97,12 @@ theorem TrustedSetup.ofHex_wellFormed {s : TrustedSetup} {τ : Fr}
     s.WellFormed τ :=
   TrustedSetup.WellFormed.of_lagrangeOfMonomial (TrustedSetup.ofHex_valid h)
     (TrustedSetup.ofHex_lagrangeOfMonomial h) hg1 hg2
+
+/-- If the embedded setup decodes, each of its Lagrange points of `G1` has order dividing `r`. -/
+theorem TrustedSetup.ofHex_lagrangeTorsion {s : TrustedSetup} (h : TrustedSetup.ofHex = .ok s)
+    (i : Fin FIELD_ELEMENTS_PER_BLOB) : Fr.modulus • G1.toPoint s.g1LagrangeBrp[i] = 0 :=
+  (TrustedSetup.ofHex_lagrangeOfMonomial h).torsion (fun j => by
+    have ht := TrustedSetup.ofHex_torsion h j.isLt
+    rwa [getElem!_pos s.g1Monomial.toArray j.val (by simp), Vector.getElem_toArray] at ht) i
 
 end EthLib.Cryptography.Kzg

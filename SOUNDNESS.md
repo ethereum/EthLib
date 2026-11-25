@@ -8754,7 +8754,8 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
   `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.
   No theorem says that they decode.
   If they decode, `TrustedSetup.ofHex_torsion` proves that each monomial point of `G1` has an order that divides `r`.
-  No theorem says this of the Lagrange points or of the points of `G2`.
+  If they decode, `TrustedSetup.ofHex_lagrangeTorsion` proves the same of each Lagrange point of `G1`, since each is a sum of multiples of the monomial points (below).
+  No theorem says this of the points of `G2`.
   If they decode, `TrustedSetup.ofHex_lagrangeOfMonomial` (`Proofs/Kzg/SetupLagrange/Embedded.lean`) proves that each Lagrange point of `G1` is the sum of the monomial points times the coefficients of its basis polynomial.
   So the Lagrange points are the matching basis of whatever secret the monomial points hold.
   The kernel checks this on the embedded data, in three rounds of 256 transforms of size 16.
