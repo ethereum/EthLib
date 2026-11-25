@@ -292,7 +292,7 @@ theorem verifyCellKzgProofBatchImpl_ok_iff_root {s : TrustedSetup}
     {c w : Nat → Fr} {b : Bool}
     -- The commitments and the proofs decode.
     (hCd : commitments.mapM (uncompressG1 ·.bytes) = .ok commitmentsG1)
-    (hPd : proofs.mapM uncompressG1 = .ok proofsG1)
+    (hPd : proofs.mapM (uncompressG1 ·.bytes) = .ok proofsG1)
     -- The points represent `c i` and `w k`.
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
     (hP : ∀ k < proofsG1.size, G1.Represents proofsG1[k]! (w k))
@@ -476,7 +476,7 @@ theorem verifyCellKzgProofBatchImpl_root {s : TrustedSetup} {τ : Fr}
     {cosetsEvals : Array CosetEvals} {proofs : Array KZGProof} {commitmentsG1 proofsG1 : Array G1}
     {c w : Nat → Fr}
     (hCd : commitments.mapM (uncompressG1 ·.bytes) = .ok commitmentsG1)
-    (hPd : proofs.mapM uncompressG1 = .ok proofsG1)
+    (hPd : proofs.mapM (uncompressG1 ·.bytes) = .ok proofsG1)
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
     (hP : ∀ k < proofsG1.size, G1.Represents proofsG1[k]! (w k))
     (h : verifyCellKzgProofBatchImpl s commitments commitmentIndices cellIndices cosetsEvals
@@ -497,7 +497,7 @@ theorem verifyCellKzgProofBatchImpl_valid_or_root {s : TrustedSetup}
     {cosetsEvals : Array CosetEvals} {proofs : Array KZGProof} {commitmentsG1 proofsG1 : Array G1}
     {c w : Nat → Fr}
     (hCd : commitments.mapM (uncompressG1 ·.bytes) = .ok commitmentsG1)
-    (hPd : proofs.mapM uncompressG1 = .ok proofsG1)
+    (hPd : proofs.mapM (uncompressG1 ·.bytes) = .ok proofsG1)
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
     (hP : ∀ k < proofsG1.size, G1.Represents proofsG1[k]! (w k))
     (h : verifyCellKzgProofBatchImpl s commitments commitmentIndices cellIndices cosetsEvals

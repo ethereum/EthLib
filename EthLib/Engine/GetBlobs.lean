@@ -264,13 +264,13 @@ The answer is also written as JSON, and read back as a consensus node reads it.
 /-- A blob and its proof as JSON. -/
 def blobAndProofV1Json (x : BlobAndProofV1) : Json :=
   -- `BlobAndProofV1`: `blob` and `proof`, each `DATA`.
-  Json.mkObj [("blob", dataJson x.blob.toList), ("proof", dataJson x.proof.toList)]
+  Json.mkObj [("blob", dataJson x.blob.toList), ("proof", dataJson x.proof.bytes.toList)]
 
 /-- A blob and the proofs of its cells as JSON. -/
 def blobAndProofV2Json (x : BlobAndProofV2) : Json :=
   -- `BlobAndProofV2`: `blob`, `DATA`, and `proofs`, an `Array of DATA` in the order of the cells.
   Json.mkObj [("blob", dataJson x.blob.toList),
-    ("proofs", listJson (dataJson ·.toList) x.proofs.toList)]
+    ("proofs", listJson (dataJson ·.bytes.toList) x.proofs.toList)]
 
 /-- The selected cells of a blob as JSON: the cells, then their proofs, with `null` where absent.
 
@@ -281,7 +281,11 @@ def blobCellsJson (x : BlobCellsAndProofsV1) : Json :=
   -- A proof is `null` where its cell is `null`, by step 4 of version 4.
   Json.mkObj [
     ("blob_cells", listJson (optionJson (dataJson ·.1.toList)) x.cells),
-    ("proofs", listJson (optionJson (dataJson ·.2.toList)) x.cells)]
+    ("proofs", listJson (optionJson (dataJson ·.2.bytes.toList)) x.cells)]
+
+/-- A KZG proof: 48 bytes, not yet checked as a point. -/
+def proofOfJson (j : Json) : Read KZGProof :=
+  KZGProof.mk <$> fixed "proof" 48 j
 
 /-- A blob and its proof: exactly the two fields. -/
 def blobAndProofV1OfJson (j : Json) : Read BlobAndProofV1 := do
@@ -294,7 +298,7 @@ def blobAndProofV1OfJson (j : Json) : Read BlobAndProofV1 := do
     -- The blob is `FIELD_ELEMENTS_PER_BLOB * BYTES_PER_FIELD_ELEMENT = 4096 * 32 = 131072` bytes.
     blob := ← fixed "blob" BYTES_PER_BLOB (← field "blobAndProof" fs "blob")
     -- The proof is a `KZGProof` of 48 bytes.
-    proof := ← fixed "proof" 48 (← field "blobAndProof" fs "proof") }
+    proof := ← proofOfJson (← field "blobAndProof" fs "proof") }
 
 /-- A blob and the proofs of its cells: exactly the two fields, with one proof per cell. -/
 def blobAndProofV2OfJson (j : Json) : Read BlobAndProofV2 := do
@@ -306,7 +310,7 @@ def blobAndProofV2OfJson (j : Json) : Read BlobAndProofV2 := do
   -- The blob is `4096 * 32 = 131072` bytes.
   let blob ← fixed "blob" BYTES_PER_BLOB (← field "blobAndProof" fs "blob")
   -- Each proof is a `KZGProof` of 48 bytes.
-  let proofs ← array "proofs" (fixed "proof" 48) (← field "blobAndProof" fs "proofs")
+  let proofs ← array "proofs" proofOfJson (← field "blobAndProof" fs "proofs")
   -- `proofs` contains exactly `CELLS_PER_EXT_BLOB` cell proofs.
   let proofs ← exactArray CELLS_PER_EXT_BLOB proofs.toArray fun count =>
     s!"proofs: {count}, not {CELLS_PER_EXT_BLOB}"
@@ -335,7 +339,7 @@ def blobCellsOfJson (j : Json) : Read BlobCellsAndProofsV1 := do
   let cells ← array "blob_cells" (nullable (fixed "cell" BYTES_PER_CELL))
     (← field "blobCells" fs "blob_cells")
   -- Each proof is a `KZGProof` of 48 bytes, or `null`.
-  let proofs ← array "proofs" (nullable (fixed "proof" 48)) (← field "blobCells" fs "proofs")
+  let proofs ← array "proofs" (nullable proofOfJson) (← field "blobCells" fs "proofs")
   -- Not in the source: the two arrays have one length.
   unless cells.length = proofs.length do reject "blobCells: arrays of two lengths"
   return ⟨← (cells.zip proofs).mapM cellAndProof⟩

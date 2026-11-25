@@ -224,7 +224,7 @@ theorem computeKzgProofImpl_eq (s : TrustedSetup) {poly : Polynomial}
     ∃ Q : Array Fr, Q.size = FIELD_ELEMENTS_PER_BLOB ∧
       (∀ i : Fin FIELD_ELEMENTS_PER_BLOB, Q[i.val]! = (quotientPoly poly z).eval (evalDomain i)) ∧
       computeKzgProofImpl s poly z =
-        .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray Q), (interpolant poly).eval z) := by
+        .ok (⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray Q)⟩, (interpolant poly).eval z) := by
   let y := (interpolant poly).eval z
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
   let Q : Array Fr := (domain.zip ((poly.map (· - y)).zip
@@ -252,7 +252,7 @@ theorem computeKzgProofImpl_eq (s : TrustedSetup) {poly : Polynomial}
   · unfold computeKzgProofImpl
     rw [evaluatePolynomialInEvaluationForm_eq_interpolate poly z hsize]
     change (g1LincombPoints s.g1LagrangeBrp.toArray Q >>= fun proofG1 =>
-      pure (compressG1 proofG1, y)) = _
+      pure (KZGProof.mk (compressG1 proofG1), y)) = _
     rw [g1LincombPoints_eq_msm (by rw [Vector.size_toArray, hQsize])]
     rfl
 

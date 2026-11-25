@@ -186,7 +186,7 @@ def verifyDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork} (setup : Tr
   -- Every cell sits at the index of the column in the extended blob of its row.
   verifyCellKzgProofBatch setup ((sidecar.commitments bidCommitments).data.map (·.bytes))
     (Array.replicate sidecar.column.data.size sidecar.index.toNat) sidecar.column.data
-    sidecar.kzgProofs.data
+    (sidecar.kzgProofs.data.map (·.bytes))
 
 /-- From Gloas: the largest size of a serialized data column sidecar.
 
@@ -522,6 +522,6 @@ def verifyPartialDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork}
   -- Every cell sits at the index of the column in the extended blob of its row.
   verifyCellKzgProofBatch setup (commitments.map (·.bytes))
     (Array.replicate indices.size columnIndex.toNat)
-    sidecar.partialColumn.data sidecar.kzgProofs.data
+    sidecar.partialColumn.data (sidecar.kzgProofs.data.map (·.bytes))
 
 end EthLib.Consensus

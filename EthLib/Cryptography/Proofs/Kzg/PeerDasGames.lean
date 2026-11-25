@@ -134,8 +134,8 @@ def CellOpening.Verifies (s : TrustedSetup) (commitment : Bytes48) (o : CellOpen
   verifyCellKzgProofBatch s #[commitment] #[o.cellIndex] #[o.cell] #[o.proof] = .ok true
 
 /-- A map that fails on an invalid proof validates every proof it reads. -/
-private theorem zipIdx_mapM_validates {ε : Type} {g : Bytes48 × Nat → Except ε Bytes48}
-    (hg : ∀ p r, g p = .ok r → validateKzgG1 p.1 = true) {ps qs : Array Bytes48}
+private theorem zipIdx_mapM_validates {ε : Type} {g : Bytes48 × Nat → Except ε KZGProof}
+    (hg : ∀ p r, g p = .ok r → validateKzgG1 p.1 = true) {ps : Array Bytes48} {qs : Array KZGProof}
     (h : ps.zipIdx.mapM g = .ok qs) : ∀ p ∈ ps, validateKzgG1 p = true := by
   obtain ⟨hsz, hk⟩ := array_mapM_ok h
   intro p hp
@@ -249,7 +249,8 @@ theorem CellOpening.Verifies.valid {s : TrustedSetup} {τ : Fr}
   rw [← getElem!_pos G 0 (by simp [hGsz])] at hC
   rw [← getElem!_pos Q 0 (by simp [hQsz])] at hP
   rw [← getElem!_pos evals 0 (by simp [hesz])] at he
-  simp only [List.getElem_toArray, List.getElem_cons_zero] at hC hP he
+  simp only [List.map_toArray, List.map_cons, List.map_nil, List.getElem_toArray,
+    List.getElem_cons_zero] at hC hP he
   obtain ⟨c, hc⟩ := represents_of_validateKzgG1 hvc hC
   obtain ⟨w, hw⟩ := represents_of_validateKzgG1 hvp hP
   let y : CellBatchInput := ⟨#[commitment], #[o.cellIndex], #[o.cell], #[o.proof]⟩

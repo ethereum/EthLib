@@ -61,7 +61,7 @@ def OpeningData.toBatch (openings : List OpeningData) : OpeningBatch where
   commitments := (openings.map fun o => KZGCommitment.mk o.commitment).toArray
   zs := (openings.map fun o => o.z).toArray
   ys := (openings.map fun o => o.y).toArray
-  proofs := (openings.map fun o => o.proof).toArray
+  proofs := (openings.map fun o => KZGProof.mk o.proof).toArray
 
 /-- The core input of an algebraically annotated batch. -/
 def Opening.toBatch (openings : List Opening) : OpeningBatch :=

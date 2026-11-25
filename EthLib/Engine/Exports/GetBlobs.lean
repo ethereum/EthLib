@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Base.List
+public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Engine.Capabilities
 public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.GetBlobs

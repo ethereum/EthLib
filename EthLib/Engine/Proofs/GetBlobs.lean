@@ -379,11 +379,27 @@ theorem getBlobsParams_json {version : Nat} (hashes : List VersionedHash)
 
 /-! ## The answer as JSON -/
 
+/-- A proof reads back from its bytes written as data. -/
+private theorem proofOfJson_dataJson (p : KZGProof) :
+    proofOfJson (Serialization.JsonRpc.dataJson p.bytes.toList) = .ok p := by
+  unfold proofOfJson
+  rw [Serialization.JsonRpc.fixed_dataJson]
+  rfl
+
+/-- A proof decodes exactly from the JSON string of its bytes. -/
+private theorem proofOfJson_eq_ok_iff {j : Lean.Json} {p : KZGProof} :
+    proofOfJson j = .ok p ↔ j = .str (hexString p.bytes.toList) := by
+  obtain ⟨b⟩ := p
+  rw [← Serialization.JsonRpc.fixed_false_eq_ok_iff (what := "proof") (n := 48)]
+  unfold proofOfJson
+  rcases h : Serialization.JsonRpc.fixed "proof" 48 j with e | v <;>
+    simp [Functor.map, Except.map]
+
 /-- A blob and its proof read back from their JSON. -/
 theorem blobAndProofV1OfJson_json (x : BlobAndProofV1) :
     blobAndProofV1OfJson (blobAndProofV1Json x) = .ok x := by
   have hd : [("blob", Serialization.JsonRpc.dataJson x.blob.toList),
-      ("proof", Serialization.JsonRpc.dataJson x.proof.toList)].Pairwise
+      ("proof", Serialization.JsonRpc.dataJson x.proof.bytes.toList)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobAndProof" hd
     (by simp [Serialization.JsonRpc.dataJson])
@@ -395,13 +411,13 @@ theorem blobAndProofV1OfJson_json (x : BlobAndProofV1) :
     (List.mem_cons_of_mem _ (List.mem_cons_self ..))
   unfold blobAndProofV1OfJson blobAndProofV1Json
   simp only [bind, Except.bind, hfs, hex, ite_true, r1, r2, Serialization.JsonRpc.fixed_dataJson,
-    pure, Except.pure]
+    proofOfJson_dataJson, pure, Except.pure]
 
 /-- A blob and the proofs of its cells read back from their JSON. -/
 theorem blobAndProofV2OfJson_json (x : BlobAndProofV2) :
     blobAndProofV2OfJson (blobAndProofV2Json x) = .ok x := by
   have hd : [("blob", Serialization.JsonRpc.dataJson x.blob.toList),
-      ("proofs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList)
+      ("proofs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.bytes.toList)
         x.proofs.toList)].Pairwise fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobAndProof" hd
     (by simp [Serialization.JsonRpc.dataJson, Serialization.JsonRpc.listJson])
@@ -413,8 +429,8 @@ theorem blobAndProofV2OfJson_json (x : BlobAndProofV2) :
     (List.mem_cons_of_mem _ (List.mem_cons_self ..))
   unfold blobAndProofV2OfJson blobAndProofV2Json
   simp only [bind, Except.bind, hfs, hex, ite_true, r1, r2, Serialization.JsonRpc.fixed_dataJson,
-    Serialization.JsonRpc.array_fixed_listJson, Vector.toArray_toList, exactArray_toArray,
-    pure, Except.pure]
+    Serialization.JsonRpc.array_listJson_of _ proofOfJson_dataJson, Vector.toArray_toList,
+    exactArray_toArray, pure, Except.pure]
 
 /-- A JSON value reads as a blob and its proof exactly when it is an object of the form below.
 
@@ -428,14 +444,15 @@ theorem blobAndProofV1OfJson_eq_ok_iff {j : Lean.Json} {x : BlobAndProofV1} :
       ∃ fs, Serialization.JsonRpc.fields "blobAndProof" j = .ok fs ∧
         Serialization.JsonRpc.hasExactly fs ["blob", "proof"] = true ∧
         fs.lookup "blob" = some (.str (hexString x.blob.toList)) ∧
-        fs.lookup "proof" = some (.str (hexString x.proof.toList)) := by
+        fs.lookup "proof" = some (.str (hexString x.proof.bytes.toList)) := by
   unfold blobAndProofV1OfJson
   simp only [bind_ok_iff]
   refine exists_congr fun fs => and_congr_right fun _ => ?_
   by_cases hex : Serialization.JsonRpc.hasExactly fs ["blob", "proof"] = true
   · rw [and_iff_right hex]
     simp only [hex, ↓reduceIte, bind_ok_iff, Serialization.JsonRpc.field_eq_ok_iff,
-      Serialization.JsonRpc.fixed_false_eq_ok_iff, pure, Except.pure, Except.ok.injEq]
+      Serialization.JsonRpc.fixed_false_eq_ok_iff, proofOfJson_eq_ok_iff, pure, Except.pure,
+      Except.ok.injEq]
     obtain ⟨blob, proof⟩ := x
     constructor
     · rintro ⟨_, hb, blob, rfl, _, hp, proof, rfl, he⟩
@@ -461,7 +478,7 @@ theorem blobAndProofV2OfJson_eq_ok_iff {j : Lean.Json} {x : BlobAndProofV2} :
         Serialization.JsonRpc.hasExactly fs ["blob", "proofs"] = true ∧
         fs.lookup "blob" = some (.str (hexString x.blob.toList)) ∧
         fs.lookup "proofs" =
-          some (.arr (x.proofs.toList.map fun p => .str (hexString p.toList)).toArray) := by
+          some (.arr (x.proofs.toList.map fun p => .str (hexString p.bytes.toList)).toArray) := by
   unfold blobAndProofV2OfJson
   simp only [bind_ok_iff]
   refine exists_congr fun fs => and_congr_right fun _ => ?_
@@ -469,7 +486,7 @@ theorem blobAndProofV2OfJson_eq_ok_iff {j : Lean.Json} {x : BlobAndProofV2} :
   · rw [and_iff_right hex]
     simp only [hex, ↓reduceIte, bind_ok_iff, Serialization.JsonRpc.field_eq_ok_iff,
       Serialization.JsonRpc.fixed_false_eq_ok_iff,
-      Serialization.JsonRpc.array_fixed_false_eq_ok_iff]
+      Serialization.JsonRpc.array_eq_ok_iff_of fun _ _ => proofOfJson_eq_ok_iff]
     obtain ⟨blob, proofs⟩ := x
     constructor
     · rintro ⟨_, hb, blob, rfl, _, hp, l, rfl, v, made, h⟩
@@ -497,6 +514,14 @@ private theorem array_nullable_fixed_listJson {n : Nat} (what w : String)
   Serialization.JsonRpc.array_listJson_of what (Serialization.JsonRpc.nullable_optionJson
     (fun v => Serialization.JsonRpc.fixed_dataJson w v false)
     (fun _ => Base.Toolchain.Json.isNull_str _)) l
+
+/-- A list of optional proofs reads back from its encoding as data. -/
+private theorem array_nullable_proofOfJson_listJson (l : List (Option KZGProof)) :
+    Serialization.JsonRpc.array "proofs" (Serialization.JsonRpc.nullable proofOfJson)
+      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
+        (Serialization.JsonRpc.dataJson ·.bytes.toList)) l) = .ok l :=
+  Serialization.JsonRpc.array_listJson_of _ (Serialization.JsonRpc.nullable_optionJson
+    proofOfJson_dataJson (fun _ => Base.Toolchain.Json.isNull_str _)) l
 
 /-- Encoding the images of a list encodes each item through the composite encoder. -/
 private theorem listJson_map_option {α β : Type} (g : α → Lean.Json) (h : β → α)
@@ -526,14 +551,14 @@ theorem blobCellsOfJson_json (x : BlobCellsAndProofsV1) :
         (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.fst)) :=
     listJson_map_option _ _ _ (fun o => by cases o <;> rfl)
   have c2 : Serialization.JsonRpc.listJson
-      (Serialization.JsonRpc.optionJson (Serialization.JsonRpc.dataJson ·.2.toList)) x.cells =
+      (Serialization.JsonRpc.optionJson (Serialization.JsonRpc.dataJson ·.2.bytes.toList)) x.cells =
       Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
-        (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.snd)) :=
+        (Serialization.JsonRpc.dataJson ·.bytes.toList)) (x.cells.map (·.map Prod.snd)) :=
     listJson_map_option _ _ _ (fun o => by cases o <;> rfl)
   have hd : [("blob_cells", Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
       (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.fst))),
       ("proofs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.optionJson
-      (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.snd)))
+      (Serialization.JsonRpc.dataJson ·.bytes.toList)) (x.cells.map (·.map Prod.snd)))
       ].Pairwise fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobCells" hd
     (by simp [Serialization.JsonRpc.listJson])
@@ -546,7 +571,8 @@ theorem blobCellsOfJson_json (x : BlobCellsAndProofsV1) :
   unfold blobCellsOfJson blobCellsJson
   rw [c1, c2]
   simp only [bind, Except.bind, hfs, hex, ite_true, r1, r2,
-    array_nullable_fixed_listJson, List.length_map, pure, Except.pure, mapM_cellAndProof]
+    array_nullable_fixed_listJson, array_nullable_proofOfJson_listJson,
+    List.length_map, pure, Except.pure, mapM_cellAndProof]
 
 /-- A value that reads as optional is `null` exactly when it reads as absent. -/
 private theorem isNull_of_nullable {α : Type} {f : Lean.Json → Serialization.JsonRpc.Read α}
@@ -594,7 +620,7 @@ theorem blobCellsOfJson_nulls {j : Lean.Json} {x : BlobCellsAndProofsV1}
   rcases hp : Serialization.JsonRpc.field "blobCells" fs "proofs" with e | pj
   · simp [hf, hex, hc, hc2, hp, bind, Except.bind] at h
   rcases hp2 : Serialization.JsonRpc.array "proofs"
-    (Serialization.JsonRpc.nullable (Serialization.JsonRpc.fixed "proof" 48)) pj with e | pl
+    (Serialization.JsonRpc.nullable proofOfJson) pj with e | pl
   · simp [hf, hex, hc, hc2, hp, hp2, bind, Except.bind] at h
   by_cases hlen : cl.length = pl.length
   case neg => simp [hf, hex, hc, hc2, hp, hp2, hlen, bind, Except.bind] at h

@@ -278,8 +278,8 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
   have hd : [("blobs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList)
       b.blobs), ("commitments", Serialization.JsonRpc.listJson
       (Serialization.JsonRpc.dataJson ·.bytes.toList) b.commitments), ("proofs",
-      Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList) b.proofs)].Pairwise
-      fun a b => a.1 ≠ b.1 := by simp
+      Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.bytes.toList)
+        b.proofs)].Pairwise fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobsBundle" hd
     (by simp [Serialization.JsonRpc.listJson])
   have hex : Serialization.JsonRpc.hasExactly fs blobsBundleFields = true :=
@@ -299,8 +299,16 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
     have read := Serialization.JsonRpc.array_fixed_listJson "commitments" "commitment"
       (b.commitments.map (·.bytes))
     simpa [Serialization.JsonRpc.listJson, Array.map_map, Function.comp_def] using read
+  -- A proof is written as its bytes, and read back as the bytes it holds.
+  have proofs : Serialization.JsonRpc.array "proofs"
+      (Serialization.JsonRpc.fixed "proof" 48)
+      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.bytes.toList)
+        b.proofs) = .ok (b.proofs.map (·.bytes)) := by
+    have read := Serialization.JsonRpc.array_fixed_listJson "proofs" "proof"
+      (b.proofs.map (·.bytes))
+    simpa [Serialization.JsonRpc.listJson, Array.map_map, Function.comp_def] using read
   simp only [hfs, hex, r1, r2, r3, Serialization.JsonRpc.array_fixed_listJson, commitments,
-    Json.liftM_ok, bind, Except.bind, ite_true]
+    proofs, Json.liftM_ok, bind, Except.bind, ite_true]
   simp [List.map_map, Function.comp_def]
   cases b
   simp_all [pure, Except.pure]

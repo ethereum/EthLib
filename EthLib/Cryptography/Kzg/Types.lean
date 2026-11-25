@@ -3,9 +3,9 @@ module
 /-!
 # `Kzg.Types`
 
-The 48-byte commitment and the 32-byte versioned hash of EIP-4844, as structures around bytes.
+The 48-byte commitment and proof and the 32-byte versioned hash of EIP-4844, as structures.
 
-So Lean rejects a proof, a public key or a Merkle root where a value of one of them is expected.
+So Lean rejects a public key, a Merkle root or one of these three where another is expected.
 
 The checks of untrusted bytes still take the bytes.
 
@@ -27,6 +27,14 @@ deriving DecidableEq, Repr, Inhabited
 /-- Commitments compare as their bytes, so a search tree can hold them. -/
 instance : Ord KZGCommitment where
   compare a b := compare a.bytes b.bytes
+
+/-- A KZG proof: the 48 bytes of a compressed `G1` point.
+
+The type names the role of the bytes, not their validity as a point. -/
+structure KZGProof where
+  /-- The 48 bytes of the compressed point. -/
+  bytes : Vector UInt8 48
+deriving DecidableEq, Repr, Inhabited
 
 /-- The versioned hash of a KZG commitment, which names a blob.
 

@@ -221,7 +221,7 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
     -- The bit reversal puts the proofs in cell order.
     let padded := hs ++ Array.replicate (CELLS_PER_EXT_BLOB - hs.size) Bls.G1.zero
     bitReversalPermutation (fftG1 padded (computeRootsOfUnity CELLS_PER_EXT_BLOB))).get
-  return (cells, proofs.map compressG1)
+  return (cells, proofs.map fun proof => ⟨compressG1 proof⟩)
 
 /-- Compute the cells of a blob and their proofs.
 
@@ -264,7 +264,7 @@ def computeVerifyCellKzgProofBatchChallenge
     let h := h ++ ⟨(Base.ByteOrder.toBE 8 cellIndex).toArray⟩
     let h := evals.foldl (init := h) fun h ce =>
       h ++ ⟨(blsFieldToBytes ce).toArray⟩
-    h ++ ⟨proof.toArray⟩
+    h ++ ⟨proof.bytes.toArray⟩
   -- The challenge is the SHA-256 of that input, read as a big-endian integer.
   --
   -- It is reduced modulo the modulus of `Fr`.
@@ -324,7 +324,7 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   -- `LL = sum_k r^k pi_k`.
   --
   -- The proofs are decoded once, for this sum and for `RLP` below.
-  let proofsG1 ← proofs.mapM uncompressG1
+  let proofsG1 ← proofs.mapM (uncompressG1 ·.bytes)
   let ll : G1 ← g1LincombPoints proofsG1 rPowers
 
   -- `LR = [s^n]`, in `G2`.

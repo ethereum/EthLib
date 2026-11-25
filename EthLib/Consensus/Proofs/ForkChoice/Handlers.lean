@@ -943,7 +943,7 @@ theorem validateDataAvailability_ok {sources : BlockSources preset fork}
       ∃ blobs proofs, sources.blobsAndProofs blockRoot = some (blobs, proofs) ∧
         Cryptography.Kzg.verifyBlobKzgProofBatch sources.setup blobs
           ((block.body.blobKzgCommitments ⟨deneb, Nat.lt_trans before (by decide)⟩).data.map
-            (·.bytes)) proofs = .ok true := by
+            (·.bytes)) (proofs.map (·.bytes)) = .ok true := by
   have fulu : ¬ .fusaka ≤ fork := Nat.not_le_of_lt before
   have gloas : ¬ .glamsterdam ≤ fork := fun later => fulu (Nat.le_trans (by decide) later)
   unfold validateDataAvailability isDataAvailable
@@ -953,7 +953,7 @@ theorem validateDataAvailability_ok {sources : BlockSources preset fork}
     obtain ⟨blobs, proofs⟩ := data
     cases verified : Cryptography.Kzg.verifyBlobKzgProofBatch sources.setup blobs
         ((block.body.blobKzgCommitments ⟨deneb, Nat.lt_trans before (by decide)⟩).data.map
-          (·.bytes)) proofs with
+          (·.bytes)) (proofs.map (·.bytes)) with
     | error e => simp_all [bind, Except.bind, Except.mapError]
     | ok result =>
       cases result

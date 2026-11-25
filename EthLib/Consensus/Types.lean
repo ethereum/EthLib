@@ -92,6 +92,12 @@ Source: "Type aliases" of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#typ
 instance : Serialization.Ssz.SszType Cryptography.Kzg.KZGCommitment :=
   .wrapper Cryptography.Kzg.KZGCommitment.mk Cryptography.Kzg.KZGCommitment.bytes
 
+/-- From Deneb: a KZG proof is a `Bytes48` in SSZ.
+
+Source: "Type aliases" of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#type-aliases). -/
+instance : Serialization.Ssz.SszType Cryptography.Kzg.KZGProof :=
+  .wrapper Cryptography.Kzg.KZGProof.mk Cryptography.Kzg.KZGProof.bytes
+
 /-- From Fulu: the index of a cell in an extended blob, below the number of cells. -/
 abbrev CellIndex := UInt64
 
