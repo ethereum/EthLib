@@ -1069,6 +1069,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the decoders of mplex, multistream-select and yamux read the body of a frame with `Encoding.ByteReader.bytes` ([#4657](https://github.com/ethereum/EthLib/pull/4657)).
+  `Libp2p.Mplex.decode`, `Libp2p.Multistream.decode` and `Libp2p.Yamux.decode` return the same frame, rest and error for every input.
+  Their theorems keep their statements, and a proof that unfolds one of them now meets the shared reader.
 - In Lean, the RLPx handshake writes and reads the 2-byte size of a packet with `Base.ByteOrder.toBE` and `ofBE` ([#4653](https://github.com/ethereum/EthLib/pull/4653)).
   `Rlpx.sizeBytes` and `Rlpx.openPacket` (`Networking/Rlpx/Handshake.lean`) unfold to the codec of `Base`, and compute the same bytes and the same check for every input.
   `openPacket_sealPacket` keeps its statement, and a proof that unfolds `sizeBytes` or `openPacket` now meets the codec of `Base`.

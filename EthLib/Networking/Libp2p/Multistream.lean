@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Networking.Encoding.ByteReader
 public import EthLib.Networking.Encoding.Uvarint
 
 /-!
@@ -70,12 +71,11 @@ def decode (bytes : List UInt8) : Except MultistreamError (ByteArray × List UIn
   -- Not in the sources: a length of zero leaves no room for the newline, so it is refused.
   if length = 0 then throw .empty
   -- The bytes that the length counts.
-  let body := rest.take length
-  if body.length < length then throw (.truncated length body.length)
+  let (body, after) ← ByteReader.bytes (.truncated length) length rest
   -- Messages are always followed by a newline, the last byte that the length counts.
   if body[length - 1]? ≠ some newline then throw (.missingNewline (body[length - 1]?.getD 0))
   -- Messages are sent as UTF-8, but the framing reads any bytes, and leaves the name to the caller.
-  return (⟨(body.take (length - 1)).toArray⟩, rest.drop length)
+  return (⟨(body.take (length - 1)).toArray⟩, after)
 
 /-- The answer to a proposed protocol: the protocol itself if supported, else `na`. -/
 def respond (supported : List ByteArray) (proposal : ByteArray) : ByteArray :=

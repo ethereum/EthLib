@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Libp2p.Multistream
 public import EthLib.Networking.Proofs.Encoding.Uvarint
 import EthLib.Base.Proofs.CodeInjective
+import EthLib.Networking.Proofs.Encoding.ByteReader
 
 /-!
 # Proofs: multistream-select messages
@@ -33,13 +34,11 @@ theorem decode_encode (message : ByteArray) (h : message.size + 1 < Uvarint.boun
   rw [hlen] at h
   simp only [decode]
   rw [EthLib.Networking.Proofs.Encoding.Uvarint.decode_encode h]
-  have h1 : (bs ++ newline :: rest).take (bs.length + 1) = bs ++ [newline] := by
-    rw [List.take_append, List.take_of_length_le (by omega)]
-    simp
-  have h2 : (bs ++ newline :: rest).drop (bs.length + 1) = rest := by
-    rw [List.drop_append]
-    simp
-  simp [h1, h2, bind, Except.bind, Except.mapError]
+  have hread : ByteReader.bytes (MultistreamError.truncated (bs.length + 1)) (bs.length + 1)
+      (bs ++ newline :: rest) = .ok (bs ++ [newline], rest) := by
+    simpa using ByteReader.bytes_append (MultistreamError.truncated (bs.length + 1))
+      (bs ++ [newline]) rest
+  simp [hread, bind, Except.bind, Except.mapError]
   rfl
 
 /-- A decoded message and its newline are shorter than `2^63` bytes.
@@ -55,35 +54,34 @@ theorem encode_decode {bytes rest : List UInt8} {message : ByteArray}
       obtain ⟨L, r0⟩ := p
       obtain ⟨hL, hb⟩ := EthLib.Networking.Proofs.Encoding.Uvarint.encode_decode hd
       simp only [hd, bind, Except.bind, Except.mapError] at h
-      generalize hbody : r0.take L = body at h
       by_cases h0 : L = 0
       · simp [h0, throw, throwThe, MonadExceptOf.throw] at h
-      by_cases h1 : body.length < L
-      · simp [h0, h1, throw, throwThe, MonadExceptOf.throw] at h
-      by_cases h2 : body[L - 1]? = some newline
-      · simp only [h0, h1, h2, ne_eq, not_true_eq_false, ite_false] at h
-        simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
-        have hlen : body.length = L := by
-          have : body.length ≤ L := by rw [← hbody]; simp; omega
-          omega
-        have hsz : (⟨(body.take (L - 1)).toArray⟩ : ByteArray).size = L - 1 := by
-          simp [ByteArray.size]; omega
-        have hi : L - 1 < body.length := by omega
-        have hg : body[L - 1] = newline := by simpa [hi] using h2
-        have hdrop : body.drop (L - 1) = [newline] := by
-          rw [List.drop_eq_getElem_cons hi, hg, List.drop_of_length_le (by omega)]
-        have hr0 : body.take (L - 1) ++ newline :: r0.drop L = r0 := by
-          calc body.take (L - 1) ++ newline :: r0.drop L
-              = body.take (L - 1) ++ body.drop (L - 1) ++ r0.drop L := by
-                rw [hdrop]; simp
-            _ = r0 := by rw [List.take_append_drop, ← hbody, List.take_append_drop]
-        refine ⟨by omega, ?_⟩
-        rw [← hb]
-        have hL' : L - 1 + 1 = L := by omega
-        simp only [encode, hsz, hL', List.append_assoc, List.singleton_append]
-        rw [hr0]
-      · simp [h0, h1, h2, throw, throwThe, MonadExceptOf.throw] at h
+      cases hread : ByteReader.bytes (MultistreamError.truncated L) L r0 with
+      | error err => simp [h0, hread] at h
+      | ok p =>
+        obtain ⟨body, after⟩ := p
+        obtain ⟨hlen, hsplit⟩ := (ByteReader.bytes_ok_iff _ _ _ _ _).mp hread
+        by_cases h2 : body[L - 1]? = some newline
+        · simp only [h0, hread, h2, ne_eq, not_true_eq_false, ite_false, pure, Except.pure,
+            Except.ok.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          have hsz : (⟨(body.take (L - 1)).toArray⟩ : ByteArray).size = L - 1 := by
+            simp [ByteArray.size]; omega
+          have hi : L - 1 < body.length := by omega
+          have hg : body[L - 1] = newline := by simpa [hi] using h2
+          have hdrop : body.drop (L - 1) = [newline] := by
+            rw [List.drop_eq_getElem_cons hi, hg, List.drop_of_length_le (by omega)]
+          have hr0 : body.take (L - 1) ++ newline :: after = r0 := by
+            calc body.take (L - 1) ++ newline :: after
+                = body.take (L - 1) ++ body.drop (L - 1) ++ after := by
+                  rw [hdrop]; simp
+              _ = r0 := by rw [List.take_append_drop, hsplit]
+          refine ⟨by omega, ?_⟩
+          rw [← hb]
+          have hL' : L - 1 + 1 = L := by omega
+          simp only [encode, hsz, hL', List.append_assoc, List.singleton_append]
+          rw [hr0]
+        · simp [h0, hread, h2, throw, throwThe, MonadExceptOf.throw] at h
 
 /-- The decoder accepts exactly the encodings of messages that fit, then any bytes.
 
