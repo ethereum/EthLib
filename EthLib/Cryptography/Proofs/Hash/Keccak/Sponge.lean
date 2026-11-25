@@ -42,7 +42,7 @@ def lanesBits8 (a0 a1 a2 a3 a4 a5 a6 a7 : UInt64) : BitVec 512 :=
 def lanesBits13 (a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 : UInt64) : BitVec 832 :=
   a12.toBitVec ++ lanesBits4 a8 a9 a10 a11 ++ lanesBits8 a0 a1 a2 a3 a4 a5 a6 a7
 
-/-- Lane `i` of a bit vector: its bits `64i` to `64i + 63`. -/
+/-- Lane `i` of a bit vector: its bits `64i` to `64i + 63`, zero past its width. -/
 def laneOfBits {n : Nat} (v : BitVec n) (i : Nat) : UInt64 :=
   UInt64.ofBitVec (v.extractLsb' (64 * i) 64)
 
@@ -344,7 +344,7 @@ theorem keccak256_indifferentiable :
 
 /-- **A random-oracle bound on Keccak-256 holds over a uniform permutation.**
 
-A game of cost at most `N` wins with chance at most `δ` plus the bound above at `N`. -/
+A game of cost at most `N` wins with chance at most `δ` plus the sponge bound at `N`. -/
 theorem keccak256_realProb_le_spongeIndiffBound
     {game : OracleComp (GameSpec State ByteArray (Vector UInt8 DIGEST_LEN_256)) Bool} {N : ℕ}
     -- The game costs at most `N`.

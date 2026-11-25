@@ -50,7 +50,7 @@ theorem rotateRight_rotateRight_sub {w n : Nat} (x : BitVec w) (hw : n < w) :
   · have hlt3 : i - n < w - n := by omega
     simp [hlt, hlt3, show n + (i - n) = i by omega]
 
-/-- Two concatenations of bit vectors of the same widths are equal when their parts are. -/
+/-- Two concatenations of bit vectors of the same widths are equal exactly when their parts are. -/
 theorem BitVec.append_inj_iff {w v : Nat} {a c : BitVec w} {b d : BitVec v} :
     a ++ b = c ++ d ↔ a = c ∧ b = d := by
   refine ⟨fun h => ⟨?_, ?_⟩, fun h => by rw [h.1, h.2]⟩
