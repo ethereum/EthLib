@@ -1065,6 +1065,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Networking.Discv5.asciiBytes` (`Networking/Discv5/Identity.lean`) is removed ([#4650](https://github.com/ethereum/EthLib/pull/4650)).
+  It was `String.toUTF8` under another name, and an ASCII label has the same bytes in both.
+  The key agreement and the identity proof of discv5 now unfold to `String.toUTF8`, and compute the same bytes.
+  Migration: write `s.toUTF8` in place of `asciiBytes s`.
 - In Lean, seven lemmas about lists move from the trie proofs (`Execution/Proofs/Trie/Order.lean`) to `Base/Proofs/List.lean`, with the same statements ([#4648](https://github.com/ethereum/EthLib/pull/4648)).
   - `Trie.le_foldl_min_iff`, `Trie.foldl_min_perm`, `Trie.foldl_last`, `Trie.eq_of_perm_of_length_le_one`, `Trie.length_le_one_of_nodup`, `Trie.nodup_of_map` and `Trie.nodup_map_of_injective` are now in `Base`.
   - `Blocks.nodup_map_of_injective` (`Execution/Proofs/Blocks/AccessListBuilder.lean`) is removed, since it stated the same fact as `Base.nodup_map_of_injective`.

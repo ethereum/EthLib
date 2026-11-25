@@ -27,9 +27,6 @@ namespace EthLib.Networking.Discv5
 open EthLib.Cryptography.Secp256k1
 open EthLib.Cryptography.Hash
 
-/-- The ASCII bytes of a string. -/
-def asciiBytes (s : String) : ByteArray := s.toUTF8
-
 /-- The shared secret of a private key and a public key: `d Q`, compressed to 33 bytes.
 
 The public key must be a point of the curve other than `O`, as for the ECDH of SEC 1 v2. -/
@@ -61,7 +58,7 @@ The initiator is node A, and the recipient is node B, which sent the challenge. 
 def deriveKeys (secret challengeData : ByteArray) (nodeIdA nodeIdB : NodeId) :
     Except Hkdf.HkdfError SessionKeys := do
   -- `kdf-info = "discovery v5 key agreement" || node-id-A || node-id-B`.
-  let info := asciiBytes "discovery v5 key agreement" ++ ⟨nodeIdA.toArray⟩ ++ ⟨nodeIdB.toArray⟩
+  let info := "discovery v5 key agreement".toUTF8 ++ ⟨nodeIdA.toArray⟩ ++ ⟨nodeIdB.toArray⟩
   -- `prk = HKDF-Extract(challenge-data, secret)`, then `key-data = HKDF-Expand(prk, kdf-info)`.
   --
   -- RFC 5869 with HMAC-SHA-256, and 32 bytes of output.
@@ -79,7 +76,7 @@ def idSignatureHash (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeI
   -- `id-signature-input = id-signature-text || challenge-data || ephemeral-pubkey || node-id-B`.
   --
   -- The hash is `sha256(id-signature-input)`.
-  Sha256.hash32 (asciiBytes "discovery v5 identity proof" ++ challengeData ++
+  Sha256.hash32 ("discovery v5 identity proof".toUTF8 ++ challengeData ++
     ephemeralPubkey ++ ⟨nodeIdB.toArray⟩)
 
 /-- The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the SHA-256 hash.
