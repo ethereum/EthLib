@@ -5,11 +5,13 @@ public import EthLib.Serialization.Proofs.JsonRpc
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
-# Proofs: the JSON form of a withdrawal
+# Proofs: the JSON form of a withdrawal and of a versioned hash
 
 A withdrawal reads exactly from an object with exactly its four fields, each of its type.
 
 The writer of withdrawals writes what the reader reads back, alone or in a list.
+
+So does the writer of versioned hashes.
 -/
 
 public section
@@ -109,5 +111,16 @@ theorem array_withdrawal_listJson (what : String) (ws : List Blocks.Withdrawal) 
     simp only [List.mapM_cons]
     rw [ih, withdrawal_withdrawalJson]
     rfl
+
+/-- The decoder of versioned hashes reads back the encoding of any versioned hash. -/
+theorem versionedHash_versionedHashJson (what : String) (h : Cryptography.Kzg.VersionedHash) :
+    versionedHash what (versionedHashJson h) = .ok h := by
+  rw [versionedHash, versionedHashJson, fixed_dataJson]
+  rfl
+
+/-- The decoder of lists of versioned hashes reads back the encoding of any list of them. -/
+theorem array_versionedHash_listJson (what w : String) (hs : List Cryptography.Kzg.VersionedHash) :
+    array what (versionedHash w) (listJson versionedHashJson hs) = .ok hs :=
+  array_listJson_of what (versionedHash_versionedHashJson w) hs
 
 end EthLib.Execution.Rpc

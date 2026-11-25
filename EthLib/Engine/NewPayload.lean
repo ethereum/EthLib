@@ -40,7 +40,7 @@ open EthLib.Execution.Blocks
 open EthLib.Execution.Transactions
 open EthLib.Engine.Json
 open EthLib.Serialization.JsonRpc
-open EthLib.Execution.Rpc (withdrawal)
+open EthLib.Execution.Rpc (withdrawal versionedHash versionedHashJson)
 open EthLib.Cryptography.Kzg (VersionedHash)
 
 /-- Whether a version of the method takes payloads of a fork. -/
@@ -141,8 +141,7 @@ def newPayloadParams (version : Nat) (params : Json) :
   let (any, amsterdam) ← payloadParam version (← param 0)
   -- Parameter 2, from version 3: `expectedBlobVersionedHashes`, an array of 32-byte data.
   let hashes ← if version ≥ 3 then
-    some <$> array "expectedBlobVersionedHashes"
-      (fun j => VersionedHash.mk <$> fixed "versioned hash" 32 j) (← param 1)
+    some <$> array "expectedBlobVersionedHashes" (versionedHash "versioned hash") (← param 1)
     else pure none
   -- Parameter 3, from version 3: `parentBeaconBlockRoot`, 32 bytes of data.
   let beaconRoot ← if version ≥ 3 then
@@ -179,7 +178,7 @@ def newPayloadParamsJson {fork : Fork} (version : Nat) (payload : ExecutionPaylo
     | none => executionPayloadJson payload
   -- Parameters 2 and 3 from version 3, then parameter 4 from version 4.
   .arr ([payload] ++
-    (if 3 ≤ version then [listJson (dataJson ·.bytes.toList) hashes, dataJson beaconRoot.toList]
+    (if 3 ≤ version then [listJson versionedHashJson hashes, dataJson beaconRoot.toList]
       else []) ++
     (if 4 ≤ version then [listJson (dataJson ·.data.toList) requests] else [])).toArray
 

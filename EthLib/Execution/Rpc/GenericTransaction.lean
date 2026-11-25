@@ -103,7 +103,7 @@ def genericTransaction (j : Json) : Read GenericTransaction := do
     maxFeePerBlobGas := ← opt "maxFeePerBlobGas" uint
     accessList := ← opt "accessList" fun what => array what access
     blobVersionedHashes := ← opt "blobVersionedHashes" fun what =>
-      array what fun j => Cryptography.Kzg.VersionedHash.mk <$> hash32 "blob hash" j
+      array what (versionedHash "blob hash")
     blobs := ← opt "blobs" fun what => array what (bytes "blob")
     commitments := ← opt "commitments" fun what => array what (bytes "commitment")
     proofs := ← opt "proofs" fun what => array what (bytes "proof")

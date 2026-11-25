@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Rpc.Base
+public import EthLib.Execution.Rpc.Json
 public import EthLib.Execution.Transactions.Settlement
 
 /-!
@@ -109,8 +110,7 @@ def transactionFields (gasPrice : Nat) : Transaction → List (String × Json)
         ("maxPriorityFeePerGas", u256Json tx.maxPriorityFeePerGas),
         ("maxFeePerGas", u256Json tx.maxFeePerGas),
         ("maxFeePerBlobGas", u256Json tx.maxFeePerBlobGas),
-        ("blobVersionedHashes",
-          listJson (fun h => dataJson h.bytes.toList) tx.blobVersionedHashes)]
+        ("blobVersionedHashes", listJson versionedHashJson tx.blobVersionedHashes)]
   | .setCode tx =>
     typedFields 4 tx.chainId tx.nonce.toNat tx.gas tx.value tx.data tx.accessList tx.yParity
         tx.r tx.s ++
@@ -180,8 +180,7 @@ def transactionOfJson (j : Json) : Read Transaction := do
                    accessList, yParity, r, s
                    maxFeePerBlobGas := ← uint256 "maxFeePerBlobGas" (← get "maxFeePerBlobGas")
                    blobVersionedHashes := ← array "blobVersionedHashes"
-                     (fun j => Cryptography.Kzg.VersionedHash.mk <$> bytes32 "blob hash" j)
-                     (← get "blobVersionedHashes") }
+                     (versionedHash "blob hash") (← get "blobVersionedHashes") }
   if type = 4 then
     -- A set-code transaction holds its nonce in 64 bits.
     let nonce ← uint64 "nonce" (← get "nonce")
