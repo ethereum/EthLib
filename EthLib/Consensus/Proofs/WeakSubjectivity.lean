@@ -191,15 +191,14 @@ theorem balanceChurnPeriod_of_computeWeakSubjectivityPeriod_eq_ok {config : Conf
 
 /-- Phase 0: computed epochs are one of the two expressions of the rule, on natural numbers.
 
-With large average balances, they are the longer of the churn bound and the top-up bound.
+With large average balances, they are the churn bound.
 
 With small ones, they are the top-up bound for small balances. -/
 theorem phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
     (h : phase0PeriodEpochs N t T delta Delta = .ok epochs) :
     if 230 * T.toNat < 320 * t.toNat then
-      epochs.toNat = max (N.toNat * (320 * t.toNat - 230 * T.toNat) /
-          (600 * delta.toNat * (2 * t.toNat + T.toNat)))
-        (230 * N.toNat / (600 * Delta.toNat))
+      epochs.toNat = N.toNat * (320 * t.toNat - 230 * T.toNat) /
+        (600 * delta.toNat * (2 * t.toNat + T.toNat))
     else epochs.toNat = 30 * N.toNat * t.toNat / (200 * Delta.toNat * (T.toNat - t.toNat)) := by
   have hD : SAFETY_DECAY = 10 := rfl
   unfold phase0PeriodEpochs at h
@@ -210,26 +209,22 @@ theorem phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
   rw [h230] at hlow
   rw [h320] at hhigh
   split at h
-  · -- The churn branch: the longer of the two bounds.
+  · -- The churn branch for large balances.
     rename_i hgt
     have hlt : 230 * T.toNat < 320 * t.toNat := by
       have := UInt64.lt_iff_toNat_lt.mp hgt
       omega
     simp only [hlt, ↓reduceIte]
-    simp only [bind_ok_iff, mulChecked_ok_iff, addChecked_ok_iff, divChecked_ok_iff, pure,
-      Except.pure, Except.ok.injEq, UInt64.toNat_ofNat, h230] at h
-    obtain ⟨a, ⟨-, ha⟩, b, ⟨-, hb⟩, c, ⟨-, hc⟩, d, ⟨-, hd⟩, e, ⟨-, he⟩, f, ⟨-, hf⟩, g, ⟨-, hg⟩,
-      k, ⟨-, hk⟩, l, ⟨-, hl⟩, rfl⟩ := h
+    simp only [bind_ok_iff, mulChecked_ok_iff, addChecked_ok_iff,
+      divChecked_ok_iff, UInt64.toNat_ofNat] at h
+    obtain ⟨a, ⟨-, ha⟩, b, ⟨-, hb⟩, c, ⟨-, hc⟩, d, ⟨-, hd⟩, e, ⟨-, he⟩, -, hf⟩ := h
     have hsub : (high - low).toNat = high.toNat - low.toNat :=
       UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt hgt)
     rw [hsub, hhigh, hlow] at he
-    rw [he, hd, ha, hc, hb] at hf
-    rw [hg, hk] at hl
-    rw [toNat_max, hf, hl]
+    rw [hf, he, hd, ha, hc, hb]
     -- The two forms differ only in the order of their factors.
     have hchurn : t.toNat * 320 - T.toNat * 230 = 320 * t.toNat - 230 * T.toNat := by omega
-    have htopUp : N.toNat * 230 = 230 * N.toNat := by omega
-    rw [hchurn, htopUp]
+    rw [hchurn]
   · -- The top-up branch for small balances.
     rename_i hle
     have hnot : ¬ 230 * T.toNat < 320 * t.toNat := by
@@ -250,7 +245,7 @@ theorem phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
 
 The first is `160 N / (600 delta)`, the churn of validators with the balance term dropped.
 
-The second is `230 N / (600 Delta)`, the top-up term, which also bounds the case of small balances.
+The second is `230 N / (600 Delta)`, which bounds the top-ups for small balances.
 
 There is no condition beyond success of the computation. -/
 theorem phase0PeriodEpochs_le {N t T delta Delta epochs : UInt64}
@@ -264,10 +259,10 @@ theorem phase0PeriodEpochs_le {N t T delta Delta epochs : UInt64}
   generalize delta.toNat = d at *
   generalize Delta.toNat = D at *
   split at closed
-  · -- Large balances: the churn term is at most `160 n / (600 d)`, or the top-up term is the max.
+  · -- Large balances: the churn term is at most `160 n / (600 d)`.
     rename_i hlt
     rw [closed]
-    refine Nat.max_le.mpr ⟨Nat.le_trans ?_ (Nat.le_max_left _ _), Nat.le_max_right _ _⟩
+    refine Nat.le_trans ?_ (Nat.le_max_left _ _)
     by_cases hz : 600 * d * (2 * t' + T') = 0
     · rw [hz, Nat.div_zero]
       exact Nat.zero_le _
@@ -363,11 +358,9 @@ private theorem churnEpochs_le {N t T delta : Nat} (largeBalances : 230 * T < 32
     _ ≤ N * (30 * t * (2 * t + T)) := Nat.mul_le_mul_left N key
     _ = N * t * (30 * (2 * t + T)) := by ac_rfl
 
-/-- Phase 0: with large balances, the epochs of the rule are few enough when the top-ups are.
+/-- Phase 0: with large balances, the epochs of the rule are few enough.
 
 Take `N` validators of average balance `t` and largest balance `T`, in ether, with `t ≤ T`.
-
-Assume the rule's epochs for top-ups move at most `N t / 20` ether.
 
 The ether moved counts `delta` validators of `T` ether in each epoch.
 
@@ -376,22 +369,13 @@ Then the epochs of the rule move at most `N t / 20` ether.
 That is `SAFETY_DECAY / 200` of the balance, with `SAFETY_DECAY` at 10. -/
 theorem churn_le_of_phase0PeriodEpochs_eq_ok {N t T delta Delta epochs : UInt64}
     (h : phase0PeriodEpochs N t T delta Delta = .ok epochs)
-    (largeBalances : 230 * T.toNat < 320 * t.toNat) (averageLe : t.toNat ≤ T.toNat)
-    (topUps : 20 * (230 * N.toNat / (600 * Delta.toNat) * delta.toNat * T.toNat) ≤
-      N.toNat * t.toNat) :
+    (largeBalances : 230 * T.toNat < 320 * t.toNat) (averageLe : t.toNat ≤ T.toNat) :
     20 * (epochs.toNat * delta.toNat * T.toNat) ≤ N.toNat * t.toNat := by
-  -- With large balances the rule takes the longer of its epochs for churn and for top-ups.
+  -- With large balances the rule takes its epochs for churn.
   have closed := phase0PeriodEpochs_eq_ok h
   simp only [largeBalances, ↓reduceIte] at closed
   rw [closed]
-  rcases Nat.le_total (N.toNat * (320 * t.toNat - 230 * T.toNat) /
-      (600 * delta.toNat * (2 * t.toNat + T.toNat))) (230 * N.toNat / (600 * Delta.toNat))
-    with order | order
-  · rw [Nat.max_eq_right order]
-    exact topUps
-  -- The epochs for churn always move at most `N t / 20` ether, at `delta` validators of `T` each.
-  · rw [Nat.max_eq_left order]
-    exact churnEpochs_le largeBalances averageLe
+  exact churnEpochs_le largeBalances averageLe
 
 /-! ## The withdrawal delay is a lower bound -/
 

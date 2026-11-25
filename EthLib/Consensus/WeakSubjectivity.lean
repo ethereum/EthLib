@@ -99,24 +99,25 @@ The arguments are those of the analysis.
 
 Small balances cost the attacker little to top up, so the deposits bound the period.
 
-Otherwise both the churn and the top-ups bound it, and the period waits for the longer. -/
+Otherwise the churn bounds it. -/
 def phase0PeriodEpochs (N t T delta Delta : UInt64) : Except ArithError Epoch := do
   -- Let `D = SAFETY_DECAY`.
   let D := SAFETY_DECAY
   -- Let `l = T * (200 + 3 * D)` and `h = t * (200 + 12 * D)`.
   let low ← mulChecked T (200 + 3 * D)
   let high ← mulChecked t (200 + 12 * D)
-  -- When `l < h`, the churn and the top-ups both bound the period.
+  -- When `l < h`, the churn bounds the period.
   if high > low then
     -- The churn takes `floor(N * (h - l) / (600 * delta * (2 * t + T)))` epochs.
+    --
+    -- The attack of the analysis also tops up validators, and the source waits for those too.
+    --
+    -- A top-up only speeds an attack, and a validator at the largest balance needs none.
+    --
+    -- So EthLib takes the churn alone, which never exceeds the time of the attack.
     let churnDivisor ← mulChecked (← mulChecked 600 delta)
       (← addChecked (← mulChecked 2 t) T)
-    let epochsForValidatorSetChurn ← divChecked (← mulChecked N (high - low)) churnDivisor
-    -- The top-ups take `floor(N * (200 + 3 * D) / (600 * Delta))` epochs.
-    let epochsForBalanceTopUps ←
-      divChecked (← mulChecked N (200 + 3 * D)) (← mulChecked 600 Delta)
-    -- The epochs are the longer of the two.
-    return max epochsForValidatorSetChurn epochsForBalanceTopUps
+    divChecked (← mulChecked N (high - low)) churnDivisor
   -- Else the top-ups take `floor(3 * N * D * t / (200 * Delta * (T - t)))` epochs.
   else
     let numerator ← mulChecked (← mulChecked (← mulChecked 3 N) D) t

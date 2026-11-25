@@ -181,6 +181,16 @@ def test_phase0_table(balance: int, count: int, period: int):
     assert consensus.compute_weak_subjectivity_period("mainnet", "phase0", state) == period
 
 
+def test_phase0_takes_the_churn_alone():
+    # 600000 validators of 24 ether: the churn is 600000 // 65536 = 9 validators per epoch.
+    # The churn takes 600000 * (24 * 320 - 32 * 230) // (600 * 9 * 80) = 444 epochs, by hand.
+    # The top-ups would take 600000 * 230 // (600 * 512) = 449; a top-up only speeds an attack.
+    # So the period is 256 + 444 = 700 epochs, where the longer of the two would give 705.
+    # The source takes the longer of the two (consensus-specs#5866).
+    state = phase0_state(600000, 24 * GWEI)
+    assert consensus.compute_weak_subjectivity_period("mainnet", "phase0", state) == 700
+
+
 @pytest.mark.parametrize(("total", "period"), ELECTRA_TABLE)
 def test_electra_table(total: int, period: int):
     count = total // MAX_EFFECTIVE_BALANCE_ELECTRA
