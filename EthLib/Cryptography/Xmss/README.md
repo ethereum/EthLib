@@ -161,6 +161,13 @@ The theorem assumes that the cache holds no trial input of the two keys when sig
 It also assumes that a bottom tree of that index, if the key keeps one, holds a top signature, not an error; a key from `keyGen` keeps no bottom tree.
 Then the cache still holds none when each search starts, so each search fails with probability at most `exp(-4000)`.
 
+Inside the unforgeability game, earlier signatures and the adversary's queries can fill the cache, so those assumptions can fail there.
+Take the game with a signer that replies with its error (`Unforgeability/Reasons.lean`), and an adversary with at most `qH` calls of `H` and `r` requests.
+Some request fails with probability at most `Q (1 - |C| / 2^128)^(2^31)`, so at most `Q exp(-2000)` (`signingFailure_le_pow`, `signingFailure_le_exp`, `Unforgeability/SearchFailure.lean`).
+`Q` bounds the hash calls of that game, as in `SOUNDNESS.md`.
+A failed request leaves in the cache an aligned block of `2^31` trial inputs, whose answers all missed the code.
+The bound counts every hash call of the game, so it needs no assumption on the cache.
+
 **Domain separation.**
 Every hash call names its call site: what it computes, and the arguments that kind of call takes, such as the layer, the key and the position.
 The hash reads the call site as a 16-byte address, so that two calls never hash the same input by accident (`Address.lean`, `TweakableHash.lean`).
@@ -197,8 +204,7 @@ The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs
 
 - No security property is proved beyond the random oracle model, so the theorem says nothing about an attack that uses the structure of Keccak-256.
 - Security against a quantum adversary is not proved.
-- The failure bound of a whole signature assumes a starting cache with no trial input of its two keys.
-  An earlier signature under the same top key caches that key's trial inputs, and in the unforgeability game the adversary's queries can too.
-  So no theorem bounds the failure of a later signature, or of signing inside the game.
+- That signing fails with small probability when several keys share the oracle.
+  The bound for signing inside the unforgeability game is for its one key.
 - No theorem says that this module and any other implementation compute the same keys and signatures.
   The test vectors check one key and one signature against an independent implementation.

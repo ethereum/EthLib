@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.IdealFailure
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SearchFailure
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.AdversaryBudget
 
 /-!
@@ -83,4 +84,10 @@ So the variant game's bound is `q / 2^127 + 2 Q / 2^256 + r (Q / 2^95 + 2 exp(-4
 The last term is at least `r^2 / 2^62`, so it says nothing from about `2^31` requests.
 
 That loss comes from the proof, which charges each new search the whole cache.
+
+A second bound on the failure needs no hop.
+
+A failed request leaves in the cache `2^31` trials that all missed the code.
+
+So the variant game's bound is also `q / 2^127 + Q exp(-2000)`.
 -/

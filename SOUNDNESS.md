@@ -105,6 +105,27 @@ The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
 So this theorem does not bound the failure of a later signature, or of signing inside the game.
 
+Signing inside the game, later signatures included, has its own bound, `Unforgeability.signingFailure_le_pow` (`Proofs/Xmss/Unforgeability/SearchFailure.lean`).
+`signingFailure` (`Proofs/Xmss/Unforgeability/Reasons.lean`) runs the game whose signer replies with its error.
+It runs that game against the random oracle from an empty cache, and reads the log of its signing requests.
+Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
+Some request of its game fails with probability at most `Q (1 - p)^(2^31)`.
+Here `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384` bounds the game's hash calls (`isQueryBoundP_reasonRun`).
+`p = |C| / 2^128` is the chance that one trial gives a codeword, about `2^-20.0045`.
+A search tries the randomizers `R_0 + c` modulo `2^128` for `c < 2^32`.
+Its trials hold an aligned block, the `2^31` randomizers `b 2^31 + j` for `j < 2^31` (`exists_block_of_window`).
+Two blocks are equal or share no trial input (`blockPoint_inj`).
+A failed request leaves in the oracle's cache such a block whose answers all missed the code (`failedSearch_of_mem_support_reasonRun`).
+A top error that the key kept counts too.
+The key keeps an error only after its search failed, and the cache keeps that search.
+So by `HashSig.prEvent_failedSearch_le` with `T = 2^31`, the probability is at most `Q (1 - p)^(2^31)` (`prEvent_failedBlock_le`).
+Since `(1 - p)^(2^31)` is at most `exp(-2000)` (`trialMiss_pow_le_exp`), it is at most `Q exp(-2000)` (`signingFailure_le_exp`).
+At `r = 2^32` and `qH = 2^128`, that bound is about `2^-2757`.
+The bound covers every request of the game, after earlier signatures under the key and after any queries of the adversary.
+So `Unforgeability.reasonForgeAdvantage_le_exp` bounds a forgery against that game by `q / 2^127 + Q exp(-2000)`, with `q` the budget of the theorem below.
+The game holds one key.
+No theorem bounds the failure of signing when several keys share the oracle, as on a node that holds several keys.
+
 The game is the generic strong-unforgeability game of `Proofs/SufCma.lean`, with leanXMSS as its scheme (`Unforgeability.scheme`).
 Its rule of use is that no leaf index is requested twice.
 The game is the real game of the security proof (`game_eq_realGame`).
