@@ -155,9 +155,11 @@ def newPayloadOnChainOf
   match next with
   | none => return (status, none, none)
   | some (block, post) =>
+    -- An account whose code the state after the block lacks fails with the code of its state error.
+    let accounts ← toResult none (Execution.Blocks.Exports.accountsItem post)
     let encoded : Except _ (ByteArray × ByteArray) := do
       let header ← Serialization.Rlp.encode (Serialization.Rlp.Codec.toItem block.header)
-      let accounts ← Serialization.Rlp.encode (Execution.Blocks.Exports.accountsItem post)
+      let accounts ← Serialization.Rlp.encode accounts
       return (header, accounts)
     let (header, accounts) ← toResult none
       (encoded.mapError fun e => UnreadArgument.mk s!"result: {reprStr e}")

@@ -1061,6 +1061,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the exports read the code of an account through the state's own read, `State.getCode` ([#4604](https://github.com/ethereum/EthLib/issues/4604)).
+  A state whose account names a code that the state lacks was exported with an empty code, and now gives the error of a missing code.
+  `stateEntry` and `stateEntryItem` (`Execution/Exports/Transactions.lean`) and `accountsItem` (`Execution/Exports/Transition.lean`) return an `Except StateError`.
+  A state read from the bindings stores each code under its hash, and blocks and transactions keep every code (`stateTransition_hasCodes`, `processTransaction_hasCodes`).
+  So the error is not expected through the Python bindings, whose results do not change.
+  Migration: bind the result of these three functions, or match on it.
 - In Lean, three lemmas about byte arrays and vectors move to `Base/Proofs/Bytes.lean`, where every codec proof can use them ([#4638](https://github.com/ethereum/EthLib/pull/4638)).
   - `Rlp.byteArray_eq_of_toList` (`Serialization/Proofs/Rlp/Bytes.lean`) is now `Base.byteArray_eq_of_toList`, and its two byte arrays are implicit.
   - `Proofs.Gossip.Topic.vector_four` (`Networking/Proofs/Gossip/Topic.lean`) is now `Base.vector_four`, for a vector of any type.
