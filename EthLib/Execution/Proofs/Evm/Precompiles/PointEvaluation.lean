@@ -17,7 +17,7 @@ namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Base (readBytes)
-open EthLib.Cryptography.Kzg (kzgCommitmentToVersionedHash)
+open EthLib.Cryptography.Kzg (VersionedHash kzgCommitmentToVersionedHash)
 
 /-- Call data of any other length than 192 bytes fails before the gas is charged. -/
 theorem pointEvaluation_invalidInputLength {data : ByteArray} (hsize : data.size ≠ INPUT_BYTES) (gas : Nat) :
@@ -57,7 +57,7 @@ theorem pointEvaluation_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArra
     · rename_i hgas hhash
       simp only [reduceCtorEq, false_iff, not_exists, not_and]
       intro _ _ h
-      exact absurd h hhash
+      exact absurd (congrArg VersionedHash.mk h) hhash
     rename_i hgas hhash
     split
     · rename_i e _
@@ -72,7 +72,8 @@ theorem pointEvaluation_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArra
       · simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, Except.ok.injEq]
         constructor
         · intro h
-          exact ⟨fits, by omega, Decidable.not_not.mp hhash, hverify, h.symm⟩
+          -- Equal versioned hashes have equal bytes.
+          exact ⟨fits, by omega, congrArg (·.bytes) (Decidable.not_not.mp hhash), hverify, h.symm⟩
         · intro ⟨_, _, _, _, h⟩
           exact h.symm
   · rw [dite_eq_right fits]

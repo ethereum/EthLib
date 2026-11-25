@@ -25,8 +25,8 @@ namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
 open EthLib.Base (Bytes32 ByteOrder.toBE packBytes readBytes)
 open EthLib.Cryptography.Bls (Fr)
-open EthLib.Cryptography.Kzg (Bytes48 TrustedSetup kzgCommitmentToVersionedHash validateKzgG1Point
-  verifyKzgProofWith)
+open EthLib.Cryptography.Kzg (Bytes48 TrustedSetup VersionedHash kzgCommitmentToVersionedHash
+  validateKzgG1Point verifyKzgProofWith)
 open EthLib.Cryptography.Kzg.Constants (FIELD_ELEMENTS_PER_BLOB)
 
 /-- The size of the call data: a versioned hash, two field elements and two compressed G1 points. -/
@@ -42,7 +42,7 @@ inductive PointEvaluationError where
   /-- The gas given was below the price. -/
   | outOfGas (cost gas : Nat)
   /-- The versioned hash `actual` of the call is not `expected`, the one of the commitment. -/
-  | versionedHashMismatch (expected actual : Bytes32)
+  | versionedHashMismatch (expected actual : VersionedHash)
   /-- The commitment `commitment` is not a valid compressed G1 point in the subgroup. -/
   | invalidCommitment (commitment : Bytes48)
   /-- `z` or `y`, of value `value`, is not below the BLS12-381 group order. -/
@@ -67,7 +67,7 @@ def PointEvaluationError.reprPrec : PointEvaluationError → Nat → Std.Format
   | .outOfGas cost gas, p =>
     pointEvaluationErrorFormat "outOfGas" [namedArg "cost" cost, namedArg "gas" gas] p
   | .versionedHashMismatch expected actual, p => pointEvaluationErrorFormat "versionedHashMismatch"
-      [namedArg "expected" expected, namedArg "actual" actual] p
+      [namedArg "expected" expected.bytes, namedArg "actual" actual.bytes] p
   | .invalidCommitment commitment, p =>
     pointEvaluationErrorFormat "invalidCommitment" [namedArg "commitment" commitment] p
   | .invalidFieldElement value, p =>
@@ -143,13 +143,13 @@ def pointEvaluation (data : ByteArray) (gas : Nat) : Except PointEvaluationError
     -- The versioned hash is bytes 0 to 31, `z` bytes 32 to 63 and `y` bytes 64 to 95.
     --
     -- The commitment is bytes 96 to 143, and the proof bytes 144 to 191.
-    let versionedHash := readBytes data 0 32 (by simp [fits, INPUT_BYTES])
+    let versionedHash : VersionedHash := ⟨readBytes data 0 32 (by simp [fits, INPUT_BYTES])⟩
     let z := readBytes data 32 32 (by simp [fits, INPUT_BYTES])
     let y := readBytes data 64 32 (by simp [fits, INPUT_BYTES])
     let commitment := readBytes data 96 48 (by simp [fits, INPUT_BYTES])
     let proof := readBytes data 144 48 (by simp [fits, INPUT_BYTES])
     -- The versioned hash of the commitment equals the given versioned hash.
-    let expected := (kzgCommitmentToVersionedHash ⟨commitment⟩).bytes
+    let expected := kzgCommitmentToVersionedHash ⟨commitment⟩
     if expected ≠ versionedHash then
       throw (.versionedHashMismatch expected versionedHash)
     -- The proof shows that the polynomial of the commitment takes the value `y` at `z`.
