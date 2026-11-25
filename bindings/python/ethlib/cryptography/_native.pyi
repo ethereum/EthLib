@@ -80,6 +80,26 @@ def bls_decode_g2(point: bytes) -> bytes:
     """A compressed `G2` point, decoded, checked in the subgroup, and compressed again."""
     ...
 
+def bls_key_validate(pubkey: bytes) -> bool:
+    """Whether 48 bytes are a valid public key, by key validation of the BLS draft, §2.5."""
+    ...
+
+def bls_sk_to_pk(secret_key: bytes) -> bytes:
+    """The public key of a secret key of 32 big-endian bytes, by `SkToPk` of the BLS draft, §2.4."""
+    ...
+
+def bls_bytes48_to_g1(point: bytes) -> bytes:
+    """A compressed `G1` point, decoded without the subgroup check, and compressed again."""
+    ...
+
+def bls_g1_add(lhs: bytes, rhs: bytes) -> bytes:
+    """The sum of two compressed `G1` points of the curve, compressed, with no subgroup check."""
+    ...
+
+def bls_g1_neg(point: bytes) -> bytes:
+    """The negation of a compressed `G1` point of the curve, compressed, with no subgroup check."""
+    ...
+
 def bls_expand_message_xmd(message: bytes, dst: bytes, length: int) -> bytes:
     """The message expansion of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`."""
     ...

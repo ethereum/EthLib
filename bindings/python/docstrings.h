@@ -53,6 +53,21 @@
 #define DOC_bls_decode_g2 \
   "A compressed `G2` point, decoded, checked in the subgroup, and compressed again."
 
+#define DOC_bls_key_validate \
+  "Whether 48 bytes are a valid public key, by key validation of the BLS draft, §2.5."
+
+#define DOC_bls_sk_to_pk \
+  "The public key of a secret key of 32 big-endian bytes, by `SkToPk` of the BLS draft, §2.4."
+
+#define DOC_bls_bytes48_to_g1 \
+  "A compressed `G1` point, decoded without the subgroup check, and compressed again."
+
+#define DOC_bls_g1_add \
+  "The sum of two compressed `G1` points of the curve, compressed, with no subgroup check."
+
+#define DOC_bls_g1_neg \
+  "The negation of a compressed `G1` point of the curve, compressed, with no subgroup check."
+
 #define DOC_bls_expand_message_xmd \
   "The message expansion of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`."
 

@@ -36,7 +36,9 @@ instance : ExportError BlsError where
 
 /-! ## Sizes
 
-The Python C extension reads every size through these at module-init time, so the wrapper hardcodes no constant of its own.
+The Python C extension reads every size through these at module-init time.
+
+So the wrapper hardcodes no constant of its own.
 
 Each takes a `Unit` to keep the C-ABI signature predictable. -/
 
@@ -67,6 +69,22 @@ It fails on any other size, as the decoding of a `G2` point does. -/
 def readSignature (bytes : ByteArray) : Except BlsError BLSSignature :=
   match exactBytes? 96 bytes with
   | some sig => .ok sig
+  | none => .error .invalidG2Point
+
+/-- A compressed `G1` point of 48 bytes, decoded without the subgroup check.
+
+An input of another length is an invalid point. -/
+def readG1 (bytes : ByteArray) : Except BlsError G1 :=
+  match exactBytes? 48 bytes with
+  | some bytes => G1.uncompress bytes
+  | none => .error .invalidG1Point
+
+/-- A compressed `G2` point of 96 bytes, decoded without the subgroup check.
+
+An input of another length is an invalid point. -/
+def readG2 (bytes : ByteArray) : Except BlsError G2 :=
+  match exactBytes? 96 bytes with
+  | some bytes => G2.uncompress bytes
   | none => .error .invalidG2Point
 
 /-- A check of public keys and a signature.
@@ -162,20 +180,73 @@ The point at infinity is accepted in its one canonical encoding. -/
 /-- A compressed `G1` point, decoded, checked in the subgroup, and compressed again. -/
 @[export eth_bls_decode_g1]
 def decodeG1Export (bytes : ByteArray) : Result ByteArray := do
-  let p ← toResult none (match exactBytes? 48 bytes with
-    | some bytes => G1.uncompress bytes
-    | none => .error .invalidG1Point)
+  let p ← toResult none (readG1 bytes)
   if !G1.inSubgroup p then toResult (ε := BlsError) none (.error .notInSubgroup)
   return packBytes (G1.compress p)
 
 /-- A compressed `G2` point, decoded, checked in the subgroup, and compressed again. -/
 @[export eth_bls_decode_g2]
 def decodeG2Export (bytes : ByteArray) : Result ByteArray := do
-  let p ← toResult none (match exactBytes? 96 bytes with
-    | some bytes => G2.uncompress bytes
-    | none => .error .invalidG2Point)
+  let p ← toResult none (readG2 bytes)
   if !G2.inSubgroup p then toResult (ε := BlsError) none (.error .notInSubgroup)
   return packBytes (G2.compress p)
+
+/-! ## Keys and the group `G1`
+
+These exports give the key checks and the `G1` operations of the consensus layer.
+
+A `G1` point crosses the boundary as its 48-byte compressed encoding. -/
+
+/-- Whether 48 bytes are a valid public key, by key validation of the BLS draft, §2.5.
+
+The point at infinity, a point off the curve and a point outside the subgroup are not valid.
+
+An input of another length is not a public key, so it is not valid either. -/
+@[export eth_bls_key_validate]
+def keyValidateExport (pubkey : ByteArray) : Result UInt8 :=
+  return match exactBytes? 48 pubkey with
+    | some pubkey =>
+      match G1.keyValidate pubkey with
+      | .ok () => 1
+      | .error _ => 0
+    | none => 0
+
+/-- The public key of a secret key of 32 big-endian bytes, by `SkToPk` of the BLS draft, §2.4.
+
+The key must lie in `[1, r - 1]`.
+
+The key is secret, and this function does not run in constant time. -/
+@[export eth_bls_sk_to_pk]
+def skToPkExport (secretKey : ByteArray) : Result ByteArray := do
+  let sk ← toResult none (SecretKey.fromBytes secretKey)
+  return packBytes (skToPk sk)
+
+/-- A compressed `G1` point, decoded without the subgroup check, and compressed again.
+
+An input that is not the 48-byte compressed encoding of a point of the curve is invalid.
+
+The point at infinity is accepted only in its canonical encoding. -/
+@[export eth_bls_bytes48_to_g1]
+def bytes48ToG1Export (point : ByteArray) : Result ByteArray := do
+  let p ← toResult none (readG1 point)
+  return packBytes (G1.compress p)
+
+/-- The sum of two compressed `G1` points of the curve, compressed, with no subgroup check.
+
+An input that is not the 48-byte compressed encoding of a point of the curve is invalid. -/
+@[export eth_bls_g1_add]
+def g1AddExport (lhs rhs : ByteArray) : Result ByteArray := do
+  let p ← toResult none (readG1 lhs)
+  let q ← toResult none (readG1 rhs)
+  return packBytes (G1.compress (p + q))
+
+/-- The negation of a compressed `G1` point of the curve, compressed, with no subgroup check.
+
+An input that is not the 48-byte compressed encoding of a point of the curve is invalid. -/
+@[export eth_bls_g1_neg]
+def g1NegExport (point : ByteArray) : Result ByteArray := do
+  let p ← toResult none (readG1 point)
+  return packBytes (G1.compress (-p))
 
 /-! ## Hash to curve
 
@@ -214,12 +285,8 @@ Both points must lie in their subgroups of order `r`.
 A point at infinity gives the identity, as in the pairing check. -/
 @[export eth_bls_pairing]
 def pairingExport (p q : ByteArray) : Result ByteArray := do
-  let P ← toResult none (match exactBytes? 48 p with
-    | some p => G1.uncompress p
-    | none => .error .invalidG1Point)
-  let Q ← toResult none (match exactBytes? 96 q with
-    | some q => G2.uncompress q
-    | none => .error .invalidG2Point)
+  let P ← toResult none (readG1 p)
+  let Q ← toResult none (readG2 q)
   if !G1.inSubgroup P || !G2.inSubgroup Q then toResult (ε := BlsError) none (.error .notInSubgroup)
   return fp12Bytes (pairing P Q)
 

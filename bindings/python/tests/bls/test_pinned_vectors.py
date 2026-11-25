@@ -3,6 +3,9 @@
 from pathlib import Path
 
 import pytest
+from eth_typing import BLSPubkey
+from py_ecc.bls.g2_primitives import G1_to_pubkey, pubkey_to_G1
+from py_ecc.optimized_bls12_381 import add
 from ruamel.yaml import YAML
 
 from ethlib.cryptography import bls
@@ -131,3 +134,100 @@ def test_hash_to_g2_bls_tests(case: dict) -> None:
     out = case["output"]
     expected = b"".join(b(c) for c in out["x"].split(",") + out["y"].split(","))
     assert bls.hash_to_g2(case["input"]["msg"].encode(), dst) == expected
+
+
+# The G1 point at infinity, in its one canonical compressed encoding.
+G1_INFINITY = b"\xc0" + b"\x00" * 47
+
+# The failing G1 deserialization cases whose point still lies on the curve.
+# Only the subgroup check refuses them, and the G1 operations make no such check.
+ON_CURVE_OUTSIDE_G1 = {
+    "deserialization_fails_not_in_G1",
+    "deserialization_fails_infinity_with_false_b_flag",
+}
+
+
+@pytest.mark.parametrize("case", cases("bls", "deserialization_G1"))
+def test_key_validate(case: dict) -> None:
+    # Key validation decodes as deserialization does, and also refuses the point at infinity.
+    pubkey = b(case["input"]["pubkey"])
+    assert bls.key_validate(pubkey) == (case["output"] and pubkey != G1_INFINITY)
+
+
+@pytest.mark.parametrize("case", cases("bls", "deserialization_G1"))
+def test_bytes48_to_g1(case: dict, request: pytest.FixtureRequest) -> None:
+    data = b(case["input"]["pubkey"])
+    if case["output"] or request.node.callspec.id in ON_CURVE_OUTSIDE_G1:
+        # A point of the curve decodes, and its canonical encoding is the input itself.
+        assert bls.bytes48_to_g1(data) == data
+        return
+    with raises(bls.BlsError, "invalid G1 point") as error:
+        bls.bytes48_to_g1(data)
+    assert error.value.code == 4
+
+
+def verify_pubkeys() -> set[bytes]:
+    paths = (ROOT / "bls" / "verify").glob("*/data.yaml")
+    return {b(LOADER.load(p.read_text())["input"]["pubkey"]) for p in paths}
+
+
+@pytest.mark.parametrize("case", cases("bls", "sign"))
+def test_sk_to_pk(case: dict) -> None:
+    sk = b(case["input"]["privkey"])
+    if case["output"] is None:
+        with raises(bls.BlsError, "invalid secret key") as error:
+            bls.sk_to_pk(sk)
+        assert error.value.code == 13
+        return
+    # The keys of the signing cases are the public keys of the verification cases.
+    pk = bls.sk_to_pk(sk)
+    assert pk in verify_pubkeys()
+    assert bls.verify(pk, b(case["input"]["message"]), b(case["output"]))
+
+
+# The aggregation cases with a result: the others refuse a key that the addition does not check.
+SUMS = [c for c in cases("bls", "eth_aggregate_pubkeys") if c.values[0]["output"] is not None]
+
+
+@pytest.mark.parametrize("case", SUMS)
+def test_g1_add_sums_pubkeys(case: dict) -> None:
+    # An aggregate public key is the sum of the keys, so a fold of the addition gives it.
+    pubkeys = [b(pk) for pk in case["input"]]
+    total = G1_INFINITY
+    for pk in pubkeys:
+        total = bls.g1_add(total, pk)
+    assert total == b(case["output"])
+
+
+# The finite public keys of the verification cases; one more case gives the point at infinity.
+FINITE_PUBKEYS = sorted(verify_pubkeys() - {G1_INFINITY})
+
+
+@pytest.mark.parametrize("pubkey", FINITE_PUBKEYS, ids=lambda pk: pk.hex()[:16])
+def test_g1_neg(pubkey: bytes) -> None:
+    # A finite point and its negation differ, and their sum is the point at infinity.
+    neg = bls.g1_neg(pubkey)
+    assert neg != pubkey
+    assert bls.g1_neg(neg) == pubkey
+    assert bls.g1_add(pubkey, neg) == G1_INFINITY
+
+
+def test_g1_infinity_is_neutral() -> None:
+    assert bls.g1_neg(G1_INFINITY) == G1_INFINITY
+    for pk in FINITE_PUBKEYS:
+        assert bls.g1_add(pk, G1_INFINITY) == pk
+        assert bls.g1_add(G1_INFINITY, pk) == pk
+
+
+def test_g1_operations_skip_the_subgroup_check() -> None:
+    # The pinned point lies on the curve, outside the subgroup of order r.
+    path = ROOT / "bls" / "deserialization_G1" / "deserialization_fails_not_in_G1" / "data.yaml"
+    point = b(LOADER.load(path.read_text())["input"]["pubkey"])
+    assert not bls.key_validate(point)
+    assert bls.bytes48_to_g1(point) == point
+    assert bls.g1_neg(bls.g1_neg(point)) == point
+    assert bls.g1_add(point, bls.g1_neg(point)) == G1_INFINITY
+    assert bls.g1_add(point, G1_INFINITY) == point
+    # Its double, by the reference, which decodes it without the subgroup check too.
+    decoded = pubkey_to_G1(BLSPubkey(point))
+    assert bls.g1_add(point, point) == G1_to_pubkey(add(decoded, decoded))
