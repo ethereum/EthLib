@@ -135,7 +135,12 @@ private theorem refusal_toSetting (resolved : ResolvedBuilderConfig)
   simp only [BuilderConfigSetting.refusal, ResolvedBuilderConfig.toSetting, Option.getD_some,
     List.mapM_map]
   rw [Base.mapM_eq_ok_map (g := fun entry => (entry.url, entry.authData))]
-  · simp [distinct]
+  · -- A pair is read back from the bytes of its URL and its data, so distinct pairs stay apart.
+    have keyed := distinct.map (S := fun a b => a ≠ b)
+      (fun (url, data) => [String.toByteArray url, data])
+      fun _ _ differ same => differ (by simpa [String.toByteArray_inj, Prod.ext_iff] using same)
+    simp only [List.map_map] at keyed
+    simpa [List.map_map, List.Nodup] using keyed
   · intro _ _
     rfl
 

@@ -214,7 +214,12 @@ def BuilderConfigSetting.refusal (config : BuilderConfigSetting) : Option String
   | .error _ => some "an entry has no authentication data and its URL gives none"
   | .ok pairs =>
     -- The source: no two entries share both their URL, as the exact string, and their data.
-    if pairs.Nodup then none else some "two entries share their URL and authentication data"
+    --
+    -- A pair has no order, so each one is scanned as the bytes of its URL, then its data.
+    --
+    -- The bytes give back the pair, so the scan finds the same repeats.
+    if (firstRepeated (pairs.map fun (url, data) => [url.toByteArray, data])).isNone then none
+    else some "two entries share their URL and authentication data"
 
 /-- The builder configuration of a client, from an object of the keymanager form.
 

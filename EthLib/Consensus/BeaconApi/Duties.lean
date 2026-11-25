@@ -291,7 +291,10 @@ def ptcDuties (config : Config) (state : BeaconState preset fork) (gloas : .glam
   if epoch.toNat + 1 < (getCurrentEpoch state).toNat ∨ epoch < config.GLOAS_FORK_EPOCH then
     throw (invalidEpoch epoch)
   -- The source asks for distinct indices, so a repeated one gives code 400 too.
-  unless indices.Nodup do throw { code := 400, message := "Repeated validator index" }
+  --
+  -- One pass with a search tree finds a repeat, in `O(n log n)` for `n` indices.
+  unless (firstRepeated indices).isNone do
+    throw { code := 400, message := "Repeated validator index" }
   -- The duty of each requested validator in turn; the first index that fails ends the answer.
   return (← indices.mapM (ptcDuty config state gloas epoch)).filterMap id
 

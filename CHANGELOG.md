@@ -1160,6 +1160,10 @@ Not yet released.
 - In Lean, a send of Transactions in an eth session checks its hashes with a search tree ([#4559](https://github.com/ethereum/EthLib/pull/4559)).
   - `Execution.Network.sendEth` (`Execution/Network/Session.lean`) unfolds to the scan `Base.firstRepeated` and lookups in a `Std.TreeSet` of the hashes sent and received, instead of `List.Nodup` and list membership.
     It gives the same verdict on every input, and the session keeps its lists.
+- In Lean, two duplicate checks of the consensus APIs use the one-pass scan `Base.firstRepeated` ([#4518](https://github.com/ethereum/EthLib/issues/4518)).
+  - `Consensus.BeaconApi.ptcDuties` (`Consensus/BeaconApi/Duties.lean`) unfolds to the scan on the requested indices, instead of `List.Nodup`.
+  - `Consensus.KeymanagerApi.BuilderConfigSetting.refusal` (`Consensus/KeymanagerApi/BuilderConfig.lean`) scans each entry as the bytes of its URL, then its data, instead of `List.Nodup`.
+  Each gives the same answer on every input, and every theorem keeps its statement.
 - In Lean, the container lookup of the SSZ and JSON exports builds only the codec and the spelling of the container it names ([#4566](https://github.com/ethereum/EthLib/issues/4566)).
   - `Consensus.Exports.containerOf` (`Consensus/Exports/Ssz.lean`) matches on the name, the preset and the fork together, and each arm binds the preset and the fork it reads.
     The compiler no longer lifts every codec to the top of the function, so a call no longer builds them all.
