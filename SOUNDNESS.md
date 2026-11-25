@@ -118,6 +118,13 @@ It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH +
 The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
 With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
+`Unforgeability.forgeAdvantage_le_ownQueries` (same file) charges the requests nothing.
+With `r <= 2^32`, it bounds a forgery by `(qH + 2^19 + 1) / 2^127`, so just above `2^-108` for an adversary that makes no call of `H`.
+The model's two lanes charge the signer's calls nothing.
+Only the two seed guesses count the whole game's calls.
+When the bound is below one, the bound on `r` keeps that count at most `2^128`.
+The constant `2^19 + 1` covers the slack of the proof's two lanes and the two seed guesses.
+The slack holds the verification and the probes of one forgery.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.

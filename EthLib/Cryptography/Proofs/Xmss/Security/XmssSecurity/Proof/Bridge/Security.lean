@@ -66,6 +66,32 @@ theorem final_arithmetic (q : Nat) (hK : keygenQueries ≤ q) (hq : q < 2 ^ 127)
       exact_mod_cast (by omega : 2 * (q - keygenQueries) + 2 ^ 20 + 1 + 1 ≤ 2 * q)
     _ = _ := hhalf
 
+/-- The real game wins at most as often as the model's game, plus one guess of each seed per call.
+
+The model's game is against the translated, memoized adversary, and `q` counts every hash call. -/
+theorem realGame_le_model (q : Nat) (hq : q < 2 ^ 256)
+    (adversary : EthAdversary)
+    (hbound : HashQueryBound (realGame adversary) ∅ q) :
+    Pr{let x ← (simulateQ romImpl (realGame adversary)).run' ∅}[x = true] ≤
+      forgeAdvantage Concrete.scheme (modelAdversary adversary) +
+        ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) +
+          ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by
+  have hseeded := seededBudget adversary q hq hbound
+  calc Pr{let x ← (simulateQ romImpl (realGame adversary)).run' ∅}[x = true]
+      ≤ Pr{let x ← (simulateQ romImpl (innerGame adversary)).run' ∅}[x = true] +
+        ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := realGame_le_inner adversary q hseeded
+    _ = Pr{let x ← sampleMasterSeed >>= tableGame adversary}[x = true] +
+        ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by rw [innerGame_eq_tableGame]
+    _ ≤ Pr{let x ← cleanGame adversary}[x = true] +
+        ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) +
+          ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) :=
+      add_le_add (tableGame_le_clean adversary q hq hseeded) le_rfl
+    _ ≤ Pr{let x ← refGame adversary}[x = true] +
+        ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) +
+          ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) :=
+      add_le_add (add_le_add (cleanGame_le_ref adversary) le_rfl) le_rfl
+    _ = _ := by rw [refGame_eq]
+
 /-- The real game wins with probability at most `q / 2^127`, for a budget of `q >= 1` calls. -/
 theorem realGame_security (q : Nat) (hq : 1 ≤ q)
     (adversary : EthAdversary)
@@ -81,21 +107,10 @@ theorem realGame_security (q : Nat) (hq : 1 ≤ q)
     have hlanes := Proof.concreteScheme_afterKeygenSecurity (q - keygenQueries) (by omega)
       (modelAdversary adversary) (afterKeygenBudget adversary q (by omega) hseeded)
     calc Pr{let x ← (simulateQ romImpl (realGame adversary)).run' ∅}[x = true]
-        ≤ Pr{let x ← (simulateQ romImpl (innerGame adversary)).run' ∅}[x = true] +
-          ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := realGame_le_inner adversary q hseeded
-      _ = Pr{let x ← sampleMasterSeed >>= tableGame adversary}[x = true] +
-          ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by rw [innerGame_eq_tableGame]
-      _ ≤ Pr{let x ← cleanGame adversary}[x = true] +
+        ≤ forgeAdvantage Concrete.scheme (modelAdversary adversary) +
           ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) +
             ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) :=
-        add_le_add (tableGame_le_clean adversary q (by omega) hseeded) le_rfl
-      _ ≤ Pr{let x ← refGame adversary}[x = true] +
-          ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) +
-            ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) :=
-        add_le_add (add_le_add (cleanGame_le_ref adversary) le_rfl) le_rfl
-      _ = forgeAdvantage Concrete.scheme (modelAdversary adversary) +
-          ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) +
-            ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by rw [refGame_eq]
+          realGame_le_model q (by omega) adversary hbound
       _ ≤ ((2 * (q - keygenQueries) + lowerOrderSlack : Nat) : ℝ≥0∞) / ((2 ^ 128 : Nat) : ℝ≥0∞) +
           ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) +
             ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) :=
