@@ -12,14 +12,6 @@ A fast confirmation reads its stake from a checkpoint state, the source.
 A receiver near the call reads the committees of an epoch at most three epochs after the source.
 
 The stake that leaves the active set by then must fit the near exit reserve of the source.
-
-Every exit is placed at `current + 1 + MAX_SEED_LOOKAHEAD` or later, from the epoch where it starts.
-
-So each state fixes activity up to `current + MAX_SEED_LOOKAHEAD`.
-
-With a lookahead of at least three epochs, every such exit was already scheduled at the source.
-
-A condition on the preset names that lookahead.
 -/
 
 @[expose] public section
@@ -42,19 +34,16 @@ def exitReserveNear (source : BeaconState preset fork) : ℕ :=
     {v ∈ activeVoters source | (source.validators.data[v.toNat]?).any fun validator =>
       validator.exitEpoch.toNat ≤ (getCurrentEpoch source).toNat + 3}
 
-/-- Stake active at the source and inactive at a near epoch of a later state fits the reserve.
-
-The later state keeps the source's activity up to its fixed epoch, as every run does.
-
-The epoch is from the source's epoch to three epochs after it.
-
-A validator active at the source and inactive at that epoch was inactive there in the source too.
-
-So its exit epoch in the source is at most that epoch, which the near exit reserve counts. -/
+/-- Stake active at the source and inactive at a near epoch of a later state fits the reserve. -/
 private theorem exitStake_le_exitReserveNear {post : Fork}
     {source : BeaconState preset fork} {later : BeaconState preset post}
+    -- A condition on the preset names a lookahead of at least three epochs.
+    --
+    -- With that lookahead, every exit within three epochs was already scheduled at the source.
     (within : source.RegistryWithinLimit) (fixedWindow : preset.SeedLookaheadAtLeastThree)
+    -- The later state keeps the source's activity up to its fixed epoch, as every run does.
     (kept : ActiveKept (activityFixedEpoch source) source later)
+    -- The epoch is from the source's epoch to three epochs after it.
     {epoch : Epoch} (low : getCurrentEpoch source ≤ epoch)
     (high : epoch.toNat ≤ (getCurrentEpoch source).toNat + 3) :
     stake (fun v => balanceAt source v.toNat)
@@ -65,18 +54,29 @@ private theorem exitStake_le_exitReserveNear {post : Fork}
   rw [Finset.mem_filter] at member ⊢
   obtain ⟨active, absent⟩ := member
   refine ⟨active, ?_⟩
+  -- Every exit is placed at `current + 1 + MAX_SEED_LOOKAHEAD` or later.
+  --
+  -- Here `current` is the epoch where the exit starts.
+  --
+  -- So each state fixes activity up to `current + MAX_SEED_LOOKAHEAD`.
+  --
   -- The epoch is within the source's fixed epoch, so the later state reads the source's activity.
   have fixed : epoch ≤ activityFixedEpoch source := by
     rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
     have := epoch.toNat_lt
     have : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := fixedWindow
     omega
+  -- Take a validator active at the source and inactive at that epoch.
+  --
+  -- It was inactive at that epoch in the source too.
   rw [kept epoch fixed] at absent
   unfold activeVoters at active
   rw [List.mem_toFinset, mem_getActiveValidatorIndices within] at active
   obtain ⟨validator, found, current⟩ := active
   simp only [isActiveAt, found, Option.map_some, Option.getD_some] at absent
   simp only [found, Option.any_some, decide_eq_true_eq]
+  -- So its exit epoch in the source is at most that epoch, which the near exit reserve counts.
+  --
   -- Active at the source's epoch and not at the later one: activation is early, so exit is due.
   simp only [isActiveValidator, Bool.and_eq_true, Bool.and_eq_false_iff, decide_eq_true_eq,
     decide_eq_false_iff_not, UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at current absent
@@ -156,25 +156,24 @@ Each full epoch of a near receiver's window omits some active source stake.
 
 That omitted stake is at most the near exit reserve.
 
-It needs a seed lookahead of at least three, and a checkpoint at most two epochs before the parent.
-
-The source state's registry is within the limit (`within`).
-
-From Gloas the type of the registry does not give it.
-
 The alternative is a block collision between two honest stores by the horizon. -/
 theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    -- The bound needs a seed lookahead of at least three.
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (fixedWindow : preset.SeedLookaheadAtLeastThree)
     {time : ℕ} {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
     (callerTime : (e.world n).time ≤ time) {checkpoint : Checkpoint}
     {source : BeaconState preset fork} {block parent : BeaconBlock preset fork} {first : Slot}
     (sourceOk : ((e.world n).state u).checkpointState checkpoint = .ok source)
+    -- The source state's registry is within the limit.
+    --
+    -- From Gloas the type of the registry does not give it.
     (within : source.RegistryWithinLimit)
     (parentOk : ((e.world n).state u).block block.parentRoot = .ok parent)
     (firstOk : addChecked parent.slot 1 = .ok first)
+    -- The bound needs a checkpoint at most two epochs before the parent.
     (onChain : SourceOnParentChain ((e.world n).state u) checkpoint block.parentRoot parent)
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1)) :
     ReceiverWindowExitsNearWith (e := e) (computeEpochAtSlot preset parent.slot) source first

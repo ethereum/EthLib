@@ -12,12 +12,6 @@ The walk starts after a start block and lists its roots oldest first.
 Honest heads cover a root over a span of times when each up-to-date honest head descends from it.
 
 Coverage of the whole walk follows from coverage of the start and a step for each member.
-
-The step covers a member up to one more time, from the coverage of its parent up to that time.
-
-It may read the coverage of every member before that time.
-
-It may also give an alternative instead.
 -/
 
 @[expose] public section
@@ -33,22 +27,24 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- Coverage of a walk, from the coverage of its start and a step for each member.
-
-The members are listed oldest first, and each member's parent is the member before it.
-
-The first member's parent is the start.
-
-The step covers a member up to one more time from the coverage of its parent up to that time.
-
-It may also read the coverage of every member before that time.
-
-The step may fail with an alternative `P` instead; the result then holds `P`. -/
+/-- Coverage of a walk, from the coverage of its start and a step for each member. -/
 theorem Execution.walk_covers {first last : ℕ} {P : Prop} {start : Root} (members : List Root)
     (parentOf : Root → Root)
+    -- The walk starts after a start block and lists its roots oldest first.
+    --
+    -- Each member's parent is the member before it.
+    --
+    -- The first member's parent is the start.
     (parents : ∀ i (h : i < members.length), parentOf members[i] =
       if _ : i = 0 then start else members[i - 1]'(by omega))
     (startCovers : HonestHeadsCover (e := e) start first (last + 1))
+    -- The step covers a member up to one more time, from its parent's coverage up to that time.
+    --
+    -- It may also read the coverage of every member before that time.
+    --
+    -- The step may fail with an alternative `P` instead.
+    --
+    -- The result then holds `P`.
     (step : ∀ T, T ≤ last → (∀ m ∈ members, HonestHeadsCover (e := e) m first T) →
       ∀ m ∈ members, HonestHeadsCover (e := e) (parentOf m) first (T + 1) →
         HonestHeadsCover (e := e) m first (T + 1) ∨ P) :

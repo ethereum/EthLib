@@ -12,14 +12,6 @@ A store's justified checkpoint after the anchor was set by one count of votes.
 The count passed only if two thirds of the active stake voted for it.
 
 When Byzantine stake is below two thirds there, an honest validator was among the voters.
-
-Its vote was in a block that the store holds, and the store reads it with a valid signature.
-
-So the vote is a statement of a sent message, which the network model ties to its signer.
-
-The count reads the active stake above the floor of one increment, from the stake floors.
-
-The anchor's latest header must be the anchor block's, with a zero state root.
 -/
 
 @[expose] public section
@@ -35,17 +27,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {e : Execution (honestForkChoice config checks sources anchorState anchorBlock assignment
     genesisTimeMs) J}
 
-/-- A state where a store counts votes has active stake above one and a half increments.
-
-The count is after the first two epochs.
-
-A pull-up counts in a held state, where the terminal floor bounds the stake of the keys.
-
-An epoch step on the way to a held child counts in an epoch call of the run to that child.
-
-There the run floor bounds it.
-
-Distinct keys make the stake of the keys that of the indices. -/
+/-- A state where a store counts votes has active stake above one and a half increments. -/
 private theorem counted_stake_large {anchor : Store preset fork} {g : ForkedBeaconState preset}
     {horizon : Epoch} {last : Nat}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -64,6 +46,7 @@ private theorem counted_stake_large {anchor : Store preset fork} {g : ForkedBeac
         (state = base ∨ ∃ slot, processSlots config checks base slot = .ok state) ∧
         (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 ∧
         processSlot state = .ok counted)
+    -- The count is after the first two epochs.
     (later : GENESIS_EPOCH + 1 < getCurrentEpoch counted)
     (upper : (getCurrentEpoch counted).toNat ≤ horizon.toNat + 1) :
     3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
@@ -78,31 +61,28 @@ private theorem counted_stake_large {anchor : Store preset fork} {g : ForkedBeac
       heldEarly w honest k bound next scheduled root state found
   rcases shape with rfl | ⟨state, childRoot, child, childFound, parent, before, path, boundary,
     countedOk⟩
+  -- A pull-up counts in a held state, where the terminal floor bounds the stake of the keys.
+  --
+  -- Distinct keys make the stake of the keys that of the indices.
   · -- A pull-up: the terminal floor, with distinct keys.
     have floor := terminal w honest k bound root counted held upper later
     rw [stake_activeKeys_eq (reached.pubkeysDistinct_of_blockState (UInt64.le_of_eq anchorSlot)
       (absent w honest k bound) early pre genesis held)] at floor
     exact floor
+  -- An epoch step on the way to a held child counts in an epoch call of the run to that child.
+  --
+  -- There the run floor bounds it.
   · -- An epoch step: the run floor at the epoch call.
     exact reached.countedRun_enoughStake (UInt64.le_of_eq anchorSlot) (absent w honest k bound)
       early pre (enough w honest k bound) genesis held childFound parent before path boundary
       countedOk later upper
 
-/-- A store's justified checkpoint after an epoch has a signer from a set that the count can't miss.
-
-The count passed, so a validator among the quorum voters of that set voted for the checkpoint.
-
-The set misses the count when the quorum voters outside it hold less than two thirds of the total.
-
-That bound is the premise `fewCounted`, for each state that the store counts in.
-
-The vote was cast in a block that the store holds, below the counting state, and the block was sent.
-
-The anchor's latest header must be the anchor block's, with a zero state root. -/
+/-- A store's justified checkpoint after an epoch has a signer from a set the count can't miss. -/
 theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store preset fork}
     {g : ForkedBeaconState preset} {epoch horizon : Epoch} {last : Nat}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    -- The anchor's latest header must be the anchor block's, with a zero state root.
     (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
       anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
       anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
@@ -122,6 +102,11 @@ theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store 
     (slotOk : ((e.world k).state w).getCurrentSlot config = .ok slot)
     (later : epoch < ((e.world k).state w).justifiedCheckpoint.epoch)
     (p : ValidatorIndex → Prop) [DecidablePred p]
+    -- The set misses the count when the quorum voters outside it hold less than two thirds.
+    --
+    -- Those two thirds are of the total active balance.
+    --
+    -- That bound must hold for each state that the store counts in.
     (fewCounted : ∀ (root : Root) (base state : BeaconState preset fork) (total : Gwei),
       ((e.world k).state w).blockStates[root]? = some base →
       (state = base ∨ ∃ (slot : Slot) (childRoot : Root) (child : BeaconBlock preset fork),
@@ -295,9 +280,13 @@ theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store 
           rw [UInt64.le_iff_toNat_le, getCurrentEpoch_toNat, getCurrentEpoch_toNat]
           exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp this)
         exact Nat.le_trans (UInt64.le_iff_toNat_le.mp epochLe) (insideHeld childStored)
+  -- The count reads the active stake above the floor of one increment, from the stake floors.
+  --
   -- The count's active stake is above one and a half increments.
   have large := counted_stake_large anchored start anchorSlot genesis pre absent heldEarly enough
     terminal honest high held shape countedLater upper
+  -- The count passed, so a validator among the quorum voters of that set voted for the checkpoint.
+  --
   -- So an honest quorum voter voted for the checkpoint.
   obtain ⟨current, vote, member, voter, link, target⟩ :=
     processJustificationAndFinalization_exists_voter p backed.1 backed.2 large few pulledOk
@@ -312,38 +301,29 @@ theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store 
       .ok vote.2.target.root := by
     rw [target]
     exact walk
+  -- The vote was cast in a block that the store holds, below the counting state.
+  --
+  -- The store reads it with a valid signature, and the block was sent.
+  --
+  -- So the vote is a statement of a sent message, which the network model ties to its signer.
+  --
   -- The vote is a statement of a message sent by now, of a slot before the store's slot.
   obtain ⟨m, sent, signed, before⟩ := e.exists_sent_of_votesBelow anchored start anchorSlot slots
     positive apart delay honest (absent w honest k high) below voteWalk slotOk
   exact ⟨vote.1, voter, k, le_rfl, m, sent, vote.2, signed, target, before⟩
 
-/-- Each up-to-date honest store's justified checkpoint after an epoch has an honest signer.
-
-The epoch is at or after the anchor's.
-
-Byzantine stake is below two thirds wherever an honest store counts votes for a later target.
-
-The checkpoint was set by one count of votes, in a state the store holds or on the way from one.
-
-The count passed, so an honest validator among the quorum voters voted for the checkpoint.
-
-Its vote was cast in a block the store holds, below the counting state.
-
-The store reads that block's attestation with a valid signature, and the block was sent.
-
-The anchor state ends a run from a deposited genesis, and the stake floors bound the active stake.
-
-The anchor's latest header must be the anchor block's, with a zero state root.
-
-The genesis state has one, since its latest header is that of the genesis block.
-
-So has the state after the anchor block, since block processing stores a zero state root.
-
-The anchor store checks neither, and without them a justified root may be one no store holds. -/
+/-- Each up-to-date honest store's justified checkpoint after an epoch has an honest signer. -/
 theorem Execution.justifiedHonestlySigned [DecidablePred (· ∈ J)] {anchor : Store preset fork}
     {g : ForkedBeaconState preset} {epoch horizon : Epoch} {first last : Nat}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    -- The anchor's latest header must be the anchor block's, with a zero state root.
+    --
+    -- The genesis state has one, since its latest header is that of the genesis block.
+    --
+    -- So has the state after the anchor block, since block processing stores a zero state root.
+    --
+    -- The anchor store checks neither, and without them a justified root may be one no store holds.
     (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
       anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
       anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
@@ -351,16 +331,29 @@ theorem Execution.justifiedHonestlySigned [DecidablePred (· ∈ J)] {anchor : S
     (anchorZero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
     (slots : 0 < config.SLOT_DURATION_MS) (parameters : DirectSafety.Parameters preset)
     (delay : preset.InclusionDelayPositive)
+    -- The anchor state ends a run from a deposited genesis.
     (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
     (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
     (heldEarly : HeldStatesBeforeUpgrade (e := e) last)
     (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    -- The stake floors bound the active stake.
     (enough : HeldRunStakeFloor (e := e) pre horizon last)
     (terminal : HeldTerminalStakeFloor (e := e) horizon last)
+    -- The epoch is at or after the anchor's.
     (afterAnchor : getCurrentEpoch anchorState ≤ epoch)
+    -- Byzantine stake is below two thirds wherever an honest store counts votes for a later target.
     (byzantine : ByzantineCountedStake (e := e) epoch first last) :
     JustifiedHonestlySigned (e := e) epoch first last := by
   intro w honest k slot low high upToDate slotOk later
+  -- The checkpoint was set by one count of votes.
+  --
+  -- The count ran in a state the store holds, or on the way from one.
+  --
+  -- The count passed, so an honest validator among the quorum voters voted for the checkpoint.
+  --
+  -- Its vote was cast in a block the store holds, below the counting state.
+  --
+  -- The store reads that block's attestation with a valid signature, and the block was sent.
   exact Execution.justifiedSigned_at anchored start anchorSlot anchorHeader anchorZero slots
     parameters delay genesis pre roots absent heldEarly bounded enough terminal afterAnchor honest
     high slotOk later (· ∈ J)

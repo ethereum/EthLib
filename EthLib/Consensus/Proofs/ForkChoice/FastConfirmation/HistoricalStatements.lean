@@ -39,27 +39,27 @@ def CountedState (store : Store preset fork) (config : Config)
 def activeVoters (state : BeaconState preset fork) : Finset ValidatorIndex :=
   (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset
 
-/-- Stake of the source state that may leave the active set soon.
-
-It counts the active validators whose exit epoch is at most two epochs after the current one.
-
-From Electra, it adds the exit and consolidation churn limits and the balances left to consume.
-
-A churn limit that fails to read counts as 0.
-
-From Electra, it also adds a slack of `2 * MAX_EFFECTIVE_BALANCE_ELECTRA`.
-
-Before Electra, it adds the validator churn limit, at least 1, times `MAX_EFFECTIVE_BALANCE`. -/
+/-- Stake of the source state that may leave the active set soon. -/
 def exitReserve (config : Config) (source : BeaconState preset fork) : Nat :=
+  -- The reserve counts the active validators whose exit epoch is near.
+  --
+  -- A near exit epoch is at most two epochs after the current one.
   stake (fun v => balanceAt source v.toNat)
     {v ∈ activeVoters source | (source.validators.data[v.toNat]?).any fun validator =>
       validator.exitEpoch.toNat ≤ (getCurrentEpoch source).toNat + 2} +
+    -- From Electra, it adds the exit and consolidation churn limits.
+    --
+    -- It also adds the balances left to consume.
+    --
+    -- A churn limit that fails to read counts as 0.
     if electra : .pectra ≤ fork then
       ((exitChurnLimit config source).toOption.getD 0).toNat +
         (source.exitBalanceToConsume electra).toNat +
         ((getConsolidationChurnLimit config source).toOption.getD 0).toNat +
         (source.consolidationBalanceToConsume electra).toNat +
+        -- From Electra, it also adds a slack of `2 * MAX_EFFECTIVE_BALANCE_ELECTRA`.
         2 * preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
+    -- Before Electra, it adds the validator churn limit, at least 1, times `MAX_EFFECTIVE_BALANCE`.
     else max 1 (getValidatorChurnLimit config source).toNat * preset.MAX_EFFECTIVE_BALANCE.toNat
 
 /-- Every block held by the store has a nonzero state root. -/
@@ -248,13 +248,11 @@ variable [DecidablePred (· ∈ J)]
 
 /-- Each nonempty window of the head between the two slots has little Byzantine stake.
 
-Its Byzantine stake plus half the reserve is within the threshold share of its active stake.
-
-Stakes are the source state's balances of the window's members active at the source.
-
 An assumption on the run: the rule does not check the Byzantine stake of later windows.
 
-It buys each later window's margin over its adversary, with the reserve as the charge for exits.
+It buys each later window's margin over its adversary.
+
+The reserve is the charge for exits.
 
 At the near exit reserve a theorem bounds those exits, so they are not assumed.
 
@@ -263,6 +261,11 @@ def SourceWindowReserveWith (store : Store preset fork) (head : Root)
     (source : BeaconState preset fork) (first last : Slot) (reserve : ℕ) : Prop :=
   ∀ low high participants, first ≤ low → low ≤ high → high ≤ last →
     store.getCommitteesBetweenSlots head low high = .ok participants →
+    -- Each window's Byzantine stake plus half the reserve is within its threshold share.
+    --
+    -- That share is of the window's active stake.
+    --
+    -- Stakes are the source state's balances of the window's members active at the source.
     100 * stake (fun v => balanceAt source v.toNat)
         {v ∈ Store.activeMembers source participants | v ∉ J} +
       50 * reserve ≤ config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
@@ -369,10 +372,6 @@ def RootViable (root : Root) (first last : Nat) : Prop :=
 
 /-- Each up-to-date honest store with an early justified checkpoint has it comparable with the root.
 
-An early checkpoint has an epoch at most the given one.
-
-The justified block descends from the root, or the root descends from the justified block.
-
 This is the checkpoint-consistency half of the root's viability, for early checkpoints only.
 
 While no later checkpoint is justified, every honest store's checkpoint is early.
@@ -383,7 +382,9 @@ Realized justification at the call's head would discharge it more directly, by a
 def EarlyJustifiedConsistent (root : Root) (epoch : Epoch) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    -- An early checkpoint has an epoch at most the given one.
     ((e.world k).state w).justifiedCheckpoint.epoch ≤ epoch →
+    -- The justified block descends from the root, or the root descends from the justified block.
     ((e.world k).state w).isAncestor
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       ((e.world k).state w).isAncestor ⟨root, .pending⟩
@@ -391,11 +392,7 @@ def EarlyJustifiedConsistent (root : Root) (epoch : Epoch) (first last : Nat) : 
 
 /-- Each up-to-date honest store keeps a root that strictly descends from its justified block.
 
-The root stays in the store's filtered tree.
-
-The filtered tree keeps such a block when a viable leaf descends from it.
-
-So this says that the root keeps a viable leaf, the other half of the root's viability.
+This says that the root keeps a viable leaf, the other half of the root's viability.
 
 Voting sources refreshed after empty epochs would make it more direct, by a rule change. -/
 def RootKeepsViableLeaf (root : Root) (first last : Nat) : Prop :=
@@ -406,13 +403,12 @@ def RootKeepsViableLeaf (root : Root) (first last : Nat) : Prop :=
     ((e.world k).state w).isAncestor ⟨root, .pending⟩
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true →
     root ≠ ((e.world k).state w).justifiedCheckpoint.root →
+    -- The root stays in the store's filtered tree.
+    --
+    -- The filtered tree keeps such a block when a viable leaf descends from it.
     (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes
 
 /-- Each up-to-date honest store whose justified checkpoint is after an epoch has an honest signer.
-
-An honest validator signed a vote with that checkpoint as its target.
-
-The vote is of a slot before the store's current slot, in a message sent by the store's time.
 
 Byzantine stake below two thirds in each state that counts the votes gives such a signer.
 
@@ -424,27 +420,27 @@ def JustifiedHonestlySigned (epoch : Epoch) (first last : Nat) : Prop :=
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
     ((e.world k).state w).getCurrentSlot config = .ok slot →
     epoch < ((e.world k).state w).justifiedCheckpoint.epoch →
+    -- An honest validator signed a vote with that checkpoint as its target.
+    --
+    -- The vote is of a slot before the store's current slot, in a message sent by the store's time.
     ∃ v ∈ J, ∃ i, (e.world i).time ≤ (e.world k).time ∧ ∃ m ∈ (e.world i).sent, ∃ data,
       (v, data) ∈ statements config checks anchorState anchorBlock m ∧
       data.target = ((e.world k).state w).justifiedCheckpoint ∧ data.slot < slot
 
-/-- Byzantine stake is below two thirds of the total in each state that counts later votes.
-
-The total is the active balance of the state's epoch, at least one increment.
-
-The states are those where an up-to-date honest store over the interval counts votes.
-
-Their epoch is after the given one.
-
-The Byzantine stake is that of the quorum voters outside the honest set.
-
-The quorum voters are the unslashed validators active in the state's epoch or the one before. -/
+/-- Byzantine stake is below two thirds of the total in each state that counts later votes. -/
 def ByzantineCountedStake (epoch : Epoch) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k (state : BeaconState preset fork) (total : Gwei),
     first ≤ (e.world k).time → (e.world k).time ≤ last →
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    -- The states are those where an up-to-date honest store over the interval counts votes.
+    --
+    -- Their epoch is after the given one.
     CountedState ((e.world k).state w) config state → epoch < getCurrentEpoch state →
+    -- The total is the active balance of the state's epoch, at least one increment.
     getTotalActiveBalance state = .ok total →
+    -- The Byzantine stake is that of the quorum voters outside the honest set.
+    --
+    -- The quorum voters are the unslashed validators active in the state's epoch or the one before.
     3 * stake (fun v => balanceAt state v.toNat) {v ∈ quorumVoters state | v ∉ J} <
       2 * total.toNat
 
@@ -555,24 +551,14 @@ def HeldTerminalStakeFloor (horizon : Epoch) (last : Nat) : Prop :=
 
 /-- An honest store has two runs from the anchor to held states that give direct-safety evidence.
 
-A terminal view of the first state has the store's earlier finalized checkpoint.
-
-A terminal view of the second state has the store's later justified checkpoint.
-
-The earlier finalized epoch is at most the later justified epoch.
-
-The later justified root does not read the earlier finalized root at that epoch.
-
-The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
-
-It is relative to the anchor, and its drift counts from the anchor.
-
 With enough churn since the anchor, the stake inequality holds with no accountable key. -/
 def HistoricalDirectSafetyEvidence {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
   ∃ w ∈ J, ∃ i k, i ≤ k ∧ (e.world k).time ≤ time ∧
+    -- The earlier finalized epoch is at most the later justified epoch.
     ((e.world i).state w).finalizedCheckpoint.epoch ≤
       ((e.world k).state w).justifiedCheckpoint.epoch ∧
+    -- The later justified root does not read the earlier finalized root at that epoch.
     ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
       ((e.world i).state w).finalizedCheckpoint.epoch ≠
         .ok ((e.world i).state w).finalizedCheckpoint.root ∧
@@ -583,8 +569,13 @@ def HistoricalDirectSafetyEvidence {g : ForkedBeaconState preset}
       (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
       (∃ r : Root, ((e.world i).state w).blockStates[r]? = some stateA) ∧
       (∃ r : Root, ((e.world k).state w).blockStates[r]? = some stateB) ∧
+      -- A terminal view of the first state has the store's earlier finalized checkpoint.
       va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
+      -- A terminal view of the second state has the store's later justified checkpoint.
       vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
+      -- The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
+      --
+      -- It is relative to the anchor, and its drift counts from the anchor.
       DirectSafety.AccountableOrHashEvidence pre left right
         ((e.world k).state w).justifiedCheckpoint.epoch.toNat
 
@@ -602,28 +593,19 @@ def SelectedCheckpointsAgree (horizon : Epoch) (last : Nat) : Prop :=
 
 /-- Two honest stores hold different justified checkpoints of one epoch, with evidence.
 
-Each checkpoint is the justified or unrealized justified checkpoint of its store.
-
-The stores are at events by the time.
-
-A terminal view of a held state of each store has that checkpoint as its current justified field.
-
-The runs go from the anchor to the two held states.
-
-The evidence is the direct-safety stake inequality on those runs, or hash evidence on them.
-
-Its drift counts from the anchor, up to one epoch past the common epoch.
-
 With enough churn since the anchor, the stake inequality holds with no accountable key. -/
 def CrossStoreJustifiedEvidence {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
+  -- The stores are at events by the time.
   ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
     ∃ first second : Checkpoint,
+      -- Each checkpoint is the justified or unrealized justified checkpoint of its store.
       (first = ((e.world i).state a).justifiedCheckpoint ∨
         first = ((e.world i).state a).unrealizedJustifiedCheckpoint) ∧
       (second = ((e.world j).state b).justifiedCheckpoint ∨
         second = ((e.world j).state b).unrealizedJustifiedCheckpoint) ∧
       first.epoch = second.epoch ∧ first ≠ second ∧
+    -- The runs go from the anchor to the two held states.
     ∃ (stateA stateB : BeaconState preset fork)
       (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
       (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
@@ -631,27 +613,22 @@ def CrossStoreJustifiedEvidence {g : ForkedBeaconState preset}
       (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
       (∃ r : Root, ((e.world i).state a).blockStates[r]? = some stateA) ∧
       (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
+      -- For each store, a terminal view of a held state has that store's checkpoint.
+      --
+      -- The checkpoint is the current justified field of the view.
       va.state.currentJustifiedCheckpoint = first ∧
       vb.state.currentJustifiedCheckpoint = second ∧
+      -- The evidence is the direct-safety stake inequality on those runs, or hash evidence on them.
+      --
+      -- Its drift counts from the anchor, up to one epoch past the common epoch.
       DirectSafety.AccountableOrHashEvidence pre left right first.epoch.toNat
 
-/-- An honest finality conflicts with a held state's justification, with evidence from two runs.
-
-The finalized checkpoint is that of an honest store, at an event by the time.
-
-The held state is held by an honest store, the same one or another, at an event by the time.
-
-Its realized justified checkpoint is at the finalized epoch or later.
-
-A terminal view of the first state has the finalized checkpoint, and the second state is the view.
-
-The second state's justified root does not read the finalized root at the finalized epoch.
-
-The evidence is the direct-safety stake inequality on those runs, or hash evidence on them.
-
-Its drift counts from the anchor, up to one epoch past the held justified epoch. -/
+/-- An honest finality conflicts with a held state's justification, with evidence from two runs. -/
 def HeldStateFinalityEvidence {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
+  -- The finalized checkpoint is that of an honest store, at an event by the time.
+  --
+  -- The held state is held by an honest store, the same one or another, at an event by the time.
   ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
     ∃ (stateA stateB : BeaconState preset fork)
       (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
@@ -660,37 +637,35 @@ def HeldStateFinalityEvidence {g : ForkedBeaconState preset}
       (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
       (∃ r : Root, ((e.world i).state a).blockStates[r]? = some stateA) ∧
       (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
+      -- A terminal view of the first state has the finalized checkpoint.
       va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
+      -- The second state is the view, with the same current justified checkpoint.
       vb.state.currentJustifiedCheckpoint = stateB.currentJustifiedCheckpoint ∧
+      -- The held state's realized justified checkpoint is at the finalized epoch or later.
       ((e.world i).state a).finalizedCheckpoint.epoch ≤ stateB.currentJustifiedCheckpoint.epoch ∧
+      -- The second state's justified root does not read the finalized root at the finalized epoch.
       ((e.world j).state b).getCheckpointBlock stateB.currentJustifiedCheckpoint.root
         ((e.world i).state a).finalizedCheckpoint.epoch ≠
           .ok ((e.world i).state a).finalizedCheckpoint.root ∧
+      -- The evidence is the direct-safety stake inequality on those runs, or hash evidence on them.
+      --
+      -- Its drift counts from the anchor, up to one epoch past the held justified epoch.
       DirectSafety.AccountableOrHashEvidence pre left right
         stateB.currentJustifiedCheckpoint.epoch.toNat
 
 /-- Two honest stores have two runs from the anchor to held states that give direct-safety evidence.
 
-The two stores may be the same or different, at any events by the time.
-
-A terminal view of the first state has the first store's finalized checkpoint.
-
-A terminal view of the second state has the second store's justified checkpoint.
-
-The first store's finalized epoch is at most the second store's justified epoch.
-
-The second store's justified root does not read the first store's finalized root at that epoch.
-
-The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
-
-It is relative to the anchor, and its drift counts from the anchor.
-
 With enough churn since the anchor, the stake inequality holds with no accountable key. -/
 def CrossStoreDirectSafetyEvidence {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
+  -- The two stores may be the same or different, at any events by the time.
   ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+    -- The first store's finalized epoch is at most the second store's justified epoch.
     ((e.world i).state a).finalizedCheckpoint.epoch ≤
       ((e.world j).state b).justifiedCheckpoint.epoch ∧
+    -- The second store's justified root does not read the first store's finalized root.
+    --
+    -- The read is at the first store's finalized epoch.
     ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
       ((e.world i).state a).finalizedCheckpoint.epoch ≠
         .ok ((e.world i).state a).finalizedCheckpoint.root ∧
@@ -701,8 +676,13 @@ def CrossStoreDirectSafetyEvidence {g : ForkedBeaconState preset}
       (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
       (∃ r : Root, ((e.world i).state a).blockStates[r]? = some stateA) ∧
       (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
+      -- A terminal view of the first state has the first store's finalized checkpoint.
       va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
+      -- A terminal view of the second state has the second store's justified checkpoint.
       vb.state.currentJustifiedCheckpoint = ((e.world j).state b).justifiedCheckpoint ∧
+      -- The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
+      --
+      -- It is relative to the anchor, and its drift counts from the anchor.
       DirectSafety.AccountableOrHashEvidence pre left right
         ((e.world j).state b).justifiedCheckpoint.epoch.toNat
 

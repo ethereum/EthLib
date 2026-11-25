@@ -11,41 +11,9 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 /-!
 # Proofs: the arithmetic and the updates of the fast confirmation rule
 
-An empty range of slots weighs nothing, and so does a sum over no items.
+The arithmetic covers the sums of weights, the committees of a range of slots and the adversary.
 
-The adversary has no weight in an empty range.
-
-A sum is the sum of its weights, so at most the sum of bounds on them.
-
-A range of slots that ends later has every member of the committees of a shorter one.
-
-A member of the committees of the slots between two slots shows that the first is earlier.
-
-The members of the committees of a range are those of the committees of its slots.
-
-Two head states with the same committees on the epochs of a range read the same members for it.
-
-A range that covers a whole epoch weighs the whole active balance.
-
-Such a range also holds every validator active in that epoch.
-
-At each slot the tracked heads move on by one: the current head becomes the previous one.
-
-The update keeps the confirmed block, and sets the checkpoints by the epoch boundaries.
-
-A restart keeps the old confirmed block or takes the one confirmed before the restart.
-
-A block is due for finality two epochs after the first epoch that starts at or after its slot.
-
-A restart takes the block confirmed before it only when that block is newer than the confirmed one.
-
-That block must also be not yet due for finality, and in the chain of the head.
-
-From Gloas the payload status of the head does not change which blocks are in its chain.
-
-The fast confirmation of a slot records the head of the store, at every fork.
-
-The safe execution block is the payload of the confirmed block, and from Gloas its bid's parent.
+The updates cover the tracked heads and checkpoints, a restart and the execution blocks.
 -/
 
 @[expose] public section
@@ -883,17 +851,7 @@ theorem blockShouldBeFinalized_eq_ok_iff {root : Root} {block : BeaconBlock pres
 
 The block confirmed before the restart replaces the confirmed block exactly when three things hold.
 
-It is at a later slot than the confirmed block.
-
-It is not yet due for finality: the slot from which it is due is still ahead.
-
-It is in the chain of the head.
-
-Otherwise the confirmed block stays.
-
-For a newer block, the restart fails when the test of finality overflows.
-
-For a newer block not yet due, it also fails when the test of the chain fails. -/
+Otherwise the confirmed block stays. -/
 theorem getRestartResilientConfirmedRoot_eq_ok_iff {fcr : FastConfirmationStore}
     {head rootBeforeRestart root : Root} {before confirmed : BeaconBlock preset fork}
     {currentSlot : Slot} (positive : 0 < preset.SLOTS_PER_EPOCH)
@@ -901,12 +859,22 @@ theorem getRestartResilientConfirmedRoot_eq_ok_iff {fcr : FastConfirmationStore}
     (storedConfirmed : store.blocks[fcr.confirmedRoot]? = some confirmed)
     (now : store.getCurrentSlot config = .ok currentSlot) :
     store.getRestartResilientConfirmedRoot config fcr head rootBeforeRestart = .ok root ↔
+      -- First, the block is at a later slot than the confirmed block.
       if before.slot.toNat ≤ confirmed.slot.toNat then root = fcr.confirmedRoot
+      -- For a newer block, the restart fails when the test of finality overflows.
       else before.slot.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
         ((before.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1) / preset.SLOTS_PER_EPOCH.toNat +
           2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+        -- Second, the block is not yet due for finality.
+        --
+        -- The slot from which it is due is still ahead.
         if ((before.slot.toNat + preset.SLOTS_PER_EPOCH.toNat - 1) / preset.SLOTS_PER_EPOCH.toNat +
             2) * preset.SLOTS_PER_EPOCH.toNat ≤ currentSlot.toNat then root = fcr.confirmedRoot
+        -- Third, the block is in the chain of the head.
+        --
+        -- For a newer block not yet due, the restart also fails when the test of the chain fails.
+        --
+        -- From Gloas the payload status of the head does not change which blocks are in its chain.
         else ∃ onChain,
           store.isAncestor ⟨head, .pending⟩ ⟨rootBeforeRestart, .pending⟩ = .ok onChain ∧
             root = if onChain then rootBeforeRestart else fcr.confirmedRoot := by
@@ -942,7 +910,9 @@ theorem getRestartResilientConfirmedRoot_eq_ok_iff {fcr : FastConfirmationStore}
 
 /-- The fast confirmation of a slot records the head of the store as the head of the slot.
 
-The head of the slot before becomes the previous head. -/
+The head of the slot before becomes the previous head.
+
+This holds at every fork. -/
 theorem onFastConfirmation_heads {fcr after : FastConfirmationStore}
     (confirmed : store.onFastConfirmation config fcr = .ok after) :
     ∃ head, store.getHead config = .ok head ∧

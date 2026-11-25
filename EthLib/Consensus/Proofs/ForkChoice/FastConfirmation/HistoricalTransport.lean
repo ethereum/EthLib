@@ -792,17 +792,7 @@ private theorem stake_le_of_mem_supporters {β : Type} {T : BlockTree β}
     exact inside v inX
 
 open Models.ForkChoice in
-/-- From Gloas, a receiver margin makes the path child below the parent outweigh each rival.
-
-The path runs from the parent's pending node to the block's pending node.
-
-It passes the node of the status that the block builds on.
-
-The margin counts the window, the score, twice the honest supporters and the honest parent voters.
-
-Every competing voter is a window member outside those sets, and the boost is at most the score.
-
-It also gives the block's honest supporters positive stake, and the path child positive weight. -/
+/-- From Gloas, a receiver margin makes the path child below the parent outweigh each rival. -/
 private theorem sibling_bound_of_window_margin [DecidablePred (· ∈ J)]
     {store : Store preset fork} (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
     {state : BeaconState preset fork} (within : state.RegistryWithinLimit)
@@ -810,11 +800,16 @@ private theorem sibling_bound_of_window_margin [DecidablePred (· ∈ J)]
     {members participants : Std.TreeSet ValidatorIndex} {score : Nat}
     (found : store.blocks[root]? = some block)
     (parentFound : store.blocks[block.parentRoot]? = some parent)
+    -- Every competing voter is a window member outside the honest supporters and parent voters.
     (inWindow : ∀ c, (Store.nodeTree lower).Ancestor (some block.parentRoot, none) c →
       c ≠ (some block.parentRoot, none) →
       ∀ i ∈ supporters (Store.voters state) (Store.nodeView lower nodes) c, i.toUInt64 ∈ members)
     (shortInside : ∀ v ∈ participants, v ∈ members)
+    -- The boost is at most the score.
     (boostLe : store.boostScoreOfGloas config gloas ≤ score)
+    -- The margin counts the window, the score, twice the honest supporters and the parent voters.
+    --
+    -- Those parent voters are honest too.
     (margin : stake (fun v => balanceAt state v.toNat) (Store.activeMembers state members) +
         score <
       2 * stake (fun v =>
@@ -825,10 +820,14 @@ private theorem sibling_bound_of_window_margin [DecidablePred (· ∈ J)]
         if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
         then balanceAt state v.toNat else 0)
         {v ∈ store.parentVotersOf state participants block parent | v ∈ J}) :
+    -- The margin also gives the block's honest supporters positive stake.
     0 < stake (fun v =>
         if v ∈ ((unslashedActiveBalances state).map (·.1)).toFinset
         then balanceAt state v.toNat else 0)
         {v ∈ store.supportersOf state ⟨root, .pending⟩ | v ∈ J} ∧
+    -- The path runs from the parent's pending node to the block's pending node.
+    --
+    -- It passes the node of the status that the block builds on.
     ∀ p c d : Option Root × Status,
       (Store.nodeTree lower).Ancestor (some block.parentRoot, none) p →
       (Store.nodeTree lower).IsChild c p → (Store.nodeTree lower).IsChild d p →
@@ -839,6 +838,7 @@ private theorem sibling_bound_of_window_margin [DecidablePred (· ∈ J)]
         weight (Store.voters state).insertNone
           (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
           ((Store.nodeView lower nodes).withBoost (store.boostedNode config gloas)) c ∧
+      -- The margin also gives the path child positive weight.
       0 < weight (Store.voters state).insertNone
           (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
           ((Store.nodeView lower nodes).withBoost (store.boostedNode config gloas)) c := by
