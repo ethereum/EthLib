@@ -706,7 +706,7 @@ theorem FlagsActive.of_upgradeNext {pre : ForkedBeaconState preset}
   | glamsterdam =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨after, afterOk, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp afterOk
+    obtain rfl := upgradeToHeze_ok_iff.mp afterOk
     have lists := upgradeHezeFields_lists (config := config) pre
     exact holds.of_upgrade (show Fork.altair ≤ .glamsterdam by decide) kept slot
       (Nat.le_of_eq (by rw [lists.1]))

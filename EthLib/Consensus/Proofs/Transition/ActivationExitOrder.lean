@@ -789,7 +789,7 @@ private theorem upgradeNext {pre : ForkedBeaconState preset}
     exact of_data (upgradeToGloas_spec upgraded).1 (upgradeFrame_upgradeToGloas upgraded).finalized
       (upgradeFrame_upgradeToGloas upgraded).slot
   · obtain ⟨_, upgraded, rfl⟩ := ok
-    obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact of_data (upgradeHezeFields_lists _).1
 
 private theorem processEffectiveBalanceUpdates

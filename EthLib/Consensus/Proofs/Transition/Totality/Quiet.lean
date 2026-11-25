@@ -271,7 +271,7 @@ private theorem upgradeNext_quiet {pre : ForkedBeaconState preset}
   | glamsterdam =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨after, afterOk, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp afterOk
+    obtain rfl := upgradeToHeze_ok_iff.mp afterOk
     exact quiet_of_flags (fork := .glamsterdam) (fork' := .hegota) (by decide) (by decide)
       (kept_of_eq rfl) (kept_of_eq rfl)
   | _ => cases computed

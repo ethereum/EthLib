@@ -174,7 +174,7 @@ private theorem registry_upgrade_size {s : ForkedBeaconState preset}
   · obtain ⟨_, upgraded, rfl⟩ := ok
     exact congrArg Array.size (upgradeToGloas_spec upgraded).1
   · obtain ⟨_, upgraded, rfl⟩ := ok
-    obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     rfl
 
 private theorem registry_upgrades_size {s t : ForkedBeaconState preset}

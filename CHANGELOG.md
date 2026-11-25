@@ -1069,6 +1069,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean and Python, the upgrade to Heze no longer checks that the two deposit indices of the state are equal, so it never fails ([#3516](https://github.com/ethereum/EthLib/issues/3516)).
+  Both indices stopped changing at Fulu, so the check protected no deposit, and a network that starts at Fulu or later never sets the start index, so it would halt at Heze.
+  The error `TransitionError.depositIndicesDiffer` and its code 33 are removed; code 33 is not reused, and the codes after it keep their values.
+  `upgradeToHeze_ok_iff` (`Consensus/Proofs/Transition/Upgrade.lean`) now says the upgrade gives the carried fields, and `upgradeToHeze_error_iff` is removed.
+  The run hypotheses of the totality proofs (`UpgradeReady`, `UpgradeDraws`, `UpgradeDrawsEnd`) no longer ask for equal indices at Gloas.
+  Migration: drop any handling of code 33 from the upgrade to Heze.
+
 - In Lean, `Networking.Discv5.asciiBytes` (`Networking/Discv5/Identity.lean`) is removed ([#4650](https://github.com/ethereum/EthLib/pull/4650)).
   It was `String.toUTF8` under another name, and an ASCII label has the same bytes in both.
   The key agreement and the identity proof of discv5 now unfold to `String.toUTF8`, and compute the same bytes.

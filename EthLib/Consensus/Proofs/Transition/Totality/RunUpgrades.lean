@@ -358,7 +358,7 @@ theorem upgradeNext_effectiveBalanceSum_le {pre : ForkedBeaconState preset}
   case glamsterdam =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact (effectiveBalanceSum_eq_of_validators (upgradeHezeFields_lists state).1).le
   all_goals simp only [upgradeNext] at computed; cases computed
 
@@ -634,7 +634,7 @@ theorem RunBounded.of_upgradeNext {start : RunStart} {budget elapsed : Nat}
   case glamsterdam =>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact holds.of_carried (by dsimp only; decide) (Nat.le_of_eq rfl) effective load rfl
       (fun _ _ => rfl) rfl (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl)
       (fun _ _ => rfl) rfl

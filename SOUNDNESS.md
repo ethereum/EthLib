@@ -8249,7 +8249,7 @@ They are the invariant of the state transition, the shape of the state and the b
 They also include `JustifiedEarly`, and before Altair the facts that a block checked on each pending attestation.
 The run also takes three hypotheses on the states it reaches, which no bound gives.
 `SignersEarly`: in the first two epochs of the run, the signers of the previous epoch hold at most the active balance; a validator that signed and exits at the epoch boundary can break it, and from the third epoch no one has signed.
-`DrawsEnd`: each draw of a sync committee, of the proposers and of a payload committee ends, at the state it reads and under the bounds that the run proves there, and the upgrade to Heze finds its two deposit indices equal.
+`DrawsEnd`: each draw of a sync committee, of the proposers and of a payload committee ends, at the state it reads and under the bounds that the run proves there.
 `EpochLimitBeforeAltair`: a run that starts before Altair ends by an epoch at which the inactivity penalty fits, at least `9 * 10^6` on mainnet.
 `DrawsAtCap.drawsEnd` (`Proofs/Transition/Totality/RunHypotheses.lean`) meets `DrawsEnd` with `DrawsAtCap` and `DrawFits` at every fork, state by state: each draw meets a validator at the cap of its fork.
 From Electra, that form holds only for short runs.

@@ -128,8 +128,6 @@ inductive TransitionError where
 
   It holds the mix of the bid, then the mix of the current epoch. -/
   | bidWrongRandao (prevRandao expected : Bytes32)
-  /-- From Heze: at the upgrade, the state has not processed every deposit of the contract. -/
-  | depositIndicesDiffer (eth1DepositIndex depositRequestsStartIndex : UInt64)
   /-- The target of an attestation is neither the current nor the previous epoch. -/
   | attestationTargetNotRecent (target currentEpoch : Epoch)
   /-- The target of an attestation is not the epoch of its slot. -/
@@ -329,7 +327,6 @@ def TransitionError.code : TransitionError → UInt32
   | .bidRepeatsParentHash .. => 30
   | .bidWrongParentRoot .. => 31
   | .bidWrongRandao .. => 32
-  | .depositIndicesDiffer .. => 33
   | .attestationTargetNotRecent .. => 34
   | .attestationTargetNotSlotEpoch .. => 35
   | .attestationTooEarly .. => 36

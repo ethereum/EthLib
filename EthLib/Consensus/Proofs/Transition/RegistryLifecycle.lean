@@ -1145,7 +1145,7 @@ theorem registryLifecycle_upgradeNext {pre : ForkedBeaconState preset}
   · obtain ⟨_, upgraded, rfl⟩ := computed
     exact .of_data (upgradeToGloas_spec upgraded).1
   · obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    obtain rfl := upgradeToHeze_ok_iff.mp upgraded
     exact .of_data (upgradeHezeFields_lists _).1
 
 /-- Every step of a chain keeps the lifecycle of the validators. -/
