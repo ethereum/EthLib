@@ -673,19 +673,16 @@ private theorem foldlM_counted {α β ε : Type} {step : β → α → Except ε
     (measure : β → Nat) (count : α → Nat) (unit : Nat)
     (each : ∀ a x b, step a x = .ok b → P a → P b ∧ measure b ≤ measure a + count x * unit) :
     ∀ {xs : List α} {a b : β}, xs.foldlM step a = .ok b → P a →
-      P b ∧ measure b ≤ measure a + (xs.map count).sum * unit
-  | [], a, b, computed, holds => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    simpa using holds
-  | x :: xs, a, b, computed, holds => by
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, first, rest⟩ := computed
-    obtain ⟨heldFirst, raisedFirst⟩ := each _ _ _ first holds
-    obtain ⟨heldRest, raisedRest⟩ := foldlM_counted P measure count unit each rest heldFirst
-    refine ⟨heldRest, ?_⟩
-    simp only [List.map_cons, List.sum_cons, Nat.add_mul]
-    omega
+      P b ∧ measure b ≤ measure a + (xs.map count).sum * unit := by
+  intro xs a b computed holds
+  have raised := foldlM_ok_weighted
+    (fun b c => P b ∧ measure b ≤ measure a + c * unit) count
+    (fun b x b' c held ok => by
+      obtain ⟨kept, rise⟩ := each b x b' ok held.1
+      refine ⟨kept, ?_⟩
+      rw [Nat.add_mul]
+      omega) (c := 0) (by simpa using holds) computed
+  simpa using raised
 
 /-- Slashing a validator keeps the bound, and raises the slashed balances by at most the cap. -/
 private theorem Bounded.slash {a b : BeaconState preset fork} {i : ValidatorIndex}

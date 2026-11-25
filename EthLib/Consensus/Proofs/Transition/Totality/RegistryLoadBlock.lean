@@ -274,18 +274,15 @@ private theorem foldlM_registryLoad_le {α ε : Type}
     (each : ∀ s x s', step s x = .ok s' → registryLoad s' ≤ registryLoad s + bound) :
     ∀ (items : List α) {state after : BeaconState preset fork},
       items.foldlM step state = .ok after →
-        registryLoad after ≤ registryLoad state + bound * items.length
-  | [], _, _, computed => by
-    simp only [List.foldlM, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    simp
-  | _ :: rest, _, _, computed => by
-    simp only [List.foldlM, bind_ok_iff] at computed
-    obtain ⟨_, first, tail⟩ := computed
-    have one := each _ _ _ first
-    have more := foldlM_registryLoad_le each rest tail
-    simp only [List.length_cons, Nat.mul_succ]
-    omega
+        registryLoad after ≤ registryLoad state + bound * items.length := by
+  intro items state after computed
+  have raised := foldlM_ok_weighted
+    (fun b c => registryLoad b ≤ registryLoad state + bound * c) (fun _ => 1)
+    (fun b x b' c held ok => by
+      have := each b x b' ok
+      rw [Nat.mul_add, Nat.mul_one]
+      omega) (c := 0) (by simp) computed
+  simpa using raised
 
 /-- A pending deposit added to the queue raises the count by one. -/
 private theorem registryLoad_addPendingDeposit {electra : .pectra ≤ fork}
