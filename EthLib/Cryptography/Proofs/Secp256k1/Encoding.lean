@@ -41,21 +41,16 @@ theorem decompress_eq_ok_iff {x : Fp} {odd : Bool} {p : Point} :
 
 namespace Point
 
-/-- Validation keeps a point of the curve other than `O`, since the cofactor is 1. -/
-private theorem validatePublicKey_eq_ok {p : Point} (hp : p.isOnCurve = true)
-    (hinf : p ≠ infinity) : Sec1.validatePublicKey Fn.modulus 1 p = .ok p :=
-  Sec1.validatePublicKey_eq_ok_iff.mpr ⟨rfl, hinf, hp, Or.inl rfl⟩
-
 theorem decode_encodeCompressed {p : Point} (hp : p.isOnCurve = true) (hinf : p ≠ infinity) :
     decode p.encodeCompressed = .ok p := by
   rw [decode, Sec1.decode_encode isSqrt_sqrt true hp, Base.ok_bind,
-    validatePublicKey_eq_ok hp hinf]
+    Sec1.validatePublicKey_one_eq_ok hp hinf]
   rfl
 
 theorem decode_encodeUncompressed {p : Point} (hp : p.isOnCurve = true) (hinf : p ≠ infinity) :
     decode p.encodeUncompressed = .ok p := by
   rw [decode, Sec1.decode_encode isSqrt_sqrt false hp, Base.ok_bind,
-    validatePublicKey_eq_ok hp hinf]
+    Sec1.validatePublicKey_one_eq_ok hp hinf]
   rfl
 
 /-- The decoder accepts exactly the encodings of the points other than `O`.

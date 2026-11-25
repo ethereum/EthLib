@@ -1077,6 +1077,18 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, secp256r1 encodes and decodes its points with the SEC 1 module of every prime-field curve, in both forms ([#4704](https://github.com/ethereum/EthLib/pull/4704)).
+  - `Secp256r1.sec1` (`Cryptography/Secp256r1/Encoding.lean`) holds what SEC 1 reads from `Fp`, with the square root for `p = 3 mod 4`, and `Secp256r1.isSqrt_sqrt` proves its law.
+  - `Point.encodeCompressed`, `Point.encodeUncompressed` and `Point.decode` are new: the decoder reads both forms and `00`, then validates the key by SEC 1 v2 §3.2.2.1, which rejects `O`.
+    `Point.decode_eq_ok_iff` (`Cryptography/Proofs/Secp256r1/Encoding.lean`) says that it accepts exactly the encodings of the points other than `O`.
+  - `Secp256r1.decodeUncompressed` becomes `Secp256r1.Point.decodeUncompressed` on a `ByteArray`, and accepts the same 65-byte keys as before.
+    `Secp256r1.decodeUncompressed_eq_some_iff` becomes `Point.decodeUncompressed_eq_some_iff`, stated with `(affine x y).encodeUncompressed`, and `Libp2p.Tls.readP256_eq_ok_iff` takes the key as a `ByteArray`.
+  - `Sec1.validatePublicKey_one_eq_ok` (`Cryptography/Proofs/Sec1.lean`) is new: with cofactor 1, validation keeps every point of the curve other than `O`.
+  - `Secp256r1.encodeUncompressed` on two coordinates is removed for `(Point.affine x y).encodeUncompressed`, and `Fp.toBytes` is a `ByteArray`.
+  - `Exports.readCoordinate` reads a `ByteArray` through `Sec1.fieldOfBytes?`, with the same values and errors on 32 bytes; it rejects any other length.
+  - The P256VERIFY precompile is unchanged: EIP-7951 reads `qx` and `qy` without a prefix, by its own checks.
+  - The modules `EthLib.Cryptography.ShortWeierstrass.Encoding` and `EthLib.Cryptography.Proofs.ShortWeierstrass.Encoding` are removed, with the 32-byte coordinate codec and its proofs: `ShortWeierstrass.coordinateToBytes`, `coordinateOfBytes?`, `encodeUncompressed`, `length_coordinateToBytes`, `ofBE_coordinateToBytes`, `coordinateOfBytes?_coordinateToBytes` and `coordinateToBytes_of_coordinateOfBytes?`.
+    Use `Sec1.fieldToBytes` and `Sec1.fieldOfBytes?` with the parameters of the curve, and the lemmas `Sec1.size_fieldToBytes`, `Sec1.ofBE_fieldToBytes` and `Sec1.fieldOfBytes?_eq_some_iff`; they hold for any length `mlen`, not only 32 bytes.
 - In Lean, 61 technical lemmas of the Montgomery arithmetic on 32-bit limbs move to the namespace `Montgomery.Internal`, and three lemmas on digits to `Montgomery.Limbs.Internal` ([#4685](https://github.com/ethereum/EthLib/issues/4685)).
   Only the Montgomery modules and their proofs use them, and those modules open the namespace.
   - From `Cryptography/Montgomery/Words.lean`: `mac_spec`, `sbb_spec`, `num_succ`, `fits_succ`, `num_congr`, `fits_congr`, `fits_of_lt`, `num_cons`, `fits_cons`, `num_cons_zero`, `fits_cons_zero`, `radix_succ`, `num_lt`, `num_snoc`, `loop_induct`, `loop_add`, `macS_spec`, `shS_spec`, `redS_spec`, `subbS_spec`, `lt_of_fits`, `load_spec`, `num_mod` and `radix_mod`.

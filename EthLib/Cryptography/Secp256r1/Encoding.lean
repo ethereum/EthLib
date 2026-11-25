@@ -1,53 +1,49 @@
 module
 
 public import EthLib.Cryptography.Secp256r1.Curve
-public import EthLib.Base.ByteOrder
-public import EthLib.Cryptography.ShortWeierstrass.Encoding
+public import EthLib.Cryptography.Sec1
 
 /-!
 # `Secp256r1.Encoding`
 
-The uncompressed encoding of a point, from SEC 1 v2 §2.3.3, and its decoding from §2.3.4.
+The two encodings of a point as bytes, by SEC 1 v2 §2.3.3, and the decoding of a public key.
 
-The encoding is the prefix `04`, then `x`, then `y`, each as 32 big-endian bytes (§2.3.5).
+The compressed form has 33 bytes, and the uncompressed form 65.
 
-The decoder accepts only that form, with both coordinates below `p` and the point on the curve.
-
-The cofactor is one, so a decoded point also passes the subgroup check of SEC 1 v2 §3.2.2.1.
+A public key is decoded by SEC 1 v2 §2.3.4, then validated by §3.2.2.1, which rejects `O`.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Secp256r1
 
-/-- A coordinate as 32 big-endian bytes, by SEC 1 v2 §2.3.5, as for every curve. -/
-abbrev Fp.toBytes (x : Fp) : List UInt8 := ShortWeierstrass.coordinateToBytes x
+/-- What SEC 1 reads from `Fp`: an element takes 32 octets, and its root for `p = 3 mod 4`. -/
+def sec1 : Sec1.Params Fp.modulus := ⟨32, by decide, by decide, by decide, Sec1.sqrt3Mod4⟩
 
-/-- The uncompressed encoding `04 ‖ x ‖ y` of an affine point, by SEC 1 v2 §2.3.3. -/
-abbrev encodeUncompressed (x y : Fp) : List UInt8 := ShortWeierstrass.encodeUncompressed x y
+/-- A coordinate as 32 bytes, by SEC 1 v2 §2.3.5. -/
+abbrev Fp.toBytes (x : Fp) : ByteArray := Sec1.fieldToBytes sec1 x
 
-/-- Decode an uncompressed point, by SEC 1 v2 §2.3.4.
+namespace Point
 
-The result is `none` for another length or prefix, or for a coordinate of `p` or more.
+/-- The point as 33 bytes, by SEC 1 v2 §2.3.3 with point compression, or `O` as one byte. -/
+abbrev encodeCompressed (q : Point) : ByteArray := Sec1.encode sec1 true q
 
-It is also `none` for a point off the curve. -/
-def decodeUncompressed (bytes : List UInt8) : Option Point :=
-  -- Steps 1 and 2, for `00` and the compressed form, are not implemented: they give `none`.
-  --
-  -- Steps 3.1 and 3.2: `M = W || X || Y`, and "invalid" unless `W = 04`.
-  match bytes with
-  | 4 :: coords =>
-    -- Step 3 applies only when `M` has `2 * 32 + 1` octets.
-    if coords.length = 64 then
-      -- Steps 3.3 and 3.4: `x_P` and `y_P` by §2.3.6, "invalid" unless in `[0, p-1]`.
-      match ShortWeierstrass.coordinateOfBytes? (coords.take 32),
-          ShortWeierstrass.coordinateOfBytes? (coords.drop 32) with
-      | some x, some y =>
-        let point := Point.affine x y
-        -- Steps 3.5 and 3.6: `(x_P, y_P)` must satisfy the curve equation.
-        if point.isOnCurve then some point else none
-      | _, _ => none
-    else none
-  | _ => none
+/-- The point as 65 bytes, by SEC 1 v2 §2.3.3 without point compression, or `O` as one byte. -/
+abbrev encodeUncompressed (q : Point) : ByteArray := Sec1.encode sec1 false q
+
+/-- Decode a public key from either form: SEC 1 v2 §2.3.4, then the validation of §3.2.2.1.
+
+Validation rejects `O`, and skips the check `n Q = O`, since the cofactor is 1. -/
+def decode (bytes : ByteArray) : Except Sec1.Sec1Error Point :=
+  Sec1.decode sec1 bytes >>= Sec1.validatePublicKey Fn.modulus 1
+
+/-- Decode a public key in the uncompressed form only, or `none`.
+
+TLS 1.3 key shares and the keys of the libp2p TLS handshake accept no other form. -/
+def decodeUncompressed (bytes : ByteArray) : Option Point :=
+  -- The uncompressed form `04 || X || Y` has `2 * 32 + 1` octets.
+  if bytes.size = 65 then (decode bytes).toOption else none
+
+end Point
 
 end EthLib.Cryptography.Secp256r1

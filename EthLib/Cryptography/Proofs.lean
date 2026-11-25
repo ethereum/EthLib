@@ -7,7 +7,6 @@ public import EthLib.Cryptography.Proofs.Bls
 public import EthLib.Cryptography.Proofs.Kzg
 public import EthLib.Cryptography.Proofs.Merkle
 public import EthLib.Cryptography.Proofs.Ecdsa.Curve
-public import EthLib.Cryptography.Proofs.ShortWeierstrass.Encoding
 public import EthLib.Cryptography.Proofs.Sec1
 public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
 public import EthLib.Cryptography.Proofs.Unicode

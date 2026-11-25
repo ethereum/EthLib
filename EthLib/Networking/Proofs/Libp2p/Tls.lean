@@ -677,13 +677,15 @@ private theorem fields_ok_iff {tag : UInt8} {value : Der.Value} {values : List D
   · simp only [ensure, ht, ite_false, bind, Except.bind, reduceCtorEq, false_and]
 
 /-- An input that the uncompressed decoder accepts is 65 octets. -/
-private theorem length_of_decodeUncompressed {key : List UInt8}
+private theorem length_of_decodeUncompressed {key : ByteArray}
     {point : Cryptography.Secp256r1.Point}
-    (h : Cryptography.Secp256r1.decodeUncompressed key = some point) : key.length = 65 := by
-  obtain ⟨x, y, -, -, rfl⟩ := Cryptography.Secp256r1.decodeUncompressed_eq_some_iff.mp h
-  simp [Cryptography.Secp256r1.encodeUncompressed,
-    Cryptography.ShortWeierstrass.encodeUncompressed,
-    Cryptography.ShortWeierstrass.length_coordinateToBytes]
+    (h : Cryptography.Secp256r1.Point.decodeUncompressed key = some point) :
+    key.data.toList.length = 65 := by
+  unfold Cryptography.Secp256r1.Point.decodeUncompressed at h
+  split at h
+  · rw [Array.length_toList]
+    exact ‹key.size = 65›
+  · cases h
 
 /-- The content octets of the algorithm id-ecPublicKey with the curve secp256r1. -/
 private abbrev p256Algorithm : List UInt8 :=
@@ -696,7 +698,8 @@ Every other key type, curve, parameter form and length form is rejected.
 
 So is an unused bit or a trailing octet. -/
 theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Point} :
-    readP256 spki = .ok point ↔ ∃ key, Cryptography.Secp256r1.decodeUncompressed key = some point ∧
+    readP256 spki = .ok point ↔
+      ∃ key, Cryptography.Secp256r1.Point.decodeUncompressed key = some point ∧
       -- The 26 octets start with a SEQUENCE header and the DER of id-ecPublicKey with secp256r1.
       --
       -- They end with a BIT STRING header.
@@ -708,7 +711,7 @@ theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Po
       -- The BIT STRING has no unused bits and holds an uncompressed point (RFC 5480 §2.2).
       spki.data.toList = [0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
         0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00] ++
-          key := by
+          key.data.toList := by
   constructor
   · intro h
     unfold readP256 at h
@@ -726,12 +729,12 @@ theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Po
     obtain ⟨bytes, hbytes, h7⟩ := bind_ok_iff.mp h6
     clear h h1 h2 h3 h4 h5 h6
     obtain ⟨rfl, rfl⟩ := ensure_ok_iff.mp hensure
-    cases hdec : Cryptography.Secp256r1.decodeUncompressed bytes.data.toList with
+    cases hdec : Cryptography.Secp256r1.Point.decodeUncompressed bytes with
     | none => simp [hdec, throw, throwThe, MonadExceptOf.throw] at h7
     | some p =>
     simp only [hdec, pure, Except.pure, Except.ok.injEq] at h7
     subst h7
-    refine ⟨bytes.data.toList, hdec, ?_⟩
+    refine ⟨bytes, hdec, ?_⟩
     have hk := length_of_decodeUncompressed hdec
     -- The algorithm holds the key type and one parameter, the curve.
     unfold readAlgorithm at halg
@@ -786,8 +789,9 @@ theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Po
     rw [data_toList_eq_of_read_ok hsread hscontent (by simp [hk]), stag,
       data_toList_eq_nil_of_isEmpty sempty]
     simp [hk]
-  · rintro ⟨key, hdec, hspki⟩
+  · rintro ⟨⟨⟨key⟩⟩, hdec, hspki⟩
     have hk := length_of_decodeUncompressed hdec
+    simp only at hk hspki
     obtain ⟨data⟩ := spki
     have hdata : data = (0x30 :: UInt8.ofNat (0x30 :: UInt8.ofNat p256Algorithm.length ::
         (p256Algorithm ++ (3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ [])))).length ::

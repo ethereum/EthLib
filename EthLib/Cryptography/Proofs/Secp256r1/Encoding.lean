@@ -1,73 +1,98 @@
 module
 
+public import EthLib.Base.Proofs.Except
 public import EthLib.Cryptography.Secp256r1.Encoding
-public import EthLib.Base.Proofs.ByteOrder
-public import EthLib.Cryptography.Proofs.ShortWeierstrass.Encoding
+public import EthLib.Cryptography.Proofs.Sec1
+public import EthLib.Cryptography.Proofs.Secp256r1.Field
 
 /-!
-# Proofs: the uncompressed encoding of secp256r1
+# Proofs: the point encodings of secp256r1
 
-The decoder follows the uncompressed case of SEC 1 v2 §2.3.4, and no other.
+The decoder accepts exactly the two encodings of the points other than `O`.
 
-It accepts exactly the uncompressed encodings of §2.3.3.
+It returns the point that was encoded, so no other bytes decode to a point.
 
-Those are the bytes `04 ‖ x ‖ y` of the affine points `(x, y)` on the curve.
+The uncompressed decoder accepts exactly the uncompressed encodings.
 
-So the octet `00` of `O` is refused.
-
-It also refuses another prefix or length, a coordinate of `p` or more, and a pair off the curve.
+Each fact follows from the one for every curve, with the square root for `p = 3 mod 4`.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Secp256r1
 
-open Base
+/-- The square root of `Fp` returns a root of each square, and `none` for each non-square. -/
+theorem isSqrt_sqrt : Sec1.IsSqrt sec1.sqrt? := by
+  -- Reducing the projection first keeps unification off the field's arithmetic.
+  simp only [sec1]
+  exact Sec1.isSqrt_sqrt3Mod4 (by decide)
 
-/-- The decoder accepts exactly the uncompressed encodings of the affine points on the curve.
+namespace Point
 
-The encoding is the prefix `04`, then `x`, then `y`.
+theorem decode_encodeCompressed {p : Point} (hp : p.isOnCurve = true) (hinf : p ≠ infinity) :
+    decode p.encodeCompressed = .ok p := by
+  rw [decode, Sec1.decode_encode isSqrt_sqrt true hp, Base.ok_bind,
+    Sec1.validatePublicKey_one_eq_ok hp hinf]
 
-Each coordinate takes 32 big-endian bytes, by SEC 1 v2 §2.3.5.
+theorem decode_encodeUncompressed {p : Point} (hp : p.isOnCurve = true) (hinf : p ≠ infinity) :
+    decode p.encodeUncompressed = .ok p := by
+  rw [decode, Sec1.decode_encode isSqrt_sqrt false hp, Base.ok_bind,
+    Sec1.validatePublicKey_one_eq_ok hp hinf]
 
-It returns the point `(x, y)` of every such encoding. -/
-theorem decodeUncompressed_eq_some_iff {bytes : List UInt8} {point : Point} :
-    decodeUncompressed bytes = some point ↔
-      ∃ x y : Fp, point = .affine x y ∧ point.isOnCurve = true ∧
-        bytes = encodeUncompressed x y := by
+/-- The decoder accepts exactly the encodings of the points other than `O`. -/
+theorem decode_eq_ok_iff {bytes : ByteArray} {p : Point} :
+    decode bytes = .ok p ↔
+      p.isOnCurve = true ∧ p ≠ infinity ∧
+        (bytes = p.encodeCompressed ∨ bytes = p.encodeUncompressed) := by
   constructor
   · intro h
-    unfold decodeUncompressed at h
+    rw [decode] at h
+    cases hd : Sec1.decode sec1 bytes with
+    | error e => rw [hd] at h; cases h
+    | ok q =>
+      rw [hd, Base.ok_bind, Sec1.validatePublicKey_eq_ok_iff] at h
+      obtain ⟨rfl, hinf, hon, -⟩ := h
+      obtain ⟨-, c, hc⟩ := (Sec1.decode_eq_ok_iff isSqrt_sqrt).mp hd
+      refine ⟨hon, hinf, ?_⟩
+      cases c
+      · exact Or.inr hc
+      · exact Or.inl hc
+  · rintro ⟨hon, hinf, rfl | rfl⟩
+    · exact decode_encodeCompressed hon hinf
+    · exact decode_encodeUncompressed hon hinf
+
+theorem size_encodeCompressed (x y : Fp) : (affine x y).encodeCompressed.size = 33 :=
+  Sec1.size_encode_true sec1 x y
+
+theorem size_encodeUncompressed (x y : Fp) : (affine x y).encodeUncompressed.size = 65 :=
+  Sec1.size_encode_false sec1 x y
+
+/-- The uncompressed decoder accepts exactly the uncompressed encodings of points on the curve.
+
+It returns the point `(x, y)` of each. -/
+theorem decodeUncompressed_eq_some_iff {bytes : ByteArray} {point : Point} :
+    decodeUncompressed bytes = some point ↔
+      ∃ x y : Fp, point = .affine x y ∧ point.isOnCurve = true ∧
+        bytes = (affine x y).encodeUncompressed := by
+  rw [decodeUncompressed]
+  constructor
+  · intro h
     split at h
-    · rename_i coords
-      split at h <;> rename_i hlen
-      · split at h
-        · rename_i x y hx hy
-          dsimp only at h
-          split at h <;> rename_i hc
-          · cases h
-            refine ⟨_, _, rfl, hc, ?_⟩
-            -- Each half of the 64 bytes is the 32-byte form of the coordinate it holds.
-            simp only [encodeUncompressed, ShortWeierstrass.encodeUncompressed,
-              ShortWeierstrass.coordinateToBytes_of_coordinateOfBytes? (by simp [hlen]) hx,
-              ShortWeierstrass.coordinateToBytes_of_coordinateOfBytes? (by simp [hlen]) hy,
-              List.take_append_drop]
-          · cases h
-        · cases h
-      · cases h
+    · rename_i hs
+      obtain ⟨hon, hinf, hb⟩ := decode_eq_ok_iff.mp (Base.toOption_eq_some_iff.mp h)
+      cases point with
+      | infinity => exact absurd rfl hinf
+      | affine x y =>
+        refine ⟨x, y, rfl, hon, ?_⟩
+        rcases hb with rfl | rfl
+        · rw [size_encodeCompressed] at hs
+          cases hs
+        · rfl
     · cases h
-  · rintro ⟨x, y, rfl, hc, rfl⟩
-    -- The decoder splits the 64 bytes back into the two coordinates, each below `p`.
-    have hl (z : Fp) : z.toBytes.length = 32 := ShortWeierstrass.length_coordinateToBytes z
-    have hlen : (x.toBytes ++ y.toBytes).length = 64 := by simp [hl]
-    have htake : (x.toBytes ++ y.toBytes).take 32 = x.toBytes := by
-      rw [List.take_append_of_le_length (Nat.le_of_eq (hl x).symm),
-        List.take_of_length_le (Nat.le_of_eq (hl x))]
-    have hdrop : (x.toBytes ++ y.toBytes).drop 32 = y.toBytes := by
-      rw [List.drop_append_of_le_length (Nat.le_of_eq (hl x).symm),
-        List.drop_of_length_le (Nat.le_of_eq (hl x)), List.nil_append]
-    have hp : Fp.modulus ≤ 2 ^ 256 := by decide
-    simp only [decodeUncompressed, encodeUncompressed, ShortWeierstrass.encodeUncompressed, hlen,
-      htake, hdrop, ShortWeierstrass.coordinateOfBytes?_coordinateToBytes hp, hc, ite_true]
+  · rintro ⟨x, y, rfl, hon, rfl⟩
+    simp only [size_encodeUncompressed, ↓reduceIte, Base.toOption_eq_some_iff]
+    exact decode_encodeUncompressed hon (by simp)
+
+end Point
 
 end EthLib.Cryptography.Secp256r1

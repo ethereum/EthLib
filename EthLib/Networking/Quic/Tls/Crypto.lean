@@ -80,7 +80,7 @@ def readScalar (bytes : Vector UInt8 32) (error : Error) : Except Error Secp256r
 /-- A field coordinate as 32 big-endian octets, with leading zeros, RFC 9846 §7.4.2. -/
 def coordinate (value : Secp256r1.Fp) : Vector UInt8 32 :=
   -- §7.4.2: the octet string Z has constant length, and its leading zeros stay.
-  ⟨value.toBytes.toArray, by simpa using ShortWeierstrass.length_coordinateToBytes value⟩
+  ⟨value.toBytes.data, by simp [Sec1.fieldToBytes, Secp256r1.sec1]⟩
 
 /-- Read an uncompressed P-256 key share, RFC 9846 §4.3.8.2 and SEC 1 v2 §2.3.4. -/
 def readP256Share (peer : ByteArray) : Except Error Secp256r1.Point :=
@@ -93,7 +93,7 @@ def readP256Share (peer : ByteArray) : Except Error Secp256r1.Point :=
   -- Validation step (1) holds by the form: it never encodes the point at infinity O.
   --
   -- The subgroup check that §4.3.8.2 does not require holds too: the cofactor of P-256 is one.
-  match Secp256r1.decodeUncompressed peer.toList with
+  match Secp256r1.Point.decodeUncompressed peer with
   | some point => .ok point
   -- A value that fails a step is not a valid public key of the group.
   | none => .error .keyShare
@@ -118,7 +118,7 @@ def keyShare (group : Wire.CodePoint) (privateKey : Vector UInt8 32) :
     -- `Q = O` needs `d = 0` mod `n`, which the range excludes, so this case never occurs.
     | .infinity => throw .privateKey
     -- §4.3.8.2: `legacy_form = 4`, then `X` and `Y`, each in 32 octets.
-    | .affine x y => return ⟨(Secp256r1.encodeUncompressed x y).toArray⟩
+    | .affine x y => return (Secp256r1.Point.affine x y).encodeUncompressed
   -- No other NamedGroup has a backend here.
   else throw (.group group)
 
