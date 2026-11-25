@@ -124,10 +124,11 @@ def _versioned_hash(commitment: bytes) -> bytes:
     return b"\x01" + hashlib.sha256(commitment).digest()[1:]
 
 
-def _with_commitments(fork: str, count: int) -> bytes:
-    """The pinned block of a fork, committing to the first commitments above."""
+def _with_commitments(fork: str, count: int, order: list[int] | None = None) -> bytes:
+    """The pinned block of a fork, committing to the first commitments above, or to those listed."""
     message = copy.deepcopy(_message(fork))
-    commitments = ["0x" + _commitment(i).hex() for i in range(count)]
+    chosen = range(count) if order is None else order
+    commitments = ["0x" + _commitment(i).hex() for i in chosen]
     if fork == "gloas":
         bid = message["body"]["signed_execution_payload_bid"]["message"]
         bid["blob_kzg_commitments"] = commitments
@@ -155,6 +156,21 @@ def test_blobs_in_the_order_of_the_commitments(fork: str) -> None:
     assert body == blobs[1] + blobs[2]
     # An empty list of hashes is a request for no blob.
     assert consensus.api_blobs("minimal", FORKS[fork], block, blobs, hashes=[]) == hex_of([])
+
+
+@pytest.mark.parametrize("fork", ["deneb", "gloas"])
+def test_one_blob_for_each_requested_hash(fork: str) -> None:
+    # The block commits to C0, C1, C0, so its first and last blobs are equal.
+    block = _with_commitments(fork, 3, [0, 1, 0])
+    blobs = [_blob(0), _blob(1), _blob(0)]
+    every = {"data": ["0x" + blob.hex() for blob in blobs]}
+    assert consensus.api_blobs("minimal", FORKS[fork], block, blobs) == every
+    # A requested hash gives one blob, at the first place of its commitment.
+    hashes = [_versioned_hash(_commitment(i)) for i in (1, 0)]
+    answer = consensus.api_blobs("minimal", FORKS[fork], block, blobs, hashes=hashes)
+    assert answer == {"data": ["0x" + _blob(0).hex(), "0x" + _blob(1).hex()]}
+    body = consensus.api_blobs_ssz("minimal", FORKS[fork], block, blobs, hashes=hashes[1:])
+    assert body == _blob(0)
 
 
 def test_no_blobs_before_deneb() -> None:

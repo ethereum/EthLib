@@ -30,7 +30,7 @@ The flags `execution_optimistic` and `finalized` come from the store, not from t
 SOUNDNESS.md records the points that the source leaves open.
 
 [blocks endpoints]: https://github.com/ethereum/beacon-APIs/tree/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/blocks
-[blobs endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/blobs/blobs.yaml
+[blobs endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/blobs/blobs.yaml
 [columns endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/debug/data_column_sidecars.yaml
 [envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/execution_payload/envelope_get.yaml
 [proposer's envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/execution_payload_envelope.yaml
@@ -217,16 +217,30 @@ def blockCommitments (block : BeaconBlock preset fork) : List KZGCommitment :=
   -- Before Deneb a block has none.
   else []
 
-/-- The blobs of a block, in the order of their commitments. -/
-def blockBlobs (blobs : List Blob) (commitments : List KZGCommitment)
-    (hashes : Option (List VersionedHash)) : List Blob :=
+/-- The blobs of a block, each with the versioned hash of the commitment at its place. -/
+def blobHashes (blobs : List Blob) (commitments : List KZGCommitment) :
+    List (Blob × VersionedHash) :=
   -- The blobs pair with the commitments in order.
+  (blobs.zip commitments).map fun (blob, commitment) =>
+    (blob, kzgCommitmentToVersionedHash commitment)
+
+/-- The blobs of a block that a list of versioned hashes asks for, each with its hash. -/
+def requestedBlobs (requested : List VersionedHash) (blobs : List Blob)
+    (commitments : List KZGCommitment) : List (Blob × VersionedHash) :=
+  -- The source: only the blobs whose commitment has one of the requested hashes.
   --
-  -- The source: with versioned hashes, only the blobs whose commitment has one of those hashes.
+  -- One blob for each such hash, also when the block repeats its commitment.
   --
-  -- Without them, every blob of the block.
-  ((blobs.zip commitments).filter fun (_, commitment) =>
-    hashes.all (·.contains (kzgCommitmentToVersionedHash commitment))).map (·.1)
+  -- The blob kept is the first, in the order of the block.
+  ((blobHashes blobs commitments).filter fun (_, hash) => requested.contains hash).eraseDupsBy
+    fun a b => a.2 == b.2
+
+/-- The blobs of a block, in the order of their commitments. -/
+def blockBlobs (blobs : List Blob) (commitments : List KZGCommitment) :
+    Option (List VersionedHash) → List Blob
+  -- Without versioned hashes, every blob of the block.
+  | none => (blobs.zip commitments).map (·.1)
+  | some requested => (requestedBlobs requested blobs commitments).map (·.1)
 
 /-- The blobs of a signed block that the blobs endpoint gives, from the blobs of its commitments.
 

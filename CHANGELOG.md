@@ -1143,6 +1143,15 @@ Not yet released.
   - `Sphincs.Unforgeability.Bridge.fst_map_counted` is removed, since it restated `HashSig.counted_forget`.
   Migration: use the names of `EthLib.Cryptography.HashSig`, from `EthLib.Cryptography.Proofs.HashSig.Counted`.
 
+- In Lean and Python, the blobs endpoint of the Beacon API gives one blob for each requested versioned hash, at the first place of its commitment, also when the block repeats that commitment ([#4644](https://github.com/ethereum/EthLib/issues/4644)).
+  This follows ethereum/beacon-APIs#676; before, each place of a repeated commitment gave its blob.
+  `BeaconApi.blockBlobs` (`Consensus/BeaconApi/Blocks.lean`) now matches on its last argument, so that argument has no name and `(hashes := h)` no longer elaborates.
+  With hashes, it reads the new `requestedBlobs`, over the blobs of the block with their hashes, `blobHashes`.
+  `requestedBlobs_hashes` and `requestedBlobs_nodup` (`Consensus/Proofs/BeaconApi/Blocks.lean`) state the hashes of the answer, and that no two of its blobs share one.
+  `requestedBlobs_sublist` and `requestedBlobs_first` state that it keeps the order of the block, and that each blob is the first of its hash.
+  `Base.eraseDupsBy_sublist`, `Base.map_eraseDupsBy`, `Base.eq_append_cons_of_filter` and `Base.eq_append_cons_of_mem_eraseDupsBy` (`Base/Proofs/List.lean`) are the general facts behind them.
+  Migration: pass the hashes to `blockBlobs` by position.
+
 - In Lean, the decoders of mplex, multistream-select and yamux read the body of a frame with `Encoding.ByteReader.bytes` ([#4657](https://github.com/ethereum/EthLib/pull/4657)).
   `Libp2p.Mplex.decode`, `Libp2p.Multistream.decode` and `Libp2p.Yamux.decode` return the same frame, rest and error for every input.
   Their theorems keep their statements, and a proof that unfolds one of them now meets the shared reader.

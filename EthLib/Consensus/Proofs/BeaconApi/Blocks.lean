@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Consensus.BeaconApi.Blocks
 public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.ForkChoice.Store
@@ -86,30 +87,75 @@ theorem blindedBlockResponse_gloas {block : SignedBeaconBlock preset fork}
     (Nat.le_trans (by decide : Fork.bellatrix.ctorIdx ≤ Fork.glamsterdam.ctorIdx) gloas)
   simp [blindedBlockResponse, none, late]
 
-/-- The first items of the kept pairs of a zip keep the order of the first list. -/
-private theorem map_fst_filter_zip_sublist {α β : Type} (p : α × β → Bool) :
-    ∀ (xs : List α) (ys : List β), (((xs.zip ys).filter p).map Prod.fst).Sublist xs
+/-- The answer for a list of hashes keeps the blobs of the block, each with its hash, in order. -/
+theorem requestedBlobs_sublist (requested : List VersionedHash) (blobs : List Blob)
+    (commitments : List KZGCommitment) :
+    (requestedBlobs requested blobs commitments).Sublist (blobHashes blobs commitments) :=
+  (Base.eraseDupsBy_sublist _ _).trans List.filter_sublist
+
+/-- Each blob of the answer for a list of hashes is the first in the block with its hash. -/
+theorem requestedBlobs_first {requested : List VersionedHash} {blobs : List Blob}
+    {commitments : List KZGCommitment} {entry : Blob × VersionedHash}
+    (mem : entry ∈ requestedBlobs requested blobs commitments) :
+    ∃ front back, blobHashes blobs commitments = front ++ entry :: back ∧
+      ∀ earlier ∈ front, earlier.2 ≠ entry.2 := by
+  -- The entry is the first of its hash among the requested blobs.
+  rw [requestedBlobs] at mem
+  obtain ⟨front, back, split, first⟩ :=
+    Base.eq_append_cons_of_mem_eraseDupsBy (fun e : Blob × VersionedHash => e.2) _ mem
+  -- Its hash is requested.
+  have asked := (List.mem_filter.1 (split ▸ List.mem_append_right front
+    (List.mem_cons_self (a := entry) (l := back)))).2
+  obtain ⟨front', back', whole, sorted⟩ := Base.eq_append_cons_of_filter split
+  refine ⟨front', back', whole, fun earlier mem same => ?_⟩
+  rcases sorted earlier mem with known | dropped
+  · exact first earlier known same
+  -- A blob before it that was not requested has another hash.
+  · simp_all
+
+/-- The hashes of the answer: the requested hashes of the commitments, once each, in block order. -/
+theorem requestedBlobs_hashes {requested : List VersionedHash} {blobs : List Blob}
+    {commitments : List KZGCommitment} (paired : blobs.length = commitments.length) :
+    (requestedBlobs requested blobs commitments).map (·.2) =
+      ((commitments.map kzgCommitmentToVersionedHash).filter requested.contains).eraseDups := by
+  rw [requestedBlobs, Base.map_eraseDupsBy, blobHashes]
+  conv_rhs => rw [← List.map_snd_zip (l₁ := blobs) (Nat.le_of_eq paired.symm), List.map_map]
+  congr 1
+  induction blobs.zip commitments with
+  | nil => rfl
+  | cons pair rest ih =>
+    simp only [List.map_cons, List.filter_cons]
+    split <;> simp_all
+
+/-- No two blobs of the answer for a list of hashes have one versioned hash. -/
+theorem requestedBlobs_nodup (requested : List VersionedHash) (blobs : List Blob)
+    (commitments : List KZGCommitment) :
+    ((requestedBlobs requested blobs commitments).map (·.2)).Nodup := by
+  rw [requestedBlobs, Base.map_eraseDupsBy]
+  exact Base.nodup_eraseDups _
+
+/-- The first items of a zip keep the order of the first list. -/
+private theorem map_fst_zip_sublist {α β : Type} :
+    ∀ (xs : List α) (ys : List β), ((xs.zip ys).map Prod.fst).Sublist xs
   | [], _ => by simp
   | _ :: _, [] => by simp
-  | x :: xs, y :: ys => by
-    have rest := map_fst_filter_zip_sublist p xs ys
-    by_cases keep : p (x, y) = true <;> simp [keep]
-    · exact rest
-    · exact rest.cons x
+  | x :: xs, _ :: ys => (map_fst_zip_sublist xs ys).cons_cons x
 
 /-- The blobs of the answer keep the order of the blobs of the block. -/
 theorem blockBlobs_sublist (blobs : List Blob) (commitments : List KZGCommitment)
     (hashes : Option (List VersionedHash)) :
     (blockBlobs blobs commitments hashes).Sublist blobs := by
-  exact map_fst_filter_zip_sublist _ _ _
+  cases hashes with
+  | none => exact map_fst_zip_sublist _ _
+  | some requested =>
+    refine ((requestedBlobs_sublist requested blobs commitments).map Prod.fst).trans ?_
+    simpa [blobHashes, List.map_map, Function.comp_def] using map_fst_zip_sublist blobs commitments
 
 /-- Without hashes, the answer is every blob of the block. -/
 theorem blockBlobs_none {blobs : List Blob} {commitments : List KZGCommitment}
     (paired : blobs.length = commitments.length) :
-    blockBlobs blobs commitments none = blobs := by
-  simp only [blockBlobs, Option.all_none]
-  rw [List.filter_eq_self.2 (by simp)]
-  exact List.map_fst_zip (Nat.le_of_eq paired)
+    blockBlobs blobs commitments none = blobs :=
+  List.map_fst_zip (Nat.le_of_eq paired)
 
 /-- Each blob of the answer sits at the place of a commitment whose versioned hash is requested. -/
 theorem blockBlobs_versionedHash {blobs : List Blob} {commitments : List KZGCommitment}
@@ -118,13 +164,23 @@ theorem blockBlobs_versionedHash {blobs : List Blob} {commitments : List KZGComm
     ∃ (place : Nat) (commitment : KZGCommitment),
       blobs[place]? = some blob ∧ commitments[place]? = some commitment ∧
       ∀ requested ∈ hashes, kzgCommitmentToVersionedHash commitment ∈ requested := by
-  simp only [blockBlobs, List.mem_map, List.mem_filter] at mem
-  obtain ⟨⟨b, c⟩, ⟨zipped, kept⟩, rfl⟩ := mem
+  -- The blob comes with a commitment of the block, and with its hash if any was requested.
+  obtain ⟨c, zipped, requestedHash⟩ : ∃ c, (blob, c) ∈ blobs.zip commitments ∧
+      ∀ requested ∈ hashes, kzgCommitmentToVersionedHash c ∈ requested := by
+    cases hashes with
+    | none =>
+      obtain ⟨⟨b, c⟩, zipped, rfl⟩ := List.mem_map.1 mem
+      exact ⟨c, zipped, by simp⟩
+    | some requested =>
+      obtain ⟨⟨b, hash⟩, kept, rfl⟩ := List.mem_map.1 mem
+      have filtered := (Base.eraseDupsBy_sublist _ _).subset kept
+      simp only [blobHashes, List.mem_filter, List.mem_map, Prod.mk.injEq,
+        List.contains_iff_mem] at filtered
+      obtain ⟨⟨⟨b', c⟩, zipped, rfl, rfl⟩, asked⟩ := filtered
+      exact ⟨c, zipped, by simpa using asked⟩
   obtain ⟨place, found⟩ := List.mem_iff_getElem?.1 zipped
   rw [List.getElem?_zip_eq_some] at found
-  refine ⟨place, c, found.1, found.2, ?_⟩
-  rintro requested rfl
-  simpa using kept
+  exact ⟨place, c, found.1, found.2, requestedHash⟩
 
 /-- Each blob of the answer commits to a commitment of the block whose versioned hash is requested.
 

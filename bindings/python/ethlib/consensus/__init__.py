@@ -1078,7 +1078,7 @@ def api_blobs(
 ) -> dict[str, Any]:
     """The Beacon API blobs of a signed block, in commitment order, or ConsensusError."""
     # The blobs are those of the commitments of the block, one each, in order; else code 500.
-    # With hashes, only the blobs whose commitment has one of these versioned hashes remain.
+    # With hashes, one blob for each requested hash, at the first place of its commitment.
     # An empty list of hashes is a request for no blob, unlike None.
     # The flags execution_optimistic and finalized come from the store and are absent.
     chosen = None if hashes is None else list(hashes)
