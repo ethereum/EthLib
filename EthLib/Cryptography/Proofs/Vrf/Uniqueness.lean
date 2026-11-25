@@ -25,31 +25,11 @@ open OracleSpec OracleComp ENNReal
 open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith experimentWith_queryBound
   prEvent_experimentWith_le)
 
-/-! ## The check with the hash as an oracle -/
+/-! ## The hash as an oracle -/
 
 /-- One call to the hash oracle, the only oracle that the extraction calls. -/
 def oracleHash (x : ByteArray) : OracleComp HashSpec Digest :=
   liftM (HashSpec.query x)
-
-/-- The check of an opening at index `i` against a root, with `H` in place of Keccak-256.
-
-It returns the output at `i`, or nothing if the opening is invalid. -/
-def verifyWith {m : Type → Type} [Monad m] (H : ByteArray → m Digest) (root : Digest)
-    (i : UInt32) (o : Opening) : m (Option Digest) := do
-  -- The leaf commits to the secret.
-  let leaf ← H (leafInput o.secret)
-  -- The opening is valid when its path leads from that leaf to the root.
-  let top ← Merkle.climb (nodeWith H) ⟨0, i.toNat⟩ leaf o.path.toList
-  if top = root then
-    let output ← H (outputInput i o.secret)
-    return some output
-  else
-    return none
-
-/-- With Keccak-256 as `H`, the check is the check of the specification. -/
-theorem verifyWith_hash (root : Digest) (i : UInt32) (o : Opening) :
-    (verifyWith (m := Id) (fun x => pure (hash x)) root i o).run = verify root i o :=
-  rfl
 
 /-! ## The experiment -/
 
@@ -95,7 +75,7 @@ theorem outputsWin_keccak256_iff {claim : OpeningsClaim} :
     OutputsWin (extractOutputs (m := Id) (fun x => pure (hash x)) claim).run ↔
       ∃ y y', verify claim.root claim.index claim.first = some y ∧
         verify claim.root claim.index claim.second = some y' ∧ y ≠ y' := by
-  simp only [OutputsWin, extractOutputs, Id.run_bind, Id.run_pure, verifyWith_hash]
+  simp only [OutputsWin, extractOutputs, Id.run_bind, Id.run_pure, verify]
 
 /-! ## The check replayed from a cache -/
 

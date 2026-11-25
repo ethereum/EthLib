@@ -142,7 +142,7 @@ A refinement theorem is a property.
 A **refinement module** is a property module that states a refinement theorem, or uses one in a proof.
 A refinement that holds by definition is still stated as a theorem, so that a reader can find it.
 Its proof unfolds the definitions, often with `rfl`.
-`rootWith_hash` in `EthLib/Cryptography/Proofs/Vrf/Unpredictability.lean` is one.
+`rootOf_secret` in `EthLib/Cryptography/Proofs/Vrf/SeedSecrets.lean` is one.
 
 A module is a model because of what it says, not because of what it imports.
 A module that imports VCVio is a property when its theorems are about the specification.

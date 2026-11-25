@@ -1087,6 +1087,13 @@ Not yet released.
 - In Lean, `Ssz.wellFormed_vector_element` (`Serialization/Proofs/Ssz/Type/Legality.lean`) is removed ([#4621](https://github.com/ethereum/EthLib/pull/4621)).
   It stated the same fact as `Ssz.wellFormed_vector` (`Serialization/Proofs/Ssz/Codec/Admits.lean`), with the same hypothesis and conclusion.
   Migration: use `Ssz.wellFormed_vector`, from `EthLib.Serialization.Proofs.Ssz.Codec.Admits`.
+- In Lean, the VRF specification defines its tree and its check once, with the hash as an argument in any monad ([#4575](https://github.com/ethereum/EthLib/issues/4575)).
+  The Keccak-256 forms are their instances in the identity monad, so the proofs no longer restate them.
+  - `Vrf.nodeWith` (`Cryptography/Vrf/Hash.lean`), `Vrf.leafWith`, `Vrf.rootWith` and `Vrf.openingWith` (`Cryptography/Vrf/KeyGen.lean`), and `Vrf.verifyWith` (`Cryptography/Vrf/Verify.lean`) move from the proofs into the specification.
+    `treeHash`, `root`, `opening` and `verify` are now these forms with Keccak-256, so they unfold to them.
+  - `Vrf.leaves` is removed: leaf `j` is `leafWith` with Keccak-256.
+  - The theorems `Vrf.rootWith_hash`, `Vrf.openingWith_hash` and `Vrf.verifyWith_hash` are removed, since each restated a definition.
+  Migration: use the forms with the hash as an argument, at `Id` with `fun x => pure (hash x)`, where the removed names were used.
 - In Lean, SSZ holds its bytes as a `ByteArray` in place of an `Array UInt8` ([#4560](https://github.com/ethereum/EthLib/pull/4560)).
   A node of a Merkle tree, an encoding and a byte value of SSZ now have the type that SHA-256 and the bindings use.
   So no step copies them from one type to the other.
