@@ -161,7 +161,7 @@ def prunedHistoryUnavailableExport : PyValue → Result PyValue
 /-! ## The chain view -/
 
 open EthLib.Base (ChainConfig Fork Hash32)
-open EthLib.Execution.Blocks (Block BlockChain BlockError Log Receipt stateTransition)
+open EthLib.Execution.Blocks (Block BlockChain BlockError Log Receipt RecentBlock stateTransition)
 open EthLib.Execution.Blocks.Exports (blockOf)
 open EthLib.Execution.State (stateRoot)
 open EthLib.Cryptography.Hash.Keccak (keccak256)
@@ -175,15 +175,34 @@ def recordOf {fork : Fork} (block : Block fork Execution.Transactions.Transactio
     (block.header.hash.mapError fun e => UnreadArgument.mk s!"block hash: {reprStr e}")
   return ⟨fork, block, hash, state, receipts, logs, accessList⟩
 
-/-- The record of a block after the last record of a chain, by the state transition. -/
-def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRecord)
+/-- The record of a block after the last record of a chain, by the state transition.
+
+The recent blocks are those of the records so far, oldest first. -/
+def nextRecord (config : ChainConfig) (checkSeal : Bool) (recent : Array RecentBlock)
     (prev : BlockRecord) (block : String × ByteArray) : Result BlockRecord := do
-  let ⟨_, block⟩ ← blockOf config block.1 block.2
-  let chain : BlockChain := ⟨config, prev.state, records.map BlockRecord.recent⟩
+  let ⟨fork, block⟩ ← blockOf config block.1 block.2
+  -- From Paris, the transition reads only the last 255 recent blocks, so the chain keeps those.
+  --
+  -- Before Paris, the ommer checks read every recent block, so the chain keeps them all.
+  let recent := if .paris ≤ fork then (recent.extract (recent.size - 255) recent.size).toList
+    else recent.toList
+  let chain : BlockChain := ⟨config, prev.state, recent⟩
   let state ← toResult s!"block {block.header.number}" (stateTransition chain block checkSeal)
   let hash ← toResult none
     (block.header.hash.mapError fun e => UnreadArgument.mk s!"block hash: {reprStr e}")
   toResult s!"block {block.header.number}" (BlockRecord.ofRun chain block hash state)
+
+/-- The records of the lowest block and of the blocks after it.
+
+Each block runs on the chain of the records before it. -/
+def recordsOf (config : ChainConfig) (checkSeal : Bool) (lowest : BlockRecord)
+    (rest : List (String × ByteArray)) : Result (List BlockRecord) := do
+  -- The records and their recent blocks grow in place, one block at a time.
+  let (records, _) ← rest.foldlM (init := (#[lowest], #[lowest.recent]))
+    fun (records, recent) block => do
+      let record ← nextRecord config checkSeal recent (records.back?.getD lowest) block
+      return (records.push record, recent.push record.recent)
+  return records.toList
 
 /-- The inputs of a chain view: the configuration, the state of the lowest block, and the blocks.
 
@@ -258,9 +277,7 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
   -- It runs on the chain before it.
   --
   -- The history before the lowest block is not there.
-  let records ← rest.foldlM (init := [lowest]) fun records block => do
-    let prev := records.getLast?.getD lowest
-    return records ++ [← nextRecord config checkSeal records prev block]
+  let records ← recordsOf config checkSeal lowest rest
   if h : records = [] then rejectArgument none "no block"
   else
     -- The head must be the last block.

@@ -12,6 +12,8 @@ The Yellow Paper ([`Paper.tex`][yp], Appendix H.2) defines BLOCKHASH by a walk u
 
 The two agree when the recent blocks are linked and reach back far enough.
 
+From Paris, the transition of a block reads only the last 255 recent blocks of its chain.
+
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
@@ -347,5 +349,59 @@ theorem blockHash_of_short {chain : BlockChain} {hashes : List Hash32} {last : R
   · simp [hnil] at hlast
   · rw [hh, List.length_append, List.length_map, List.length_drop, List.length_singleton]
     omega
+
+/-! ## The recent blocks that a transition reads -/
+
+/-- Keeping the last 255 recent blocks twice keeps the same blocks as keeping them once. -/
+private theorem drop_drop_recent (l : List RecentBlock) :
+    (l.drop (l.length - 255)).drop ((l.drop (l.length - 255)).length - 255) =
+      l.drop (l.length - 255) := by
+  rw [List.length_drop, show l.length - (l.length - 255) - 255 = 0 by omega, List.drop_zero]
+
+/-- The recent hashes of the last 255 recent blocks are those of all the recent blocks. -/
+private theorem recentHashes_drop_recent (l : List RecentBlock) :
+    recentHashes (l.drop (l.length - 255)) = recentHashes l := by
+  unfold recentHashes; rw [drop_drop_recent]
+
+/-- From Paris, the checks of a block read the same from the last 255 recent blocks. -/
+private theorem checkBlock_drop_recent (config : ChainConfig) (checkSeal : Bool)
+    (l : List RecentBlock) {fork : Fork} (block : Block fork Transaction)
+    (paris : .paris ≤ fork) :
+    checkBlock config checkSeal (l.drop (l.length - 255)) block =
+      checkBlock config checkSeal l block := by
+  -- The last of the last 255 recent blocks is the last recent block: the parent.
+  have hlast : (l.drop (l.length - 255)).getLast? = l.getLast? := by
+    rw [List.getLast?_drop]
+    split
+    · cases l with
+      | nil => rfl
+      | cons a t => rename_i h; simp only [List.length_cons] at h; omega
+    · rfl
+  -- The ommer checks, which read the other recent blocks, run only before Paris.
+  have hlt : ¬ fork < .paris := Std.not_lt.mpr paris
+  unfold checkBlock
+  simp only [hlast, hlt, ite_false]
+
+/-- The body of a block reads only the last 255 recent blocks of its chain.
+
+It reads them for the hashes that BLOCKHASH gives. -/
+theorem runBody_drop_recent (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
+    (overrides : BodyOverrides) (blobGasPrice : Option Nat) :
+    runBody { chain with recent := chain.recent.drop (chain.recent.length - 255) } block overrides
+      blobGasPrice = runBody chain block overrides blobGasPrice := by
+  -- The body reads the recent blocks only through their hashes.
+  simp only [runBody, recentHashes_drop_recent]
+
+/-- From Paris, the transition of a block reads only the last 255 recent blocks of its chain.
+
+The parent is the last of them, and a block from Paris has no ommers to check against the others.
+-/
+theorem stateTransition_drop_recent (chain : BlockChain) {fork : Fork}
+    (block : Block fork Transaction) (checkSeal : Bool) (paris : .paris ≤ fork) :
+    stateTransition { chain with recent := chain.recent.drop (chain.recent.length - 255) } block
+      checkSeal = stateTransition chain block checkSeal := by
+  -- The checks read the same parent, and the ommer checks do not run from Paris.
+  have hcheck := checkBlock_drop_recent chain.config checkSeal chain.recent block paris
+  simp only [stateTransition, hcheck, runBody_drop_recent]
 
 end EthLib.Execution.Blocks

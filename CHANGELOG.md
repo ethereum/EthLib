@@ -1040,6 +1040,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the chain view of the RPC export runs each block from Paris on the last 255 recent blocks ([#4553](https://github.com/ethereum/EthLib/pull/4553)).
+  So building it costs time linear in its blocks.
+  - `Rpc.Exports.nextRecord` (`Execution/Exports/Rpc.lean`) takes the recent blocks as an array, and `Rpc.Exports.recordsOf` is new: the loop of the view over its blocks.
+    `recordsOf_eq` (`Execution/Proofs/Exports/Rpc.lean`) says that it gives the records of the old loop, which ran each block on all the records before it.
+  - `runBody_drop_recent` and `stateTransition_drop_recent` (`Execution/Proofs/Blocks/History.lean`) are new.
+    The body reads only the last 255 recent blocks of its chain, and from Paris so does the transition.
 - In Lean, more duplicate checks use the one-pass scan `Base.firstRepeated` ([#4545](https://github.com/ethereum/EthLib/pull/4545)).
   It replaces the test of `List.Nodup` and the comparison of a list with its repeats removed.
   - They cover the key shares of a QUIC TLS ClientHello and the indices of an SSZ multiproof request.
