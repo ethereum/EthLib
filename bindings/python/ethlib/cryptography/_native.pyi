@@ -2092,6 +2092,14 @@ def hoodi_active_fork(number: int, timestamp: int) -> str | None:
     """The name of the active fork of Hoodi at a block, or `None` when none is active."""
     ...
 
+def sepolia_active_fork(number: int, timestamp: int) -> str | None:
+    """The name of the active fork of Sepolia at a block, or `None` when none is active."""
+    ...
+
+def chain_config(name: str) -> dict[str, Any]:
+    """The configuration of a chain that EthLib holds, as a `dict`."""
+    ...
+
 def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | None:
     """The name of the active fork of a configured chain at a block, or `None` when none is active."""
     ...

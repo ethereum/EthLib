@@ -1,4 +1,4 @@
-"""The forks and blob schedules of the execution chains of mainnet, Hoodi and a configured chain."""
+"""The forks and blob schedules of mainnet, Hoodi, Sepolia and a configured chain."""
 
 from typing import Any
 
@@ -16,6 +16,16 @@ def mainnet_active_fork(number: int, timestamp: int) -> str | None:
 def hoodi_active_fork(number: int, timestamp: int) -> str | None:
     """The fork active on Hoodi at a block with this number and timestamp, if any."""
     return _native.hoodi_active_fork(number, timestamp)
+
+
+def sepolia_active_fork(number: int, timestamp: int) -> str | None:
+    """The fork active on Sepolia at a block with this number and timestamp, if any."""
+    return _native.sepolia_active_fork(number, timestamp)
+
+
+def chain_config(name: str) -> dict[str, Any]:
+    """The configuration of mainnet, Hoodi or Sepolia, as `active_fork` takes it."""
+    return _native.chain_config(name)
 
 
 def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | None:
@@ -38,8 +48,10 @@ def write_execution_config(config: dict[str, Any]) -> dict[str, Any]:
 __all__ = [
     "ChainError",
     "active_fork",
+    "chain_config",
     "execution_blob_schedule",
     "hoodi_active_fork",
     "mainnet_active_fork",
+    "sepolia_active_fork",
     "write_execution_config",
 ]

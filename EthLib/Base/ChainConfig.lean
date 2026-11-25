@@ -335,6 +335,63 @@ def hoodi : ChainConfig where
     (.bpo1, .time 1762365720),
     (.bpo2, .time 1762955544)]
 
+/-- The configuration of the Sepolia test network, from Frontier to Glamsterdam.
+
+Sepolia sets no blob schedule of its own.
+
+Each schedule of its genesis file is the one that the EIPs of its fork give.
+
+Fusaka keeps the schedule of Pectra, and Glamsterdam that of BPO2.
+
+Sources:
+
+- The [genesis file][genesis]: the chain ID, the deposit contract, and each activation but Paris.
+- The [consensus configuration][config]: the hash of the last proof-of-work block.
+- The header with that hash, which the Python tests pin and check: the number of that block.
+- [EIP-3675][eip-3675]: Paris activates at the block after the last proof-of-work block.
+- The Sepolia rows of [EIP-7569][eip-7569] and [EIP-7600][eip-7600]: the times of Dencun and Pectra.
+- The Sepolia rows of [EIP-7607][eip-7607] and [EIP-7773][eip-7773]: the times from Fusaka on.
+
+[genesis]: https://github.com/eth-clients/sepolia/blob/7b1b9d9549787b6bbf538f943304c4cf84f7e39e/metadata/genesis.json
+[config]: https://github.com/eth-clients/sepolia/blob/7b1b9d9549787b6bbf538f943304c4cf84f7e39e/metadata/config.yaml#L28
+[eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#transition-block-validity
+[eip-7569]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7569.md#activation
+[eip-7600]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7600.md#activation
+[eip-7607]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7607.md#activation
+[eip-7773]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-7773.md#activation
+-/
+def sepolia : ChainConfig where
+  chainId := 11155111
+  -- The deposit contract of the genesis file.
+  depositContractAddress := #v[0x7f, 0x02, 0xc3, 0xe3, 0xc9, 0x8b, 0x13, 0x30, 0x55, 0xb8, 0xb3,
+    0x48, 0xb2, 0xac, 0x62, 0x56, 0x69, 0xed, 0x29, 0x5d]
+  activations := [
+    -- Every fork up to London activates at block 0.
+    --
+    -- The DAO fork and the forks that only delay the difficulty bomb are absent.
+    (.frontier, .block 0),
+    (.homestead, .block 0),
+    (.tangerineWhistle, .block 0),
+    (.spuriousDragon, .block 0),
+    (.byzantium, .block 0),
+    (.constantinople, .block 0),
+    (.petersburg, .block 0),
+    (.istanbul, .block 0),
+    (.berlin, .block 0),
+    (.london, .block 0),
+    -- The last proof-of-work block is block 1450408, so Paris activates at the next one.
+    --
+    -- The merge netsplit block of the genesis file enters only the fork identifier.
+    (.paris, .block 1450409),
+    -- Each later fork activates at the time of the genesis file.
+    (.shapella, .time 1677557088),
+    (.dencun, .time 1706655072),
+    (.pectra, .time 1741159776),
+    (.fusaka, .time 1760427360),
+    (.bpo1, .time 1761017184),
+    (.bpo2, .time 1761607008),
+    (.glamsterdam, .time 1791294816)]
+
 end ChainConfig
 
 end EthLib.Base

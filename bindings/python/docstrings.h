@@ -1562,6 +1562,12 @@
 #define DOC_hoodi_active_fork \
   "The name of the active fork of Hoodi at a block, or `None` when none is active."
 
+#define DOC_sepolia_active_fork \
+  "The name of the active fork of Sepolia at a block, or `None` when none is active."
+
+#define DOC_chain_config \
+  "The configuration of a chain that EthLib holds, as a `dict`."
+
 #define DOC_active_fork \
   "The name of the active fork of a configured chain at a block, or `None` when none is active."
 
