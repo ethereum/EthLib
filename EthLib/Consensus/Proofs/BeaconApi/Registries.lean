@@ -478,7 +478,7 @@ theorem lt_of_mem_selectValidators {state : BeaconState preset fork} {ids : List
     | pubkey pubkey =>
       obtain ⟨position, validator, found, _, _, rfl⟩ := resolveValidatorId_pubkey.mp resolved
       have bound := (Array.getElem?_eq_some_iff.mp found).1
-      have : (UInt64.ofNat position).toNat ≤ position := by simp [Nat.mod_le]
+      have := UInt64.toNat_ofNat_le (n := position)
       omega
 
 end EthLib.Consensus.BeaconApi
