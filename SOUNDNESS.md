@@ -8139,18 +8139,24 @@ No witness yet covers a run across the Electra fork epoch.
 Each block of the chain is one that the transition accepts.
 Each block must stay within stated limits on its body (`BlockBounded`), and each raises the bounds by a fixed step (`BlockStep.Covers`).
 The protocol does not cap the Gwei that deposits bring in, so that limit is an assumption on the chain.
-The step charges each block the most rewards that any block can pay within the budget.
-It takes the base reward per increment at its largest, when the total active balance is one increment.
-It does not read the rewards that the attestations earn.
-On mainnet that is about 70,640 ETH a block at a budget of `2^57` Gwei.
-So the mainnet corollary covers 16 epochs, not the horizon of the scores.
+The step charges each block its deposits, its whistleblower rewards and the most that its sync aggregate pays.
+The rewards that blocks pay for attestations are charged once in each epoch instead (`BlockStep.rewards`).
+In an epoch, they add up to at most the weight of the flags over 448.
+A block keeps the base reward per increment, and does not lower that weight.
+`ChainHolds.rewarded` keeps that sum: times 448, the supply is within the bound of the past epochs plus the weight of the flags.
+The weight is bounded with the base reward per increment at its largest, when the total active balance is one increment (`flagWeightBound`).
+It does not read which validators set the flags.
+On mainnet that is about 70,315 ETH an epoch at a budget of `2^57` Gwei, where the old step charged about 70,640 ETH a block.
+So the mainnet corollary covers 64 epochs, up from 16, and not the horizon of the scores.
 From Electra one attester slashing may name `2048 * 64` validators.
-A step that covers that many names would pass `2^64` Gwei over the 544 blocks of 16 epochs.
+A step that covers that many names would pass `2^64` Gwei over the 2080 blocks of 64 epochs.
 So the slashing limit is far below what the protocol allows at every fork: the mainnet corollary allows `2^10` slashed validators in a block.
-A tight bound would read the flags that the attestations set.
-It needs the flags to be set only at active validators.
-It also needs the previous active balance to stay near the current one.
-Neither is proved.
+At 2048 ETH each, the slashed balances reach `2^62` Gwei after about 2,180 blocks, so that limit alone stops the corollary at 67 epochs.
+With fewer slashings a block, the supply step would bind next.
+The hysteresis ratio asks at least 24,576 ETH of supply step for 16 joins of 2048 ETH, which stops it at about 82 epochs.
+A tight bound on the weight would read the flags, which `FlagsActive` sets only at active validators.
+It also needs the previous active balance to stay near the current one, which is not proved.
+Years of epochs would also need limits on the deposits and the slashings of the whole chain, not of each block.
 Blocks carry attestations, so the chain takes `SignersAtEnds` in place of `SignersEarly`.
 The signers then hold at most the active balance at the end of every epoch, not only the first two.
 The theorem also assumes a positive inclusion delay, a positive withdrawal delay, and an increment at most the activation balance; mainnet meets all three.

@@ -1058,6 +1058,18 @@ Not yet released.
     Each gives the same answer on every input.
   - `Base.isNone_firstRepeated` (`Base/Proofs/List.lean`) is new: the scan finds nothing exactly when the list has no repeat, as a test.
     Unfolding `Ssz.rejectRelated` now gives the scan; `rejectRelated_eq` keeps its statement.
+- In Lean, the chain theorem charges the rewards that blocks pay for attestations once in each epoch, not in each block ([#2601](https://github.com/ethereum/EthLib/issues/2601)).
+  So `chainConditions_mainnet` and the mainnet corollaries of `ChainRun.lean` cover 64 epochs, up from 16.
+  - `BlockStep` (`Totality/ChainHolds.lean`) has a new field `rewards`, the rise of the supply in each epoch from those rewards.
+  - `RunStart.afterChain` is new: the start raised by some blocks and by the rewards of the epochs so far and the current one.
+    `ChainConditions.run`, `ChainHolds.bounded` and the conclusion of `ChainHolds.run` read it in place of `RunStart.afterBlocks`, and `ChainConditions.at` takes the number of epochs.
+    `RunStart.afterChain_zero`, `RunBounded.raiseSupply` and `RunBounded.afterChain_mono` are new.
+  - `ChainHolds.rewarded` is a new field: times 448, the supply is within the bound of the past epochs plus the weight of the flags.
+  - `BlockStep.Covers.supply` charges `syncRewardBound` in place of `blockRewardBound`, and the new field `Covers.rewards` asks `flagWeightBound ≤ 448 * rewards`.
+  - `blockRewardBound` (`Totality/SupplyBlock.lean`) is removed.
+    `flagWeightBound`, `syncRewardBound` and `Preset.largestPerIncrement` are new, and `blockRewardCap_le` bounds the cap by `flagWeightBound / 448 + syncRewardBound`.
+    `blockPerIncrement_le`, `flagRewardWeight_le_flagWeightBound` and `syncRewardCap_le` are new.
+  - `BlockStep.mainnet` charges 25,000 ETH a block and 71,000 ETH an epoch.
 - In Lean, the JSON-RPC reader of hex bytes, `JsonRpc.bytesOf` (`Serialization/JsonRpc.lean`), reads the digits with `Base.hexBytes?`, with the same bytes and the same error messages ([#4488](https://github.com/ethereum/EthLib/issues/4488)).
   - Unfolding it now gives a check of the parity, a check that no character is an uppercase letter when uppercase is refused, and `Base.hexBytes?`, not a loop over indices; its public lemmas keep their statements.
   - `Base.hexBytesFrom?_eq_some_iff` (`Base/Proofs/Hex.lean`) is new: decoding succeeds exactly on pairs of hex digits, and appends the byte of each pair.

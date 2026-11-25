@@ -53,9 +53,14 @@ theorem RunHolds.toChainHolds {start : RunStart} {budget startEpoch : Nat} {fork
     {state : BeaconState preset fork} (holds : RunHolds config start budget startEpoch state) :
     ChainHolds config start BlockStep.zero budget startEpoch 0 state := by
   refine ⟨holds.started, holds.invariant, holds.shaped, holds.wellFormed, holds.resolved,
-    holds.early, holds.voted, Nat.zero_le _, ?_⟩
-  rw [RunStart.afterBlocks_zero]
-  exact holds.bounded
+    holds.early, holds.voted, Nat.zero_le _, ?_, ?_⟩
+  · rw [RunStart.afterChain_zero]
+    exact holds.bounded
+  · -- With no rewards per epoch, the bound is that of the run, with no weight of the flags.
+    have := holds.bounded.supply
+    rw [RunStart.afterBlocks_zero]
+    simp only [BlockStep.zero, Nat.zero_add]
+    omega
 
 /-! ## One slot -/
 
@@ -68,7 +73,7 @@ private theorem RunHolds.of_chainHolds {start : RunStart} {budget startEpoch blo
     (quiet : startEpoch + 2 ≤ (getCurrentEpoch state).toNat → Quiet state) :
     RunHolds config start budget startEpoch state := by
   have bounded := holds.bounded
-  rw [RunStart.afterBlocks_zero] at bounded
+  rw [RunStart.afterChain_zero] at bounded
   exact ⟨holds.started, holds.invariant, holds.shaped, holds.wellFormed, holds.resolved,
     holds.early, holds.voted, bounded, quietCurrent, quiet⟩
 
