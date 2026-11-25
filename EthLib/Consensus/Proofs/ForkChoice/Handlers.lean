@@ -8,53 +8,13 @@ public import EthLib.Consensus.Proofs.Time
 /-!
 # Proofs: the handlers of the fork choice
 
+What each handler of the store keeps, changes and checks, from a tick to an inclusion list.
+
 No handler lowers the epoch of the justified or of the finalized checkpoint.
 
-Each of these checkpoints stays as it was, or changes to one at a greater epoch.
-
-A tick sets the clock to its time, and the catch-up loop never stalls.
+A tick sets the clock to its time.
 
 Every other handler keeps the clock.
-
-A new block enters the store with the state that the transition computes for it.
-
-At Deneb and Electra the node held its blobs, and their proofs matched its commitments.
-
-From Fulu the node got every column that it samples, and each column was valid.
-
-From Gloas the data comes with the payload, and the check of the block passes.
-
-From Gloas a block that builds on the payload of its parent finds that payload verified.
-
-A new block that the handler accepts is not from the future, and is after the finalized slot.
-
-The checkpoint block of its parent at the finalized epoch is the finalized block.
-
-At Bellatrix the first payload passes exactly when it follows a terminal block of proof of work.
-
-A known block leaves the store as it was.
-
-An attestation leaves each voter not marked as an equivocator a vote at its target epoch or later.
-
-An attestation from the wire passes only with its target at the current epoch or the one before.
-
-An accepted attester slashing adds to the equivocators exactly the validators in both attestations.
-
-From Gloas the vote of an attestation on the payload passes exactly in the three allowed cases.
-
-From Gloas a block also records whether it came before the votes of the payload committee.
-
-A vote of the payload committee sets the votes of its validator at each of its positions.
-
-Such a vote for another slot than its block's, or carried by a block at slot 0, changes nothing.
-
-An accepted envelope had its data and passed its checks, and the store then keeps it.
-
-Its payload then counts as verified, and nothing else changes.
-
-From Gloas a block may fix the proposers of a slot when it is the head.
-
-So may a block that a known block after the slot has as parent.
 -/
 
 @[expose] public section
@@ -316,26 +276,22 @@ theorem SameCheckpoints.unrealizedFinalized {after : Store preset fork}
 
 /-- The tip pulled up to the end of its epoch lowers neither epoch, and keeps the blocks.
 
-It also keeps the clock.
-
-It runs justification and finalization on the held state of the tip.
-
-The result updates the unrealized checkpoints of the store.
-
-It may also update the realized checkpoints with that result.
-
-It records the current justified checkpoint of that result as the tip's unrealized justification. -/
+It also keeps the clock. -/
 theorem computePulledUpTip_frame {root : Root} {after : Store preset fork}
     (pulled : store.computePulledUpTip config root = .ok after) :
     store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
       after.blockStates = store.blockStates ∧
       SameClock store after ∧ ∃ state counted, store.blockStates[root]? = some state ∧
+        -- It runs justification and finalization on the held state of the tip.
         processJustificationAndFinalization state = .ok counted ∧ ∃ moved : Store preset fork,
+          -- The result updates the unrealized checkpoints of the store.
           (moved = store.updateUnrealizedCheckpoints counted.currentJustifiedCheckpoint
               counted.finalizedCheckpoint ∨
+            -- It may also update the realized checkpoints with that result.
             moved = (store.updateUnrealizedCheckpoints counted.currentJustifiedCheckpoint
               counted.finalizedCheckpoint).updateCheckpoints counted.currentJustifiedCheckpoint
                 counted.finalizedCheckpoint) ∧
+          -- The tip's unrealized justification becomes that result's current justified checkpoint.
           SameCheckpoints moved after ∧ after.unrealizedJustifications =
             store.unrealizedJustifications.insert root counted.currentJustifiedCheckpoint := by
   unfold computePulledUpTip at pulled
@@ -1105,24 +1061,20 @@ theorem validatePayloadData_ok_iff {sources : BlockSources preset fork} {root : 
   rw [unless_ok_iff]
   exact columnsAvailable_ok_iff
 
-/-- The first payload passes exactly when it follows a terminal block of proof of work.
-
-With a configured terminal block hash, the epoch must reach its activation.
-
-The payload must then follow that hash.
-
-Otherwise the node must know the parent of the payload and its own parent.
-
-The first of the two must then be terminal. -/
+/-- The first payload passes exactly when it follows a terminal block of proof of work. -/
 theorem validateMergeBlock_ok {powBlock : Hash32 → Option PowBlock}
     {block : BeaconBlock preset fork} {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam} :
     validateMergeBlock config powBlock block bellatrix = .ok () ↔
+      -- With a configured terminal block hash, the epoch must reach its activation.
       if config.TERMINAL_BLOCK_HASH ≠ Vector.replicate 32 0 then
         config.TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH ≤ computeEpochAtSlot preset block.slot ∧
+          -- The payload must then follow that hash.
           (block.body.executionPayload bellatrix).parentHash = config.TERMINAL_BLOCK_HASH
+      -- Otherwise the node must know the parent of the payload and its own parent.
       else ∃ terminal parent,
         powBlock (block.body.executionPayload bellatrix).parentHash = some terminal ∧
           powBlock terminal.parentHash = some parent ∧
+          -- The first of the two must then be terminal.
           isValidTerminalPowBlock config terminal parent = true := by
   unfold validateMergeBlock
   dsimp only
@@ -1775,21 +1727,22 @@ theorem notifyPtcMessages_of_zero {checks : SignatureChecks} {gloas : .glamsterd
 
 /-- An accepted envelope names a block whose state the store holds.
 
-The data of the payload is available against the bid in that state.
+The store then keeps the envelope at the root of its block.
 
-The envelope passes its checks against that state.
+From Heze it also records whether the payload satisfied its inclusion lists.
 
-From Heze the store then records whether the payload satisfied its inclusion lists.
-
-The store then keeps the envelope at the root of its block, and nothing else changes. -/
+Nothing else in the store changes. -/
 theorem onExecutionPayloadEnvelope_ok {checks : SignatureChecks}
     {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     ∃ state, store.blockStates[signed.message.beaconBlockRoot]? = some state ∧
+      -- The data of the payload is available against the bid in that state.
       validatePayloadData config sources signed.message.beaconBlockRoot
         (state.latestExecutionPayloadBid gloas) = .ok () ∧
+      -- The envelope passes its checks against that state.
       verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed = .ok () ∧
+      -- From Heze the store records the answer on the inclusion lists.
       ∃ recorded, store.recordEnvelope sources signed.message.beaconBlockRoot
           signed.message.payload = .ok recorded ∧
         after = { recorded with payloads := fun _ =>
@@ -1935,6 +1888,8 @@ theorem onInclusionList_sameClock {checks : SignatureChecks} {heze : .hegota ≤
 A block may be the last one at or before a slot when it is the head.
 
 It may also be when a known block after the slot has it as parent.
+
+Such a block may fix the proposers of that slot.
 
 The rule fails exactly when the head fails. -/
 theorem isValidDependentRoot_ok_iff {root : Root} {dependentSlot : Slot} {possible : Bool} :
