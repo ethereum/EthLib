@@ -155,7 +155,7 @@ private theorem sum_map_baseRewardBoundBeforeAltair_le {α : Type} (balance : α
     ∀ list : List α, (list.map fun x => preset.baseRewardBoundBeforeAltair (balance x)).sum ≤
       preset.baseRewardBoundBeforeAltair (list.map balance).sum := by
   intro list
-  -- The two divisors become one, and the reward factor comes out of the sum.
+  -- The two divisors become one, and the reward factor moves into each term of the sum.
   simp only [Preset.baseRewardBoundBeforeAltair, Nat.div_div_eq_div_mul]
   rw [← sum_map_mul_right]
   exact sum_map_div_le (fun x => balance x * preset.BASE_REWARD_FACTOR.toNat) _ list
