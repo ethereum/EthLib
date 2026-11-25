@@ -106,13 +106,7 @@ def runNodeOf (args : PyValue × ByteArray × (String × ByteArray × List ByteA
     PyValue) : Result PyValue := do
   let (config, state, anchor, terminalTotalDifficulty, totalDifficulty, requests) := args
   -- A block of proof of work also takes its total difficulty, and the terminal one.
-  unless terminalTotalDifficulty < 2 ^ 256 do
-    rejectArgument none
-      s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256"
-  let transition : TransitionConfiguration := {
-    terminalTotalDifficulty := BitVec.ofNat 256 terminalTotalDifficulty
-    terminalBlockHash := 0
-    terminalBlockNumber := 0 }
+  let transition ← transitionOf terminalTotalDifficulty
   -- The configuration, the state and the block take the forms of the export on a chain.
   let chain ← Execution.Blocks.Exports.chainOf config state [anchor]
   let some block := chain.recent.head? | rejectArgument none "anchor: no block"
