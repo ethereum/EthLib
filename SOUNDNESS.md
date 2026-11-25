@@ -522,7 +522,23 @@ That search reads only the index and the two openings.
 The theorem holds for every root, including one built to cheat.
 `verify_opening` says that the opening of an honest tree verifies, with the output of its secret.
 
-Uniqueness is reduced to a collision, and no theorem bounds the cost of finding one.
+Uniqueness is reduced to a collision, and `Proofs/Vrf/Uniqueness.lean` bounds the chance of two outputs at one index, with Keccak-256 a random oracle.
+An adversary makes at most `q` oracle queries, then outputs a root, an index and two openings.
+The experiment checks both openings as `verify` does, with a query for each Keccak-256 call.
+`verifyWith_hash` shows that this check, with Keccak-256 in place of the oracle, is `verify`.
+The adversary wins when both openings verify, with two different outputs.
+`outputsWin_keccak256_iff` shows that, with Keccak-256 in place of the oracle, a win is two openings that `verify` accepts, with two different outputs.
+`collision_of_extractOutputs` shows that every win leaves two different cached inputs with one answer.
+The search `findHashCollisionWith` (`Proofs/Vrf/Verify.lean`) names them, run with a table that agrees with the cache.
+`secret_unique_of_climb_eq` shows, for any hash, that when two climbs from one index reach one node, the search succeeds unless the two secrets are equal.
+`verify_secret_unique` is that theorem with Keccak-256.
+`prEvent_experimentWith_le` then gives `prEvent_outputsWin_le`, which bounds a win by `Q^2 / N`.
+Here `Q` bounds the oracle queries of the whole experiment, and `N` is the number of digests.
+`prEvent_outputsWin_le_two_pow` states it with `N = 2^256`.
+`extractOutputs_queryBound` shows that the two checks make at most `2 (h + 2)` queries, for a tree of height `h`.
+`prEvent_outputsWin_le_of_adversary` states the bound with `Q = q + 2 (h + 2)`, which is `q + 68` at the height of 32.
+Carrying the bound over to Keccak-256 is the idealisation of A4, not a theorem.
+
 In the random oracle model, `prEvent_guess_le` (`Proofs/Vrf/Unpredictability.lean`) bounds the chance of guessing an unopened output.
 The secret at the guessed index is uniform, and the adversary sees the root, the hash and the openings at other indices.
 It guesses right with probability at most `(1 + 2 Q) / 2^256`, where `Q = q_H + (q_O + 1) 2^33` counts its hash queries and requests.
@@ -545,7 +561,7 @@ A selection therefore compares `mixOutput`, the hash of the output with randomne
 The mix is a random oracle, and the tree hash is Keccak-256 itself.
 The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
 The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
-No theorem bounds that last chance, as for uniqueness.
+No theorem bounds that last chance, since the uniqueness bound above takes the tree hash as a random oracle.
 The theorem says nothing about a holder that registers a root without knowing a tree under it.
 That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
 It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
@@ -8270,6 +8286,10 @@ The codeword searches of each scheme share the bullet of that scheme:
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
+- VRF uniqueness: Keccak-256 is a random oracle on byte strings, shared by the leaves, the nodes and the outputs of the tree.
+  Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
+  Only classical queries are counted, and the adversary's private sampling is not.
+  The bound says nothing about an attack that uses the structure of Keccak.
 - VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
   That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
   The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.

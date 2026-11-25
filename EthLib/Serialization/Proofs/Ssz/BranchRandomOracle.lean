@@ -3,6 +3,7 @@ module
 public import EthLib.Serialization.Proofs.Ssz.RandomOracle
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
 public import EthLib.Serialization.Ssz.Typed.Basic
+public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 
 /-!
 # Proofs: two branches of one root in the random oracle model
@@ -167,20 +168,6 @@ theorem collision_of_extractBranches {depth : Nat} {cache : HashOracle.QueryCach
     exact collision_of_cached hdistinct hequal (cached_of_climbBranchM hf hrun₁ a ha)
       (cached_of_climbBranchM hf hrun₂ b hb)
 
-/-- A climb makes at most one oracle call per branch node. -/
-private theorem climbBranchM_queryBound (index level : Nat) (node : Bytes) (branch : List Bytes) :
-    IsQueryBoundP (climbBranchM queryHash index level node branch) (fun _ => True)
-      branch.length := by
-  unfold climbBranchM
-  generalize (⟨level, index >>> level⟩ : Cryptography.Merkle.Position) = p
-  induction branch generalizing p node with
-  | nil => trivial
-  | cons sibling rest ih =>
-    simp only [Cryptography.Merkle.climb]
-    refine (isQueryBoundP_bind (n := 1) ?_ fun parent _ => ih parent p.parent).mono
-      (by simp [Nat.add_comm])
-    exact combineM_queryBound _ _
-
 /-- The extraction makes at most `2 * depth` oracle calls, one per climbed node.
 
 It climbs at most `depth` nodes of each branch. -/
@@ -190,7 +177,8 @@ theorem extractBranches_queryBound (depth : Nat) (claim : BranchClaim) :
   have climbs : ∀ (leaf : Vector UInt8 32) (branch : List (Vector UInt8 32)),
       IsQueryBoundP (climbBranchM queryHash claim.index 0 leaf.toArray
         ((branch.take depth).map Vector.toArray)) (fun _ => True) depth := fun _ _ =>
-    (climbBranchM_queryBound _ _ _ _).mono (by simp)
+    (Cryptography.Merkle.isQueryBoundP_climb (hash := fun _ => combineM queryHash)
+      (fun _ left right => combineM_queryBound left right) _ _ _).mono (by simp)
   exact (isQueryBoundP_bind (climbs _ _) fun _ _ =>
     isQueryBoundP_bind (climbs _ _) fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
 
