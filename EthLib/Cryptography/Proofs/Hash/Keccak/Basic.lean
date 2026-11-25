@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Keccak
+public import PolyFun.Control.Monad.Hom
 import EthLib.Base.Proofs.Bytes
 import Mathlib.Tactic.IntervalCases
 
@@ -638,6 +639,59 @@ theorem keccak256With_eq_squeeze256 {m : Type → Type} [Monad m] [LawfulMonad m
   rw [keccak256With, Internal.keccak256Read]
   exact Functor.map_map _ _ _
 
+/-! ## Monad morphisms
+
+A monad morphism maps the sponge over `f` to the sponge over its image of `f`.
+
+Only the permutation calls carry effects, so the morphism acts on them alone. -/
+
+section Morphism
+
+variable {m n : Type → Type} [Monad m] [Monad n]
+
+open Internal in
+/-- A monad morphism maps the absorbed blocks to the blocks absorbed over its image. -/
+theorem mmap_absorbBlocks (φ : m →ᵐ n) (f : State → m State) (rate : Nat)
+    (read : Nat → UInt64) (k start : Nat) (S : State) :
+    φ (absorbBlocks f rate read k start S) =
+      absorbBlocks (fun T => φ (f T)) rate read k start S := by
+  induction k generalizing start S with
+  | zero => exact φ.mmap_pure S
+  | succ k ih =>
+    rw [absorbBlocks, absorbBlocks, φ.mmap_bind]
+    exact congrArg _ (funext fun T => ih _ T)
+
+open Internal in
+/-- A monad morphism maps the state before the last permutation to that over its image. -/
+theorem mmap_stateBeforeLastPermutation (φ : m →ᵐ n) (f : State → m State) (rate len : Nat)
+    (read : Nat → UInt64) :
+    φ (stateBeforeLastPermutation f rate len read) =
+      stateBeforeLastPermutation (fun T => φ (f T)) rate len read := by
+  rw [stateBeforeLastPermutation, stateBeforeLastPermutation, φ.mmap_bind, mmap_absorbBlocks]
+  exact congrArg _ (funext fun T => φ.mmap_pure _)
+
+open Internal in
+/-- A monad morphism maps the absorbing phase to that over its image. -/
+theorem mmap_spongeAbsorb (φ : m →ᵐ n) (f : State → m State) (rate len : Nat)
+    (read : Nat → UInt64) :
+    φ (spongeAbsorb f rate len read) = spongeAbsorb (fun T => φ (f T)) rate len read := by
+  rw [spongeAbsorb, spongeAbsorb, φ.mmap_bind, mmap_stateBeforeLastPermutation]
+
+/-- A monad morphism maps Keccak-256 of lanes to Keccak-256 of lanes over its image. -/
+theorem mmap_keccak256LanesWith [LawfulMonad m] [LawfulMonad n] (φ : m →ᵐ n)
+    (f : State → m State) (lanes : Array UInt64) :
+    φ (keccak256LanesWith f lanes) = keccak256LanesWith (fun T => φ (f T)) lanes := by
+  rw [keccak256LanesWith, keccak256LanesWith, Internal.keccak256Read, Internal.keccak256Read,
+    φ.mmap_map, mmap_spongeAbsorb]
+
+/-- A monad morphism maps Keccak-256 of bytes to Keccak-256 of bytes over its image. -/
+theorem mmap_keccak256With [LawfulMonad m] [LawfulMonad n] (φ : m →ᵐ n)
+    (f : State → m State) (msg : ByteArray) :
+    φ (keccak256With f msg) = keccak256With (fun T => φ (f T)) msg := by
+  rw [keccak256With_eq_squeeze256, keccak256With_eq_squeeze256, φ.mmap_map, mmap_spongeAbsorb]
+
+end Morphism
+
 /-! ## A pure permutation
 
 Over a permutation that is a pure function, the sponge in any lawful monad has no effect.
@@ -650,9 +704,10 @@ theorem absorbBlocks_pure {m : Type → Type} [Monad m] [LawfulMonad m] (g : Sta
     (rate : Nat) (read : Nat → UInt64) (n start : Nat) (S : State) :
     absorbBlocks (m := m) (fun T => pure (g T)) rate read n start S =
       pure (Id.run (absorbBlocks (fun T => pure (g T)) rate read n start S)) := by
-  induction n generalizing start S with
-  | zero => rfl
-  | succ n ih => rw [absorbBlocks, pure_bind, ih]; rfl
+  have h := mmap_absorbBlocks (MonadHom.pure m) (fun T => (pure (g T) : Id State)) rate read n
+    start S
+  simp only [MonadHom.pure_apply, Id.run_pure] at h
+  exact h.symm
 
 open Internal in
 /-- The state before the last permutation, over a pure permutation, is `pure` of its value. -/
@@ -660,7 +715,10 @@ theorem stateBeforeLastPermutation_pure {m : Type → Type} [Monad m] [LawfulMon
     (g : State → State) (rate len : Nat) (read : Nat → UInt64) :
     stateBeforeLastPermutation (m := m) (fun T => pure (g T)) rate len read =
       pure (Id.run (stateBeforeLastPermutation (fun T => pure (g T)) rate len read)) := by
-  rw [stateBeforeLastPermutation, absorbBlocks_pure, pure_bind]; rfl
+  have h := mmap_stateBeforeLastPermutation (MonadHom.pure m) (fun T => (pure (g T) : Id State))
+    rate len read
+  simp only [MonadHom.pure_apply, Id.run_pure] at h
+  exact h.symm
 
 open Internal in
 /-- The absorbing phase over a pure permutation is `pure` of its value. -/
@@ -668,22 +726,27 @@ theorem spongeAbsorb_pure {m : Type → Type} [Monad m] [LawfulMonad m] (g : Sta
     (rate len : Nat) (read : Nat → UInt64) :
     spongeAbsorb (m := m) (fun T => pure (g T)) rate len read =
       pure (Id.run (spongeAbsorb (fun T => pure (g T)) rate len read)) := by
-  rw [spongeAbsorb, stateBeforeLastPermutation_pure, pure_bind]; rfl
+  have h := mmap_spongeAbsorb (MonadHom.pure m) (fun T => (pure (g T) : Id State)) rate len read
+  simp only [MonadHom.pure_apply, Id.run_pure] at h
+  exact h.symm
 
 /-- Keccak-256 of lanes over a pure permutation is `pure` of its value. -/
 theorem keccak256LanesWith_pure {m : Type → Type} [Monad m] [LawfulMonad m] (g : State → State)
     (lanes : Array UInt64) :
     keccak256LanesWith (m := m) (fun T => pure (g T)) lanes =
       pure (Id.run (keccak256LanesWith (fun T => pure (g T)) lanes)) := by
-  rw [keccak256LanesWith, Internal.keccak256Read, spongeAbsorb_pure, map_pure]; rfl
+  have h := mmap_keccak256LanesWith (MonadHom.pure m) (fun T => (pure (g T) : Id State)) lanes
+  simp only [MonadHom.pure_apply, Id.run_pure] at h
+  exact h.symm
 
 /-- Keccak-256 of bytes over a pure permutation is `pure` of its value. -/
 theorem keccak256With_pure {m : Type → Type} [Monad m] [LawfulMonad m] (g : State → State)
     (msg : ByteArray) :
     keccak256With (m := m) (fun T => pure (g T)) msg =
       pure (Id.run (keccak256With (fun T => pure (g T)) msg)) := by
-  rw [keccak256With, Internal.keccak256Read, spongeAbsorb_pure, map_pure]
-  exact map_pure _ _
+  have h := mmap_keccak256With (MonadHom.pure m) (fun T => (pure (g T) : Id State)) msg
+  simp only [MonadHom.pure_apply, Id.run_pure] at h
+  exact h.symm
 
 /-- Keccak-256 of lanes over Keccak-f[1600], in a lawful monad, is `pure` of its Keccak-256. -/
 theorem keccak256LanesWith_keccakF {m : Type → Type} [Monad m] [LawfulMonad m]

@@ -9,6 +9,7 @@ public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsPermutation
 public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsSponge
 public import EthLib.Cryptography.Proofs.Hash.Keccak.OneBlock
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Indifferentiability
+public import EthLib.Cryptography.Proofs.Hash.Keccak.QueryBound
 
 /-!
 # Proofs: Keccak
