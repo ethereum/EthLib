@@ -9,18 +9,14 @@ public import EthLib.Execution.Transactions.Validity
 
 The network form of a blob transaction, which peers send in answer to a request for it.
 
-From Dencun, it is the type byte `0x03`, then the RLP list of four items.
-
-They are the payload body of the transaction, the blobs, the commitments and the proofs.
-
-It has one proof per blob, by [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking).
-
-From Fusaka, the wrapper version 1 comes after the payload body, by [EIP-7594][eip7594].
-
-It has one proof per cell of each extended blob.
+It carries the payload body of the transaction with its blobs, commitments and proofs.
 
 A block holds only the payload body, so the hash of the transaction ignores the rest.
 
+- [EIP-4844][eip4844] gives the form from Dencun, with one proof per blob.
+- [EIP-7594][eip7594] gives the form from Fusaka, with one proof per cell of each extended blob.
+
+[eip4844]: https://eips.ethereum.org/EIPS/eip-4844#networking
 [eip7594]: https://eips.ethereum.org/EIPS/eip-7594#networking
 -/
 
@@ -93,7 +89,9 @@ def toItem (fork : Fork) (w : NetworkBlobTransaction) : Item :=
   if fork ≥ .fusaka then
     .list [Codec.toItem w.tx, Codec.toItem WRAPPER_VERSION, Codec.toItem w.blobs,
       Codec.toItem w.commitments, Codec.toItem w.proofs]
-  -- EIP-4844: the payload body, the blobs, the commitments and the proofs.
+  -- EIP-4844, from Dencun: four items.
+  --
+  -- They are the payload body, the blobs, the commitments and the proofs.
   else
     .list [Codec.toItem w.tx, Codec.toItem w.blobs, Codec.toItem w.commitments,
       Codec.toItem w.proofs]

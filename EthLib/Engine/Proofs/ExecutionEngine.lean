@@ -12,25 +12,7 @@ The execution layer built from the checks of `engine_newPayload` answers from th
 
 It accepts a request exactly when the payload has a block at the active fork of the chain.
 
-That block must carry the versioned hashes of the request from Deneb, and pass the state transition.
-
-A payload whose block decodes holds no transaction of no bytes.
-
 The beacon chain calls a version of the method at each fork from Bellatrix to Gloas.
-
-At Gloas, the block of a payload is a block of Amsterdam.
-
-Its header holds the slot number of the payload and the hash of its block access list.
-
-A payload takes a fork exactly when its optional fields are present from their forks on.
-
-The withdrawals are from Shapella, and the two blob gas fields from Dencun.
-
-So a decoded payload of version 1 takes the forks before Shapella.
-
-Version 2 takes Shapella, and version 3 the forks from Dencun.
-
-The structure built from a payload of the beacon chain has the same shape, and takes its fork.
 -/
 
 public section

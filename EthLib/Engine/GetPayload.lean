@@ -282,27 +282,25 @@ def blobsBundleOfJson (version : Nat) (j : Lean.Json) : Json.Decode BlobsBundle 
 
 /-- What a consensus node reads from the result of the method, at the fork of the payload.
 
-The access list and the slot are those of a payload from Glamsterdam.
-
-The block value is present from version 2, the bundle and the override flag from version 3.
-
-The execution requests are present from version 4.
-
 The writer writes the options that are present, so they must follow the version. -/
 structure GetPayloadResult (fork : Fork) where
   /-- The execution payload. -/
   payload : ExecutionPayload fork
-  /-- The block access list, from Glamsterdam. -/
+  /-- The block access list of a payload from Glamsterdam. -/
   blockAccessList : Since .glamsterdam fork ByteArray
-  /-- The slot number, from Glamsterdam. -/
+  /-- The slot number of a payload from Glamsterdam. -/
   slotNumber : Since .glamsterdam fork UInt64
-  /-- The value of the block to its proposer, in wei. -/
+  /-- The value of the block to its proposer, in wei, present from version 2. -/
   blockValue : Option Nat
-  /-- The blobs, commitments and proofs of the blob transactions of the payload. -/
+  /-- The blobs, commitments and proofs of the blob transactions of the payload.
+
+  The bundle is present from version 3. -/
   blobsBundle : Option BlobsBundle
-  /-- Whether the execution layer suggests its own payload over one of an external builder. -/
+  /-- Whether the execution layer suggests its own payload over one of an external builder.
+
+  The flag is present from version 3. -/
   shouldOverrideBuilder : Option Bool
-  /-- The execution requests of the payload. -/
+  /-- The execution requests of the payload, present from version 4. -/
   executionRequests : Option (List ByteArray)
 
 /-- What a response holds at a version of the method: the fields of that version. -/

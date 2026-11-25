@@ -13,14 +13,6 @@ The beacon chain reads a payload request directly, through its model of the exec
 Between two nodes, the request travels instead as the JSON parameters of the method.
 
 From Bellatrix to Gloas, the method on a chain answers valid exactly when the model accepts.
-
-The last block of the chain must pass the terminal block check, which only the method makes.
-
-A chain without the parent of the payload gives no valid answer on either route.
-
-From Heze the request reads back at version 6, with its inclusion list.
-
-Its block does not run yet, since the execution rules of Bogota are not in this library.
 -/
 
 public section
@@ -444,7 +436,12 @@ theorem newPayloadOnChain_valid_iff_accepts {transition : TransitionConfiguratio
       (valid_iff_accepts_of_json hFork hJson hTerminal).mpr hAccept
     exact ⟨_, answer, hJson, hRun, hValid⟩
 
-/-! ## From Heze -/
+/-! ## From Heze
+
+The request reads back at version 6, with its inclusion list.
+
+Its block does not run yet, since the execution rules of Bogota are not in this library.
+-/
 
 /-- From Heze, the JSON of a request reads back at version 6, with the values of the request.
 

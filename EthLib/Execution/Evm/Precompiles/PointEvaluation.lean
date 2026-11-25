@@ -16,10 +16,6 @@ The call data names the blob by the versioned hash of its commitment.
 
 Source: Point evaluation precompile, in [EIP-4844][eip-4844].
 
-EIP-4844 leaves the order of decoding open.
-
-The proof check decodes the commitment, `z`, `y` and the proof, in that order.
-
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#point-evaluation-precompile
 -/
 
@@ -106,6 +102,10 @@ It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alon
 The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
 def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
     Except PointEvaluationError Bool := do
+  -- EIP-4844 leaves the order of decoding open.
+  --
+  -- This check decodes the commitment, `z`, `y` and the proof, in that order.
+  --
   -- The commitment, a compressed G1 point that must decode and lie in the subgroup.
   let commitmentPoint ←
     (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment commitment
