@@ -1091,6 +1091,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, leanXMSS and leanSPHINCS are stated through one strong-unforgeability game, `Cryptography/Proofs/SufCma.lean` ([#4707](https://github.com/ethereum/EthLib/pull/4707), [#4718](https://github.com/ethereum/EthLib/pull/4718)).
+  A scheme (`SufCma.Scheme`) has a signer that keeps its key and may fail, and a rule of use on its requests.
+  The game fixes the freshness check, and a model (`SufCma.Model`) answers the coins and the hash.
+  `SufCma.StronglyUnforgeable scheme model maxSignings slack bits` charges the adversary's own hash calls; `SufCma.StronglyUnforgeableAllCalls scheme model bits` charges every hash call of the game.
+  - leanXMSS: `Xmss.Unforgeability.unforgeable` states `StronglyUnforgeableAllCalls` at 127 bits; `forgeAdvantage_le_ownQueries` is now `stronglyUnforgeable`, and `forgeAdvantage_le_adversaryBudget` and `forgeAdvantage_le_lifetime` are `advantage_le_adversaryBudget` and `advantage_le_lifetime`.
+  - leanSPHINCS: `Sphincs.Unforgeability.Bridge.unforgeable` states `StronglyUnforgeableAllCalls` at 127 bits, and `forgeAdvantage_le_capped` is now `advantage_le_capped`; the unused game of `Proofs/Sphincs/Unforgeability/Game.lean` is removed.
+  - The bespoke adversaries, experiments, advantages and predicates (`gameCore`, `experiment`, `forgeAdvantage`, `HasHashQueryBound`, `HasClassicalSecurityBits`) of both public games are removed.
+
 - In Lean, the strong unforgeability of leanXMSS for the adversary's own hash calls has the slack `530`, down from `2^19 + 1` ([#4712](https://github.com/ethereum/EthLib/pull/4712)).
   `Xmss.Unforgeability.stronglyUnforgeable` (`Cryptography/Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) states `SufCma.StronglyUnforgeable scheme (SufCma.randomOracleModel HashSpec) (2 ^ LOG_LIFETIME) 530 127`.
   - `XmssSecurity.CappedChain.capped_forgeAdvantage_le_of_adversaryBound` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/Proof/CappedExactFirstLaneBound.lean`) bounds the model by `(2q + 1058) / 2^128`, down from `(2q + 2^20) / 2^128`.

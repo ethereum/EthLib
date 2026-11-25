@@ -422,17 +422,18 @@ theorem reasonForgeAdvantage_le (adversary : ReasonAdversary) :
   have hwin : reasonForgeAdvantage adversary
       = Pr{let x ← (simulateQ romImpl (reasonRun adversary)).run' ∅}[
           (Valid x.2.1 ∧ ¬SufCma.Returned scheme x.2.1 x.1) ∧ x.2.2 = true] :=
-    SufCma.prEvent_countedRunIn _ _ fun x : Forgery × QueryLog SigningSpec × Bool =>
-      (Valid x.2.1 ∧ ¬SufCma.Returned scheme x.2.1 x.1) ∧ x.2.2 = true
+    (SufCma.prEvent_countedRunIn _ _ fun x : Forgery × QueryLog SigningSpec × Bool =>
+      (Valid x.2.1 ∧ ¬SufCma.Returned scheme x.2.1 x.1) ∧ x.2.2 = true).trans
+        (by rw [run_randomOracleModel])
   have hfail : signingFailure adversary
       = Pr{let x ← (simulateQ romImpl (reasonRun adversary)).run' ∅}[
           ∃ entry ∈ x.2.1, entry.2 = none] :=
-    SufCma.prEvent_countedRunIn _ _ fun x : Forgery × QueryLog SigningSpec × Bool =>
-      ∃ entry ∈ x.2.1, entry.2 = none
+    (SufCma.prEvent_countedRunIn _ _ fun x : Forgery × QueryLog SigningSpec × Bool =>
+      ∃ entry ∈ x.2.1, entry.2 = none).trans (by rw [run_randomOracleModel])
   have hgame : SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) (hideReasons adversary)
       = Pr{let x ← (simulateQ romImpl (SufCma.game scheme (hideReasons adversary))).run' ∅}[
-          x = true] :=
-    rfl
+          x = true] := by
+    rw [SufCma.advantage, run_randomOracleModel]
   rw [hwin, hfail, hgame, reasonRun_eq, game_hideReasons_eq]
   simp only [map_bind]
   refine prEvent_bind_le_add ((simulateQ romImpl keys).run ∅) _ _ _ _ _ fun p => ?_

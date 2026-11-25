@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme
-public import VCVio.OracleComp.QueryTracking.WriterCost
+public import EthLib.Cryptography.Proofs.SufCma
 
 /-!
 # The security statement
@@ -66,9 +66,7 @@ Each hash query costs one, repeated queries included.
 
 Uniform sampling costs nothing. -/
 noncomputable def countedOracle :=
-  (unifFwdImpl HashSpec +
-    (randomOracle : QueryImpl HashSpec (StateT (QueryCache HashSpec) ProbComp))).withAddCost
-    (fun | .inl _ => (0 : Nat) | .inr _ => 1)
+  HashSpec.romImpl.withAddCost EthLib.Cryptography.SufCma.hashCost
 
 /-- The signing oracle: the deterministic signer with the secret key.
 

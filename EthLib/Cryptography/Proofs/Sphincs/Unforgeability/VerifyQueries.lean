@@ -4,7 +4,8 @@ public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
-public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Game
+public import EthLib.Cryptography.Sphincs
+public import EthLib.Cryptography.Proofs.HashSig.Bytes
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.HashSig.Calls
 
@@ -455,6 +456,10 @@ theorem verifyCalls_eq : verifyCalls = 491 := by
   decide
 
 /-! ## Verification in the game -/
+
+/-- `H` in the game: a query to the random oracle, which answers every hash call. -/
+abbrev H : ByteArray → OracleComp HashSig.OracleWorld (Vector UInt8 32) :=
+  HashSig.queryH
 
 /-- The game's `H` makes one oracle call. -/
 theorem H_isTotalQueryBound (x : ByteArray) : IsTotalQueryBound (H x) 1 :=

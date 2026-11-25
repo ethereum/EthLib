@@ -38,9 +38,10 @@ theorem isTotalQueryBound_H (x : ByteArray) : IsTotalQueryBound (H x) 1 :=
 /-! ## The game with the adversary's counter -/
 
 /-- The game is the game with the adversary's counter, its count forgotten. -/
-theorem gameCore_eq_map (adversary : Adversary) :
-    gameCore adversary = Prod.fst <$> adversaryGameCore adversary := by
-  unfold gameCore adversaryGameCore
+theorem game_eq_map (adversary : Adversary) :
+    SufCma.game scheme adversary = Prod.fst <$> adversaryGameCore adversary := by
+  rw [game_eq]
+  unfold adversaryGameCore
   simp only [map_bind, map_pure]
   refine bind_congr fun seed => bind_congr fun ⟨sk, pk⟩ => ?_
   conv_lhs => rw [← HashSig.counted_forget IsAdversaryHashCall (adversary.main pk)]
@@ -57,10 +58,10 @@ theorem countedRun_liftM_coins {α : Type} (p : ProbComp α) :
     have hq : countedRun f (liftM (unifSpec.query t) : OracleComp OracleWorld _) =
         (fun x => (x, 0)) <$> (liftM (unifSpec.query t) : ProbComp _) := by
       change simulateQ (unifFwdAnswerImpl f)
-        (HashSig.counted isHashCall
+        (HashSig.counted (SufCma.IsHashCall HashSpec)
           (liftM (OracleWorld.query (.inl t)))) = _
       rw [HashSig.counted_query]
-      simp only [simulateQ_map, simulateQ_spec_query, unifFwdAnswerImpl, isHashCall,
+      simp only [simulateQ_map, simulateQ_spec_query, unifFwdAnswerImpl, SufCma.IsHashCall,
         Sum.isRight_inl]
       rfl
     rw [countedRun_bind, hq, bind_map_left, map_bind]
@@ -69,9 +70,10 @@ theorem countedRun_liftM_coins {α : Type} (p : ProbComp α) :
 /-- A query costs 1 if it is a hash call and 0 if it is a coin. -/
 theorem countedRun_query (t : OracleWorld.Domain) :
     countedRun f (liftM (OracleWorld.query t)) =
-      (fun u => (u, if isHashCall t then 1 else 0)) <$> unifFwdAnswerImpl f t := by
+      (fun u => (u, if (SufCma.IsHashCall HashSpec) t then 1 else 0)) <$>
+        unifFwdAnswerImpl f t := by
   change simulateQ (unifFwdAnswerImpl f)
-    (HashSig.counted isHashCall (liftM (OracleWorld.query t))) = _
+    (HashSig.counted (SufCma.IsHashCall HashSpec) (liftM (OracleWorld.query t))) = _
   rw [HashSig.counted_query, simulateQ_map, simulateQ_spec_query]
 
 /-- A run of a bound computation is a run of the first part, then of the rest. -/
@@ -118,7 +120,7 @@ theorem calls_run_counted {α : Type} (s : QueryImpl SigningSpec (OracleComp Ora
       rw [bind_pure_comp, countedRun_map, support_map] at hy
       obtain ⟨z, hz, rfl⟩ := hy
       have hz' := ih u z hz
-      have hc : IsAdversaryHashCall (.inl t) ↔ isHashCall t := Iff.rfl
+      have hc : IsAdversaryHashCall (.inl t) ↔ (SufCma.IsHashCall HashSpec) t := Iff.rfl
       simp only [hc, List.empty_eq, List.nil_append, List.append_nil]
       split <;> omega
     · simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind, QueryImpl.add_apply_inr,
@@ -162,12 +164,15 @@ def signerOf (sk : SecretKey) (msg : Message) : OracleComp HashSpec (Option Sign
   Except.toOption <$> signWith H sk msg
 
 /-- The verification of the game, on a public key and a forgery. -/
-def verifierOf (pk : PublicKey) (forgery : Forgery) : OracleComp HashSpec Bool :=
+def verifierOf (pk : PublicKey) (forgery : SufCma.Forgery Message Signature) :
+    OracleComp HashSpec Bool :=
   verifyWith H pk forgery.message forgery.signature
 
 /-- The verdict of the game, on a forgery, the log of requests and the verification. -/
-def verdictOf (forgery : Forgery) (log : QueryLog SigningSpec) (verified : Bool) : Bool :=
-  decide (Valid log ∧ ¬Contains log forgery) && verified
+noncomputable def verdictOf (forgery : SufCma.Forgery Message Signature)
+    (log : QueryLog SigningSpec) (verified : Bool) :
+    Bool :=
+  decide (Valid log ∧ ¬SufCma.Returned scheme log forgery) && verified
 
 /-- A signing request makes at most `470595 + 3 * 2^32` calls.
 
@@ -182,9 +187,10 @@ Key generation makes at most `K` calls, a request at most `S` and the verificati
 theorem calls_game {Seed' SK PK : Type} (seeds : ProbComp Seed')
     (keygen : Seed' → OracleComp HashSpec (SK × PK))
     (signer : SK → Message → OracleComp HashSpec (Option Signature))
-    (verify : PK → Forgery → OracleComp HashSpec Bool)
-    (win : Forgery → QueryLog SigningSpec → Bool → Bool)
-    (main : PK → OracleComp (OracleWorld + SigningSpec) Forgery) (K S V : Nat)
+    (verify : PK → SufCma.Forgery Message Signature → OracleComp HashSpec Bool)
+    (win : SufCma.Forgery Message Signature → QueryLog SigningSpec → Bool → Bool)
+    (main : PK → OracleComp (OracleWorld + SigningSpec) (SufCma.Forgery Message Signature))
+    (K S V : Nat)
     (hK : ∀ seed, hashCalls f (keygen seed) ≤ K)
     (hS : ∀ sk msg, hashCalls f (signer sk msg) ≤ S)
     (hV : ∀ seed ∈ support seeds, ∀ forgery,
@@ -224,7 +230,7 @@ theorem adversaryGameCore_eq (adversary : Adversary) :
     adversaryGameCore adversary = (do
       let seed ← liftM sampleSeed
       let keys : SecretKey × PublicKey ← liftM (keyGenWith H seed)
-      let run : (Forgery × Nat) × QueryLog SigningSpec ←
+      let run : (SufCma.Forgery Message Signature × Nat) × QueryLog SigningSpec ←
         (simulateQ (QueryImpl.ofLift OracleWorld
           (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
             QueryImpl.withLogging (fun msg => liftM (signerOf keys.1 msg) :
@@ -232,7 +238,7 @@ theorem adversaryGameCore_eq (adversary : Adversary) :
           (HashSig.counted IsAdversaryHashCall (adversary.main keys.2))).run
       let verified ← liftM (verifierOf keys.2 run.1.1)
       pure (verdictOf run.1.1 run.2 verified, run.1.2, run.2.length)) := by
-  unfold adversaryGameCore signingOracle signerOf verifierOf verdictOf
+  unfold adversaryGameCore signingOracle signer signerOf verifierOf verdictOf
   refine bind_congr fun seed => bind_congr fun ⟨sk, pk⟩ => ?_
   refine bind_congr fun ⟨⟨forgery, calls⟩, log⟩ => ?_
   rfl
@@ -255,24 +261,19 @@ theorem calls_adversaryGameCore (adversary : Adversary) :
 /-! ## The budget transfers -/
 
 omit f in
-/-- The oracles of the experiment with the adversary's counter are the plain random oracle. -/
-theorem adversaryOracle_eq : (unifFwdImpl HashSpec + (randomOracle : QueryImpl HashSpec
-    (StateT (QueryCache HashSpec) ProbComp))) = HashSpec.romImpl := rfl
-
-omit f in
 /-- The experiment with the adversary's counter runs its game against the plain random oracle. -/
 theorem adversaryExperiment_eq (adversary : Adversary) :
     adversaryExperiment adversary =
-      (simulateQ HashSpec.romImpl (adversaryGameCore adversary)).run' ∅ := by
-  rw [adversaryExperiment, adversaryOracle_eq]
+      (simulateQ HashSpec.romImpl (adversaryGameCore adversary)).run' ∅ :=
+  rfl
 
 omit f in
 /-- Forgetting the count of a counted run gives a run against the plain random oracle. -/
 theorem mem_support_run'_of_withAddCost {α : Type} (oa : OracleComp OracleWorld α)
     (r : α × Nat)
-    (h : r ∈ support ((simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅)) :
+    (h : r ∈ support ((simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost) oa).run.run' ∅)) :
     r.1 ∈ support ((simulateQ HashSpec.romImpl oa).run' ∅) := by
-  rw [← QueryImpl.fst_map_run_simulateQ_withAddCost _ hashCost]
+  rw [← QueryImpl.fst_map_run_simulateQ_withAddCost _ SufCma.hashCost]
   simp only [StateT.run'_eq, StateT.run_map, support_map, Set.mem_image] at h ⊢
   obtain ⟨⟨r', cache⟩, hmem, rfl⟩ := h
   exact ⟨(r'.1, cache), ⟨(r', cache), hmem, rfl⟩, rfl⟩
@@ -284,31 +285,32 @@ theorem mem_support_adversaryExperiment (adversary : Adversary) (r : (Bool × Na
   rw [countedRun.eq_1] at hr
   rw [adversaryExperiment_eq]
   exact mem_support_run'_of_withAddCost _ r
-    ((mem_support_counted_iff (adversaryGameCore adversary) hashCost hashCost_eq r).2 ⟨f, hr⟩)
+    ((mem_support_counted_iff (adversaryGameCore adversary) SufCma.hashCost SufCma.hashCost_eq_ite
+      r).2 ⟨f, hr⟩)
 
 omit f in
 /-- The probability of a forgery is the same in the game with the adversary's counter. -/
-theorem forgeAdvantage_eq (adversary : Adversary) :
-    forgeAdvantage adversary =
+theorem advantage_eq (adversary : Adversary) :
+    SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) adversary =
       Pr{let result ← adversaryExperiment adversary}[result.1 = true] := by
-  have hE : forgeAdvantage adversary =
+  have hE : SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) adversary =
       Pr{let result ←
-        (simulateQ HashSpec.romImpl (gameCore adversary)).run' ∅}[result = true] := by
-    rw [forgeAdvantage, experiment_eq]
-    exact HashSig.prEvent_run_withAddCost (gameCore adversary) hashCost
-  rw [hE, gameCore_eq_map, simulateQ_map, adversaryExperiment_eq]
+        (simulateQ HashSpec.romImpl (SufCma.game scheme adversary)).run' ∅}[result = true] := by
+    rw [SufCma.advantage, SufCma.runIn_randomOracleModel]
+  rw [hE, game_eq_map, simulateQ_map, adversaryExperiment_eq]
   simp only [StateT.run'_eq, StateT.run_map, Functor.map_map]
 
 omit f in
 /-- A budget of `q` calls of the adversary's own and `r` requests is one of `q + C` calls in all.
 
 `C` bounds the calls of key generation, of `r` requests and of verification. -/
-theorem hasHashQueryBound_of_adversary (adversary : Adversary) (q r : Nat)
+theorem isGameQueryBound_of_adversary (adversary : Adversary) (q r : Nat)
     (hq : HasAdversaryQueryBound adversary q r) :
-    HasHashQueryBound adversary (q + schemeCalls r) := by
+    SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec) adversary
+      (q + schemeCalls r) := by
   intro result hr
-  obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _ (experiment_eq adversary) result hr
-  rw [gameCore_eq_map] at hr
+  obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _ (countedRunIn_game_eq adversary) result hr
+  rw [game_eq_map] at hr
   obtain ⟨run, hrun, rfl⟩ := mem_support_countedRun_map f _ _ result hr
   have hcalls := calls_adversaryGameCore f adversary run hrun
   obtain ⟨hq₁, hq₂⟩ := hq run.1 (mem_support_adversaryExperiment f adversary run hrun)

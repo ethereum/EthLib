@@ -24,27 +24,23 @@ open OracleComp OracleSpec
 open HashSig (HashSpec OracleWorld)
 open SphincsSecurity.Security.Prefix (hashCalls hashCalls_bind hashCalls_pure)
 
-/-- A query is a hash call, not a coin. -/
-def isHashCall (input : OracleWorld.Domain) : Prop := input.isRight
-
-instance : DecidablePred isHashCall := fun input ↦ inferInstanceAs (Decidable (input.isRight))
-
 /-- A count of the counted oracle is a count of the counted game under some answer function.
 
 The cost function must charge 1 for each hash call and 0 for each coin. -/
 theorem mem_support_counted_iff {α : Type} (oa : OracleComp OracleWorld α)
     (cost : OracleWorld.Domain → Nat)
-    (hcost : ∀ input, cost input = if isHashCall input then 1 else 0) (result : α × Nat) :
+    (hcost : ∀ input, cost input = if (SufCma.IsHashCall HashSpec) input then 1 else 0)
+    (result : α × Nat) :
     result ∈ support ((simulateQ (HashSpec.romImpl.withAddCost cost) oa).run.run' ∅) ↔
       ∃ f : QueryImpl HashSpec Id, result ∈ support
-        (simulateQ (unifFwdAnswerImpl f) (HashSig.counted isHashCall oa)) := by
-  rw [show cost = fun input ↦ if isHashCall input then 1 else 0 from funext hcost,
+        (simulateQ (unifFwdAnswerImpl f) (HashSig.counted (SufCma.IsHashCall HashSpec) oa)) := by
+  rw [show cost = fun input ↦ if (SufCma.IsHashCall HashSpec) input then 1 else 0 from funext hcost,
     ← HashSig.simulate_withCost]
   have hrun : result ∈ support
-      ((simulateQ HashSpec.romImpl (HashSig.counted isHashCall oa)).run' ∅) ↔
+      ((simulateQ HashSpec.romImpl (HashSig.counted (SufCma.IsHashCall HashSpec) oa)).run' ∅) ↔
         ∃ cache, (result, cache) ∈ support
           ((simulateQ HashSpec.romImpl
-            (HashSig.counted isHashCall oa)).run ∅) := by
+            (HashSig.counted (SufCma.IsHashCall HashSpec) oa)).run ∅) := by
     rw [StateT.run'_eq, support_map]
     exact ⟨fun ⟨⟨_, cache⟩, h, hx⟩ ↦ ⟨cache, hx ▸ h⟩, fun ⟨cache, h⟩ ↦ ⟨_, h, rfl⟩⟩
   refine hrun.trans ((exists_agreesWithFn_mem_support_simulateQ_unifFwdAnswerImpl_iff _ ∅
@@ -62,7 +58,7 @@ theorem hashCalls_map {β γ : Type} (oc : OracleComp HashSpec β) (g : β → �
 
 Coins stay uniform. -/
 noncomputable def countedRun {α : Type} (oa : OracleComp OracleWorld α) : ProbComp (α × Nat) :=
-  simulateQ (unifFwdAnswerImpl f) (HashSig.counted isHashCall oa)
+  simulateQ (unifFwdAnswerImpl f) (HashSig.counted (SufCma.IsHashCall HashSpec) oa)
 
 theorem countedRun_pure {α : Type} (x : α) : countedRun f (pure x) = pure (x, 0) := by
   simp only [countedRun, HashSig.counted_pure, simulateQ_pure]
@@ -96,60 +92,51 @@ theorem mem_support_countedRun_map_of_mem {α β : Type} (oa : OracleComp Oracle
 
 /-! ## The counted oracles as the plain random oracle with a cost -/
 
-/-- The cost of a query: 0 for a coin and 1 for a hash call. -/
-def hashCost : OracleWorld.Domain → Nat
-  | .inl _ => 0
-  | .inr _ => 1
-
-/-- The cost of a query is 1 exactly when it is a hash call. -/
-theorem hashCost_eq (input : OracleWorld.Domain) :
-    hashCost input = if isHashCall input then 1 else 0 := by
-  cases input <;> rfl
-
-/-- The counted oracle is the plain random oracle, charging 1 per hash call. -/
-theorem countedOracle_eq : countedOracle = HashSpec.romImpl.withAddCost hashCost := rfl
-
-/-- The experiment runs the game against the plain random oracle, charging 1 per hash call. -/
-theorem experiment_eq (adversary : Adversary) :
-    experiment adversary =
-      (simulateQ (HashSpec.romImpl.withAddCost hashCost) (gameCore adversary)).run.run' ∅ := by
-  rw [experiment, countedOracle_eq]
+/-- The game's counted run is its run against the plain random oracle, charging 1 per hash call. -/
+theorem countedRunIn_game_eq (adversary : Adversary) :
+    SufCma.countedRunIn (SufCma.randomOracleModel HashSpec) (SufCma.game scheme adversary) =
+      (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost)
+        (SufCma.game scheme adversary)).run.run' ∅ :=
+  SufCma.countedRunIn_randomOracleModel _
 
 /-- The model's counted oracle is the plain random oracle, charging 1 per hash call. -/
 theorem modelCountedOracle_eq :
-    SphincsSecurity.Security.countedOracle = HashSpec.romImpl.withAddCost hashCost := rfl
+    SphincsSecurity.Security.countedOracle = HashSpec.romImpl.withAddCost SufCma.hashCost := rfl
 
 /-- The model's experiment runs its game against the plain random oracle, at 1 per hash call. -/
 theorem modelExperiment_eq (adversary : SphincsSecurity.Security.Adversary) :
     SphincsSecurity.Security.experiment adversary =
-      (simulateQ (HashSpec.romImpl.withAddCost hashCost)
+      (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost)
         (SphincsSecurity.Security.gameCore adversary)).run.run' ∅ := by
   rw [SphincsSecurity.Security.experiment, modelCountedOracle_eq]
 
 /-- A computation equal to a counted run has the same results as that run. -/
 theorem mem_support_iff_of_eq_withAddCost {α : Type} (oa : OracleComp OracleWorld α)
     (X : ProbComp (α × Nat))
-    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) (r : α × Nat) :
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost) oa).run.run' ∅)
+    (r : α × Nat) :
     r ∈ support X ↔
-      r ∈ support ((simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) := by
+      r ∈ support ((simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost) oa).run.run' ∅) := by
   subst hX
   exact Iff.rfl
 
 /-- A result of a computation equal to a counted run is a run under some answer function. -/
 theorem exists_countedRun_of_mem_support {α : Type} (oa : OracleComp OracleWorld α)
     (X : ProbComp (α × Nat))
-    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) (r : α × Nat)
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost) oa).run.run' ∅)
+    (r : α × Nat)
     (h : r ∈ support X) : ∃ f, r ∈ support (countedRun f oa) :=
-  (mem_support_counted_iff oa hashCost hashCost_eq r).1
+  (mem_support_counted_iff oa SufCma.hashCost SufCma.hashCost_eq_ite r).1
     ((mem_support_iff_of_eq_withAddCost oa X hX r).1 h)
 
 /-- A run under some answer function is a result of a computation equal to the counted run. -/
 theorem mem_support_of_countedRun {α : Type} (oa : OracleComp OracleWorld α)
     (X : ProbComp (α × Nat))
-    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) (r : α × Nat)
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost) oa).run.run' ∅)
+    (r : α × Nat)
     (h : r ∈ support (countedRun f oa)) : r ∈ support X :=
   (mem_support_iff_of_eq_withAddCost oa X hX r).2
-    ((mem_support_counted_iff oa hashCost hashCost_eq r).2 ⟨f, h⟩)
+    ((mem_support_counted_iff oa SufCma.hashCost SufCma.hashCost_eq_ite r).2 ⟨f, h⟩)
 
 /-- A hash computation runs as under `f`, with its hash calls as the count. -/
 theorem countedRun_liftM {β : Type} (oc : OracleComp HashSpec β) :
@@ -164,10 +151,10 @@ theorem countedRun_liftM {β : Type} (oc : OracleComp HashSpec β) :
     have hq : countedRun f (liftM (HashSpec.query t) : OracleComp OracleWorld _) =
         pure (f t, 1) := by
       change simulateQ (unifFwdAnswerImpl f)
-        (HashSig.counted isHashCall
+        (HashSig.counted (SufCma.IsHashCall HashSpec)
           (liftM (OracleWorld.query (.inr t)))) = _
       rw [HashSig.counted_query]
-      simp only [simulateQ_map, simulateQ_spec_query, unifFwdAnswerImpl, isHashCall,
+      simp only [simulateQ_map, simulateQ_spec_query, unifFwdAnswerImpl, SufCma.IsHashCall,
         Sum.isRight_inr, ↓reduceIte]
       rfl
     have he : evalWithAnswerFn f (liftM (HashSpec.query t) : OracleComp HashSpec _) = f t :=
@@ -287,15 +274,16 @@ theorem countLe_signedGame {a b : Nat} (hab : a ≤ b) (adversary : Adversary)
         (evalWithAnswerFn f (SphincsSecurity.Seeded.keygen S0 : OracleComp HashSpec _)).2
         (toMessage m) : OracleComp HashSpec _) ≤
       b * hashCalls f (signWith H ⟨ofSeed S0⟩ m)) :
-    CountLe f a b (gameCore adversary) (signedGame adversary) := by
-  have hverify : ∀ (pk : SphincsSecurity.PublicKey) (forgery : Forgery),
+    CountLe f a b (SufCma.game scheme adversary) (signedGame adversary) := by
+  have hverify : ∀ (pk : SphincsSecurity.PublicKey) (forgery : SufCma.Forgery Message Signature),
       verifyWith H (ofPublicKey pk) forgery.message forgery.signature =
         (SphincsSecurity.Concrete.verify pk (toMessage forgery.message)
           (toSignature forgery.signature) : OracleComp HashSpec Bool) := fun pk forgery ↦ by
     have h := verifyWith_queryH (m := OracleComp HashSpec) pk (toMessage forgery.message)
       (toSignature forgery.signature)
     rwa [ofMessage_toMessage, ofSignature_toSignature] at h
-  unfold gameCore signedGame sampleSeed signingOracle
+  rw [game_eq]
+  unfold signedGame sampleSeed signingOracle signer
   simp only [← liftComp_eq_liftM, liftComp_map, bind_map_left, keyGenWith_queryH, hverify]
   simp only [liftComp_eq_liftM]
   refine CountLe.bind (CountLe.refl hab _) fun seed ↦ ?_
@@ -320,7 +308,8 @@ theorem hasHashQueryBound_translate {a b : Nat} (ha : 0 < a) (hab : a ≤ b)
         (evalWithAnswerFn f (SphincsSecurity.Seeded.keygen S0 : OracleComp HashSpec _)).2
         (toMessage m) : OracleComp HashSpec _) ≤
       b * hashCalls f (signWith H ⟨ofSeed S0⟩ m))
-    (adversary : Adversary) (q : Nat) (hq : HasHashQueryBound adversary q) :
+    (adversary : Adversary) (q : Nat)
+    (hq : SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec) adversary q) :
     SphincsSecurity.Security.HasHashQueryBound (translate adversary) (b * q / a) := by
   intro result hr
   obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _
@@ -331,7 +320,7 @@ theorem hasHashQueryBound_translate {a b : Nat} (ha : 0 < a) (hab : a ≤ b)
     rw [signedGame_eq]
     exact mem_support_countedRun_map_of_mem f _ wins run n hrun
   obtain ⟨n', hn', hle⟩ := countLe_signedGame f hab adversary (hreq f) _ hsigned
-  have hq' := hq _ (mem_support_of_countedRun f _ _ (experiment_eq adversary) _ hn')
+  have hq' := hq _ (mem_support_of_countedRun f _ _ (countedRunIn_game_eq adversary) _ hn')
   exact (Nat.le_div_iff_mul_le ha).2 (by
     rw [Nat.mul_comm]
     exact hle.trans (Nat.mul_le_mul_left _ hq'))

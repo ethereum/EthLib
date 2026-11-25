@@ -484,7 +484,7 @@ The unforgeability theorem with capped searches below uses it, and so does the f
 
 That bound is `Unforgeability.Bridge.signingFailure_le` (`Proofs/Sphincs/Unforgeability/Bridge/SigningFailure.lean`).
 `signingFailure` (`Proofs/Sphincs/Unforgeability/Bridge/Statement.lean`) runs the unforgeability game below against the random oracle, from an empty cache, and reads the log of its signing requests.
-The game is the verdict on that run (`gameCore_eq_map_gameRun`), so the log holds the game's own requests.
+The game is the verdict on that run (`game_eq_map_gameRun`), so the log holds the game's own requests.
 Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
 Some request of its game gets no signature with probability at most `(q + C) (1 - p)^(2^32)`.
 Here `C = 264193 + r * (470595 + 3 * 2^32) + 491` bounds the scheme's calls, as in the second unforgeability theorem below.
@@ -492,16 +492,18 @@ Here `C = 264193 + r * (470595 + 3 * 2^32) + 491` bounds the scheme's calls, as 
 A request with no signature leaves in the oracle's cache a search whose `2^32` counters all missed the code (`failedSearch_of_signerOf`, `Proofs/Sphincs/Unforgeability/Bridge/Search.lean`).
 By `failedSearch_of_mem_support_run` (`Proofs/Sphincs/Unforgeability/Bridge/SearchGameRun.lean`), the adversary's run then ends with a failed search in the cache, and the verification only adds entries to the cache.
 So the final cache of the game holds that failed search (`failedSearch_of_mem_support_gameRun`).
-The game makes at most `q + C` hash calls (`hasHashQueryBound_of_adversary`, `Proofs/Sphincs/Unforgeability/Bridge/AdversaryCalls.lean`).
-So by `HashSig.prEvent_failedSearch_le` with `T = 2^32`, its final cache holds a failed search with probability at most `(q + C) (1 - p)^(2^32)` (`wp_failedSearch_gameCore_le`, `Proofs/Sphincs/Unforgeability/Bridge/SearchGame.lean`).
+The game makes at most `q + C` hash calls (`isGameQueryBound_of_adversary`, `Proofs/Sphincs/Unforgeability/Bridge/AdversaryCalls.lean`).
+So by `HashSig.prEvent_failedSearch_le` with `T = 2^32`, its final cache holds a failed search with probability at most `(q + C) (1 - p)^(2^32)` (`wp_failedSearch_game_le`, `Proofs/Sphincs/Unforgeability/Bridge/SearchGame.lean`).
 Since `(1 - p)^(2^32)` is at most `exp(-2^18)` (`searchMiss_pow_le_exp`, `Proofs/Sphincs/CodewordSearch.lean`), the probability is at most `(q + C) exp(-2^18)` (`signingFailure_le_exp`).
 At `2^30` requests, `C` is about `2^63.6`, and even at `q = 2^128` that bound is about `2^-378066`.
 The bound covers every request of the game, after earlier signatures under the key and after any queries of the adversary.
 The game holds one key.
 No theorem bounds the failure of signing when several keys share the oracle, as on a node that holds several keys.
 
+The game is the generic strong-unforgeability game of `Proofs/SufCma.lean`, with leanSPHINCS as its scheme (`Unforgeability.Bridge.scheme`).
+Its rule of use is at most `2^30` signing requests.
 Unforgeability is `Unforgeability.Bridge.unforgeable` (`Proofs/Sphincs/Unforgeability.lean`).
-Take an adversary whose experiment makes at most `q >= 1` hash calls and at most `2^30` signing requests.
+Take an adversary whose game makes at most `q >= 1` hash calls.
 In the random oracle model, it forges a signature with probability at most `q / 2^127`.
 Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
@@ -522,7 +524,7 @@ At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
 `r` is not capped: a run past `2^30` requests loses, but its signer calls still enter `C`.
 Key generation makes 264193 calls, and a signing request at most `470595 + 3 * 2^32`, when every counter search tries all `2^32` counters.
 A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
-The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
+The game with the adversary's counter is the game above with its counts forgotten (`game_eq_map`, `advantage_eq`), so both theorems bound the same forging probability.
 
 A third theorem, `Unforgeability.Bridge.unforgeable_capped`, charges each request its counter searches only up to `2^22` counters.
 Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
@@ -534,7 +536,7 @@ Up to that answer the two runs agree, and all requests but the last one cost at 
 The last one costs at most `470595 + 3 * 2^32`, which is the `3 * 2^32` in `C'`.
 An answer with a long search leaves, in the oracle's cache, a search whose first `2^22` counters all missed the code (`failedSearch_of_signerOf`).
 By `HashSig.prEvent_failedSearch_le`, that has probability at most `(q + C) * (1 - p)^(2^22)`, below `2^-127` up to `2^200` calls, and the `1` covers it; above that, the bound is at least 1.
-`forgeAdvantage_le_capped` states the bound for every cap `1 <= T <= 2^32`, with that term written out.
+`advantage_le_capped` states the bound for every cap `1 <= T <= 2^32`, with that term written out.
 
 ### VRF tree
 

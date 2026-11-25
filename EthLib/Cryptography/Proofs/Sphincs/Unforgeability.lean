@@ -9,7 +9,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Main
 
 The theorem holds in the random oracle model, for one key and at most `2^30` signing requests.
 
-Take an adversary whose experiment makes at most `q >= 1` hash calls.
+Take an adversary whose game makes at most `q >= 1` hash calls.
 
 It forges a signature with probability at most `q / 2^127`.
 
@@ -25,15 +25,20 @@ Two more theorems charge only the adversary's own hash calls, and take a bound o
 namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 
 open ENNReal EthLib.Cryptography.Sphincs.Constants
+open EthLib.Cryptography.HashSig (HashSpec)
 
 /-- leanSPHINCS as EthLib computes it is strongly unforgeable in the random oracle model.
 
-Take an adversary whose experiment makes at most `q >= 1` hash calls in every run.
+Take an adversary whose game makes at most `q >= 1` hash calls in every run.
 
 It forges with probability at most `q / 2^127`.
 
-`q` counts the calls of key generation and of every signing request too. -/
-theorem unforgeable : HasClassicalSecurityBits 127 := fun q hq adversary hbound =>
+`q` counts the calls of key generation and of every signing request too.
+
+A run with more than `2^30` signing requests loses. -/
+theorem unforgeable :
+    SufCma.StronglyUnforgeableAllCalls scheme (SufCma.randomOracleModel HashSpec) 127 :=
+  fun q hq adversary hbound => (SufCma.mul_inv_two_pow _ _).symm ▸
   -- The game runs EthLib's key generation, signing and verification.
   --
   -- Their hash `H` is a query to the oracle.
@@ -66,8 +71,8 @@ theorem unforgeable_adversary : HasAdversarySecurityBits 127 := fun q r adversar
   -- Each signing request adds at most `470595 + 3 * 2^32`.
   --
   -- That holds when every counter search runs to its end.
-  unforgeable (q + schemeCalls r) (by unfold schemeCalls keyGenCalls; omega) adversary
-    (hasHashQueryBound_of_adversary adversary q r hbound)
+  (unforgeable (q + schemeCalls r) (by unfold schemeCalls keyGenCalls; omega) adversary
+    (isGameQueryBound_of_adversary adversary q r hbound)).trans_eq (SufCma.mul_inv_two_pow _ _)
 
 /-- leanSPHINCS as EthLib computes it is strongly unforgeable, with long searches charged apart.
 
@@ -82,16 +87,17 @@ It forges with probability at most `(q + C_T) / 2^127 + (q + C) * (1 - p)^T`.
 `C_T` charges each request its searches up to `T` counters, and one request all `2^32`.
 
 `C` bounds the scheme's calls with every search run to its end. -/
-theorem forgeAdvantage_le_capped (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MAX_COUNTER_TRIALS)
+theorem advantage_le_capped (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MAX_COUNTER_TRIALS)
     (q r : Nat) (adversary : Adversary) (h : HasAdversaryQueryBound adversary q r) :
-    forgeAdvantage adversary ≤
+    SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) adversary ≤
       ((q + cappedCalls T r : Nat) : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) +
         ((q + schemeCalls r : Nat) : ℝ≥0∞) *
           (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T :=
   -- The wrapped adversary forges within the first budget, and the rest is the long searches.
-  (forgeAdvantage_le_capSearches T hT₁ hT adversary q r h).trans (add_le_add
-    (unforgeable (q + cappedCalls T r) (by unfold cappedCalls keyGenCalls; omega)
-      (capSearches T adversary) (hasHashQueryBound_capSearches T adversary q r h)) le_rfl)
+  (advantage_le_capSearches T hT₁ hT adversary q r h).trans (add_le_add
+    ((unforgeable (q + cappedCalls T r) (by unfold cappedCalls keyGenCalls; omega)
+      (capSearches T adversary) (isGameQueryBound_capSearches T adversary q r h)).trans_eq
+        (SufCma.mul_inv_two_pow _ _)) le_rfl)
 
 /-- With uniform digests, `2^22` counters all miss the code with probability at most `2^-327`. -/
 theorem searchMiss_pow_searchCap_le :
@@ -171,7 +177,7 @@ theorem unforgeable_capped : HasCappedSecurityBits 127 := by
     -- The request that shows it is charged all `3 * 2^32` counters.
     --
     -- A longer search leaves `2^22` missed counters in the oracle's cache, which is unlikely.
-    refine (forgeAdvantage_le_capped searchCap hT₁ hT q r adversary h).trans ?_
+    refine (advantage_le_capped searchCap hT₁ hT q r adversary h).trans ?_
     refine (add_le_add le_rfl (longSearches_le _ hN)).trans ?_
     rw [ENNReal.div_add_div_same, Nat.cast_add (q + cappedCalls searchCap r) 1, Nat.cast_one]
   · -- Above, the bound is at least 1.

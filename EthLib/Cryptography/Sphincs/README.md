@@ -204,7 +204,7 @@ Definitions that derive a secret take the derivation function as an argument too
 ## What is not proved
 
 - Security for more than one key, or for more than `2^30` signing requests.
-- A bound for the game of `Unforgeability/Game.lean`.
-  Its budget counts only the adversary's own queries and requests, and it has no signing limit.
+- A bound of the generic form that charges only the adversary's own calls with a fixed slack.
+  The theorems that charge the adversary's own calls add the scheme's calls of each request.
 - That signing fails with small probability when several keys share the oracle.
   The bound for signing inside the game is for its one key.

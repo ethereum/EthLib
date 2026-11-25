@@ -1522,7 +1522,7 @@ theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
 omit f in
 /-- An adversary with `q` hash calls against EthLib, translated, has `q` against the model. -/
 theorem hasHashQueryBound_translate_self (adversary : Adversary) (q : Nat)
-    (hq : HasHashQueryBound adversary q) :
+    (hq : SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec) adversary q) :
     SphincsSecurity.Security.HasHashQueryBound (translate adversary) q := by
   have h := hasHashQueryBound_translate Nat.one_pos le_rfl
     (fun f S0 m => by simpa only [Nat.one_mul] using hashCalls_sign_le f S0 m)

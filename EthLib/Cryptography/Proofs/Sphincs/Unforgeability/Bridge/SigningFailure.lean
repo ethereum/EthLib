@@ -30,20 +30,21 @@ theorem gameRun_eq_keys_run (adversary : Adversary) :
       let keys : SecretKey × PublicKey ← (do
         let seed ← liftM sampleSeed
         liftM (keyGenWith H seed) : OracleComp OracleWorld (SecretKey × PublicKey))
-      let run : Forgery × QueryLog SigningSpec ←
+      let run : SufCma.Forgery Message Signature × QueryLog SigningSpec ←
         (simulateQ (QueryImpl.ofLift OracleWorld
           (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
             QueryImpl.withLogging (fun msg => liftM (signerOf keys.1 msg) :
               QueryImpl SigningSpec (OracleComp OracleWorld))) (adversary.main keys.2)).run
       let verified ← liftM (verifierOf keys.2 run.1)
       pure (run.1, run.2, verified)) := by
-  unfold gameRun signingOracle signerOf verifierOf
+  unfold gameRun signingOracle signer signerOf verifierOf
   rw [bind_assoc]
 
 /-- The game is the verdict on its run. -/
-theorem gameCore_eq_map_gameRun (adversary : Adversary) :
-    gameCore adversary = (fun run => verdictOf run.1 run.2.1 run.2.2) <$> gameRun adversary := by
-  rw [gameRun_eq_keys_run, gameCore_eq_keys_run]
+theorem game_eq_map_gameRun (adversary : Adversary) :
+    SufCma.game scheme adversary =
+      (fun run => verdictOf run.1 run.2.1 run.2.2) <$> gameRun adversary := by
+  rw [gameRun_eq_keys_run, game_eq_keys_run]
   simp only [map_bind, map_pure]
 
 /-- Take any keys, then the adversary's run with its oracles, then the verification.
@@ -53,10 +54,10 @@ A run in which some request gets no signature ends with a failed search.
 All `2^32` counters of that search miss the code in the final cache. -/
 theorem failedSearch_of_mem_support_keys_run
     (keys : OracleComp OracleWorld (SecretKey × PublicKey)) (adversary : Adversary)
-    (z : (Forgery × QueryLog SigningSpec × Bool) × HashSpec.QueryCache)
+    (z : (SufCma.Forgery Message Signature × QueryLog SigningSpec × Bool) × HashSpec.QueryCache)
     (hz : z ∈ support ((simulateQ HashSpec.romImpl (do
       let keyPair : SecretKey × PublicKey ← keys
-      let run : Forgery × QueryLog SigningSpec ←
+      let run : SufCma.Forgery Message Signature × QueryLog SigningSpec ←
         (simulateQ (QueryImpl.ofLift OracleWorld
           (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
             QueryImpl.withLogging (fun msg => liftM (signerOf keyPair.1 msg) :
@@ -87,7 +88,7 @@ theorem failedSearch_of_mem_support_keys_run
 
 All `2^32` counters of that search miss the code in the final cache. -/
 theorem failedSearch_of_mem_support_gameRun (adversary : Adversary)
-    (z : (Forgery × QueryLog SigningSpec × Bool) × HashSpec.QueryCache)
+    (z : (SufCma.Forgery Message Signature × QueryLog SigningSpec × Bool) × HashSpec.QueryCache)
     (hz : z ∈ support ((simulateQ HashSpec.romImpl (gameRun adversary)).run ∅))
     (h : ∃ entry ∈ z.1.2.1, entry.2 = none) :
     HashSig.FailedSearch searchPoint SearchMiss MAX_COUNTER_TRIALS z.2 := by
@@ -111,7 +112,7 @@ theorem signingFailure_le (adversary : Adversary) (q r : Nat)
   calc signingFailure adversary
       = wp ((simulateQ HashSpec.romImpl (gameRun adversary)).run ∅)
           (fun z => propInd (∃ entry ∈ z.1.2.1, entry.2 = none)) := by
-        rw [signingFailure, adversaryOracle_eq, prEvent_eq_wp_propInd, StateT.run'_eq, wp_map]
+        rw [signingFailure, prEvent_eq_wp_propInd, StateT.run'_eq, wp_map]
         rfl
     -- A run with a request that got no signature ends with a failed search in its cache.
     _ ≤ wp ((simulateQ HashSpec.romImpl (gameRun adversary)).run ∅)
@@ -120,13 +121,13 @@ theorem signingFailure_le (adversary : Adversary) (q r : Nat)
         ExpectationWP.Lower.wp_mono_of_support _ fun z hz =>
           propInd_mono (failedSearch_of_mem_support_gameRun adversary z hz)
     -- The game is a map of the run, so it ends with the same cache.
-    _ = wp ((simulateQ HashSpec.romImpl (gameCore adversary)).run ∅)
+    _ = wp ((simulateQ HashSpec.romImpl (SufCma.game scheme adversary)).run ∅)
           (fun z => propInd
             (HashSig.FailedSearch searchPoint SearchMiss MAX_COUNTER_TRIALS z.2)) := by
-        rw [gameCore_eq_map_gameRun, simulateQ_map, StateT.run_map, wp_map]
+        rw [game_eq_map_gameRun, simulateQ_map, StateT.run_map, wp_map]
         rfl
     -- The game makes at most `q + C` hash calls.
-    _ ≤ _ := wp_failedSearch_gameCore_le MAX_COUNTER_TRIALS hT₁ le_rfl adversary q r h
+    _ ≤ _ := wp_failedSearch_game_le MAX_COUNTER_TRIALS hT₁ le_rfl adversary q r h
 
 /-- Some request of the game gets no signature with probability at most `(q + C) exp(-2^18)`.
 
