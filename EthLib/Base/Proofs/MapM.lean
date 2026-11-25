@@ -516,6 +516,12 @@ theorem foldlM_error_of_step {g : β → α → Except ε β} (I : β → Prop) 
     · exact step b x e hb h
     · exact foldlM_error_of_step I Q keep step (keep b x b' hb hb') h
 
+/-- A fold whose steps never fail with a given error never fails with it. -/
+theorem foldlM_ne_error_of_step {g : β → α → Except ε β} {e : ε}
+    (step : ∀ b x, g b x ≠ .error e) (xs : List α) (b : β) : xs.foldlM g b ≠ .error e := fun h =>
+  foldlM_error_of_step (fun _ => True) (· ≠ e) (fun _ _ _ _ _ => trivial)
+    (fun b x _ _ he => by rintro rfl; exact step b x he) trivial h rfl
+
 /-- A fold succeeds when each step succeeds and keeps an invariant that holds at the start. -/
 theorem foldlM_exists_ok_of_invariant {σ : Type} {g : σ → α → Except ε σ}
     (P : σ → Prop) {xs : List α} (step : ∀ acc, ∀ x ∈ xs, P acc → ∃ r, g acc x = .ok r ∧ P r) :

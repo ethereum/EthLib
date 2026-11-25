@@ -1058,6 +1058,30 @@ theorem createEther_isOk_iff {fork : Fork} {tx : TransactionState} {address : Ad
   · intro hfit
     exact modifyState_isOk (by simp only [Account.credit, hfit, ↓reduceIte]; rfl)
 
+/-- Creating ether fails only for a balance that would overflow at its address. -/
+theorem error_createEther {fork : Fork} {tx : TransactionState} {address : Address}
+    {amount : U256} {e : StateError} (h : tx.createEther fork address amount = .error e) :
+    e = .balanceOverflow address := by
+  have h := modifyState_eq_error.mp h
+  unfold Account.credit at h
+  split at h <;> cases h
+  rfl
+
+/-- Moving ether fails only for a short sender or a recipient whose balance would overflow. -/
+theorem error_moveEther {fork : Fork} {tx : TransactionState} {sender recipient : Address}
+    {amount : U256} {e : StateError} (h : tx.moveEther fork sender recipient amount = .error e) :
+    e = .insufficientBalance sender ∨ e = .balanceOverflow recipient := by
+  unfold moveEther at h
+  simp only [bind, Except.bind] at h
+  split at h
+  · cases h
+    rename_i debit
+    have debit := modifyState_eq_error.mp debit
+    unfold Account.debit at debit
+    split at debit <;> cases debit
+    exact .inl rfl
+  · exact .inr (error_createEther h)
+
 /-- Creating ether at one address adds it to that balance, and leaves every nonce and code. -/
 theorem getAccount_createEther {fork : Fork} {tx tx' : TransactionState}
     {target : Address} {amount : U256} (h : tx.createEther fork target amount = .ok tx')
