@@ -468,19 +468,22 @@ instance {fork : Fork} : SszType (PartialDataColumnGroupID fork) :=
   .container (names fork) (fun g => (g.beaconBlockRoot, g.slot))
     (fun (beaconBlockRoot, slot) => ⟨beaconBlockRoot, slot⟩)
 
-/-- The gossip group ID of a group: the version byte 0, then the SSZ bytes of the group. -/
+/-- The version byte of a gossip group ID at a fork: 0 before Gloas, and 1 from Gloas. -/
+def version (fork : Fork) : UInt8 :=
+  if fork < .glamsterdam then 0 else 1
+
+/-- The gossip group ID of a group: the version byte of the fork, then the SSZ bytes. -/
 def toGroupId {fork : Fork} (group : PartialDataColumnGroupID fork) : Except Err ByteArray := do
-  -- The version byte 0, then the SSZ bytes of the group.
-  return ByteArray.mk #[0] ++ (← SszType.serialize group)
+  return ByteArray.mk #[version fork] ++ (← SszType.serialize group)
 
 /-- The group that a gossip group ID names.
 
-An ID whose first byte is not the version 0 names no group, since an unknown version is ignored.
+An ID whose first byte is not the version of the fork names no group, as it is ignored.
 
 Nor does an ID whose remaining bytes are not the SSZ bytes of a group. -/
 def ofGroupId (fork : Fork) (bytes : ByteArray) : Option (PartialDataColumnGroupID fork) :=
-  -- The first byte is the version 0.
-  if bytes.data[0]? = some 0 then
+  -- The first byte is the version of the fork.
+  if bytes.data[0]? = some (version fork) then
     -- The group is the SSZ decoding of the remaining bytes, if they decode.
     (SszType.deserialize (PartialDataColumnGroupID fork) (bytes.extract 1 bytes.size)).toOption
   -- An empty ID or another version names no group.

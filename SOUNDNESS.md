@@ -2973,7 +2973,7 @@ They are the two partial flags of a subscription change, the extensions of a con
 The partial columns of the consensus layer travel in these fields.
 `decodeRpc_encode` (`Networking/Proofs/Gossip/Rpc.lean`) covers them, and three theorems prove that a subscription change, a control message or an RPC without these fields decodes them at their defaults.
 `ofGroupId` (`Consensus/DataAvailability/Column.lean`) reads a group ID back, and `ofGroupId_toGroupId` proves that it reads the ID of every group back to that group.
-`ofGroupId_version` proves that an ID whose first byte is not the version 0 names no group.
+`ofGroupId_version` proves that an ID whose first byte is not the version of its fork (0 before Gloas, 1 from Gloas) names no group.
 
 The model takes these readings.
 
