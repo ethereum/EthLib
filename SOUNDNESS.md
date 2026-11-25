@@ -7919,8 +7919,10 @@ Each is the status of its key on the state that the keys before it leave (`getEl
 After an import, each key with the status `imported` is a remote key (`mem_remoteKeys_importRemoteKeys`), and no remote key is lost (`remoteKeys_prefix_importRemoteKeys`).
 After a delete, no key with the status `deleted` is a remote key (`not_mem_remoteKeys_deleteRemoteKeys`).
 Importing one key that the client does not know imports it, deleting it then deletes it (`fst_deleteRemoteKeys_importRemoteKeys`), and the remote keys are those before (`remoteKeys_deleteRemoteKeys_importRemoteKeys`).
-An import refuses a key that the client knows, and a delete removes every remote key with its public key.
-No theorem yet states that the remote keys of a reachable state have distinct public keys.
+An import adds only a key that the client does not know, and a delete only removes keys.
+The other calls leave the remote keys as they were.
+So every call keeps the public keys of the remote keys distinct (`remoteDistinct_handle`).
+After any run of calls from a client whose remote keys have distinct public keys, they still do (`remoteDistinct_of_run`).
 The Python suite runs the example of issue #2139: an import of `a, b, b` onto `a`, then a delete of `b, c`.
 
 The source leaves five points about remote keys open, and EthLib takes these readings:
