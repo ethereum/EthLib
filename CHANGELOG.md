@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Node.validRecord_isSome` (`Engine/Proofs/Node/Replay.lean`) says that every valid block of a node reached from a starting block has a record, so its body runs again ([#4557](https://github.com/ethereum/EthLib/pull/4557)).
+  `Node.view_isSome` says that such a node has a chain view, and `Node.Reachable.validRecord_eq` that the record of a valid block stays the same in every later node.
+  `Node.Reachable.chainAt_eq` (`Engine/Proofs/Node/Ancestry.lean`) says that the chain at a valid block stays the same in later nodes.
+  They assume that the last node they read knows no block under the parent hash of its starting block, which would close a cycle of block hashes.
+
 - In Lean, `Node.forkchoiceUpdatedStep_of_newPayloadStep_invalid` (`Engine/Proofs/Node/LatestValid.lean`) says that a later update to a payload answered `INVALID` answers `INVALID` with the same latest valid hash ([#4555](https://github.com/ethereum/EthLib/pull/4555)).
   That update leaves the node as it was.
   The node is reached from a starting block, and the payload passed the checks before execution.
