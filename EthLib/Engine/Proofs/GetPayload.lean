@@ -11,27 +11,9 @@ import EthLib.Engine.Proofs.NewPayload
 
 A version returns exactly the forks whose fields are its own.
 
-So each fork from Paris to Glamsterdam has a version, and no other fork has one.
-
-An unknown payload ID returns the Engine API's unknown-payload error.
-
-Each other refusal happens when its check fails and every earlier check passes.
-
 A returned payload is the payload form of the stored block, at a fork that its version accepts.
 
-From version 3, the bundle's commitments hash to the block's blob hashes, in order.
-
-Its blob or cell proofs pass the KZG verifier.
-
-Versions 3 and 4 return one proof per blob, and versions 5 and 6 return 128 per blob.
-
-The decoder reads back the parameters that the writer writes.
-
-It reads no JSON value other than what the writer writes.
-
 The result of a response reads back at its version and its fork.
-
-A bundle reads back exactly when it passes the length rules of its version.
 
 The payload of a response, sent back to `engine_newPayload`, passes its checks and gives its block.
 -/
@@ -120,7 +102,9 @@ theorem of_getPayload_eq_ok {config : ChainConfig} {setup : TrustedSetup}
       split at hb <;> simp_all
     · exact ⟨rfl, ‹_›, ‹_›, ‹_›, ‹_›, ‹_›, ok_of_ne_error ‹_›, fun hv => absurd hv ‹_›⟩
 
-/-- From version 3, the bundle has the block's hashes in order, its counts, and verifies. -/
+/-- From version 3, the bundle has the block's hashes in order and its counts.
+
+Its proofs pass the KZG check. -/
 theorem getPayload_bundle {config : ChainConfig} {setup : TrustedSetup}
     {store : PayloadStore} {version : Nat} {id : PayloadId} {r : GetPayloadResponse}
     (h : getPayload config setup store version id = .ok r) (hv : 3 ≤ version) :
@@ -171,7 +155,10 @@ theorem getPayload_cell_proof_count {config : ChainConfig} {setup : TrustedSetup
   have hc := (getPayload_bundle h (by omega)).2.2.1
   simpa [proofCount, hfork] using hc
 
-/-! ## The other refusals of the method -/
+/-! ## The other refusals of the method
+
+Each refusal happens when its check fails and every earlier check passes.
+-/
 
 variable {config : ChainConfig} {setup : TrustedSetup} {store : PayloadStore} {version : Nat}
   {id : PayloadId} {stored : StoredPayload}

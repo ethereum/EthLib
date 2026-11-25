@@ -7,19 +7,7 @@ public import EthLib.Execution.Transactions.Network
 /-!
 # Proofs: the network form of blob transactions
 
-The network form reads back from its bytes, at each fork from Dencun.
-
-Bytes that decode to a network form are its encoding.
-
-So bytes decode to a network form exactly when they encode it and the fork is Dencun or later.
-
-The transaction it carries is the first item of its RLP list, so its hash ignores the blobs.
-
-The check of the blobs succeeds exactly when three conditions hold.
-
-The counts match, each commitment hashes to its versioned hash, and the proofs verify.
-
-Two errors with one code come from one constructor.
+These proofs cover the bytes of the network form, the check of its blobs and its error codes.
 -/
 
 @[expose] public section
