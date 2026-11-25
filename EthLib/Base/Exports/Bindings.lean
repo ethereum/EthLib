@@ -1842,7 +1842,7 @@ def bindings : List Binding := [
     "(max_payload_size: int, type_bound: int, data: bytes) -> bytes",
     [`EthLib.Networking.Gossip.PayloadError], some "GossipError"⟩,
   ⟨"gossip_rpc_decode", `EthLib.Networking.Gossip.Exports.rpcDecodeExport,
-    "(data: bytes) -> dict[str, Any]",
+    "(max_payload_size: int, data: bytes) -> dict[str, Any]",
     [`EthLib.Networking.Gossip.RpcError], some "GossipError"⟩,
   ⟨"gossip_rpc_encode", `EthLib.Networking.Gossip.Rpc.encode,
     "(rpc: dict[str, Any]) -> bytes",

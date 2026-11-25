@@ -1458,7 +1458,7 @@
   "The SSZ bytes of the data of a gossip message, given the payload cap and the size bound of its type."
 
 #define DOC_gossip_rpc_decode \
-  "The RPC that the bytes encode, under the `StrictNoSign` policy."
+  "The RPC that the bytes encode, under the `StrictNoSign` policy and the size limit of the cap."
 
 #define DOC_gossip_rpc_encode \
   "The bytes of an RPC."

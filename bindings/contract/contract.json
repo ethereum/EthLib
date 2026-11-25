@@ -14418,8 +14418,9 @@
    "error_class": "GossipError",
    "docstring":
    "The SSZ bytes of the data of a gossip message, given the payload cap and the size bound of its type.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
-  {"summary": "The RPC that the bytes encode, under the `StrictNoSign` policy.",
-   "signature": "(data: bytes) -> dict[str, Any]",
+  {"summary":
+   "The RPC that the bytes encode, under the `StrictNoSign` policy and the size limit of the cap.",
+   "signature": "(max_payload_size: int, data: bytes) -> dict[str, Any]",
    "operation": "EthLib.Networking.Gossip.Exports.rpcDecodeExport",
    "method": "gossip_rpc_decode",
    "errors":
@@ -14429,10 +14430,12 @@
       {"constructor": "signed", "code": 102},
       {"constructor": "missingTopic", "code": 103},
       {"constructor": "wireType", "code": 104},
-      {"constructor": "utf8", "code": 105}]}],
+      {"constructor": "utf8", "code": 105},
+      {"constructor": "tooLong", "code": 106},
+      {"constructor": "arith", "code": 107}]}],
    "error_class": "GossipError",
    "docstring":
-   "The RPC that the bytes encode, under the `StrictNoSign` policy."},
+   "The RPC that the bytes encode, under the `StrictNoSign` policy and the size limit of the cap."},
   {"summary": "The bytes of an RPC.",
    "signature": "(rpc: dict[str, Any]) -> bytes",
    "operation": "EthLib.Networking.Gossip.Rpc.encode",
