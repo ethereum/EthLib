@@ -1110,6 +1110,12 @@ Not yet released.
     The new bounds read `2^l * (c + 1)` in place of `2^(l + 1)`.
   Migration: use the theorems of the Merkle namespace, with `c := 1` and a rewrite by `pow_succ` for the old form of the VRF bounds.
 
+- In Lean, the second proposer duties answer gives the dependent root at slot `start(epoch) - 1` up to the Fulu fork epoch ([#4603](https://github.com/ethereum/EthLib/issues/4603)).
+  - `Consensus.BeaconApi.dutiesResponse` (`Consensus/BeaconApi/Duties.lean`) takes the root at `start(epoch - 1) - 1` only after `FULU_FORK_EPOCH`.
+    The upgrade to Fulu draws the proposers of the fork epoch after the epoch before it, so the blocks of that epoch can still change them.
+  - `dutiesResponse_proposerV2_of_le_fulu` and `dutiesResponse_proposerV2_of_fulu_lt` (`Consensus/Proofs/BeaconApi/Duties.lean`) are new: the root of each side of the fork epoch.
+  - A caller that passes a state from Fulu with a configuration that does not schedule Fulu, such as the minimal one, now gets the root at `start(epoch) - 1` for the current epoch, and code 400 for the next one.
+    It should set `FULU_FORK_EPOCH`.
 - In Lean, a Gloas builder keeps the first preferences of a proposer for a slot, and may refuse preferences from a key that is not the proposer of the slot ([#3860](https://github.com/ethereum/EthLib/issues/3860)).
   This follows `ethereum/builder-specs` at `0911550`.
   - `BuilderApi.preferencesFailures` and `BuilderApi.PreferencesStore.submit` (`Consensus/BuilderApi/RequestAuth.lean`) take the key of the proposer that the builder knows for each slot, before the key of the path.

@@ -961,7 +961,33 @@ private theorem dutiesResponse_proposer_eq_exists {config : Config}
                  data := .arr (duties.map ProposerDuty.toJson).toArray }) := by
   rcases version with ⟨rfl, rfl⟩ | rfl
   · exact ⟨0, by simp [dutiesResponse]⟩
-  · exact ⟨1, rfl⟩
+  · exact ⟨_, rfl⟩
+
+/-- Up to the Fulu fork epoch, the second proposer answer gives the root at slot start(epoch) - 1.
+
+The upgrade to Fulu draws the proposers of the fork epoch after the epoch before it. -/
+theorem dutiesResponse_proposerV2_of_le_fulu {config : Config}
+    {state : BeaconState preset fork} {epoch : Epoch} {indices : List ValidatorIndex}
+    {genesisRoot : Root} (early : epoch ≤ config.FULU_FORK_EPOCH) :
+    dutiesResponse config state .proposerV2 epoch indices genesisRoot =
+      (do
+        let duties ← proposerDuties state epoch
+        return { dependentRoot := some (← dependentRoot state 0 epoch genesisRoot),
+                 data := .arr (duties.map ProposerDuty.toJson).toArray }) := by
+  simp [dutiesResponse, early]
+
+/-- After the Fulu fork epoch, the second proposer root is the one at slot start(epoch - 1) - 1.
+
+The proposers of such an epoch are drawn at the end of the epoch two before it. -/
+theorem dutiesResponse_proposerV2_of_fulu_lt {config : Config}
+    {state : BeaconState preset fork} {epoch : Epoch} {indices : List ValidatorIndex}
+    {genesisRoot : Root} (late : config.FULU_FORK_EPOCH < epoch) :
+    dutiesResponse config state .proposerV2 epoch indices genesisRoot =
+      (do
+        let duties ← proposerDuties state epoch
+        return { dependentRoot := some (← dependentRoot state 1 epoch genesisRoot),
+                 data := .arr (duties.map ProposerDuty.toJson).toArray }) := by
+  simp [dutiesResponse, UInt64.not_le.mpr late]
 
 /-- A failed draw of the current epoch gives both proposer answers an internal error, code 500.
 
