@@ -6570,6 +6570,10 @@ In the window a repeated index gets code 400.
 Distinct indices run the duty of each requested validator in turn, in request order, and the first index that fails ends the answer.
 The PTC of the Gloas fork epoch is computed at the fork, from balances of the epoch before, so blocks of the epoch before the fork can still change it.
 So its dependent root is the block root at the last slot before the fork epoch, as [`ptc.yaml`](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/duties/ptc.yaml#L19-L27) requires, and every other epoch keeps a lag of one epoch (`dutiesResponse_ptc_root`).
+The upgrade to Fulu computes the proposers of the Fulu fork epoch in the same way, after the epoch processing of the epoch before.
+So up to the Fulu fork epoch, the second proposer answer gives the block root at the last slot before the epoch (`dutiesResponse_proposerV2_of_le_fulu`).
+After it, the root keeps a lag of one epoch (`dutiesResponse_proposerV2_of_fulu_lt`).
+The pinned [`proposer.v2.yaml`](https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/validator/duties/proposer.v2.yaml) asks for the lag of one at every epoch, which is wrong at the fork epoch; [beacon-APIs#687](https://github.com/ethereum/beacon-APIs/pull/687) proposes the fix.
 `proposerDuties_beaconProposer` shows that in the current epoch each proposer duty names the proposer of the state advanced to its slot.
 `proposerDuties_current_slot` shows the same at the slot of the state itself.
 `syncDuties_seats` shows that each seat of a sync duty holds the key of the validator, in the committee of the period, and that a duty has a seat.

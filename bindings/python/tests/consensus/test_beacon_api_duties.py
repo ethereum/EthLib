@@ -40,8 +40,17 @@ def _state(fork: str) -> bytes:
     return consensus.api_ssz("minimal", FORKS[fork], "BeaconState", _rooted(fork))
 
 
-def _duties(fork: str, kind: str, epoch: int, **options: Any) -> dict[str, Any]:
-    config = GLOAS if fork == "gloas" else None
+# The minimal configuration does not schedule Fulu, so the states from Fulu start it at epoch 0.
+FULU = {"FULU_FORK_EPOCH": "0"}
+
+# The configuration of the duties of a state of each fork.
+CONFIGS: dict[str, dict[str, str] | None] = {"fulu": FULU, "gloas": GLOAS | FULU}
+
+
+def _duties(
+    fork: str, kind: str, epoch: int, *, config: dict[str, str] | None = None, **options: Any
+) -> dict[str, Any]:
+    config = config if config is not None else CONFIGS.get(fork)
     return consensus.api_duties(
         "minimal", FORKS[fork], _state(fork), kind, epoch, GENESIS, config=config, **options
     )
@@ -125,6 +134,22 @@ def test_proposer_duties_read_the_lookahead(fork: str, ahead: int) -> None:
     answer = _duties(fork, "proposer_v2", epoch)
     root = _root_at(fork, (epoch - 1) * SLOTS_PER_EPOCH - 1)
     assert answer == {"dependent_root": root, "data": expected}
+
+
+def test_proposer_duties_v2_root_before_fulu() -> None:
+    # Before Fulu the proposers of the epoch are drawn at its start, as for the first version.
+    answer = _duties("electra", "proposer_v2", EPOCH)
+    assert answer["dependent_root"] == _root_at("electra", EPOCH * SLOTS_PER_EPOCH - 1)
+
+
+@pytest.mark.parametrize("ahead", [0, 1])
+def test_proposer_duties_v2_root_at_the_fulu_fork_epoch(ahead: int) -> None:
+    # The upgrade draws the proposers of the fork epoch after the epoch before it.
+    #
+    # So the fork epoch and the epoch after it both depend on the last slot before the fork.
+    fork_epoch = {"FULU_FORK_EPOCH": str(EPOCH)}
+    answer = _duties("fulu", "proposer_v2", EPOCH + ahead, config=fork_epoch)
+    assert answer["dependent_root"] == _root_at("fulu", EPOCH * SLOTS_PER_EPOCH - 1)
 
 
 def test_proposer_duties_v1_root() -> None:
