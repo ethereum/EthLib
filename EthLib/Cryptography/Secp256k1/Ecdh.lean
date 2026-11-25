@@ -40,6 +40,6 @@ def ecdh (sk : Fn) (pk : Point) : Except Secp256k1Error (Vector UInt8 32) :=
     -- §3.3.1, step 2: if `P = O`, output "invalid" and stop.
     | .infinity => .error .pointAtInfinity
     -- §3.3.1, step 3: output `z = x_P`, as 32 bytes by SEC 1 v2 §2.3.5.
-    | .affine x _ => .ok ⟨x.toBytes.toArray, by simp [Fp.length_toBytes]⟩
+    | .affine x _ => .ok ⟨x.toBytes.data, by simp [Sec1.fieldToBytes, sec1]⟩
 
 end EthLib.Cryptography.Secp256k1

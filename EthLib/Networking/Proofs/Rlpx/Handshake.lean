@@ -35,10 +35,10 @@ theorem decodePublicKey_encodePublicKey {p : Point} (hp : p.isOnCurve = true)
   | affine x y =>
     have h := decode_encodeUncompressed hp hinf
     simp only [decodePublicKey, encodePublicKey, Except.mapError]
-    simp only [encodeUncompressed, encodeUncompressed_coords] at h
-    have he : (⟨#[0x04] ++ (x.toBytes ++ y.toBytes).toArray⟩ : ByteArray) =
-        ⟨(0x04 :: (x.toBytes ++ y.toBytes)).toArray⟩ := by
-      simp
+    have he : (⟨#[0x04] ++ (x.toBytes ++ y.toBytes).data⟩ : ByteArray) =
+        (affine x y).encodeUncompressed := by
+      apply ByteArray.ext
+      simp [encodeUncompressed, Sec1.encode]
     rw [he, h]
 
 /-- 64 bytes decode to a point exactly when it lies on the curve, is not `O` and encodes to them. -/
@@ -62,10 +62,12 @@ theorem decodePublicKey_eq_ok_iff {bytes : Vector UInt8 64} {p : Point} :
         · have hsize := congrArg ByteArray.size hcomp
           rw [size_encodeCompressed] at hsize
           simp [ByteArray.size] at hsize
-        · have hlist := congrArg (fun b : ByteArray => b.data.toList) hunc
-          simp only [encodeUncompressed, encodeUncompressed_coords, Array.toList_append] at hlist
-          have htail : bytes.toList = x.toBytes ++ y.toBytes := List.cons.inj hlist |>.2
-          exact Vector.toList_inj.mp (by simpa [encodePublicKey] using htail.symm)
+        · have hdata := congrArg ByteArray.data hunc
+          simp only [encodeUncompressed, Sec1.encode, Bool.false_eq_true, ↓reduceIte,
+            ByteArray.data_append, Array.append_assoc, Array.append_right_inj] at hdata
+          apply Vector.toArray_inj.mp
+          simp only [encodePublicKey, Fp.toBytes, ByteArray.data_append]
+          exact hdata.symm
   · rintro ⟨hon, hinf, rfl⟩
     exact decodePublicKey_encodePublicKey hon hinf
 

@@ -20,9 +20,8 @@ open Point
 /-- The 64 bytes of `ECDSAPUBKEY` follow the prefix `04` in the uncompressed encoding. -/
 theorem encodeUncompressed_eq (x y : Fp) :
     (affine x y).encodeUncompressed = ⟨#[0x04]⟩ ++ publicKeyBytes x y := by
-  simp only [encodeUncompressed, encodeUncompressed_coords, publicKeyBytes]
-  apply ByteArray.ext
-  simp
+  simp only [encodeUncompressed, Sec1.encode, publicKeyBytes, Fp.toBytes, ByteArray.append_assoc,
+    Bool.false_eq_true, ↓reduceIte]
 
 /-- Every private key in `[1, n - 1]` has an address: `d G` is not `O`. -/
 theorem addressOfPrivateKey_ne_none {d : Fn} (hd : d ≠ 0) : addressOfPrivateKey d ≠ none := by

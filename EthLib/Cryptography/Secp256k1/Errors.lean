@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Hex
+public import EthLib.Cryptography.Sec1
 
 /-!
 # `Secp256k1.Errors`
@@ -16,13 +17,13 @@ namespace EthLib.Cryptography.Secp256k1
 
 /-- Every way secp256k1 can reject its input. -/
 inductive Secp256k1Error where
-  /-- An encoded point was not 33 or 65 bytes long. -/
+  /-- An encoded point was not 33 or 65 bytes long, nor the single byte `00`. -/
   | invalidEncodingLength (size : Nat)
   /-- The first byte of an encoded point was not `02`, `03` or `04`, or did not match its length. -/
   | invalidPrefix (byte : UInt8)
   /-- A coordinate, `value`, was `p` or more.
 
-  An uncompressed point reads `x` first, so `value` is `x` when both coordinates are too large. -/
+  A point reads `x` first, so `value` is `x` when both coordinates are too large. -/
   | coordinateTooLarge (value : Nat)
   /-- An uncompressed point did not satisfy `y^2 = x^3 + 7`. -/
   | notOnCurve
@@ -50,6 +51,14 @@ inductive Secp256k1Error where
   | badPrivateKeySize (size : Nat)
   /-- A private key was `n` or more. -/
   | privateKeyTooLarge
+  /-- A compressed `x` had only the root `y = 0`, which is even, and the prefix asked for odd.
+
+  No point of secp256k1 has `y = 0`, since `-7` is not a cube mod `p`, so no input reaches it. -/
+  | noRootOfParity
+  /-- A public key `Q` had `n Q` other than `O`.
+
+  The cofactor is 1, so validation skips that check and never returns this error. -/
+  | notInSubgroup
 deriving DecidableEq, Repr
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
@@ -71,6 +80,8 @@ def Secp256k1Error.message : Secp256k1Error → String
   | .badRecoveryId id => s!"bad recovery id: {id}, expected 0 or 1"
   | .badPrivateKeySize size => s!"bad private key size: {size}, expected 32"
   | .privateKeyTooLarge => "bad private key: not below the group order n"
+  | .noRootOfParity => "no point of the curve has this x and this parity of y"
+  | .notInSubgroup => "point is not in the subgroup of order n"
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
@@ -93,5 +104,18 @@ def Secp256k1Error.code : Secp256k1Error → UInt32
   | .badRecoveryId _ => 13
   | .badPrivateKeySize _ => 14
   | .privateKeyTooLarge => 15
+  | .noRootOfParity => 16
+  | .notInSubgroup => 17
+
+/-- The error for each cause of "invalid" in SEC 1 point decoding and public key validation. -/
+def Secp256k1Error.ofSec1 : Sec1.Sec1Error → Secp256k1Error
+  | .invalidLength size => .invalidEncodingLength size
+  | .invalidPrefix byte => .invalidPrefix byte
+  | .coordinateTooLarge value => .coordinateTooLarge value
+  | .noSquareRoot => .noPointWithX
+  | .noRootOfParity => .noRootOfParity
+  | .notOnCurve => .notOnCurve
+  | .pointAtInfinity => .pointAtInfinity
+  | .notInSubgroup => .notInSubgroup
 
 end EthLib.Cryptography.Secp256k1

@@ -38,6 +38,10 @@ REJECTED = [
     ("02" + "00" * 32, "no point of the curve has this x"),
     # 05 is no prefix.
     ("05" + GX, "bad point encoding prefix: 5"),
+    # SEC 1 v2 §2.3.4 reads x (step 2.2) before the prefix (step 2.3), so x >= p is met first.
+    ("05" + "FF" * 32, "point coordinate is not below p: 0x" + "ff" * 32),
+    # 06 is the hybrid form of ANSI X9.62, which step 3.2 rejects.
+    ("06" + GX + GY, "bad point encoding prefix: 6"),
     # The 64 coordinate bytes alone, without a prefix, have no valid length.
     (GX + GY, "bad point encoding size: 64, expected 33 or 65"),
 ]

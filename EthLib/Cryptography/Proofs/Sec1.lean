@@ -278,6 +278,33 @@ theorem decode_encode [Fact p.Prime] (law : IsSqrt params.sqrt?) (compressed : B
       simp only [h0, hx, readField_fieldToBytes, Base.ok_bind]
       rcases Nat.mod_two_eq_zero_or_one y.val with h | h <;> simp_all
 
+/-- The uncompressed form of a pair off the curve is rejected, by step 3.5. -/
+theorem decode_encode_false_of_isOnCurve_eq_false {x y : Fin p}
+    (h : (Point.affine x y).isOnCurve = false) :
+    decode params (encode params false (.affine x y)) = .error .notOnCurve := by
+  have hm := one_le_mlen params
+  have hsize := size_encode_false params x y
+  have hsx := size_fieldToBytes params x
+  unfold decode
+  rw [dite_eq_right (by omega), dite_eq_right (by omega), dite_eq_left hsize]
+  have h0 : (encode params false (.affine x y))[0]'(by omega) = 4 := by
+    simp only [encode, Bool.false_eq_true, ↓reduceIte]
+    rw [ByteArray.getElem_append_left (by simp [size_singleton]),
+      ByteArray.getElem_append_left (by simp [size_singleton])]
+    rfl
+  have hx : (encode params false (.affine x y)).extract 1 (params.mlen + 1) =
+      fieldToBytes params x := by
+    simp only [encode, Bool.false_eq_true, ↓reduceIte]
+    ext1
+    simp [hsx]
+  have hy : (encode params false (.affine x y)).extract (params.mlen + 1)
+      (encode params false (.affine x y)).size = fieldToBytes params y := by
+    simp only [encode, Bool.false_eq_true, ↓reduceIte]
+    exact ByteArray.extract_append_eq_right
+      (by rw [ByteArray.size_append, size_singleton, hsx]; omega) ByteArray.size_append
+  simp only [h0, hx, hy, readField_fieldToBytes, Base.ok_bind, h, ne_eq, not_true_eq_false,
+    ↓reduceIte, Bool.false_eq_true]
+
 /-- Octets that decode to a point are one of its encodings, and the point is on the curve. -/
 theorem exists_encode_of_decode_eq_ok (law : IsSqrt params.sqrt?) {M : ByteArray}
     {Q : Point (Fin p)} (h : decode params M = .ok Q) :

@@ -1077,6 +1077,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, secp256k1 encodes and decodes its points with the SEC 1 module of every prime-field curve ([#4699](https://github.com/ethereum/EthLib/pull/4699)).
+  - `Secp256k1.sec1` (`Cryptography/Secp256k1/Encoding.lean`) holds what SEC 1 reads from `Fp`, and `Secp256k1.isSqrt_sqrt` proves the law of its square root.
+  - `Point.encodeCompressed` and `Point.encodeUncompressed` are abbreviations of `Sec1.encode`, with the same bytes.
+  - `Point.decompress` is `Sec1.decompress`, and `Point.decode` is `Sec1.decode` followed by `Sec1.validatePublicKey`, with each error mapped by `Secp256k1Error.ofSec1`.
+  - A compressed key with an unknown prefix and an `x` of `p` or more now reports `coordinateTooLarge`.
+    SEC 1 reads `x` (step 2.2) before the prefix (step 2.3), and the other inputs keep their errors.
+  - `Secp256k1Error` gains `noRootOfParity` (code 16) and `notInSubgroup` (code 17), which no input reaches on secp256k1.
+  - `Fp.toBytes` is a `ByteArray`, the SEC 1 field element; `Fp.length_toBytes` is removed for `Sec1.size_fieldToBytes`.
+  - `Fp.ofBytes`, `Fp.ofBytes_toBytes`, `Fp.toBytes_of_ofBytes`, `encodeUncompressed_coords` and `Fp.eq_of_parity` are removed: use `Sec1.fieldOfBytes?` and the lemmas of `Cryptography/Proofs/Sec1.lean`.
+  - `Point.decode_notOnCurve` states the rejection on the uncompressed encoding of the pair.
 - In Lean, `ShortWeierstrass.Point.isOnCurve` (`Cryptography/ShortWeierstrass.lean`) compares `y * y` with `ShortWeierstrass.Point.rhs x`, the right side `x^3 + a x + b` of the equation, which SEC 1 decompression shares ([#4695](https://github.com/ethereum/EthLib/pull/4695)).
   A proof that unfolds the curve test also unfolds `rhs`.
 - In Lean, one ring isomorphism `Montgomery.toZModEquiv` maps the Montgomery elements of every modulus to `ZMod p` (`Cryptography/Proofs/Montgomery/ZMod.lean`) ([#4685](https://github.com/ethereum/EthLib/issues/4685)).
