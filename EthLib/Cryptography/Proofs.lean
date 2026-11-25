@@ -43,6 +43,11 @@ public import EthLib.Cryptography.Proofs.Sponge.Simulator
 public import EthLib.Cryptography.Proofs.Sponge.Games
 public import EthLib.Cryptography.Proofs.Sponge.Support
 public import EthLib.Cryptography.Proofs.Sponge.Proj
+public import EthLib.Cryptography.Proofs.Sponge.Inv
+public import EthLib.Cryptography.Proofs.Sponge.InvLemmas
+public import EthLib.Cryptography.Proofs.Sponge.InvFwd
+public import EthLib.Cryptography.Proofs.Sponge.InvHash
+public import EthLib.Cryptography.Proofs.Sponge.InvMain
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
