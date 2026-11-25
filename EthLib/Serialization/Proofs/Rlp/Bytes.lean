@@ -97,7 +97,6 @@ theorem readBigEndian_zero (input : ByteArray) (pos k : Nat) (hStop : pos + k â‰
     readBigEndian input pos k 0
       = Base.ByteOrder.ofBE (input.extract pos (pos + k)).data.toList := by
   -- Both are the same left fold of Horner's rule, from zero.
-  rw [readBigEndian_eq input pos k 0 hStop]
-  rfl
+  rw [readBigEndian_eq input pos k 0 hStop, Base.ByteOrder.ofBE_eq_foldl]
 
 end EthLib.Serialization.Rlp

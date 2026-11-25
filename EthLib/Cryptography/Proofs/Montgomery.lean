@@ -448,7 +448,7 @@ theorem num_limbBE (b : ByteArray) (m off : ℕ) :
       omega
     rw [hc, ht, UInt32.toNat_toUInt64, wordBE_toNat,
       show (256 : ℕ) ^ (4 * m) = 2 ^ (32 * m) by rw [Nat.pow_mul, Nat.pow_mul]]
-    simp only [ByteOrder.ofBE, List.foldl]
+    simp only [ByteOrder.ofBE_eq_foldl, List.foldl]
     ring
 
 /-- Reading `4 n` bytes gives the element of their integer, or `none` from `p` on. -/

@@ -38,7 +38,7 @@ theorem ofLE_eq_ofDigits {n : Nat} (v : Vector UInt8 n) :
 theorem ofBE_eq_ofDigits (bytes : List UInt8) :
     ofBE bytes = Nat.ofDigits 256 (bytes.reverse.map UInt8.toNat) := by
   -- A left fold is a right fold over the reversed list.
-  rw [ofBE, List.foldl_eq_foldr_reverse, ← foldr_eq_ofDigits]
+  rw [ofBE_eq_foldl, List.foldl_eq_foldr_reverse, ← foldr_eq_ofDigits]
   simp only [Nat.add_comm]
 
 end EthLib.Base.ByteOrder

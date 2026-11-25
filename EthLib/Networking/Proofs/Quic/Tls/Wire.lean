@@ -25,8 +25,8 @@ open EthLib.Networking.Encoding.ByteReader (bytes_append uint_encode require_tru
 /-- A one-byte integer is the value of that byte. -/
 @[simp] theorem uint_byte (value : UInt8) (rest : List UInt8) :
     uint 1 (value :: rest) = .ok (value.toNat, rest) := by
-  simp [uint, Encoding.ByteReader.uint, Encoding.ByteReader.bytes, Base.ByteOrder.ofBE, StateT.bind,
-    StateT.pure, bind, Except.bind, pure, Except.pure]
+  simp [uint, Encoding.ByteReader.uint, Encoding.ByteReader.bytes,
+    Base.ByteOrder.ofBE_eq_foldl, StateT.bind, StateT.pure, bind, Except.bind, pure, Except.pure]
 
 /-- Reading a bounded vector recovers all its bytes and leaves the following bytes. -/
 theorem blob_encode (width minimum maximum : Nat) (data rest : List UInt8)

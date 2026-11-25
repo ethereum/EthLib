@@ -198,7 +198,7 @@ omit [Params] in
 theorem testBit_ofBE (l : List UInt8) : ∀ i : Nat, (ByteOrder.ofBE l).testBit i =
     (decide (i < 8 * l.length) && (l.getD (l.length - 1 - i / 8) 0).toNat.testBit (i % 8)) := by
   induction l using List.reverseRecOn with
-  | nil => intro i; simp [ByteOrder.ofBE]
+  | nil => intro i; simp [ByteOrder.ofBE_eq_foldl]
   | append_singleton l x ih =>
     intro i
     rw [ByteOrder.ofBE_append_singleton, show (256 : Nat) = 2 ^ 8 from rfl,
