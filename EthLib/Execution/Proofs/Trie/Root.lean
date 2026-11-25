@@ -4,7 +4,7 @@ public import EthLib.Base.Proofs.ExceptT
 public import EthLib.Execution.Trie.Root
 import EthLib.Base.Proofs.CodeInjective
 import EthLib.Base.Proofs.List
-import Std.Data.HashMap.Lemmas
+import Std.Data.TreeMap.Lemmas
 
 /-!
 # Proofs: `Trie.Root`
@@ -368,18 +368,18 @@ theorem nodup_keys_setPairs (pairs : List (ByteArray × ByteArray)) :
   split at hb <;> split at hb' <;> simp_all
 
 /-- Each key of the table has its place in the log, holding that key. -/
-private def PlacesKeys (st : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray)) : Prop :=
+private def PlacesKeys (st : Array ByteArray × Std.TreeMap ByteArray (Nat × ByteArray)) : Prop :=
   ∀ k p v, st.2[k]? = some (p, v) → ∃ h : p < st.1.size, st.1[p] = k
 
 /-- One step keeps each key of the table at a place of the log that holds it. -/
-private theorem placesKeys_step {st : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray)}
+private theorem placesKeys_step {st : Array ByteArray × Std.TreeMap ByteArray (Nat × ByteArray)}
     (pair : ByteArray × ByteArray) (hst : PlacesKeys st) : PlacesKeys (setPairStep st pair) := by
   obtain ⟨log, table⟩ := st
   obtain ⟨key, value⟩ := pair
   intro k p v h
   by_cases h0 : value.size = 0
   · -- An empty value only removes a key.
-    simp only [setPairStep, h0, ↓reduceIte, Std.HashMap.getElem?_erase] at h ⊢
+    simp only [setPairStep, h0, ↓reduceIte, Std.TreeMap.getElem?_erase] at h ⊢
     split at h
     · cases h
     · exact hst _ _ _ h
@@ -388,20 +388,20 @@ private theorem placesKeys_step {st : Array ByteArray × Std.HashMap ByteArray (
       obtain ⟨place, old⟩ := e
       simp only [setPairStep, h0, ↓reduceIte, hk] at h ⊢
       obtain ⟨hp, hlog⟩ := hst _ _ _ hk
-      rw [Std.HashMap.getElem?_insert] at h
+      rw [Std.TreeMap.getElem?_insert] at h
       split at h
       · cases h
         rename_i hkey
-        rw [← eq_of_beq hkey]
+        rw [← Std.compare_eq_iff_eq.mp hkey]
         exact ⟨hp, hlog⟩
       · exact hst _ _ _ h
     | none =>
       simp only [setPairStep, h0, ↓reduceIte, hk] at h ⊢
-      rw [Std.HashMap.getElem?_insert] at h
+      rw [Std.TreeMap.getElem?_insert] at h
       split at h
       · cases h
         rename_i hkey
-        rw [← eq_of_beq hkey]
+        rw [← Std.compare_eq_iff_eq.mp hkey]
         simp
       · obtain ⟨hp, hlog⟩ := hst _ _ _ h
         have hp' : p < log.size := hp
@@ -409,34 +409,34 @@ private theorem placesKeys_step {st : Array ByteArray × Std.HashMap ByteArray (
         simp [Array.getElem_push, hp, hlog]
 
 /-- One step sets the value of its key in the table, where an empty value removes it. -/
-private theorem value_step (st : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray))
+private theorem value_step (st : Array ByteArray × Std.TreeMap ByteArray (Nat × ByteArray))
     (key value k : ByteArray) :
     ((setPairStep st (key, value)).2[k]?).map Prod.snd =
       if key = k then (some value).filter (fun v => decide (v.size ≠ 0))
       else (st.2[k]?).map Prod.snd := by
   obtain ⟨log, table⟩ := st
   by_cases h0 : value.size = 0
-  · simp only [setPairStep, h0, ↓reduceIte, Std.HashMap.getElem?_erase]
+  · simp only [setPairStep, h0, ↓reduceIte, Std.TreeMap.getElem?_erase]
     by_cases hk : key = k
     · subst hk
       simp only [Option.filter_some, h0, ne_eq, not_true_eq_false, decide_false,
-        Bool.false_eq_true, ↓reduceIte, beq_self_eq_true, Option.map_none]
+        Bool.false_eq_true, ↓reduceIte, Std.compare_self, Option.map_none]
     · simp [hk]
   · cases hk : table[key]? with
     | some e =>
       obtain ⟨place, old⟩ := e
-      simp only [setPairStep, h0, ↓reduceIte, hk, Std.HashMap.getElem?_insert]
+      simp only [setPairStep, h0, ↓reduceIte, hk, Std.TreeMap.getElem?_insert]
       by_cases hkk : key = k
       · subst hkk
         simp only [Option.filter_some, h0, ne_eq, not_false_eq_true, decide_true, ↓reduceIte,
-          beq_self_eq_true, Option.map_some]
+          Std.compare_self, Option.map_some]
       · simp [hkk]
     | none =>
-      simp only [setPairStep, h0, ↓reduceIte, hk, Std.HashMap.getElem?_insert]
+      simp only [setPairStep, h0, ↓reduceIte, hk, Std.TreeMap.getElem?_insert]
       by_cases hkk : key = k
       · subst hkk
         simp only [Option.filter_some, h0, ne_eq, not_false_eq_true, decide_true, ↓reduceIte,
-          beq_self_eq_true, Option.map_some]
+          Std.compare_self, Option.map_some]
       · simp [hkk]
 
 /-- The fold of the steps keeps the places, and its table holds the last value of each key. -/
@@ -470,7 +470,7 @@ private theorem foldl_setPairStep (pairs : List (ByteArray × ByteArray)) :
 
 /-- An entry of the log is a key of the table, with the value that the table gives it. -/
 private theorem mem_logEntries {log : Array ByteArray}
-    {table : Std.HashMap ByteArray (Nat × ByteArray)} {e : ByteArray × ByteArray}
+    {table : Std.TreeMap ByteArray (Nat × ByteArray)} {e : ByteArray × ByteArray}
     (he : e ∈ logEntries log table) : ∃ p, table[e.1]? = some (p, e.2) := by
   obtain ⟨k, v⟩ := e
   obtain ⟨⟨k', i⟩, -, hk⟩ := List.mem_filterMap.1 he
@@ -484,7 +484,7 @@ private theorem mem_logEntries {log : Array ByteArray}
 
 /-- The entries of the log are the table's pairs, once its places hold their keys. -/
 private theorem trieGet_logEntries (log : Array ByteArray)
-    (table : Std.HashMap ByteArray (Nat × ByteArray))
+    (table : Std.TreeMap ByteArray (Nat × ByteArray))
     (hb : PlacesKeys (log, table)) (key : ByteArray) :
     ((logEntries log table).find? fun (k, _) => sameBytes k key).map Prod.snd =
       (table[key]?).map Prod.snd := by

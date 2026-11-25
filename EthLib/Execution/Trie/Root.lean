@@ -3,7 +3,7 @@ module
 public import EthLib.Base.Hash32
 public import EthLib.Execution.Trie.HexPrefix
 public import EthLib.Serialization.Rlp.Encode
-public import Std.Data.HashMap.Basic
+public import Std.Data.TreeMap.Basic
 
 /-!
 # `Trie.Root`
@@ -210,8 +210,8 @@ def sameBytes (a b : ByteArray) : Bool :=
 
 /-- Set one pair in a log of keys and a table from each key to its place in the log and its value.
 -/
-def setPairStep (state : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray))
-    (pair : ByteArray × ByteArray) : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray) :=
+def setPairStep (state : Array ByteArray × Std.TreeMap ByteArray (Nat × ByteArray))
+    (pair : ByteArray × ByteArray) : Array ByteArray × Std.TreeMap ByteArray (Nat × ByteArray) :=
   let (log, table) := state
   let (key, value) := pair
   -- An empty value removes its key.
@@ -227,7 +227,7 @@ def setPairStep (state : Array ByteArray × Std.HashMap ByteArray (Nat × ByteAr
       (log.push key, table.insert key (place, value))
 
 /-- The keys of a log with their values in a table, at the places that the table gives them. -/
-def logEntries (log : Array ByteArray) (table : Std.HashMap ByteArray (Nat × ByteArray)) :
+def logEntries (log : Array ByteArray) (table : Std.TreeMap ByteArray (Nat × ByteArray)) :
     List (ByteArray × ByteArray) :=
   -- A place of the log holds its key's value when the table still puts the key there.
   --
@@ -243,7 +243,11 @@ def setPairs (pairs : List (ByteArray × ByteArray)) : List (ByteArray × ByteAr
   --
   -- So a key set again after its removal goes last.
   --
-  -- Each pair costs one lookup in the table, where a search of the entries would walk them all.
+  -- The table is a search tree of the keys, in byte order.
+  --
+  -- So each pair costs a count of comparisons logarithmic in the count of keys.
+  --
+  -- A search of the entries would walk them all.
   let (log, table) := pairs.foldl setPairStep (#[], ∅)
   logEntries log table
 
