@@ -1091,6 +1091,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, lane 2 of the leanXMSS security proof charges the final verification once, not twice ([#4710](https://github.com/ethereum/EthLib/pull/4710)).
+  Its bound for the adversary's own hash calls drops from `q + 768` to `q + 384` over `2^128`.
+  The verification's encoding queries and its structural queries are disjoint, as the adversary's are, so together they are at most the verifier's `384` calls.
+  - `XmssSecurity.hasSecondLaneBound_of_adversaryBound` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/Proof/CappedJointExactLoss.lean`) states `HasSecondLaneBound (q + 384)`.
+  - `XmssSecurity.cachedSelection_afterKeygen_le_adversaryDigest` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/CachedSelectionBound.lean`) keeps the verification's encoding queries as an expectation over the adversary's run, in place of `384`.
+  - `XmssSecurity.structuralQueries_le_adversary` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/Proof/CappedJointExactLoss.lean`) does the same for the verification's structural queries.
+  - `XmssSecurity.tsum_expectedVerifyQueries_add_le_of_disjoint` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/CachedSelectionBound.lean`) is new: the verification's expected queries of two disjoint classes add to at most `384`.
+
 - In Lean, secp256r1 encodes and decodes its points with the SEC 1 module of every prime-field curve, in both forms ([#4704](https://github.com/ethereum/EthLib/pull/4704)).
   - `Secp256r1.sec1` (`Cryptography/Secp256r1/Encoding.lean`) holds what SEC 1 reads from `Fp`, with the square root for `p = 3 mod 4`, and `Secp256r1.isSqrt_sqrt` proves its law.
   - `Point.encodeCompressed`, `Point.encodeUncompressed` and `Point.decode` are new: the decoder reads both forms and `00`, then validates the key by SEC 1 v2 §3.2.2.1, which rejects `O`.

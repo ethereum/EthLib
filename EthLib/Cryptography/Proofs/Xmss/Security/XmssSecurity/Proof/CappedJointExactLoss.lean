@@ -115,7 +115,7 @@ theorem sign_isQueryBoundP_zero {R : OracleWorld.Domain → Prop} [DecidablePred
 open Ghost in
 /-- Per key, the source game's structural queries are at most the adversary's and the verifier's.
 
-The verification makes at most `384` of them. -/
+The verification's structural queries are kept as their expectation over the adversary's run. -/
 theorem structuralQueries_le_adversary (adversary : Adversary) (publicKey : PublicKey)
     (secretKey : SecretKey) (cache0 : QueryCache HashSpec) :
     expectedSimulatedQueryCount romImpl
@@ -125,7 +125,14 @@ theorem structuralQueries_le_adversary (adversary : Adversary) (publicKey : Publ
       expectedSimulatedCost (impl publicKey secretKey)
           (fun input _ => if IsAdvQuery (Rom.IsRelevantHashQuery fun x =>
             keygenStructuralTargetInput secretKey cache0 x ≠ x) input then 1 else 0)
-          (adversary.main publicKey) ((cache0, []), 0) + 384 := by
+          (adversary.main publicKey) ((cache0, []), 0) +
+        ∑' y, Pr{let x ← ((simulateQ romImpl (simulateQ
+            (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey)
+            (adversary.main publicKey))).run cache0)}[x = y] *
+          expectedSimulatedQueryCount romImpl
+            (Rom.IsRelevantHashQuery fun input =>
+              keygenStructuralTargetInput secretKey cache0 input ≠ input)
+            (verifyCont publicKey y.1) y.2 := by
   -- The game is the adversary phase, then the verification.
   change expectedSimulatedQueryCount romImpl _
     (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey)
@@ -134,7 +141,7 @@ theorem structuralQueries_le_adversary (adversary : Adversary) (publicKey : Publ
   -- The signer hashes only encoding inputs, which the structural targets leave in place.
   refine add_le_add (expectedSimulatedQueryCount_source_le_adv publicKey secretKey _
     (fun request => sign_isQueryBoundP_zero (fun _ => id) _ _ _ fun payload h => h ?_)
-    _ _ _ _) (tsum_expectedVerifyQueries_le _ _ _)
+    _ _ _ _) le_rfl
   exact keygenStructuralTargetInput_encodingInput _ _ _ _
 
 open Ghost in
@@ -172,11 +179,11 @@ open Ghost in
 
 The adversary makes at most `q` hash queries, and the verification at most `384`.
 
-The verification is counted twice, once for each kind of collision. -/
+The verification is counted once: its two kinds of query are disjoint, as the adversary's are. -/
 theorem hasSecondLaneBound_of_adversaryBound (q : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q)
     (hq : q < 2 ^ 127) :
-    HasSecondLaneBound (q + 768) adversary := by
+    HasSecondLaneBound (q + 384) adversary := by
   -- The structural class of a key result.
   let structural := fun keyResult : (PublicKey × SecretKey) × QueryCache HashSpec =>
     Rom.IsRelevantHashQuery fun input =>
@@ -191,24 +198,41 @@ theorem hasSecondLaneBound_of_adversaryBound (q : Nat) (adversary : Adversary)
     adv keyResult (IsAdvEncoding keyResult.1.2.parameter)
   let str := fun keyResult : (PublicKey × SecretKey) × QueryCache HashSpec =>
     adv keyResult (IsAdvQuery (structural keyResult))
+  -- The verification's expected queries of a class, after the adversary's run on one key result.
+  let ver := fun (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)
+      (R : OracleWorld.Domain → Prop) [DecidablePred R] =>
+    ∑' y, Pr{let x ← ((simulateQ romImpl (simulateQ
+        (cappedSourceUnloggedMappedAdversaryImpl keyResult.1.1 keyResult.1.2)
+        (adversary.main keyResult.1.1))).run keyResult.2)}[x = y] *
+      expectedSimulatedQueryCount romImpl R (verifyCont keyResult.1.1 y.1) y.2
+  let venc := fun keyResult : (PublicKey × SecretKey) × QueryCache HashSpec =>
+    ver keyResult (CappedEncodingMonitor.IsEncodingHashQuery keyResult.1.2.parameter)
+  let vstr := fun keyResult : (PublicKey × SecretKey) × QueryCache HashSpec =>
+    ver keyResult (structural keyResult)
   -- The source game's structural queries are the adversary's and the verification's.
   have hstr : ∀ keyResult : (PublicKey × SecretKey) × QueryCache HashSpec,
       expectedSimulatedQueryCount romImpl (structural keyResult)
         (cappedSourceUnloggedDetailedGameAfterKeygen adversary keyResult.1.1 keyResult.1.2)
-        keyResult.2 ≤ str keyResult + 384 := fun keyResult =>
+        keyResult.2 ≤ str keyResult + vstr keyResult := fun keyResult =>
     structuralQueries_le_adversary adversary keyResult.1.1 keyResult.1.2 keyResult.2
   -- The two kinds are disjoint hash queries of the adversary, at most `q` of them.
   have hsum : ∀ keyResult : (PublicKey × SecretKey) × QueryCache HashSpec,
       enc keyResult + str keyResult ≤ q := fun keyResult =>
     adversaryEncoding_add_structural_le q adversary keyResult.1.1 keyResult.1.2 keyResult.2
       (hadv keyResult.1.1)
+  -- The verification's two kinds are disjoint too, at most `384` of them.
+  have hver : ∀ keyResult : (PublicKey × SecretKey) × QueryCache HashSpec,
+      venc keyResult + vstr keyResult ≤ 384 := fun keyResult =>
+    tsum_expectedVerifyQueries_add_le_of_disjoint _ _
+      (encodingHashQuery_structuralQuery_disjoint keyResult.1.2 keyResult.2) _ _
   unfold HasSecondLaneBound WinningSecondLaneBadEventOccurs
   refine (prEvent_or_le _ _ _).trans ?_
   -- Each key's cached selection is at most its share of the adversary's encoding queries.
   have hA : Pr{let x ← cappedDetailedGameWithEncodingTrace adversary}[
         WinningCachedSelectionOccurs x] ≤
       (∑' keyResult, Pr{let x ← (simulateQ romImpl Concrete.scheme.keygen).run ∅}[
-        x = keyResult] * (enc keyResult + 384)) / ((2 ^ digestBits : Nat) : ENNReal) := by
+        x = keyResult] * (enc keyResult + venc keyResult)) /
+        ((2 ^ digestBits : Nat) : ENNReal) := by
     rw [prEvent_winningCachedSelection_eq_tsum, div_eq_mul_inv, ← ENNReal.tsum_mul_right]
     refine tsum_le_tsum fun keyResult => ?_
     -- Name the parts of the key result: the kernel would run key generation to match two forms.
@@ -217,7 +241,7 @@ theorem hasSecondLaneBound_of_adversaryBound (q : Nat) (adversary : Adversary)
         support ((simulateQ romImpl Concrete.scheme.keygen).run ∅)
     · rw [mul_assoc, ← div_eq_mul_inv]
       refine mul_le_mul' le_rfl ?_
-      dsimp only [enc, adv]
+      dsimp only [enc, venc, adv, ver]
       -- Pass the key's parts by name, not as projections from the goal.
       exact cachedSelection_afterKeygen_le_adversaryDigest (publicKey := publicKey)
         (secretKey := secretKey) (cache0 := cache0) q adversary hadv hq hkey
@@ -226,7 +250,8 @@ theorem hasSecondLaneBound_of_adversaryBound (q : Nat) (adversary : Adversary)
   have hB : Pr{let execution ← cappedDetailedGameWithEncodingTrace adversary}[
         WinningStructuralCollisionOccurs execution.2.1.1 execution.1] ≤
       (∑' keyResult, Pr{let x ← (simulateQ romImpl Concrete.scheme.keygen).run ∅}[
-        x = keyResult] * (str keyResult + 384)) / ((2 ^ digestBits : Nat) : ENNReal) :=
+        x = keyResult] * (str keyResult + vstr keyResult)) /
+        ((2 ^ digestBits : Nat) : ENNReal) :=
     (winningStructuralCollision_le_expectedStructural adversary).trans
       (ENNReal.div_le_div_right (tsum_le_tsum fun keyResult => mul_le_mul' le_rfl
         (hstr keyResult)) _)
@@ -234,12 +259,12 @@ theorem hasSecondLaneBound_of_adversaryBound (q : Nat) (adversary : Adversary)
   rw [ENNReal.div_add_div_same, ← tsum_add]
   refine ENNReal.div_le_div_right ?_ _
   calc _ ≤ ∑' keyResult, Pr{let x ← (simulateQ romImpl Concrete.scheme.keygen).run ∅}[
-          x = keyResult] * ((q + 768 : Nat) : ENNReal) := tsum_le_tsum fun keyResult => by
+          x = keyResult] * ((q + 384 : Nat) : ENNReal) := tsum_le_tsum fun keyResult => by
         rw [← mul_add]
         refine mul_le_mul' le_rfl ?_
-        calc enc keyResult + 384 + (str keyResult + 384) =
-              enc keyResult + str keyResult + 768 := by ring
-          _ ≤ q + 768 := add_le_add (hsum keyResult) le_rfl
+        calc enc keyResult + venc keyResult + (str keyResult + vstr keyResult) =
+              enc keyResult + str keyResult + (venc keyResult + vstr keyResult) := by ring
+          _ ≤ q + 384 := add_le_add (hsum keyResult) (hver keyResult)
           _ = _ := by norm_cast
     _ ≤ _ := by
         rw [ENNReal.tsum_mul_right]

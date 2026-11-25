@@ -190,6 +190,21 @@ theorem tsum_expectedVerifyQueries_le (R : OracleWorld.Domain → Prop) [Decidab
         rw [ENNReal.tsum_mul_right]
         exact mul_le_of_le_one_left' (OracleComp.tsum_prEvent_le_one _)
 
+/-- The verification's expected queries of two disjoint classes add to at most `384`.
+
+The bound holds after any run of the adversary. -/
+theorem tsum_expectedVerifyQueries_add_le_of_disjoint (R S : OracleWorld.Domain → Prop)
+    [DecidablePred R] [DecidablePred S] (hdisjoint : ∀ input, ¬(R input ∧ S input))
+    (publicKey : PublicKey) (run : ProbComp (Forgery × QueryCache HashSpec)) :
+    (∑' y, Pr{let x ← run}[x = y] *
+        expectedSimulatedQueryCount romImpl R (verifyCont publicKey y.1) y.2) +
+      ∑' y, Pr{let x ← run}[x = y] *
+        expectedSimulatedQueryCount romImpl S (verifyCont publicKey y.1) y.2 ≤ 384 := by
+  -- A query of the union is in exactly one class, so the two counts add to the union's.
+  rw [← tsum_add]
+  simp_rw [← mul_add, ← expectedSimulatedQueryCount_or_of_disjoint romImpl R S hdisjoint]
+  exact tsum_expectedVerifyQueries_le (fun input => R input ∨ S input) publicKey run
+
 open Ghost in
 theorem cappedDetailedGameAfterKeygenWithSigningTrace_eq_map (adversary : Adversary)
     (publicKey : PublicKey) (secretKey : SecretKey) (initialCache : QueryCache HashSpec) :
@@ -288,7 +303,9 @@ theorem capped_cachedSelection_probability_le_expectedDigest
 open Ghost in
 /-- Lane 2's digest term after key generation, charging the adversary's own encoding queries.
 
-The adversary makes at most `q` hash queries, and the verification at most `384`. -/
+The adversary makes at most `q` hash queries.
+
+The verification's encoding hash queries are kept as their expectation over the adversary's run. -/
 theorem cachedSelection_afterKeygen_le_adversaryDigest (q : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q)
     (hq : q < 2 ^ 127) {publicKey : PublicKey} {secretKey : SecretKey}
@@ -301,7 +318,13 @@ theorem cachedSelection_afterKeygen_le_adversaryDigest (q : Nat) (adversary : Ad
         ∃ entry ∈ x.2.2, entry.CachedSelectionCollision x.1.secretKey x.2.1] ≤
       (expectedSimulatedCost (impl publicKey secretKey)
           (fun input _ => if IsAdvEncoding secretKey.parameter input then 1 else 0)
-          (adversary.main publicKey) ((cache0, []), 0) + 384) /
+          (adversary.main publicKey) ((cache0, []), 0) +
+        ∑' y, Pr{let x ← ((simulateQ romImpl (simulateQ
+            (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey)
+            (adversary.main publicKey))).run cache0)}[x = y] *
+          expectedSimulatedQueryCount romImpl
+            (CappedEncodingMonitor.IsEncodingHashQuery secretKey.parameter)
+            (verifyCont publicKey y.1) y.2) /
         ((2 ^ digestBits : Nat) : ENNReal) := by
   -- The adversary's ghost count stays under the budget, so the over-budget cost vanishes.
   have hover := expectedSimulatedCost_overBudget_eq_zero_of_isQueryBoundP publicKey secretKey q
@@ -315,7 +338,6 @@ theorem cachedSelection_afterKeygen_le_adversaryDigest (q : Nat) (adversary : Ad
   rw [mul_assoc, ENNReal.mul_le_mul_iff_right N_ne_zero N_ne_top] at hcore
   rw [mul_comm]
   exact (mul_le_mul' le_rfl
-    (prEvent_cachedSelection_le_scan adversary publicKey secretKey cache0)).trans
-    (hcore.trans (add_le_add le_rfl (tsum_expectedVerifyQueries_le _ publicKey _)))
+    (prEvent_cachedSelection_le_scan adversary publicKey secretKey cache0)).trans hcore
 
 end XmssSecurity
