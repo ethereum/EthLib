@@ -348,14 +348,6 @@ private theorem exists_after_of_append {s : String} :
     obtain ⟨_, -, h'⟩ := after_eq_cons (by simpa using h)
     exact exists_after_of_append cs h'
 
-private theorem append_of_isEmpty (acc piece : String) :
-    (if acc.isEmpty then piece else acc ++ piece) = acc ++ piece := by
-  split
-  · rename_i h
-    rw [String.isEmpty_iff.1 h]
-    simp
-  · rfl
-
 private theorem esc_of_not_plain {c : Char} (h : plain c = false) : ∃ t, esc c = '\\' :: t := by
   unfold esc escape
   repeat' split
