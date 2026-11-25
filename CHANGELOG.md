@@ -11,7 +11,8 @@ Not yet released.
 
 - In Lean, the column builder of PeerDAS ([EIP-7594](https://eips.ethereum.org/EIPS/eip-7594)) succeeds on full rows, and the sidecars it builds from blobs pass the batch check ([#4615](https://github.com/ethereum/EthLib/issues/4615)).
   `getDataColumnSidecars_exists_ok` (`Consensus/Proofs/DataAvailability/Column.lean`) needs each row to have a cell and a proof per column, and before Gloas as many rows as commitments.
-  `getDataColumnSidecars_exists_ok_of_computed` gives the same for the rows of blobs, under a preset of at most 128 columns.
+  `getDataColumnSidecars_exists_ok_of_computed` gives the same for the rows of blobs, under a preset of at most 128 columns, and before Gloas one blob per commitment.
+  `size_computeCellsAndKzgProofs` says that a computed row has the 128 cells and the 128 proofs of an extended blob.
   `verifyDataColumnSidecarKzgProofs_of_getDataColumnSidecars` assumes a well-formed trusted setup, and needs cells, proofs and commitments from the same blobs, in order.
   Those commitments are the carried ones before Gloas, and those of the bid from Gloas.
 

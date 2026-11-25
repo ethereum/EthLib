@@ -1754,7 +1754,8 @@ The signed header carries the root of the body (`signedHeader_eq_ok_iff`), and t
 From Gloas, `getDataColumnSidecarsFromBlock_root` shows that each sidecar built from a block names the block by its root and its slot.
 `getDataColumnSidecars_exists_ok` shows that the column builder succeeds when each row has a cell and a proof per column.
 Before Gloas it also needs as many rows as commitments.
-`getDataColumnSidecars_exists_ok_of_computed` shows that the rows of blobs are such rows under a preset of at most 128 columns.
+`getDataColumnSidecars_exists_ok_of_computed` shows that the builder also succeeds on the rows of blobs, under a preset of at most 128 columns.
+Before Gloas it also needs one blob per commitment.
 `verifyDataColumnSidecarKzgProofs_of_getDataColumnSidecars` shows that the batch check accepts each sidecar of the column builder.
 For a well-formed setup, it needs cells, proofs and commitments that come from the same blobs, in order.
 Those commitments are the carried ones before Gloas, and those of the bid from Gloas.
