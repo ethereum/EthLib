@@ -5786,7 +5786,7 @@ The reader takes a reading where its sources leave a choice:
 ### Execution JSON-RPC API
 
 The execution JSON-RPC API is the interface through which wallets, indexers and test suites read an execution node.
-EthLib follows commit [`1ca0818`](https://github.com/ethereum/execution-apis/tree/1ca0818569467cff85b7f41372f22e728d5daa14) of `ethereum/execution-apis`, which is ahead of release `v1.0.0-beta.7`.
+EthLib follows commit [`166e334`](https://github.com/ethereum/execution-apis/tree/166e334c73d96ffce916ea84e97addbcd8b3727a) of `ethereum/execution-apis`, which is ahead of release `v1.0.0-beta.7`.
 The definitions are in `Execution/Rpc/`, and the theorems in `Execution/Proofs/Rpc/`.
 
 Each reader of a base type reads back what its writer writes.

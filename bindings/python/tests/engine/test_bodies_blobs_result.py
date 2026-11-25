@@ -1,7 +1,7 @@
 """The decoders of engine_getPayloadBodies and engine_getBlobs results, on the OpenRPC examples."""
 
 # Rules: ethereum/execution-apis, src/engine/{shanghai,cancun,osaka,amsterdam}.md.
-# Commit: 1ca0818569467cff85b7f41372f22e728d5daa14.
+# Commit: 166e334c73d96ffce916ea84e97addbcd8b3727a.
 
 import copy
 import json

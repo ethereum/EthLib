@@ -35,8 +35,8 @@ A payload counts as valid when the fixture expects neither an exception nor an e
 python -I extract_forkchoice.py <directory blockchain_tests_engine> forkchoice.json
 ```
 
-`openrpc.json` holds the examples of the OpenRPC method files of the Engine API, in `ethereum/execution-apis` at commit `1ca0818569467cff85b7f41372f22e728d5daa14`, under CC0-1.0.
-They are the files `src/engine/openrpc/methods/*.yaml` of its source archive, whose sha256 is `beb7225209b06e29e97ecb20db32d1d6b6f542ebe4e8f07b5bd1e71c8af1ed79`.
+`openrpc.json` holds the examples of the OpenRPC method files of the Engine API, in `ethereum/execution-apis` at commit `166e334c73d96ffce916ea84e97addbcd8b3727a`, under CC0-1.0.
+They are the files `src/engine/openrpc/methods/*.yaml` of its source archive, whose sha256 is `c34e7e2ad27151a9ec61ba765354bdd99fe9b569aa56f47330f12bc6821dad38`.
 Each example keeps the name of its file, its method, its own name, the value of each parameter and the value of its result, without change.
 `extract_openrpc.py` wrote the file from that directory, and writes the same bytes again.
 It reads YAML, so it runs with PyYAML:
