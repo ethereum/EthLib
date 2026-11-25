@@ -25,6 +25,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Checksums: CRC-32 for the fork identifier of EIP-2124, and CRC-32C for the Snappy framing format.
 - Symmetric encryption: AES with the CTR and GCM modes, which the RLPx transport and discv5 use.
 - Key derivation over SHA-256: HMAC, HKDF, the Concatenation KDF, PBKDF2, and scrypt.
+- Elliptic-curve point encoding: the octet strings of SEC 1 for every short Weierstrass curve over an odd prime field, and public key validation.
 - secp256k1: ECDSA signatures with RFC 6979 nonces, public key recovery, the address of a public key, and ECDH.
 - secp256r1: signature verification for the P256VERIFY precompile of EIP-7951.
 - alt_bn128: the curve operations and the pairing of EIP-196 and EIP-197.

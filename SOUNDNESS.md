@@ -727,6 +727,22 @@ This game covers single signatures only.
 `DirectSafety.twoRunsForgeAdvantage_le_coCdhAdvantage` applies it to the header calls of two runs.
 No theorem yet bounds aggregates registered by deposit signatures.
 
+### SEC 1 point encoding
+
+The SEC 1 theorems are correctness statements about the octet strings of points, for every short Weierstrass curve over an odd prime field.
+The decoding theorems assume, as an explicit hypothesis, that the square root that the curve parameters supply obeys `Sec1.IsSqrt`.
+That law asks for a root of each square, and `none` for each non-square.
+`decode_eq_ok_iff`, `decode_encode` and `decompress_eq_ok_iff` also assume that the modulus `p` is prime.
+`isSqrt_sqrt3Mod4` (`Proofs/Sec1.lean`) proves that law for `α^((p + 1) / 4)` when `p = 3 mod 4`, which covers secp256k1 and P-256.
+
+`decode_eq_ok_iff` (`Proofs/Sec1.lean`) proves that octets decode to a point exactly when they are one of its encodings, compressed or uncompressed, so decoding is canonical.
+`eq_of_decode_eq_ok` proves that two octet strings of one length that decode to one point are equal.
+`decode_encode` is the round trip, and `decompress_eq_ok_iff` proves that decompression finds the point with a given `x` and parity of `y` exactly when one exists.
+Where step 2.4.1 of SEC 1 v2 §2.3.4 would give `y = p` for the root `0`, the decoder rejects the octets, so that each point has one compressed form.
+`validatePublicKey_eq_ok_iff_nsmul` states public key validation of §3.2.2.1 in the group of the curve: it accepts exactly the points other than `O` with `n Q = O`.
+It reads the curve through a map of `F_p` onto a field, and assumes that the curve has `n` points when the cofactor is 1.
+`card_point` (`Proofs/Secp256k1/Order.lean` and `Proofs/Secp256r1/Order.lean`) proves for each of secp256k1 and P-256 that its group has `n` points.
+
 ### secp256k1
 
 The secp256k1 theorems are correctness statements.
