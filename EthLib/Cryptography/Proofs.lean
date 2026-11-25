@@ -54,6 +54,7 @@ public import EthLib.Cryptography.Proofs.BinaryField
 public import EthLib.Cryptography.Proofs.Ethash
 public import EthLib.Cryptography.Proofs.Montgomery
 public import EthLib.Cryptography.Proofs.Montgomery.Fin
+public import EthLib.Cryptography.Proofs.Montgomery.ZMod
 public import EthLib.Cryptography.Proofs.Word64
 public import EthLib.Cryptography.Proofs.BaseField
 public import EthLib.Cryptography.Proofs.Fp2
