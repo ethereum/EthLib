@@ -39,7 +39,7 @@ variable {preset : Preset} {fork : Fork}
 /-- The error of a block whose payload is not yet verified, with code 503. -/
 def optimisticBlock (root : Root) : ErrorMessage :=
   -- The source names code 503 for an optimistic block; the message is EthLib's.
-  { code := 503, message := s!"Block {toHex root.toArray} is optimistic" }
+  { code := 503, message := s!"Block {toHex ⟨root.toArray⟩} is optimistic" }
 
 /-- The error of a request that no collected message answers, with code 404. -/
 def noMatch (what : String) : ErrorMessage :=

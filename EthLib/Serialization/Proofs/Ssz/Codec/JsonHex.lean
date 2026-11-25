@@ -14,12 +14,12 @@ open Lean
 
 /-- The digits a byte string is written as, behind no marker. -/
 private def hexDigitsOf (data : Bytes) : List Char :=
-  data.toList.flatMap Base.byteHexDigits
+  data.data.toList.flatMap Base.byteHexDigits
 
 /-- Writing appends the digits of each byte in turn. -/
 private theorem toHex_eq (data : Bytes) :
     (toHex data).toList = '0' :: 'x' :: hexDigitsOf data :=
-  Base.toList_hexString data.toList
+  Base.toList_hexString data.data.toList
 
 /-- Reading the digits of a byte string gives that byte string back. -/
 private theorem hexBytes_digits (data : Bytes) : hexBytes (hexDigitsOf data) = .ok data := by

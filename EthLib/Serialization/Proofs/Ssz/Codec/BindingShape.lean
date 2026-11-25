@@ -15,7 +15,7 @@ namespace EthLib.Serialization.Ssz
 private theorem each_basic_bytes {element : Desc} {values : List Value} {parts : List Bytes}
     (basic : element.isBasic = true) (each : ∀ value ∈ values, Fits element value)
     (wrote : serializeEach element values = .ok parts) :
-    (parts.foldl (fun total part => total ++ part) (#[] : Bytes)).size =
+    (parts.foldl (fun total part => total ++ part) (.empty : Bytes)).size =
       values.length * element.itemLength := by
   -- Basic elements have a fixed byte width, so the packed stream length is element count times width.
   obtain ⟨_, generated, sized⟩ := serializeEach_basic_size basic values each
@@ -140,7 +140,7 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
   | bool =>
     match leftFits, rightFits with
     | .bool b, .bool c =>
-      exact fixedLeaf_shapes (a := #[if b then 1 else 0]) (b := #[if c then 1 else 0])
+      exact fixedLeaf_shapes (a := ⟨#[if b then 1 else 0]⟩) (b := ⟨#[if c then 1 else 0]⟩)
         (by simp [serialize]) (by simp [serialize]) rfl laid other
   -- Every admissible integer uses exactly its declared byte width.
   | uint width =>

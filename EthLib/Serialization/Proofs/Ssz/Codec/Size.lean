@@ -93,7 +93,7 @@ private theorem assemble_complete (inline : List Bool) (parts : List Bytes) (siz
   · simp [assemble_eq, measured,
       show ¬size ≥ 2 ^ (8 * bytesPerOffset) by simpa [bytesPerOffset] using Nat.not_le.mpr bounded,
       pure, Except.pure]
-  · simpa only [Array.size_append, headOf_size, bodiesOf_size] using measured
+  · simpa only [ByteArray.size_append, headOf_size, bodiesOf_size] using measured
 
 /-- Measuring homogeneous slots is the sum of their individual field contributions. -/
 private theorem sequence_width (element : Desc) (parts : List Bytes) :
@@ -312,7 +312,7 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
     Fits shape value → ∃ bytes, serialize shape value = .ok bytes ∧ bytes.size = size := by
   -- Structural induction constructs each child encoding before its enclosing composite.
   induction represented with
-  | bool value => exact fun _ => ⟨#[if value then 1 else 0], by simp [Ssz.serialize], rfl⟩
+  | bool value => exact fun _ => ⟨⟨#[if value then 1 else 0]⟩, by simp [Ssz.serialize], rfl⟩
   | uint width value =>
     intro (.uint bound)
     exact ⟨uintBytes width value, by simp [Ssz.serialize, bound], uintBytes_size _ _⟩
@@ -373,7 +373,7 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
     -- The size witness and admissibility refer to the same uniquely selected option.
     cases Except.ok.inj (named.symm.trans found)
     obtain ⟨body, encoded, sized⟩ := ih admissible
-    exact ⟨#[UInt8.ofNat selector] ++ body,
+    exact ⟨⟨#[UInt8.ofNat selector]⟩ ++ body,
       by simp [Ssz.serialize, named, encoded, checkSelector_of_range ranged, Bind.bind, Except.bind,
         pure, Except.pure], by simp [sized]⟩
 

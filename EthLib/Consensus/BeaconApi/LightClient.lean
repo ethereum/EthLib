@@ -46,7 +46,7 @@ variable {preset : Preset} {fork : Fork}
 /-- The error of a block whose bootstrap the node cannot serve, with code 404. -/
 def noBootstrap (root : Root) : ErrorMessage :=
   -- The source: code 404; the message is EthLib's.
-  { code := 404, message := s!"No bootstrap for block {toHex root.toArray}" }
+  { code := 404, message := s!"No bootstrap for block {toHex ⟨root.toArray⟩}" }
 
 /-- The bootstrap of a block of the store, from the block and its post state. -/
 def bootstrapFor (config : Config) (store : Store preset fork) (root : Root) :

@@ -165,7 +165,7 @@ theorem BeaconBlock.hashTreeRoot_header {block : BeaconBlock preset fork} {bodyR
     hashTreeRoot (BeaconBlockHeader.mk block.slot block.proposerIndex block.parentRoot
       block.stateRoot bodyRoot) = hashTreeRoot block := by
   -- The body and its root have the same untyped root.
-  have bodyOk : SszType.root block.body = .ok bodyRoot.toArray := by
+  have bodyOk : SszType.root block.body = .ok ⟨bodyRoot.toArray⟩ := by
     revert rooted
     unfold SszType.hashTreeRoot
     cases SszType.root block.body with
@@ -174,7 +174,7 @@ theorem BeaconBlock.hashTreeRoot_header {block : BeaconBlock preset fork} {bodyR
       simp only [bind, Except.bind]
       intro chunked
       rw [toChunk_ok_iff.mp chunked]
-  have rootOk : SszType.root bodyRoot = .ok bodyRoot.toArray := by
+  have rootOk : SszType.root bodyRoot = .ok ⟨bodyRoot.toArray⟩ := by
     rw [LawfulSszType.root_eq]
     exact SszType.hashTreeRoot_ok_iff.mp (SszType.hashTreeRoot_bytes32 bodyRoot)
   -- Both containers summarize the same five roots.

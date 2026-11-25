@@ -315,7 +315,7 @@ def merkleProofOf (args : String × String × String × ByteArray × UInt64) :
   let shape := SszType.desc container.type
   let node ← toResult "node rejected" (nodeRoot shape (SszType.toValue value) gindex.toNat)
   let branch ← toResult "branch rejected" (buildProof shape (SszType.toValue value) gindex.toNat)
-  return (⟨node⟩, branch.map fun sibling => ⟨sibling⟩)
+  return (node, branch)
 
 /-- The node at a generalized index of the value that the bytes encode, and its branch, as a pair.
 

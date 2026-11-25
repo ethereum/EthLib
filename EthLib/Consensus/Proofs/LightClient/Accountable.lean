@@ -204,15 +204,16 @@ theorem processLightClientUpdate_finalized_agree {config : Config} {checks : Sig
       SszType.hashTreeRoot update₁.finalizedHeader.beacon = .ok root₁ ∧
       SszType.hashTreeRoot update₂.finalizedHeader.beacon = .ok root₂ ∧
       (root₁ = root₂ ∨ ∃ a b,
-        findBranchCollision gindex 0 root₁.toArray root₂.toArray
+        findBranchCollision gindex 0 ⟨root₁.toArray⟩ ⟨root₂.toArray⟩
             ((update₁.finalityBranch.toList.drop
-              (update₁.finalityBranch.toList.length - Nat.log2 gindex)).map Vector.toArray)
+              (update₁.finalityBranch.toList.length - Nat.log2 gindex)).map
+                fun node => ⟨node.toArray⟩)
             ((update₂.finalityBranch.toList.drop
-              (update₂.finalityBranch.toList.length - Nat.log2 gindex)).map Vector.toArray) =
+              (update₂.finalityBranch.toList.length - Nat.log2 gindex)).map
+                fun node => ⟨node.toArray⟩) =
           some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   -- Each update proves its finalized root with its branch, at the index of the attested slot.
   have proves (store after : LightClientStore preset fork) (update : LightClientUpdate preset fork)
       (currentSlot : Slot)

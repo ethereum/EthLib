@@ -49,7 +49,7 @@ theorem LightClientHeader.toGloas_beacon {config : Config} {post : Fork}
 /-- Nodes that convert to 32-byte vectors are the bytes of those vectors. -/
 private theorem mapM_toChunk_eq_map :
     ∀ {nodes : List Bytes} {chunks : List Bytes32},
-    nodes.mapM toChunk = .ok chunks → nodes = chunks.map Vector.toArray
+    nodes.mapM toChunk = .ok chunks → nodes = chunks.map fun node => ⟨node.toArray⟩
   | [], chunks, built => by
     simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at built
     subst built
@@ -59,7 +59,7 @@ private theorem mapM_toChunk_eq_map :
     obtain ⟨chunk, converted, tail, restBuilt, done⟩ := built
     simp only [pure, Except.pure, Except.ok.injEq] at done
     subst done
-    have same : node = chunk.toArray := toChunk_ok_iff.mp converted
+    have same : node = ⟨chunk.toArray⟩ := toChunk_ok_iff.mp converted
     rw [List.map_cons, same, mapM_toChunk_eq_map restBuilt]
 
 /-- A branch vector holds the list it was made from. -/
@@ -86,7 +86,8 @@ private theorem verifyMerkleProof_of_isValidMerkleBranch {leaf root : Bytes32}
     {branch : List Bytes32} {gindex subtree : Nat} (named : 2 ≤ gindex)
     (indexed : getSubtreeIndex gindex = .ok subtree)
     (valid : isValidMerkleBranch leaf branch (Nat.log2 gindex) subtree root = true) :
-    verifyMerkleProof leaf.toArray (branch.map Vector.toArray) gindex root.toArray = .ok true := by
+    verifyMerkleProof ⟨leaf.toArray⟩ (branch.map fun node => ⟨node.toArray⟩) gindex
+      ⟨root.toArray⟩ = .ok true := by
   have depthIs : gindexDepth gindex = .ok (Nat.log2 gindex) := by
     simp [gindexDepth]
     omega
@@ -100,8 +101,8 @@ private theorem verifyMerkleProof_of_isValidMerkleBranch {leaf root : Bytes32}
 /-- A branch that verifies at an index passes the normalized check there, with zeros in front. -/
 private theorem isValidNormalizedMerkleBranch_of_verify {leaf root : Bytes32}
     {branch : List Bytes32} {gindex target : Nat} (named : 2 ≤ gindex)
-    (verified : verifyMerkleProof leaf.toArray (branch.map Vector.toArray) gindex root.toArray =
-      .ok true) :
+    (verified : verifyMerkleProof ⟨leaf.toArray⟩ (branch.map fun node => ⟨node.toArray⟩) gindex
+      ⟨root.toArray⟩ = .ok true) :
     isValidNormalizedMerkleBranch leaf (normalizeMerkleBranch branch target) gindex root =
       .ok true := by
   have length := verifyMerkleProof_length verified
@@ -122,7 +123,7 @@ private theorem hashTreeRoot_of_fieldRoots {σ β : Type} [SszFields β] {names 
     {root : Bytes32}
     (rooted : @SszType.hashTreeRoot σ (SszType.container names fields build) value = .ok root) :
     Serialization.Ssz.hashTreeRoot (.container names (SszFields.descs β))
-      (.seq (SszFields.toValues (fields value))) = .ok root.toArray := by
+      (.seq (SszFields.toValues (fields value))) = .ok ⟨root.toArray⟩ := by
   simp only [SszType.hashTreeRoot, Base.bind_ok_iff] at rooted
   obtain ⟨node, built, chunked⟩ := rooted
   rw [toChunk_ok_iff] at chunked
@@ -140,7 +141,7 @@ private theorem ExecutionPayloadHeader.hashTreeRoot_untyped {payloadFork : Fork}
     (execution : ExecutionPayloadHeader preset payloadFork) {root : Bytes32}
     (rooted : SszType.hashTreeRoot execution = .ok root) :
     Serialization.Ssz.hashTreeRoot (SszType.desc (ExecutionPayloadHeader preset payloadFork))
-      (SszType.toValue execution) = .ok root.toArray := by
+      (SszType.toValue execution) = .ok ⟨root.toArray⟩ := by
   -- Every field type takes the root of its untyped value.
   have bytes : ∀ {n : Nat} (field : Vector UInt8 n),
       SszType.root field =
@@ -173,18 +174,18 @@ The joined branch passes the normalized check at the joined index, with zeros in
 private theorem computeMerkleProof_append {α : Type} [SszType α] (value : α)
     {inner outer index target : Nat} {leaf root top : Bytes32} {proof rest : List Bytes32}
     (joined : gindexConcat outer inner = .ok index) (named : 2 ≤ inner) (deep : 2 ≤ index)
-    (read : nodeRoot (SszType.desc α) (SszType.toValue value) inner = .ok leaf.toArray)
+    (read : nodeRoot (SszType.desc α) (SszType.toValue value) inner = .ok ⟨leaf.toArray⟩)
     (rooted : Serialization.Ssz.hashTreeRoot (SszType.desc α) (SszType.toValue value) =
-      .ok root.toArray)
+      .ok ⟨root.toArray⟩)
     (proved : computeMerkleProof value inner = .ok proof)
-    (climbs : verifyMerkleProof root.toArray (rest.map Vector.toArray) outer top.toArray =
-      .ok true) :
+    (climbs : verifyMerkleProof ⟨root.toArray⟩ (rest.map fun node => ⟨node.toArray⟩) outer
+      ⟨top.toArray⟩ = .ok true) :
     isValidNormalizedMerkleBranch leaf (normalizeMerkleBranch (proof ++ rest) target) index top =
       .ok true := by
   obtain ⟨indices, indexed⟩ := getBranchIndices_ok named
   obtain ⟨nodes, built, verified⟩ := buildProof_verifies _ _ _ rooted inner _ read indices indexed
   -- The proof is the built branch, each node read back as a vector.
-  have same : nodes = proof.map Vector.toArray := by
+  have same : nodes = proof.map fun node => ⟨node.toArray⟩ := by
     simp only [computeMerkleProof, built, bind, Except.bind] at proved
     exact mapM_toChunk_eq_map proved
   subst same

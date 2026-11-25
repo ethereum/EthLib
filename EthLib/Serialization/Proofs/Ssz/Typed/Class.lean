@@ -38,11 +38,11 @@ class LawfulSszType (α : Type) [SszType α] : Prop where
   /-- The root that the type gives a value is the root of its untyped value. -/
   root_eq : ∀ a : α, root a = Ssz.hashTreeRoot (desc α) (toValue a) := by intro; rfl
   /-- The bytes that the type gives a value are the bytes of its untyped value. -/
-  encode_eq : ∀ a : α, encode a = (do return ⟨← Ssz.serialize (desc α) (toValue a)⟩) := by
+  encode_eq : ∀ a : α, encode a = Ssz.serialize (desc α) (toValue a) := by
     intro; rfl
   /-- The value that the type reads from bytes is the typed value of their untyped decoding. -/
   decode_eq : ∀ data : ByteArray,
-      decode data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data.data)) := by
+      decode data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data)) := by
     intro; rfl
 
 namespace SszType
@@ -53,20 +53,18 @@ variable [LawfulSszType α]
 
 /-- Serializing a value is the untyped serialization of its untyped value. -/
 theorem serialize_eq (a : α) :
-    serialize a = (do return ⟨← Ssz.serialize (desc α) (toValue a)⟩) :=
+    serialize a = Ssz.serialize (desc α) (toValue a) :=
   LawfulSszType.encode_eq a
 
 /-- Deserializing bytes is the untyped deserialization, then the typed value of its result. -/
 theorem deserialize_eq (data : ByteArray) :
-    deserialize α data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data.data)) :=
+    deserialize α data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data)) :=
   LawfulSszType.decode_eq data
 
 /-- The typed bytes are the untyped bytes of the value. -/
 theorem serialize_ok_iff {a : α} {data : ByteArray} :
-    serialize a = .ok data ↔ Ssz.serialize (desc α) (toValue a) = .ok data.data := by
+    serialize a = .ok data ↔ Ssz.serialize (desc α) (toValue a) = .ok data := by
   rw [serialize_eq]
-  cases Ssz.serialize (desc α) (toValue a) <;>
-    simp [bind, Except.bind, pure, Except.pure, ByteArray.ext_iff, eq_comm]
 
 /-- The typed root is the root of the untyped value, cut to one 32-byte node. -/
 theorem hashTreeRoot_eq (a : α) :
@@ -84,7 +82,7 @@ theorem deserialize_serialize {a : α} {data : ByteArray} (wrote : serialize a =
 theorem serialize_deserialize {a : α} {data : ByteArray} (read : deserialize α data = .ok a) :
     serialize a = .ok data := by
   rw [deserialize_eq] at read
-  cases decoded : Ssz.deserialize (desc α) data.data with
+  cases decoded : Ssz.deserialize (desc α) data with
   | error fault => simp [decoded, bind, Except.bind] at read
   | ok value =>
     simp only [decoded, bind, Except.bind] at read
@@ -114,8 +112,8 @@ theorem serialize_ok_or_overflow (a : α) :
     (∃ size, 2 ^ (8 * bytesPerOffset) ≤ size ∧ serialize a = .error (.offsetOverflow size)) := by
   rcases serialize_fits_or_overflow (LawfulSszType.fits a) with
     ⟨bytes, wrote⟩ | ⟨size, large, failed⟩
-  · exact .inl ⟨⟨bytes⟩, serialize_ok_iff.mpr wrote⟩
-  · exact .inr ⟨size, large, by simp [serialize_eq, failed, bind, Except.bind]⟩
+  · exact .inl ⟨bytes, serialize_ok_iff.mpr wrote⟩
+  · exact .inr ⟨size, large, by simp [serialize_eq, failed]⟩
 
 /-- Bytes that decode to the empty value are empty, when the empty bytes decode to it. -/
 theorem size_eq_zero_iff_of_deserialize_empty {empty : α}

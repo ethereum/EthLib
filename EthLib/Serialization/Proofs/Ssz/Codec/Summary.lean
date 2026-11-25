@@ -21,11 +21,14 @@ private theorem packBytes_chunk {data : Bytes} (width : data.size = bytesPerChun
   · simp [size]
   · intro position inside _
     obtain rfl : position = 0 := by omega
+    -- Two nodes are equal when the arrays that hold their bytes are.
+    apply ByteArray.ext
     apply Array.ext
     · simp [packBytes_chunk_size _ _ (by omega : 0 < _), width]
     · intro byte inner _
-      rw [packBytes_chunk_size _ _ (by omega)] at inner
-      simpa using packBytes_get data 0 byte (by omega) inner (by omega)
+      rw [ByteArray.size_data, packBytes_chunk_size _ _ (by omega)] at inner
+      simpa [ByteArray.getElem_eq_getElem_data] using
+        packBytes_get data 0 byte (by omega) inner (by omega)
 
 /-- A complete node held as a fixed byte array is its own root. -/
 theorem hashTreeRoot_chunk {data : Bytes} (width : data.size = bytesPerChunk) :

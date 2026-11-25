@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
+public import EthLib.Serialization.Proofs.Ssz.Codec.StructBodies
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 /-! Reading back the offset table a struct or a sequence was laid out with. -/
@@ -12,17 +13,18 @@ namespace EthLib.Serialization.Ssz
 
 /-- Reading past a byte put on the front is reading the rest from one place earlier. -/
 theorem readUint_shift (data : Bytes) (byte : UInt8) (start width : Nat) :
-    readUint (#[byte] ++ data) (start + 1) width = readUint data start width := by
+    readUint (⟨#[byte]⟩ ++ data) (start + 1) width = readUint data start width := by
   -- The read moves along as the width shrinks, so the position stays quantified over.
   induction width generalizing start <;>
-    simp_all [readUint_zero, readUint_succ, Array.getElem?_append]
+    simp_all [readUint_zero, readUint_succ, Base.byteArray_getElem?_append]
 
 /-- Reading past a run of bytes on the front is reading the rest from where it starts. -/
 theorem readUint_append (front back : Bytes) (start width : Nat) :
     readUint (front ++ back) (front.size + start) width = readUint back start width := by
   -- The read moves along as the width shrinks, so the position stays quantified over.
   induction width generalizing start <;>
-    simp_all [readUint_zero, readUint_succ, Array.getElem?_append_right, Nat.add_assoc]
+    simp_all [readUint_zero, readUint_succ, Base.byteArray_getElem?_eq_data,
+      Array.getElem?_append_right, Nat.add_assoc]
 
 /--
 An integer written and read back at the same width is the integer written.
@@ -47,7 +49,8 @@ theorem readUint_uintBytes_prefix (back : Bytes) (width value : Nat)
     have shifted := readUint_shift (uintBytes width (value / 256) ++ back)
       (UInt8.ofNat (value % 256)) 0 width
     simp only [Nat.zero_add] at shifted
-    simp [readUint_succ, uintBytes_succ, Array.append_assoc, shifted, tail, Array.getElem?_append]
+    simp [readUint_succ, uintBytes_succ, ByteArray.append_assoc, shifted, tail,
+      Base.byteArray_getElem?_eq_data, Array.getElem?_append]
     -- A number is its low byte plus 256 times the rest.
     omega
 
@@ -60,7 +63,7 @@ An integer at or above what its width holds is no value of that type.
 theorem readUint_uintBytes (width value : Nat) (bound : value < 2 ^ (8 * width)) :
     readUint (uintBytes width value) 0 width = value := by
   -- This is the round trip with nothing following the integer.
-  simpa using readUint_uintBytes_prefix #[] width value bound
+  simpa using readUint_uintBytes_prefix .empty width value bound
 
 /-- The slots a struct's fields and parts stand for. -/
 def slotsOf (fields : List Desc) (parts : List Bytes) : List (Bool × Bytes) :=
@@ -126,9 +129,10 @@ theorem readSlots_headOf :
         -- The rest of the read is the same claim with this field behind it.
         have inner := ih parts (front ++ part) bodies bodyStart
           (by simpa using paired) narrowed nameable
-        simp only [Array.size_append, Array.append_assoc] at inner
+        simp only [ByteArray.size_append, ByteArray.append_assoc] at inner
         -- What was cut out is the whole of this field's own bytes.
-        simp [readSlots, fixed, inner, Nat.add_assoc, Bind.bind, Except.bind, pure, Except.pure]
+        simp [readSlots, fixed, inner, ByteArray.append_assoc, Nat.add_assoc, Bind.bind,
+          Except.bind, pure, Except.pure]
       | none =>
         simp only [headOf_cons_variable, bodyWidth_cons_variable, headWidth_cons, expectedSlots,
             Desc.isFixed, fixed,
@@ -136,9 +140,9 @@ theorem readSlots_headOf :
         -- The offset stands in for the body, and the body follows the fixed part.
         have inner := ih parts (front ++ uintBytes bytesPerOffset bodyStart) bodies
           (bodyStart + part.size) (by simpa using paired) narrowed (by omega)
-        simp only [Array.size_append, Array.append_assoc, uintBytes_size] at inner
+        simp only [ByteArray.size_append, ByteArray.append_assoc, uintBytes_size] at inner
         -- The offset written here is the one read back.
-        simp [readSlots, fixed, inner, Array.append_assoc, uintBytes_size, Nat.add_assoc,
+        simp [readSlots, fixed, inner, ByteArray.append_assoc, uintBytes_size, Nat.add_assoc,
           readUint_offset _ _ (show bodyStart < _ by omega), Bind.bind, Except.bind, pure,
           Except.pure]
 
@@ -246,7 +250,7 @@ theorem takeSlots_expectedSlots :
       have onward := ih parts (front ++ part) (by simpa using paired)
       by_cases fixed : field.isFixed <;>
         simp_all [expectedSlots, bodySizes, bodiesOf_cons_inline, bodiesOf_cons_variable, takeSlots,
-            slotsOf_cons, Bind.bind,
+            slotsOf_cons, ByteArray.append_assoc, Bind.bind,
           Except.bind, pure, Except.pure]
 
 /-- The fixed part is as wide as the slots say it is. -/
@@ -369,16 +373,16 @@ theorem structSlices_assemble :
   show structSlices fields (headOf (headWidth (slotsOf fields parts)) (slotsOf fields parts)
     ++ bodiesOf (slotsOf fields parts)) = .ok parts
   -- The fixed part reads back the slots that wrote it.
-  have read := readSlots_headOf fields parts #[] (bodiesOf (slotsOf fields parts))
+  have read := readSlots_headOf fields parts .empty (bodiesOf (slotsOf fields parts))
     (headWidth (slotsOf fields parts)) paired widths (by omega)
-  simp only [Array.size_empty, Array.empty_append, Nat.zero_add] at read
+  simp only [ByteArray.size_empty, ByteArray.empty_append, Nat.zero_add] at read
   have widthIs : (headOf (headWidth (slotsOf fields parts)) (slotsOf fields parts)
       ++ bodiesOf (slotsOf fields parts)).size
       = headWidth (slotsOf fields parts) + bodyWidth (slotsOf fields parts) := by
     simp [headOf_size, bodiesOf_size]
   have settled := structBudget_of_written fields parts paired widths
-  simp only [structSlices, structSlots, structBodies, read, bodyStarts_expectedSlots, widthIs,
-    settled, ite_eq_right (Nat.not_le.mpr nameable), Bind.bind, Except.bind]
+  simp only [structSlices, structSlots, structBodies_eq_takeSlots, read, bodyStarts_expectedSlots,
+    widthIs, settled, ite_eq_right (Nat.not_le.mpr nameable), Bind.bind, Except.bind]
   -- Either the layout opened no body at all, or the first one starts where the slots end.
   cases named : bodyOffsets (headWidth (slotsOf fields parts)) fields parts with
   | nil =>
@@ -420,7 +424,7 @@ theorem assemble_size (inline : List Bool) (parts : List Bytes) (bytes : Bytes)
 
 /-- Parts laid end to end, which is what a sequence of fixed elements encodes to. -/
 def concatParts : List Bytes → Bytes
-  | [] => #[]
+  | [] => .empty
   | part :: rest => part ++ concatParts rest
 
 /-- Extracting past a run on the front is extracting from what follows it. -/
@@ -428,14 +432,14 @@ theorem extract_append_shift (front back : Bytes) (start stop : Nat) :
     (front ++ back).extract (front.size + start) (front.size + stop)
       = back.extract start stop := by
   -- Subtracting the common prefix translates both extraction boundaries into the suffix.
-  simp
+  exact ByteArray.extract_append_size_add
 
 /-- Every element of a sequence of fixed elements sits in its own window. -/
 theorem extract_concatParts (width : Nat) :
     ∀ (parts : List Bytes), (∀ part ∈ parts, part.size = width) →
       ∀ index, index < parts.length →
         (concatParts parts).extract (index * width) ((index + 1) * width)
-          = parts[index]?.getD #[] := by
+          = parts[index]?.getD .empty := by
   intro parts
   induction parts with
   | nil => intro _ _ inside; simp at inside
@@ -465,7 +469,7 @@ theorem headOf_inline : ∀ (parts : List Bytes) (start : Nat),
   induction parts <;> simp_all [inlineSlots, headOf_nil, headOf_cons_inline, concatParts]
 
 /-- The bodies of such a sequence are empty. -/
-theorem bodiesOf_inline : ∀ (parts : List Bytes), bodiesOf (inlineSlots parts) = #[] := by
+theorem bodiesOf_inline : ∀ (parts : List Bytes), bodiesOf (inlineSlots parts) = .empty := by
   -- Skipping every inline payload leaves an empty body byte string.
   intro parts
   induction parts <;> simp_all [inlineSlots, bodiesOf_nil, bodiesOf_cons_inline]
@@ -509,7 +513,7 @@ theorem assemble_inline_eq (parts : List Bytes) :
   split
   · rfl
   · show Except.ok (headOf _ (inlineSlots parts) ++ bodiesOf (inlineSlots parts)) = _
-    rw [headOf_inline, bodiesOf_inline, Array.append_empty]
+    rw [headOf_inline, bodiesOf_inline, ByteArray.append_empty]
 
 /-- A run of equal-width elements is as wide as their count says. -/
 theorem concatParts_size (width : Nat) : ∀ (parts : List Bytes),
@@ -580,14 +584,14 @@ theorem readUint_headOf_offset : ∀ (parts : List Bytes) (start : Nat) (front b
     match index with
     | 0 =>
       -- The first offset sits at the front of the table.
-      simpa [runningOffsets, Array.append_assoc] using
+      simpa [runningOffsets, ByteArray.append_assoc] using
         readUint_offset front _ (show start < _ by omega)
     | index + 1 =>
       -- Every later one lies four bytes further along, which is the next element's.
       have onward := ih (start + part.size) (front ++ uintBytes bytesPerOffset start) bodies
         index (by simpa using inside) (by omega)
-      simp only [Array.size_append, Array.append_assoc, uintBytes_size] at onward
-      simpa [runningOffsets, Array.append_assoc, Nat.succ_mul, Nat.add_assoc, Nat.add_comm]
+      simp only [ByteArray.size_append, ByteArray.append_assoc, uintBytes_size] at onward
+      simpa [runningOffsets, ByteArray.append_assoc, Nat.succ_mul, Nat.add_assoc, Nat.add_comm]
         using onward
 
 /-- One offset per element. -/
@@ -609,15 +613,15 @@ theorem readOffsets_headOf (parts : List Bytes) (start : Nat) (bodies : Bytes)
     simp only [readOffsets, List.getElem_map, List.getElem_range]
     have inParts : index < parts.length := by simpa [readOffsets] using inRead
     -- Read the selected four-byte header entry using the bounded integer round-trip theorem.
-    have read := readUint_headOf_offset parts start #[] bodies index inParts nameable
-    simp only [Array.size_empty, Array.empty_append, Nat.zero_add] at read
+    have read := readUint_headOf_offset parts start .empty bodies index inParts nameable
+    simp only [ByteArray.size_empty, ByteArray.empty_append, Nat.zero_add] at read
     rw [read]
     simp [runningOffsets_length, inParts]
 
 /-- The spans between those offsets are the widths of the elements. -/
 theorem offsetSpans_runningOffsets : ∀ (parts : List Bytes) (start : Nat),
     offsetSpans (runningOffsets start parts) (start + bodyWidth (offsetSlots parts))
-      = .ok (parts.map Array.size) := by
+      = .ok (parts.map ByteArray.size) := by
   intro parts
   induction parts with
   | nil => intro _; simp [runningOffsets, offsetSpans_nil]
@@ -632,7 +636,7 @@ theorem offsetSpans_runningOffsets : ∀ (parts : List Bytes) (start : Nat),
 
 /-- Each body is cut back out of where its offset put it. -/
 theorem map_extract_offsets : ∀ (parts : List Bytes) (front : Bytes),
-    ((runningOffsets front.size parts).zip (parts.map Array.size)).map
+    ((runningOffsets front.size parts).zip (parts.map ByteArray.size)).map
         (fun pair => (front ++ concatParts parts).extract pair.1 (pair.1 + pair.2))
       = parts := by
   intro parts
@@ -642,7 +646,7 @@ theorem map_extract_offsets : ∀ (parts : List Bytes) (front : Bytes),
   | cons part rest ih =>
     intro front
     have onward := ih (front ++ part)
-    simp_all [runningOffsets, concatParts, Array.append_assoc]
+    simp_all [runningOffsets, concatParts, ByteArray.append_assoc]
 
 /-- A sequence of variable elements encodes to its table and then its bodies. -/
 theorem assemble_offset (parts : List Bytes) (bytes : Bytes)
@@ -664,7 +668,7 @@ theorem offset_encoding_size (parts : List Bytes) :
     (headOf (parts.length * bytesPerOffset) (offsetSlots parts) ++ concatParts parts).size
       = parts.length * bytesPerOffset + bodyWidth (offsetSlots parts) := by
   -- Count the four-byte entries separately from the total payload bytes.
-  rw [Array.size_append, headOf_size, headWidth_offset, ← bodiesOf_size, bodiesOf_offset]
+  rw [ByteArray.size_append, headOf_size, headWidth_offset, ← bodiesOf_size, bodiesOf_offset]
 
 /-- The first offset names where the bodies begin. -/
 theorem runningOffsets_head (start : Nat) (part : Bytes) (rest : List Bytes) :

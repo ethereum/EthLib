@@ -58,8 +58,8 @@ theorem withinBounds_of_decodePayload {shape : Desc} {bs d : ByteArray}
 theorem decodePayload_encodePayload_of_serialize {shape : Desc} {value : Value} {bytes : Bytes}
     (fits : Fits shape value) (wrote : serialize shape value = .ok bytes)
     (hcap : bytes.size ≤ MAX_PAYLOAD_SIZE.toNat) :
-    decodePayload (payloadBounds shape).1 (payloadBounds shape).2 (encodePayload ⟨bytes⟩) =
-      .ok ⟨bytes⟩ := by
+    decodePayload (payloadBounds shape).1 (payloadBounds shape).2 (encodePayload bytes) =
+      .ok bytes := by
   obtain ⟨hlow, hhigh⟩ := withinBounds_of_serialize fits wrote
   apply decodePayload_encodePayload
   · exact hcap

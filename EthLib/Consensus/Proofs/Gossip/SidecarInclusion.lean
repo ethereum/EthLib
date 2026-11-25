@@ -63,12 +63,11 @@ theorem validateBlobSidecar_accept_body {blobs : .dencun ≤ fork ∧ fork < .fu
       -- That commitment has the root of the sidecar's commitment.
       --
       -- Otherwise the two climbs name two different 64-byte messages with one hash.
-      (leaf = other ∨ ∃ a b, findBranchCollision gindex 0 leaf.toArray other.toArray
-          (sidecar.kzgCommitmentInclusionProof.toList.map Vector.toArray)
-          (branch.toList.map Vector.toArray) = some (a, b) ∧
+      (leaf = other ∨ ∃ a b, findBranchCollision gindex 0 ⟨leaf.toArray⟩ ⟨other.toArray⟩
+          (sidecar.kzgCommitmentInclusionProof.toList.map fun node => ⟨node.toArray⟩)
+          (branch.toList.map fun node => ⟨node.toArray⟩) = some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) :=
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) :=
   verifyBlobSidecarInclusionProof_body _ (validateBlobSidecar_accept accepted).2.2.1 rooted chosen
     built
 
@@ -95,12 +94,11 @@ theorem validateDataColumnSidecar_accept_body {columns : .fusaka ≤ fork ∧ fo
       -- That list has the root of the sidecar's list.
       --
       -- Otherwise the two climbs name two different 64-byte messages with one hash.
-      (leaf = other ∨ ∃ a b, findBranchCollision 27 0 leaf.toArray other.toArray
-          ((sidecar.kzgCommitmentsInclusionProof columns.2).toList.map Vector.toArray)
-          (branch.toList.map Vector.toArray) = some (a, b) ∧
+      (leaf = other ∨ ∃ a b, findBranchCollision 27 0 ⟨leaf.toArray⟩ ⟨other.toArray⟩
+          ((sidecar.kzgCommitmentsInclusionProof columns.2).toList.map fun node => ⟨node.toArray⟩)
+          (branch.toList.map fun node => ⟨node.toArray⟩) = some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) :=
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) :=
   verifyDataColumnSidecarInclusionProof_body columns.1 columns.2
     (validateDataColumnSidecar_accept accepted).2.2.1 rooted built
 

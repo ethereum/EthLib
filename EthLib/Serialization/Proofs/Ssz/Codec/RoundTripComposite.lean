@@ -56,12 +56,14 @@ theorem roundTrip_compatibleUnion {selectors : List Nat} {options : List Desc}
       Except.ok.injEq] at wrote
     subst wrote
     -- The selector byte is there to be read, and it reads back as the selector.
-    have firstIs : ((#[UInt8.ofNat selector] ++ body)[0]?.getD 0).toNat = selector := by
-      rw [Array.getElem?_eq_getElem (by simp; omega), Option.getD_some,
-        Array.getElem_append_left (by simp)]
+    have firstIs :
+        ((ByteArray.mk #[UInt8.ofNat selector] ++ body)[0]?.getD 0).toNat = selector := by
+      rw [getElem?_pos _ 0 (by simp; omega), Option.getD_some,
+        ByteArray.getElem_append_left (by simp)]
       simp [Nat.mod_eq_of_lt (show selector < 256 by have top : maxSelector = 127 := rfl; omega)]
     simp [deserialize]
-    rw [firstIs]
+    -- Past the selector byte, the rest is the option's encoding.
+    rw [firstIs, ByteArray.extract_append_eq_right (i := 1) (j := 1 + body.size) rfl rfl]
     exact deserializeOption_of_lookup selectors options selector option body data bounded named
       (inner body inside)
 

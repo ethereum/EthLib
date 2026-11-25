@@ -17,7 +17,7 @@ private def slotFlags : List Slot → List Bool
 
 /-- The header bytes represented by already-read slots. -/
 private def slotEncoding : List Slot → Bytes
-  | [] => #[]
+  | [] => .empty
   | .inline bytes :: rest => bytes ++ slotEncoding rest
   | .body start :: rest => uintBytes bytesPerOffset start ++ slotEncoding rest
 
@@ -104,7 +104,6 @@ private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : sc
     intro spans parts read taken
     obtain rfl := by simpa [takeSlots] using taken
     simp [bodyStarts, slotFlags, slotEncoding, headOf_nil, bodiesOf_nil]
-    omega
   | cons slot slots ih =>
     intro spans parts read taken
     cases slot with
@@ -126,7 +125,7 @@ private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : sc
       subst parts
       obtain ⟨-, header, bodies⟩ := ih widths _ tailRead tail
       have sliced : (data.extract start (start + width)).size = width := by
-        simp only [Array.size_extract]
+        simp only [ByteArray.size_extract]
         omega
       simp only [bodyStarts, List.headD_cons, slotFlags, List.zip_cons_cons,
         headOf_cons_variable, bodiesOf_cons_variable, slotEncoding]
@@ -165,20 +164,20 @@ private theorem assemble_readSlots (fields : List Desc) (data : Bytes) (slots : 
   simp only [first] at header bodies
   -- The reconstructed header occupies exactly the prefix consumed by the slot reader.
   have width : headWidth ((slotFlags slots).zip parts) = leading := by
-    have sized := congrArg Array.size header
+    have sized := congrArg ByteArray.size header
     rw [headOf_size, encoded] at sized
     simpa [Nat.min_eq_left leadingBound] using sized
   -- The reconstructed header and body cover the input and respect its size bound.
   apply assemble_of_parts (bounded := bounded)
   rw [← flags, width, header, encoded, bodies]
-  rw [extract_join data (by omega) leadingBound, Array.extract_size]
+  rw [extract_join data (by omega) leadingBound, ByteArray.extract_zero_size]
 
 /-- Every accepted container slicing reassembles to the exact original encoding. -/
 theorem structSlices_assemble_inverse (fields : List Desc) (data : Bytes) (parts : List Bytes)
     (read : structSlices fields data = .ok parts) :
     assemble (fields.map Desc.isFixed) parts = .ok data := by
   -- The decoder checks the same total-width bound as the encoder before reading slots.
-  simp only [structSlices, structSlots, structBodies] at read
+  simp only [structSlices, structSlots, structBodies_eq_takeSlots] at read
   split at read
   · simp [throw_error, Bind.bind, Except.bind] at read
   -- The budget is settled before the slots, so what the reader got past says nothing more.

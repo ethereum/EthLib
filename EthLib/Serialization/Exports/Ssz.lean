@@ -136,7 +136,7 @@ def valueOf : Nat → PyValue → Except String Value
     | "bool", body => return .bool (← boolOf body)
     -- An integer is an `int`.
     | "uint", body => return .uint (← natOf body)
-    | "bytes", .bytes data => return .bytes data.data
+    | "bytes", .bytes data => return .bytes data
     | "bytes", body => do
       match ofHex (← strOf body) with
       | .ok data => return .bytes data
@@ -191,7 +191,7 @@ def serializeOf (args : PyValue × PyValue) : Result ByteArray := do
   let (type, value) := args
   let shape ← readType type
   let value ← readValue "value" value (valueOf MAX_NESTING)
-  return ⟨← toResult "value rejected" (serialize shape value)⟩
+  toResult "value rejected" (serialize shape value)
 
 /-- The SSZ bytes of a value of a type, both given in their tagged form. -/
 @[export eth_ssz_serialize]
@@ -201,7 +201,7 @@ def serializeExport (args : PyValue) : Result PyValue := pyExport serializeOf ar
 def deserializeOf (args : PyValue × ByteArray) : Result PyValue := do
   let (type, data) := args
   let shape ← readType type
-  let value ← toResult "input rejected" (deserialize shape data.data)
+  let value ← toResult "input rejected" (deserialize shape data)
   return pyOfValue value
 
 /-- The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`. -/
@@ -213,7 +213,7 @@ def hashTreeRootOf (args : PyValue × PyValue) : Result ByteArray := do
   let (type, value) := args
   let shape ← readType type
   let value ← readValue "value" value (valueOf MAX_NESTING)
-  return ⟨← toResult "value rejected" (hashTreeRoot shape value)⟩
+  toResult "value rejected" (hashTreeRoot shape value)
 
 /-- The 32-byte hash tree root of a value of a type, both given in their tagged form. -/
 @[export eth_ssz_hash_tree_root]
@@ -281,8 +281,7 @@ def merkleProofOf (args : PyValue × PyValue × Nat) : Result (List ByteArray) :
   let shape ← readType type
   let value ← readValue "value" value (valueOf MAX_NESTING)
   let _ ← toResult "value rejected" (serialize shape value)
-  let branch ← toResult "proof rejected" (buildProof shape value gindex)
-  return branch.map fun sibling => ⟨sibling⟩
+  toResult "proof rejected" (buildProof shape value gindex)
 
 /-- The branch that proves the node at a generalized index of a value against its root.
 
@@ -299,9 +298,8 @@ def merkleProofExport (args : PyValue) : Result PyValue := pyExport merkleProofO
 The width is the limit if one is given, and the number of chunks otherwise. -/
 def merkleizeChunksOf (args : List ByteArray × Option Nat) : Result ByteArray := do
   let (chunks, limit) := args
-  let chunks := chunks.map (·.data)
   toResult "chunks rejected" (checkChunks chunks)
-  return ⟨← toResult "chunks rejected" (merkleizeBoundedUnchecked chunks.toArray limit)⟩
+  toResult "chunks rejected" (merkleizeBoundedUnchecked chunks.toArray limit)
 
 /-- The root of 32-byte chunks, in a tree padded to a power of two.
 

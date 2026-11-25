@@ -73,7 +73,7 @@ theorem deserialize_forkList_empty :
     SszType.deserialize (ForkList switch fork α limit) ByteArray.empty =
       .ok ⟨#[], fun _ => Nat.zero_le _⟩ := by
   unfold SszType.deserialize SszType.decode
-  show (do SszType.ofValue (← Ssz.deserialize _ #[])) = _
+  show (do SszType.ofValue (← Ssz.deserialize _ .empty)) = _
   split <;>
   · rw [Ssz.deserialize]
     simp [listSlices_empty, deserializeEach_nil, bind, Except.bind, pure, Except.pure,
@@ -126,7 +126,7 @@ instance : LawfulSszType (ForkList switch fork α limit) where
     by_cases fixed : (desc α).isFixed
     · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue]
       split
-      · simp [Ssz.serialize, serializeSequence, boundCheck, bind, Except.bind, pure, Except.pure]
+      · simp [Ssz.serialize, serializeSequence, boundCheck, bind, Except.bind]
       · rename_i before
         simp [Ssz.serialize, serializeSequence, l.bound (lt_of_not_switch before)]
     · simp only [encode, fixed, Bool.false_eq_true, ite_false]
@@ -193,7 +193,7 @@ instance : LawfulSszType (ForkList switch fork UInt8 limit) where
         Array.toArray_toList]
       rw [dite_eq_left_of_eq_true (eq_true l.bound)]
       rfl
-    · simp only [toValue, ofValue, from_, ↓reduceIte]
+    · simp only [toValue, ofValue, from_, ↓reduceIte, Base.byteArray_size_mk]
       rw [dite_eq_left_of_eq_true (eq_true l.bound)]
   toValue_of_ofValue {value l} made := by
     by_cases from_ : switch ≤ fork

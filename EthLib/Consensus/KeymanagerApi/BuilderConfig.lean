@@ -149,7 +149,7 @@ def readAuthData (path : String) (document : Json) : Except KeymanagerError Byte
   match Serialization.Ssz.ofHex text with
   | .ok bytes =>
     -- So 1 to 4096 bytes; a zero-length value is invalid.
-    if 1 ≤ bytes.size ∧ bytes.size ≤ MAX_BUILDER_AUTH_DATA_SIZE then .ok ⟨bytes⟩
+    if 1 ≤ bytes.size ∧ bytes.size ≤ MAX_BUILDER_AUTH_DATA_SIZE then .ok bytes
     else .error (.field path)
   | .error _ => .error (.field path)
 
@@ -234,7 +234,7 @@ def readClientBuilderConfig (document : Json) : Except KeymanagerError ClientBui
 
 /-- Authentication data as the API writes it, in lowercase hex. -/
 def authDataJson (data : ByteArray) : Json :=
-  .str (Serialization.Ssz.toHex data.data)
+  .str (Serialization.Ssz.toHex data)
 
 /-- The JSON of a resolved entry, with every field. -/
 def resolvedBuilderEntryJson (entry : ResolvedBuilderEntry) : Json :=

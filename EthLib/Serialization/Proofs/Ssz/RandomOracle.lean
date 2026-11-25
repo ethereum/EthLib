@@ -270,7 +270,7 @@ theorem size_of_queryHash {cache : HashOracle.QueryCache} {x digest : ByteArray}
 theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     {result : Bytes × List Bytes}
     (hrun : simulateQ cache.toPartialImpl (rehash tree) = some result) :
-    ∀ x ∈ result.2, ∃ digest, cache (ByteArray.mk x) = some digest := by
+    ∀ x ∈ result.2, ∃ digest, cache x = some digest := by
   induction tree generalizing result with
   | leaf node =>
     simp only [rehash, simulateQ_pure] at hrun
@@ -285,9 +285,8 @@ theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     cases hrun
     intro x hx
     rcases List.mem_cons.mp hx with rfl | hx
-    · simp only [combineM, simulateQ_bind] at hparent
-      obtain ⟨inner, hinner, -⟩ := Option.bind_eq_some_iff.mp hparent
-      exact cached_of_queryHash hinner
+    · simp only [combineM] at hparent
+      exact cached_of_queryHash hparent
     · rcases List.mem_append.mp hx with hx | hx
       · exact ihLeft hleft x hx
       · exact ihRight hright x hx
@@ -337,7 +336,7 @@ theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl Hash
       some root) :
     ∀ x ∈ (CommitmentTree.perfect depth fun i => padded zeroChunk chunks (start + i)).messages
         (tableHash f),
-      cache (ByteArray.mk x) = some (f (ByteArray.mk x)) := by
+      cache x = some (f x) := by
   induction depth generalizing start root with
   | zero => simp [CommitmentTree.perfect, CommitmentTree.messages]
   | succ depth ih =>
@@ -380,9 +379,8 @@ theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl Hash
       show ∀ i, start + (i + 2 ^ depth) = start + 2 ^ depth + i from fun i => by omega] at hx
     rcases hx with rfl | hx | hx
     · rw [rooted hleft, rooted hright]
-      simp only [combineM, simulateQ_bind] at hparent
-      obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hparent
-      obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
+      simp only [combineM] at hparent
+      obtain ⟨digest, hdigest⟩ := cached_of_queryHash hparent
       rw [hdigest, hf hdigest]
     · exact ih hleft x hx
     · exact ih hright x hx
@@ -392,11 +390,10 @@ theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl Hash
 The cache must give both inputs the answers of the table. -/
 theorem collision_of_cached {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
     {a b : Bytes} (hdistinct : a ≠ b)
-    (hequal : tableHash f (ByteArray.mk a) = tableHash f (ByteArray.mk b))
-    (ha : cache (ByteArray.mk a) = some (f (ByteArray.mk a)))
-    (hb : cache (ByteArray.mk b) = some (f (ByteArray.mk b))) : Collision cache := by
-  refine ⟨ByteArray.mk a, ByteArray.mk b, f (ByteArray.mk a),
-    fun h => hdistinct (congrArg ByteArray.data h), ha, ?_⟩
+    (hequal : tableHash f a = tableHash f b)
+    (ha : cache a = some (f a))
+    (hb : cache b = some (f b)) : Collision cache := by
+  refine ⟨a, b, f a, hdistinct, ha, ?_⟩
   rw [hb]
   exact congrArg some (Vector.toArray_inj.mp (ByteArray.mk.inj hequal)).symm
 
@@ -451,7 +448,7 @@ theorem collision_of_extract {cache : HashOracle.QueryCache} {shape : Desc} {fir
     obtain ⟨result₂, hresult₂, -⟩ := Option.bind_eq_some_iff.mp hrun
     have hcached : ∀ {tree : CommitmentTree} {result : Bytes × List Bytes},
         simulateQ cache.toPartialImpl (rehash tree) = some result →
-        ∀ x ∈ tree.messages (tableHash f), cache (ByteArray.mk x) = some (f (ByteArray.mk x)) := by
+        ∀ x ∈ tree.messages (tableHash f), cache x = some (f x) := by
       intro tree result hreplay x hx
       have heval := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hreplay
       rw [evalWithAnswerFn_rehash] at heval

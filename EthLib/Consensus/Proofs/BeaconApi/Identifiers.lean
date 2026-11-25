@@ -106,10 +106,10 @@ theorem parseStateId_print (id : StateId) : parseStateId (printStateId id) = .ok
     simp only [printStateId, parseStateId, eq_false h1, eq_false h2, eq_false h3, eq_false h4,
       ↓reduceIte, parseUInt64_print]
   | root root =>
-    have h1 : toHex root.toArray ≠ "head" := toHex_ne_word _ 'h' (by decide) (by decide)
-    have h2 : toHex root.toArray ≠ "genesis" := toHex_ne_word _ 'g' (by decide) (by decide)
-    have h3 : toHex root.toArray ≠ "finalized" := toHex_ne_word _ 'f' (by decide) (by decide)
-    have h4 : toHex root.toArray ≠ "justified" := toHex_ne_word _ 'j' (by decide) (by decide)
+    have h1 : toHex ⟨root.toArray⟩ ≠ "head" := toHex_ne_word _ 'h' (by decide) (by decide)
+    have h2 : toHex ⟨root.toArray⟩ ≠ "genesis" := toHex_ne_word _ 'g' (by decide) (by decide)
+    have h3 : toHex ⟨root.toArray⟩ ≠ "finalized" := toHex_ne_word _ 'f' (by decide) (by decide)
+    have h4 : toHex ⟨root.toArray⟩ ≠ "justified" := toHex_ne_word _ 'j' (by decide) (by decide)
     simp [printStateId, parseStateId, h1, h2, h3, h4,
       parseUInt64_toHex, parseHexBytes_toHex]
 
@@ -126,9 +126,9 @@ theorem parseBlockId_print (id : BlockId) : parseBlockId (printBlockId id) = .ok
     simp only [printBlockId, parseBlockId, eq_false h1, eq_false h2, eq_false h3, ↓reduceIte,
       parseUInt64_print]
   | root root =>
-    have h1 : toHex root.toArray ≠ "head" := toHex_ne_word _ 'h' (by decide) (by decide)
-    have h2 : toHex root.toArray ≠ "genesis" := toHex_ne_word _ 'g' (by decide) (by decide)
-    have h3 : toHex root.toArray ≠ "finalized" := toHex_ne_word _ 'f' (by decide) (by decide)
+    have h1 : toHex ⟨root.toArray⟩ ≠ "head" := toHex_ne_word _ 'h' (by decide) (by decide)
+    have h2 : toHex ⟨root.toArray⟩ ≠ "genesis" := toHex_ne_word _ 'g' (by decide) (by decide)
+    have h3 : toHex ⟨root.toArray⟩ ≠ "finalized" := toHex_ne_word _ 'f' (by decide) (by decide)
     simp [printBlockId, parseBlockId, h1, h2, h3,
       parseUInt64_toHex, parseHexBytes_toHex]
 

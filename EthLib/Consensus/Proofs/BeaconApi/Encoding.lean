@@ -107,7 +107,7 @@ theorem readKey_mkObj {β : Type} {pairs : List (String × Json)}
 
 /-- A root reads back from its hex. -/
 theorem readRoot_toHex (r : Root) :
-    ApiEnvelope.readRoot (.str (toHex r.toArray)) = some r := by
+    ApiEnvelope.readRoot (.str (toHex ⟨r.toArray⟩)) = some r := by
   simp [ApiEnvelope.readRoot, Base.exactBytes?, Base.exactArray?_toArray, ofHex_toHex]
 
 /-- An envelope reads back as written. -/
@@ -118,12 +118,12 @@ theorem ApiEnvelope.ofJson_toJson (envelope : ApiEnvelope) :
     ((version.map fun v => ("version", Json.str v.name)).toList ++
     (executionOptimistic.map fun b => ("execution_optimistic", Json.bool b)).toList ++
     (finalized.map fun b => ("finalized", Json.bool b)).toList ++
-    (dependentRoot.map fun r => ("dependent_root", Json.str (toHex r.toArray))).toList ++
+    (dependentRoot.map fun r => ("dependent_root", Json.str (toHex ⟨r.toArray⟩))).toList ++
     [("data", data)])) = _
   generalize hP : ((version.map fun v => ("version", Json.str v.name)).toList ++
     (executionOptimistic.map fun b => ("execution_optimistic", Json.bool b)).toList ++
     (finalized.map fun b => ("finalized", Json.bool b)).toList ++
-    (dependentRoot.map fun r => ("dependent_root", Json.str (toHex r.toArray))).toList ++
+    (dependentRoot.map fun r => ("dependent_root", Json.str (toHex ⟨r.toArray⟩))).toList ++
     [("data", data)]) = P
   have distinct : P.Pairwise fun a b => a.1 ≠ b.1 := by
     subst hP
@@ -140,7 +140,7 @@ theorem ApiEnvelope.ofJson_toJson (envelope : ApiEnvelope) :
     (read := ApiEnvelope.readBool) (write := Json.bool) (fun b => rfl) finalized
     (by rintro b rfl; simp [← hP]) (by rintro rfl; simp [← hP])
   have k4 := readKey_mkObj (pairs := P) distinct (key := "dependent_root")
-    (read := ApiEnvelope.readRoot) (write := fun r => Json.str (toHex r.toArray))
+    (read := ApiEnvelope.readRoot) (write := fun r => Json.str (toHex ⟨r.toArray⟩))
     readRoot_toHex dependentRoot
     (by rintro b rfl; simp [← hP]) (by rintro rfl; simp [← hP])
   have hdata : (Json.mkObj P).getObjVal? "data" = .ok data :=
@@ -205,7 +205,7 @@ private theorem readBool_eq_some_iff (j : Json) (b : Bool) :
 That hex is `0x` and 64 lowercase digits, two per byte. -/
 theorem readRoot_eq_some_iff {j : Json} {root : Root} :
     ApiEnvelope.readRoot j = some root ↔
-      ∃ text, j = .str text ∧ HexCase (toHex root.toArray) text := by
+      ∃ text, j = .str text ∧ HexCase (toHex ⟨root.toArray⟩) text := by
   cases j with
   | str text =>
     simp only [ApiEnvelope.readRoot, Base.exactBytes?, Base.exactArray?, Json.str.injEq,
@@ -215,17 +215,13 @@ theorem readRoot_eq_some_iff {j : Json} {root : Root} :
     | ok data =>
       by_cases size : data.size = 32
       · obtain ⟨r, hr⟩ := root
-        simp only [size, ↓reduceDIte, Option.some.injEq, Except.ok.injEq]
-        constructor
-        · intro same
-          cases same
-          rfl
-        · intro same
-          subst same
-          rfl
-      · simp only [size, ↓reduceDIte, reduceCtorEq, false_iff, Except.ok.injEq]
+        -- The bytes read are the root exactly when the array that holds them is.
+        simp only [ByteArray.size_data, size, ↓reduceDIte, Option.some.injEq, Vector.mk.injEq,
+          Except.ok.injEq, ByteArray.ext_iff]
+      · simp only [ByteArray.size_data, size, ↓reduceDIte, reduceCtorEq, false_iff,
+          Except.ok.injEq]
         intro same
-        exact size (same ▸ root.size_toArray)
+        exact size (by rw [same]; exact root.size_toArray)
   | _ => simp [ApiEnvelope.readRoot]
 
 /-- A document holds an envelope exactly when it is an object whose keys read as its parts. -/
@@ -278,7 +274,7 @@ theorem ApiEnvelope.ofJson_eq_ok_iff {document : Json} {envelope : ApiEnvelope} 
         ((document.getObjVal? "dependent_root").toOption = none ∧ envelope.dependentRoot = none ∨
           ∃ root text, envelope.dependentRoot = some root ∧
             document.getObjVal? "dependent_root" = .ok (.str text) ∧
-            HexCase (toHex root.toArray) text) := by
+            HexCase (toHex ⟨root.toArray⟩) text) := by
   rw [ApiEnvelope.ofJson_eq_ok_iff_readKey, readKey_eq_ok_iff_of readVersion_eq_some_iff,
     readKey_eq_ok_iff_of readBool_eq_some_iff, readKey_eq_ok_iff_of readBool_eq_some_iff,
     readKey_eq_ok_iff]
@@ -326,7 +322,7 @@ theorem readVersioned_eq_ok_iff {α : Type} [SszType α] [ApiSpelling α]
         (∀ value, document.getObjVal? "finalized" = .ok value → ∃ b, value = .bool b) ∧
         (∀ value, document.getObjVal? "dependent_root" = .ok value →
           ∃ (root : Root) (text : String), value = .str text ∧
-            HexCase (toHex root.toArray) text) := by
+            HexCase (toHex ⟨root.toArray⟩) text) := by
   have flag : ∀ {key : String} {o : Option Bool},
       (document.getObjVal? key).toOption = o.map .bool →
         ∀ value, document.getObjVal? key = .ok value → ∃ b, value = .bool b := by

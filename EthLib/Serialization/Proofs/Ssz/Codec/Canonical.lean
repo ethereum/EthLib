@@ -13,28 +13,32 @@ namespace EthLib.Serialization.Ssz
 theorem uintBytes_readUint (data : Bytes) :
     uintBytes data.size (readUint data 0 data.size) = data := by
   -- Induct over the bytes in little-endian order.
-  cases data with
-  | mk bytes =>
-    induction bytes with
-    | nil => rfl
-    | cons byte bytes ih =>
-      -- The first byte is the low digit, and the rest starts one position later.
-      have split : ({ toList := byte :: bytes } : Bytes) = #[byte] ++ ({ toList := bytes } : Bytes) := by simp
-      rw [split]
-      simp only [Array.size_append, Array.size_singleton]
-      rw [Nat.add_comm 1, readUint_succ]
-      have first : (#[byte] ++ ({ toList := bytes } : Bytes))[0]?.getD 0 = byte := by simp
-      have low := UInt8.toNat_lt byte
-      rw [first, readUint_shift, uintBytes_succ]
-      -- Reduction modulo 256 recovers the low byte without interference from higher digits.
-      have remainder : (byte.toNat + 256 * readUint ({ toList := bytes } : Bytes) 0 ({ toList := bytes } : Bytes).size) % 256 =
-          byte.toNat := by omega
-      -- Division by 256 removes that low byte and recovers the remaining integer.
-      have quotient : (byte.toNat + 256 * readUint ({ toList := bytes } : Bytes) 0 ({ toList := bytes } : Bytes).size) / 256 =
-          readUint ({ toList := bytes } : Bytes) 0 ({ toList := bytes } : Bytes).size := by omega
-      -- Reattach the recovered low byte to the recursively recovered suffix.
-      rw [remainder, quotient, ih]
-      simp
+  obtain ⟨⟨bytes⟩⟩ := data
+  induction bytes with
+  | nil => rfl
+  | cons byte bytes ih =>
+    -- The first byte is the low digit, and the rest starts one position later.
+    have split : (⟨⟨byte :: bytes⟩⟩ : Bytes) = ⟨#[byte]⟩ ++ (⟨⟨bytes⟩⟩ : Bytes) :=
+      ByteArray.ext (by simp)
+    rw [split]
+    simp only [ByteArray.size_append]
+    rw [show (ByteArray.mk #[byte]).size = 1 from rfl, Nat.add_comm 1, readUint_succ]
+    have first : (ByteArray.mk #[byte] ++ (⟨⟨bytes⟩⟩ : Bytes))[0]?.getD 0 = byte := by
+      rw [getElem?_pos _ 0 (by simp), Option.getD_some,
+        ByteArray.getElem_append_left (by exact Nat.one_pos)]
+      rfl
+    have low := UInt8.toNat_lt byte
+    rw [first, readUint_shift, uintBytes_succ]
+    -- Reduction modulo 256 recovers the low byte without interference from higher digits.
+    have remainder : (byte.toNat + 256 * readUint (⟨⟨bytes⟩⟩ : Bytes) 0
+        (⟨⟨bytes⟩⟩ : Bytes).size) % 256 = byte.toNat := by omega
+    -- Division by 256 removes that low byte and recovers the remaining integer.
+    have quotient : (byte.toNat + 256 * readUint (⟨⟨bytes⟩⟩ : Bytes) 0
+        (⟨⟨bytes⟩⟩ : Bytes).size) / 256 = readUint (⟨⟨bytes⟩⟩ : Bytes) 0 (⟨⟨bytes⟩⟩ : Bytes).size :=
+      by omega
+    -- Reattach the recovered low byte to the recursively recovered suffix.
+    rw [remainder, quotient, ih]
+    simp
 
 /-- An accepted integer encoding is reproduced exactly, including its leading zero bytes. -/
 theorem canonical_uint {width : Nat} {data : Bytes} {value : Value}
@@ -101,9 +105,11 @@ theorem packBits_unpackBits {data : Bytes} {count : Nat}
       ((data[index]?.getD 0 >>> UInt8.ofNat offset) &&& 1 == 1) = false) :
     packBits (unpackBits data count) data.size = data := by
   -- Compare output length first, then compare every bit of every byte.
+  apply ByteArray.ext
   apply Array.ext
   · simp [packBits]
   · intro index _ inside
+    rw [ByteArray.size_data] at inside
     simp only [packBits, Array.getElem_ofFn]
     apply byte_eq_of_bits
     intro offset small
@@ -116,10 +122,11 @@ theorem packBits_unpackBits {data : Bytes} {count : Nat}
       simp only [unpackBits, Array.getElem_map, Array.getElem_range]
       have quotient : (index * 8 + offset) / 8 = index := by omega
       have remainder : (index * 8 + offset) % 8 = offset := by omega
-      simp [quotient, remainder, inside]
+      simp [quotient, remainder, inside, ByteArray.getElem_eq_getElem_data]
     · -- A discarded bit is clear on both sides by the canonical padding rule.
       rw [Array.getElem?_eq_none (by simpa using Nat.le_of_not_lt held)]
-      simpa [inside] using (padding index inside offset small (by omega)).symm
+      simpa [inside, ByteArray.getElem_eq_getElem_data] using
+        (padding index inside offset small (by omega)).symm
 
 private theorem byte_padding (byte : UInt8) (start offset : Fin 8)
     (clear : byte >>> UInt8.ofNat start.val = 0) (above : start.val ≤ offset.val) :
@@ -173,6 +180,7 @@ theorem canonical_bool {data : Bytes} {value : Value}
   have sized : data.size = 1 := Decidable.byContradiction fun same => by
     simp [deserialize, same, Bind.bind, Except.bind] at read
   -- Expose that sole byte so the two accepted boolean encodings can be checked directly.
+  obtain ⟨bytes⟩ := data
   obtain ⟨byte, rfl⟩ := Array.size_eq_one_iff.mp sized
   simp [deserialize] at read
   -- Only zero and one can survive the decoder, and each re-encodes to itself.

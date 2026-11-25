@@ -67,8 +67,7 @@ def ResolvedBuilderEntry.WithinBounds (entry : ResolvedBuilderEntry) : Prop :=
 private theorem readAuthData_authDataJson (path : String) {data : ByteArray}
     (low : 1 ≤ data.size) (high : data.size ≤ MAX_BUILDER_AUTH_DATA_SIZE) :
     readAuthData path (authDataJson data) = .ok data := by
-  have text : readString path (authDataJson data) = .ok (Serialization.Ssz.toHex data.data) :=
-    rfl
+  have text : readString path (authDataJson data) = .ok (Serialization.Ssz.toHex data) := rfl
   simp [readAuthData, text, Serialization.Ssz.ofHex_toHex, bind, Except.bind, low, high]
 
 /-- A resolved entry within the bounds of the schema reads back as its stored form. -/

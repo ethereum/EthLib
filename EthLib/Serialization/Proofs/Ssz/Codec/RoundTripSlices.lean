@@ -66,7 +66,7 @@ theorem listSlices_offset_parts {element : Desc} (varying : element.fixedSize = 
       omega
     have firstIs : readUint (headOf (parts.length * bytesPerOffset) (offsetSlots parts)
         ++ concatParts parts) 0 bytesPerOffset = parts.length * bytesPerOffset := by
-      have read := readUint_headOf_offset parts (parts.length * bytesPerOffset) #[]
+      have read := readUint_headOf_offset parts (parts.length * bytesPerOffset) .empty
         (concatParts parts) 0 (by simp [parts]) nameable
       simpa [parts, runningOffsets] using read
     -- Dividing the first offset by four therefore recovers the number of elements.

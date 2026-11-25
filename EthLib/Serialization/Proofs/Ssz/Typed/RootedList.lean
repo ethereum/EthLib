@@ -75,7 +75,7 @@ theorem size_packedChunks_le {limit : Nat} (basic : (desc α).isBasic = true) (d
     (bound : data.size ≤ limit) :
     (packedChunks data).size ≤ chunksForBytes (limit * (desc α).itemLength) := by
   rw [← packElements_elementBytes basic data, packElements, fold_parts_eq_concat,
-    Array.empty_append, packBytes_size, concatParts_size _ _ (fun part member => by
+    ByteArray.empty_append, packBytes_size, concatParts_size _ _ (fun part member => by
       obtain ⟨a, -, rfl⟩ := List.mem_map.mp member
       exact (serialize_elementBytes basic a).2)]
   simp only [List.length_map, Array.length_toList, chunksForBytes]

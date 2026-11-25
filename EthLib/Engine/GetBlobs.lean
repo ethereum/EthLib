@@ -155,7 +155,7 @@ def selectedCells (bits : CellBitarray) : List (Fin CELLS_PER_EXT_BLOB) :=
   -- EIP-8070 gives it no byte order either.
   --
   -- EthLib takes the order of an SSZ bitvector: cell `i` is bit `i mod 8` of byte `i / 8`.
-  let set := Serialization.Ssz.unpackBits bits.toArray CELLS_PER_EXT_BLOB
+  let set := Serialization.Ssz.unpackBits ⟨bits.toArray⟩ CELLS_PER_EXT_BLOB
   -- Version 4, step 1: the indices that the bitarray sets.
   --
   -- The source gives the cells no order, and EthLib takes increasing index.

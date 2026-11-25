@@ -59,13 +59,15 @@ theorem gindexBit_mod_two_pow {depth i level : Nat} (below : level < depth) :
 theorem isValidMerkleBranch_eq_true_iff {leaf root : Vector UInt8 32}
     {branch : List (Vector UInt8 32)} {depth index : Nat} :
     isValidMerkleBranch leaf branch depth index root = true ↔ branch.length = depth ∧
-      climbBranch index 0 leaf.toArray (branch.map Vector.toArray) = root.toArray := by
+      climbBranch index 0 ⟨leaf.toArray⟩ (branch.map fun node => ⟨node.toArray⟩) =
+        ⟨root.toArray⟩ := by
   unfold isValidMerkleBranch computeMerkleBranchRoot
   by_cases count : branch.length = depth
   · subst count
     simp only [beq_self_eq_true, Nat.lt_irrefl, ↓reduceIte, List.take_length, Bool.true_and,
       true_and]
-    cases chunked : toChunk (climbBranch index 0 leaf.toArray (branch.map Vector.toArray)) with
+    cases chunked :
+        toChunk (climbBranch index 0 ⟨leaf.toArray⟩ (branch.map fun node => ⟨node.toArray⟩)) with
     | ok rebuilt =>
       rw [toChunk_ok_iff] at chunked
       simp [chunked, Vector.toArray_inj]
@@ -105,20 +107,22 @@ theorem isValidMerkleBranch_iff_verifyMerkleProof {leaf root : Vector UInt8 32}
     {branch : List (Vector UInt8 32)} {depth index : Nat} (positive : 0 < depth)
     (below : index < 2 ^ depth) :
     isValidMerkleBranch leaf branch depth index root = true ↔
-      verifyMerkleProof leaf.toArray (branch.map Vector.toArray) (2 ^ depth + index)
-        root.toArray = .ok true := by
+      verifyMerkleProof ⟨leaf.toArray⟩ (branch.map fun node => ⟨node.toArray⟩) (2 ^ depth + index)
+        ⟨root.toArray⟩ = .ok true := by
   rw [isValidMerkleBranch_eq_true_iff, verifyMerkleProof_eq_true_iff]
   -- Every node of the branch is a vector, so every width check passes.
   simp only [calculateMerkleRootUnchecked, gindexLength_two_pow_add positive below, bind,
-    Except.bind, List.length_map, Vector.size_toArray, true_and]
+    Except.bind, List.length_map, ← ByteArray.size_data, Vector.size_toArray, true_and]
   by_cases count : branch.length = depth
   · -- The climb at the generalized index reads the same bits as the climb at the index.
-    have same : climbBranch (2 ^ depth + index) 0 leaf.toArray (branch.map Vector.toArray) =
-        climbBranch index 0 leaf.toArray (branch.map Vector.toArray) :=
+    have same :
+        climbBranch (2 ^ depth + index) 0 ⟨leaf.toArray⟩ (branch.map fun node => ⟨node.toArray⟩) =
+          climbBranch index 0 ⟨leaf.toArray⟩ (branch.map fun node => ⟨node.toArray⟩) :=
       climbBranch_congr fun i lt => by
         simp only [List.length_map, count] at lt
         simpa using gindexBit_two_pow_add (i := index) (by omega : 0 + i < depth)
-    simp [count, same, pure, Except.pure]
+    -- A node built from a vector is measured through its array, which has the vector's size.
+    simp [count, same, -ByteArray.size_data, pure, Except.pure]
   · simp [count, throw, throwThe, MonadExceptOf.throw]
 
 /--
@@ -130,11 +134,11 @@ theorem isValidMerkleBranch_binding {leaf other root : Vector UInt8 32}
     {branch otherBranch : List (Vector UInt8 32)} {depth index : Nat}
     (first : isValidMerkleBranch leaf branch depth index root = true)
     (second : isValidMerkleBranch other otherBranch depth index root = true) :
-    leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray (branch.map Vector.toArray),
-      ∃ b ∈ branchMessages index 0 other.toArray (otherBranch.map Vector.toArray),
+    leaf = other ∨
+      ∃ a ∈ branchMessages index 0 ⟨leaf.toArray⟩ (branch.map fun node => ⟨node.toArray⟩),
+      ∃ b ∈ branchMessages index 0 ⟨other.toArray⟩ (otherBranch.map fun node => ⟨node.toArray⟩),
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b := by
   obtain ⟨count, climbed⟩ := isValidMerkleBranch_eq_true_iff.mp first
   obtain ⟨otherCount, otherClimbed⟩ := isValidMerkleBranch_eq_true_iff.mp second
   cases depth with
@@ -142,7 +146,7 @@ theorem isValidMerkleBranch_binding {leaf other root : Vector UInt8 32}
     -- With no branch node, each leaf is the root.
     rw [List.length_eq_zero_iff] at count otherCount
     subst count otherCount
-    exact .inl (Vector.toArray_inj.mp (climbed.trans otherClimbed.symm))
+    exact .inl (Vector.toArray_inj.mp (ByteArray.mk.inj (climbed.trans otherClimbed.symm)))
   | succ depth =>
     -- Both branches verify at the generalized index of the leaf.
     let gindex := 2 ^ (depth + 1) + index % 2 ^ (depth + 1)
@@ -156,13 +160,14 @@ theorem isValidMerkleBranch_binding {leaf other root : Vector UInt8 32}
     have bits : ∀ level < depth + 1, gindexBit gindex level = gindexBit index level :=
       fun level lt => (gindexBit_two_pow_add lt).trans (gindexBit_mod_two_pow lt)
     have messages : ∀ {node : Vector UInt8 32} {nodes : List (Vector UInt8 32)},
-        nodes.length = depth + 1 → branchMessages gindex 0 node.toArray (nodes.map Vector.toArray)
-          = branchMessages index 0 node.toArray (nodes.map Vector.toArray) :=
+        nodes.length = depth + 1 →
+          branchMessages gindex 0 ⟨node.toArray⟩ (nodes.map fun node => ⟨node.toArray⟩)
+            = branchMessages index 0 ⟨node.toArray⟩ (nodes.map fun node => ⟨node.toArray⟩) :=
       fun counted => branchMessages_congr fun i lt => by
         simp only [List.length_map, counted] at lt
         simpa using bits i lt
     rcases verifyMerkleProof_binding verified otherVerified with same | collision
-    · exact .inl (Vector.toArray_inj.mp same)
+    · exact .inl (Vector.toArray_inj.mp (ByteArray.mk.inj same))
     · -- The search names the two messages.
       -- Each is hashed along its own branch.
       obtain ⟨a, b, -, aIn, bIn, rest⟩ := collision
@@ -197,11 +202,11 @@ theorem isValidMerkleBranch_findBranchCollision {leaf other root : Vector UInt8 
     (first : isValidMerkleBranch leaf branch depth (gindex % 2 ^ depth) root = true)
     (second : isValidMerkleBranch other otherBranch depth (gindex % 2 ^ depth) root = true) :
     leaf = other ∨ ∃ a b,
-      findBranchCollision gindex 0 leaf.toArray other.toArray (branch.map Vector.toArray)
-          (otherBranch.map Vector.toArray) = some (a, b) ∧
+      findBranchCollision gindex 0 ⟨leaf.toArray⟩ ⟨other.toArray⟩
+          (branch.map fun node => ⟨node.toArray⟩)
+          (otherBranch.map fun node => ⟨node.toArray⟩) = some (a, b) ∧
       a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-      Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-        Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+      Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b := by
   subst deep
   have reduced := Nat.mod_lt gindex (Nat.two_pow_pos (Nat.log2 gindex))
   have firstVerified :=
@@ -210,7 +215,7 @@ theorem isValidMerkleBranch_findBranchCollision {leaf other root : Vector UInt8 
     (isValidMerkleBranch_iff_verifyMerkleProof (log2_pos named) reduced).mp second
   rw [two_pow_log2_add_mod (by omega)] at firstVerified secondVerified
   rcases verifyMerkleProof_binding firstVerified secondVerified with same | collision
-  · exact .inl (Vector.toArray_inj.mp same)
+  · exact .inl (Vector.toArray_inj.mp (ByteArray.mk.inj same))
   · obtain ⟨a, b, found, -, -, rest⟩ := collision
     exact .inr ⟨a, b, found, rest⟩
 
@@ -225,9 +230,9 @@ theorem isValidNormalizedMerkleBranch_iff {leaf root : Vector UInt8 32}
     {branch : List (Vector UInt8 32)} {gindex : Nat} (named : 2 ≤ gindex) :
     isValidNormalizedMerkleBranch leaf branch gindex root = .ok true ↔
       (∀ node ∈ branch.take (branch.length - Nat.log2 gindex), node = Vector.replicate 32 0) ∧
-      verifyMerkleProof leaf.toArray
-        ((branch.drop (branch.length - Nat.log2 gindex)).map Vector.toArray) gindex
-        root.toArray = .ok true := by
+      verifyMerkleProof ⟨leaf.toArray⟩
+        ((branch.drop (branch.length - Nat.log2 gindex)).map fun node => ⟨node.toArray⟩) gindex
+        ⟨root.toArray⟩ = .ok true := by
   have reduced := Nat.mod_lt gindex (Nat.two_pow_pos (Nat.log2 gindex))
   have depthIs : gindexDepth gindex = .ok (Nat.log2 gindex) := by
     simp [gindexDepth]
@@ -260,17 +265,17 @@ theorem isValidNormalizedMerkleBranch_binding {leaf other root : Vector UInt8 32
     (first : isValidNormalizedMerkleBranch leaf branch gindex root = .ok true)
     (second : isValidNormalizedMerkleBranch other otherBranch gindex root = .ok true) :
     leaf = other ∨ ∃ a b,
-      findBranchCollision gindex 0 leaf.toArray other.toArray
-          ((branch.drop (branch.length - Nat.log2 gindex)).map Vector.toArray)
-          ((otherBranch.drop (otherBranch.length - Nat.log2 gindex)).map Vector.toArray) =
+      findBranchCollision gindex 0 ⟨leaf.toArray⟩ ⟨other.toArray⟩
+          ((branch.drop (branch.length - Nat.log2 gindex)).map fun node => ⟨node.toArray⟩)
+          ((otherBranch.drop (otherBranch.length - Nat.log2 gindex)).map
+            fun node => ⟨node.toArray⟩) =
         some (a, b) ∧
       a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-      Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-        Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+      Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b := by
   have firstVerified := ((isValidNormalizedMerkleBranch_iff named).mp first).2
   have secondVerified := ((isValidNormalizedMerkleBranch_iff named).mp second).2
   rcases verifyMerkleProof_binding firstVerified secondVerified with same | collision
-  · exact .inl (Vector.toArray_inj.mp same)
+  · exact .inl (Vector.toArray_inj.mp (ByteArray.mk.inj same))
   · obtain ⟨a, b, found, -, -, rest⟩ := collision
     exact .inr ⟨a, b, found, rest⟩
 

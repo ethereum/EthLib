@@ -476,7 +476,7 @@ theorem getValidatorRegistration_insert (registry : Registry)
 theorem getValidatorRegistration_insert_toHex (registry : Registry)
     (signed : SignedValidatorRegistrationV1) :
     getValidatorRegistration (registry.insert signed)
-        (some (Serialization.Ssz.toHex signed.message.pubkey.toArray)) = .found signed :=
+        (some (Serialization.Ssz.toHex ⟨signed.message.pubkey.toArray⟩)) = .found signed :=
   getValidatorRegistration_insert registry signed (Serialization.Ssz.parseHexBytes_toHex _)
 
 /-- After a registration passes and is kept, a request for its key gets 200 with it.

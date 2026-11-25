@@ -191,10 +191,12 @@ private theorem collision_of_found {leftLeaves leftProof rightLeaves rightProof 
   refine ⟨by simp [x1, x2, Nat.two_mul], by simp [y1, y2, Nat.two_mul],
     fun equal => different ?_, ?_⟩
   · -- Fixed child widths keep the boundary between the two children in place.
-    obtain ⟨h1, h2⟩ := Array.append_inj equal (x1.trans y1.symm)
-    exact Prod.ext h1 h2
+    have joinedData := congrArg ByteArray.data equal
+    rw [ByteArray.data_append, ByteArray.data_append] at joinedData
+    obtain ⟨h1, h2⟩ := Array.append_inj joinedData (x1.trans y1.symm)
+    exact Prod.ext (ByteArray.ext h1) (ByteArray.ext h2)
   · -- The two pairs hash to one parent, which is the digest of their messages.
-    exact ByteArray.ext joined
+    exact joined
 
 /-- Between accepted multiproofs, the search returns hashed messages that collide under SHA-256. -/
 theorem findMultiproofMessageCollision_valid

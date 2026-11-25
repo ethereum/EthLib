@@ -36,13 +36,13 @@ class SszType (α : Type) where
 
   A type may write its bytes directly instead of building the untyped value.
   -/
-  encode : α → Except Err ByteArray := fun a => do return ⟨← Ssz.serialize desc (toValue a)⟩
+  encode : α → Except Err ByteArray := fun a => Ssz.serialize desc (toValue a)
   /--
   The value that bytes encode, which is the typed value of their untyped decoding.
 
   A type may read its bytes directly instead of building the untyped value.
   -/
-  decode : ByteArray → Except Err α := fun data => do ofValue (← Ssz.deserialize desc data.data)
+  decode : ByteArray → Except Err α := fun data => do ofValue (← Ssz.deserialize desc data)
 
 namespace SszType
 

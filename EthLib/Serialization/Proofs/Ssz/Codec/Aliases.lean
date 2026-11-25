@@ -13,12 +13,12 @@ namespace EthLib.Serialization.Ssz
 
 /-- Re-express each byte as the value of a one-byte unsigned integer. -/
 def byteValues (data : Bytes) : List Value :=
-  data.toList.map fun byte => .uint byte.toNat
+  data.data.toList.map fun byte => .uint byte.toNat
 
 /-- Each byte encodes to itself when read as a one-byte integer. -/
 theorem serializeEach_bytes (data : List UInt8) :
     serializeEach (.uint 1) (data.map fun byte => .uint byte.toNat) =
-      .ok (data.map fun byte => #[byte]) := by
+      .ok (data.map fun byte => ⟨#[byte]⟩) := by
   -- Encoding proceeds one byte at a time and preserves both its value and its position.
   have bound (byte : UInt8) : byte.toNat < 256 := byte.toNat_lt
   induction data <;> simp_all [serializeEach_nil, serializeEach_cons, serialize, uintBytes_zero,
@@ -26,16 +26,16 @@ theorem serializeEach_bytes (data : List UInt8) :
 
 /-- Singleton fixed slots contribute one byte each, all in the fixed part. -/
 private theorem byteSlots_width (data : List UInt8) :
-    headWidth (data.map fun byte => (true, #[byte])) = data.length ∧
-      bodyWidth (data.map fun byte => (true, #[byte])) = 0 := by
+    headWidth (data.map fun byte => (true, ⟨#[byte]⟩)) = data.length ∧
+      bodyWidth (data.map fun byte => (true, ⟨#[byte]⟩)) = 0 := by
   -- There are no offsets or trailing bodies for fixed-width elements.
   induction data <;> simp_all [headWidth_nil, headWidth_cons, bodyWidth_nil, bodyWidth_cons_inline,
       Nat.add_comm]
 
 /-- Singleton fixed slots concatenate to the original byte sequence. -/
 private theorem byteSlots_content (data : List UInt8) (start : Nat) :
-    headOf start (data.map fun byte => (true, #[byte])) = data.toArray ∧
-      bodiesOf (data.map fun byte => (true, #[byte])) = #[] := by
+    headOf start (data.map fun byte => (true, ⟨#[byte]⟩)) = ⟨data.toArray⟩ ∧
+      bodiesOf (data.map fun byte => (true, ⟨#[byte]⟩)) = .empty := by
   -- Each slot appends one original byte without changing it.
   induction data <;> simp_all [headOf_nil, headOf_cons_inline, bodiesOf_nil, bodiesOf_cons_inline]
 
@@ -49,15 +49,16 @@ theorem serializeSequence_bytes (data : Bytes) :
   rw [serializeEach_bytes]
   simp only [Bind.bind, Except.bind, Desc.isFixed, Desc.fixedSize, Option.isSome_some]
   -- The sequence contains exactly one inline slot for each byte.
-  have slots : ((data.toList.map fun byte => #[byte]).map fun _ => true).zip
-      (data.toList.map fun byte => #[byte]) = data.toList.map fun byte => (true, #[byte]) := by
-    induction data.toList <;> simp_all
+  have slots : ((data.data.toList.map fun byte => (⟨#[byte]⟩ : Bytes)).map fun _ => true).zip
+      (data.data.toList.map fun byte => (⟨#[byte]⟩ : Bytes)) =
+        data.data.toList.map fun byte => (true, (⟨#[byte]⟩ : Bytes)) := by
+    induction data.data.toList <;> simp_all
   simp only [assemble_eq, slots]
   rw [(byteSlots_width _).1, (byteSlots_width _).2]
-  simp only [Array.length_toList, Nat.add_zero]
+  simp only [Array.length_toList, ByteArray.size_data, Nat.add_zero]
   -- The bound counts every byte, though no offset is ever written.
   split <;> simp [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
-    Except.pure, *, (byteSlots_content _ _).1, (byteSlots_content data.toList 0).2]
+    Except.pure, *, (byteSlots_content _ _).1, (byteSlots_content data.data.toList 0).2]
 
 /-- Re-expressing bytes preserves the number of sequence elements. -/
 @[simp] theorem byteValues_length (data : Bytes) : (byteValues data).length = data.size := by
@@ -108,7 +109,9 @@ private theorem deserializeEach_byteSlices (data : Bytes) :
   · intro i inside _
     simp only [List.length_map, List.length_range] at inside
     simp only [List.getElem_map, List.getElem_range, byteValues, Array.getElem_toList]
-    rw [Array.getElem?_eq_getElem (by simp; omega), Option.getD_some]
+    -- The slice is read through the array that holds the bytes.
+    rw [Base.byteArray_getElem?_eq_data, ByteArray.data_extract,
+      Array.getElem?_eq_getElem (by simp; omega), Option.getD_some]
     simp
 
 /-- Both fixed-byte spellings decode the same input alike, every refusal included. -/
@@ -135,11 +138,11 @@ theorem deserialize_byteList_alias (data : Bytes) (limit : Nat) :
   by_cases large : data.size ≥ 2 ^ (8 * bytesPerOffset)
   · simp [large, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, Except.map]
   -- An empty input is an empty list on one path and empty bytes on the other.
-  by_cases empty : data = #[]
+  by_cases empty : data = .empty
   · subst empty
     simp [deserializeEach_nil, byteValues, Bind.bind, Except.bind, Except.map, pure, Except.pure]
   -- Otherwise each byte is one element, so the element count is the byte count.
-  have filled : data.size ≠ 0 := fun zero => empty (Array.eq_empty_of_size_eq_zero zero)
+  have filled : data.size ≠ 0 := fun zero => empty (ByteArray.size_eq_zero_iff.mp zero)
   by_cases within : data.size ≤ limit
   · simp [large, filled, Nat.mod_one, Nat.not_lt.mpr within, deserializeEach_byteSlices,
       Bind.bind, Except.bind, Except.map, pure, Except.pure]
@@ -148,14 +151,14 @@ theorem deserialize_byteList_alias (data : Bytes) (limit : Nat) :
 
 /-- Appending one-byte encodings reconstructs the original bytes after any prefix. -/
 private theorem fold_byteParts (data : List UInt8) (front : Bytes) :
-    (data.map fun byte => #[byte]).foldl (fun total part => total ++ part) front =
-      front ++ data.toArray := by
+    (data.map fun byte => ⟨#[byte]⟩).foldl (fun total part => total ++ part) front =
+      front ++ ⟨data.toArray⟩ := by
   -- Generalizing the prefix lets each induction step append the next original byte.
-  induction data generalizing front <;> simp_all
+  induction data generalizing front <;> simp_all [ByteArray.append_assoc]
 
 /-- Packing one-byte integer encodings gives the same nodes as packing the byte array. -/
 theorem packElements_bytes (data : Bytes) :
-    packElements (data.toList.map fun byte => #[byte]) = packBytes data := by
+    packElements (data.data.toList.map fun byte => ⟨#[byte]⟩) = packBytes data := by
   -- Concatenating the one-byte integer encodings recovers the original byte array before chunking.
   simp [packElements, fold_byteParts]
 

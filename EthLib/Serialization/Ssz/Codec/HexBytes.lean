@@ -18,7 +18,7 @@ namespace EthLib.Serialization.Ssz
 The digits may be in either case. -/
 def parseHexBytes (count : Nat) (text : String) : Option (Vector UInt8 count) :=
   match ofHex text with
-  | .ok data => Base.exactBytes? count ⟨data⟩
+  | .ok data => Base.exactBytes? count data
   | .error _ => none
 
 end EthLib.Serialization.Ssz

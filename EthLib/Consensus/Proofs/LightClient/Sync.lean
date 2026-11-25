@@ -43,7 +43,8 @@ theorem LightClientHeader.beacon_eq_of_sameSszValue {preset : Preset} {fork : Fo
   -- The beacon header is the first field, so its five values come first in both sequences.
   simp only [SszType.toValue, SszFields.toValues, Value.seq.injEq, List.cons.injEq] at values
   obtain ⟨⟨slot, proposer, parent, state, body, -⟩, -⟩ := values
-  simp only [Value.uint.injEq, Value.bytes.injEq, UInt64.toNat_inj, Vector.toArray_inj]
+  simp only [Value.uint.injEq, Value.bytes.injEq, ByteArray.mk.injEq, UInt64.toNat_inj,
+    Vector.toArray_inj]
     at slot proposer parent state body
   simp only [slot, proposer, parent, state, body]
 

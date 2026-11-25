@@ -522,12 +522,12 @@ theorem cons_append_extract_one {request : ByteArray} {type : UInt8}
       | mk list => cases list with
         | nil => simp at first
         | cons _ _ => exact Nat.succ_pos _
-    apply ByteArray.ext
-    rw [ByteArray.data_append, ByteArray.data_extract]
-    have whole := firstByte_append_tail bytes positive
-    have named : bytes[0]?.getD 0 = type := by
+    have whole := firstByte_append_tail ⟨bytes⟩ positive
+    -- The first byte is the type, read through the array that holds the bytes.
+    have named : (ByteArray.mk bytes)[0]?.getD 0 = type := by
       change bytes[0]? = some type at first
-      rw [first]
+      rw [getElem?_pos (ByteArray.mk bytes) 0 positive, getElem?_pos bytes 0 positive] at *
+      cases first
       rfl
     rw [named] at whole
     exact whole

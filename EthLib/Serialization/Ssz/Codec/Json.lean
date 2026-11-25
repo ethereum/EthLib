@@ -107,7 +107,7 @@ def Desc.isOneByte : Desc → Bool
 /-- Bytes as the mapping writes them: lowercase hex behind a two-character marker. -/
 def toHex (data : Bytes) : String :=
   -- A hex string: `0x`, then the bytes as they appear in the encoding, two digits a byte.
-  Base.hexString data.toList
+  Base.hexString data.data.toList
 
 /-- The bytes that a run of hex digits holds, two digits a byte, high digit first.
 
@@ -116,7 +116,7 @@ A digit may be in either letter case.
 An odd count of digits, or a character that is not a digit, is refused. -/
 def hexBytes (digits : List Char) : Except Err Bytes :=
   match Base.hexBytes? digits with
-  | some bytes => .ok bytes.data
+  | some bytes => .ok bytes
   | none => .error .hexDigits
 
 /--
@@ -143,18 +143,18 @@ def byteRunFrom : List Value → Bytes → Except Err Bytes
 
 /-- The bytes a run of one-byte integer values holds, in order. -/
 def byteRun (values : List Value) : Except Err Bytes :=
-  byteRunFrom values #[]
+  byteRunFrom values .empty
 
 /-- One-byte integer values for a run of bytes, which reads a byte-alias sequence back. -/
 def byteElements (data : Bytes) : List Value :=
-  data.toList.map fun byte => .uint byte.toNat
+  data.data.toList.map fun byte => .uint byte.toNat
 
 /-- Digits in a string, which is how the mapping writes an integer. -/
 def decimal (n : Nat) : Json := .str (toString n)
 
 /-- One decimal string per byte. -/
 def byteDigitsJson (data : Bytes) : Json :=
-  .arr (data.map fun byte => decimal byte.toNat)
+  .arr (data.data.map fun byte => decimal byte.toNat)
 
 /-- The document of a byte list: one hex string, its text, or one decimal string per byte. -/
 def byteListJson (spelling : Spelling) (data : Bytes) : Json :=
@@ -164,7 +164,7 @@ def byteListJson (spelling : Spelling) (data : Bytes) : Json :=
   --
   -- Bytes that are not valid UTF-8 spell no string, so they fall back to decimal strings.
   else if spelling.isText then
-    match String.fromUTF8? ⟨data⟩ with
+    match String.fromUTF8? data with
     | some text => .str text
     | none => byteDigitsJson data
   -- List[byte, N]: one hex string.
@@ -210,11 +210,11 @@ Bytes that spell no text are written as decimal strings.
 def textBytes (document : Json) : Except Err Bytes :=
   match document with
   -- A string stands for its UTF-8 bytes.
-  | .str text => .ok text.toUTF8.data
+  | .str text => .ok text.toUTF8
   -- Decimal strings stand only for bytes that are not valid UTF-8, where the writer used them.
   | .arr entries => do
-    let data ← byteDigitsFrom entries.toList #[]
-    if (String.fromUTF8? ⟨data⟩).isSome then throw .typeMismatch
+    let data ← byteDigitsFrom entries.toList .empty
+    if (String.fromUTF8? data).isSome then throw .typeMismatch
     return data
   | _ => .error .typeMismatch
 
@@ -270,7 +270,7 @@ def jsonOf (shape : Desc) (spelling : Spelling) (value : Value) : Except Err Jso
     -- byte: the hex string of its one byte, from `0x00` to `0xff`.
     --
     -- The alias is a one-byte integer, so no wider integer is written as hex.
-    else if spelling.isByte && width == 1 then .ok (.str (toHex #[UInt8.ofNat n]))
+    else if spelling.isByte && width == 1 then .ok (.str (toHex ⟨#[UInt8.ofNat n]⟩))
     else .ok (decimal n)
   -- Vector[byte, N]: the hex string of its `N` bytes.
   | .byteVector length, .bytes data =>
@@ -379,7 +379,7 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
   | .byteList limit => do
     let data ← if spelling.isDigits then
         let .arr entries := document | throw .typeMismatch
-        byteDigitsFrom entries.toList #[]
+        byteDigitsFrom entries.toList .empty
       else if spelling.isText then textBytes document
       else ofHex (← collectionHex document)
     if data.size > limit then throw (.documentOverLimit limit data.size)

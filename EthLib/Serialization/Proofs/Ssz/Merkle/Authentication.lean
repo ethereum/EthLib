@@ -19,7 +19,7 @@ namespace EthLib.Serialization.Ssz
 /-- Every parent digest is a complete SSZ node, regardless of the child inputs. -/
 @[simp] theorem combine_size (left right : Bytes) : (combine left right).size = bytesPerChunk := by
   -- SHA-256 produces thirty-two bytes independently of the message contents.
-  exact Cryptography.Hash.Sha256.hash_size (ByteArray.mk (left ++ right))
+  exact Cryptography.Hash.Sha256.hash_size (left ++ right)
 
 /-- The climb with SHA-256 in the identity monad is the climb of the specification. -/
 @[simp] theorem climbBranchM_sha256 (index level : Nat) (node : Bytes) (branch : List Bytes) :
@@ -81,22 +81,24 @@ theorem findBranchCollision_valid_of_width (hash : ByteArray → ByteArray)
     (rightWidths : ∀ node ∈ rightProof, node.size = bytesPerChunk)
     (found : findBranchCollision index level left right leftProof rightProof hash = some (a, b)) :
     a.size = 2 * bytesPerChunk ∧ b.size = 2 * bytesPerChunk ∧ a ≠ b ∧
-      hash (ByteArray.mk a) = hash (ByteArray.mk b) := by
+      hash a = hash b := by
   -- The two messages are those of a node collision.
   obtain ⟨c, hc, pair⟩ := Option.map_eq_some_iff.mp found
   cases pair
   obtain ⟨⟨different, joined⟩, -⟩ := Cryptography.Merkle.findCollision_valid _ _ _ _ _ _ c hc
   -- Every node the two climbs hash has 32 bytes, since a parent is a digest of the hash.
   obtain ⟨x1, x2, y1, y2⟩ := Cryptography.Merkle.findCollision_children _
-    (fun node => node.size = bytesPerChunk) (fun _ x y => width (ByteArray.mk (x ++ y)))
+    (fun node => node.size = bytesPerChunk) (fun _ x y => width (x ++ y))
     leftWidth rightWidth leftWidths rightWidths hc
   refine ⟨by simp [x1, x2, Nat.two_mul], by simp [y1, y2, Nat.two_mul],
     fun equal => different ?_, ?_⟩
   · -- Fixed child widths keep the boundary between the two children in place.
-    obtain ⟨h1, h2⟩ := Array.append_inj equal (x1.trans y1.symm)
-    exact Prod.ext h1 h2
+    have joinedData := congrArg ByteArray.data equal
+    rw [ByteArray.data_append, ByteArray.data_append] at joinedData
+    obtain ⟨h1, h2⟩ := Array.append_inj joinedData (x1.trans y1.symm)
+    exact Prod.ext (ByteArray.ext h1) (ByteArray.ext h2)
   · -- The two pairs hash to one parent, which is the digest of their messages.
-    exact ByteArray.ext joined
+    exact joined
 
 /-- Between branches of complete nodes, the search returns two different 64-byte messages.
 
@@ -108,8 +110,7 @@ theorem findBranchCollision_valid {index level : Nat} {left right : Bytes}
     (rightWidths : ∀ node ∈ rightProof, node.size = bytesPerChunk)
     (found : findBranchCollision index level left right leftProof rightProof = some (a, b)) :
     a.size = 2 * bytesPerChunk ∧ b.size = 2 * bytesPerChunk ∧ a ≠ b ∧
-      Cryptography.Hash.Sha256.hash (ByteArray.mk a)
-        = Cryptography.Hash.Sha256.hash (ByteArray.mk b) :=
+      Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b :=
   findBranchCollision_valid_of_width _ Cryptography.Hash.Sha256.hash_size leftWidth rightWidth
     leftWidths rightWidths found
 
@@ -201,8 +202,7 @@ theorem verifyMerkleProof_binding {left right root : Bytes} {leftProof rightProo
       ∃ a b, findBranchCollision index 0 left right leftProof rightProof = some (a, b) ∧
         a ∈ branchMessages index 0 left leftProof ∧ b ∈ branchMessages index 0 right rightProof ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a)
-          = Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b := by
   -- Acceptance supplies the widths and common branch depth required by collision extraction.
   obtain ⟨leftWidth, leftWidths, leftBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp first
   obtain ⟨rightWidth, rightWidths, rightBuilt⟩ := (verifyMerkleProof_eq_true_iff ..).mp second

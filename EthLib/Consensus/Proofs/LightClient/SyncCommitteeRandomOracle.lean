@@ -105,15 +105,15 @@ theorem hashTreeRootM_syncCommittee {m : Type → Type} [Monad m] [LawfulMonad m
           (.seq (committee.pubkeys.toList.map SszType.toValue))).run with
       | .ok keys =>
         let aggregate ← hash ⟨committee.aggregatePubkey.toArray ++ Array.replicate 16 0⟩
-        return .ok (← hash ⟨keys ++ aggregate.data⟩).data
+        return .ok (← hash (keys ++ aggregate))
       | .error error => return .error error) := by
   have aggregate : (hashTreeRootAtM (Hasher.ofHash hash) 2 (.byteVector 48)
-      (.bytes committee.aggregatePubkey.toArray)).run = _ :=
+      (.bytes ⟨committee.aggregatePubkey.toArray⟩)).run = _ :=
     hashTreeRootAtM_bytes48 (Hasher.ofHash hash) 1 committee.aggregatePubkey
   show (hashTreeRootAtM (Hasher.ofHash hash) 3 (.container ["pubkeys", "aggregate_pubkey"]
     [.vector (.byteVector 48) preset.SYNC_COMMITTEE_SIZE.toNat, .byteVector 48])
     (.seq [.seq (committee.pubkeys.toList.map SszType.toValue),
-      .bytes committee.aggregatePubkey.toArray])).run = _
+      .bytes ⟨committee.aggregatePubkey.toArray⟩])).run = _
   unfold hashTreeRootAtM
   simp only [merkleLayout, List.length_cons, List.length_nil, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, liftM_pure, pure_bind, List.zip_cons_cons, List.zip_nil_left,
@@ -158,10 +158,13 @@ private theorem collision_or_eq_of_hashTreeRootM_syncCommittee {cache : HashOrac
   obtain ⟨digest₂, hdigest₂, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   obtain ⟨top₂, htop₂, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   -- Each step: one answer of two hashes gives one message, or a collision of the cache.
-  refine (collision_or_eq_of_queryHash htop₁ htop₂
-    (Except.ok.inj (Option.some.inj (hfirst.trans hsecond.symm)))).elim .inl fun top => ?_
-  obtain ⟨rfl, sameAggregate⟩ := Array.append_inj' top
+  refine (collision_or_eq_of_queryHash htop₁ htop₂ (congrArg ByteArray.data
+    (Except.ok.inj (Option.some.inj (hfirst.trans hsecond.symm))))).elim .inl fun top => ?_
+  -- A message is two nodes joined, so its array is the arrays of the two joined.
+  simp only [ByteArray.data_append] at top
+  obtain ⟨sameKeys, sameAggregate⟩ := Array.append_inj' top
     ((size_of_queryHash hdigest₁).trans (size_of_queryHash hdigest₂).symm)
+  obtain rfl : node₁ = node₂ := ByteArray.ext sameKeys
   refine (collision_or_eq_of_queryHash hdigest₁ hdigest₂ sameAggregate).elim .inl fun key => ?_
   refine (collision_or_eq_of_hashTreeRootM_bytes48Vector (by simp) (by simp) hkeys₁
     hkeys₂).elim .inl fun keys => .inr ?_

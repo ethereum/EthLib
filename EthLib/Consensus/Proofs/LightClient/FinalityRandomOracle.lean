@@ -59,7 +59,7 @@ structure FinalityOutcome where
 It is zero bytes at the genesis slot, and the root of the header at any later slot. -/
 def finalizedLeafM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray)
     (header : BeaconBlockHeader) : m (Except Err Bytes) :=
-  if header.slot = GENESIS_SLOT then pure (.ok ZERO_HASH.toArray)
+  if header.slot = GENESIS_SLOT then pure (.ok ⟨ZERO_HASH.toArray⟩)
   else (hashTreeRootM (Hasher.ofHash hash) (SszType.desc BeaconBlockHeader)
     (SszType.toValue header)).run
 
@@ -109,18 +109,18 @@ theorem hashTreeRootM_beaconBlockHeader {m : Type → Type} [Monad m] [LawfulMon
     (hashTreeRootM (Hasher.ofHash hash) (SszType.desc BeaconBlockHeader)
       (SszType.toValue header)).run = (do
       -- The slot and the proposer index are their 8 bytes and 24 zero bytes, and share one hash.
-      let indices ← hash ⟨uintBytes 8 header.slot.toNat ++ Array.replicate 24 0 ++
-        (uintBytes 8 header.proposerIndex.toNat ++ Array.replicate 24 0)⟩
+      let indices ← hash (uintBytes 8 header.slot.toNat ++ ⟨Array.replicate 24 0⟩ ++
+        (uintBytes 8 header.proposerIndex.toNat ++ ⟨Array.replicate 24 0⟩))
       -- The parent and state roots share one hash.
       let roots ← hash ⟨header.parentRoot.toArray ++ header.stateRoot.toArray⟩
-      let left ← hash ⟨indices.data ++ roots.data⟩
+      let left ← hash (indices ++ roots)
       -- The body root takes one hash with a zero node.
-      let body ← hash ⟨header.bodyRoot.toArray ++ zeroChunk⟩
+      let body ← hash (⟨header.bodyRoot.toArray⟩ ++ zeroChunk)
       -- One hash joins two zero nodes.
-      let zero ← hash ⟨zeroChunk ++ zeroChunk⟩
-      let right ← hash ⟨body.data ++ zero.data⟩
-      let root ← hash ⟨left.data ++ right.data⟩
-      return .ok root.data) := by
+      let zero ← hash (zeroChunk ++ zeroChunk)
+      let right ← hash (body ++ zero)
+      let root ← hash (left ++ right)
+      return .ok root) := by
   -- The roots of the five fields, each stated for its SSZ shape.
   have slot : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.uint 8)
       (.uint header.slot.toNat)).run = _ :=
@@ -129,19 +129,19 @@ theorem hashTreeRootM_beaconBlockHeader {m : Type → Type} [Monad m] [LawfulMon
       (.uint header.proposerIndex.toNat)).run = _ :=
     hashTreeRootM_uint64 (Hasher.ofHash hash) header.proposerIndex
   have parent : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 32)
-      (.bytes header.parentRoot.toArray)).run = _ :=
+      (.bytes ⟨header.parentRoot.toArray⟩)).run = _ :=
     hashTreeRootM_bytes32 (Hasher.ofHash hash) header.parentRoot
   have state : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 32)
-      (.bytes header.stateRoot.toArray)).run = _ :=
+      (.bytes ⟨header.stateRoot.toArray⟩)).run = _ :=
     hashTreeRootM_bytes32 (Hasher.ofHash hash) header.stateRoot
   have body : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 32)
-      (.bytes header.bodyRoot.toArray)).run = _ :=
+      (.bytes ⟨header.bodyRoot.toArray⟩)).run = _ :=
     hashTreeRootM_bytes32 (Hasher.ofHash hash) header.bodyRoot
   show (hashTreeRootAtM (Hasher.ofHash hash) 2 (.container ["slot", "proposer_index",
     "parent_root", "state_root", "body_root"] [.uint 8, .uint 8, .byteVector 32, .byteVector 32,
     .byteVector 32]) (.seq [.uint header.slot.toNat, .uint header.proposerIndex.toNat,
-      .bytes header.parentRoot.toArray, .bytes header.stateRoot.toArray,
-      .bytes header.bodyRoot.toArray])).run = _
+      .bytes ⟨header.parentRoot.toArray⟩, .bytes ⟨header.stateRoot.toArray⟩,
+      .bytes ⟨header.bodyRoot.toArray⟩])).run = _
   unfold hashTreeRootAtM
   simp only [merkleLayout, List.length_cons, List.length_nil, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, liftM_pure, pure_bind, List.zip_cons_cons, List.zip_nil_left,
@@ -185,28 +185,33 @@ private theorem collision_or_eq_of_hashTreeRootM_beaconBlockHeader
   obtain ⟨right₂, hright₂, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   obtain ⟨top₂, htop₂, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   -- Each step: one answer of two hashes gives one message, or a collision of the cache.
-  refine (collision_or_eq_of_queryHash htop₁ htop₂
-    (Except.ok.inj (Option.some.inj (hfirst.trans hsecond.symm)))).elim .inl fun top => ?_
+  refine (collision_or_eq_of_queryHash htop₁ htop₂ (congrArg ByteArray.data
+    (Except.ok.inj (Option.some.inj (hfirst.trans hsecond.symm))))).elim .inl fun top => ?_
+  -- A message is two nodes joined, so its array is the arrays of the two joined.
+  simp only [ByteArray.data_append] at top
   obtain ⟨sameLeft, sameRight⟩ := Array.append_inj top
     ((size_of_queryHash hleft₁).trans (size_of_queryHash hleft₂).symm)
   refine (collision_or_eq_of_queryHash hleft₁ hleft₂ sameLeft).elim .inl fun left => ?_
+  simp only [ByteArray.data_append] at left
   obtain ⟨sameIndices, sameRoots⟩ := Array.append_inj left
     ((size_of_queryHash hindices₁).trans (size_of_queryHash hindices₂).symm)
   refine (collision_or_eq_of_queryHash hindices₁ hindices₂ sameIndices).elim .inl
     fun indices => ?_
   refine (collision_or_eq_of_queryHash hroots₁ hroots₂ sameRoots).elim .inl fun roots => ?_
   refine (collision_or_eq_of_queryHash hright₁ hright₂ sameRight).elim .inl fun right => ?_
+  simp only [ByteArray.data_append] at right
   obtain ⟨sameBody, -⟩ := Array.append_inj right
     ((size_of_queryHash hbody₁).trans (size_of_queryHash hbody₂).symm)
   refine (collision_or_eq_of_queryHash hbody₁ hbody₂ sameBody).elim .inl fun body => ?_
   -- No step collides, so every field of the two headers is equal.
   refine .inr ?_
+  simp only [ByteArray.data_append] at indices body
   obtain ⟨sameSlot, sameProposer⟩ := Array.append_inj indices (by simp [uintBytes_size])
   obtain ⟨sameParent, sameState⟩ := Array.append_inj roots (by simp)
   have slots := uintBytes_injective (by simpa using slot₁.toNat_lt)
-    (by simpa using slot₂.toNat_lt) ((Array.append_left_inj _).mp sameSlot)
+    (by simpa using slot₂.toNat_lt) (ByteArray.ext ((Array.append_left_inj _).mp sameSlot))
   have proposers := uintBytes_injective (by simpa using proposer₁.toNat_lt)
-    (by simpa using proposer₂.toNat_lt) ((Array.append_left_inj _).mp sameProposer)
+    (by simpa using proposer₂.toNat_lt) (ByteArray.ext ((Array.append_left_inj _).mp sameProposer))
   simp only [BeaconBlockHeader.mk.injEq]
   exact ⟨UInt64.toNat_inj.mp slots, UInt64.toNat_inj.mp proposers,
     Vector.toArray_inj.mp sameParent, Vector.toArray_inj.mp sameState,
@@ -359,7 +364,7 @@ theorem extractFinality_sha256 (gindex : Nat) (claim : FinalityClaim) :
     intro header
     unfold finalizedLeafM
     split
-    · show toChunk ZERO_HASH.toArray = .ok ZERO_HASH
+    · show toChunk ⟨ZERO_HASH.toArray⟩ = .ok ZERO_HASH
       exact toChunk_ok_iff.mpr rfl
     · simp only [ofHash_sha256, SszType.hashTreeRoot_eq]
       rfl

@@ -99,8 +99,10 @@ namespace DepositMerkleTree
 /-- The SSZ parent of two nodes, as a 32-byte root. -/
 def hashPair (left right : Root) : Root :=
   -- The width holds by unfolding: the SSZ parent is the bytes of a SHA-256 digest.
-  ⟨combine left.toArray right.toArray,
-    (Cryptography.Hash.Sha256.hash32 ⟨left.toArray ++ right.toArray⟩).size_toArray⟩
+  ⟨(combine ⟨left.toArray⟩ ⟨right.toArray⟩).data, by
+    rw [show combine ⟨left.toArray⟩ ⟨right.toArray⟩
+      = Cryptography.Hash.Sha256.hash (⟨left.toArray⟩ ++ ⟨right.toArray⟩) from rfl]
+    exact (Cryptography.Hash.Sha256.hash32 _).size_toArray⟩
 
 /-- The SSZ root of the all-zero subtree of a height, read from the SSZ table. -/
 def zeroNode (height : Nat) : Root :=
@@ -110,8 +112,10 @@ def zeroNode (height : Nat) : Root :=
 /-- A root with a count mixed in, as SSZ mixes the length into a list root. -/
 def mixInCount (root : Root) (count : Nat) : Root :=
   -- The width holds by unfolding: the mix-in is the bytes of a SHA-256 digest.
-  ⟨mixIn root.toArray (lengthWord count),
-    (Cryptography.Hash.Sha256.hash32 ⟨root.toArray ++ lengthWord count⟩).size_toArray⟩
+  ⟨(mixIn ⟨root.toArray⟩ (lengthWord count)).data, by
+    rw [show mixIn ⟨root.toArray⟩ (lengthWord count)
+      = Cryptography.Hash.Sha256.hash (⟨root.toArray⟩ ++ lengthWord count) from rfl]
+    exact (Cryptography.Hash.Sha256.hash32 _).size_toArray⟩
 
 end DepositMerkleTree
 

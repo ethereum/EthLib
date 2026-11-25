@@ -85,38 +85,39 @@ theorem valueOf_jsonOf_byteVector {spelling : Spelling} {length : Nat} {data : B
 
 /-- Reading decimal strings appends the bytes that they hold to the bytes so far. -/
 theorem byteDigitsFrom_map : ∀ (bytes : List UInt8) (out : Bytes),
-    byteDigitsFrom (bytes.map fun byte => decimal byte.toNat) out = .ok (out ++ bytes.toArray)
+    byteDigitsFrom (bytes.map fun byte => decimal byte.toNat) out = .ok (out ++ ⟨bytes.toArray⟩)
   | [], out => by simp [byteDigitsFrom]
   | byte :: rest, out => by
     have small : ¬ byte.toNat ≥ 256 := by have := byte.toNat_lt; omega
     simp only [List.map_cons, byteDigitsFrom, readNat_decimal, Bind.bind, Except.bind, small,
       ite_false, UInt8.ofNat_toNat, byteDigitsFrom_map rest]
-    simp
+    -- Both sides hold the same array: the bytes so far, this byte, then the rest.
+    simp [ByteArray.ext_iff, ByteArray.data_push, ByteArray.data_append]
 
 /-- The UTF-8 bytes of a text decode back to it. -/
 private theorem fromUTF8?_toByteArray (text : String) :
-    String.fromUTF8? ⟨text.toByteArray.data⟩ = some text := by
-  have valid : ByteArray.IsValidUTF8 ⟨text.toByteArray.data⟩ := text.isValidUTF8
+    String.fromUTF8? text.toByteArray = some text := by
+  have valid : ByteArray.IsValidUTF8 text.toByteArray := text.isValidUTF8
   simp [String.fromUTF8?, valid, String.fromUTF8]
 
 /-- A text within the limit is written as itself, under the text spelling. -/
 theorem jsonOf_text {limit : Nat} {text : String} (fitted : text.utf8ByteSize ≤ limit) :
-    jsonOf (.byteList limit) .text (.bytes text.toByteArray.data) = .ok (.str text) := by
+    jsonOf (.byteList limit) .text (.bytes text.toByteArray) = .ok (.str text) := by
   simp [jsonOf, fitted, byteListJson, Spelling.isDigits, Spelling.isText,
     fromUTF8?_toByteArray]
 
 /-- A text within the limit reads back as its UTF-8 bytes, under the text spelling. -/
 theorem valueOf_text {limit : Nat} {text : String} (fitted : text.utf8ByteSize ≤ limit) :
-    valueOf (.byteList limit) .text (.str text) = .ok (.bytes text.toByteArray.data) := by
+    valueOf (.byteList limit) .text (.str text) = .ok (.bytes text.toByteArray) := by
   simp [valueOf, textBytes, Spelling.isDigits, Spelling.isText, fitted, Bind.bind, Except.bind,
     pure, Except.pure]
 
 /-- Decimal strings of bytes that spell a text are refused under the text spelling. -/
-theorem valueOf_text_digits {limit : Nat} {data : Bytes} (valid : ByteArray.IsValidUTF8 ⟨data⟩) :
+theorem valueOf_text_digits {limit : Nat} {data : Bytes} (valid : ByteArray.IsValidUTF8 data) :
     valueOf (.byteList limit) .text (byteDigitsJson data) = .error .typeMismatch := by
-  have digits := byteDigitsFrom_map data.toList #[]
-  simp only [Array.empty_append, Array.toArray_toList] at digits
-  have some : (String.fromUTF8? ⟨data⟩).isSome := by
+  have digits := byteDigitsFrom_map data.data.toList .empty
+  simp only [ByteArray.empty_append, Array.toArray_toList] at digits
+  have some : (String.fromUTF8? data).isSome := by
     simpa [String.fromUTF8?] using valid
   simp [valueOf, textBytes, byteDigitsJson, Spelling.isDigits, Spelling.isText, digits, some,
     Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
@@ -137,11 +138,11 @@ theorem valueOf_jsonOf_byteList {spelling : Spelling} {limit : Nat} {data : Byte
     simp only [digits, Bool.false_eq_true, ↓reduceIte] at written
     by_cases text : spelling.isText = true
     · simp only [text, ↓reduceIte] at written
-      cases valid : String.fromUTF8? ⟨data⟩ with
+      cases valid : String.fromUTF8? data with
       | some s =>
         simp only [valid] at written
         subst written
-        have back : s.toByteArray = ⟨data⟩ := by
+        have back : s.toByteArray = data := by
           unfold String.fromUTF8? at valid
           split at valid
           · simp only [String.fromUTF8, Option.some.injEq] at valid
@@ -235,9 +236,9 @@ theorem valueOf_not_canonical :
     ∃ (shape : Desc) (spelling : Spelling) (left right : Json) (value : Value),
       left ≠ right ∧ valueOf shape spelling left = .ok value
         ∧ valueOf shape spelling right = .ok value := by
-  have lower : ofHex "0x0a" = .ok #[10] := by rfl
-  have upper : ofHex "0x0A" = .ok #[10] := by rfl
-  refine ⟨.byteVector 1, .opaque, .str "0x0a", .str "0x0A", .bytes #[10], by simp, ?_, ?_⟩ <;>
+  have lower : ofHex "0x0a" = .ok ⟨#[10]⟩ := by rfl
+  have upper : ofHex "0x0A" = .ok ⟨#[10]⟩ := by rfl
+  refine ⟨.byteVector 1, .opaque, .str "0x0a", .str "0x0A", .bytes ⟨#[10]⟩, by simp, ?_, ?_⟩ <;>
     simp [valueOf, collectionHex, lower, upper, Bind.bind, Except.bind, pure, Except.pure]
 
 

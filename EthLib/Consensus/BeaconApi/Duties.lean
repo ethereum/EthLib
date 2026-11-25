@@ -85,7 +85,7 @@ structure PtcDuty where
 
 /-- The JSON of a public key: its hex text. -/
 def pubkeyJson (pubkey : BLSPubkey) : Json :=
-  .str (toHex pubkey.toArray)
+  .str (toHex ⟨pubkey.toArray⟩)
 
 /-- The JSON of an attester duty, as the API writes it. -/
 def AttesterDuty.toJson (duty : AttesterDuty) : Json :=

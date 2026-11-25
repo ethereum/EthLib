@@ -16,7 +16,7 @@ namespace EthLib.Serialization.Ssz
 
 /-- The hex text of bytes reads back as those bytes when the count fits. -/
 theorem parseHexBytes_toHex {count : Nat} (data : Vector UInt8 count) :
-    parseHexBytes count (toHex data.toArray) = some data := by
+    parseHexBytes count (toHex ⟨data.toArray⟩) = some data := by
   simp [parseHexBytes, Base.exactBytes?, Base.exactArray?_toArray, ofHex_toHex]
 
 end EthLib.Serialization.Ssz

@@ -149,9 +149,8 @@ The logs bloom must have a byte, as for the payload's laws.
 -/
 theorem serialize_eq [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     (payload : ExecutionPayload preset fork) :
-    SszType.serialize payload = (do
-      return ⟨← Serialization.Ssz.serialize (fieldsDesc preset fork)
-        (.seq (fieldValues payload))⟩) := by
+    SszType.serialize payload =
+      Serialization.Ssz.serialize (fieldsDesc preset fork) (.seq (fieldValues payload)) := by
   rw [SszType.serialize_eq, desc_eq, toValue_eq]
 
 /-- At every fork, the bytes of a payload decode back to it. -/
@@ -267,7 +266,7 @@ theorem ExecutionPayload.hashTreeRoot_header {preset : Preset} {fork : Fork}
         (desc_transactions_of_lt before).symm) (by simp [ExecutionPayload.fieldValues]) tx
     have two := hashTreeRoot_summary (names := ExecutionPayload.names fork) (position := 14)
       (fields := (ExecutionPayload.fieldDescs preset fork).set 13 (.byteVector bytesPerChunk))
-      (values := (ExecutionPayload.fieldValues payload).set 13 (.bytes txRoot.toArray))
+      (values := (ExecutionPayload.fieldValues payload).set 13 (.bytes ⟨txRoot.toArray⟩))
       (by by_cases deneb : Fork.dencun ≤ fork <;>
         simp [ExecutionPayload.fieldDescs, ExecutionPayload.fieldValues, capella, deneb,
           gloas])

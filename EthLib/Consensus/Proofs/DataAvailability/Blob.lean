@@ -46,13 +46,12 @@ theorem verifyBlobSidecarInclusionProof_binding {preset : Preset} {fork : Fork}
     (secondValid : verifyBlobSidecarInclusionProof preset fork second = true) :
     ∃ leaf other index, SszType.hashTreeRoot first.kzgCommitment = .ok leaf ∧
       SszType.hashTreeRoot second.kzgCommitment = .ok other ∧
-      (leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray
-          (first.kzgCommitmentInclusionProof.toList.map Vector.toArray),
-        ∃ b ∈ branchMessages index 0 other.toArray
-          (second.kzgCommitmentInclusionProof.toList.map Vector.toArray),
+      (leaf = other ∨ ∃ a ∈ branchMessages index 0 ⟨leaf.toArray⟩
+          (first.kzgCommitmentInclusionProof.toList.map fun node => ⟨node.toArray⟩),
+        ∃ b ∈ branchMessages index 0 ⟨other.toArray⟩
+          (second.kzgCommitmentInclusionProof.toList.map fun node => ⟨node.toArray⟩),
           a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-          Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-            Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+          Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   unfold verifyBlobSidecarInclusionProof at firstValid secondValid
   rw [← sameIndex] at secondValid
   cases gindex : blobKzgCommitmentGindex preset fork first.index.toNat with
@@ -246,7 +245,7 @@ private theorem inclusion_branch (deneb : .dencun ≤ fork ∧ fork < .glamsterd
     ∃ gindex leaf root nodes, blobKzgCommitmentGindex preset fork index = .ok gindex ∧
       SszType.hashTreeRoot commitment = .ok leaf ∧ SszType.hashTreeRoot body = .ok root ∧
       buildProof (SszType.desc (BeaconBlockBody preset fork)) (SszType.toValue body) gindex =
-        .ok (nodes.map Vector.toArray) ∧
+        .ok (nodes.map fun node => ⟨node.toArray⟩) ∧
       isValidMerkleBranch leaf nodes (Nat.log2 gindex) (gindex % 2 ^ Nat.log2 gindex) root =
         true := by
   have inside : index < preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat :=
@@ -257,13 +256,13 @@ private theorem inclusion_branch (deneb : .dencun ≤ fork ∧ fork < .glamsterd
   obtain ⟨leaf, rooted⟩ := SszType.hashTreeRoot_total commitment
   -- The commitment is the node that the path names in the tree of the body.
   have element : PathSelects (SszType.desc (BlobKZGCommitments preset fork))
-      (SszType.toValue (body.blobKzgCommitments deneb)) [.position index] leaf.toArray := by
+      (SszType.toValue (body.blobKzgCommitments deneb)) [.position index] ⟨leaf.toArray⟩ := by
     have fits := LawfulSszType.fits (body.blobKzgCommitments deneb)
     rw [commitments_desc deneb.2] at fits ⊢
     exact PathSelects.listElement fits rfl (by simp [SszType.toValue, chosen])
       (PathSelects.root (SszType.hashTreeRoot_ok_iff.mp rooted))
   have selects : PathSelects (SszType.desc (BeaconBlockBody preset fork))
-      (SszType.toValue body) [.position 11, .position index] leaf.toArray := by
+      (SszType.toValue body) [.position 11, .position index] ⟨leaf.toArray⟩ := by
     have sound := LawfulSszType.wellFormed (α := BeaconBlockBody preset fork)
     have fits := LawfulSszType.fits body
     rw [desc] at sound fits ⊢
@@ -286,7 +285,7 @@ private theorem inclusion_branch (deneb : .dencun ≤ fork ∧ fork < .glamsterd
 
 /-- Nodes of 32 bytes convert back to the vectors they came from. -/
 theorem mapM_toChunk (nodes : List Bytes32) :
-    (nodes.map Vector.toArray).mapM toChunk = .ok nodes := by
+    (nodes.map fun node => ⟨node.toArray⟩).mapM toChunk = .ok nodes := by
   induction nodes with
   | nil => rfl
   | cons node rest ih => exact Base.mapM_cons_ok.mpr ⟨node, rest, toChunk_ok_iff.mpr rfl, ih, rfl⟩
@@ -430,14 +429,14 @@ theorem blobKzgCommitments_branch (deneb : .dencun ≤ fork ∧ fork < .glamster
       SszType.hashTreeRoot (body.blobKzgCommitments deneb) = .ok leaf ∧
       SszType.hashTreeRoot body = .ok root ∧
       buildProof (SszType.desc (BeaconBlockBody preset fork)) (SszType.toValue body) 27 =
-        .ok (nodes.map Vector.toArray) ∧
+        .ok (nodes.map fun node => ⟨node.toArray⟩) ∧
       isValidMerkleBranch leaf nodes (Nat.log2 27) (27 % 2 ^ Nat.log2 27) root = true := by
   obtain ⟨position, fields, desc, count, field⟩ := body_desc (preset := preset) deneb
   obtain ⟨values, valued, commitments⟩ := body_values deneb body
   obtain ⟨leaf, rooted⟩ := SszType.hashTreeRoot_total (body.blobKzgCommitments deneb)
   -- The list of commitments is the node that its field names in the tree of the body.
   have selects : PathSelects (SszType.desc (BeaconBlockBody preset fork))
-      (SszType.toValue body) [.position 11] leaf.toArray := by
+      (SszType.toValue body) [.position 11] ⟨leaf.toArray⟩ := by
     have sound := LawfulSszType.wellFormed (α := BeaconBlockBody preset fork)
     have fits := LawfulSszType.fits body
     rw [desc] at sound fits ⊢
@@ -478,12 +477,11 @@ theorem verifyBlobSidecarInclusionProof_body (deneb : .dencun ≤ fork ∧ fork 
       -- That commitment has the root of the sidecar's commitment.
       --
       -- Otherwise the search over both climbs names two different 64-byte messages with one hash.
-      (leaf = other ∨ ∃ a b, findBranchCollision gindex 0 leaf.toArray other.toArray
-          (sidecar.kzgCommitmentInclusionProof.toList.map Vector.toArray)
-          (branch.toList.map Vector.toArray) = some (a, b) ∧
+      (leaf = other ∨ ∃ a b, findBranchCollision gindex 0 ⟨leaf.toArray⟩ ⟨other.toArray⟩
+          (sidecar.kzgCommitmentInclusionProof.toList.map fun node => ⟨node.toArray⟩)
+          (branch.toList.map fun node => ⟨node.toArray⟩) = some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   obtain ⟨gindex, other, root, located, otherRooted, bodyRoot, depth, honest⟩ :=
     blobKzgCommitmentInclusionProof_valid deneb chosen built
   rw [rooted] at bodyRoot

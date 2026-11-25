@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalBits
+public import EthLib.Serialization.Proofs.Ssz.Codec.StructBodies
 
 /-! Reassembling the byte ranges accepted by composite decoders. -/
 
@@ -14,7 +15,7 @@ theorem extract_join (data : Bytes) {start middle stop : Nat}
     (ordered : start ≤ middle) (onward : middle ≤ stop) :
     data.extract start middle ++ data.extract middle stop = data.extract start stop := by
   -- The two intervals share exactly one boundary, so they merge into one interval.
-  rw [Array.extract_append_extract, Nat.min_eq_left ordered, Nat.max_eq_right onward]
+  rw [ByteArray.extract_append_extract, Nat.min_eq_left ordered, Nat.max_eq_right onward]
 
 /-- Concatenating two lists of parts concatenates their byte representations. -/
 theorem concatParts_append (left right : List Bytes) :
@@ -22,7 +23,7 @@ theorem concatParts_append (left right : List Bytes) :
   -- Byte concatenation associates in the same way as concatenating the lists of parts.
   induction left with
   | nil => simp [concatParts]
-  | cons head tail ih => simp [concatParts, ih, Array.append_assoc]
+  | cons head tail ih => simp [concatParts, ih, ByteArray.append_assoc]
 
 /-- Equal-width slices cover precisely the byte interval occupied by their elements. -/
 theorem concat_fixed_slices (data : Bytes) (width count : Nat)
@@ -35,7 +36,7 @@ theorem concat_fixed_slices (data : Bytes) (width count : Nat)
   | succ count ih =>
     -- Separate the final slice from the already reconstructed prefix.
     rw [List.range_succ, List.map_append, concatParts_append, ih (Nat.le_trans (Nat.mul_le_mul_left width (by omega)) bounded)]
-    simp only [List.map_cons, List.map_nil, concatParts, Array.append_empty]
+    simp only [List.map_cons, List.map_nil, concatParts, ByteArray.append_empty]
     -- Their common boundary prevents both missing bytes and overlapping bytes.
     exact extract_join data (by omega) (Nat.mul_le_mul_right width (by omega))
 
@@ -51,8 +52,9 @@ theorem readUint_extract (data : Bytes) (start stop : Nat) :
     -- Both reads take the same first byte and advance by one position.
     have inside : offset < (data.extract start stop).size := by simp; omega
     have source : start + offset < data.size := by omega
-    simp only [readUint_succ, Array.getElem?_eq_getElem inside,
-      Array.getElem?_eq_getElem source, Option.getD_some, Array.getElem_extract]
+    simp only [readUint_succ, getElem?_pos (data.extract start stop) offset inside,
+      getElem?_pos data (start + offset) source, Option.getD_some,
+      ByteArray.getElem_extract]
     rw [ih (offset + 1) (by omega) bounded]
     congr 2
 
@@ -151,8 +153,8 @@ theorem assemble_of_parts {inline : List Bool} {parts : List Bytes} {data : Byte
       bodiesOf (inline.zip parts) = data)
     (bounded : data.size < 2 ^ (8 * bytesPerOffset)) : assemble inline parts = .ok data := by
   -- The reconstructed header and body have the same total width as the accepted input.
-  have sized := congrArg Array.size same
-  simp only [Array.size_append, headOf_size, bodiesOf_size] at sized
+  have sized := congrArg ByteArray.size same
+  simp only [ByteArray.size_append, headOf_size, bodiesOf_size] at sized
   -- That width lies below 2^32, so assembly returns the reconstructed bytes.
   simp [assemble_eq, show ¬headWidth (inline.zip parts) + bodyWidth (inline.zip parts) ≥
     2 ^ (8 * bytesPerOffset) by omega, same, pure, Except.pure]
@@ -171,9 +173,10 @@ theorem assemble_fixed_slices (data : Bytes) (width count : Nat)
   change headOf (headWidth (inlineSlots parts)) (inlineSlots parts) ++
     bodiesOf (inlineSlots parts) = data
   -- The inline header contains every element byte and leaves no separate body.
-  rw [headOf_inline, bodiesOf_inline, Array.append_empty,
+  rw [headOf_inline, bodiesOf_inline, ByteArray.append_empty,
     show concatParts parts = data.extract 0 (count * width) from
-      concat_fixed_slices data width count (by simp [sized, Nat.mul_comm]), ← sized, Array.extract_size]
+      concat_fixed_slices data width count (by simp [sized, Nat.mul_comm]), ← sized,
+      ByteArray.extract_zero_size]
 
 /-- An ordered offset table and its bodies reassemble to their exact original bytes. -/
 theorem assemble_offset_slices (data : Bytes) (count : Nat) (spans : List Nat)
@@ -210,7 +213,7 @@ theorem assemble_offset_slices (data : Bytes) (count : Nat) (spans : List Nat)
       bodiesOf (offsetSlots parts) = data
     rw [headWidth_offset, countIs, headOf_offsets, partition.1,
       readOffsets_bytes data count room, bodiesOf_offset, partition.2,
-      extract_join data (by omega) room, Array.extract_size]
+      extract_join data (by omega) room, ByteArray.extract_zero_size]
   -- The original accepted size guarantees that assembling these parts is permitted.
   exact assemble_of_parts raw bounded
 

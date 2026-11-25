@@ -42,7 +42,7 @@ def chunksForBits (bitCount : Nat) : Nat :=
 /-- Nodes over a sequence of basic elements, packed back to back before being split. -/
 def packElements (parts : List Bytes) : Array Bytes :=
   -- The serialized elements, concatenated in order, then packed into chunks.
-  packBytes (parts.foldl (fun total part => total ++ part) #[])
+  packBytes (parts.foldl (fun total part => total ++ part) .empty)
 
 /-- What a shape puts under its tree. -/
 inductive Leaves where

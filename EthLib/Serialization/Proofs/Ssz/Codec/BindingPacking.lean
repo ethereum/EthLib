@@ -13,8 +13,12 @@ namespace EthLib.Serialization.Ssz
 theorem packBytes_injective {left right : Bytes} (lengths : left.size = right.size)
     (packed : packBytes left = packBytes right) : left = right := by
   -- Recover each payload byte by its packed-node number and its offset inside that node.
+  apply ByteArray.ext
   apply Array.ext lengths
   intro i hi hj
+  -- A read of the array that holds the bytes is a read of the bytes.
+  rw [ByteArray.size_data] at hi hj
+  change left[i]'hi = right[i]'hj
   -- Division by 32 selects the node, while the remainder selects a byte within it.
   have position : i % bytesPerChunk < bytesPerChunk := Nat.mod_lt _ (by decide)
   -- Recombining the node number and byte offset recovers the original payload position.
@@ -98,7 +102,7 @@ theorem fold_parts_eq_concat (parts : List Bytes) (front : Bytes) :
   -- Appending parts to a running prefix preserves their order by associativity of byte concatenation.
   induction parts generalizing front with
   | nil => simp [concatParts]
-  | cons part rest ih => simp [concatParts, ih, Array.append_assoc]
+  | cons part rest ih => simp [concatParts, ih, ByteArray.append_assoc]
 
 /-- Packed fixed-width element streams preserve same-length value sequences. -/
 theorem packElements_injective {shape : Desc} {width : Nat}

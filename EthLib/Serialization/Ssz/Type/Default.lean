@@ -32,11 +32,11 @@ def Desc.default : Desc → Except Err Value
   -- uintN: 0.
   | .uint _ => .ok (.uint 0)
   -- ByteVector[N]: `N` zero bytes, as for a Vector[byte, N].
-  | .byteVector length => .ok (.bytes (Array.replicate length 0))
+  | .byteVector length => .ok (.bytes ⟨Array.replicate length 0⟩)
   -- Bitvector[N]: `N` bits, each false.
   | .bitVector length => .ok (.bits (Array.replicate length false))
   -- ByteList[N]: the empty list.
-  | .byteList _ => .ok (.bytes #[])
+  | .byteList _ => .ok (.bytes .empty)
   -- Bitlist[N]: the empty list.
   | .bitList _ => .ok (.bits #[])
   -- EIP-7916: a ProgressiveBitlist is the empty list.

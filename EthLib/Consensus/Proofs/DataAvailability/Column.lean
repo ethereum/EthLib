@@ -70,12 +70,12 @@ theorem verifyKzgCommitmentsInclusionProof_binding {preset : Preset} {fork : For
     (secondValid : verifyKzgCommitmentsInclusionProof preset second secondBranch bodyRoot = true) :
     ∃ leaf other index, SszType.hashTreeRoot first = .ok leaf ∧
       SszType.hashTreeRoot second = .ok other ∧
-      (leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray
-          (firstBranch.toList.map Vector.toArray),
-        ∃ b ∈ branchMessages index 0 other.toArray (secondBranch.toList.map Vector.toArray),
+      (leaf = other ∨ ∃ a ∈ branchMessages index 0 ⟨leaf.toArray⟩
+          (firstBranch.toList.map fun node => ⟨node.toArray⟩),
+        ∃ b ∈ branchMessages index 0 ⟨other.toArray⟩
+          (secondBranch.toList.map fun node => ⟨node.toArray⟩),
           a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-          Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-            Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+          Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   unfold verifyKzgCommitmentsInclusionProof at firstValid secondValid
   cases gindex : blobKzgCommitmentsGindex preset fork with
   | error fault => simp [gindex] at firstValid
@@ -104,13 +104,14 @@ theorem verifyDataColumnSidecarInclusionProof_binding {preset : Preset} {fork : 
     (secondValid : verifyDataColumnSidecarInclusionProof preset beforeGloas second = true) :
     ∃ leaf other index, SszType.hashTreeRoot (first.kzgCommitments beforeGloas) = .ok leaf ∧
       SszType.hashTreeRoot (second.kzgCommitments beforeGloas) = .ok other ∧
-      (leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray
-          ((first.kzgCommitmentsInclusionProof beforeGloas).toList.map Vector.toArray),
-        ∃ b ∈ branchMessages index 0 other.toArray
-          ((second.kzgCommitmentsInclusionProof beforeGloas).toList.map Vector.toArray),
+      (leaf = other ∨ ∃ a ∈ branchMessages index 0 ⟨leaf.toArray⟩
+          ((first.kzgCommitmentsInclusionProof beforeGloas).toList.map
+            fun node => ⟨node.toArray⟩),
+        ∃ b ∈ branchMessages index 0 ⟨other.toArray⟩
+          ((second.kzgCommitmentsInclusionProof beforeGloas).toList.map
+            fun node => ⟨node.toArray⟩),
           a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-          Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-            Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+          Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   unfold verifyDataColumnSidecarInclusionProof at firstValid secondValid
   rw [sameRoot] at firstValid
   exact verifyKzgCommitmentsInclusionProof_binding firstValid secondValid
@@ -126,13 +127,12 @@ theorem verifyPartialDataColumnHeaderInclusionProof_binding {preset : Preset} {f
     (secondValid : verifyPartialDataColumnHeaderInclusionProof preset second = true) :
     ∃ leaf other index, SszType.hashTreeRoot first.kzgCommitments = .ok leaf ∧
       SszType.hashTreeRoot second.kzgCommitments = .ok other ∧
-      (leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray
-          (first.kzgCommitmentsInclusionProof.toList.map Vector.toArray),
-        ∃ b ∈ branchMessages index 0 other.toArray
-          (second.kzgCommitmentsInclusionProof.toList.map Vector.toArray),
+      (leaf = other ∨ ∃ a ∈ branchMessages index 0 ⟨leaf.toArray⟩
+          (first.kzgCommitmentsInclusionProof.toList.map fun node => ⟨node.toArray⟩),
+        ∃ b ∈ branchMessages index 0 ⟨other.toArray⟩
+          (second.kzgCommitmentsInclusionProof.toList.map fun node => ⟨node.toArray⟩),
           a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-          Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-            Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+          Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   unfold verifyPartialDataColumnHeaderInclusionProof at firstValid secondValid
   rw [sameRoot] at firstValid
   exact verifyKzgCommitmentsInclusionProof_binding firstValid secondValid
@@ -198,9 +198,6 @@ theorem PartialDataColumnGroupID.ofGroupId_toGroupId {fork : Fork}
     have he : (ByteArray.mk #[0] ++ data).extract 1 (ByteArray.mk #[0] ++ data).size = data := by
       apply ByteArray.ext
       simp [ByteArray.data_append, ByteArray.data_extract]
-      right
-      rw [show (ByteArray.mk #[0]).size = 1 from rfl]
-      omega
     have hc : (ByteArray.mk #[0] ++ data).data[0]? = some 0 := by simp [ByteArray.data_append]
     unfold PartialDataColumnGroupID.ofGroupId
     simp only [hc, ↓reduceIte, he, hd]
@@ -513,12 +510,12 @@ theorem verifyDataColumnSidecarInclusionProof_body (fulu : .fusaka ≤ fork)
       SszType.hashTreeRoot (sidecar.kzgCommitments beforeGloas) = .ok leaf ∧
       SszType.hashTreeRoot (body.blobKzgCommitments ⟨Nat.le_trans (by decide) fulu,
         beforeGloas⟩) = .ok other ∧
-      (leaf = other ∨ ∃ a b, findBranchCollision 27 0 leaf.toArray other.toArray
-          ((sidecar.kzgCommitmentsInclusionProof beforeGloas).toList.map Vector.toArray)
-          (branch.toList.map Vector.toArray) = some (a, b) ∧
+      (leaf = other ∨ ∃ a b, findBranchCollision 27 0 ⟨leaf.toArray⟩ ⟨other.toArray⟩
+          ((sidecar.kzgCommitmentsInclusionProof beforeGloas).toList.map
+            fun node => ⟨node.toArray⟩)
+          (branch.toList.map fun node => ⟨node.toArray⟩) = some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   have deneb : .dencun ≤ fork ∧ fork < .glamsterdam := ⟨Nat.le_trans (by decide) fulu, beforeGloas⟩
   obtain ⟨other, root, otherRooted, bodyRoot, depth, honest⟩ :=
     blobKzgCommitmentsInclusionProof_valid deneb built

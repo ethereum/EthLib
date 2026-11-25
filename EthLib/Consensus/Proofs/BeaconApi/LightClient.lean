@@ -287,7 +287,6 @@ private theorem encodeUpdateChunk_ok {config : Config} {genesisValidatorsRoot : 
         simp [encodeUpdateChunk, checkUpdateFork, eq_true altair, eq_true same, digested,
           Except.mapError, bind, Except.bind, pure, Except.pure] at encoded
       | ok digest =>
-      have four : (⟨digest.toArray⟩ : ByteArray).size = 4 := by simp [ByteArray.size]
       cases wrote : SszType.serialize update with
       | error fault =>
         simp [encodeUpdateChunk, checkUpdateFork, eq_true altair, eq_true same, digested, wrote,
@@ -295,7 +294,6 @@ private theorem encodeUpdateChunk_ok {config : Config} {genesisValidatorsRoot : 
       | ok payload =>
       simp [encodeUpdateChunk, checkUpdateFork, eq_true altair, eq_true same, digested, wrote,
           Except.mapError, bind, Except.bind] at encoded
-      rw [four] at encoded
       by_cases small : 4 + payload.size < 18446744073709551616
       · rw [ite_eq_left small] at encoded
         refine ⟨digest, payload, altair, same, rfl, rfl, small, ?_⟩
@@ -324,7 +322,7 @@ private theorem ofFn_getElem_append {n : Nat} {data pre tail : ByteArray}
     Vector.ofFn (fun i : Fin n => data[start + i]'(bound i)) = piece := by
   subst split at_start
   ext i inside
-  simp [getElem_append_vector _ _ _ inside]
+  simp only [Vector.getElem_ofFn, getElem_append_vector _ _ _ inside]
 
 /-- The chunk of an update, between any bytes, decodes to the update and then reads on. -/
 private theorem decodeUpdateChunksFrom_chunk {config : Config} {genesisValidatorsRoot : Root}

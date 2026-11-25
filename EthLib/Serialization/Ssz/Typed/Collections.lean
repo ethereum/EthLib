@@ -121,7 +121,7 @@ instance {α : Type} [SszType α] {length : Nat} : SszType (Vector α length) wh
   -- Variable-size elements: the untyped encoder writes the offsets, then the bodies.
   encode v :=
     if (desc α).isFixed then encodeFixedElements v.toArray
-    else do return ⟨← Ssz.serialize (.vector (desc α) length) (.seq (v.toList.map toValue))⟩
+    else Ssz.serialize (.vector (desc α) length) (.seq (v.toList.map toValue))
 
 instance {α : Type} [SszType α] {limit : Nat} : SszType (SszList α limit) where
   desc := .list (desc α) limit
@@ -138,7 +138,7 @@ instance {α : Type} [SszType α] {limit : Nat} : SszType (SszList α limit) whe
   -- Variable-size elements: the untyped encoder writes the offsets, then the bodies.
   encode l :=
     if (desc α).isFixed then encodeFixedElements l.data
-    else do return ⟨← Ssz.serialize (.list (desc α) limit) (.seq (l.data.toList.map toValue))⟩
+    else Ssz.serialize (.list (desc α) limit) (.seq (l.data.toList.map toValue))
 
 /--
 `ByteList[limit]`, the alias of `List[byte, limit]`.
@@ -147,11 +147,11 @@ It takes precedence over a list of `uint8` elements, which encodes and roots ali
 -/
 instance (priority := high) {limit : Nat} : SszType (SszList UInt8 limit) where
   desc := .byteList limit
-  toValue l := .bytes l.data
+  toValue l := .bytes ⟨l.data⟩
   ofValue
     | .bytes data =>
       -- ByteList[N]: at most `N` bytes.
-      if within : data.size ≤ limit then .ok ⟨data, within⟩
+      if within : data.size ≤ limit then .ok ⟨data.data, within⟩
       else .error (.overLimit limit data.size)
     | _ => .error .typeMismatch
 
@@ -186,8 +186,7 @@ instance {α : Type} [SszType α] : SszType (ProgressiveList α) where
   -- Otherwise the encoding is that of a List[type, N], as EIP-7916 states, offsets then bodies.
   encode l :=
     if (desc α).isFixed then encodeFixedElements l.data
-    else do
-      return ⟨← Ssz.serialize (.progressiveList (desc α) none) (.seq (l.data.toList.map toValue))⟩
+    else Ssz.serialize (.progressiveList (desc α) none) (.seq (l.data.toList.map toValue))
 
 instance : SszType ProgressiveBitlist where
   -- EIP-7916: ProgressiveBitlist has no limit, so the type declares none.
