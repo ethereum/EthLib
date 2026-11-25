@@ -8,31 +8,17 @@ public import EthLib.Cryptography.Proofs.RandomOracleTable
 
 From Fulu, a node samples the columns of a few custody groups, picked by hashing its node ID.
 
-Here the oracle answers in place of the SHA-256 call that gives each ID its group.
+A node that asks for `k` of the `G` groups accepts with probability at most `C(a, k) / C(G, k)`.
 
-The network serves a set of columns, fixed before the oracle answers.
+Here `a` counts the groups whose columns are all served.
 
-Call a group served when all its columns are served.
-
-A node accepts when every group that its search returns is served.
-
-That happens with probability at most `C(a, k) / C(G, k)`.
-
-Here `G` counts the groups, `a` the served groups and `k` the groups that the node asks for.
-
-It needs `G` to divide `2^64`, so that a fresh digest gives every group the chance `1 / G`.
+The oracle answers in place of the SHA-256 call that gives each ID its group.
 
 The bound holds for the oracle only; no theorem bounds the search when SHA-256 answers.
-
-The served columns cannot depend on the answers of the oracle.
 
 SHA-256 is public, so an adversary that knows a node ID can compute the groups of that node.
 
 The bound says nothing about such an adversary.
-
-On mainnet a group holds one column, and data that cannot be rebuilt leaves at most 63 columns.
-
-There the bound `C(63, k) / C(128, k)` is below `2^-k` for `k ≥ 1`.
 -/
 
 @[expose] public section
@@ -438,23 +424,23 @@ private theorem prEvent_queryCollectGroups_eq_zero (config : Config) (good : Cus
 
 /-- A search from `j` accepted groups accepts with chance at most `C(a-j, k-j) / C(G-j, k-j)`.
 
-The `j` groups are distinct, and the search accepts when it returns only accepted groups.
-
 Here `G` counts the groups, `a` the accepted ones and `k < G` the groups that the search wants.
-
-Every digest in the cache gives a group that the search already holds.
-
-So a repeated ID gives nothing new, and each fresh ID gives a uniform group. -/
+-/
 private theorem prEvent_queryCollectGroups_le (config : Config) (good : CustodyIndex → Bool)
     (divides : config.NUMBER_OF_CUSTODY_GROUPS.toNat ∣ 2 ^ 64) (count : Nat)
     (below : count < config.NUMBER_OF_CUSTODY_GROUPS.toNat) (fuel : Nat) (id : NodeID)
     (groups : List CustodyIndex) (cache : (ByteArray →ₒ Bytes32).QueryCache)
+    -- The `j` groups are distinct.
     (distinct : groups.Nodup)
     (inRange : ∀ g ∈ groups, g.toNat < config.NUMBER_OF_CUSTODY_GROUPS.toNat)
     (accepted : ∀ g ∈ groups, good g = true)
+    -- Every digest in the cache gives a group that the search already holds.
+    --
+    -- So a repeated ID gives nothing new, and each fresh ID gives a uniform group.
     (known : ∀ x v, cache x = some v → firstUInt64 v % config.NUMBER_OF_CUSTODY_GROUPS ∈ groups) :
     Pr{let z ← (simulateQ (ByteArray →ₒ Bytes32).randomOracle
       (queryCollectGroups config count fuel id groups)).run' cache}[
+        -- The search accepts when it returns only accepted groups.
         ∃ out, z = .ok out ∧ ∀ g ∈ out, good g = true] ≤
       searchBound ((Finset.range config.NUMBER_OF_CUSTODY_GROUPS.toNat).filter
         fun r => good (UInt64.ofNat r) = true).card
@@ -554,16 +540,16 @@ private theorem prEvent_queryCollectGroups_le (config : Config) (good : CustodyI
 
 Here `G` counts the groups, `a` the served groups and `k` the groups that the node asks for.
 
-The oracle starts with an empty cache, and the served columns are fixed before it answers.
-
-It needs `G` to divide `2^64`.
-
-An error, such as a search out of fuel or more groups than exist, is a rejection. -/
+The oracle starts with an empty cache, and the served columns are fixed before it answers. -/
 theorem prEvent_queryCustodyGroups_served_le (config : Config) (preset : Preset)
     (nodeId : NodeID) (count : UInt64) (fuel : Nat)
+    -- It needs `G` to divide `2^64`, so that a fresh digest gives every group the chance `1 / G`.
     (divides : config.NUMBER_OF_CUSTODY_GROUPS.toNat ∣ 2 ^ 64) (served : ColumnIndex → Bool) :
     Pr{let z ← (simulateQ (ByteArray →ₒ Bytes32).randomOracle
       (queryCustodyGroups config nodeId count fuel)).run' ∅}[
+        -- A node accepts when every group that its search returns is served.
+        --
+        -- An error, such as a search out of fuel or more groups than exist, is a rejection.
         ∃ groups, z = .ok groups ∧ ∀ group ∈ groups, groupServed config preset served group] ≤
       ((servedGroupCount config preset served).choose count.toNat : ℝ≥0∞) /
         (config.NUMBER_OF_CUSTODY_GROUPS.toNat.choose count.toNat : ℝ≥0∞) := by

@@ -10,75 +10,13 @@ public import EthLib.Consensus.Proofs.Signing
 /-!
 # Proofs: state accessors
 
-The active indices are exactly the indices of the active validators, in increasing order.
+It proves what the accessors of the beacon state return, from active indices to circular buffers.
 
-That needs the registry to stay within the limit of the preset, which its type says before Gloas.
+Before Gloas the type of the registry keeps it within the limit of the preset.
 
-From Gloas the registry is a progressive list, so these theorems take the bound as a hypothesis.
+From Gloas the registry is a progressive list.
 
-A position of the registry is active in an epoch when the validator there is.
-
-The effective balances are aligned when each is a whole number of increments.
-
-When the largest values of the preset are aligned, so is the largest of each validator.
-
-A marked sum of effective balances is their sum over the marked positions.
-
-A total balance reads its indices as a set: their order and their repeats do not matter.
-
-A total balance is at least one effective balance increment.
-
-The total active balance rejects an active position or a balance sum of `2^64` or more.
-
-From Electra, the pending balance of a validator is the sum of its pending partial withdrawals.
-
-A sum of `2^64` or more fails, and the balance is zero exactly when each of those amounts is.
-
-The previous epoch is the current one minus one, or the genesis epoch at genesis.
-
-On natural numbers, the current epoch is the slot over the epoch length, less one for the previous.
-
-Each slot has from one committee up to the most committees of the preset.
-
-Each member of a committee, and each validator that an attestation shows, is active in its epoch.
-
-Every active validator is in a committee of its epoch, and no validator is in two of them.
-
-A committee is cut from the shuffle of the epoch of its slot.
-
-The seed of an epoch exists when the epoch plus the length of the history of mixes fits in 64 bits.
-
-The seed lookahead must also be shorter than that history.
-
-The shuffle of the epoch then has a value, when the registry holds at most `2^40` validators.
-
-A committee is cut when its position is below the count of the epoch, under two more bounds.
-
-The count and the active validators times it fit in 64 bits.
-
-Both hold when the registry times a bound on the committees of an epoch is below `2^64`.
-
-The members of the committees of a slot, cut from one shuffle, are those of each committee in turn.
-
-A validator is among those members exactly when one of the committees holds it.
-
-From Electra, the attesters of some committees, cut from one shuffle, are those of each in turn.
-
-The signers of an attestation are those cut from the shuffle of the epoch of its slot.
-
-This holds when that shuffle has a value.
-
-The indices of an attestation increase strictly, as the check of an indexed attestation asks.
-
-An attestation has at most as many signers as bits, so its indexed form never exceeds its limit.
-
-A proposer draw that shuffles only the positions it reads returns what the full shuffle gives.
-
-Before Fulu, the proposer is active in the epoch of the state.
-
-A signature domain always has a value.
-
-A write to a circular buffer is read back at its position, and leaves every other entry unchanged.
+So from Gloas, the theorems that need the registry within that limit take it as a hypothesis.
 -/
 
 @[expose] public section
@@ -1046,21 +984,19 @@ theorem mem_getActiveValidatorIndices_of_getBeaconCommittee {state : BeaconState
 
 /-- No validator is in two committees of one epoch.
 
-Take two committees of slots of one epoch, each with an index below the committees of a slot.
-
-If both hold one validator, their slots are equal and their indices are equal.
-
-The registry must stay within its limit.
-
-The number of active validators times the number of committees of the epoch must fit in 64 bits.
+Two committees of slots of one epoch that hold one validator have equal slots and equal indices.
 -/
 theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
+    -- The registry must stay within its limit.
     (within : state.RegistryWithinLimit) {firstSlot secondSlot : Slot}
     {firstIndex secondIndex : CommitteeIndex}
+    -- The two slots are in one epoch.
     (sameEpoch : computeEpochAtSlot preset firstSlot = computeEpochAtSlot preset secondSlot)
+    -- Each committee has an index below the committees of a slot.
     (firstLt : firstIndex < getCommitteeCountPerSlot state (computeEpochAtSlot preset firstSlot))
     (secondLt :
       secondIndex < getCommitteeCountPerSlot state (computeEpochAtSlot preset secondSlot))
+    -- The number of active validators times the committees of the epoch must fit in 64 bits.
     (fits : (getActiveValidatorIndices state (computeEpochAtSlot preset firstSlot)).length *
       ((getCommitteeCountPerSlot state (computeEpochAtSlot preset firstSlot)).toNat *
         preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
@@ -1246,24 +1182,20 @@ theorem getBeaconCommittees_nodup {state : BeaconState preset fork}
 
 /-- Every active validator is in a committee of its epoch.
 
-The committee has a slot of the epoch and an index below the committees of a slot.
-
-The checked read of the active indices of the epoch must succeed.
-
-The seed of the epoch must have a value, and an epoch must have at least one slot.
-
-The slots of the epoch must fit in 64 bits.
-
-There must be at most `2^40` active validators.
-
-Their number times the number of committees of the epoch must fit in 64 bits. -/
+The committee has a slot of the epoch and an index below the committees of a slot. -/
 theorem exists_mem_getBeaconCommittee {state : BeaconState preset fork} {epoch : Epoch}
+    -- The checked read of the active indices of the epoch must succeed.
     (indicesFit : getActiveValidatorIndicesChecked state epoch =
       .ok (getActiveValidatorIndices state epoch))
+    -- The seed of the epoch must have a value.
     {seed : Bytes32} (seedOk : getSeed state epoch DOMAIN_BEACON_ATTESTER = .ok seed)
+    -- An epoch must have at least one slot.
     (positive : preset.SLOTS_PER_EPOCH ≠ 0)
+    -- The slots of the epoch must fit in 64 bits.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    -- There must be at most `2^40` active validators.
     (small : (getActiveValidatorIndices state epoch).length ≤ 2 ^ 40)
+    -- Their number times the number of committees of the epoch must fit in 64 bits.
     (fits : (getActiveValidatorIndices state epoch).length *
       ((getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
     {member : ValidatorIndex} (active : member ∈ getActiveValidatorIndices state epoch) :
@@ -2287,24 +2219,19 @@ theorem proposerSearch_congr_validators {fork : Fork} {first second : Array Vali
       · have far : ¬ i + 1 < 18446744073709551616 := by omega
         simp only [far, dite_false]
 
-/-- Two states of one fork read the same proposer of the slot, or fail with the same error.
-
-The theorem takes an equal slot.
-
-From Fusaka, it takes equal proposer lookahead vectors.
-
-Before Fusaka, it takes an equal seed of the current epoch of `s` with the proposer domain.
-
-Before Fusaka, it also takes equal checked active indices of that epoch.
-
-Before Fusaka, it also takes equal effective balances at every position of the registry of `s`. -/
+/-- Two states of one fork read the same proposer of the slot, or fail with the same error. -/
 theorem getBeaconProposerIndex_congr_of_seed {fork : Fork} {s w : BeaconState preset fork}
+    -- The theorem takes an equal slot.
     (slot : w.slot = s.slot)
+    -- From Fusaka, it takes equal proposer lookahead vectors.
     (lookahead : ∀ fulu : .fusaka ≤ fork, w.proposerLookahead fulu = s.proposerLookahead fulu)
+    -- Before Fusaka, it takes an equal seed of the current epoch of `s` with the proposer domain.
     (seed : fork < .fusaka → getSeed w (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER =
       getSeed s (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER)
+    -- Before Fusaka, it also takes equal checked active indices of that epoch.
     (active : fork < .fusaka → getActiveValidatorIndicesChecked w (getCurrentEpoch s) =
       getActiveValidatorIndicesChecked s (getCurrentEpoch s))
+    -- Before Fusaka, it takes equal effective balances at every position of the registry of `s`.
     (effective : fork < .fusaka → ∀ j < s.validators.data.size,
       (s.validators.data[j]?).map (·.effectiveBalance) =
         (w.validators.data[j]?).map (·.effectiveBalance)) :

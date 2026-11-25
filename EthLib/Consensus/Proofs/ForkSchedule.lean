@@ -10,14 +10,6 @@ public import Mathlib.Data.List.Nodup
 The fork at an epoch is the latest consensus fork that has started by then.
 
 So it never moves back as the epoch grows, whatever the order of the configured epochs.
-
-Heze changes neither the fork nor the version of anything before it.
-
-The blob limit at an epoch is that of the latest schedule entry that has started by then.
-
-So is the gas limit that the schedule of Gloas recommends.
-
-The blob limit at each epoch is at most the largest blob limit, which is one of the limits.
 -/
 
 @[expose] public section

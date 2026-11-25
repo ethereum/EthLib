@@ -15,7 +15,9 @@ import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 /-!
 # Proofs: the rewards answers of the Beacon API
 
-What the attestation, sync committee and block rewards answer, and how each part moves a balance.
+This file proves what the attestation, sync committee and block rewards of the Beacon API answer.
+
+It also proves how each part moves a balance.
 -/
 
 @[expose] public section
@@ -609,21 +611,20 @@ theorem attestationRewards_ideal_of_altair {config : Config} (altair : .altair �
 
 /-- Before Altair, the attester part of the inclusion rewards of each validator.
 
-The matching source attestations are those of the previous epoch.
+An unslashed signer's part is its base reward less the proposer share.
 
-An unslashed signer of them has an earliest inclusion.
-
-Its part is its base reward less the proposer share, divided by the delay of that inclusion.
-
-Any other validator has no part. -/
+That difference is divided by the delay of its earliest inclusion, rounding down. -/
 private theorem attesterInclusionRewards_getD (before : fork < .altair) {parts : Array Gwei}
     (own : attesterInclusionRewards state before = .ok parts) :
     ∃ attestations signers attesters total,
+      -- The matching source attestations are those of the previous epoch.
       getMatchingSourceAttestations state before (getPreviousEpoch state) = .ok attestations ∧
       attestations.toList.mapM (getPendingAttestingIndices state) = .ok signers ∧
       unslashedAmong state signers = .ok attesters ∧
       getTotalActiveBalance state = .ok total ∧
+      -- A validator that is not an unslashed signer has no part.
       ∀ index : ValidatorIndex, (index ∉ attesters → parts.getD index.toNat 0 = 0) ∧
+        -- An unslashed signer of them has an earliest inclusion.
         (index ∈ attesters → ∃ earliest base,
           (earliestInclusions state.validators.data.size
             (attestations.zip signers.toArray)).getD index.toNat none = some earliest ∧
@@ -759,37 +760,34 @@ private theorem idealInactivityPenalty_eq_netDelta {config : Config} (before : f
     rw [timely set, replicate_getD_zero, UInt64.toNat_zero, Nat.zero_add] at *
     simp only [netDelta, noReward, UInt64.toNat_zero, Int.natCast_zero, Int.zero_sub, value]
 
-/-- Before Altair, the ideal rewards read at a validator, from its base reward.
-
-The balance is only copied into the entry.
-
-Each vote earns the reward of a validator whose vote matched.
-
-In a leak that is the base reward of the validator.
-
-Otherwise it is the base reward times the increments of the unslashed balance that matched.
-
-That product is divided by the active increments, rounding down.
-
-The inclusion earns the base reward less the proposer share.
-
-In a leak the validator pays four base rewards less the proposer share, and otherwise nothing. -/
+/-- Before Altair, the ideal rewards read at a validator, from its base reward. -/
 theorem idealRewardsOf_parts_of_lt_altair (before : fork < .altair) {balance : Gwei}
     {index : ValidatorIndex} {rates : IdealAttestationRewards}
     (computed : idealRewardsOf state balance index = .ok rates) :
     ∃ total base leak, getTotalActiveBalance state = .ok total ∧
       getBaseReward state total index = .ok base ∧ isInInactivityLeak state = .ok leak ∧
+      -- The balance is only copied into the entry.
       rates.effectiveBalance = balance ∧
+      -- Each vote earns the reward of a validator whose vote matched.
       (∀ vote ∈ [(getMatchingSourceAttestations state before, rates.source),
           (getMatchingTargetAttestations state before, rates.target),
           (getMatchingHeadAttestations state before, rates.head)],
         ∃ attestations matched, vote.1 (getPreviousEpoch state) = .ok attestations ∧
           getAttestingBalance state attestations = .ok matched ∧
+          -- In a leak that is the base reward of the validator.
+          --
+          -- Otherwise it is the base reward times the increments of the matched unslashed balance.
+          --
+          -- That product is divided by the active increments, rounding down.
           vote.2 = ((if leak then base.toNat else
             base.toNat * (matched.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) /
               (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) : Nat) : Int)) ∧
+      -- The inclusion earns the base reward less the proposer share.
       rates.inclusionDelay.map UInt64.toNat =
         some (base.toNat - base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat) ∧
+      -- In a leak the validator pays four base rewards less the proposer share.
+      --
+      -- Otherwise it pays nothing.
       rates.inactivity = -((if leak then BASE_REWARDS_PER_EPOCH.toNat * base.toNat -
         base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat else 0 : Nat) : Int) := by
   have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
@@ -1640,16 +1638,6 @@ theorem syncCommitteeRewardsResponse_ne_rewardOutOfRange (aggregate : SyncAggreg
 /-! ## Block rewards
 
 The block rewards start from the state that the operations of the block read.
-
-Their total is the sum of their parts, and from Altair the sync part is the share of the step.
-
-The operations and the sync aggregate raise the proposer's balance by exactly that total.
-
-That needs a block that does not slash the proposer, pay it a deposit or switch its credentials.
-
-It also needs a proposer without a seat in the sync committee.
-
-On a state where the block applies, the rewards fail only by an overflow.
 -/
 
 /-- The state that the operations of a block read, as the steps before them give it. -/
@@ -1827,37 +1815,31 @@ private theorem syncProposerReward_toNat {reward share : Gwei}
   rw [computed.2, scaledOk.2]
   rfl
 
-/-- The operations and the sync aggregate of a block raise the proposer's balance by the total.
-
-The proposer must have a balance.
-
-The block must not slash the proposer.
-
-Before Electra, no deposit of the block may carry its key.
-
-From Electra to Fulu, no consolidation request of the block may come from its key.
-
-From Altair, its key must hold no seat in the sync committee.
-
-The mixes must span more than the seed lookahead plus two epochs, as on mainnet and minimal. -/
+/-- The operations and the sync aggregate of a block raise the proposer's balance by the total. -/
 theorem blockRewards_balance {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
     {rewards : BlockRewards} {after : BeaconState preset fork} {validator : Validator}
+    -- The mixes must span more than the seed lookahead plus two epochs, as on mainnet and minimal.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (applied : processBlock config checks engine state block = .ok after)
     (answered : blockRewards config checks engine state block = .ok rewards)
     (found : state.validators.data[block.proposerIndex.toNat]? = some validator)
+    -- The proposer must have a balance.
     (held : block.proposerIndex.toNat < state.balances.data.size)
+    -- The block must not slash the proposer.
     (unslashedByProposers : ∀ slashing ∈ block.body.proposerSlashings.data,
       slashing.signedHeader1.message.proposerIndex ≠ block.proposerIndex)
     (unslashedByAttesters : ∀ slashing ∈ block.body.attesterSlashings.data,
       block.proposerIndex ∉ slashingIndices slashing)
+    -- Before Electra, no deposit of the block may carry its key.
     (undeposited : ∀ before : fork < .pectra,
       ∀ deposit ∈ (block.body.deposits (Nat.lt_trans before (by decide))).data,
         deposit.data.pubkey ≠ validator.pubkey)
+    -- From Electra to Fulu, no consolidation request of the block may come from its key.
     (unswitched : ∀ electra : .pectra ≤ fork ∧ fork < .glamsterdam,
       ∀ request ∈ (block.body.executionRequests electra).consolidations.data,
         request.sourcePubkey ≠ validator.pubkey)
+    -- From Altair, its key must hold no seat in the sync committee.
     (unseated : ∀ altair : .altair ≤ fork,
       validator.pubkey ∉ (state.currentSyncCommittee altair).value.pubkeys.toList) :
     ∃ start balance final, stateBeforeOperations config checks engine state block = .ok start ∧

@@ -12,21 +12,9 @@ import EthLib.Base.Proofs.ByteOrder
 
 It counts the values one draw accepts, as a function of the balance.
 
-From Electra it also counts the pairs of bytes, read little-endian, that a draw accepts.
-
 It also shows that the checked draw makes the same comparison on natural numbers.
 
-This holds when the balance is at most the largest, and the largest times the scale fits in 64 bits.
-
 It states counts, not probabilities.
-
-Two draw inputs with block numbers below `2^64` are equal only for equal seeds and blocks.
-
-The draw inputs have 40 bytes, so they differ from the shuffle inputs of 33 or 37 bytes.
-
-The seed of each slot also hashes 40 bytes in the same layout, so its inputs are not separated here.
-
-Different draws in one hash block read disjoint bytes of its hash.
 -/
 
 @[expose] public section
@@ -186,7 +174,10 @@ theorem drawAccepts_eq_of_pectra (preset : Preset) (fork : Base.Fork)
   simpa only [valueNat, scaleNat] using
     checked_draw_comparison _ e _ (2 ^ 16 - 1) leftFits' rightFits'
 
-/-! ## Hash inputs and byte positions -/
+/-! ## Hash inputs and byte positions
+
+The seed of each slot also hashes 40 bytes in the same layout, so its inputs are not separated here.
+-/
 
 /-- A draw input has 32 seed bytes and eight bytes for its block number. -/
 @[simp] theorem size_drawInput (seed : Bytes32) (block : Nat) :

@@ -53,21 +53,18 @@ theorem mem_getNextSyncCommitteeIndices {state : BeaconState preset fork}
   rw [← getActiveValidatorIndicesChecked_ok checked]
   exact selected
 
-/-- The draw of the next sync committee returns a committee exactly when these facts hold.
-
-The draw of indices succeeds.
-
-Each validator of the draw exists.
-
-Member `i` of the committee has the key of the validator at position `i` of the draw.
-
-The aggregate of the committee is the aggregate of its keys. -/
+/-- The draw of the next sync committee returns a committee exactly when the facts below hold. -/
 theorem getNextSyncCommittee_eq_ok_iff {state : BeaconState preset fork}
     {committee : SyncCommittee preset} :
     getNextSyncCommittee state = .ok committee ↔
+      -- The draw of indices succeeds.
       ∃ indices, getNextSyncCommitteeIndices state = .ok indices ∧
+        -- Each validator of the draw exists.
+        --
+        -- Member `i` of the committee has the key of the validator at position `i` of the draw.
         (∀ i : Fin preset.SYNC_COMMITTEE_SIZE.toNat, ∃ validator,
           getValidator state indices[i] = .ok validator ∧ committee.pubkeys[i] = validator.pubkey) ∧
+        -- The aggregate of the committee is the aggregate of its keys.
         aggregatePubkeys committee.pubkeys.toArray = .ok committee.aggregatePubkey := by
   unfold getNextSyncCommittee
   simp only [bind_ok_iff, pure, Except.pure]

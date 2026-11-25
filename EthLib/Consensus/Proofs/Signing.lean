@@ -13,15 +13,7 @@ import EthLib.Serialization.Proofs.Ssz.Type.Legality
 
 Each of them exists for every input, since the roots they hash always exist.
 
-A domain starts with its domain type, so two domain types never share a domain.
-
-Before Fulu, a fork digest is the first four bytes of the root of the fork data.
-
 A signing root is also the root of the signing data whose first field holds the object itself.
-
-So two different objects of one type with one signing root are two values with one root.
-
-If every count of both objects fits its word, two inputs of the node hash in their trees collide.
 -/
 
 @[expose] public section
