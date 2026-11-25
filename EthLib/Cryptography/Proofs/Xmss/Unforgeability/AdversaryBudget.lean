@@ -169,4 +169,124 @@ theorem lifetimeQueries_eq :
     LOG_LIFETIME, LAYER_HEIGHT]
   norm_num
 
+/-! ## The bound for the adversary's own hash calls -/
+
+open XmssSecurity.Ghost (IsAdvHash) in
+/-- The model's run of the adversary makes its hash calls, one query each, and nothing more. -/
+theorem isQueryBoundP_simulateQ_adversaryImpl {α : Type} :
+    ∀ (oa : OracleComp (OracleWorld + SigningSpec) α) (n : Nat),
+      IsQueryBoundP oa IsAdversaryHash n →
+        IsQueryBoundP (simulateQ adversaryImpl oa) IsAdvHash n := by
+  intro oa
+  induction oa using OracleComp.inductionOn with
+  | pure a => intro n _; exact isQueryBoundP_pure _ _ _
+  | query_bind t k ih =>
+    intro n h
+    rw [isQueryBoundP_query_bind_iff] at h
+    rw [simulateQ_query_bind]
+    rcases t with world | request
+    · -- A world query is the same query of the model, a hash call exactly when it was one.
+      have hiff : IsAdvHash (.inl world) ↔ IsAdversaryHash (.inl world) := by
+        rcases world with _ | _ <;> exact Iff.rfl
+      refine (isQueryBoundP_bind (n := if IsAdvHash (.inl world) then 1 else 0) ?_
+        fun u _ => ih u _ (h.2 u)).mono ?_
+      · exact (isQueryBoundP_query_iff (spec := XmssSecurity.OracleWorld + XmssSecurity.SigningSpec)
+          _ (.inl world) _).2 fun hp => by simp [hp]
+      · by_cases hw : IsAdvHash (.inl world)
+        · have := h.1.resolve_left (not_not.2 (hiff.1 hw))
+          rw [ite_eq_left hw, ite_eq_left (hiff.1 hw)]
+          omega
+        · rw [ite_eq_right hw, ite_eq_right (fun hh => hw (hiff.2 hh))]
+          omega
+    · -- A request is one request of the model, which is no hash call.
+      refine (isQueryBoundP_bind (p := IsAdvHash) (n := 0) (m := n) ?_ fun u _ => ?_).mono
+        (by omega)
+      · exact (isQueryBoundP_map_iff _ _ _).2
+          ((isQueryBoundP_query_iff (spec := XmssSecurity.OracleWorld + XmssSecurity.SigningSpec)
+            _ (.inr _) 0).2 fun hp => hp.elim)
+      · have hk := h.2 u
+        rw [ite_eq_right (show ¬IsAdversaryHash (.inr request) from id)] at hk
+        exact ih u n hk
+
+open XmssSecurity.Ghost (IsAdvHash) in
+/-- Memoizing the signing requests keeps every hash call and adds none. -/
+theorem isQueryBoundP_memoize {α : Type} :
+    ∀ (oa : OracleComp (XmssSecurity.OracleWorld + XmssSecurity.SigningSpec) α)
+      (cache : QueryCache XmssSecurity.SigningSpec) (n : Nat),
+      IsQueryBoundP oa IsAdvHash n →
+        IsQueryBoundP (DeterministicSigning.memoize oa cache) IsAdvHash n := by
+  intro oa
+  induction oa using OracleComp.inductionOn with
+  | pure a => intro cache n _; exact isQueryBoundP_pure _ _ _
+  | query_bind t k ih =>
+    intro cache n h
+    rw [isQueryBoundP_query_bind_iff] at h
+    rcases t with world | request
+    · rw [DeterministicSigning.memoize_base]
+      refine (isQueryBoundP_bind (n := if IsAdvHash (.inl world) then 1 else 0) ?_
+        fun u _ => ih u cache _ (h.2 u)).mono ?_
+      · exact (isQueryBoundP_query_iff (spec := XmssSecurity.OracleWorld + XmssSecurity.SigningSpec)
+          _ (.inl world) _).2 fun hp => by simp [hp]
+      · by_cases hw : IsAdvHash (.inl world)
+        · have := h.1.resolve_left (not_not.2 hw)
+          rw [ite_eq_left hw, ite_eq_left hw]
+          omega
+        · rw [ite_eq_right hw, ite_eq_right hw]
+          omega
+    · have hnext : ∀ u, IsQueryBoundP (k u) IsAdvHash n := fun u => by
+        simpa [ite_eq_right (show ¬IsAdvHash (.inr request) from id)] using h.2 u
+      rw [DeterministicSigning.memoize_request]
+      cases hc : cache request with
+      | some answer => exact ih answer cache n (hnext answer)
+      | none =>
+        dsimp only
+        refine (isQueryBoundP_bind (p := IsAdvHash) (n := 0) (m := n) ?_
+          fun u _ => ih u _ n (hnext u)).mono (by omega)
+        exact (isQueryBoundP_query_iff (spec := XmssSecurity.OracleWorld + XmssSecurity.SigningSpec)
+          _ (.inr request) 0).2 fun hp => hp.elim
+
+open XmssSecurity.Ghost (IsAdvHash) in
+/-- The model's adversary makes the hash calls of the adversary, on every public key. -/
+theorem isQueryBoundP_modelAdversary (adversary : Adversary) {qH : Nat}
+    (h : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
+    (pk : XmssSecurity.PublicKey) :
+    IsQueryBoundP ((XmssSecurity.Bridge.modelAdversary adversary).main pk) IsAdvHash qH :=
+  isQueryBoundP_memoize _ ∅ qH
+    ((isQueryBoundP_map_iff _ _ _).2 (isQueryBoundP_simulateQ_adversaryImpl _ qH (h _)))
+
+/-- A forgery has chance at most `(qH + 2^19 + 1) / 2^127`, whatever the requests cost the signer.
+
+The forger makes at most `qH` calls of `H` and at most `2^32` requests. -/
+theorem forgeAdvantage_le_ownQueries (adversary : Adversary) {qH r : Nat}
+    (hbudget : HasAdversaryBudget adversary qH r) (hr : r ≤ 2 ^ LOG_LIFETIME) :
+    forgeAdvantage adversary ≤
+      ((qH + 2 ^ 19 + 1 : Nat) : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) := by
+  by_cases hbig : 2 ^ 127 ≤ qH + 2 ^ 19 + 1
+  · -- From there on, the bound is at least one.
+    refine (prEvent_le_one _).trans ?_
+    rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (ENNReal.natCast_ne_top _)),
+      one_mul]
+    exact_mod_cast hbig
+  -- The game's calls are at most `2^128`, so each seed guess term costs at most `2^-128`.
+  have hq : gameQueries qH r ≤ 2 ^ 128 := by
+    have := Nat.mul_le_mul_right requestQueries hr
+    norm_num [gameQueries, keyGenQueries, requestQueries, verifyQueries, LOG_LIFETIME,
+      LAYER_HEIGHT] at this hbig ⊢
+    omega
+  have hmodel := XmssSecurity.CappedChain.capped_forgeAdvantage_le_of_adversaryBound qH
+    (XmssSecurity.Bridge.modelAdversary adversary)
+    (isQueryBoundP_modelAdversary adversary fun pk => (hbudget pk).1)
+  refine (forgeAdvantage_eq adversary).trans_le
+    ((XmssSecurity.Bridge.realGame_le_model (gameQueries qH r) (by omega) adversary
+      (hashQueryBound_realGame adversary _ (hasHashQueryBound_of_budget adversary hbudget))).trans
+      ((add_le_add (add_le_add hmodel (XmssSecurity.Bridge.guesses_le (by omega)))
+        (XmssSecurity.Bridge.guesses_le (by omega))).trans ?_))
+  -- The model's bound is `(2 qH + 2^20) / 2^128`, and the two guesses add `2 / 2^128`.
+  rw [← ENNReal.add_div, ← ENNReal.add_div]
+  rw [show ((2 ^ 128 : Nat) : ℝ≥0∞) = 2 * ((2 ^ 127 : Nat) : ℝ≥0∞) by norm_num]
+  rw [show ((2 * qH + XmssSecurity.lowerOrderSlack : Nat) : ℝ≥0∞) + 1 + 1 =
+      2 * ((qH + 2 ^ 19 + 1 : Nat) : ℝ≥0∞) by
+    simp only [XmssSecurity.lowerOrderSlack]; push_cast; ring]
+  exact (ENNReal.mul_div_mul_left _ _ (by norm_num) (by norm_num)).le
+
 end EthLib.Cryptography.Xmss.Unforgeability

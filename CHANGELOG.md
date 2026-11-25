@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Xmss.Unforgeability.forgeAdvantage_le_ownQueries` (`Cryptography/Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) bounds an XMSS forgery by `(qH + 2^19 + 1) / 2^127` ([#3373](https://github.com/ethereum/EthLib/issues/3373)).
+  The forger makes at most `qH` calls of `H` and at most `2^32` signing requests, and the requests cost nothing in the bound.
+  `XmssSecurity.Bridge.realGame_le_model` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/Proof/Bridge/Security.lean`) now holds the hops from the real game to the model's game, and `realGame_security` keeps its statement.
 - In Lean, `BeaconApi.dutiesResponse_proposer_error_code_of_run` (`Consensus/Proofs/BeaconApi/DutiesReachable.lean`) classifies the failures of a proposer answer ([#3585](https://github.com/ethereum/EthLib/issues/3585)).
   From Fulu, at a state that a run from the Phase 0 genesis state built from deposits reaches, such an answer that fails has code 400.
   It takes the bounds of `dutiesResponse_proposer_error_code` on the slots of the epoch and on the slot of the state.
