@@ -3241,6 +3241,15 @@ Not yet released.
   The lookup of a fork by its name reads it, and so do the proofs that the consensus fork upgrades and their balance replay stop.
   So a fork added at the end changes none of them; only `Base.Fork.last` must move to it.
 
+- In Lean, `Cryptography.Kzg.KZGCommitment` and `Cryptography.Kzg.VersionedHash` are now structures over their bytes.
+  The new module `EthLib.Cryptography.Kzg.Types` defines them, and `Consensus.VersionedHash` is the KZG type.
+  So Lean rejects a KZG proof, a public key or a Merkle root where one of them is expected.
+  `Cryptography.Kzg.kzgCommitmentToVersionedHash` now takes a commitment and returns a versioned hash.
+  The KZG operations that read untrusted bytes, such as `Cryptography.Kzg.verifyBlobKzgProof`, still take `Bytes48`.
+  The SSZ, RLP and JSON forms are those of the bytes, so no encoding changes.
+  The C and Python function signatures stay the same.
+  Migration: build a value with `KZGCommitment.mk` or `VersionedHash.mk`, and read its bytes with `.bytes`.
+
 ## 0.3.0
 
 Released on 2026-11-06.

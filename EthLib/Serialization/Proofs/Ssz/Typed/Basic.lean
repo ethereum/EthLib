@@ -178,4 +178,41 @@ instance {n : Nat} [NeZero n] : LawfulSszType (Vector UInt8 n) where
     · simp [encode, desc, toValue, Ssz.serialize, wide, v.size_toArray, bind, Except.bind, pure,
         Except.pure]
 
+/-- A structure around one value keeps the laws of the SSZ type of that value.
+
+It needs its two conversions to undo each other. -/
+theorem LawfulSszType.wrapper {α β : Type} [SszType β] [LawfulSszType β] (mk : β → α)
+    (get : α → β) (get_mk : ∀ b, get (mk b) = b) (mk_get : ∀ a, mk (get a) = a) :
+    @LawfulSszType α (SszType.wrapper mk get) :=
+  letI : SszType α := SszType.wrapper mk get
+  { wellFormed := LawfulSszType.wellFormed (α := β)
+    fits a := LawfulSszType.fits (get a)
+    ofValue_toValue a := by
+      change mk <$> ofValue (α := β) (toValue (get a)) = .ok a
+      rw [LawfulSszType.ofValue_toValue]
+      exact congrArg Except.ok (mk_get a)
+    toValue_of_ofValue {value a} made := by
+      change mk <$> ofValue (α := β) value = .ok a at made
+      change toValue (get a) = value
+      -- The value read back is the one inside the structure that the untyped value gives.
+      cases read : ofValue (α := β) value with
+      | error e => rw [read] at made; cases made
+      | ok b =>
+        rw [read] at made
+        cases made
+        rw [get_mk]
+        exact LawfulSszType.toValue_of_ofValue read
+    ofValue_ne_error {value fault} fits made := by
+      change mk <$> ofValue (α := β) value = .error fault at made
+      -- The value inside is never refused, so neither is the structure.
+      cases read : ofValue (α := β) value with
+      | error e => exact LawfulSszType.ofValue_ne_error (α := β) fits read
+      | ok b => rw [read] at made; cases made
+    root_eq a := LawfulSszType.root_eq (get a)
+    encode_eq a := LawfulSszType.encode_eq (get a)
+    decode_eq data := by
+      change mk <$> decode (α := β) data = _
+      rw [LawfulSszType.decode_eq (α := β)]
+      cases Ssz.deserialize (desc β) data.data <;> rfl }
+
 end EthLib.Serialization.Ssz

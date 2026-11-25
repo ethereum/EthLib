@@ -267,7 +267,7 @@ theorem CellOpening.Verifies.valid {s : TrustedSetup} {τ : Fr}
   obtain ⟨hvc, hvp⟩ := validateKzgG1_of_verifyCellKzgProofBatch h
   obtain ⟨-, -, -, hci, evals, hev, hI⟩ := verifyCellKzgProofBatch_eq_ok h
   obtain ⟨⟨G, hG⟩, ⟨Q, hQ⟩⟩ := verifyCellKzgProofBatchImpl_decodes hI
-  have hd : dedupCommitments #[commitment] = (#[commitment], #[0]) := by
+  have hd : dedupCommitments #[commitment] = (#[KZGCommitment.mk commitment], #[0]) := by
     simp [dedupCommitments, dedupStep]
   rw [hd] at hG
   obtain ⟨hGsz, hGk⟩ := array_mapM_ok hG

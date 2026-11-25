@@ -53,12 +53,14 @@ theorem eval_batchErrorAt_eq_errorPoly {τ : Fr} {y : BlobBatchInput}
       validateKzgG1 o.commitment.bytes = true ∧ validateKzgG1 o.proof.bytes = true)
     (ha : ∀ o ∈ openings, o.commitment.Valid τ ∧ o.proof.Valid τ) (r : Fr) :
     (batchErrorAt openings r).eval τ = (y.errorPoly τ scalarOf scalarOf).eval r := by
-  have hc := congrArg OpeningBatch.commitments hbatch
+  -- Read as bytes, the commitments of the batch are those of the openings and of the input.
+  have hc := congrArg (·.commitments.map KZGCommitment.bytes) hbatch
   have hz := congrArg OpeningBatch.zs hbatch
   have hy := congrArg OpeningBatch.ys hbatch
   have hp := congrArg OpeningBatch.proofs hbatch
   simp only [Opening.toBatch, OpeningData.toBatch, List.map_map, Function.comp_def,
-    Opening.data, BlobBatchInput.toOpeningBatch] at hc hz hy hp
+    Opening.data, BlobBatchInput.toOpeningBatch, List.map_toArray, Array.map_map,
+    Array.map_id_fun', id_eq] at hc hz hy hp
   rw [eval_batchErrorAt, BlobBatchInput.errorPoly, eval_batchErrorPoly,
     ← hc, ← hz, ← hy, ← hp]
   simp only [List.size_toArray, List.length_map]
@@ -81,10 +83,11 @@ theorem validated_of_verifyBlobKzgProofBatch {s : TrustedSetup} {y : BlobBatchIn
   obtain ⟨_, _, _, _, _, hcs, hps, _⟩ := verifyBlobKzgProofBatch_eq_ok h
   obtain ⟨hcsz, hc⟩ := Base.array_mapM_ok hcs
   obtain ⟨hpsz, hp⟩ := Base.array_mapM_ok hps
-  have hc' := congrArg OpeningBatch.commitments hbatch
+  have hc' := congrArg (·.commitments.map KZGCommitment.bytes) hbatch
   have hp' := congrArg OpeningBatch.proofs hbatch
   simp only [Opening.toBatch, OpeningData.toBatch, List.map_map, Function.comp_def,
-    Opening.data, BlobBatchInput.toOpeningBatch] at hc' hp'
+    Opening.data, BlobBatchInput.toOpeningBatch, List.map_toArray, Array.map_map,
+    Array.map_id_fun', id_eq] at hc' hp'
   intro o ho
   constructor
   · have hmem : o.commitment.bytes ∈ y.commitments := by
@@ -183,7 +186,7 @@ Let each challenge be the concrete hash of its blob and commitment.
 Then the openings form the batch that the concrete verifier builds from the submission. -/
 theorem Matches.toBatch_eq_toOpeningBatch {out : List BlobOpening} {openings : List Opening}
     (hm : Matches out openings)
-    (hz : openings.map Opening.z = out.map fun o => computeChallenge o.blob o.commitment.bytes) :
+    (hz : openings.map Opening.z = out.map fun o => computeChallenge o.blob ⟨o.commitment.bytes⟩) :
     Opening.toBatch openings = (BlobOpening.toInput out).toOpeningBatch := by
   have hlen := hm.length
   obtain ⟨hc, hp⟩ := hm.map_points
@@ -218,13 +221,20 @@ theorem Matches.toBatch_eq_toOpeningBatch {out : List BlobOpening} {openings : L
       simp only [BlobBatchInput.evals, Array.getElem_ofFn, hdec, hch]
       rw [getElem!_pos _ _ (by simpa using hio), getElem!_pos _ _ (by simpa using hip)]
       simpa using (hy i hio hip).symm
-  rw [hcb, hpb, hch, hev]
+  -- The batch holds the commitments of the submitted bytes.
+  have hcm : (openings.map fun x => KZGCommitment.mk x.commitment.bytes).toArray =
+      (BlobOpening.toInput out).commitments.map KZGCommitment.mk := by
+    have hmk := congrArg (List.map KZGCommitment.mk) hcb
+    simp only [List.map_map, Function.comp_def] at hmk
+    rw [hmk]
+    simp [BlobOpening.toInput]
+  rw [hcm, hpb, hch, hev]
   rfl
 
 /-- A successful challenge loop with the concrete hashes as challenges gives the concrete batch. -/
 theorem toBatch_eq_toOpeningBatch_of_mem_support_challengeOpenings {out : List BlobOpening}
     {openings : List Opening} (h : some openings ∈ MonadAttach.support (challengeOpenings out))
-    (hz : openings.map Opening.z = out.map fun o => computeChallenge o.blob o.commitment.bytes) :
+    (hz : openings.map Opening.z = out.map fun o => computeChallenge o.blob ⟨o.commitment.bytes⟩) :
     Opening.toBatch openings = (BlobOpening.toInput out).toOpeningBatch :=
   (matches_of_mem_support_challengeOpenings out h).toBatch_eq_toOpeningBatch hz
 
@@ -239,7 +249,7 @@ Let the blob verifier return a verdict on the submission.
 Then the verdict is true exactly when the game's equation holds at the concrete batch challenge. -/
 theorem verifyBlobKzgProofBatch_ok_iff_game {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     {out : List BlobOpening} {openings : List Opening} (hm : Matches out openings)
-    (hz : openings.map Opening.z = out.map fun o => computeChallenge o.blob o.commitment.bytes)
+    (hz : openings.map Opening.z = out.map fun o => computeChallenge o.blob ⟨o.commitment.bytes⟩)
     (ha : ∀ o ∈ openings, o.commitment.Valid τ ∧ o.proof.Valid τ) {b : Bool}
     (h : verifyBlobKzgProofBatch s (BlobOpening.toInput out).blobs
       (BlobOpening.toInput out).commitments (BlobOpening.toInput out).proofs = .ok b) :

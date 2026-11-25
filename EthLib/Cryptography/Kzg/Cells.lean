@@ -249,7 +249,7 @@ def computeVerifyCellKzgProofBatchChallenge
     ++ ⟨(Base.ByteOrder.toBE 8 commitments.size).toArray⟩
     ++ ⟨(Base.ByteOrder.toBE 8 cellIndices.size).toArray⟩
   -- Then each commitment, in order.
-  let h := commitments.foldl (init := h) fun h c => h ++ ⟨c.toArray⟩
+  let h := commitments.foldl (init := h) fun h c => h ++ ⟨c.bytes.toArray⟩
   -- One entry per cell, from four arrays of one length, which the callers check.
   let cells := (commitmentIndices.zip cellIndices).zip (cosetsEvals.zip proofs)
   -- For each cell, in order: its commitment index and its cell index, as 8 big-endian bytes each.
@@ -333,7 +333,7 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
     fun weights (i, rPower) => weights.modify i (· + rPower)
 
   -- `RLC = sum_i w_i C_i`, for commitment `C_i`.
-  let rlc : G1 ← g1LincombPoints (← commitments.mapM uncompressG1) weights
+  let rlc : G1 ← g1LincombPoints (← commitments.mapM (uncompressG1 ·.bytes)) weights
 
   -- The coset shift `h_k` of every cell `k`.
   --
@@ -412,13 +412,13 @@ def verifyCellKzgProofBatch (setup : TrustedSetup)
         -- Every commitment is validated as a `G1` point, repeated or not.
         --
         -- A repeated entry has the same bytes, so it gives the same result.
-        let _ ← match bytesToKzgCommitment cb with
+        let c ← match bytesToKzgCommitment cb with
                 | .ok c    => pure c
                 | .error _ => throw (.invalidCommitment (some i))
         -- Find or append.
-        match deduped.idxOf? cb with
+        match deduped.idxOf? c with
         | some j => pure (deduped, commitmentIndices.push j)
-        | none   => pure (deduped.push cb, commitmentIndices.push deduped.size)
+        | none   => pure (deduped.push c, commitmentIndices.push deduped.size)
 
   -- Each cell is decoded into its 64 values in `Fr`.
   let cosetsEvals : Array CosetEvals ← cells.mapM fun c =>

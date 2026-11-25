@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.Operations
+public import EthLib.Consensus.Proofs.Types
 public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections

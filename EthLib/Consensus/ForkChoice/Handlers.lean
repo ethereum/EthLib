@@ -150,8 +150,8 @@ def isDataAvailable (config : Config) (sources : BlockSources preset fork)
   -- Proof `i` shows that blob `i` matches commitment `i`, as EIP-4844 specifies.
   else
     let some (blobs, proofs) := sources.blobsAndProofs root | throw (.blobsUnavailable root)
-    (verifyBlobKzgProofBatch sources.setup blobs (block.body.blobKzgCommitments range).data
-      proofs).mapError .kzg
+    (verifyBlobKzgProofBatch sources.setup blobs
+      ((block.body.blobKzgCommitments range).data.map (·.bytes)) proofs).mapError .kzg
 
 /-- Check that the data of a block is available.
 

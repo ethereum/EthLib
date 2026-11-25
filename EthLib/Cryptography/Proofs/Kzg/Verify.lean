@@ -114,7 +114,7 @@ theorem verifyKzgProof_computeKzgProof {s : TrustedSetup} {τ : Fr}
     {zBytes yBytes : Bytes32}
     (hC : blobToKzgCommitment s blob = .ok C)
     (hP : computeKzgProof s blob zBytes = .ok (P, yBytes)) :
-    verifyKzgProof s C zBytes yBytes P = .ok true := by
+    verifyKzgProof s C.bytes zBytes yBytes P = .ok true := by
   cases hblob : blobToPolynomial blob with
   | error e =>
     have herr : blobToKzgCommitment s blob = .error e := by
@@ -158,18 +158,18 @@ theorem computeBlobKzgProof_eq {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed �
     ∃ Q : Polynomial, Q.size = FIELD_ELEMENTS_PER_BLOB ∧
       (∀ i : Fin FIELD_ELEMENTS_PER_BLOB, Q[i.val]! =
         (quotientPoly poly (computeChallenge blob
-          (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)))).eval (evalDomain i)) ∧
+          ⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)⟩)).eval (evalDomain i)) ∧
       computeBlobKzgProof s blob (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) =
         .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray Q)) := by
   have hsize := size_blobToPolynomial blob poly hblob
   obtain ⟨C', hC', -⟩ := validateKzgG1Point_compressG1 (represents_lagrange_msm hs (τ := τ) hsize)
   have hbytes : bytesToKzgCommitment (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) =
-      .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) := by
+      .ok ⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)⟩ := by
     refine bytesToKzgCommitment_ok_iff.mpr ⟨?_, rfl⟩
     rw [validateKzgG1_eq_validateKzgG1Point, hC']
     rfl
   obtain ⟨Q, hQs, hQv, hImpl⟩ := computeKzgProofImpl_eq s hsize
-    (computeChallenge blob (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)))
+    (computeChallenge blob ⟨compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)⟩)
   refine ⟨Q, hQs, hQv, ?_⟩
   unfold computeBlobKzgProof
   rw [hbytes, hblob]
@@ -181,7 +181,7 @@ theorem computeBlobKzgProof_eq {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed �
 theorem exists_blobToKzgCommitment_computeBlobKzgProof {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {blob : Blob} {poly : Polynomial}
     (hblob : blobToPolynomial blob = .ok poly) :
-    ∃ C P, blobToKzgCommitment s blob = .ok C ∧ computeBlobKzgProof s blob C = .ok P := by
+    ∃ C P, blobToKzgCommitment s blob = .ok C ∧ computeBlobKzgProof s blob C.bytes = .ok P := by
   obtain ⟨Q, -, -, hcomp⟩ := computeBlobKzgProof_eq hs hblob
   exact ⟨_, _, blobToKzgCommitment_eq_ok s hblob, hcomp⟩
 
@@ -198,8 +198,8 @@ def BlobOpeningValid (τ : Fr) (blob : Blob) (commitment proof : Bytes48) : Prop
   ∃ poly C c P w, blobToPolynomial blob = .ok poly ∧
     validateKzgG1Point commitment = .ok C ∧ G1.Represents C c ∧
     validateKzgG1Point proof = .ok P ∧ G1.Represents P w ∧
-    c - (interpolant poly).eval (computeChallenge blob commitment) =
-      w * (τ - computeChallenge blob commitment)
+    c - (interpolant poly).eval (computeChallenge blob ⟨commitment⟩) =
+      w * (τ - computeChallenge blob ⟨commitment⟩)
 
 /-- **An honestly computed blob commitment and proof form a valid opening.**
 
@@ -209,9 +209,9 @@ Let `blobToKzgCommitment` return `C`, and let `computeBlobKzgProof` return `P`.
 
 Then `(blob, C, P)` is a valid blob opening at `τ`. -/
 theorem blobOpeningValid_computeBlobKzgProof {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
-    {blob : Blob} {C P : Bytes48} (hC : blobToKzgCommitment s blob = .ok C)
-    (hP : computeBlobKzgProof s blob C = .ok P) :
-    BlobOpeningValid τ blob C P := by
+    {blob : Blob} {C : KZGCommitment} {P : KZGProof} (hC : blobToKzgCommitment s blob = .ok C)
+    (hP : computeBlobKzgProof s blob C.bytes = .ok P) :
+    BlobOpeningValid τ blob C.bytes P := by
   cases hblob : blobToPolynomial blob with
   | error e =>
     unfold blobToKzgCommitment at hC
@@ -254,8 +254,8 @@ theorem verifyBlobKzgProof_eq_ok_true {s : TrustedSetup} {blob : Blob}
     (h : verifyBlobKzgProof s blob commitment proof = .ok true) :
     ∃ poly C P, blobToPolynomial blob = .ok poly ∧
       validateKzgG1Point commitment = .ok C ∧ validateKzgG1Point proof = .ok P ∧
-      verifyKzgProofImpl s C (computeChallenge blob commitment)
-        ((interpolant poly).eval (computeChallenge blob commitment)) P = true := by
+      verifyKzgProofImpl s C (computeChallenge blob ⟨commitment⟩)
+        ((interpolant poly).eval (computeChallenge blob ⟨commitment⟩)) P = true := by
   unfold verifyBlobKzgProof at h
   cases hC : validateKzgG1Point commitment with
   | error e =>
@@ -288,8 +288,8 @@ For a well-formed setup, a blob's proof verifies against its commitment. -/
 theorem verifyBlobKzgProof_computeBlobKzgProof {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blob : Blob} {C : KZGCommitment} {P : KZGProof}
     (hC : blobToKzgCommitment s blob = .ok C)
-    (hP : computeBlobKzgProof s blob C = .ok P) :
-    verifyBlobKzgProof s blob C P = .ok true := by
+    (hP : computeBlobKzgProof s blob C.bytes = .ok P) :
+    verifyBlobKzgProof s blob C.bytes P = .ok true := by
   exact verifyBlobKzgProof_of_blobOpeningValid hs
     (blobOpeningValid_computeBlobKzgProof hs hC hP)
 

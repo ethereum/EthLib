@@ -129,7 +129,7 @@ theorem verifyBlobKzgProof_binding {s : TrustedSetup} {τ : Fr}
     {commitment : KZGCommitment} {proof : KZGProof} {poly : Polynomial}
     {C P : G1} {f g : Fr[X]} (hblob : blobToPolynomial blob = .ok poly)
     (hc : bytesToKzgCommitment commitmentBytes = .ok commitment)
-    (hC : uncompressG1 commitment = .ok C) (hf : G1.Represents C (f.eval τ))
+    (hC : uncompressG1 commitment.bytes = .ok C) (hf : G1.Represents C (f.eval τ))
     (hp : bytesToKzgProof proofBytes = .ok proof)
     (hP : uncompressG1 proof = .ok P) (hg : G1.Represents P (g.eval τ))
     (hfdeg : f.natDegree < FIELD_ELEMENTS_PER_BLOB) (hgdeg : g.natDegree < FIELD_ELEMENTS_PER_BLOB)
@@ -148,15 +148,15 @@ theorem verifyBlobKzgProof_binding {s : TrustedSetup} {τ : Fr}
       (a - b).natDegree < FIELD_ELEMENTS_PER_BLOB :=
     lt_of_le_of_lt (natDegree_sub_le a b) (max_lt ha hb)
   -- The conversions return their input bytes, and validation gives the decoded points.
-  obtain ⟨rfl, hC⟩ := validateKzgG1Point_of_bytesToKzgCommitment hc hC
+  obtain ⟨rfl, hCv⟩ := validateKzgG1Point_of_bytesToKzgCommitment hc hC
   obtain ⟨rfl, hP⟩ := validateKzgG1Point_of_bytesToKzgProof hp hP
   obtain ⟨poly', C', P', hblob', hC', hP', hv⟩ := verifyBlobKzgProof_eq_ok_true h
   cases hblob.symm.trans hblob'
-  cases hC.symm.trans hC'
+  cases hCv.symm.trans hC'
   cases hP.symm.trans hP'
   rcases opening_eq_or_root ((verifyKzgProofImpl_iff hs hf hg
-      (computeChallenge blob commitment)
-      ((interpolant poly).eval (computeChallenge blob commitment))).mp hv)
+      (computeChallenge blob ⟨commitmentBytes⟩)
+      ((interpolant poly).eval (computeChallenge blob ⟨commitmentBytes⟩))).mp hv)
     with hfp | ⟨hne, hroot⟩ | ⟨hne, hroot⟩
   · exact Or.inl hfp
   · exact Or.inr (Or.inl ⟨hne, hsubdeg f (interpolant poly) hfdeg (natDegree_interpolant_lt poly),

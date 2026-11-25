@@ -60,7 +60,8 @@ theorem decodeBlobPolys_of_ok {blobs : Array Blob} {ps : Array Polynomial}
 
 /-- The evaluation challenges of the pairs of a blob and its commitment. -/
 def BlobBatchInput.challenges (y : BlobBatchInput) : Array Fr :=
-  Array.ofFn (n := y.blobs.size) fun i => computeChallenge y.blobs[i.val] y.commitments[i.val]!
+  Array.ofFn (n := y.blobs.size) fun i =>
+    computeChallenge y.blobs[i.val] ⟨y.commitments[i.val]!⟩
 
 /-- The values of the decoded blobs at their evaluation challenges. -/
 noncomputable def BlobBatchInput.evals (y : BlobBatchInput) : Array Fr :=
@@ -69,14 +70,24 @@ noncomputable def BlobBatchInput.evals (y : BlobBatchInput) : Array Fr :=
 
 /-- The batch challenge: the Fiat-Shamir challenge of the batch check of openings on blobs. -/
 noncomputable def BlobBatchInput.challenge (y : BlobBatchInput) : Fr :=
-  computeVerifyKzgProofBatchChallenge y.commitments y.challenges y.evals y.proofs
+  computeVerifyKzgProofBatchChallenge (y.commitments.map KZGCommitment.mk) y.challenges y.evals
+    y.proofs
 
 /-- The inputs that the batch check of openings hashes for a blob batch. -/
 noncomputable def BlobBatchInput.toOpeningBatch (y : BlobBatchInput) : OpeningBatch where
-  commitments := y.commitments
+  commitments := y.commitments.map KZGCommitment.mk
   zs := y.challenges
   ys := y.evals
   proofs := y.proofs
+
+/-- The commitment at a position of the commitments of some bytes holds the bytes there. -/
+theorem bytes_getElem!_map_mk (a : Array Bytes48) (i : Nat) :
+    (a.map KZGCommitment.mk)[i]!.bytes = a[i]! := by
+  by_cases h : i < a.size
+  · rw [getElem!_pos a i h, getElem!_pos (a.map KZGCommitment.mk) i (by simpa using h)]
+    simp
+  · rw [getElem!_neg a i h, getElem!_neg (a.map KZGCommitment.mk) i (by simpa using h)]
+    rfl
 
 /-- The error polynomial of a blob batch, where `c` and `w` map the bytes of points to scalars. -/
 noncomputable def BlobBatchInput.errorPoly (y : BlobBatchInput) (τ : Fr)
@@ -95,8 +106,8 @@ private noncomputable def blobPureStep (acc : BlobBatchAcc)
     (entry : Blob × Bytes48 × Bytes48 × G1 × G1 × Polynomial) : BlobBatchAcc :=
   let (commitments, commitmentsG1, challenges, ys, proofs, proofsG1) := acc
   let (blob, cb, pb, c, p, poly) := entry
-  let z := computeChallenge blob cb
-  (commitments.push cb, commitmentsG1.push c, challenges.push z,
+  let z := computeChallenge blob ⟨cb⟩
+  (commitments.push ⟨cb⟩, commitmentsG1.push c, challenges.push z,
     ys.push ((interpolant poly).eval z), proofs.push pb, proofsG1.push p)
 
 /-- Pushing `g x` at each list element appends `(L.map g).toArray`. -/
@@ -123,7 +134,7 @@ private theorem blobLoopStep_of_ok (acc : BlobBatchAcc) (blob : Blob) (cb pb : B
        let proof ← match bytesToKzgProof pb with
          | .ok p => pure p
          | .error _ => throw (KzgError.invalidProof (some i))
-       let commitmentG1 ← uncompressG1 commitment
+       let commitmentG1 ← uncompressG1 commitment.bytes
        let proofG1 ← uncompressG1 proof
        pure (commitments.push commitment, commitmentsG1.push commitmentG1,
          challenges.push challenge, ys.push y, proofs.push proof, proofsG1.push proofG1)) =
@@ -151,7 +162,7 @@ private theorem blobLoopStep_valid (acc r : BlobBatchAcc) (blob : Blob) (cb pb :
              let proof ← match bytesToKzgProof pb with
                | .ok p => pure p
                | .error _ => throw (KzgError.invalidProof (some i))
-             let commitmentG1 ← uncompressG1 commitment
+             let commitmentG1 ← uncompressG1 commitment.bytes
              let proofG1 ← uncompressG1 proof
              pure (commitments.push commitment, commitmentsG1.push commitmentG1,
                challenges.push challenge, ys.push y, proofs.push proof, proofsG1.push proofG1)) =
@@ -185,19 +196,20 @@ private theorem blobLoopStep_valid (acc r : BlobBatchAcc) (blob : Blob) (cb pb :
 private theorem list_foldl_blobPureStep
     (L : List (Blob × Bytes48 × Bytes48 × G1 × G1 × Polynomial)) :
     L.foldl blobPureStep (#[], #[], #[], #[], #[], #[]) =
-      ((L.map fun e => e.2.1).toArray, (L.map fun e => e.2.2.2.1).toArray,
-        (L.map fun e => computeChallenge e.1 e.2.1).toArray,
-        (L.map fun e => (interpolant e.2.2.2.2.2).eval (computeChallenge e.1 e.2.1)).toArray,
+      ((L.map fun e => KZGCommitment.mk e.2.1).toArray, (L.map fun e => e.2.2.2.1).toArray,
+        (L.map fun e => computeChallenge e.1 ⟨e.2.1⟩).toArray,
+        (L.map fun e => (interpolant e.2.2.2.2.2).eval (computeChallenge e.1 ⟨e.2.1⟩)).toArray,
         (L.map fun e => e.2.2.1).toArray, (L.map fun e => e.2.2.2.2.1).toArray) := by
-  have hp1 := list_foldl_push (step := blobPureStep) (fun s₀ => s₀.1) (fun e => e.2.1)
+  have hp1 := list_foldl_push (step := blobPureStep) (fun s₀ => s₀.1)
+    (fun e => KZGCommitment.mk e.2.1)
     (fun ⟨_, _, _, _, _, _⟩ _ => rfl) L (#[], #[], #[], #[], #[], #[])
   have hp2 := list_foldl_push (step := blobPureStep) (fun s₀ => s₀.2.1) (fun e => e.2.2.2.1)
     (fun ⟨_, _, _, _, _, _⟩ _ => rfl) L (#[], #[], #[], #[], #[], #[])
   have hp3 := list_foldl_push (step := blobPureStep) (fun s₀ => s₀.2.2.1)
-    (fun e => computeChallenge e.1 e.2.1) (fun ⟨_, _, _, _, _, _⟩ _ => rfl) L
+    (fun e => computeChallenge e.1 ⟨e.2.1⟩) (fun ⟨_, _, _, _, _, _⟩ _ => rfl) L
     (#[], #[], #[], #[], #[], #[])
   have hp4 := list_foldl_push (step := blobPureStep) (fun s₀ => s₀.2.2.2.1)
-    (fun e => (interpolant e.2.2.2.2.2).eval (computeChallenge e.1 e.2.1))
+    (fun e => (interpolant e.2.2.2.2.2).eval (computeChallenge e.1 ⟨e.2.1⟩))
     (fun ⟨_, _, _, _, _, _⟩ _ => rfl) L (#[], #[], #[], #[], #[], #[])
   have hp5 := list_foldl_push (step := blobPureStep) (fun s₀ => s₀.2.2.2.2.1)
     (fun e => e.2.2.1) (fun ⟨_, _, _, _, _, _⟩ _ => rfl) L (#[], #[], #[], #[], #[], #[])
@@ -227,11 +239,12 @@ private theorem blobLoop_eq_ok {blobs : Array Blob} {commitmentsBytes proofsByte
         let proof ← match bytesToKzgProof pb with
           | .ok p => pure p
           | .error _ => throw (KzgError.invalidProof (some i))
-        let commitmentG1 ← uncompressG1 commitment
+        let commitmentG1 ← uncompressG1 commitment.bytes
         let proofG1 ← uncompressG1 proof
         pure (commitments.push commitment, commitmentsG1.push commitmentG1,
           challenges.push challenge, ys.push y, proofs.push proof, proofsG1.push proofG1)) =
-      .ok (commitmentsBytes, csG1, y.challenges, y.evals, proofsBytes, psG1) := by
+      .ok (commitmentsBytes.map KZGCommitment.mk, csG1, y.challenges, y.evals, proofsBytes,
+        psG1) := by
   intro y
   obtain ⟨hpssz, hpsk⟩ := array_mapM_ok hps
   obtain ⟨hcssz, hcsk⟩ := array_mapM_ok hcsG1
@@ -262,22 +275,24 @@ private theorem blobLoop_eq_ok {blobs : Array Blob} {commitmentsBytes proofsByte
       exact blobLoopStep_of_ok acc _ _ _ k hcb hpb hbl]
   rw [← List.foldl_map, list_foldl_blobPureStep]
   refine congrArg Except.ok ?_
-  have h1 : ((L.map pureEntry).map fun e => e.2.1).toArray = commitmentsBytes := by
+  have h1 : ((L.map pureEntry).map fun e => KZGCommitment.mk e.2.1).toArray =
+      commitmentsBytes.map KZGCommitment.mk := by
     apply Array.ext (by simp [hlenL, hc])
     intro k hk₁ hk₂
-    simp [pureEntry, hgetL k (by simp [hlenL]; omega)]
+    simp [pureEntry, hgetL k (by simpa using hk₁)]
   have h2 : ((L.map pureEntry).map fun e => e.2.2.2.1).toArray = csG1 := by
     apply Array.ext (by simp [hlenL, hcssz, hc])
     intro k hk₁ hk₂
     simp [pureEntry, hgetL k (by simp [hlenL]; omega), getElem!_pos csG1 k hk₂]
-  have h3 : ((L.map pureEntry).map fun e => computeChallenge e.1 e.2.1).toArray = y.challenges := by
+  have h3 : ((L.map pureEntry).map fun e => computeChallenge e.1 ⟨e.2.1⟩).toArray =
+      y.challenges := by
     apply Array.ext (by simp [y, BlobBatchInput.challenges, hlenL])
     intro k hk₁ hk₂
     have hk' : k < blobs.size := by simpa [y, BlobBatchInput.challenges] using hk₂
     simp [y, pureEntry, BlobBatchInput.challenges, hgetL k (hlenL.symm ▸ hk'),
       getElem!_pos commitmentsBytes k (hc ▸ hk')]
   have h4 : ((L.map pureEntry).map fun e =>
-      (interpolant e.2.2.2.2.2).eval (computeChallenge e.1 e.2.1)).toArray = y.evals := by
+      (interpolant e.2.2.2.2.2).eval (computeChallenge e.1 ⟨e.2.1⟩)).toArray = y.evals := by
     apply Array.ext (by simp [y, BlobBatchInput.evals, hlenL])
     intro k hk₁ hk₂
     have hk' : k < blobs.size := by simpa [y, BlobBatchInput.evals] using hk₂
@@ -311,8 +326,8 @@ theorem verifyBlobKzgProofBatch_eq_ok {s : TrustedSetup} {blobs : Array Blob}
       ∃ commitmentsG1 proofsG1,
         commitmentsBytes.mapM validateKzgG1Point = .ok commitmentsG1 ∧
         proofsBytes.mapM validateKzgG1Point = .ok proofsG1 ∧
-        verifyKzgProofBatch s commitmentsBytes commitmentsG1 y.challenges y.evals
-          proofsBytes proofsG1 = .ok b := by
+        verifyKzgProofBatch s (commitmentsBytes.map KZGCommitment.mk) commitmentsG1 y.challenges
+          y.evals proofsBytes proofsG1 = .ok b := by
   intro y
   unfold verifyBlobKzgProofBatch at h
   by_cases hc : commitmentsBytes.size ≠ blobs.size
@@ -378,10 +393,12 @@ theorem verifyBlobKzgProofBatch_exists_ok (s : TrustedSetup) {blobs : Array Blob
   unfold verifyBlobKzgProofBatch
   rw [ite_eq_right (not_not.mpr hc), ite_eq_right (not_not.mpr hp)]
   obtain ⟨b, hb⟩ := verifyKzgProofBatch_exists_ok s
+    (commitments := commitmentsBytes.map KZGCommitment.mk) (proofs := proofsBytes)
     (zs := (⟨blobs, commitmentsBytes, proofsBytes⟩ : BlobBatchInput).challenges)
     (ys := (⟨blobs, commitmentsBytes, proofsBytes⟩ : BlobBatchInput).evals)
     (by simp [BlobBatchInput.challenges, hc]) (by simp [BlobBatchInput.evals, hc])
-    (hp.trans hc.symm) (array_mapM_ok hcsG1).1 ((array_mapM_ok hpsG1).1.trans (hp.trans hc.symm))
+    (by simp [hp, hc]) ((array_mapM_ok hcsG1).1.trans (by simp))
+    ((array_mapM_ok hpsG1).1.trans (by simp [hp, hc]))
   exact ⟨b, EthLib.Base.bind_ok_iff.mpr ⟨_, blobLoop_eq_ok hc hp hpsM hcsG1 hpsG1, hb⟩⟩
 
 /-- **The empty batch verifies.**
@@ -441,7 +458,10 @@ theorem verifyBlobKzgProofBatch_ok_iff_root {s : TrustedSetup} {τ : Fr}
       have h1 := hpgk i (hpgsz ▸ hi) hi
       rw [← getElem!_pos y.proofs i (hpgsz ▸ hi), ← getElem!_pos psG1 i hi] at h1
       exact hP i (hpgsz ▸ hi) _ (uncompressG1_of_validateKzgG1Point h1)
-  exact verifyKzgProofBatch_ok_iff_root hs hC' hP' hbatch
+  have root := verifyKzgProofBatch_ok_iff_root hs hC' hP' hbatch
+  -- The commitments are the bytes that the caller gave, so they are as many.
+  rw [Array.size_map] at root
+  exact root
 
 /-- **An accepted batch of blobs is valid, or its batch challenge is a root.**
 
@@ -489,7 +509,7 @@ theorem verifyBlobKzgProofBatch_valid_or_root {s : TrustedSetup} {τ : Fr}
     rw [← getElem!_pos y.proofs i hi_p, ← getElem!_pos psG1 i (hpgsz ▸ hi_p)] at hpb
     have hrC := hC i hi_c _ (uncompressG1_of_validateKzgG1Point hcb)
     have hrP := hP i hi_p _ (uncompressG1_of_validateKzgG1Point hpb)
-    have hchal : y.challenges[i]! = computeChallenge y.blobs[i]! y.commitments[i]! := by
+    have hchal : y.challenges[i]! = computeChallenge y.blobs[i]! ⟨y.commitments[i]!⟩ := by
       rw [getElem!_pos y.challenges i (by simp [BlobBatchInput.challenges, hi])]
       simp [BlobBatchInput.challenges, getElem!_pos y.blobs i hi]
     have heval : y.evals[i]! = (interpolant ps[i]!).eval y.challenges[i]! := by
@@ -547,10 +567,12 @@ theorem prEvent_blobInput_root_le (τ : Fr) (c w : Bytes48 → Fr) {n : Nat}
   have hexp : batchRomExperiment (BlobBatchInput.toOpeningBatch <$> adversary) =
       Prod.map BlobBatchInput.toOpeningBatch id <$> blobInputRomExperiment adversary := by
     simp [batchRomExperiment, blobInputRomExperiment]
-  have h := prEvent_batchErrorPoly_root_le τ (fun x i => c x.commitments[i]!)
+  have h := prEvent_batchErrorPoly_root_le τ (fun x i => c x.commitments[i]!.bytes)
     (fun x i => w x.proofs[i]!) (n := n) _ hq'
   rw [hexp, simulateQ_map, StateT.run'_map', prEvent_map] at h
-  exact h
+  -- Each commitment of the batch holds the bytes of the input at its position.
+  simpa only [Function.comp_def, Prod.map, BlobBatchInput.toOpeningBatch, bytes_getElem!_map_mk,
+    Array.size_map, id_eq, BlobBatchInput.errorPoly] using h
 
 /-! ## Valid blob openings and completeness -/
 
@@ -596,11 +618,11 @@ theorem verifyBlobKzgProofBatch_of_blobOpeningValid {s : TrustedSetup}
       rw [← getElem!_pos blobs i hi'] at h1
       rw [getElem!_pos ps i (by omega)]
       exact Except.ok.inj (h1.symm.trans hpoly)
-    have hchal : y.challenges[i]! = computeChallenge blobs[i]! commitments[i]! := by
+    have hchal : y.challenges[i]! = computeChallenge blobs[i]! ⟨commitments[i]!⟩ := by
       rw [getElem!_pos y.challenges i (by simp [y, BlobBatchInput.challenges, hi'])]
       simp [y, BlobBatchInput.challenges, getElem!_pos blobs i hi']
     have heval : y.evals[i]! =
-        (interpolant poly).eval (computeChallenge blobs[i]! commitments[i]!) := by
+        (interpolant poly).eval (computeChallenge blobs[i]! ⟨commitments[i]!⟩) := by
       rw [getElem!_pos y.evals i (by simp [y, BlobBatchInput.evals, hi'])]
       simp [y, BlobBatchInput.evals, hdec, hpoly_eq, hchal]
     rw [scalarOf_eq hCv hCr, scalarOf_eq hPv hPr, hchal, heval]
@@ -625,7 +647,7 @@ Then the batch check of blobs accepts. -/
 theorem verifyBlobKzgProofBatch_computeBlobKzgProof {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blobs : Array Blob} {commitments proofs : Array Bytes48}
     (hc : commitments.size = blobs.size) (hp : proofs.size = blobs.size)
-    (hhonest : ∀ i < blobs.size, blobToKzgCommitment s blobs[i]! = .ok commitments[i]! ∧
+    (hhonest : ∀ i < blobs.size, blobToKzgCommitment s blobs[i]! = .ok ⟨commitments[i]!⟩ ∧
       computeBlobKzgProof s blobs[i]! commitments[i]! = .ok proofs[i]!) :
     verifyBlobKzgProofBatch s blobs commitments proofs = .ok true :=
   verifyBlobKzgProofBatch_of_blobOpeningValid hs hc hp fun i hi =>
@@ -659,7 +681,7 @@ Its commitments and proofs are computed honestly, and the batch check of blobs a
 theorem exists_honest_blob_batch (τ : Fr) :
     ∃ (s : TrustedSetup) (y : BlobBatchInput),
       s.WellFormed τ ∧ y.blobs.size > 0 ∧
-      (∀ i < y.blobs.size, blobToKzgCommitment s y.blobs[i]! = .ok y.commitments[i]! ∧
+      (∀ i < y.blobs.size, blobToKzgCommitment s y.blobs[i]! = .ok ⟨y.commitments[i]!⟩ ∧
         computeBlobKzgProof s y.blobs[i]! y.commitments[i]! = .ok y.proofs[i]!) ∧
       verifyBlobKzgProofBatch s y.blobs y.commitments y.proofs = .ok true := by
   obtain ⟨C, P, hC, hP⟩ :=
@@ -667,15 +689,15 @@ theorem exists_honest_blob_batch (τ : Fr) :
       blobToPolynomial_oneHotBlob
   have hhonest : ∀ i < (#[oneHotBlob]).size,
       blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) (#[oneHotBlob])[i]! =
-        .ok (#[C])[i]! ∧
-      computeBlobKzgProof (TrustedSetup.ofPowers (setupPowers τ)) (#[oneHotBlob])[i]! (#[C])[i]! =
-        .ok (#[P])[i]! := by
+        .ok ⟨(#[C.bytes])[i]!⟩ ∧
+      computeBlobKzgProof (TrustedSetup.ofPowers (setupPowers τ)) (#[oneHotBlob])[i]!
+        (#[C.bytes])[i]! = .ok (#[P])[i]! := by
     intro i hi
     obtain rfl : i = 0 := Nat.lt_one_iff.mp hi
-    rw [getElem!_pos #[oneHotBlob] 0 (Nat.zero_lt_one), getElem!_pos #[C] 0 (Nat.zero_lt_one),
+    rw [getElem!_pos #[oneHotBlob] 0 (Nat.zero_lt_one), getElem!_pos #[C.bytes] 0 (Nat.zero_lt_one),
       getElem!_pos #[P] 0 (Nat.zero_lt_one)]
     exact ⟨hC, hP⟩
-  exact ⟨TrustedSetup.ofPowers (setupPowers τ), ⟨#[oneHotBlob], #[C], #[P]⟩,
+  exact ⟨TrustedSetup.ofPowers (setupPowers τ), ⟨#[oneHotBlob], #[C.bytes], #[P]⟩,
     wellFormed_ofPowers τ, Nat.zero_lt_one, hhonest,
     verifyBlobKzgProofBatch_computeBlobKzgProof (wellFormed_ofPowers τ) rfl rfl hhonest⟩
 

@@ -241,7 +241,7 @@ variable {subnet : SubnetID} {future : Bool} {finalizedSlot : Slot}
 
 /-- Once its KZG check is computed, the proofs of a blob sidecar are a chain of two checks. -/
 theorem blobSidecarProofs_eq
-    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof =
+    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment.bytes sidecar.kzgProof =
       .ok kzgValid) :
     blobSidecarProofs setup fork sidecar =
       .ok ((rejectUnless (verifyBlobSidecarInclusionProof preset fork sidecar)
@@ -269,7 +269,7 @@ theorem validateBlobSidecar_eq
       sidecar.signedBlockHeader.signature = .ok valid)
     (checkpoint : store.getCheckpointBlock sidecar.signedBlockHeader.message.parentRoot
       store.finalizedCheckpoint.epoch = .ok finalizedBlock)
-    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof =
+    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment.bytes sidecar.kzgProof =
       .ok kzgValid)
     (proposerOf : expectedProposer config checks parentState
       sidecar.signedBlockHeader.message.slot = .ok expected) :
@@ -319,7 +319,7 @@ theorem validateBlobSidecar_eq_accept
       sidecar.signedBlockHeader.signature = .ok valid)
     (checkpoint : store.getCheckpointBlock sidecar.signedBlockHeader.message.parentRoot
       store.finalizedCheckpoint.epoch = .ok finalizedBlock)
-    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof =
+    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment.bytes sidecar.kzgProof =
       .ok kzgValid)
     (proposerOf : expectedProposer config checks parentState
       sidecar.signedBlockHeader.message.slot = .ok expected) :
@@ -356,7 +356,7 @@ theorem validateBlobSidecar_ignored
       sidecar.signedBlockHeader.signature = .ok valid)
     (checkpoint : store.getCheckpointBlock sidecar.signedBlockHeader.message.parentRoot
       store.finalizedCheckpoint.epoch = .ok finalizedBlock)
-    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof =
+    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment.bytes sidecar.kzgProof =
       .ok kzgValid)
     (proposerOf : expectedProposer config checks parentState
       sidecar.signedBlockHeader.message.slot = .ok expected) :
@@ -391,7 +391,7 @@ theorem validateBlobSidecar_rejected
       sidecar.signedBlockHeader.signature = .ok valid)
     (checkpoint : store.getCheckpointBlock sidecar.signedBlockHeader.message.parentRoot
       store.finalizedCheckpoint.epoch = .ok finalizedBlock)
-    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof =
+    (kzg : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment.bytes sidecar.kzgProof =
       .ok kzgValid)
     (proposerOf : expectedProposer config checks parentState
       sidecar.signedBlockHeader.message.slot = .ok expected) :
@@ -426,7 +426,8 @@ theorem validateBlobSidecar_accept
     blobSidecarKey sidecar ∉ seen.blobSidecarTuples ∧
       sidecar.index < blobSidecarLimit config fork ∧
       verifyBlobSidecarInclusionProof preset fork sidecar = true ∧
-      verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof = .ok true := by
+      verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment.bytes sidecar.kzgProof =
+        .ok true := by
   unfold validateBlobSidecar at accepted
   simp only [bind_ok_iff, andThenM_eq_ok_accept, ignoreUnless_eq_accept,
     rejectUnless_eq_accept] at accepted
@@ -438,7 +439,8 @@ theorem validateBlobSidecar_accept
   simp [pure, Except.pure] at final
   subst final
   refine ⟨by simpa using unseen, by simpa using inside, included, ?_⟩
-  cases checked : verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment sidecar.kzgProof <;>
+  cases checked :
+      verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment.bytes sidecar.kzgProof <;>
     simp_all [Except.mapError]
 
 end Blob

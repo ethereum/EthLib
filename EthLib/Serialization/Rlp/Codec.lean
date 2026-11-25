@@ -163,6 +163,14 @@ instance {n : Nat} : Codec (Vector UInt8 n) where
   ofItem item := do
     exactBytes n (← item.toBytes) (.wrongLength n)
 
+/-- The item of a structure around one value: the item of that value.
+
+It encodes and decodes as the value inside. -/
+@[instance_reducible]
+def Codec.wrapper {α β : Type} [Codec β] (mk : β → α) (get : α → β) : Codec α where
+  toItem a := Codec.toItem (get a)
+  ofItem item := mk <$> Codec.ofItem item
+
 /-- An item is itself, so a structure can hold an item that it does not read. -/
 instance : Codec Item where
   toItem := id

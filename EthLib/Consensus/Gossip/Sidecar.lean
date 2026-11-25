@@ -122,7 +122,7 @@ def blobSidecarProofs (setup : TrustedSetup) (fork : Fork) (sidecar : BlobSideca
   -- Reject it unless its KZG proof shows that its blob matches its commitment.
   --
   -- An input that the KZG check cannot read is an error.
-  let valid ← (verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment
+  let valid ← (verifyBlobKzgProof setup sidecar.blob sidecar.kzgCommitment.bytes
     sidecar.kzgProof).mapError .kzg
   return rejectUnless valid "invalid blob kzg proof"
 

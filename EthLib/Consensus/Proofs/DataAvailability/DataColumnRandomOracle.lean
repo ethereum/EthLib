@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Serialization.Proofs.Ssz.BranchRandomOracle
+import EthLib.Consensus.Proofs.Types
 import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
 
 /-!
@@ -141,7 +142,10 @@ theorem collision_of_extractColumnHeaders {preset : Preset} {fork : Fork}
       rw [eq_ok_of_bind_toChunk hfirstLeaf, desc_forkList beforeGloas] at hfirst
       rw [eq_ok_of_bind_toChunk hsecondLeaf, desc_forkList beforeGloas, ← sameLeaf] at hsecond
       -- A list of commitments is its array, since the bound on its size is a proof.
-      have lists : claim.1.kzgCommitments.data.toList ≠ claim.2.kzgCommitments.data.toList := by
+      --
+      -- A commitment is its bytes, so two different lists have different lists of bytes.
+      have lists : claim.1.kzgCommitments.data.toList.map (·.bytes) ≠
+          claim.2.kzgCommitments.data.toList.map (·.bytes) := by
         intro same
         apply differ
         have data : ∀ {first second : BlobKZGCommitments preset fork},
@@ -151,10 +155,13 @@ theorem collision_of_extractColumnHeaders {preset : Preset} {fork : Fork}
           cases second
           cases same
           rfl
-        exact data (Array.toList_inj.mp same)
+        have bytes : Function.Injective (·.bytes : Cryptography.Kzg.KZGCommitment → _) :=
+          fun ⟨_⟩ ⟨_⟩ same => by cases same; rfl
+        exact data (Array.toList_inj.mp ((List.map_injective_iff.mpr bytes) same))
       exact collision_of_hashTreeRootM_bytes48List
         (Nat.lt_trans (UInt64.toNat_lt preset.MAX_BLOB_COMMITMENTS_PER_BLOCK) (by decide)) lists
-        hfirst hsecond
+        (by rw [← map_toValue_kzgCommitment]; exact hfirst)
+        (by rw [← map_toValue_kzgCommitment]; exact hsecond)
     · -- Two different roots climb to one body root, so the search finds a collision of the climbs.
       have hout := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hbranches
       simp only [extractBranches, evalWithAnswerFn_bind, evalWithAnswerFn_climbBranchM,
@@ -224,10 +231,14 @@ theorem extractColumnHeaders_queryBound (preset : Preset) {fork : Fork}
         2 * preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat) := by
   unfold extractColumnHeaders
   rw [desc_forkList beforeGloas]
-  refine (isQueryBoundP_bind (hashTreeRootM_bytes48List_queryBound _
-    claim.1.kzgCommitments.data.toList) fun _ _ =>
-      isQueryBoundP_bind (hashTreeRootM_bytes48List_queryBound _
-        claim.2.kzgCommitments.data.toList) fun _ _ =>
+  -- A commitment is rooted as its bytes.
+  have first := hashTreeRootM_bytes48List_queryBound preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+    (claim.1.kzgCommitments.data.toList.map (·.bytes))
+  have second := hashTreeRootM_bytes48List_queryBound preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+    (claim.2.kzgCommitments.data.toList.map (·.bytes))
+  rw [← map_toValue_kzgCommitment] at first second
+  refine (isQueryBoundP_bind first fun _ _ =>
+      isQueryBoundP_bind second fun _ _ =>
         isQueryBoundP_bind (n := 2 * preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat) (m := 0) ?_
           fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
   split

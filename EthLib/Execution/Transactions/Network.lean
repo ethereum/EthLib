@@ -33,6 +33,11 @@ open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Serialization.Rlp
 
+/-- A KZG commitment is the RLP string of its 48 bytes.
+
+Source: "Networking" of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking). -/
+instance : Codec KZGCommitment := .wrapper KZGCommitment.mk KZGCommitment.bytes
+
 /-- The version of the network form from Fusaka on. -/
 def WRAPPER_VERSION : Nat := 1
 
@@ -143,7 +148,7 @@ def decodeNetwork (fork : Fork) (bytes : ByteArray) :
 /-- The versioned hash of a commitment: `0x01`, then the last 31 bytes of its SHA-256 hash. -/
 def versionedHash (commitment : KZGCommitment) : Bytes32 :=
   -- EIP-4844: the version `0x01`, then the last 31 bytes of the SHA-256 hash of the commitment.
-  Cryptography.Kzg.kzgCommitmentToVersionedHash commitment
+  (Cryptography.Kzg.kzgCommitmentToVersionedHash commitment).bytes
 
 /-- Whether each commitment hashes to the versioned hash at its position. -/
 def hashesMatch (hashes : List Bytes32) (commitments : List KZGCommitment) : Bool :=
@@ -190,11 +195,12 @@ def verifyBlobBundle (setup : TrustedSetup) (fork : Fork) (blobs : List Blob)
     -- The batch check of cells verifies all of them at once.
     let indices := (List.range CELLS_PER_EXT_BLOB).toArray
     verifyCellKzgProofBatch setup
-      (commitments.toArray.flatMap fun c => Array.replicate CELLS_PER_EXT_BLOB c)
+      (commitments.toArray.flatMap fun c => Array.replicate CELLS_PER_EXT_BLOB c.bytes)
       (Array.flatten (Array.replicate blobs.length indices))
       cells.toArray.flatten proofs.toArray
   -- EIP-4844: the batch check of blobs, one proof per blob.
-  else verifyBlobKzgProofBatch setup blobs.toArray commitments.toArray proofs.toArray
+  else
+    verifyBlobKzgProofBatch setup blobs.toArray (commitments.toArray.map (·.bytes)) proofs.toArray
 
 /-- Whether the network form's proofs show that its commitments match its blobs. -/
 def proofsVerify (setup : TrustedSetup) (fork : Fork) (w : NetworkBlobTransaction) :
@@ -215,7 +221,7 @@ def validateBlobs (setup : TrustedSetup) (fork : Fork) (hashes : List Bytes32) (
   unless hashesMatch hashes commitments do
     -- Some pair does not match, so the first such pair has an index below both lengths.
     let index := (hashes.zip commitments).findIdx fun (h, c) => !decide (versionedHash c = h)
-    let commitment := commitments.getD index (Vector.replicate 48 0)
+    let commitment := commitments.getD index ⟨Vector.replicate 48 0⟩
     throw (.versionedHashMismatch index (versionedHash commitment) (hashes.getD index 0))
   -- The commitments match the blobs and the proofs.
   unless ← (verifyBlobBundle setup fork blobs commitments proofs).mapError .kzg do

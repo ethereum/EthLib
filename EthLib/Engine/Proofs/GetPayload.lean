@@ -290,7 +290,7 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
     blobsBundleOfJson version (blobsBundleJson b) = .ok b := by
   have hd : [("blobs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList)
       b.blobs), ("commitments", Serialization.JsonRpc.listJson
-      (Serialization.JsonRpc.dataJson ·.toList) b.commitments), ("proofs",
+      (Serialization.JsonRpc.dataJson ·.bytes.toList) b.commitments), ("proofs",
       Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList) b.proofs)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobsBundle" hd
@@ -304,9 +304,19 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
     (List.mem_cons_of_mem _ (List.mem_cons_self ..))
   have r3 := Serialization.JsonRpc.field_of_perm (what := "blobsBundle") hp hd
     (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_self ..)))
-  simp only [hfs, hex, r1, r2, r3, Serialization.JsonRpc.array_fixed_listJson, Json.liftM_ok,
-    bind, Except.bind, ite_true, h]
-  rfl
+  -- A commitment is written as its bytes, and read back as the bytes it holds.
+  have commitments : Serialization.JsonRpc.array "commitments"
+      (Serialization.JsonRpc.fixed "commitment" 48)
+      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.bytes.toList)
+        b.commitments) = .ok (b.commitments.map (·.bytes)) := by
+    have read := Serialization.JsonRpc.array_fixed_listJson "commitments" "commitment"
+      (b.commitments.map (·.bytes))
+    simpa [Serialization.JsonRpc.listJson, Array.map_map, Function.comp_def] using read
+  simp only [hfs, hex, r1, r2, r3, Serialization.JsonRpc.array_fixed_listJson, commitments,
+    Json.liftM_ok, bind, Except.bind, ite_true]
+  simp [List.map_map, Function.comp_def]
+  cases b
+  simp_all [pure, Except.pure]
 
 /-- A payload form of a block holds at most 32 bytes of extra data. -/
 theorem payloadOfBlock_extraData {fork : Fork} {block : Block fork Transaction}

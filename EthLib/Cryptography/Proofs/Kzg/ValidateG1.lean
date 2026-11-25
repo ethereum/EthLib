@@ -99,7 +99,7 @@ The theorems below relate each conversion to KZG validation.
 
 /-- Bytes that decode to a point of the subgroup convert to a commitment, unchanged. -/
 theorem bytesToKzgCommitment_of_validateKzgG1Point {b : Bytes48} {P : G1}
-    (h : validateKzgG1Point b = .ok P) : bytesToKzgCommitment b = .ok b := by
+    (h : validateKzgG1Point b = .ok P) : bytesToKzgCommitment b = .ok ⟨b⟩ := by
   rw [bytesToKzgCommitment, ite_eq_left (validateKzgG1_of_validateKzgG1Point h)]
 
 /-- Bytes that decode to a point of the subgroup convert to a proof, unchanged. -/
@@ -133,8 +133,8 @@ theorem bytesToKzgProof_of_validateKzgG1Point_error {b : Bytes48} {e : KzgError}
 
 EIP-4844 gets the point of a commitment the same way: it converts the bytes, then decodes them. -/
 theorem validateKzgG1Point_of_bytesToKzgCommitment {b : Bytes48} {c : KZGCommitment} {C : G1}
-    (hc : bytesToKzgCommitment b = .ok c) (hC : uncompressG1 c = .ok C) :
-    c = b ∧ validateKzgG1Point b = .ok C := by
+    (hc : bytesToKzgCommitment b = .ok c) (hC : uncompressG1 c.bytes = .ok C) :
+    c = ⟨b⟩ ∧ validateKzgG1Point b = .ok C := by
   unfold bytesToKzgCommitment at hc
   split at hc
   · rename_i hv

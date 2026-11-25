@@ -62,7 +62,7 @@ def Opening.data (o : Opening) : OpeningData :=
 
 /-- The core opening-batch input, with all arrays built from one list. -/
 def OpeningData.toBatch (openings : List OpeningData) : OpeningBatch where
-  commitments := (openings.map fun o => o.commitment).toArray
+  commitments := (openings.map fun o => KZGCommitment.mk o.commitment).toArray
   zs := (openings.map fun o => o.z).toArray
   ys := (openings.map fun o => o.y).toArray
   proofs := (openings.map fun o => o.proof).toArray

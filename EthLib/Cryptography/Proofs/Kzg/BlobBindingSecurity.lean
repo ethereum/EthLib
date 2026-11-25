@@ -32,7 +32,7 @@ theorem blobToKzgCommitment_eq_of_represents {s : TrustedSetup} {τ : Fr}
     (hblob : blobToPolynomial blob = .ok values)
     (hpoint : validateKzgG1Point bytes = .ok point)
     (hrep : G1.Represents point ((interpolant values).eval τ)) :
-    blobToKzgCommitment s blob = .ok bytes := by
+    blobToKzgCommitment s blob = .ok ⟨bytes⟩ := by
   obtain ⟨hcommit, hsum⟩ := blobToKzgCommitment_represents hs hblob
   have heq := G1.compress_congr hsum.1 hrep.1 (hsum.2.trans hrep.2.symm)
   have hround := G1.compress_uncompress (validateKzgG1Point_eq_ok_iff.mp hpoint).1
@@ -46,7 +46,7 @@ def Validated (out : List BlobOpening) : Prop :=
 /-- At least one submitted commitment differs from the commitment computed from its blob. -/
 def Nonbinding (τ : Fr) (out : List BlobOpening) : Prop :=
   ∃ o ∈ out, blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) o.blob ≠
-    .ok o.commitment.bytes
+    .ok ⟨o.commitment.bytes⟩
 
 /-- The scalar batch verification equation at the oracle challenges. -/
 def Accepted (τ : Fr) (checked : Option (List Opening × Fr)) : Prop :=
@@ -175,7 +175,7 @@ theorem blobError_ne_zero_of_nonbinding {τ : Fr} {o : BlobOpening} {values : Po
     (hb : blobToPolynomial o.blob = .ok values)
     (hv : validateKzgG1 o.commitment.bytes = true) (ha : o.commitment.Valid τ)
     (hne : blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) o.blob ≠
-      .ok o.commitment.bytes) : blobError o.blob o.commitment ≠ 0 := by
+      .ok ⟨o.commitment.bytes⟩) : blobError o.blob o.commitment ≠ 0 := by
   intro hzero
   have heq : o.commitment.polynomial = interpolant values := by
     rw [blobError_of_ok o.commitment hb] at hzero

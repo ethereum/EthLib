@@ -271,7 +271,7 @@ theorem ColumnBatch.acceptsAt_computeCellsAndKzgProofs {s : TrustedSetup} {τ : 
     (hs : s.WellFormed τ) {c : ColumnBatch} (h₁ : c.cells.size = c.commitments.size)
     (h₂ : c.proofs.size = c.commitments.size) (hj : c.cellIndex < CELLS_PER_EXT_BLOB)
     (hblobs : ∀ k < c.commitments.size, ∃ blob cs qs,
-      blobToKzgCommitment s blob = .ok c.commitments[k]! ∧
+      blobToKzgCommitment s blob = .ok ⟨c.commitments[k]!⟩ ∧
       computeCellsAndKzgProofs s blob = .ok (cs, qs) ∧
       c.cells[k]! = cs[c.cellIndex]! ∧ c.proofs[k]! = qs[c.cellIndex]!)
     (x : Fr) : c.toInput.AcceptsAt s τ x := by

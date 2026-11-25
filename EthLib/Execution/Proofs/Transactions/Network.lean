@@ -32,6 +32,10 @@ open EthLib.Serialization.Rlp
 
 /-! ## Bytes -/
 
+/-- A KZG commitment keeps the laws of the RLP string of its 48 bytes. -/
+instance : LawfulCodec KZGCommitment :=
+  .wrapper KZGCommitment.mk KZGCommitment.bytes (fun _ => rfl) (fun _ => rfl)
+
 /-- The network form reads back from its RLP list, at every fork. -/
 theorem NetworkBlobTransaction.ofItem_toItem (fork : Fork) (w : NetworkBlobTransaction) :
     NetworkBlobTransaction.ofItem fork (w.toItem fork) = .ok w := by

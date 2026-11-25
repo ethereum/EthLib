@@ -169,7 +169,7 @@ def ExecutionEngine.constant (valid : Bool) : ExecutionEngine preset fork where
 
 /-! ## The payload of a block -/
 
-/-- From Deneb: the versioned hash of a KZG commitment, as 32 bytes.
+/-- From Deneb: the versioned hash of a KZG commitment.
 
 It is the version byte of KZG, then the last 31 bytes of the SHA-256 hash of the commitment. -/
 def commitmentVersionedHash (commitment : Cryptography.Kzg.KZGCommitment) : VersionedHash :=

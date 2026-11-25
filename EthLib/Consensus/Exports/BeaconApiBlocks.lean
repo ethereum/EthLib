@@ -79,11 +79,13 @@ def apiBlockQuerySszExport (args : PyValue) : Result PyValue := pyExport apiBloc
 
 /-- The JSON response of the blobs endpoint. -/
 def apiBlobsOf
-    (args : String × String × ByteArray × List Blob × Option (List VersionedHash)) :
+    (args : String × String × ByteArray × List Blob × Option (List Base.Bytes32)) :
     Result PyValue := do
   let (name, fork, block, blobs, hashes) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let block ← decodeInput (SignedBeaconBlock preset fork) block
+  -- Each requested hash arrives as 32 bytes, read as a versioned hash.
+  let hashes := hashes.map (·.map VersionedHash.mk)
   let envelope ← toResult none (BeaconApi.blobsResponse block blobs hashes)
   return PyValue.ofJson envelope.toJson
 
@@ -97,12 +99,13 @@ def apiBlobsExport (args : PyValue) : Result PyValue := pyExport apiBlobsOf args
 
 /-- The SSZ body of the blobs answer. -/
 def apiBlobsSszOf
-    (args : String × String × ByteArray × List Blob × Option (List VersionedHash)) :
+    (args : String × String × ByteArray × List Blob × Option (List Base.Bytes32)) :
     Result ByteArray := do
   let (name, fork, block, blobs, hashes) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let block ← decodeInput (SignedBeaconBlock preset fork) block
-  toResult none (BeaconApi.blobsSsz block blobs hashes)
+  -- Each requested hash arrives as 32 bytes, read as a versioned hash.
+  toResult none (BeaconApi.blobsSsz block blobs (hashes.map (·.map VersionedHash.mk)))
 
 /-- The SSZ body of the blobs answer, as `bytes`.
 
