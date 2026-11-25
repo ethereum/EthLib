@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Base.List
 public import EthLib.Engine.Capabilities
 public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.GetBlobs
@@ -56,7 +57,7 @@ def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Res
   -- A malformed pool has code 0.
   let entries ← entries.mapM pooledOf
   -- A pool holds each blob once, so two entries with one hash are malformed input.
-  unless (entries.map (·.1)).Nodup do
+  unless (Base.firstRepeated (entries.map (·.1))).isNone do
     rejectArgument none "pool: two entries with one versioned hash"
   -- The method is specified up to Glamsterdam, the fork of its version 4.
   --

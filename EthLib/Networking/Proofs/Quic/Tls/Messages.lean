@@ -580,7 +580,7 @@ theorem repeatedKind_nil : repeatedKind [] = ⟨0, by decide⟩ :=
 /-- A block passes the duplicate check exactly when no extension type occurs twice in it. -/
 theorem uniqueExtensions_eq_true_iff (es : List Extension) :
     uniqueExtensions es = true ↔ (es.map (·.kind)).Nodup := by
-  simp [uniqueExtensions, Option.isNone_iff_eq_none, Base.firstRepeated_eq_none_iff]
+  simp [uniqueExtensions]
 
 /-- The repeated type of a block: the first type when a later extension has it, else the rest's. -/
 theorem repeatedKind_cons (e : Extension) (rest : List Extension) :

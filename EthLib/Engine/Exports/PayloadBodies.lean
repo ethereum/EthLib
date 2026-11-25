@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Base.List
 public import EthLib.Engine.Capabilities
 public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.PayloadBodies
@@ -76,8 +77,9 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
   -- A malformed store has code 0.
   let entries ← entries.mapM storedOf
   -- A store holds each block once, and one canonical block at each number.
-  unless (entries.map (·.1)).Nodup do rejectArgument none "store: two entries with one block hash"
-  unless (entries.filterMap (·.2.1)).Nodup do
+  unless (Base.firstRepeated (entries.map (·.1))).isNone do
+    rejectArgument none "store: two entries with one block hash"
+  unless (Base.firstRepeated (entries.filterMap (·.2.1))).isNone do
     rejectArgument none "store: two canonical entries at a number"
   let canonical (n : Nat) : Option StoredBody :=
     (entries.find? (·.2.1 == some n)).map (·.2.2)

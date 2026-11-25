@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.List
 public import EthLib.Serialization.Ssz.Error
 public import EthLib.Cryptography.Merkle.Multiproof
 
@@ -153,7 +154,8 @@ An ancestor claim can be overwritten when its descendants are folded upward.
 def rejectRelated (indices : List Nat) : Except Err Unit := do
   -- These three refusals are EthLib's, so that a multiproof checks every index it claims.
   if indices.isEmpty then throw .emptyRequest
-  if indices.eraseDups.length != indices.length then throw .repeatedIndex
+  -- A repeated index is refused, as one pass over the indices finds it.
+  if (EthLib.Base.firstRepeated indices).isSome then throw .repeatedIndex
   rejectClaimPaths indices indices
 
 /-- Levels a node sits below the root, which its index carries in its leading bit. -/

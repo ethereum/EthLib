@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
+import EthLib.Base.Proofs.List
 
 /-! A multiproof of one claim is the single-item proof of that claim. -/
 
@@ -20,7 +21,8 @@ theorem getHelperIndices_singleton (index : Nat) :
   unfold getHelperIndices claimPositions getBranchIndices
   cases measured : getPathIndices index with
   | error fault =>
-    simp [rejectRelated, rejectClaimPaths, measured, List.eraseDups_cons, Bind.bind, Except.bind]
+    simp [rejectRelated, rejectClaimPaths, measured, EthLib.Base.firstRepeated_cons, Bind.bind,
+      Except.bind]
   | ok path =>
     -- The path is the index halved once per level, up to just below the root.
     obtain ⟨spelled, named⟩ : path = (List.range (Nat.log2 index)).map (index >>> ·) ∧
@@ -46,10 +48,10 @@ theorem getHelperIndices_singleton (index : Nat) :
     -- The checks pass, and the Merkle helpers of one node are the siblings of its path.
     have height : gindexHeight [index] = Nat.log2 index := by simp [gindexHeight, levelOf]
     have inside := gindexPosition_inTree named (Nat.le_of_eq height.symm)
-    simp only [rejectRelated, rejectClaimPaths, measured, List.eraseDups_cons,
+    simp only [rejectRelated, rejectClaimPaths, measured, EthLib.Base.firstRepeated_cons,
+      EthLib.Base.firstRepeated_nil, List.not_mem_nil, Option.isSome_none,
       Bind.bind, Except.bind, pure, Except.pure, List.isEmpty_cons, Bool.false_eq_true,
-      ↓reduceIte, List.filter_nil, List.eraseDups_nil, List.length_cons, List.length_nil,
-      bne_self_eq_false, List.map_cons, List.map_nil, height]
+      ↓reduceIte, List.map_cons, List.map_nil, height]
     rw [List.drop_one, ancestors]
     dsimp only
     rw [height] at inside

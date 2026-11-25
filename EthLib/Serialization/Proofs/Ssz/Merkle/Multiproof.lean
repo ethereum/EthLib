@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperAntichain
+import EthLib.Base.Proofs.List
 
 /-! An SSZ multiproof is the Merkle multiproof at the positions of its indices. -/
 
@@ -284,7 +285,7 @@ theorem calculateMultiMerkleRootUnchecked_two_children (left right : Bytes) :
       getPathIndices,
       gindexLength, gindexDepth, gindexHeight, levelOf, gindexPosition, Cryptography.Merkle.helpers,
       Cryptography.Merkle.helpers.go, Position.covers, Bind.bind, Except.bind, Pure.pure,
-      Except.pure, List.range_succ, List.eraseDups_cons]
+      Except.pure, List.range_succ, EthLib.Base.firstRepeated_cons]
   -- The tree holding the two children below the root.
   let tree : Nat → Bytes := fun n => if n = 2 then left else if n = 3 then right else
     combine left right

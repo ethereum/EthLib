@@ -87,7 +87,8 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × Nat × PyValue)
   let .arr entries := tree.toJson | rejectArgument none "tree: not an array"
   let tree ← entries.toList.mapM knownOfJson
   -- A tree holds each block once, so two payloads with one block hash are malformed input.
-  unless (tree.map (·.1)).Nodup do rejectArgument none "tree: two payloads with one block hash"
+  unless (Base.firstRepeated (tree.map (·.1))).isNone do
+    rejectArgument none "tree: two payloads with one block hash"
   -- The finalized block that the execution layer knows is a block hash, or `null` for none.
   let finalized := finalized.toJson
   -- The known finalized block is an input that the export reads itself, so its errors have code 0.

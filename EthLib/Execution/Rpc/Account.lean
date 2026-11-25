@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.List
 public import EthLib.Execution.Rpc.Raw
 
 /-!
@@ -81,7 +82,7 @@ def storageRequests (j : Json) : Read (List (Address × List Bytes32)) := do
   -- EthLib's choice: one address in two cases of hex is invalid, code -32602.
   --
   -- The answer has one member for each address.
-  unless (requests.map (·.1)).Nodup do reject "requests: an address twice"
+  unless (Base.firstRepeated (requests.map (·.1))).isNone do reject "requests: an address twice"
   return requests
 
 /-- The JSON of a word on 32 bytes. -/

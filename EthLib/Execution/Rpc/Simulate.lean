@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.List
 public import EthLib.Execution.Rpc.Call
 public import EthLib.Execution.Rpc.Json
 
@@ -128,7 +129,7 @@ def storageSlots (what : String) (j : Json) : Read (List (Bytes32 × U256)) := d
   let slots ← kvs.toList.mapM fun (key, value) => do
     let key ← fixed "slot" 32 (.str key) (upper := true)
     return (key, U256.fromBeBytes (← hash32 "slot value" value))
-  unless (slots.map (·.1)).Nodup do reject s!"{what}: a slot twice"
+  unless (Base.firstRepeated (slots.map (·.1))).isNone do reject s!"{what}: a slot twice"
   return slots
 
 /-- Whether an object has a key, whatever its value, `null` included. -/
@@ -165,7 +166,8 @@ def stateOverrides (j : Json) : Read (List (Address × AccountOverride)) := do
   let .obj kvs := j | reject "stateOverrides: not an object"
   let overrides ← kvs.toList.mapM fun (name, value) => do
     return (← address "address" (.str name), ← accountOverride value)
-  unless (overrides.map (·.1)).Nodup do reject "stateOverrides: an address twice"
+  unless (Base.firstRepeated (overrides.map (·.1))).isNone do
+    reject "stateOverrides: an address twice"
   return overrides
 
 /-- One block of the request. -/
