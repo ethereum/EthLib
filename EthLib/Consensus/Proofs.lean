@@ -28,6 +28,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.RandaoKept
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Consensus.Proofs.BeaconApi.Rewards
+public import EthLib.Consensus.Proofs.BeaconApi.StateForkReachable
 public import EthLib.Consensus.Proofs.BeaconApi.StateQueries
 public import EthLib.Consensus.Proofs.BeaconApi.Submit
 public import EthLib.Consensus.Proofs.BeaconApi.SyncCommitteesReachable

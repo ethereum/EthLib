@@ -27,6 +27,30 @@ open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
+/-- Any count of slots keeps the fork versions. -/
+private theorem advanceSlots_forkVersions {fork : Fork} :
+    ∀ {count : Nat} {state after : BeaconState preset fork},
+      advanceSlots config checks count state = .ok after → after.forkVersions = state.forkVersions
+  | 0, state, after, computed => by
+    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  | count + 1, state, after, computed => by
+    simp only [advanceSlots, bind_ok_iff] at computed
+    obtain ⟨next, nextOk, rest⟩ := computed
+    exact (advanceSlots_forkVersions rest).trans (advanceSlot_kept nextOk).1
+
+/-- The transition of a block keeps the fork versions. -/
+theorem stateTransition_forkVersions {fork : Fork} {engine : ExecutionEngine preset fork}
+    {state after : BeaconState preset fork} {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool}
+    (computed : stateTransition config checks engine state signed validateResult = .ok after) :
+    after.forkVersions = state.forkVersions := by
+  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok computed
+  simp only [processSlots, bind_ok_iff, ensure_ok_iff] at slotsOk
+  obtain ⟨_, -, advancedOk⟩ := slotsOk
+  exact (frame_processBlock blockOk).forkVersions.trans (advanceSlots_forkVersions advancedOk)
+
 /-- One step of a chain keeps a property of the fork and of the fork versions.
 
 It needs each upgrade that is due to keep that property. -/
