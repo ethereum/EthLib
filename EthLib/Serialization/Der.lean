@@ -49,10 +49,20 @@ structure Value where
   content : ByteArray
   encoded : ByteArray
 
-/-- Read one low-tag-number tag, length and value (X.690 §§8.1.2, 8.1.3 and 10.1). -/
-def read (input : ByteArray) : Except Error (Value × ByteArray) := do
-  match input.data.toList with
-  | tag :: first :: rest =>
+/-- Read the low-tag-number tag, length and value at offset `pos` (X.690 §§8.1.2, 8.1.3, 10.1).
+
+It gives the value and the offset after it. -/
+def readAt (input : ByteArray) (pos : Nat) : Except Error (Value × Nat) := do
+  -- A count of bytes in an error is relative to the bytes from `pos`.
+  --
+  -- Only the value and its length octets are cut from the input.
+  --
+  -- So a read costs its own size, not the input's.
+  let left := input.size - pos
+  -- §8.1.1.1: an encoding has at least one identifier octet and one length octet.
+  if h : pos + 2 ≤ input.size then
+    let tag := input[pos]
+    let first := input[pos + 1]
     -- §8.1.2.2: one identifier octet, with the tag number from 0 to 30 in bits 5 to 1.
     --
     -- §8.1.2.4.1: bits 5 to 1 set to `11111` start a high tag number, which this reader rejects.
@@ -69,9 +79,9 @@ def read (input : ByteArray) : Except Error (Value × ByteArray) := do
         --
         -- §8.1.3.5 c: the initial octet 0xFF shall not be used.
         if count = 0 ∨ count = 127 then throw (.length first)
-        if rest.length < count then throw (.truncated (2 + count) input.size)
+        if left - 2 < count then throw (.truncated (2 + count) left)
         -- §8.1.3.5: the subsequent octets give the length, unsigned, most significant octet first.
-        let bytes := rest.take count
+        let bytes := (input.extract (pos + 2) (pos + 2 + count)).data.toList
         match bytes with
         -- Unreachable: the count is at least 1, and the input holds that many octets after it.
         | [] => throw (.length first)
@@ -83,12 +93,19 @@ def read (input : ByteArray) : Except Error (Value × ByteArray) := do
           if length < 128 then throw (.length first)
           pure (length, 2 + count)
     -- §8.1.1.1 and §8.1.3.3: the contents octets follow the length octets, as many as it gives.
-    if input.size < header + length then throw (.truncated (header + length) input.size)
-    -- The value keeps its contents and its whole encoding, then the input after it.
-    return (⟨tag, input.extract header (header + length),
-      input.extract 0 (header + length)⟩, input.extract (header + length) input.size)
-  -- §8.1.1.1: an encoding has at least one identifier octet and one length octet.
-  | _ => throw (.truncated 2 input.size)
+    if left < header + length then throw (.truncated (header + length) left)
+    -- The value keeps its contents and its whole encoding, then the offset after it.
+    let next := pos + header + length
+    return (⟨tag, input.extract (pos + header) next, input.extract pos next⟩, next)
+  else throw (.truncated 2 left)
+
+/-- Read one low-tag-number tag, length and value, and give the bytes after it.
+
+It follows X.690 §§8.1.2, 8.1.3 and 10.1. -/
+def read (input : ByteArray) : Except Error (Value × ByteArray) := do
+  let (value, next) ← readAt input 0
+  -- The bytes after the value, cut once.
+  return (value, input.extract next input.size)
 
 /-- Read one value of the expected tag. -/
 def readTag (tag : UInt8) (input : ByteArray) : Except Error (Value × ByteArray) := do
@@ -105,14 +122,19 @@ def exact (tag : UInt8) (input : ByteArray) : Except Error Value := do
 /-- Read siblings, with at most one value per input byte. -/
 def children (input : ByteArray) : Except Error (List Value) := go input.size input
 where
-  go : Nat → ByteArray → Except Error (List Value)
+  /-- Read the siblings from offset `pos`, each after the last. -/
+  goAt : Nat → ByteArray → Nat → Except Error (List Value)
     -- Unreachable: each read takes two bytes or more, so the fuel never runs out first.
-    | 0, input => if input.isEmpty then .ok [] else .error (.truncated 2 input.size)
-    | fuel + 1, input => do
+    | 0, input, pos =>
+      if input.size ≤ pos then .ok [] else .error (.truncated 2 (input.size - pos))
+    | fuel + 1, input, pos => do
       -- §8.9.2, §8.10.2, §8.11.2 and §8.12.2: the contents are complete encodings, in turn.
-      if input.isEmpty then return []
-      let (value, rest) ← read input
-      return value :: (← go fuel rest)
+      if input.size ≤ pos then return []
+      -- Each value is read at its offset, so the bytes after it are never copied.
+      let (value, next) ← readAt input pos
+      return value :: (← goAt fuel input next)
+  /-- Read the siblings from the start of the input. -/
+  go (fuel : Nat) (input : ByteArray) : Except Error (List Value) := goAt fuel input 0
 
 /-- A DER INTEGER, rejecting redundant sign octets (X.690 §8.3). -/
 def integer (value : Value) : Except Error Int := do
