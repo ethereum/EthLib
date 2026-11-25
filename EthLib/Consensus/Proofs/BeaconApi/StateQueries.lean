@@ -94,21 +94,6 @@ theorem stateRoot_resolveStateId_root
   rw [hr] at this
   exact this
 
-/-- Each state identifier names a state that the store keeps, under the root of its block. -/
-theorem blockStates_of_resolveStateId {stateId : StateId} {root : Root}
-    {state : BeaconState preset fork}
-    (resolved : resolveStateId config store stateId = some (root, state)) :
-    store.blockStates[root]? = some state := by
-  have after {named : Root} (found : stateAfter store named = some (root, state)) :
-      store.blockStates[root]? = some state := by
-    simp only [stateAfter, Option.map_eq_some_iff, Prod.mk.injEq] at found
-    obtain ⟨_, kept, rfl, rfl⟩ := found
-    exact kept
-  cases stateId <;> simp only [resolveStateId, Option.bind_eq_some_iff] at resolved
-  all_goals first
-    | exact after resolved
-    | exact Exists.elim resolved fun _ found => after found.2
-
 /-- The genesis state from deposits has each finality checkpoint at epoch 0 with the zero root.
 
 Only Phase 0 has a genesis state from deposits. -/

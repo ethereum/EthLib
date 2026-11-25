@@ -27,8 +27,8 @@ open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- Any count of slots keeps the fork versions. -/
-private theorem advanceSlots_forkVersions {fork : Fork} :
+/-- Advancing a state by any number of slots keeps its fork versions. -/
+theorem advanceSlots_forkVersions {fork : Fork} :
     ∀ {count : Nat} {state after : BeaconState preset fork},
       advanceSlots config checks count state = .ok after → after.forkVersions = state.forkVersions
   | 0, state, after, computed => by
