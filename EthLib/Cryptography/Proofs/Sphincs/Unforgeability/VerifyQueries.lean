@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Proofs.HashSig
-public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Game
 public import EthLib.Cryptography.Proofs.Wots
@@ -194,17 +194,6 @@ theorem chain_isTotalQueryBound {α : Type} {k : Nat} (step : Fin k → α → O
     exact isTotalQueryBound_bind (chain_isTotalQueryBound step hstep start s _ value)
       fun _ => hstep _ _
 
-/-- A climb makes one call per sibling, when each node hash makes at most one. -/
-theorem climb_isTotalQueryBound {α : Type} (hash : Merkle.Position → α → α → OracleComp spec α)
-    (hhash : ∀ p left right, IsTotalQueryBound (hash p left right) 1) :
-    ∀ (siblings : List α) (p : Merkle.Position) (current : α),
-      IsTotalQueryBound (Merkle.climb hash p current siblings) siblings.length
-  | [], _, _ => isQueryBound_pure _ _ _ _
-  | _ :: rest, p, current => by
-    rw [Merkle.climb, List.length_cons]
-    exact (isTotalQueryBound_bind (hhash _ _ _)
-      fun _ => climb_isTotalQueryBound hash hhash rest _ _).mono (by omega)
-
 /-- The chains of a codeword have `3 * 64 - 128 = 64` steps left above the revealed positions. -/
 theorem sum_steps_of_codeword {d : Digest} {x : Codeword} (h : codeword? d = some x) :
     ∑ i : Fin V, (CHAIN_LENGTH - 1 - (x[i] : Nat)) = CHAIN_HASHES := by
@@ -245,7 +234,7 @@ theorem treeRecover_isTotalQueryBound (pkSeed : PkSeed) (idx : Nat) (kappa : Fin
     IsTotalQueryBound (treeRecover H pkSeed idx kappa s opening) (1 + FORS_HEIGHT) := by
   rw [treeRecover]
   refine isTotalQueryBound_bind (th_isTotalQueryBound H hH _ _ _) fun leaf => ?_
-  have := climb_isTotalQueryBound (forsNodeHash H pkSeed idx kappa)
+  have := Merkle.isTotalQueryBound_climb (hash := forsNodeHash H pkSeed idx kappa)
     (fun _ _ _ => th_isTotalQueryBound H hH _ _ _) opening.path.toList ⟨0, s.val⟩ leaf
   rwa [Vector.length_toList] at this
 
@@ -291,7 +280,8 @@ theorem layerRoot_isTotalQueryBound (pkSeed : PkSeed) (layer : Layer) (idx : Nat
     rw [← Nat.add_zero layer.height]
     refine isTotalQueryBound_bind ?_ fun _ => isQueryBound_pure _ _ _ _
     rw [fold]
-    have := climb_isTotalQueryBound (nodeHash H pkSeed layer (OtsKey.ofIndex layer idx).tree)
+    have := Merkle.isTotalQueryBound_climb
+      (hash := nodeHash H pkSeed layer (OtsKey.ofIndex layer idx).tree)
       (fun _ _ _ => th_isTotalQueryBound H hH _ _ _) sig.path.toList
       ⟨0, (OtsKey.ofIndex layer idx).leaf⟩ leaf
     rwa [Vector.length_toList] at this

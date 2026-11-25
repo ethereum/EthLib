@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
 public import EthLib.Cryptography.Proofs.Merkle.Binding.SecondPreimage
+public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import VCVio.OracleComp.QueryTracking.SubSpec
 public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
@@ -51,6 +52,27 @@ theorem experimentWith_queryBound {γ β : Type} {extraction : γ → OracleComp
   -- The adversary spends its `q` calls, then the extraction its `n`, on whatever claim it got.
   isQueryBoundP_bind hq fun claim _ => IsQueryBoundP.liftComp_subSpec
     (fun _ => iff_of_true trivial rfl) (hn claim)
+
+omit [DecidableEq D] in
+/-- A climb that a partial table replays to the end meets `P` on every pair it hashes. -/
+theorem climbPairs_of_replay {ι : Type} {spec : OracleSpec ι} {impl : QueryImpl spec Option}
+    {hash : Position → α → α → OracleComp spec α} {table : Position → α → α → Id α}
+    {P : α → α → Prop}
+    -- Each replayed node hash meets `P` on its children and returns the node of a full table.
+    (hstep : ∀ p a b v, simulateQ impl (hash p a b) = some v → P a b ∧ v = (table p a b).run) :
+    -- The pairs are those of the climb with the full table.
+    ∀ (t : List α) (p : Position) (b : α) {top : α},
+      simulateQ impl (climb hash p b t) = some top → ∀ x ∈ climbPairs table p b t, P x.1 x.2
+  | [], _, _, _, _, x, hx => by simp [climbPairs] at hx
+  | _ :: t, p, _, _, hrun, x, hx => by
+    simp only [climb, simulateQ_bind] at hrun
+    obtain ⟨parent, hparent, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+    -- The replayed parent is the parent of the table, so the climb above goes on from it.
+    obtain ⟨hpair, rfl⟩ := hstep _ _ _ _ hparent
+    simp only [climbPairs, List.mem_cons] at hx
+    rcases hx with rfl | hx
+    · exact hpair
+    · exact climbPairs_of_replay hstep t p.parent _ hrun x hx
 
 /-- An oracle input includes the parent position and its ordered children.
 
@@ -302,10 +324,7 @@ theorem partial_siblings_isSome (c : (NodeInput R →ₒ R).QueryCache) (leaves 
 
 /-- A climb against the oracle makes one call per sibling. -/
 theorem climb_queryBound : ∀ (t : List R) (p : Position) (b : R),
-    IsTotalQueryBound (climb queryNode p b t) t.length
-  | [], _, _ => trivial
-  | v :: t, p, b => by
-    simp only [climb, queryNode, List.length_cons, isTotalQueryBound_query_bind_iff]
-    exact ⟨by omega, fun x => by simpa using climb_queryBound t p.parent x⟩
+    IsTotalQueryBound (climb queryNode p b t) t.length :=
+  isTotalQueryBound_climb queryNode_queryBound
 
 end EthLib.Cryptography.Merkle.RandomOracle

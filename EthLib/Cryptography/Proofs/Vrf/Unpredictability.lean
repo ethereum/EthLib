@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Vrf.Verify
+public import EthLib.Cryptography.Proofs.Vrf.Oracle
 public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import VCVio.OracleComp.QueryTracking.RandomOracle.HiddenSeed
 public import VCVio.OracleComp.EvalDist.Sum
@@ -34,9 +35,6 @@ open EthLib.Cryptography.Vrf.Constants
 open OracleSpec OracleComp ENNReal
 
 /-! ## The game -/
-
-/-- The hash as an oracle from byte strings to 32-byte values. -/
-abbrev HashSpec := ByteArray →ₒ Digest
 
 /-- The holder's opening oracle: an index in, an opening or nothing out. -/
 abbrev OpenSpec := UInt32 →ₒ Option Opening
@@ -278,12 +276,6 @@ theorem isQueryBoundP_gameD (others : UInt32 → Digest) (c : UInt32) (adversary
   exact h.mono (by simp only [VRF_TREE_HEIGHT]; omega)
 
 /-! ## One point of the secret -/
-
-/-- There are `2^256` values of 32 bytes. -/
-theorem natCard_digest : Nat.card Digest = 2 ^ 256 := by
-  rw [Nat.card_eq_fintype_card, Fintype.card_congr (arrayVectorEquivFin _ _), Fintype.card_fun,
-    Fintype.card_fin, ← FinEnum.card_eq_fintypeCard, FinEnum.card_UInt8, VRF_HASH_SIZE]
-  norm_num
 
 /-- A given input is one of the two points of a uniform secret with probability `<= 2 / 2^256`. -/
 theorem prEvent_mem_range_enc_le (c : UInt32) (t : ByteArray) :

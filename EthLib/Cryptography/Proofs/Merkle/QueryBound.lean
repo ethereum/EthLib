@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
-public import VCVio.OracleComp.QueryTracking.QueryBound.Basic
+public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 
 /-!
 # Proofs: how many calls a Merkle tree makes
@@ -33,6 +33,23 @@ theorem isQueryBoundP_climb (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) 
       isQueryBoundP_climb hhash rest _ _).mono ?_
     simp only [List.length_cons]
     omega
+
+/-- A climb makes no query that `p` accepts when no node hash makes one. -/
+theorem isQueryBoundP_climb_zero (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 0) :
+    ∀ (siblings : List α) (q : Position) (current : α),
+      IsQueryBoundP (climb hash q current siblings) p 0
+  | [], _, _ => isQueryBoundP_pure _ _ _
+  | _ :: rest, _, _ => by
+    rw [climb]
+    exact isQueryBoundP_bind (hhash _ _ _) fun _ _ => isQueryBoundP_climb_zero hhash rest _ _
+
+/-- A climb costs at most one query per sibling in all, when each node hash costs at most one. -/
+theorem isTotalQueryBound_climb (hhash : ∀ q a b, IsTotalQueryBound (hash q a b) 1)
+    (siblings : List α) (q : Position) (current : α) :
+    IsTotalQueryBound (climb hash q current siblings) siblings.length :=
+  -- A total count is the count of the queries that the always-true predicate accepts.
+  (isQueryBoundP_true_iff _ _).mp <| isQueryBoundP_climb
+    (fun q a b => (isQueryBoundP_true_iff _ _).mpr (hhash q a b)) siblings q current
 
 variable {leaves : Nat → OracleComp spec α} {c : Nat}
 

@@ -620,7 +620,7 @@ theorem treeRecover_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : Fi
     IsQueryBoundP (treeRecover H pkSeed idx kappa s opening) p 0 := by
   rw [treeRecover]
   exact isQueryBoundP_bind_zero _ _ (forsLeafHash_isQueryBoundP_zero H hH _ _ _ _ _) fun _ =>
-    climb_isQueryBoundP_zero _
+    Merkle.isQueryBoundP_climb_zero
       (fun _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _ _ _
 
 /-- Recovering a FORS public key queries `p` nowhere. -/
@@ -643,7 +643,7 @@ theorem layerRoot_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (idx : Na
   cases leaf with
   | none => exact isQueryBoundP_pure _ _ _
   | some leaf =>
-    exact isQueryBoundP_bind_zero _ _ (climb_isQueryBoundP_zero _
+    exact isQueryBoundP_bind_zero _ _ (Merkle.isQueryBoundP_climb_zero
       (fun _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _ _ _)
       fun _ => isQueryBoundP_pure _ _ _
 

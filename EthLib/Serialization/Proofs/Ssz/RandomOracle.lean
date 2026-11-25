@@ -392,10 +392,10 @@ theorem collision_of_cached {cache : HashOracle.QueryCache} {f : QueryImpl HashO
     {a b : Bytes} (hdistinct : a ≠ b)
     (hequal : tableHash f a = tableHash f b)
     (ha : cache a = some (f a))
-    (hb : cache b = some (f b)) : Collision cache := by
-  refine ⟨a, b, f a, hdistinct, ha, ?_⟩
-  rw [hb]
-  exact congrArg some (Vector.toArray_inj.mp (ByteArray.mk.inj hequal)).symm
+    (hb : cache b = some (f b)) : Collision cache :=
+  -- Equal bytes of two digests are equal digests.
+  Cryptography.Merkle.RandomOracle.collision_of_cached hdistinct
+    (Vector.toArray_inj.mp (ByteArray.mk.inj hequal)) ha hb
 
 /-- Two replayed queries with one answer have one input, or the cache has a collision. -/
 theorem collision_or_eq_of_queryHash {cache : HashOracle.QueryCache}
