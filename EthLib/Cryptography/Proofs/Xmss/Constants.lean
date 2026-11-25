@@ -10,6 +10,23 @@ public import EthLib.Cryptography.Xmss.Constants
 
 namespace EthLib.Cryptography.Xmss.Constants
 
+/-! ## The values of the parameters -/
+
+/-- `v = 58` chains per one-time key. -/
+theorem v_eq : V = 58 := rfl
+
+/-- 4 positions per chain. -/
+theorem chain_length_eq : CHAIN_LENGTH = 4 := rfl
+
+/-- 64 digits per digest. -/
+theorem digits_eq : DIGITS = 64 := rfl
+
+/-- `T = 106`. -/
+theorem target_sum_eq : TARGET_SUM = 106 := rfl
+
+/-- `h = 16` levels per tree. -/
+theorem layer_height_eq : LAYER_HEIGHT = 16 := rfl
+
 /-! ## Identities the parameter set must satisfy -/
 
 /-- A digest is exactly 64 digits of 2 bits. -/

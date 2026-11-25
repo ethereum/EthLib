@@ -21,6 +21,27 @@ open EthLib.Cryptography.Xmss.Constants
 
 variable {f : Array UInt64 → Lanes4}
 
+/-! ## The two layers' keys
+
+The bottom key of a leaf index `idx` is `idx` itself, and the top key is `b = floor(idx / 2^16)`. -/
+
+/-- The top key of a leaf index is its integer divided by `2^16`. -/
+theorem bottomTree_eq_div (idx : LeafIndex) : bottomTree idx = idx.toNat / 2 ^ LAYER_HEIGHT :=
+  rfl
+
+/-- The bottom tree of a leaf index is a key of the top tree: it is below `2^16`. -/
+theorem bottomTree_lt (idx : LeafIndex) : bottomTree idx < 2 ^ LAYER_HEIGHT := by
+  have := idx.toNat_lt_size
+  simp only [bottomTree, LAYER_HEIGHT, UInt32.size] at *
+  omega
+
+/-- The top key, as a 32-bit word, does not wrap. -/
+theorem toNat_ofNat_bottomTree (idx : LeafIndex) :
+    (UInt32.ofNat (bottomTree idx)).toNat = bottomTree idx := by
+  have := bottomTree_lt idx
+  simp only [LAYER_HEIGHT] at this
+  exact UInt32.toNat_ofNat_of_lt' (by simp only [UInt32.size]; omega)
+
 /-! ## The verifier as a value -/
 
 /-- What the one-time leaf recovery computes.

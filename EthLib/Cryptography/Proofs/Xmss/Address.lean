@@ -52,6 +52,18 @@ theorem Address.toNat_encode_lo (address : Address) :
   simp only [Nat.shiftLeft_eq]
   omega
 
+/-- The second lane of an address is zero. -/
+@[simp] theorem Address.hi_encode (address : Address) : address.encode.hi = 0 :=
+  rfl
+
+/-- An address is the 16-byte integer `lo + 2^32 hi + 2^56 (tau + 32 mu)`. -/
+theorem Address.toNat_encode (address : Address) :
+    address.encode.toNat =
+      address.lo.toNat + 2 ^ 32 * address.hi.val
+        + 2 ^ 56 * (address.tau.val + 32 * address.mu.val) := by
+  rw [Hash.Keccak.Lanes2.toNat, Address.toNat_encode_lo, Address.hi_encode]
+  simp
+
 /-- The bytes of an address's lanes are its four fields, each in its own little-endian bytes. -/
 theorem Address.bytes_encode (address : Address) :
     address.encode.bytes.toList =
@@ -63,13 +75,8 @@ theorem Address.bytes_encode (address : Address) :
   have hhi := address.hi.isLt
   have ht : address.tau.val + 32 * address.mu.val < 2 ^ 8 := by
     have := address.tau.isLt; have := address.mu.isLt; omega
-  -- Both are the bytes of `lo + 2^32 hi + 2^56 (tau + 32 mu)`, the high lane being zero.
-  have hn : Hash.Keccak.Lanes2.toNat address.encode =
-      address.lo.toNat + 2 ^ 32 * address.hi.val
-        + 2 ^ 56 * (address.tau.val + 32 * address.mu.val) := by
-    rw [Hash.Keccak.Lanes2.toNat, Address.toNat_encode_lo]
-    simp [Address.encode]
-  rw [Hash.Keccak.Lanes2.bytes_eq_toLE, hn]
+  -- Both are the bytes of `lo + 2^32 hi + 2^56 (tau + 32 mu)`.
+  rw [Hash.Keccak.Lanes2.bytes_eq_toLE, Address.toNat_encode]
   generalize address.lo.toNat = a at *
   generalize address.hi.val = b at *
   generalize address.tau.val + 32 * address.mu.val = c at *
@@ -79,6 +86,53 @@ theorem Address.bytes_encode (address : Address) :
   apply UInt8.toNat_inj.mp
   simp only [Vector.getElem_toList, Base.ByteOrder.toLE_eq_div, Vector.getElem_ofFn]
   interval_cases j <;> simp [UInt8.toNat_ofNat'] <;> omega
+
+/-! ## The integer of each kind of address
+
+Each kind of call fixes its type code `tau`.
+
+Every address but the parameter's adds `2^23` to `hi` on the top layer.
+
+So the top layer sets bit `32 + 23 = 55` of the integer. -/
+
+/-- `A_prf(l, e, j)`: type 0, with the pair of chains `j` in `hi`. -/
+theorem Address.toNat_encode_prf (layer : Layer) (e : UInt32) (j : Fin (V / 2)) :
+    (Address.prf layer e j).encode.toNat = e.toNat + 2 ^ 32 * (j.val + 2 ^ 23 * layer.toNat) := by
+  simp [Address.toNat_encode, Address.lo, Address.hi, Address.tau, Address.mu, layerHi]
+
+/-- `A_chain(l, e, mu)`: type 1, with `mu` in bits 5 to 7 of the type byte. -/
+theorem Address.toNat_encode_chain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 1)) :
+    (Address.chain layer e mu).encode.toNat =
+      e.toNat + 2 ^ 32 * (2 ^ 23 * layer.toNat) + 2 ^ 56 * (1 + 32 * mu.val) := by
+  simp [Address.toNat_encode, Address.lo, Address.hi, Address.tau, Address.mu, layerHi]
+
+/-- `A_leaf(l, e)`: type 2. -/
+theorem Address.toNat_encode_leaf (layer : Layer) (e : UInt32) :
+    (Address.leaf layer e).encode.toNat =
+      e.toNat + 2 ^ 32 * (2 ^ 23 * layer.toNat) + 2 ^ 56 * 2 := by
+  simp [Address.toNat_encode, Address.lo, Address.hi, Address.tau, Address.mu, layerHi]
+
+/-- `A_node(l, lambda, j)`: type 3, with the level `lambda` in `hi` and the node `j` in `lo`. -/
+theorem Address.toNat_encode_node (layer : Layer) (level : Fin (LAYER_HEIGHT + 1)) (j : UInt32) :
+    (Address.node layer level j).encode.toNat =
+      j.toNat + 2 ^ 32 * (level.val + 2 ^ 23 * layer.toNat) + 2 ^ 56 * 3 := by
+  simp [Address.toNat_encode, Address.lo, Address.hi, Address.tau, Address.mu, layerHi]
+
+/-- `A_param`: type 5, every other field zero. -/
+theorem Address.toNat_encode_param : Address.param.encode.toNat = 2 ^ 56 * 5 := by
+  simp [Address.toNat_encode, Address.lo, Address.hi, Address.tau, Address.mu]
+
+/-- `A_rnd(l, e)`: type 7. -/
+theorem Address.toNat_encode_rnd (layer : Layer) (e : UInt32) :
+    (Address.rnd layer e).encode.toNat =
+      e.toNat + 2 ^ 32 * (2 ^ 23 * layer.toNat) + 2 ^ 56 * 7 := by
+  simp [Address.toNat_encode, Address.lo, Address.hi, Address.tau, Address.mu, layerHi]
+
+/-- `A_msg(l, e)`: type 12. -/
+theorem Address.toNat_encode_msg (layer : Layer) (e : UInt32) :
+    (Address.msg layer e).encode.toNat =
+      e.toNat + 2 ^ 32 * (2 ^ 23 * layer.toNat) + 2 ^ 56 * 12 := by
+  simp [Address.toNat_encode, Address.lo, Address.hi, Address.tau, Address.mu, layerHi]
 
 /-! ## The two layers -/
 

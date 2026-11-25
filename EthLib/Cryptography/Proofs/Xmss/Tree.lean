@@ -106,6 +106,21 @@ theorem path_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Di
       (leaves H publicParam prf layer) LAYER_HEIGHT e :=
   Merkle.path_congr _ hash' _ _ e fun q h1 h2 => agree q h1 (by omega)
 
+/-- The fold of a path is the Merkle climb from key `e`'s leaf over its 16 entries. -/
+theorem fold_eq_climb (e : Nat) (leaf : Digest) (pi : Vector Digest LAYER_HEIGHT) :
+    fold H publicParam layer e leaf pi
+      = Merkle.climb (nodeHash H publicParam layer) ⟨0, e⟩ leaf pi.toList :=
+  rfl
+
+/-- The fold of a path given entry by entry is the climb over the list of its entries.
+
+That list is the form the climb lemmas take one level at a time. -/
+theorem fold_ofFn (e : Nat) (leaf : Digest) (path : Nat → Digest) :
+    fold H publicParam layer e leaf (Vector.ofFn fun k : Fin LAYER_HEIGHT => path k.val)
+      = Merkle.climb (nodeHash H publicParam layer) ⟨0, e⟩ leaf
+          (List.ofFn fun k : Fin LAYER_HEIGHT => path k.val) := by
+  rw [fold_eq_climb, Vector.toList_ofFn]
+
 /-- A fold is the same with any node hash that agrees on levels 1 to 16. -/
 theorem fold_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
     (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ LAYER_HEIGHT →

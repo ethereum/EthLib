@@ -48,6 +48,22 @@ theorem thInput_eq_append (publicParam : PublicParam) (address : Address)
       = publicParam.toArray ++ address.encode.toArray ++ payload :=
   rfl
 
+/-- `Th(P, A, M)` with a hash `f` is the first half of `f` on the lanes `P | A | M`. -/
+theorem th_run (f : Array UInt64 → Lanes4) (publicParam : PublicParam)
+    (address : Address) (payload : Array UInt64) :
+    (th (pureHash f) publicParam address payload).run
+      = halfOf 0 (f (thInput publicParam address payload)) :=
+  rfl
+
+/-- The bytes of `P | A | M` are the 16 bytes of `P`, the 16 bytes of `A`, then those of `M`. -/
+theorem lanesBytes_thInput (publicParam : PublicParam) (address : Address)
+    (payload : Array UInt64) :
+    Hash.Keccak.lanesBytes (thInput publicParam address payload)
+      = publicParam.bytes.toList ++ address.encode.bytes.toList
+        ++ Hash.Keccak.lanesBytes payload := by
+  rw [thInput_eq_append, Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_append,
+    Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.lanesBytes_lanes2]
+
 /-- `P | A | M` determines `P`, the address whose encoding is `A`, and `M`. -/
 theorem thInput_inj {publicParam publicParam' : PublicParam} {a a' : Address} {m m' : Array UInt64}
     (h : thInput publicParam a m = thInput publicParam' a' m') : publicParam = publicParam'

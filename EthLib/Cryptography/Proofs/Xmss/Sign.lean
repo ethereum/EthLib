@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.Trials
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Tree
+public import EthLib.Cryptography.Proofs.Xmss.Verify
 
 /-!
 # Proofs: leanXMSS signing
@@ -31,12 +32,6 @@ variable {f : Array UInt64 → Lanes4}
 A key holds the trees of a seed when its parts are what the seed gives.
 
 Key generation gives such a key, and signing keeps it one. -/
-
-/-- The bottom tree of a leaf index is a key of the top tree: it is below `2^16`. -/
-theorem bottomTree_lt (idx : LeafIndex) : bottomTree idx < 2 ^ LAYER_HEIGHT := by
-  have := idx.toNat_lt_size
-  simp only [bottomTree, LAYER_HEIGHT, UInt32.size] at *
-  omega
 
 /-- A secret key that holds what its seed gives.
 
