@@ -47,7 +47,7 @@ variable {Dg E C Msg : Type} (P : Padding Msg (Dg × E))
 abbrev ACache (Msg Dg E C : Type) := (ASpec Msg Dg E C).QueryCache
 
 /-- The cached value of a path, when the answers it reads are cached. -/
-def valC (c : ACache Msg Dg E C) (β : List (Dg × E)) : Option (SpongeState Dg E C) :=
+noncomputable def valC (c : ACache Msg Dg E C) (β : List (Dg × E)) : Option (SpongeState Dg E C) :=
   match P.unpad β with
   | some m => (c (.inl m)).bind fun d => (c (.inr β)).map fun t => ((d, t.1.2), t.2)
   | none => c (.inr β)
