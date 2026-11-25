@@ -1063,12 +1063,34 @@ Not yet released.
     `Jacobian.Coords.mulAddAux_succ` (`Cryptography/Proofs/Jacobian.lean`) states its old recursion; rewrite with it where a proof unfolded the old body.
   - `Secp256r1.Point.mulAdd.chain` and `Secp256r1.Point.mulAddAux_eq` are removed.
     `Word64.Raw.bit_eq_testBit` (`Cryptography/Proofs/Word64.lean`) says that the bits of four words are the bits of their value.
+- In Lean, the SEC 1 encoding of coordinates is one codec in `Cryptography/ShortWeierstrass/Encoding.lean`: `ShortWeierstrass.coordinateToBytes`, `ShortWeierstrass.coordinateOfBytes?` and `ShortWeierstrass.encodeUncompressed` ([#4524](https://github.com/ethereum/EthLib/pull/4524)).
+  - `Secp256k1.Fp.toBytes`, `Secp256r1.Fp.toBytes` and `Secp256r1.encodeUncompressed` are now abbreviations of them, so they unfold to the shared codec, with the same bytes.
+  - `Secp256k1.Fp.ofBytes`, `Secp256r1.decodeUncompressed`, `Secp256r1.Exports.readCoordinate` and the affine case of `Secp256k1.Point.encodeUncompressed` call the shared codec, with the same values and errors.
+    Unfolding them gives the shared functions; `Secp256k1.encodeUncompressed_coords` (`Cryptography/Proofs/Secp256k1/Encoding.lean`) restates the shared form with the curve's coordinate bytes.
+  - `ShortWeierstrass.length_coordinateToBytes` gives the length of 32 bytes; use it where a proof unfolded `Secp256r1.Fp.toBytes` to get the length.
+    `ShortWeierstrass.ofBE_coordinateToBytes`, `coordinateOfBytes?_coordinateToBytes` and `coordinateToBytes_of_coordinateOfBytes?` (`Cryptography/Proofs/ShortWeierstrass/Encoding.lean`) are the round trips, and every public statement is unchanged.
 - In Lean, the duplicate checks of TLS extensions share one linear scan, `Base.firstRepeated` (`Base/List.lean`), the first element of a list that occurs again later ([#4517](https://github.com/ethereum/EthLib/pull/4517)).
   - `Libp2p.Tls.firstRepeated` is removed; use `Base.firstRepeated`, which gives the same value on every list.
     `Base.firstRepeated_nil` and `Base.firstRepeated_cons` state its old recursion, `Base.firstRepeated_eq_none_iff` relates it to `List.Nodup`, and `Base.two_le_count_of_firstRepeated` says what it finds occurs twice (`Base/Proofs/List.lean`).
   - `Quic.Tls.uniqueExtensions` and `Quic.Tls.repeatedKind` unfold to the scan, not to `eraseDups` and a recursion.
     `Quic.Tls.uniqueExtensions_eq_true_iff`, `Quic.Tls.repeatedKind_nil` and `Quic.Tls.repeatedKind_cons` (`Networking/Proofs/Quic/Tls/Messages.lean`) state their old meaning; rewrite with them where a proof unfolded the old bodies.
   - The certificate reader of `Libp2p.Tls` matches on the scan instead of checking `List.Nodup` on the OIDs; `Proofs.Libp2p.Tls.nodup_iff_nodup_bytes` (`Networking/Proofs/Libp2p/Tls.lean`) relates the two.
+- In Lean, square and multiply is one function, `Base.powBits` (`Base/Pow.lean`), over any product with a one ([#4519](https://github.com/ethereum/EthLib/pull/4519)).
+  - `Secp256k1.Fin.powBits` and `AltBn128.Fp12.powBits` are removed; `Base.powBits` computes the same values.
+  - `Secp256k1.Fin.powBits_eq_pow` and `AltBn128.Fp12.powBits_eq_pow` are `Base.powBits_eq_pow`, for a `Monoid`; on `Fin m`, open `Fin.CommRing`, or use `Base.map_powBits` with a ring map, as `Fp.toZMod_pow` now does.
+    `Secp256k1.Fin.powBits_mod` is `Base.powBits_mod`, without its `NeZero` hypothesis (`Base/Proofs/Pow.lean`).
+    `Base.map_powBits` says that a map which keeps products and one sends square and multiply to the power, for an exponent below `2^fuel`.
+  - `Secp256k1.Fp.pow` and `Secp256k1.Fn.pow` unfold to `Base.powBits 256`, so `Secp256k1.Fp.pow_eq_powBits` is removed, with the unused `toZMod_powBits` of `Secp256r1.Fp`, `Secp256r1.Fn` and `AltBn128.Fp`.
+    `Fp.toZMod_pow` and `Fn.toZMod_pow` of secp256k1 keep their statements.
+  - The instance `One Fp12` moves from the proofs to `Cryptography/AltBn128/Pairing.lean`.
+- In Lean, ECDSA verification and the signing loop of SEC 1 v2 are written once, over `Ecdsa.Curve` (`Cryptography/Ecdsa/Curve.lean`), and secp256k1 and P-256 are its instances ([#4506](https://github.com/ethereum/EthLib/pull/4506)).
+  - `Secp256k1.Ecdsa.verify` and `Secp256r1.verify` call `Ecdsa.Curve.verify` on the curve's `domain`, with the same values.
+    Unfold `Ecdsa.Curve.verify` too where a proof unfolded the old body of `verify`.
+  - `Secp256k1.Ecdsa.signWith` and `Secp256r1.Ecdsa.signWith` call `Ecdsa.Curve.signWith`, with the same values; they are no longer recursive, so their equation lemmas change.
+    Unfold `Ecdsa.Curve.signWith` too where a proof unfolded the old loop; `signWith_spec` of both curves keeps its statement.
+  - `Ecdsa.Curve.Laws` (`Cryptography/Proofs/Ecdsa/Curve.lean`) holds what the proofs need of a curve, and the theorems of ECDSA are proved once for it.
+    `Secp256k1.Ecdsa.laws` and `Secp256r1.laws` prove it, and every public theorem of both curves keeps its statement.
+  - `open Ecdsa` inside a namespace under `EthLib.Cryptography.Secp256k1` now gets the warning "Ambiguous namespace `Ecdsa`", since `EthLib.Cryptography.Ecdsa` exists too; write `open Secp256k1.Ecdsa`.
 - In Lean, `Rpc.Tracer.record` (`Execution/Rpc/Trace.lean`) updates the slots it has seen only when the configuration prints the storage ([#4510](https://github.com/ethereum/EthLib/pull/4510)).
   - Unfolding it now gives a test of `disableStorage` before the seen slots are updated; the entries and the refunds of every trace are unchanged.
     `record_slots_of_disableStorage` and `record_logs_of_disableStorage` (`Execution/Proofs/Rpc/Trace.lean`) state what holds with the storage disabled, and `record_slots_of_stepError` keeps its statement.
