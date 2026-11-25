@@ -801,8 +801,7 @@ namespace SyncCommitteeKeys
 /-- Genesis initialization returns only a pre-Altair state, which has no sync committees. -/
 private theorem genesis {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) : SyncCommitteeKeys g.state := by
-  obtain ⟨_, _, _, ok⟩ := genesis
-  obtain ⟨before, _⟩ := initializeBeaconStateFromEth1_ok ok
+  obtain ⟨_, _, _, before, -⟩ := genesis
   intro altair
   exact (Nat.not_le_of_lt before altair).elim
 

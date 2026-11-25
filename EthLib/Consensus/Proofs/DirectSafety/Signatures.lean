@@ -66,7 +66,7 @@ theorem _root_.EthLib.Consensus.Run.genesisValidatorsRoot {g a : ForkedBeaconSta
 theorem _root_.EthLib.Consensus.Run.forkVersions_ofConfig {g a : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (run : Run config checks g a) :
     a.state.forkVersions.OfConfig config := by
-  obtain ⟨hash, time, deposits, initialized⟩ := genesis
+  obtain ⟨hash, time, deposits, _, initialized⟩ := genesis
   exact forkVersions_ofConfig_of_genesis_chainSteps initialized run.chainSteps
 
 /-- The state before a block of the run has the genesis validators root of the run. -/

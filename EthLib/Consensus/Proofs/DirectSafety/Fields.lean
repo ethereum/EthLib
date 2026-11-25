@@ -67,7 +67,7 @@ The run starts at a genesis built from deposits. -/
 theorem _root_.EthLib.Consensus.Run.pubkeysDistinct {g a : ForkedBeaconState preset}
     (run : Run config checks g a) (genesis : Genesis config checks g) :
     PubkeysDistinct a.state := by
-  obtain ⟨_, _, _, initialized⟩ := genesis
+  obtain ⟨_, _, _, _, initialized⟩ := genesis
   simpa [PubkeysDistinct, validatorKeys] using
     (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized run.chainSteps).2
 
@@ -582,7 +582,7 @@ private theorem run_bits {g a : ForkedBeaconState preset} (run : Run config chec
   -- Between epoch calls, each bit refers to the epoch one position further back.
   induction run generalizing i with
   | nil =>
-    obtain ⟨_, _, _, ok⟩ := genesis
+    obtain ⟨_, _, _, _, ok⟩ := genesis
     have bits := (initializeBeaconStateFromEth1_finality ok).1
     simp [bits] at set
   | @snoc before after pre step ih =>
@@ -664,7 +664,7 @@ private theorem run_zero {g a : ForkedBeaconState preset} (run : Run config chec
   -- Bit zero retains the current-target call and its source after checkpoint rotation.
   induction run with
   | nil =>
-    obtain ⟨_, _, _, ok⟩ := genesis
+    obtain ⟨_, _, _, _, ok⟩ := genesis
     simp [(initializeBeaconStateFromEth1_finality ok).1] at set
   | @snoc before after pre step ih =>
     have old (bits : after.state.justificationBits = before.state.justificationBits)
@@ -730,7 +730,7 @@ theorem justified_fields {g a : ForkedBeaconState preset} (run : Run config chec
     c = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∨ Nonempty (JustificationHistory run c) := by
   induction run generalizing c with
   | nil =>
-    obtain ⟨_, _, _, ok⟩ := genesis
+    obtain ⟨_, _, _, _, ok⟩ := genesis
     have fields := initializeBeaconStateFromEth1_checkpoints ok
     exact .inl (field.elim (fun h => h.trans fields.2.1) (fun h => h.trans fields.2.2))
   | @snoc before after pre step ih =>
@@ -818,7 +818,7 @@ theorem finalized_field {g a : ForkedBeaconState preset} (run : Run config check
         FinalizationRule call a.state.finalizedCheckpoint := by
   induction run with
   | nil =>
-    obtain ⟨_, _, _, ok⟩ := genesis
+    obtain ⟨_, _, _, _, ok⟩ := genesis
     exact .inl (initializeBeaconStateFromEth1_finality ok).2
   | @snoc before after pre step ih =>
     have keep (same : after.state.finalizedCheckpoint = before.state.finalizedCheckpoint) :

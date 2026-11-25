@@ -60,8 +60,7 @@ private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
   induction run with
   | nil =>
     intro fulu
-    obtain ⟨_, _, _, initialized⟩ := genesis
-    obtain ⟨phase0, -⟩ := initializeBeaconStateFromEth1_ok initialized
+    obtain ⟨_, _, _, phase0, initialized⟩ := genesis
     exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
   | @snoc middle last pre step ih =>
     intro fulu

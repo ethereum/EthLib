@@ -4880,9 +4880,7 @@ theorem queueCarry_le_of_run {g x y : ForkedBeaconState preset}
   constructor
   · have gBefore : g.fork < .pectra := by
       refine Nat.lt_of_not_ge fun late => ?_
-      obtain ⟨hash, time, deposits, ok⟩ := genesis
-      have altair : Fork.altair ≤ g.fork := Nat.le_trans (by decide) late
-      simp [initializeBeaconStateFromEth1, altair, throw] at ok
+      exact absurd (Nat.lt_of_le_of_lt late genesis.before) (by decide)
     obtain ⟨u, v, head, step, rest, uBefore, vElectra, -⟩ :=
       split_electra_crossing (shared.append tail) gBefore targetElectra
     have vEarly : v.fork < .glamsterdam :=
@@ -4912,9 +4910,7 @@ theorem reachable_electra_epoch {g y : ForkedBeaconState preset}
   induction run with
   | nil =>
     intro electra
-    obtain ⟨hash, time, deposits, ok⟩ := genesis
-    have altair : Fork.altair ≤ g.fork := Nat.le_trans (by decide) electra
-    simp [initializeBeaconStateFromEth1, altair, throw] at ok
+    exact absurd (Nat.lt_of_le_of_lt electra genesis.before) (by decide)
   | @snoc middle last pre step ih =>
     cases step with
     | slot ok =>

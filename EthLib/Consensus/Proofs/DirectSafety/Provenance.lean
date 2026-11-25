@@ -37,8 +37,8 @@ theorem run_justified_separated {g a : ForkedBeaconState preset}
     Invariant a.state ∧ JustifiedEarly a.state ∧ JustifiedSeparated a.state := by
   induction run with
   | nil =>
-    obtain ⟨hash, time, deposits, ok⟩ := genesis
-    exact ⟨(initializeBeaconStateFromEth1_invariant ok).2,
+    obtain ⟨hash, time, deposits, _, ok⟩ := genesis
+    exact ⟨initializeBeaconStateFromEth1_invariant ok,
       JustifiedEarly.of_initializeBeaconStateFromEth1 ok,
       JustifiedSeparated.of_initializeBeaconStateFromEth1 ok⟩
   | snoc pre step ih =>
@@ -54,13 +54,13 @@ private theorem votes_snoc {g a b : ForkedBeaconState preset} (run : Run config 
 private theorem genesis_participation {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) :
     ParticipationBacked (Run.nil : Run config checks g g) g.state := by
-  obtain ⟨_, _, _, ok⟩ := genesis
+  obtain ⟨_, _, _, phase0, ok⟩ := genesis
   constructor
-  · intro before current pending member
-    rw [initializeBeaconStateFromEth1_pending ok before current] at member
+  · intro _ current pending member
+    rw [initializeBeaconStateFromEth1_pending ok current] at member
     simp at member
   · intro altair
-    exact False.elim (Nat.not_le_of_lt (initializeBeaconStateFromEth1_invariant ok).1 altair)
+    exact False.elim (Nat.not_le_of_lt phase0 altair)
 
 private theorem run_participation {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (parameters : Parameters preset) (genesis : Genesis config checks g) :

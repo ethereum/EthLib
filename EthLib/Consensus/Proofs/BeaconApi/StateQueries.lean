@@ -99,8 +99,10 @@ theorem stateRoot_resolveStateId_root
 Only Phase 0 has a genesis state from deposits. -/
 theorem finalityCheckpoints_genesis {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {state : BeaconState preset fork}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state) :
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state) :
     finalityCheckpoints state =
       { previousJustified := ⟨0, Vector.replicate 32 0⟩
         currentJustified := ⟨0, Vector.replicate 32 0⟩
@@ -222,8 +224,10 @@ theorem GenesisCheckpointsZero.of_chainSteps {first last : ForkedBeaconState pre
 /-- In the genesis state from deposits, each checkpoint at epoch 0 has the zero root. -/
 theorem GenesisCheckpointsZero.of_initializeBeaconStateFromEth1 {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state) :
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state) :
     GenesisCheckpointsZero state := by
   have reported := finalityCheckpoints_genesis computed
   simp only [finalityCheckpoints, FinalityCheckpoints.mk.injEq] at reported
@@ -245,8 +249,10 @@ A justified checkpoint at epoch 0 is reported with the zero root too. -/
 theorem finalityCheckpoints_of_genesis_chainSteps {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {genesis : BeaconState preset fork}
     {last : ForkedBeaconState preset}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok genesis)
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok genesis)
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, genesis⟩ last) :
     (last.state.finalizedCheckpoint.epoch = 0 →
         (finalityCheckpoints last.state).finalized = ⟨0, Vector.replicate 32 0⟩) ∧

@@ -191,12 +191,13 @@ The specification defines genesis only before Altair. -/
 theorem validatorKeys_prefix_and_distinct_of_genesis_chainSteps
     {eth1BlockHash : Hash32} {eth1Timestamp : UInt64} {deposits : Array Deposit}
     {genesis : BeaconState preset fork} {last : ForkedBeaconState preset}
+    {before : fork < .altair}
     (initialized :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
         .ok genesis)
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, genesis⟩ last) :
     validatorKeys genesis <+: validatorKeys last.state ∧ PubkeysDistinct last.state := by
-  obtain ⟨before, genesisTime, bodyRoot, _, root, frame, rfl⟩ :=
+  obtain ⟨genesisTime, bodyRoot, _, root, frame, rfl⟩ :=
     initializeBeaconStateFromEth1_frame initialized
   -- The empty state before the deposits has no validator, so no two share a key.
   have empty : PubkeysDistinct (emptyGenesisState (preset := preset) config before genesisTime

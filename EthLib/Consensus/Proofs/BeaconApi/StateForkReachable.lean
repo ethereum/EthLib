@@ -64,8 +64,9 @@ theorem stateFork_mem_forkSchedule_of_reachable {checks : SignatureChecks} {gene
     {eth1BlockHash : Hash32} {eth1Timestamp : UInt64} {deposits : Array Deposit}
     {genesis : BeaconState preset genesisFork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
+    {before : genesisFork < .altair}
     (initialized :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
         .ok genesis)
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨genesisFork, genesis⟩
       ⟨fork, anchorState⟩)
@@ -84,8 +85,9 @@ theorem stateFork_mem_forkSchedule_of_resolveStateId {checks : SignatureChecks}
     {genesisFork : Fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {genesis : BeaconState preset genesisFork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
+    {before : genesisFork < .altair}
     (initialized :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
         .ok genesis)
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨genesisFork, genesis⟩
       ⟨fork, anchorState⟩)

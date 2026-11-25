@@ -172,8 +172,7 @@ theorem Run.assignedProposers {g x : ForkedBeaconState preset}
   induction run with
   | nil =>
     -- Genesis is before Fulu, so it has no lookahead.
-    obtain ⟨_, _, _, initialized⟩ := genesis
-    have before := (initializeBeaconStateFromEth1_ok initialized).1
+    obtain ⟨_, _, _, before, initialized⟩ := genesis
     exact fun fulu => (Nat.not_le_of_lt before (Nat.le_trans (by decide) fulu)).elim
   | snoc pre step ih => exact assignedProposers_chainStep step.chainStep ih
 

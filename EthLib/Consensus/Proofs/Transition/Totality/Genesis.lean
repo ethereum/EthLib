@@ -366,12 +366,14 @@ private theorem genesisDeposits_summary (before : fork < .altair)
 /-- An unassigned validator at genesis is funded and not yet eligible for activation. -/
 theorem initializeBeaconStateFromEth1_unassigned_eligibility {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok after) (i : Nat) (v : Validator) (found : after.validators.data[i]? = some v)
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok after) (i : Nat) (v : Validator) (found : after.validators.data[i]? = some v)
     (unassigned : v.activationEpoch = FAR_FUTURE_EPOCH) :
     (∃ balance, after.balances.data[i]? = some balance ∧ v.effectiveBalance ≤ balance) ∧
       v.activationEligibilityEpoch = FAR_FUTURE_EPOCH ∧ v.slashed = false := by
-  obtain ⟨before, time, root, deposited, activated, _, depositedOk, activatedOk, stateEq⟩ :=
+  obtain ⟨time, root, deposited, activated, _, depositedOk, activatedOk, stateEq⟩ :=
     initializeBeaconStateFromEth1_ok computed
   rw [stateEq] at found ⊢
   obtain ⟨balances, _, size, effective⟩ :=
@@ -404,11 +406,13 @@ theorem initializeBeaconStateFromEth1_unassigned_eligibility {eth1BlockHash : Ha
 /-- Genesis assigns only the genesis activation epoch; all other keys remain unassigned. -/
 theorem initializeBeaconStateFromEth1_activation_epochs {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok after) :
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok after) :
     ∀ v ∈ after.validators.data,
       v.activationEpoch = FAR_FUTURE_EPOCH ∨ v.activationEpoch = GENESIS_EPOCH := by
-  obtain ⟨before, time, root, deposited, activated, _, depositedOk, activatedOk, equal⟩ :=
+  obtain ⟨time, root, deposited, activated, _, depositedOk, activatedOk, equal⟩ :=
     initializeBeaconStateFromEth1_ok computed
   rw [equal]
   exact (foldlM_activateAtGenesis_decomposition (Nat.lt_trans before (by decide))
@@ -419,10 +423,12 @@ theorem initializeBeaconStateFromEth1_activation_epochs {eth1BlockHash : Hash32}
 /-- Every validator starts unslashed after successful genesis initialization. -/
 theorem initializeBeaconStateFromEth1_unslashed {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok after) :
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok after) :
     ∀ v ∈ after.validators.data, v.slashed = false := by
-  obtain ⟨before, time, root, deposited, activated, _, depositedOk, activatedOk, equal⟩ :=
+  obtain ⟨time, root, deposited, activated, _, depositedOk, activatedOk, equal⟩ :=
     initializeBeaconStateFromEth1_ok computed
   rw [equal]
   intro v member
@@ -443,12 +449,14 @@ theorem initializeBeaconStateFromEth1_withinBudget {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
     {budget : Nat} (scoreBound : Nat)
     (funded : (deposits.toList.map (·.data.amount.toNat)).sum ≤ budget)
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok after) :
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok after) :
     WithinBudget budget scoreBound after := by
-  have matched := (initializeBeaconStateFromEth1_invariant computed).2.balancesMatch
+  have matched := (initializeBeaconStateFromEth1_invariant computed).balancesMatch
   -- A candidate genesis starts from an empty state, applies each deposit, then activates.
-  obtain ⟨before, genesisTime, bodyRoot, deposited, activated, root, depositedOk, activatedOk,
+  obtain ⟨genesisTime, bodyRoot, deposited, activated, root, depositedOk, activatedOk,
     rfl⟩ := initializeBeaconStateFromEth1_ok computed
   clear computed
   have notGloas : fork < .glamsterdam := Nat.lt_trans before (by decide)

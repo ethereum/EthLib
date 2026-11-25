@@ -544,11 +544,13 @@ The genesis block of the model is the block of the zero root, the root of its ch
 theorem initializeBeaconStateFromEth1_slackChainInvariant {fork : Fork}
     {state : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state) :
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state) :
     SlackChainInvariant V U W (block (Vector.replicate 32 0)) attested block
       ⟨fork, state⟩ := by
-  obtain ⟨before, holds⟩ := initializeBeaconStateFromEth1_invariant computed
+  have holds := initializeBeaconStateFromEth1_invariant computed
   obtain ⟨-, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
   refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed,
     JustifiedSeparated.of_initializeBeaconStateFromEth1 computed,
@@ -578,8 +580,10 @@ theorem slackJustifiedCheckpoints_of_chain (positive : 0 < preset.SLOTS_PER_EPOC
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state)
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state)
     {last : ForkedBeaconState preset}
     (steps :
       Relation.ReflTransGen (SlackStep config checks V U W attested block) ⟨fork, state⟩ last) :
@@ -627,8 +631,10 @@ theorem slackJustifiedCheckpoints_of_chainSteps (positive : 0 < preset.SLOTS_PER
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
-      .ok state)
+    {before : fork < .altair}
+    (computed :
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+        .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
     (meets : ∀ forked after,

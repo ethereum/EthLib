@@ -698,7 +698,7 @@ private theorem Run.activationCohortBound {s t : ForkedBeaconState preset}
 private theorem Genesis.activationCohortBound {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     ActivationCohortBound config g.state := by
-  obtain ⟨hash, time, deposits, ok⟩ := genesis
+  obtain ⟨hash, time, deposits, _, ok⟩ := genesis
   have classified := initializeBeaconStateFromEth1_activation_epochs ok
   constructor
   · intro e finite nonGenesis
@@ -1223,7 +1223,7 @@ theorem recent_inactive_same_epoch {g x y : ForkedBeaconState preset}
     {key : Cryptography.Bls.BLSPubkey}
     (member : key ∈ (recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) :
     getCurrentEpoch y.state = getCurrentEpoch x.state := by
-  have ⟨_, _, _, initialized⟩ := genesis
+  have ⟨_, _, _, _, initialized⟩ := genesis
   classical
   have xEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   obtain ⟨both, absent⟩ := Finset.mem_sdiff.mp member
@@ -1358,7 +1358,7 @@ theorem joining_before_electra_split {g x y : ForkedBeaconState preset}
         cohortCap config y.state.validators.data.size * preset.MAX_EFFECTIVE_BALANCE.toNat ∧
     Models.stake (effectiveWeight y.state)
       ((recentKeys y.state ∩ recentKeys x.state) \ activeKeys x.state) ≤ boundaryStake x := by
-  have ⟨_, _, _, initialized⟩ := genesis
+  have ⟨_, _, _, _, initialized⟩ := genesis
   classical
   refine ⟨new_recent_before_electra shared tail genesis twoSlots caps early, ?_⟩
   have uniqueX := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
