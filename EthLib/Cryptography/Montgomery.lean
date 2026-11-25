@@ -18,6 +18,8 @@ Its product is the CIOS method of Koç, Acar and Kaliski, [IEEE Micro 16(3)][cio
 
 namespace EthLib.Cryptography
 
+open Montgomery.Internal
+
 namespace Montgomery
 
 /-! ## The modulus
@@ -277,7 +279,7 @@ def numPairs (f : Nat → UInt64) : Nat → Nat → Nat
   | m + 2, k => (f k + (f (k + 1) <<< 32)).toNat + 2 ^ 64 * numPairs f m (k + 2)
 
 /-- Two at a time, fitting words write their integer. -/
-theorem numPairs_eq {f : Nat → UInt64} {m k : Nat} (h : Fits m f k) :
+theorem Internal.numPairs_eq {f : Nat → UInt64} {m k : Nat} (h : Fits m f k) :
     numPairs f m k = num m f k := by
   induction m using Nat.strongRecOn generalizing k with
   | _ m ih =>
@@ -332,7 +334,7 @@ The compiler makes one copy for each modulus, so each product is a direct call. 
     powTableAux a k next (t.push next)
 
 /-- Each product adds one entry. -/
-theorem size_powTableAux (a : Montgomery M) :
+theorem Internal.size_powTableAux (a : Montgomery M) :
     ∀ (k : Nat) (last : Montgomery M) (t : Array (Montgomery M)),
       (powTableAux a k last t).size = t.size + k
   | 0, _, _ => rfl
@@ -354,14 +356,14 @@ theorem size_powTableAux (a : Montgomery M) :
   mul s t[d.toNat]
 
 /-- The top four bits of a word are a digit below 16. -/
-theorem topDigit_lt (w : UInt32) : (w >>> 28).toNat < 16 := by
+theorem Internal.topDigit_lt (w : UInt32) : (w >>> 28).toNat < 16 := by
   rw [UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow]
   have := w.toNat_lt
   simp only [UInt32.reduceToNat, Nat.reduceMod]
   omega
 
 /-- The low four bits of a word are a digit below 16. -/
-theorem lowDigit_lt (w : UInt32) : (w &&& 15).toNat < 16 := by
+theorem Internal.lowDigit_lt (w : UInt32) : (w &&& 15).toNat < 16 := by
   rw [UInt32.toNat_and]
   exact Nat.lt_succ_of_le Nat.and_le_right
 
@@ -427,7 +429,7 @@ It is `none` when they write an integer of at least `p`. -/
   | k + 1, acc => pushLimbs f k (pushLimb acc (f k).toUInt32)
 
 /-- Pushing `k` limbs adds `4 k` bytes. -/
-theorem size_pushLimbs (f : Nat → UInt64) (k : Nat) (acc : ByteArray) :
+theorem Internal.size_pushLimbs (f : Nat → UInt64) (k : Nat) (acc : ByteArray) :
     (pushLimbs f k acc).size = acc.size + 4 * k := by
   induction k generalizing acc with
   | zero => rfl

@@ -18,6 +18,8 @@ It is "Analyzing and comparing Montgomery multiplication algorithms", [IEEE Micr
 
 namespace EthLib.Cryptography.Montgomery
 
+open Internal
+
 section Generic
 
 variable {n : Nat} [Words n]
@@ -60,7 +62,7 @@ def value (st : Words.W n × UInt64) : Nat :=
   num n (Words.word st.1) 0 + 2 ^ (32 * n) * st.2.toNat
 
 /-- A modulus with an inverse mod `2 ^ 32` is positive. -/
-theorem pos_of_pinv {P : Nat} {pinv : UInt64} (hpinv : (P * pinv.toNat + 1) % 2 ^ 32 = 0) :
+theorem Internal.pos_of_pinv {P : Nat} {pinv : UInt64} (hpinv : (P * pinv.toNat + 1) % 2 ^ 32 = 0) :
     0 < P := by
   rcases Nat.eq_zero_or_pos P with h | h
   · rw [h, Nat.zero_mul] at hpinv
@@ -68,7 +70,7 @@ theorem pos_of_pinv {P : Nat} {pinv : UInt64} (hpinv : (P * pinv.toNat + 1) % 2 
   · exact h
 
 /-- One CIOS step adds `a b_i` and a multiple of `p`, divides by `2 ^ 32`, and stays below `2 p`. -/
-theorem step_spec {p : Nat → UInt64} {pinv : UInt64} (hp : Fits n p 0)
+theorem Internal.step_spec {p : Nat → UInt64} {pinv : UInt64} (hp : Fits n p 0)
     (hpinv : (num n p 0 * pinv.toNat + 1) % 2 ^ 32 = 0) {a : Nat → UInt64} (ha : Fits n a 0)
     (hA : num n a 0 < num n p 0) (b : Nat → UInt64) {i : Nat} (hb : (b i).toNat < 2 ^ 32)
     {st : Words.W n × UInt64} (ht : Fits n (Words.word st.1) 0)
@@ -131,14 +133,14 @@ theorem step_spec {p : Nat → UInt64} {pinv : UInt64} (hp : Fits n p 0)
   if top < d.2 then out t else out d.1
 
 /-- The final reduction hands its result to its continuation. -/
-theorem reduce_out (p : Nat → UInt64) (t : Words.W n) (top : UInt64) {β : Type}
+theorem Internal.reduce_out (p : Nat → UInt64) (t : Words.W n) (top : UInt64) {β : Type}
     (out : Words.W n → β) : reduce p t top out = out (reduce p t top id) := by
   unfold reduce
   dsimp only
   split <;> rfl
 
 /-- The final reduction gives the integer mod `p`. -/
-theorem reduce_spec {p : Nat → UInt64} (hp : Fits n p 0) {t : Words.W n} {top : UInt64}
+theorem Internal.reduce_spec {p : Nat → UInt64} (hp : Fits n p 0) {t : Words.W n} {top : UInt64}
     (ht : Fits n (Words.word t) 0) (hv : value (t, top) < 2 * num n p 0) :
     Fits n (Words.word (reduce p t top id)) 0 ∧
       num n (Words.word (reduce p t top id)) 0 = value (t, top) % num n p 0 := by
@@ -180,12 +182,12 @@ theorem reduce_spec {p : Nat → UInt64} (hp : Fits n p 0) {t : Words.W n} {top 
   reduce p st.1 st.2 out
 
 /-- The product hands its result to its continuation. -/
-theorem mulWords_out (p : Nat → UInt64) (pinv : UInt64) (a b : Nat → UInt64) {β : Type}
+theorem Internal.mulWords_out (p : Nat → UInt64) (pinv : UInt64) (a b : Nat → UInt64) {β : Type}
     (out : Words.W n → β) : mulWords p pinv a b out = out (mulWords p pinv a b id) :=
   reduce_out _ _ _ _
 
 /-- The CIOS product is `a b R⁻¹` mod `p`, below `p`, with `R = 2 ^ (32 n)`. -/
-theorem mulWords_spec {p : Nat → UInt64} {pinv : UInt64} (hp : Fits n p 0)
+theorem Internal.mulWords_spec {p : Nat → UInt64} {pinv : UInt64} (hp : Fits n p 0)
     (hpinv : (num n p 0 * pinv.toNat + 1) % 2 ^ 32 = 0) {a : Nat → UInt64} (ha : Fits n a 0)
     (hA : num n a 0 < num n p 0) {b : Nat → UInt64} (hb : Fits n b 0) :
     Fits n (Words.word (mulWords (n := n) p pinv a b id)) 0 ∧
@@ -231,7 +233,7 @@ theorem mulWords_spec {p : Nat → UInt64} {pinv : UInt64} (hp : Fits n p 0)
 section Parts
 
 /-- Zeros load as the words of zero. -/
-theorem load_zero : Words.load (n := n) (fun _ => 0) 0 = Words.zero :=
+theorem Internal.load_zero : Words.load (n := n) (fun _ => 0) 0 = Words.zero :=
   Words.ext _ _ fun i hi => by rw [Words.word_load _ _ _ hi, Words.word_zero]
 
 variable [Limbs n]
@@ -257,7 +259,7 @@ The final reduction follows, and its result goes to `out`. -/
   reduce p st.1 st.2 out
 
 /-- Fitting words, stored as limbs and loaded back, are the same words. -/
-theorem load_pack {t : Words.W n} (h : Fits n (Words.word t) 0) :
+theorem Internal.load_pack {t : Words.W n} (h : Fits n (Words.word t) 0) :
     Words.load (n := n) (Limbs.get (Limbs.pack (n := n) t)) 0 = t := by
   have hl := lt_of_fits h
   refine Words.ext _ _ fun i hi => UInt64.toNat_inj.mp ?_

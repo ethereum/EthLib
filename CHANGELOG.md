@@ -1077,6 +1077,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, 61 technical lemmas of the Montgomery arithmetic on 32-bit limbs move to the namespace `Montgomery.Internal`, and three lemmas on digits to `Montgomery.Limbs.Internal` ([#4685](https://github.com/ethereum/EthLib/issues/4685)).
+  Only the Montgomery modules and their proofs use them, and those modules open the namespace.
+  - From `Cryptography/Montgomery/Words.lean`: `mac_spec`, `sbb_spec`, `num_succ`, `fits_succ`, `num_congr`, `fits_congr`, `fits_of_lt`, `num_cons`, `fits_cons`, `num_cons_zero`, `fits_cons_zero`, `radix_succ`, `num_lt`, `num_snoc`, `loop_induct`, `loop_add`, `macS_spec`, `shS_spec`, `redS_spec`, `subbS_spec`, `lt_of_fits`, `load_spec`, `num_mod` and `radix_mod`.
+  - From `Cryptography/Montgomery/Product.lean`: `pos_of_pinv`, `step_spec`, `reduce_out`, `reduce_spec`, `mulWords_out`, `mulWords_spec`, `load_zero` and `load_pack`.
+  - From `Cryptography/Montgomery.lean`: `numPairs_eq`, `size_powTableAux`, `topDigit_lt`, `lowDigit_lt` and `size_pushLimbs`.
+  - From `Cryptography/Proofs/Montgomery/Core.lean`: `num_zero`, `fits_zero`, `fits_snoc`, `eq_of_num_eq`, `word_succ` and `ltWords_iff`.
+    `Limbs.digit_toNat`, `Limbs.num_digit` and `Limbs.fits_digit` move to `Montgomery.Limbs.Internal`.
+  - From `Cryptography/Proofs/Montgomery.lean`: `radix_mul_inv`, `radix_inv_mul`, `radix_cancel`, `limbs_cast`, `mulLimbs_cast`, `toZMod_sub'`, `powTableAux_spec`, `powTable_spec`, `toZMod_window`, `toZMod_powWord`, `toZMod_powDigits`, `toList_toBE_four`, `pushLimbs_toList`, `wordBE_toNat` and `num_limbBE`.
+  The lemmas that callers use stay public, such as those of the element and its operations, `mulLimbs_spec`, `addLimbs_spec`, `subLimbs_spec`, `toBytesBE_size`, `toNat_eq_val`, `zero_spec`, `mulHigh_mulLow` and the map to `ZMod p`.
+  To reach a moved lemma, write `open EthLib.Cryptography.Montgomery.Internal`, or `Montgomery.Limbs.Internal` for the lemmas on digits.
+
 - In Lean, secp256k1 encodes and decodes its points with the SEC 1 module of every prime-field curve ([#4699](https://github.com/ethereum/EthLib/pull/4699)).
   - `Secp256k1.sec1` (`Cryptography/Secp256k1/Encoding.lean`) holds what SEC 1 reads from `Fp`, and `Secp256k1.isSqrt_sqrt` proves the law of its square root.
   - `Point.encodeCompressed` and `Point.encodeUncompressed` are abbreviations of `Sec1.encode`, with the same bytes.

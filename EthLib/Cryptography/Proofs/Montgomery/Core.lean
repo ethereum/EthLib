@@ -10,16 +10,18 @@ public import EthLib.Cryptography.Montgomery
 
 namespace EthLib.Cryptography.Montgomery
 
+open Internal
+
 variable {n : Nat} [Words n]
 
 /-- An empty sequence of words writes `0`. -/
-theorem num_zero (f : Nat → UInt64) (k : Nat) : num 0 f k = 0 := rfl
+theorem Internal.num_zero (f : Nat → UInt64) (k : Nat) : num 0 f k = 0 := rfl
 
 /-- An empty sequence of words fits. -/
-theorem fits_zero (f : Nat → UInt64) (k : Nat) : Fits 0 f k := trivial
+theorem Internal.fits_zero (f : Nat → UInt64) (k : Nat) : Fits 0 f k := trivial
 
 /-- The `n + 1` words fit exactly when the first `n` fit and the last is below `2 ^ 32`. -/
-theorem fits_snoc {n : Nat} {f : Nat → UInt64} {k : Nat} :
+theorem Internal.fits_snoc {n : Nat} {f : Nat → UInt64} {k : Nat} :
     Fits (n + 1) f k ↔ Fits n f k ∧ (f (k + n)).toNat < 2 ^ 32 := by
   induction n generalizing k with
   | zero => simp [Fits]
@@ -28,7 +30,7 @@ theorem fits_snoc {n : Nat} {f : Nat → UInt64} {k : Nat} :
     exact ⟨fun ⟨a, b, c⟩ => ⟨⟨a, b⟩, c⟩, fun ⟨⟨a, b⟩, c⟩ => ⟨a, b, c⟩⟩
 
 /-- Fitting words with the same integer are the same words. -/
-theorem eq_of_num_eq {n : Nat} {f g : Nat → UInt64} {k : Nat} (hf : Fits n f k)
+theorem Internal.eq_of_num_eq {n : Nat} {f g : Nat → UInt64} {k : Nat} (hf : Fits n f k)
     (hg : Fits n g k) (h : num n f k = num n g k) : ∀ i < n, f (k + i) = g (k + i) := by
   induction n generalizing k with
   | zero => intro i hi; omega
@@ -45,11 +47,11 @@ theorem eq_of_num_eq {n : Nat} {f g : Nat → UInt64} {k : Nat} (hf : Fits n f k
       rwa [Nat.add_right_comm k 1 i, Nat.add_assoc] at e
 
 /-- The words of a fixed count are the words of a pair of a low word and the rest. -/
-theorem word_succ {n : Nat} [Words n] (t : Words.W (n + 1)) :
+theorem Internal.word_succ {n : Nat} [Words n] (t : Words.W (n + 1)) :
     Words.word t = cons (t : UInt64 × Words.W n).1 (Words.word (t : UInt64 × Words.W n).2) := rfl
 
 /-- The comparison of words is the comparison of their integers. -/
-theorem ltWords_iff {t : Words.W n} {p : Nat → UInt64} (ht : Fits n (Words.word t) 0)
+theorem Internal.ltWords_iff {t : Words.W n} {p : Nat → UInt64} (ht : Fits n (Words.word t) 0)
     (hp : Fits n p 0) : ltWords t p = true ↔ num n (Words.word t) 0 < num n p 0 := by
   have z : (0 : UInt64).toNat ≤ 1 := by decide
   obtain ⟨fd, bd, ed⟩ := Words.subb_spec t p 0 0 ht hp z
@@ -79,12 +81,13 @@ theorem val_injective : Function.Injective (val : T n → Nat) := by
   simpa using eq_of_num_eq (fits a 0) (fits b 0) h k hk
 
 /-- A digit is the integer of 32 bits at its place. -/
-theorem digit_toNat (x i : Nat) : (digit x i).toNat = x / 2 ^ (32 * i) % 2 ^ 32 := by
+theorem Internal.digit_toNat (x i : Nat) : (digit x i).toNat = x / 2 ^ (32 * i) % 2 ^ 32 := by
   have := Nat.mod_lt (x / 2 ^ (32 * i)) (Nat.two_pow_pos 32)
   rw [digit, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
 
 /-- The digits of `x` from place `k` write `x / 2 ^ (32 k)` mod `2 ^ (32 m)`. -/
-theorem num_digit (x : Nat) (m k : Nat) : num m (digit x) k = x / 2 ^ (32 * k) % 2 ^ (32 * m) := by
+theorem Internal.num_digit (x : Nat) (m k : Nat) :
+    num m (digit x) k = x / 2 ^ (32 * k) % 2 ^ (32 * m) := by
   induction m generalizing k with
   | zero => simp [num, Nat.mod_one]
   | succ m ih =>
@@ -92,14 +95,15 @@ theorem num_digit (x : Nat) (m k : Nat) : num m (digit x) k = x / 2 ^ (32 * k) %
       ← Nat.div_div_eq_div_mul, digit_toNat]
 
 /-- The digits fit. -/
-theorem fits_digit (x : Nat) (m k : Nat) : Fits m (digit x) k :=
+theorem Internal.fits_digit (x : Nat) (m k : Nat) : Fits m (digit x) k :=
   fits_of_lt fun _ _ => by
     rw [digit_toNat]
     exact Nat.mod_lt _ (by decide)
 
 /-- The limbs of `x` write `x mod 2 ^ (32 n)`. -/
 theorem val_ofNat (x : Nat) : val (ofNat (n := n) x) = x % 2 ^ (32 * n) := by
-  rw [ofNat, val_pack ((load_spec _ _).1.mpr (fits_digit x n 0)), (load_spec _ _).2, num_digit]
+  rw [ofNat, val_pack ((load_spec _ _).1.mpr (Internal.fits_digit x n 0)), (load_spec _ _).2,
+    Internal.num_digit]
   simp
 
 end Limbs

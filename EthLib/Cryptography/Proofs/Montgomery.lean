@@ -24,6 +24,8 @@ The inverse agrees with the inverse of `ZMod p` when `p` is prime.
 
 namespace EthLib.Cryptography.Montgomery
 
+open Internal
+
 variable {n : Nat} [Words n] [Limbs n] {M : Modulus n}
 
 /-- The modulus is below the radix `2 ^ (32 n)`. -/
@@ -45,16 +47,16 @@ theorem Modulus.odd (M : Modulus n) : M.p % 2 = 1 := by
 def radix (M : Modulus n) : ZMod M.p := ((2 ^ (32 * n) : ℕ) : ZMod M.p)
 
 /-- `R` is a unit mod `p`, because `p` is odd. -/
-theorem radix_mul_inv (M : Modulus n) : radix M * (radix M)⁻¹ = 1 :=
+theorem Internal.radix_mul_inv (M : Modulus n) : radix M * (radix M)⁻¹ = 1 :=
   ZMod.coe_mul_inv_eq_one _
     (Nat.Coprime.pow_left _ ((Nat.coprime_two_left).mpr (Nat.odd_iff.mpr M.odd)))
 
 /-- `R⁻¹ R = 1` mod `p`. -/
-theorem radix_inv_mul (M : Modulus n) : (radix M)⁻¹ * radix M = 1 := by
+theorem Internal.radix_inv_mul (M : Modulus n) : (radix M)⁻¹ * radix M = 1 := by
   rw [mul_comm, radix_mul_inv]
 
 /-- Two values equal after a product by `R` are equal. -/
-theorem radix_cancel {x y : ZMod M.p} (h : x * radix M = y * radix M) : x = y := by
+theorem Internal.radix_cancel {x y : ZMod M.p} (h : x * radix M = y * radix M) : x = y := by
   have := congrArg (· * (radix M)⁻¹) h
   simpa only [mul_assoc, radix_mul_inv, mul_one] using this
 
@@ -63,12 +65,12 @@ def toZMod (a : Montgomery M) : ZMod M.p :=
   (Limbs.val a.limbs : ZMod M.p) * (radix M)⁻¹
 
 /-- The limbs of an element write `a R` mod `p`. -/
-theorem limbs_cast (a : Montgomery M) :
+theorem Internal.limbs_cast (a : Montgomery M) :
     (Limbs.val a.limbs : ZMod M.p) = toZMod a * radix M := by
   rw [toZMod, mul_assoc, radix_inv_mul, mul_one]
 
 /-- The Montgomery product divides the product of the limbs by `R`, mod `p`. -/
-theorem mulLimbs_cast (a : Limbs.T n) (ha : Limbs.val a < M.p) (b : Limbs.T n) :
+theorem Internal.mulLimbs_cast (a : Limbs.T n) (ha : Limbs.val a < M.p) (b : Limbs.T n) :
     (Limbs.val (mulLimbs M a ha b).limbs : ZMod M.p) * radix M =
       Limbs.val a * Limbs.val b := by
   have hc := congrArg (Nat.cast : ℕ → ZMod M.p) (mulLimbs_spec M a ha b).2
@@ -102,7 +104,7 @@ theorem toZMod_add (a b : Montgomery M) : toZMod (a + b) = toZMod a + toZMod b :
   ring
 
 /-- The difference is the difference mod `p`. -/
-theorem toZMod_sub' (a b : Montgomery M) : toZMod (sub a b) = toZMod a - toZMod b := by
+theorem Internal.toZMod_sub' (a b : Montgomery M) : toZMod (sub a b) = toZMod a - toZMod b := by
   apply radix_cancel
   have h : (Limbs.val (sub a b).limbs : ZMod M.p) = Limbs.val a.limbs - Limbs.val b.limbs := by
     change (Limbs.val (subLimbs M a.limbs b.limbs) : ZMod M.p) = _
@@ -222,7 +224,7 @@ theorem ofNat_toNat (a : Montgomery M) : ofNat a.toNat = a := by
 Let `last` be `a ^ (s - 1)`.
 
 Then the extended table holds `a ^ 0` to `a ^ (s + k - 1)`. -/
-theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (last : Montgomery M)
+theorem Internal.powTableAux_spec (a : Montgomery M) (k : ℕ) (last : Montgomery M)
     (t : Array (Montgomery M)) (hlast : toZMod last = toZMod a ^ (t.size - 1)) (ht : 0 < t.size)
     (h : ∀ i (hi : i < t.size), toZMod t[i] = toZMod a ^ i) :
     ∀ i (hi : i < t.size + k),
@@ -251,7 +253,7 @@ theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (last : Montgomery M)
     exact hv i (by simp; omega)
 
 /-- The table holds `a ^ 0` to `a ^ 15`. -/
-theorem powTable_spec (a : Montgomery M) {i : ℕ} (hi : i < 16) :
+theorem Internal.powTable_spec (a : Montgomery M) {i : ℕ} (hi : i < 16) :
     toZMod (powTable a)[i] = toZMod a ^ i :=
   powTableAux_spec a 15 one #[one] (toZMod_one.trans (pow_zero _).symm) (by simp) (by
     intro i hi
@@ -259,7 +261,7 @@ theorem powTable_spec (a : Montgomery M) {i : ℕ} (hi : i < 16) :
     exact toZMod_one.trans (pow_zero _).symm) i (by simpa using hi)
 
 /-- A window raises the accumulator to the 16th power and multiplies by `a ^ d`. -/
-theorem toZMod_window (a acc : Montgomery M) (d : UInt32) (hd : d.toNat < 16) :
+theorem Internal.toZMod_window (a acc : Montgomery M) (d : UInt32) (hd : d.toNat < 16) :
     toZMod (window (powTable a) acc d hd) = toZMod acc ^ 16 * toZMod a ^ d.toNat := by
   change toZMod (acc * acc * (acc * acc) * (acc * acc * (acc * acc)) *
     (acc * acc * (acc * acc) * (acc * acc * (acc * acc))) * (powTable a)[d.toNat]) = _
@@ -267,7 +269,7 @@ theorem toZMod_window (a acc : Montgomery M) (d : UInt32) (hd : d.toNat < 16) :
   ring
 
 /-- The windows of a word `w` raise the accumulator to the power `2 ^ 32`, times `a ^ w`. -/
-theorem toZMod_powWord (a acc : Montgomery M) (w : UInt32) :
+theorem Internal.toZMod_powWord (a acc : Montgomery M) (w : UInt32) :
     toZMod (powWord (powTable a) acc w) = toZMod acc ^ 2 ^ 32 * toZMod a ^ w.toNat := by
   have hw := w.toNat_lt
   have e7 : (w >>> 28).toNat = w.toNat / 2 ^ 28 := by
@@ -296,7 +298,7 @@ theorem toZMod_powWord (a acc : Montgomery M) (w : UInt32) :
 /-- The windows of the low `k` limbs raise the accumulator to `2 ^ (32 k)`, times `a ^ e`.
 
 Here `e` is the integer of those limbs. -/
-theorem toZMod_powDigits (a : Montgomery M) (l : Limbs.T n) (k : ℕ) (acc : Montgomery M) :
+theorem Internal.toZMod_powDigits (a : Montgomery M) (l : Limbs.T n) (k : ℕ) (acc : Montgomery M) :
     toZMod (powDigits (powTable a) l k acc) =
       toZMod acc ^ 2 ^ (32 * k) * toZMod a ^ num k (Limbs.get l) 0 := by
   induction k generalizing acc with
@@ -334,7 +336,7 @@ theorem toZMod_inv [Fact M.p.Prime] (a : Montgomery M) : toZMod a⁻¹ = (toZMod
 open EthLib.Base
 
 /-- The four bytes of a limb are its integer written on four bytes, big-endian. -/
-theorem toList_toBE_four (x : UInt32) :
+theorem Internal.toList_toBE_four (x : UInt32) :
     (ByteOrder.toBE 4 x.toNat).toList =
       [(x >>> 24).toUInt8, (x >>> 16).toUInt8, (x >>> 8).toUInt8, x.toUInt8] := by
   have := x.toNat_lt
@@ -345,7 +347,7 @@ theorem toList_toBE_four (x : UInt32) :
     simp [UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow] <;> omega
 
 /-- Pushing fitting limbs appends their integer written on `4 k` bytes, big-endian. -/
-theorem pushLimbs_toList (f : ℕ → UInt64) (k : ℕ) (acc : ByteArray) (h : Fits k f 0) :
+theorem Internal.pushLimbs_toList (f : ℕ → UInt64) (k : ℕ) (acc : ByteArray) (h : Fits k f 0) :
     (pushLimbs f k acc).data.toList =
       acc.data.toList ++ (ByteOrder.toBE (4 * k) (num k f 0)).toList := by
   induction k generalizing acc with
@@ -394,7 +396,7 @@ private theorem getElem!_eq_getD (b : ByteArray) (i : ℕ) : b[i]! = b.data.getD
     rfl
 
 /-- A word read from four bytes is their big-endian integer. -/
-theorem wordBE_toNat (b : ByteArray) (i : ℕ) :
+theorem Internal.wordBE_toNat (b : ByteArray) (i : ℕ) :
     (wordBE b i).toNat = b[i]!.toNat * 2 ^ 24 + b[i + 1]!.toNat * 2 ^ 16 +
       b[i + 2]!.toNat * 2 ^ 8 + b[i + 3]!.toNat := by
   simp only [wordBE, getElem!_eq_getD]
@@ -430,7 +432,7 @@ private theorem ofFn_succ_bytes (b : ByteArray) (m off : ℕ) :
     rw [show off + 4 + (i - 4) = off + i by omega]
 
 /-- The limbs read from `off` hold the integer of the `4 m` bytes from `off`, big-endian. -/
-theorem num_limbBE (b : ByteArray) (m off : ℕ) :
+theorem Internal.num_limbBE (b : ByteArray) (m off : ℕ) :
     num m (limbBE m b off) 0
       = ByteOrder.ofBE (List.ofFn (n := 4 * m) fun k => b[off + k.val]!) := by
   induction m generalizing off with

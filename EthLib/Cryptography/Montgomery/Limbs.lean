@@ -14,6 +14,8 @@ Eight limbs hold 256 bits, and twelve hold 384 bits.
 
 namespace EthLib.Cryptography.Montgomery
 
+open Internal
+
 section Generic
 
 variable {n : Nat} [Words n]
