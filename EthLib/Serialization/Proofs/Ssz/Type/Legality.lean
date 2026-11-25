@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Ssz.Type.Valid
+public import EthLib.Base.Proofs.List
 
 /-! What a legal composite type declares, read off the checks that validity makes. -/
 
@@ -11,12 +12,12 @@ namespace EthLib.Serialization.Ssz
 /-- A legal container declares fields, each under one name of its own, each legal. -/
 theorem wellFormed_container_iff (names : List String) (fields : List Desc) :
     (Desc.container names fields).wellFormed = .ok () ↔
-      fields ≠ [] ∧ names.length = fields.length ∧ firstDuplicate names = none ∧
+      fields ≠ [] ∧ names.length = fields.length ∧ names.Nodup ∧
         Desc.allWellFormed fields = .ok () := by
   -- Each check either refuses or passes, so every combination of outcomes is settled by evaluation.
   simp only [Desc.wellFormed]
   by_cases e : fields.isEmpty = true <;> by_cases l : (names.length != fields.length) = true <;>
-    cases d : firstDuplicate names <;> cases a : Desc.allWellFormed fields <;>
+    by_cases d : names.Nodup <;> cases a : Desc.allWellFormed fields <;>
     simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
 
 /-- A legal progressive container declares a layout ending on a field.
@@ -28,7 +29,7 @@ theorem wellFormed_progressiveContainer_iff (active : List Bool) (names : List S
     (Desc.progressiveContainer active names fields).wellFormed = .ok () ↔
       active ≠ [] ∧ active.getLast? = some true ∧ active.length ≤ maxActiveFields ∧ fields ≠ [] ∧
         active.countP (· == true) = fields.length ∧ names.length = fields.length ∧
-        firstDuplicate names = none ∧ Desc.allWellFormed fields = .ok () := by
+        names.Nodup ∧ Desc.allWellFormed fields = .ok () := by
   -- The checks run in order, so each one is settled before the next is read.
   simp only [Desc.wellFormed]
   by_cases e : active.isEmpty = true
@@ -57,14 +58,14 @@ theorem wellFormed_progressiveContainer_iff (active : List Bool) (names : List S
     | some x => exact ⟨x, rfl⟩
   have hx' : x = true := by simpa [hx] using g
   subst hx'
-  cases d : firstDuplicate names
+  by_cases d : names.Nodup
   · simp_all
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
 
 /-- A legal union declares options, each under a selector of its own in range, all legal, every two compatible. -/
 theorem wellFormed_compatibleUnion_iff (selectors : List Nat) (options : List Desc) :
     (Desc.compatibleUnion selectors options).wellFormed = .ok () ↔
-      selectors ≠ [] ∧ options ≠ [] ∧ selectors.length = options.length ∧ firstDuplicate selectors = none ∧
+      selectors ≠ [] ∧ options ≠ [] ∧ selectors.length = options.length ∧ selectors.Nodup ∧
         selectors.find? (fun s => s < minSelector || s > maxSelector) = none ∧
         Desc.allWellFormed options = .ok () ∧ Desc.optionsCompatible selectors options = .ok () := by
   -- The checks run in order, so each one is settled before the next is read.
@@ -76,20 +77,16 @@ theorem wellFormed_compatibleUnion_iff (selectors : List Nat) (options : List De
   by_cases l : (selectors.length != options.length) = true
   · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
   simp only [l, Bool.false_eq_true, ite_false]
-  cases d : firstDuplicate selectors
-  · cases f : selectors.find? (fun s => s < minSelector || s > maxSelector)
+  cases d : Base.firstRepeated selectors
+  · have d := (Base.firstRepeated_eq_none_iff selectors).mp d
+    cases f : selectors.find? (fun s => s < minSelector || s > maxSelector)
     · simp_all [Bind.bind, Except.bind]
       cases Desc.allWellFormed options <;> simp
     · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-  · simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
-
-/-- A list with no repeated entry reports no duplicate. -/
-theorem firstDuplicate_of_nodup {α : Type} [BEq α] [LawfulBEq α] :
-    ∀ items : List α, items.Nodup → firstDuplicate items = none
-  | [], _ => rfl
-  | item :: rest, distinct => by
-    -- The head is absent from the rest, and the rest has no duplicate either.
-    rw [List.nodup_cons] at distinct
-    simp [firstDuplicate, distinct.1, firstDuplicate_of_nodup rest distinct.2]
+  · -- A repeated selector is found exactly when the selectors are not distinct.
+    have repeated : ¬ selectors.Nodup := fun distinct => by
+      rw [(Base.firstRepeated_eq_none_iff selectors).mpr distinct] at d
+      contradiction
+    simp_all [throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
 
 end EthLib.Serialization.Ssz

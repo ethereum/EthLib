@@ -326,7 +326,7 @@ The names must be distinct, at least one, and one for each field.
 -/
 theorem LawfulSszType.container {σ β : Type} [SszFields β] [LawfulSszFields β]
     {names : List String} {fields : σ → β} {build : β → σ}
-    (named : names.length = (descs β).length ∧ names ≠ [] ∧ firstDuplicate names = none)
+    (named : names.length = (descs β).length ∧ names ≠ [] ∧ names.Nodup)
     (left : ∀ s, build (fields s) = s) (right : ∀ b, fields (build b) = b) :
     @LawfulSszType σ (SszType.container names fields build) := by
   letI := SszType.container names fields build
@@ -381,7 +381,7 @@ theorem LawfulSszType.progressiveContainer {σ β : Type} [SszFields β] [Lawful
     {active : List Bool} {names : List String} {fields : σ → β} {build : β → σ}
     (layout : active.getLast? = some true ∧ active.length ≤ maxActiveFields ∧
       active.count true = (descs β).length)
-    (named : names.length = (descs β).length ∧ names ≠ [] ∧ firstDuplicate names = none)
+    (named : names.length = (descs β).length ∧ names ≠ [] ∧ names.Nodup)
     (left : ∀ s, build (fields s) = s) (right : ∀ b, fields (build b) = b) :
     @LawfulSszType σ (SszType.progressiveContainer active names fields build) := by
   letI := SszType.progressiveContainer active names fields build

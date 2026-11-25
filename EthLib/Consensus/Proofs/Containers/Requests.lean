@@ -55,7 +55,7 @@ instance : LawfulSszType (ExecutionRequests preset fork) :=
       by_cases gloas : Fork.glamsterdam ≤ fork <;>
         simp [names, sinceNames, SszFields.descs, gloas],
      by simp [names],
-     firstDuplicate_of_nodup _ names_nodup⟩
+     names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 /-- The types of the request lists, in their order: three, and from Gloas five. -/
@@ -222,7 +222,7 @@ instance [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] :
       by_cases deneb : Fork.dencun ≤ fork <;> by_cases electra : Fork.pectra ≤ fork <;>
         simp [names, sinceNames, SszFields.descs, deneb, electra],
      by simp [names],
-     firstDuplicate_of_nodup _ names_nodup⟩
+     names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 end NewPayloadRequest

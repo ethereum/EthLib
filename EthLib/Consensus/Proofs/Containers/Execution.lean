@@ -127,7 +127,7 @@ instance [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] :
         by_cases gloas : Fork.glamsterdam ≤ fork <;>
         simp [names, sinceNames, SszFields.descs, capella, deneb, gloas],
      by simp [names],
-     firstDuplicate_of_nodup _ names_nodup⟩
+     names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 /--
@@ -185,7 +185,7 @@ instance [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] :
       by_cases capella : Fork.shapella ≤ fork <;> by_cases deneb : Fork.dencun ≤ fork <;>
         simp [names, sinceNames, SszFields.descs, capella, deneb],
      by simp [names],
-     firstDuplicate_of_nodup _ names_nodup⟩
+     names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 end ExecutionPayloadHeader

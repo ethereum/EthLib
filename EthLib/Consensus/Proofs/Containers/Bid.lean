@@ -56,7 +56,7 @@ instance [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] :
     ⟨by by_cases heze : Fork.hegota ≤ fork <;>
        simp [ExecutionPayloadBid.names, sinceNames, SszFields.descs, heze],
      by simp [ExecutionPayloadBid.names],
-     firstDuplicate_of_nodup _ ExecutionPayloadBid.names_nodup⟩
+     ExecutionPayloadBid.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 instance [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat] :

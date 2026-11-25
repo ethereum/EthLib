@@ -3,6 +3,7 @@ module
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 public import EthLib.Serialization.Ssz.Type.Valid
+public import EthLib.Base.Proofs.List
 
 /-! Every value a real type encodes is a value that type admits. -/
 
@@ -100,7 +101,7 @@ theorem wellFormed_union {selectors : List Nat} {options : List Desc}
 /-- A struct names every field exactly once. -/
 theorem wellFormed_container_names {names : List String} {fields : List Desc}
     (sound : (Desc.container names fields).wellFormed = .ok ()) :
-    names.length = fields.length ∧ firstDuplicate names = none := by
+    names.length = fields.length ∧ names.Nodup := by
   rw [Desc.wellFormed] at sound
   simp only [Bind.bind, Except.bind, throw_error] at sound
   repeat' split at sound
@@ -110,7 +111,7 @@ theorem wellFormed_container_names {names : List String} {fields : List Desc}
 theorem wellFormed_progressiveContainer_names {active : List Bool} {names : List String}
     {fields : List Desc}
     (sound : (Desc.progressiveContainer active names fields).wellFormed = .ok ()) :
-    names.length = fields.length ∧ firstDuplicate names = none := by
+    names.length = fields.length ∧ names.Nodup := by
   rw [Desc.wellFormed] at sound
   simp only [Bind.bind, Except.bind, throw_error] at sound
   repeat' split at sound

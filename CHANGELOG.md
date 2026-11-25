@@ -1069,6 +1069,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the SSZ type check finds a repeated field name or union selector with the one-pass scan `Base.firstRepeated` ([#4518](https://github.com/ethereum/EthLib/issues/4518)).
+  - `Ssz.firstDuplicate` (`Serialization/Ssz/Type/Valid.lean`) is removed, with `firstDuplicate_of_nodup` (`Serialization/Proofs/Ssz/Type/Legality.lean`) and `nodup_of_firstDuplicate` (`Serialization/Proofs/Ssz/Codec/JsonRoundTrip.lean`).
+    `Desc.wellFormed` unfolds to the scan, and refuses the same declarations with the same errors.
+  - The theorems below state `names.Nodup`, or `selectors.Nodup` for the union, where they stated `firstDuplicate names = none` or `firstDuplicate selectors = none`.
+    They are `wellFormed_container_iff`, `wellFormed_progressiveContainer_iff` and `wellFormed_compatibleUnion_iff` (`Serialization/Proofs/Ssz/Type/Legality.lean`), `wellFormed_container_names` and `wellFormed_progressiveContainer_names` (`Serialization/Proofs/Ssz/Codec/Admits.lean`).
+    The hypothesis `named` of `LawfulSszType.container`, `LawfulSszType.progressiveContainer` and `LawfulSszType.forkContainer` changes the same way.
+  - `Base.isSome_firstRepeated` (`Base/Proofs/List.lean`) is new: the scan finds an element exactly when the list has a repeat, as a test.
+  Migration: pass a proof of `names.Nodup` where a proof of `firstDuplicate names = none` was passed, for instance `by decide` on a list of literals.
 - In Lean, `Cryptography.Kzg.KZGProof` is now a structure over its 48 bytes, as `KZGCommitment` is ([#4605](https://github.com/ethereum/EthLib/issues/4605)).
   `EthLib.Cryptography.Kzg.Types` defines it, so Lean rejects a commitment, a public key or other 48 bytes where a proof is expected.
   `bytesToKzgProof`, `computeKzgProof`, `computeBlobKzgProof`, `computeCellsAndKzgProofs` and `recoverCellsAndKzgProofs` return the structure.

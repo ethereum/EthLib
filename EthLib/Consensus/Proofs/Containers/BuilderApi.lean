@@ -73,7 +73,7 @@ instance : LawfulSszType (BuilderBid preset fork) :=
       by_cases deneb : Fork.dencun ≤ fork <;> by_cases electra : Fork.pectra ≤ fork <;>
         simp [BuilderBid.names, sinceNames, SszFields.descs, deneb, electra],
      by simp [BuilderBid.names],
-     firstDuplicate_of_nodup _ BuilderBid.names_nodup⟩
+     BuilderBid.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 instance : LawfulSszType (SignedBuilderBid preset fork) :=
@@ -90,7 +90,7 @@ instance : LawfulSszType (BlindedBeaconBlockBody preset fork) :=
           SszFields.descs, altair, bellatrix, capella, deneb, electra, gloas, heze,
           not_lt_of_switch, lt_of_not_switch],
      by simp [BlindedBeaconBlockBody.names],
-     firstDuplicate_of_nodup _ BlindedBeaconBlockBody.names_nodup⟩
+     BlindedBeaconBlockBody.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 instance : LawfulSszType (BlindedBeaconBlock preset fork) :=
@@ -109,11 +109,11 @@ theorem ExecutionPayloadAndBlobsBundle.names_nodup :
 
 instance : LawfulSszType (BuilderBlobsBundle preset fork) :=
   .container ⟨rfl, by simp [BuilderBlobsBundle.names],
-    firstDuplicate_of_nodup _ BuilderBlobsBundle.names_nodup⟩ (fun _ => rfl) (fun _ => rfl)
+    BuilderBlobsBundle.names_nodup⟩ (fun _ => rfl) (fun _ => rfl)
 
 instance : LawfulSszType (ExecutionPayloadAndBlobsBundle preset fork) :=
   .container ⟨rfl, by simp [ExecutionPayloadAndBlobsBundle.names],
-    firstDuplicate_of_nodup _ ExecutionPayloadAndBlobsBundle.names_nodup⟩
+    ExecutionPayloadAndBlobsBundle.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]

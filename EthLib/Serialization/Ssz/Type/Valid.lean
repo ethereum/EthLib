@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Ssz.Type.Desc
 public import EthLib.Serialization.Ssz.Error
+public import EthLib.Base.List
 
 /-!
 Declaration validity and compatibility of Merkle layouts.
@@ -202,13 +203,6 @@ def isCompatible (left right : Desc) : Bool :=
   -- The walk descends one level of each type at a time, so their nesting bounds it.
   compatibleAt (left.nesting + right.nesting) left right
 
-/-- The first entry that also appears later in a declaration. -/
-def firstDuplicate {α : Type} [BEq α] : List α → Option α
-  | [] => none
-  | item :: rest =>
-    -- A repeated key would give one name or selector two meanings.
-    if rest.contains item then some item else firstDuplicate rest
-
 mutual
 
 /--
@@ -248,7 +242,7 @@ def Desc.wellFormed : Desc → Except Err Unit
     -- EthLib's own: names are data here, so every field needs exactly one name.
     if names.length != fields.length then throw (.layoutFieldCount names.length fields.length)
     -- EthLib's own: unique names make field lookup unambiguous.
-    if (firstDuplicate names).isSome then throw .badDeclaration
+    if (Base.firstRepeated names).isSome then throw .badDeclaration
     -- A container is legal only when all its field types are.
     Desc.allWellFormed fields
   | .progressiveContainer active names fields => do
@@ -269,7 +263,7 @@ def Desc.wellFormed : Desc → Except Err Unit
     -- EthLib's own: names are data here, so every field needs exactly one name.
     if names.length != fields.length then throw (.layoutFieldCount names.length fields.length)
     -- EthLib's own: unique names make field lookup unambiguous.
-    if (firstDuplicate names).isSome then throw .badDeclaration
+    if (Base.firstRepeated names).isSome then throw .badDeclaration
     -- A progressive container is legal only when all its field types are.
     Desc.allWellFormed fields
   | .compatibleUnion selectors options => do
@@ -280,7 +274,7 @@ def Desc.wellFormed : Desc → Except Err Unit
     -- So EthLib checks what a map gives for free: one option per selector, and no repeated one.
     if selectors.length != options.length then throw .badDeclaration
     -- Repeated selectors would let one tag identify different payload types.
-    if let some selector := firstDuplicate selectors then
+    if let some selector := Base.firstRepeated selectors then
       throw (.unionSelectorRepeated selector)
     -- EIP-8016: a selector outside 1 to 127 is illegal.
     match selectors.find? (fun selector => selector < minSelector || selector > maxSelector) with

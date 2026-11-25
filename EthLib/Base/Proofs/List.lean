@@ -378,6 +378,11 @@ theorem firstRepeated_eq_none_iff {α : Type} [Ord α] [Std.TransOrd α] [Std.La
     [DecidableEq α] (l : List α) : (firstRepeated l).isNone = decide l.Nodup := by
   rw [Bool.eq_iff_iff, Option.isNone_iff_eq_none, decide_eq_true_iff, firstRepeated_eq_none_iff]
 
+/-- The scan finds an element exactly when some element occurs twice, as a test of the list. -/
+@[simp] theorem isSome_firstRepeated {α : Type} [Ord α] [Std.TransOrd α] [Std.LawfulEqOrd α]
+    [DecidableEq α] (l : List α) : (firstRepeated l).isSome = !decide l.Nodup := by
+  rw [← Option.not_isNone, isNone_firstRepeated]
+
 /-- The element that occurs again occurs at least twice. -/
 theorem two_le_count_of_firstRepeated {α : Type} [Ord α] [Std.TransOrd α] [Std.LawfulEqOrd α]
     [BEq α] [LawfulBEq α] {l : List α} {x : α} (h : firstRepeated l = some x) : 2 ≤ l.count x := by

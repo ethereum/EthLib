@@ -301,8 +301,7 @@ theorem LawfulSszType.forkContainer {σ β : Type} [SszFields β] [LawfulSszFiel
     {active : List Bool} {names : List String} {fields : σ → β} {build : β → σ}
     (layout : switch ≤ fork → active.getLast? = some true ∧
       active.length ≤ maxActiveFields ∧ active.count true = (SszFields.descs β).length)
-    (named : names.length = (SszFields.descs β).length ∧ names ≠ [] ∧
-      firstDuplicate names = none)
+    (named : names.length = (SszFields.descs β).length ∧ names ≠ [] ∧ names.Nodup)
     (left : ∀ s, build (fields s) = s) (right : ∀ b, fields (build b) = b) :
     @LawfulSszType σ (SszType.forkContainer switch fork active names fields build) := by
   by_cases from_ : switch ≤ fork
