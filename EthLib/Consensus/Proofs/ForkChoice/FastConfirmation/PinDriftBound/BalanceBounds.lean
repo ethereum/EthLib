@@ -1025,7 +1025,7 @@ theorem cap_le_cap_of_run (caps : CapOrder preset) {z y : ForkedBeaconState pres
   cases found : z.state.validators.data[i]? with
   | none => simp
   | some w =>
-    obtain ⟨w', found', mono⟩ := post.validatorCap_mono caps.activation caps.compounding i
+    obtain ⟨w', found', mono⟩ := post.validatorCap_mono caps i
       w found
     simp only [found', Option.map_some, Option.getD_some]
     exact UInt64.le_iff_toNat_le.mp mono
@@ -2488,8 +2488,8 @@ private theorem exitQ_potential (h : Setting config checks g split fin pulled an
     obtain ⟨shared⟩ := h.toFin
     intro w found
     by_contra slashed
-    exact run_slashed_exit_assigned (shared.append pre) h.genesis h.caps.activation
-      h.caps.compounding (Internal.Setting.delay h) v.toNat w found (by simpa using slashed)
+    exact run_slashed_exit_assigned (shared.append pre) h.genesis h.caps (Internal.Setting.delay h)
+        v.toNat w found (by simpa using slashed)
         (far w found)
   have retained : ∀ {m n : ForkedBeaconState preset} (b : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (a : Run config checks n ⟨fork, se⟩),
@@ -3295,7 +3295,7 @@ private theorem floorC_stay (h : Setting config checks g split fin pulled anc co
         (r2 : Run config checks p ⟨fork, counted⟩), r1.append r2 = rp.append rest := by
       obtain ⟨r1, r2, whole⟩ := Internal.balancePath_endpoint rp rest (Nat.le_refl _) member
       exact ⟨r1, r2, whole⟩
-    obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps.activation h.caps.compounding
+    obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps
       i.toNat val initial
     have := UInt64.le_iff_toNat_le.mp mono
     simp only [PinTerms.capAt, found, Option.map_some, Option.getD_some]

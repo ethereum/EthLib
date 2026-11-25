@@ -493,7 +493,7 @@ private theorem capAt_le_of_exit {x z : ForkedBeaconState preset} (r : Run confi
     (i : ℕ) {w : Validator}
     (found : x.state.validators.data[i]? = some w) (assigned : w.exitEpoch ≠ FAR_FUTURE_EPOCH) :
     PinTerms.capAt z i ≤ PinTerms.capAt x i := by
-  obtain ⟨wz, foundZ, kept⟩ := r.compounding_of_exit_assigned caps.activation caps.compounding
+  obtain ⟨wz, foundZ, kept⟩ := r.compounding_of_exit_assigned caps
     i w found assigned
   rw [Internal.capAt_of_found electraZ foundZ, Internal.capAt_of_found electraX found]
   have order := UInt64.le_iff_toNat_le.mp caps.compounding
@@ -1981,7 +1981,7 @@ private theorem whist_created (h : Setting config checks g split fin pulled anc 
     Array.getElem?_eq_some_iff.mpr ⟨insideC, rfl⟩
   have slashedW : counted.validators.data[i].slashed = true := by simpa [foundC] using flagC
   have exitAssigned := run_slashed_exit_assigned ((toFin.append fromFin).append tailC) h.genesis
-    h.caps.activation h.caps.compounding (Internal.Setting.delay h) i _ foundC slashedW
+    h.caps (Internal.Setting.delay h) i _ foundC slashedW
   have unset : ∀ v, (⟨fork, split⟩ : ForkedBeaconState preset).state.validators.data[i]? =
       some v → v.exitEpoch = FAR_FUTURE_EPOCH := fun v found => by
     rw [Array.getElem?_eq_none (Nat.le_of_not_lt outside)] at found

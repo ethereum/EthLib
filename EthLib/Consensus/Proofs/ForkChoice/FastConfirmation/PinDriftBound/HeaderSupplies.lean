@@ -372,8 +372,8 @@ theorem activeNewlySlashed_unwithdrawn (h : Setting config checks g split fin pu
   obtain ⟨tailR⟩ := h.toPulled
   obtain ⟨tailC⟩ := h.toCounted
   have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
-  obtain ⟨uAssigned, -⟩ := tailC.newly_slashed_withdrawableEpoch h.caps.activation
-    h.caps.compounding (Internal.Setting.delay h) i s u foundS foundC cleanS slashedC
+  obtain ⟨uAssigned, -⟩ := tailC.newly_slashed_withdrawableEpoch h.caps (Internal.Setting.delay h) i
+      s u foundS foundC cleanS slashedC
   -- If the split has no exit for the key, C's slashing assigns one.
   --
   -- A run never charges an exit twice.
@@ -394,7 +394,7 @@ theorem activeNewlySlashed_unwithdrawn (h : Setting config checks g split fin pu
         (Array.mem_of_getElem? foundS))
     have exited : s.exitEpoch.toNat ≤ (getCurrentEpoch split).toNat := by omega
     have withdrawn : s.withdrawableEpoch.toNat ≤ (getCurrentEpoch split).toNat := by omega
-    have clean := (Run.retired_validator tailC h.caps.activation h.caps.compounding i s u
+    have clean := (Run.retired_validator tailC h.caps i s u
       foundS foundC (UInt64.le_iff_toNat_le.mpr exited) cleanS
       (UInt64.le_iff_toNat_le.mpr withdrawn)).1
     simp [slashedC] at clean
@@ -647,7 +647,7 @@ theorem created_first_state (h : Setting config checks g split fin pulled anc co
       have := getCurrentEpoch_succ_lt_farFuture h.twoSlots ns
       omega)
   obtain ⟨unassigned, -⟩ := EthLib.Consensus.Internal.run_eligible_balance
-    (toFin.append (pre0.snoc step)) h.genesis h.caps.activation h.caps.compounding h.aligned
+    (toFin.append (pre0.snoc step)) h.genesis h.caps h.aligned
     h.early finite
   obtain ⟨⟨b, foundB, le⟩, -, clean⟩ := unassigned v.toNat vn foundN far
   -- the key is absent at each state of the path before the first state
@@ -1205,8 +1205,8 @@ private theorem cut_whistle (h : Setting config checks g split fin pulled anc co
     have endS : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch split).toNat :=
       UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps rest.chainSteps)
     have epochB : (getCurrentEpoch b).toNat = (getCurrentEpoch split).toNat := by rw [sameEpoch]
-    have withdrawable := ((rest.append toPulled).newly_slashed_withdrawableEpoch h.caps.activation
-      h.caps.compounding (Internal.Setting.delay h) j u wP foundA foundP clean markedP).2
+    have withdrawable := ((rest.append toPulled).newly_slashed_withdrawableEpoch h.caps
+        (Internal.Setting.delay h) j u wP foundA foundP clean markedP).2
     have p : P j := by
       refine ⟨?_, by simp [foundS, markedS], ?_⟩
       · cases foundB : b.validators.data[j]? with
@@ -1537,13 +1537,13 @@ theorem budget_branchR (h : Setting config checks g split fin pulled anc counted
         obtain ⟨_, recorded, -⟩ := step.slashed_activated
           (by rw [mFork]; exact Nat.le_trans (by decide) h.fulu)
           (Nat.lt_of_le_of_lt (fork_le_of_chainSteps after.chainSteps) h.early)
-          h.caps.activation h.caps.compounding (Internal.Setting.delay h) finite v.toNat
+          h.caps (Internal.Setting.delay h) finite v.toNat
           (fun u read => by simp [found] at read) (by simp [found, foundN, slashedN])
         simp [found] at recorded
     obtain ⟨wP, foundP, slashedP⟩ :=
       (after.append toPulled).slashedPersistence v.toNat w foundN slashedN
     have withdrawable := ((((Run.nil.snoc step).append after).append toPulled)
-      |>.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
+      |>.newly_slashed_withdrawableEpoch h.caps
         (Internal.Setting.delay h)
         v.toNat u wP foundM foundP unslashedM slashedP).2
     have cut : v ∈ Internal.cutKeys config pulled anc fin split := by

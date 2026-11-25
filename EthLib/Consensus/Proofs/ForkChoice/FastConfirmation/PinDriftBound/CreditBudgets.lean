@@ -175,7 +175,7 @@ private theorem pending_key_claim (h : Setting config checks g split fin pulled 
     intro fork
     exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
   have finPartials : Internal.AssignedPartials fin :=
-    (Internal.CapStep.run toFin h.caps.activation h.caps.compounding).2.1 h.early genesisPartials
+    (Internal.CapStep.run toFin h.caps).2.1 h.early genesisPartials
   have noEntry : ((((fin.pendingPartialWithdrawals electra).data.toList.filter
       fun entry => decide (entry.validatorIndex = v)).filter
         (fun entry => entry.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).map
@@ -2293,7 +2293,7 @@ theorem cap_floor_sum (h : Setting config checks g split fin pulled anc counted 
       simp only [List.mem_map]
       rintro _ ⟨v, -, rfl⟩
       exact UInt64.le_iff_toNat_le.mp
-        (Internal.minimum_cap h.caps.activation h.caps.compounding v))
+        (Internal.minimum_cap h.caps v))
   simpa [smul_eq_mul, Nat.mul_comm] using this
 
 /-- A sum over a subset can be extended by zero to use the ambient set's pointwise bounds. -/
@@ -2669,7 +2669,7 @@ private theorem withdrawable_of_clean_run (caps : CapOrder preset)
       u.withdrawableEpoch.toNat := by
   obtain ⟨uC, foundC⟩ : ∃ uC, c.validators.data[i]? = some uC :=
     ⟨_, Array.getElem?_eq_getElem inside⟩
-  have lower := (run.newly_slashed_withdrawableEpoch caps.activation caps.compounding
+  have lower := (run.newly_slashed_withdrawableEpoch caps
     delay i uC u foundC foundU (clean uC foundC) flag).2
   simp only at lower
   exact lower
@@ -3249,9 +3249,9 @@ theorem slash_floor_from_slashed
     ⟨_, Array.getElem?_eq_getElem inFin⟩
   obtain ⟨val, foundZ, slashedZ⟩ := r1.slashedPersistence v.toNat uF foundF (slashedFin uF foundF)
   have assigned : val.exitEpoch ≠ FAR_FUTURE_EPOCH :=
-    run_slashed_exit_assigned (shared.append r1) h.genesis h.caps.activation
-      h.caps.compounding (Internal.Setting.delay h) v.toNat val foundZ slashedZ
-  have kept := r2.slashed_withdrawable_eq h.caps.activation h.caps.compounding
+    run_slashed_exit_assigned (shared.append r1) h.genesis h.caps (Internal.Setting.delay h) v.toNat
+        val foundZ slashedZ
+  have kept := r2.slashed_withdrawable_eq h.caps
     v.toNat val wP foundZ foundP slashedZ assigned
   have capEq : PinTerms.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat =
       (withdrawalMaxEffectiveBalance preset fork val).toNat := by
@@ -3267,7 +3267,7 @@ theorem slash_floor_from_slashed
     (fun before step after _ _ _ => .inr fun u foundU => by
       have low := Nat.lt_of_le_of_lt
         (fork_le_of_chainSteps ((Run.nil.snoc step).append after).chainSteps) h.early
-      have keptU := before.slashed_withdrawable_eq h.caps.activation h.caps.compounding
+      have keptU := before.slashed_withdrawable_eq h.caps
         v.toNat val u foundZ foundU slashedZ assigned
       have lateW := late
       rw [kept.2] at lateW

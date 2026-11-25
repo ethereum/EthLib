@@ -1658,7 +1658,7 @@ theorem effectiveRise_le
     split
     · exact Nat.le_refl _
     · exact UInt64.le_iff_toNat_le.mp caps.compounding
-  have cappedR := history.effectiveBalance_capped genesis caps.activation caps.compounding
+  have cappedR := history.effectiveBalance_capped genesis caps
   -- The crossing of each validator.
   obtain ⟨cross, crossEq⟩ : ∃ f : ℕ → ℕ, ∀ i, f i = (if effective i < cap i then
       (if effective i + preset.upwardBand < actual i + slashBack i + syncP i + credit i then

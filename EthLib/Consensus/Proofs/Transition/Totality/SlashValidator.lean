@@ -146,8 +146,7 @@ theorem slashValidator_total_of_room {config : Config} {state : BeaconState pres
     · have read : marked.balances.data[j]'(by simpa [lowered, BeaconState.putBalance] using hj) =
           state.balances.data[j]'(loweredBalances ▸ hj) := by
         simp only [markedBalances]
-      rw [read]
-      exact Nat.le_refl _
+      exact Nat.le_of_eq (congrArg UInt64.toNat read)
   have proposerBound : proposer.toNat < state.balances.data.size := by
     rw [← loweredBalances]
     exact proposerInside

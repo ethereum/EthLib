@@ -56,10 +56,8 @@ structure RunConditions (preset : Preset) (config : Config) (start : RunStart)
   members : preset.SYNC_COMMITTEE_SIZE ≠ 0
   /-- The largest effective balances are whole numbers of increments. -/
   aligned : MaxEffectiveBalancesAligned preset
-  /-- The cap before Electra is at most the least balance to activate. -/
-  activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE
-  /-- The least balance to activate is at most the cap of a compounding validator. -/
-  compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA
+  /-- The effective-balance caps are in order. -/
+  caps : CapOrder preset
   /-- The least churn is at least one increment. -/
   minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
   /-- The largest activation and exit churn is at least one increment. -/
@@ -447,7 +445,7 @@ theorem processEpoch_exists_ok_of_run [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR
         (by omega) conditions.minimum conditions.maximum exitCarried depositCarried
         (shaped.inside electra) slashedFits slashedProduct halfway
         (by have := holds.summaries capella; omega) (fun _ => conditions.slots)
-        conditions.compounding (loadLe.trans load.2.2)
+        conditions.caps.compounding (loadLe.trans load.2.2)
         (Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ loadLe) loadRoom.1)
         (fun _ => ⟨Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ loadLe) loadRoom.2.1,
           Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ loadLe))
@@ -657,7 +655,7 @@ theorem UpgradeReady.of_run {start : RunStart} {budget epochs lastEpoch elapsed 
   | pectra =>
     exact ⟨by omega, conditions.lookahead, by omega,
       fun offset within => ⟨sizeLe.trans load.2.2, draws offset within
-        (shaped.le_drawCap_of_electra (by decide) conditions.compounding)
+        (shaped.le_drawCap_of_electra (by decide) conditions.caps.compounding)
         (sizeLe.trans load.2.2)⟩⟩
   | fusaka =>
     have pending : pendingDepositSum pre =
@@ -665,7 +663,7 @@ theorem UpgradeReady.of_run {start : RunStart} {budget epochs lastEpoch elapsed 
       simp only [pendingDepositSum, (by decide : Fork.pectra ≤ .fusaka), ↓reduceDIte]
     refine ⟨by omega, conditions.lookahead, by omega, conditions.positive.slotsPerEpoch,
       fun offset within => ⟨draws offset within
-        (shaped.le_drawCap_of_electra (by decide) conditions.compounding)
+        (shaped.le_drawCap_of_electra (by decide) conditions.caps.compounding)
         (sizeLe.trans load.2.2) (Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ sizeLe) loadRoom.2.1),
         sizeLe.trans load.2.2,
         Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ sizeLe))
@@ -712,8 +710,7 @@ theorem runConditions_mainnet {startEpoch : Nat} (early : startEpoch ≤ 2 ^ 40)
     apart := by decide
     members := syncCommitteeSize_ne_zero_presets.1
     aligned := maxEffectiveBalancesAligned_mainnet
-    activation := by decide
-    compounding := by decide
+    caps := CapOrder.mainnet
     minimum := by decide
     maximum := by decide
     slots := by decide

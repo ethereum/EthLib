@@ -380,8 +380,7 @@ private theorem active_stake_le_window_of_prefix {g x a y : ForkedBeaconState pr
   -- With a shorter delay every registry entry counts with the largest effective balance.
   · have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       (shared.append pre).chainSteps).2
-    have capped := (shared.append pre).effectiveBalance_capped genesis caps.activation
-      caps.compounding
+    have capped := (shared.append pre).effectiveBalance_capped genesis caps
     have inside (i : ValidatorIndex)
         (member : i ∈ getActiveValidatorIndices a.state (getCurrentEpoch a.state)) :
         i.toNat < a.state.validators.data.size := by
@@ -4047,8 +4046,7 @@ private theorem intervalGain_active_path {g x y : ForkedBeaconState preset}
       (shared.append tail).chainSteps).2
   have gloas : y.fork < .glamsterdam := Nat.lt_trans early (by decide)
   have earlyX := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) gloas
-  have capped := (shared.append tail).effectiveBalance_capped genesis caps.activation
-    caps.compounding
+  have capped := (shared.append tail).effectiveBalance_capped genesis caps
   have allKeys : gaining x y ≤ ∑ k ∈ activeKeys x.state,
       (effectiveWeight y.state k - effectiveWeight x.state k) := by
     apply Finset.sum_le_sum_of_subset

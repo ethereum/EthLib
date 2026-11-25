@@ -3757,8 +3757,7 @@ theorem _root_.EthLib.Consensus.Run.unassigned_assignment_resources
     (shared : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
     (head : Run config checks x u)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset)
     (electra : .pectra ≤ x.fork) (early : u.fork < .glamsterdam) :
     let candidate := fun i : Nat =>
@@ -3784,8 +3783,8 @@ theorem _root_.EthLib.Consensus.Run.unassigned_assignment_resources
       (x.state.depositBalanceToConsume electra).toNat +
       config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat *
         ((getCurrentEpoch u.state).toNat - (getCurrentEpoch x.state).toNat + 1) := by
-  apply shared.unassigned_assignment_resources_of_pending_law genesis head activation
-    compounding aligned electra early
+  apply shared.unassigned_assignment_resources_of_pending_law genesis head caps aligned electra
+    early
   · intro f a b e before ok matched
     simpa only [actualBalanceAt] using funding_pending_capacity e before ok matched
   · intro f a b engine block before ok

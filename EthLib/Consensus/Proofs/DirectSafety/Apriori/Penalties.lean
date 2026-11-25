@@ -1357,7 +1357,7 @@ private theorem retained_slashed_bound {x s : ForkedBeaconState preset} {high : 
   | none => simp [old] at cohort
   | some u =>
     simp only [old, Option.any_some, Bool.and_eq_true, Bool.not_eq_true'] at cohort
-    have lower := pre.newly_slashed_withdrawableEpoch caps.activation caps.compounding
+    have lower := pre.newly_slashed_withdrawableEpoch caps
       (by omega) i u v old found cohort.2 slashed
     rw [UInt64.lt_iff_toNat_lt]
     unfold driftHorizon at short
@@ -1550,7 +1550,7 @@ private theorem eligible_le_retained_anchor {g x r z y : ForkedBeaconState prese
         apply UInt64.not_le.mp
         intro withdrawn
         have exited := UInt64.le_trans (exits _ (Array.mem_of_getElem? foundR)) withdrawn
-        have stays := inner.retired_validator caps.activation caps.compounding
+        have stays := inner.retired_validator caps
           i v w' foundR foundZ exited (Bool.eq_false_iff.mpr slashed) withdrawn
         rw [stays.2.2] at notWithdrawable
         exact absurd (UInt64.lt_of_lt_of_le notWithdrawable withdrawn) (UInt64.lt_irrefl _)
@@ -2301,7 +2301,7 @@ private theorem floorProducer_pre {g x y : ForkedBeaconState preset}
     simp only
         [minSlashingPenaltyQuotient, positive, ↓reduceIte, EthLib.Consensus.parameters, mBefore]
     split_ifs <;> omega
-  · have cap := shared.effectiveBalance_capped genesis caps.activation caps.compounding v
+  · have cap := shared.effectiveBalance_capped genesis caps v
       (Array.mem_of_getElem? initial)
     have notAfter : ¬ .pectra ≤ x.fork := Nat.not_le_of_gt before
     simp only [withdrawalMaxEffectiveBalance, notAfter, ↓reduceIte] at cap
@@ -2686,8 +2686,7 @@ private theorem pre_validator_cap (shared : Run config checks g x)
     (early : y.fork < .pectra) (v : Validator) (member : v ∈ y.state.validators.data) :
     v.effectiveBalance.toNat ≤ preset.MAX_EFFECTIVE_BALANCE.toNat := by
   have caps := supported.2.2.1
-  have bound := (shared.append tail).effectiveBalance_capped supported.1 caps.activation
-    caps.compounding v member
+  have bound := (shared.append tail).effectiveBalance_capped supported.1 caps v member
   have notElectra : ¬ Fork.pectra ≤ y.fork := Nat.not_le_of_lt early
   simpa [withdrawalMaxEffectiveBalance, getMaxEffectiveBalance, notElectra] using
     UInt64.le_iff_toNat_le.mp bound

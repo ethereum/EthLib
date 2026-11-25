@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
+public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 import EthLib.Base.Proofs.Nat
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.ChainRoots
@@ -251,17 +252,6 @@ def pathCredits (i : Nat) : List (ForkedBeaconState preset) → Nat
 def pathDebits (i : Nat) : List (ForkedBeaconState preset) → Nat
   | x :: y :: rest => (actualBalanceAt x i - actualBalanceAt y i) + pathDebits i (y :: rest)
   | _ => 0
-
-/-- The ordering of the effective-balance caps that the departure bound assumes. -/
-structure CapOrder (preset : Preset) : Prop where
-  activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE
-  compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA
-
-/-- The mainnet preset orders its effective-balance caps. -/
-theorem CapOrder.mainnet : CapOrder Preset.mainnet := ⟨by decide, by decide⟩
-
-/-- The minimal preset orders its effective-balance caps. -/
-theorem CapOrder.minimal : CapOrder Preset.minimal := ⟨by decide, by decide⟩
 
 /-- The activation balance is at most the largest effective balance before Electra.
 
@@ -764,7 +754,7 @@ theorem hysteresis_of_run_slot {g middle last : ForkedBeaconState preset}
     (hysteresis_of_advanceSlot bands advancedOk (kept ▸ first)) (caps.maxEffective_eq activation)
     caps.compounding
     (advanceSlot_capped advancedOk
-      (run.effectiveBalance_capped genesis caps.activation caps.compounding))
+      (run.effectiveBalance_capped genesis caps))
     upgraded
 
 /-- The state at the first slot of an epoch, reached by slot steps, is within the bands. -/
@@ -1451,7 +1441,7 @@ theorem _root_.EthLib.Consensus.Run.effectiveAt_ge_of_balanceFloor
     obtain ⟨w, located, lifecycle⟩ := pre.registryLifecycle.validators i v found
     have assigned : w.activationEpoch ≠ FAR_FUTURE_EPOCH := by
       rwa [lifecycle.activationEpoch activated]
-    obtain ⟨z, locatedZ, capMono⟩ := pre.validatorCap_mono caps.activation caps.compounding
+    obtain ⟨z, locatedZ, capMono⟩ := pre.validatorCap_mono caps
       i v found
     have eq : z = w := by rw [located, Option.some.injEq] at locatedZ; exact locatedZ.symm
     subst z
@@ -1498,7 +1488,7 @@ theorem effective_loss_from_balance {g x y : ForkedBeaconState preset}
   have value : reference.toNat = rounded := by
     dsimp [reference]; rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
   by_cases affordable : pathDebits i tail.balancePath ≤ actualBalanceAt x i
-  · have capped := shared.effectiveBalance_capped genesis caps.activation caps.compounding v
+  · have capped := shared.effectiveBalance_capped genesis caps v
       (Array.mem_of_getElem? found)
     obtain ⟨rest, path⟩ := Run.balancePath_head tail
     have bound := tail.effectiveAt_ge_of_balanceFloor caps early i v found activated reference

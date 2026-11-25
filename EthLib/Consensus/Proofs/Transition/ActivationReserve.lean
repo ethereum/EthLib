@@ -29,8 +29,7 @@ theorem Run.unassigned_assignment_resources_of_pending_law {g x u : ForkedBeacon
     (shared : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
     (head : Run config checks x u)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset)
     (electra : .pectra ≤ x.fork) (early : u.fork < .glamsterdam)
     (pendingLaw : ∀ {f : Fork} (a b : BeaconState preset f) (e : .pectra ≤ f),
@@ -74,7 +73,7 @@ theorem Run.unassigned_assignment_resources_of_pending_law {g x u : ForkedBeacon
   let candidate := fun i : Nat => decide
     ((x.state.validators.data[i]?.map (·.activationEpoch)).getD FAR_FUTURE_EPOCH =
       FAR_FUTURE_EPOCH)
-  have bound := preKeyCharge_run shared genesis head activation compounding aligned electra
+  have bound := preKeyCharge_run shared genesis head caps aligned electra
     early candidate pendingLaw blockLaw
   have initial : (∑ i ∈ Finset.range x.state.validators.data.size,
       preKeyCharge candidate x.state i) =
@@ -126,8 +125,7 @@ theorem Run.unassigned_assignment_resources_of_pending_law {g x u : ForkedBeacon
 /-- Before Electra, each scheduled key retains at least one activation reserve. -/
 theorem Run.scheduled_activation_reserve {g x : ForkedBeaconState preset}
     (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset) (early : x.fork < .pectra)
     (i : Nat) (v : Validator) (found : x.state.validators.data[i]? = some v)
     (future : getCurrentEpoch x.state < v.activationEpoch)
@@ -141,7 +139,7 @@ theorem Run.scheduled_activation_reserve {g x : ForkedBeaconState preset}
     change _ < 18446744073709551615
     change v.activationEpoch.toNat ≠ 18446744073709551615 at different
     omega
-  have reserve := (run_scheduled_reserve run genesis activation compounding aligned
+  have reserve := (run_scheduled_reserve run genesis caps aligned
     (Nat.lt_trans early (by decide)) epochFinite) early i v found
       (UInt64.lt_iff_toNat_lt.mp future) assigned
   exact reserve.1

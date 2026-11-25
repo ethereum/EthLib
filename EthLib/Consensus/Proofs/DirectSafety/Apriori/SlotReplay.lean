@@ -293,7 +293,7 @@ private theorem epochInput_facts {g x u : ForkedBeaconState preset}
     run.pendingConsolidationsOrdered genesis delay,
     run.exit_withdrawable_delay genesis,
     run.activationExitOrder genesis,
-    run.effectiveBalance_capped genesis caps.activation caps.compounding,
+    run.effectiveBalance_capped genesis caps,
     run.pendingConsolidations_apart genesis delay,
     pre.registryLifecycle.trans (.of_data rfl), start,
     UInt64.lt_iff_toNat_lt.mpr (by
@@ -517,7 +517,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     refine ⟨w, found, fun far' => ?_⟩
     rw [far'] at activated
     exact absurd (UInt64.lt_of_le_of_lt activated finite) (UInt64.lt_irrefl _)
-  have slashedSpan := epochPrefix_slashedSpan pre caps.activation caps.compounding
+  have slashedSpan := epochPrefix_slashedSpan pre caps
     cachedOk epoch.toEpochPrefix depositsOk
   have horizon : next.toNat ≤ horizonEnd x high := by
     have epochs : (getCurrentEpoch cached).toNat = (getCurrentEpoch s).toNat := by
@@ -533,7 +533,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
       cachedFuture startLife (UInt64.lt_of_le_of_lt startCurrent finite) startCurrent ordered
       exits finite delayed delayTwo activationOrder nextOk twoSlots capped unique apart sources
       initialZero slashedSpan horizon (Run.pendingConsolidationsOrdered shared genesis delay)
-      (run_slashed_exit_assigned shared genesis caps.activation caps.compounding delay)
+      (run_slashed_exit_assigned shared genesis caps delay)
       provenance
   -- The pass keeps a sublist of the queue, and pays from states with the pass input's registry.
   have shape := pass.pass_shape
@@ -1033,7 +1033,7 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
     -- The run facts at the step input.
     have invariant := (run_justified_separated whole genesis).1
     have slashedExit : SlashedExitAssigned middle.state := fun i v found flag =>
-      run_slashed_exit_assigned whole genesis caps.activation caps.compounding delay
+      run_slashed_exit_assigned whole genesis caps delay
         i v found flag
     have finite : getCurrentEpoch middle.state < FAR_FUTURE_EPOCH := by
       have ne := getCurrentEpoch_ne_farFuture twoSlots middle.state

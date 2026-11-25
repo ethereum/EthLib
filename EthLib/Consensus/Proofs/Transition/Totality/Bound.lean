@@ -121,6 +121,19 @@ theorem Config.divisorsPositive_mainnet : Config.mainnet.DivisorsPositive := by
 theorem Config.divisorsPositive_minimal : Config.minimal.DivisorsPositive := by
   constructor <;> decide
 
+/-- The effective-balance caps of a preset are in order. -/
+structure CapOrder (preset : Preset) : Prop where
+  /-- The cap before Electra is at most the least balance to activate. -/
+  activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE
+  /-- The least balance to activate is at most the cap of a compounding validator. -/
+  compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA
+
+/-- The mainnet preset orders its effective-balance caps. -/
+theorem CapOrder.mainnet : CapOrder Preset.mainnet := ⟨by decide, by decide⟩
+
+/-- The minimal preset orders its effective-balance caps. -/
+theorem CapOrder.minimal : CapOrder Preset.minimal := ⟨by decide, by decide⟩
+
 /-- A fold of checked sums succeeds when the start and the list sum below 2^64.
 
 It returns the sum on natural numbers. -/

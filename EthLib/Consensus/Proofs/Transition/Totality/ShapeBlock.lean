@@ -654,8 +654,7 @@ theorem processBlock_shaped {fork : Fork} {engine : ExecutionEngine preset fork}
 
 /-- A run of slots across the forks keeps the shape, with the upgrades on the way. -/
 private theorem advanceSlotsAcross_shaped
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA) :
+    (caps : CapOrder preset) :
     ∀ {count : Nat} {forked after : ForkedBeaconState preset},
       advanceSlotsAcross config checks count forked = .ok after → Shaped forked.state →
         Shaped after.state
@@ -666,8 +665,8 @@ private theorem advanceSlotsAcross_shaped
     simp only [advanceSlotsAcross, bind_ok_iff] at computed
     obtain ⟨next, nextOk, rest⟩ := computed
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp nextOk
-    exact advanceSlotsAcross_shaped activation compounding rest
-      (processUpgrades_shaped activation compounding upgraded
+    exact advanceSlotsAcross_shaped caps rest
+      (processUpgrades_shaped caps upgraded
         (advanceSlot_shaped advancedOk shaped))
 
 /-- A block that the transition accepts keeps the shape, from a state of an earlier fork or not.
@@ -680,15 +679,14 @@ The activation balance must be at most the cap of compounding credentials. -/
 theorem stateTransitionAcross_shaped {fork : Fork} {engine : ExecutionEngine preset fork}
     {forked : ForkedBeaconState preset} {signed : SignedBeaconBlock preset fork}
     {validateResult : Bool} {after : BeaconState preset fork}
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (computed :
       stateTransitionAcross config checks engine forked signed validateResult = .ok after)
     (shaped : Shaped forked.state) : Shaped after := by
   obtain ⟨advanced, slotsOk, applied⟩ := stateTransitionAcross_ok computed
   simp only [processSlotsAcross, bind_ok_iff, ensure_ok_iff] at slotsOk
   obtain ⟨_, _, advancedOk⟩ := slotsOk
-  exact processBlock_shaped compounding (applySignedBlock_ok applied).2.1
-    (advanceSlotsAcross_shaped activation compounding advancedOk shaped)
+  exact processBlock_shaped caps.compounding (applySignedBlock_ok applied).2.1
+    (advanceSlotsAcross_shaped caps advancedOk shaped)
 
 end EthLib.Consensus

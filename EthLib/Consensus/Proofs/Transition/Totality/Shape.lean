@@ -403,11 +403,10 @@ The largest balance before Electra must be at most the least one from Electra.
 That one must be at most the largest one for compounding credentials. -/
 theorem upgradeNext_shaped {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (computed : upgradeNext config checks pre = .ok post) (shaped : Shaped pre.state) :
     Shaped post.val.state := by
-  have capped := upgradeNext_capped activation compounding computed shaped.capped
+  have capped := upgradeNext_capped caps computed shaped.capped
   have matched := (upgradeFrame_upgradeNext computed).balancesMatch shaped.balancesMatch
   obtain ⟨fork, state⟩ := pre
   cases fork <;>
@@ -476,11 +475,10 @@ theorem upgradeNext_shaped {pre : ForkedBeaconState preset}
 
 /-- The upgrades due at a slot keep the shape of the state, under the same conditions. -/
 theorem processUpgrades_shaped {forked upgraded : ForkedBeaconState preset}
-    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset)
     (computed : processUpgrades config checks forked = .ok upgraded)
     (shaped : Shaped forked.state) : Shaped upgraded.state :=
   processUpgrades_induction (property := fun forked => Shaped forked.state)
-    (fun held ok => upgradeNext_shaped activation compounding ok held) shaped computed
+    (fun held ok => upgradeNext_shaped caps ok held) shaped computed
 
 end EthLib.Consensus

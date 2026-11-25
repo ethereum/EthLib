@@ -4242,7 +4242,7 @@ private theorem pre_electra_charge_step_bounds {g x y : ForkedBeaconState preset
     · rename_i assigned
       cases Option.some.inj added
       have lower := departureCharges_epoch_ge step targetEarly _ member
-      have capped := shared.effectiveBalance_capped genesis caps.activation caps.compounding
+      have capped := shared.effectiveBalance_capped genesis caps
         old (Array.mem_of_getElem? found)
       have notElectra : ¬ .pectra ≤ x.fork := Nat.not_le_of_lt early
       simp only [withdrawalMaxEffectiveBalance, notElectra, ↓reduceIte] at capped

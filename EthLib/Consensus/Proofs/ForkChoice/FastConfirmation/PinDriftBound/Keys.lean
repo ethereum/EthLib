@@ -2293,11 +2293,11 @@ private theorem slot_step_targets {g x m last : ForkedBeaconState preset}
     have xEarly : x.fork < .glamsterdam :=
       Nat.lt_of_le_of_lt (fork_le_of_chainSteps pre.chainSteps) beforeFork
     have lifeXM : RegistryLifecycle x.state m.state := pre.registryLifecycle
-    have capXM := (Internal.CapStep.run pre caps.activation caps.compounding).1
+    have capXM := (Internal.CapStep.run pre caps).1
     have orderedM : OrderedAt config m.state :=
       (shared.append pre).pendingConsolidationsOrdered genesis delay
     have orderedX := shared.pendingConsolidationsOrdered genesis delay
-    have cappedX := shared.effectiveBalance_capped genesis caps.activation caps.compounding
+    have cappedX := shared.effectiveBalance_capped genesis caps
     -- The cached state is the state of the step, up to its roots.
     have lifeMC : RegistryLifecycle m.state cached := .of_data (by rw [cachedEq])
     have slotMC : cached.slot = m.state.slot := by rw [cachedEq]
@@ -3457,10 +3457,10 @@ private theorem Ctx.step_facts {g x m : ForkedBeaconState preset} {high : ℕ}
     have := c.quotientTwo
     omega
   refine ⟨positiveQ,
-    UInt64.le_iff_toNat_le.mp (Internal.minimum_cap c.caps.activation c.caps.compounding val),
+    UInt64.le_iff_toNat_le.mp (Internal.minimum_cap c.caps val),
     ?_, le_smul_ceilDiv (β := Nat) positiveQ⟩
-  have := Run.effectiveBalance_capped (c.shared.append hm) c.genesis c.caps.activation
-    c.caps.compounding val (Array.mem_of_getElem? found)
+  have := Run.effectiveBalance_capped (c.shared.append hm) c.genesis c.caps val
+      (Array.mem_of_getElem? found)
   have e : effectiveAt m i = val.effectiveBalance.toNat := by simp [effectiveAt, found]
   rw [e]
   exact UInt64.le_iff_toNat_le.mp this
@@ -3750,7 +3750,7 @@ private theorem Ctx.slashed_window {g x z m : ForkedBeaconState preset} {high : 
     val.slashed = true →
       epoch + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat / 2 < val.withdrawableEpoch.toNat := by
   intro flag
-  have lower := rm.newly_slashed_withdrawableEpoch c.caps.activation c.caps.compounding
+  have lower := rm.newly_slashed_withdrawableEpoch c.caps
     c.delay i v0 val found0 found unslashed0 flag
   have window := c.guard.2.2.2.2.2.2.2.2.2.2.1
   have xz := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps hz.chainSteps)
@@ -4351,7 +4351,7 @@ theorem Run.funded_at_start {g x z : ForkedBeaconState preset}
   have lessAct : getCurrentEpoch z.state + 1 < v0.activationEpoch :=
     UInt64.lt_iff_toNat_lt.mpr (by rw [plusOne]; omega)
   obtain ⟨funded, maxLe, unslashed⟩ := (Internal.run_eligible_balance (shared.append pre) genesis
-    caps.activation caps.compounding aligned zEarly finite).2 electraZ i v0 found0
+    caps aligned zEarly finite).2 electraZ i v0 found0
     (Or.inl actNeFar)
     (UInt64.lt_iff_toNat_lt.mpr (by have := UInt64.lt_iff_toNat_lt.mp lessAct; omega))
   obtain ⟨bal, hbal, effLe⟩ := funded (by
@@ -4490,7 +4490,7 @@ theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
     (fun p member => by
       obtain ⟨⟨val, found⟩, -⟩ := floors p member
       have := UInt64.le_iff_toNat_le.mp
-        (Internal.minimum_cap caps.activation caps.compounding (h := p.fork) val)
+        (Internal.minimum_cap caps (h := p.fork) val)
       simpa [PinTerms.capAt, found] using this)
   have sameEff : effectiveAt y i = effectiveAt n i := by
     have inside : i < n.state.validators.data.size := by
