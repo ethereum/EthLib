@@ -25,7 +25,7 @@ namespace EthLib.Cryptography.Montgomery
   (s &&& 0xFFFFFFFF, s >>> 32)
 
 /-- The two words of `mac` write `t + a b + c`, when every input is below `2 ^ 32`. -/
-theorem mac_spec {t a b c : UInt64} (ht : t.toNat < 2 ^ 32) (ha : a.toNat < 2 ^ 32)
+theorem Internal.mac_spec {t a b c : UInt64} (ht : t.toNat < 2 ^ 32) (ha : a.toNat < 2 ^ 32)
     (hb : b.toNat < 2 ^ 32) (hc : c.toNat < 2 ^ 32) :
     (mac t a b c).1.toNat + 2 ^ 32 * (mac t a b c).2.toNat
       = t.toNat + a.toNat * b.toNat + c.toNat ∧
@@ -42,13 +42,16 @@ theorem mac_spec {t a b c : UInt64} (ht : t.toNat < 2 ^ 32) (ha : a.toNat < 2 ^ 
   simp
   omega
 
+-- The lemmas of the internal namespace serve the Montgomery modules and their proofs alone.
+open Internal
+
 /-- The low 32 bits of `x - y - b`, and the borrow out of them. -/
 @[inline] def sbb (x y b : UInt64) : UInt64 × UInt64 :=
   let d := x - y - b
   (d &&& 0xFFFFFFFF, d >>> 63)
 
 /-- The two words of `sbb` write `x - y - b`, with the borrow as a multiple of `2 ^ 32`. -/
-theorem sbb_spec {x y b : UInt64} (hx : x.toNat < 2 ^ 32) (hy : y.toNat < 2 ^ 32)
+theorem Internal.sbb_spec {x y b : UInt64} (hx : x.toNat < 2 ^ 32) (hy : y.toNat < 2 ^ 32)
     (hb : b.toNat ≤ 1) :
     (sbb x y b).1.toNat + y.toNat + b.toNat = x.toNat + 2 ^ 32 * (sbb x y b).2.toNat ∧
     (sbb x y b).1.toNat < 2 ^ 32 ∧ (sbb x y b).2.toNat ≤ 1 := by
@@ -80,15 +83,15 @@ def loop {σ : Type} : Nat → (Nat → σ → σ) → Nat → σ → σ
   | n + 1, f, k, s => loop n f (k + 1) (f k s)
 
 /-- The lowest word, then the others above it. -/
-theorem num_succ (n : Nat) (f : Nat → UInt64) (k : Nat) :
+theorem Internal.num_succ (n : Nat) (f : Nat → UInt64) (k : Nat) :
     num (n + 1) f k = (f k).toNat + 2 ^ 32 * num n f (k + 1) := rfl
 
 /-- `n + 1` words fit when the lowest one and the others fit. -/
-theorem fits_succ {n : Nat} {f : Nat → UInt64} {k : Nat} :
+theorem Internal.fits_succ {n : Nat} {f : Nat → UInt64} {k : Nat} :
     Fits (n + 1) f k ↔ (f k).toNat < 2 ^ 32 ∧ Fits n f (k + 1) := Iff.rfl
 
 /-- Words that agree write the same integer. -/
-theorem num_congr {n : Nat} {f g : Nat → UInt64} {j k : Nat}
+theorem Internal.num_congr {n : Nat} {f g : Nat → UInt64} {j k : Nat}
     (h : ∀ i < n, f (j + i) = g (k + i)) : num n f j = num n g k := by
   induction n generalizing j k with
   | zero => rfl
@@ -99,7 +102,7 @@ theorem num_congr {n : Nat} {f g : Nat → UInt64} {j k : Nat}
       exact h (i + 1) (by omega)]
 
 /-- Words that agree fit together. -/
-theorem fits_congr {n : Nat} {f g : Nat → UInt64} {j k : Nat}
+theorem Internal.fits_congr {n : Nat} {f g : Nat → UInt64} {j k : Nat}
     (h : ∀ i < n, f (j + i) = g (k + i)) : Fits n f j ↔ Fits n g k := by
   induction n generalizing j k with
   | zero => exact Iff.rfl
@@ -110,7 +113,7 @@ theorem fits_congr {n : Nat} {f g : Nat → UInt64} {j k : Nat}
       exact h (i + 1) (by omega)]
 
 /-- The words fit when each one is below `2 ^ 32`. -/
-theorem fits_of_lt {n : Nat} {f : Nat → UInt64} {k : Nat}
+theorem Internal.fits_of_lt {n : Nat} {f : Nat → UInt64} {k : Nat}
     (h : ∀ i < n, (f (k + i)).toNat < 2 ^ 32) : Fits n f k := by
   induction n generalizing k with
   | zero => trivial
@@ -120,37 +123,37 @@ theorem fits_of_lt {n : Nat} {f : Nat → UInt64} {k : Nat}
     exact h (i + 1) (by omega)
 
 /-- After its first word, a word followed by `w` reads as `w`. -/
-theorem num_cons {n : Nat} (h : UInt64) (w : Nat → UInt64) (k : Nat) :
+theorem Internal.num_cons {n : Nat} (h : UInt64) (w : Nat → UInt64) (k : Nat) :
     num n (cons h w) (k + 1) = num n w k :=
   num_congr fun i _ => by
     simp only [cons, Nat.add_right_comm k 1 i, Nat.add_one_ne_zero, ↓reduceIte,
       Nat.add_sub_cancel]
 
 /-- After its first word, a word followed by `w` fits as `w`. -/
-theorem fits_cons {n : Nat} (h : UInt64) (w : Nat → UInt64) (k : Nat) :
+theorem Internal.fits_cons {n : Nat} (h : UInt64) (w : Nat → UInt64) (k : Nat) :
     Fits n (cons h w) (k + 1) ↔ Fits n w k :=
   fits_congr fun i _ => by
     simp only [cons, Nat.add_right_comm k 1 i, Nat.add_one_ne_zero, ↓reduceIte,
       Nat.add_sub_cancel]
 
 /-- The integer of a word `h` followed by words `w`. -/
-theorem num_cons_zero {n : Nat} (h : UInt64) (w : Nat → UInt64) :
+theorem Internal.num_cons_zero {n : Nat} (h : UInt64) (w : Nat → UInt64) :
     num (n + 1) (cons h w) 0 = h.toNat + 2 ^ 32 * num n w 0 := by
   rw [num_succ, num_cons]
   rfl
 
 /-- A word followed by `w` fits when the word and `w` fit. -/
-theorem fits_cons_zero {n : Nat} {h : UInt64} {w : Nat → UInt64} :
+theorem Internal.fits_cons_zero {n : Nat} {h : UInt64} {w : Nat → UInt64} :
     Fits (n + 1) (cons h w) 0 ↔ h.toNat < 2 ^ 32 ∧ Fits n w 0 := by
   rw [fits_succ, fits_cons]
   rfl
 
 /-- `2 ^ (32 (n + 1))` is `2 ^ 32` times `2 ^ (32 n)`. -/
-theorem radix_succ (n : Nat) : 2 ^ (32 * (n + 1)) = 2 ^ 32 * 2 ^ (32 * n) := by
+theorem Internal.radix_succ (n : Nat) : 2 ^ (32 * (n + 1)) = 2 ^ 32 * 2 ^ (32 * n) := by
   rw [Nat.mul_succ, Nat.pow_add, Nat.mul_comm]
 
 /-- Words that fit write an integer below `2 ^ (32 n)`. -/
-theorem num_lt {n : Nat} {f : Nat → UInt64} {k : Nat} (h : Fits n f k) :
+theorem Internal.num_lt {n : Nat} {f : Nat → UInt64} {k : Nat} (h : Fits n f k) :
     num n f k < 2 ^ (32 * n) := by
   induction n generalizing k with
   | zero => exact Nat.one_pos
@@ -161,7 +164,7 @@ theorem num_lt {n : Nat} {f : Nat → UInt64} {k : Nat} (h : Fits n f k) :
     omega
 
 /-- The top word of `n + 1` words weighs `2 ^ (32 n)`. -/
-theorem num_snoc (n : Nat) (f : Nat → UInt64) (k : Nat) :
+theorem Internal.num_snoc (n : Nat) (f : Nat → UInt64) (k : Nat) :
     num (n + 1) f k = num n f k + 2 ^ (32 * n) * (f (k + n)).toNat := by
   induction n generalizing k with
   | zero => simp [num]
@@ -171,7 +174,7 @@ theorem num_snoc (n : Nat) (f : Nat → UInt64) (k : Nat) :
     omega
 
 /-- An invariant that each step keeps holds after the steps. -/
-theorem loop_induct {σ : Type} (P : Nat → σ → Prop) (f : Nat → σ → σ) (n k : Nat) (s : σ)
+theorem Internal.loop_induct {σ : Type} (P : Nat → σ → Prop) (f : Nat → σ → σ) (n k : Nat) (s : σ)
     (h0 : P k s) (hs : ∀ i s, k ≤ i → i < k + n → P i s → P (i + 1) (f i s)) :
     P (k + n) (loop n f k s) := by
   induction n generalizing k s with
@@ -182,7 +185,7 @@ theorem loop_induct {σ : Type} (P : Nat → σ → Prop) (f : Nat → σ → σ
       (fun i s hi hi' => hs i s (by omega) (by omega))
 
 /-- `k + m` steps are `k` steps, then `m` steps from the index after them. -/
-theorem loop_add {σ : Type} (f : Nat → σ → σ) (k m i : Nat) (s : σ) :
+theorem Internal.loop_add {σ : Type} (f : Nat → σ → σ) (k m i : Nat) (s : σ) :
     loop (k + m) f i s = loop m f (i + k) (loop k f i s) := by
   induction k generalizing i s with
   | zero => rw [Nat.zero_add, Nat.add_zero]; rfl
@@ -351,7 +354,7 @@ private theorem num_wordS (t : UInt64 × inst.W) :
   num_cons_zero _ _
 
 /-- The words of `t + a b + c` on `n + 1` words write the sum. -/
-theorem macS_spec (t : UInt64 × inst.W) (a : Nat → UInt64) (b c : UInt64) (k : Nat)
+theorem Internal.macS_spec (t : UInt64 × inst.W) (a : Nat → UInt64) (b c : UInt64) (k : Nat)
     (ht : Fits (n + 1) (wordS t) 0) (ha : Fits (n + 1) a k) (hb : b.toNat < 2 ^ 32)
     (hc : c.toNat < 2 ^ 32) :
     Fits (n + 1) (wordS (macS t a b c k).1) 0 ∧ (macS t a b c k).2.toNat < 2 ^ 32 ∧
@@ -370,7 +373,7 @@ theorem macS_spec (t : UInt64 × inst.W) (a : Nat → UInt64) (b c : UInt64) (k 
   omega
 
 /-- The words of `t + m p + c` with `top` above write the sum. -/
-theorem shS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (m c : UInt64) (k : Nat)
+theorem Internal.shS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (m c : UInt64) (k : Nat)
     (top : UInt64) (ht : Fits (n + 1) (wordS t) 0) (hp : Fits (n + 1) p k)
     (hm : m.toNat < 2 ^ 32) (hc : c.toNat < 2 ^ 32) (htop : top.toNat < 2 ^ 33) :
     Fits (n + 1 + 1) (cons (shS t p m c k top).1.1 (wordS (shS t p m c k top).1.2)) 0 ∧
@@ -397,7 +400,7 @@ theorem shS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (m c : UInt64) (k :
   omega
 
 /-- The words of the reduction row write the sum divided by `2 ^ 32`. -/
-theorem redS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (m top : UInt64)
+theorem Internal.redS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (m top : UInt64)
     (ht : Fits (n + 1) (wordS t) 0) (hp : Fits (n + 1) p 0) (hm : m.toNat < 2 ^ 32)
     (htop : top.toNat < 2 ^ 33)
     (h : (num (n + 1) (wordS t) 0 + m.toNat * num (n + 1) p 0 +
@@ -425,7 +428,7 @@ theorem redS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (m top : UInt64)
   omega
 
 /-- The words of `t - p - br` write the difference, with the borrow on top. -/
-theorem subbS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (br : UInt64) (k : Nat)
+theorem Internal.subbS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (br : UInt64) (k : Nat)
     (ht : Fits (n + 1) (wordS t) 0) (hp : Fits (n + 1) p k) (hb : br.toNat ≤ 1) :
     Fits (n + 1) (wordS (subbS t p br k).1) 0 ∧ (subbS t p br k).2.toNat ≤ 1 ∧
       num (n + 1) (wordS (subbS t p br k).1) 0 + num (n + 1) p k + br.toNat =
@@ -485,7 +488,7 @@ theorem subbS_spec (t : UInt64 × inst.W) (p : Nat → UInt64) (br : UInt64) (k 
 end Succ
 
 /-- The words of fitting words are below `2 ^ 32`. -/
-theorem lt_of_fits {n : Nat} {f : Nat → UInt64} {k : Nat} (h : Fits n f k) :
+theorem Internal.lt_of_fits {n : Nat} {f : Nat → UInt64} {k : Nat} (h : Fits n f k) :
     ∀ i < n, (f (k + i)).toNat < 2 ^ 32 := by
   induction n generalizing k with
   | zero => intro i hi; omega
@@ -515,7 +518,7 @@ theorem zero_spec : Fits n (Words.word (Words.zero : Words.W n)) 0 ∧
   exact hz n 0
 
 /-- Loaded words are the words read. -/
-theorem load_spec (a : Nat → UInt64) (k : Nat) :
+theorem Internal.load_spec (a : Nat → UInt64) (k : Nat) :
     (Fits n (Words.word (Words.load (n := n) a k)) 0 ↔ Fits n a k) ∧
       num n (Words.word (Words.load (n := n) a k)) 0 = num n a k := by
   have h : ∀ i < n, Words.word (Words.load (n := n) a k) (0 + i) = a (k + i) :=
@@ -523,7 +526,7 @@ theorem load_spec (a : Nat → UInt64) (k : Nat) :
   exact ⟨fits_congr h, num_congr h⟩
 
 /-- The integer of `n` limbs, mod `2 ^ 32`, is the integer of its low limb. -/
-theorem num_mod {f : Nat → UInt64} {k : Nat} (hn : 0 < n) (h : Fits n f k) :
+theorem Internal.num_mod {f : Nat → UInt64} {k : Nat} (hn : 0 < n) (h : Fits n f k) :
     num n f k % 2 ^ 32 = (f k).toNat := by
   obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
   rw [num_succ]
@@ -531,7 +534,7 @@ theorem num_mod {f : Nat → UInt64} {k : Nat} (hn : 0 < n) (h : Fits n f k) :
   omega
 
 /-- `2 ^ (32 n)` is a multiple of `2 ^ 32` for `n > 0`. -/
-theorem radix_mod (hn : 0 < n) : ∃ q, 2 ^ (32 * n) = 2 ^ 32 * q := by
+theorem Internal.radix_mod (hn : 0 < n) : ∃ q, 2 ^ (32 * n) = 2 ^ 32 * q := by
   obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
   exact ⟨_, radix_succ m⟩
 
