@@ -96,10 +96,6 @@ structure NodeState where
   requests : List (Endpoint × Request)
   deriving DecidableEq
 
-/-- The value of a key in a list of pairs, if any. -/
-def lookupKey {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) (key : κ) : Option α :=
-  (pairs.find? (·.1 = key)).map (·.2)
-
 /-- A list of pairs with the value of a key replaced, or added. -/
 def setKey {κ α : Type} [DecidableEq κ] (pairs : List (κ × α)) (key : κ) (value : α) :
     List (κ × α) :=
@@ -189,7 +185,7 @@ def receiveMessage (node : Local) (rand : Randoms) (state : NodeState) (key : Se
   -- Step 2: with session keys for the source node ID, node B tries to decrypt the message.
   --
   -- Session Cache: the keys are those of that node ID at that IP address and port.
-  let opened := match lookupKey state.sessions key with
+  let opened := match state.sessions.lookup key with
     | some session => (openPacket SessionError.packet SessionError.decryption
         session.incomingKey packet).toOption.map (session, ·)
     | none => none
@@ -199,14 +195,14 @@ def receiveMessage (node : Local) (rand : Randoms) (state : NodeState) (key : Se
     -- An answer from the peer of a request of this node settles that request.
     --
     -- Not in the source: any message that opens from that peer settles it, not only the response.
-    let settled := match lookupKey state.requests key.endpoint with
+    let settled := match state.requests.lookup key.endpoint with
       | some request => decide (request.id = key.id)
       | none => false
     let state := if settled then { state with requests := eraseKey state.requests key.endpoint }
       else state
     answerIn node rand state key session plaintext
   | none =>
-    match lookupKey state.challenges key with
+    match state.challenges.lookup key with
     -- Handshake Implementation Considerations: a message packet while a challenge is pending.
     --
     -- The node re-sends the challenge already in progress, instead of creating a new one.
@@ -233,7 +229,7 @@ def receiveWhoareyou (node : Local) (rand : Randoms) (state : NodeState) (endpoi
   -- So a WHOAREYOU for an earlier request is ignored, where the source re-sends that request.
   --
   -- A node with at most one request in flight per peer meets the source exactly.
-  match lookupKey state.requests endpoint, readWhoareyou node.nodeId bytes with
+  match state.requests.lookup endpoint, readWhoareyou node.nodeId bytes with
   | some request, .ok challenge =>
     -- Step 3: the `nonce` of the WHOAREYOU mirrors the `nonce` of the request packet.
     if challenge.nonce = request.nonce then
@@ -294,7 +290,7 @@ def receiveHandshake (node : Local) (rand : Randoms) (state : NodeState) (key : 
   -- With one, EthLib takes the public key from it, and does not check the record in the packet.
   --
   -- That departs from step 4: the key that B already holds decides the handshake.
-  match lookupKey state.challenges key, node.publicKeyOf key.id <|> recordKey key.id record with
+  match state.challenges.lookup key, node.publicKeyOf key.id <|> recordKey key.id record with
   | some challenge, some srcKey =>
     -- Step 4: verify `id-signature`, derive the session keys, then decrypt the message.
     match openHandshake node.staticKey challenge.challengeData node.nodeId srcKey bytes with
@@ -335,7 +331,7 @@ def step (node : Local) (rand : Randoms) (state : NodeState) (endpoint : Endpoin
 Without a session, the request is sealed under a key that the peer does not have. -/
 def sendRequest (node : Local) (rand : Randoms) (state : NodeState) (key : SessionKey)
     (unknownKey : Aes.Key .aes128) (plaintext : ByteArray) : NodeState × List ByteArray :=
-  match lookupKey state.sessions key with
+  match state.sessions.lookup key with
   -- Step 1: with session keys for node B, node A encrypts its request with those keys.
   | some session =>
     match sealInSession node rand key.id session plaintext with
