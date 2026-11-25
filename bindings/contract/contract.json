@@ -15149,33 +15149,6 @@
    "error_class": "StateError",
    "docstring":
    "The state root after the mining rewards of a block, from the state that `input` encodes.\n\nThe forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.\n\nThe block and each of its ommers decode at the fork of their own number.\n\nFrom Paris on, a block pays no reward."},
-  {"summary":
-   "The name of the active fork of mainnet at a block, or `None` when none is active.",
-   "signature": "(number: int, timestamp: int) -> str | None",
-   "operation": "EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport",
-   "method": "mainnet_active_fork",
-   "errors": [],
-   "error_class": "ChainError",
-   "docstring":
-   "The name of the active fork of mainnet at a block, or `None` when none is active.\n\nThe arguments are the block number and the timestamp."},
-  {"summary":
-   "The name of the active fork of Hoodi at a block, or `None` when none is active.",
-   "signature": "(number: int, timestamp: int) -> str | None",
-   "operation": "EthLib.Base.ChainConfig.Exports.hoodiActiveForkExport",
-   "method": "hoodi_active_fork",
-   "errors": [],
-   "error_class": "ChainError",
-   "docstring":
-   "The name of the active fork of Hoodi at a block, or `None` when none is active.\n\nThe arguments are the block number and the timestamp."},
-  {"summary":
-   "The name of the active fork of Sepolia at a block, or `None` when none is active.",
-   "signature": "(number: int, timestamp: int) -> str | None",
-   "operation": "EthLib.Base.ChainConfig.Exports.sepoliaActiveForkExport",
-   "method": "sepolia_active_fork",
-   "errors": [],
-   "error_class": "ChainError",
-   "docstring":
-   "The name of the active fork of Sepolia at a block, or `None` when none is active.\n\nThe arguments are the block number and the timestamp."},
   {"summary": "The configuration of a chain that EthLib holds, as a `dict`.",
    "signature": "(name: str) -> dict[str, Any]",
    "operation": "EthLib.Base.ChainConfig.Exports.chainConfigExport",
@@ -15185,15 +15158,15 @@
    "docstring":
    "The configuration of a chain that EthLib holds, as a `dict`.\n\nThe argument is the name of the chain: `mainnet`, `hoodi` or `sepolia`."},
   {"summary":
-   "The name of the active fork of a configured chain at a block, or `None` when none is active.",
+   "The name of the active fork of a chain at a block, or `None` when none is active.",
    "signature":
-   "(config: dict[str, Any], number: int, timestamp: int) -> str | None",
+   "(chain: str | dict[str, Any], number: int, timestamp: int) -> str | None",
    "operation": "EthLib.Base.ChainConfig.Exports.activeForkExport",
    "method": "active_fork",
    "errors": [],
    "error_class": "ChainError",
    "docstring":
-   "The name of the active fork of a configured chain at a block, or `None` when none is active.\n\nThe arguments are the configuration as a `dict`, the block number and the timestamp."},
+   "The name of the active fork of a chain at a block, or `None` when none is active.\n\nThe arguments are the chain, the block number and the timestamp.\n\nThe chain is a name or a configuration `dict`."},
   {"summary":
    "The blob schedule of a chain at a block, from a base configuration and a configuration file.",
    "signature":

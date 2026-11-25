@@ -1034,6 +1034,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Python, `mainnet_active_fork`, `hoodi_active_fork` and `sepolia_active_fork` are removed, with the C exports `eth_mainnet_active_fork`, `eth_hoodi_active_fork` and `eth_sepolia_active_fork` ([#4500](https://github.com/ethereum/EthLib/issues/4500)).
+  - `active_fork` now takes the name of a chain that EthLib holds as well as a configuration `dict`: write `active_fork("hoodi", number, timestamp)`.
+    Its first parameter is now named `chain`.
+    With a name, it reads no configuration from Python, and costs about 0.06 µs more per call than the removed exports.
+  - `active_fork(chain_config(name), number, timestamp)` gives the same fork, and reads the `dict` on each call.
+  - An unknown name raises `ChainError` with code 0, as `chain_config` does.
+  - In Lean, `mainnetActiveForkOf`, `hoodiActiveForkOf` and `sepoliaActiveForkOf` and their exports are removed, and `activeForkOf` takes a name as well.
+
 - In Lean, SHA-256 and RIPEMD-160 pad through one shared Merkle-Damgård padding in `EthLib/Cryptography/Hash/Padding.lean`, which takes each hash's length bytes ([#4447](https://github.com/ethereum/EthLib/pull/4447)).
   - `Sha256.paddingZeros` and `Ripemd160.paddingZeros` are `Padding.paddingZeros`, and `Sha256.LENGTH_SIZE_BYTES` is removed.
     `Sha256.pad` and `Ripemd160.pad` are now `Padding.pad lengthBytes` of their own length bytes, and compute the same bytes.

@@ -1556,20 +1556,11 @@
 #define DOC_state_rewards_root \
   "The state root after the mining rewards of a block, from the state that `input` encodes."
 
-#define DOC_mainnet_active_fork \
-  "The name of the active fork of mainnet at a block, or `None` when none is active."
-
-#define DOC_hoodi_active_fork \
-  "The name of the active fork of Hoodi at a block, or `None` when none is active."
-
-#define DOC_sepolia_active_fork \
-  "The name of the active fork of Sepolia at a block, or `None` when none is active."
-
 #define DOC_chain_config \
   "The configuration of a chain that EthLib holds, as a `dict`."
 
 #define DOC_active_fork \
-  "The name of the active fork of a configured chain at a block, or `None` when none is active."
+  "The name of the active fork of a chain at a block, or `None` when none is active."
 
 #define DOC_execution_blob_schedule \
   "The blob schedule of a chain at a block, from a base configuration and a configuration file."

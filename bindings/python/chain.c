@@ -4,21 +4,6 @@
 /* ---- Lean externs ----------------------------------------------------- */
 
 extern lean_object*
-eth_mainnet_active_fork(
-  lean_object* args
-);
-
-extern lean_object*
-eth_hoodi_active_fork(
-  lean_object* args
-);
-
-extern lean_object*
-eth_sepolia_active_fork(
-  lean_object* args
-);
-
-extern lean_object*
 eth_chain_config(
   lean_object* args
 );
@@ -39,30 +24,6 @@ eth_write_execution_config(
 );
 
 /* ---- Wrappers --------------------------------------------------------- */
-
-PyObject*
-py_mainnet_active_fork(
-  PyObject* self,
-  PyObject* args
-) {
-  return call_pyvalue_export(eth_mainnet_active_fork, args, 2, CHAIN_ERROR);
-}
-
-PyObject*
-py_hoodi_active_fork(
-  PyObject* self,
-  PyObject* args
-) {
-  return call_pyvalue_export(eth_hoodi_active_fork, args, 2, CHAIN_ERROR);
-}
-
-PyObject*
-py_sepolia_active_fork(
-  PyObject* self,
-  PyObject* args
-) {
-  return call_pyvalue_export(eth_sepolia_active_fork, args, 2, CHAIN_ERROR);
-}
 
 PyObject*
 py_chain_config(

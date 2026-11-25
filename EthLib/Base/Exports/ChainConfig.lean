@@ -11,9 +11,9 @@ public import Lean.Data.Json
 
 The C exports of the active fork of a chain, for the Python bindings.
 
-Mainnet, Hoodi and Sepolia have an export each, and any other chain passes its configuration.
+A chain is named, as mainnet, Hoodi and Sepolia are, or passes its configuration as a `dict`.
 
-The configuration of each of these three also crosses as a `dict`.
+The configuration of a named chain also crosses as a `dict`.
 -/
 
 public section
@@ -22,42 +22,6 @@ namespace EthLib.Base.ChainConfig.Exports
 
 open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport forkOfName
   rejectArgument toResult)
-
-/-- The name of the active fork of mainnet at a block, if a fork is active. -/
-def mainnetActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
-  -- A block number and a timestamp cross the boundary as 64-bit integers, as EIP-6122 reads them.
-  let (number, timestamp) := args
-  -- A fork crosses it as its name, a `str` such as `bellatrix`.
-  pure ((mainnet.activeFork number.toNat timestamp.toNat).map (·.name))
-
-/-- The name of the active fork of mainnet at a block, or `None` when none is active.
-
-The arguments are the block number and the timestamp. -/
-@[export eth_mainnet_active_fork]
-def mainnetActiveForkExport (args : PyValue) : Result PyValue := pyExport mainnetActiveForkOf args
-
-/-- The name of the active fork of Hoodi at a block, if a fork is active. -/
-def hoodiActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
-  let (number, timestamp) := args
-  pure ((hoodi.activeFork number.toNat timestamp.toNat).map (·.name))
-
-/-- The name of the active fork of Hoodi at a block, or `None` when none is active.
-
-The arguments are the block number and the timestamp. -/
-@[export eth_hoodi_active_fork]
-def hoodiActiveForkExport (args : PyValue) : Result PyValue := pyExport hoodiActiveForkOf args
-
-/-- The name of the active fork of Sepolia at a block, if a fork is active. -/
-def sepoliaActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
-  let (number, timestamp) := args
-  pure ((sepolia.activeFork number.toNat timestamp.toNat).map (·.name))
-
-/-- The name of the active fork of Sepolia at a block, or `None` when none is active.
-
-The arguments are the block number and the timestamp. -/
-@[export eth_sepolia_active_fork]
-def sepoliaActiveForkExport (args : PyValue) : Result PyValue :=
-  pyExport sepoliaActiveForkOf args
 
 open Lean (Json)
 
@@ -182,18 +146,25 @@ The argument is the name of the chain: `mainnet`, `hoodi` or `sepolia`. -/
 @[export eth_chain_config]
 def chainConfigExport (args : PyValue) : Result PyValue := pyExport chainConfigValue args
 
-/-- The name of the active fork of a configured chain at a block, if a fork is active.
+/-- The name of the active fork of a chain at a block, if a fork is active.
 
-The configuration is a `dict` with the keys and values of the JSON that other exports read. -/
+The chain is the name of one that EthLib holds, or a configuration as a `dict`. -/
 def activeForkOf (args : PyValue × UInt64 × UInt64) : Result (Option String) := do
+  -- A block number and a timestamp cross the boundary as 64-bit integers, as EIP-6122 reads them.
   let (config, number, timestamp) := args
-  -- A chain configuration crosses the boundary as the typed value of its JSON, a `dict`.
-  let config ← configOfJson config.toJson
+  let config ← match config with
+    -- A name crosses as a `str`, and picks a configuration that EthLib holds.
+    | .str name => namedConfigOf name
+    -- A configuration crosses as the typed value of its JSON, a `dict`.
+    | config => configOfJson config.toJson
+  -- A fork crosses the boundary as its name, a `str` such as `bellatrix`.
   return (config.activeFork number.toNat timestamp.toNat).map (·.name)
 
-/-- The name of the active fork of a configured chain at a block, or `None` when none is active.
+/-- The name of the active fork of a chain at a block, or `None` when none is active.
 
-The arguments are the configuration as a `dict`, the block number and the timestamp. -/
+The arguments are the chain, the block number and the timestamp.
+
+The chain is a name or a configuration `dict`. -/
 @[export eth_active_fork]
 def activeForkExport (args : PyValue) : Result PyValue := pyExport activeForkOf args
 

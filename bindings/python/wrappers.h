@@ -758,9 +758,6 @@ PyObject* py_state_withdrawals_root                       (PyObject* self, PyObj
 PyObject* py_state_dao_fork_root                         (PyObject* self, PyObject* args);
 PyObject* py_state_rewards_root                           (PyObject* self, PyObject* args);
 
-PyObject* py_mainnet_active_fork                          (PyObject* self, PyObject* args);
-PyObject* py_hoodi_active_fork                            (PyObject* self, PyObject* args);
-PyObject* py_sepolia_active_fork                          (PyObject* self, PyObject* args);
 PyObject* py_chain_config                                 (PyObject* self, PyObject* args);
 PyObject* py_active_fork                                  (PyObject* self, PyObject* args);
 PyObject* py_execution_blob_schedule                      (PyObject* self, PyObject* args);

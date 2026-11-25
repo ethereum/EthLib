@@ -10,9 +10,6 @@ from ethlib.chain import (
     ChainError,
     active_fork,
     chain_config,
-    hoodi_active_fork,
-    mainnet_active_fork,
-    sepolia_active_fork,
     write_execution_config,
 )
 from ethlib.cryptography.keccak import keccak256
@@ -156,11 +153,11 @@ def test_blob_schedules_are_those_of_the_forks() -> None:
     } == FORK_SCHEDULES
 
 
-# Each chain with its own export, and blocks on both sides of its boundaries.
+# Each named chain, and blocks on both sides of its boundaries.
 CHAINS = [
-    ("mainnet", mainnet_active_fork, [15_537_393, 15_537_394, 20_000_000]),
-    ("hoodi", hoodi_active_fork, [0, 1]),
-    ("sepolia", sepolia_active_fork, [0, PARIS_BLOCK - 1, PARIS_BLOCK, LATER_BLOCK]),
+    ("mainnet", [15_537_393, 15_537_394, 20_000_000]),
+    ("hoodi", [0, 1]),
+    ("sepolia", [0, PARIS_BLOCK - 1, PARIS_BLOCK, LATER_BLOCK]),
 ]
 # Timestamps on both sides of each fork by time of the three chains.
 BOUNDARY_TIMES = sorted(
@@ -170,14 +167,15 @@ BOUNDARY_TIMES = sorted(
 )
 
 
-@pytest.mark.parametrize("name, own_export, numbers", CHAINS)
-def test_configuration_reads_back(name, own_export, numbers) -> None:
-    """The configuration as a `dict` gives the same active forks, and a file holds it whole."""
+@pytest.mark.parametrize("name, numbers", CHAINS)
+def test_configuration_reads_back(name, numbers) -> None:
+    """The configuration as a `dict` gives the forks of the chain, and a file holds it whole."""
     config = chain_config(name)
     for number in numbers:
         for time in BOUNDARY_TIMES:
             for timestamp in (time - 1, time) if time else (0,):
-                assert active_fork(config, number, timestamp) == own_export(number, timestamp)
+                expected = active_fork(name, number, timestamp)
+                assert active_fork(config, number, timestamp) == expected
     write_execution_config(config)
 
 
@@ -185,11 +183,14 @@ def test_unknown_chain() -> None:
     with raises(ChainError, "no chain is named goerli") as error:
         chain_config("goerli")
     assert error.value.code == 0
+    with raises(ChainError, "no chain is named goerli") as error:
+        active_fork("goerli", 0, 0)
+    assert error.value.code == 0
 
 
 def test_genesis_is_london() -> None:
-    assert sepolia_active_fork(0, int(GENESIS["timestamp"], 16)) == "london"
-    assert sepolia_active_fork(0, 0) == "london"
+    assert active_fork("sepolia", 0, int(GENESIS["timestamp"], 16)) == "london"
+    assert active_fork("sepolia", 0, 0) == "london"
 
 
 def test_terminal_header_is_the_published_one() -> None:
@@ -204,22 +205,22 @@ def test_paris_boundary() -> None:
     number = int.from_bytes(fields[8], "big")
     timestamp = int.from_bytes(fields[11], "big")
     # The last proof-of-work block is at London, and its child at Paris.
-    assert sepolia_active_fork(number, timestamp) == "london"
-    assert sepolia_active_fork(number + 1, timestamp + 1) == "paris"
+    assert active_fork("sepolia", number, timestamp) == "london"
+    assert active_fork("sepolia", number + 1, timestamp + 1) == "paris"
     # The merge netsplit block of the genesis file is no activation.
     netsplit = GENESIS["config"]["mergeNetsplitBlock"]
-    assert sepolia_active_fork(netsplit - 1, timestamp) == "paris"
-    assert sepolia_active_fork(netsplit, timestamp) == "paris"
+    assert active_fork("sepolia", netsplit - 1, timestamp) == "paris"
+    assert active_fork("sepolia", netsplit, timestamp) == "paris"
 
 
 @pytest.mark.parametrize("timestamp, before, fork, key", TIMES)
 def test_time_boundary(timestamp: int, before: str, fork: str, key: str) -> None:
-    assert sepolia_active_fork(LATER_BLOCK, timestamp - 1) == before
-    assert sepolia_active_fork(LATER_BLOCK, timestamp) == fork
+    assert active_fork("sepolia", LATER_BLOCK, timestamp - 1) == before
+    assert active_fork("sepolia", LATER_BLOCK, timestamp) == fork
 
 
 def test_glamsterdam_is_last() -> None:
-    assert sepolia_active_fork(LATER_BLOCK, 2**64 - 1) == "glamsterdam"
+    assert active_fork("sepolia", LATER_BLOCK, 2**64 - 1) == "glamsterdam"
 
 
 def test_fork_ids() -> None:
@@ -257,5 +258,5 @@ def test_fork_ids() -> None:
 def test_timestamp_out_of_range() -> None:
     """A timestamp of 2^64 is not a 64-bit number, so it fails with code 0."""
     with raises(ChainError, f"expected an int below {2**64}, got {2**64}") as error:
-        sepolia_active_fork(0, 2**64)
+        active_fork("sepolia", 0, 2**64)
     assert error.value.code == 0
