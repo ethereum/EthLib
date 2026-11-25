@@ -1058,6 +1058,23 @@ theorem createEther_isOk_iff {fork : Fork} {tx : TransactionState} {address : Ad
   · intro hfit
     exact modifyState_isOk (by simp only [Account.credit, hfit, ↓reduceIte]; rfl)
 
+/-- A read of code fails only with a missing code at its hash. -/
+theorem error_getCode {tx : TransactionState} {codeHash : Hash32} {e : StateError}
+    (h : tx.getCode codeHash = .error e) : e = .missingCode codeHash := by
+  unfold getCode at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  unfold State.getCode at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  · exact (Except.error.inj h).symm
+
 /-- Creating ether fails only for a balance that would overflow at its address. -/
 theorem error_createEther {fork : Fork} {tx : TransactionState} {address : Address}
     {amount : U256} {e : StateError} (h : tx.createEther fork address amount = .error e) :

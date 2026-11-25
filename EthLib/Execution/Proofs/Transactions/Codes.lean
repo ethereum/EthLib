@@ -468,39 +468,6 @@ private theorem noMiss_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
       · exact processMessage_ne_missingCode vfirst.1 c h
       · cases h
 
-/-- A credit of ether never fails for a missing code. -/
-private theorem creditEther_ne_missingCode (tx : TransactionState) (address : Address)
-    (amount : Nat) (c : Hash32) : creditEther fork tx address amount ≠ .error (.missingCode c) := by
-  unfold creditEther
-  split
-  · exact modifyState_ne_missingCode
-      (fun _ _ h => by unfold Account.credit at h; split at h <;> cases h) c
-  · nofun
-
-/-- The deletions at the end of a transaction never fail for a missing code. -/
-private theorem deleteAccounts_ne_missingCode (state : TransactionState) (output : CallOutput)
-    (c : Hash32) : deleteAccounts fork state output ≠ .error (.missingCode c) := by
-  have fold : ∀ (l : List Address) (init : TransactionState),
-      l.foldlM (fun state address =>
-        if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
-        else pure (state.destroyAccount address)) init ≠ .error (.missingCode c) := by
-    intro l
-    induction l with
-    | nil => exact fun _ h => by cases h
-    | cons address rest ih =>
-      intro init h
-      rcases Base.bind_eq_error h with h | ⟨mid, -, h⟩
-      · split at h
-        · exact modifyState_ne_missingCode (fun _ _ h => by cases h) c h
-        · cases h
-      · exact ih mid h
-  intro h
-  unfold deleteAccounts at h
-  rcases Base.bind_eq_error h with h | ⟨deleted, -, h⟩
-  · rw [Std.ExtTreeSet.foldlM_eq_foldlM_toList] at h
-    exact fold _ _ h
-  · cases h
-
 /-- A run of a transaction never aborts for a missing code, when its block holds every code. -/
 private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnvironment fork}
     {block : BlockState} {included : Included} {tx : Transaction}
@@ -537,20 +504,12 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
   rcases Base.bind_eq_error h with h | ⟨⟨settled, used⟩, -, h⟩
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
-    unfold settleGas at he
-    rw [paidBaseFee_empty] at he
-    rcases Base.bind_eq_error he with he | ⟨mid, -, he⟩
-    · exact creditEther_ne_missingCode _ _ _ c he
-    rcases Base.bind_eq_error he with he | ⟨paid, -, he⟩
-    · unfold payBeneficiary at he
-      split at he
-      · cases he
-      · exact creditEther_ne_missingCode _ _ _ c he
-    · cases he
+    obtain ⟨_, he⟩ := error_settleGas he
+    cases he
   rcases Base.bind_eq_error h with h | ⟨deleted, -, h⟩
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
-    exact deleteAccounts_ne_missingCode _ _ c he
+    exact deleteAccounts_ne_error _ _ _ he
   · cases h
 
 /-- A call on a block that holds every code keeps the code of each account available. -/
