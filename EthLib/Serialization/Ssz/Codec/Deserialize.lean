@@ -34,7 +34,7 @@ inductive Slot where
 /-- The bytes a slot holds in place, a body having none of its own here. -/
 def Slot.held : Slot → Bytes
   | .inline bytes => bytes
-  | .body _ => #[]
+  | .body _ => .empty
 
 
 /--
@@ -126,16 +126,17 @@ def bodyStarts : List Slot → List Nat
   | .inline _ :: rest => bodyStarts rest
   | .body start :: rest => start :: bodyStarts rest
 
-/-- The parts in field order, each body taken from the span its offset opened. -/
-def takeSlots (data : Bytes) : List Slot → List Nat → Except Err (List Bytes)
-  | [], _ => .ok []
-  -- An inline field consumes no body span because its payload is already present.
-  | .inline bytes :: rest, spans => do return bytes :: (← takeSlots data rest spans)
-  -- A variable field consumes exactly one validated span and extracts those payload bytes.
-  | .body start :: rest, span :: spans => do
-      return data.extract start (start + span) :: (← takeSlots data rest spans)
-  -- A body with no span left means a table shorter than the fields that read it.
-  | .body _ :: _, [] => .error .badDeclaration
+/--
+The bytes of each field of a struct, in order.
+
+A slot written in place gives its own bytes, and a slot behind an offset takes the next body.
+-/
+def fillSlots : List Slot → List Bytes → List Bytes
+  | [], _ => []
+  | .inline bytes :: slots, bodies => bytes :: fillSlots slots bodies
+  | .body _ :: slots, body :: bodies => body :: fillSlots slots bodies
+  -- The bodies are cut one per offset, so a slot behind an offset never runs out of them.
+  | .body _ :: slots, [] => fillSlots slots []
 
 /--
 The budget a struct encoding has to give, settled before any of its fields is read.
@@ -164,18 +165,24 @@ def structSlots (fields : List Desc) (data : Bytes) : Except Err (List Slot × N
   structBudget fields data.size
   readSlots fields data 0
 
-/-- Each field's own bytes, once the offsets in the fixed part are checked against the input. -/
-def structBodies (data : Bytes) (slots : List Slot) (leading : Nat) : Except Err (List Bytes) := do
+/-- The body of each field behind an offset, once the offsets are checked against the input. -/
+def offsetBodies (data : Bytes) (slots : List Slot) (leading : Nat) : Except Err (List Bytes) := do
   let offsets := bodyStarts slots
   -- With no bodies, the slots just read are the whole encoding, and no unused byte follows.
   if offsets.isEmpty then
     if data.size != leading then throw (.scope leading data.size)
-    return slots.map Slot.held
+    return []
   -- The first body starts where the slots end; anything else leaves a gap or an overlap.
   if offsets.headD 0 != leading then throw (.firstOffset leading (offsets.headD 0))
   -- Validate the complete offset order before extracting any variable payload.
   let spans ← offsetSpans offsets data.size
-  takeSlots data slots spans
+  -- Each body runs from its offset over its span.
+  return List.zipWith (fun start span => data.extract start (start + span)) offsets spans
+
+/-- Each field's own bytes, once the offsets in the fixed part are checked against the input. -/
+def structBodies (data : Bytes) (slots : List Slot) (leading : Nat) : Except Err (List Bytes) :=
+  -- The fields written in place keep their bytes, and the others take the bodies in order.
+  fillSlots slots <$> offsetBodies data slots leading
 
 /--
 Each field's own bytes, cut out of a struct encoding.
@@ -262,7 +269,7 @@ def unpackDelimited (limit : Option Nat) (data : Bytes) : Except Err (Array Bool
   let final := data[data.size - 1]?.getD 0
   -- Trailing zero bytes would give one value a second encoding.
   if final == 0 then
-    if data.all (· == 0) then throw .noDelimiter else throw .trailingZeros
+    if data.data.all (· == 0) then throw .noDelimiter else throw .trailingZeros
   -- Inside the final byte, the closing bit is the highest one set.
   --
   -- So the count is `8 * (n - 1) + h`, for `n` bytes and that bit at position `h`.

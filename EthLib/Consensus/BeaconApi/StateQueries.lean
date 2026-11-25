@@ -219,14 +219,14 @@ def stateQuery (state : BeaconState preset fork) : StateQuery → Except ErrorMe
   | .root => do
     let root ← (stateRoot state).mapError fun _ => internalError "no state root"
     -- The root endpoint: an object with the one required key root.
-    return { data := Json.mkObj [("root", .str (toHex root.toArray))] }
+    return { data := Json.mkObj [("root", .str (toHex ⟨root.toArray⟩))] }
   -- The fork and finality checkpoints endpoints: the object itself, with no version.
   | .fork => do return { data := ← apiJsonOr500 (stateFork state) }
   | .finalityCheckpoints => do return { data := ← apiJsonOr500 (finalityCheckpoints state) }
   | .randao epoch => do
     let mix ← stateRandao state epoch
     -- The RANDAO endpoint: an object with the one required key randao.
-    return { data := Json.mkObj [("randao", .str (toHex mix.toArray))] }
+    return { data := Json.mkObj [("randao", .str (toHex ⟨mix.toArray⟩))] }
   -- The queues, the lookahead and the builder fields: with the version of the state.
   | .pendingDeposits => versioned fork (pendingDeposits state)
   | .pendingPartialWithdrawals => versioned fork (pendingPartialWithdrawals state)

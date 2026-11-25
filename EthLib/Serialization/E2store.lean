@@ -185,7 +185,7 @@ structure Index where
 The integer is in two's complement, so a top bit of 1 makes it negative. -/
 def readInt64 (data : ByteArray) (pos : Nat) : Int :=
   -- SlotIndex: each entry is a fixed-length 8-byte two's complement signed integer, little-endian.
-  (BitVec.ofNat 64 (Ssz.readUint data.data pos 8)).toInt
+  (BitVec.ofNat 64 (Ssz.readUint data pos 8)).toInt
 
 /-- The index that the data of an index record holds.
 
@@ -199,7 +199,7 @@ def readIndex (data : ByteArray) : Except E2storeError Index :=
     .error (.indexSize data.size)
   else
     -- The count is the last 8 bytes, which EthLib reads unsigned and little-endian.
-    let count := Ssz.readUint data.data (data.size - 8) 8
+    let count := Ssz.readUint data (data.size - 8) 8
     -- SlotIndex: the record is `count * 8 + 24` bytes, so its data is `16 + 8 count` bytes.
     if data.size ≠ 16 + 8 * count then
       .error (.indexSize data.size)
@@ -211,6 +211,6 @@ def readIndex (data : ByteArray) : Except E2storeError Index :=
       -- The record starts with its 8-byte header.
       --
       -- So entry `i`, counted from 0, is at `8 + 8 i` of the data.
-      .ok ⟨Ssz.readUint data.data 0 8, (List.range count).map fun i => readInt64 data (8 + 8 * i)⟩
+      .ok ⟨Ssz.readUint data 0 8, (List.range count).map fun i => readInt64 data (8 + 8 * i)⟩
 
 end EthLib.Serialization.E2store

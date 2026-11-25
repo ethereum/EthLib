@@ -221,11 +221,11 @@ theorem extract_concatParts_run {width : Nat} :
     have sized : part.size = width := widths part (by simp)
     have restWidths : ∀ other ∈ rest, other.size = width := fun other member =>
       widths other (by simp [member])
-    simp only [concatParts, Array.extract_append, sized]
+    simp only [concatParts, ByteArray.extract_append, sized]
     cases skip with
     | succ skip =>
       -- The first part lies wholly before the run, so the run starts in the rest.
-      rw [Array.extract_eq_empty_of_le (by rw [Nat.succ_mul]; omega), Array.empty_append,
+      rw [ByteArray.extract_eq_empty_iff.mpr (by rw [Nat.succ_mul]; omega), ByteArray.empty_append,
         show (skip + 1) * width - width = skip * width by rw [Nat.succ_mul]; omega,
         show (skip + 1 + take) * width - width = (skip + take) * width by
           rw [show skip + 1 + take = (skip + take) + 1 by omega, Nat.succ_mul]; omega,
@@ -239,7 +239,7 @@ theorem extract_concatParts_run {width : Nat} :
         have ih := extract_concatParts_run rest restWidths 0 take
         simp only [Nat.zero_mul, Nat.zero_add, Nat.zero_sub, List.drop_zero] at ih ⊢
         rw [show (take + 1) * width - width = take * width by rw [Nat.succ_mul]; omega, ih,
-          Array.extract_eq_self_of_le (by rw [sized, Nat.succ_mul]; omega)]
+          Base.byteArray_extract_eq_self_of_le (by rw [sized, Nat.succ_mul]; omega)]
         simp [concatParts]
 
 section Packed
@@ -298,7 +298,7 @@ theorem packElements_elementBytes (basic : (desc α).isBasic = true) (elements :
   generalize hk : perChunk α = per at filled positive
   rw [bytesPerChunk] at filled
   have wide : 0 < width := Nat.pos_of_ne_zero (by rintro rfl; simp at filled)
-  rw [packElements, fold_parts_eq_concat, Array.empty_append]
+  rw [packElements, fold_parts_eq_concat, ByteArray.empty_append]
   apply Array.ext
   · -- The bytes fill whole nodes of `per` elements each, the last one perhaps in part.
     simp only [packBytes_size, size, packedChunks, Array.size_ofFn, hk, bytesPerChunk]
@@ -316,12 +316,12 @@ theorem packElements_elementBytes (basic : (desc α).isBasic = true) (elements :
     have run : (concatParts (elements.toList.map elementBytes)).extract (chunk * 32)
           (chunk * 32 + 32)
         = (elements.extract (chunk * per) (chunk * per + per)).foldl
-            (fun bytes a => bytes ++ elementBytes a) #[] := by
+            (fun bytes a => bytes ++ elementBytes a) .empty := by
       rw [show chunk * 32 + 32 = (chunk * per + per) * width by
           rw [← filled, Nat.add_mul]; ac_rfl,
         show chunk * 32 = (chunk * per) * width by rw [← filled]; ac_rfl,
         extract_concatParts_run _ widths, ← Array.foldl_toList, Array.toList_extract,
-        List.extract_eq_take_drop, ← List.foldl_map, fold_parts_eq_concat, Array.empty_append,
+        List.extract_eq_take_drop, ← List.foldl_map, fold_parts_eq_concat, ByteArray.empty_append,
         List.map_take, List.map_drop]
       congr 2
       omega
@@ -338,7 +338,7 @@ theorem hashTreeRoot_vector_packed {length : Nat} (basic : (desc α).isBasic = t
     packElements_elementBytes basic elements.toArray
   have fit : ¬chunksForBytes (length * (desc α).itemLength) < (packedChunks elements.toArray).size
       := by
-    rw [← packed, packElements, fold_parts_eq_concat, Array.empty_append, packBytes_size,
+    rw [← packed, packElements, fold_parts_eq_concat, ByteArray.empty_append, packBytes_size,
       concatParts_size _ _ (fun part member => by
         obtain ⟨a, -, rfl⟩ := List.mem_map.mp member
         exact (serialize_elementBytes basic a).2)]

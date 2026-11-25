@@ -476,7 +476,8 @@ theorem valueOf_eq_json (fuel : Nat) (value : PyValue) :
         jsonPair_toJson]
       case h_3 =>
         -- The writer of bytes is the hex writer of the codec, whose reader reads them back.
-        have back (data : Bytes) : ofHex (Base.hexString data.toList) = .ok data := ofHex_toHex data
+        have back (data : Bytes) : ofHex (Base.hexString data.data.toList) = .ok data :=
+          ofHex_toHex data
         simp only [strOf, pure, Except.pure, Base.toList_eq_data_toList, back]
       case h_4 => rfl
       case h_5 =>

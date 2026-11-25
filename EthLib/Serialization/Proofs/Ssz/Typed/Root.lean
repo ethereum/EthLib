@@ -26,7 +26,7 @@ variable {α : Type} [SszType α] [LawfulSszType α]
 
 /-- The typed root is the untyped root of the value. -/
 theorem hashTreeRoot_ok_iff {a : α} {root : Vector UInt8 32} :
-    hashTreeRoot a = .ok root ↔ Ssz.hashTreeRoot (desc α) (toValue a) = .ok root.toArray := by
+    hashTreeRoot a = .ok root ↔ Ssz.hashTreeRoot (desc α) (toValue a) = .ok ⟨root.toArray⟩ := by
   rw [hashTreeRoot_eq]
   cases rooted : Ssz.hashTreeRoot (desc α) (toValue a) with
   | error fault => simp [bind, Except.bind]
@@ -38,7 +38,7 @@ theorem hashTreeRoot_ok_iff {a : α} {root : Vector UInt8 32} :
 theorem hashTreeRoot_total (a : α) : ∃ root, hashTreeRoot a = .ok root := by
   obtain ⟨root, rooted, width⟩ :=
     Ssz.hashTreeRoot_total (desc α) (toValue a) LawfulSszType.wellFormed (LawfulSszType.fits a)
-  exact ⟨⟨root, width⟩, hashTreeRoot_ok_iff.mpr rooted⟩
+  exact ⟨⟨root.data, width⟩, hashTreeRoot_ok_iff.mpr rooted⟩
 
 /-- A 32-byte value is its own root. -/
 theorem hashTreeRoot_bytes32 (root : Vector UInt8 32) : hashTreeRoot root = .ok root :=

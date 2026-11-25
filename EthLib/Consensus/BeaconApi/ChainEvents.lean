@@ -118,7 +118,7 @@ def topic : ChainEvent → EventTopic
   | .fastConfirmation _ => .fastConfirmation
 
 /-- A root as the API writes it. -/
-def rootJson (root : Root) : Json := .str (toHex root.toArray)
+def rootJson (root : Root) : Json := .str (toHex ⟨root.toArray⟩)
 
 /-- The data of an event, as JSON. -/
 def data (fork : Fork) : ChainEvent → Json

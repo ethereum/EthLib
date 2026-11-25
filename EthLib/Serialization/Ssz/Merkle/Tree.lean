@@ -29,13 +29,13 @@ namespace EthLib.Serialization.Ssz
 /-- The all-zero node. -/
 def zeroChunk : Bytes :=
   -- 32 zero bytes, the leaf that pads every tree.
-  Array.replicate bytesPerChunk 0
+  ⟨Array.replicate bytesPerChunk 0⟩
 
 /-- Folding two nodes into their parent, with a hash that may answer in a monad. -/
 def combineM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) (left right : Bytes) :
-    m Bytes := do
+    m Bytes :=
   -- A parent is `H(left || right)`, the hash of the 64 bytes of its two children.
-  return (← hash (ByteArray.mk (left ++ right))).data
+  hash (left ++ right)
 
 /-- Folding two nodes into their parent, with SHA-256. -/
 def combine (left right : Bytes) : Bytes :=
@@ -99,7 +99,7 @@ def packBytes (data : Bytes) : Array Bytes :=
     let start := position.val * bytesPerChunk
     let piece := data.extract start (start + bytesPerChunk)
     -- The last chunk is right-padded with zero bytes to 32.
-    piece ++ Array.replicate (bytesPerChunk - piece.size) 0
+    piece ++ ⟨Array.replicate (bytesPerChunk - piece.size) 0⟩
 
 /--
 Root of the perfect tree of a given depth, over nodes starting at a position.
@@ -128,7 +128,7 @@ def subtreeAt (chunks : Array Bytes) (depth start : Nat) : Bytes :=
 
 /-- A node as a 32-byte vector, refused if it has another width. -/
 def toChunk (node : Bytes) : Except Err (Vector UInt8 bytesPerChunk) :=
-  Base.exactArray bytesPerChunk node (.count bytesPerChunk)
+  Base.exactBytes bytesPerChunk node (.count bytesPerChunk)
 
 /-- Refuse a hash operand that is not one complete 32-byte SSZ node. -/
 def checkChunk (node : Bytes) : Except Err Unit :=

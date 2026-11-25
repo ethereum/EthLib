@@ -338,7 +338,7 @@ end SigningRequest
 def signingRootFields : Option Root → List (String × Json)
   -- The schemas: the signing root is optional, so an absent one is left out.
   | none => []
-  | some root => [("signingRoot", .str (toHex root.toArray))]
+  | some root => [("signingRoot", .str (toHex ⟨root.toArray⟩))]
 
 /-- The fields of the shared part of a request. -/
 def signingFields (signing : Signing) : Except Err (List (String × Json)) := do

@@ -271,7 +271,8 @@ def chainHeads (store : Store preset fork) (optimistic : OptimisticStore preset 
 
 /-- The JSON object of a checkpoint. -/
 def checkpointJson (checkpoint : Checkpoint) : Json :=
-  Json.mkObj [("epoch", uintJson checkpoint.epoch), ("root", .str (toHex checkpoint.root.toArray))]
+  Json.mkObj [("epoch", uintJson checkpoint.epoch),
+    ("root", .str (toHex ⟨checkpoint.root.toArray⟩))]
 
 /-- The JSON object of a node view, with empty extra data. -/
 def ForkChoiceNodeView.toJson (view : ForkChoiceNodeView) : Json :=
@@ -280,16 +281,16 @@ def ForkChoiceNodeView.toJson (view : ForkChoiceNodeView) : Json :=
   -- The source lets the extra data vary, or be an empty object; EthLib gives an empty object.
   Json.mkObj [
     ("slot", uintJson view.slot),
-    ("block_root", .str (toHex view.blockRoot.toArray)),
+    ("block_root", .str (toHex ⟨view.blockRoot.toArray⟩)),
     ("payload_status", .str (payloadStatusName view.payloadStatus)),
-    ("parent_root", .str (toHex view.parentRoot.toArray)),
+    ("parent_root", .str (toHex ⟨view.parentRoot.toArray⟩)),
     ("parent_payload_status",
       (view.parentPayloadStatus.map fun status => Json.str (payloadStatusName status)).getD .null),
     ("justified_checkpoint", checkpointJson view.justifiedCheckpoint),
     ("finalized_checkpoint", checkpointJson view.finalizedCheckpoint),
     ("weight", uintJson view.weight),
     ("validity", .str view.validity.name),
-    ("execution_block_hash", .str (toHex view.executionBlockHash.toArray)),
+    ("execution_block_hash", .str (toHex ⟨view.executionBlockHash.toArray⟩)),
     ("payload_attester_count", uintJson view.payloadAttesterCount),
     ("payload_availability_yes_count", uintJson view.payloadAvailabilityYesCount),
     ("payload_data_availability_yes_count", uintJson view.payloadDataAvailabilityYesCount),
@@ -297,7 +298,7 @@ def ForkChoiceNodeView.toJson (view : ForkChoiceNodeView) : Json :=
 
 /-- The JSON object of a leaf. -/
 def ChainHead.toJson (head : ChainHead) : Json :=
-  Json.mkObj [("root", .str (toHex head.root.toArray)), ("slot", uintJson head.slot),
+  Json.mkObj [("root", .str (toHex ⟨head.root.toArray⟩)), ("slot", uintJson head.slot),
     ("execution_optimistic", .bool head.executionOptimistic)]
 
 /-- The response of the fork choice endpoint, or the error with code 500. -/

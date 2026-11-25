@@ -31,27 +31,6 @@ theorem readUint_lt (data : Bytes) (start width : Nat) :
     (unpackBits data count).size = count := by
   simp [unpackBits]
 
-/-- A successful offset table gives one span per body. -/
-theorem offsetSpans_length {offsets spans : List Nat} {scope : Nat}
-    (read : offsetSpans offsets scope = .ok spans) : spans.length = offsets.length := by
-  -- Each accepted start offset contributes one span, including a zero-length span.
-  induction offsets generalizing spans with
-  | nil => rw [offsetSpans_nil] at read; cases read; rfl
-  | cons start rest ih =>
-    cases rest with
-    | nil =>
-      rw [offsetSpans_single] at read
-      split at read <;> cases read
-      rfl
-    | cons next rest =>
-      rw [offsetSpans_cons_cons] at read
-      split at read
-      · cases read
-      · -- A rejected suffix cannot occur inside a successfully decoded table.
-        obtain ⟨more, tail, ⟨⟩⟩ := checksPassed read
-        -- Prepending the current span increases both counts by one.
-        simp [ih tail]
-
 /-- Cutting a vector produces one slice per declared element. -/
 theorem vectorSlices_length {element : Desc} {count : Nat} {data : Bytes}
     {slices : List Bytes} (read : vectorSlices element count data = .ok slices) :

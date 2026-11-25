@@ -134,7 +134,7 @@ def printStateId : StateId → String
   | .finalized => "finalized"
   | .justified => "justified"
   | .slot slot => toString slot.toNat
-  | .root root => toHex root.toArray
+  | .root root => toHex ⟨root.toArray⟩
 
 /-- The text of a block identifier, with lowercase hex. -/
 def printBlockId : BlockId → String
@@ -142,12 +142,12 @@ def printBlockId : BlockId → String
   | .genesis => "genesis"
   | .finalized => "finalized"
   | .slot slot => toString slot.toNat
-  | .root root => toHex root.toArray
+  | .root root => toHex ⟨root.toArray⟩
 
 /-- The text of a validator identifier, with lowercase hex. -/
 def printValidatorId : ValidatorId → String
   | .index index => toString index.toNat
-  | .pubkey pubkey => toHex pubkey.toArray
+  | .pubkey pubkey => toHex ⟨pubkey.toArray⟩
 
 variable {preset : Preset} {fork : Base.Fork}
 

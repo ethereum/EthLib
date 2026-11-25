@@ -195,14 +195,14 @@ theorem ofHex_eq_ok_iff {text : String} {data : Bytes} :
       cases h : Base.hexBytes? digits with
       | none => simp [h] at read
       | some bytes => exact ⟨bytes, rfl⟩
-    have dataEq : bytes.data = data := by
+    have dataEq : bytes = data := by
       simp only [readBytes] at read
       cases read
       rfl
     obtain ⟨rest, hdata, kept⟩ := keptOrUpper_of_hexBytesFrom? digits .empty bytes readBytes
     simp only [ByteArray.data_empty, Array.toList_empty, List.nil_append, dataEq] at hdata
-    refine .inr ⟨data.toList.flatMap Base.byteHexDigits, digits, ?_, marked, ?_⟩
-    · exact Base.toList_hexString data.toList
+    refine .inr ⟨data.data.toList.flatMap Base.byteHexDigits, digits, ?_, marked, ?_⟩
+    · exact Base.toList_hexString data.data.toList
     · rw [hdata]
       exact kept
   · intro cased

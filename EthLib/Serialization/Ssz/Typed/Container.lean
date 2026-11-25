@@ -18,120 +18,6 @@ Source: [EIP-7495][eip7495] for the layout of a progressive container.
 
 namespace EthLib.Serialization.Ssz
 
-/-- What one slot of a struct's fixed part holds, cut from a byte array. -/
-inductive ByteSlot where
-  /-- The field itself, written in place. -/
-  | inline (bytes : ByteArray)
-  /-- Where the field's body begins, the body following the fixed part. -/
-  | body (start : Nat)
-
-/-- The slot of the untyped codec at the same place. -/
-def ByteSlot.toSlot : ByteSlot → Slot
-  | .inline bytes => .inline bytes.data
-  | .body start => .body start
-
-/-- Where each field's bytes sit inside a struct's encoding. -/
-def readByteSlots : List Desc → ByteArray → Nat → Except Err (List ByteSlot × Nat)
-  | [], _, position => .ok ([], position)
-  | field :: fields, data, position =>
-    match field.fixedSize with
-    -- A fixed-size field sits in place, over its own width.
-    | some width => do
-      if position + width > data.size then throw (.truncated (position + width) data.size)
-      let (rest, ending) ← readByteSlots fields data (position + width)
-      return (.inline (data.extract position (position + width)) :: rest, ending)
-    -- A variable-size field leaves its offset in place, a little-endian uint32.
-    | none => do
-      if position + bytesPerOffset > data.size then
-        throw (.truncated (position + bytesPerOffset) data.size)
-      let (rest, ending) ← readByteSlots fields data (position + bytesPerOffset)
-      return (.body (readUint data.data position bytesPerOffset) :: rest, ending)
-
-/-- The slots of a struct's fixed part, and where that part ends. -/
-def byteStructSlots (fields : List Desc) (data : ByteArray) :
-    Except Err (List ByteSlot × Nat) := do
-  -- The budget is settled first, so no slot is read past the input.
-  --
-  -- EthLib's own bound: an input of `2^32` bytes or more is refused.
-  --
-  -- Serialization never writes one, since four-byte offsets could not address it.
-  if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
-  -- EthLib's step 1, the budget: an input of fixed width has exactly that width.
-  --
-  -- With a variable-size field, the input holds at least the fixed part.
-  structBudget fields data.size
-  readByteSlots fields data 0
-
-/-- Where each body begins, in the order the table names them. -/
-def byteBodyStarts : List ByteSlot → List Nat
-  | [] => []
-  | .inline _ :: rest => byteBodyStarts rest
-  -- The offsets in the order of their fields, which is the order of their bodies.
-  | .body start :: rest => start :: byteBodyStarts rest
-
-/-- The body of each field behind an offset, once the offsets are checked against the input. -/
-def byteBodies (data : ByteArray) (slots : List ByteSlot) (leading : Nat) :
-    Except Err (List ByteArray) := do
-  let offsets := byteBodyStarts slots
-  -- With no bodies, the slots just read are the whole encoding, and no unused byte follows.
-  if offsets.isEmpty then
-    if data.size != leading then throw (.scope leading data.size)
-    return []
-  -- The first body starts where the slots end; anything else leaves a gap or an overlap.
-  if offsets.headD 0 != leading then throw (.firstOffset leading (offsets.headD 0))
-  -- The offsets never decrease and the last is at most the scope; each body ends at the next.
-  let spans ← offsetSpans offsets data.size
-  return List.zipWith (fun start span => data.extract start (start + span)) offsets spans
-
-/-- The width so far, plus the bytes the fixed part of `parts` occupies. -/
-def byteHeadWidthFrom : List (Bool × ByteArray) → Nat → Nat
-  | [], width => width
-  -- A fixed-size part takes its own length, a variable-size one the four bytes of its offset.
-  | (isInline, part) :: rest, width =>
-      byteHeadWidthFrom rest (width + if isInline then part.size else bytesPerOffset)
-
-/-- The width so far, plus the bytes the bodies of `parts` occupy. -/
-def byteBodyWidthFrom : List (Bool × ByteArray) → Nat → Nat
-  | [], width => width
-  -- Only a variable-size part has a body.
-  | (true, _) :: rest, width => byteBodyWidthFrom rest width
-  | (false, part) :: rest, width => byteBodyWidthFrom rest (width + part.size)
-
-/-- The fixed part so far, then the fixed part of `parts`, whose first body begins at `start`. -/
-def byteHeadOfFrom : Nat → List (Bool × ByteArray) → ByteArray → ByteArray
-  | _, [], out => out
-  -- A fixed-size part is written in place.
-  | start, (true, part) :: rest, out => byteHeadOfFrom start rest (out ++ part)
-  -- A variable-size part writes the offset of its body, and the next body starts past its end.
-  | start, (false, part) :: rest, out =>
-      byteHeadOfFrom (start + part.size) rest (out ++ ⟨uintBytes bytesPerOffset start⟩)
-
-/-- The bodies so far, then the bodies of `parts`. -/
-def byteBodiesOfFrom : List (Bool × ByteArray) → ByteArray → ByteArray
-  | [], out => out
-  | (true, _) :: rest, out => byteBodiesOfFrom rest out
-  -- The variable-size parts follow, in order.
-  | (false, part) :: rest, out => byteBodiesOfFrom rest (out ++ part)
-
-/--
-Parts laid out as a struct encodes them, as one byte array.
-
-Fixed parts sit in place, variable ones leave an offset behind and follow after.
--/
-def assembleBytes (inline : List Bool) (parts : List ByteArray) : Except Err ByteArray := do
-  let slots := List.zipWith Prod.mk inline parts
-  -- The first body starts past the fixed part, so the length of the fixed part is the first offset.
-  let leading := byteHeadWidthFrom slots 0
-  let total := leading + byteBodyWidthFrom slots 0
-  -- The fixed and the variable lengths sum to less than `2^32`, since an offset has four bytes.
-  --
-  -- An offset past what four bytes can name would wrap, so the encoding is refused.
-  if total ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow total)
-  -- The fixed parts, offsets in place, then the variable parts in order.
-  --
-  -- The whole encoding is written into one array, sized once.
-  return byteBodiesOfFrom slots (byteHeadOfFrom leading slots (ByteArray.emptyWithCapacity total))
-
 /-- The fields of a container, as a tuple of SSZ types nested to the right. -/
 class SszFields (β : Type) where
   -- The fields, in declaration order, form a tuple such as `α × (β × γ)`.
@@ -152,7 +38,7 @@ class SszFields (β : Type) where
 
   The reader takes the bodies of the fields behind offsets, in order.
   -/
-  decodeSlots : List ByteSlot → Except Err (List ByteArray → Except Err β)
+  decodeSlots : List Slot → Except Err (List ByteArray → Except Err β)
 
 open SszType
 
@@ -217,7 +103,7 @@ It is compiled once for all containers, since a copy for each one would hold all
 @[noinline, nospecialize]
 def encodeStruct {β : Type} [SszFields β] (b : β) : Except Err ByteArray := do
   -- The serializations of the fields, laid out by whether each field is fixed-size.
-  assembleBytes ((SszFields.descs β).map Desc.isFixed) (← SszFields.encodes b)
+  assemble ((SszFields.descs β).map Desc.isFixed) (← SszFields.encodes b)
 
 /--
 The tuple of fields that the bytes of a struct encode.
@@ -231,10 +117,10 @@ def decodeStruct {β : Type} [SszFields β] (data : ByteArray) : Except Err β :
   -- So a refusal names the same rule.
   --
   -- EthLib's step 1, the budget, then step 2, the fixed part, read in place.
-  let (slots, leading) ← byteStructSlots (SszFields.descs β) data
+  let (slots, leading) ← structSlots (SszFields.descs β) data
   -- With no offsets, step 3 checks that the fixed part is the whole input, then fields decode.
-  if (byteBodyStarts slots).isEmpty then
-    let bodies ← byteBodies data slots leading
+  if (bodyStarts slots).isEmpty then
+    let bodies ← offsetBodies data slots leading
     (← SszFields.decodeSlots slots) bodies
   -- With offsets, the fixed fields decode first, then step 3 checks the offsets as a whole.
   --
@@ -243,7 +129,7 @@ def decodeStruct {β : Type} [SszFields β] (data : ByteArray) : Except Err β :
   -- Step 4 then decodes each body, in declaration order.
   else
     let read ← SszFields.decodeSlots slots
-    read (← byteBodies data slots leading)
+    read (← offsetBodies data slots leading)
 
 /--
 The container with the given field names, over a structure and the tuple of its fields.

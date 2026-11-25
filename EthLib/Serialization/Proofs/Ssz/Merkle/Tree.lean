@@ -165,8 +165,8 @@ theorem merkleizeProgressiveUncheckedM_ofHash_eq (hash : ByteArray → ByteArray
 theorem packBytes_chunk_size (data : Bytes) (i : Nat) (within : i < (packBytes data).size) :
     ((packBytes data)[i]).size = bytesPerChunk := by
   -- An extracted window is at most one node wide, and zeros fill exactly its missing bytes.
-  simp only [packBytes, Array.getElem_ofFn, Array.size_append, Array.size_replicate,
-    Array.size_extract]
+  simp only [packBytes, Array.getElem_ofFn, ByteArray.size_append, Base.byteArray_size_mk,
+    Array.size_replicate, ByteArray.size_extract]
   omega
 
 /-- Packing pads even the final partial node to one complete hash operand. -/
@@ -184,8 +184,8 @@ theorem packBytes_get (data : Bytes) (i j : Nat) (node : i < (packBytes data).si
       data[i * bytesPerChunk + j] := by
   -- A position inside the original message lies in the extracted window, before its zero padding.
   simp only [packBytes, Array.getElem_ofFn]
-  rw [Array.getElem_append_left (by simp only [Array.size_extract]; omega)]
-  simp only [Array.getElem_extract]
+  rw [ByteArray.getElem_append_left (by simp only [ByteArray.size_extract]; omega)]
+  simp only [ByteArray.getElem_extract]
 
 /-- Positions beyond the original message are zero-filled in the final node. -/
 theorem packBytes_padding (data : Bytes) (i j : Nat) (node : i < (packBytes data).size)
@@ -193,7 +193,7 @@ theorem packBytes_padding (data : Bytes) (i j : Nat) (node : i < (packBytes data
     ((packBytes data)[i])[j]'(by rw [packBytes_chunk_size]; exact position) = 0 := by
   -- After the extracted bytes, the remaining positions belong to the explicit zero suffix.
   simp only [packBytes, Array.getElem_ofFn]
-  rw [Array.getElem_append_right (by simp only [Array.size_extract]; omega)]
+  rw [ByteArray.getElem_append_right (by simp only [ByteArray.size_extract]; omega)]
   exact Array.getElem_replicate _
 
 /--
@@ -337,21 +337,23 @@ theorem merkleizeProgressiveUnchecked_eq (chunks : List Bytes) (level : Nat) :
 
 /-- A node converts to a 32-byte vector exactly when that vector holds its bytes. -/
 theorem toChunk_ok_iff {node : Bytes} {chunk : Vector UInt8 bytesPerChunk} :
-    toChunk node = .ok chunk ↔ node = chunk.toArray := by
+    toChunk node = .ok chunk ↔ node = ⟨chunk.toArray⟩ := by
   unfold toChunk
-  exact Base.exactArray_eq_ok_iff.trans eq_comm
+  rw [Base.exactBytes_eq_ok_iff]
+  -- Bytes are equal exactly when the arrays that hold them are.
+  exact ⟨fun same => ByteArray.ext same.symm, fun same => by rw [same]⟩
 
 /-- A node passes the width check exactly when it is 32 bytes wide; otherwise it gets the error. -/
 theorem checkChunk_eq (node : Bytes) : checkChunk node =
     if node.size = bytesPerChunk then .ok () else .error (.count bytesPerChunk node.size) := by
   unfold checkChunk toChunk
   by_cases width : node.size = bytesPerChunk
-  · simp [Base.exactArray_of_size_eq _ width, width, Except.map]
-  · simp [Base.exactArray_of_size_ne _ width, width, Except.map]
+  · simp [Base.exactBytes_of_size_eq _ width, width, Except.map]
+  · simp [Base.exactBytes_of_size_ne _ width, width, Except.map]
 
 /-- A node that reads as a 32-byte vector holds the bytes of that vector. -/
 theorem eq_ok_of_bind_toChunk {root : Except Err Bytes} {chunk : Vector UInt8 bytesPerChunk}
-    (read : root >>= toChunk = .ok chunk) : root = .ok chunk.toArray := by
+    (read : root >>= toChunk = .ok chunk) : root = .ok ⟨chunk.toArray⟩ := by
   cases root with
   | error => simp [bind, Except.bind] at read
   | ok node =>

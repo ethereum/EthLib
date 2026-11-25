@@ -48,8 +48,6 @@ theorem lawful_presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszTyp
     by_cases present : p
     · simp only [encodes, descs, toValues, dite_eq_left present, ite_eq_left present,
         LawfulSszType.encode_eq, serializeFields_cons, LawfulSszFields.encodes_eq (β := β)]
-      cases Ssz.serialize (desc α) (toValue (pair.1 present)) <;>
-        cases serializeFields (descs β) (toValues pair.2) <;> rfl
     · simp only [encodes, descs, toValues, dite_eq_right present, ite_eq_right present,
         LawfulSszFields.encodes_eq (β := β)]
   case decodeSlots_check =>
@@ -60,14 +58,14 @@ theorem lawful_presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszTyp
         have rest := LawfulSszFields.decodeSlots_check (β := β) slots
         rcases LawfulSszType.decode_cases (α := α) bytes with
           ⟨fault, read, dec⟩ | ⟨value, a, read, -, dec⟩
-        · simp [decodeSlots, descs, present, checkInline, ByteSlot.toSlot, read, dec, bind,
+        · simp [decodeSlots, descs, present, checkInline, read, dec, bind,
             Except.bind, Functor.map, Except.map]
-        · simp only [decodeSlots, descs, dite_eq_left present, ite_eq_left present, List.map_cons,
-            ByteSlot.toSlot, checkInline, read, dec, bind, Except.bind, ← rest]
+        · simp only [decodeSlots, descs, dite_eq_left present, ite_eq_left present,
+            checkInline, read, dec, bind, Except.bind, ← rest]
           cases SszFields.decodeSlots (β := β) slots <;> rfl
       | .body _ :: slots =>
-        simp only [decodeSlots, descs, dite_eq_left present, ite_eq_left present, List.map_cons,
-          ByteSlot.toSlot, checkInline, ← LawfulSszFields.decodeSlots_check (β := β) slots, bind,
+        simp only [decodeSlots, descs, dite_eq_left present, ite_eq_left present,
+          checkInline, ← LawfulSszFields.decodeSlots_check (β := β) slots, bind,
           Except.bind]
         cases SszFields.decodeSlots (β := β) slots <;> rfl
       | [] => simp [decodeSlots, descs, present, checkInline, Functor.map, Except.map]
@@ -89,7 +87,7 @@ theorem lawful_presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszTyp
             Except.pure, Except.ok.injEq] at made
           subst made
           have tail := LawfulSszFields.decodeSlots_read bodies rest
-            (by simpa [descs, present] using count) (by simpa [byteBodyStarts] using starts)
+            (by simpa [descs, present] using count) (by simpa [bodyStarts] using starts)
           simp only [descs, ite_eq_left present, fillSlots, deserializeFields, read, tail, ofValues,
             dite_eq_left present, bind, Except.bind, pure, Except.pure]
           rcases deserializeFields (descs β) (fillSlots slots bodies) with _ | values
@@ -103,10 +101,10 @@ theorem lawful_presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszTyp
             Except.ok.injEq] at made
           subst made
           match bodies, starts with
-          | [], starts => simp [byteBodyStarts] at starts
+          | [], starts => simp [bodyStarts] at starts
           | bytes :: bodies, starts =>
             have tail := LawfulSszFields.decodeSlots_read bodies rest
-              (by simpa [descs, present] using count) (by simpa [byteBodyStarts] using starts)
+              (by simpa [descs, present] using count) (by simpa [bodyStarts] using starts)
             rcases LawfulSszType.decode_cases (α := α) bytes with
               ⟨fault, read, dec⟩ | ⟨value, a, read, conv, dec⟩
             · simp [descs, present, fillSlots, deserializeFields, read, dec, bind, Except.bind]
@@ -206,8 +204,7 @@ theorem lawful_presentFields (p : Prop) [Decidable p] (α : Type) [SszType α]
     · simp only [encodes, descs, toValues, dite_eq_left present, ite_eq_left present,
         LawfulSszType.encode_eq, serializeFields_cons, serializeFields_nil]
       cases Ssz.serialize (desc α) (toValue (field present)) <;> rfl
-    · simp [encodes, descs, toValues, present, serializeFields_nil, pure, Except.pure,
-        Functor.map, Except.map]
+    · simp [encodes, descs, toValues, present, serializeFields_nil, pure, Except.pure]
   case decodeSlots_check =>
     intro slots
     by_cases present : p
@@ -215,10 +212,10 @@ theorem lawful_presentFields (p : Prop) [Decidable p] (α : Type) [SszType α]
       | .inline bytes :: _ =>
         rcases LawfulSszType.decode_cases (α := α) bytes with
           ⟨fault, read, dec⟩ | ⟨value, a, read, -, dec⟩ <;>
-        simp [decodeSlots, descs, present, checkInline, ByteSlot.toSlot, read, dec, bind,
+        simp [decodeSlots, descs, present, checkInline, read, dec, bind,
           Except.bind, Functor.map, Except.map, pure, Except.pure]
       | .body _ :: _ | [] =>
-        simp [decodeSlots, descs, present, checkInline, ByteSlot.toSlot, Functor.map, Except.map]
+        simp [decodeSlots, descs, present, checkInline, Functor.map, Except.map]
     · simp [decodeSlots, descs, present, checkInline, Functor.map, Except.map]
   case decodeSlots_read =>
     intro slots read bodies made count starts
@@ -226,7 +223,7 @@ theorem lawful_presentFields (p : Prop) [Decidable p] (α : Type) [SszType α]
     · match slots, made, count, starts with
       | [.inline bytes], made, _, starts =>
         obtain rfl : bodies = [] := List.eq_nil_of_length_eq_zero (by
-          simpa [byteBodyStarts] using starts.symm)
+          simpa [bodyStarts] using starts.symm)
         rcases LawfulSszType.decode_cases (α := α) bytes with
           ⟨fault, -, dec⟩ | ⟨value, a, read, conv, dec⟩
         · simp [decodeSlots, present, dec, bind, Except.bind] at made
@@ -246,12 +243,12 @@ theorem lawful_presentFields (p : Prop) [Decidable p] (α : Type) [SszType α]
               Functor.map, Except.map]
           · simp [descs, present, fillSlots, deserializeFields, read, dec, ofValues, conv, bind,
               Except.bind, pure, Except.pure, Functor.map, Except.map]
-        | [], starts | _ :: _ :: _, starts => simp [byteBodyStarts] at starts
+        | [], starts | _ :: _ :: _, starts => simp [bodyStarts] at starts
       | [], _, count, _ | _ :: _ :: _, _, count, _ => simp [descs, present] at count
     · match slots, made, count, starts with
       | [], made, _, starts =>
         obtain rfl : bodies = [] := List.eq_nil_of_length_eq_zero (by
-          simpa [byteBodyStarts] using starts.symm)
+          simpa [bodyStarts] using starts.symm)
         simp only [decodeSlots, dite_eq_right present, Except.ok.injEq] at made
         subst made
         simp [descs, present, fillSlots, deserializeFields, ofValues, bind, Except.bind]

@@ -19,7 +19,7 @@ open EthLib.Base
 
 /-- Folding two nodes hashes their concatenation with SHA-256. -/
 theorem combine_eq (left right : Bytes) :
-    combine left right = (Cryptography.Hash.Sha256.hash (ByteArray.mk (left ++ right))).data :=
+    combine left right = Cryptography.Hash.Sha256.hash (left ++ right) :=
   rfl
 
 /-- A subtree past the data is the zero subtree, a leaf is padded, and a parent folds two halves. -/

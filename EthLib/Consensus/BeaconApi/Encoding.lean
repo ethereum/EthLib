@@ -97,7 +97,7 @@ def toJson (envelope : ApiEnvelope) : Json :=
     (envelope.version.map fun v => ("version", Json.str v.name)).toList ++
     (envelope.executionOptimistic.map fun b => ("execution_optimistic", Json.bool b)).toList ++
     (envelope.finalized.map fun b => ("finalized", Json.bool b)).toList ++
-    (envelope.dependentRoot.map fun r => ("dependent_root", Json.str (toHex r.toArray))).toList ++
+    (envelope.dependentRoot.map fun r => ("dependent_root", Json.str (toHex ⟨r.toArray⟩))).toList ++
     [("data", envelope.data)]
 
 /-- The value of an optional metadata key, read when the key is present. -/
@@ -126,7 +126,7 @@ def readBool : Json → Option Bool
 def readRoot : Json → Option Root
   -- The source: a root is a string of `0x` and 64 hex digits, in either case, so 32 bytes.
   | .str text => match ofHex text with
-    | .ok data => Base.exactBytes? 32 ⟨data⟩
+    | .ok data => Base.exactBytes? 32 data
     | .error _ => none
   | _ => none
 

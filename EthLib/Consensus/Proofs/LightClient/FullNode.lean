@@ -21,10 +21,10 @@ open Base Serialization.Ssz
 
 /-- Nodes that are the bytes of 32-byte vectors convert back to those vectors. -/
 theorem mapM_toChunk_map_toArray :
-    ∀ chunks : List Bytes32, (chunks.map Vector.toArray).mapM toChunk = .ok chunks
+    ∀ chunks : List Bytes32, (chunks.map fun node => ⟨node.toArray⟩).mapM toChunk = .ok chunks
   | [] => rfl
   | chunk :: rest => by
-    have read : toChunk chunk.toArray = .ok chunk := toChunk_ok_iff.mpr rfl
+    have read : toChunk ⟨chunk.toArray⟩ = .ok chunk := toChunk_ok_iff.mpr rfl
     simp [List.mapM_cons, read, mapM_toChunk_map_toArray rest, bind, Except.bind, pure,
       Except.pure]
 
@@ -35,7 +35,7 @@ The node is read at a generalized index of at least two, and the root is the roo
 The check of a normalized branch accepts the branch at that index and against that root. -/
 theorem computeMerkleProof_isValidNormalizedMerkleBranch {α : Type} [SszType α]
     [LawfulSszType α] (value : α) {gindex : Nat} (named : 2 ≤ gindex) {leaf : Bytes32}
-    (read : nodeRoot (SszType.desc α) (SszType.toValue value) gindex = .ok leaf.toArray) :
+    (read : nodeRoot (SszType.desc α) (SszType.toValue value) gindex = .ok ⟨leaf.toArray⟩) :
     ∃ root branch, SszType.hashTreeRoot value = .ok root ∧
       computeMerkleProof value gindex = .ok branch ∧
       isValidNormalizedMerkleBranch leaf branch gindex root = .ok true := by

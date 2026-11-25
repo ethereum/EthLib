@@ -27,13 +27,13 @@ structure SszString (limit : Nat) where
 instance {limit : Nat} : SszType (SszString limit) where
   desc := .byteList limit
   -- The value of the byte list is the UTF-8 encoding of the text.
-  toValue s := .bytes s.text.toByteArray.data
+  toValue s := .bytes s.text.toByteArray
   ofValue
     | .bytes data =>
       -- ByteList[N]: at most `N` bytes, checked first.
       if within : data.size ≤ limit then
         -- EthLib's own rule: bytes that are not valid UTF-8 hold no text, and are refused.
-        if valid : ByteArray.IsValidUTF8 ⟨data⟩ then .ok ⟨String.fromUTF8 ⟨data⟩ valid, within⟩
+        if valid : ByteArray.IsValidUTF8 data then .ok ⟨String.fromUTF8 data valid, within⟩
         else .error .notUtf8
       else .error (.overLimit limit data.size)
     | _ => .error .typeMismatch

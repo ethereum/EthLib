@@ -35,7 +35,7 @@ instance : ApiSpelling SigningResponse := .unmarked
 /-- The plain-text response to a request to sign: the signature as hex alone. -/
 def SigningResponse.text (response : SigningResponse) : String :=
   -- The source: the text/plain form is the signature as hex; its example writes 0x first.
-  toHex response.signature.toArray
+  toHex ⟨response.signature.toArray⟩
 
 /-- A public key is written as hex. -/
 instance : ApiSpelling BLSPubkey := .unmarked

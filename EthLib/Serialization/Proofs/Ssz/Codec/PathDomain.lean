@@ -24,7 +24,8 @@ private theorem bit_position_inside (count ordinal : Nat) (inside : ordinal < co
 private theorem packedBits_size (data : Array Bool) :
     (packedBits data).size = chunksForBits data.size := by
   -- Rounding first to bytes and then to chunks equals rounding directly to 256 bits.
-  simp only [packedBits, packBytes_size, packBits, Array.size_ofFn, chunksForBits, bytesPerChunk]
+  simp only [packedBits, packBytes_size, packBits, Base.byteArray_size_mk, Array.size_ofFn,
+    chunksForBits, bytesPerChunk]
   omega
 
 private theorem packing_materialized (budget : Nat) (chunks : Array Bytes)

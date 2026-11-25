@@ -264,7 +264,7 @@ def elementBytes {α : Type} [SszType α] (a : α) : Bytes :=
   -- A lawful element always has an encoding, so the empty one never stands in.
   match Ssz.serialize (desc α) (toValue a) with
   | .ok bytes => bytes
-  | .error _ => #[]
+  | .error _ => .empty
 
 /-- How many elements of a basic type share one leaf: those that fit in a node, at least one. -/
 def perChunk (α : Type) [SszType α] : Nat :=
@@ -279,9 +279,9 @@ def packedChunk {α : Type} [SszType α] (elements : Array α) (index : Nat) : B
   let start := index * perChunk α
   -- A loop over the few elements of the leaf, never over the whole sequence.
   let piece := (elements.extract start (start + perChunk α)).foldl
-    (fun bytes a => bytes ++ elementBytes a) #[]
+    (fun bytes a => bytes ++ elementBytes a) .empty
   -- Each chunk is right-padded with zero bytes to 32; only the last one can be short.
-  piece ++ Array.replicate (bytesPerChunk - piece.size) 0
+  piece ++ ⟨Array.replicate (bytesPerChunk - piece.size) 0⟩
 
 /-- The leaves of basic elements, each holding the elements that share it. -/
 def packedChunks {α : Type} [SszType α] (elements : Array α) : Array Bytes :=

@@ -122,7 +122,7 @@ theorem memoryExtend_eq (memory : ByteArray) (n : Nat) :
   split
   · subst n
     apply ByteArray.ext
-    simp [ByteArray.data_append]
+    simp
   · rfl
 
 /-- A write within memory keeps its size. -/

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.ByteOrder
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Serialization.Ssz.Packing
 
 /-! The widths and bit positions of the byte encodings shared by SSZ codecs and trees. -/
@@ -10,12 +11,15 @@ public import EthLib.Serialization.Ssz.Packing
 namespace EthLib.Serialization.Ssz
 
 /-- An integer of no bytes is written as nothing. -/
-theorem uintBytes_zero (value : Nat) : uintBytes 0 value = #[] := rfl
+theorem uintBytes_zero (value : Nat) : uintBytes 0 value = .empty := rfl
 
 /-- An integer is written as its low byte, then its quotient by 256 one byte narrower. -/
 theorem uintBytes_succ (width value : Nat) :
     uintBytes (width + 1) value
-      = #[UInt8.ofNat (value % 256)] ++ uintBytes width (value / 256) := by
+      = ⟨#[UInt8.ofNat (value % 256)]⟩ ++ uintBytes width (value / 256) := by
+  -- The bytes are equal when their arrays are.
+  apply ByteArray.ext
+  rw [ByteArray.data_append]
   -- A byte keeps only the value modulo 256 anyway.
   rw [uintBytes, uintBytes, Base.ByteOrder.toArray_toLE_succ, ← UInt8.ofNat_mod_size (x := value)]
 
@@ -26,7 +30,10 @@ theorem uintBytes_size (width value : Nat) : (uintBytes width value).size = widt
   -- No bytes were asked for, and none were written.
   | zero => rfl
   -- One byte was written and the rest is the same claim one width down.
-  | succ width ih => simp only [uintBytes_succ, Array.size_append, Array.size_singleton, ih]; omega
+  | succ width ih =>
+    simp only [uintBytes_succ, ByteArray.size_append, Base.byteArray_size_mk, Array.size_singleton,
+      ih]
+    omega
 
 /--
 Every bit reads back where it was put, and no other bit of the byte disturbs it.

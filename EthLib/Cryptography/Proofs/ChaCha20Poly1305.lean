@@ -285,7 +285,7 @@ theorem byteAtOrZero_keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (b
         have hlt : j < 64 * (n + 1) := by omega
         have hm : j - 64 * n = j % 64 := by omega
         simp [hj, hlt, hq, Base.byteAtOrZero, hm, Base.packBytes, ByteArray.getElem_eq_getElem_data]
-        exact dite_eq_left (by simp [ByteArray.size]; omega)
+        exact dite_eq_left (by omega)
       · simp [hj, show ¬j < 64 * (n + 1) by omega]
         exact Base.byteAtOrZero_of_size_le (by simp; omega)
 

@@ -105,10 +105,10 @@ theorem readGloasData_of_getObjVal? {α : Type} [SszType α] [LawfulSszType α] 
 private theorem readSigningRoot_mkObj {pairs : List (String × Json)}
     (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (signingRoot : Option Root)
     (present : ∀ root, signingRoot = some root →
-      ("signingRoot", Json.str (toHex root.toArray)) ∈ pairs)
+      ("signingRoot", Json.str (toHex ⟨root.toArray⟩)) ∈ pairs)
     (absent : signingRoot = none → "signingRoot" ∉ pairs.map Prod.fst) :
     readSigningRoot (Json.mkObj pairs) = .ok signingRoot := by
-  simp [readSigningRoot, readKey_mkObj distinct (write := fun root => .str (toHex root.toArray))
+  simp [readSigningRoot, readKey_mkObj distinct (write := fun root => .str (toHex ⟨root.toArray⟩))
     readRoot_toHex signingRoot present absent, Except.mapError]
 
 /-- The block of a request of the second block kind reads back as written. -/

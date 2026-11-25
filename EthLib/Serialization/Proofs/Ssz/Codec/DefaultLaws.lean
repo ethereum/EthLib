@@ -21,7 +21,7 @@ theorem default_fits (shape : Desc) :
   -- Zero is below every positive power-of-two integer bound.
   | case2 width => rintro _ ⟨⟩; exact .uint (Nat.pow_pos (by decide))
   -- Replicated bytes and bits have exactly the declared fixed length.
-  | case3 length => rintro _ ⟨⟩; exact .byteVector (by simp)
+  | case3 length => rintro _ ⟨⟩; exact .byteVector Array.size_replicate
   | case4 length => rintro _ ⟨⟩; exact .bitVector (by simp)
   -- Empty variable arrays satisfy every natural-number capacity.
   | case5 limit => rintro _ ⟨⟩; exact .byteList (by simp)

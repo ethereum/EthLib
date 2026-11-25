@@ -33,7 +33,7 @@ theorem jsonOfEach_ok (element : Desc) (spelling : Spelling) : ∀ (elements : L
 /-- A run of one-byte integers that fit holds bytes. -/
 theorem byteRun_ok : ∀ (elements : List Value),
     (∀ value ∈ elements, Fits (.uint 1) value) → ∃ data, byteRun elements = .ok data
-  | [], _ => ⟨#[], byteRun_nil⟩
+  | [], _ => ⟨.empty, byteRun_nil⟩
   | value :: rest, each => by
     obtain ⟨data, wrote⟩ :=
       byteRun_ok rest fun other member => each other (.tail _ member)
@@ -42,7 +42,7 @@ theorem byteRun_ok : ∀ (elements : List Value),
     | uint bound =>
       rename_i n
       have small : ¬ n ≥ 256 := by simp at bound; omega
-      exact ⟨#[UInt8.ofNat n] ++ data, by
+      exact ⟨⟨#[UInt8.ofNat n]⟩ ++ data, by
         simp [byteRun_uint, small, wrote, Bind.bind, Except.bind, pure, Except.pure]⟩
 
 /-- Elements that each fit and write give a sequence document, under every spelling. -/

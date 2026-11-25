@@ -41,6 +41,67 @@ theorem byteArray_get!_set!_ne (b : ByteArray) {i j : Nat} (v : UInt8)
         (by rw [Array.size_setIfInBounds]; exact hi),
       getElem!_neg b.data i hi]
 
+/-- Bytes built from an array have the size of that array. -/
+@[simp] theorem byteArray_size_mk (a : Array UInt8) : (ByteArray.mk a).size = a.size := rfl
+
+/-- A read of bytes built from an array is the read of that array. -/
+@[simp] theorem byteArray_getElem_mk (a : Array UInt8) (i : Nat)
+    (inside : i < (ByteArray.mk a).size) :
+    (ByteArray.mk a)[i] = a[i]'inside :=
+  rfl
+
+/-- Bytes built from an empty array are the empty bytes. -/
+@[simp] theorem byteArray_mk_empty : ByteArray.mk #[] = .empty := rfl
+
+/-- Joining bytes built from two arrays gives the bytes built from the joined arrays. -/
+@[simp] theorem byteArray_mk_append_mk (a b : Array UInt8) :
+    ByteArray.mk a ++ ByteArray.mk b = ByteArray.mk (a ++ b) :=
+  ByteArray.ext ByteArray.data_append
+
+/-- A slice of bytes built from an array is built from the same slice of that array. -/
+@[simp] theorem byteArray_mk_extract (a : Array UInt8) (start stop : Nat) :
+    (ByteArray.mk a).extract start stop = ByteArray.mk (a.extract start stop) :=
+  ByteArray.ext ByteArray.data_extract
+
+/-- A slice from the start that reaches the end is the whole of the bytes. -/
+theorem byteArray_extract_eq_self_of_le {b : ByteArray} {stop : Nat} (h : b.size ≤ stop) :
+    b.extract 0 stop = b :=
+  ByteArray.ext (by rw [ByteArray.data_extract]; exact Array.extract_eq_self_of_le h)
+
+/-- The slice of a join that covers its first part is that part. -/
+@[simp] theorem byteArray_extract_append_size (a b : ByteArray) : (a ++ b).extract 0 a.size = a :=
+  ByteArray.extract_append_eq_left rfl
+
+/-- The slice of a join that starts past a front and covers the next part is that part. -/
+@[simp] theorem byteArray_extract_append_append_size (a b c : ByteArray) :
+    (a ++ (b ++ c)).extract a.size (a.size + b.size) = b := by
+  -- Past the front, the slice reads the rest, where the part comes first.
+  simpa using ByteArray.extract_append_size_add (a := a) (b := b ++ c) (i := 0) (j := b.size)
+
+/-- An optional read of bytes is the same read of the array that holds them. -/
+theorem byteArray_getElem?_eq_data (b : ByteArray) (i : Nat) : b[i]? = b.data[i]? := by
+  -- Both reads test the same bound, since the bytes and their array have one size.
+  by_cases h : i < b.size
+  · rw [getElem?_pos b i h, getElem?_pos b.data i h]; rfl
+  · rw [getElem?_neg b i h, getElem?_neg b.data i h]
+
+/-- An optional read of bytes built from an array is the read of that array. -/
+@[simp] theorem byteArray_getElem?_mk (a : Array UInt8) (i : Nat) :
+    (ByteArray.mk a)[i]? = a[i]? :=
+  byteArray_getElem?_eq_data _ i
+
+/-- A read of joined bytes reads the first part below its size, and the second part past it. -/
+theorem byteArray_getElem?_append (a b : ByteArray) (i : Nat) :
+    (a ++ b)[i]? = if i < a.size then a[i]? else b[i - a.size]? := by
+  simp only [byteArray_getElem?_eq_data, ByteArray.data_append, Array.getElem?_append]
+  rfl
+
+/-- A read of a slice reads the bytes from its start, while the index stays inside the slice. -/
+theorem byteArray_getElem?_extract (b : ByteArray) (start stop i : Nat) :
+    (b.extract start stop)[i]? = if i < min stop b.size - start then b[start + i]? else none := by
+  simp only [byteArray_getElem?_eq_data, ByteArray.data_extract, Array.getElem?_extract]
+  rfl
+
 /-- Two arrays of one size are equal when their defaulting reads agree inside them. -/
 theorem byteArray_ext_get! {a b : ByteArray} (hsz : a.size = b.size)
     (h : ∀ i, i < a.size → a.get! i = b.get! i) : a = b := by

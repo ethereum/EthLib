@@ -21,12 +21,12 @@ open SszType
 
 /-- Nodes that are all 32 bytes wide are the bytes of some 32-byte vectors. -/
 theorem exists_map_toArray : ∀ {nodes : List Bytes}, (∀ node ∈ nodes, node.size = 32) →
-    ∃ chunks : List (Vector UInt8 32), chunks.map Vector.toArray = nodes
+    ∃ chunks : List (Vector UInt8 32), chunks.map (fun node => ⟨node.toArray⟩) = nodes
   | [], _ => ⟨[], rfl⟩
   | node :: rest, widths => by
     obtain ⟨chunks, mapped⟩ := exists_map_toArray fun other member =>
       widths other (List.mem_cons_of_mem _ member)
-    exact ⟨⟨node, widths node List.mem_cons_self⟩ :: chunks, by simp [mapped]⟩
+    exact ⟨⟨node.data, widths node List.mem_cons_self⟩ :: chunks, by simp [mapped]⟩
 
 /-- An index of at least two names a node with a branch. -/
 theorem getBranchIndices_ok {gindex : Nat} (named : 2 ≤ gindex) :
@@ -48,9 +48,9 @@ A branch built for a readable node of a value is valid against the root of the v
 A node at generalized index `g` sits at depth `log2 g`, at index `g % 2^(log2 g)` of its level.
 -/
 theorem buildProof_isValidMerkleBranch (a : α) {gindex : Nat} (named : 2 ≤ gindex)
-    {leaf : Vector UInt8 32} (read : nodeRoot (desc α) (toValue a) gindex = .ok leaf.toArray) :
+    {leaf : Vector UInt8 32} (read : nodeRoot (desc α) (toValue a) gindex = .ok ⟨leaf.toArray⟩) :
     ∃ root branch, hashTreeRoot a = .ok root ∧
-      buildProof (desc α) (toValue a) gindex = .ok (branch.map Vector.toArray) ∧
+      buildProof (desc α) (toValue a) gindex = .ok (branch.map fun node => ⟨node.toArray⟩) ∧
       isValidMerkleBranch leaf branch (Nat.log2 gindex) (gindex % 2 ^ Nat.log2 gindex) root =
         true := by
   obtain ⟨indices, indexed⟩ := getBranchIndices_ok named
@@ -60,7 +60,7 @@ theorem buildProof_isValidMerkleBranch (a : α) {gindex : Nat} (named : 2 ≤ gi
   -- The branch nodes and the root are 32 bytes wide, so they are vectors.
   obtain ⟨branch, rfl⟩ := exists_map_toArray widths
   obtain ⟨vectorRoot, typedRoot⟩ := hashTreeRoot_total a
-  have same : root = vectorRoot.toArray :=
+  have same : root = ⟨vectorRoot.toArray⟩ :=
     Except.ok.inj (rooted.symm.trans (hashTreeRoot_ok_iff.mp typedRoot))
   subst same
   refine ⟨vectorRoot, branch, typedRoot, built, ?_⟩

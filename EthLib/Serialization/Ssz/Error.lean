@@ -6,8 +6,8 @@ module
 
 namespace EthLib.Serialization.Ssz
 
-/-- Bytes, as the codec passes them around. -/
-abbrev Bytes := Array UInt8
+/-- Bytes, as the codec passes them around, stored unboxed. -/
+abbrev Bytes := ByteArray
 
 /-- A refusal, naming what was broken. -/
 inductive Err where

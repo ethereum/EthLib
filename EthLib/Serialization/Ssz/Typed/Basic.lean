@@ -36,22 +36,16 @@ def decodeUint {α : Type} (width : Nat) (make : Nat → α) (data : ByteArray) 
   --
   -- The bytes must be exactly the width, as the untyped decoder asks.
   if data.size != width then .error (.scope width data.size)
-  else .ok (make (readUint data.data 0 width))
+  else .ok (make (readUint data 0 width))
 
-/-- The bytes so far, then the `width` little-endian bytes of `n`, its lowest byte first. -/
-def pushUintBytes : (width n : Nat) → ByteArray → ByteArray
-  | 0, _, out => out
-  -- Byte `i` of the little-endian encoding is `floor(n / 256^i) mod 256`.
-  | width + 1, n, out => pushUintBytes width (n / 256) (out.push (UInt8.ofNat n))
-
-/-- The `width` little-endian bytes of `n`, written straight into a byte array. -/
+/-- The `width` little-endian bytes of `n`, as the untyped encoder writes them. -/
 def encodeUint (width n : Nat) : Except Err ByteArray :=
-  -- uintN: `N / 8` bytes, little-endian, written into an array sized once.
+  -- uintN: `N / 8` bytes, little-endian.
   --
   -- A number past the width loses its high bytes.
   --
   -- A typed value always fits its width, so its bytes are those of the untyped encoder.
-  .ok (pushUintBytes width n (ByteArray.emptyWithCapacity width))
+  .ok (uintBytes width n)
 
 end SszType
 
@@ -126,10 +120,10 @@ It takes precedence over a vector of `uint8` elements, which encodes and roots a
 -/
 instance (priority := high) {n : Nat} : SszType (Vector UInt8 n) where
   desc := .byteVector n
-  toValue v := .bytes v.toArray
+  toValue v := .bytes ⟨v.toArray⟩
   ofValue
     -- ByteVector[N]: exactly `N` bytes.
-    | .bytes data => Base.exactArray n data (.count n)
+    | .bytes data => Base.exactBytes n data (.count n)
     | _ => .error .typeMismatch
   -- ByteVector[N] serializes to its `N` bytes as they are.
   --

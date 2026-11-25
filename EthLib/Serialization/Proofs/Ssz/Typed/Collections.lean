@@ -115,7 +115,7 @@ theorem encodeElementsOnto_eq {α : Type} [SszType α] [LawfulSszType α] (items
     (i : Nat) (out : ByteArray) :
     encodeElementsOnto items i out =
       (serializeEach (desc α) ((items.toList.drop i).map toValue)).map
-        fun parts => out ++ ⟨concatParts parts⟩ := by
+        fun parts => out ++ concatParts parts := by
   rw [encodeElementsOnto]
   by_cases inside : i < items.size
   · rw [dite_eq_left inside,
@@ -130,15 +130,10 @@ theorem encodeElementsOnto_eq {α : Type} [SszType α] [LawfulSszType α] (items
       cases serializeEach (desc α) ((items.toList.drop (i + 1)).map toValue) with
       | error fault => rfl
       | ok parts =>
-        simp only [Except.map, Except.ok.injEq]
-        ext1
-        simp [concatParts, Array.append_assoc]
+        simp [Except.map, concatParts, ByteArray.append_assoc]
   · rw [dite_eq_right inside,
       List.drop_eq_nil_of_le (by simp; omega)]
-    simp only [List.map_nil, serializeEach_nil, Except.map]
-    congr 1
-    ext1
-    simp [concatParts]
+    simp [serializeEach_nil, Except.map, concatParts]
 termination_by items.size - i
 
 /--
@@ -147,21 +142,19 @@ The bytes of fixed-size elements, written one after another, are those of the un
 theorem encodeFixedElements_eq {α : Type} [SszType α] [LawfulSszType α]
     (fixed : (desc α).isFixed) (items : Array α) :
     encodeFixedElements items =
-      (do return ⟨← serializeSequence (desc α) (items.toList.map toValue)⟩) := by
+      serializeSequence (desc α) (items.toList.map toValue) := by
   simp only [encodeFixedElements, serializeSequence, assembleSequence, fixed, assemble_inline_eq]
   rw [encodeElementsOnto_eq, List.drop_zero]
   cases serializeEach (desc α) (items.toList.map toValue) with
   | error fault => rfl
   | ok parts =>
-    have empty : ∀ c, ByteArray.emptyWithCapacity c ++ ⟨concatParts parts⟩ =
-        ⟨concatParts parts⟩ := fun c => by
-      ext1
-      simp [show (ByteArray.emptyWithCapacity c).data = #[] from rfl]
-    have size : (⟨concatParts parts⟩ : ByteArray).size = (concatParts parts).size := rfl
+    have empty : ∀ c, ByteArray.emptyWithCapacity c ++ concatParts parts = concatParts parts :=
+      fun c => by
+        ext1
+        simp [show (ByteArray.emptyWithCapacity c).data = #[] from rfl]
     by_cases big : (concatParts parts).size ≥ 2 ^ (8 * bytesPerOffset)
-    · simp [Except.map, empty, bind, Except.bind, size, big, throw, throwThe,
-        MonadExceptOf.throw]
-    · simp [Except.map, empty, bind, Except.bind, size, big, pure, Except.pure]
+    · simp [Except.map, empty, bind, Except.bind, big, throw, throwThe, MonadExceptOf.throw]
+    · simp [Except.map, empty, bind, Except.bind, big, pure, Except.pure]
 
 instance {α : Type} [SszType α] [LawfulSszType α] {length : Nat} [NeZero length] :
     LawfulSszType (Vector α length) where
@@ -315,7 +308,7 @@ instance {α : Type} [SszType α] [LawfulSszType α] : LawfulSszType (Progressiv
   encode_eq l := by
     by_cases fixed : (desc α).isFixed
     · simp only [encode, fixed, ite_true, encodeFixedElements_eq fixed, desc, toValue,
-        serialize_progressiveList_seq, boundCheck, bind, Except.bind, pure, Except.pure]
+        serialize_progressiveList_seq, boundCheck, bind, Except.bind]
     · simp only [encode, fixed, Bool.false_eq_true, ite_false]
       rfl
 
@@ -332,14 +325,14 @@ instance : LawfulSszType ProgressiveBitlist where
 
 /-- An empty encoding has no slices. -/
 theorem listSlices_empty (element : Desc) (limit : Option Nat) :
-    listSlices element limit #[] = .ok [] := by
+    listSlices element limit .empty = .ok [] := by
   simp [listSlices, bytesPerOffset, pure, Except.pure]
 
 /-- The empty bytes decode to the empty progressive list. -/
 theorem deserialize_progressiveList_empty {α : Type} [SszType α] :
     SszType.deserialize (ProgressiveList α) ByteArray.empty = .ok ⟨#[]⟩ := by
   unfold SszType.deserialize SszType.decode
-  show (do SszType.ofValue (← Ssz.deserialize _ #[])) = _
+  show (do SszType.ofValue (← Ssz.deserialize _ .empty)) = _
   rw [Ssz.deserialize]
   simp [listSlices_empty, deserializeEach_nil, bind, Except.bind, pure, Except.pure,
       SszType.ofValue, SszType.ofElements, SszType.ofElementsOnto, Functor.map, Except.map]

@@ -118,10 +118,10 @@ theorem BeaconState.nodeRoot_nextSyncCommittee
     (altair : .altair ≤ fork) (state : BeaconState preset fork) {root : Bytes32}
     (rooted : SszType.hashTreeRoot (state.nextSyncCommittee altair) = .ok root) :
     nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
-      (nextSyncCommitteeGindex fork) = .ok root.toArray := by
+      (nextSyncCommitteeGindex fork) = .ok ⟨root.toArray⟩ := by
   -- The field sits at the ordinal of its name, in a container or a progressive container.
   have selected : PathSelects (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
-      [.position ((BeaconState.names fork).idxOf "next_sync_committee")] root.toArray := by
+      [.position ((BeaconState.names fork).idxOf "next_sync_committee")] ⟨root.toArray⟩ := by
     have inner := PathSelects.root
       ((SszType.hashTreeRoot_ok_iff (α := Rooted (SyncCommittee preset))).mp rooted)
     cases fork
@@ -143,10 +143,10 @@ theorem BeaconState.nodeRoot_currentSyncCommittee
     (altair : .altair ≤ fork) (state : BeaconState preset fork) {root : Bytes32}
     (rooted : SszType.hashTreeRoot (state.currentSyncCommittee altair) = .ok root) :
     nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
-      (currentSyncCommitteeGindex fork) = .ok root.toArray := by
+      (currentSyncCommitteeGindex fork) = .ok ⟨root.toArray⟩ := by
   -- The field sits at the ordinal of its name, in a container or a progressive container.
   have selected : PathSelects (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
-      [.position ((BeaconState.names fork).idxOf "current_sync_committee")] root.toArray := by
+      [.position ((BeaconState.names fork).idxOf "current_sync_committee")] ⟨root.toArray⟩ := by
     have inner := PathSelects.root
       ((SszType.hashTreeRoot_ok_iff (α := Rooted (SyncCommittee preset))).mp rooted)
     cases fork
@@ -167,18 +167,18 @@ theorem BeaconState.nodeRoot_finalizedCheckpoint_root
     [LawfulSszType (BeaconState preset fork)]
     (altair : .altair ≤ fork) (state : BeaconState preset fork) :
     nodeRoot (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
-      (finalizedRootGindex fork) = .ok state.finalizedCheckpoint.root.toArray := by
+      (finalizedRootGindex fork) = .ok ⟨state.finalizedCheckpoint.root.toArray⟩ := by
   -- Finality descends through the checkpoint field, then its root at ordinal 1.
   have checkpoint : PathSelects (SszType.desc Checkpoint)
       (SszType.toValue state.finalizedCheckpoint) [.position 1]
-      state.finalizedCheckpoint.root.toArray :=
+      ⟨state.finalizedCheckpoint.root.toArray⟩ :=
     PathSelects.containerField (LawfulSszType.wellFormed (α := Checkpoint))
       (LawfulSszType.fits state.finalizedCheckpoint) (ordinal := 1)
       (child := SszType.desc Root) (inner := SszType.toValue state.finalizedCheckpoint.root)
       rfl rfl (.root (hashTreeRoot_chunk (by simp [bytesPerChunk])))
   have selected : PathSelects (SszType.desc (BeaconState preset fork)) (SszType.toValue state)
       [.position ((BeaconState.names fork).idxOf "finalized_checkpoint"), .position 1]
-      state.finalizedCheckpoint.root.toArray := by
+      ⟨state.finalizedCheckpoint.root.toArray⟩ := by
     cases fork
     all_goals try exact absurd altair (by decide)
     all_goals first
@@ -503,7 +503,7 @@ This holds at every preset. -/
 theorem ExecutionPayloadHeader.nodeRoot_blockHash (capella : .shapella ≤ fork)
     (beforeGloas : fork < .glamsterdam) (header : ExecutionPayloadHeader preset fork) :
     nodeRoot (SszType.desc (ExecutionPayloadHeader preset fork)) (SszType.toValue header)
-      (payloadHeaderBlockHashGindex fork) = .ok header.blockHash.toArray := by
+      (payloadHeaderBlockHashGindex fork) = .ok ⟨header.blockHash.toArray⟩ := by
   -- The block hash is field 12 at each of these forks, a leaf of the tree of fields.
   cases fork
   all_goals try first
@@ -511,11 +511,11 @@ theorem ExecutionPayloadHeader.nodeRoot_blockHash (capella : .shapella ≤ fork)
     | exact absurd beforeGloas (by decide)
   all_goals first
     | exact nodeRoot_containerLeaf (count := 15) (ordinal := 12)
-        (child := .byteVector bytesPerChunk) (inner := .bytes header.blockHash.toArray)
+        (child := .byteVector bytesPerChunk) (inner := .bytes ⟨header.blockHash.toArray⟩)
         rfl rfl (by decide) (by decide +kernel) (by decide +kernel) rfl rfl
         (hashTreeRoot_chunk (by simp [bytesPerChunk]))
     | exact nodeRoot_containerLeaf (count := 17) (ordinal := 12)
-        (child := .byteVector bytesPerChunk) (inner := .bytes header.blockHash.toArray)
+        (child := .byteVector bytesPerChunk) (inner := .bytes ⟨header.blockHash.toArray⟩)
         rfl rfl (by decide) (by decide +kernel) (by decide +kernel) rfl rfl
         (hashTreeRoot_chunk (by simp [bytesPerChunk]))
 

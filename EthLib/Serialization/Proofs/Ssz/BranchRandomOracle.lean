@@ -59,10 +59,10 @@ It climbs the first `depth` nodes of each branch from its leaf, as the branch ch
 The experiment runs it with the oracle. -/
 def extractBranches {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray) (depth : Nat)
     (claim : BranchClaim) : m BranchOutcome := do
-  let firstRoot ← climbBranchM hash claim.index 0 claim.firstLeaf.toArray
-    ((claim.firstBranch.take depth).map Vector.toArray)
-  let secondRoot ← climbBranchM hash claim.index 0 claim.secondLeaf.toArray
-    ((claim.secondBranch.take depth).map Vector.toArray)
+  let firstRoot ← climbBranchM hash claim.index 0 ⟨claim.firstLeaf.toArray⟩
+    ((claim.firstBranch.take depth).map fun node => ⟨node.toArray⟩)
+  let secondRoot ← climbBranchM hash claim.index 0 ⟨claim.secondLeaf.toArray⟩
+    ((claim.secondBranch.take depth).map fun node => ⟨node.toArray⟩)
   return ⟨claim, toChunk firstRoot, toChunk secondRoot⟩
 
 /-- The adversary wins: two different leaves at one index climb to one root.
@@ -95,7 +95,7 @@ theorem cached_of_climbBranchM {cache : HashOracle.QueryCache} {f : QueryImpl Ha
     (hrun : simulateQ cache.toPartialImpl (climbBranchM queryHash index level node branch) =
       some root) :
     ∀ x ∈ branchMessages index level node branch (tableHash f),
-      cache (ByteArray.mk x) = some (f (ByteArray.mk x)) := by
+      cache x = some (f x) := by
   -- Each level queries its pair, and the levels above climb from the parent of the table.
   have climbed : ∀ (branch : List Bytes) (p : Cryptography.Merkle.Position) (node : Bytes)
       {root : Bytes},
@@ -104,7 +104,7 @@ theorem cached_of_climbBranchM {cache : HashOracle.QueryCache} {f : QueryImpl Ha
         some root →
       ∀ x ∈ Cryptography.Merkle.climbPairs (fun _ => combineM (m := Id) (tableHash f)) p
           node branch,
-        cache (ByteArray.mk (x.1 ++ x.2)) = some (f (ByteArray.mk (x.1 ++ x.2))) := by
+        cache (x.1 ++ x.2) = some (f (x.1 ++ x.2)) := by
     intro branch
     induction branch with
     | nil =>
@@ -120,9 +120,8 @@ theorem cached_of_climbBranchM {cache : HashOracle.QueryCache} {f : QueryImpl Ha
       simp only [Cryptography.Merkle.climbPairs, List.mem_cons] at hx
       rcases hx with rfl | hx
       · -- This level queried its pair, so the cache holds the answer of the table.
-        simp only [combineM, simulateQ_bind] at hparent
-        obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hparent
-        obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
+        simp only [combineM] at hparent
+        obtain ⟨digest, hdigest⟩ := cached_of_queryHash hparent
         rw [hdigest, hf hdigest]
       · rw [← heval] at hrun
         exact ih p.parent _ hrun x hx
@@ -150,11 +149,11 @@ theorem collision_of_extractBranches {depth : Nat} {cache : HashOracle.QueryCach
   -- Under the table, the leaves are equal, or the search over the two climbs finds a collision.
   rcases climbBranchM_binding (tableHash f) (by simp [hfirst, hsecond])
       (hroot₁.trans hroot₂.symm) with hsame | hfound
-  · exact absurd (Vector.toArray_inj.mp hsame) hleaves
+  · exact absurd (Vector.toArray_inj.mp (ByteArray.mk.inj hsame)) hleaves
   · obtain ⟨⟨a, b⟩, hab⟩ := Option.isSome_iff_exists.mp hfound
     -- Every leaf and every branch node is a 32-byte vector.
     have widths : ∀ (nodes : List (Vector UInt8 32)),
-        ∀ node ∈ nodes.map Vector.toArray, node.size = bytesPerChunk := by
+        ∀ node ∈ nodes.map fun node => (⟨node.toArray⟩ : Bytes), node.size = bytesPerChunk := by
       intro nodes node member
       obtain ⟨vector, -, rfl⟩ := List.mem_map.mp member
       exact vector.size_toArray
@@ -175,8 +174,8 @@ theorem extractBranches_queryBound (depth : Nat) (claim : BranchClaim) :
     IsQueryBoundP (extractBranches queryHash depth claim) (fun _ => True) (2 * depth) := by
   -- Each climb takes at most `depth` branch nodes, with one call per node.
   have climbs : ∀ (leaf : Vector UInt8 32) (branch : List (Vector UInt8 32)),
-      IsQueryBoundP (climbBranchM queryHash claim.index 0 leaf.toArray
-        ((branch.take depth).map Vector.toArray)) (fun _ => True) depth := fun _ _ =>
+      IsQueryBoundP (climbBranchM queryHash claim.index 0 ⟨leaf.toArray⟩
+        ((branch.take depth).map fun node => ⟨node.toArray⟩)) (fun _ => True) depth := fun _ _ =>
     (Cryptography.Merkle.isQueryBoundP_climb (hash := fun _ => combineM queryHash)
       (fun _ left right => combineM_queryBound left right) _ _ _).mono (by simp)
   exact (isQueryBoundP_bind (climbs _ _) fun _ _ =>
@@ -241,10 +240,10 @@ theorem prEvent_branchWins_le_of_adversary (depth : Nat)
 /-- With SHA-256 in the identity monad, the extraction climbs as the branch check does. -/
 theorem extractBranches_sha256 (depth : Nat) (claim : BranchClaim) :
     (extractBranches (m := Id) Cryptography.Hash.Sha256.hash depth claim).run =
-      ⟨claim, toChunk (climbBranch claim.index 0 claim.firstLeaf.toArray
-          ((claim.firstBranch.take depth).map Vector.toArray)),
-        toChunk (climbBranch claim.index 0 claim.secondLeaf.toArray
-          ((claim.secondBranch.take depth).map Vector.toArray))⟩ :=
+      ⟨claim, toChunk (climbBranch claim.index 0 ⟨claim.firstLeaf.toArray⟩
+          ((claim.firstBranch.take depth).map fun node => ⟨node.toArray⟩)),
+        toChunk (climbBranch claim.index 0 ⟨claim.secondLeaf.toArray⟩
+          ((claim.secondBranch.take depth).map fun node => ⟨node.toArray⟩))⟩ :=
   rfl
 
 /-- With SHA-256 as the node hash, a win is two valid branches of two different leaves.
@@ -276,9 +275,9 @@ theorem branchWins_sha256_iff {depth : Nat} {claim : BranchClaim} :
 
 /-- The 48 bytes of a vector and 16 zero bytes form its two packed nodes. -/
 private theorem packBytes_bytes48 (bytes : Vector UInt8 48) :
-    padded zeroChunk (Serialization.Ssz.packBytes bytes.toArray) 0 ++
-        padded zeroChunk (Serialization.Ssz.packBytes bytes.toArray) 1 =
-      bytes.toArray ++ Array.replicate 16 0 := by
+    padded zeroChunk (Serialization.Ssz.packBytes ⟨bytes.toArray⟩) 0 ++
+        padded zeroChunk (Serialization.Ssz.packBytes ⟨bytes.toArray⟩) 1 =
+      ⟨bytes.toArray ++ Array.replicate 16 0⟩ := by
   have size : bytes.toArray.size = 48 := bytes.size_toArray
   simp [padded, Serialization.Ssz.packBytes, size, bytesPerChunk, ← Array.append_assoc,
     Array.extract_append_extract, Array.extract_eq_self_of_le]
@@ -298,10 +297,10 @@ A field of a container is rooted with such a budget.
 It holds for a hasher in any lawful monad. -/
 theorem hashTreeRootAtM_bytes48 {m : Type → Type} [Monad m] [LawfulMonad m]
     (hasher : Hasher m) (budget : Nat) (bytes : Vector UInt8 48) :
-    (hashTreeRootAtM hasher (budget + 1) (.byteVector 48) (.bytes bytes.toArray)).run = (do
-      return .ok (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) := by
-  have size : bytes.toArray.size = 48 := bytes.size_toArray
-  have count : (Serialization.Ssz.packBytes bytes.toArray).size = 2 := by
+    (hashTreeRootAtM hasher (budget + 1) (.byteVector 48) (.bytes ⟨bytes.toArray⟩)).run = (do
+      return .ok (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩)) := by
+  have size : (⟨bytes.toArray⟩ : Bytes).size = 48 := bytes.size_toArray
+  have count : (Serialization.Ssz.packBytes ⟨bytes.toArray⟩).size = 2 := by
     simp [size, bytesPerChunk]
   simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
@@ -310,7 +309,7 @@ theorem hashTreeRootAtM_bytes48 {m : Type → Type} [Monad m] [LawfulMonad m]
     ↓reduceIte, ExceptT.run_lift]
   rw [count, show depthFor 2 = 1 from depthFor_pow 1, subtreeAtM_two hasher count, combineM,
     packBytes_bytes48]
-  simp only [map_bind, map_pure]
+  simp only [bind_pure_comp]
 
 /-- The root of 48 bytes is one hash of those bytes and 16 zero bytes.
 
@@ -318,7 +317,7 @@ It holds for a hasher in any lawful monad. -/
 theorem hashTreeRootM_bytes48 {m : Type → Type} [Monad m] [LawfulMonad m]
     (hasher : Hasher m) (bytes : Vector UInt8 48) :
     (hashTreeRootM hasher (SszType.desc (Vector UInt8 48)) (SszType.toValue bytes)).run = (do
-      return .ok (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) :=
+      return .ok (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩)) :=
   hashTreeRootAtM_bytes48 hasher 0 bytes
 
 /-- The root of 48 bytes, the size of a commitment or a public key, makes one oracle call. -/
@@ -338,7 +337,7 @@ theorem cached_of_hashTreeRootM_bytes48 {cache : HashOracle.QueryCache}
       (SszType.desc (Vector UInt8 48)) (SszType.toValue bytes)).run = some root) :
     cache ⟨bytes.toArray ++ Array.replicate 16 0⟩ =
         some (f ⟨bytes.toArray ++ Array.replicate 16 0⟩) ∧
-      root = .ok (tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩).data := by
+      root = .ok (tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩) := by
   have heval := cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hrun
   rw [hashTreeRootM_bytes48] at hrun heval
   simp only [Hasher.ofHash, evalWithAnswerFn_bind, evalWithAnswerFn_queryHash,
@@ -353,13 +352,12 @@ private theorem mapM_hashTreeRootAtM_bytes48 {m : Type → Type} [Monad m] [Lawf
     (hasher : Hasher m) (list : List (Vector UInt8 48)) :
     (list.mapM fun bytes => hashTreeRootAtM hasher 1 (.byteVector 48)
       (SszType.toValue bytes)).run =
-      Except.ok <$> list.mapM fun bytes => do
-        return (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data := by
+      Except.ok <$> list.mapM fun bytes => hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩ := by
   induction list with
   | nil => simp
   | cons bytes rest ih =>
     have root : (hashTreeRootAtM hasher 1 (.byteVector 48) (SszType.toValue bytes)).run =
-        (do return .ok (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) :=
+        (do return .ok (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩)) :=
       hashTreeRootM_bytes48 hasher bytes
     simp only [List.mapM_cons, ExceptT.run_bind, root, ih, bind_assoc, pure_bind, map_bind,
       bind_map_left, map_pure, ExceptT.run_pure]
@@ -374,8 +372,7 @@ theorem hashTreeRootM_bytes48List {m : Type → Type} [Monad m] [LawfulMonad m]
     (hashTreeRootM hasher (.list (SszType.desc (Vector UInt8 48)) limit)
         (.seq (vectors.map SszType.toValue))).run =
       if limit < vectors.length then pure (.error (.overLimit limit vectors.length)) else do
-        let roots ← vectors.mapM fun bytes => do
-          return (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data
+        let roots ← vectors.mapM fun bytes => hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩
         let root ← subtreeAtM hasher roots.toArray (depthFor limit) 0
         return .ok (← mixInM hasher root (lengthWord vectors.length)) := by
   show (hashTreeRootAtM hasher 2 (.list (.byteVector 48) limit)
@@ -416,8 +413,7 @@ theorem hashTreeRootM_bytes48Vector {m : Type → Type} [Monad m] [LawfulMonad m
     (hashTreeRootM hasher (.vector (SszType.desc (Vector UInt8 48)) length)
         (.seq (vectors.map SszType.toValue))).run = (do
       -- Each vector is rooted with one hash.
-      let roots ← vectors.mapM fun bytes => do
-        return (← hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data
+      let roots ← vectors.mapM fun bytes => hasher.hash ⟨bytes.toArray ++ Array.replicate 16 0⟩
       -- The width of the tree is the least power of two at least the length.
       return .ok (← subtreeAtM hasher roots.toArray (depthFor length) 0)) := by
   subst count
@@ -444,8 +440,8 @@ theorem hashTreeRootM_bytes48Vector {m : Type → Type} [Monad m] [LawfulMonad m
 
 /-- The roots of 48-byte vectors make one oracle call each. -/
 private theorem mapM_bytes48_queryBound (list : List (Vector UInt8 48)) :
-    IsQueryBoundP (list.mapM fun bytes => do
-      return (← (Hasher.ofHash queryHash).hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data)
+    IsQueryBoundP (list.mapM fun bytes =>
+      (Hasher.ofHash queryHash).hash ⟨bytes.toArray ++ Array.replicate 16 0⟩)
       (fun _ => True) list.length := by
   induction list with
   | nil => exact isQueryBoundP_pure _ _ _
@@ -504,13 +500,13 @@ private theorem collision_or_eq_of_subtreeAtM_bytes48 {cache : HashOracle.QueryC
     {depth : Nat} {first second : List (Vector UInt8 48)}
     (sameLength : first.length = second.length) (fits : first.length ≤ 2 ^ depth)
     {firstRoots secondRoots : List Bytes} {node : Bytes}
-    (hfirstRoots : simulateQ cache.toPartialImpl (first.mapM fun bytes => do
-      return (← (Hasher.ofHash queryHash).hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) =
+    (hfirstRoots : simulateQ cache.toPartialImpl (first.mapM fun bytes =>
+      (Hasher.ofHash queryHash).hash ⟨bytes.toArray ++ Array.replicate 16 0⟩) =
         some firstRoots)
     (hfirst : simulateQ cache.toPartialImpl
       (subtreeAtM (Hasher.ofHash queryHash) firstRoots.toArray depth 0) = some node)
-    (hsecondRoots : simulateQ cache.toPartialImpl (second.mapM fun bytes => do
-      return (← (Hasher.ofHash queryHash).hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) =
+    (hsecondRoots : simulateQ cache.toPartialImpl (second.mapM fun bytes =>
+      (Hasher.ofHash queryHash).hash ⟨bytes.toArray ++ Array.replicate 16 0⟩) =
         some secondRoots)
     (hsecond : simulateQ cache.toPartialImpl
       (subtreeAtM (Hasher.ofHash queryHash) secondRoots.toArray depth 0) = some node) :
@@ -519,10 +515,10 @@ private theorem collision_or_eq_of_subtreeAtM_bytes48 {cache : HashOracle.QueryC
   obtain ⟨f, hf⟩ := cache.exists_agreesWithFn
   -- Each digest is the replayed root of one vector, so the lemma of one vector applies to it.
   have elements : ∀ {list : List (Vector UInt8 48)} {roots : List Bytes},
-      simulateQ cache.toPartialImpl (list.mapM fun bytes => do
-        return (← (Hasher.ofHash queryHash).hash ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) =
+      simulateQ cache.toPartialImpl (list.mapM fun bytes =>
+        (Hasher.ofHash queryHash).hash ⟨bytes.toArray ++ Array.replicate 16 0⟩) =
           some roots →
-      roots = list.map (fun bytes => (tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩).data) ∧
+      roots = list.map (fun bytes => tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩) ∧
         ∀ bytes ∈ list, cache ⟨bytes.toArray ++ Array.replicate 16 0⟩ =
           some (f ⟨bytes.toArray ++ Array.replicate 16 0⟩) := by
     intro list
@@ -540,14 +536,13 @@ private theorem collision_or_eq_of_subtreeAtM_bytes48 {cache : HashOracle.QueryC
       obtain ⟨others, hothers, hroots⟩ := Option.bind_eq_some_iff.mp hroots
       simp only [simulateQ_pure] at hroots
       cases hroots
-      simp only [Hasher.ofHash, simulateQ_bind, simulateQ_pure] at hdigest
-      obtain ⟨answer, hanswer, hdata⟩ := Option.bind_eq_some_iff.mp hdigest
+      simp only [Hasher.ofHash] at hdigest
       have hroot : simulateQ cache.toPartialImpl (hashTreeRootM (Hasher.ofHash queryHash)
           (SszType.desc (Vector UInt8 48)) (SszType.toValue bytes)).run =
             some (.ok digest) := by
         rw [hashTreeRootM_bytes48]
-        simp only [Hasher.ofHash, simulateQ_bind, simulateQ_pure, hanswer]
-        exact congrArg (Option.map Except.ok) hdata
+        simp only [Hasher.ofHash, simulateQ_bind, simulateQ_pure, hdigest]
+        rfl
       obtain ⟨cachedRoot, rooted⟩ := cached_of_hashTreeRootM_bytes48 hf hroot
       obtain ⟨rfl, cached⟩ := ih hothers
       refine ⟨by rw [Except.ok.inj rooted]; rfl, fun other member => ?_⟩
@@ -567,7 +562,7 @@ private theorem collision_or_eq_of_subtreeAtM_bytes48 {cache : HashOracle.QueryC
   have complete : ∀ list : List (Vector UInt8 48),
       (CommitmentTree.perfect depth fun i => padded zeroChunk
         (list.map fun bytes =>
-          (tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩).data).toArray (0 + i)).Complete :=
+          tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩).toArray (0 + i)).Complete :=
     fun list => CommitmentTree.perfect_complete _ _ fun _ _ =>
       padded_size _ (fun chunk member => by
         obtain ⟨bytes, -, rfl⟩ := List.mem_map.mp (List.mem_toArray.mp member)
@@ -580,8 +575,8 @@ private theorem collision_or_eq_of_subtreeAtM_bytes48 {cache : HashOracle.QueryC
     have leaves := CommitmentTree.perfect_injective _ same
     have read : ∀ (list : List (Vector UInt8 48)) (i : Nat) (inside : i < list.length),
         padded zeroChunk (list.map fun bytes =>
-          (tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩).data).toArray (0 + i) =
-          (tableHash f ⟨list[i].toArray ++ Array.replicate 16 0⟩).data := by
+          tableHash f ⟨bytes.toArray ++ Array.replicate 16 0⟩).toArray (0 + i) =
+          tableHash f ⟨list[i].toArray ++ Array.replicate 16 0⟩ := by
       intro list i inside
       simp [padded, inside]
     by_cases equal : ∀ i (inFirst : i < first.length) (inSecond : i < second.length),
@@ -592,7 +587,7 @@ private theorem collision_or_eq_of_subtreeAtM_bytes48 {cache : HashOracle.QueryC
       have digest := (read first i inFirst).symm.trans
         ((leaves i (Nat.lt_of_lt_of_le inFirst fits)).trans (read second i inSecond))
       exact .inl (collision_of_cached (fun same => unequal (Vector.toArray_inj.mp
-        (Array.append_inj same (by simp)).1)) (ByteArray.ext digest)
+        (Array.append_inj (ByteArray.mk.inj same) (by simp)).1)) digest
         (firstElements _ (by simp)) (secondElements _ (by simp)))
   · exact .inl (collision_of_cached hab hequal (cached_of_subtreeAtM hf hfirst a ha)
       (cached_of_subtreeAtM hf hsecond b hb))
@@ -622,19 +617,16 @@ theorem collision_of_hashTreeRootM_bytes48List {cache : HashOracle.QueryCache} {
   obtain ⟨secondRoots, hsecondRoots, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   obtain ⟨secondNode, hsecondNode, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   obtain ⟨secondMixed, hsecondMixed, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
-  simp only [mixInM, Hasher.ofHash, combineM, simulateQ_bind,
-    simulateQ_pure] at hfirstMixed hsecondMixed
-  obtain ⟨firstDigest, hfirstDigest, hfirstMixed⟩ := Option.bind_eq_some_iff.mp hfirstMixed
-  obtain ⟨secondDigest, hsecondDigest, hsecondMixed⟩ := Option.bind_eq_some_iff.mp hsecondMixed
-  cases hfirstMixed
-  cases hsecondMixed
+  simp only [mixInM, Hasher.ofHash, combineM] at hfirstMixed hsecondMixed
   -- Two different mixed messages with one root already collide.
-  refine (collision_or_eq_of_queryHash hfirstDigest hsecondDigest
-    (Except.ok.inj (Option.some.inj (hfirst.trans hsecond.symm)))).elim id fun sameMix => ?_
+  refine (collision_or_eq_of_queryHash hfirstMixed hsecondMixed (congrArg ByteArray.data
+    (Except.ok.inj (Option.some.inj (hfirst.trans hsecond.symm))))).elim id fun sameMix => ?_
   -- One mixed message: one node of the trees, and one count, since counts fit the word.
-  obtain ⟨rfl, sameWord⟩ := Array.append_inj' sameMix (by simp)
+  rw [ByteArray.data_append, ByteArray.data_append] at sameMix
+  obtain ⟨sameNode, sameWord⟩ := Array.append_inj' sameMix (by simp)
+  obtain rfl : firstNode = secondNode := ByteArray.ext sameNode
   have sameLength : first.length = second.length :=
-    lengthWord_injective (by omega) (by omega) sameWord
+    lengthWord_injective (by omega) (by omega) (ByteArray.ext sameWord)
   exact (collision_or_eq_of_subtreeAtM_bytes48 sameLength
     (Nat.le_trans (by omega) (le_two_pow_depthFor limit)) hfirstRoots hfirstNode hsecondRoots
     hsecondNode).elim id fun same => absurd same differ
@@ -677,11 +669,11 @@ theorem hashTreeRootM_bytes96 {m : Type → Type} [Monad m] [LawfulMonad m]
       (SszType.toValue bytes)).run = (do
       let low ← hash ⟨bytes.toArray.extract 0 64⟩
       let high ← hash ⟨bytes.toArray.extract 64 96 ++ Array.replicate 32 0⟩
-      return .ok (← hash ⟨low.data ++ high.data⟩).data) := by
-  have size : bytes.toArray.size = 96 := bytes.size_toArray
-  have count : (Serialization.Ssz.packBytes bytes.toArray).size = 3 := by
+      return .ok (← hash (low ++ high))) := by
+  have size : (⟨bytes.toArray⟩ : Bytes).size = 96 := bytes.size_toArray
+  have count : (Serialization.Ssz.packBytes ⟨bytes.toArray⟩).size = 3 := by
     simp [size, bytesPerChunk]
-  show (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 96) (.bytes bytes.toArray)).run = _
+  show (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 96) (.bytes ⟨bytes.toArray⟩)).run = _
   simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
   simp only [layoutChunksWithM, MerkleLayout.packing, Option.getD_none, Leaves.count,
@@ -689,7 +681,7 @@ theorem hashTreeRootM_bytes96 {m : Type → Type} [Monad m] [LawfulMonad m]
     ↓reduceIte, ExceptT.run_lift]
   rw [count, show depthFor 3 = 2 by simp [depthFor],
     subtreeAtM_ofHash_four hash (by omega) (by omega)]
-  simp [combineM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk, zeroChunk,
+  simp [combineM, padded, Serialization.Ssz.packBytes, bytesPerChunk, zeroChunk,
     Array.extract_append_extract]
 
 /-- The root of 32 bytes is those bytes, with no hash.
@@ -698,16 +690,16 @@ It holds for a hasher in any lawful monad. -/
 theorem hashTreeRootM_bytes32 {m : Type → Type} [Monad m] [LawfulMonad m]
     (hasher : Hasher m) (bytes : Vector UInt8 32) :
     (hashTreeRootM hasher (SszType.desc (Vector UInt8 32)) (SszType.toValue bytes)).run =
-      pure (.ok bytes.toArray) := by
-  have size : bytes.toArray.size = 32 := bytes.size_toArray
-  have count : (Serialization.Ssz.packBytes bytes.toArray).size = 1 := by
+      pure (.ok ⟨bytes.toArray⟩) := by
+  have size : (⟨bytes.toArray⟩ : Bytes).size = 32 := bytes.size_toArray
+  have count : (Serialization.Ssz.packBytes ⟨bytes.toArray⟩).size = 1 := by
     simp [size, bytesPerChunk]
-  show (hashTreeRootAtM hasher 1 (.byteVector 32) (.bytes bytes.toArray)).run = _
+  show (hashTreeRootAtM hasher 1 (.byteVector 32) (.bytes ⟨bytes.toArray⟩)).run = _
   simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
   simp only [layoutChunksWithM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
     merkleizeBoundedUncheckedM, count, show depthFor 1 = 0 from depthFor_pow 0]
-  simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk,
+  simp [subtreeAtM, padded, Serialization.Ssz.packBytes, bytesPerChunk,
     Array.extract_eq_self_of_le]
 
 /-- The root of a 64-bit integer is its 8 bytes and 24 zero bytes, with no hash.
@@ -716,7 +708,7 @@ It holds for a hasher in any lawful monad. -/
 theorem hashTreeRootM_uint64 {m : Type → Type} [Monad m] [LawfulMonad m]
     (hasher : Hasher m) (value : UInt64) :
     (hashTreeRootM hasher (SszType.desc UInt64) (SszType.toValue value)).run =
-      pure (.ok (uintBytes 8 value.toNat ++ Array.replicate 24 0)) := by
+      pure (.ok (uintBytes 8 value.toNat ++ ⟨Array.replicate 24 0⟩)) := by
   have fits : uintFits 8 value.toNat = true := (uintFits_iff 8 _).mpr value.toNat_lt
   have size : (uintBytes 8 value.toNat).size = 8 := uintBytes_size 8 _
   have count : (Serialization.Ssz.packBytes (uintBytes 8 value.toNat)).size = 1 := by
@@ -728,7 +720,9 @@ theorem hashTreeRootM_uint64 {m : Type → Type} [Monad m] [LawfulMonad m]
   simp only [hashTreeRootAtM, merkleLayout, fixedLeaf, encoded, pure_bind, liftM_pure]
   simp only [layoutChunksWithM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
     merkleizeBoundedUncheckedM, count, show depthFor 1 = 0 from depthFor_pow 0]
-  simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk,
-    Array.extract_eq_self_of_le]
+  -- The one node is the integer's bytes, which a cut at 32 bytes keeps whole, then zeros.
+  have whole : (uintBytes 8 value.toNat).extract 0 32 = uintBytes 8 value.toNat :=
+    ByteArray.ext (by simp [Array.extract_eq_self_of_le, size])
+  simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk, whole]
 
 end EthLib.Serialization.Ssz.RandomOracle

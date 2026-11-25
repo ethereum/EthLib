@@ -31,7 +31,7 @@ inductive Value where
   /-- An unsigned integer, whose width comes from the type it is read against. -/
   | uint (n : Nat)
   /-- Opaque bytes, for the two byte-array shapes. -/
-  | bytes (data : Array UInt8)
+  | bytes (data : ByteArray)
   /-- Bits, for the three bitfield shapes. -/
   | bits (data : Array Bool)
   /-- Elements in order, for the sequences and for the structs. -/

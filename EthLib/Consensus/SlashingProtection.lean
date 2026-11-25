@@ -170,7 +170,7 @@ def readBytes (path : String) (size : Nat) (document : Json) :
   -- The EIP sets no length, so EthLib asks for the size of the type.
   --
   -- That is 48 bytes for a key and 32 bytes for a root.
-  | .ok bytes => exactBytes size ⟨bytes⟩ fun _ => .field path
+  | .ok bytes => exactBytes size bytes fun _ => .field path
   | .error _ => .error (.field path)
 
 /-- An array, each element read in turn. -/
@@ -251,7 +251,7 @@ def uint64Json (value : UInt64) : Json := Serialization.Ssz.decimal value.toNat
 
 /-- Bytes as the file writes them, in lowercase hex. -/
 def bytesJson {size : Nat} (bytes : Vector UInt8 size) : Json :=
-  .str (Serialization.Ssz.toHex bytes.toArray)
+  .str (Serialization.Ssz.toHex ⟨bytes.toArray⟩)
 
 /-- The fields of a signing root, none when it is not known. -/
 def signingRootFields : Option Root → List (String × Json)

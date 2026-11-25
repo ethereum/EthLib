@@ -131,7 +131,7 @@ theorem Altair.hashInput_injective {domain₁ domain₂ : Vector UInt8 4} {topic
   obtain ⟨lengths, rest⟩ := List.append_inj rest (by simp [uintBytes_size])
   -- Eight bytes hold every length below 2^64 exactly.
   have sizes : topic₁.size = topic₂.size :=
-    uintBytes_injective (width := 8) hsize₁ hsize₂ (Array.toList_inj.mp lengths)
+    uintBytes_injective (width := 8) hsize₁ hsize₂ (ByteArray.ext (Array.toList_inj.mp lengths))
   -- The topic length then splits the topic from the bytes.
   obtain ⟨topics, rest⟩ := List.append_inj rest (by simpa using sizes)
   exact ⟨Vector.toArray_inj.mp (Array.toList_inj.mp (by simpa using domains)),

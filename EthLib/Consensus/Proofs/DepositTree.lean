@@ -28,21 +28,24 @@ namespace DepositMerkleTree
 
 /-- The parent of two nodes is the SSZ parent of their bytes. -/
 @[simp] theorem toArray_hashPair (left right : Root) :
-    (hashPair left right).toArray = combine left.toArray right.toArray :=
+    ⟨(hashPair left right).toArray⟩ = combine ⟨left.toArray⟩ ⟨right.toArray⟩ :=
   rfl
 
 /-- The root of an empty subtree is the SSZ root of the zero subtree of that height. -/
 @[simp] theorem toArray_zeroNode (height : Nat) :
-    (zeroNode height).toArray = zeroSubtree height := by
+    ⟨(zeroNode height).toArray⟩ = zeroSubtree height := by
+  -- Two nodes are equal when the arrays that hold their bytes are.
+  apply ByteArray.ext
   apply Array.ext
   · simp [zeroNode, zeroSubtree_size, bytesPerChunk]
   · intro i _ within
     simp only [zeroNode, Vector.getElem_toArray, Vector.getElem_ofFn,
-      Array.getElem?_eq_getElem within, Option.getD_some]
+      Base.byteArray_getElem?_eq_data, Array.getElem?_eq_getElem within, Option.getD_some]
 
 /-- The empty subtree of height zero is the zero leaf. -/
 @[simp] theorem zeroNode_zero : zeroNode 0 = Vector.replicate 32 0 := by
   apply Vector.toArray_inj.mp
+  apply ByteArray.mk.inj
   rw [toArray_zeroNode, zeroSubtree_eq]
   rfl
 
@@ -50,6 +53,7 @@ namespace DepositMerkleTree
 theorem zeroNode_succ (height : Nat) :
     zeroNode (height + 1) = hashPair (zeroNode height) (zeroNode height) := by
   apply Vector.toArray_inj.mp
+  apply ByteArray.mk.inj
   rw [toArray_hashPair, toArray_zeroNode, toArray_zeroNode, zeroSubtree_eq, zeroSubtree_eq]
   rfl
 
@@ -62,7 +66,7 @@ theorem zeroNode_eq (height : Nat) :
 
 /-- A root with a count mixed in is the SSZ root with that length mixed in. -/
 @[simp] theorem toArray_mixInCount (root : Root) (count : Nat) :
-    (mixInCount root count).toArray = mixIn root.toArray (lengthWord count) :=
+    ⟨(mixInCount root count).toArray⟩ = mixIn ⟨root.toArray⟩ (lengthWord count) :=
   rfl
 
 /-! ## Pushing builds the tree of all leaves -/
@@ -155,8 +159,8 @@ theorem root_create (leaves : List Root) (height : Nat) (fits : leaves.length �
 
 /-- A Merkle root over roots, read as bytes, is the Merkle root over their bytes. -/
 theorem toArray_subtreeRoot (height : Nat) (leaves : Nat → Root) :
-    (subtreeRoot hashPair height leaves).toArray
-      = subtreeRoot combine height fun i => (leaves i).toArray := by
+    ⟨(subtreeRoot hashPair height leaves).toArray⟩
+      = subtreeRoot combine height fun i => ⟨(leaves i).toArray⟩ := by
   induction height generalizing leaves with
   | zero => rfl
   | succ height ih => rw [subtreeRoot_halves, subtreeRoot_halves, toArray_hashPair, ih, ih]
@@ -164,8 +168,8 @@ theorem toArray_subtreeRoot (height : Nat) (leaves : Nat → Root) :
 /-- The root of the subtree of some leaves is the SSZ root of those leaves, padded with zeros. -/
 theorem toArray_root_create (leaves : List Root) (height : Nat)
     (fits : leaves.length ≤ 2 ^ height) :
-    (create leaves height).root.toArray
-      = subtreeAt (leaves.map Vector.toArray).toArray height 0 := by
+    ⟨(create leaves height).root.toArray⟩
+      = subtreeAt (leaves.map fun leaf => ⟨leaf.toArray⟩).toArray height 0 := by
   rw [root_create leaves height fits, toArray_subtreeRoot, subtreeAt_eq_subtreeRoot]
   congr 1
   funext i
@@ -753,8 +757,9 @@ The rest of a longer branch then climbs on from that root.
 private theorem climbBranch_generateProof {index : Nat} :
     ∀ {height : Nat} {tree : DepositMerkleTree} {reached : Root} {branch : Vector Root height},
       tree.generateProof index height = some (reached, branch) → ∀ rest : List Bytes,
-        climbBranch index 0 reached.toArray (branch.toList.map Vector.toArray ++ rest)
-          = climbBranch index height tree.root.toArray rest
+        climbBranch index 0 ⟨reached.toArray⟩
+            (branch.toList.map (fun node => ⟨node.toArray⟩) ++ rest)
+          = climbBranch index height ⟨tree.root.toArray⟩ rest
   | 0, tree, reached, branch, walked, rest => by
     simp only [generateProof, Option.some.injEq, Prod.mk.injEq] at walked
     obtain ⟨rfl, rfl⟩ := walked
@@ -1143,7 +1148,7 @@ theorem new_pushLeaves_ok {leaves : List Root} {tree : DepositTree}
 theorem map_toArray_of_mapM_hashTreeRoot {α : Type} [SszType α] [LawfulSszType α]
     {items : List α} {roots : List Root}
     (rooted : items.mapM SszType.hashTreeRoot = .ok roots) :
-    roots.map Vector.toArray = items.map leafRoot := by
+    roots.map (fun root => ⟨root.toArray⟩) = items.map leafRoot := by
   induction items generalizing roots with
   | nil =>
     cases rooted

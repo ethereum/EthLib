@@ -88,33 +88,33 @@ theorem hashTreeRootM_depositData {m : Type → Type} [Monad m] [LawfulMonad m]
       -- The signature takes three.
       let low ← hash ⟨data.signature.toArray.extract 0 64⟩
       let high ← hash ⟨data.signature.toArray.extract 64 96 ++ Array.replicate 32 0⟩
-      let signature ← hash ⟨low.data ++ high.data⟩
+      let signature ← hash (low ++ high)
       -- Three more hashes join the four field roots.
       --
       -- The withdrawal credentials are their own node.
-      let left ← hash ⟨pubkey.data ++ data.withdrawalCredentials.toArray⟩
+      let left ← hash (pubkey ++ ⟨data.withdrawalCredentials.toArray⟩)
       -- The amount is its 8 bytes and 24 zero bytes.
-      let right ← hash ⟨uintBytes 8 data.amount.toNat ++ Array.replicate 24 0 ++ signature.data⟩
-      let root ← hash ⟨left.data ++ right.data⟩
-      return .ok root.data) := by
+      let right ← hash (uintBytes 8 data.amount.toNat ++ ⟨Array.replicate 24 0⟩ ++ signature)
+      let root ← hash (left ++ right)
+      return .ok root) := by
   -- The roots of the four fields, each stated for its SSZ shape.
   have pubkey : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 48)
-      (.bytes data.pubkey.toArray)).run = (do
-        return .ok (← hash ⟨data.pubkey.toArray ++ Array.replicate 16 0⟩).data) :=
+      (.bytes ⟨data.pubkey.toArray⟩)).run = (do
+        return .ok (← hash ⟨data.pubkey.toArray ++ Array.replicate 16 0⟩)) :=
     hashTreeRootM_bytes48 (Hasher.ofHash hash) data.pubkey
   have credentials : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 32)
-      (.bytes data.withdrawalCredentials.toArray)).run = _ :=
+      (.bytes ⟨data.withdrawalCredentials.toArray⟩)).run = _ :=
     hashTreeRootM_bytes32 (Hasher.ofHash hash) data.withdrawalCredentials
   have amount : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.uint 8)
       (.uint data.amount.toNat)).run = _ :=
     hashTreeRootM_uint64 (Hasher.ofHash hash) data.amount
   have signature : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 96)
-      (.bytes data.signature.toArray)).run = _ :=
+      (.bytes ⟨data.signature.toArray⟩)).run = _ :=
     hashTreeRootM_bytes96 hash data.signature
   show (hashTreeRootAtM (Hasher.ofHash hash) 2 (.container ["pubkey", "withdrawal_credentials",
     "amount", "signature"] [.byteVector 48, .byteVector 32, .uint 8, .byteVector 96])
-    (.seq [.bytes data.pubkey.toArray, .bytes data.withdrawalCredentials.toArray,
-      .uint data.amount.toNat, .bytes data.signature.toArray])).run = _
+    (.seq [.bytes ⟨data.pubkey.toArray⟩, .bytes ⟨data.withdrawalCredentials.toArray⟩,
+      .uint data.amount.toNat, .bytes ⟨data.signature.toArray⟩])).run = _
   unfold hashTreeRootAtM
   simp only [merkleLayout, List.length_cons, List.length_nil, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, liftM_pure, pure_bind, List.zip_cons_cons, List.zip_nil_left,
@@ -157,18 +157,23 @@ private theorem collision_or_eq_of_hashTreeRootM_depositData {cache : HashOracle
   obtain ⟨right₂, hright₂, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   obtain ⟨top₂, htop₂, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   have sameTop : top₁.data = top₂.data :=
-    Except.ok.inj (Option.some.inj (hfirst.trans hsecond.symm))
+    congrArg ByteArray.data (Except.ok.inj (Option.some.inj (hfirst.trans hsecond.symm)))
   -- Each step: one answer of two hashes gives one message, or a collision of the cache.
   refine (collision_or_eq_of_queryHash htop₁ htop₂ sameTop).elim .inl fun top => ?_
+  -- A message is two nodes joined, so its array is the arrays of the two joined.
+  simp only [ByteArray.data_append] at top
   obtain ⟨sameLeft, sameRight⟩ := Array.append_inj top
     ((size_of_queryHash hleft₁).trans (size_of_queryHash hleft₂).symm)
   refine (collision_or_eq_of_queryHash hleft₁ hleft₂ sameLeft).elim .inl fun left => ?_
+  simp only [ByteArray.data_append] at left
   obtain ⟨samePublic, sameCredentials⟩ := Array.append_inj left
     ((size_of_queryHash hpublic₁).trans (size_of_queryHash hpublic₂).symm)
   refine (collision_or_eq_of_queryHash hpublic₁ hpublic₂ samePublic).elim .inl fun key => ?_
   refine (collision_or_eq_of_queryHash hright₁ hright₂ sameRight).elim .inl fun right => ?_
+  simp only [ByteArray.data_append] at right
   obtain ⟨sameAmount, sameSigned⟩ := Array.append_inj right (by simp [uintBytes_size])
   refine (collision_or_eq_of_queryHash hsigned₁ hsigned₂ sameSigned).elim .inl fun signed => ?_
+  simp only [ByteArray.data_append] at signed
   obtain ⟨sameLow, sameHigh⟩ := Array.append_inj signed
     ((size_of_queryHash hlow₁).trans (size_of_queryHash hlow₂).symm)
   refine (collision_or_eq_of_queryHash hlow₁ hlow₂ sameLow).elim .inl fun low => ?_
@@ -181,7 +186,7 @@ private theorem collision_or_eq_of_hashTreeRootM_depositData {cache : HashOracle
     rw [Array.extract_append_extract]
     exact (Array.extract_eq_self_of_le (by simp)).symm
   have amounts := uintBytes_injective (by simpa using amount₁.toNat_lt)
-    (by simpa using amount₂.toNat_lt) ((Array.append_left_inj _).mp sameAmount)
+    (by simpa using amount₂.toNat_lt) (ByteArray.ext ((Array.append_left_inj _).mp sameAmount))
   have low : signature₁.toArray.extract 0 64 = signature₂.toArray.extract 0 64 := low
   have high : signature₁.toArray.extract 64 96 = signature₂.toArray.extract 64 96 :=
     (Array.append_left_inj _).mp high

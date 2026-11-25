@@ -99,7 +99,7 @@ theorem wins_of_computeSigningRoot_eq {α : Type} [SszType α] [LawfulSszType α
   obtain ⟨valuesDiffer, firstRooted, secondRooted⟩ :=
     signingValues_of_computeSigningRoot_eq differ firstSigned secondSigned
   refine wins_signingValue_iff.mpr ⟨LawfulSszType.wellFormed, LawfulSszType.fits first,
-    LawfulSszType.fits second, firstSized, secondSized, ?_, root.toArray, firstRooted,
+    LawfulSszType.fits second, firstSized, secondSized, ?_, ⟨root.toArray⟩, firstRooted,
     secondRooted⟩
   -- Equal pairs of values give equal signing values.
   intro same

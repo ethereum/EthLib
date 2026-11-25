@@ -21,13 +21,16 @@ def Rewrites (shape : Desc) : Prop :=
 
 /-- One byte on the front of a run gives one value on the front of the elements. -/
 theorem byteElements_cons (byte : UInt8) (data : Bytes) :
-    byteElements (#[byte] ++ data) = .uint byte.toNat :: byteElements data := by
-  simp [byteElements]
+    byteElements (⟨#[byte]⟩ ++ data) = .uint byte.toNat :: byteElements data := by
+  simp [byteElements, ByteArray.data_append]
 
 /-- A run of one-byte values is recovered from the bytes it wrote. -/
 theorem byteElements_byteRun : ∀ (values : List Value) (data : Bytes),
     byteRun values = .ok data → byteElements data = values
-  | [], data, wrote => by simp_all [byteRun_nil, byteElements]
+  | [], data, wrote => by
+    simp only [byteRun_nil, Except.ok.injEq] at wrote
+    subst wrote
+    rfl
   | .uint n :: rest, data, wrote => by
     -- A small value writes one byte, and that byte reads back as the same value.
     cases run : byteRun rest <;> by_cases wide : 256 ≤ n <;>

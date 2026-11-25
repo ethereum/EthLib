@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+public import EthLib.Serialization.Proofs.Ssz.Codec.StructBodies
 
 /-! Reading a struct's fixed part first changes which refusal is met, never what is accepted. -/
 
@@ -76,7 +77,7 @@ theorem deserializeStruct_of {fields : List Desc} {data : Bytes} {slices : List 
   -- With offsets, every inline field was cut out as is, so the early check passes.
   have inline : (bodyStarts slots).isEmpty = false → checkInline fields slots = .ok () := by
     intro hasBodies
-    simp only [structBodies, hasBodies, Bool.false_eq_true, ite_false] at bodies
+    simp only [structBodies_eq_takeSlots, hasBodies, Bool.false_eq_true, ite_false] at bodies
     split at bodies
     · simp [throw_error, Bind.bind, Except.bind] at bodies
     · obtain ⟨spans, -, taken⟩ := checksPassed bodies

@@ -1061,6 +1061,23 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, SSZ holds its bytes as a `ByteArray` in place of an `Array UInt8` ([#4560](https://github.com/ethereum/EthLib/pull/4560)).
+  A node of a Merkle tree, an encoding and a byte value of SSZ now have the type that SHA-256 and the bindings use.
+  So no step copies them from one type to the other.
+  - `Ssz.Bytes` (`Serialization/Ssz/Error.lean`) is `ByteArray`, and `Ssz.Value.bytes` holds a `ByteArray`.
+    A parent node is the hash of its two children joined, with no conversion.
+  - The typed container codec (`Serialization/Ssz/Typed/Container.lean`) reads and writes with the untyped `structSlots`, `bodyStarts` and `assemble`.
+    Its copies over `ByteArray` are removed: `ByteSlot`, `ByteSlot.toSlot`, `readByteSlots`, `byteStructSlots`, `byteBodyStarts`, `byteBodies`, `byteHeadWidthFrom`, `byteBodyWidthFrom`, `byteHeadOfFrom`, `byteBodiesOfFrom` and `assembleBytes`.
+    `pushUintBytes` is removed too, and a typed integer is written by `uintBytes`.
+  - `offsetBodies` and `fillSlots` (`Serialization/Ssz/Codec/Deserialize.lean`) are new, and `structBodies` fills the slots from `offsetBodies`.
+    `takeSlots` moves to the proof module `Serialization/Proofs/Ssz/Codec/StructBodies.lean`, and `structBodies_eq_takeSlots` states the previous body of `structBodies`.
+  - The theorems `readByteSlots_eq`, `byteStructSlots_eq`, `byteBodyStarts_eq`, `assembleBytes_eq`, `structBodies_eq` and `SszType.data_pushUintBytes` are removed with the copies they tied to the untyped codec.
+    `byteStructSlots_length` is now `structSlots_length`, and `byteBodies_length` is now `offsetBodies_length`.
+  - A theorem about SSZ bytes changes its statement only where the type forces it, and says the same of the same bytes.
+    A byte literal `#[b]` is written `⟨#[b]⟩`, and a 32-byte vector met as bytes is wrapped as `⟨v.toArray⟩`.
+    A conversion `ByteArray.mk` or `.data` that is no longer needed is dropped.
+  - The Python bindings and their results do not change.
+  Migration: build SSZ bytes with `ByteArray.mk` or `.empty`, read their array with `.data`, and use the untyped codec in place of the removed copies.
 - In Lean, the versioned hashes of a list of transactions are defined from those of one transaction ([#4565](https://github.com/ethereum/EthLib/issues/4565)).
   - `Execution.Transactions.Transaction.blobHashes` moves from `Execution/Transactions/Process.lean` to `Execution/Transactions/Types.lean`, beside the transaction type, with the same name and body.
   - `Engine.ExecutionPayload.blobVersionedHashes` (`Engine/Block.lean`) now unfolds to `List.flatMap` of `Transaction.blobHashes`, instead of its own match on the kind of each transaction.

@@ -28,7 +28,7 @@ def computeMerkleBranchRoot (leaf : Vector UInt8 32) (branch : List (Vector UInt
   -- The branch holds at least `depth` nodes, and the first `depth` are read.
   if branch.length < depth then throw (.branchLength depth branch.length)
   -- For `i < depth`: `v = H(b_i || v)` if bit `i` of the index is 1, else `v = H(v || b_i)`.
-  toChunk (climbBranch index 0 leaf.toArray ((branch.take depth).map Vector.toArray))
+  toChunk (climbBranch index 0 ⟨leaf.toArray⟩ ((branch.take depth).map fun node => ⟨node.toArray⟩))
 
 /-- Whether a branch of exactly `depth` nodes climbs from the leaf at an index to the root. -/
 def isValidMerkleBranch (leaf : Vector UInt8 32) (branch : List (Vector UInt8 32))

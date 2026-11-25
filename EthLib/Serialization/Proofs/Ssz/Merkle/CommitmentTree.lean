@@ -27,7 +27,7 @@ inductive CommitmentTree where
 def MessageCollision (a b : Bytes)
     (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) : Prop :=
   a.size = 2 * bytesPerChunk ∧ b.size = 2 * bytesPerChunk ∧ a ≠ b ∧
-    hash (ByteArray.mk a) = hash (ByteArray.mk b)
+    hash a = hash b
 
 instance (a b : Bytes) (hash : ByteArray → ByteArray) :
     Decidable (MessageCollision a b hash) := by
@@ -145,7 +145,7 @@ def Collision (left right : CommitmentTree)
     (hash : ByteArray → ByteArray := Cryptography.Hash.Sha256.hash) : Prop :=
   -- Both witnesses must belong to these computations, excluding unrelated hash collisions.
   ∃ first ∈ left.messages hash, ∃ second ∈ right.messages hash,
-    first ≠ second ∧ hash (ByteArray.mk first) = hash (ByteArray.mk second)
+    first ≠ second ∧ hash first = hash second
 
 /-- Every complete computation has a complete root node, when every digest has 32 bytes. -/
 @[simp] theorem root_size (tree : CommitmentTree) (complete : tree.Complete)
@@ -190,9 +190,12 @@ theorem fork_binding {hash : ByteArray → ByteArray}
   -- Two equal 64-byte concatenations split uniquely at byte 32.
   -- Unequal ones witness a collision.
   by_cases inputs : left.root hash ++ right.root hash = otherLeft.root hash ++ otherRight.root hash
-  · exact .inl (Array.append_inj inputs ((root_size _ complete.1 hash width).trans
-      (root_size _ otherComplete.1 hash width).symm))
-  · exact .inr ⟨_, List.mem_cons_self, _, List.mem_cons_self, inputs, ByteArray.ext same⟩
+  · have joined := congrArg ByteArray.data inputs
+    rw [ByteArray.data_append, ByteArray.data_append] at joined
+    obtain ⟨leftSame, rightSame⟩ := Array.append_inj joined
+      ((root_size _ complete.1 hash width).trans (root_size _ otherComplete.1 hash width).symm)
+    exact .inl ⟨ByteArray.ext leftSame, ByteArray.ext rightSame⟩
+  · exact .inr ⟨_, List.mem_cons_self, _, List.mem_cons_self, inputs, same⟩
 
 /-- A collision in the left subcomputations remains a collision in the full trees. -/
 theorem Collision.left {hash : ByteArray → ByteArray} {left otherLeft : CommitmentTree}

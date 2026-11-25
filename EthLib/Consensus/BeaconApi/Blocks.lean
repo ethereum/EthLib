@@ -78,7 +78,7 @@ def blockRootResponse (block : SignedBeaconBlock preset fork) :
   -- A block whose root cannot be computed gives code 500.
   let root ← (blockRoot block).mapError fun _ => internalError "no block root"
   -- The source: the data is an object with the root, hex encoded with the 0x prefix.
-  return { data := Json.mkObj [("root", .str (toHex root.toArray))] }
+  return { data := Json.mkObj [("root", .str (toHex ⟨root.toArray⟩))] }
 
 /-- The response of the block attestations endpoint, without the two flags from the store. -/
 def blockAttestationsResponse (block : SignedBeaconBlock preset fork) :
@@ -141,7 +141,7 @@ structure HeaderResponse where
 
 /-- The JSON object of one header answer. -/
 def HeaderResponse.toJson (response : HeaderResponse) : Except ErrorMessage Json := do
-  return Json.mkObj [("root", .str (toHex response.root.toArray)),
+  return Json.mkObj [("root", .str (toHex ⟨response.root.toArray⟩)),
     ("canonical", .bool response.canonical), ("header", ← apiJsonOr500 response.header)]
 
 /-- The answer for one signed header: its root, and whether its block is canonical. -/
@@ -244,7 +244,7 @@ def blobsResponse (block : SignedBeaconBlock preset fork) (blobs : List Blob)
     (hashes : Option (List VersionedHash)) : Except ErrorMessage ApiEnvelope := do
   let kept ← blobsOf block blobs hashes
   -- The data is the array of the kept blobs, each hex encoded with the 0x prefix.
-  return { data := .arr (kept.map fun blob => Json.str (toHex blob.toArray)).toArray }
+  return { data := .arr (kept.map fun blob => Json.str (toHex ⟨blob.toArray⟩)).toArray }
 
 /-- The SSZ body of the blobs answer: a list bounded by the commitments that a block may hold. -/
 def blobsSsz (block : SignedBeaconBlock preset fork) (blobs : List Blob)

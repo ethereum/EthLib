@@ -52,7 +52,7 @@ def hashInput (domain : Vector UInt8 4) (topic bytes : ByteArray) : ByteArray :=
   -- A topic of 2^64 bytes or more has no 64-bit length, and the bytes keep the low 64 bits of it.
   --
   -- The source fails there instead, but no byte string in memory reaches that length.
-  ⟨domain.toArray⟩ ++ ⟨Serialization.Ssz.uintBytes 8 topic.size⟩ ++ topic ++ bytes
+  ⟨domain.toArray⟩ ++ Serialization.Ssz.uintBytes 8 topic.size ++ topic ++ bytes
 
 end Altair
 

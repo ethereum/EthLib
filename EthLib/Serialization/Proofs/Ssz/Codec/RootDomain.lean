@@ -32,20 +32,20 @@ private theorem basic_encoding {shape : Desc} {value : Value}
     ∃ bytes, serialize shape value = .ok bytes ∧ bytes.size = shape.itemLength := by
   -- Only booleans and integers share nodes with their neighbors.
   cases fitted <;> simp [Desc.isBasic] at basic
-  case bool b => exact ⟨#[if b then 1 else 0], by simp [serialize], rfl⟩
+  case bool b => exact ⟨⟨#[if b then 1 else 0]⟩, by simp [serialize], rfl⟩
   case uint width n bound => exact ⟨uintBytes width n, by simp [serialize, bound], uintBytes_size _ _⟩
 
 /-- Basic elements serialize to exactly their fixed byte widths, without offset tables. -/
 theorem serializeEach_basic_size {shape : Desc} (basic : shape.isBasic = true) :
     ∀ values, (∀ value ∈ values, Fits shape value) →
     ∃ parts, serializeEach shape values = .ok parts ∧
-      (parts.foldl (fun total part => total ++ part) (#[] : Bytes)).size =
+      (parts.foldl (fun total part => total ++ part) (.empty : Bytes)).size =
         values.length * shape.itemLength := by
   -- Concatenating basic encodings adds their fixed byte widths.
   -- The accumulated prefix contributes its existing width, followed by the sum of every encoded part.
   have fold_size : ∀ (parts : List Bytes) (front : Bytes),
       (parts.foldl (fun total part => total ++ part) front).size =
-        front.size + (parts.map Array.size).sum := by
+        front.size + (parts.map ByteArray.size).sum := by
     intro parts
     induction parts <;> simp [*, Nat.add_assoc]
   intro values
@@ -58,7 +58,7 @@ theorem serializeEach_basic_size {shape : Desc} (basic : shape.isBasic = true) :
     obtain ⟨tail, rest, total⟩ := ih (fun item member => each item (List.mem_cons_of_mem _ member))
     refine ⟨head :: tail, by simp [serializeEach_cons, wrote, rest, Bind.bind, Except.bind, pure,
         Except.pure], ?_⟩
-    simp only [fold_size, Array.size_empty, Nat.zero_add] at total ⊢
+    simp only [fold_size, ByteArray.size_empty, Nat.zero_add] at total ⊢
     simp [sized, total, Nat.add_mul, Nat.add_comm]
 
 private theorem sequence_fits {element : Desc} {values : List Value}
@@ -85,7 +85,7 @@ private theorem sequence_fits {element : Desc} {values : List Value}
     apply packed_fits
     intro capacity named
     obtain ⟨count, rfl, rfl⟩ := Option.map_eq_some_iff.mp named
-    change chunksForBytes (parts.foldl _ (#[] : Bytes)).size ≤ _
+    change chunksForBytes (parts.foldl _ (.empty : Bytes)).size ≤ _
     rw [sized]
     unfold chunksForBytes
     exact Nat.div_le_div_right (Nat.sub_le_sub_right
@@ -141,7 +141,8 @@ private theorem bits_fits (data : Array Bool) (limit : Option Nat) (mixin : Opti
   apply packed_fits
   intro capacity named
   have bound := bounded capacity named
-  simp only [packBits, Array.size_ofFn, chunksForBytes, chunksForBits, bytesPerChunk] at *
+  simp only [packBits, Base.byteArray_size_mk, Array.size_ofFn, chunksForBytes, chunksForBits,
+    bytesPerChunk] at *
   omega
 
 /-- A well-formed type and an admissible value supply a valid layout before any hashes are computed. -/
@@ -150,7 +151,7 @@ theorem layout_exists {shape : Desc} {value : Value}
     ∃ layout, merkleLayout shape value = .ok layout ∧ LayoutFits layout := by
   -- Each admissibility constructor supplies exactly the count or bound its layout needs.
   cases fitted with
-  | bool b => exact fixed_fits (bytes := #[if b then 1 else 0]) (by simp [serialize])
+  | bool b => exact fixed_fits (bytes := ⟨#[if b then 1 else 0]⟩) (by simp [serialize])
   | @uint width n bound => exact fixed_fits (bytes := uintBytes width n) (by simp [serialize, bound])
   | @byteVector length data exact =>
     refine ⟨.packing (packBytes data) (some (packBytes data).size),

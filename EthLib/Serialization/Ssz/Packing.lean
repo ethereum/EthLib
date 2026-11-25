@@ -16,7 +16,7 @@ A value wider than the given width is truncated.
 
 A caller needing exact recovery has to check the range itself.
 -/
-def uintBytes (width value : Nat) : Bytes := (Base.ByteOrder.toLE width value).toArray
+def uintBytes (width value : Nat) : Bytes := ⟨(Base.ByteOrder.toLE width value).toArray⟩
 
 /-- The eight bits that land in one byte, gathered into it. -/
 def packByte (bits : Array Bool) (byteIndex : Nat) : UInt8 :=
@@ -39,6 +39,6 @@ Each byte is built from the bits that land in it, rather than one bit at a time 
 A byte then stands on its own, which is what lets a bit be read back where it was put.
 -/
 def packBits (bits : Array Bool) (byteCount : Nat) : Bytes :=
-  Array.ofFn (n := byteCount) fun byteIndex => packByte bits byteIndex.val
+  ⟨Array.ofFn (n := byteCount) fun byteIndex => packByte bits byteIndex.val⟩
 
 end EthLib.Serialization.Ssz

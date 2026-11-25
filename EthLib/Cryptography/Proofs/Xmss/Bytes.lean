@@ -34,7 +34,7 @@ open EthLib.Cryptography.Hash.Keccak (keccak256 lanesBytes)
 /-- A byte string built from a list splits where the list does. -/
 private theorem mk_append (l₁ l₂ : List UInt8) :
     ByteArray.mk (l₁ ++ l₂).toArray = ⟨l₁.toArray⟩ ++ ⟨l₂.toArray⟩ :=
-  ByteArray.ext (by simp [ByteArray.data_append])
+  ByteArray.ext (by simp)
 
 /-- The bytes of a fixed-size object, as a byte string, are its list of bytes. -/
 private theorem packBytes_eq_mk {n : Nat} (v : Vector UInt8 n) :
@@ -133,7 +133,7 @@ theorem chainStarts_bytes (publicParam : PublicParam) (s : Seed) (layer : Layer)
   simp only [Id.run_pure, Fin.getElem_fin, getElem_cast_flatMap_halves, Vector.getElem_ofFn]
   -- The suffix is empty, so it adds no byte.
   have hempty : ∀ b : ByteArray, b ++ ⟨(lanesBytes #[]).toArray⟩ = b := fun b =>
-    ByteArray.ext (by simp [ByteArray.data_append, lanesBytes])
+    ByteArray.ext (by simp [lanesBytes])
   rw [toList_bytes_halfOf, seedPrf_bytes, hempty]
   rfl
 
@@ -304,7 +304,7 @@ theorem toList_encodeSignature (sig : Signature) :
         ++ (sig.top.chainValues.toList.map fun d => d.bytes.toList).flatten
         ++ (sig.top.path.toList.map fun d => d.bytes.toList).flatten := by
   simp [encodeSignature, encodeLayerSignature, packDigests_eq_mk, lanesBytes_digestLanes,
-    Base.packBytes, ByteArray.data_append]
+    Base.packBytes]
   rfl
 
 /-- Byte strings verify exactly when they encode a key, a message and a signature reaching the root.

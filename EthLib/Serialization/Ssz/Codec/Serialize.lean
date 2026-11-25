@@ -71,7 +71,7 @@ An inline part sits here in full.
 Anything else leaves the offset of its body, and the next body begins past its end.
 -/
 def headOf (start : Nat) (parts : List (Bool × Bytes)) : Bytes :=
-  headOfFrom start parts #[]
+  headOfFrom start parts .empty
 
 /-- The bodies so far, then the bodies of `parts`. -/
 def bodiesOfFrom : List (Bool × Bytes) → Bytes → Bytes
@@ -81,7 +81,7 @@ def bodiesOfFrom : List (Bool × Bytes) → Bytes → Bytes
 
 /-- The bodies, in the order their offsets name them. -/
 def bodiesOf (parts : List (Bool × Bytes)) : Bytes :=
-  bodiesOfFrom parts #[]
+  bodiesOfFrom parts .empty
 
 /--
 Parts laid out as a struct or a sequence encodes them.
@@ -107,7 +107,9 @@ def assemble (inline : List Bool) (parts : List Bytes) : Except Err Bytes := do
   -- The offset of the body `i` is the first offset plus the lengths of the bodies before it.
   --
   -- The result is the fixed parts, offsets in place, then the variable parts in order.
-  return headOf leading slots ++ bodiesOf slots
+  --
+  -- Both are written into one array, sized once to the whole encoding.
+  return bodiesOfFrom slots (headOfFrom leading slots (ByteArray.emptyWithCapacity total))
 
 /-- The option a selector names, or a refusal when it names none. -/
 def lookupOption : List Nat → List Desc → Nat → Except Err Desc
@@ -145,7 +147,7 @@ mutual
 /-- The SSZ encoding of a value, read against the type it is meant to fit. -/
 def serialize : Desc → Value → Except Err Bytes
   -- boolean: the byte `0x01` for true, `0x00` for false.
-  | .bool, .bool b => .ok #[if b then 1 else 0]
+  | .bool, .bool b => .ok ⟨#[if b then 1 else 0]⟩
   -- uintN: `N / 8` bytes, little-endian; the type holds the byte width `N / 8`.
   --
   -- A value of `2^N` or more is refused.
@@ -216,7 +218,7 @@ def serialize : Desc → Value → Except Err Bytes
     -- The selector is written as one byte, so one the range does not allow is refused, not cut.
     checkSelector selector
     let body ← serialize option data
-    return #[UInt8.ofNat selector] ++ body
+    return ⟨#[UInt8.ofNat selector]⟩ ++ body
   | _, _ => .error .typeMismatch
 termination_by structural _ value => value
 

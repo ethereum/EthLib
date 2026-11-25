@@ -28,35 +28,18 @@ theorem SszType.ofUint_ok {α : Type} {width : Nat} {make : Nat → α} {value :
 /-- An integer read straight from its bytes is the one the untyped decoder reads. -/
 theorem SszType.decodeUint_eq {α : Type} (width : Nat) (make : Nat → α) (data : ByteArray) :
     decodeUint width make data =
-      (do ofUint width make (← Ssz.deserialize (.uint width) data.data)) := by
+      (do ofUint width make (← Ssz.deserialize (.uint width) data)) := by
   unfold decodeUint
   by_cases size : data.size = width
-  · have below := readUint_lt data.data 0 width
-    simp [Ssz.deserialize, ByteArray.size_data, size, ofUint, below]
-  · simp [Ssz.deserialize, ByteArray.size_data, size]
+  · have below := readUint_lt data 0 width
+    simp [Ssz.deserialize, size, ofUint, below]
+  · simp [Ssz.deserialize, size]
     rfl
 
-/-- The bytes pushed for an integer are its little-endian bytes, after the bytes so far. -/
-theorem SszType.data_pushUintBytes (width n : Nat) (out : ByteArray) :
-    (pushUintBytes width n out).data = out.data ++ uintBytes width n := by
-  induction width generalizing n out with
-  | zero => simp [pushUintBytes, uintBytes_zero]
-  | succ width ih =>
-    rw [pushUintBytes, ih, uintBytes_succ, ← Array.append_assoc, ByteArray.data_push,
-      ← UInt8.ofNat_mod_size (x := n)]
-    rfl
-
-/-- An integer that fits its width, written straight to bytes, gives the untyped encoder's bytes. -/
+/-- An integer that fits its width gives the untyped encoder's bytes. -/
 theorem SszType.encodeUint_eq (width n : Nat) (below : n < 2 ^ (8 * width)) :
-    encodeUint width n = (do return ⟨← Ssz.serialize (.uint width) (.uint n)⟩) := by
-  have bytes : pushUintBytes width n (ByteArray.emptyWithCapacity width) = ⟨uintBytes width n⟩ := by
-    cases h : pushUintBytes width n (ByteArray.emptyWithCapacity width) with
-    | mk data =>
-      have := data_pushUintBytes width n (ByteArray.emptyWithCapacity width)
-      rw [h] at this
-      simp only at this
-      rw [this, show (ByteArray.emptyWithCapacity width).data = #[] from rfl, Array.empty_append]
-  simp [encodeUint, bytes, Ssz.serialize, below, bind, Except.bind, pure, Except.pure]
+    encodeUint width n = Ssz.serialize (.uint width) (.uint n) := by
+  simp [encodeUint, Ssz.serialize, below]
 
 /--
 An integer type is lawful when its numbers are exactly those below the bound of its width.
@@ -72,10 +55,10 @@ theorem LawfulSszType.ofUint {α : Type} [SszType α] {width : Nat} (toNat : α 
     (bounded : ∀ a, toNat a < 2 ^ (8 * width)) (left : ∀ a, ofNat (toNat a) = a)
     (right : ∀ n, n < 2 ^ (8 * width) → toNat (ofNat n) = n)
     (rooted : ∀ a : α, SszType.root a = Ssz.hashTreeRoot (desc α) (toValue a) := by intro; rfl)
-    (encoded : ∀ a : α, SszType.encode a = (do return ⟨← Ssz.serialize (desc α) (toValue a)⟩) := by
+    (encoded : ∀ a : α, SszType.encode a = Ssz.serialize (desc α) (toValue a) := by
       intro; rfl)
     (decoded : ∀ data : ByteArray,
-      SszType.decode data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data.data)) := by
+      SszType.decode data = (do ofValue (α := α) (← Ssz.deserialize (desc α) data)) := by
       intro; rfl) :
     LawfulSszType α where
   wellFormed := by simp only [declared, Desc.wellFormed, sized, ↓reduceIte]
@@ -112,10 +95,10 @@ instance : LawfulSszType Bool where
       · simp [h, ByteArray.size_data]
     have kind : SszType.desc Bool = .bool := rfl
     by_cases size : data.size = 1
-    · simp only [decode, kind, Ssz.deserialize, ByteArray.size_data, get, size, bne_self_eq_false,
-        Bool.false_eq_true, ite_false]
+    · simp only [decode, kind, Ssz.deserialize, get, size, bne_self_eq_false, Bool.false_eq_true,
+        ite_false]
       split <;> split <;> simp_all [ofValue] <;> rfl
-    · simp [decode, kind, Ssz.deserialize, ByteArray.size_data, size]
+    · simp [decode, kind, Ssz.deserialize, size]
       rfl
 
 instance : LawfulSszType UInt8 :=
@@ -163,20 +146,19 @@ instance {n : Nat} [NeZero n] : LawfulSszType (Vector UInt8 n) where
     -- Only bytes of the declared count read back, as the vector that holds them.
     rename_i data
     by_cases exact : data.size = n
-    · rw [Base.exactArray_of_size_eq _ exact, Except.ok.injEq] at made
+    · rw [Base.exactBytes_of_size_eq _ exact, Except.ok.injEq] at made
       subst made
       rfl
-    · rw [Base.exactArray_of_size_ne _ exact] at made
+    · rw [Base.exactBytes_of_size_ne _ exact] at made
       cases made
   ofValue_ne_error {value fault} fits made := by
     cases fits with
-    | byteVector exact => simp [ofValue, Base.exactArray_of_size_eq _ exact] at made
+    | byteVector exact => simp [ofValue, Base.exactBytes_of_size_eq _ exact] at made
   encode_eq v := by
     by_cases wide : n ≥ 2 ^ (8 * bytesPerOffset)
     · simp [encode, desc, toValue, Ssz.serialize, wide, v.size_toArray, bind, Except.bind, throw,
         throwThe, MonadExceptOf.throw]
-    · simp [encode, desc, toValue, Ssz.serialize, wide, v.size_toArray, bind, Except.bind, pure,
-        Except.pure]
+    · simp [encode, desc, toValue, Ssz.serialize, wide, v.size_toArray, pure, Except.pure]
 
 /-- A structure around one value keeps the laws of the SSZ type of that value.
 
@@ -213,6 +195,6 @@ theorem LawfulSszType.wrapper {α β : Type} [SszType β] [LawfulSszType β] (mk
     decode_eq data := by
       change mk <$> decode (α := β) data = _
       rw [LawfulSszType.decode_eq (α := β)]
-      cases Ssz.deserialize (desc β) data.data <;> rfl }
+      cases Ssz.deserialize (desc β) data <;> rfl }
 
 end EthLib.Serialization.Ssz

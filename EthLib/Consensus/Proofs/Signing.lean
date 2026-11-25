@@ -79,7 +79,7 @@ def signingShape (shape : Desc) : Desc :=
 
 /-- The signing data with the object in place of its root. -/
 def signingValue (value : Value) (domain : Domain) : Value :=
-  .seq [value, .bytes domain.toArray]
+  .seq [value, .bytes ⟨domain.toArray⟩]
 
 /-- The signing root of an object is the root of one value.
 
@@ -98,11 +98,11 @@ theorem computeSigningRoot_eq_hashTreeRoot {α : Type} [SszType α] [LawfulSszTy
   -- A container reads only the root of each field, so the object gives the same root as its root.
   have summary := hashTreeRoot_summary (names := ["object_root", "domain"])
     (fields := [desc α, .byteVector bytesPerChunk])
-    (values := [toValue object, .bytes domain.toArray]) (position := 0) rfl rfl rfl rooted
-  have objectRooted : SszType.hashTreeRoot object = .ok ⟨root, width⟩ :=
+    (values := [toValue object, .bytes ⟨domain.toArray⟩]) (position := 0) rfl rfl rfl rooted
+  have objectRooted : SszType.hashTreeRoot object = .ok ⟨root.data, width⟩ :=
     hashTreeRoot_ok_iff.mpr rooted
   rw [computeSigningRoot, objectRooted]
-  show SszType.hashTreeRoot (SigningData.mk ⟨root, width⟩ domain) = _
+  show SszType.hashTreeRoot (SigningData.mk ⟨root.data, width⟩ domain) = _
   rw [SszType.hashTreeRoot_eq]
   exact congrArg (· >>= toChunk) summary
 
@@ -168,16 +168,16 @@ theorem signingValues_of_computeSigningRoot_eq {α : Type} [SszType α] [LawfulS
     (secondSigned : computeSigningRoot second secondDomain = .ok root) :
     signingValue (toValue first) firstDomain ≠ signingValue (toValue second) secondDomain ∧
       Serialization.Ssz.hashTreeRoot (signingShape (desc α))
-          (signingValue (toValue first) firstDomain) = .ok root.toArray ∧
+          (signingValue (toValue first) firstDomain) = .ok ⟨root.toArray⟩ ∧
       Serialization.Ssz.hashTreeRoot (signingShape (desc α))
-          (signingValue (toValue second) secondDomain) = .ok root.toArray := by
+          (signingValue (toValue second) secondDomain) = .ok ⟨root.toArray⟩ := by
   rw [computeSigningRoot_eq_hashTreeRoot] at firstSigned secondSigned
   -- A signing root is the root of its signing value, cut to one node.
   have rooted : ∀ {value : Value} {domain : Domain},
       (do toChunk (← Serialization.Ssz.hashTreeRoot (signingShape (desc α))
         (signingValue value domain))) = Except.ok root →
       Serialization.Ssz.hashTreeRoot (signingShape (desc α)) (signingValue value domain) =
-        .ok root.toArray := by
+        .ok ⟨root.toArray⟩ := by
     intro value domain signed
     cases found : Serialization.Ssz.hashTreeRoot (signingShape (desc α))
         (signingValue value domain) with

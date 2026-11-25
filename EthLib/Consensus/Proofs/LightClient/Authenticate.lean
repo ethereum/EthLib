@@ -36,15 +36,14 @@ theorem isValidNormalizedMerkleBranch_value {α : Type} [SszType α] [LawfulSszT
     {leaf node root : Bytes32} {branch : List Bytes32} {gindex : Nat} (named : 2 ≤ gindex)
     (valid : isValidNormalizedMerkleBranch leaf branch gindex root = .ok true) (value : α)
     (rooted : SszType.hashTreeRoot value = .ok root)
-    (read : nodeRoot (SszType.desc α) (SszType.toValue value) gindex = .ok node.toArray) :
+    (read : nodeRoot (SszType.desc α) (SszType.toValue value) gindex = .ok ⟨node.toArray⟩) :
     leaf = node ∨ ∃ honest a b, computeMerkleProof value gindex = .ok honest ∧
-      findBranchCollision gindex 0 leaf.toArray node.toArray
-          ((branch.drop (branch.length - Nat.log2 gindex)).map Vector.toArray)
-          ((honest.drop (honest.length - Nat.log2 gindex)).map Vector.toArray) =
+      findBranchCollision gindex 0 ⟨leaf.toArray⟩ ⟨node.toArray⟩
+          ((branch.drop (branch.length - Nat.log2 gindex)).map fun node => ⟨node.toArray⟩)
+          ((honest.drop (honest.length - Nat.log2 gindex)).map fun node => ⟨node.toArray⟩) =
         some (a, b) ∧
       a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-      Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-        Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+      Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b := by
   obtain ⟨valueRoot, honest, valueRooted, built, honestValid⟩ :=
     computeMerkleProof_isValidNormalizedMerkleBranch value named read
   obtain rfl : valueRoot = root := Except.ok.inj (valueRooted.symm.trans rooted)
@@ -246,17 +245,17 @@ theorem validateLightClientUpdate_finalized {config : Config} {checks : Signatur
         update.finalizedHeader.beacon.slot ≠ GENESIS_SLOT ∧
           SszType.hashTreeRoot update.finalizedHeader.beacon = .ok leaf) ∧
       ∀ node : Bytes32,
-        nodeRoot (SszType.desc α) (SszType.toValue state) gindex = .ok node.toArray →
+        nodeRoot (SszType.desc α) (SszType.toValue state) gindex = .ok ⟨node.toArray⟩ →
       -- The node of the value at the index of the finality branch is the proved leaf.
       leaf = node ∨ ∃ honest a b, computeMerkleProof state gindex = .ok honest ∧
-        findBranchCollision gindex 0 leaf.toArray node.toArray
+        findBranchCollision gindex 0 ⟨leaf.toArray⟩ ⟨node.toArray⟩
             ((update.finalityBranch.toList.drop
-              (update.finalityBranch.toList.length - Nat.log2 gindex)).map Vector.toArray)
-            ((honest.drop (honest.length - Nat.log2 gindex)).map Vector.toArray) =
+              (update.finalityBranch.toList.length - Nat.log2 gindex)).map
+                fun node => ⟨node.toArray⟩)
+            ((honest.drop (honest.length - Nat.log2 gindex)).map fun node => ⟨node.toArray⟩) =
           some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b := by
   obtain ⟨gindex, leaf, indexed, named, valid⟩ :=
     validateFinality_proves (validateLightClientUpdate_proves accepted).2.1 finality
   exact ⟨gindex, leaf, indexed, named, fun node read =>
@@ -279,17 +278,17 @@ theorem validateLightClientUpdate_nextSyncCommittee {config : Config}
         update.attestedHeader.beacon.slot = .ok gindex ∧
       SszType.hashTreeRoot update.nextSyncCommittee = .ok leaf ∧
       ∀ node : Bytes32,
-        nodeRoot (SszType.desc α) (SszType.toValue state) gindex = .ok node.toArray →
+        nodeRoot (SszType.desc α) (SszType.toValue state) gindex = .ok ⟨node.toArray⟩ →
       -- The node of the value at the index of the committee branch is the update's committee root.
       leaf = node ∨ ∃ honest a b, computeMerkleProof state gindex = .ok honest ∧
-        findBranchCollision gindex 0 leaf.toArray node.toArray
+        findBranchCollision gindex 0 ⟨leaf.toArray⟩ ⟨node.toArray⟩
             ((update.nextSyncCommitteeBranch.toList.drop
-              (update.nextSyncCommitteeBranch.toList.length - Nat.log2 gindex)).map Vector.toArray)
-            ((honest.drop (honest.length - Nat.log2 gindex)).map Vector.toArray) =
+              (update.nextSyncCommitteeBranch.toList.length - Nat.log2 gindex)).map
+                fun node => ⟨node.toArray⟩)
+            ((honest.drop (honest.length - Nat.log2 gindex)).map fun node => ⟨node.toArray⟩) =
           some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b := by
   obtain ⟨gindex, leaf, indexed, committeeRoot, valid⟩ :=
     validateNextSyncCommitteeBranch_proves
       ((validateLightClientUpdate_proves accepted).2.2.1 committee)
@@ -364,14 +363,13 @@ theorem validateLightClientUpdate_finalizedCheckpoint {config : Config}
       SszType.hashTreeRoot state.finalizedCheckpoint.root = .ok node ∧
       (leaf = node ∨ ∃ honest a b,
         computeMerkleProof state (finalizedRootGindex stateFork) = .ok honest ∧
-        findBranchCollision (finalizedRootGindex stateFork) 0 leaf.toArray node.toArray
+        findBranchCollision (finalizedRootGindex stateFork) 0 ⟨leaf.toArray⟩ ⟨node.toArray⟩
             ((update.finalityBranch.toList.drop (update.finalityBranch.toList.length -
-              Nat.log2 (finalizedRootGindex stateFork))).map Vector.toArray)
+              Nat.log2 (finalizedRootGindex stateFork))).map fun node => ⟨node.toArray⟩)
             ((honest.drop (honest.length - Nat.log2 (finalizedRootGindex stateFork))).map
-              Vector.toArray) = some (a, b) ∧
+              fun node => ⟨node.toArray⟩) = some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   obtain ⟨gindex, leaf, indexed, named, bound⟩ :=
     validateLightClientUpdate_finalized accepted finality state rooted
   rw [layout, Except.ok.injEq] at indexed
@@ -402,15 +400,14 @@ theorem validateLightClientUpdate_nextSyncCommittee_state {config : Config}
       -- The root of the committee of the update is the root of the next committee of the state.
       (leaf = node ∨ ∃ honest a b,
         computeMerkleProof state (nextSyncCommitteeGindex stateFork) = .ok honest ∧
-        findBranchCollision (nextSyncCommitteeGindex stateFork) 0 leaf.toArray node.toArray
+        findBranchCollision (nextSyncCommitteeGindex stateFork) 0 ⟨leaf.toArray⟩ ⟨node.toArray⟩
             ((update.nextSyncCommitteeBranch.toList.drop
               (update.nextSyncCommitteeBranch.toList.length -
-                Nat.log2 (nextSyncCommitteeGindex stateFork))).map Vector.toArray)
+                Nat.log2 (nextSyncCommitteeGindex stateFork))).map fun node => ⟨node.toArray⟩)
             ((honest.drop (honest.length - Nat.log2 (nextSyncCommitteeGindex stateFork))).map
-              Vector.toArray) = some (a, b) ∧
+              fun node => ⟨node.toArray⟩) = some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   obtain ⟨gindex, leaf, indexed, committeeRooted, bound⟩ :=
     validateLightClientUpdate_nextSyncCommittee accepted committee state rooted
   rw [layout, Except.ok.injEq] at indexed
@@ -441,15 +438,14 @@ theorem initializeLightClientStore_currentSyncCommittee {config : Config}
       -- The branch of the bootstrap proves it.
       (leaf = node ∨ ∃ honest a b,
         computeMerkleProof state (currentSyncCommitteeGindex stateFork) = .ok honest ∧
-        findBranchCollision (currentSyncCommitteeGindex stateFork) 0 leaf.toArray node.toArray
+        findBranchCollision (currentSyncCommitteeGindex stateFork) 0 ⟨leaf.toArray⟩ ⟨node.toArray⟩
             ((bootstrap.currentSyncCommitteeBranch.toList.drop
               (bootstrap.currentSyncCommitteeBranch.toList.length -
-                Nat.log2 (currentSyncCommitteeGindex stateFork))).map Vector.toArray)
+                Nat.log2 (currentSyncCommitteeGindex stateFork))).map fun node => ⟨node.toArray⟩)
             ((honest.drop (honest.length - Nat.log2 (currentSyncCommitteeGindex stateFork))).map
-              Vector.toArray) = some (a, b) ∧
+              fun node => ⟨node.toArray⟩) = some (a, b) ∧
         a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+        Cryptography.Hash.Sha256.hash a = Cryptography.Hash.Sha256.hash b) := by
   obtain ⟨_, kept, gindex, leaf, indexed, leafRooted, valid⟩ :=
     initializeLightClientStore_proves computed
   rw [kept]
