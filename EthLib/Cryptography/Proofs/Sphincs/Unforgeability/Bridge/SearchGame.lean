@@ -59,11 +59,13 @@ theorem wp_failedSearch_le_of_eq {α : Type} (T : Nat) (hT₁ : 1 ≤ T)
     (fun p p' j j' hj hj' he => searchPoint_inj p p' j j' (by omega) (by omega) he)
     hashCost (fun _ => le_rfl) oa n hn
 
-/-- The game leaves a failed search of `T` trials with probability at most `(q + C) (1 - p)^T`.
+/-- The game ends with a failed search of `T` trials with probability `<= (q + C) (1 - p)^T`.
 
 The adversary makes at most `q` hash calls of its own and `r` signing requests.
 
-The bound on the searches is `1 <= T <= 2^32`, and `C` bounds the scheme's calls. -/
+Here `1 <= T <= 2^32`, and `C` bounds the scheme's calls.
+
+`p` is the chance that one counter gives a codeword. -/
 theorem wp_failedSearch_gameCore_le (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MAX_COUNTER_TRIALS)
     (adversary : Adversary) (q r : Nat) (h : HasAdversaryQueryBound adversary q r) :
     wp ((simulateQ HashSpec.romImpl (gameCore adversary)).run ∅)

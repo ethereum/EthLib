@@ -214,6 +214,30 @@ def HasCappedSecurityBits (bits : Nat) : Prop :=
     forgeAdvantage adversary ≤
       ((q + cappedCalls searchCap r + 1 : Nat) : ℝ≥0∞) / ((2 ^ bits : Nat) : ℝ≥0∞)
 
+/-! ## Signing inside the game -/
+
+/-- The game up to its verdict: the forgery, the log of signing requests and the verification.
+
+The game above is the verdict on this run. -/
+noncomputable def gameRun (adversary : Adversary) :
+    OracleComp OracleWorld (Forgery × QueryLog SigningSpec × Bool) := do
+  let seed ← liftM sampleSeed
+  let (sk, pk) ← liftM (keyGenWith H seed)
+  let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
+    (simulateQ (QueryImpl.ofLift OracleWorld
+      (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + signingOracle sk)
+      (adversary.main pk)).run
+  let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
+  return (forgery, log, verified)
+
+/-- The probability that some signing request of the game gets no signature.
+
+The game runs against one random oracle, from an empty cache, as above but with no cost. -/
+noncomputable def signingFailure (adversary : Adversary) : ℝ≥0∞ :=
+  Pr{let result ← (simulateQ (unifFwdImpl HashSpec + (randomOracle : QueryImpl HashSpec
+    (StateT (QueryCache HashSpec) ProbComp))) (gameRun adversary)).run' ∅}[
+    ∃ entry ∈ result.2.1, entry.2 = none]
+
 /-- The cap on signing requests is within the model's cap of 1,182,000,000. -/
 theorem signatureLimit_le : SIGNATURE_LIMIT ≤ SphincsSecurity.signatureLimit := by
   decide

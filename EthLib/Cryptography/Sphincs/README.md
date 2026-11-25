@@ -175,10 +175,11 @@ Definitions that derive a secret take the derivation function as an argument too
   The count `q` includes the calls of key generation, of every signing request and of the final verification.
   The adversary forges with probability at most `q / 2^127` (`unforgeable`).
   The game is stated in `Unforgeability/Bridge/Statement.lean`.
-- Signing inside the unforgeability game (`Unforgeability/Bridge/SigningFailure.lean`).
-  Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run.
-  Some request of its game gets no signature with probability at most `(q + C) exp(-2^18)` (`signingFailure_le`, `signingFailure_le_exp`).
+- Signing inside the unforgeability game of `Unforgeability/Bridge/Statement.lean`, in the random-oracle model (`Unforgeability/Bridge/SigningFailure.lean`).
+  Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
+  Some request of its game gets no signature with probability at most `(q + C) (1 - p)^(2^32)` (`signingFailure_le`), so at most `(q + C) exp(-2^18)` (`signingFailure_le_exp`).
   Here `C = 264193 + r * (470595 + 3 * 2^32) + 491` bounds the calls of key generation, of the `r` requests and of the verification.
+  `p` is the chance that one counter gives a codeword, about `2^-13.84`.
   A request with no signature leaves in the oracle's cache a search whose `2^32` counters all missed the code.
   The bound counts every hash call of the run, so it needs no assumption on the cache when a request starts.
 - The security proof (`Security/`).

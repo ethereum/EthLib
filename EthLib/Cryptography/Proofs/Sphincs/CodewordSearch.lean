@@ -106,7 +106,7 @@ theorem prEvent_findCounter_none (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
   · rw [toNat_ofNat_trial (by omega)]
     exact hfresh j (by omega)
 
-/-- With uniform digests, all `2^32` counters miss the code with probability below `exp(-2^18)`. -/
+/-- All `2^32` uniform counters miss the code with probability below `exp(-2^18)`. -/
 theorem searchMiss_pow_le_exp :
     (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ MAX_COUNTER_TRIALS ≤
       ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
@@ -123,7 +123,7 @@ theorem searchMiss_pow_le_exp :
 
 /-- **All `2^32` counters miss the code with probability below `exp(-2^18)`.**
 
-The hypotheses are those of the exact probability above. -/
+The cache holds none of the counters' inputs when the search starts. -/
 theorem prEvent_findCounter_none_le (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
     (cache : HashSig.HashSpec.QueryCache)
     (hfresh : ∀ j < MAX_COUNTER_TRIALS,

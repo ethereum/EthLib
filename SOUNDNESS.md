@@ -460,18 +460,18 @@ Here `q` is the chance that one uniform answer misses, and the trial inputs may 
 The unforgeability theorem with capped searches below uses it, and so does the failure bound for signing inside the game.
 
 That bound is `Unforgeability.Bridge.signingFailure_le` (`Proofs/Sphincs/Unforgeability/Bridge/SigningFailure.lean`).
-`signingFailure` runs the unforgeability game below against the random oracle, from an empty cache, and reads the log of its signing requests.
+`signingFailure` (`Proofs/Sphincs/Unforgeability/Bridge/Statement.lean`) runs the unforgeability game below against the random oracle, from an empty cache, and reads the log of its signing requests.
 The game is the verdict on that run (`gameCore_eq_map_gameRun`), so the log holds the game's own requests.
 Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
-Some request of its game gets no signature with probability at most `(q + C) * (1 - p)^(2^32)`.
+Some request of its game gets no signature with probability at most `(q + C) (1 - p)^(2^32)`.
 Here `C = 264193 + r * (470595 + 3 * 2^32) + 491` bounds the scheme's calls, as in the second unforgeability theorem below.
 `p` is the chance that one counter gives a codeword, about `2^-13.84`.
 A request with no signature leaves in the oracle's cache a search whose `2^32` counters all missed the code (`failedSearch_of_signerOf`, `Proofs/Sphincs/Unforgeability/Bridge/Search.lean`).
 By `failedSearch_of_mem_support_run` (`Proofs/Sphincs/Unforgeability/Bridge/SearchGameRun.lean`), the adversary's run then ends with a failed search in the cache, and the verification only adds entries to the cache.
 So the final cache of the game holds that failed search (`failedSearch_of_mem_support_gameRun`).
 The game makes at most `q + C` hash calls (`hasHashQueryBound_of_adversary`, `Proofs/Sphincs/Unforgeability/Bridge/AdversaryCalls.lean`).
-So by `HashSig.prEvent_failedSearch_le` with `T = 2^32`, its final cache holds a failed search with probability at most `(q + C) * (1 - p)^(2^32)` (`wp_failedSearch_gameCore_le`, `Proofs/Sphincs/Unforgeability/Bridge/SearchGame.lean`).
-Since `(1 - p)^(2^32)` is at most `exp(-2^18)` (`searchMiss_pow_le_exp`, `Proofs/Sphincs/CodewordSearch.lean`), the probability is at most `(q + C) * exp(-2^18)` (`signingFailure_le_exp`).
+So by `HashSig.prEvent_failedSearch_le` with `T = 2^32`, its final cache holds a failed search with probability at most `(q + C) (1 - p)^(2^32)` (`wp_failedSearch_gameCore_le`, `Proofs/Sphincs/Unforgeability/Bridge/SearchGame.lean`).
+Since `(1 - p)^(2^32)` is at most `exp(-2^18)` (`searchMiss_pow_le_exp`, `Proofs/Sphincs/CodewordSearch.lean`), the probability is at most `(q + C) exp(-2^18)` (`signingFailure_le_exp`).
 At `2^30` requests, `C` is about `2^63.6`, and even at `q = 2^128` that bound is about `2^-378066`.
 The bound covers every request of the game, after earlier signatures under the key and after any queries of the adversary.
 The game holds one key.

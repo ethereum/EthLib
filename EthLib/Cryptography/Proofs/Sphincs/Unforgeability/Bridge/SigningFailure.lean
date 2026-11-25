@@ -24,25 +24,6 @@ open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open HashSig (HashSpec OracleWorld)
 
-/-- The game up to its result: keys, the adversary with its log, then the verification. -/
-noncomputable def gameRun (adversary : Adversary) :
-    OracleComp OracleWorld (Forgery × QueryLog SigningSpec × Bool) := do
-  let seed ← liftM sampleSeed
-  let (sk, pk) ← liftM (keyGenWith H seed)
-  let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
-    (simulateQ (QueryImpl.ofLift OracleWorld
-      (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + signingOracle sk)
-      (adversary.main pk)).run
-  let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
-  return (forgery, log, verified)
-
-/-- The probability that some signing request of the game gets no signature.
-
-The game runs against one random oracle, from an empty cache. -/
-noncomputable def signingFailure (adversary : Adversary) : ℝ≥0∞ :=
-  Pr{let result ← (simulateQ HashSpec.romImpl (gameRun adversary)).run' ∅}[
-    ∃ entry ∈ result.2.1, entry.2 = none]
-
 /-- The run is key generation, then the adversary's run with its oracles, then the verification. -/
 theorem gameRun_eq_keys_run (adversary : Adversary) :
     gameRun adversary = (do
@@ -93,7 +74,7 @@ theorem failedSearch_of_mem_support_keys_run
   simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
   subst hz
   obtain ⟨entry, hmem, hnone⟩ := h
-  -- No signature is a long search for every bound, `2^32` included.
+  -- A request with no signature searched past every bound, `2^32` included.
   have hlong : ¬∀ e ∈ v.1.2, SearchesBelow MAX_COUNTER_TRIALS e.2 := fun hall => by
     have hbelow := hall entry hmem
     rw [hnone] at hbelow
@@ -110,7 +91,7 @@ theorem failedSearch_of_mem_support_gameRun (adversary : Adversary)
     (hz : z ∈ support ((simulateQ HashSpec.romImpl (gameRun adversary)).run ∅))
     (h : ∃ entry ∈ z.1.2.1, entry.2 = none) :
     HashSig.FailedSearch searchPoint SearchMiss MAX_COUNTER_TRIALS z.2 := by
-  -- The step holds for any keys: on the game's own keys, the kernel replay runs key generation.
+  -- The step is stated for any keys, so the proof never unfolds key generation.
   rw [gameRun_eq_keys_run] at hz
   exact failedSearch_of_mem_support_keys_run _ adversary z hz h
 
@@ -130,7 +111,7 @@ theorem signingFailure_le (adversary : Adversary) (q r : Nat)
   calc signingFailure adversary
       = wp ((simulateQ HashSpec.romImpl (gameRun adversary)).run ∅)
           (fun z => propInd (∃ entry ∈ z.1.2.1, entry.2 = none)) := by
-        rw [signingFailure, prEvent_eq_wp_propInd, StateT.run'_eq, wp_map]
+        rw [signingFailure, adversaryOracle_eq, prEvent_eq_wp_propInd, StateT.run'_eq, wp_map]
         rfl
     -- A run with a request that got no signature ends with a failed search in its cache.
     _ ≤ wp ((simulateQ HashSpec.romImpl (gameRun adversary)).run ∅)
