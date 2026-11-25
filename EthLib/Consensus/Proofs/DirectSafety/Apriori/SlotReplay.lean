@@ -464,10 +464,8 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     exact reservedFrame_cache cachedOk reserve assignment erasure
   obtain ⟨_, _, _, _, _, _, cachedErasure, _, cachedReserve⟩ := id cacheFrame
   -- The stages before the payments, as the replay records them.
-  obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents,
-    limit, prefixTrace, justifiedOk, scoredOk, rewardsOk, registry, slashings, limitOk, resetOk,
-    depositsOk, consolidationsOk, replay, recordedEq⟩ :=
-    funding_epoch_site_limit middleOk recordOk
+  obtain ⟨reset, deposited, epoch, depositsOk, consolidationsOk, recordedEq⟩ :=
+    funding_epoch_site middleOk recordOk
   -- The epoch's own trace runs the same prefix, so its suffix starts at `middle`.
   have suffixTrace : EpochTrace (EpochStage.action config checks)
       (EpochStage.middleStages ++ EpochStage.tailStages) middle epoched := by
@@ -520,7 +518,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     rw [far'] at activated
     exact absurd (UInt64.lt_of_le_of_lt activated finite) (UInt64.lt_irrefl _)
   have slashedSpan := epochPrefix_slashedSpan pre caps.activation caps.compounding
-    cachedOk justifiedOk scoredOk rewardsOk registry slashings resetOk depositsOk
+    cachedOk epoch.toEpochPrefix depositsOk
   have horizon : next.toNat ≤ horizonEnd x high := by
     have epochs : (getCurrentEpoch cached).toNat = (getCurrentEpoch s).toNat := by
       rw [sameEpoch]
@@ -530,12 +528,11 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     retiredEnd, coverEnd, futureEnd, effectiveBound⟩ :=
     reservedReplay_epochNext_lowered (x := x) (high := high) (rounding := rounding)
       (eventPosition := eventPosition) (paymentPosition := paymentPosition)
-      (callPosition := callPosition) electra early matched justifiedOk scoredOk rewardsOk replay
-      registry slashings limitOk resetOk depositsOk consolidationsOk suffixTrace cachedReserve
-      assignment cachedErasure prior cachedRetired cachedCover cachedFuture startLife
-      (UInt64.lt_of_le_of_lt startCurrent finite) startCurrent ordered exits finite delayed
-      delayTwo activationOrder nextOk twoSlots capped unique apart sources initialZero
-      slashedSpan horizon (Run.pendingConsolidationsOrdered shared genesis delay)
+      (callPosition := callPosition) electra early matched epoch depositsOk consolidationsOk
+      suffixTrace cachedReserve assignment cachedErasure prior cachedRetired cachedCover
+      cachedFuture startLife (UInt64.lt_of_le_of_lt startCurrent finite) startCurrent ordered
+      exits finite delayed delayTwo activationOrder nextOk twoSlots capped unique apart sources
+      initialZero slashedSpan horizon (Run.pendingConsolidationsOrdered shared genesis delay)
       (run_slashed_exit_assigned shared genesis caps.activation caps.compounding delay)
       provenance
   -- The pass keeps a sublist of the queue, and pays from states with the pass input's registry.
@@ -546,10 +543,9 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
   obtain ⟨_, _, _, _, _, _, _, _, _, _, depositedLife, _, depositedDelay, _⟩ :=
     reservedReplay_epochPrefixDeposits_facts (x := x) (high := high) (rounding := rounding)
       (eventPosition := eventPosition) (paymentPosition := paymentPosition)
-      (callPosition := callPosition) electra early matched justifiedOk scoredOk rewardsOk replay
-      registry slashings limitOk resetOk deposits cachedReserve assignment cachedErasure prior
-      cachedRetired startLife (UInt64.lt_of_le_of_lt startCurrent finite) ordered exits finite
-      delayed delayTwo
+      (callPosition := callPosition) electra early matched epoch deposits cachedReserve assignment
+      cachedErasure prior cachedRetired startLife (UInt64.lt_of_le_of_lt startCurrent finite)
+      ordered exits finite delayed delayTwo
   have freshDeposited : FreshExits deposited queue :=
     fresh.lifecycle ((RegistryLifecycle.of_data (congrArg (·.data) cachedValidators)).trans
       depositedLife) (fun _ member => member)
@@ -570,7 +566,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
   have orderedDeposited : PendingConsolidationsOrdered config
       (getCurrentEpoch deposited).toNat deposited :=
     depositsOk.pendingConsolidationsOrdered
-      (epochTrace_pendingConsolidationsOrdered prefixTrace ordered)
+      (epochTrace_pendingConsolidationsOrdered epoch.trace ordered)
   have recordStep : ∀ (source : BalanceSource)
       (limits : BeaconState preset fork → Except TransitionError (Nat × Nat))
       (action : BeaconState preset fork → Except TransitionError (BeaconState preset fork))
@@ -587,13 +583,13 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     · simp only [List.mem_singleton] at added
       subst added
       exact notTransfer
-  have rewardSources : ∀ e ∈ rewardEvents, e.source ≠ .consolidations :=
+  have rewardSources : ∀ e ∈ epoch.recorded, e.source ≠ .consolidations :=
     replayRewards_induction (config := config)
       (fun pre : BalanceReplay preset fork => ∀ e ∈ pre.2, e.source ≠ .consolidations)
       (fun prior ok => recordStep _ _ _ ok (by simp) prior)
       (fun which prior ok => recordStep _ _ _ ok
         (by rcases which with rfl | rfl <;> simp) prior)
-      (by simp) replay
+      (by simp) epoch.replay
   have consolidationEvents : ∀ e ∈ recorded, e.source = .consolidations →
       PendingConsolidationInvariant config e.before.state := by
     intro e member transfer
@@ -607,7 +603,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     · exact orderedDeposited.1
   -- The stages before the payments record exactly the replay's events.
   rw [← recordedEq] at replayed
-  have recordedLength : recorded.length = rewardEvents.length + 3 := by
+  have recordedLength : recorded.length = epoch.recorded.length + 3 := by
     simp [recordedEq, electra]
   -- The epoch keeps the slot, so the slot write lands on the first slot of the next epoch.
   obtain ⟨justifiedState, justifiedStep, epochFrame⟩ := processEpoch_frame epochOk

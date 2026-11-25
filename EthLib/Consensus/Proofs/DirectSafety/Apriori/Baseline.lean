@@ -151,18 +151,10 @@ private theorem epochSuffix_effective {fork : Fork} {consolidated z : BeaconStat
 
 It takes the same hypotheses as the whole-epoch reserved replay. -/
 theorem reservedReplay_epochNext_lowered {fork : Fork}
-    {s justified scored rewarded registered slashed reset deposited consolidated z :
-      BeaconState preset fork}
-    {recorded : List (BalanceEvent preset)} {limit : Nat} {next : Epoch}
+    {s reset deposited consolidated z : BeaconState preset fork}
+    {next : Epoch}
     (electra : .pectra ≤ fork) (early : fork < .glamsterdam) (matched : BalancesMatch s)
-    (justifiedOk : EpochStage.Edge config checks .justification s justified)
-    (scoredOk : EpochStage.Edge config checks .inactivity justified scored)
-    (rewardsOk : processRewardsAndPenalties config scored = .ok rewarded)
-    (replay : replayRewards (config := config) (scored, []) = .ok (rewarded, recorded))
-    (registry : processRegistryUpdates config rewarded = .ok registered)
-    (slashings : processSlashings registered = .ok slashed)
-    (limitOk : delayedSlashingLimit registered = .ok limit)
-    (resetOk : EpochStage.Edge config checks .eth1Reset slashed reset)
+    (epoch : ReplayedPrefix config checks s reset)
     (depositsOk : EpochStage.Edge config checks .pendingDeposits reset deposited)
     (consolidationsOk : EpochStage.Edge config checks .pendingConsolidations deposited consolidated)
     (trace : EpochTrace (EpochStage.action config checks)
@@ -212,7 +204,8 @@ theorem reservedReplay_epochNext_lowered {fork : Fork}
           ReservedReplay (config := config) (checks := checks) x high rounding
             ⟨fork, s⟩ (getCurrentEpoch s) ⟨fork, z⟩ next eventPosition paymentPosition
             callPosition
-            (recorded ++ [⟨.slashings, ⟨fork, registered⟩, ⟨fork, slashed⟩, 0, limit⟩] ++
+            (epoch.recorded ++
+              [⟨.slashings, ⟨fork, epoch.registered⟩, ⟨fork, epoch.slashed⟩, 0, epoch.limit⟩] ++
               if electra : .pectra ≤ fork then
                 [⟨.deposits, ⟨fork, reset⟩, ⟨fork, deposited⟩,
                   consumedDeposits reset deposited electra, 0⟩,
@@ -225,7 +218,7 @@ theorem reservedReplay_epochNext_lowered {fork : Fork}
           ReservedFrame (config := config) (checks := checks) x high rounding
             ⟨fork, consolidated⟩ ⟨fork, z⟩ next next suffix final
               (lowerOriginal final ⟨fork, z⟩) ∧
-          OwnershipBefore (eventPosition + (recorded.length + 3))
+          OwnershipBefore (eventPosition + (epoch.recorded.length + 3))
             (paymentPosition + payments.length) (lowerOriginal final ⟨fork, z⟩) ∧
           RetiredActivated z (lowerOriginal final ⟨fork, z⟩).retired ∧
           EndpointCoverAll x ⟨fork, z⟩ (lowerOriginal final ⟨fork, z⟩) ∧
@@ -245,8 +238,8 @@ theorem reservedReplay_epochNext_lowered {fork : Fork}
                 preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0)) := by
   obtain ⟨u, suffix, consumed, payments, allocations, final, pass, validators, balances, history,
       frame, counted, retiredZ, coverZ, futureZ⟩ :=
-    reservedReplay_epochNext (callPosition := callPosition) electra early matched justifiedOk
-      scoredOk rewardsOk replay registry slashings limitOk resetOk depositsOk consolidationsOk
+    reservedReplay_epochNext (callPosition := callPosition) electra early matched epoch
+      depositsOk consolidationsOk
       trace reserve assignment erasure prior retired startCover startFuture startLife startFinite
       startCurrent ordered exits finite delayed delayTwo activationOrder nextOk twoSlots caps
       unique apart sources initialZero slashedSpan horizon orderedX slashedExit provenance
@@ -258,13 +251,7 @@ theorem reservedReplay_epochNext_lowered {fork : Fork}
   · simpa only [List.append_nil] using history.append (ReservedReplay.nil lower)
   · intro increment down before i
     -- The prefix keeps effective balances and caps up to the consolidation output.
-    have prefixOk : epochBeforePayments config checks s = .ok consolidated := by
-      rw [epochBeforePayments_eq_run]
-      exact EpochTrace.run_ok_iff.mpr ((EpochTrace.append_iff
-        (xs := [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset,
-          .pendingDeposits]) (ys := [.pendingConsolidations])).mpr
-        ⟨deposited, epochDepositTrace justifiedOk scoredOk rewardsOk registry slashings resetOk
-          depositsOk, .cons (EpochStage.action_cases.mpr consolidationsOk) .nil⟩)
+    have prefixOk := epoch.epochBeforePayments depositsOk consolidationsOk
     have kept := effectiveKept_epochBeforePayments prefixOk
     have capsC := capped_epochBeforePayments prefixOk caps
     obtain ⟨q, updated, zValidators, zBalances⟩ := epochSuffix_effective early trace

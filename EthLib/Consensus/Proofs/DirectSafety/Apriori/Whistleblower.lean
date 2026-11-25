@@ -815,14 +815,9 @@ private theorem block_credits_le {g : ForkedBeaconState preset} {fork : Fork}
 
 They also keep the epoch, and keep each withdrawable epoch that is after the epoch. -/
 private theorem prefix_withdrawable {fork : Fork}
-    {s cached justified scored rewarded registered slashed reset : BeaconState preset fork}
+    {s cached reset : BeaconState preset fork}
     (electra : .pectra ≤ fork) (cachedOk : processSlot s = .ok cached)
-    (justifiedOk : EpochStage.Edge config checks .justification cached justified)
-    (scoredOk : EpochStage.Edge config checks .inactivity justified scored)
-    (rewardedOk : processRewardsAndPenalties config scored = .ok rewarded)
-    (registeredOk : processRegistryUpdates config rewarded = .ok registered)
-    (slashedOk : processSlashings registered = .ok slashed)
-    (resetOk : EpochStage.Edge config checks .eth1Reset slashed reset) :
+    (epoch : EpochPrefix config checks cached reset) :
     reset.validators.data.size = s.validators.data.size ∧
       getCurrentEpoch reset = getCurrentEpoch s ∧
       ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v →
@@ -830,37 +825,37 @@ private theorem prefix_withdrawable {fork : Fork}
           ∃ w, reset.validators.data[i]? = some w ∧
             getCurrentEpoch reset < w.withdrawableEpoch := by
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-  have one := justifiedOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
-  have two := scoredOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+  have one := epoch.justifiedOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+  have two := epoch.scoredOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have three := EpochStage.Edge.validators_eq (stage := .rewards) (config := config)
-    (checks := checks) rewardedOk ⟨nofun, nofun, nofun⟩
-  have threeSlot := (frame_processRewardsAndPenalties rewardedOk).slot
-  have fourSlot := (frame_processRegistryUpdates registeredOk).slot
-  have fourSize := (sameSizes_processRegistryUpdates registeredOk).1
+    (checks := checks) epoch.rewardedOk ⟨nofun, nofun, nofun⟩
+  have threeSlot := (frame_processRewardsAndPenalties epoch.rewardedOk).slot
+  have fourSlot := (frame_processRegistryUpdates epoch.registeredOk).slot
+  have fourSize := (sameSizes_processRegistryUpdates epoch.registeredOk).1
   have five := EpochStage.Edge.validators_eq (stage := .slashings) (config := config)
-    (checks := checks) slashedOk ⟨nofun, nofun, nofun⟩
-  have fiveSlot := (frame_processSlashings slashedOk).slot
-  have six := resetOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
-  have epoch : getCurrentEpoch reset = getCurrentEpoch s := by
+    (checks := checks) epoch.slashedOk ⟨nofun, nofun, nofun⟩
+  have fiveSlot := (frame_processSlashings epoch.slashedOk).slot
+  have six := epoch.resetOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+  have sameEpoch : getCurrentEpoch reset = getCurrentEpoch s := by
     simp only [getCurrentEpoch, six.2.2.2.2, fiveSlot, fourSlot, threeSlot, two.2.2.2.2,
       one.2.2.2.2]
-  have rewardedEpoch : getCurrentEpoch rewarded = getCurrentEpoch s := by
+  have rewardedEpoch : getCurrentEpoch epoch.rewarded = getCurrentEpoch s := by
     simp only [getCurrentEpoch, threeSlot, two.2.2.2.2, one.2.2.2.2]
-  refine ⟨?_, epoch, fun i v found late => ?_⟩
+  refine ⟨?_, sameEpoch, fun i v found late => ?_⟩
   · rw [six.1, five, fourSize, three, two.1, one.1]
-  · have atRewarded : rewarded.validators.data[i]? = some v := by
+  · have atRewarded : epoch.rewarded.validators.data[i]? = some v := by
       rw [three, two.1, one.1]; exact found
-    have atReset (w : Validator) (read : registered.validators.data[i]? = some w) :
+    have atReset (w : Validator) (read : epoch.registered.validators.data[i]? = some w) :
         reset.validators.data[i]? = some w := by
       rw [six.1, five]; exact read
-    rw [epoch]
+    rw [sameEpoch]
     by_cases assigned : v.exitEpoch = FAR_FUTURE_EPOCH
     · obtain ⟨w, read, same | after⟩ := processRegistryUpdates_withdrawableEpoch_of_unassigned
-        electra registeredOk i v atRewarded assigned
+        electra epoch.registeredOk i v atRewarded assigned
       · exact ⟨w, atReset w read, same ▸ late⟩
       · exact ⟨w, atReset w read, rewardedEpoch ▸ after⟩
     · obtain ⟨w, read, same⟩ := processRegistryUpdates_withdrawableEpoch_of_assigned
-        electra registeredOk i v atRewarded assigned
+        electra epoch.registeredOk i v atRewarded assigned
       exact ⟨w, atReset w read, same ▸ late⟩
 
 /-- A key of the slashable base after a step, present before it, was in the base before it. -/
@@ -890,23 +885,15 @@ private theorem deposit_le_funding {g u v : ForkedBeaconState preset}
     (step : Step config checks u v) (caps : CapOrder preset) (electra : .pectra ≤ u.fork)
     (early : v.fork < .glamsterdam)
     {events : List (BalanceEvent preset)} (replayed : step.balanceEvents = .ok events)
-    {cached justified scored rewarded registered slashed reset deposited :
-      BeaconState preset u.fork}
-    (cachedOk : processSlot u.state = .ok cached)
-    (justifiedOk : EpochStage.Edge config checks .justification cached justified)
-    (scoredOk : EpochStage.Edge config checks .inactivity justified scored)
-    (rewardedOk : processRewardsAndPenalties config scored = .ok rewarded)
-    (registeredOk : processRegistryUpdates config rewarded = .ok registered)
-    (slashedOk : processSlashings registered = .ok slashed)
-    (resetOk : EpochStage.Edge config checks .eth1Reset slashed reset)
+    {cached reset deposited : BeaconState preset u.fork}
+    (cachedOk : processSlot u.state = .ok cached) (epoch : EpochPrefix config checks cached reset)
     (member : (⟨.deposits, ⟨u.fork, reset⟩, ⟨u.fork, deposited⟩,
       consumedDeposits reset deposited electra, 0⟩ : BalanceEvent preset) ∈ events) :
     (∑ i ∈ Finset.range v.state.validators.data.size, if pooled v i then
         actualBalanceAt ⟨u.fork, deposited⟩ i - actualBalanceAt ⟨u.fork, reset⟩ i else 0) ≤
       funding_deposit_credit (⟨.deposits, ⟨u.fork, reset⟩, ⟨u.fork, deposited⟩,
         consumedDeposits reset deposited electra, 0⟩ : BalanceEvent preset) := by
-  obtain ⟨size, epoch, kept⟩ := prefix_withdrawable electra cachedOk justifiedOk scoredOk
-    rewardedOk registeredOk slashedOk resetOk
+  obtain ⟨size, sameEpoch, kept⟩ := prefix_withdrawable electra cachedOk epoch
   obtain ⟨-, -, -, -, matched, -, -⟩ := replay_event_provenance shared (Run.nil.snoc step)
     genesis early _ (Nat.le_succ _) events (single_balanceEvents step replayed) _ member
   simp only [funding_deposit_credit, electra, and_self, ↓reduceIte]
@@ -1131,9 +1118,11 @@ private theorem slot_credits_le {g u v : ForkedBeaconState preset}
     · refine (List.sum_le_sum fun e member => ordinary e member
         (by rw [crossing e member]; decide) (by rw [crossing e member]; decide)).trans ?_
       omega
-  obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents, limit,
-    -, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
-    consolidatedOk, rewardReplay, shapeEq⟩ := funding_epoch_site beforeOk replay
+  obtain ⟨reset, deposited, ⟨⟨justified, scored, rewarded, registered, slashed, justifiedOk,
+    scoredOk, rewardedOk, registeredOk, slashedOk, resetOk⟩, rewardEvents, limit, rewardReplay, _⟩,
+    depositedOk, consolidatedOk, shapeEq⟩ := funding_epoch_site beforeOk replay
+  have stages : EpochPrefix config checks cached reset :=
+    ⟨_, _, _, _, _, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk⟩
   simp only [electra, ↓reduceDIte] at shapeEq
   subst shapeEq
   simp only [EpochStage.Edge, electra, ↓reduceDIte] at depositedOk consolidatedOk
@@ -1158,10 +1147,9 @@ private theorem slot_credits_le {g u v : ForkedBeaconState preset}
           consumedConsolidations deposited middle electra,
           consumedConsolidations deposited middle electra⟩] ++ crossings := by simp
   have deposit := deposit_le_funding shared genesis step caps electra early replayed cachedOk
-    justifiedOk scoredOk rewardedOk registeredOk slashedOk resetOk depMember
+    stages depMember
   -- The pass reads the queue, the effective balances and the epoch at the start of the slot.
-  obtain ⟨_, epochReset, _⟩ := prefix_withdrawable electra cachedOk justifiedOk scoredOk
-    rewardedOk registeredOk slashedOk resetOk
+  obtain ⟨_, epochReset, _⟩ := prefix_withdrawable electra cachedOk stages
   have cachedSame : cached.validators = u.state.validators ∧
       cached.pendingConsolidations = u.state.pendingConsolidations := by
     obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk

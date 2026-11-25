@@ -1082,6 +1082,15 @@ Not yet released.
     The accept theorem states the seven new conditions.
   - The parity registry lists the four envelope cases of v1.7.0-beta.4 that fill a payload with other withdrawals, and the gossip tests expect them to fail.
   Migration: pass the time of the slot and the two withdrawal roots to those three theorems.
+- In Lean, the a priori drift proofs take the six stages of an epoch before the pending deposits as one hypothesis ([#3601](https://github.com/ethereum/EthLib/issues/3601)).
+  - `EpochPrefix` (`Consensus/Proofs/Transition/EpochDecomposition.lean`) holds the state after each of the six stages and the equation of each stage.
+    `EpochPrefix.trace`, `EpochPrefix.depositTrace` and `EpochPrefix.epochBeforePayments` give its trace, its trace with the pending deposits, and the state before the payments.
+    `EpochPrefix.of_trace` names the states of a trace of the six stages.
+  - `ReplayedPrefix` (`Consensus/Proofs/DirectSafety/IntervalFunding.lean`) adds the events of the replay of the rewards and the limit of the slashings, and `EpochPrefix.replayed` builds it.
+  - `funding_epoch_site` returns a `ReplayedPrefix` with the two pending stages and the events, and `funding_epoch_site_limit`, which said the same with the limit, is removed.
+  - `funding_epoch_prefix`, `reservedReplay_epochPrefixDeposits_facts`, `epochPrefix_slashedSpan`, `reservedReplay_epochNext` and `reservedReplay_epochNext_lowered` take the structure in place of the six to eight stage hypotheses, and their conclusions read its fields.
+  - `epochDepositTrace` (`Consensus/Proofs/DirectSafety/Apriori/Reserved/Epoch.lean`) is removed for `EpochPrefix.depositTrace`.
+  Migration: build the structure from the stage equations, or take it from `funding_epoch_site`.
 - In Lean, the decoders of mplex, multistream-select and yamux read the body of a frame with `Encoding.ByteReader.bytes` ([#4657](https://github.com/ethereum/EthLib/pull/4657)).
   `Libp2p.Mplex.decode`, `Libp2p.Multistream.decode` and `Libp2p.Yamux.decode` return the same frame, rest and error for every input.
   Their theorems keep their statements, and a proof that unfolds one of them now meets the shared reader.

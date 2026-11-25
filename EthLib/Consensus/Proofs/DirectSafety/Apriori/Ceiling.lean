@@ -1182,9 +1182,9 @@ private theorem epoch_delayed_slashing_nondebit {x m n : ForkedBeaconState prese
     rfl
   have sameEpoch : getCurrentEpoch cached = getCurrentEpoch m.state := by
     simp only [getCurrentEpoch, (frame_processSlot cachedOk).slot]
-  obtain ⟨justified, scored, rewarded, registered, after, reset, deposited,
-    rewards, limit, _, justifiedOk, scoredOk, rewardedOk, registeredOk,
-    slashOk, _, _, _, rewardReplay, shape⟩ := funding_epoch_site processed epochReplay
+  obtain ⟨reset, deposited, ⟨⟨justified, scored, rewarded, registered, after, justifiedOk,
+    scoredOk, rewardedOk, registeredOk, slashOk, _⟩, rewards, limit, rewardReplay, _⟩, _, _,
+    shape⟩ := funding_epoch_site processed epochReplay
   have quiet := replayRewards_induction
     (fun pre => ∀ e ∈ pre.2, e.source ≠ .slashings)
     (fun held ok => by
