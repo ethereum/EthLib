@@ -3,9 +3,11 @@ module
 /-!
 # `Base.Proofs.BitVec`
 
-Facts about rotations of a bit vector that Lean core does not prove and that several hashes use.
+Facts about bit vectors that Lean core does not prove and that several hashes use.
 
 A rotation by `n`, then by the width minus `n`, gives the vector back.
+
+Two concatenations of the same widths are equal exactly when their parts are.
 -/
 
 @[expose] public section
@@ -47,5 +49,12 @@ theorem rotateRight_rotateRight_sub {w n : Nat} (x : BitVec w) (hw : n < w) :
     simp [hlt, hlt2, hge2, show w - n + i - (w - n) = i by omega]
   · have hlt3 : i - n < w - n := by omega
     simp [hlt, hlt3, show n + (i - n) = i by omega]
+
+/-- Two concatenations of bit vectors of the same widths are equal exactly when their parts are. -/
+theorem BitVec.append_inj_iff {w v : Nat} {a c : BitVec w} {b d : BitVec v} :
+    a ++ b = c ++ d ↔ a = c ∧ b = d := by
+  refine ⟨fun h => ⟨?_, ?_⟩, fun h => by rw [h.1, h.2]⟩
+  · simpa [BitVec.extractLsb'_append_eq_left] using congrArg (BitVec.extractLsb' v w) h
+  · simpa [BitVec.extractLsb'_append_eq_right] using congrArg (BitVec.extractLsb' 0 v) h
 
 end EthLib.Base
