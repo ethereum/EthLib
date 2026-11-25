@@ -43,6 +43,7 @@ public import EthLib.Cryptography.Proofs.Sponge.Simulator
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
+public import EthLib.Cryptography.Proofs.SufCma
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs
 public import EthLib.Cryptography.Proofs.Vrf

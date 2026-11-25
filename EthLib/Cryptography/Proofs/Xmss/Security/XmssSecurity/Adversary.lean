@@ -207,10 +207,11 @@ theorem valid_map (log : QueryLog XmssSecurity.SigningSpec) :
   rfl
 
 /-- The translated transcript holds the forgery exactly when the model's holds its translation. -/
-theorem contains_map (log : QueryLog XmssSecurity.SigningSpec) (forgery : Forgery) :
-    Contains (log.map ofEntry) forgery ↔
+theorem returned_map (log : QueryLog XmssSecurity.SigningSpec) (forgery : Forgery) :
+    SufCma.Returned scheme (log.map ofEntry) forgery ↔
       XmssSecurity.SigningTranscript.Contains log (toModelForgery forgery) := by
-  simp only [Contains, XmssSecurity.SigningTranscript.Contains, List.mem_map, toModelForgery,
+  simp only [SufCma.Returned, scheme_message, XmssSecurity.SigningTranscript.Contains, List.mem_map,
+    toModelForgery,
     XmssSecurity.Forgery.request]
   constructor
   · rintro ⟨_, ⟨entry, hentry, rfl⟩, hmessage, hsignature⟩

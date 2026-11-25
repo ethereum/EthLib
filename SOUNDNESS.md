@@ -105,21 +105,24 @@ The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
 So this theorem does not bound the failure of a later signature, or of signing inside the game.
 
+The game is the generic strong-unforgeability game of `Proofs/SufCma.lean`, with leanXMSS as its scheme (`Unforgeability.scheme`).
+Its rule of use is that no leaf index is requested twice.
+The game is the real game of the security proof (`game_eq_realGame`).
 Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability/Game.lean`).
 In the random oracle model, an adversary with a budget of `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
 Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle, and the signer keeps its key across requests.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
 The budget `q` bounds the calls of that game on every run, key generation, signing and the final verification included.
-The game is the real game of the security proof (`gameCore_eq_realGame`).
-`Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
+`Unforgeability.advantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
 It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384`.
 The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
-With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385) / 2^127`.
+With `r <= 2^32`, `Unforgeability.advantage_le_lifetime` gives `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
-`Unforgeability.forgeAdvantage_le_ownQueries` (same file) charges the requests nothing.
-With `r <= 2^32`, it bounds a forgery by `(qH + 2^19 + 1) / 2^127`, so just above `2^-108` for an adversary that makes no call of `H`.
+`Unforgeability.stronglyUnforgeable` (same file) charges the signer's calls nothing.
+It states the generic predicate of strong unforgeability with at most `2^32` requests, a slack of `2^19 + 1` and 127 bits.
+So it bounds a forgery by `(qH + 2^19 + 1) / 2^127`, just above `2^-108` for an adversary that makes no call of `H`.
 The model's two lanes charge the signer's calls nothing.
 Only the two seed guesses count the whole game's calls.
 When the bound is below one, the bound on `r` keeps that count at most `2^128`.
@@ -8819,6 +8822,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/Sponge/`
+- `EthLib/Cryptography/Proofs/SufCma.lean`
 - `EthLib/Cryptography/Proofs/SupportBind.lean`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/UniformReads.lean`

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Statement
+public import EthLib.Cryptography.Proofs.SufCma
 
 @[expose] public section
 
@@ -74,7 +75,7 @@ noncomputable def forgeAdvantage {Key : Type} (scheme : Scheme Key) (adversary :
 
 /-- Count one per hash call, including cache hits, and zero per uniform sample. -/
 noncomputable def countedRomImpl :=
-  romImpl.withAddCost (fun | .inl _ => (0 : Nat) | .inr _ => 1)
+  romImpl.withAddCost EthLib.Cryptography.SufCma.hashCost
 
 /-- Every execution of the consistent random oracle uses at most `q` hash calls.
 
