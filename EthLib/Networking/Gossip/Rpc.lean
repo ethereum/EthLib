@@ -14,6 +14,8 @@ Its extension fields come from the [v1.3 schema][v13] and the [partial messages 
 
 The consensus layer applies the `StrictNoSign` [signature policy][policy].
 
+It also bounds the size of the whole RPC by the payload cap of the network.
+
 [rpc]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#the-rpc
 [policy]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#signature-policy-options
 [v10]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#protobuf
@@ -27,6 +29,7 @@ The consensus layer applies the `StrictNoSign` [signature policy][policy].
 
 namespace EthLib.Networking.Gossip
 
+open EthLib.Base (ArithError)
 open EthLib.Networking.Encoding.Protobuf
 open EthLib.Networking.ReqResp (maxMessageSize)
 
@@ -135,7 +138,9 @@ inductive RpcError where
   /-- A topic is not valid UTF-8. -/
   | utf8 (field : Nat)
   /-- The RPC is longer than the largest gossip message. -/
-  | tooLong (size : Nat)
+  | tooLong (size bound : Nat)
+  /-- The largest gossip message of the payload cap is 2^64 bytes or more. -/
+  | arith (error : ArithError)
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -149,7 +154,8 @@ def RpcError.code : RpcError → UInt32
   | .missingTopic => 103
   | .wireType .. => 104
   | .utf8 _ => 105
-  | .tooLong _ => 106
+  | .tooLong .. => 106
+  | .arith _ => 107
 
 /-- The field numbers that `StrictNoSign` forbids in a message, even with an empty value.
 
@@ -327,24 +333,18 @@ def decodePartial (bytes : ByteArray) : Except RpcError PartialMessagesExtension
     partialMessage := (← repeated bytesOf rs 3).getLast?
     partsMetadata := (← repeated bytesOf rs 4).getLast? }
 
-/-- Whether an encoded RPC fits the largest gossip message, for the payload cap of the network.
-
-Clients must reject a longer one, by the gossip size limits of the phase 0 p2p interface. -/
-def withinMessageSize (maxPayloadSize : UInt64) (bytes : ByteArray) : Bool :=
-  -- The largest message is the worst-case compression of the cap plus 1024 bytes, at least 1 MiB.
-  --
-  -- A bound that overflows 64 bits admits no RPC.
-  match maxMessageSize maxPayloadSize with
-  -- The whole encoded RPC counts, with its control messages, framing and topics.
-  | .ok limit => bytes.size ≤ limit.toNat
-  | .error _ => false
-
-/-- An RPC, for the payload cap of the network.
+/-- An RPC within the largest gossip message of the payload cap of the network.
 
 The control field is singular: each occurrence is decoded alone, then they merge. -/
 def decodeRpc (maxPayloadSize : UInt64) (bytes : ByteArray) : Except RpcError Rpc := do
-  -- Clients "MUST reject" a message whose encoded RPC exceeds the largest gossip message.
-  unless withinMessageSize maxPayloadSize bytes do throw (.tooLong bytes.size)
+  -- The largest message is the worst-case compression of the cap plus 1024 bytes, at least 1 MiB.
+  let bound ← (maxMessageSize maxPayloadSize).mapError .arith
+  -- The bound counts the whole RPC, with its topics, control messages and protobuf framing.
+  --
+  -- The length prefix of the stream is not part of these bytes.
+  --
+  -- A longer RPC is rejected before any record is read.
+  if bound.toNat < bytes.size then throw (.tooLong bytes.size bound.toNat)
   let rs ← recordsOf bytes
   -- The RPC: `subscriptions = 1` and `publish = 2`, repeated.
   let subscriptions ← (← repeated bytesOf rs 1).mapM decodeSubOpts

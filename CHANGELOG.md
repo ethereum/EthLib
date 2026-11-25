@@ -1150,13 +1150,14 @@ Not yet released.
 
 - The gossip RPC decoder takes the payload cap of the network first.
   It rejects an encoded RPC longer than the largest gossip message of that cap, with the new code 106.
-  The phase 0 networking specification says that clients must reject such a message, framing included.
+  A cap whose largest message overflows 64 bits rejects every RPC, with the new code 107.
+  The [phase 0 networking text](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#gossipsub-size-limits) says that clients must reject such a message, protobuf framing included.
   The largest message is `32 + n + n / 6 + 1024` bytes for the payload cap `n`, and at least 1 MiB, so 12234442 bytes on mainnet.
-  The decoder took an RPC of any length, so a payload at its compressed bound could come with any amount of topics and control messages.
+  The decoder took an RPC of any length, so a payload at its compressed bound could come with any number of topics and control messages.
   In Python, `gossip.rpc.decode` takes `max_payload_size` first.
-  In Lean, `decodeRpc` takes the cap first, and `decodeRpc_encode` asks that the encoding fit that bound, in place of `2^64` bytes.
-  `withinMessageSize` in `EthLib.Networking.Gossip` is the check.
-  `withinMessageSize_iff` and `decodeRpc_tooLong` in `EthLib.Networking.Proofs.Gossip.Rpc` state the sizes that it accepts and that a longer RPC is rejected.
+  In Lean, `decodeRpc` takes the cap first, and so do `decodeRpc_no_partial`, `decodeRpc_signed` and `decodeRpc_signedRecords`.
+  `decodeRpc_encode` asks that the encoding fit the largest message of the cap, in place of `2^64` bytes, and `decodeRpc_signedRecords` no longer asks for a size.
+  `decodeRpc_tooLong` and `decodeRpc_arith` in `EthLib.Networking.Proofs.Gossip.Rpc` state the two rejections.
 
 - In Lean, `phase0PeriodEpochs` (`Consensus/WeakSubjectivity.lean`), and so the Phase 0 to Deneb weak subjectivity period, takes the epochs for the churn of validators alone when balances are large, no longer the longer of those and the epochs for top-ups ([consensus-specs#5866](https://github.com/ethereum/consensus-specs/issues/5866)).
   The period is shorter only where the epochs for top-ups were the longer, for instance beyond about 4.39 million validators of 32 ether.

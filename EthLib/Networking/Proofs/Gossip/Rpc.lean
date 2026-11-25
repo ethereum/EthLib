@@ -3,7 +3,6 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Networking.Gossip.Rpc
 public import EthLib.Networking.Proofs.Encoding.Protobuf
-public import EthLib.Networking.Proofs.Gossip.Payload
 import EthLib.Base.Proofs.CodeInjective
 
 /-!
@@ -20,6 +19,7 @@ open EthLib.Base
 open EthLib.Networking.Encoding.Protobuf
 open EthLib.Networking.Gossip
 open EthLib.Networking.Proofs.Encoding.Protobuf
+open EthLib.Networking.ReqResp (maxMessageSize)
 
 /-! ## Helpers -/
 
@@ -219,48 +219,29 @@ theorem decodeControl_encode (c : Control) (h : c.encode.size < 2 ^ 64) :
 
 /-! ## The size limit -/
 
-/-- The largest gossip message of a payload cap `n`: `32 + n + n / 6 + 1024` bytes, at least 1 MiB.
+/-- A payload cap whose largest gossip message overflows 64 bits rejects every RPC. -/
+theorem decodeRpc_arith {maxPayloadSize : UInt64} {error : ArithError} (bytes : ByteArray)
+    (hb : maxMessageSize maxPayloadSize = .error error) :
+    decodeRpc maxPayloadSize bytes = .error (.arith error) := by
+  simp [decodeRpc, hb, Except.mapError, bind, Except.bind]
 
-It is the value of `maxMessageSize` for a cap of at most the largest Snappy block. -/
-abbrev messageBound (maxPayloadSize : UInt64) : Nat :=
-  max (32 + maxPayloadSize.toNat + maxPayloadSize.toNat / 6 + 1024) 1048576
-
-/-- An encoded RPC passes the size check exactly when it fits the largest gossip message. -/
-theorem withinMessageSize_iff {maxPayloadSize : UInt64} {bytes : ByteArray}
-    (hcap : maxPayloadSize.toNat ≤ Snappy.maxUncompressedLength) :
-    withinMessageSize maxPayloadSize bytes = true ↔ bytes.size ≤ messageBound maxPayloadSize := by
-  have value : (UInt64.ofNat (32 + maxPayloadSize.toNat + maxPayloadSize.toNat / 6 + 1024)).toNat =
-      32 + maxPayloadSize.toNat + maxPayloadSize.toNat / 6 + 1024 := by
-    unfold Snappy.maxUncompressedLength at hcap
-    rw [UInt64.toNat_ofNat_of_lt' (by unfold UInt64.size; omega)]
-  simp only [withinMessageSize, Payload.maxMessageSize_eq hcap, Base.Uint64.toNat_max, value,
-    decide_eq_true_eq, messageBound]
-  rfl
-
-/-- An RPC longer than the largest gossip message is rejected with its size, whatever its bytes. -/
-theorem decodeRpc_tooLong {maxPayloadSize : UInt64} {bytes : ByteArray}
-    (hcap : maxPayloadSize.toNat ≤ Snappy.maxUncompressedLength)
-    (long : messageBound maxPayloadSize < bytes.size) :
-    decodeRpc maxPayloadSize bytes = .error (.tooLong bytes.size) := by
-  have hw : withinMessageSize maxPayloadSize bytes = false :=
-    Bool.eq_false_iff.mpr fun hw => Nat.not_le.mpr long ((withinMessageSize_iff hcap).mp hw)
-  simp [decodeRpc, hw, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+/-- An RPC longer than the largest gossip message is rejected, whatever its bytes. -/
+theorem decodeRpc_tooLong {maxPayloadSize bound : UInt64} {bytes : ByteArray}
+    (hb : maxMessageSize maxPayloadSize = .ok bound) (long : bound.toNat < bytes.size) :
+    decodeRpc maxPayloadSize bytes = .error (.tooLong bytes.size bound.toNat) := by
+  simp [decodeRpc, hb, long, Except.mapError, throw, throwThe, MonadExceptOf.throw, bind,
+    Except.bind]
 
 /-! ## Round trip of an RPC -/
 
 /-- Decoding the encoding of an RPC returns it, when the encoding fits the largest gossip message.
 
 This covers the fields of the partial message extension. -/
-theorem decodeRpc_encode {maxPayloadSize : UInt64} (rpc : Rpc)
-    (hcap : maxPayloadSize.toNat ≤ Snappy.maxUncompressedLength)
-    (h : rpc.encode.size ≤ messageBound maxPayloadSize) :
+theorem decodeRpc_encode {maxPayloadSize bound : UInt64} (rpc : Rpc)
+    (hb : maxMessageSize maxPayloadSize = .ok bound) (hw : rpc.encode.size ≤ bound.toNat) :
     decodeRpc maxPayloadSize rpc.encode = .ok rpc := by
-  have hw := (withinMessageSize_iff hcap).mpr h
-  replace h : rpc.encode.size < 2 ^ 64 := by
-    unfold Snappy.maxUncompressedLength at hcap
-    unfold messageBound at h
-    rw [Nat.max_def] at h
-    split at h <;> omega
+  have h : rpc.encode.size < 2 ^ 64 := Nat.lt_of_le_of_lt hw bound.toNat_lt
+  replace hw : ¬bound.toNat < rpc.encode.size := Nat.not_lt.mpr hw
   obtain ⟨subs, pub, c, part⟩ := rpc
   unfold Rpc.encode at h hw ⊢
   have h1 : subs.mapM (decodeSubOpts ∘ SubOpts.encode) = .ok (subs.map id) :=
@@ -278,7 +259,9 @@ theorem decodeRpc_encode {maxPayloadSize : UInt64} (rpc : Rpc)
   by_cases hc : c = {}
   · subst hc
     simp only [ite_true] at h hw ⊢
-    rw [decodeRpc, hw, recordsOf_serialize ?_ h]
+    rw [decodeRpc, hb]
+    simp only [Except.mapError, bind, Except.bind, hw, ite_false]
+    rw [recordsOf_serialize ?_ h]
     · simp [lastMessage, getLast?_toList, repeated, valuesOf_append, valuesOf_map_comp,
         mapM_bytesOf_len, h1, h2, h4, bind, Except.bind, pure, Except.pure]
     · simp [lenRecord, maxField, or_imp, forall_and]
@@ -286,7 +269,9 @@ theorem decodeRpc_encode {maxPayloadSize : UInt64} (rpc : Rpc)
       decodeControl_encode c <| size_lt_of_mem (n := 3)
         (List.mem_append_left _ <| List.mem_append_right _ <| by simp [hc]) h
     simp only [hc, ite_false] at h hw ⊢
-    rw [decodeRpc, hw, recordsOf_serialize ?_ h]
+    rw [decodeRpc, hb]
+    simp only [Except.mapError, bind, Except.bind, hw, ite_false]
+    rw [recordsOf_serialize ?_ h]
     · simp [lastMessage, getLast?_toList, repeated, valuesOf_append, valuesOf_map_comp,
         valuesOf_cons, lenRecord, mapM_bytesOf_len, h1, h2, h3, h4, bytesOf, bind, Except.bind,
         pure, Except.pure,
@@ -320,7 +305,7 @@ theorem decodeRpc_no_partial {maxPayloadSize : UInt64} {bytes : ByteArray} {rs :
     {rpc : Rpc} (hr : recordsOf bytes = .ok rs) (hf : ∀ r ∈ rs, r.field ≠ 10)
     (h : decodeRpc maxPayloadSize bytes = .ok rpc) : rpc.partialMessage = none := by
   have h10 : lastMessage decodePartial rs 10 = .ok none := lastMessage_of_nil hf
-  simp only [decodeRpc, hr, h10, bind, Except.bind, pure, Except.pure] at h
+  simp only [decodeRpc, hr, h10, Except.mapError, bind, Except.bind, pure, Except.pure] at h
   repeat' split at h
   all_goals first | (injection h with h; subst h; simp) | nomatch h
 
@@ -417,12 +402,12 @@ theorem decodeRpc_signed {maxPayloadSize : UInt64} {frame message : ByteArray}
   have hv : Value.len message ∈ valuesOf rs 2 :=
     List.mem_filterMap.mpr ⟨_, hm, by simp [lenRecord]⟩
   intro heq
-  have hw : withinMessageSize maxPayloadSize frame = true := by
-    cases hw : withinMessageSize maxPayloadSize frame
-    · simp [decodeRpc, hw, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at heq
-    · rfl
-  simp only [decodeRpc, hw, recordsOf_ok hframe, ↓reduceIte, pure, Except.pure, bind,
-    Except.bind] at heq
+  rcases hb : maxMessageSize maxPayloadSize with e | bound
+  · rw [decodeRpc_arith frame hb] at heq; cases heq
+  by_cases long : bound.toNat < frame.size
+  · rw [decodeRpc_tooLong hb long] at heq; cases heq
+  simp only [decodeRpc, hb, long, Except.mapError, recordsOf_ok hframe, ↓reduceIte, pure,
+    Except.pure, bind, Except.bind] at heq
   cases h2 : repeated bytesOf rs 2 with
   | error e => split at heq <;> (try split at heq) <;> simp_all
   | ok L =>
@@ -455,13 +440,18 @@ theorem decodeMessage_signedRecords (m : Message) {n : Nat} (hn : n ∈ signedFi
 
 /-- An RPC that publishes such a message is rejected. -/
 theorem decodeRpc_signedRecords {maxPayloadSize : UInt64} (m : Message) {n : Nat}
-    (hn : n ∈ signedFields)
-    (value : ByteArray)
-    (h : (serialize [lenRecord 2 (serialize (signedRecords n value m))]).size < 2 ^ 64) :
+    (hn : n ∈ signedFields) (value : ByteArray) :
     ∀ rpc,
       decodeRpc maxPayloadSize (serialize [lenRecord 2 (serialize (signedRecords n value m))]) ≠
         .ok rpc := by
   intro rpc
+  -- A frame that passes the size check is shorter than `2^64` bytes.
+  rcases hb : maxMessageSize maxPayloadSize with e | bound
+  · rw [decodeRpc_arith _ hb]; nofun
+  by_cases long :
+      bound.toNat < (serialize [lenRecord 2 (serialize (signedRecords n value m))]).size
+  · rw [decodeRpc_tooLong hb long]; nofun
+  have h := Nat.lt_of_le_of_lt (Nat.not_lt.mp long) bound.toNat_lt
   have hframe := records_serialize (by simp [lenRecord, maxField]) h
   have hms := records_serialize (fields_signedRecords hn value m)
     (size_lt_of_mem (List.mem_singleton_self _) h)

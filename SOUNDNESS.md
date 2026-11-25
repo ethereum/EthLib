@@ -2992,13 +2992,16 @@ Which messages share a packet is not modelled; the recommendation to send the he
 
 ### The size of a gossip RPC
 
-The phase 0 networking specification of the consensus layer says that clients must reject a gossip message larger than `max_message_size()`.
+The [phase 0 networking text, Gossipsub size limits](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#gossipsub-size-limits) says that clients must reject a gossip message larger than the largest message size.
 That size is the worst-case compression of the payload cap of the network plus 1024 bytes, and at least 1 MiB.
 On mainnet it is 12234442 bytes.
-It bounds the whole encoded RPC, with its topics and control messages.
+It bounds the whole encoded RPC, with its topics, control messages and protobuf framing.
+The length prefix of the stream is not part of the RPC, and the text does not say whether it counts; EthLib leaves it out.
 `decodeRpc` (`Networking/Gossip/Rpc.lean`) takes the cap and rejects a longer RPC with `RpcError.tooLong`, before it reads any record.
-`withinMessageSize_iff` (`Networking/Proofs/Gossip/Rpc.lean`) states which sizes the check accepts, and `decodeRpc_tooLong` that a longer RPC is rejected whatever its bytes.
-`decodeRpc_encode` returns every RPC whose encoding fits the bound, so the check rejects no such encoding.
+A cap whose largest message overflows 64 bits rejects every RPC, with `RpcError.arith`.
+`decodeRpc_tooLong` (`Networking/Proofs/Gossip/Rpc.lean`) states that a longer RPC is rejected whatever its bytes.
+`decodeRpc_encode` returns every RPC whose encoding fits, so the check rejects no such encoding.
+`maxMessageSize_eq` (`Networking/Proofs/Gossip/Payload.lean`) gives the closed form of the size for a cap of at most the largest Snappy block.
 The same section says that a client must not emit or propagate a larger message, which the encoder leaves to its caller.
 
 ### The gossip RPC and the partial message extension

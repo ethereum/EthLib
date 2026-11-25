@@ -1953,7 +1953,7 @@ def gossip_decode_payload(max_payload_size: int, type_bound: int, data: bytes) -
     ...
 
 def gossip_rpc_decode(max_payload_size: int, data: bytes) -> dict[str, Any]:
-    """The RPC that the bytes encode, under the `StrictNoSign` policy, given the payload cap."""
+    """The RPC that the bytes encode, under the `StrictNoSign` policy and the size limit of the cap."""
     ...
 
 def gossip_rpc_encode(rpc: dict[str, Any]) -> bytes:

@@ -25,9 +25,9 @@ from raising import raises
 
 TOPIC = "/eth2/b5303f2a/data_column_sidecar_3/ssz_snappy"
 PREFIX = "gossip RPC rejected: EthLib.Networking.Gossip.RpcError."
+PROTOBUF = PREFIX + "protobuf (EthLib.Networking.Encoding.Protobuf.ProtobufError."
 # The payload cap of the mainnet configuration: 10 MiB.
 MAX_PAYLOAD_SIZE = 10 * 1024 * 1024
-PROTOBUF = PREFIX + "protobuf (EthLib.Networking.Encoding.Protobuf.ProtobufError."
 
 
 def _varint(n: int) -> bytes:
@@ -831,11 +831,13 @@ def test_experimental_extension_fields_are_skipped() -> None:
 
 
 # The consensus-specs pin is v1.7.0-beta.4, file specs/phase0/p2p-interface.md.
-# Its section "Gossipsub size limits" says that clients MUST reject a larger message.
-# That covers an encoded RPC larger than `max_message_size()`, framing included.
-# Its section "Maximum message sizes" defines that size and `max_compressed_len`.
+# Its section "Gossipsub size limits" makes clients reject an RPC above the largest message size.
+# The protobuf framing counts, but the length prefix of the stream is not part of the RPC.
+# Its section "Maximum message sizes" derives that size from the worst-case compression of the cap.
 MAX_COMPRESSED_LEN = 32 + MAX_PAYLOAD_SIZE + MAX_PAYLOAD_SIZE // 6
 MAX_MESSAGE_SIZE = max(MAX_COMPRESSED_LEN + 1024, 1024 * 1024)
+# The largest cap whose largest message fits 64 bits: 32 + n + n // 6 + 1024 < 2^64.
+LARGEST_CAP = 15811494920322471908
 
 
 def _padded(size: int) -> bytes:
@@ -847,11 +849,16 @@ def _padded(size: int) -> bytes:
 
 
 def _largest_payload(topic_length: int) -> bytes:
-    """An RPC that publishes data of the largest compressed size, on a topic of that length."""
+    """An RPC that publishes data of the largest compressed size, on a topic of that many bytes."""
     value = rpc.Rpc(
         publish=(rpc.Message(data=bytes(MAX_COMPRESSED_LEN), topic="t" * topic_length),)
     )
     return rpc.encode(value)
+
+
+def _too_long(size: int, bound: int = MAX_MESSAGE_SIZE) -> str:
+    """The message of an RPC of the given size above the given bound."""
+    return PREFIX + f"tooLong {size} {bound}"
 
 
 def test_largest_message_of_mainnet() -> None:
@@ -865,7 +872,7 @@ def test_rpc_within_the_largest_message_is_accepted(size: int) -> None:
 
 @pytest.mark.parametrize("size", [MAX_MESSAGE_SIZE + 1, MAX_MESSAGE_SIZE + 4096])
 def test_rpc_above_the_largest_message_is_rejected(size: int) -> None:
-    with raises(rpc.GossipError, PREFIX + f"tooLong {size}") as info:
+    with raises(rpc.GossipError, _too_long(size)) as info:
         rpc.decode(MAX_PAYLOAD_SIZE, _padded(size))
     assert info.value.code == 106
 
@@ -880,7 +887,7 @@ def test_largest_payload_with_a_topic_that_fills_the_room_is_accepted() -> None:
 def test_largest_payload_with_a_longer_topic_is_rejected() -> None:
     data = _largest_payload(1012)
     assert len(data) == MAX_MESSAGE_SIZE + 1
-    with raises(rpc.GossipError, PREFIX + f"tooLong {len(data)}") as info:
+    with raises(rpc.GossipError, _too_long(len(data))) as info:
         rpc.decode(MAX_PAYLOAD_SIZE, data)
     assert info.value.code == 106
 
@@ -888,18 +895,37 @@ def test_largest_payload_with_a_longer_topic_is_rejected() -> None:
 def test_size_is_checked_before_the_records() -> None:
     # One byte too many, and the bytes are not protobuf records, but the size is reported.
     data = b"\xff" * (MAX_MESSAGE_SIZE + 1)
-    with raises(rpc.GossipError, PREFIX + f"tooLong {len(data)}"):
+    with raises(rpc.GossipError, _too_long(len(data))) as info:
         rpc.decode(MAX_PAYLOAD_SIZE, data)
+    assert info.value.code == 106
 
 
-@pytest.mark.parametrize(("size", "accepted"), [(1024 * 1024, True), (1024 * 1024 + 1, False)])
-def test_small_cap_keeps_the_floor_of_one_mebibyte(size: int, accepted: bool) -> None:
-    # A cap of 31 bytes gives 32 + 31 + 5 + 1024 bytes, below the floor of 1 MiB.
-    # Here the length of the record of field 15 is a varint of three bytes.
+def _floor_record(size: int) -> bytes:
+    """An RPC of the given size near 1 MiB: one record of field 15, with a length of three bytes."""
     data = _len(15, bytes(size - 4))
     assert len(data) == size
-    if accepted:
-        assert rpc.decode(31, data) == rpc.Rpc()
-    else:
-        with raises(rpc.GossipError, PREFIX + f"tooLong {size}"):
-            rpc.decode(31, data)
+    return data
+
+
+def test_small_cap_accepts_an_rpc_at_the_floor_of_one_mebibyte() -> None:
+    # A cap of 31 bytes gives 32 + 31 + 5 + 1024 bytes, below the floor of 1 MiB.
+    assert rpc.decode(31, _floor_record(1024 * 1024)) == rpc.Rpc()
+
+
+def test_small_cap_rejects_an_rpc_above_the_floor_of_one_mebibyte() -> None:
+    size = 1024 * 1024 + 1
+    with raises(rpc.GossipError, _too_long(size, 1024 * 1024)) as info:
+        rpc.decode(31, _floor_record(size))
+    assert info.value.code == 106
+
+
+def test_largest_cap_with_a_message_size_accepts_an_rpc() -> None:
+    assert 32 + LARGEST_CAP + LARGEST_CAP // 6 + 1024 == 2**64 - 1
+    assert rpc.decode(LARGEST_CAP, b"") == rpc.Rpc()
+
+
+@pytest.mark.parametrize("cap", [LARGEST_CAP + 1, 2**64 - 1])
+def test_cap_whose_message_size_overflows_rejects_every_rpc(cap: int) -> None:
+    with raises(rpc.GossipError, PREFIX + "arith (EthLib.Base.ArithError.overflow)") as info:
+        rpc.decode(cap, b"")
+    assert info.value.code == 107

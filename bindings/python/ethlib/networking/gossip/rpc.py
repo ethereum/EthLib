@@ -159,7 +159,7 @@ def _partial(value: dict[str, Any] | None) -> PartialMessagesExtension | None:
 
 
 def decode(max_payload_size: int, data: bytes) -> Rpc:
-    """The RPC that the bytes encode, given the payload cap; a rejected RPC raises GossipError."""
+    """The RPC that the bytes encode, within the size limit of the cap; else a GossipError."""
     # The native dict keys are the Lean field names in snake case; its lists become tuples here.
     value = _native.gossip_rpc_decode(max_payload_size, data)
     return Rpc(
