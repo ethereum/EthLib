@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.ExecutionConfig
+import EthLib.Base.Except
 public import EthLib.Base.Proofs.ChainConfig
 public import EthLib.Base.Proofs.Json
 import EthLib.Base.Proofs.List
@@ -404,20 +405,6 @@ private theorem ok_of_ite {ε α : Type} {b : Prop} [Decidable b] {x y : Except 
   · simpa [hb] using h
   · exact absurd (by simpa [hb] using h) (fails c)
 
-/-- A step followed by a pure result succeeds when the step does, with that result. -/
-private theorem ok_of_bind_pure {ε α β : Type} {x : Except ε α} {f : α → β} {c : β}
-    (h : (x >>= fun a => pure (f a)) = .ok c) : ∃ a, x = .ok a ∧ f a = c := by
-  cases x with
-  | error e => cases h
-  | ok a => exact ⟨a, rfl, Except.ok.inj h⟩
-
-/-- A step followed by another succeeds when the step does, and the rest succeeds after it. -/
-private theorem ok_of_bind {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {c : β}
-    (h : (x >>= f) = .ok c) : ∃ a, x = .ok a ∧ f a = .ok c := by
-  cases x with
-  | error e => cases h
-  | ok a => exact ⟨a, rfl, h⟩
-
 /-- A configuration that passes the order check is the one given, and it is ordered. -/
 private theorem ok_of_check {x c : ChainConfig} {y : Except ConfigError ChainConfig}
     (fails : ∀ c, y ≠ .ok c) (h : (if decide x.Ordered = true then pure x else y) = .ok c) :
@@ -536,7 +523,7 @@ theorem readExecutionConfig_ordered {base config : ChainConfig} {j : Json}
   -- The file passed its checks, and the last one is the order check.
   unfold readExecutionConfig at h
   obtain ⟨read, -, hc⟩ :=
-    ok_of_bind (ok_of_ite (fun c hc => by cases hc) (ok_of_ite (fun c hc => by cases hc) h))
+    bind_ok_iff.mp (ok_of_ite (fun c hc => by cases hc) (ok_of_ite (fun c hc => by cases hc) h))
   exact (ok_of_check (fun c hc => by cases hc) hc).2
 
 /-- A file holds mainnet whole, since mainnet sets no blob schedule of its own. -/
@@ -579,13 +566,14 @@ theorem blobScheduleAt_read {base config : ChainConfig} {j : Json} {n t : Nat}
   -- The file passed the check of its schedules, and each fork was read.
   unfold readExecutionConfig at h
   obtain ⟨read, hread, hc⟩ :=
-    ok_of_bind (ok_of_ite (fun c hc => by cases hc) (ok_of_ite (fun c hc => by cases hc) h))
+    bind_ok_iff.mp (ok_of_ite (fun c hc => by cases hc) (ok_of_ite (fun c hc => by cases hc) h))
   replace hc := (ok_of_check (fun c hc => by cases hc) hc).1
   clear h
   -- The forks read come in the order of the names.
   have hfst : read.map Prod.fst = forkNames.map Prod.fst := by
     refine map_fst_of_mapM_eq_ok (fun ⟨f, n⟩ r hr => ?_) hread
-    obtain ⟨l, -, rfl⟩ := ok_of_bind_pure hr
+    obtain ⟨l, -, h⟩ := bind_ok_iff.mp hr
+    cases h
     rfl
   have sorted : read.Pairwise fun a b => a.1 < b.1 :=
     List.pairwise_map.1 (hfst ▸ List.pairwise_map.2 forkNames_sorted)
