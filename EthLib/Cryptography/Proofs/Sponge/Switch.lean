@@ -10,7 +10,7 @@ Each hash call of a game unfolds into the calls of the sponge to the permutation
 
 A uniform permutation then answers alike to independent uniform answers, up to the birthday bound.
 
-This is the switching lemma of [Bellare, Rogaway, Eurocrypt 2006][br], §2.
+This is the PRP/PRF switching lemma of [Bellare, Rogaway, Eurocrypt 2006][br].
 
 [br]: https://eprint.iacr.org/2004/331
 -/

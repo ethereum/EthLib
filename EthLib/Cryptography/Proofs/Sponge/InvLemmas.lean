@@ -188,7 +188,9 @@ theorem gEdge_snd_inj (hS : CombStruct P iv cs c) (hC : VisCons cs.sim)
 
 variable [Zero Dg] [Zero E] [LawfulXor Dg] [LawfulXor E]
 
-/-- **States of the sponge determine known paths.** -/
+/-- **States of the sponge determine known paths.**
+
+Without a collision, one absorbed state on two known paths means one parent path and one block. -/
 theorem node_inj (hS : CombStruct P iv cs c) (hC : VisCons cs.sim)
     (hEC : ¬ HiddenCollision P iv cs.vis c)
     {β γ : List (Dg × E)} {B B' : Dg × E} {s s' : SpongeState Dg E C}

@@ -142,7 +142,9 @@ theorem lookup_swap_all_none {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
 
 variable (u : SpongeState Dg E C)
 
-/-- **A new query that is not rooted.** -/
+/-- **A new query that is not rooted.**
+
+Answering it with the uniform draw keeps the invariant. -/
 theorem combInv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
     (hI : CombInv P iv cs c) {x : SpongeState Dg E C} (hy : cs.sim.edges.lookup x = none)
     (hch : chainOf cs.sim.chains x = none) :
@@ -284,7 +286,7 @@ theorem lookup_all {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
   lookup_eq_some_of_mem ((hC.allMem _).mpr h) fun e he hex => by
     rw [gEdge_fst_inj hS hC.vis hEC ((hC.allMem e).mp he) h hex]
 
-/-- **A recorded query.** -/
+/-- **A recorded query.** A forward query that the simulator recorded keeps the invariant. -/
 theorem combInv_fwd_recorded {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
     (hI : CombInv P iv cs c) {x y : SpongeState Dg E C} (hy : cs.sim.edges.lookup x = some y) :
     CombInv P iv (fwdOut P iv cs x u (y, cs.sim, none)).2 c := by
@@ -299,7 +301,7 @@ theorem combInv_fwd_recorded {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
 
 variable [DecidableEq Msg] [SampleableType Dg] [SampleableType E] [SampleableType C]
 
-/-- **A new rooted query**: its path is hidden, or new to both views. -/
+/-- **A new rooted query** keeps the invariant: its path is hidden, or new to both views. -/
 theorem combInv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
     (hI : CombInv P iv cs c) {x s v : SpongeState Dg E C} {β : List (Dg × E)}
     (hy : cs.sim.edges.lookup x = none) (hch : chainOf cs.sim.chains x = some (s, β))

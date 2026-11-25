@@ -34,7 +34,7 @@ def walkState (vf : List (Dg × E) → SpongeState Dg E C) (pre : List (Dg × E)
     (s : SpongeState Dg E C) (bs : List (Dg × E)) (i : ℕ) : SpongeState Dg E C :=
   if i = 0 then s else vf (pre ++ bs.take i)
 
-/-- One block further along the walk. -/
+/-- Starting one block later, from that block's value, shifts the walk's states by one. -/
 theorem walkState_cons (vf : List (Dg × E) → SpongeState Dg E C) (pre : List (Dg × E))
     (s y : SpongeState Dg E C) (B : Dg × E) (bs : List (Dg × E)) (i : ℕ)
     (hy : y = vf (pre ++ [B])) :

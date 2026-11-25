@@ -154,11 +154,11 @@ theorem allWalk_support (used : List (Dg × E) → Bool) (pre : List (Dg × E))
       rw [← hvB]
       exact hdet vf hvf
 
-/-- **The forward step of the simulator over path values.**
+/-- **The forward step of the simulator over path values** has three cases.
 
-Either `x` is recorded, or it is a new rooted state whose path value is asked.
-
-Otherwise it is a new state that is not rooted, answered with `u`. -/
+- The query `x` is recorded.
+- The query is a new rooted state, and the step asks the value of its path.
+- The query is a new state that is not rooted, and the step answers `u`. -/
 theorem visFwd_support (x u : SpongeState Dg E C) (σ : SimState Dg E C) (c : ACache Msg Dg E C)
     {z : (SpongeState Dg E C × SimState Dg E C × Option (List (Dg × E) × SpongeState Dg E C)) ×
       ACache Msg Dg E C}
@@ -189,7 +189,7 @@ theorem visFwd_support (x u : SpongeState Dg E C) (σ : SimState Dg E C) (c : AC
 
 variable (iv : SpongeState Dg E C)
 
-/-- The outcomes of the combined forward step. -/
+/-- Each outcome of the combined forward step comes from a uniform draw and a simulator step. -/
 theorem combFwd_support (x : SpongeState Dg E C) (cs : CState Dg E C Msg) (c : ACache Msg Dg E C)
     {z : ((SpongeState Dg E C × SpongeState Dg E C) × CState Dg E C Msg) × ACache Msg Dg E C}
     (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
@@ -203,7 +203,7 @@ theorem combFwd_support (x : SpongeState Dg E C) (cs : CState Dg E C Msg) (c : A
   exact ⟨u, r, hr, rfl⟩
 
 omit [XorOp Dg] [XorOp E] in
-/-- The outcomes of the combined inverse step. -/
+/-- Each outcome of the combined inverse step comes from a uniform draw, with the cache kept. -/
 theorem combInverse_support (y : SpongeState Dg E C) (cs : CState Dg E C Msg)
     (c : ACache Msg Dg E C)
     {z : ((SpongeState Dg E C × SpongeState Dg E C) × CState Dg E C Msg) × ACache Msg Dg E C}
@@ -216,7 +216,7 @@ theorem combInverse_support (y : SpongeState Dg E C) (cs : CState Dg E C Msg)
   obtain ⟨u, -, rfl⟩ := hz
   exact ⟨u, rfl⟩
 
-/-- The outcomes of the combined hash step. -/
+/-- Each outcome of the combined hash step is a walk of the full view, then a hash query. -/
 theorem combHash_support (m : Msg) (cs : CState Dg E C Msg) (c : ACache Msg Dg E C)
     {z : ((Dg × Dg) × CState Dg E C Msg) × ACache Msg Dg E C}
     (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl

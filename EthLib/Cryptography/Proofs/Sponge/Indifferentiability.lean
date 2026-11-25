@@ -9,9 +9,11 @@ public import EthLib.Cryptography.Proofs.Sponge.Switch
 
 A game of cost `N` has advantage at most `C(N, 2) / |S| + (N (2N + 1) + N (N + 1)) / |C|`.
 
-This is Theorem 2 of [Bertoni, Daemen, Peeters, Van Assche, Eurocrypt 2008][sponge], §4.
+It is Theorem 2 of [Bertoni et al., Eurocrypt 2008][sponge], §4.3, with a simpler simulator.
 
-The games are identical until bad, as in [Bellare, Rogaway, Eurocrypt 2006][br], §3.
+So its bound is a sum of collision bounds, weaker than theirs.
+
+The games agree until bad: the fundamental lemma of [Bellare, Rogaway, Eurocrypt 2006][br].
 
 [sponge]: https://keccak.team/files/SpongeIndifferentiability.pdf
 [br]: https://eprint.iacr.org/2004/331

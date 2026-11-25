@@ -11,9 +11,9 @@ The value at each rooted state comes from a random oracle on block paths.
 
 So the sponge and the game see one value at a path, whichever reaches it first.
 
-The simulator is Algorithm 3 of [Bertoni, Daemen, Peeters, Van Assche, Eurocrypt 2008][sponge].
+The simulator simplifies Algorithm 3 of [Bertoni et al., Eurocrypt 2008][sponge], §4.3.
 
-It is in their §4.3.
+Here it takes the value at a new rooted state from the oracle on paths.
 
 [sponge]: https://keccak.team/files/SpongeIndifferentiability.pdf
 -/
@@ -152,9 +152,9 @@ structure CState (Dg E C Msg : Type) where
   sim : SimState Dg E C
   /-- The hashed messages, the most recent first. -/
   hashed : List Msg
-  /-- Some answer of the full view differed from that of the visible view. -/
+  /-- Some real answer differed from the ideal answer. -/
   diff : Bool
-  /-- Some draw of the simulator hit a visible capacity. -/
+  /-- Some new answer of the simulator had a capacity seen before the query. -/
   bad : Bool
 
 /-- The first state of the combined game. -/
@@ -230,7 +230,7 @@ def invOut (iv : SpongeState Dg E C) (cs : CState Dg E C Msg) (y u : SpongeState
   ((aR, r.1), ⟨all', r.2, cs.hashed, cs.diff || decide (aR ≠ r.1),
     cs.bad || hitsKnown iv cs.sim ((cs.sim.edges.map Prod.swap).lookup y).isNone u.2⟩)
 
-/-- The combined inverse step. -/
+/-- The combined inverse step at `y`: the real and the ideal answer, from one uniform draw. -/
 noncomputable def combInverse (iv : SpongeState Dg E C) (y : SpongeState Dg E C) :
     StateT (CState Dg E C Msg) (OracleComp (unifSpec + ASpec Msg Dg E C))
       (SpongeState Dg E C × SpongeState Dg E C) := StateT.mk fun cs => do
@@ -264,13 +264,13 @@ noncomputable def combStep (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
   | .inl (.inr (.inr y)) => combInverse iv y
   | .inr m => combHash P iv m
 
-/-- The combined game with the real answers: the real world over random functions. -/
+/-- The combined game that answers each query with its real answer. -/
 noncomputable def combReal (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) :
     QueryImpl (GameSpec (SpongeState Dg E C) Msg Dg)
       (StateT (CState Dg E C Msg) (OracleComp (unifSpec + ASpec Msg Dg E C))) :=
   fun t => Prod.fst <$> combStep P iv t
 
-/-- The combined game with the ideal answers: the ideal world. -/
+/-- The combined game that answers each query with its ideal answer. -/
 noncomputable def combIdeal (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) :
     QueryImpl (GameSpec (SpongeState Dg E C) Msg Dg)
       (StateT (CState Dg E C Msg) (OracleComp (unifSpec + ASpec Msg Dg E C))) :=
