@@ -312,6 +312,87 @@ theorem getFlagIndexDeltas_getD {altair : .altair ≤ fork}
       simp only [Array.getD_eq_getD_getElem?, result.2, penalty, start.2]
       simp
 
+/-- One step of the flag deltas adds less than `2^58` to both deltas of its validator.
+
+A reward is a 64-bit product over a nonzero multiple of the weight denominator, 64.
+
+A penalty is a 64-bit product over that denominator. -/
+theorem addFlagDelta_getD_self_lt {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
+    {participated : Array Bool} {total participatingIncrements activeIncrements : Gwei}
+    {deltas next : Array Gwei × Array Gwei} {index : ValidatorIndex}
+    (computed : addFlagDelta state flagIndex participated total participatingIncrements
+      activeIncrements deltas index = .ok next) :
+    (next.1.getD index.toNat 0).toNat < (deltas.1.getD index.toNat 0).toNat + 2 ^ 58 ∧
+      (next.2.getD index.toNat 0).toNat < (deltas.2.getD index.toNat 0).toNat + 2 ^ 58 := by
+  have weight : WEIGHT_DENOMINATOR.toNat = 64 := rfl
+  obtain ⟨rewards, penalties⟩ := deltas
+  simp only [addFlagDelta, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    -- In a leak the step keeps both entries.
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      omega
+    · simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at computed
+      obtain ⟨numerator, -, denominator, denominatorOk, reward, rewardOk, added, addedOk, rfl⟩ :=
+        computed
+      rw [mulChecked_ok_iff, weight] at denominatorOk
+      rw [divChecked_ok_iff] at rewardOk
+      -- The denominator is not zero, so it is at least the weight denominator.
+      have nonzero : denominator.toNat ≠ 0 := fun zero =>
+        rewardOk.1 (UInt64.toNat_inj.mp (by rw [zero, UInt64.toNat_zero]))
+      have least : 64 ≤ denominator.toNat := by omega
+      have quotient : reward.toNat ≤ numerator.toNat / 64 := by
+        rw [rewardOk.2]
+        exact Nat.div_le_div_left least (by decide)
+      have wide := numerator.toNat_lt_size
+      simp only [UInt64.size] at wide
+      dsimp only
+      rw [addDelta_getD_self addedOk]
+      omega
+  · split at computed
+    -- A validator that did not set the head flag pays no penalty.
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      omega
+    · simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at computed
+      obtain ⟨scaled, -, added, addedOk, rfl⟩ := computed
+      have wide := scaled.toNat_lt_size
+      simp only [UInt64.size] at wide
+      dsimp only
+      rw [addDelta_getD_self addedOk, UInt64.toNat_div, weight]
+      omega
+
+/-- Each reward and each penalty of the flag deltas from Altair is below `2^58`. -/
+theorem getFlagIndexDeltas_getD_lt {altair : .altair ≤ fork}
+    {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {rewards penalties : Array Gwei}
+    (computed : getFlagIndexDeltas state altair flagIndex = .ok (rewards, penalties)) (j : Nat) :
+    (rewards.getD j 0).toNat < 2 ^ 58 ∧ (penalties.getD j 0).toNat < 2 ^ 58 := by
+  simp only [getFlagIndexDeltas, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, -, _, -, _, -, eligible, eligibleOk, folded⟩ := computed
+  -- Only the step of the validator at the position changes its entries, and they start at zero.
+  have entry := foldlM_entry (entry := fun deltas : Array Gwei × Array Gwei =>
+      (deltas.1.getD j 0, deltas.2.getD j 0)) (j := j)
+    (fun _ _ _ step other => addFlagDelta_getD_of_ne step (Ne.symm other))
+    (getEligibleValidatorIndices_ok eligibleOk).1 folded
+  simp only [replicate_getD_zero] at entry
+  by_cases named : ∃ index ∈ eligible, index.toNat = j
+  · obtain ⟨index, member, same⟩ := named
+    obtain ⟨last, next, start, step, ended⟩ := entry.2 index member same
+    simp only [Prod.mk.injEq] at start ended
+    have bound := addFlagDelta_getD_self_lt step
+    rw [same, start.1, start.2, UInt64.toNat_zero, Nat.zero_add, ← ended.1, ← ended.2] at bound
+    exact bound
+  · have kept := entry.1 fun index member same => named ⟨index, member, same⟩
+    simp only [Prod.mk.injEq] at kept
+    rw [kept.1, kept.2, UInt64.toNat_zero]
+    omega
+
 /-! ## The inactivity deltas from Altair -/
 
 /-- One step of the inactivity penalties from Altair keeps the entries of the other validators. -/
@@ -432,6 +513,64 @@ theorem getInactivityPenaltyDeltas_getD_of_altair {config : Config} (altair : .a
     refine ⟨score, scoreOk, ?_⟩
     rw [result, penalty, start]
     simp
+
+/-- One step of the inactivity penalties from Altair adds at most a bound to its validator.
+
+That bound is `floor((2^64 - 1) / (B * Q))`, for score bias `B` and penalty quotient `Q`. -/
+private theorem addInactivityScorePenalty_getD_self_le {config : Config}
+    {altair : .altair ≤ fork} {targetMatched : Array Bool} {penalties next : Array Gwei}
+    {index : ValidatorIndex}
+    (computed : addInactivityScorePenalty config state altair targetMatched penalties index =
+      .ok next) :
+    (next.getD index.toNat 0).toNat ≤ (penalties.getD index.toNat 0).toNat +
+      (2 ^ 64 - 1) / (config.INACTIVITY_SCORE_BIAS.toNat *
+        (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
+  unfold addInactivityScorePenalty at computed
+  split at computed
+  -- A validator that hit the target pays nothing.
+  · cases computed
+    exact Nat.le_add_right _ _
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff] at computed
+      obtain ⟨numerator, -, denominator, denominatorOk, penalty, penaltyOk, added⟩ := computed
+      rw [mulChecked_ok_iff] at denominatorOk
+      rw [divChecked_ok_iff] at penaltyOk
+      rw [addDelta_getD_self added, penaltyOk.2, ← denominatorOk.2]
+      -- The numerator has 64 bits, so it is at most `2^64 - 1`.
+      have wide := numerator.toNat_lt_size
+      simp only [UInt64.size] at wide
+      exact Nat.add_le_add_left (Nat.div_le_div_right (by omega)) _
+    · cases computed
+
+/-- From Altair, each inactivity penalty is at most `floor((2^64 - 1) / (B * Q))`.
+
+Here `B` is the inactivity score bias and `Q` the inactivity penalty quotient of the fork. -/
+theorem getInactivityPenaltyDeltas_getD_le_of_altair {config : Config} (altair : .altair ≤ fork)
+    {rewards penalties : Array Gwei}
+    (computed : getInactivityPenaltyDeltas config state = .ok (rewards, penalties)) (j : Nat) :
+    (penalties.getD j 0).toNat ≤ (2 ^ 64 - 1) / (config.INACTIVITY_SCORE_BIAS.toNat *
+      (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
+  unfold getInactivityPenaltyDeltas at computed
+  dsimp only at computed
+  simp only [altair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq, Prod.mk.injEq] at computed
+  obtain ⟨_, -, eligible, eligibleOk, final, folded, -, rfl⟩ := computed
+  -- Only the step of the validator at the position changes its entry, and it starts at zero.
+  have entry := foldlM_entry (entry := fun deltas : Array Gwei => deltas.getD j 0) (j := j)
+    (fun _ _ _ step other => addInactivityScorePenalty_getD_of_ne step (Ne.symm other))
+    (getEligibleValidatorIndices_ok eligibleOk).1 folded
+  rw [replicate_getD_zero] at entry
+  by_cases named : ∃ index ∈ eligible, index.toNat = j
+  · obtain ⟨index, member, same⟩ := named
+    obtain ⟨last, next, start, step, ended⟩ := entry.2 index member same
+    have bound := addInactivityScorePenalty_getD_self_le step
+    rw [same, start, UInt64.toNat_zero, Nat.zero_add] at bound
+    rw [ended]
+    exact bound
+  · rw [entry.1 fun index member same => named ⟨index, member, same⟩, UInt64.toNat_zero]
+    exact Nat.zero_le _
 
 /-! ## The deltas of each kind of vote before Altair -/
 

@@ -1301,6 +1301,130 @@ theorem attestationRewardsResponse_eq_rewardOutOfRange_iff {config : Config} {ep
       exists_and_left, exists_eq_left']
     cases ideal.all (·.fits) <;> cases entries.all (·.fits) <;> simp [ensure, pure, Except.pure]
 
+/-- For a state from Altair, each computed part of a vote lies strictly between `-2^58` and `2^58`.
+
+The parts of a vote are those of the head, the target and the source. -/
+theorem attestationRewards_flags_lt_of_altair {config : Config} (altair : .altair ≤ fork)
+    {ids : List ValidatorId} {entries : List AttestationRewards}
+    (answered : attestationRewards config state ids = .ok entries)
+    {entry : AttestationRewards} (member : entry ∈ entries) :
+    -2 ^ 58 < entry.head ∧ entry.head < 2 ^ 58 ∧ -2 ^ 58 < entry.target ∧
+      entry.target < 2 ^ 58 ∧ -2 ^ 58 < entry.source ∧ entry.source < 2 ^ 58 := by
+  have parts := answered
+  simp only [attestationRewards, altair, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at parts
+  obtain ⟨_, penalized, flags, flagged, -⟩ := parts
+  obtain ⟨sourced, targeted, headed, -, -⟩ :=
+    attestationRewards_parts_of_altair altair answered flagged penalized member
+  -- Each part is the net delta of the deltas of a flag, or of none past the end of the list.
+  have bound (k : Nat) :
+      -2 ^ 58 < netDelta (flags.getD k (#[], #[])) entry.validatorIndex.toNat ∧
+        netDelta (flags.getD k (#[], #[])) entry.validatorIndex.toNat < 2 ^ 58 := by
+    rw [List.getD_eq_getElem?_getD]
+    cases found : flags[k]? with
+    | none =>
+      simp only [Option.getD_none, netDelta, Array.getD_eq_getD_getElem?, Array.getElem?_empty,
+        UInt64.toNat_zero]
+      omega
+    | some deltas =>
+      obtain ⟨flagIndex, -, computed⟩ := mapM_ok_mem flagged deltas (List.mem_of_getElem? found)
+      obtain ⟨rewards, penalties⟩ := deltas
+      have := getFlagIndexDeltas_getD_lt computed entry.validatorIndex.toNat
+      simp only [Option.getD_some, netDelta]
+      omega
+  rw [headed, targeted, sourced]
+  exact ⟨(bound 2).1, (bound 2).2, (bound 1).1, (bound 1).2, (bound 0).1, (bound 0).2⟩
+
+/-- For a state from Altair, each computed inactivity part lies from minus a bound to zero.
+
+That bound is `floor((2^64 - 1) / (B * Q))`, for score bias `B` and penalty quotient `Q`. -/
+theorem attestationRewards_inactivity_le_of_altair {config : Config} (altair : .altair ≤ fork)
+    {ids : List ValidatorId} {entries : List AttestationRewards}
+    (answered : attestationRewards config state ids = .ok entries)
+    {entry : AttestationRewards} (member : entry ∈ entries) :
+    -(((2 ^ 64 - 1) / (config.INACTIVITY_SCORE_BIAS.toNat *
+        (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) : Nat) : Int) ≤
+      entry.inactivity ∧ entry.inactivity ≤ 0 := by
+  have parts := answered
+  simp only [attestationRewards, altair, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at parts
+  obtain ⟨_, penalized, _, flagged, -⟩ := parts
+  obtain ⟨-, -, -, -, inactive⟩ :=
+    attestationRewards_parts_of_altair altair answered flagged penalized member
+  -- The inactivity deltas hold no reward, so the part is minus a bounded penalty.
+  have bound := getInactivityPenaltyDeltas_getD_le_of_altair altair penalized
+    entry.validatorIndex.toNat
+  have noReward := getInactivityPenaltyDeltas_rewards penalized entry.validatorIndex.toNat
+  rw [inactive]
+  simp only [netDelta, noReward, UInt64.toNat_zero]
+  omega
+
+/-- From Altair, the ideal reward of a flag is below `2^58`. -/
+private theorem idealFlagReward_lt {altair : .altair ≤ fork}
+    {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {index : ValidatorIndex} {reward : Gwei}
+    (computed : idealFlagReward state altair flagIndex index = .ok reward) :
+    reward.toNat < 2 ^ 58 := by
+  simp only [idealFlagReward, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, -, _, -, _, -, ⟨rewards, _⟩, stepped, rfl⟩ := computed
+  -- One step of the flag deltas from zero entries adds less than `2^58`.
+  have bound := (addFlagDelta_getD_self_lt stepped).1
+  simp only [replicate_getD_zero, UInt64.toNat_zero, Nat.zero_add] at bound
+  exact bound
+
+/-- For a state from Altair, each computed ideal part of a vote lies from zero to below `2^58`.
+
+Each ideal inactivity part is zero. -/
+theorem idealAttestationRewards_lt_of_altair (altair : .altair ≤ fork)
+    {ideal : List IdealAttestationRewards} (idealed : idealAttestationRewards state = .ok ideal)
+    {rates : IdealAttestationRewards} (member : rates ∈ ideal) :
+    0 ≤ rates.head ∧ rates.head < 2 ^ 58 ∧ 0 ≤ rates.target ∧ rates.target < 2 ^ 58 ∧
+      0 ≤ rates.source ∧ rates.source < 2 ^ 58 ∧ rates.inactivity = 0 := by
+  obtain ⟨_, _, _, -, -, computed⟩ := idealAttestationRewards_mem idealed member
+  simp only [idealRewardsOf, altair, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, ⟨head, headOk, rfl⟩, _, ⟨target, targetOk, rfl⟩, _, ⟨source, sourceOk, rfl⟩,
+    rfl⟩ := computed
+  have headLt := idealFlagReward_lt headOk
+  have targetLt := idealFlagReward_lt targetOk
+  have sourceLt := idealFlagReward_lt sourceOk
+  dsimp only
+  omega
+
+/-- For a state from Altair, the answer never gets the error of an amount out of range, code 500.
+
+It assumes that the inactivity penalty quotient of the fork is at least 2. -/
+theorem attestationRewardsResponse_ne_rewardOutOfRange_of_altair (altair : .altair ≤ fork)
+    (quotient : 2 ≤ (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
+    (config : Config) (epoch : Epoch) (ids : List ValidatorId) :
+    attestationRewardsResponse config state epoch ids ≠ .error rewardOutOfRange := by
+  intro refused
+  obtain ⟨-, -, -, rewarded, ideal, entries, -, idealed, answered, unfit⟩ :=
+    attestationRewardsResponse_eq_rewardOutOfRange_iff.mp refused
+  -- With a zero score bias the bound is zero, and any other bias divides by at least the quotient.
+  have cap : (2 ^ 64 - 1) / (config.INACTIVITY_SCORE_BIAS.toNat *
+      (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) < 2 ^ 63 := by
+    rcases Nat.eq_zero_or_pos config.INACTIVITY_SCORE_BIAS.toNat with zero | positive
+    · rw [zero, Nat.zero_mul, Nat.div_zero]
+      exact Nat.two_pow_pos 63
+    · have atMost : (2 ^ 64 - 1) / (config.INACTIVITY_SCORE_BIAS.toNat *
+          (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) ≤ (2 ^ 64 - 1) / 2 :=
+        Nat.div_le_div_left (Nat.le_trans quotient (Nat.le_mul_of_pos_left _ positive))
+          (by decide)
+      omega
+  -- Each amount of both lists fits, so the check of the range passes.
+  have idealFit : ideal.all (·.fits) = true := List.all_eq_true.mpr fun rates member => by
+    have := idealAttestationRewards_lt_of_altair altair idealed member
+    simp only [IdealAttestationRewards.fits, int64Fits, Bool.and_eq_true, decide_eq_true_eq]
+    omega
+  have totalFit : entries.all (·.fits) = true := List.all_eq_true.mpr fun entry member => by
+    have := attestationRewards_flags_lt_of_altair altair answered member
+    have := attestationRewards_inactivity_le_of_altair altair answered member
+    simp only [AttestationRewards.fits, int64Fits, Bool.and_eq_true, decide_eq_true_eq]
+    omega
+  rw [idealFit, totalFit] at unfit
+  simp at unfit
+
 /-! ## Sync committee rewards
 
 The sync committee rewards name each requested member once, in order of index.
