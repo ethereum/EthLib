@@ -1061,6 +1061,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, a builder signs its bid at the fork version that the configuration gives to the epoch of the bid's slot ([#3514](https://github.com/ethereum/EthLib/issues/3514)).
+  - `Consensus.executionPayloadBidSigningRoot` (`Consensus/HonestBuilder.lean`) is new, and `getExecutionPayloadBidSignature` signs it from a state of any fork.
+  - `Consensus.builderSigningRoot` (`Consensus/Transition/Payload.lean`) loses its optional epoch and always takes the current epoch of the state.
+  - `getDomain_currentEpoch` is removed, and `builderSigningRoot_bid` now takes the root of a bid signed on the chain of a scheduled state.
+  - `verifyExecutionPayloadBidSignature_of_sign` and `RemoteSigningApi.getExecutionPayloadBidSignature_eq_of_requestSigningRoot` take a state of any fork and the version of the schedule, in place of the current epoch.
+  Migration: give the signing state the same genesis validators root as the checking state.
+  The checking state gives its current epoch, and fork info gives the bid's epoch, the version that the configuration gives the bid's epoch.
 - In Lean, the exports read the code of an account through the state's own read, `State.getCode` ([#4604](https://github.com/ethereum/EthLib/issues/4604)).
   A state whose account names a code that the state lacks was exported with an empty code, and now gives the error of a missing code.
   `stateEntry` and `stateEntryItem` (`Execution/Exports/Transactions.lean`) and `accountsItem` (`Execution/Exports/Transition.lean`) return an `Except StateError`.
