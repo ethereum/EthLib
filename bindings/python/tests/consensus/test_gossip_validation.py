@@ -1,6 +1,7 @@
 """The gossip validation of EthLib against the gossip validation vectors."""
 
 import hashlib
+from functools import cache
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -199,13 +200,28 @@ def run_case(preset: str, fork: str, case: Path) -> None:
     assert outcomes == expected
 
 
+@cache
+def _disagreements() -> dict:
+    """The cases of consensus-spec-tests on which EthLib knowingly disagrees."""
+    return archives.disagreements("consensus-spec-tests")
+
+
+def disagreement(path: str) -> list:
+    """The mark of a case on which EthLib knowingly disagrees, which must then fail."""
+    listed = _disagreements().get((f"tests/{path}", None))
+    if listed is None:
+        return []
+    return [pytest.mark.xfail(strict=True, raises=AssertionError, reason=listed["reason"])]
+
+
 def _cases() -> list:
     """Every vendored case, as its preset, fork and directory."""
     cases = []
     for meta in sorted(FILES.rglob("meta.yaml")):
         case = meta.parent
         preset, fork = case.relative_to(FILES).parts[:2]
-        cases.append(pytest.param(preset, fork, case, id=case.relative_to(FILES).as_posix()))
+        path = case.relative_to(FILES).as_posix()
+        cases.append(pytest.param(preset, fork, case, id=path, marks=disagreement(path)))
     return cases
 
 
@@ -224,15 +240,9 @@ def _archive_cases() -> list:
             case = meta.parent
             fork, _, handler = case.relative_to(base).parts[:3]
             if runs(fork, handler):
-                cases.append(
-                    pytest.param(
-                        preset,
-                        fork,
-                        case,
-                        id=f"{preset}/{case.relative_to(base).as_posix()}",
-                        marks=pytest.mark.archive(name),
-                    )
-                )
+                path = f"{preset}/{case.relative_to(base).as_posix()}"
+                marks = [pytest.mark.archive(name), *disagreement(path)]
+                cases.append(pytest.param(preset, fork, case, id=path, marks=marks))
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no gossip validation case")

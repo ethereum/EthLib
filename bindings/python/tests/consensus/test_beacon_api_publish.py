@@ -11,7 +11,7 @@ from raising import raises
 from .containers import FORKS
 from .test_beacon_api_events import block_events, envelope_events, parsed
 from .test_beacon_api_pool import ENDPOINTS, event
-from .test_gossip_validation import FILES, MESSAGE_TOPICS, case_store, read, runs
+from .test_gossip_validation import FILES, MESSAGE_TOPICS, case_store, disagreement, read, runs
 
 # The publish endpoint of each gossip topic whose objects a client may publish.
 PUBLISH = {
@@ -52,7 +52,8 @@ def _cases() -> list:
             continue
         meta = _YAML.load(meta_file.read_text())
         if all(_topic(meta, message) in TOPIC_ENDPOINTS for message in meta["messages"]):
-            cases.append(pytest.param(preset, fork, case, id=case.relative_to(FILES).as_posix()))
+            path = case.relative_to(FILES).as_posix()
+            cases.append(pytest.param(preset, fork, case, id=path, marks=disagreement(path)))
     return cases
 
 
