@@ -1058,6 +1058,9 @@ Not yet released.
     Each gives the same answer on every input.
   - `Base.isNone_firstRepeated` (`Base/Proofs/List.lean`) is new: the scan finds nothing exactly when the list has no repeat, as a test.
     Unfolding `Ssz.rejectRelated` now gives the scan; `rejectRelated_eq` keeps its statement.
+- In Lean, the configuration check of a TLS endpoint uses the one-pass scan `Base.firstRepeated` ([#4558](https://github.com/ethereum/EthLib/pull/4558)).
+  - `Quic.Tls.Handshake.validateConfig` (`Networking/Quic/Tls/Handshake.lean`) unfolds to the scan instead of `List.Nodup`, on the groups, the initial shares and the groups of the ephemeral keys.
+    It gives the same answer on every configuration.
 - In Lean, the chain theorem charges the rewards that blocks pay for attestations once in each epoch, not in each block ([#2601](https://github.com/ethereum/EthLib/issues/2601)).
   So `chainConditions_mainnet` and the mainnet corollaries of `ChainRun.lean` cover 64 epochs, up from 16.
   - `BlockStep` (`Totality/ChainHolds.lean`) has a new field `rewards`, the rise of the supply in each epoch from those rewards.
