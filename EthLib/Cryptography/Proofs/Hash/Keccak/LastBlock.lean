@@ -67,17 +67,20 @@ It is the state for the message without it, with `v` XORed into that lane's plac
 
 - The lane starts at byte `p`, a multiple of 8.
 - The lane is in the last block: `p / rate = len / rate`. -/
-theorem stateBeforeLastPermutation_xorLane (f : State → State) {rate : Nat} (hr : 0 < rate)
-    (lanes : 8 ∣ rate) (len p : Nat) (read : Nat → UInt64) (v : UInt64) (hp : 8 ∣ p)
-    (hlast : p / rate = len / rate) :
+theorem stateBeforeLastPermutation_xorLane {m : Type → Type} [Monad m] [LawfulMonad m]
+    (f : State → m State) {rate : Nat} (hr : 0 < rate) (lanes : 8 ∣ rate) (len p : Nat)
+    (read : Nat → UInt64) (v : UInt64) (hp : 8 ∣ p) (hlast : p / rate = len / rate) :
     stateBeforeLastPermutation f rate len (fun q => if q = p then read q ^^^ v else read q) =
-      (stateBeforeLastPermutation f rate len read).xorLane (p % rate / 8) v := by
+      (·.xorLane (p % rate / 8) v) <$> stateBeforeLastPermutation f rate len read := by
   simp only [stateBeforeLastPermutation]
   -- The blocks before the last one lie before the lane, so they read the same lanes.
   have hle : rate * (len / rate) ≤ p := hlast ▸ Nat.mul_div_le p rate
   rw [absorbBlocks_congr_read f lanes _ _ (read' := read) (t := 0)
     (fun q hq _ => by simp only [Nat.zero_add]; rw [ite_eq_right (by omega)])]
-  generalize absorbBlocks f rate read (len / rate) 0 State.zero = S
+  rw [map_bind]
+  refine congrArg _ (funext fun S => ?_)
+  rw [map_pure]
+  refine congrArg pure ?_
   -- In the last block, the lane is lane `i₀` from the start of the block.
   set i₀ := p % rate / 8 with hi₀
   have hstart : rate * (len / rate) + 8 * i₀ = p := by

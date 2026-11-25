@@ -162,8 +162,9 @@ def keccakTrials : TrialSource Id := fun before =>
   if (8 * before.size) % Hash.Keccak.RATE_256 + 16 < Hash.Keccak.RATE_256 then
     -- Only the randomizer changes between trials.
     -- So the state before the last permutation is built once, with the randomizer lanes at zero.
-    let S := Hash.Keccak.Internal.stateBeforeLastPermutation Hash.Keccak.keccakF
-      Hash.Keccak.RATE_256 (8 * (before.size + 2)) (Hash.Keccak.Internal.laneOfArray before)
+    let S := Id.run (Hash.Keccak.Internal.stateBeforeLastPermutation
+      (fun S => pure (Hash.Keccak.keccakF S)) Hash.Keccak.RATE_256 (8 * (before.size + 2))
+      (Hash.Keccak.Internal.laneOfArray before))
     -- The randomizer fills lanes `k` and `k + 1` of the last block.
     let k := (8 * before.size) % Hash.Keccak.RATE_256 / 8
     ⟨fun rho =>

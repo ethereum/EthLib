@@ -1107,6 +1107,27 @@ Not yet released.
   `TransactionState.modifyState_eq_error` gives each of them in one line.
   New lemmas say which state error each step of a transaction can give: `TransactionState.error_getCode`, `error_creditEther`, `error_buyGas`, `error_settleGas`, `deleteAccounts_ne_error` and `prepareFirstFrame_ne_state`.
   Migration: write `fun h => hf _ (TransactionState.modifyState_eq_error.mp h)` in place of either lemma.
+- In Lean, the Keccak sponge takes its permutation as a computation in a monad, `f : State → m State` for any monad `m` ([#2842](https://github.com/ethereum/EthLib/issues/2842)).
+  - `Internal.absorbBlocks`, `Internal.stateBeforeLastPermutation`, `Internal.spongeAbsorb` and `Internal.keccak256Read` (`Cryptography/Hash/Keccak.lean`) take such a permutation and return a computation in `m`.
+  - `keccak256With` and `keccak256LanesWith` are Keccak-256 of bytes and of lanes over such a permutation.
+    `keccak256` and `keccak256Lanes` are their identity-monad instances at Keccak-f[1600].
+    `keccak512` and `Hasher256` run the same sponge in the identity monad at Keccak-f[1600].
+    All four compute the same bytes as before.
+  - The proof-side `keccak256With` over a pure function is removed (`Cryptography/Proofs/Hash/Keccak/Indifferentiability.lean`).
+    `Keccak256Indifferentiable`, `keccak256Indifferentiable_of_spongeExact` and `keccak256_realProb_le` state the same facts about `fun π msg => Id.run (keccak256With (fun S => pure (π S)) msg)`.
+    `keccak256With_keccakF` moves to `Cryptography/Proofs/Hash/Keccak/Basic.lean`, and says that over Keccak-f[1600] in any lawful monad the hash is `pure (keccak256 msg)`.
+  - The sponge lemmas over a pure `f` now take a permutation in a monad.
+    `absorbBlocks_pad`, `absorbBlocks_congr_read`, `absorbBlocks_congr` and `stateBeforeLastPermutation_congr` hold in every monad.
+    `spongeAbsorb_eq` and `spongeAbsorb_of_size_lt` hold in every lawful monad.
+    `absorbBlocks_add`, `stateBeforeLastPermutation_eq_pad` and `stateBeforeLastPermutation_xorLane` hold in every lawful monad, and state their result as a bind or a map.
+    The first block count of `absorbBlocks_add` is named `k`, as `m` names the monad.
+  - `keccak256Read_eq` (`Cryptography/Proofs/Hash/Keccak/Lanes.lean`) becomes `keccak256Read_eq_keccak256With`: in every monad, the bytes of the lane reader's digest are `keccak256With f msg`.
+  - `absorbBlocks_ofLanes`, `absorbAll_eq`, `sponge_eq_of_squeeze`, `oneCallHash_eq` and `keccak256_eq_squeeze256` name the identity-monad instance.
+  - New in `Cryptography/Proofs/Hash/Keccak/Basic.lean`: `keccak256With_eq_squeeze256`, `absorbBlocks_pure`, `stateBeforeLastPermutation_pure`, `spongeAbsorb_pure`, `keccak256LanesWith_pure`, `keccak256With_pure` and `keccak256LanesWith_keccakF`.
+    New in `Cryptography/Proofs/Hash/Keccak/Lanes.lean`: `keccak256LanesWith_lanesBytes`.
+    New in `Cryptography/Proofs/Xmss/TweakableHash.lean`: `Xmss.hashId_eq_keccak256LanesWith`.
+  Migration: pass `fun S => pure (f S)` where a pure `f` was passed, and read the result with `Id.run`.
+
 - In Lean, the SSZ type check finds a repeated field name or union selector with the one-pass scan `Base.firstRepeated` ([#4518](https://github.com/ethereum/EthLib/issues/4518)).
   - `Ssz.firstDuplicate` (`Serialization/Ssz/Type/Valid.lean`) is removed, with `firstDuplicate_of_nodup` (`Serialization/Proofs/Ssz/Type/Legality.lean`) and `nodup_of_firstDuplicate` (`Serialization/Proofs/Ssz/Codec/JsonRoundTrip.lean`).
     `Desc.wellFormed` unfolds to the scan, and refuses the same declarations with the same errors.

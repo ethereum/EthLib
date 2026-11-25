@@ -34,6 +34,13 @@ theorem hash_bytes (input : Array UInt64) :
     (hash input).bytes = Hash.Keccak.keccak256 ⟨(Hash.Keccak.lanesBytes input).toArray⟩ :=
   Hash.Keccak.keccak256Lanes_lanesBytes input
 
+/-- The scheme's `H` is Keccak-256 of lanes over Keccak-f[1600], in the identity monad.
+
+With another permutation in place of Keccak-f[1600], the same sponge gives the hash of a model. -/
+theorem hashId_eq_keccak256LanesWith :
+    hashId = Hash.Keccak.keccak256LanesWith (fun S => pure (Hash.Keccak.keccakF S)) :=
+  rfl
+
 /-- A hash input is the lanes of the parameter, then of the address, then the payload. -/
 theorem thInput_eq_append (publicParam : PublicParam) (address : Address)
     (payload : Array UInt64) :

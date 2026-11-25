@@ -33,16 +33,19 @@ open OracleComp OracleSpec ENNReal EthLib.Cryptography.LazyPermutation
 def oneBlockState (msg : ByteArray) : State :=
   Internal.absorbBlock RATE_256 State.zero (Internal.laneAt (pad RATE_256 msg)) 0
 
-/-- Below 136 bytes, the absorbing phase is one call to the permutation, whatever it is. -/
-theorem spongeAbsorb_of_size_lt (f : State → State) {msg : ByteArray} (h : msg.size < RATE_256) :
+/-- Below 136 bytes, the absorbing phase is one call to the permutation, whatever it is.
+
+It holds in every lawful monad. -/
+theorem spongeAbsorb_of_size_lt {m : Type → Type} [Monad m] [LawfulMonad m] (f : State → m State)
+    {msg : ByteArray} (h : msg.size < RATE_256) :
     Internal.spongeAbsorb f RATE_256 msg.size (Internal.laneAt msg) = f (oneBlockState msg) := by
   have hn : blockCount RATE_256 msg.size = 1 := by simp [blockCount, Nat.div_eq_of_lt h]
-  simp only [spongeAbsorb_eq, hn, Internal.absorbBlocks, oneBlockState]
+  simp only [spongeAbsorb_eq, hn, Internal.absorbBlocks, oneBlockState, bind_pure]
 
 /-- Below 136 bytes, Keccak-256 is the first 256 bits of one call to Keccak-f[1600]. -/
 theorem keccak256_of_size_lt {msg : ByteArray} (h : msg.size < RATE_256) :
     keccak256 msg = Internal.squeeze256 (keccakF (oneBlockState msg)) := by
-  rw [keccak256_eq_squeeze256, spongeAbsorb_of_size_lt keccakF h]
+  rw [keccak256_eq_squeeze256, spongeAbsorb_of_size_lt (fun S => pure (keccakF S)) h, Id.run_pure]
 
 /-! ## The state space -/
 
@@ -199,8 +202,9 @@ abbrev ShortMessage := {m : ByteArray // m.size < RATE_256}
 /-- With the permutation `π` in place of Keccak-f[1600], the game's hash is the spec's sponge. -/
 theorem oneCallHash_eq (π : State → State) (m : ShortMessage) :
     oneCallHash (fun m : ShortMessage => oneBlockState m.1) Internal.squeeze256 π m =
-      Internal.squeeze256 (Internal.spongeAbsorb π RATE_256 m.1.size (Internal.laneAt m.1)) := by
-  rw [oneCallHash, spongeAbsorb_of_size_lt π m.2]
+      Internal.squeeze256 (Id.run (Internal.spongeAbsorb (fun S => pure (π S)) RATE_256 m.1.size
+        (Internal.laneAt m.1))) := by
+  rw [oneCallHash, spongeAbsorb_of_size_lt (fun S => pure (π S)) m.2, Id.run_pure]
 
 /-- **Collisions of one-block Keccak-256 over a random permutation.**
 

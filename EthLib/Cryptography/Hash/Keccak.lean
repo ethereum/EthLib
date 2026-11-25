@@ -744,12 +744,14 @@ def squeeze512 (S : State) : Vector UInt8 DIGEST_LEN_512 :=
 
 This is FIPS 202 §4, Algorithm 8, step 6.
 
-The blocks are read in place, so a long message is never copied block by block. -/
-@[specialize] def absorbBlocks (f : State → State) (rate : Nat) (read : Nat → UInt64) :
-    Nat → Nat → State → State
-  | 0, _, S => S
-  | n + 1, start, S =>
-    absorbBlocks f rate read n (start + rate) (f (absorbBlock rate S read start))
+The blocks are read in place, so a long message is never copied block by block.
+
+The permutation is a computation in a monad, called once per block, in block order. -/
+@[specialize] def absorbBlocks {m : Type → Type} [Monad m] (f : State → m State) (rate : Nat)
+    (read : Nat → UInt64) : Nat → Nat → State → m State
+  | 0, _, S => pure S
+  | n + 1, start, S => do
+    absorbBlocks f rate read n (start + rate) (← f (absorbBlock rate S read start))
 
 end Internal
 
@@ -778,14 +780,14 @@ The rate must be positive, below 200 bytes and a multiple of 8 bytes, as for the
 The message `N` has `len` bytes, and `read p` is its lane of bytes `p` to `p + 7`, for `8 ∣ p`.
 
 Its bytes from `len` on must read as zero, as `P` holds the padding there. -/
-@[specialize] def Internal.stateBeforeLastPermutation (f : State → State) (rate len : Nat)
-    (read : Nat → UInt64) : State :=
+@[specialize] def Internal.stateBeforeLastPermutation {m : Type → Type} [Monad m]
+    (f : State → m State) (rate len : Nat) (read : Nat → UInt64) : m State := do
   -- There are n - 1 = len(N) / r blocks before the last one, since n = len(N) / r + 1.
   --
   -- Steps 1 and 2: the k = n - 1 blocks of P = N || pad(r, len(N)) before the last are in N.
   let k := len / rate
   -- Steps 3 to 6 for i < n - 1: from S = 0^b, S = f(S ^ (P_i || 0^c)), with P_i read from N.
-  let S := Internal.absorbBlocks f rate read k 0 State.zero
+  let S ← Internal.absorbBlocks f rate read k 0 State.zero
   -- The last block gives S ^ (P_{n-1} || 0^c), with no permutation after it.
   --
   -- The last block P_{n-1} starts with the rest of N, read in place; bytes past N read as zero.
@@ -793,7 +795,7 @@ Its bytes from `len` on must read as zero, as `P` holds the padding there. -/
   -- The first 1 bit of the padding is bit 0 of byte len(N) mod r of the last block.
   let S := Internal.xorBlockByte rate S (len % rate) 0x01
   -- The final 1 bit is bit 7 of byte r - 1; with one padding byte, both bits share it.
-  Internal.xorBlockByte rate S (rate - 1) 0x80
+  return Internal.xorBlockByte rate S (rate - 1) 0x80
 
 /-- The absorbing phase, FIPS 202 §4, Algorithm 8, steps 1 to 6, at a rate of `rate` bytes:
 
@@ -814,48 +816,72 @@ The rate must also be a multiple of 8 bytes, so that each lane lies wholly in `P
 
 FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument.
 
+The permutation is a computation in a monad, so a proof can pass a query to a random permutation.
+
+The sponge never calls the inverse of the permutation.
+
 The message `N` has `len` bytes, read a lane at a time, with zero bytes from `len` on. -/
-@[specialize] def Internal.spongeAbsorb (f : State → State) (rate len : Nat)
-    (read : Nat → UInt64) : State :=
+@[specialize] def Internal.spongeAbsorb {m : Type → Type} [Monad m] (f : State → m State)
+    (rate len : Nat) (read : Nat → UInt64) : m State := do
   -- The absorbing phase ends with the last permutation of step 6.
   --
   -- So it is that permutation applied to the state just before it.
-  f (Internal.stateBeforeLastPermutation f rate len read)
+  f (← Internal.stateBeforeLastPermutation f rate len read)
 
 /-- Keccak-256 of a message read a lane at a time, `KECCAK[512](N, 256)` of FIPS 202 §5.2.
+
+The permutation `f` takes the place of Keccak-f[1600].
+
+It is called once per block of the padded message.
 
 The message has `len` bytes, and `read p` is its lane of bytes `p` to `p + 7`, for `8 ∣ p`.
 
 Its bytes from `len` on must read as zero.
 
 A reader that breaks those conditions gives no Keccak-256 digest, so this is internal. -/
-@[inline] def Internal.keccak256Read (len : Nat) (read : Nat → UInt64) : Lanes4 :=
+@[inline] def Internal.keccak256Read {m : Type → Type} [Monad m] (f : State → m State)
+    (len : Nat) (read : Nat → UInt64) : m Lanes4 :=
   -- KECCAK[c](N, d) = SPONGE[KECCAK-p[1600, 24], pad10*1, 1600 - c](N, d).
   --
   -- So c = 512, d = 256, and r = 1600 - c = 1088 bits, that is 136 bytes.
   --
   -- Unlike SHA3-256 of §6.1, the message N gets no 01 suffix before the padding.
   --
-  -- Algorithm 8, steps 1 to 6: absorb N at r = 136 bytes, with f = KECCAK-p[1600, 24].
+  -- Algorithm 8, steps 1 to 6: absorb N at r = 136 bytes, with f in place of KECCAK-p[1600, 24].
   --
-  -- Steps 7 to 9: the digest is Trunc_256(S), as d = 256 ≤ r = 1088.
+  -- Steps 7 to 9: the digest is Trunc_256(S), as d = 256 ≤ r = 1088, with no further call of f.
   --
   -- The digest is the four lanes of Trunc_256(S): lanes 0 to 3, bits 0 to 255 of the state.
-  Internal.squeezeLanes256 (Internal.spongeAbsorb keccakF RATE_256 len read)
+  Internal.squeezeLanes256 <$> Internal.spongeAbsorb f RATE_256 len read
 
-/-- Keccak-256 of a string of lanes: the message of 8 bytes a lane, and its digest as lanes.
+/-- Keccak-256 of a string of lanes over a permutation `f` in a monad.
+
+The message is 8 bytes a lane, and the digest is four lanes.
 
 The sponge reads its message a lane at a time.
 
 So a message held as lanes is hashed with no byte moved. -/
+@[inline] def keccak256LanesWith {m : Type → Type} [Monad m] (f : State → m State)
+    (lanes : Array UInt64) : m Lanes4 :=
+  Internal.keccak256Read f (8 * lanes.size) (Internal.laneOfArray lanes)
+
+/-- Keccak-256 of a byte string over a permutation `f` in a monad.
+
+The bytes are read a lane at a time, and the digest's lanes are written back as bytes. -/
+@[inline] def keccak256With {m : Type → Type} [Monad m] (f : State → m State)
+    (msg : ByteArray) : m (Vector UInt8 DIGEST_LEN_256) :=
+  Lanes4.bytes <$> Internal.keccak256Read f msg.size (Internal.laneAt msg)
+
+/-- Keccak-256 of a string of lanes, with Keccak-f[1600], in the identity monad. -/
 @[inline] def keccak256Lanes (lanes : Array UInt64) : Lanes4 :=
-  Internal.keccak256Read (8 * lanes.size) (Internal.laneOfArray lanes)
+  Id.run (keccak256LanesWith (fun S => pure (keccakF S)) lanes)
 
 /-- Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2.
 
 The bytes are read a lane at a time, and the digest's lanes are written back as bytes. -/
 def keccak256 (msg : ByteArray) : Vector UInt8 DIGEST_LEN_256 :=
-  (Internal.keccak256Read msg.size (Internal.laneAt msg)).bytes
+  -- The sponge over f = KECCAK-p[1600, 24], in the identity monad.
+  Id.run (keccak256With (fun S => pure (keccakF S)) msg)
 
 /-- Keccak-512 of a byte string, `KECCAK[1024](N, 512)` of FIPS 202 §5.2:
 
@@ -868,7 +894,9 @@ def keccak512 (msg : ByteArray) : Vector UInt8 DIGEST_LEN_512 :=
   -- Algorithm 8, steps 1 to 6: absorb N at r = 72 bytes, with f = KECCAK-p[1600, 24].
   --
   -- Steps 7 to 9: the digest is Trunc_512(S), as d = 512 ≤ r = 576.
-  Internal.squeeze512 (Internal.spongeAbsorb keccakF RATE_512 msg.size (Internal.laneAt msg))
+  Internal.squeeze512
+    (Id.run (Internal.spongeAbsorb (fun S => pure (keccakF S)) RATE_512 msg.size
+      (Internal.laneAt msg)))
 
 /-! ## Incremental hashing
 
@@ -901,7 +929,8 @@ def absorb (h : Hasher256) (data : ByteArray) : Hasher256 :=
   -- The number of whole blocks of r = 136 bytes among them.
   let count := bytes.size / RATE_256
   -- Step 6 on each whole block: S = f(S ^ (P_i || 0^c)).
-  ⟨Internal.absorbBlocks keccakF RATE_256 (Internal.laneAt bytes) count 0 h.state,
+  ⟨Id.run (Internal.absorbBlocks (fun S => pure (keccakF S)) RATE_256 (Internal.laneAt bytes)
+      count 0 h.state),
     -- The rest, fewer than r bytes, waits.
     bytes.extract (RATE_256 * count) bytes.size⟩
 
@@ -918,7 +947,9 @@ def digest (h : Hasher256) : Vector UInt8 DIGEST_LEN_256 :=
   -- Step 6: that block goes through S = f(S ^ (P_{n-1} || 0^c)).
   --
   -- Steps 7 to 9: the digest is Trunc_256(S).
-  Internal.squeeze256 (Internal.absorbBlocks keccakF RATE_256 (Internal.laneAt last) 1 0 h.state)
+  Internal.squeeze256
+    (Id.run (Internal.absorbBlocks (fun S => pure (keccakF S)) RATE_256 (Internal.laneAt last) 1 0
+      h.state))
 
 end Hasher256
 
