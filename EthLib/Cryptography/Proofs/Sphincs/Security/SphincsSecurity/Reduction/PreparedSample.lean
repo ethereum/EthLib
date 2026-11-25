@@ -13,6 +13,8 @@ It gives a prepared cache and a fixed answer function.
 That answer function agrees with the material, the graph labels and their surrogate boundary.
 -/
 
+open EthLib.Cryptography.HashSig (counted_query_bind simulate_withCost)
+
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
@@ -29,17 +31,18 @@ attribute [local instance] Classical.propDecidable
 omit [Params] in
 theorem OnlyW.counted {α : Type} (selected : OracleWorld.Domain → Prop) [DecidablePred selected]
     (oa : OracleComp OracleWorld α) (h : OnlyW oa) :
-    OnlyW (QueryCap.counted selected oa) := by
+    OnlyW (EthLib.Cryptography.HashSig.counted selected oa) := by
   induction oa using OracleComp.inductionOn with
   | pure value => exact OnlyW.pure' _
   | query_bind input next ih =>
       rw [OnlyW, isQueryBoundP_query_bind_iff] at h
-      rw [QueryCap.counted_query_bind, OnlyW, isQueryBoundP_query_bind_iff]
+      rw [counted_query_bind, OnlyW, isQueryBoundP_query_bind_iff]
       refine ⟨h.1, fun answer => ?_⟩
       have hnext : OnlyW (next answer) := by
         have := h.2 answer
         split at this <;> simpa [OnlyW] using this
-      have hbind : OnlyW (QueryCap.counted selected (next answer) >>= fun result =>
+      have hbind : OnlyW (EthLib.Cryptography.HashSig.counted selected (next answer) >>=
+          fun result =>
           (pure (result.1, (if selected input then 1 else 0) + result.2) :
             OracleComp OracleWorld (α × Nat))) :=
         OnlyW.bind (ih answer hnext) (fun _ => OnlyW.pure' _)
@@ -177,7 +180,7 @@ theorem fixedHashWorld_countHashQueries (f : QueryImpl HashSpec Id) {α : Type}
     (oa : OracleComp OracleWorld α) :
     simulateQ (Prefix.fixedHashWorld f) (countHashQueries oa) =
       (simulateQ (Prefix.fixedWorldCost f) oa).run := by
-  rw [countHashQueries, QueryCap.simulate_withCost, Prefix.fixedWorldCost]
+  rw [countHashQueries, simulate_withCost, Prefix.fixedWorldCost]
   congr 3
   funext input
   cases input <;> rfl

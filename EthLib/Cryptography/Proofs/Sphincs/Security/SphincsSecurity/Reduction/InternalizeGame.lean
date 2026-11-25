@@ -12,6 +12,8 @@ So internalizing the long inputs of the adversary never lowers a budgeted win pr
 From a uniform seed, the internalized game is equal in distribution to fixed-function games.
 -/
 
+open EthLib.Cryptography.HashSig (counted_pure counted_query)
+
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
@@ -136,7 +138,7 @@ theorem BlockD.pure' (sk : SphincsSecurity.Seeded.SecretKey) {β : Type} (value 
     BlockD sk (pure value : OracleComp AdvSpec β) := by
   intro short long
   simp only [leftProgD, rightProgD, simulateQ_pure, StateT.run_pure, WriterT.run_pure, leftRun,
-    rightRun, countShort, countHashQueries, QueryCap.counted_pure,
+    rightRun, countShort, countHashQueries, counted_pure,
     StateT.run_pure, map_pure]
   rfl
 
@@ -225,8 +227,8 @@ theorem BlockD.long (sk : SphincsSecurity.Seeded.SecretKey) {input : HashInput}
         simp only [StateT.run, privateRead, hc]
       rw [hread]
       simp only [leftRun, countShort, rightRun, countHashQueries, simulateQ_pure, WriterT.run_pure,
-        QueryCap.counted_pure, StateT.run_pure, map_pure]
-      rw [QueryCap.counted_query, simulateQ_map, simulateQ_spec_query, StateT.run_map]
+        counted_pure, StateT.run_pure, map_pure]
+      rw [counted_query, simulateQ_map, simulateQ_spec_query, StateT.run_map]
       change _ <$> (_ <$> (_ <$> (randomOracle (spec := HashSpec) input).run
         (merge short long))) =ᵈ _
       rw [QueryImpl.withCaching_run_some _ (hlookup.trans hc)]

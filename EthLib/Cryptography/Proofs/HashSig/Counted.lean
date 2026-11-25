@@ -3,35 +3,60 @@ module
 public import VCVio.OracleComp.QueryTracking.WriterCost
 public import VCVio.OracleComp.QueryTracking.QueryBound
 
+/-!
+# Proofs: counting the queries of a computation
+
+A computation, paired with the number of its queries that a predicate selects.
+
+The leanXMSS and leanSPHINCS security proofs count their hash calls with it.
+-/
+
 @[expose] public section
 
-namespace XmssSecurity.QueryCounting
+namespace EthLib.Cryptography.HashSig
 
-open _root_.OracleComp OracleSpec
-set_option backward.isDefEq.respectTransparency false
+open OracleComp OracleSpec
 
 variable {Index : Type} {spec : OracleSpec Index} {Result Next : Type}
   (selected : Index → Prop) [DecidablePred selected]
 
-noncomputable def counted (computation : OracleComp spec Result) : OracleComp spec (Result × Nat) :=
+/-- The computation, paired with the number of its queries that satisfy the predicate. -/
+noncomputable def counted (computation : OracleComp spec Result) :
+    OracleComp spec (Result × Nat) :=
   OracleComp.construct (fun result => pure (result, 0))
     (fun input _ next => do
       let answer ← liftM (spec.query input)
       let result ← next answer
       pure (result.1, (if selected input then 1 else 0) + result.2)) computation
 
-theorem counted_pure (result : Result) : counted selected (pure result : OracleComp spec Result) = pure (result, 0) := rfl
+/-- A computation that makes no query counts none. -/
+theorem counted_pure (result : Result) :
+    counted selected (pure result : OracleComp spec Result) = pure (result, 0) := rfl
 
-theorem counted_query_bind (input : spec.Domain) (next : spec.Range input → OracleComp spec Result) :
+/-- A query adds one to the count of the rest when the predicate selects it. -/
+theorem counted_query_bind (input : spec.Domain)
+    (next : spec.Range input → OracleComp spec Result) :
     counted selected (liftM (spec.query input) >>= next) = (do
       let answer ← liftM (spec.query input)
       let result ← counted selected (next answer)
       pure (result.1, (if selected input then 1 else 0) + result.2)) := rfl
 
+/-- One query counts one when the predicate selects it, and none otherwise. -/
+theorem counted_query (input : spec.Domain) :
+    counted selected (liftM (spec.query input)) =
+      (fun answer => (answer, if selected input then 1 else 0)) <$>
+        (liftM (spec.query input) : OracleComp spec _) := by
+  change (do
+    let answer ← liftM (spec.query input)
+    pure (answer, (if selected input then 1 else 0) + 0)) = _
+  simp only [Nat.add_zero, pure_bind, bind_pure_comp]
+
+/-- Answering a counted computation is answering it at a cost of one per selected query. -/
 theorem simulate_withCost {m : Type → Type} [Monad m] [LawfulMonad m]
     (impl : QueryImpl spec m) (computation : OracleComp spec α) :
     simulateQ impl (counted selected computation) =
-      (simulateQ (impl.withAddCost (fun input => if selected input then 1 else (0 : Nat))) computation).run := by
+      (simulateQ (impl.withAddCost (fun input => if selected input then 1 else (0 : Nat)))
+        computation).run := by
   induction computation using OracleComp.inductionOn with
   | pure value => rfl
   | query_bind input next ih =>
@@ -41,6 +66,7 @@ theorem simulate_withCost {m : Type → Type} [Monad m] [LawfulMonad m]
         WriterT.run_bind, WriterT.run_liftM, WriterT.run_tell, map_eq_bind_pure_comp, bind_assoc]
       rfl
 
+/-- Forgetting the count gives the computation back. -/
 theorem counted_forget (computation : OracleComp spec Result) :
     Prod.fst <$> counted selected computation = computation := by
   induction computation using OracleComp.inductionOn with
@@ -48,7 +74,9 @@ theorem counted_forget (computation : OracleComp spec Result) :
   | query_bind input next ih =>
       simp only [counted_query_bind, map_bind, bind_pure_comp, Functor.map_map, ih]
 
-theorem counted_bind (computation : OracleComp spec Result) (next : Result → OracleComp spec Next) :
+/-- The count of a sequence is the sum of the counts of its two parts. -/
+theorem counted_bind (computation : OracleComp spec Result)
+    (next : Result → OracleComp spec Next) :
     counted selected (computation >>= next) = (do
       let first ← counted selected computation
       let second ← counted selected (next first.1)
@@ -58,10 +86,13 @@ theorem counted_bind (computation : OracleComp spec Result) (next : Result → O
   | query_bind input continuation ih =>
       simp only [bind_assoc, counted_query_bind, ih, pure_bind, Nat.add_assoc]
 
+/-- Mapping the result keeps the count. -/
 theorem counted_map (computation : OracleComp spec Result) (f : Result → Next) :
-    counted selected (f <$> computation) = (fun result => (f result.1, result.2)) <$> counted selected computation := by
-  rw [show f <$> computation = computation >>= fun result => pure (f result) from (bind_pure_comp f computation).symm,
+    counted selected (f <$> computation) =
+      (fun result => (f result.1, result.2)) <$> counted selected computation := by
+  rw [show f <$> computation = computation >>= fun result => pure (f result) from
+      (bind_pure_comp f computation).symm,
     counted_bind]
   simp only [counted_pure, Nat.add_zero, bind_pure_comp, map_pure]
 
-end XmssSecurity.QueryCounting
+end EthLib.Cryptography.HashSig

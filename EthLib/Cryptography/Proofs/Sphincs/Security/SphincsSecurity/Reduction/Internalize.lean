@@ -15,6 +15,9 @@ This module defines that internalized adversary and runs that count short and to
 It shows that the internalized adversary queries only short inputs.
 -/
 
+open EthLib.Cryptography.HashSig
+  (counted counted_bind counted_map counted_pure counted_query counted_query_bind)
+
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
@@ -93,7 +96,7 @@ theorem OnlyW.liftProb {α : Type} (oa : ProbComp α) :
 /-- Separate counts of short and long hash calls. -/
 noncomputable def count2 {α : Type} (oa : OracleComp OracleWorld α) :
     OracleComp OracleWorld ((α × Nat) × Nat) :=
-  QueryCap.counted ShortQuery (QueryCap.counted LongQuery oa)
+  counted ShortQuery (counted LongQuery oa)
 
 omit [Params] in
 theorem count2_query_bind {α : Type} (input : OracleWorld.Domain)
@@ -103,7 +106,7 @@ theorem count2_query_bind {α : Type} (input : OracleWorld.Domain)
       let result ← count2 (next answer)
       pure ((result.1.1, (if LongQuery input then 1 else 0) + result.1.2),
         (if ShortQuery input then 1 else 0) + result.2)) := by
-  simp only [count2, QueryCap.counted_bind, QueryCap.counted_pure, bind_assoc,
+  simp only [count2, counted_bind, counted_pure, bind_assoc,
     pure_bind, Nat.add_zero]
   rfl
 
@@ -217,7 +220,7 @@ theorem run_count2_short {α : Type} (oa : OracleComp OracleWorld α) (h : OnlyW
 
 noncomputable def countShort {α : Type} (oa : OracleComp OracleWorld α) :
     OracleComp OracleWorld (α × Nat) :=
-  QueryCap.counted ShortQuery oa
+  counted ShortQuery oa
 
 omit [Params] in
 theorem countShort_eq_count2 {α : Type} (oa : OracleComp OracleWorld α) :
@@ -225,7 +228,7 @@ theorem countShort_eq_count2 {α : Type} (oa : OracleComp OracleWorld α) :
   induction oa using OracleComp.inductionOn with
   | pure value => rfl
   | query_bind input next ih =>
-      rw [countShort, QueryCap.counted_query_bind, count2_query_bind]
+      rw [countShort, counted_query_bind, count2_query_bind]
       simp only [map_bind, map_pure]
       refine bind_congr (fun answer => ?_)
       have hih := ih answer
@@ -247,7 +250,7 @@ theorem leftRun_bind {α β : Type} (oa : OracleComp OracleWorld α)
     leftRun (oa >>= next) cache = leftRun oa cache >>= fun first =>
       (fun second => ((second.1.1, first.1.2 + second.1.2), second.2)) <$>
         leftRun (next first.1.1) first.2 := by
-  simp only [leftRun, countShort, QueryCap.counted_bind, simulateQ_bind,
+  simp only [leftRun, countShort, counted_bind, simulateQ_bind,
     StateT.run_bind, bind_pure_comp, simulateQ_map, StateT.run_map]
 
 omit [Params] in
@@ -256,7 +259,7 @@ theorem rightRun_bind {α β : Type} (oa : OracleComp OracleWorld α)
     rightRun (oa >>= next) cache = rightRun oa cache >>= fun first =>
       (fun second => ((second.1.1, first.1.2 + second.1.2), second.2)) <$>
         rightRun (next first.1.1) first.2 := by
-  simp only [rightRun, countHashQueries, QueryCap.counted_bind, simulateQ_bind,
+  simp only [rightRun, countHashQueries, counted_bind, simulateQ_bind,
     StateT.run_bind, bind_pure_comp, simulateQ_map, StateT.run_map]
 
 omit [Params] in
@@ -264,14 +267,14 @@ theorem leftRun_map {α β : Type} (f : α → β) (oa : OracleComp OracleWorld 
     (cache : QueryCache HashSpec) :
     leftRun (f <$> oa) cache = (fun result => ((f result.1.1, result.1.2), result.2)) <$>
       leftRun oa cache := by
-  simp only [leftRun, countShort, QueryCap.counted_map, simulateQ_map, StateT.run_map]
+  simp only [leftRun, countShort, counted_map, simulateQ_map, StateT.run_map]
 
 omit [Params] in
 theorem rightRun_map {α β : Type} (f : α → β) (oa : OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) :
     rightRun (f <$> oa) cache = (fun result => ((f result.1.1, result.1.2), result.2)) <$>
       rightRun oa cache := by
-  simp only [rightRun, countHashQueries, QueryCap.counted_map, simulateQ_map,
+  simp only [rightRun, countHashQueries, counted_map, simulateQ_map,
     StateT.run_map]
 
 omit [Params] in
@@ -403,7 +406,7 @@ theorem leftRun_longQuery {input : HashInput} (h : ¬IsShort input) (cache : Que
     leftRun (liftM (OracleWorld.query (.inr input))) cache =
       (fun result => ((result.1, 0), result.2)) <$>
         (randomOracle (spec := HashSpec) input).run cache := by
-  rw [leftRun, countShort, QueryCap.counted_query, simulateQ_map, simulateQ_spec_query,
+  rw [leftRun, countShort, counted_query, simulateQ_map, simulateQ_spec_query,
     StateT.run_map]
   simp only [ShortQuery, h, ↓reduceIte]
   rfl

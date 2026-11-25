@@ -24,6 +24,8 @@ It has the same output distribution when it runs from the cache programmed with 
 So the master seed can be sampled after the material, also when the hash queries are counted.
 -/
 
+open EthLib.Cryptography.HashSig (counted counted_bind simulate_withCost)
+
 @[expose] public section
 
 open OracleComp OracleSpec
@@ -184,13 +186,13 @@ theorem evalDist_prepared_continuation {α : Type} (computation : OracleComp Ora
 Queries with a cached answer count, and uniform draws do not. -/
 noncomputable def countHashQueries {α : Type} (computation : OracleComp OracleWorld α) :
     OracleComp OracleWorld (α × Nat) :=
-  QueryCap.counted (fun input : OracleWorld.Domain => input matches .inr _) computation
+  counted (fun input : OracleWorld.Domain => input matches .inr _) computation
 
 omit [Params] in
 theorem simulateQ_countHashQueries {α : Type} (computation : OracleComp OracleWorld α) :
     simulateQ romImpl (countHashQueries computation) =
       (simulateQ countedOracle computation).run := by
-  rw [countHashQueries, QueryCap.simulate_withCost, countedOracle, Completeness.romImpl]
+  rw [countHashQueries, simulate_withCost, countedOracle, Completeness.romImpl]
   congr 3
   funext input
   cases input <;> rfl
@@ -243,7 +245,7 @@ theorem countHashQueries_sampling_bind {α β : Type} (sampling : ProbComp α)
     countHashQueries ((liftM sampling : OracleComp OracleWorld α) >>= next) =
       (liftM sampling : OracleComp OracleWorld α) >>= fun value =>
         countHashQueries (next value) := by
-  rw [countHashQueries, QueryCap.counted_bind]
+  rw [countHashQueries, counted_bind]
   change (countHashQueries (liftM sampling : OracleComp OracleWorld α) >>= _) = _
   rw [countHashQueries_lift_prob, bind_map_left]
   simp only [Nat.zero_add, Prod.mk.eta, bind_pure]

@@ -31,7 +31,7 @@ local notation "runOf " sign:max A:max => WriterT.run (simulateQ (QueryImpl.ofLi
     (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
       QueryImpl.withLogging (fun msg => liftM (sign msg) :
         QueryImpl SigningSpec (OracleComp OracleWorld)))
-    (SphincsSecurity.QueryCap.counted IsAdversaryHashCall A))
+    (HashSig.counted IsAdversaryHashCall A))
 
 /-- A computation lifted to the logging monad logs nothing. -/
 theorem run_liftM_writerT {β : Type} (c : OracleComp OracleWorld β) :
@@ -44,7 +44,7 @@ theorem run_liftM_writerT {β : Type} (c : OracleComp OracleWorld β) :
 theorem mem_support_runOf_pure {α : Type} (a : α) (y : ((α × Nat) × QueryLog SigningSpec) × Nat) :
     y ∈ support (countedRun f (runOf sign (pure a : OracleComp (OracleWorld + SigningSpec) α))) ↔
       y = (((a, 0), []), 0) := by
-  rw [SphincsSecurity.QueryCap.counted_pure, simulateQ_pure, WriterT.run_pure',
+  rw [HashSig.counted_pure, simulateQ_pure, WriterT.run_pure',
     countedRun_pure, support_pure, Set.mem_singleton_iff]
   rfl
 
@@ -57,7 +57,7 @@ theorem mem_support_runOf_inl {α : Type} (w : OracleWorld.Domain)
       ∃ u ∈ support (unifFwdAnswerImpl f w), ∃ z ∈ support (countedRun f (runOf sign (k u))),
         y = (((z.1.1.1, (if isHashCall w then 1 else 0) + z.1.1.2), z.1.2),
           (if isHashCall w then 1 else 0) + z.2) := by
-  rw [SphincsSecurity.QueryCap.counted_query_bind]
+  rw [HashSig.counted_query_bind]
   simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind,
     QueryImpl.add_apply_inl, QueryImpl.ofLift_apply, simulateQ_pure, WriterT.run_pure',
     map_pure]
@@ -83,7 +83,7 @@ theorem mem_support_runOf_inr {α : Type} (msg : Message)
       ∃ z ∈ support (countedRun f (runOf sign (k (evalWithAnswerFn f (sign msg))))),
         y = (((z.1.1.1, z.1.1.2), ⟨msg, evalWithAnswerFn f (sign msg)⟩ :: z.1.2),
           hashCalls f (sign msg) + z.2) := by
-  rw [SphincsSecurity.QueryCap.counted_query_bind]
+  rw [HashSig.counted_query_bind]
   simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind, QueryImpl.add_apply_inr,
     QueryImpl.withLogging_apply, WriterT.run_tell, bind_assoc,
     map_eq_bind_pure_comp, Function.comp_def, pure_bind, simulateQ_pure,
@@ -256,7 +256,7 @@ theorem calls_capGame {Seed' SK PK : Type} (seeds : ProbComp Seed')
   obtain ⟨u, hu, rfl⟩ := hv
   rw [Set.mem_singleton_iff] at hu
   subst hu
-  rw [StateT.run'_eq, SphincsSecurity.QueryCap.counted_map, simulateQ_map, WriterT.run_map,
+  rw [StateT.run'_eq, HashSig.counted_map, simulateQ_map, WriterT.run_map,
     countedRun_map, support_map] at hw
   obtain ⟨w', hw', rfl⟩ := hw
   dsimp only
