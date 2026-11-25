@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Aes.Gcm
 public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
 import EthLib.Base.Proofs.MapM
 import EthLib.Base.Proofs.Bytes
+import EthLib.Cryptography.Proofs.Aes.Block
 
 /-!
 # Proofs: QUIC packet protection
@@ -98,16 +99,11 @@ theorem sample_applyMask (longHeader : Bool) (offset : Nat) (width : Packet.Pack
     rw [maskByte, ite_eq_right hzero, dite_eq_right hpn, UInt8.xor_zero]
   · rfl
 
-private theorem and_xor (a b c : UInt8) :
-    (a ^^^ b) &&& c = (a &&& c) ^^^ (b &&& c) := by
-  apply UInt8.toNat_inj.mp
-  simp only [UInt8.toNat_and, UInt8.toNat_xor, Nat.and_xor_distrib_right]
-
 /-- Masking low bits preserves the Header Form bit, RFC 9001 §5.4.1. -/
 theorem headerForm_xor (first mask : UInt8) (longHeader : Bool) :
     (first ^^^ (mask &&& (if longHeader then 0x0f else 0x1f))) &&& 0x80 =
       first &&& 0x80 := by
-  rw [and_xor, UInt8.and_assoc]
+  rw [Aes.xor_and, UInt8.and_assoc]
   cases longHeader <;> simp only [Bool.false_eq_true, ↓reduceIte,
     show (0x0f : UInt8) &&& 0x80 = 0 by decide,
     show (0x1f : UInt8) &&& 0x80 = 0 by decide, UInt8.and_zero, UInt8.xor_zero]

@@ -4,6 +4,7 @@ public import EthLib.Serialization.Der
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.ByteOrder
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # DER reader checks
@@ -184,10 +185,6 @@ theorem integer_redundant_zero (next : UInt8) (rest : List UInt8)
     Functor.map, Except.map]
 
 /-! ## The length octets -/
-
-/-- A list of bytes in a byte array is the array. -/
-private theorem byteArray_eq_of_toList {a b : ByteArray} (h : a.data.toList = b.data.toList) :
-    a = b := ByteArray.ext (Array.toList_inj.mp h)
 
 /-- The bytes of a slice are the bytes after its start, up to its end. -/
 private theorem toList_extract (b : ByteArray) (x y : Nat) :

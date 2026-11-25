@@ -489,4 +489,19 @@ namespace EthLib.Base
   apply ByteArray.ext
   simp
 
+/-- A byte array rebuilt from the list of its bytes is itself. -/
+theorem byteArray_mk_toArray_toList (bytes : ByteArray) :
+    (⟨bytes.data.toList.toArray⟩ : ByteArray) = bytes := by
+  simp
+
+/-- Two byte arrays with the same list of bytes are equal. -/
+theorem byteArray_eq_of_toList {a b : ByteArray} (h : a.data.toList = b.data.toList) : a = b :=
+  ByteArray.ext (Array.toList_inj.mp h)
+
+/-- A vector of four entries is the vector of its four entries. -/
+theorem vector_four {α : Type} (v : Vector α 4) : v = #v[v[0], v[1], v[2], v[3]] := by
+  ext i hi
+  match i, hi with
+  | 0, _ | 1, _ | 2, _ | 3, _ => rfl
+
 end EthLib.Base

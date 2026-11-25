@@ -17,12 +17,6 @@ namespace EthLib.Serialization.Rlp
 
 open EthLib.Base (byteArray_getElem_eq_get!)
 
-/-- Two byte arrays with the same bytes are equal. -/
-theorem byteArray_eq_of_toList (a b : ByteArray) (h : a.data.toList = b.data.toList) : a = b := by
-  cases a; cases b
-  simp only [Array.toList_inj] at h
-  rw [h]
-
 /-- The bytes between two positions have as many bytes as the positions are apart. -/
 theorem length_extract_toList (input : ByteArray) (pos stop : Nat) (hStop : stop ≤ input.size) :
     (input.extract pos stop).data.toList.length = stop - pos := by

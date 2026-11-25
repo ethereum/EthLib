@@ -17,7 +17,7 @@ So no item has two accepted encodings, and two decoders that follow this specifi
 
 namespace EthLib.Serialization.Rlp
 
-open EthLib.Base (byteArray_getElem_eq_get!)
+open EthLib.Base (byteArray_eq_of_toList byteArray_getElem_eq_get!)
 
 /-- What an accepted length in the long form is made of. -/
 theorem readLongLength_ok {input : ByteArray} {pos stop : Nat} {kind kind' : PayloadKind}
@@ -344,7 +344,7 @@ theorem encode_decode (b : ByteArray) (x : Item) (h : decode b = .ok x) : encode
         simp [readItem, hItem, Except.map]
       obtain ⟨e, hEncode, hBytes⟩ :=
         (canonical_upTo b.size).1 b 0 b.size (Nat.le_refl _) (by omega) _ _ hRead
-      rw [hEncode, byteArray_eq_of_toList e b (by simpa using hBytes.symm)]
+      rw [hEncode, byteArray_eq_of_toList (a := e) (b := b) (by simpa using hBytes.symm)]
     · simp [hEnd] at h
 
 /-- `encode` is a bijection between items and the byte strings that `decode` accepts.

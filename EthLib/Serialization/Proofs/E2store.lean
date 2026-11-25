@@ -52,12 +52,6 @@ private theorem readHeader_extract (bytes : ByteArray) (offset : Nat)
     dite_eq_right (show ¬bytes.size < offset + 8 by omega),
     dite_eq_right (show ¬min (offset + 8) bytes.size - offset < 0 + 8 by omega)]
 
-/-- A vector of four bytes is the vector of its four entries. -/
-private theorem vector_four (v : Vector UInt8 4) : v = #v[v[0], v[1], v[2], v[3]] := by
-  ext i hi
-  match i, hi with
-  | 0, _ | 1, _ | 2, _ | 3, _ => rfl
-
 /-- The header of a type and a length that fits reads back as that type and length. -/
 private theorem readHeader_encodeHeader (type : UInt16) (length : Nat) (h : length < 2 ^ 32) :
     readHeader (encodeHeader type length) 0 = .ok ⟨type, length⟩ := by

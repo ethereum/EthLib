@@ -3,6 +3,7 @@ module
 public import EthLib.Serialization.Rlp.Scalar
 public import EthLib.Serialization.Proofs.Rlp.Canonical
 public import EthLib.Serialization.Proofs.Rlp.Bound
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # `Serialization.Proofs.Rlp.Scalar`
@@ -39,7 +40,7 @@ theorem eq_scalar_of_toScalar (x : Item) (n : Nat) (h : x.toScalar = .ok n) : x 
       -- Bytes with no leading zero are `BE` of the number they write.
       have hUnique := bigEndian_unique data.data.toList (fun b hb hb0 => by subst hb0; exact hZero hb)
       simp only [Item.scalar, Item.bytes.injEq]
-      exact (byteArray_eq_of_toList _ _ hUnique).symm
+      exact (Base.byteArray_eq_of_toList hUnique).symm
   | .list _ => simp [Item.toScalar] at h
 
 /-- Two scalars with the same item are equal. -/

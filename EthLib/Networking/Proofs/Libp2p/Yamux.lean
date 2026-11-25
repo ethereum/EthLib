@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Libp2p.Yamux
 public import EthLib.Base.Proofs.ByteOrder
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: yamux frames
@@ -86,9 +87,7 @@ theorem decode_encode {frame : Frame} (h : frame.Valid) (rest : List UInt8) :
   rw [hB] at hB'
   rw [hC] at hC'
   have hv : frame.data.size = frame.dataSize := h
-  have hba : (⟨frame.data.data.toList.toArray⟩ : ByteArray) = frame.data := by
-    cases frame.data
-    rfl
+  have hba := Base.byteArray_mk_toArray_toList frame.data
   have hk := Kind.ofUInt8?_toUInt8 frame.kind
   have hr : (frame.data.data.toList ++ rest).take frame.dataSize = frame.data.data.toList := by
     rw [← hv, ← hl]; simp

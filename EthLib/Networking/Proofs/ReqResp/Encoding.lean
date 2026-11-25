@@ -6,6 +6,7 @@ public import EthLib.Networking.Proofs.Snappy.Frame
 public import EthLib.Networking.Proofs.Snappy.FrameEncode
 public import EthLib.Networking.Proofs.Snappy.Read
 import EthLib.Base.Proofs.CodeInjective
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # `Networking.Proofs.ReqResp.Encoding`
@@ -22,6 +23,7 @@ open EthLib.Networking.Encoding.Varint
 open EthLib.Networking.Proofs.Encoding.Varint
 open EthLib.Networking.Proofs
 open EthLib.Networking.Proofs.Snappy.Read
+open EthLib.Base (byteArray_mk_toArray_toList)
 
 /-! ## The bound on the compressed size -/
 
@@ -294,10 +296,6 @@ theorem decodePayload_encodePayload {typeMin typeBound : UInt64} {d : ByteArray}
 
 /-! ## Response codes and chunks -/
 
-/-- A byte array rebuilt from the list of its bytes is itself. -/
-theorem mk_toList (b : ByteArray) : (⟨b.data.toList.toArray⟩ : ByteArray) = b := by
-  simp
-
 /-- Every byte reads back as itself through its response code. -/
 theorem toByte_ofByte (b : UInt8) : (ResponseCode.ofByte b).toByte = b := by
   by_cases h0 : b = 0 <;> by_cases h1 : b = 1 <;> by_cases h2 : b = 2 <;>
@@ -352,7 +350,8 @@ private theorem decodeResponseChunk_append {contextBytes : Nat} {typeMin typeBou
     simp only [ite_true] at hctx hd
     subst hctx
     have hlen : context.data.toList.length = context.size := Array.length_toList
-    rw [List.drop_left' hlen, List.take_left' hlen, mk_toList, mk_toList]
+    rw [List.drop_left' hlen, List.take_left' hlen, byteArray_mk_toArray_toList,
+      byteArray_mk_toArray_toList]
     simp [hlen, hd, bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
   · simp only [hs, ite_false] at hctx hd
     have hctx' : context = ByteArray.empty := by
@@ -361,7 +360,8 @@ private theorem decodeResponseChunk_append {contextBytes : Nat} {typeMin typeBou
       | nil => rfl
       | cons _ _ => simp [ByteArray.size] at hctx
     subst hctx'
-    rw [show ByteArray.empty.data.toList = [] from rfl, List.nil_append, mk_toList]
+    rw [show ByteArray.empty.data.toList = [] from rfl, List.nil_append,
+      byteArray_mk_toArray_toList]
     cases code with
     | success => contradiction
     | _ => simp [hd, bind, Except.bind, pure, Except.pure]
@@ -451,7 +451,7 @@ theorem decodeResponseChunk_eq_ok_iff {contextBytes : Nat} {typeMin typeBound : 
               omega
             · subst hb
               apply ByteArray.ext
-              simp [ByteArray.data_append]
+              simp
       · rename_i _ hne
         cases hp : decodePayload 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩ with
         | error e => simp [hp, bind, Except.bind] at h
@@ -461,7 +461,7 @@ theorem decodeResponseChunk_eq_ok_iff {contextBytes : Nat} {typeMin typeBound : 
           have hs : ResponseCode.ofByte b ≠ .success := hne
           refine ⟨by rw [hb], by simp [hs], ⟨rest.toArray⟩, ?_, by simpa [hs] using hp⟩
           apply ByteArray.ext
-          simp [ByteArray.data_append, hb]
+          simp [hb]
   · rintro ⟨hc, hctx, p, rfl, hd⟩
     exact decodeResponseChunk_append hc hctx hd
 

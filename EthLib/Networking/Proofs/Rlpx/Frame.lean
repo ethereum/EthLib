@@ -5,6 +5,7 @@ public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Hasher
 import EthLib.Base.Proofs.ByteOrder
 import EthLib.Base.Proofs.CodeInjective
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: RLPx frames
@@ -25,11 +26,6 @@ namespace EthLib.Networking.Rlpx
 open EthLib.Cryptography
 open EthLib.Cryptography.Hash.Keccak
 open EthLib.Cryptography.Secp256k1.Point
-
-/-- The bytes of a byte array, as a list, give back the byte array. -/
-private theorem ByteArray.mk_toArray_toList (b : ByteArray) :
-    (⟨b.data.toList.toArray⟩ : ByteArray) = b := by
-  simp
 
 theorem size_crypt (aesKey : Aes.Key .aes256) (counter : Aes.Block) (data : ByteArray) :
     (crypt aesKey counter data).size = data.size :=
@@ -197,12 +193,12 @@ theorem readFrame_writeFrame {st st' : FrameState} {frameData frame : ByteArray}
     F.data.toList (macBytes h2).data.toList rest.data.toList hHs (hM h1) (hM h2)
   have hheader : readSize (crypt st.aesKey st.counter ⟨H.data.toList.toArray⟩).data.toList =
       frameData.size := by
-    rw [ByteArray.mk_toArray_toList, hH, crypt_crypt, readSize_header (by omega)]
+    rw [Base.byteArray_mk_toArray_toList, hH, crypt_crypt, readSize_header (by omega)]
   rw [readFrame_eq]
   simp only [ByteArray.data_append, Array.toList_append]
   simp only [s1, s2, s6]
   rw [hheader, ← hFs]
-  simp only [s3, s4, s5, ByteArray.mk_toArray_toList]
+  simp only [s3, s4, s5, Base.byteArray_mk_toArray_toList]
   have c1 : ¬ (2 * BLOCK_SIZE + F.data.toList.length + BLOCK_SIZE + rest.data.toList.length <
       2 * BLOCK_SIZE) := by omega
   have c2 : ¬ ((macBytes h1).data.toList ≠
@@ -451,7 +447,7 @@ theorem readFrame_changed {st st' : FrameState} {frameData f : ByteArray}
   -- So the reader reads the honest frame size, and a frame ciphertext of `n` bytes.
   have hsize' : readSize (crypt st.aesKey st.counter ⟨(g.take BLOCK_SIZE).toArray⟩).data.toList =
       frameData.size := by
-    rw [hhead, ByteArray.mk_toArray_toList, hsz]
+    rw [hhead, Base.byteArray_mk_toArray_toList, hsz]
   rw [ht1, hsize', ← hn, ht, macStep_absorb,
     List.drop_append_of_le_length (by rw [hglen]; omega),
     List.drop_append_of_le_length (by rw [hglen]; omega),
@@ -469,7 +465,7 @@ theorem readFrame_changed {st st' : FrameState} {frameData f : ByteArray}
   -- The honest frame MAC is the MAC of the honest frame MAC input.
   have hx2 : (macDigest h2).toList = macOf (frameMacInput st.macKey t n l) := by
     have hFl : F = ⟨((l.drop (2 * BLOCK_SIZE)).take n).toArray⟩ := by
-      rw [p3, ByteArray.mk_toArray_toList]
+      rw [p3, Base.byteArray_mk_toArray_toList]
     rw [hh2, hFl, hh1, ← p1, ht, macStep_absorb, frameMacStep_absorb, macDigest_absorb]
   rw [hx2] at hC
   have hn' : (H ++ macBytes h1 ++ F ++ macBytes h2).size - 3 * BLOCK_SIZE = n := by
