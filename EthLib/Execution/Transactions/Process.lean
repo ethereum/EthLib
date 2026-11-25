@@ -50,11 +50,6 @@ open EthLib.Execution.State (BlockState EMPTY_ACCOUNT TransactionState)
 
 /-! ## The start of the message -/
 
-/-- The versioned hashes of the blobs of a transaction, empty unless it carries blobs. -/
-def Transaction.blobHashes : Transaction → List Cryptography.Kzg.VersionedHash
-  | .blob tx => tx.blobVersionedHashes
-  | _ => []
-
 /-- The addresses of the precompiles of `fork`. -/
 def precompileAddresses (fork : Fork) : List Address :=
   -- The paper's `pi`: the addresses of the precompiles active at the fork.

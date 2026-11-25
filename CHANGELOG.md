@@ -1061,6 +1061,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the versioned hashes of a list of transactions are defined from those of one transaction ([#4565](https://github.com/ethereum/EthLib/issues/4565)).
+  - `Execution.Transactions.Transaction.blobHashes` moves from `Execution/Transactions/Process.lean` to `Execution/Transactions/Types.lean`, beside the transaction type, with the same name and body.
+  - `Engine.ExecutionPayload.blobVersionedHashes` (`Engine/Block.lean`) now unfolds to `List.flatMap` of `Transaction.blobHashes`, instead of its own match on the kind of each transaction.
+    It gives the same list for every input, and every theorem keeps its statement.
+  No caller needs to change.
 - In Lean, the error of a wrong versioned hash in the point evaluation precompile carries `Cryptography.Kzg.VersionedHash` ([#4564](https://github.com/ethereum/EthLib/issues/4564)).
   - `Evm.Precompiles.PointEvaluation.PointEvaluationError.versionedHashMismatch` takes two versioned hashes in place of two `Bytes32`.
     Its message, its code and the Python error stay the same.
