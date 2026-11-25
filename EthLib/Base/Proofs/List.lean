@@ -142,6 +142,15 @@ theorem nodup_eraseDups {α : Type} [BEq α] [LawfulBEq α] (l : List α) : l.er
         simp at mem
       · exact Nat.le_trans (List.length_filter_le _ _) (by simpa using short)
 
+/-- Two maps that agree on a list keep the same elements of it. -/
+theorem filterMap_congr {α β : Type} {f g : α → Option β} :
+    ∀ {l : List α}, (∀ a ∈ l, f a = g a) → l.filterMap f = l.filterMap g
+  -- Mathlib proves the same fact, and this copy keeps the base layer free of Mathlib.
+  | [], _ => rfl
+  | a :: l, h => by
+    rw [List.filterMap_cons, List.filterMap_cons, h a (by simp),
+      filterMap_congr fun b hb => h b (by simp [hb])]
+
 /-- Each term at least `low` makes the sum at least the count times `low`. -/
 theorem le_sum_map {α : Type} {f : α → Nat} {low : Nat} :
     ∀ {xs : List α}, (∀ x ∈ xs, low ≤ f x) → xs.length * low ≤ (xs.map f).sum

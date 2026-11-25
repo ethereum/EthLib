@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.Invariants
+import EthLib.Base.Proofs.List
 
 /-!
 # Proofs: the beacon committees of an epoch do not change during it
@@ -126,15 +127,6 @@ theorem ActiveStep.trans {first second third : BeaconState preset fork}
   have epoch := activityFixedEpoch_eq_of_slot one.1
   exact ⟨two.1.trans one.1, one.2.trans (epoch ▸ two.2)⟩
 
-/-- Two functions that agree on the elements of a list keep the same of them. -/
-private theorem filterMap_congr_mem {α β : Type} {f g : α → Option β} :
-    ∀ {list : List α}, (∀ value ∈ list, f value = g value) →
-      list.filterMap f = list.filterMap g
-  | [], _ => rfl
-  | first :: rest, same => by
-    simp only [List.filterMap_cons, same first List.mem_cons_self,
-      filterMap_congr_mem fun value member => same value (List.mem_cons_of_mem first member)]
-
 /-- The positions of a list that pass a test, read over the positions of the list. -/
 private theorem filterMap_zipIdx_eq_range_length {α : Type} (test : α → Bool)
     (list : List α) :
@@ -158,7 +150,7 @@ private theorem filterMap_zipIdx_eq_range_length {α : Type} (test : α → Bool
     rw [List.zipIdx_append, List.filterMap_append, List.range_succ, List.filterMap_append,
       more init size]
     congr 1
-    · refine filterMap_congr_mem fun index member => ?_
+    · refine filterMap_congr fun index member => ?_
       simp [List.getElem?_append_left (size ▸ List.mem_range.mp member)]
     · subst size
       rw [Nat.zero_add, List.zipIdx_singleton, List.filterMap_cons, List.filterMap_cons,
@@ -198,7 +190,7 @@ theorem ActiveKept.getActiveValidatorIndices_eq {post : Base.Fork} {bound epoch 
     getActiveValidatorIndices other epoch = getActiveValidatorIndices state epoch := by
   rw [getActiveValidatorIndices_eq_range other epoch (Nat.le_max_left _ state.validators.data.size),
     getActiveValidatorIndices_eq_range state epoch (Nat.le_max_right other.validators.data.size _)]
-  exact filterMap_congr_mem fun index _ => by rw [kept epoch le index]
+  exact filterMap_congr fun index _ => by rw [kept epoch le index]
 
 /-- Every active position of a registry fits in 64 bits, read by position or by activity. -/
 private theorem activePositionsFit_iff {post : Base.Fork} (state : BeaconState preset post)
