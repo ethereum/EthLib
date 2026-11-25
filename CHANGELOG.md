@@ -1061,6 +1061,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the error of a wrong versioned hash in the point evaluation precompile carries `Cryptography.Kzg.VersionedHash` ([#4564](https://github.com/ethereum/EthLib/issues/4564)).
+  - `Evm.Precompiles.PointEvaluation.PointEvaluationError.versionedHashMismatch` takes two versioned hashes in place of two `Bytes32`.
+    Its message, its code and the Python error stay the same.
+  - `Evm.Precompiles.PointEvaluation.pointEvaluation` wraps bytes 0 to 31 of the call data once, after the length and gas checks, and compares two versioned hashes.
+    `pointEvaluation_eq_ok_iff` keeps its statement, and a proof that unfolds the call now compares two versioned hashes.
+  Migration: build the error with `VersionedHash.mk`, and read its bytes with `.bytes`.
 - In Lean, `engine_getBlobs` types its versioned hashes as `Cryptography.Kzg.VersionedHash` ([#4563](https://github.com/ethereum/EthLib/issues/4563)).
   - `Engine.BlobPool.lookup` takes a versioned hash.
     `Engine.getBlobsParams` returns versioned hashes, read with `Execution.Rpc.versionedHash`, and `Engine.getBlobsParamsJson` writes them with `Execution.Rpc.versionedHashJson`.
