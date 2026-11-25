@@ -23,12 +23,16 @@ namespace EthLib.Base.ChainConfig.Exports
 open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport forkOfName
   rejectArgument toResult)
 
-/-- The name of the active fork of mainnet at a block, if a fork is active. -/
-def mainnetActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
+/-- The name of the active fork of a configuration at a block, if a fork is active. -/
+def activeForkName (config : ChainConfig) (args : UInt64 × UInt64) : Result (Option String) :=
   -- A block number and a timestamp cross the boundary as 64-bit integers, as EIP-6122 reads them.
   let (number, timestamp) := args
   -- A fork crosses it as its name, a `str` such as `bellatrix`.
-  pure ((mainnet.activeFork number.toNat timestamp.toNat).map (·.name))
+  pure ((config.activeFork number.toNat timestamp.toNat).map (·.name))
+
+/-- The name of the active fork of mainnet at a block, if a fork is active. -/
+def mainnetActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
+  activeForkName mainnet args
 
 /-- The name of the active fork of mainnet at a block, or `None` when none is active.
 
@@ -38,8 +42,7 @@ def mainnetActiveForkExport (args : PyValue) : Result PyValue := pyExport mainne
 
 /-- The name of the active fork of Hoodi at a block, if a fork is active. -/
 def hoodiActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
-  let (number, timestamp) := args
-  pure ((hoodi.activeFork number.toNat timestamp.toNat).map (·.name))
+  activeForkName hoodi args
 
 /-- The name of the active fork of Hoodi at a block, or `None` when none is active.
 
@@ -49,8 +52,7 @@ def hoodiActiveForkExport (args : PyValue) : Result PyValue := pyExport hoodiAct
 
 /-- The name of the active fork of Sepolia at a block, if a fork is active. -/
 def sepoliaActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
-  let (number, timestamp) := args
-  pure ((sepolia.activeFork number.toNat timestamp.toNat).map (·.name))
+  activeForkName sepolia args
 
 /-- The name of the active fork of Sepolia at a block, or `None` when none is active.
 
@@ -188,8 +190,7 @@ The configuration is a `dict` with the keys and values of the JSON that other ex
 def activeForkOf (args : PyValue × UInt64 × UInt64) : Result (Option String) := do
   let (config, number, timestamp) := args
   -- A chain configuration crosses the boundary as the typed value of its JSON, a `dict`.
-  let config ← configOfJson config.toJson
-  return (config.activeFork number.toNat timestamp.toNat).map (·.name)
+  activeForkName (← configOfJson config.toJson) (number, timestamp)
 
 /-- The name of the active fork of a configured chain at a block, or `None` when none is active.
 
