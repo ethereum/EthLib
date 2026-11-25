@@ -9,6 +9,7 @@ public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Kzg.TrustedSetup
 public import EthLib.Cryptography.Kzg.Errors
 public import EthLib.Base.ByteOrder
+public import EthLib.Base.List
 
 /-!
 # `Cells`
@@ -296,9 +297,10 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
     let index := (commitmentIndices.find? (· ≥ commitments.size)).getD 0
     throw (.commitmentIndexOutOfBounds index commitments.size)
   -- The commitments are distinct, checked here after the indices.
-  if commitments.zipIdx.any (fun (c, i) => commitments.idxOf? c ≠ some i) then
-    let repeated := commitments.zipIdx.find? (fun (c, i) => commitments.idxOf? c ≠ some i)
-    throw (.duplicateCommitments ((repeated.map (·.2)).getD 0))
+  --
+  -- One pass names the first commitment that repeats an earlier one.
+  if let some index := Base.firstRepeatIndex commitments.toList then
+    throw (.duplicateCommitments index)
 
   -- The check is `e(LL, LR) = e(RL, [1])`, for the points `LL`, `LR` and `RL` defined below.
   --
@@ -405,23 +407,18 @@ def verifyCellKzgProofBatch (setup : TrustedSetup)
   if cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) then
     throw (.cellIndexOutOfBounds ((cellIndices.find? (· ≥ CELLS_PER_EXT_BLOB)).getD 0))
 
+  -- Every commitment is validated as a `G1` point, repeated or not, and a failure names its index.
+  --
+  -- A repeated entry has the same bytes, so it gives the same result.
+  let commitments : Array KZGCommitment ← commitmentsBytes.zipIdx.mapM fun (cb, i) =>
+    match bytesToKzgCommitment cb with
+    | .ok c    => pure c
+    | .error _ => throw (.invalidCommitment (some i))
+
   -- The distinct commitments and the index of each cell's commitment among them, in one scan.
   --
   -- Remove repeated commitments, keeping the first index.
-  let (deduped, commitmentIndices) ←
-    commitmentsBytes.zipIdx.foldlM
-      (init := ((#[] : Array KZGCommitment), (#[] : Array CommitmentIndex)))
-      fun (deduped, commitmentIndices) (cb, i) => do
-        -- Every commitment is validated as a `G1` point, repeated or not.
-        --
-        -- A repeated entry has the same bytes, so it gives the same result.
-        let c ← match bytesToKzgCommitment cb with
-                | .ok c    => pure c
-                | .error _ => throw (.invalidCommitment (some i))
-        -- Find or append.
-        match deduped.idxOf? c with
-        | some j => pure (deduped, commitmentIndices.push j)
-        | none   => pure (deduped.push c, commitmentIndices.push deduped.size)
+  let (deduped, commitmentIndices) := Base.distinctPlaces commitments.toList
 
   -- Each cell is decoded into its 64 values in `Fr`.
   let cosetsEvals : Array CosetEvals ← cells.mapM fun c =>

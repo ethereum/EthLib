@@ -164,7 +164,7 @@ theorem foldlM_eq_ok_dedup {ε : Type}
       rw [List.foldl_cons, ← hf init p r' hp]
       exact foldlM_eq_ok_dedup hf L r' r h
 
-/-- The removal in the batch check of cells returns the removal of repeated commitments. -/
+/-- A fold over bytes and their places that fails or removes a repeat returns the removal. -/
 theorem zipIdx_foldlM_eq_ok_dedup {ε : Type}
     {f : Array KZGCommitment × Array CommitmentIndex → Bytes48 × Nat →
       Except ε (Array KZGCommitment × Array CommitmentIndex)}
@@ -184,6 +184,39 @@ theorem zipIdx_mapM_eq_ok {ε : Type} {g : Bytes48 × Nat → Except ε Bytes48}
   refine Array.ext hsz fun i hi hi' => ?_
   have := hg _ _ (hk i (by rw [Array.size_zipIdx]; exact hi') hi)
   rw [this, Array.getElem_zipIdx]
+
+/-- A map that validates each commitment from its bytes gives the commitments of the bytes. -/
+private theorem zipIdx_mapM_commitments_eq_ok {ε : Type}
+    {g : Bytes48 × Nat → Except ε KZGCommitment} (hg : ∀ p r, g p = .ok r → r = ⟨p.1⟩)
+    {bs : Array Bytes48} {cs : Array KZGCommitment} (h : bs.zipIdx.mapM g = .ok cs) :
+    cs = bs.map KZGCommitment.mk := by
+  obtain ⟨hsz, hk⟩ := array_mapM_ok h
+  rw [Array.size_zipIdx] at hsz
+  refine Array.ext (by rw [Array.size_map]; exact hsz) fun i hi hi' => ?_
+  have := hg _ _ (hk i (by rw [Array.size_zipIdx]; exact hsz ▸ hi) hi)
+  rw [this, Array.getElem_zipIdx, Array.getElem_map]
+
+/-- The one-pass removal over the commitments of some bytes is the removal of repeats. -/
+private theorem distinctPlaces_map_mk (bs : Array Bytes48) :
+    Base.distinctPlaces (bs.map KZGCommitment.mk).toList = dedupCommitments bs := by
+  -- Both are the same fold, once over the commitments and once over their bytes.
+  rw [Base.distinctPlaces_eq_foldl, Array.toList_map, List.foldl_map, dedupCommitments,
+    ← Array.foldl_toList]
+  rfl
+
+/-- Each commitment that validates holds the bytes it was read from. -/
+private theorem commitment_of_validate (p : Bytes48 × Nat) (r : KZGCommitment)
+    (hr : (match bytesToKzgCommitment p.1 with
+      | .ok c => pure c
+      | .error _ => throw (KzgError.invalidCommitment (some p.2)) : Except KzgError KZGCommitment)
+      = .ok r) : r = ⟨p.1⟩ := by
+  cases hb : bytesToKzgCommitment p.1 with
+  | error e => simp [hb, throw, throwThe, MonadExceptOf.throw] at hr
+  | ok c =>
+    obtain ⟨-, rfl⟩ := bytesToKzgCommitment_ok_iff.mp hb
+    -- An accepted commitment holds the bytes it was read from.
+    simp [hb, pure, Except.pure] at hr
+    exact hr.symm
 
 /-- **An accepted outer check is an accepted core check.**
 
@@ -222,16 +255,10 @@ theorem verifyCellKzgProofBatch_eq_ok {setup : TrustedSetup} {bs : Array Bytes48
   split at h
   · cases h
   rename_i qs hqs
-  have hdd' := zipIdx_foldlM_eq_ok_dedup (fun acc p r hr => by
-    unfold dedupStep
-    cases hb : bytesToKzgCommitment p.1 with
-    | error e => simp [hb, throw, throwThe, MonadExceptOf.throw] at hr
-    | ok c =>
-      -- An accepted commitment holds the bytes it was read from.
-      obtain ⟨-, rfl⟩ := bytesToKzgCommitment_ok_iff.mp hb
-      cases hi : acc.1.idxOf? ⟨p.1⟩ <;>
-        simp [hb, hi, pure, Except.pure] at hr ⊢ <;>
-        exact hr.symm) hdd
+  -- The validated commitments hold their bytes, and the one pass is the removal of repeats.
+  have hdd' := zipIdx_mapM_commitments_eq_ok commitment_of_validate hdd
+  subst hdd'
+  rw [distinctPlaces_map_mk] at h
   have hqs' := zipIdx_mapM_eq_ok (fun p r hr => by
     cases hb : bytesToKzgProof p.1 <;>
       simp [hb, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at hr
@@ -239,7 +266,7 @@ theorem verifyCellKzgProofBatch_eq_ok {setup : TrustedSetup} {bs : Array Bytes48
     unfold bytesToKzgProof at hb
     split at hb <;> cases hb
     rfl) hqs
-  subst hdd' hqs'
+  subst hqs'
   refine ⟨h₁, h₂, h₃, fun k hk => ?_, evals, hevals, h⟩
   have hk' := Array.any_eq_false'.mp h₄ _ (Array.getElem_mem hk)
   rw [getElem!_pos cellIndices k hk]
@@ -302,6 +329,16 @@ theorem sumInterp_ok :
     simp only [List.foldlM_cons, bind, Except.bind, hi, hs, pure, Except.pure]
     exact hacc
 
+/-- Commitments that no search finds at a later place have no first repeat. -/
+private theorem firstRepeatIndex_eq_none_of_any {commitments : Array KZGCommitment}
+    (h : (commitments.zipIdx.any fun (c, i) => commitments.idxOf? c ≠ some i) = false) :
+    Base.firstRepeatIndex commitments.toList = none := by
+  rw [Base.firstRepeatIndex_eq_find?, ← Array.toList_zipIdx, Array.find?_toList,
+    Option.map_eq_none_iff, Array.find?_eq_none]
+  -- The search of the array is the search of its list.
+  intro p hp
+  simpa [Array.idxOf?_toList] using Array.any_eq_false'.mp h p hp
+
 /-- **The core check returns a verdict.**
 
 The cells, their values and the proofs are as many as the commitment indices.
@@ -340,8 +377,8 @@ theorem verifyCellKzgProofBatchImpl_ok {s : TrustedSetup} {commitments : Array K
   | error e =>
   exfalso
   unfold verifyCellKzgProofBatchImpl at hI
-  simp only [h₁, h₂, h₃, h₄', h₅, ne_eq, not_true_eq_false, ↓reduceIte, Bool.false_eq_true,
-    bind, Except.bind, hG, hQ] at hI
+  simp only [h₁, h₂, h₃, h₄', firstRepeatIndex_eq_none_of_any h₅, ne_eq, not_true_eq_false,
+    ↓reduceIte, Bool.false_eq_true, bind, Except.bind, hG, hQ] at hI
   set n := commitmentIndices.size
   set r := computeVerifyCellKzgProofBatchChallenge commitments commitmentIndices cellIndices
     cosetsEvals proofs
@@ -470,17 +507,15 @@ theorem verifyCellKzgProofBatch_exists_ok {s : TrustedSetup} {bs : Array Bytes48
   unfold verifyCellKzgProofBatch at hO
   simp only [h₄, Bool.false_eq_true, ↓reduceIte] at hO
   simp only [h₁, h₂, h₃, ne_eq, not_true_eq_false, ↓reduceIte, bind, Except.bind] at hO
-  -- The removal of repeated commitments returns, since every commitment is valid.
+  -- The validation of the commitments returns, since every commitment is valid.
   split at hO
   · rename_i e hdd
-    rw [← Array.foldlM_toList] at hdd
-    refine Base.foldlM_ne_error _ _ (fun acc p hp => ?_) hdd
-    · have hv : validateKzgG1 p.1 = true :=
-        hbs _ (Array.fst_mem_of_mem_zipIdx (Array.mem_toList_iff.mp hp))
-      have hb : bytesToKzgCommitment p.1 = .ok ⟨p.1⟩ :=
-        bytesToKzgCommitment_ok_iff.mpr ⟨hv, rfl⟩
-      simp only [hb, pure, Except.pure]
-      split <;> exact ⟨_, rfl⟩
+    refine array_mapM_ne_error (fun p hp => ?_) hdd
+    have hv := hbs _ (Array.fst_mem_of_mem_zipIdx hp)
+    have hb : bytesToKzgCommitment p.1 = .ok ⟨p.1⟩ :=
+      bytesToKzgCommitment_ok_iff.mpr ⟨hv, rfl⟩
+    simp only [hb, pure, Except.pure]
+    exact ⟨_, rfl⟩
   rename_i dd hdd
   -- The cells decode.
   split at hO
@@ -499,16 +534,9 @@ theorem verifyCellKzgProofBatch_exists_ok {s : TrustedSetup} {bs : Array Bytes48
     exact ⟨_, rfl⟩
   rename_i qs hqs
   -- The inputs of the core check are the removal and the proofs, as in an accepted check.
-  have hdd' := zipIdx_foldlM_eq_ok_dedup (fun acc p r hr => by
-    unfold dedupStep
-    cases hb : bytesToKzgCommitment p.1 with
-    | error e => simp [hb, throw, throwThe, MonadExceptOf.throw] at hr
-    | ok c =>
-      -- An accepted commitment holds the bytes it was read from.
-      obtain ⟨-, rfl⟩ := bytesToKzgCommitment_ok_iff.mp hb
-      cases hi : acc.1.idxOf? ⟨p.1⟩ <;>
-        simp [hb, hi, pure, Except.pure] at hr ⊢ <;>
-        exact hr.symm) hdd
+  have hdd' := zipIdx_mapM_commitments_eq_ok commitment_of_validate hdd
+  subst hdd'
+  rw [distinctPlaces_map_mk] at hO
   have hqs' := zipIdx_mapM_eq_ok (fun p r hr => by
     cases hb : bytesToKzgProof p.1 <;>
       simp [hb, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at hr
@@ -516,7 +544,6 @@ theorem verifyCellKzgProofBatch_exists_ok {s : TrustedSetup} {bs : Array Bytes48
     unfold bytesToKzgProof at hb
     split at hb <;> cases hb
     rfl) hqs
-  subst hdd'
   rw [hqs'] at hO
   obtain ⟨hdsz, hdidx, hdmem⟩ := dedupCommitments_spec bs
   obtain ⟨hevsz, hevk⟩ := array_mapM_ok hev

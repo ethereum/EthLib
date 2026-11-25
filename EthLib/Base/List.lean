@@ -1,5 +1,6 @@
 module
 
+public import Std.Data.TreeMap.Basic
 public import Std.Data.TreeSet.Basic
 
 /-!
@@ -10,6 +11,8 @@ Prefixes and suffixes of lists, which text formats read around their fields.
 Also a table of values by key, kept in order, as stream multiplexers keep their streams.
 
 Also the first element of a list that occurs again, as duplicate checks name it.
+
+Also the distinct elements of a list, as batch checks share one copy of each.
 -/
 
 @[expose] public section
@@ -47,5 +50,32 @@ def firstRepeated {α : Type} [Ord α] (l : List α) : Option α :=
     -- The lookup comes before the insertion, so the insertion updates the set in place.
     let again := later.contains x
     (later.insert x, if again then some x else found)).2
+
+/-- The scan for a repeat from a place, given the set of the elements before it. -/
+def firstRepeatIndexFrom {α : Type} [Ord α] (earlier : Std.TreeSet α) (place : Nat) :
+    List α → Option Nat
+  | [] => none
+  -- The first element in the set ends the scan.
+  | x :: xs =>
+    if earlier.contains x then some place
+    else firstRepeatIndexFrom (earlier.insert x) (place + 1) xs
+
+/-- The place of the first element of a list that equals an earlier one, if any. -/
+def firstRepeatIndex {α : Type} [Ord α] (l : List α) : Option Nat :=
+  -- One pass from the start, with a search tree of the elements before the current one.
+  firstRepeatIndexFrom ∅ 0 l
+
+/-- The distinct elements of a list in order, and the place of each element among them. -/
+def distinctPlaces {α : Type} [Ord α] (l : List α) : Array α × Array Nat :=
+  -- One pass, with a search tree from each distinct element to its place.
+  let (distinct, places, _) :=
+    l.foldl (init := ((#[] : Array α), (#[] : Array Nat), (∅ : Std.TreeMap α Nat)))
+      fun (distinct, places, seen) x =>
+        match seen.get? x with
+        -- A repeat takes the place of its first copy.
+        | some j => (distinct, places.push j, seen)
+        -- A new element goes at the end.
+        | none => (distinct.push x, places.push distinct.size, seen.insert x distinct.size)
+  (distinct, places)
 
 end EthLib.Base

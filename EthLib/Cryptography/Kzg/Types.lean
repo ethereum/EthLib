@@ -24,6 +24,10 @@ structure KZGCommitment where
   bytes : Vector UInt8 48
 deriving DecidableEq, Repr, Inhabited
 
+/-- Commitments compare as their bytes, so a search tree can hold them. -/
+instance : Ord KZGCommitment where
+  compare a b := compare a.bytes b.bytes
+
 /-- The versioned hash of a KZG commitment, which names a blob.
 
 Its first byte names the version of the commitment scheme, which the type does not check. -/
