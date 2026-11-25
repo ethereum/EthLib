@@ -349,6 +349,7 @@ def AuthFailure.reason : BuilderApi.AuthFailure → String
   | .dataMismatch => "data_mismatch"
   | .slotMismatch => "slot_mismatch"
   | .slotPassed => "slot_passed"
+  | .notProposer => "not_proposer"
   | .badSignature => "bad_signature"
 
 /-- From Gloas: the failed checks of a request for a bid, by name. -/
@@ -378,25 +379,28 @@ def builderRequestAuthFailuresExport (args : PyValue) : Result PyValue :=
 
 /-- From Gloas: the failed checks of a request that submits preferences, by name. -/
 def builderPreferencesFailuresOf
-    (args : String × String × Option PyValue × ByteArray × UInt64 × Cryptography.Bls.BLSPubkey ×
-      Option String × ByteArray) : Result (List String) := do
-  let (name, fork, replacements, agreed, currentSlot, pubkey, header, data) := args
+    (args : String × String × Option PyValue × ByteArray × UInt64 × Option ByteArray ×
+      Cryptography.Bls.BLSPubkey × Option String × ByteArray) : Result (List String) := do
+  let (name, fork, replacements, agreed, currentSlot, state, pubkey, header, data) := args
+  let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
-  unless .glamsterdam ≤ fork do
-    rejectArgument none s!"no builder request authentication at {fork.name}"
-  let config ← configWithValue name replacements
-  let request ← toResult "input rejected" (SszType.deserialize BuilderPreferencesRequest data)
-  let failures ← toResult "root rejected"
-    (BuilderApi.preferencesFailures config .bls agreed currentSlot pubkey header request)
-  return failures.map AuthFailure.reason
+  if gloas : .glamsterdam ≤ fork then
+    let config ← configWithValue name replacements
+    let state ← state.mapM fun bytes =>
+      toResult "state rejected" (SszType.deserialize (BeaconState preset fork) bytes)
+    -- Without a state, the builder skips the check of the proposer.
+    let proposerOf slot := state.bind (BuilderApi.lookaheadProposerKey · gloas slot)
+    let request ← toResult "input rejected" (SszType.deserialize BuilderPreferencesRequest data)
+    let failures ← toResult "root rejected" (BuilderApi.preferencesFailures config .bls agreed
+      currentSlot proposerOf pubkey header request)
+    return failures.map AuthFailure.reason
+  else rejectArgument none s!"no builder request authentication at {fork.name}"
 
 /-- From Gloas: the failed checks of a request that submits preferences, by name, in order.
 
-The arguments are the name of the preset and of the configuration, the fork and replacements.
+The arguments are the preset and configuration name, the fork, replacements and the agreed data.
 
-Then come the agreed data, the builder's current slot, the key of the path and the version header.
-
-Then come the SSZ bytes of the request. -/
+Then come the builder's current slot and state, the key of the path, the header and the request. -/
 @[export eth_consensus_builder_preferences_failures]
 def builderPreferencesFailuresExport (args : PyValue) : Result PyValue :=
   pyExport builderPreferencesFailuresOf args
@@ -428,9 +432,9 @@ From Deneb to Fulu, it carries the payload with its blobs bundle.
 
 At Gloas, the response to a request for a [bid] carries a signed bid of the execution payload.
 
-[header]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/header.yaml
-[blinded block]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/blinded_blocks.yaml
-[bid]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/execution_payload_bid.yaml
+[header]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/header.yaml
+[blinded block]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/blinded_blocks.yaml
+[bid]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/execution_payload_bid.yaml
 -/
 def isVersionedBody (fork : Fork) : String → Bool
   | "SignedBuilderBid" => .bellatrix ≤ fork && fork < .glamsterdam

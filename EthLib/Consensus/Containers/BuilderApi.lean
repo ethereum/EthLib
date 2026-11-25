@@ -32,13 +32,13 @@ The [Gloas validator] document gives their containers.
 
 The [Gloas builder] document gives the authentication data limit and the execution payment cap.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#containers
-[Capella]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/capella/builder.md#containers
-[Deneb]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#containers
-[Electra]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/electra/builder.md#containers
-[Fulu]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/fulu/builder.md#containers
-[Gloas validator]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/validator.md#containers
-[Gloas builder]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md#constants
+[builder specification]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/builder.md#containers
+[Capella]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/capella/builder.md#containers
+[Deneb]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#containers
+[Electra]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/electra/builder.md#containers
+[Fulu]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/fulu/builder.md#containers
+[Gloas validator]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/validator.md#containers
+[Gloas builder]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/builder.md#constants
 -/
 
 @[expose] public section
@@ -184,7 +184,7 @@ That is more than the cell proofs that a bundle can need, so it admits bundles t
 
 The bound also sets the depth of the Merkle tree of the proofs.
 
-[Fulu]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/fulu/builder.md#blobsbundle
+[Fulu]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/fulu/builder.md#blobsbundle
 -/
 def builderBlobProofsLimit (preset : Preset) (fork : Fork) : Nat :=
   if .fusaka ≤ fork then
@@ -197,8 +197,8 @@ The source calls it a blobs bundle; this name keeps it apart from that of the En
 
 The [Deneb] document defines it, and the [Fulu] document changes the bound on its proofs.
 
-[Deneb]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#blobsbundle
-[Fulu]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/fulu/builder.md#blobsbundle
+[Deneb]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#blobsbundle
+[Fulu]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/fulu/builder.md#blobsbundle
 -/
 structure BuilderBlobsBundle (preset : Preset) (fork : Fork) where
   /-- The commitments to the blobs. -/
@@ -225,9 +225,9 @@ Before Deneb a builder reveals the payload alone, and Electra keeps the containe
 
 The [Deneb] and [Fulu] documents define it, and [`blinded_blocks.yaml`] gives it as the response.
 
-[Deneb]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#executionpayloadandblobsbundle
-[Fulu]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/fulu/builder.md#executionpayloadandblobsbundle
-[`blinded_blocks.yaml`]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/blinded_blocks.yaml
+[Deneb]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#executionpayloadandblobsbundle
+[Fulu]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/fulu/builder.md#executionpayloadandblobsbundle
+[`blinded_blocks.yaml`]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/blinded_blocks.yaml
 -/
 structure ExecutionPayloadAndBlobsBundle (preset : Preset) (fork : Fork) where
   /-- The payload. -/
@@ -256,7 +256,7 @@ Its response schema names no Electra form, and its Electra example has the field
 
 Outside Bellatrix to Fulu the type still has a form, which no rule reads.
 
-[`blinded_blocks.yaml`]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/blinded_blocks.yaml
+[`blinded_blocks.yaml`]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/blinded_blocks.yaml
 -/
 def RevealedPayload (preset : Preset) (fork : Fork) : Type :=
   if .dencun ≤ fork then ExecutionPayloadAndBlobsBundle preset fork

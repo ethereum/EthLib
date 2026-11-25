@@ -5632,7 +5632,7 @@
   {"summary":
    "From Gloas: the failed checks of a request that submits preferences, by name, in order.",
    "signature":
-   "(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]",
+   "(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, state: bytes | None, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]",
    "operation": "EthLib.Consensus.Exports.builderPreferencesFailuresExport",
    "method": "consensus_builder_preferences_failures",
    "errors":
@@ -5716,7 +5716,7 @@
       {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "SszError",
    "docstring":
-   "From Gloas: the failed checks of a request that submits preferences, by name, in order.\n\nThe arguments are the name of the preset and of the configuration, the fork and replacements.\n\nThen come the agreed data, the builder's current slot, the key of the path and the version header.\n\nThen come the SSZ bytes of the request."},
+   "From Gloas: the failed checks of a request that submits preferences, by name, in order.\n\nThe arguments are the preset and configuration name, the fork, replacements and the agreed data.\n\nThen come the builder's current slot and state, the key of the path, the header and the request."},
   {"summary":
    "The default data that a proposer and a builder agree, from the builder's URL.",
    "signature": "(url: str) -> bytes",

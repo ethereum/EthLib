@@ -1,4 +1,4 @@
-# Source: ethereum/builder-specs at ea92eff73ad77c33d3b59a2033ffa02dfae5ee05
+# Source: ethereum/builder-specs at 0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7
 5e797754a0c4c60bfbd310e7e498bf294b4e2f4b391d261a179bd5ebf47e291b  bellatrix/execution_payload.json
 8cf8b2714e0d195af6bdb59e3bdc400907802bb34f48c3e1f1ab0dbc20035594  bellatrix/execution_payload.ssz
 fa440ea608d6a72341a48d3379826504c4e30f0494b7f9c30ccd9b5d2e8b1cf1  bellatrix/signed_blinded_beacon_block.json

@@ -886,7 +886,7 @@ def bindings : List Binding := [
   ⟨"consensus_builder_preferences_failures",
     `EthLib.Consensus.Exports.builderPreferencesFailuresExport,
     "(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, " ++
-      "pubkey: bytes, version_header: str | None, data: bytes) -> list[str]",
+      "state: bytes | None, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_default_auth_data", `EthLib.Consensus.BuilderApi.defaultAuthData,
     "(url: str) -> bytes", [`EthLib.Consensus.BuilderApi.AuthDataError], some "ConsensusError"⟩,

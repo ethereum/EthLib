@@ -531,6 +531,23 @@ def getBeaconProposerIndex (state : BeaconState preset fork) :
       ⟨epochSeed.toArray ++ (ByteOrder.toLE 8 state.slot.toNat).toArray⟩
     computeProposerIndex state (← getActiveValidatorIndicesChecked state epoch).toArray seed
 
+/-- The key of the validator at an index of a state, if there is one. -/
+def validatorPubkey? (state : BeaconState preset fork) (index : ValidatorIndex) :
+    Option Cryptography.Bls.BLSPubkey :=
+  state.validators.data[index.toNat]?.map (·.pubkey)
+
+/-- From Fulu: the proposer of a slot of the current or next epoch, by the lookahead of a state.
+
+Other slots, and slots past the end of the lookahead, have none. -/
+def lookaheadSchedule (state : BeaconState preset fork) (fulu : .fusaka ≤ fork) (slot : Slot) :
+    Option ValidatorIndex :=
+  -- EIP-7917: the lookahead holds the proposers of two epochs, from the current epoch's start.
+  if currentEpochStart state ≤ slot.toNat ∧
+      slot.toNat < currentEpochStart state + 2 * preset.SLOTS_PER_EPOCH.toNat then
+    -- The proposer of slot s is at index s minus the first slot of the current epoch.
+    (state.proposerLookahead fulu)[slot.toNat - currentEpochStart state]?
+  else none
+
 /-- The signature domain of a kind of message in an epoch, by default the epoch of the state.
 
 Before the epoch of the latest fork of the state, the previous fork version applies. -/

@@ -16,7 +16,7 @@ The rule is in the [validator document], and the compressed form in [RFC 5952] s
 
 The URL is read by a part of the grammar of [RFC 3986] section 3, which SOUNDNESS.md lists.
 
-[validator document]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/validator.md#default-auth-data
+[validator document]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/validator.md#default-auth-data
 [RFC 5952]: https://www.rfc-editor.org/rfc/rfc5952#section-4
 [RFC 3986]: https://www.rfc-editor.org/rfc/rfc3986#section-3
 -/

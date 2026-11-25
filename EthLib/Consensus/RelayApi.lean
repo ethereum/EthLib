@@ -45,8 +45,8 @@ This library writes each timestamp in decimal, as the example of [`misc.yaml`] d
 Delivered payloads may also be sorted by value, lowest or highest first, as [`misc.yaml`] says.
 
 [submission endpoint]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/blocks.yaml
-[Deneb relaying rules]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#bidding
-[Electra bid]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/electra/builder.md#builderbid
+[Deneb relaying rules]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#bidding
+[Electra bid]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/electra/builder.md#builderbid
 [`validators.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/validators.yaml
 [`responses.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
@@ -160,23 +160,6 @@ def scheduledEntries (schedule : Slot → Option ValidatorIndex)
       -- Each entry includes the slot and the validator with the duty.
       some ⟨slot, index, entry⟩
     else none
-
-/-- The key of the validator at an index of a state, if there is one. -/
-def validatorPubkey? (state : BeaconState preset fork) (index : ValidatorIndex) :
-    Option BLSPubkey :=
-  state.validators.data[index.toNat]?.map (·.pubkey)
-
-/-- From Fulu: the proposer of a slot of the current or next epoch, by the lookahead of a state.
-
-Other slots, and slots past the end of the lookahead, have none. -/
-def lookaheadSchedule (state : BeaconState preset fork) (fulu : .fusaka ≤ fork) (slot : Slot) :
-    Option ValidatorIndex :=
-  -- EIP-7917: the lookahead holds the proposers of two epochs, from the current epoch's start.
-  if currentEpochStart state ≤ slot.toNat ∧
-      slot.toNat < currentEpochStart state + 2 * preset.SLOTS_PER_EPOCH.toNat then
-    -- The proposer of slot s is at index s minus the first slot of the current epoch.
-    (state.proposerLookahead fulu)[slot.toNat - currentEpochStart state]?
-  else none
 
 /-- From Fulu: the list of validators that a relay serves, by the lookahead of its state.
 

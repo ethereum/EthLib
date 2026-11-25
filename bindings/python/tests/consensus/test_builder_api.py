@@ -95,9 +95,9 @@ def _builder_domain(version: bytes | None = None) -> bytes:
     return bytes([0, 0, 0, 1]) + fork_data_root[:28]
 
 
-def _sign(message_root: bytes, domain: bytes) -> bytes:
-    """The signature of the secret key of the test over a root, under a domain."""
-    return G2ProofOfPossession.Sign(SECRET_KEY, _sha(message_root + domain))
+def _sign(message_root: bytes, domain: bytes, secret_key: int = SECRET_KEY) -> bytes:
+    """The signature of a secret key, by default that of the test, over a root, under a domain."""
+    return G2ProofOfPossession.Sign(secret_key, _sha(message_root + domain))
 
 
 @pytest.mark.parametrize("source", VERSIONS)
@@ -515,13 +515,15 @@ def _auth_domain(kind: bytes = bytes([11, 0, 0, 1])) -> bytes:
     return kind + _builder_domain()[4:]
 
 
-def _signed_auth(message: bytes | None = None, domain: bytes | None = None) -> bytes:
-    """Request authentication signed by the test key under the requested domain."""
+def _signed_auth(
+    message: bytes | None = None, domain: bytes | None = None, secret_key: int = SECRET_KEY
+) -> bytes:
+    """Request authentication signed by a key, by default the test key, under a domain."""
     if message is None:
         message = _auth_message()
     if domain is None:
         domain = _auth_domain()
-    return struct.pack("<I", 4 + 96) + _sign(_auth_root(message), domain) + message
+    return struct.pack("<I", 4 + 96) + _sign(_auth_root(message), domain, secret_key) + message
 
 
 @pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
@@ -792,6 +794,83 @@ def test_preferences_pinned_example():
         "slot_passed",
         "bad_signature",
     ]
+
+
+# A pinned minimal Gloas state, whose lookahead names the proposers of two epochs.
+GLOAS_STATE = (
+    Path(__file__).resolve().parents[4]
+    / "tests/consensus/fork_choice/minimal/gloas/fork_choice/ex_ante/pyspec_tests/ex_ante_vanilla"
+    / "anchor_state.ssz_snappy"
+)
+# The minimal configuration, with the mainnet genesis fork version that signs the requests here.
+MINIMAL_CONFIG = {"GENESIS_FORK_VERSION": consensus.config("mainnet")["GENESIS_FORK_VERSION"]}
+
+
+def _gloas_lookahead() -> tuple[bytes, int, list[int], list[str]]:
+    """The pinned Gloas state, the first slot of its epoch, its lookahead and its validator keys."""
+    state = snappy.decompress(GLOAS_STATE.read_bytes())
+    document = consensus.api_json("minimal", "glamsterdam", "BeaconState", state)
+    slots_per_epoch = int(consensus.preset("minimal")["SLOTS_PER_EPOCH"])
+    start = int(document["slot"]) // slots_per_epoch * slots_per_epoch
+    lookahead = [int(index) for index in document["proposer_lookahead"]]
+    keys = [validator["pubkey"] for validator in document["validators"]]
+    return state, start, lookahead, keys
+
+
+def _state_preferences_failures(state: bytes, request: bytes, pubkey: bytes) -> list[str]:
+    """The failed checks of preferences by a builder that knows the lookahead of a Gloas state."""
+    return consensus.builder_preferences_failures(
+        "minimal", "glamsterdam", AGREED, 0, pubkey, "gloas", request, MINIMAL_CONFIG, state
+    )
+
+
+def test_preferences_from_the_proposer():
+    # The test keys of the state: validator i has the secret key i + 1.
+    state, start, lookahead, keys = _gloas_lookahead()
+    slot = start + 3
+    index = lookahead[3]
+    pubkey = G2ProofOfPossession.SkToPk(index + 1)
+    assert "0x" + pubkey.hex() == keys[index]
+    signed = _signed_auth(_auth_message(slot=slot), secret_key=index + 1)
+    assert _state_preferences_failures(state, _preferences_request(signed), pubkey) == []
+
+
+def test_preferences_from_another_validator():
+    # The proposer at offset 3 signs for the first slot, which another validator proposes.
+    state, start, lookahead, _ = _gloas_lookahead()
+    index = lookahead[3]
+    assert lookahead[0] != index
+    pubkey = G2ProofOfPossession.SkToPk(index + 1)
+    signed = _signed_auth(_auth_message(slot=start), secret_key=index + 1)
+    assert _state_preferences_failures(state, _preferences_request(signed), pubkey) == [
+        "not_proposer"
+    ]
+
+
+def test_preferences_not_from_the_proposer():
+    # The test key is not a key of the state, so it proposes at no slot of the lookahead.
+    state, start, lookahead, _ = _gloas_lookahead()
+    for offset in (0, len(lookahead) - 1):
+        request = _preferences_request(_signed_auth(_auth_message(slot=start + offset)))
+        assert _state_preferences_failures(state, request, PUBKEY) == ["not_proposer"]
+        # A builder that knows no state skips the check, which the source makes a SHOULD.
+        args = ("minimal", "glamsterdam", AGREED, 0, PUBKEY, "gloas", request, MINIMAL_CONFIG)
+        assert consensus.builder_preferences_failures(*args) == []
+
+
+def test_preferences_beyond_the_lookahead():
+    # The lookahead names no proposer past the next epoch, so no key fails there.
+    state, start, lookahead, _ = _gloas_lookahead()
+    request = _preferences_request(_signed_auth(_auth_message(slot=start + len(lookahead))))
+    assert _state_preferences_failures(state, request, PUBKEY) == []
+
+
+def test_preferences_malformed_state():
+    # A minimal Gloas state has 14405 bytes before its variable parts.
+    message = "state rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 14405 0"
+    with raises(ERROR, message) as info:
+        _state_preferences_failures(b"", _preferences_request(_signed_auth()), PUBKEY)
+    assert info.value.code == 4
 
 
 def test_request_checks_malformed_body():

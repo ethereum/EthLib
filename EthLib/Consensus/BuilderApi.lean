@@ -42,9 +42,9 @@ Its [Gloas signing] rules add the second domain.
 
 A proposer counts a bid's execution payment up to its own cap, as the [Gloas valuation] rules say.
 
-[signing]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#signing
-[Gloas signing]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md#signing
-[Gloas valuation]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md#max_execution_payment
+[signing]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/builder.md#signing
+[Gloas signing]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/builder.md#signing
+[Gloas valuation]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/builder.md#max_execution_payment
 -/
 
 @[expose] public section
@@ -124,7 +124,7 @@ def BlindedBeaconBlock.unblind (block : BlindedBeaconBlock preset fork)
 
 The [builder specification] has the proposer assemble the full block this way.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/validator.md#block-proposal
+[builder specification]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/validator.md#block-proposal
 -/
 def SignedBlindedBeaconBlock.unblind (signed : SignedBlindedBeaconBlock preset fork)
     (range : HasBuilderApi fork) (payload : ExecutionPayload preset fork) :
@@ -215,7 +215,7 @@ The [builder specification] gives the check, from the state of the builder.
 
 It fails when the proposer, its validator, the domain or the signing root fails.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#blinded-block-processing
+[builder specification]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/builder.md#blinded-block-processing
 -/
 def verifyBlindedBlockSignature (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (signed : SignedBlindedBeaconBlock preset fork) :

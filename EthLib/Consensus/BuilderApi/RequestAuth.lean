@@ -7,26 +7,16 @@ public import EthLib.Consensus.BuilderApi.Encoding
 /-!
 # `Consensus.BuilderApi.RequestAuth`
 
-From Gloas, a proposer authenticates its requests to a builder with a signed message.
-
-The message holds data that the proposer agreed with the builder, and the slot of the proposal.
-
-A builder checks the version header, the data, the slot and the signature of each request.
-
-These are the checks of the authentication.
-
-The source also refuses a malformed body and a request without its timing headers, outside them.
-
-A builder should keep the preferences that it accepts, and must honor their cap in its bids.
+From Gloas, a proposer authenticates its requests to a builder, which keeps its preferences.
 
 The [builder specification] gives the rules for [preferences] and for [bid requests].
 
 Its [validator document] gives the authentication data.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md
-[preferences]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md#builder-preferences
-[bid requests]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md#per-request-validator-inputs
-[validator document]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/validator.md#constructing-the-builderrequestauth
+[builder specification]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/builder.md
+[preferences]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/builder.md#builder-preferences
+[bid requests]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/builder.md#per-request-validator-inputs
+[validator document]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/validator.md#constructing-the-builderrequestauth
 -/
 
 @[expose] public section
@@ -47,6 +37,10 @@ inductive AuthFailure where
   | slotMismatch
   /-- The slot of the authentication is before the builder's current slot. -/
   | slotPassed
+  /-- The builder knows another proposer for the slot, as from the lookahead of its state.
+
+  The source makes this check a SHOULD, so a builder that skips it still conforms. -/
+  | notProposer
   /-- The signature does not verify against the key of the path. -/
   | badSignature
   deriving DecidableEq, Repr
@@ -100,23 +94,43 @@ The agreed data is the data agreed out of band, or by default the data from the 
 def authFailures (config : Config) (checks : SignatureChecks) (agreed : ByteArray)
     (pathSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
     (auth : SignedBuilderRequestAuth) : Except Err (List AuthFailure) := do
+  -- The source also refuses a malformed body and a request without its timing headers.
+  --
+  -- Those rules are outside these checks.
   let signature ← signatureFailures config checks pubkey auth
   -- The version header, then the data.
   return headerFailures versionHeader ++ dataFailures agreed auth.message ++
     -- The slot of the authentication matches the slot of the path.
     (if auth.message.slot = pathSlot then [] else [.slotMismatch]) ++ signature
 
-/-- From Gloas: every check that fails on a request that submits preferences. -/
+/-- From Gloas: the key of the proposer of a slot, by the lookahead of the builder's state.
+
+A slot outside the current and next epoch of the state has none.
+
+Neither has a slot whose proposer is not in the registry, which a valid state never holds. -/
+def lookaheadProposerKey {preset : Preset} {fork : Fork} (state : BeaconState preset fork)
+    (gloas : .glamsterdam ≤ fork) (slot : Slot) : Option BLSPubkey :=
+  lookaheadSchedule state (Nat.le_trans (by decide) gloas) slot >>= validatorPubkey? state
+
+/-- From Gloas: every check that fails on a request that submits preferences.
+
+The builder knows the key of the proposer of some slots, and none of the others.
+
+A builder that skips the check of the proposer knows none. -/
 def preferencesFailures (config : Config) (checks : SignatureChecks) (agreed : ByteArray)
-    (currentSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
-    (request : BuilderPreferencesRequest) : Except Err (List AuthFailure) := do
+    (currentSlot : Slot) (proposerOf : Slot → Option BLSPubkey) (pubkey : BLSPubkey)
+    (versionHeader : Option String) (request : BuilderPreferencesRequest) :
+    Except Err (List AuthFailure) := do
+  let slot := request.auth.message.slot
   let signature ← signatureFailures config checks pubkey request.auth
   -- The version header, then the data.
   return headerFailures versionHeader ++ dataFailures agreed request.auth.message ++
     -- The slot of the authentication has not already passed.
     --
     -- The source defines a passed slot no more precisely, and EthLib takes one before the current.
-    (if request.auth.message.slot < currentSlot then [.slotPassed] else []) ++ signature
+    (if slot < currentSlot then [.slotPassed] else []) ++
+    -- The builder knows no other proposer for the slot.
+    (if (proposerOf slot).all (· = pubkey) then [] else [.notProposer]) ++ signature
 
 /-- Whether a status may answer a request whose checks of the authentication fail as listed.
 
@@ -132,11 +146,9 @@ instance (failures : List AuthFailure) (status : Nat) :
     Decidable (AllowedStatus failures status) := by
   unfold AllowedStatus; infer_instance
 
-/-- The preferences that a builder keeps, by the key of the proposer and the slot.
+/-- The preferences that a builder should keep, by the key of the proposer and the slot.
 
-A later entry for the same key and slot comes first, and hides the earlier one.
-
-The source says that a builder should keep them, and does not say which of two submissions wins. -/
+The first preferences accepted for a key and slot stay, and later ones are ignored. -/
 structure PreferencesStore where
   /-- The entries, the latest first. -/
   entries : List ((BLSPubkey × Slot) × BuilderPreferences) := []
@@ -151,17 +163,24 @@ def get (store : PreferencesStore) (pubkey : BLSPubkey) (slot : Slot) :
 /-- The store with preferences kept under a key and a slot, ahead of every earlier entry. -/
 def keep (store : PreferencesStore) (pubkey : BLSPubkey) (slot : Slot)
     (preferences : BuilderPreferences) : PreferencesStore :=
-  -- The newest entry first, so that it hides an earlier one for the same key and slot.
+  -- The newest entry first.
+  --
+  -- A submission keeps preferences only for a key and slot with none, so nothing is hidden.
   ⟨((pubkey, slot), preferences) :: store.entries⟩
 
 /-- From Gloas: the store after a request that submits preferences under the key of its path. -/
 def submit (store : PreferencesStore) (config : Config) (checks : SignatureChecks)
-    (agreed : ByteArray) (currentSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
-    (request : BuilderPreferencesRequest) : Except Err PreferencesStore := do
-  let failures ← preferencesFailures config checks agreed currentSlot pubkey versionHeader request
+    (agreed : ByteArray) (currentSlot : Slot) (proposerOf : Slot → Option BLSPubkey)
+    (pubkey : BLSPubkey) (versionHeader : Option String) (request : BuilderPreferencesRequest) :
+    Except Err PreferencesStore := do
+  let slot := request.auth.message.slot
+  let failures ←
+    preferencesFailures config checks agreed currentSlot proposerOf pubkey versionHeader request
   -- When no check fails, the store keeps the preferences per proposer and per slot.
-  return if failures = [] then
-    store.keep pubkey request.auth.message.slot request.preferences
+  --
+  -- A submission for a key and slot already kept is ignored, and still answered with 202.
+  return if failures = [] ∧ store.get pubkey slot = none then
+    store.keep pubkey slot request.preferences
   -- Otherwise the store is unchanged.
   else store
 

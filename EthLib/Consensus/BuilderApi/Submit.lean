@@ -20,7 +20,7 @@ The signature checks are an argument, and the source asks for BLS checks, which 
 
 The transition checks the signature of the proposer, which the [builder specification] asks for.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#blinded-block-processing
+[builder specification]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/builder.md#blinded-block-processing
 -/
 
 @[expose] public section
@@ -37,8 +37,8 @@ variable {preset : Preset} {fork : Fork}
 
 [`blinded_blocks_v2.yaml`][v2] answers 202, and the builder publishes the block itself.
 
-[v1]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/blinded_blocks.yaml
-[v2]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/blinded_blocks_v2.yaml
+[v1]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/blinded_blocks.yaml
+[v2]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/blinded_blocks_v2.yaml
 -/
 inductive SubmitVersion where
   /-- The first endpoint, which answers with the payload. -/
