@@ -590,6 +590,33 @@ theorem foldlM_applyAuthorization_keeps {address : Address} {code : ByteArray}
     exact ⟨haccount'.trans haccount, fun key => (hstorage' key).trans (hstorage key),
       fun key => (htransient' key).trans (htransient key), hsame ▸ hcode''⟩
 
+/-! ## The accessed addresses -/
+
+/-- An authorization that succeeds keeps every accessed address. -/
+theorem mem_accessed_applyAuthorization {address : Address}
+    (h : applyAuthorization fork chainId done auth = .ok done') (mem : address ∈ done.accessed) :
+    address ∈ done'.accessed := by
+  rcases applyAuthorization_cases h with
+    rfl | ⟨authority, -, -, ⟨-, rfl⟩ | ⟨-, paid, state, refund, hpay, -, rfl⟩⟩
+  · exact mem
+  · exact Std.ExtTreeSet.mem_insert.mpr (.inr mem)
+  · -- The payment keeps the accesses, which already hold the authority.
+    show address ∈ paid.accessed
+    rw [(state_payAuthorization hpay).2.1]
+    exact Std.ExtTreeSet.mem_insert.mpr (.inr mem)
+
+/-- The authorizations of a list that succeed keep every accessed address. -/
+theorem mem_accessed_foldlM_applyAuthorization {address : Address} :
+    ∀ {auths : List Authorization} {start done : Delegations Meter},
+      auths.foldlM (applyAuthorization fork chainId) start = .ok done →
+      address ∈ start.accessed → address ∈ done.accessed
+  | [], _, _, h, mem => by
+    cases h
+    exact mem
+  | _ :: _, _, _, h, mem => by
+    obtain ⟨next, hnext, h⟩ := bind_ok_iff.mp h
+    exact mem_accessed_foldlM_applyAuthorization h (mem_accessed_applyAuthorization hnext mem)
+
 /-! ## The meter up to BPO5 -/
 
 /-- Up to BPO5, an authorization keeps the meter. -/

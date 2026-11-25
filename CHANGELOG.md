@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `accessStorageKey_fst_of_mem_accesses` (`Execution/Proofs/Transactions/AccessListWarm.lean`) says that a slot of the access list of a transaction is warm in every frame that its message reaches ([#4569](https://github.com/ethereum/EthLib/pull/4569)).
+  That holds at any depth and after any call that failed, so SLOAD and SSTORE price it as warm there.
+  `accessAddress_fst_of_mem_accesses` says the same of an address of the access list.
+  `RunReaches.accessesLe` and `RunBurns.accessesLe` (`Execution/Proofs/Evm/Call/AccessesRun.lean`) say that every frame a run reaches, and the frame it ends in, hold every access of its start.
+
 - In Lean, `processMessage_accessesLe` (`Execution/Proofs/Evm/Call/AccessesGrow.lean`) says that every call and creation ends with every access of the substate it is sent with ([#4568](https://github.com/ethereum/EthLib/pull/4568)).
   That holds whether its frame fails or not.
   `Substate.AccessesLe` (`Execution/Proofs/Evm/Instructions/Static.lean`) is the relation: one substate holds every accessed address and storage key of another.
