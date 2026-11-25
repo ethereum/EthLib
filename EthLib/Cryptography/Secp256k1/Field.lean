@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Pow
+
 /-!
 # `Secp256k1.Field`
 
@@ -44,29 +46,17 @@ abbrev Fp :=
 The private key and the integers `r` and `s` of a signature live in it. -/
 abbrev Fn := Fin Fn.modulus
 
-/-- `a^e` in `Fin m`, for `e < 2^fuel`, by square and multiply.
-
-Each step reads the low bit of `e`, then squares the base for the next bit.
-
-It recurses on `fuel`, so the kernel can run it. -/
-def Fin.powBits {m : Nat} [NeZero m] : Nat → Fin m → Nat → Fin m
-  | 0, _, _ => 1
-  | fuel + 1, a, e =>
-    -- `a^e = a^(e mod 2) * (a^2)^(e / 2)`.
-    let half := Fin.powBits fuel (a * a) (e / 2)
-    if e % 2 = 1 then a * half else half
-
 namespace Fp
 
 /-- `a^e`, for an exponent below `2^256`. -/
-def pow (a : Fp) (e : Nat) : Fp := Fin.powBits 256 a e
+def pow (a : Fp) (e : Nat) : Fp := Base.powBits 256 a e
 
 end Fp
 
 namespace Fn
 
 /-- `a^e`, for an exponent below `2^256`. -/
-def pow (a : Fn) (e : Nat) : Fn := Fin.powBits 256 a e
+def pow (a : Fn) (e : Nat) : Fn := Base.powBits 256 a e
 
 end Fn
 

@@ -192,11 +192,6 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 
 @[simp] theorem toZMod_sub (a b : Fp) : toZMod (a - b) = toZMod a - toZMod b := rfl
 
-/-- Square and multiply computes `a^e`, for an exponent below `2^256`. -/
-theorem toZMod_powBits (a : Fp) (e : Nat) (he : e < 2 ^ 256) :
-    toZMod (Secp256k1.Fin.powBits 256 a e) = toZMod a ^ e :=
-  Secp256k1.Fin.powBits_eq_pow 256 a e he
-
 /-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
 @[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ :=
   Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a

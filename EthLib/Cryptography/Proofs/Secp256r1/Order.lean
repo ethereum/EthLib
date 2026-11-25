@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Pow
 public import EthLib.Cryptography.Proofs.Secp256r1.Curve
 public import Mathlib.Algebra.Module.ZMod
 
@@ -65,12 +66,9 @@ private def residueMul (s t : Fp × Fp × Fp) : Fp × Fp × Fp :=
   let c4 := s.2.2 * t.2.2
   (c0 - b * c3, c1 - a * c3 - b * c4, c2 - a * c4)
 
-/-- `s^e` mod `f`, for `e < 2^fuel`, by square and multiply. -/
-private def residuePow : Nat → Fp × Fp × Fp → Nat → Fp × Fp × Fp
-  | 0, _, _ => (1, 0, 0)
-  | fuel + 1, s, e =>
-    let half := residuePow fuel (residueMul s s) (e / 2)
-    if e % 2 = 1 then residueMul s half else half
+/-- `s^e` mod `f`, for `e < 2^fuel`, by square and multiply with the product of residues. -/
+private def residuePow (fuel : Nat) (s : Fp × Fp × Fp) (e : Nat) : Fp × Fp × Fp :=
+  @Base.powBits _ ⟨residueMul⟩ ⟨(1, 0, 0)⟩ fuel s e
 
 /-- The value of a residue at `x`. -/
 private def residueEval (x : ZMod Fp.modulus) (s : Fp × Fp × Fp) : ZMod Fp.modulus :=
@@ -84,22 +82,9 @@ private theorem residueEval_mul {x : ZMod Fp.modulus} (hx : x * x * x + Fp.toZMo
 
 private theorem residueEval_pow {x : ZMod Fp.modulus} (hx : x * x * x + Fp.toZMod a * x + Fp.toZMod b = 0)
     (fuel : Nat) (s : Fp × Fp × Fp) (e : Nat) (he : e < 2 ^ fuel) :
-    residueEval x (residuePow fuel s e) = residueEval x s ^ e := by
-  induction fuel generalizing s e with
-  | zero =>
-    obtain rfl : e = 0 := by simpa using he
-    simp [residuePow, residueEval]
-  | succ fuel ih =>
-    have h2 : e / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at he; omega
-    -- `s^e = s^(e mod 2) * (s^2)^(e / 2)`.
-    simp only [residuePow]
-    split_ifs with h
-    · rw [residueEval_mul hx, ih _ _ h2, residueEval_mul hx, ← pow_two, ← pow_mul, ← pow_succ']
-      congr 1
-      omega
-    · rw [ih _ _ h2, residueEval_mul hx, ← pow_two, ← pow_mul]
-      congr 1
-      omega
+    residueEval x (residuePow fuel s e) = residueEval x s ^ e :=
+  @Base.map_powBits _ _ ⟨residueMul⟩ ⟨(1, 0, 0)⟩ _ (residueEval x) (residueEval_mul hx)
+    (by show residueEval x (1, 0, 0) = 1; simp [residueEval]) fuel s e he
 
 /-- An inverse of `X^p - X` mod `f`, computed outside Lean and checked by the kernel. -/
 private def residueInv : Fp × Fp × Fp :=
