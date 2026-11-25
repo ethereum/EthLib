@@ -5558,13 +5558,13 @@ The model takes that block as finalized when the finalized block that the execut
 The finalized hash of the request itself does not count.
 `forkchoiceUpdated_zero_after_transition` shows that a zero safe or finalized hash then gives `-38002`.
 No step of the method names that error for this case, so the model reads it as an invalid forkchoice state of step 9.
-In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and without payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
+In version 4, custody columns that decode never change the answer (`forkchoiceUpdatedCall_custody`), and with `null` payload attributes every version gives the same answer (`forkchoiceUpdatedCall_of_null`).
 `checkAttributes_eq_ok_iff` states when attributes pass their checks against the head: the version takes their fork, their structure is that of the fork, and their timestamp is above the head's.
 A fork that the version does not take gives `-38005` (`checkAttributes_eq_error_of_unsupportedFork`).
 A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003` (`checkAttributes_eq_error_of_wrong_structure`, `checkAttributes_eq_error_of_not_after_head`).
 When the update applies a valid head, attributes whose fields fit no structure of the version give `-38003` (`forkchoiceUpdatedCall_eq_error_of_attributes`, with `payloadAttributesOfVersion_eq_error_iff` and `payloadAttributesOfJson_wrong_fields`), and when it applies none they are not read (`forkchoiceUpdatedCall_of_no_head`).
 Version 1 names no code for a wrong structure, and the model gives it `-38003`, the answer of its step 9 for invalid attributes.
-The OpenRPC description of the method makes the payload attributes optional, but the model asks for them, as `null` when there are none.
+The OpenRPC description of the method makes the payload attributes optional, and a request without them reads as one with `null` (`forkchoiceUpdatedParams_eq_ok_iff`).
 
 `executionEngine_accepts_iff` (`Proofs/ExecutionEngine.lean`) states when the execution engine accepts a payload request of the beacon chain.
 The request lists must be well formed, and the payload must have a block at the active fork of the chain, which must be before Glamsterdam.

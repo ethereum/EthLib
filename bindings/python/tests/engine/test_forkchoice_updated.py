@@ -316,6 +316,7 @@ def test_invalid_payload_attributes(version: int, attributes: dict[str, object])
 @pytest.mark.parametrize(
     "params",
     [
+        pytest.param([NEW_HEAD], id="no-attributes"),
         pytest.param([NEW_HEAD, None], id="no-custody"),
         pytest.param([NEW_HEAD, None, None], id="null-custody"),
         pytest.param([NEW_HEAD, None, CUSTODY_COLUMNS], id="all-columns"),
@@ -348,6 +349,23 @@ def test_version_4_without_attributes(params: list[object]) -> None:
         )
         == want
     )
+
+
+@pytest.mark.parametrize("version", [1, 2, 3])
+def test_attributes_omitted(version: int) -> None:
+    """A request without the attributes answers as one with `null` attributes."""
+    answers = [
+        engine.forkchoice_updated(
+            CONFIG,
+            TREE,
+            f"engine_forkchoiceUpdatedV{version}",
+            params,
+            terminal_total_difficulty=MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+        )
+        for params in ([NEW_HEAD], [NEW_HEAD, None])
+    ]
+    assert answers[0] == answers[1]
+    assert answers[0]["payloadId"] is None
 
 
 def test_custody_columns_with_invalid_attributes() -> None:
@@ -416,15 +434,16 @@ def test_custody_columns_malformed(custody: object, reason: str) -> None:
 @pytest.mark.parametrize(
     ("version", "params", "reason"),
     [
-        (1, [NEW_HEAD, None, CUSTODY_COLUMNS], "params: got 3, expected 2"),
-        (2, [NEW_HEAD, None, CUSTODY_COLUMNS], "params: got 3, expected 2"),
-        (3, [NEW_HEAD, None, CUSTODY_COLUMNS], "params: got 3, expected 2"),
-        (4, [NEW_HEAD, None, CUSTODY_COLUMNS, None], "params: got 4, expected 2 or 3"),
-        (4, [NEW_HEAD], "params: got 1, expected 2 or 3"),
+        (1, [NEW_HEAD, None, CUSTODY_COLUMNS], "params: got 3, expected 1 or 2"),
+        (2, [NEW_HEAD, None, CUSTODY_COLUMNS], "params: got 3, expected 1 or 2"),
+        (3, [NEW_HEAD, None, CUSTODY_COLUMNS], "params: got 3, expected 1 or 2"),
+        (3, [], "params: got 0, expected 1 or 2"),
+        (4, [NEW_HEAD, None, CUSTODY_COLUMNS, None], "params: got 4, expected 1 to 3"),
+        (4, [], "params: got 0, expected 1 to 3"),
     ],
 )
 def test_wrong_parameter_count(version: int, params: list[object], reason: str) -> None:
-    """Versions 1 to 3 take two parameters, and version 4 two or three."""
+    """Versions 1 to 3 take one or two parameters, and version 4 one to three."""
     with raises(
         engine.EngineError, f'engine error: EthLib.Engine.EngineError.invalidParams "{reason}"'
     ) as error:
