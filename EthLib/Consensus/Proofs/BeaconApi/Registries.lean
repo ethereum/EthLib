@@ -33,10 +33,6 @@ open Base Cryptography.Bls
 
 variable {preset : Preset} {fork : Fork}
 
-/-- A word of 64 bits that comes from a natural number is at most that number. -/
-private theorem toNat_ofNat_le (n : Nat) : (UInt64.ofNat n).toNat ≤ n := by
-  simp [Nat.mod_le]
-
 /-- An index names itself when it is below the size of the registry, and nothing otherwise. -/
 theorem resolveValidatorId_index {state : BeaconState preset fork} {i index : ValidatorIndex} :
     resolveValidatorId state (.index i) = some index ↔
@@ -100,7 +96,7 @@ private theorem mem_selectIndices {size : Nat} {resolve : ValidatorId → Option
       or_false, true_and, exists_false, false_and]
     constructor
     · rintro ⟨n, hn, rfl⟩
-      have := toNat_ofNat_le n
+      have := UInt64.toNat_ofNat_le (n := n)
       omega
     · intro h
       have := index.toNat_lt_size
