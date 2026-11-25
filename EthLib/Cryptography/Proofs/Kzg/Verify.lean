@@ -195,7 +195,9 @@ Let `z` be the evaluation challenge of the blob and the commitment.
 
 Then `c - p(z) = w (τ - z)` for the interpolant `p` of `poly`. -/
 def BlobOpeningValid (τ : Fr) (blob : Blob) (commitment proof : Bytes48) : Prop :=
+  -- The blob decodes to values `poly`.
   ∃ poly C c P w, blobToPolynomial blob = .ok poly ∧
+    -- The commitment and the proof pass KZG validation, as points that represent `c` and `w`.
     validateKzgG1Point commitment = .ok C ∧ G1.Represents C c ∧
     validateKzgG1Point proof = .ok P ∧ G1.Represents P w ∧
     c - (interpolant poly).eval (computeChallenge blob ⟨commitment⟩) =

@@ -11,19 +11,15 @@ set_option autoImplicit false
 
 Group elements carry polynomial representations before a hash query is answered.
 
-This is the algebraic algorithm interface of Fuchsbauer, Kiltz and Loss, §2.1, Definition 1.
-
-<https://eprint.iacr.org/2017/620>
+This is the algebraic algorithm interface of [Fuchsbauer, Kiltz and Loss][agm], §2.1, Definition 1.
 
 The hash is one typed, domain-separated random oracle with uniform values in `Fr`.
-
-Polynomial annotations are not part of its key, so repeated protocol inputs share an answer.
-
-Batch queries contain one list of openings, so their four arrays have the same length.
 
 This model idealizes the input encodings and SHA-256 reduced modulo `r`.
 
 The latter distribution is not uniform, as SOUNDNESS.md A4 explains.
+
+[agm]: https://eprint.iacr.org/2017/620
 -/
 
 @[expose] public section
@@ -74,6 +70,7 @@ def Opening.toBatch (openings : List Opening) : OpeningBatch :=
 /-- The two protocol input domains, without algebraic annotations. -/
 inductive HashKey where
   | blob (blob : Blob) (commitment : Bytes48)
+  /-- Batch queries contain one list of openings, so their four arrays have the same length. -/
   | batch (openings : List OpeningData)
 deriving DecidableEq
 
@@ -82,7 +79,9 @@ inductive Request where
   | blob (blob : Blob) (commitment : AlgebraicPoint)
   | batch (openings : List Opening)
 
-/-- Remove the extraction metadata from the input of the random oracle. -/
+/-- Remove the extraction metadata from the input of the random oracle.
+
+Polynomial annotations are not part of the key, so repeated protocol inputs share an answer. -/
 def Request.key : Request → HashKey
   | .blob b commitment => .blob b commitment.bytes
   | .batch openings => .batch (openings.map Opening.data)

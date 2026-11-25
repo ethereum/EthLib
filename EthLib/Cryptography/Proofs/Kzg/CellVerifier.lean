@@ -308,7 +308,11 @@ The cells, their values and the proofs are as many as the commitment indices.
 
 Each commitment index names a commitment, and no commitment repeats.
 
-The commitments and the proofs decode, each cell index is below 128, and each cell has 64 values.
+The commitments and the proofs decode.
+
+Each cell index is below 128.
+
+Each cell has 64 values.
 
 Then the core check returns a verdict, with no error. -/
 theorem verifyCellKzgProofBatchImpl_ok {s : TrustedSetup} {commitments : Array KZGCommitment}
@@ -318,6 +322,11 @@ theorem verifyCellKzgProofBatchImpl_ok {s : TrustedSetup} {commitments : Array K
     (h₂ : cosetsEvals.size = commitmentIndices.size) (h₃ : proofs.size = commitmentIndices.size)
     (h₄ : ∀ i ∈ commitmentIndices, i < commitments.size)
     (h₅ : (commitments.zipIdx.any fun (c, i) => commitments.idxOf? c ≠ some i) = false)
+    -- The commitments and the proofs decode.
+    --
+    -- Each cell index is below 128.
+    --
+    -- Each cell has 64 values.
     (hG : commitments.mapM (uncompressG1 ·.bytes) = .ok G) (hQ : proofs.mapM uncompressG1 = .ok Q)
     (hci : ∀ i ∈ cellIndices, i < CELLS_PER_EXT_BLOB)
     (hev : ∀ e ∈ cosetsEvals, e.size = FIELD_ELEMENTS_PER_CELL) :
@@ -448,6 +457,7 @@ theorem verifyCellKzgProofBatch_exists_ok {s : TrustedSetup} {bs : Array Bytes48
     {cellIndices : Array CellIndex} {cells : Array Cell} {ps : Array Bytes48}
     (h₁ : cells.size = bs.size) (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
     (hci : ∀ i ∈ cellIndices, i < CELLS_PER_EXT_BLOB)
+    -- Each commitment and each proof passes KZG validation.
     (hbs : ∀ b ∈ bs, validateKzgG1 b = true) (hps : ∀ p ∈ ps, validateKzgG1 p = true)
     (hcells : ∀ c ∈ cells, ∃ e, cellToCosetEvals c = .ok e) :
     ∃ b, verifyCellKzgProofBatch s bs cellIndices cells ps = .ok b := by
@@ -591,10 +601,13 @@ Let the outer check return the verdict `b`.
 Then `b` is true exactly when the challenge is a root of the error polynomial of the batch. -/
 theorem verifyCellKzgProofBatch_ok_iff_root {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) (y : CellBatchInput) {c w : Bytes48 → Fr}
+    -- Each commitment that decodes gives a point that represents the scalar `c` of its bytes.
     (hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
       G1.Represents P (c y.commitments[k]!))
+    -- Each proof that decodes gives a point that represents the scalar `w` of its bytes.
     (hP : ∀ k < y.proofs.size, ∀ P, uncompressG1 y.proofs[k]! = .ok P →
       G1.Represents P (w y.proofs[k]!)) {b : Bool}
+    -- The outer check returns the verdict `b`.
     (h : verifyCellKzgProofBatch s y.commitments y.cellIndices y.cells y.proofs = .ok b) :
     b = true ↔ (y.toCellBatch.errorPoly τ c w).eval y.toCellBatch.challenge = 0 := by
   obtain ⟨-, -, -, -, evals, hev, hI⟩ := verifyCellKzgProofBatch_eq_ok h
@@ -633,8 +646,10 @@ If the outer check accepts, then every cell is valid for its own commitment.
 Otherwise the error polynomial of the batch is not zero, and the challenge is one of its roots. -/
 theorem verifyCellKzgProofBatch_valid_or_root {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) (y : CellBatchInput) {c w : Bytes48 → Fr}
+    -- Each commitment that decodes gives a point that represents the scalar `c` of its bytes.
     (hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
       G1.Represents P (c y.commitments[k]!))
+    -- Each proof that decodes gives a point that represents the scalar `w` of its bytes.
     (hP : ∀ k < y.proofs.size, ∀ P, uncompressG1 y.proofs[k]! = .ok P →
       G1.Represents P (w y.proofs[k]!))
     (h : verifyCellKzgProofBatch s y.commitments y.cellIndices y.cells y.proofs = .ok true) :
@@ -661,9 +676,13 @@ theorem verifyCellKzgProofBatch_valid_or_root {s : TrustedSetup}
 
 Take a model of the target group and a well-formed setup of the secret `τ`.
 
-Let the scalars `c` and `w` be as in the previous theorem, and let the outer check accept.
+Let each commitment decode to a point that represents the scalar `c` of its bytes.
 
-Let two cells of the batch have one cell index, and commitments with one scalar.
+Let each proof decode to a point that represents the scalar `w` of its bytes.
+
+Let the outer check accept.
+
+Let two of its cells have one cell index, and commitments of one scalar.
 
 Let their proofs decode to `P` and `P'`.
 
@@ -675,14 +694,19 @@ Then one of three cases holds.
 theorem verifyCellKzgProofBatch_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
     {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
     (y : CellBatchInput) {c w : Bytes48 → Fr}
+    -- Each commitment that decodes gives a point that represents the scalar `c` of its bytes.
     (hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
       G1.Represents P (c y.commitments[k]!))
+    -- Each proof that decodes gives a point that represents the scalar `w` of its bytes.
     (hP : ∀ k < y.proofs.size, ∀ P, uncompressG1 y.proofs[k]! = .ok P →
       G1.Represents P (w y.proofs[k]!))
+    -- The outer check accepts.
     (h : verifyCellKzgProofBatch s y.commitments y.cellIndices y.cells y.proofs = .ok true)
+    -- Two cells of the batch have one cell index, and commitments with one scalar.
     {k k' : Nat} (hk : k < y.cells.size) (hk' : k' < y.cells.size)
     (hc : c y.commitments[k]! = c y.commitments[k']!)
     (hj : y.cellIndices[k]! = y.cellIndices[k']!) {P P' : G1}
+    -- Their proofs decode to `P` and `P'`.
     (hPk : uncompressG1 y.proofs[k]! = .ok P) (hPk' : uncompressG1 y.proofs[k']! = .ok P') :
     y.cells[k]! = y.cells[k']! ∨
       (∃ sol, findBsdh M s y.cellIndices[k]! y.toCellBatch.cosetsEvals[k]!
@@ -731,7 +755,7 @@ The adversary makes `q` queries, then outputs the inputs of an outer batch of at
 
 The event is that the challenge of that batch is a root of its error polynomial, which is not zero.
 
-Its probability is at most `(q + 1) (n - 1) / r`.
+Its probability is at most `(q + 1) (n - 1) / r`, where `r` is the order of `Fr`.
 
 The event does not ask that the check accepts.
 

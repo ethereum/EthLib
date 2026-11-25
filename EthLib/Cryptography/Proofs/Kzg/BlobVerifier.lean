@@ -7,24 +7,17 @@ public import EthLib.Cryptography.Proofs.Kzg.BatchChallenge
 /-!
 # Proofs: the batch check of blob openings
 
-The batch check of blobs takes triples of a blob, a commitment and a proof, as bytes.
-
-For each triple in turn, it validates the commitment, decodes the blob and validates the proof.
-
-It evaluates each decoded blob at its evaluation challenge.
-
-It then runs the batch check of openings on these points, evaluation challenges and values.
-
 Each root below is a root of the error polynomial of the batch.
 
 - On well-formed inputs of one size, the batch check of blobs returns a verdict, with no error.
 - The empty batch verifies, for every setup.
 - For a well-formed setup, the verdict is true exactly when the batch challenge is a root.
-- Every entry of an accepted batch satisfies the opening equation, or the batch challenge is a root.
+- An accepted batch is valid, or its batch challenge is a root.
 - With the hash a random oracle, the root case has probability at most `(q + 1) (n - 1) / r`.
   Here `q` bounds the queries, `n` the commitments, and `r` is the order of `Fr`.
 - The bound is tight at `q = 0` and `n = 2`, where a batch of two blobs reaches it.
-- Every batch of valid blob openings is accepted, including honestly computed proofs.
+- Every batch of valid blob openings is accepted.
+- Every batch of honestly computed commitments and proofs is accepted.
 -/
 
 @[expose] public section
@@ -329,6 +322,13 @@ theorem verifyBlobKzgProofBatch_eq_ok {s : TrustedSetup} {blobs : Array Blob}
         verifyKzgProofBatch s (commitmentsBytes.map KZGCommitment.mk) commitmentsG1 y.challenges
           y.evals proofsBytes proofsG1 = .ok b := by
   intro y
+  -- The batch check of blobs takes triples of a blob, a commitment and a proof, as bytes.
+  --
+  -- For each triple in turn, it validates the commitment, decodes the blob and validates the proof.
+  --
+  -- It evaluates each decoded blob at its evaluation challenge.
+  --
+  -- It then runs the batch check of openings on these points, evaluation challenges and values.
   unfold verifyBlobKzgProofBatch at h
   by_cases hc : commitmentsBytes.size ≠ blobs.size
   · rw [ite_eq_left hc] at h
@@ -439,10 +439,13 @@ Let the batch check of blobs return the verdict `b`.
 Then `b` is true exactly when the batch challenge is a root of the error polynomial of the batch. -/
 theorem verifyBlobKzgProofBatch_ok_iff_root {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) (y : BlobBatchInput) {c w : Bytes48 → Fr}
+    -- Each commitment that decodes gives a point that represents the scalar `c` of its bytes.
     (hC : ∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
       G1.Represents P (c y.commitments[i]!))
+    -- Each proof that decodes gives a point that represents the scalar `w` of its bytes.
     (hP : ∀ i < y.proofs.size, ∀ P, uncompressG1 y.proofs[i]! = .ok P →
       G1.Represents P (w y.proofs[i]!)) {b : Bool}
+    -- The batch check of blobs returns the verdict `b`.
     (h : verifyBlobKzgProofBatch s y.blobs y.commitments y.proofs = .ok b) :
     b = true ↔ (y.errorPoly τ c w).eval y.challenge = 0 := by
   obtain ⟨-, -, -, csG1, psG1, hcsG1, hpsG1, hbatch⟩ := verifyBlobKzgProofBatch_eq_ok h
@@ -480,10 +483,13 @@ Each entry also passes the check of one blob.
 Otherwise the error polynomial of the batch is not zero, and the batch challenge is a root of it. -/
 theorem verifyBlobKzgProofBatch_valid_or_root {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) (y : BlobBatchInput) {c w : Bytes48 → Fr}
+    -- Each commitment that decodes gives a point that represents the scalar `c` of its bytes.
     (hC : ∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
       G1.Represents P (c y.commitments[i]!))
+    -- Each proof that decodes gives a point that represents the scalar `w` of its bytes.
     (hP : ∀ i < y.proofs.size, ∀ P, uncompressG1 y.proofs[i]! = .ok P →
       G1.Represents P (w y.proofs[i]!))
+    -- The batch check of blobs accepts.
     (h : verifyBlobKzgProofBatch s y.blobs y.commitments y.proofs = .ok true) :
     (∀ i < y.blobs.size,
         c y.commitments[i]! - y.evals[i]! = w y.proofs[i]! * (τ - y.challenges[i]!) ∧
@@ -543,7 +549,7 @@ The adversary makes at most `q` queries, then outputs a batch with at most `n` c
 
 The event is that the batch challenge is a root of a nonzero error polynomial of the batch.
 
-Its probability is at most `(q + 1) (n - 1) / r`.
+Its probability is at most `(q + 1) (n - 1) / r`, where `r` is the order of `Fr`.
 
 An accepted batch runs on inputs of one size, so `n` bounds the number of blobs as well.
 
@@ -587,6 +593,7 @@ Let every entry be a valid blob opening at `τ`.
 Then the batch check of blobs accepts. -/
 theorem verifyBlobKzgProofBatch_of_blobOpeningValid {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blobs : Array Blob} {commitments proofs : Array Bytes48}
+    -- The arrays of blobs, commitments and proofs have one size.
     (hc : commitments.size = blobs.size) (hp : proofs.size = blobs.size)
     (hv : ∀ i < blobs.size, BlobOpeningValid τ blobs[i]! commitments[i]! proofs[i]!) :
     verifyBlobKzgProofBatch s blobs commitments proofs = .ok true := by
@@ -641,11 +648,14 @@ Assume a well-formed setup of the secret `τ`.
 
 Take arrays of blobs, commitments and proofs of one size.
 
-Let each commitment and proof come from `blobToKzgCommitment` and `computeBlobKzgProof`.
+Let each commitment be the commitment of its blob.
+
+Let each proof be the blob proof computed from that commitment.
 
 Then the batch check of blobs accepts. -/
 theorem verifyBlobKzgProofBatch_computeBlobKzgProof {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blobs : Array Blob} {commitments proofs : Array Bytes48}
+    -- The arrays of blobs, commitments and proofs have one size.
     (hc : commitments.size = blobs.size) (hp : proofs.size = blobs.size)
     (hhonest : ∀ i < blobs.size, blobToKzgCommitment s blobs[i]! = .ok ⟨commitments[i]!⟩ ∧
       computeBlobKzgProof s blobs[i]! commitments[i]! = .ok proofs[i]!) :
@@ -791,7 +801,9 @@ theorem exists_blobInput_adversary_prEvent_root_eq (τ : Fr) :
       simp
     rw [getElem!_pos y.evals i (by simpa [y, BlobBatchInput.evals] using hi)]
     simp [BlobBatchInput.evals, hdec, hinterp]
-  -- Each entry has the error `1`, so the error polynomial takes the value `1 + r` at `r`.
+  -- With each scalar the scalar of its bytes, each entry has the error `1 - 0 - 0 = 1`.
+  --
+  -- So the error polynomial takes the value `1 + r` at `r`.
   have herr : ∀ r : Fr, (y.errorPoly τ scalarOf scalarOf).eval r = 1 + r := fun r => by
     have hent : ∀ i < 2, openingError τ (scalarOf y.commitments[i]!) y.evals[i]!
         (scalarOf y.proofs[i]!) y.challenges[i]! = 1 := fun i hi => by
@@ -800,10 +812,13 @@ theorem exists_blobInput_adversary_prEvent_root_eq (τ : Fr) :
     rw [BlobBatchInput.errorPoly, eval_batchErrorPoly, show y.commitments.size = 2 from rfl,
       Finset.sum_range_succ, Finset.sum_range_one, hent 0 (by decide), hent 1 (by decide)]
     ring
+  -- So the error polynomial of the batch is `1 + X`, which is not zero and has the root `-1`.
   have hne : y.errorPoly τ scalarOf scalarOf ≠ 0 := fun h0 => by
     simpa [h0] using herr 0
   refine ⟨pure y, y, rfl, trivial, rfl, hC, hP, hne, ?_⟩
   -- The single query of the verifier is fresh, so the batch challenge is uniform.
+  --
+  -- So the event of the bound has probability exactly `1 / r`.
   have hsize : y.commitments.size = 2 := rfl
   clear_value y
   have hiff : ∀ u : Fr, (y.commitments.size ≤ 2 ∧ y.errorPoly τ scalarOf scalarOf ≠ 0 ∧

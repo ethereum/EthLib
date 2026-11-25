@@ -7,67 +7,15 @@ public import EthLib.Cryptography.Proofs.Kzg.Binding
 /-!
 # Proofs: position-binding and code-binding of PeerDAS, as games
 
-Wagner and Zapico prove the security of PeerDAS in the standard model, in ePrint 2025/1683.
+This file states Lemmas 3 and 4 of §3.1 of [ePrint 2025/1683][wz25] as games, and proves them.
 
-<https://eprint.iacr.org/2025/1683>
+Theorem 1 there, the security of PeerDAS as data-availability sampling, is not proved here.
 
-This file states two lemmas of §3.1 there as games, and proves them.
+- [Wagner and Zapico, ePrint 2025/1683][wz25]: the security of PeerDAS in the standard model.
+- [Wagner and Zapico, ePrint 2024/1362][wz24]: Lemma 3 here is Lemma 2 of §3.1 there.
 
-- Lemma 3, position-binding: an adversary opens one cell index to two cells.
-  Then a reduction wins bilinear strong Diffie–Hellman (BSDH) at least as often.
-- Lemma 4, code-binding: an adversary opens cells that no blob explains.
-  Then two reductions win BSDH and adaptive rational strong Diffie–Hellman (ARSDH).
-  The sum of their probabilities bounds the probability of the adversary.
-
-Lemma 3 is Lemma 2 of §3.1 of Wagner and Zapico, ePrint 2024/1362.
-
-<https://eprint.iacr.org/2024/1362>
-
-There, the adversary also receives `[τ^i]_2` for `i ≤ 4095`.
-
-Its reduction reads only `[τ^i]_2` for `i < 64`.
-
-In every game here, the secret `τ` is uniform in `Fr`.
-
-Every adversary receives only `[τ^i]_1` for `i ≤ 4095` and `[τ^i]_2` for `i ≤ 64`.
-
-This is the input of Definitions 1 and 2 of ePrint 2025/1683, with `(d, D) = (4095, 64)`.
-
-The verifier of the games builds the full setup from these points.
-
-It checks each cell alone, with the batch check of cells.
-
-The error polynomial of a batch of one cell is a constant.
-
-A nonzero constant has no root, and the zero constant means that the cell is valid.
-
-So an accepted cell is valid without a random oracle.
-
-Another file states code-binding with one batch check of all opened cells of a commitment.
-
-Each reduction runs the adversary once.
-
-It then runs a search that reads only the setup and the output of the adversary.
-
-The running times of the reductions are not formalized.
-
-That BSDH and ARSDH are hard is a hypothesis of no theorem here.
-
-An adversary is any Lean function, so one that recovers `τ` from its input always wins.
-
-Without a model of cost, hardness cannot be a Lean hypothesis.
-
-The BSDH advantage is relative to a model of the target group.
-
-The real pairing gives such a model.
-
-This verifier accepts the cells and proofs of a blob.
-
-Another file proves it.
-
-Theorem 1 of ePrint 2025/1683 is not proved here.
-
-That theorem is the security of PeerDAS as data-availability sampling.
+[wz25]: https://eprint.iacr.org/2025/1683
+[wz24]: https://eprint.iacr.org/2024/1362
 -/
 
 @[expose] public section
@@ -81,7 +29,12 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial OracleComp ENNReal MeasureTheory
 
-/-! ## Reductions in general -/
+/-! ## Reductions in general
+
+Each reduction runs the adversary once.
+
+It then runs a search that reads only the setup and the output of the adversary.
+-/
 
 /-- **A reduction that wins whenever the adversary wins wins at least as often.**
 
@@ -120,7 +73,20 @@ theorem prEvent_le_add_of_reductions {S I O A B : Type} (sample : ProbComp S) (i
   rw [prEvent_map, prEvent_map]
   exact (prEvent_mono _ _ _ (h s)).trans (prEvent_or_le _ _ _)
 
-/-! ## The assumptions -/
+/-! ## The assumptions
+
+In every game here, the secret `τ` is uniform in `Fr`.
+
+Every adversary receives only `[τ^i]_1` for `i ≤ 4095` and `[τ^i]_2` for `i ≤ 64`.
+
+The running times of the reductions are not formalized.
+
+That BSDH and ARSDH are hard is a hypothesis of no theorem here.
+
+An adversary is any Lean function, so one that recovers `τ` from its input always wins.
+
+Without a model of cost, hardness cannot be a Lean hypothesis.
+-/
 
 /-- **The advantage against `(4095, 64)`-BSDH, Definition 1 of ePrint 2025/1683.**
 
@@ -131,6 +97,9 @@ It wins when it outputs `c ≠ τ` and the element of the target group for `1 / 
 The target group is a model, and the real pairing gives one. -/
 noncomputable def bsdhAdvantage {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
     (adversary : SetupPowers → ProbComp (Fr × GT)) : ℝ≥0∞ :=
+  -- The powers are the input of Definitions 1 and 2 of ePrint 2025/1683.
+  --
+  -- There, `(d, D) = (4095, 64)`.
   Pr{let τ ← $ᵗ Fr; let sol ← adversary (setupPowers τ)}[IsBsdhSolutionSub M τ sol]
 
 /-- **The advantage against `(4095, 64)`-ARSDH, Definition 2 of ePrint 2025/1683.**
@@ -145,7 +114,12 @@ noncomputable def arsdhAdvantage (adversary : SetupPowers → ProbComp (Finset F
   Pr{let τ ← $ᵗ Fr; let sol ← adversary (setupPowers τ)}[
     IsArsdhSolution (FIELD_ELEMENTS_PER_BLOB - 1) τ sol]
 
-/-! ## One cell, checked alone -/
+/-! ## One cell, checked alone
+
+The verifier of the games checks each cell alone, with the batch check of cells.
+
+It builds the full setup from the powers that the adversary receives.
+-/
 
 /-- An opening of one cell: its index, its bytes and the bytes of its proof. -/
 structure CellOpening where
@@ -153,7 +127,9 @@ structure CellOpening where
   cell : Cell
   proof : Bytes48
 
-/-- The verifier accepts the opening for the commitment, as a batch of one cell. -/
+/-- The verifier accepts the opening for the commitment, as a batch of one cell.
+
+This verifier accepts the cells and proofs of a blob, as another file proves. -/
 def CellOpening.Verifies (s : TrustedSetup) (commitment : Bytes48) (o : CellOpening) : Prop :=
   verifyCellKzgProofBatch s #[commitment] #[o.cellIndex] #[o.cell] #[o.proof] = .ok true
 
@@ -251,11 +227,7 @@ The commitment and the proof decode to points that represent scalars `c` and `w`
 
 Let `I` interpolate `e` on the coset of the cell, and let `h` be its shift.
 
-These satisfy `c - I(τ) = w (τ^64 - h^64)`.
-
-No random oracle is needed: the error polynomial of one cell is a constant.
-
-A nonzero constant has no root, and the zero constant is the valid case. -/
+These satisfy `c - I(τ) = w (τ^64 - h^64)`. -/
 theorem CellOpening.Verifies.valid {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {commitment : Bytes48} {o : CellOpening}
     (h : o.Verifies s commitment) :
@@ -298,6 +270,9 @@ theorem CellOpening.Verifies.valid {s : TrustedSetup} {τ : Fr}
     cases hP'
     exact hw
   have hx : y.toCellBatch.cosetsEvals = evals := decodeCells_of_ok hev
+  -- No random oracle is needed: the error polynomial of one cell is a constant.
+  --
+  -- The zero constant is the valid case.
   rcases verifyCellKzgProofBatch_valid_or_root hs y (c := fun _ => c) (w := fun _ => w) hyC
     hyP h with hall | ⟨h0, hroot⟩
   · have hv := hall 0 (by simp [y])
@@ -305,6 +280,7 @@ theorem CellOpening.Verifies.valid {s : TrustedSetup} {τ : Fr}
     refine ⟨by simpa using hci 0 (by simp), evals[0]!, G[0]!, c, Q[0]!, w, he, hC, hc, hP, hw,
       ?_⟩
     simpa [y] using hv
+  -- A nonzero constant has no root.
   · have hdeg : (y.toCellBatch.errorPoly τ (fun _ => c) (fun _ => w)).natDegree ≤ 0 :=
       natDegree_errorPoly_le _ _
     exact absurd hroot (eval_ne_zero_of_natDegree_le_zero h0 hdeg _)
@@ -346,7 +322,12 @@ theorem CellOpening.Verifies.valid₂ {s : TrustedSetup} {τ : Fr}
   refine ⟨hci, e, w, he, decodeCell_of_ok he, ?_, hv⟩
   simpa only [decodePoint, hP] using hw
 
-/-! ## Position-binding, Lemma 3 -/
+/-! ## Position-binding, Lemma 3
+
+An adversary opens one cell index to two cells.
+
+Then a reduction wins bilinear strong Diffie–Hellman (BSDH) at least as often.
+-/
 
 /-- The winning condition of position-binding, Definition 4 of ePrint 2025/1683.
 
@@ -405,6 +386,10 @@ theorem isBsdhSolutionSub_positionBsdhSearch {GT : Type} [CommMonoid GT] (M : Ta
 Take a model of the target group.
 
 For every adversary, the advantage is at most that of the reduction against `(4095, 64)`-BSDH.
+
+In Lemma 2 of ePrint 2024/1362, the adversary also receives `[τ^i]_2` for `i ≤ 4095`.
+
+The reduction of that lemma reads only `[τ^i]_2` for `i < 64`.
 -/
 theorem positionBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
     (adversary : SetupPowers → ProbComp (Bytes48 × CellOpening × CellOpening)) :
@@ -415,7 +400,14 @@ theorem positionBindingAdvantage_le {GT : Type} [CommMonoid GT] (M : TargetGroup
     (fun τ sol => IsBsdhSolutionSub M τ sol)
     fun τ _ hw => isBsdhSolutionSub_positionBsdhSearch M (wellFormed_ofPowers τ) hw
 
-/-! ## Code-binding, Lemma 4 -/
+/-! ## Code-binding, Lemma 4
+
+An adversary opens cells that no blob explains.
+
+Then two reductions win BSDH and adaptive rational strong Diffie–Hellman (ARSDH).
+
+The sum of their probabilities bounds the probability of the adversary.
+-/
 
 /-- Symbol `j` of the codeword of the polynomial `f`.
 
@@ -440,7 +432,9 @@ def CodeBindingWins (s : TrustedSetup) (out : Bytes48 × List CellOpening) : Pro
 
 The secret `τ` is uniform in `Fr`, and the adversary receives its powers.
 
-The verifier checks each opening alone, with the setup built from the powers. -/
+The verifier checks each opening alone, with the setup built from the powers.
+
+Another file states code-binding with one batch check of all opened cells of a commitment. -/
 noncomputable def codeBindingAdvantage
     (adversary : SetupPowers → ProbComp (Bytes48 × List CellOpening)) : ℝ≥0∞ :=
   Pr{let τ ← $ᵗ Fr; let out ← adversary (setupPowers τ)}[
@@ -544,12 +538,6 @@ theorem eq_codewordCell {cell : Cell} {e : CosetEvals} (he : cellToCosetEvals ce
 
 Assume a well-formed setup of the secret `τ`.
 
-Let `I` interpolate the first 64 openings.
-
-If `I` misses no opening, its codeword agrees with every cell, so the adversary has not won.
-
-Otherwise the deterministic argument applies to the first 64 openings and the outlier.
-
 Then the first search returns a BSDH solution, or the second returns an ARSDH solution. -/
 theorem codeBinding_searches {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
     {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
@@ -570,9 +558,12 @@ theorem codeBinding_searches {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
       refine ⟨e, he, ?_⟩
       simp only [openedValues, openingAt_cellIndex hnd ho, Option.map_some, Option.getD_some,
         decodeCell_of_ok he]
+  -- Let `I` interpolate the first 64 openings.
   cases hout : outlier os with
   | none =>
     -- The interpolation of the first 64 openings agrees with every opening.
+    --
+    -- If `I` misses no opening, its codeword agrees with every cell, so the adversary has not won.
     exfalso
     refine hno ⟨cellsInterpolant (firstCells os) (openedValues os), hdeg, fun o ho => ?_⟩
     obtain ⟨e, he, hee⟩ := hev o ho
@@ -626,6 +617,7 @@ theorem codeBinding_searches {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
     obtain ⟨e, he, hee⟩ := hev o ho
     have hevsz : (openedValues os o.cellIndex).size = FIELD_ELEMENTS_PER_CELL :=
       hee ▸ size_bytesToBlsFields he
+    -- Otherwise the deterministic argument applies to the first 64 openings and the outlier.
     rcases code_binding M hs hJ hJcard hci (openedValues os) hevsz hdC hw hv with
       h1 | ⟨sol, hsol, hsolv⟩ | h3
     · exact absurd (fun m hm => h1.2 o.cellIndex (Finset.mem_insert_self _ _) m hm) hinc

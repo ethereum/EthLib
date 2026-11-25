@@ -19,17 +19,10 @@ Each operation that reads the trusted setup takes it as its first argument.
 
 Each operation that can reject its input returns `Except KzgError`.
 
-The scheme is PolyCommit_DL, §3.2 of Kate, Zaverucha and Goldberg, ASIACRYPT 2010:
-<https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf>
+- [Kate, Zaverucha and Goldberg, ASIACRYPT 2010][kzg10], §3.2: the scheme, PolyCommit_DL.
+- [EIP-4844, Cryptographic helpers][eip-4844]: the opening check and the batch check of blob proofs.
 
-[EIP-4844, Cryptographic helpers][eip-4844] uses two operations of this module.
-
-They are the check of one opening and the batch check of blob proofs.
-
-The proof function of the text that EIP-4844 points to returns no `y`.
-
-Here the proof function also returns `y = p(z)`.
-
+[kzg10]: https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers
 -/
 
@@ -205,6 +198,9 @@ def computeKzgProof (setup : TrustedSetup) (blob : Blob) (zBytes : Bytes32) :
   let polynomial ← blobToPolynomial blob
   -- The point `z` is decoded into `Fr`, then the proof and `y = p(z)` are computed.
   let z ← bytesToBlsField zBytes
+  -- The proof function of the text that EIP-4844 points to returns no `y`.
+  --
+  -- Here the proof function also returns `y = p(z)`.
   let (proof, y) ← computeKzgProofImpl setup polynomial z
   -- The proof and `y` as 32 big-endian bytes.
   return (proof, blsFieldToBytes y)

@@ -7,41 +7,9 @@ public import EthLib.Cryptography.Proofs.Kzg.PeerDasBatchGames
 
 A client of PeerDAS receives the cells of a block one column at a time.
 
-It checks each column in one batch: the cells of many commitments at one cell index.
+This file states Lemmas 3 and 4 of [ePrint 2025/1683][wz25], with a verifier of such columns.
 
-So the cells of one commitment reach it through several batches, each with its own challenge.
-
-This file states Lemmas 3 and 4 of ePrint 2025/1683 with a verifier that checks such columns.
-
-<https://eprint.iacr.org/2025/1683>
-
-The adversary may query the oracle, then outputs a commitment, openings and `m` columns.
-
-The verifier hashes each column to its challenge, one query of the oracle per column.
-
-It accepts a column when the batch check of cells returns a verdict on it.
-
-The challenge of the column must also be a root of its error polynomial.
-
-For a well-formed setup, this is the batch check of cells at the challenge of the hash.
-
-An opening counts when one of the columns holds it, for the commitment, at the index of the column.
-
-The hash is a random oracle into `Fr` on the inputs of the core check.
-
-That idealises SHA-256 reduced modulo `r`, the order of `Fr`, whose values are not exactly uniform.
-
-Let each column have at most `n` cells, and let the adversary make at most `q` queries.
-
-The bound of each lemma then grows by `(q + m) (n - 1) / r`.
-
-That term bounds one event: a column has a nonzero error polynomial with its challenge as a root.
-
-Otherwise every cell of every column is valid, and each opening that a column holds verifies alone.
-
-Then the games of single cells apply.
-
-The verifier accepts the columns of honest blobs with every challenge.
+[wz25]: https://eprint.iacr.org/2025/1683
 -/
 
 @[expose] public section
@@ -53,7 +21,12 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial OracleComp OracleSpec ENNReal MeasureTheory
 
-/-! ## Several batches with a random oracle -/
+/-! ## Several batches with a random oracle
+
+The hash is a random oracle into `Fr` on the inputs of the core check.
+
+That idealises SHA-256 reduced modulo `r`, the order of `Fr`, whose values are not exactly uniform.
+-/
 
 /-- The game of several batch challenges, with the hash as an oracle from `X` to `Fr`.
 
@@ -158,7 +131,12 @@ theorem prEvent_batchesRomRoot_le {X Y α : Type} [DecidableEq X] (key : Y → X
       evalWithAnswerFn_challenges]
     exact List.mem_append_right _ (List.mem_append_left _ (List.mem_map_of_mem hy))
 
-/-! ## Columns -/
+/-! ## Columns
+
+A client checks each column in one batch: the cells of many commitments at one cell index.
+
+So the cells of one commitment reach it through several batches, each with its own challenge.
+-/
 
 /-- **A batch of one column: the cells of many commitments at one cell index.**
 
@@ -197,6 +175,11 @@ def ColumnBatch.Holds (c : ColumnBatch) (commitment : Bytes48) (o : CellOpening)
 /-- **Every column has at most `n` cells, and is accepted with its challenge.** -/
 def ColumnsAccepted (s : TrustedSetup) (τ : Fr) (n : Nat) (cs : List (ColumnBatch × Fr)) :
     Prop :=
+  -- The verifier accepts a column when the batch check of cells returns a verdict on it.
+  --
+  -- The challenge of the column must also be a root of its error polynomial.
+  --
+  -- For a well-formed setup, this is the batch check of cells at the challenge of the hash.
   ∀ c ∈ cs, c.1.cells.size ≤ n ∧ c.1.toInput.AcceptsAt s τ c.2
 
 /-- **The challenge of some column is a root of its error polynomial, which is not zero.**
@@ -292,7 +275,12 @@ theorem ColumnBatch.acceptsAt_challenge_iff {s : TrustedSetup}
     c.toInput.AcceptsAt s τ c.key.challenge ↔ c.verify s = .ok true :=
   CellBatchInput.acceptsAt_challenge_iff hs c.toInput
 
-/-! ## The games -/
+/-! ## The games
+
+The adversary may query the oracle, then outputs a commitment, openings and `m` columns.
+
+The verifier hashes each column to its challenge, one query of the oracle per column.
+-/
 
 /-- **The union bound for one reduction and a bad event.**
 
@@ -389,6 +377,11 @@ theorem columnPositionBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup
     IsBsdhSolutionSub M τ (positionBsdhSearch M s (p.1.1, p.1.2.1)) ∨ ColumnRoot τ n p.2 := by
   obtain ⟨hidx, hne, hacc, ⟨c, hc, hh⟩, ⟨c', hc', hh'⟩⟩ := hw
   rcases columnsAccepted_cases hs hacc with hall | hroot
+  -- Without a root, every cell of every column is valid.
+  --
+  -- Each opening that a column holds verifies alone.
+  --
+  -- Then the games of single cells apply.
   · exact Or.inl (isBsdhSolutionSub_positionBsdhSearch M hs
       ⟨hidx, hne, hall c hc _ _ hh, hall c' hc' _ _ hh'⟩)
   · exact Or.inr hroot
@@ -477,13 +470,7 @@ noncomputable def columnCodeArsdhReduction {m : Nat}
 
 /-- **When the adversary wins code-binding with columns, a search wins or a challenge is a root.**
 
-Assume a well-formed setup of the secret `τ`.
-
-If no challenge is a root, every opening verifies alone.
-
-Then the adversary wins code-binding with cells checked alone.
-
-Then one of the two searches of Lemma 4 returns a solution. -/
+Assume a well-formed setup of the secret `τ`. -/
 theorem columnCodeBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
     {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {n m : Nat}
     {p : (Bytes48 × List CellOpening × Vector ColumnBatch m) × List (ColumnBatch × Fr)}
@@ -493,10 +480,14 @@ theorem columnCodeBinding_cases {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
       ColumnRoot τ n p.2 := by
   obtain ⟨hnd, hacc, hheld, hno⟩ := hw
   rcases columnsAccepted_cases hs hacc with hall | hroot
+  -- If no challenge is a root, every opening verifies alone.
+  --
+  -- Then the adversary wins code-binding with cells checked alone.
   · have hwin : CodeBindingWins s (p.1.1, p.1.2.1) := by
       refine ⟨hnd, fun o ho => ?_, hno⟩
       obtain ⟨c, hc, hh⟩ := hheld o ho
       exact hall c hc _ _ hh
+    -- Then one of the two searches of Lemma 4 returns a solution.
     rcases codeBinding_searches M hs hwin with h | h
     · exact Or.inl h
     · exact Or.inr (Or.inl h)
