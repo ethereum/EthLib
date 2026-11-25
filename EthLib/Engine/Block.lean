@@ -201,12 +201,11 @@ def ofBlock (hParis : .paris ≤ fork) (b : Block fork Transaction) :
 /-- The versioned hashes of the blob transactions of a list, in order. -/
 def blobVersionedHashes (transactions : List Transaction) : List Cryptography.Kzg.VersionedHash :=
   -- Version 3, step 3.1: the versioned hashes of each blob transaction, in the order of inclusion.
-  transactions.flatMap fun
-    | .blob tx => tx.blobVersionedHashes
-    -- Another transaction adds none, so without blob transactions the actual array is `[]`.
-    --
-    -- Step 3.1 requires the expected array to be `[]` then, and step 3.2 enforces it.
-    | _ => []
+  --
+  -- Another transaction adds none, so without blob transactions the actual array is `[]`.
+  --
+  -- Step 3.1 requires the expected array to be `[]` then, and step 3.2 enforces it.
+  transactions.flatMap Transaction.blobHashes
 
 end ExecutionPayload
 

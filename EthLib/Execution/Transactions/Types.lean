@@ -285,6 +285,11 @@ def fork (t : Transaction) : Fork :=
   -- No EIP adds a typed transaction 0, the type of a legacy transaction, so its fork is Frontier.
   (typeFork t.type).getD .frontier
 
+/-- The versioned hashes of the blobs of a transaction, empty unless it carries blobs. -/
+def blobHashes : Transaction → List Cryptography.Kzg.VersionedHash
+  | .blob tx => tx.blobVersionedHashes
+  | _ => []
+
 /-- The transaction with a signature of 0, as a simulation runs a call. -/
 def unsigned : Transaction → Transaction
   -- `T_r = T_s = 0`, with `T_w = 0` for a legacy transaction and `T_y = 0` for a typed one.
