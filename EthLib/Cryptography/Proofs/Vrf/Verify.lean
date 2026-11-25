@@ -40,7 +40,9 @@ theorem verify_eq_some_iff {root : Digest} {i : UInt32} {o : Opening} {y : Diges
     verify root i o = some y ↔
       (Merkle.climb treeHash ⟨0, i.toNat⟩ (leafHash o.secret) o.path.toList).run = root ∧
         y = outputHash i o.secret := by
-  unfold verify
+  -- The Keccak-256 check reads its leaf and its output as the leaf and output hashes.
+  change (if (Merkle.climb treeHash ⟨0, i.toNat⟩ (leafHash o.secret) o.path.toList).run = root
+    then some (outputHash i o.secret) else none) = some y ↔ _
   by_cases hp :
       (Merkle.climb treeHash ⟨0, i.toNat⟩ (leafHash o.secret) o.path.toList).run = root <;>
     simp [hp, eq_comm]
@@ -57,11 +59,14 @@ theorem verify_opening (secrets : UInt32 → Digest) (i : UInt32) :
     verify (root secrets) i (opening secrets i) = some (outputHash i (secrets i)) := by
   refine verify_eq_some_iff.mpr ⟨?_, rfl⟩
   -- Leaf `i` of the tree commits to secret `i`.
-  have hleaf : leaves secrets i.toNat = leafHash (secrets i) := by simp [leaves]
+  let leaves := leafWith (m := Id) (fun x => pure (hash x)) secrets
+  have hleaf : leaves i.toNat = leafHash (secrets i) := by
+    simp only [leaves, leafWith, leafHash, UInt32.ofNat_toNat]
+    rfl
   show (Merkle.climb treeHash ⟨0, i.toNat⟩ (leafHash (secrets i))
-    (Merkle.path treeHash (m := Id) (leaves secrets) VRF_TREE_HEIGHT i.toNat).run.toList).run = _
+    (Merkle.path treeHash leaves VRF_TREE_HEIGHT i.toNat).run.toList).run = _
   rw [← hleaf]
-  exact Merkle.climb_path_root treeHash (leaves secrets) i.toNat_lt
+  exact Merkle.climb_path_root treeHash leaves i.toNat_lt
 
 /-! ## Uniqueness -/
 

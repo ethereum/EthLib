@@ -19,17 +19,27 @@ The output hashes the index and the secret, not the leaf.
 
 namespace EthLib.Cryptography.Vrf
 
+/-- Verify an opening at index `i` against a root, with `H` in place of Keccak-256.
+
+It returns the output at `i`, or nothing if the opening is invalid. -/
+def verifyWith {m : Type → Type} [Monad m] (H : ByteArray → m Digest) (root : Digest)
+    (i : UInt32) (opening : Opening) : m (Option Digest) := do
+  -- The leaf commits to the secret.
+  let leaf ← H (leafInput opening.secret)
+  -- The opening is valid when its path leads from that leaf to the root.
+  let top ← Merkle.climb (nodeWith H) ⟨0, i.toNat⟩ leaf opening.path.toList
+  if top = root then
+    let output ← H (outputInput i opening.secret)
+    return some output
+  else
+    return none
+
 /--
 Verify an opening at index `i` against a root.
 
 It returns the output at `i`, or nothing if the opening is invalid.
 -/
 def verify (root : Digest) (i : UInt32) (opening : Opening) : Option Digest :=
-  -- The leaf commits to the secret.
-  let leaf := leafHash opening.secret
-  -- The opening is valid when its path leads from that leaf to the root.
-  if (Merkle.climb treeHash ⟨0, i.toNat⟩ leaf opening.path.toList).run = root then
-    some (outputHash i opening.secret)
-  else none
+  (verifyWith (m := Id) (fun x => pure (hash x)) root i opening).run
 
 end EthLib.Cryptography.Vrf

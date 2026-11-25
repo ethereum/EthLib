@@ -122,7 +122,7 @@ An adversary makes at most `q` classical queries to it, then outputs a root, an 
 Both openings verify, with two different outputs, with probability at most `(q + 68)^2 / 2^256`.
 The 68 counts the queries of the two checks: for each, the leaf, 32 nodes and the output.
 With `q = 2^64`, that is below `2^-127`.
-The experiment checks the openings as verification does, with a query for each Keccak-256 call (`verifyWith_hash`).
+The experiment checks the openings with the check of the specification, with a query for each Keccak-256 call.
 With Keccak-256 in place of the oracle, a win is exactly two openings that verify with two different outputs (`outputsWin_keccak256_iff`).
 
 A third statement, which is not one of those properties, says exactly what verification checks.
@@ -155,7 +155,7 @@ The hash is a random oracle, the secret at the challenge index is uniform, and t
 The adversary gets the root, queries the hash `q_H` times, and asks for `q_O` openings at other indices.
 Its guess of the output at the challenge index is right with probability at most `(1 + 2 Q) / 2^256`, where `Q = q_H + (q_O + 1) 2^33` (`prEvent_guess_le`).
 With `q_H = 2^64` and `q_O = 2^32`, that is below `2^-189`.
-The game computes the root and the openings with the tree of this module, with the hash as an oracle (`rootWith_hash`, `openingWith_hash`).
+The game computes the root and the openings with the tree of the specification, with the hash as an oracle.
 
 That theorem fixes the challenge index before the game, where Micali, Rabin and Vadhan let the adversary choose it.
 A second theorem lets the adversary choose it (`prEvent_adaptiveGame_le`, `AdaptiveIndex.lean`).

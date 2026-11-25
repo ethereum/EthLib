@@ -33,41 +33,6 @@ namespace EthLib.Cryptography.Vrf
 open EthLib.Cryptography.Vrf.Constants
 open OracleSpec OracleComp ENNReal
 
-/-! ## The tree over a hash oracle -/
-
-section Oracle
-
-variable {m : Type → Type} [Monad m] (H : ByteArray → m Digest)
-
-/-- The node hash of the tree, with `H` in place of Keccak-256. -/
-def nodeWith (_p : Merkle.Position) (left right : Digest) : m Digest :=
-  H (nodeInput left right)
-
-/-- Leaf `j` of the tree over the secrets, with `H` in place of Keccak-256. -/
-def leafWith (secrets : UInt32 → Digest) (j : Nat) : m Digest :=
-  H (leafInput (secrets (UInt32.ofNat j)))
-
-/-- The root of the tree over the secrets, with `H` in place of Keccak-256. -/
-def rootWith (secrets : UInt32 → Digest) : m Digest :=
-  Merkle.root (nodeWith H) (leafWith H secrets) VRF_TREE_HEIGHT
-
-/-- The opening at index `i`, with `H` in place of Keccak-256. -/
-def openingWith (secrets : UInt32 → Digest) (i : UInt32) : m Opening := do
-  let path ← Merkle.path (nodeWith H) (leafWith H secrets) VRF_TREE_HEIGHT i.toNat
-  return ⟨secrets i, path⟩
-
-end Oracle
-
-/-- With Keccak-256 as `H`, the root is the root of the specification. -/
-theorem rootWith_hash (secrets : UInt32 → Digest) :
-    (rootWith (m := Id) (fun x => pure (hash x)) secrets).run = root secrets :=
-  rfl
-
-/-- With Keccak-256 as `H`, the opening is the opening of the specification. -/
-theorem openingWith_hash (secrets : UInt32 → Digest) (i : UInt32) :
-    (openingWith (m := Id) (fun x => pure (hash x)) secrets i).run = opening secrets i :=
-  rfl
-
 /-! ## The game -/
 
 /-- The hash as an oracle from byte strings to 32-byte values. -/

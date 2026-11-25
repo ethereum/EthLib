@@ -521,7 +521,7 @@ The theorem holds for every root, including one built to cheat.
 Uniqueness is reduced to a collision, and `Proofs/Vrf/Uniqueness.lean` bounds the chance of two outputs at one index, with Keccak-256 a random oracle.
 An adversary makes at most `q` oracle queries, then outputs a root, an index and two openings.
 The experiment checks both openings as `verify` does, with a query for each Keccak-256 call.
-`verifyWith_hash` shows that this check, with Keccak-256 in place of the oracle, is `verify`.
+With Keccak-256 in place of the oracle, this check is `verify` by definition.
 The adversary wins when both openings verify, with two different outputs.
 `outputsWin_keccak256_iff` shows that, with Keccak-256 in place of the oracle, a win is two openings that `verify` accepts, with two different outputs.
 `collision_of_extractOutputs` shows that every win leaves two different cached inputs with one answer.

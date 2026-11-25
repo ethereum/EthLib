@@ -19,19 +19,33 @@ open EthLib.Cryptography.Vrf.Constants
 
 /-! ## The tree of the secrets -/
 
-/-- The leaves over the secrets `s_j`: leaf `j` commits to secret `j`. -/
-def leaves (secrets : UInt32 → Digest) (j : Nat) : Digest :=
-  leafHash (secrets (UInt32.ofNat j))
+section Oracle
+
+variable {m : Type → Type} [Monad m] (H : ByteArray → m Digest)
+
+/-- Leaf `j` over the secrets `s_j`, with `H` in place of Keccak-256: it commits to secret `j`. -/
+def leafWith (secrets : UInt32 → Digest) (j : Nat) : m Digest :=
+  H (leafInput (secrets (UInt32.ofNat j)))
+
+/-- The root of the tree over the secrets, with `H` in place of Keccak-256. -/
+def rootWith (secrets : UInt32 → Digest) : m Digest :=
+  -- Every node is a node hash.
+  Merkle.root (nodeWith H) (leafWith H secrets) VRF_TREE_HEIGHT
+
+/-- The opening at index `i`, with `H` in place of Keccak-256: its secret and its path. -/
+def openingWith (secrets : UInt32 → Digest) (i : UInt32) : m Opening := do
+  let path ← Merkle.path (nodeWith H) (leafWith H secrets) VRF_TREE_HEIGHT i.toNat
+  return ⟨secrets i, path⟩
+
+end Oracle
 
 /-- The root of the tree over the secrets. -/
 def root (secrets : UInt32 → Digest) : Digest :=
-  -- Every node is a node hash.
-  (Merkle.root treeHash (m := Id) (leaves secrets) VRF_TREE_HEIGHT).run
+  (rootWith (m := Id) (fun x => pure (hash x)) secrets).run
 
 /-- The opening at index `i`: its secret and its path. -/
-def opening (secrets : UInt32 → Digest) (i : UInt32) : Opening where
-  secret := secrets i
-  path := (Merkle.path treeHash (m := Id) (leaves secrets) VRF_TREE_HEIGHT i.toNat).run
+def opening (secrets : UInt32 → Digest) (i : UInt32) : Opening :=
+  (openingWith (m := Id) (fun x => pure (hash x)) secrets i).run
 
 /-! ## The secrets of a seed -/
 

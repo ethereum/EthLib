@@ -58,11 +58,16 @@ def leafHash (secret : Digest) : Digest :=
 def nodeHash (left right : Digest) : Digest :=
   hash (nodeInput left right)
 
-/-- The node hash at a position of the tree, in the identity monad.
+/-- The node hash at a position of the tree, with `H` in place of Keccak-256.
 
 The VRF tree hashes every node alike, so the position is ignored. -/
-def treeHash (_p : Merkle.Position) (left right : Digest) : Id Digest :=
-  pure (nodeHash left right)
+def nodeWith {m : Type → Type} [Monad m] (H : ByteArray → m Digest) (_p : Merkle.Position)
+    (left right : Digest) : m Digest :=
+  H (nodeInput left right)
+
+/-- The node hash at a position of the tree, with Keccak-256. -/
+def treeHash (p : Merkle.Position) (left right : Digest) : Id Digest :=
+  nodeWith (m := Id) (fun x => pure (hash x)) p left right
 
 /-- The output at index `i` of a secret. -/
 def outputHash (i : UInt32) (secret : Digest) : Digest :=
