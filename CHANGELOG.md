@@ -1043,6 +1043,15 @@ Not yet released.
 - In Lean, the JSON-RPC reader of hex bytes, `JsonRpc.bytesOf` (`Serialization/JsonRpc.lean`), reads the digits with `Base.hexBytes?`, with the same bytes and the same error messages ([#4488](https://github.com/ethereum/EthLib/issues/4488)).
   - Unfolding it now gives a check of the parity, a check that no character is an uppercase letter when uppercase is refused, and `Base.hexBytes?`, not a loop over indices; its public lemmas keep their statements.
   - `Base.hexBytesFrom?_eq_some_iff` (`Base/Proofs/Hex.lean`) is new: decoding succeeds exactly on pairs of hex digits, and appends the byte of each pair.
+- In Lean, the DER reader reads each value at an offset of the input ([#4533](https://github.com/ethereum/EthLib/pull/4533)).
+  So the components of a SEQUENCE cost time linear in its size.
+  - `Der.readAt` (`Serialization/Der.lean`) is new: it reads the value that starts at an offset and gives the offset after it.
+    `Der.read` is now `readAt` at offset 0, and cuts the bytes after the value with one copy.
+    `read_eq` (`Serialization/Proofs/Der.lean`) states the old body on the input's list of octets; rewrite with it where a proof unfolded `read`.
+  - `Der.children.goAt` is new: it reads the siblings from an offset.
+    `Der.children.go` is now `goAt` at offset 0.
+    `children_go_zero` and `children_go_succ` give its old equations.
+    Every DER theorem keeps its statement.
 - In Lean, the discv5 node state reads its lists of pairs with core `List.lookup` ([#4489](https://github.com/ethereum/EthLib/issues/4489)).
   - `Discv5.lookupKey` is removed; write `pairs.lookup key`, which gives the same value on every list, since the keys compare by their decidable equality.
   - `lookupKey_setKey_self`, `lookupKey_setKey_of_ne`, `lookupKey_eraseKey_self` and `lookupKey_challenges_receiveHandshake` (`Networking/Proofs/Discv5/Node.lean`) are `lookup_setKey_self`, `lookup_setKey_of_ne`, `lookup_eraseKey_self` and `lookup_challenges_receiveHandshake`, stated with `List.lookup`.

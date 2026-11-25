@@ -22,6 +22,130 @@ namespace EthLib.Serialization.Proofs.Der
 open EthLib.Serialization.Der
 open EthLib.Base
 
+/-- Cutting a byte array past its end gives the same bytes as cutting at its end. -/
+private theorem extract_min_size (a : ByteArray) (i j : Nat) :
+    a.extract i (min j a.size) = a.extract i j := by
+  ext1
+  simp [Array.extract_eq_extract_right]
+  omega
+
+/-- A read at an offset is the read at the start of the bytes from that offset, shifted back. -/
+private theorem readAt_shift (input : ByteArray) (pos : Nat) :
+    readAt input pos =
+      (fun r => (r.1, r.2 + pos)) <$> readAt (input.extract pos input.size) 0 := by
+  have hE : (input.extract pos input.size).size = input.size - pos := by
+    simp [ByteArray.size_extract]
+  unfold readAt
+  by_cases h : pos + 2 ≤ input.size
+  · have h' : 0 + 2 ≤ (input.extract pos input.size).size := by rw [hE]; omega
+    rw [dite_eq_left h, dite_eq_left h']
+    simp only [ByteArray.getElem_extract, hE, Nat.sub_zero, Nat.zero_add,
+      ByteArray.extract_extract, extract_min_size, Nat.add_assoc]
+    simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, pure, Except.pure,
+      Functor.map, Except.map]
+    generalize input[pos] = tag
+    generalize input[pos + 1] = first
+    generalize (input.extract (pos + 2) (pos + (2 + (first.toNat - 128)))).data.toList = B
+    rcases B with _ | ⟨b, B⟩ <;>
+      by_cases c1 : tag.toNat % 32 = 31 ∨ tag = 0 <;> simp only [c1, ite_true, ite_false] <;>
+      by_cases c2 : first.toNat < 128 <;> simp only [c2, ite_true, ite_false] <;>
+      simp_all <;> repeat (split <;> (try simp_all [Nat.add_comm]))
+  · rw [dite_eq_right h, dite_eq_right (by rw [hE]; omega)]
+    simp [hE, throw, throwThe, MonadExceptOf.throw, Functor.map, Except.map]
+
+/-- The reader at offset 0 in its form on the list of the input's octets.
+
+It reads the value at the start, then hands back a copy of the bytes after it. -/
+theorem read_eq (input : ByteArray) : read input = (do
+    match input.data.toList with
+    | tag :: first :: rest =>
+      if tag.toNat % 32 = 31 ∨ tag = 0 then throw (.tag none tag)
+      let (length, header) ←
+        if first.toNat < 128 then pure (first.toNat, 2)
+        else do
+          let count := first.toNat - 128
+          if count = 0 ∨ count = 127 then throw (.length first)
+          if rest.length < count then throw (.truncated (2 + count) input.size)
+          let bytes := rest.take count
+          match bytes with
+          | [] => throw (.length first)
+          | head :: _ =>
+            if head = 0 then throw (.length first)
+            let length := EthLib.Base.ByteOrder.ofBE bytes
+            if length < 128 then throw (.length first)
+            pure (length, 2 + count)
+      if input.size < header + length then throw (.truncated (header + length) input.size)
+      return (⟨tag, input.extract header (header + length),
+        input.extract 0 (header + length)⟩, input.extract (header + length) input.size)
+    | _ => throw (.truncated 2 input.size)
+  : Except Error (Value × ByteArray)) := by
+  unfold EthLib.Serialization.Der.read readAt
+  have hsz : input.size = input.data.toList.length := by simp
+  rcases hL : input.data.toList with _ | ⟨tag, _ | ⟨first, rest⟩⟩ <;> rw [hL] at hsz
+  · simp at hsz
+    simp [hsz, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · simp at hsz
+    simp [hsz, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · have h0 : ∀ hh, input[0]'hh = tag := by
+      intro hh; simp [ByteArray.getElem_eq_getElem_data, ← Array.getElem_toList, hL]
+    have h1 : ∀ hh, input[0 + 1]'hh = first := by
+      intro hh; simp [ByteArray.getElem_eq_getElem_data, ← Array.getElem_toList, hL]
+    have hb : ∀ n, (input.extract (0 + 2) (0 + 2 + n)).data.toList = rest.take n := by
+      intro n; simp [ByteArray.data_extract, hL]
+    simp at hsz
+    rw [dite_eq_left (by omega)]
+    simp only [h0, h1, hb, throw, throwThe, MonadExceptOf.throw, bind, Except.bind, pure,
+      Except.pure, Nat.sub_zero, Nat.zero_add]
+    have hl : input.size - 2 = rest.length := by omega
+    simp only [hl]
+    symm
+    generalize List.take (first.toNat - 128) rest = B
+    rcases B with _ | ⟨b, B⟩ <;> repeat (split <;> (try simp_all))
+
+/-- The siblings from an offset are the siblings of the bytes from that offset. -/
+private theorem goAt_shift (fuel : Nat) : ∀ (input : ByteArray) (pos : Nat),
+    children.goAt fuel input pos = children.go fuel (input.extract pos input.size) := by
+  induction fuel with
+  | zero =>
+    intro input pos
+    simp only [children.go, children.goAt, ByteArray.size_extract, Nat.min_self, Nat.sub_zero,
+      Nat.le_zero, Nat.sub_eq_zero_iff_le]
+  | succ fuel ih =>
+    intro input pos
+    simp only [children.go, children.goAt, ByteArray.size_extract, Nat.min_self,
+      Nat.le_zero, Nat.sub_eq_zero_iff_le]
+    by_cases hp : input.size ≤ pos
+    · simp [hp]
+    · rw [readAt_shift]
+      simp only [hp, ite_false]
+      cases readAt (input.extract pos input.size) 0 with
+      | error e => rfl
+      | ok r =>
+        obtain ⟨v, n⟩ := r
+        simp only [Functor.map, Except.map, bind, Except.bind]
+        rw [ih, ih, ByteArray.extract_extract, ByteArray.size_extract, Nat.min_self,
+          Nat.add_comm n pos, show pos + (input.size - pos) = input.size by omega, Nat.min_self]
+
+/-- With no fuel, the siblings of an empty input are none, and any other input is truncated. -/
+theorem children_go_zero (input : ByteArray) :
+    children.go 0 input = if input.isEmpty then .ok [] else .error (.truncated 2 input.size) := by
+  simp [children.go, children.goAt, ByteArray.isEmpty]
+
+/-- With fuel, the siblings are the value read first, then the siblings of the bytes after it. -/
+theorem children_go_succ (fuel : Nat) (input : ByteArray) :
+    children.go (fuel + 1) input = (do
+      if input.isEmpty then return []
+      let (value, rest) ← read input
+      return value :: (← children.go fuel rest)) := by
+  simp only [children.go, children.goAt, EthLib.Serialization.Der.read, ByteArray.isEmpty,
+    Nat.le_zero, beq_iff_eq]
+  cases readAt input 0 with
+  | error e => rfl
+  | ok r =>
+    obtain ⟨v, n⟩ := r
+    simp only [bind, Except.bind, pure, Except.pure]
+    rw [goAt_shift, children.go]
+
 /-- A typed read succeeds only with the requested tag and the underlying reader's result. -/
 theorem readTag_ok_iff {tag : UInt8} {input rest : ByteArray} {value : Value} :
     readTag tag input = .ok (value, rest) ↔
@@ -96,7 +220,7 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
   constructor
   · intro h
     have hsz : input.size = input.data.toList.length := by rw [Array.length_toList]; rfl
-    unfold EthLib.Serialization.Der.read at h
+    rw [read_eq] at h
     generalize hL : input.data.toList = L at h hsz
     rcases L with _ | ⟨tag, _ | ⟨first, more⟩⟩
     · simp [throw, throwThe, MonadExceptOf.throw] at h
@@ -200,7 +324,7 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
     · rw [he] at hin
       have hfirst : (UInt8.ofNat content.size).toNat = content.size := by
         simp only [UInt8.toNat_ofNat']; omega
-      unfold EthLib.Serialization.Der.read
+      rw [read_eq]
       rw [hin]
       simp only [List.cons_append]
       simp [ht1, ht0, hfirst, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind, pure,
@@ -237,7 +361,7 @@ theorem read_ok_iff {input rest : ByteArray} {value : Value} :
         rw [hsz, hin]
         simp [← hcs]
         omega
-      unfold EthLib.Serialization.Der.read
+      rw [read_eq]
       rw [hin]
       simp only [List.cons_append]
       simp [ht1, ht0, throw, throwThe, MonadExceptOf.throw, bind, Except.bind, pure,
@@ -1313,10 +1437,10 @@ theorem exists_of_children_go_eq_ok_cons {fuel : Nat} {input : ByteArray} {v : V
     ∃ f rest, fuel = f + 1 ∧ read input = .ok (v, rest) ∧ children.go f rest = .ok vs := by
   cases fuel with
   | zero =>
-    simp only [children.go] at h
+    rw [children_go_zero] at h
     split at h <;> simp at h
   | succ f =>
-    simp only [children.go] at h
+    rw [children_go_succ] at h
     by_cases he : input.isEmpty = true
     · simp [he, pure, Except.pure] at h
     · cases hr : read input with
@@ -1335,12 +1459,12 @@ theorem isEmpty_of_children_go_eq_ok_nil {fuel : Nat} {input : ByteArray}
     (h : children.go fuel input = .ok []) : input.isEmpty = true := by
   cases fuel with
   | zero =>
-    simp only [children.go] at h
+    rw [children_go_zero] at h
     split at h
     · assumption
     · simp at h
   | succ f =>
-    simp only [children.go] at h
+    rw [children_go_succ] at h
     by_cases he : input.isEmpty = true
     · exact he
     · cases hr : read input with
@@ -1359,7 +1483,7 @@ theorem children_go_succ_eq_ok_of_read {fuel : Nat} {input rest : ByteArray} {v 
   have he : input.isEmpty = false := by
     simp only [ByteArray.isEmpty, beq_eq_false_iff_ne, ne_eq]
     omega
-  simp [children.go, he, h, hg, bind, Except.bind, pure, Except.pure]
+  simp [children_go_succ, he, h, hg, bind, Except.bind, pure, Except.pure]
 
 /-- An empty input has no siblings, whatever the fuel. -/
 theorem children_go_empty (fuel : Nat) : children.go fuel ⟨#[]⟩ = .ok [] := by
@@ -1382,14 +1506,14 @@ theorem children_go_sizes : ∀ (fuel : Nat) (input : ByteArray) (vs : List Valu
   induction fuel with
   | zero =>
     intro input vs h v hv
-    simp only [children.go] at h
+    rw [children_go_zero] at h
     split at h
     · cases h
       simp at hv
     · cases h
   | succ fuel ih =>
     intro input vs h v hv
-    simp only [children.go] at h
+    rw [children_go_succ] at h
     by_cases he : input.isEmpty = true
     · simp only [he, ite_true, pure, Except.pure, bind, Except.bind, Except.ok.injEq] at h
       subst h
