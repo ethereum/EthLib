@@ -58,17 +58,13 @@ def bytesOf (what : String) (upper : Bool) (j : Json) : Read ByteArray := do
   --
   -- EthLib also refuses an odd count of digits, which the pattern admits but no byte string has.
   if digits.size % 2 ≠ 0 then reject s!"{what}: odd number of hex digits" else
-  let mut out := ByteArray.emptyWithCapacity (digits.size / 2)
-  for i in [0:digits.size / 2] do
-    match digits[2 * i]?, digits[2 * i + 1]? with
-    | some c, some d =>
-      match hexValue upper c, hexValue upper d with
-      -- Byte `i` is `16 * d_(2i) + d_(2i+1)`, the high digit first.
-      | some high, some low => out := out.push (16 * high + low)
-      | _, _ => reject s!"{what}: not a hex digit"
-    -- The count is even, so both digits of each byte exist and this case never happens.
-    | _, _ => reject s!"{what}: odd number of hex digits"
-  return out
+  let chars := digits.data.toList.map Char.ofUInt8
+  -- Where the pattern refuses `A-F`, any uppercase letter is not a hex digit.
+  if !upper && chars.any Char.isUpper then reject s!"{what}: not a hex digit" else
+  -- Byte `i` is `16 * d_(2i) + d_(2i+1)`, the high digit first, as Base reads hex.
+  match Base.hexBytes? chars with
+  | some out => pure out
+  | none => reject s!"{what}: not a hex digit"
 
 /-- A byte string of any length. -/
 def bytes (what : String) (j : Json) : Read ByteArray := bytesOf what false j

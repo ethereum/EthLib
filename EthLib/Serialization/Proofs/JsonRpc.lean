@@ -116,22 +116,6 @@ private theorem flatMap_pair_getElem? {α β : Type} (x y : α → β) (l : List
       · rw [show 2 * (i + 1) = 2 * i + 1 + 1 by omega]; simpa using this.1
       · rw [show 2 * (i + 1) + 1 = 2 * i + 1 + 1 + 1 by omega]; simpa using this.2
 
-/-- A loop that pushes one byte per index returns the bytes it pushed. -/
-private theorem forIn_range'_push {s k : Nat}
-    {f : Nat → ByteArray → Except String (ForInStep ByteArray)}
-    (g : Nat → UInt8) (h : ∀ i out, i ∈ List.range' s k → f i out = .ok (.yield (out.push (g i))))
-    (out : ByteArray) :
-    forIn (List.range' s k) out f = .ok (out ++ ((List.range' s k).map g).toByteArray) := by
-  induction k generalizing s out with
-  | zero => simp [List.range'_zero]; rfl
-  | succ k ih =>
-    rw [List.range'_succ, List.forIn_cons, h s out (by simp [List.range'_succ])]
-    simp only [bind, Except.bind]
-    rw [ih (fun i o hi => h i o (by simp [List.range'_succ, hi]))]
-    congr 1
-    apply ByteArray.ext
-    simp [List.map_cons]
-
 /-- The hex digits are ASCII. -/
 private theorem hexDigitChar_ascii (n : Fin 16) : (hexDigitChar n).val ≤ 0x7F := by
   revert n; decide +revert
@@ -200,6 +184,49 @@ private theorem flatMap_byteHexDigits_getElem? (data : List UInt8) (i : Nat) :
   flatMap_pair_getElem? (fun b => hexDigitChar (highDigit b)) (fun b => hexDigitChar (lowDigit b))
     data i
 
+/-- The fact below, checked by the kernel on each of the 256 codes.
+
+A code with a lowercase hex value is not an uppercase letter. -/
+private theorem isUpper_of_hexValue_false_lt : ∀ n, n < 256 →
+    (hexValue false n.toUInt8).isSome = true → (Char.ofUInt8 n.toUInt8).isUpper = false := by
+  decide +kernel
+
+/-- A code that is not an uppercase letter has the same value with and without uppercase.
+
+The kernel checks it on each of the 256 codes. -/
+private theorem hexValue_true_eq_false_lt : ∀ n, n < 256 →
+    (Char.ofUInt8 n.toUInt8).isUpper = false →
+      hexValue true n.toUInt8 = hexValue false n.toUInt8 := by
+  decide +kernel
+
+/-- A code with a lowercase hex value is not an uppercase letter. -/
+private theorem isUpper_of_hexValue_false {c v : UInt8} (h : hexValue false c = some v) :
+    (Char.ofUInt8 c).isUpper = false := by
+  have := isUpper_of_hexValue_false_lt c.toNat c.toNat_lt
+  rw [show c.toNat.toUInt8 = c from UInt8.ofNat_toNat, h] at this
+  exact this rfl
+
+/-- A code read with uppercase allowed has the same value under the decoder's own rule.
+
+When that rule refuses uppercase, the code must not be an uppercase letter. -/
+private theorem hexValue_of_hexValue_true {upper : Bool} {c v : UInt8}
+    (hup : upper = false → (Char.ofUInt8 c).isUpper = false) (h : hexValue true c = some v) :
+    hexValue upper c = some v := by
+  cases upper
+  · have := hexValue_true_eq_false_lt c.toNat c.toNat_lt
+    rw [show c.toNat.toUInt8 = c from UInt8.ofNat_toNat] at this
+    rw [← this (hup rfl), h]
+  · exact h
+
+/-- A code that the decoder reads as a digit has the same value when uppercase is allowed. -/
+private theorem hexValue_true_of_hexValue {upper : Bool} {c v : UInt8}
+    (h : hexValue upper c = some v) : hexValue true c = some v := by
+  cases upper
+  · have := hexValue_true_eq_false_lt c.toNat c.toNat_lt
+    rw [show c.toNat.toUInt8 = c from UInt8.ofNat_toNat] at this
+    rw [this (isUpper_of_hexValue_false h), h]
+  · exact h
+
 /-- The decoder returns the bytes whose two digits it reads at positions `2 * i` and `2 * i + 1`.
 
 This holds when the text after `0x` has exactly two digit codes for each byte. -/
@@ -212,41 +239,43 @@ private theorem bytesOf_of_hexDigits {what : String} {upper : Bool} {j : Lean.Js
     bytesOf what upper j = .ok data.toByteArray := by
   unfold bytesOf
   rw [hj]
-  simp only [bind, Except.bind, pure, Except.pure]
+  simp only [bind, Except.bind, List.data_toByteArray, List.toList_toArray]
   have hsz : ds.toByteArray.size = 2 * data.length := by simpa using hlen
   have hne : ¬ (ds.toByteArray.size % 2 ≠ 0) := by omega
-  simp only [hne, ↓reduceIte]
-  rw [show ds.toByteArray.size / 2 = data.length by omega]
-  have hr : List.range' [:data.length].start [:data.length].size [:data.length].step =
-      List.range' 0 data.length 1 := by
-    rw [show [:data.length].size = data.length by simp [Std.Legacy.Range.size]]
-  rw [Std.Legacy.Range.forIn_eq_forIn_range', hr,
-    forIn_range'_push (fun i => data.getD i 0) ?_]
-  · show Except.ok _ = Except.ok _
-    congr 1
-    apply ByteArray.ext
-    simp only [ByteArray.data_append, List.data_toByteArray]
-    have hm : (List.range' 0 data.length).map (fun i => data.getD i 0) = data := by
-      apply List.ext_getElem (by simp)
-      intro n h1 h2
-      simp [List.getD_eq_getElem?_getD, h2]
-    rw [hm]
-    simp [ByteArray.emptyWithCapacity]
-    rfl
-  · intro i out hi
-    rw [List.mem_range'_1] at hi
-    have hi' : i < data.length := by omega
-    have e : ∀ j : Nat, ds.toByteArray[j]? = ds[j]? := by
-      intro j
-      rw [getElem?_def, getElem?_def]
+  -- Every code is one of the two digits of some byte, so the decoder reads a value from it.
+  have hall : ∀ c ∈ ds, ∃ v, hexValue upper c = some v := by
+    intro c hc
+    obtain ⟨k, hk, rfl⟩ := List.mem_iff_getElem.mp hc
+    obtain ⟨i, rfl | rfl⟩ : ∃ i, k = 2 * i ∨ k = 2 * i + 1 := ⟨k / 2, by omega⟩
+    · have h0 := (hidx i (by omega)).1
+      rw [List.getElem?_eq_getElem hk, Option.bind_some] at h0
+      exact ⟨_, h0⟩
+    · have h1 := (hidx i (by omega)).2
+      rw [List.getElem?_eq_getElem hk, Option.bind_some] at h1
+      exact ⟨_, h1⟩
+  -- Without uppercase, no code is an uppercase letter, so the check of case passes.
+  have hany : (!upper && (ds.map Char.ofUInt8).any Char.isUpper) = false := by
+    cases upper
+    · simp only [Bool.not_false, Bool.true_and, List.any_eq_false, List.mem_map]
+      rintro _ ⟨c, hc, rfl⟩
+      obtain ⟨v, hv⟩ := hall c hc
+      simp [isUpper_of_hexValue_false hv]
+    · rfl
+  -- Each pair of codes reads, uppercase allowed, as the two digits of its byte.
+  have hbytes : Base.hexBytes? (ds.map Char.ofUInt8) = some data.toByteArray := by
+    refine Base.hexBytesFrom?_eq_some_iff.mpr ⟨data, by simp [hlen], ?_, fun i hi => ?_⟩
+    · apply ByteArray.ext
       simp
-    obtain ⟨h0, h1⟩ := hidx i hi'
-    obtain ⟨c, hc, hv1⟩ := Option.bind_eq_some_iff.mp h0
-    obtain ⟨d, hd, hv2⟩ := Option.bind_eq_some_iff.mp h1
-    rw [e, e, hc, hd]
-    simp only
-    rw [hv1, hv2, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi']
-    exact congrArg (fun x => Except.ok (ForInStep.yield (out.push x))) (byte_split data[i])
+    · obtain ⟨h0, h1⟩ := hidx i hi
+      obtain ⟨c, hc, hv1⟩ := Option.bind_eq_some_iff.mp h0
+      obtain ⟨d, hd, hv2⟩ := Option.bind_eq_some_iff.mp h1
+      refine ⟨_, _, ?_, ?_, (byte_split data[i]).symm⟩
+      · rw [List.getElem?_map, hc]
+        exact hexValue_true_of_hexValue hv1
+      · rw [List.getElem?_map, hd]
+        exact hexValue_true_of_hexValue hv2
+  simp only [hne, hany, hbytes, Bool.false_eq_true, ↓reduceIte]
+  rfl
 
 /-- The decoder reads back the bytes of their hex encoding.
 
@@ -704,46 +733,6 @@ private theorem hexDigitChar_hexValue (c : UInt8) (h : (hexValue false c).isSome
   rw [digit, ← digitChar_eq_hexDigitChar _ below]
   exact ⟨code, below⟩
 
-/-- A loop over indices whose every step pushes one byte returns those bytes, each with its fact. -/
-private theorem forIn_range'_ok {Q : Nat → UInt8 → Prop} {s k : Nat}
-    {f : Nat → ByteArray → Except String (ForInStep ByteArray)}
-    (hf : ∀ i out r, f i out = .ok r → ∃ x, r = .yield (out.push x) ∧ Q i x)
-    {out res : ByteArray} (h : forIn (List.range' s k) out f = .ok res) :
-    ∃ xs : List UInt8, xs.length = k ∧ res = out ++ xs.toByteArray ∧
-      ∀ (j : Nat) (hj : j < xs.length), Q (s + j) xs[j] := by
-  induction k generalizing s out with
-  | zero =>
-    refine ⟨[], rfl, ?_, fun j hj => absurd hj (Nat.not_lt_zero j)⟩
-    simp only [List.range'_zero, List.forIn_nil, pure, Except.pure, Except.ok.injEq] at h
-    rw [← h]
-    apply ByteArray.ext
-    simp
-  | succ k ih =>
-    rw [List.range'_succ, List.forIn_cons] at h
-    obtain ⟨r, hr, h⟩ := bind_ok_iff.mp h
-    obtain ⟨x, rfl, hx⟩ := hf s out r hr
-    obtain ⟨xs, hlen, hres, hq⟩ := ih h
-    refine ⟨x :: xs, by simp [hlen], ?_, ?_⟩
-    · rw [hres]
-      apply ByteArray.ext
-      simp
-    · intro j hj
-      cases j with
-      | zero => simpa using hx
-      | succ j =>
-        have := hq j (by simpa using hj)
-        rw [show s + 1 + j = s + (j + 1) by omega] at this
-        exact this
-
-/-- A byte of a buffer, read with a check, is the entry of the list of its bytes. -/
-private theorem getElem?_eq_data_toList (b : ByteArray) (i : Nat) : b[i]? = b.data.toList[i]? := by
-  have hs : b.data.toList.length = b.size := Array.length_toList
-  by_cases h : i < b.size
-  · rw [getElem?_pos b i h, List.getElem?_eq_getElem (by omega)]
-    simp only [Array.getElem_toList]
-    rfl
-  · rw [getElem?_neg b i h, List.getElem?_eq_none (by omega)]
-
 /-- The fact below, checked by the kernel on each of the 256 codes, with and without uppercase. -/
 private theorem hexValue_lt_lt : ∀ n, n < 256 → ∀ upper : Bool,
     (hexValue upper n.toUInt8).isSome = true →
@@ -792,41 +781,40 @@ private theorem bytesOf_eq_ok_digits {what : String} {upper : Bool} {j : Lean.Js
     dsimp only at h
     split at h
     · cases h
-    rename_i heven
-    obtain ⟨res, hloop, hres⟩ := bind_ok_iff.mp h
-    have hb : res = b := by cases hres; rfl
-    subst hb
-    have hr : List.range' [:digits.size / 2].start [:digits.size / 2].size
-        [:digits.size / 2].step = List.range' 0 (digits.size / 2) 1 := by
-      rw [show [:digits.size / 2].size = digits.size / 2 by simp [Std.Legacy.Range.size]]
-    rw [Std.Legacy.Range.forIn_eq_forIn_range', hr] at hloop
-    -- Each step reads two digit codes and pushes the byte that they write.
-    obtain ⟨xs, hlen, hxs, hq⟩ := forIn_range'_ok
-      (Q := fun i x => ∃ c d, digits[2 * i]? = some c ∧ digits[2 * i + 1]? = some d ∧
-        hexValue upper c = some (highDigit x).val.toUInt8 ∧
-        hexValue upper d = some (lowDigit x).val.toUInt8)
-      (fun i out r hr' => by
-        split at hr'
-        · rename_i c d hc hd'
-          split at hr'
-          · rename_i high low hh hl
-            simp only [pure, Except.pure, Except.ok.injEq] at hr'
-            obtain ⟨eh, el⟩ := highDigit_lowDigit (hexValue_lt hh).2 (hexValue_lt hl).2
-            exact ⟨_, hr'.symm, c, d, hc, hd', by rw [hh, eh], by rw [hl, el]⟩
-          · simp [bind, Except.bind] at hr'
-        · simp [bind, Except.bind] at hr')
-      hloop
-    have hres' : res.data.toList = xs := by
-      rw [hxs]; simp [ByteArray.emptyWithCapacity] <;> rfl
-    refine ⟨s, digits, rfl, hd, ?_, fun i hi => ?_⟩
-    · have : digits.data.toList.length = digits.size := Array.length_toList
-      rw [hres']
-      omega
-    · obtain ⟨c, d, hc, hd2, hcs, hds⟩ := hq i (by rw [← hres']; exact hi)
-      simp only [Nat.zero_add] at hc hd2
-      rw [getElem?_eq_data_toList] at hc hd2
-      rw [hc, hd2, List.getElem_of_eq hres' hi]
-      exact ⟨hcs, hds⟩
+    split at h
+    · cases h
+    rename_i hcase
+    split at h
+    · rename_i _ hout
+      cases h
+      -- The digits read in pairs, uppercase allowed, as the bytes.
+      obtain ⟨xs, hl, hr, hxs⟩ := Base.hexBytesFrom?_eq_some_iff.mp hout
+      have hb : b.data.toList = xs := by
+        rw [hr]
+        simp
+      -- Without uppercase, the check of case passed, so no digit is an uppercase letter.
+      have hup : ∀ c ∈ digits.data.toList, upper = false → (Char.ofUInt8 c).isUpper = false := by
+        rintro c hc rfl
+        simp only [Bool.not_false, Bool.true_and, Bool.not_eq_true, List.any_eq_false,
+          List.mem_map] at hcase
+        simpa using hcase _ ⟨c, hc, rfl⟩
+      refine ⟨s, digits, rfl, hd, ?_, fun i hi => ?_⟩
+      · rw [hb]
+        simpa using hl
+      · have hi' : i < xs.length := hb ▸ hi
+        obtain ⟨u, v, hu, hv, hx⟩ := hxs i hi'
+        rw [List.getElem?_map] at hu hv
+        obtain ⟨c, hc, hu⟩ := Option.bind_eq_some_iff.mp hu
+        obtain ⟨c, hc', rfl⟩ := Option.map_eq_some_iff.mp hc
+        obtain ⟨d, hd', hv⟩ := Option.bind_eq_some_iff.mp hv
+        obtain ⟨d, hd'', rfl⟩ := Option.map_eq_some_iff.mp hd'
+        have hu' := hexValue_of_hexValue_true (hup c (List.mem_of_getElem? hc')) hu
+        have hv' := hexValue_of_hexValue_true (hup d (List.mem_of_getElem? hd'')) hv
+        -- Each byte is sixteen times its high digit plus its low digit.
+        obtain ⟨eh, el⟩ := highDigit_lowDigit (hexValue_lt hu').2 (hexValue_lt hv').2
+        rw [hc', hd'', Option.bind_some, Option.bind_some, List.getElem_of_eq hb hi, hx, eh, el]
+        exact ⟨hu', hv'⟩
+    · cases h
   | _ =>
     obtain ⟨digits, hd, -⟩ := bind_ok_iff.mp h
     simp [hexDigits] at hd
