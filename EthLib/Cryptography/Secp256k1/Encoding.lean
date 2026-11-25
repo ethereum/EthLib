@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Secp256k1.Curve
 public import EthLib.Cryptography.Secp256k1.Errors
 public import EthLib.Cryptography.Secp256k1.Sqrt
+public import EthLib.Cryptography.ShortWeierstrass.Encoding
 public import EthLib.Base.ByteOrder
 
 /-!
@@ -19,20 +20,19 @@ A public key is never the point at infinity, by SEC 1 v2 §3.2.2.1, so the decod
 
 namespace EthLib.Cryptography.Secp256k1
 
-/-- A coordinate as 32 bytes, by SEC 1 v2 §2.3.5. -/
-def Fp.toBytes (x : Fp) : List UInt8 :=
-  -- Step 1: `q = p` is an odd prime, so `M` is the integer `a` as `mlen = 32` octets, by §2.3.7.
-  (Base.ByteOrder.toBE 32 x.val).toList
+/-- A coordinate as 32 bytes, by SEC 1 v2 §2.3.5, as for every curve. -/
+abbrev Fp.toBytes (x : Fp) : List UInt8 := ShortWeierstrass.coordinateToBytes x
 
 /-- A coordinate is 32 bytes long. -/
-theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 := by
-  simp [Fp.toBytes]
+theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 :=
+  ShortWeierstrass.length_coordinateToBytes x
 
 /-- 32 bytes as a coordinate, by SEC 1 v2 §2.3.6: the integer must be below `p`. -/
 def Fp.ofBytes (bytes : List UInt8) : Except Secp256k1Error Fp :=
-  -- Step 1: `a` is the integer of `M`, by §2.3.8, and "invalid" unless `a` lies in `[0, p-1]`.
-  if h : Base.ByteOrder.ofBE bytes < Fp.modulus then .ok ⟨_, h⟩
-  else .error (.coordinateTooLarge (Base.ByteOrder.ofBE bytes))
+  match ShortWeierstrass.coordinateOfBytes? bytes with
+  | some x => .ok x
+  -- The integer of the bytes is `p` or more.
+  | none => .error (.coordinateTooLarge (Base.ByteOrder.ofBE bytes))
 
 /-- Big-endian bytes as a scalar, if their integer is below `n`.
 
@@ -53,8 +53,8 @@ def encodeCompressed : Point → ByteArray
 def encodeUncompressed : Point → ByteArray
   -- Step 1: if `P = O`, output `M = 00`.
   | infinity => ⟨#[0x00]⟩
-  -- Steps 3.1 to 3.3: `X` from `x_P`, `Y` from `y_P`, and `M = 04 || X || Y`.
-  | affine x y => ⟨(0x04 :: x.toBytes ++ y.toBytes).toArray⟩
+  -- Steps 3.1 to 3.3: `M = 04 || X || Y`, as for every curve.
+  | affine x y => ⟨(ShortWeierstrass.encodeUncompressed x y).toArray⟩
 
 /-- The point with coordinate `x` whose `y` has parity `odd`, by SEC 1 v2 §2.3.4 step 2.4.1. -/
 def decompress (x : Fp) (odd : Bool) : Except Secp256k1Error Point :=

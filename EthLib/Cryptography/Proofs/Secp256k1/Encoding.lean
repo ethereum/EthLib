@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Except
 public import EthLib.Cryptography.Secp256k1.Encoding
+public import EthLib.Cryptography.Proofs.ShortWeierstrass.Encoding
 public import EthLib.Cryptography.Proofs.Secp256k1.Sqrt
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 
@@ -23,9 +24,8 @@ namespace EthLib.Cryptography.Secp256k1
 /-! ## Coordinates -/
 
 theorem Fp.ofBytes_toBytes (x : Fp) : Fp.ofBytes x.toBytes = .ok x := by
-  have h : Base.ByteOrder.ofBE x.toBytes = x.val := by
-    rw [Fp.toBytes, Base.ByteOrder.ofBE_toBE, Nat.mod_eq_of_lt (Nat.lt_trans x.isLt (by decide))]
-  simp only [Fp.ofBytes, h, x.isLt, dite_true]
+  simp only [Fp.ofBytes, Fp.toBytes,
+    ShortWeierstrass.coordinateOfBytes?_coordinateToBytes (by decide) x]
 
 /-- 32 bytes that read as a coordinate are that coordinate's bytes. -/
 theorem Fp.toBytes_of_ofBytes {l : List UInt8} {x : Fp} (hl : l.length = 32) (h : Fp.ofBytes l = .ok x) :
@@ -33,9 +33,12 @@ theorem Fp.toBytes_of_ofBytes {l : List UInt8} {x : Fp} (hl : l.length = 32) (h 
   simp only [Fp.ofBytes] at h
   split at h
   · cases h
-    rw [Fp.toBytes, ← hl]
-    exact Base.ByteOrder.toList_toBE_ofBE l
+    exact ShortWeierstrass.coordinateToBytes_of_coordinateOfBytes? hl (by assumption)
   · cases h
+
+/-- The shared uncompressed form `04 ‖ x ‖ y`, written with the coordinate bytes of this curve. -/
+theorem encodeUncompressed_coords (x y : Fp) :
+    ShortWeierstrass.encodeUncompressed x y = 0x04 :: (x.toBytes ++ y.toBytes) := rfl
 
 /-! ## Decompression -/
 
@@ -149,8 +152,9 @@ theorem decode_encodeUncompressed {p : Point} (hp : p.isOnCurve = true) (hinf : 
     have hdrop : (x.toBytes ++ y.toBytes).drop 32 = y.toBytes := by
       rw [List.drop_append_of_le_length (by rw [Fp.length_toBytes]), List.drop_of_length_le (by rw [Fp.length_toBytes]),
         List.nil_append]
-    simp only [decode, encodeUncompressed, List.toList_toArray, List.cons_append, hlen, hne, htake, hdrop,
-      Fp.ofBytes_toBytes, hp, bind, Except.bind, ite_true, ite_false, (by decide : ¬(64 : Nat) = 32)]
+    simp only [decode, encodeUncompressed, encodeUncompressed_coords, List.toList_toArray, hlen,
+      hne, htake, hdrop, Fp.ofBytes_toBytes, hp, bind, Except.bind, ite_true, ite_false,
+      (by decide : ¬(64 : Nat) = 32)]
 
 /-- The decoder accepts exactly the encodings of the points other than `O`.
 
@@ -195,9 +199,9 @@ theorem decode_eq_ok_iff (bytes : ByteArray) (p : Point) :
             · rename_i hc
               cases h
               refine ⟨hc, by simp, Or.inr ?_⟩
-              rw [byteArray_eq hl, encodeUncompressed, h4,
+              rw [byteArray_eq hl, encodeUncompressed, encodeUncompressed_coords, h4,
                 Fp.toBytes_of_ofBytes (by simp [h64]) hx, Fp.toBytes_of_ofBytes (by simp [h64]) hy,
-                List.cons_append, List.take_append_drop]
+                List.take_append_drop]
             · cases h
   · rintro ⟨hp, hinf, h | h⟩ <;> subst h
     · exact decode_encodeCompressed hp hinf
@@ -207,7 +211,7 @@ theorem size_encodeCompressed (x y : Fp) : (affine x y).encodeCompressed.size = 
   simp [encodeCompressed, ByteArray.size, Fp.length_toBytes]
 
 theorem size_encodeUncompressed (x y : Fp) : (affine x y).encodeUncompressed.size = 65 := by
-  simp [encodeUncompressed, ByteArray.size, Fp.length_toBytes]
+  simp [encodeUncompressed, encodeUncompressed_coords, ByteArray.size, Fp.length_toBytes]
 
 /-- `O`, encoded as the single byte `00`, is not a public key. -/
 theorem decode_infinity : decode infinity.encodeCompressed = .error .pointAtInfinity := rfl
