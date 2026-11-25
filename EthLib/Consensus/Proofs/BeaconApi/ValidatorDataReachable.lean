@@ -25,28 +25,6 @@ variable {preset : Preset} {fork : Fork} {config : Config}
 
 namespace Store
 
-/-- The root of the head of a store names a block that the store holds. -/
-theorem getHead_known {store : Store preset fork} {head : ForkChoiceNode}
-    (found : store.getHead config = .ok head) :
-    ∃ block, store.blocks[head.root]? = some block := by
-  unfold getHead at found
-  cases tree : store.getFilteredNodeTree config with
-  | error fault => simp [tree, bind, Except.bind] at found
-  | ok nodes =>
-    -- The walk starts at the justified block, which the store holds.
-    have justified := filterNodeTree_known (config := config)
-      (show store.filterNodeTree config ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok nodes
-        from tree)
-    simp only [tree, bind, Except.bind] at found
-    split at found
-    · simp only [pure, Except.pure, Except.ok.injEq] at found
-      subst found
-      exact justified
-    -- The walk ends at its start, or at a viable node, which the store holds.
-    · rcases getHeadFrom_mem found with rfl | member
-      · exact justified
-      · exact (filterNodeTree_mem tree _ member).2.1
-
 variable {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
   {store : Store preset fork}
 
