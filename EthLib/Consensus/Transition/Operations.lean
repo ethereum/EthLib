@@ -553,16 +553,20 @@ def processDepositRequest (state : BeaconState preset fork) (electra : .pectra �
 
 /-! ## Voluntary exits -/
 
-/-- From Electra: the check that a validator has no pending partial withdrawal.
+/-- The balance that a validator has queued to withdraw, at every fork. -/
+def pendingBalanceToWithdraw (state : BeaconState preset fork) (index : ValidatorIndex) :
+    Except AccessorError Gwei :=
+  -- From Electra the sum of the pending partial withdrawals of the validator.
+  if electra : .pectra ≤ fork then getPendingBalanceToWithdraw state electra index
+  -- Before Electra there is no pending partial withdrawal.
+  else pure 0
 
-Before Electra there is no such withdrawal, and nothing is checked. -/
+/-- The check that a validator has no pending partial withdrawal. -/
 def checkNoPendingWithdrawal (state : BeaconState preset fork) (index : ValidatorIndex) :
-    Except TransitionError Unit :=
-  -- From Electra the pending partial withdrawals of the validator sum to 0.
-  if electra : .pectra ≤ fork then do
-    let pending ← liftAccessor (getPendingBalanceToWithdraw state electra index)
-    ensure (pending = 0) (.exitPendingWithdrawal index)
-  else pure ()
+    Except TransitionError Unit := do
+  -- The pending partial withdrawals of the validator sum to 0.
+  let pending ← liftAccessor (pendingBalanceToWithdraw state index)
+  ensure (pending = 0) (.exitPendingWithdrawal index)
 
 /-- The domain under which a validator signs a voluntary exit for an epoch.
 

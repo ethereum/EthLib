@@ -1061,6 +1061,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the gossip check of a voluntary exit ignores an exit whose validator has a pending partial withdrawal, from Electra ([#4171](https://github.com/ethereum/EthLib/issues/4171)).
+  - `Consensus.pendingBalanceToWithdraw` (`Consensus/Transition/Operations.lean`) is new: the balance a validator has queued to withdraw, 0 before Electra.
+  - `Consensus.checkNoPendingWithdrawal` now unfolds to a check of that balance, and gives the same result at every fork.
+  - `Consensus.validateVoluntaryExit` checks that balance after the activity checks and before the signature.
+    `validateVoluntaryExit_eq`, `validateVoluntaryExit_ignored` and `validateVoluntaryExit_eq_accept` take the computed balance as a hypothesis, and state the new check.
+  Migration: pass the pending balance of the validator to those three theorems.
+- In Lean, the gossip group ID of partial columns starts with the version byte 1 from Gloas, and 0 before ([#4602](https://github.com/ethereum/EthLib/pull/4602)).
+  - `PartialDataColumnGroupID.version` (`Consensus/DataAvailability/Column.lean`) is new, and `toGroupId` and `ofGroupId` unfold to it.
+  - `ofGroupId_version` takes a first byte other than the version of the fork.
+    `version_of_lt_glamsterdam` and `version_of_glamsterdam_le` give that version on each side of Gloas.
+  Migration: write and read the group ID with the version of the fork.
 - In Lean, `Ssz.wellFormed_vector_element` (`Serialization/Proofs/Ssz/Type/Legality.lean`) is removed ([#4621](https://github.com/ethereum/EthLib/pull/4621)).
   It stated the same fact as `Ssz.wellFormed_vector` (`Serialization/Proofs/Ssz/Codec/Admits.lean`), with the same hypothesis and conclusion.
   Migration: use `Ssz.wellFormed_vector`, from `EthLib.Serialization.Proofs.Ssz.Codec.Admits`.
