@@ -2435,7 +2435,13 @@ When two entries name one address, the slots of both count.
 `startAccessedStorageKeys_of_lt_berlin` proves that before Berlin a transaction starts with no slot warm.
 SLOAD and SSTORE read these keys through `accessStorageKey`.
 SLOAD pays 2100 for a cold slot and 100 for a warm one, by EIP-2929, and SSTORE also pays more for a cold slot.
-No theorem yet joins these keys with the price of the first access to a slot in a run.
+`accessStorageKey_fst_of_mem_accesses` (`Execution/Proofs/Transactions/AccessListWarm.lean`) proves that a slot of the access list is warm in every frame that the message of the transaction reaches.
+That holds at any depth of nested calls, and after any call that failed.
+`accessAddress_fst_of_mem_accesses` proves the same for an address of the access list.
+Both rest on `RunReaches.accessesLe` (`Execution/Proofs/Evm/Call/AccessesRun.lean`): every reached frame holds the accesses of the start of the run.
+A call that fails drops only the accesses that it added, as EIP-2929 asks of a reverted scope.
+A reached frame is one that the step relation of `Execution/Proofs/Evm/Call/BurnRun.lean` reaches.
+No theorem yet shows that every frame the interpreter runs is such a frame.
 
 ### Nonces within 64 bits
 

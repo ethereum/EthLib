@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.AccessListWarm
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Burn
 public import EthLib.Execution.Proofs.Transactions.Candidate
