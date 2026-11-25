@@ -9,21 +9,11 @@ public import EthLib.Consensus.Gossip.ProposerPreferences
 
 From Gloas: gossip validation of the bids of builders.
 
-A builder offers to give the payload of a slot for a value, on top of a parent block and payload.
+A builder offers the payload of a slot for a value, on a parent block and a parent payload.
 
-A node forwards only the best bid for each slot and parent, and one bid of each builder there.
+The comments in the body state each check, in order.
 
-The bid must suit the preferences that the proposer of the slot published.
-
-Those preferences fix the address of the fees and the target of the gas limit.
-
-The bid must also build on the head of the fork choice, or on its parent.
-
-The builder must be active, able to pay the bid, and not about to exit.
-
-Some steps of the rule can fail, such as a root, or an addition out of range.
-
-Such a failure is an error rather than an outcome.
+A step that fails, such as a root or an addition out of range, is an error rather than an outcome.
 -/
 
 @[expose] public section
@@ -88,6 +78,22 @@ def Store.isBidCompatibleWithHead (config : Config) (store : Store preset fork)
 def Seen.bestExecutionPayloadBidFor (seen : Seen) (key : Slot × Hash32 × Root) : Option Gwei :=
   seen.bestExecutionPayloadBids.lookup key
 
+/-- The count of valid bids of a builder for a slot, a parent payload and a parent block. -/
+def Seen.executionPayloadBidCount (seen : Seen) (key : Slot × Hash32 × Root × BuilderIndex) :
+    Nat :=
+  seen.executionPayloadBids.count key
+
+/-- From Gloas: how many bids a builder may have forwarded for each slot and parent.
+
+It is the balance that the builder does not owe, in whole ether. -/
+def getBuilderBidLimit (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (index : BuilderIndex) : Except AccessorError UInt64 := do
+  let builder ← getBuilder state gloas index
+  -- Let `p` be what the builder owes.
+  let pending ← getPendingBalanceToWithdrawForBuilder state gloas index
+  -- `floor(max(b - p, 0) / 10^9)`, for the balance `b` of the builder.
+  return saturatingSub builder.balance pending / ETH_TO_GWEI
+
 /-- The gas limit of the payload of a valid envelope, by the hash of the payload, if any. -/
 def Seen.executionPayloadGasLimitFor (seen : Seen) (blockHash : Hash32) : Option UInt64 :=
   seen.executionPayloadGasLimits.lookup blockHash
@@ -132,16 +138,14 @@ def bidInclusionListOutcome (store : Store preset fork) (state : BeaconState pre
 
 /-- From Gloas: the checks of a signed bid on its topic, at a time in ms.
 
-The parents of a bid are its parent payload, by hash, and its parent block, by root. -/
+The parents of a bid are its parent payload, by hash, and its parent block, by root.
+
+The proposer of the slot should still weigh a higher bid past the limit, without forwarding it. -/
 def validateExecutionPayloadBid (config : Config) (checks : SignatureChecks) (seen : Seen)
     (store : Store preset fork) (gloas : .glamsterdam ≤ fork)
     (signed : SignedExecutionPayloadBid preset fork) (currentTimeMs : UInt64) :
     Except ForkChoiceError ValidationResult :=
   let bid := signed.message
-  -- IGNORE unless it is the first valid bid of its builder for its slot and its parents.
-  (ignoreUnless (!seen.executionPayloadBids.contains
-      (bid.slot, bid.parentBlockHash, bid.parentBlockRoot, bid.builderIndex))
-    "already seen valid bid for this slot, parent, and builder").andThenM fun _ =>
   -- IGNORE unless its value beats the best value of a valid bid for its slot and its parents.
   --
   -- Only the highest bid for a slot and a parent is forwarded, as EIP-7732 specifies.
@@ -222,6 +226,11 @@ def validateExecutionPayloadBid (config : Config) (checks : SignatureChecks) (se
   -- REJECT unless the builder is active.
   let active ← (isActiveBuilder state gloas bid.builderIndex).mapError .accessor
   (rejectUnless active "builder is not active").andThenM fun _ => do
+  -- IGNORE unless the builder has fewer valid bids for the slot and parents than its limit.
+  let limit ← (getBuilderBidLimit state gloas bid.builderIndex).mapError .accessor
+  (ignoreUnless (seen.executionPayloadBidCount
+      (bid.slot, bid.parentBlockHash, bid.parentBlockRoot, bid.builderIndex) < limit.toNat)
+    "builder has reached its bid limit for this slot and parent").andThenM fun _ => do
   -- IGNORE unless the balance of the builder covers the value of the bid.
   let covered ← (canBuilderCoverBid state gloas bid.builderIndex bid.value).mapError .accessor
   (ignoreUnless covered "builder cannot cover bid value").andThenM fun _ => do
@@ -235,7 +244,7 @@ def validateExecutionPayloadBid (config : Config) (checks : SignatureChecks) (se
     (verifyExecutionPayloadBidSignature config checks state gloas signed).mapError .transition
   return rejectUnless valid "invalid bid signature"
 
-/-- The keys after a valid bid: its slot, parents and builder, and its value as the best one. -/
+/-- The keys after a valid bid: one more bid of its builder, and its value as the best one. -/
 def Seen.recordExecutionPayloadBid (seen : Seen) (signed : SignedExecutionPayloadBid preset fork) :
     Seen :=
   let bid := signed.message

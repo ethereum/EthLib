@@ -1069,6 +1069,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, a builder may have several bids forwarded for one slot and parent, up to a limit that its balance sets ([#3512](https://github.com/ethereum/EthLib/issues/3512)).
+  - `Consensus.getBuilderBidLimit` (`Consensus/Gossip/Bid.lean`) is new: the balance that the builder does not owe, in whole ether.
+  - `Seen.executionPayloadBidCount` counts the valid bids of a key, and a valid bid adds one (`executionPayloadBidCount_recordExecutionPayloadBid`).
+  - `validateExecutionPayloadBid` drops the check of a first bid, and ignores a bid once the count of its key reaches the limit.
+  - `validateExecutionPayloadBid_of_seen` and `validateExecutionPayloadBid_recordExecutionPayloadBid` are removed, and `validateExecutionPayloadBid_of_not_best` no longer takes a fresh key.
+  - The chain theorems take the computed limit as a hypothesis.
+    `lt_limit_of_validateExecutionPayloadBid_eq_accept` and `executionPayloadBidCount_le_limit_of_validateExecutionPayloadBid_eq_accept` bound the count by the limit.
+  - The parity registry lists the eight bid cases of v1.7.0-beta.4 that rest on one bid per builder, and the gossip tests expect them to fail.
+  Migration: pass the bid limit to the chain theorems, and use the count in place of the seen key.
 - In Lean, the Miller loop of the BLS12-381 pairing squares with the complex method and multiplies by each line with a sparse product ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
   - `Bls.Fp12.square` (`Cryptography/Bls/Fp12.lean`) unfolds to the complex squaring, not to `a * a`; `Fp12.square_eq` (`Cryptography/Proofs/Bls/Fp12.lean`) states that it is the square.
   - `Bls.Fp12.mulLine` (`Cryptography/Bls/Pairing.lean`), `Bls.Fp6.mulBy01` and `Bls.Fp6.mulBy1` (`Cryptography/Bls/Fp6.lean`) are new, with `mulLine_eq`, `Fp6.mulBy01_eq` and `Fp6.mulBy1_eq`, which state them as full products, and their map lemmas.
