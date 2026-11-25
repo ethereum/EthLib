@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.KeymanagerApi.Server
 public import EthLib.Consensus.Proofs.KeymanagerApi.BuilderConfig
+public import EthLib.Consensus.Proofs.KeymanagerApi.Run
 public import EthLib.Consensus.Proofs.KeymanagerApi.VoluntaryExit
 
 /-!
@@ -123,31 +124,9 @@ private theorem keyed_settingCalls {α : Type} {calls : SettingCalls α}
     (lawful : calls.setting.Lawful) {config : ClientConfig} {state : KeyState}
     (keyed : state.Keyed) (method : String) (pubkey : BLSPubkey) (body : Json) :
     (calls.handle config state method pubkey body).2.Keyed := by
-  have locals : ∀ mappings, (calls.setting.withMappings state mappings).localKeys =
-      state.localKeys := fun mappings => (lawful state mappings).2.1
-  have keptSet : ∀ value, (calls.setting.set state pubkey value).Keyed := by
-    intro value k mem
-    exact keyed k (by simpa [Setting.set, locals] using mem)
-  unfold SettingCalls.handle
-  split
-  · exact keyed
-  · split
-    · exact keyed
-    · split
-      · exact keyed
-      · split
-        · exact keyed
-        · exact keptSet _
-    · split
-      · rename_i after deleted
-        unfold Setting.delete at deleted
-        split at deleted
-        · cases deleted
-          intro k mem
-          exact keyed k (by simpa [locals] using mem)
-        · cases deleted
-      · exact keyed
-    · exact keyed
+  intro k mem
+  rw [SettingCalls.localKeys_handle lawful config state method pubkey body] at mem
+  exact keyed k mem
 
 /-- A request to import keystores keeps a client keyed.
 
@@ -210,13 +189,6 @@ private theorem keyed_deleteRemoteKeysCall {state : KeyState} (keyed : state.Key
 theorem keyed_handle {state : KeyState} (keyed : state.Keyed) (text : JsonText)
     (config : ClientConfig) (chain : Option ChainView) (method path : String) (body : Json) :
     (handle text config chain state method path body).2.Keyed := by
-  have named : ∀ (key : String) (call : BLSPubkey → Response × KeyState),
-      (∀ pubkey, (call pubkey).2.Keyed) → (withPubkey key state call).2.Keyed := by
-    intro key call h
-    unfold withPubkey
-    split
-    · exact h _
-    · exact keyed
   unfold handle
   dsimp only
   split
@@ -226,11 +198,15 @@ theorem keyed_handle {state : KeyState} (keyed : state.Keyed) (text : JsonText)
   · exact keyed
   · exact keyed_postRemoteKeys keyed body
   · exact keyed_deleteRemoteKeysCall keyed body
-  · exact named _ _ fun _ => keyed_settingCalls feeRecipientSetting_lawful keyed _ _ body
-  · exact named _ _ fun _ => keyed_settingCalls gasLimitSetting_lawful keyed _ _ body
-  · exact named _ _ fun _ => keyed_settingCalls graffitiSetting_lawful keyed _ _ body
-  · exact named _ _ fun _ => keyed_settingCalls builderConfigSetting_lawful keyed _ _ body
-  · exact named _ _ fun _ => keyed
+  · exact KeyState.of_withPubkey keyed fun _ =>
+      keyed_settingCalls feeRecipientSetting_lawful keyed _ _ body
+  · exact KeyState.of_withPubkey keyed fun _ =>
+      keyed_settingCalls gasLimitSetting_lawful keyed _ _ body
+  · exact KeyState.of_withPubkey keyed fun _ =>
+      keyed_settingCalls graffitiSetting_lawful keyed _ _ body
+  · exact KeyState.of_withPubkey keyed fun _ =>
+      keyed_settingCalls builderConfigSetting_lawful keyed _ _ body
+  · exact KeyState.of_withPubkey keyed fun _ => keyed
   · exact keyed
 
 /-- A run of calls from a keyed client leaves it keyed.
@@ -239,15 +215,8 @@ Each state of the run is the one that a call leaves from the state before it. -/
 theorem keyed_of_run {states : Nat → KeyState} {k : Nat} (start : (states 0).Keyed)
     (run : ∀ i < k, ∃ text client chain method path body,
       states (i + 1) = (handle text client chain (states i) method path body).2) :
-    (states k).Keyed := by
-  induction k with
-  | zero => exact start
-  | succ n ih =>
-    obtain ⟨text, client, chain, method, path, body, step⟩ :=
-      run n (Nat.lt_succ_self n)
-    rw [step]
-    exact keyed_handle (ih fun i hi => run i (Nat.lt_succ_of_lt hi)) text client chain method
-      path body
+    (states k).Keyed :=
+  KeyState.of_run (fun _ keyed => keyed_handle keyed) start run
 
 /-- After a run of calls from a keyed client, an exit that the client signs verifies.
 

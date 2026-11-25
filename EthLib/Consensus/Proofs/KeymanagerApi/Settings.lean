@@ -137,6 +137,46 @@ theorem handle_get_of_handle_set {α : Type} {calls : SettingCalls α} {config :
     simpa [Setting.set, KeyState.isManaged, KeyState.isActive, locals, remotes] using managed
   simp [SettingCalls.handle, managed, read, allowed, stillManaged, Setting.get_set lawful]
 
+/-- A call through the API on a lawful setting keeps the local and the remote keys. -/
+private theorem keys_handle {α : Type} {calls : SettingCalls α} (lawful : calls.setting.Lawful)
+    (config : ClientConfig) (state : KeyState) (method : String) (pubkey : BLSPubkey)
+    (body : Json) :
+    (calls.handle config state method pubkey body).2.localKeys = state.localKeys ∧
+      (calls.handle config state method pubkey body).2.remoteKeys = state.remoteKeys := by
+  unfold SettingCalls.handle
+  split
+  · exact ⟨rfl, rfl⟩
+  · split
+    · exact ⟨rfl, rfl⟩
+    · split
+      · exact ⟨rfl, rfl⟩
+      · split
+        · exact ⟨rfl, rfl⟩
+        · exact (lawful _ _).2
+    · split
+      · rename_i deleted
+        unfold Setting.delete at deleted
+        split at deleted
+        · cases deleted
+          exact (lawful _ _).2
+        · cases deleted
+      · exact ⟨rfl, rfl⟩
+    · exact ⟨rfl, rfl⟩
+
+/-- A call through the API on a lawful setting keeps the local keys. -/
+theorem SettingCalls.localKeys_handle {α : Type} {calls : SettingCalls α}
+    (lawful : calls.setting.Lawful) (config : ClientConfig) (state : KeyState) (method : String)
+    (pubkey : BLSPubkey) (body : Json) :
+    (calls.handle config state method pubkey body).2.localKeys = state.localKeys :=
+  (keys_handle lawful config state method pubkey body).1
+
+/-- A call through the API on a lawful setting keeps the remote keys. -/
+theorem SettingCalls.remoteKeys_handle {α : Type} {calls : SettingCalls α}
+    (lawful : calls.setting.Lawful) (config : ClientConfig) (state : KeyState) (method : String)
+    (pubkey : BLSPubkey) (body : Json) :
+    (calls.handle config state method pubkey body).2.remoteKeys = state.remoteKeys :=
+  (keys_handle lawful config state method pubkey body).2
+
 /-- A set of the zero fee recipient on a managed key gets HTTP 400 and changes nothing. -/
 theorem handle_feeRecipient_zero {config : ClientConfig} {state : KeyState}
     {pubkey : BLSPubkey} {body : Json} (managed : state.isManaged pubkey = true)

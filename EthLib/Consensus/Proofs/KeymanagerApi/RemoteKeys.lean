@@ -1,6 +1,9 @@
 module
 
-public import EthLib.Consensus.KeymanagerApi.RemoteKeys
+public import EthLib.Consensus.Proofs.KeymanagerApi.BuilderConfig
+public import EthLib.Consensus.Proofs.KeymanagerApi.DeleteKeys
+public import EthLib.Consensus.Proofs.KeymanagerApi.LocalKeys
+public import EthLib.Consensus.Proofs.KeymanagerApi.Run
 
 /-!
 # Proofs: remote keys through the Keymanager API
@@ -14,6 +17,8 @@ After an import, each key with the status imported is a remote key.
 After a delete, no key with the status deleted is a remote key.
 
 Importing one new key and then deleting it gives back the remote keys before.
+
+The remote keys keep distinct public keys under every run of calls.
 -/
 
 @[expose] public section
@@ -218,5 +223,85 @@ theorem remoteKeys_deleteRemoteKeys_importRemoteKeys (state : KeyState)
     exact fun key member same => absurd same (absent key member)
   simp [notReadonly, List.filter_append]
   exact absent
+
+/-! ## Distinct public keys -/
+
+/-- The remote keys of a client have distinct public keys. -/
+def KeyState.RemoteDistinct (state : KeyState) : Prop :=
+  (state.remoteKeys.map (·.pubkey)).Nodup
+
+/-- An import of one key keeps the public keys of the remote keys distinct. -/
+theorem remoteDistinct_importRemoteKey {state : KeyState} (distinct : state.RemoteDistinct)
+    (definition : ImportRemoteSignerDefinition) :
+    (importRemoteKey state definition).2.RemoteDistinct := by
+  unfold importRemoteKey
+  split
+  · exact distinct
+  · rename_i unknown
+    -- A key that the client does not know has the public key of no remote key.
+    simp only [KeyState.isKnown, Bool.or_eq_true, List.any_eq_true, beq_iff_eq, not_or,
+      not_exists, not_and] at unknown
+    simp only [KeyState.RemoteDistinct, List.map_append, List.map_cons, List.map_nil,
+      List.nodup_append, List.nodup_cons, List.not_mem_nil, not_false_eq_true, List.nodup_nil,
+      and_self, List.mem_map, List.mem_singleton, ne_eq, forall_exists_index, and_imp,
+      forall_apply_eq_imp_iff₂, true_and]
+    exact ⟨distinct, fun key member _ same => same ▸ unknown.2 key member⟩
+
+/-- An import of remote keys keeps their public keys distinct. -/
+theorem remoteDistinct_importRemoteKeys {state : KeyState} (distinct : state.RemoteDistinct)
+    (definitions : List ImportRemoteSignerDefinition) :
+    (importRemoteKeys state definitions).2.RemoteDistinct := by
+  induction definitions generalizing state with
+  | nil => exact distinct
+  | cons definition rest ih => exact ih (remoteDistinct_importRemoteKey distinct definition)
+
+/-- A delete of remote keys keeps their public keys distinct, since it removes keys only. -/
+theorem remoteDistinct_deleteRemoteKeys {state : KeyState} (distinct : state.RemoteDistinct)
+    (pubkeys : List BLSPubkey) : (deleteRemoteKeys state pubkeys).2.RemoteDistinct :=
+  ((remoteKeys_sublist_deleteRemoteKeys state pubkeys).map _).nodup distinct
+
+/-- Every call of the Keymanager API keeps the public keys of the remote keys distinct. -/
+theorem remoteDistinct_handle {state : KeyState} (distinct : state.RemoteDistinct)
+    (text : JsonText) (config : ClientConfig) (chain : Option ChainView) (method path : String)
+    (body : Json) : (handle text config chain state method path body).2.RemoteDistinct := by
+  -- A call that keeps the remote keys keeps them distinct.
+  have kept : ∀ after : KeyState, after.remoteKeys = state.remoteKeys → after.RemoteDistinct :=
+    fun after same => by rw [KeyState.RemoteDistinct, same]; exact distinct
+  -- The calls on the settings of a key change only their own mappings.
+  have setting : ∀ {α : Type} (calls : SettingCalls α), calls.setting.Lawful →
+      ∀ method pubkey body, (calls.handle config state method pubkey body).2.RemoteDistinct :=
+    fun _ lawful method pubkey body =>
+      kept _ (SettingCalls.remoteKeys_handle lawful config state method pubkey body)
+  unfold handle
+  dsimp only
+  split
+  · exact distinct
+  · exact kept _ (remoteKeys_postKeystores state body)
+  · exact kept _ (remoteKeys_deleteKeystores text state body)
+  · exact distinct
+  · unfold postRemoteKeys
+    split
+    · exact distinct
+    · exact remoteDistinct_importRemoteKeys distinct _
+  · unfold deleteRemoteKeysCall
+    split
+    · exact distinct
+    · exact remoteDistinct_deleteRemoteKeys distinct _
+  · exact KeyState.of_withPubkey distinct fun _ => setting _ feeRecipientSetting_lawful _ _ body
+  · exact KeyState.of_withPubkey distinct fun _ => setting _ gasLimitSetting_lawful _ _ body
+  · exact KeyState.of_withPubkey distinct fun _ => setting _ graffitiSetting_lawful _ _ body
+  · exact KeyState.of_withPubkey distinct fun _ => setting _ builderConfigSetting_lawful _ _ body
+  · exact KeyState.of_withPubkey distinct fun _ => distinct
+  · exact distinct
+
+/-- After a run of calls, the remote keys of a client still have distinct public keys.
+
+Each state of the run is the one that a call leaves from the state before it. -/
+theorem remoteDistinct_of_run {states : Nat → KeyState} {k : Nat}
+    (start : (states 0).RemoteDistinct)
+    (run : ∀ i < k, ∃ text client chain method path body,
+      states (i + 1) = (handle text client chain (states i) method path body).2) :
+    (states k).RemoteDistinct :=
+  KeyState.of_run (fun _ distinct => remoteDistinct_handle distinct) start run
 
 end EthLib.Consensus.KeymanagerApi
