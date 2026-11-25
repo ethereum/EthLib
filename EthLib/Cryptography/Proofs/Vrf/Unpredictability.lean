@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Vrf.Verify
-public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import VCVio.OracleComp.QueryTracking.RandomOracle.HiddenSeed
 public import VCVio.OracleComp.EvalDist.Sum
 public import VCVio.OracleComp.Constructions.SampleableType.Measure
@@ -172,54 +172,6 @@ theorem simulateQ_deriveImpl_gameD (others : UInt32 → Digest) (c : UInt32) (s 
     ← QueryImpl.simulateQ_compose, himpl]
   rfl
 
-/-! ## Counting hash queries
-
-A node of level `l` hashes its `2^l` leaves and its `2^l - 1` inner nodes. -/
-
-section Count
-
-variable {ι : Type} {spec : OracleSpec ι} {p : ι → Prop} [DecidablePred p] {α : Type}
-  {hash : Merkle.Position → α → α → OracleComp spec α} {leaves : Nat → OracleComp spec α}
-
-/-- A node of level `l` makes at most `2^(l + 1) - 1` queries, one per leaf and per hash. -/
-theorem isQueryBoundP_node (hleaves : ∀ j, IsQueryBoundP (leaves j) p 1)
-    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
-    ∀ q : Merkle.Position,
-      IsQueryBoundP (Merkle.node hash leaves q) p (2 ^ (q.level + 1) - 1) := by
-  rintro ⟨level, j⟩
-  induction level generalizing j with
-  | zero => exact hleaves j
-  | succ level ih =>
-    rw [Merkle.node_succ]
-    have h1 : 1 ≤ 2 ^ (level + 1) := Nat.one_le_two_pow
-    have h2 : 2 ^ (level + 1 + 1) = 2 * 2 ^ (level + 1) := by rw [pow_succ]; ring
-    refine (isQueryBoundP_bind (ih _) fun _ _ =>
-      isQueryBoundP_bind (ih _) fun _ _ => hhash _ _ _).mono ?_
-    simp only at h1 h2 ⊢
-    omega
-
-/-- The `n` siblings above a node of level `l` make at most `2^(l + n + 1) - 2^(l + 1)` queries. -/
-theorem isQueryBoundP_siblings (hleaves : ∀ j, IsQueryBoundP (leaves j) p 1)
-    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
-    ∀ (q : Merkle.Position) (n : Nat), IsQueryBoundP (Merkle.siblings hash leaves q n) p
-      (2 ^ (q.level + n + 1) - 2 ^ (q.level + 1))
-  | q, 0 => by simp [Merkle.siblings]
-  | q, n + 1 => by
-    simp only [Merkle.siblings]
-    have h1 : 1 ≤ 2 ^ (q.level + 1) := Nat.one_le_two_pow
-    have h2 : 2 ^ (q.level + 1 + 1) = 2 * 2 ^ (q.level + 1) := by rw [pow_succ]; ring
-    have h3 : 2 ^ (q.level + 1 + 1) ≤ 2 ^ (q.level + 1 + n + 1) :=
-      Nat.pow_le_pow_right (by norm_num) (by omega)
-    have h4 : q.level + (n + 1) + 1 = q.level + 1 + n + 1 := by omega
-    rw [h4]
-    refine (isQueryBoundP_bind (isQueryBoundP_node hleaves hhash q.sibling) fun _ _ =>
-      isQueryBoundP_bind (isQueryBoundP_siblings hleaves hhash q.parent n) fun _ _ =>
-        isQueryBoundP_pure _ _ 0).mono ?_
-    simp only [Merkle.Position.sibling_level, Merkle.Position.parent_level]
-    omega
-
-end Count
-
 /-! ## The budgets -/
 
 attribute [local irreducible] VRF_TREE_HEIGHT
@@ -267,16 +219,16 @@ theorem isQueryBoundP_leafD (others : UInt32 → Digest) (c : UInt32) (j : Nat) 
 /-- The path of an opening in a tree of height `n` makes fewer than `2^(n + 1)` hash queries. -/
 theorem isQueryBoundP_pathD (others : UInt32 → Digest) (c : UInt32) (n i : Nat) :
     IsQueryBoundP (Merkle.path (nodeWith hashD) (leafD others c) n i) IsHashD (2 ^ (n + 1)) := by
-  have h := isQueryBoundP_siblings (hash := nodeWith hashD) (leaves := leafD others c)
+  have h := Merkle.isQueryBoundP_siblings (hash := nodeWith hashD) (leaves := leafD others c)
     (isQueryBoundP_leafD others c) (fun _ a b => isQueryBoundP_hashD (nodeInput a b)) ⟨0, i⟩ n
-  exact h.mono (by simp)
+  exact h.mono (by dsimp only; rw [Nat.zero_add, pow_succ]; exact Nat.sub_le _ _)
 
 /-- The root of a tree of height `n` makes fewer than `2^(n + 1)` hash queries. -/
 theorem isQueryBoundP_rootD (others : UInt32 → Digest) (c : UInt32) (n : Nat) :
     IsQueryBoundP (Merkle.root (nodeWith hashD) (leafD others c) n) IsHashD (2 ^ (n + 1)) := by
-  have h := isQueryBoundP_node (hash := nodeWith hashD) (leaves := leafD others c)
+  have h := Merkle.isQueryBoundP_node (hash := nodeWith hashD) (leaves := leafD others c)
     (isQueryBoundP_leafD others c) (fun _ a b => isQueryBoundP_hashD (nodeInput a b)) ⟨n, 0⟩
-  exact h.mono (Nat.sub_le _ _)
+  exact h.mono (by dsimp only; rw [pow_succ]; exact Nat.sub_le _ _)
 
 /-- Answering an adversary of `qh` hash queries and `qo` requests costs `qh + qo 2^33` queries. -/
 theorem isQueryBoundP_simulateQ_openImplD (others : UInt32 → Digest) (c : UInt32) {α : Type}

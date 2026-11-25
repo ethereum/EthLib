@@ -1089,6 +1089,13 @@ Not yet released.
   `forkchoiceUpdatedParams_eq_ok_iff` (`Engine/Proofs/ForkchoiceUpdated.lean`) states the new case.
   A request with a wrong count of parameters now names the counts `1 or 2`, or from version 4 `1 to 3`, in its `-32602` message.
 
+- In Lean, the query bounds of a Merkle node, a build and the siblings of a path are stated once, in `Cryptography/Proofs/Merkle/QueryBound.lean`, for leaves of any cost `c` ([#4575](https://github.com/ethereum/EthLib/issues/4575)).
+  - `Merkle.isQueryBoundP_node`, `Merkle.isQueryBoundP_build` and `Merkle.isQueryBoundP_siblings` are new.
+  - `Xmss.isQueryBoundP_merkleNode`, `Xmss.isQueryBoundP_merkleBuild` and `Xmss.isQueryBoundP_merkleSiblings` are removed, since the new theorems state them word for word.
+  - `Vrf.isQueryBoundP_node` and `Vrf.isQueryBoundP_siblings` are removed: they follow from the new theorems at `c = 1`.
+    The new bounds read `2^l * (c + 1)` in place of `2^(l + 1)`.
+  Migration: use the theorems of the Merkle namespace, with `c := 1` and a rewrite by `pow_succ` for the old form of the VRF bounds.
+
 - In Lean, a Gloas builder keeps the first preferences of a proposer for a slot, and may refuse preferences from a key that is not the proposer of the slot ([#3860](https://github.com/ethereum/EthLib/issues/3860)).
   This follows `ethereum/builder-specs` at `0911550`.
   - `BuilderApi.preferencesFailures` and `BuilderApi.PreferencesStore.submit` (`Consensus/BuilderApi/RequestAuth.lean`) take the key of the proposer that the builder knows for each slot, before the key of the path.
