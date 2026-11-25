@@ -9,21 +9,7 @@ public import EthLib.Consensus.Proofs.Gossip.SyncCommittee
 
 Each topic checks a vote in a fixed order, so its outcome is a chain of checks.
 
-The chain needs the head state, the subnet, the committee and the signatures.
-
-It also needs the checks of the clock and of the ancestors of the block voted for.
-
-Once these are computed, the outcome is that chain.
-
 From the chain follows which votes each topic accepts and which it ignores.
-
-A valid vote records its keys, and the same vote is then ignored.
-
-From Gloas a vote whose payload checks pass also passes those of the fork choice.
-
-The checks of an aggregate cut its committee and its participants from one shuffle.
-
-Reading each of them from the state alone gives the same outcome, errors included.
 -/
 
 @[expose] public section
@@ -694,6 +680,7 @@ theorem validateAggregateInCommittee_eq_accessors :
   | error e => simp only [bind, Except.bind]
   | ok state =>
     simp only [bind, Except.bind]
+    -- The checks of an aggregate cut its committee and its participants from one shuffle.
     cases shuffleOk : attesterShuffle state
         (computeEpochAtSlot preset signed.message.aggregate.data.slot) with
     -- Both sides read the shuffle at the committee, so its failure is the same error on both.

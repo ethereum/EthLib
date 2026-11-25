@@ -10,14 +10,6 @@ public import EthLib.Networking.Proofs.Gossip.Validation
 The topic checks preferences in a fixed order, so its outcome is a chain of checks.
 
 The chain reads the clock, the dependent block, its advanced state and the signature.
-
-Once these are computed, preferences are valid exactly when every check passes.
-
-Valid preferences record their key, and preferences with the same key are then ignored.
-
-A state names a validator as the proposer of each of its upcoming proposal slots.
-
-So the validator passes the proposer check for that slot, with the lookahead of that state.
 -/
 
 @[expose] public section
@@ -93,7 +85,12 @@ theorem validateProposerPreferences_eq_accept
 
 end Accept
 
-/-! ## The proposer check and the upcoming proposal slots -/
+/-! ## The proposer check and the upcoming proposal slots
+
+A state names a validator as the proposer of each of its upcoming proposal slots.
+
+So the validator passes the proposer check for that slot, with the lookahead of that state.
+-/
 
 /-- A slot that a validator proposes, among the upcoming slots of a state, names it as proposer.
 

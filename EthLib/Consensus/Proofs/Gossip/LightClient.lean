@@ -8,14 +8,6 @@ public import EthLib.Consensus.Gossip.LightClient
 A node accepts an update exactly when every check of its role passes.
 
 So an accepted update is newer than every update of its topic forwarded before.
-
-A full node accepts only the update that the latest update it supplies gives.
-
-A light client accepts only an update that its store accepts.
-
-That update must also move the store forward, or repeat the latest forwarded finality update.
-
-Once an update is forwarded, every update that is not newer is ignored.
 -/
 
 @[expose] public section

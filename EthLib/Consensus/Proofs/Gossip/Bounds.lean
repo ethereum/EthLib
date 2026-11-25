@@ -12,19 +12,6 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Class
 The payload of a gossip message is bounded by the largest size of its topic's type.
 
 From Gloas, a size limit of its topic bounds it too.
-
-- Before Gloas, no topic has a size limit.
-- Only aggregates, attester slashings, data column sidecars, bids and inclusion lists have one.
-- From Gloas, the size limit of a data column sidecar topic is the largest size of a sidecar.
-- With a size limit, the bound of a topic is the lower of the limit and the bound of its type.
-- From Electra, aggregates, attestations and attester slashings keep their bounds at Electra.
-- That holds for the mainnet and minimal presets.
-- A payload that the gossip decoder accepts at its topic's bound is within the type's largest size.
-- That payload is also within the size limit of the topic.
-- A message that a node serializes, within the payload cap, passes the decoder once compressed.
-- That message must also be within the size limit of its topic, if the topic has one.
-- Its payload then reads back as the message.
-- From Heze, the topic of inclusion lists carries a signed inclusion list.
 -/
 
 @[expose] public section
