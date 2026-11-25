@@ -103,7 +103,7 @@ def topicBound (preset : Preset) (config : Config) (fork : Fork) (topic : Gossip
     Option UInt64 :=
   (topicDesc preset config fork topic).map fun shape =>
     match topic.sizeLimit preset config fork with
-    | some limit => min (Networking.ReqResp.payloadBounds shape).2 limit
-    | none => (Networking.ReqResp.payloadBounds shape).2
+    | some limit => min (Networking.ReqResp.payloadBounds config.MAX_PAYLOAD_SIZE shape).2 limit
+    | none => (Networking.ReqResp.payloadBounds config.MAX_PAYLOAD_SIZE shape).2
 
 end EthLib.Consensus

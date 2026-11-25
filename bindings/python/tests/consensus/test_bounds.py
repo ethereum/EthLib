@@ -120,10 +120,11 @@ def test_request_unknown_preset() -> None:
 def test_request_bounds_admit_the_request() -> None:
     # An 84-byte status passes the payload decoder at its bounds, and 83 bytes do not.
     low, high = consensus.reqresp_request_bounds("phase0", _id("status", 1))
+    cap = consensus.config("mainnet")["MAX_PAYLOAD_SIZE"]
     status = bytes(84)
-    assert reqresp.decode_payload(low, high, _payload(status)) == status
+    assert reqresp.decode_payload(cap, low, high, _payload(status)) == status
     with raises(ValueError, "declared length 83 is below 84"):
-        reqresp.decode_payload(low, high, _payload(bytes(83)))
+        reqresp.decode_payload(cap, low, high, _payload(bytes(83)))
 
 
 def test_ping_response() -> None:

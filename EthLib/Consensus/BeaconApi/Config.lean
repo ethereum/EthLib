@@ -188,7 +188,7 @@ def presetEntries (preset : Preset) : List (String × SpecValue) := [
   ("CELLS_PER_EXT_BLOB", spec preset.CELLS_PER_EXT_BLOB),
   ("NUMBER_OF_COLUMNS", spec preset.NUMBER_OF_COLUMNS)]
 
-/-- Each value of a configuration under its name, with the payload cap that every network shares. -/
+/-- Each value of a configuration under its name. -/
 def configEntries (config : Config) : List (String × SpecValue) := [
   ("EPOCHS_PER_SUBNET_SUBSCRIPTION", spec config.EPOCHS_PER_SUBNET_SUBSCRIPTION),
   ("SUBNETS_PER_NODE", spec config.SUBNETS_PER_NODE),
@@ -257,6 +257,7 @@ def configEntries (config : Config) : List (String × SpecValue) := [
   ("DEPOSIT_CHAIN_ID", spec config.DEPOSIT_CHAIN_ID),
   ("DEPOSIT_NETWORK_ID", spec config.DEPOSIT_NETWORK_ID),
   ("DEPOSIT_CONTRACT_ADDRESS", spec config.DEPOSIT_CONTRACT_ADDRESS),
+  ("MAX_PAYLOAD_SIZE", spec config.MAX_PAYLOAD_SIZE),
   ("MAX_REQUEST_BLOCKS", spec config.MAX_REQUEST_BLOCKS),
   ("ATTESTATION_PROPAGATION_SLOT_RANGE", spec config.ATTESTATION_PROPAGATION_SLOT_RANGE),
   ("MAXIMUM_GOSSIP_CLOCK_DISPARITY", spec config.MAXIMUM_GOSSIP_CLOCK_DISPARITY),
@@ -281,8 +282,7 @@ def configEntries (config : Config) : List (String × SpecValue) := [
     spec config.MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST),
   ("BLOB_SCHEDULE", spec config.BLOB_SCHEDULE),
   ("GAS_LIMIT_SCHEDULE", spec config.GAS_LIMIT_SCHEDULE),
-  ("CONFIRMATION_BYZANTINE_THRESHOLD", spec config.CONFIRMATION_BYZANTINE_THRESHOLD),
-  ("MAX_PAYLOAD_SIZE", spec Networking.ReqResp.MAX_PAYLOAD_SIZE)]
+  ("CONFIRMATION_BYZANTINE_THRESHOLD", spec config.CONFIRMATION_BYZANTINE_THRESHOLD)]
 
 /-- The spec map of a configuration and a preset: each value under the name of the source. -/
 def specMap (config : Config) (preset : Preset) : List (String × Json) :=

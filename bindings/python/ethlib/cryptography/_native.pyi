@@ -1408,11 +1408,11 @@ def reqresp_max_compressed_len(n: int) -> int:
     """The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."""
     ...
 
-def reqresp_decode_payload(type_min: int, type_bound: int, data: bytes) -> bytes:
-    """The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type."""
+def reqresp_decode_payload(max_payload_size: int, type_min: int, type_bound: int, data: bytes) -> bytes:
+    """The SSZ bytes of a payload, given the payload cap and the encoding bounds of its SSZ type."""
     ...
 
-def reqresp_decode_response_chunk(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> tuple[int, bytes, bytes]:
+def reqresp_decode_response_chunk(max_payload_size: int, context_bytes: int, type_min: int, type_bound: int, data: bytes) -> tuple[int, bytes, bytes]:
     """One response chunk, given the number of context bytes that the method sends."""
     ...
 
@@ -1948,8 +1948,8 @@ def gossip_message_id(fork: str, topic: bytes, data: bytes) -> bytes:
     """The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest."""
     ...
 
-def gossip_decode_payload(type_bound: int, data: bytes) -> bytes:
-    """The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type."""
+def gossip_decode_payload(max_payload_size: int, type_bound: int, data: bytes) -> bytes:
+    """The SSZ bytes of the data of a gossip message, given the payload cap and the size bound of its type."""
     ...
 
 def gossip_rpc_decode(data: bytes) -> dict[str, Any]:

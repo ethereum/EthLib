@@ -156,7 +156,7 @@ def forkOf (name : ByteArray) : Result Fork := do
   if .phase0 ≤ fork then return fork
   else rejectArgument none s!"{fork.name} is not a fork of the beacon chain"
 
-/-- The configuration of a name, with the payload cap that every network shares. -/
+/-- The configuration of a name, as JSON. -/
 def configJson (config : Config) : Json := entriesJson (BeaconApi.configEntries config)
 
 /-- The preset of a name, as a `dict`. -/

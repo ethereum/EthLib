@@ -49,7 +49,6 @@ size_t SPHINCS_FORS_HEIGHT;
 
 size_t ENR_MAX_RECORD_SIZE;
 size_t RLPX_SECRETS_SIZE;
-size_t REQRESP_MAX_PAYLOAD_SIZE;
 size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 size_t SECP256K1_HASH_LEN;
 size_t SECP256K1_SIGNATURE_LEN;
@@ -349,11 +348,6 @@ eth_enr_const_max_record_size(
 
 extern uint64_t
 eth_rlpx_const_secrets_size(
-  lean_object* unit
-);
-
-extern uint64_t
-eth_reqresp_const_max_payload_size(
   lean_object* unit
 );
 
@@ -1570,7 +1564,6 @@ PyInit__native(void) {
     SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(lean_box(0));
     ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(lean_box(0));
     RLPX_SECRETS_SIZE       = (size_t) eth_rlpx_const_secrets_size(lean_box(0));
-    REQRESP_MAX_PAYLOAD_SIZE = (size_t) eth_reqresp_const_max_payload_size(lean_box(0));
     REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(lean_box(0));
     PBKDF2_HASH_LEN = (size_t) eth_pbkdf2_const_hash_len(lean_box(0));
     SALSA_BLOCK_SIZE = (size_t) eth_scrypt_const_salsa_block_size(lean_box(0));
@@ -1641,7 +1634,6 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SECP256R1_SIGNATURE_LEN", SECP256R1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "ENR_MAX_RECORD_SIZE", ENR_MAX_RECORD_SIZE);
   PyModule_AddIntConstant(m, "RLPX_SECRETS_SIZE", RLPX_SECRETS_SIZE);
-  PyModule_AddIntConstant(m, "REQRESP_MAX_PAYLOAD_SIZE", REQRESP_MAX_PAYLOAD_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_ERROR_MESSAGE_SIZE", REQRESP_MAX_ERROR_MESSAGE_SIZE);
   PyModule_AddIntConstant(m, "PBKDF2_HASH_LEN", PBKDF2_HASH_LEN);
   PyModule_AddIntConstant(m, "SALSA_BLOCK_SIZE", SALSA_BLOCK_SIZE);

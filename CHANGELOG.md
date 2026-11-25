@@ -1069,6 +1069,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- `MAX_PAYLOAD_SIZE` is a value of the consensus configuration, as the p2p interface lists it among its configuration values ([#4606](https://github.com/ethereum/EthLib/issues/4606)).
+  - In Lean, `Consensus.Config.MAX_PAYLOAD_SIZE` is new, 10485760 in the mainnet and minimal configurations, and the configuration reader and the Beacon API spec map read it there.
+  - `Networking.ReqResp.MAX_PAYLOAD_SIZE` is removed.
+    `ReqResp.decodePayload`, `ReqResp.decodeResponseChunk`, `ReqResp.maxMessageSize`, `ReqResp.payloadBounds` and `Gossip.decodePayload` take the cap as their first argument.
+    `requestBounds`, `responseBounds` and `topicBound` read it from the configuration they take.
+  - The theorems on these definitions take the cap as an argument, with a hypothesis that it fits: below `2^63` for requests and responses, and at most `2^32 - 1`, the largest Snappy block, for gossip.
+    `toNat_MAX_PAYLOAD_SIZE` is removed.
+  - In Python, `reqresp.decode_payload`, `reqresp.decode_response_chunk` and `gossip.decode_payload` take `max_payload_size` first, and `reqresp.MAX_PAYLOAD_SIZE` is removed.
+  Migration: pass the cap of the network, such as `consensus.config("mainnet")["MAX_PAYLOAD_SIZE"]` in Python or `config.MAX_PAYLOAD_SIZE` in Lean.
 - In Lean, `Transactions.modifyState_ne_noAccount` and `Transactions.modifyState_ne_insufficientBalance` (`Execution/Proofs/Transactions/NoAccount.lean` and `Funded.lean`) are removed ([#4676](https://github.com/ethereum/EthLib/pull/4676)).
   `TransactionState.modifyState_eq_error` gives each of them in one line.
   New lemmas say which state error each step of a transaction can give: `TransactionState.error_getCode`, `error_creditEther`, `error_buyGas`, `error_settleGas`, `deleteAccounts_ne_error` and `prepareFirstFrame_ne_state`.

@@ -215,8 +215,9 @@ So its messages live in `EthLib/Execution/Network/`, which has those types and i
 
 A protocol layer owns the tables that give bytes their meaning.
 For example, Consensus gives the SSZ type and the length bounds of each gossip topic, of each request and of each response chunk, in `EthLib/Consensus/Gossip/Bounds.lean`, `EthLib/Consensus/ReqResp/Bounds.lean` and `EthLib/Consensus/ReqResp/ResponseBounds.lean`.
-Networking owns the framing and its own payload cap.
-It applies the smaller of that cap and the length bound that its caller passes, as `decodePayload` does in `EthLib/Networking/Gossip/Payload.lean` and in `EthLib/Networking/ReqResp/Encoding.lean`.
+Networking owns the framing, and it takes the payload cap of the network as an argument.
+The cap is a value of the consensus configuration, since each network may set its own.
+Networking applies the smaller of that cap and the length bound that its caller passes, as `decodePayload` does in `EthLib/Networking/Gossip/Payload.lean` and in `EthLib/Networking/ReqResp/Encoding.lean`.
 
 ## Rules
 

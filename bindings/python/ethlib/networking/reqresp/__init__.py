@@ -10,10 +10,10 @@ from ethlib.errors import ReqRespError
 # A payload is a varint of the SSZ length, then a Snappy framed stream of the SSZ bytes.
 # A response chunk is a response code, then context bytes, then a payload.
 #
+# Each decoder takes the payload cap `MAX_PAYLOAD_SIZE` of the network's configuration.
 # Each decoder takes the whole message.
 # A message that a decoder rejects raises `ReqRespError`, a `ValueError` with a code.
 # The encoders cannot fail.
-MAX_PAYLOAD_SIZE = _native.REQRESP_MAX_PAYLOAD_SIZE
 MAX_ERROR_MESSAGE_SIZE = _native.REQRESP_MAX_ERROR_MESSAGE_SIZE
 
 
@@ -30,13 +30,13 @@ def max_compressed_len(n: int) -> int:
     return _native.reqresp_max_compressed_len(n)
 
 
-def decode_payload(type_min: int, type_bound: int, data: bytes) -> bytes:
-    """The SSZ bytes of a payload whose SSZ type encodes to type_min through type_bound bytes."""
-    return _native.reqresp_decode_payload(type_min, type_bound, data)
+def decode_payload(max_payload_size: int, type_min: int, type_bound: int, data: bytes) -> bytes:
+    """The SSZ bytes of a payload, given the payload cap and the encoding bounds of its SSZ type."""
+    return _native.reqresp_decode_payload(max_payload_size, type_min, type_bound, data)
 
 
 def decode_response_chunk(
-    context_bytes: int, type_min: int, type_bound: int, data: bytes
+    max_payload_size: int, context_bytes: int, type_min: int, type_bound: int, data: bytes
 ) -> ResponseChunk:
     """
     One response chunk, for a method that sends context_bytes context bytes on success.
@@ -44,7 +44,9 @@ def decode_response_chunk(
     An error chunk carries no context bytes, and its payload is the error message.
     """
     return ResponseChunk(
-        *_native.reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data)
+        *_native.reqresp_decode_response_chunk(
+            max_payload_size, context_bytes, type_min, type_bound, data
+        )
     )
 
 
@@ -60,7 +62,6 @@ def encode_response_chunk(chunk: ResponseChunk) -> bytes:
 
 __all__ = [
     "ReqRespError",
-    "MAX_PAYLOAD_SIZE",
     "MAX_ERROR_MESSAGE_SIZE",
     "ResponseChunk",
     "max_compressed_len",

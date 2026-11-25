@@ -14,7 +14,7 @@ A client rejects data longer than the worst-case compression of the largest payl
 
 It also rejects a payload above the payload cap or the size bound of the message type.
 
-The limits are the same at every fork.
+The payload cap is a value of the network configuration, and the limits are the same at every fork.
 -/
 
 @[expose] public section
@@ -22,7 +22,7 @@ The limits are the same at every fork.
 namespace EthLib.Networking.Gossip
 
 open EthLib.Base (ArithError)
-open EthLib.Networking.ReqResp (MAX_PAYLOAD_SIZE maxCompressedLen)
+open EthLib.Networking.ReqResp (maxCompressedLen)
 
 /-- Every way the data of a gossip message can be rejected. -/
 inductive PayloadError where
@@ -50,17 +50,18 @@ def PayloadError.code : PayloadError → UInt32
   | .payloadTooLong .. => 4
 
 /--
-The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.
+The SSZ bytes of the data of a gossip message, given the payload cap and the size bound of its type.
 
 The caller deserializes the bytes, since it knows their SSZ type.
 -/
-def decodePayload (typeBound : UInt64) (data : ByteArray) : Except PayloadError ByteArray := do
+def decodePayload (maxPayloadSize typeBound : UInt64) (data : ByteArray) :
+    Except PayloadError ByteArray := do
   -- The data has at most `32 + n + n / 6` bytes, for the payload cap `n`.
-  let compressedBound ← (maxCompressedLen MAX_PAYLOAD_SIZE).mapError .arith
+  let compressedBound ← (maxCompressedLen maxPayloadSize).mapError .arith
   if compressedBound.toNat < data.size then
     throw (.compressedTooLong data.size compressedBound.toNat)
   -- The bound on the payload is the smaller of the cap and the size bound of the type.
-  let bound := (min typeBound MAX_PAYLOAD_SIZE).toNat
+  let bound := (min typeBound maxPayloadSize).toNat
   -- The preamble declares the payload length, so a long payload is rejected unread.
   --
   -- This early check is EthLib's choice.

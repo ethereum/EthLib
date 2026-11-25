@@ -17,6 +17,8 @@ The stream follows the framing format of Snappy:
 
 These definitions take the whole message at once.
 
+The payload cap `MAX_PAYLOAD_SIZE` is a value of the network configuration, which they take.
+
 A peer reads a stream and may stop at the first byte past a bound.
 
 How many bytes it reads before it decides is not part of these definitions.
@@ -29,11 +31,6 @@ namespace EthLib.Networking.ReqResp
 open EthLib.Base (ArithError)
 open EthLib.Base.Uint64 (addChecked divChecked)
 open EthLib.Networking.Encoding
-
-/-- The largest payload of a gossip message, a request or a response chunk, in SSZ bytes: 10 MiB.
-
-The cap is the same at every fork. -/
-def MAX_PAYLOAD_SIZE : UInt64 := 10485760
 
 /-- The largest error message, in bytes. -/
 def MAX_ERROR_MESSAGE_SIZE : UInt64 := 256
@@ -48,12 +45,12 @@ def maxCompressedLen (n : UInt64) : Except ArithError UInt64 := do
   -- `32 + n + n / 6`, where each sum is a checked 64-bit addition.
   addChecked (← addChecked 32 n) (← divChecked n 6)
 
-/-- The largest message a peer accepts on the gossip network, framing included.
+/-- The largest gossip message a peer accepts, framing included, for the payload cap of the network.
 
 It allows 1024 bytes of overhead above the largest compressed payload, and at least 1 MiB. -/
-def maxMessageSize : Except ArithError UInt64 := do
+def maxMessageSize (maxPayloadSize : UInt64) : Except ArithError UInt64 := do
   -- The compressed bound of the largest payload, plus 1024 bytes of framing and encoding.
-  let framed ← addChecked (← maxCompressedLen MAX_PAYLOAD_SIZE) 1024
+  let framed ← addChecked (← maxCompressedLen maxPayloadSize) 1024
   -- At least 1 MiB, in case the payload cap is small.
   return max framed 1048576
 
@@ -143,14 +140,14 @@ def ReqRespError.code : ReqRespError → UInt32
   | .lengthBelowMinimum .. => 9
   | .trailingBytes _ => 10
 
-/-- The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.
+/-- The SSZ bytes of a payload, given the payload cap and the encoding bounds of its SSZ type.
 
 The caller deserializes the bytes, since it knows their SSZ type.
 
 The reader of a payload stops at the chunk that completes the declared length.
 
 Any byte after that chunk makes the payload invalid. -/
-def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
+def decodePayload (maxPayloadSize typeMin typeBound : UInt64) (bs : ByteArray) :
     Except ReqRespError ByteArray := do
   -- The header is the length `n` of the SSZ bytes, an unsigned varint of at most ten bytes.
   --
@@ -160,7 +157,7 @@ def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
   let (header, rest) := Varint.split bs.data.toList
   let declared ← (Varint.decode header).mapError .varint
   -- `n` is at most the smaller of the largest encoding of the type and the payload cap.
-  let bound := min typeBound MAX_PAYLOAD_SIZE
+  let bound := min typeBound maxPayloadSize
   if bound < declared then throw (.lengthOutOfBounds declared bound)
   -- `n` is at least the smallest encoding, since a shorter payload cannot be of that type.
   if declared < typeMin then throw (.lengthBelowMinimum declared typeMin)
@@ -206,10 +203,12 @@ structure ResponseChunk where
 
 A success carries that many context bytes, and its payload has the bounds of the message type.
 
+Both payloads are also at most the payload cap.
+
 An error carries no context bytes, and its payload is an error message of at most 256 bytes.
 
 A chunk is a response code, then context bytes, then a payload. -/
-def decodeResponseChunk (contextBytes : Nat) (typeMin typeBound : UInt64)
+def decodeResponseChunk (maxPayloadSize : UInt64) (contextBytes : Nat) (typeMin typeBound : UInt64)
     (bs : ByteArray) : Except ReqRespError ResponseChunk :=
   match bs.data.toList with
   -- A chunk starts with its response code, one byte.
@@ -219,11 +218,12 @@ def decodeResponseChunk (contextBytes : Nat) (typeMin typeBound : UInt64)
     -- Success: the context bytes, then the payload of the message type.
     | .success => do
       if rest.length < contextBytes then throw (.contextTruncated contextBytes rest.length)
-      let payload ← decodePayload typeMin typeBound ⟨(rest.drop contextBytes).toArray⟩
+      let payload ←
+        decodePayload maxPayloadSize typeMin typeBound ⟨(rest.drop contextBytes).toArray⟩
       return ⟨.success, ⟨(rest.take contextBytes).toArray⟩, payload⟩
     -- An error code: no context bytes, then an error message of at most 256 bytes.
     | code => do
-      let payload ← decodePayload 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩
+      let payload ← decodePayload maxPayloadSize 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩
       return ⟨code, ByteArray.empty, payload⟩
 
 /-- A response chunk that decodes to `chunk`, with its payload in uncompressed Snappy frames.
