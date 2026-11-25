@@ -508,6 +508,27 @@ theorem getValidatorRegistration_notHeld {registry : Registry} {text : String}
       (getValidatorRegistration registry (some text)).status = none := by
   simp [getValidatorRegistration, spells, absent, RegistrationAnswer.status]
 
+/-! ## Block scoring -/
+
+/-- A bid value passes exactly when the balance difference is it plus the excluded withdrawals.
+
+All three are in Wei. -/
+theorem verifyBidValue_iff {payload : ExecutionPayload preset fork} {deneb : .dencun ≤ fork}
+    {feeRecipient : ExecutionAddress} {bidValue balanceDifference : U256} :
+    verifyBidValue payload deneb feeRecipient bidValue balanceDifference = true ↔
+      balanceDifference.toNat =
+        bidValue.toNat + excludedWithdrawals payload deneb feeRecipient := by
+  simp only [verifyBidValue, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq]
+  omega
+
+/-- With no Wei withdrawn to the fee recipient, a bid value passes exactly when it is the change. -/
+theorem verifyBidValue_of_excluded_eq_zero {payload : ExecutionPayload preset fork}
+    {deneb : .dencun ≤ fork} {feeRecipient : ExecutionAddress} {bidValue balanceDifference : U256}
+    (zero : excludedWithdrawals payload deneb feeRecipient = 0) :
+    verifyBidValue payload deneb feeRecipient bidValue balanceDifference = true ↔
+      balanceDifference = bidValue := by
+  rw [verifyBidValue_iff, zero, Nat.add_zero, BitVec.toNat_inj]
+
 end RelayApi
 
 /-- The served bid always computes. -/

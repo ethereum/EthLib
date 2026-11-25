@@ -242,6 +242,20 @@ def relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> by
     return _native.consensus_relay_submission_bid(name, fork, data, pubkey)
 
 
+def relay_verify_bid_value(
+    name: str,
+    fork: str,
+    payload: bytes,
+    fee_recipient: bytes,
+    bid_value: int,
+    balance_difference: int,
+) -> bool:
+    """From Deneb to Fulu: whether a bid value in Wei is what its builder pays the recipient."""
+    return _native.consensus_relay_verify_bid_value(
+        name, fork, payload, fee_recipient, bid_value, balance_difference
+    )
+
+
 def relay_validators(
     name: str, fork: str, state: bytes, registry: list[bytes]
 ) -> list[dict[str, Any]]:
@@ -2420,6 +2434,7 @@ __all__ = [
     "builder_preferences_failures",
     "default_auth_data",
     "relay_submission_bid",
+    "relay_verify_bid_value",
     "relay_validators",
     "relay_validator_registration",
     "relay_delivered_payload",

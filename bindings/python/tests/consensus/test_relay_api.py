@@ -4,8 +4,8 @@ import hashlib
 import json
 import re
 import struct
-from collections.abc import Iterator
-from functools import cache
+from collections.abc import Callable, Iterator
+from functools import cache, partial
 from itertools import count
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -518,6 +518,57 @@ def test_served_bid(version: str):
 def test_served_bid_outside_relay_forks(fork: str):
     with raises(SszError, f"no Relay API submissions at {fork}"):
         consensus.relay_submission_bid("mainnet", fork, b"", RELAY_KEY)
+
+
+# One withdrawal of 32 ETH, in Wei, which each example payload pays to the proposer's fee recipient.
+WITHDRAWN = 32 * 10**18
+# The forks of the check of the value of a bid.
+BID_VALUE_VERSIONS = ["deneb", "electra", "fulu"]
+
+
+def _bid_value_check(version: str, recipient: bytes | None = None) -> Callable[[int, int], bool]:
+    """The check of a bid value against the payload of the example, by value and balance change."""
+    example = _completed(version)
+    payload = _ssz(version, "ExecutionPayload", example["execution_payload"])
+    if recipient is None:
+        recipient = _hex(example["message"]["proposer_fee_recipient"])
+    return partial(consensus.relay_verify_bid_value, "mainnet", _fork(version), payload, recipient)
+
+
+@pytest.mark.parametrize("version", BID_VALUE_VERSIONS)
+def test_bid_value_excludes_withdrawals(version: str):
+    check = _bid_value_check(version)
+    withdrawals = _completed(version)["execution_payload"]["withdrawals"]
+    assert [int(w["amount"]) for w in withdrawals] == [32 * 10**9]
+    # The builder pays 1 ETH, so the balance of the fee recipient grows by 33 ETH.
+    assert check(10**18, 10**18 + WITHDRAWN)
+    # Read without converting Gwei to Wei, the withdrawal would count as 32 * 10**9 Wei.
+    assert not check(10**18 + WITHDRAWN - 32 * 10**9, 10**18 + WITHDRAWN)
+    assert not check(10**18, 10**18 + WITHDRAWN - 1)
+
+
+@pytest.mark.parametrize("version", BID_VALUE_VERSIONS)
+def test_bid_value_below_the_withdrawals(version: str):
+    # A balance change below the withdrawals is a subtraction below zero, which fails.
+    check = _bid_value_check(version)
+    assert check(0, WITHDRAWN)
+    assert not check(0, WITHDRAWN - 1)
+    # A subtraction modulo 2**256 would give 2**256 - 1 here, and pass.
+    assert not check(2**256 - 1, WITHDRAWN - 1)
+
+
+@pytest.mark.parametrize("version", BID_VALUE_VERSIONS)
+def test_bid_value_other_recipient(version: str):
+    # No withdrawal goes to another address, so the value is the whole balance change.
+    check = _bid_value_check(version, bytes(20))
+    assert check(10**18, 10**18)
+    assert not check(10**18, 10**18 + WITHDRAWN)
+
+
+@pytest.mark.parametrize("fork", ["shapella", "glamsterdam"])
+def test_bid_value_outside_its_forks(fork: str):
+    with raises(SszError, f"no Relay API bid value check at {fork}"):
+        consensus.relay_verify_bid_value("mainnet", fork, b"", bytes(20), 0, 0)
 
 
 # The pinned minimal Fulu state, whose lookahead names the proposers of two epochs.

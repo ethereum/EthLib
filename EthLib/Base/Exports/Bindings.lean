@@ -893,6 +893,10 @@ def bindings : List Binding := [
   ⟨"consensus_relay_submission_bid", `EthLib.Consensus.Exports.relaySubmissionBidExport,
     "(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_relay_verify_bid_value", `EthLib.Consensus.Exports.relayVerifyBidValueExport,
+    "(name: str, fork: str, payload: bytes, fee_recipient: bytes, bid_value: int, " ++
+      "balance_difference: int) -> bool",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_relay_validators", `EthLib.Consensus.Exports.relayValidatorsExport,
     "(name: str, fork: str, state: bytes, registry: list[bytes]) -> list[dict[str, Any]]",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,

@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `RelayApi.verifyBidValue` (`Consensus/RelayApi.lean`) is the check of the Deneb builder specification that the value of a bid is the payment of its builder to the fee recipient ([#2125](https://github.com/ethereum/EthLib/issues/2125)).
+  `verifyBidValue_iff` (`Consensus/Proofs/RelayApi.lean`) says that it passes exactly when the balance change of the fee recipient is the value plus the withdrawals to it, in Wei.
+  In Python, `relay_verify_bid_value` runs it on an SSZ payload.
+
 - In Lean, `accessStorageKey_fst_of_mem_accesses` (`Execution/Proofs/Transactions/AccessListWarm.lean`) says that a slot of the access list of a transaction is warm in every frame that its message reaches ([#4569](https://github.com/ethereum/EthLib/pull/4569)).
   That holds at any depth and after any call that failed, so SLOAD and SSTORE price it as warm there.
   `accessAddress_fst_of_mem_accesses` says the same of an address of the access list.

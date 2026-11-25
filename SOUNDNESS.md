@@ -7638,7 +7638,11 @@ The source does not fix the key that signs the served bid, so it is an input.
 From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
 That check needs the balance change of the fee recipient from a simulation of the payload.
 It subtracts the amounts of the withdrawals to the fee recipient, each converted from Gwei to Wei, from that change in Wei.
-EthLib does not yet specify this check, so it does not say which submissions a relay may serve; [#2125](https://github.com/ethereum/EthLib/issues/2125) tracks the check.
+`verifyBidValue` (`Consensus/RelayApi.lean`) states the check, and a subtraction below zero fails it, as the source's `uint256` subtraction raises.
+`verifyBidValue_iff` (`Consensus/Proofs/RelayApi.lean`) shows that it passes exactly when the change is the value of the bid plus those withdrawals.
+`verifyBidValue_of_excluded_eq_zero` shows that, when no Wei is withdrawn to the fee recipient, it passes exactly when the change is the value.
+The change is an input: computing it runs the payload on a state that the source does not fix.
+EthLib does not yet say which submissions a relay may serve; [#2131](https://github.com/ethereum/EthLib/issues/2131) tracks it.
 
 The source leaves four points about a submission open, and EthLib specifies none of them:
 
@@ -8528,12 +8532,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 566 operations and 51 size constants.
-The Python extension calls 566 of the operations and 51 of the constants.
+Lean exports 567 operations and 51 size constants.
+The Python extension calls 567 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12708 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (515), `chacha20_poly1305.c` (75), `chain.c` (97), `consensus.c` (2734), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1653), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (430), `quic.c` (271), `reqresp.c` (130), `rlp.c` (209), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (870), `x25519.c` (21), `xmss.c` (344).
+12722 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (515), `chacha20_poly1305.c` (75), `chain.c` (97), `consensus.c` (2745), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1655), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (430), `quic.c` (271), `reqresp.c` (130), `rlp.c` (209), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (871), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
