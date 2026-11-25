@@ -17,8 +17,8 @@ The source says that a read-only key cannot be deleted from the API, and gives i
 
 Such a key here stays, with the status error, the only status that fits; `SOUNDNESS.md` notes it.
 
-[`local_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/local_keystores.yaml
-[flow]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/flows/README.md#delete
+[`local_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/local_keystores.yaml
+[flow]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/flows/README.md#delete
 -/
 
 @[expose] public section

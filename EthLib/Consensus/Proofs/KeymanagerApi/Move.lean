@@ -18,7 +18,7 @@ The statement covers one key and one move, and does not compare the genesis vali
 
 The data passes from one call to the other as a value, so the step through JSON text is not covered.
 
-[use case]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/use-cases/README.md#move-a-key
+[use case]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/use-cases/README.md#move-a-key
 -/
 
 @[expose] public section

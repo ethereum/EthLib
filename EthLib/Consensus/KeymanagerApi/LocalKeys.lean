@@ -17,9 +17,9 @@ Step 3 of the import flow allows either, and its step 4 loads data only for a ma
 
 This module takes the reading of step 4; `SOUNDNESS.md` records the question.
 
-[`local_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/local_keystores.yaml
-[import flow]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/flows/README.md#import
-[use cases]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/use-cases/README.md#add-a-key
+[`local_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/local_keystores.yaml
+[import flow]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/flows/README.md#import
+[use cases]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/use-cases/README.md#add-a-key
 -/
 
 @[expose] public section

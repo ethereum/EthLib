@@ -17,7 +17,7 @@ A view of the chain, if the client has one, serves the call that signs a volunta
 
 Every other method and path gets HTTP 404, including calls that this module does not model yet.
 
-[OpenAPI document]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/keymanager-oapi.yaml
+[OpenAPI document]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/keymanager-oapi.yaml
 -/
 
 @[expose] public section

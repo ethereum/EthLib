@@ -288,7 +288,7 @@ The first registers every validator and compares the list with the proposer look
 The second moves the state inside an epoch, replaces the lookahead, registers one validator, and checks that only the slots of that validator have entries.
 A last test checks that the list is refused at the forks before and after Fulu.
 
-The directory `keymanager_api/` holds files of the Keymanager API, from `ethereum/keymanager-APIs` at commit `3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e`.
+The directory `keymanager_api/` holds files of the Keymanager API, from `ethereum/keymanager-APIs` at commit `2d8a02843cbf91f7ebc6274bf68a89b908019130`.
 The files are copied byte for byte under their paths in that repository.
 `keymanager-oapi.yaml` is the OpenAPI document, which names the schemas of the API.
 `types/` holds the files that define those schemas, with an example of most of them.

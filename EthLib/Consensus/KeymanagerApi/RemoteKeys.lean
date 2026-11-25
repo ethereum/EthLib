@@ -12,7 +12,7 @@ They are `GET`, `POST` and `DELETE` on `/eth/v1/remotekeys` of [`remote_keystore
 
 The source lists an error status for I/O errors, which a pure state never meets.
 
-[`remote_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/remote_keystores.yaml
+[`remote_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/2d8a02843cbf91f7ebc6274bf68a89b908019130/apis/remote_keystores.yaml
 -/
 
 @[expose] public section
