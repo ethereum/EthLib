@@ -160,7 +160,7 @@ theorem inv_fwd_recorded {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
   refine ⟨hS.of_eq rfl rfl, fun hbad hEC => ?_⟩
   simp only [fwdOut, hy, Option.isNone_some, Bool.false_and, Bool.or_false] at hbad hEC ⊢
   have hC := hcond hbad hEC
-  have hA := lookup_all hS hC hEC (Or.inl (pair_mem_of_lookup_eq_some hy))
+  have hA := lookup_all hS hC hEC (Or.inl (mem_of_lookup_eq_some hy))
   simp only [hA]
   refine ⟨hC.vis, hC.allMem, ?_⟩
   simp [hC.noDiff]
@@ -205,7 +205,7 @@ theorem inv_fwd_unrooted {cs : CState Dg E C Msg} {c : ACache Msg Dg E C}
         exact (mem_knownC_cons iv).mpr (Or.inr (Or.inl rfl))
   have hA := lookup_all_none hC hnoG
   refine ⟨?_, fun e => ?_, ?_⟩
-  · exact visCons_cons hC.vis (notMem_map_fst_of_lookup_none hy)
+  · exact visCons_cons hC.vis (notMem_map_fst_of_lookup_eq_none hy)
       (fun h => by
         obtain ⟨e, he, rfl⟩ := List.mem_map.mp h
         exact hbad0.2 (snd_mem_knownC iv he))
@@ -303,7 +303,7 @@ theorem inv_fwd_rooted {cs : CState Dg E C Msg} {c c' : ACache Msg Dg E C}
   have hcap : ∀ p ∈ cs.sim.chains, p.1.2 ∈ knownC iv cs.sim := fun p hp =>
     chain_cap_mem_knownC iv P hS hp
   have hvis : VisCons cs'.sim :=
-    visCons_cons hC.vis (notMem_map_fst_of_lookup_none hy)
+    visCons_cons hC.vis (notMem_map_fst_of_lookup_eq_none hy)
       (fun h => by
         obtain ⟨e, he, rfl⟩ := List.mem_map.mp h
         exact hbad0.2 (snd_mem_knownC iv he))
@@ -487,7 +487,7 @@ theorem inv_invOut {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv P 
         (fun h => by
           obtain ⟨e, he, he'⟩ := List.mem_map.mp h
           exact hbad0.2 (he' ▸ fst_mem_knownC iv he))
-        (notMem_map_snd_of_lookup_swap_none hx) (Or.inl rfl)
+        (notMem_map_snd_of_lookup_swap_eq_none hx) (Or.inl rfl)
         (Or.inr fun p hp h => hbad0.2 (h ▸ hcap p hp)) (fun e _ p hp hpo => absurd hp hpo)
     · change e ∈ cs'.all ↔ e ∈ cs'.sim.edges ∨ HiddenEdge P iv cs'.vis c e
       have hHE : ∀ e, HiddenEdge P iv cs'.vis c e ↔ HiddenEdge P iv cs.vis c e := by
@@ -504,7 +504,7 @@ theorem inv_invOut {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv P 
     simp only [invOut, visInv, hx, Option.isNone_some, Bool.false_and, Bool.or_false]
       at hbad hEC ⊢
     have hC := hcond hbad hEC
-    have hA := lookup_swap_all hS hC hEC (Or.inl (pair_mem_of_lookup_swap_eq_some hx))
+    have hA := lookup_swap_all hS hC hEC (Or.inl (mem_of_lookup_swap_eq_some hx))
     simp only [hA]
     refine ⟨hC.vis, hC.allMem, ?_⟩
     simp [hC.noDiff]

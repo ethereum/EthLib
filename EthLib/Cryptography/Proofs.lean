@@ -15,6 +15,8 @@ public import EthLib.Cryptography.Proofs.SupportBind
 public import EthLib.Cryptography.Proofs.UniformReads
 public import EthLib.Cryptography.Proofs.RandomOracleTable
 public import EthLib.Cryptography.Proofs.RandomOracleFromCache
+public import EthLib.Cryptography.Proofs.RandomOracleWithCoins
+public import EthLib.Cryptography.Proofs.ProjectionInLaw
 public import EthLib.Cryptography.Proofs.ExceptTAnswers
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.HashSig.Oracle

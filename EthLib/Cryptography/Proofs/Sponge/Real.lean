@@ -49,12 +49,6 @@ theorem val_fresh_evalDistEq {β : List (Dg × E)} {c : ACache Msg Dg E C}
     simp only [h.2 m hm, bind_assoc, pure_bind, map_bind, map_pure]
     exact uniform_digest_evalDistEq
 
-/-- A continuation that reads only the first component of a draw sees its first marginal. -/
-theorem bind_fst_evalDistEq {α β γ : Type} {X : ProbComp (α × β)} {Y : ProbComp α}
-    (h : Prod.fst <$> X =ᵈ Y) (R : α → ProbComp γ) : (X >>= fun w => R w.1) =ᵈ (Y >>= R) := by
-  rw [← bind_map_left]
-  exact EvalDistEq.bind_left h R
-
 omit [DecidableEq Dg] [DecidableEq E] [DecidableEq Msg]
   [SampleableType Dg] [SampleableType E] [SampleableType C] in
 /-- Asking the value of one path leaves every other path asked by nobody. -/
@@ -66,12 +60,6 @@ theorem freshVal_of_val_support {β γ : List (Dg × E)} {c c' : ACache Msg Dg E
   · exact h.2 m hm
   · simp only [ValPt] at hβ
     rw [← (P.unpad_eq_some_iff γ m).mp hm, ← (P.unpad_eq_some_iff β m).mp hβ]
-
-/-- A lookup gives one result whichever decision of equality it uses. -/
-theorem lookup_eq_of_decidableEq {α β : Type} [DecidableEq α] {l : List (α × β)} {a : α}
-    {r : Option β} (h : l.lookup a = r) (i : DecidableEq α) :
-    @List.lookup α β (@instBEqOfDecidableEq α i) a l = r := by
-  convert h
 
 /-! ## The walk of the full view -/
 
@@ -265,7 +253,8 @@ theorem uInv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
         · exact absurd h (by simp)
         · simp only [ValPt] at h
           subst h
-          exact usedPath_of_prefix P List.mem_cons_self (ne_nil_prefix_iff.mpr ⟨i, hi, rfl⟩)
+          exact usedPath_of_prefix P List.mem_cons_self
+            ⟨List.ne_nil_of_length_pos (by simp; omega), List.take_prefix _ _⟩
       · exact hmono β (hU.1 β hc)
     · by_cases hc : c (.inl m') = none
       · rcases hchanged (.inl m') (by rw [hc]; exact hm') with h | ⟨i, hi, h⟩
@@ -274,7 +263,8 @@ theorem uInv_combStep (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
           exact usedPath_of_prefix P List.mem_cons_self ⟨P.pad_ne_nil m', List.prefix_refl _⟩
         · simp only [ValPt] at h
           rw [(P.unpad_eq_some_iff _ m').mp h]
-          exact usedPath_of_prefix P List.mem_cons_self (ne_nil_prefix_iff.mpr ⟨i, hi, rfl⟩)
+          exact usedPath_of_prefix P List.mem_cons_self
+            ⟨List.ne_nil_of_length_pos (by simp; omega), List.take_prefix _ _⟩
       · exact hmono _ (hU.2 m' hc)
 
 end Used
@@ -432,7 +422,7 @@ theorem combReal_step_evalDistEq (t : (GameSpec (SpongeState Dg E C) Msg Dg).Dom
       simp only [lookup_eq_of_decidableEq hA, Prod.map_apply, id_eq, map_pure]
       exact EvalDistEq.bind_const _ _
   · rw [funImpl_inr]
-    simp only [combStep, combHash, StateT.run_mk, simulateQ_bind, StateT.run_bind, run_hq,
+    simp only [combStep, combHash, StateT.run_mk, simulateQ_bind, StateT.run_bind, run_queryRight,
       simulateQ_pure, StateT.run_pure, map_bind, map_pure, hashOut, sponge, StateT.run_map,
       Functor.map_map, Prod.map_apply, id_eq]
     -- The hash itself is not part of the real answer.

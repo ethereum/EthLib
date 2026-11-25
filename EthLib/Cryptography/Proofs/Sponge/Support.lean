@@ -18,29 +18,6 @@ namespace EthLib.Cryptography.Sponge
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
 
-/-! ## One query of a random oracle -/
-
-section RandomOracle
-
-variable {ι : Type} [DecidableEq ι] {hs : OracleSpec.{0, 0} ι}
-  [∀ t : hs.Domain, SampleableType (hs.Range t)]
-
-/-- A query of the second summand, in the random-oracle model, is one query of the oracle. -/
-theorem run_hq (t : ι) (c : hs.QueryCache) :
-    (simulateQ hs.romImpl (hq t)).run c = (hs.randomOracle t).run c := by
-  simp [hq]
-
-/-- A query of a random oracle keeps the cache, caches its answer and changes no other entry. -/
-theorem randomOracle_run_support (t : ι) (c : hs.QueryCache) {z : hs.Range t × hs.QueryCache}
-    (hz : z ∈ support ((hs.randomOracle t).run c)) :
-    c ≤ z.2 ∧ z.2 t = some z.1 ∧ ∀ t', t' ≠ t → z.2 t' = c t' :=
-  ⟨QueryImpl.withCaching_cache_le _ t c z hz, QueryImpl.withCaching_run_caches _ t c z hz,
-    fun _ ht' => by
-      rw [QueryImpl.withCaching_run_eq_cacheQuery _ hz]
-      exact QueryCache.cacheQuery_of_ne _ _ ht'⟩
-
-end RandomOracle
-
 variable {Dg E C Msg : Type} (P : Padding Msg (Dg × E))
 
 /-- The cache of the random oracles of the intermediate games. -/
@@ -78,7 +55,7 @@ theorem val_support (β : List (Dg × E)) (c : ACache Msg Dg E C)
   unfold val at hz
   split at hz
   · next m hm =>
-    simp only [simulateQ_bind, StateT.run_bind, run_hq, simulateQ_pure, StateT.run_pure,
+    simp only [simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure, StateT.run_pure,
       mem_support_bind_iff, support_pure, Set.mem_singleton_iff] at hz
     obtain ⟨⟨d, c₁⟩, h₁, ⟨t, c₂⟩, h₂, rfl⟩ := hz
     obtain ⟨hc₁, hd, hc₁'⟩ := randomOracle_run_support _ c h₁
@@ -90,7 +67,7 @@ theorem val_support (β : List (Dg × E)) (c : ACache Msg Dg E C)
     · simp only at ht' ⊢
       rw [hc₂' t' (by rintro rfl; exact ht' rfl), hc₁' t' (by rintro rfl; exact ht' hm)]
   · next hm =>
-    rw [run_hq] at hz
+    rw [run_queryRight] at hz
     obtain ⟨hc, ht, hc'⟩ := randomOracle_run_support _ c hz
     refine ⟨hc, ?_, fun t' ht' => hc' t' (by rintro rfl; exact ht' rfl)⟩
     simp only [valC, hm]
@@ -106,11 +83,11 @@ theorem val_run_of_valC (β : List (Dg × E)) (c : ACache Msg Dg E C) {v : Spong
   · next m hm =>
     obtain ⟨d, hd, hv⟩ := Option.bind_eq_some_iff.mp hv
     obtain ⟨t, ht, rfl⟩ := Option.map_eq_some_iff.mp hv
-    simp only [hm, simulateQ_bind, StateT.run_bind, run_hq,
+    simp only [hm, simulateQ_bind, StateT.run_bind, run_queryRight,
       QueryImpl.withCaching_run_some _ hd, pure_bind, QueryImpl.withCaching_run_some _ ht,
       simulateQ_pure, StateT.run_pure]
   · next hm =>
-    simp only [hm, run_hq, QueryImpl.withCaching_run_some _ hv]
+    simp only [hm, run_queryRight, QueryImpl.withCaching_run_some _ hv]
 
 /-- A uniform draw leaves the cache alone. -/
 theorem drawSt_run (c : ACache Msg Dg E C) :
@@ -273,7 +250,7 @@ theorem combHash_support (m : Msg) (cs : CState Dg E C Msg) (c : ACache Msg Dg E
       (allWalk P (usedPath P cs.sim.chains cs.hashed) [] iv cs.all (P.pad m))).run c) ∧
       (d, z.2) ∈ support (((ASpec Msg Dg E C).randomOracle (.inl m)).run c₁) ∧
       z.1 = hashOut cs m w d := by
-  simp only [combHash, StateT.run_mk, simulateQ_bind, StateT.run_bind, run_hq,
+  simp only [combHash, StateT.run_mk, simulateQ_bind, StateT.run_bind, run_queryRight,
     simulateQ_pure, StateT.run_pure, mem_support_bind_iff, support_pure,
     Set.mem_singleton_iff] at hz
   obtain ⟨⟨w, c₁⟩, hw, ⟨d, c₂⟩, hd, rfl⟩ := hz

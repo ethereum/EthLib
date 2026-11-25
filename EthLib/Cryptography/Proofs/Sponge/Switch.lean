@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.ProjectionInLaw
 public import EthLib.Cryptography.Proofs.Sponge.Games
 
 /-!
@@ -110,11 +111,6 @@ theorem isQueryBoundP_toPerm (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E 
     rwa [Nat.add_sub_cancel' hle] at this
 
 /-! ## The switch to independent answers -/
-
-/-- A draw, then a run, as one computation. -/
-theorem prEvent_let_let {β γ : Type} (mx : ProbComp β) (f : β → ProbComp γ) (q : γ → Prop) :
-    Pr{let b ← mx; let c ← f b}[q c] = Pr{let c ← mx >>= f}[q c] := by
-  simp [map_bind]
 
 section Switch
 

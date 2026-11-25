@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.IndependentAnswers
+public import EthLib.Cryptography.Proofs.RandomOracleWithCoins
 public import EthLib.Cryptography.Proofs.Sponge.Simulator
 
 /-!
@@ -22,11 +23,6 @@ It is in their §4.3.
 namespace EthLib.Cryptography.Sponge
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
-
-/-- A query of the second summand, among coins and that summand. -/
-abbrev hq {ι : Type} {hs : OracleSpec.{0, 0} ι} (t : ι) :
-    OracleComp (unifSpec + hs) (hs.Range t) :=
-  (unifSpec + hs).query (.inr t)
 
 /-- The random oracle on block paths that gives the values at rooted states. -/
 abbrev TSpec (Dg E C : Type) : OracleSpec (List (Dg × E)) :=
@@ -51,10 +47,10 @@ noncomputable def val (P : Padding Msg (Dg × E)) (β : List (Dg × E)) :
   match P.unpad β with
   -- The path pads the message `m`: the digest is the hash of `m`, the rest comes from the path.
   | some m => do
-    let d ← hq (hs := ASpec Msg Dg E C) (.inl m)
-    let t ← hq (hs := ASpec Msg Dg E C) (.inr β)
+    let d ← queryRight (hs := ASpec Msg Dg E C) (.inl m)
+    let t ← queryRight (hs := ASpec Msg Dg E C) (.inr β)
     pure ((d, t.1.2), t.2)
-  | none => hq (hs := ASpec Msg Dg E C) (.inr β)
+  | none => queryRight (hs := ASpec Msg Dg E C) (.inr β)
 
 /-! ## Random functions -/
 
@@ -110,7 +106,7 @@ noncomputable def idealTImpl (P : Padding Msg (Dg × E)) :
   | .inl (.inr (.inr y)) => StateT.mk fun σ => do
     let u ← drawSt
     pure (visInv y u σ)
-  | .inr m => (liftM (hq (hs := ASpec Msg Dg E C) (.inl m)) :
+  | .inr m => (liftM (queryRight (hs := ASpec Msg Dg E C) (.inl m)) :
       OracleComp (unifSpec + ASpec Msg Dg E C) Dg)
 
 /-! ## The combined game -/
@@ -227,7 +223,7 @@ noncomputable def combHash (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C)
     StateT (CState Dg E C Msg) (OracleComp (unifSpec + ASpec Msg Dg E C)) (Dg × Dg) :=
   StateT.mk fun cs => do
     let w ← allWalk P (usedPath P cs.sim.chains cs.hashed) [] iv cs.all (P.pad m)
-    let d ← hq (hs := ASpec Msg Dg E C) (.inl m)
+    let d ← queryRight (hs := ASpec Msg Dg E C) (.inl m)
     pure (hashOut cs m w d)
 
 /-- The combined step: the real answer, then the ideal answer. -/
@@ -285,7 +281,7 @@ noncomputable def visImpl (P : Padding Msg (Dg × E)) (iv : SpongeState Dg E C) 
       (((vs.1.edges.map Prod.swap).lookup y).isNone && decide (u.2 ∈ knownC iv vs.1))))
   | .inr m => StateT.mk fun vs => do
     if pre then skel P [] (P.pad m) else pure ()
-    let d ← hq (hs := ASpec Msg Dg E C) (.inl m)
+    let d ← queryRight (hs := ASpec Msg Dg E C) (.inl m)
     pure (d, (vs.1, m :: vs.2.1, vs.2.2))
 
 end Setting

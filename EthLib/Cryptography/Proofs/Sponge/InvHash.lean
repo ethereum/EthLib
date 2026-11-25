@@ -22,30 +22,10 @@ variable {Dg E C Msg : Type} {P : Padding Msg (Dg × E)} {iv : SpongeState Dg E 
 
 /-! ## Prefixes -/
 
-/-- The nonempty prefixes of a list are its first `i + 1` elements, for `i` below its length. -/
-theorem ne_nil_prefix_iff {α : Type} {β l : List α} :
-    β ≠ [] ∧ β <+: l ↔ ∃ i < l.length, β = l.take (i + 1) := by
-  constructor
-  · rintro ⟨hne, hp⟩
-    have hlen := hp.length_le
-    have hpos : 0 < β.length := List.length_pos_iff.mpr hne
-    refine ⟨β.length - 1, by omega, ?_⟩
-    rw [Nat.sub_add_cancel hpos]
-    exact List.prefix_iff_eq_take.mp hp
-  · rintro ⟨i, hi, rfl⟩
-    exact ⟨by simpa [List.take_eq_nil_iff] using List.ne_nil_of_length_pos (by omega),
-      List.take_prefix _ _⟩
-
 /-- A prefix of a padding hashed after `m` is a prefix of the padding of `m`, or hashed before. -/
 theorem hPath_cons_iff {L : List Msg} {m : Msg} {β : List (Dg × E)} :
     HPath P (m :: L) β ↔ (β ≠ [] ∧ β <+: P.pad m) ∨ HPath P L β := by
   simp [HPath]
-
-/-- The first `i + 1` elements are the first `i`, then the element at `i`. -/
-theorem take_succ_eq_append {α : Type} {bs : List α} {i : ℕ} (h : i < bs.length) :
-    bs.take (i + 1) = bs.take i ++ [bs[i]] := by
-  rw [List.take_add_one, List.getElem?_eq_getElem h]
-  rfl
 
 /-! ## The walk of the full view -/
 
@@ -114,7 +94,7 @@ theorem detWalk_spec (used : List (Dg × E) → Bool) (vf : List (Dg × E) → S
       simpa [List.take_succ_cons] using this
     -- The lookup at the first state returns the target pair.
     have hlook : ∀ y, A.lookup (absorb s B) = some y → y = vf (pre ++ [B]) := fun y hy =>
-      hfun _ _ _ (hA _ (pair_mem_of_lookup_eq_some hy)) h0
+      hfun _ _ _ (hA _ (mem_of_lookup_eq_some hy)) h0
     -- The first step is recorded after the walk.
     have hfirst : ∀ (A' : PermCache (SpongeState Dg E C)), (absorb s B, vf (pre ++ [B])) ∈ A' →
         ∀ (us' : List (SpongeState Dg E C)), (∀ e ∈ A', G e) →
@@ -143,7 +123,7 @@ theorem detWalk_spec (used : List (Dg × E) → Bool) (vf : List (Dg × E) → S
     split
     · next y hy =>
       obtain rfl := hlook y hy
-      exact hfirst A (pair_mem_of_lookup_eq_some hy) us.tail hA hA₀ fun _ h => h
+      exact hfirst A (mem_of_lookup_eq_some hy) us.tail hA hA₀ fun _ h => h
     · next hy =>
       have hnu : used (pre ++ [B]) = false := by
         by_contra hu
@@ -183,6 +163,19 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
   have hhashed : cs'.hashed = m :: cs.hashed := rfl
   set pm := P.pad m with hpm
   have hpm0 : pm ≠ [] := P.pad_ne_nil m
+  -- The nonempty prefixes of the padding are its first `i + 1` blocks.
+  have hpre : ∀ β, β ≠ [] ∧ β <+: pm ↔ ∃ i < pm.length, β = pm.take (i + 1) := by
+    intro β
+    constructor
+    · rintro ⟨hne, hp⟩
+      have hlen := hp.length_le
+      have hpos : 0 < β.length := List.length_pos_iff.mpr hne
+      refine ⟨β.length - 1, by omega, ?_⟩
+      rw [Nat.sub_add_cancel hpos]
+      exact List.prefix_iff_eq_take.mp hp
+    · rintro ⟨i, hi, rfl⟩
+      exact ⟨by simpa [List.take_eq_nil_iff] using List.ne_nil_of_length_pos (by omega),
+        List.take_prefix _ _⟩
   -- The values of the paths along the padded message.
   set vf : List (Dg × E) → SpongeState Dg E C := fun β => (valC P c' β).getD iv with hvf
   have hvfc : ∀ i < pm.length, valC P c' (pm.take (i + 1)) = some (vf (pm.take (i + 1))) := by
@@ -209,7 +202,7 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
     refine ⟨hS.root, fun p hp => svC_mono hcc' (hS.chainVal p hp), hS.chainEdge,
       fun β hβ => ?_⟩
     rcases hPath_cons_iff.mp (hhashed ▸ hβ) with h | h
-    · obtain ⟨i, hi, rfl⟩ := ne_nil_prefix_iff.mp h
+    · obtain ⟨i, hi, rfl⟩ := (hpre _).mp h
       rw [hvfc i hi]
       simp
     · obtain ⟨v, hv⟩ := Option.ne_none_iff_exists'.mp (hS.hCached β h)
@@ -240,7 +233,7 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
     intro i hi hvis
     obtain ⟨v₀, hv₀⟩ := exists_chain_of_mem_vPaths hvis
     obtain ⟨q, hq, B, h1, h2⟩ := hS.chainEdge _ hv₀ (by simp [List.take_eq_nil_iff, hpm0])
-    rw [take_succ_eq_append hi] at h1
+    rw [List.take_succ_eq_append_getElem hi] at h1
     obtain ⟨h3, h4⟩ := List.append_inj' h1 rfl
     obtain rfl : pm[i] = B := List.singleton_inj.mp h4
     have hq1 := svC_mono hcc' (hS.chainVal q hq)
@@ -257,10 +250,10 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
     by_cases hvis : pm.take (i + 1) ∈ vPaths cs.sim
     · exact Or.inl (hvisEdge i hi hvis)
     · refine Or.inr ⟨pm.take i, pm[i], _, _,
-        ⟨?_, by rw [← take_succ_eq_append hi]; exact hvis⟩, hsv i (by omega), ?_, rfl⟩
-      · rw [← take_succ_eq_append hi]
-        exact hPath_cons_iff.mpr (Or.inl (ne_nil_prefix_iff.mpr ⟨i, hi, rfl⟩))
-      · rw [← take_succ_eq_append hi]
+        ⟨?_, by rw [← List.take_succ_eq_append_getElem hi]; exact hvis⟩, hsv i (by omega), ?_, rfl⟩
+      · rw [← List.take_succ_eq_append_getElem hi]
+        exact hPath_cons_iff.mpr (Or.inl ((hpre _).mpr ⟨i, hi, rfl⟩))
+      · rw [← List.take_succ_eq_append_getElem hi]
         exact hvfc i hi
   -- The step into a used prefix is already in the full view.
   have hused : ∀ i (hi : i < pm.length),
@@ -276,16 +269,16 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
         · exact absurd hu hvis
         · exact ⟨m', hm', hu⟩
       have hhid : Hidden P cs.vis (pm.take i ++ [pm[i]]) := by
-        rw [← take_succ_eq_append hi]
+        rw [← List.take_succ_eq_append_getElem hi]
         exact ⟨hH, hvis⟩
       obtain ⟨v₀, hv₀⟩ := Option.ne_none_iff_exists'.mp (hS.hCached _ hhid.1)
       obtain ⟨s₀, hs₀⟩ := svC_known hS (knownPath_init hS (Or.inr hhid))
       obtain rfl := svC_eq_of_le hcc' hs₀ (hsv i (by omega))
       have := hvfc i hi
-      rw [take_succ_eq_append hi] at this
+      rw [List.take_succ_eq_append_getElem hi] at this
       obtain rfl := valC_eq_of_le hcc' hv₀ this
       refine (hC.allMem _).mpr (Or.inr ⟨pm.take i, pm[i], _, _, hhid, hs₀, hv₀, ?_⟩)
-      rw [take_succ_eq_append hi]
+      rw [List.take_succ_eq_append_getElem hi]
   obtain ⟨hw1, hwG, hwA, hwN⟩ := detWalk_spec (usedPath P cs.sim.chains cs.hashed) vf G hfun
     cs.all pm [] iv cs.all us (fun e he => hGmono e ((hC.allMem e).mp he)) (fun _ h => h)
     hpath hused
@@ -305,18 +298,18 @@ theorem inv_combHash {cs : CState Dg E C Msg} {c : ACache Msg Dg E C} (hI : Inv 
   · rcases he with he | ⟨γ, G', t, v, hδ, ht, hv, rfl⟩
     · exact hwA _ ((hC.allMem _).mpr (Or.inl he))
     · rcases hPath_cons_iff.mp hδ.1 with h | h
-      · obtain ⟨i, hi, hγ⟩ := ne_nil_prefix_iff.mp h
+      · obtain ⟨i, hi, hγ⟩ := (hpre _).mp h
         change i < pm.length at hi
-        rw [take_succ_eq_append hi] at hγ
+        rw [List.take_succ_eq_append_getElem hi] at hγ
         obtain ⟨rfl, hGG⟩ := List.append_inj' hγ rfl
         obtain rfl : G' = pm[i] := List.singleton_inj.mp hGG
         rw [hsv i (by omega)] at ht
         obtain rfl := Option.some.inj ht
         have := hvfc i hi
-        rw [take_succ_eq_append hi, hv] at this
+        rw [List.take_succ_eq_append_getElem hi, hv] at this
         obtain rfl := Option.some.inj this
         have := hwN i hi
-        rw [take_succ_eq_append hi] at this
+        rw [List.take_succ_eq_append_getElem hi] at this
         exact this
       · have hhid : Hidden P cs.vis (γ ++ [G']) := ⟨h, hδ.2⟩
         obtain ⟨v₀, hv₀⟩ := Option.ne_none_iff_exists'.mp (hS.hCached _ h)

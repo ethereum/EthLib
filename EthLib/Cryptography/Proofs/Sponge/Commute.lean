@@ -2,7 +2,6 @@ module
 
 public import EthLib.Cryptography.Proofs.Sponge.Proj
 public import EthLib.Cryptography.Proofs.Sponge.Support
-public import VCVio.OracleComp.QueryTracking.RandomOracle.Commute
 
 /-!
 # Proofs: the sponge's queries of path values can wait until the end of the game
@@ -19,78 +18,6 @@ The joint law of the output, the visible state and the cache stays the same.
 namespace EthLib.Cryptography.Sponge
 
 open OracleComp OracleSpec LazyPermutation Indifferentiability
-
-/-! ## Commuting computations in the random-oracle model -/
-
-section RandomOracle
-
-variable {ι : Type} [DecidableEq ι] {hs : OracleSpec.{0, 0} ι}
-  [∀ t : hs.Domain, SampleableType (hs.Range t)]
-
-/-- Any two steps of the random-oracle model commute: answers and cache keep their joint law. -/
-theorem romImpl_run_bind_comm (q q' : (unifSpec + hs).Domain) (c : hs.QueryCache) {β : Type}
-    (f : (unifSpec + hs).Range q → (unifSpec + hs).Range q' → hs.QueryCache → ProbComp β) :
-    ((hs.romImpl q).run c >>= fun v => (hs.romImpl q').run v.2 >>= fun w => f v.1 w.1 w.2) =ᵈ
-      ((hs.romImpl q').run c >>= fun w => (hs.romImpl q).run w.2 >>= fun v => f v.1 w.1 v.2) := by
-  rcases q with n | s <;> rcases q' with n' | t
-  · simp only [roSim.run_apply_inl, bind_map_left]
-    exact EvalDistEq.bind_bind_swap _ _ _
-  · simp only [roSim.run_apply_inl, bind_map_left, romImpl_apply_inr]
-    exact EvalDistEq.bind_bind_swap _ _ _
-  · simp only [roSim.run_apply_inl, bind_map_left, romImpl_apply_inr]
-    exact EvalDistEq.bind_bind_swap _ _ _
-  · simp only [romImpl_apply_inr]
-    let : MeasurableSpace β := ⊤
-    have : DiscreteMeasurableSpace β := ⟨fun _ => trivial⟩
-    exact EvalDistEq.of_evalDist_eq (randomOracle.evalDist_run_bind_run_swap s t c f)
-
-/-- One query commutes with a computation that does not read its answer. -/
-theorem run_query_bind_comm (q : (unifSpec + hs).Domain) {γ δ : Type}
-    (Y : OracleComp (unifSpec + hs) γ)
-    (V : (unifSpec + hs).Range q → γ → OracleComp (unifSpec + hs) δ) (c : hs.QueryCache) :
-    (simulateQ hs.romImpl (liftM ((unifSpec + hs).query q) >>= fun a =>
-        Y >>= fun r => V a r)).run c =ᵈ
-      (simulateQ hs.romImpl (Y >>= fun r =>
-        liftM ((unifSpec + hs).query q) >>= fun a => V a r)).run c := by
-  induction Y using OracleComp.inductionOn generalizing c with
-  | pure r => simp
-  | query_bind q' k ih =>
-    simp only [simulateQ_bind, simulateQ_query, OracleQuery.input_query, OracleQuery.cont_query,
-      id_map, StateT.run_bind, bind_assoc] at ih ⊢
-    refine (romImpl_run_bind_comm q q' c fun a a' c' =>
-      (simulateQ hs.romImpl (k a')).run c' >>= fun p =>
-        (simulateQ hs.romImpl (V a p.1)).run p.2).trans
-      (EvalDistEq.bind_right _ fun w => ?_)
-    exact ih w.1 w.2
-
-/-- **Independent computations commute** in the random-oracle model.
-
-Running `X` then `Y` gives the joint law of outputs and cache of running `Y` then `X`. -/
-theorem run_bind_bind_comm {β γ δ : Type} (X : OracleComp (unifSpec + hs) β)
-    (Y : OracleComp (unifSpec + hs) γ) (W : β → γ → OracleComp (unifSpec + hs) δ)
-    (c : hs.QueryCache) :
-    (simulateQ hs.romImpl (X >>= fun b => Y >>= fun r => W b r)).run c =ᵈ
-      (simulateQ hs.romImpl (Y >>= fun r => X >>= fun b => W b r)).run c := by
-  induction X using OracleComp.inductionOn generalizing c with
-  | pure b => simp
-  | query_bind q k ih =>
-    calc (simulateQ hs.romImpl ((liftM ((unifSpec + hs).query q) >>= k) >>= fun b =>
-          Y >>= fun r => W b r)).run c
-        = (simulateQ hs.romImpl (liftM ((unifSpec + hs).query q) >>= fun a =>
-            k a >>= fun b => Y >>= fun r => W b r)).run c := by rw [bind_assoc]
-      _ =ᵈ (simulateQ hs.romImpl (liftM ((unifSpec + hs).query q) >>= fun a =>
-            Y >>= fun r => k a >>= fun b => W b r)).run c := by
-          simp only [simulateQ_bind, StateT.run_bind]
-          exact EvalDistEq.bind_right _ fun w => by
-            have := ih w.1 w.2
-            simp only [simulateQ_bind, StateT.run_bind] at this
-            exact this
-      _ =ᵈ (simulateQ hs.romImpl (Y >>= fun r => liftM ((unifSpec + hs).query q) >>= fun a =>
-            k a >>= fun b => W b r)).run c :=
-          run_query_bind_comm q Y (fun a r => k a >>= fun b => W b r) c
-      _ = _ := by simp only [bind_assoc]
-
-end RandomOracle
 
 /-! ## The end phase -/
 
@@ -208,16 +135,6 @@ theorem visImpl_hashed_mono (pre : Bool) {α : Type}
     · simp only [mem_support_bind_iff, support_pure, Set.mem_singleton_iff] at hz
       obtain ⟨d, -, rfl⟩ := hz
       exact List.mem_cons_of_mem _ hs
-
-omit [XorOp Dg] [XorOp E] [DecidableEq C] in
-/-- An output reachable in the random-oracle model is reachable with any answers. -/
-theorem fst_mem_support_of_mem_support_run {β : Type}
-    {X : OracleComp (unifSpec + ASpec Msg Dg E C) β} {c : ACache Msg Dg E C}
-    {z : β × ACache Msg Dg E C}
-    (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl X).run c)) : z.1 ∈ support X :=
-  support_simulateQ_run'_subset (ASpec Msg Dg E C).romImpl X c (by
-    rw [StateT.run'_eq, support_map]
-    exact ⟨z, hz, rfl⟩)
 
 omit [DecidableEq Msg] in
 /-- The hash step with queries of path values is these queries, then the step without them. -/
