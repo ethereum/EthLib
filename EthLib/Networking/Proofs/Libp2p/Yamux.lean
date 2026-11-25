@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Libp2p.Yamux
 public import EthLib.Base.Proofs.ByteOrder
 import EthLib.Base.Proofs.Bytes
+import EthLib.Networking.Proofs.Encoding.ByteReader
 
 /-!
 # Proofs: yamux frames
@@ -89,15 +90,14 @@ theorem decode_encode {frame : Frame} (h : frame.Valid) (rest : List UInt8) :
   have hv : frame.data.size = frame.dataSize := h
   have hba := Base.byteArray_mk_toArray_toList frame.data
   have hk := Kind.ofUInt8?_toUInt8 frame.kind
-  have hr : (frame.data.data.toList ++ rest).take frame.dataSize = frame.data.data.toList := by
-    rw [← hv, ← hl]; simp
-  have hdr : (frame.data.data.toList ++ rest).drop frame.dataSize = rest := by
-    rw [← hv, ← hl]; simp
-  have hnr : ¬ (frame.data.data.toList ++ rest).length < frame.dataSize := by
-    simp only [List.length_append, hl]; omega
+  have hread : Encoding.ByteReader.bytes (YamuxError.truncated frame.dataSize) frame.dataSize
+      (frame.data.data.toList ++ rest) = .ok (frame.data.data.toList, rest) := by
+    rw [← hv, ← hl]; exact Encoding.ByteReader.bytes_append _ _ _
   simp only [decode, encode, hA, hB, hC, headerSize]
-  simp [hA', hB', hC', hk, hl, hv, hba, Frame.dataSize]
-  rfl
+  simp [hA', hB', hC', hk]
+  simp only [Frame.dataSize] at hread
+  rw [hread]
+  simp only [Functor.map, Except.map, hba]
 
 /-- A decoded frame is valid, and the input is its encoding followed by the rest. -/
 theorem encode_decode {bytes rest : List UInt8} {frame : Frame}
@@ -133,17 +133,19 @@ theorem encode_decode {bytes rest : List UInt8} {frame : Frame}
     simp only [hv0, hk, ne_eq, not_true_eq_false, ite_false] at h
     generalize hn : (if kind = Kind.data then
         (ByteOrder.ofBE [x8, x9, x10, x11]).toUInt32.toNat else 0) = n at h
-    by_cases hr : (List.take n (List.drop 12 bytes)).length < n
-    · simp only [hr, ↓reduceIte] at h; cases h
-    simp only [hr, ↓reduceIte, pure, Except.pure] at h
-    obtain ⟨rfl, rfl⟩ := h
-    have hl : (List.take n (List.drop 12 bytes)).length = n := by
-      have := List.length_take_le n (List.drop 12 bytes); omega
-    refine ⟨?_, ?_⟩
-    · show (⟨(List.take n (List.drop 12 bytes)).toArray⟩ : ByteArray).size = _
-      show (List.take n (List.drop 12 bytes)).toArray.size = _
-      rw [List.size_toArray, hl, ← hn]
-      rfl
-    · simp only [encode, hk', toBE_toUInt16, toBE_toUInt32]
-      rw [List.append_assoc _ (List.take n _), List.take_append_drop]
-      exact Eq.trans (by simp [hv0]) hb.symm
+    cases hread : Encoding.ByteReader.bytes (YamuxError.truncated n) n (List.drop 12 bytes) with
+    | error err => simp [hread, Functor.map, Except.map] at h
+    | ok p =>
+      obtain ⟨field, after⟩ := p
+      obtain ⟨hl, hsplit⟩ := (Encoding.ByteReader.bytes_ok_iff _ _ _ _ _).mp hread
+      simp only [hread] at h
+      obtain ⟨rfl, rfl⟩ := h
+      refine ⟨?_, ?_⟩
+      · show (⟨field.toArray⟩ : ByteArray).size = _
+        show field.toArray.size = _
+        rw [List.size_toArray, hl, ← hn]
+        rfl
+      · simp only [encode, hk', toBE_toUInt16, toBE_toUInt32]
+        rw [hsplit] at hb
+        rw [hb]
+        simp [hv0]

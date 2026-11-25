@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Networking.Encoding.ByteReader
 public import EthLib.Base.ByteOrder
 
 /-!
@@ -161,8 +162,7 @@ def decode (bytes : List UInt8) : Except YamuxError (Frame × List UInt8) := do
   let length := (Base.ByteOrder.ofBE (header.drop 8)).toUInt32
   -- Length Field: a Data frame has that many bytes after the header, and other types none.
   let size := if kind = .data then length.toNat else 0
-  let body := rest.take size
-  if body.length < size then throw (.truncated size body.length)
-  return (⟨kind, flags, streamId, length, ⟨body.toArray⟩⟩, rest.drop size)
+  let (body, after) ← Encoding.ByteReader.bytes (.truncated size) size rest
+  return (⟨kind, flags, streamId, length, ⟨body.toArray⟩⟩, after)
 
 end EthLib.Networking.Libp2p.Yamux

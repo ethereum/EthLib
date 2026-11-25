@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Networking.Encoding.ByteReader
 public import EthLib.Networking.Encoding.Uvarint
 
 /-!
@@ -167,9 +168,8 @@ def decode (bytes : List UInt8) : Except MplexError (Frame × List UInt8) := do
   -- The source asks this of the sender; the decoder also refuses a frame that breaks it.
   if flag.ends ∧ length ≠ 0 then throw (.dataOnEnd length)
   -- The data: `length` bytes.
-  let body := rest.take length
-  if body.length < length then throw (.truncated length body.length)
+  let (body, after) ← ByteReader.bytes (.truncated length) length rest
   -- `id = header >> 3`.
-  return (⟨header / 8, flag, ⟨body.toArray⟩⟩, rest.drop length)
+  return (⟨header / 8, flag, ⟨body.toArray⟩⟩, after)
 
 end EthLib.Networking.Libp2p.Mplex

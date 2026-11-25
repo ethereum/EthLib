@@ -4,6 +4,7 @@ public import EthLib.Networking.Libp2p.Mplex
 public import EthLib.Networking.Proofs.Encoding.Uvarint
 import EthLib.Base.Proofs.CodeInjective
 import EthLib.Base.Proofs.Bytes
+import EthLib.Networking.Proofs.Encoding.ByteReader
 
 /-!
 # Proofs: mplex frames
@@ -63,18 +64,16 @@ theorem decode_encode {frame : Frame} (h : frame.Valid) (rest : List UInt8) :
     simp [encode]
   have hnd : ¬ (frame.flag.ends ∧ frame.data.size ≠ 0) := fun ⟨h1, h2⟩ => h2 (he h1)
   have hnt : ¬ maxData < frame.data.size := Nat.not_lt.mpr hd
-  have hnr : ¬ frame.data.data.toList.length < frame.data.size := by omega
-  have hr : (frame.data.data.toList ++ rest).take frame.data.size = frame.data.data.toList := by
-    rw [← hl]; simp
-  have hdr : (frame.data.data.toList ++ rest).drop frame.data.size = rest := by
-    rw [← hl]; simp
+  have hread : ByteReader.bytes (MplexError.truncated frame.data.size) frame.data.size
+      (frame.data.data.toList ++ rest) = .ok (frame.data.data.toList, rest) := by
+    rw [← hl]; exact ByteReader.bytes_append _ _ _
   have hba := Base.byteArray_mk_toArray_toList frame.data
   rw [hass]
   simp only [decode]
   rw [EthLib.Networking.Proofs.Encoding.Uvarint.decode_encode hhb]
   simp only [bind, Except.bind, Except.mapError, hm, Flag.ofNat?_toNat]
   rw [EthLib.Networking.Proofs.Encoding.Uvarint.decode_encode hsz]
-  simp only [hnt, hnd, hnr, hr, hdr, hq, hba, ite_false, pure, Except.pure]
+  simp only [hnt, hnd, hread, hq, hba, ite_false, pure, Except.pure]
 
 /-- A decoded frame is valid, and the input is its encoding followed by the rest. -/
 theorem encode_decode {bytes rest : List UInt8} {frame : Frame}
@@ -100,25 +99,26 @@ theorem encode_decode {bytes rest : List UInt8} {frame : Frame}
         · simp [h1, throw, throwThe, MonadExceptOf.throw] at h
         by_cases h2 : flag.ends = true ∧ L ≠ 0
         · simp [h1, h2, throw, throwThe, MonadExceptOf.throw] at h
-        by_cases h3 : (r1.take L).length < L
-        · simp only [h1, h2, h3, ↓reduceIte] at h; cases h
-        simp only [h1, h2, h3, ite_false, pure, Except.pure, Except.ok.injEq,
-          Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
-        have hn := Flag.toNat_of_ofNat? hf
-        have hl : (List.take L r1).length = L := by
-          have := List.length_take_le L r1; omega
-        have hba : (⟨(List.take L r1).toArray⟩ : ByteArray).size = L := by
-          show (List.take L r1).toArray.size = L
-          rw [List.size_toArray]; exact hl
-        refine ⟨⟨?_, ?_, ?_⟩, ?_⟩
-        · simp only [streamIdBound]; simp only [Uvarint.bound] at hH; omega
-        · simp only [hba]; omega
-        · intro he; simp only [hba]; exact Decidable.byContradiction fun hne => h2 ⟨he, hne⟩
-        · simp only [encode, hba, hn]
-          have hh : 8 * (hdr / 8) + hdr % 8 = hdr := by omega
-          rw [hh, ← hb, ← hb2]
-          simp [List.append_assoc]
+        cases hread : ByteReader.bytes (MplexError.truncated L) L r1 with
+        | error err => simp [h1, h2, hread] at h
+        | ok p =>
+          obtain ⟨field, after⟩ := p
+          obtain ⟨hl, hsplit⟩ := (ByteReader.bytes_ok_iff _ _ _ _ _).mp hread
+          simp only [h1, h2, hread, ite_false, pure, Except.pure, Except.ok.injEq,
+            Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          have hn := Flag.toNat_of_ofNat? hf
+          have hba : (⟨field.toArray⟩ : ByteArray).size = L := by
+            show field.toArray.size = L
+            rw [List.size_toArray]; exact hl
+          refine ⟨⟨?_, ?_, ?_⟩, ?_⟩
+          · simp only [streamIdBound]; simp only [Uvarint.bound] at hH; omega
+          · simp only [hba]; omega
+          · intro he; simp only [hba]; exact Decidable.byContradiction fun hne => h2 ⟨he, hne⟩
+          · simp only [encode, hba, hn]
+            have hh : 8 * (hdr / 8) + hdr % 8 = hdr := by omega
+            rw [hh, ← hb, ← hb2, hsplit]
+            simp [List.append_assoc]
 
 /-- The decoder accepts exactly the encodings of valid frames, then any bytes. -/
 theorem decode_eq_ok_iff {bytes rest : List UInt8} {frame : Frame} :
