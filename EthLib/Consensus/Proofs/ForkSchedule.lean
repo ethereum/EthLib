@@ -10,6 +10,8 @@ public import Mathlib.Data.List.Nodup
 The fork at an epoch is the latest consensus fork that has started by then.
 
 So it never moves back as the epoch grows, whatever the order of the configured epochs.
+
+The forks of the mainnet and minimal configurations start in the order of the timeline.
 -/
 
 @[expose] public section
@@ -95,6 +97,65 @@ theorem forkAtEpoch_mono {earlier later : Epoch} (le : earlier ≤ later) :
     config.forkAtEpoch earlier ≤ config.forkAtEpoch later := by
   obtain ⟨first, scheduled, started⟩ := activationEpoch_forkAtEpoch (config := config) earlier
   exact le_forkAtEpoch scheduled (UInt64.le_trans started le)
+
+/-! ## Configurations whose forks start in order -/
+
+/-- The consensus forks of a configuration start in the order of the timeline.
+
+Forks may share a first epoch. -/
+def ForkEpochsOrdered (config : Config) : Prop :=
+  config.ALTAIR_FORK_EPOCH ≤ config.BELLATRIX_FORK_EPOCH ∧
+    config.BELLATRIX_FORK_EPOCH ≤ config.CAPELLA_FORK_EPOCH ∧
+    config.CAPELLA_FORK_EPOCH ≤ config.DENEB_FORK_EPOCH ∧
+    config.DENEB_FORK_EPOCH ≤ config.ELECTRA_FORK_EPOCH ∧
+    config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH ∧
+    config.FULU_FORK_EPOCH ≤ config.GLOAS_FORK_EPOCH ∧
+    config.GLOAS_FORK_EPOCH ≤ config.HEZE_FORK_EPOCH
+
+instance (config : Config) : Decidable config.ForkEpochsOrdered := by
+  unfold ForkEpochsOrdered
+  infer_instance
+
+/-- The forks of the mainnet configuration start in order. -/
+theorem forkEpochsOrdered_mainnet : mainnet.ForkEpochsOrdered := by decide
+
+/-- The forks of the minimal configuration start in order. -/
+theorem forkEpochsOrdered_minimal : minimal.ForkEpochsOrdered := by decide
+
+/-- When the forks start in order, a later consensus fork never starts earlier. -/
+theorem activationEpoch_le_of_le (ordered : config.ForkEpochsOrdered) {earlier later : Fork}
+    {start finish : Epoch} (first : config.activationEpoch earlier = some start)
+    (second : config.activationEpoch later = some finish) (le : earlier ≤ later) :
+    start ≤ finish := by
+  obtain ⟨ab, bc, cd, de, ef, fg, gh⟩ := ordered
+  simp only [UInt64.le_iff_toNat_le] at ab bc cd de ef fg gh ⊢
+  cases earlier <;> simp only [activationEpoch, reduceCtorEq, Option.some.injEq] at first <;>
+    subst first <;>
+    cases later <;> simp only [activationEpoch, reduceCtorEq, Option.some.injEq] at second <;>
+    subst second <;>
+    first
+      | exact absurd le (by decide)
+      | (simp only [UInt64.toNat_zero]; omega)
+      | omega
+
+/-- The next consensus fork is later, and starts at the epoch it comes with. -/
+theorem nextFork_activationEpoch {fork next : Fork} {first : Epoch}
+    (scheduled : config.nextFork fork = some (next, first)) :
+    fork < next ∧ config.activationEpoch next = some first := by
+  cases fork <;>
+    simp only [nextFork, reduceCtorEq, Option.some.injEq, Prod.mk.injEq] at scheduled <;>
+    obtain ⟨rfl, rfl⟩ := scheduled <;> exact ⟨by decide, rfl⟩
+
+/-- A consensus fork before another one has a next consensus fork, at or before the other. -/
+theorem exists_nextFork_le {fork later : Fork} {start finish : Epoch}
+    (current : config.activationEpoch fork = some start)
+    (target : config.activationEpoch later = some finish) (lt : fork < later) :
+    ∃ next first, config.nextFork fork = some (next, first) ∧ next ≤ later := by
+  cases fork <;> simp only [activationEpoch, reduceCtorEq] at current <;>
+    cases later <;> simp only [activationEpoch, reduceCtorEq] at target <;>
+    first
+      | exact absurd lt (by decide)
+      | exact ⟨_, _, rfl, by decide⟩
 
 /-- The fork at an epoch is never one of BPO1 to BPO5, which change only the blob schedule. -/
 theorem forkAtEpoch_ne_bpo (epoch : Epoch) :
