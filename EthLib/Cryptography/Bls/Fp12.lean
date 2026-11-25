@@ -59,8 +59,19 @@ instance : Neg (Fp12 F) := ⟨neg⟩
   -- a == ⟨one, zero⟩
   Fp6.beq a.c0 Fp6.one && Fp6.isZero a.c1
 
-/-- Squaring. -/
-@[inline] def square (a : Fp12 F) : Fp12 F := a * a
+/-- Squaring, by the complex method of [Devegili et al.][dev], §3, with `β = v`.
+
+It takes two products in `Fp6`, where a product takes three.
+
+[dev]: https://eprint.iacr.org/2006/471
+-/
+def square (a : Fp12 F) : Fp12 F :=
+  -- §3: `v0 = a0 a1`.
+  let t := a.c0 * a.c1
+  -- §3: `c0 = (a0 + a1)(a0 + β a1) - v0 - β v0`.
+  let c0 := (a.c0 + a.c1) * (a.c0 + a.c1.mulByV) - t - t.mulByV
+  -- §3: `c1 = 2 v0`.
+  ⟨c0, t + t⟩
 
 /-- Squaring in the cyclotomic subgroup, by [Granger and Scott][source], §3.2, equation (5).
 

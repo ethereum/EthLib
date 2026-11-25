@@ -21,21 +21,22 @@ open EthLib.Cryptography.BaseField (Hom)
 
 variable {F G : Type} [BaseField F] [BaseField G]
 
-theorem map_lineValue (f : Hom F G) (c0 c2 c3 : Fp2 F) :
-    (lineValue c0 c2 c3).map f = lineValue (c0.map f) (c2.map f) (c3.map f) := by
-  simp only [lineValue, Fp12.map, Fp6.map, Fp2.map_zero]
+theorem map_mulLine (f : Hom F G) (g : Fp12 F) (c0 c2 c3 : Fp2 F) :
+    (g.mulLine c0 c2 c3).map f = (g.map f).mulLine (c0.map f) (c2.map f) (c3.map f) := by
+  simp only [Fp12.mulLine, Fp12.map, Fp6.map_add, Fp6.map_sub, Fp6.map_mulBy01, Fp6.map_mulBy1,
+    Fp6.map_mulByV, Fp2.map_add]
 
 theorem map_millerDouble (f : Hom F G) (T : G2 F) (xp yp : F) (g : Fp12 F) :
     Prod.map (G2.map f) (Fp12.map f) (millerDouble T xp yp g)
       = millerDouble (T.map f) (f xp) (f yp) (g.map f) := by
-  simp only [millerDouble, Prod.map, G2.map_double, Fp12.map_mul, map_lineValue,
+  simp only [millerDouble, Prod.map, G2.map_double, Fp12.map_square, map_mulLine,
     Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_ofFp, f.map_ofNat]
   rfl
 
 theorem map_millerAdd (f : Hom F G) (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (g : Fp12 F) :
     Prod.map (G2.map f) (Fp12.map f) (millerAdd T xq yq xp yp g)
       = millerAdd (T.map f) (xq.map f) (yq.map f) (f xp) (f yp) (g.map f) := by
-  simp only [millerAdd, Prod.map, G2.map_add_fn, Fp12.map_mul, map_lineValue,
+  simp only [millerAdd, Prod.map, G2.map_add_fn, map_mulLine,
     Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_ofFp]
   simp only [G2.map, G1.map, Fp2.hom, Fp2.map_one]
 

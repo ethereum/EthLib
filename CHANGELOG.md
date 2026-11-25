@@ -1069,6 +1069,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the Miller loop of the BLS12-381 pairing squares with the complex method and multiplies by each line with a sparse product ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
+  - `Bls.Fp12.square` (`Cryptography/Bls/Fp12.lean`) unfolds to the complex squaring, not to `a * a`; `Fp12.square_eq` (`Cryptography/Proofs/Bls/Fp12.lean`) states that it is the square.
+  - `Bls.Fp12.mulLine` (`Cryptography/Bls/Pairing.lean`), `Bls.Fp6.mulBy01` and `Bls.Fp6.mulBy1` (`Cryptography/Bls/Fp6.lean`) are new, with `mulLine_eq`, `Fp6.mulBy01_eq` and `Fp6.mulBy1_eq`, which state them as full products, and their map lemmas.
+    `map_lineValue` (`Cryptography/Proofs/Bls/PairingMap.lean`) is removed, since no proof maps a line value any more.
+  - `millerDouble` and `millerAdd` unfold to these; every pairing gives the same value, and every theorem keeps its statement.
 - `MAX_PAYLOAD_SIZE` is a value of the consensus configuration, as the p2p interface lists it among its configuration values ([#4606](https://github.com/ethereum/EthLib/issues/4606)).
   - In Lean, `Consensus.Config.MAX_PAYLOAD_SIZE` is new, 10485760 in the mainnet and minimal configurations, and the configuration reader and the Beacon API spec map read it there.
   - `Networking.ReqResp.MAX_PAYLOAD_SIZE` is removed.

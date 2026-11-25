@@ -141,6 +141,10 @@ instance : CommRing Fp12 where
   mul_one := Fp12.mul_one
   mul_comm := Fp12.mul_comm
 
+/-- The complex squaring is the square. -/
+theorem square_eq (a : Fp12) : a.square = a * a := by
+  apply ext <;> simp [square] <;> ring
+
 /-! ## Conjugation, norm over `Fp6`, and `Fp12.inverse` soundness -/
 
 @[simp]

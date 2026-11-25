@@ -162,6 +162,16 @@ instance : CommRing Fp6 where
 theorem mulByV_eq (a : Fp6) : a.mulByV = a * v := by
   apply ext <;> simp [mulByV]
 
+/-! ## Products with sparse elements -/
+
+/-- The product with `b0 + b1 v` is the product with that element. -/
+theorem mulBy01_eq (a : Fp6) (b0 b1 : Fp2) : a.mulBy01 b0 b1 = a * ⟨b0, b1, 0⟩ := by
+  apply ext <;> simp only [mulBy01, mul_c0, mul_c1, mul_c2, Fp2.mulByOnePlusI_eq] <;> ring
+
+/-- The product with `b1 v` is the product with that element. -/
+theorem mulBy1_eq (a : Fp6) (b1 : Fp2) : a.mulBy1 b1 = a * ⟨0, b1, 0⟩ := by
+  apply ext <;> simp only [mulBy1, mul_c0, mul_c1, mul_c2, Fp2.mulByOnePlusI_eq] <;> ring
+
 /-! ## Norm over `Fp2` and `Fp6.inverse` soundness -/
 
 /-- The norm of `a` down to `Fp2`.
