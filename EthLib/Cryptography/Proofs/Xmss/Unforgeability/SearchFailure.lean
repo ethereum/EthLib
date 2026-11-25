@@ -471,13 +471,14 @@ theorem failedSearch_of_mem_support_reasonRun (adversary : ReasonAdversary)
 theorem isQueryBoundP_reasonRun (adversary : ReasonAdversary) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
-    IsQueryBoundP (reasonRun adversary) IsHashCall (gameQueries qH r) := by
-  have hhash : ∀ x, IsQueryBoundP (QueryImpl.id' OracleWorld (.inr x)) IsHashCall 1 :=
-    fun x => by simp [IsHashCall]
+    IsQueryBoundP (reasonRun adversary) (SufCma.IsHashCall HashSpec) (gameQueries qH r) := by
+  have hhash : ∀ x,
+      IsQueryBoundP (QueryImpl.id' OracleWorld (.inr x)) (SufCma.IsHashCall HashSpec) 1 :=
+    fun x => by simp [SufCma.IsHashCall]
   have hH := isQueryBoundP_hashOf hhash
   rw [reasonRun_eq_failGameOf]
   exact (isQueryBoundP_bind (isQueryBoundP_liftM_prob _) fun _ _ =>
-    isQueryBoundP_failGameOf (fun n => by simp [IsHashCall]) hhash
+    isQueryBoundP_failGameOf (fun n => by simp [SufCma.IsHashCall]) hhash
       (Cost.isQueryBoundP_schemeSeed hH _) (Cost.isQueryBoundP_seedPrf hH)
       adversary hh hr).mono (le_of_eq (Nat.zero_add _))
 
@@ -491,15 +492,13 @@ A failed block is one whose `2^31` trials all missed the code in the final cache
 
 `p = |C| / 2^128` is the chance that one trial gives a codeword. -/
 theorem prEvent_failedBlock_le {α : Type} (oa : OracleComp OracleWorld α) {n : ℕ}
-    (hn : IsQueryBoundP oa IsHashCall n) :
+    (hn : IsQueryBoundP oa (SufCma.IsHashCall HashSpec) n) :
     Pr{let z ← (simulateQ HashSpec.romImpl oa).run ∅}[
         HashSig.FailedSearch blockPoint TrialMiss (2 ^ 31) z.2] ≤
       (n : ℝ≥0∞) * (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ (2 ^ 31) := by
-  have hcount : countedOracle =
-      HashSpec.romImpl.withAddCost (fun | .inl _ => (0 : ℕ) | .inr _ => 1) := rfl
   have hcalls := (hashQueryBound_iff_counted oa).1
     (XmssSecurity.hashQueryBound_of_isQueryBoundP oa hn ∅)
-  rw [hcount] at hcalls
+  simp only [SufCma.countedRunIn, SufCma.randomOracleModel] at hcalls
   rw [← prEvent_trialMiss]
   refine HashSig.prEvent_failedSearch_le blockPoint TrialMiss (2 ^ 31) (by norm_num)
     (fun p p' j j' hj hj' h => blockPoint_inj p p' j j' hj hj' h) _ ?_ oa n hcalls
@@ -546,8 +545,9 @@ theorem signingFailure_le_pow (adversary : ReasonAdversary) {qH r : ℕ}
   calc signingFailure adversary
       = Pr{let x ← (simulateQ HashSpec.romImpl (reasonRun adversary)).run' ∅}[
           SomeFailure x] := by
-        rw [← hrom]
-        exact prEvent_countedOracle (reasonRun adversary) SomeFailure
+        -- Rewrite with the model's lemma on any game, or the kernel replay runs the game.
+        refine (SufCma.prEvent_countedRunIn _ (reasonRun adversary) SomeFailure).trans ?_
+        rw [run_randomOracleModel, hrom]
     _ = Pr{let z ← (simulateQ HashSpec.romImpl (reasonRun adversary)).run ∅}[
           SomeFailure z.1] := by
         rw [StateT.run'_eq, prEvent_map]
@@ -580,7 +580,8 @@ It also needs at most `qH` hash queries and `r` requests, which bound the game's
 
 The adversary then forges with probability at most `q / 2^127 + Q exp(-2000)`. -/
 theorem reasonForgeAdvantage_le_exp (q : ℕ) (hq : 1 ≤ q) (adversary : ReasonAdversary)
-    (hbound : HasHashQueryBound (hideReasons adversary) q) {qH r : ℕ}
+    (hbound : SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec)
+      (hideReasons adversary) q) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
     reasonForgeAdvantage adversary ≤
