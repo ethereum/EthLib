@@ -27,8 +27,8 @@ test = [
 [dependency-groups]
 lint = [
   "codespell==2.4.3",
-  "ruff==0.17.5",
-  "ty==0.0.104",
+  "ruff==0.17.6",
+  "ty==0.0.107",
 ]
 
 [tool.uv]
