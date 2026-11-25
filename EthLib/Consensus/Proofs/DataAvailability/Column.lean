@@ -630,6 +630,14 @@ theorem computeCellsAndKzgProofs_ok_fk20 {setup : TrustedSetup} {blob : Blob}
     refine ⟨polynomialEvalToCoeff poly, ?_, (Except.ok.inj computed).symm⟩
     rw [size_polynomialEvalToCoeff, size_blobToPolynomial blob poly decoded]
 
+/-- A computed row has the 128 cells and the 128 proofs of an extended blob. -/
+theorem size_computeCellsAndKzgProofs {setup : TrustedSetup} {blob : Blob}
+    {row : Array Cell × Array KZGProof}
+    (computed : computeCellsAndKzgProofs setup blob = .ok row) :
+    row.1.size = CELLS_PER_EXT_BLOB ∧ row.2.size = CELLS_PER_EXT_BLOB := by
+  obtain ⟨p, size, rfl⟩ := computeCellsAndKzgProofs_ok_fk20 computed
+  exact size_fk20CellsAndProofs setup (by rw [size]; decide)
+
 /-- The flattened list of rows that are empty except one is that one row. -/
 theorem flatten_map_range_ite {α : Type} (row : List α) {i n : Nat} (inside : i < n) :
     ((List.range n).map fun j => if j = i then row else []).flatten = row := by
@@ -845,13 +853,7 @@ theorem verifyDataColumnSidecarKzgProofs_eq_verify {preset : Preset} {fork : For
         sidecar.index.toNat, sidecar.column.data, sidecar.kzgProofs.data.map (·.bytes)⟩ :=
   rfl
 
-/-- The column builder `getDataColumnSidecars` succeeds when each row has a cell per column.
-
-Each row also has a proof per column, and before Gloas there are as many rows as commitments.
-
-Rows computed from blobs have the 128 cells and proofs of `Kzg.Constants.CELLS_PER_EXT_BLOB`.
-
-So they are full under a preset with at most 128 columns. -/
+/-- The column builder succeeds on full rows, with one row per commitment before Gloas. -/
 theorem getDataColumnSidecars_exists_ok {preset : Preset} {fork : Fork}
     {header : Until .glamsterdam fork SignedBeaconBlockHeader}
     {commitments : Until .glamsterdam fork (BlobKZGCommitments preset fork)}
@@ -919,13 +921,38 @@ theorem getDataColumnSidecars_exists_ok {preset : Preset} {fork : Fork}
       · rename_i unbounded
         exact unbounded (by first | exact fun _ => cellsBound before | exact fun b => b.elim)
 
-/-- Each sidecar of the column builder `getDataColumnSidecars` passes the batch check.
+/-- The column builder succeeds on the rows of blobs, under a preset of at most 128 columns.
 
-The trusted setup must be well formed.
+Before Gloas, there must also be one blob per commitment. -/
+theorem getDataColumnSidecars_exists_ok_of_computed {preset : Preset} {fork : Fork}
+    {setup : TrustedSetup}
+    {header : Until .glamsterdam fork SignedBeaconBlockHeader}
+    {commitments : Until .glamsterdam fork (BlobKZGCommitments preset fork)}
+    {branch : Until .glamsterdam fork
+      (Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat)}
+    {root : Since .glamsterdam fork Root} {slot : Since .glamsterdam fork Slot}
+    {blobs : List Blob} {rows : List (Array Cell × Array KZGProof)}
+    -- The preset has at most one column per cell of an extended blob.
+    (columns : preset.NUMBER_OF_COLUMNS.toNat ≤ Cryptography.Kzg.Constants.CELLS_PER_EXT_BLOB)
+    -- The rows are the cells and proofs of the blobs, in order.
+    (computed : blobs.mapM (computeCellsAndKzgProofs setup) = .ok rows)
+    -- Before Gloas, there are as many blobs as commitments.
+    (counted : ∀ beforeGloas : fork < .glamsterdam,
+      blobs.length = (commitments beforeGloas).data.size) :
+    ∃ sidecars, getDataColumnSidecars preset header commitments branch root slot rows =
+      .ok sidecars := by
+  refine getDataColumnSidecars_exists_ok (fun row member => ?_)
+    fun before => (mapM_ok_length computed).trans (counted before)
+  -- Each row is computed from a blob, so it has a cell and a proof for each of the 128 cells.
+  obtain ⟨blob, -, rowOk⟩ := mapM_ok_mem computed row member
+  obtain ⟨cellsSize, proofsSize⟩ := size_computeCellsAndKzgProofs rowOk
+  omega
 
-The cells, the proofs and the commitments come from the same blobs, in order.
+/-- Each sidecar that the column builder makes from the rows of blobs passes the batch check.
 
-Those commitments are the carried ones before Gloas, and those of the bid from Gloas. -/
+Assume a trusted setup that is well formed for some secret `τ`.
+
+The commitments come from the same blobs, in order: carried before Gloas, in the bid from Gloas. -/
 theorem verifyDataColumnSidecarKzgProofs_of_getDataColumnSidecars {preset : Preset} {fork : Fork}
     {setup : TrustedSetup}
     {τ : Cryptography.Bls.Fr} (wellFormed : setup.WellFormed τ)
@@ -952,7 +979,7 @@ theorem verifyDataColumnSidecarKzgProofs_of_getDataColumnSidecars {preset : Pres
   intro sidecar member
   obtain ⟨i, inside, rfl⟩ := List.getElem_of_mem member
   obtain ⟨indexed, cellsOf, proofsOf, carriedOf, -⟩ := entries i inside
-  -- The cells answer to the commitments of the blobs, carried or in the bid.
+  -- The commitments of the sidecar, carried or in the bid, are those of the blobs, in order.
   have committed : blobs.mapM (blobToKzgCommitment setup) =
       .ok (sidecars[i].commitments bidCommitments).data.toList := by
     unfold DataColumnSidecar.commitments
@@ -985,15 +1012,10 @@ theorem verifyDataColumnSidecarKzgProofs_of_getDataColumnSidecars {preset : Pres
     · rw [h] at cellK; cases cellK
     · exact (Array.getElem?_eq_some_iff.mp h).1
   -- A computed row has the 128 cells and proofs of an extended blob.
-  have sizes : rows[k].1.size = Cryptography.Kzg.Constants.CELLS_PER_EXT_BLOB ∧
-      rows[k].2.size = Cryptography.Kzg.Constants.CELLS_PER_EXT_BLOB := by
-    obtain ⟨p, size, computedRow⟩ := computeCellsAndKzgProofs_ok_fk20 rowOk
-    rw [computedRow]
-    exact size_fk20CellsAndProofs setup (by rw [size]; decide)
+  have sizes := size_computeCellsAndKzgProofs rowOk
   -- Index `i` fits in 64 bits, since it is below the 128 cells of a row.
-  have small : (i.toUInt64).toNat = i := UInt64.toNat_ofNat_of_lt' (by
+  have small : (i.toUInt64).toNat = i := toNat_toUInt64_of_lt (by
     have : Cryptography.Kzg.Constants.CELLS_PER_EXT_BLOB = 128 := by decide
-    have : UInt64.size = 2 ^ 64 := rfl
     omega)
   have hc : k < sidecars[i].column.data.size := by omega
   have hp : k < sidecars[i].kzgProofs.data.size := by omega
