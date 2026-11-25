@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.List
 public import EthLib.Cryptography.Kzg.Cells
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+import Batteries.Data.Array.Lemmas
 
 /-!
 # Proofs: the shape and the input checks of the cell operations
@@ -16,6 +17,8 @@ The batch challenge is a canonical field element.
 Each cell operation rejects each malformed input with its own error, before any other work.
 
 A buffer of indices decodes to a list exactly when it holds their 8-byte encodings, in order.
+
+Commitments are ordered by their bytes, with the laws that a search tree needs.
 -/
 
 @[expose] public section
@@ -103,6 +106,21 @@ theorem val_computeVerifyCellKzgProofBatchChallenge_lt
   rw [computeVerifyCellKzgProofBatchChallenge]
   exact Fr.val_hashToBlsField_lt _
 
+/-! ## The order of commitments -/
+
+/-- Commitments compare as their bytes, so the order is transitive. -/
+instance : Std.TransOrd KZGCommitment where
+  -- Both laws are those of the order on byte vectors.
+  eq_swap := Std.OrientedCmp.eq_swap (cmp := fun a b : Vector UInt8 48 => compare a b)
+  isLE_trans := Std.TransCmp.isLE_trans (cmp := fun a b : Vector UInt8 48 => compare a b)
+
+/-- Commitments compare as equal exactly when they are equal. -/
+instance : Std.LawfulEqOrd KZGCommitment where
+  -- Equal bytes make equal commitments.
+  eq_of_compare h :=
+    congrArg KZGCommitment.mk
+      (Std.LawfulEqCmp.eq_of_compare (cmp := fun a b : Vector UInt8 48 => compare a b) h)
+
 /-! ## `verifyCellKzgProofBatchImpl` validation -/
 
 /-- Rejects a `cellIndices` array whose length does not match `commitmentIndices`. -/
@@ -175,12 +193,12 @@ theorem verifyCellKzgProofBatchImpl_duplicateCommitments (setup : TrustedSetup)
     verifyCellKzgProofBatchImpl setup commitments commitmentIndices cellIndices
         cosetsEvals proofs
       = throw (.duplicateCommitments entry.2) := by
-  have h : commitments.zipIdx.any (fun (c, i) => commitments.idxOf? c ≠ some i) = true :=
-    Base.any_eq_true_of_find?_eq_some found
+  -- The search of the array is the search of its list, so the scan finds the same place.
+  have h : Base.firstRepeatIndex commitments.toList = some entry.2 := by
+    rw [Base.firstRepeatIndex_eq_find?, ← Array.toList_zipIdx, Array.find?_toList]
+    simp only [Array.idxOf?_toList, found, Option.map_some]
   unfold verifyCellKzgProofBatchImpl
-  rw [h, hcidx]
-  simp only [ne_eq, decide_not] at found
-  simp [hcell, hcoset, hproof, found, throw_bind]
+  simp [hcell, hcoset, hproof, hcidx, h, throw_bind]
 
 /-- Alias for `verifyCellKzgProofBatchImpl_cellIndices_mismatch`. -/
 theorem computeVerifyCellKzgProofBatchChallenge_mismatch_cellIndices (setup : TrustedSetup)

@@ -1114,6 +1114,12 @@ Not yet released.
   - `Consensus.Exports.containerOf` (`Consensus/Exports/Ssz.lean`) matches on the name, the preset and the fork together, and each arm binds the preset and the fork it reads.
     The compiler no longer lifts every codec to the top of the function, so a call no longer builds them all.
     It gives the same container for every name, preset and fork, and its type is unchanged.
+- In Lean, the batch check of cells finds and removes repeated commitments in one pass with a search tree ([#4571](https://github.com/ethereum/EthLib/pull/4571)).
+  - `Base.firstRepeatIndex`, `Base.firstRepeatIndexFrom` and `Base.distinctPlaces` (`Base/List.lean`) are new: the place of the first element that equals an earlier one, and the distinct elements of a list with the place of each element among them.
+    `firstRepeatIndex_eq_find?`, `firstRepeatIndex_eq_none_iff` and `distinctPlaces_eq_foldl` (`Base/Proofs/List.lean`) relate them to the searches they replace.
+  - `Kzg.KZGCommitment` (`Cryptography/Kzg/Types.lean`) has an `Ord` instance that compares its bytes, with its laws in `Cryptography/Proofs/Kzg/Cells.lean`.
+  - `Kzg.verifyCellKzgProofBatchImpl` unfolds to `Base.firstRepeatIndex`, and `Kzg.verifyCellKzgProofBatch` validates its commitments with a map, then unfolds to `Base.distinctPlaces`.
+    Both give the same result and the same error on every input, and every theorem keeps its statement.
 - In Lean, the chain theorem charges the rewards that blocks pay for attestations once in each epoch, not in each block ([#2601](https://github.com/ethereum/EthLib/issues/2601)).
   So `chainConditions_mainnet` and the mainnet corollaries of `ChainRun.lean` cover 64 epochs, up from 16.
   - `BlockStep` (`Totality/ChainHolds.lean`) has a new field `rewards`, the rise of the supply in each epoch from those rewards.

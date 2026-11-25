@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.List
+import Std.Data.TreeMap.Lemmas
 import Std.Data.TreeSet.Lemmas
 
 /-!
@@ -394,5 +395,129 @@ theorem two_le_count_of_firstRepeated {α : Type} [Ord α] [Std.TransOrd α] [St
       have := ih (by simpa [hy] using h)
       have : l.count x ≤ (y :: l).count x := List.count_le_count_cons
       omega
+
+/-- The first place of an element in two joined lists, from the places in each. -/
+private theorem idxOf?_append {α : Type} [BEq α] [LawfulBEq α] (a : α) (l₁ l₂ : List α) :
+    (l₁ ++ l₂).idxOf? a =
+      if a ∈ l₁ then l₁.idxOf? a else (l₂.idxOf? a).map (· + l₁.length) := by
+  induction l₁ with
+  | nil => simp
+  | cons x l₁ ih =>
+    by_cases hx : x = a
+    · simp [List.idxOf?_cons, hx]
+    · by_cases ha : a ∈ l₁ <;> simp [List.idxOf?_cons, hx, ha, ih, Ne.symm hx, Option.map_map,
+        Function.comp_def, Nat.add_assoc]
+
+/-- The scan from a place, given the set of a prefix, finds the first later repeat. -/
+private theorem firstRepeatIndexFrom_eq_find? {α : Type} [Ord α] [Std.TransOrd α]
+    [Std.LawfulEqOrd α] [BEq α] [LawfulBEq α] (pre l : List α) (earlier : Std.TreeSet α)
+    (h : ∀ y, earlier.contains y = decide (y ∈ pre)) :
+    firstRepeatIndexFrom earlier pre.length l =
+      ((l.zipIdx pre.length).find? fun (c, i) => (pre ++ l).idxOf? c ≠ some i).map (·.2) := by
+  induction l generalizing pre earlier with
+  | nil => simp [firstRepeatIndexFrom]
+  | cons x xs ih =>
+    by_cases hx : x ∈ pre
+    · -- The head lies in the prefix, so its first place is earlier and the scan stops here.
+      obtain ⟨k, hk⟩ :=
+        Option.ne_none_iff_exists'.mp (mt List.idxOf?_eq_none_iff.mp (not_not_intro hx))
+      have hlt := (List.idxOf?_eq_some_iff.mp hk).1
+      rw [firstRepeatIndexFrom, ite_eq_left (by simp [h, hx])]
+      simp [List.zipIdx_cons, idxOf?_append, hx, hk, Nat.ne_of_lt hlt]
+    · -- The head is new, so its first place is its own and the scan goes on with it in the prefix.
+      rw [firstRepeatIndexFrom, ite_eq_right (by simp [h, hx])]
+      have := ih (pre ++ [x]) (earlier.insert x) (fun y => by
+        by_cases hy : x = y <;> simp [Std.TreeSet.contains_insert, h, hy, Ne.symm])
+      simp only [List.length_append, List.length_singleton, List.append_assoc,
+        List.singleton_append] at this
+      rw [this]
+      simp [List.zipIdx_cons, idxOf?_append, hx, List.idxOf?_cons]
+
+/-- The scan for a repeat finds the first place whose element occurs at an earlier place. -/
+theorem firstRepeatIndex_eq_find? {α : Type} [Ord α] [Std.TransOrd α] [Std.LawfulEqOrd α]
+    [BEq α] [LawfulBEq α] (l : List α) :
+    firstRepeatIndex l = (l.zipIdx.find? fun (c, i) => l.idxOf? c ≠ some i).map (·.2) := by
+  -- The scan starts with the empty prefix and the empty set.
+  simpa [firstRepeatIndex] using firstRepeatIndexFrom_eq_find? [] l ∅ (by simp)
+
+/-- The scan from a set finds nothing when no element occurs twice or lies in the set. -/
+private theorem firstRepeatIndexFrom_eq_none_iff {α : Type} [Ord α] [Std.TransOrd α]
+    [Std.LawfulEqOrd α] (earlier : Std.TreeSet α) (place : Nat) (l : List α) :
+    firstRepeatIndexFrom earlier place l = none ↔
+      l.Nodup ∧ ∀ x ∈ l, earlier.contains x = false := by
+  induction l generalizing earlier place with
+  | nil => simp [firstRepeatIndexFrom]
+  | cons x xs ih =>
+    by_cases hx : earlier.contains x = true
+    · simp [firstRepeatIndexFrom, hx]
+    · -- Past the head, the set holds it, so the tail must avoid it.
+      rw [firstRepeatIndexFrom, ite_eq_right hx, ih]
+      simp only [Std.TreeSet.contains_insert, Bool.or_eq_false_iff, beq_eq_false_iff_ne,
+        List.nodup_cons, ne_eq, Std.compare_eq_iff_eq, List.forall_mem_cons,
+        Bool.not_eq_true] at hx ⊢
+      constructor
+      · rintro ⟨hn, ha⟩
+        exact ⟨⟨fun hm => (ha x hm).1 rfl, hn⟩, hx, fun a h => (ha a h).2⟩
+      · rintro ⟨⟨hm, hn⟩, -, ha⟩
+        exact ⟨hn, fun a h => ⟨fun e => hm (e ▸ h), ha a h⟩⟩
+
+/-- The scan for a repeat finds nothing exactly when no element occurs twice. -/
+theorem firstRepeatIndex_eq_none_iff {α : Type} [Ord α] [Std.TransOrd α] [Std.LawfulEqOrd α]
+    (l : List α) : firstRepeatIndex l = none ↔ l.Nodup := by
+  -- The empty set holds no element.
+  simp [firstRepeatIndex, firstRepeatIndexFrom_eq_none_iff]
+
+/-- The first place of an element in an array with one more element at the end. -/
+private theorem idxOf?_push {α : Type} [BEq α] [LawfulBEq α] (d : Array α) (x y : α) :
+    (d.push x).idxOf? y = if y ∈ d then d.idxOf? y else if x == y then some d.size else none := by
+  rcases d with ⟨d⟩
+  rw [List.push_toArray, List.idxOf?_toArray, List.idxOf?_toArray, idxOf?_append]
+  by_cases hy : y ∈ d <;> by_cases hx : x = y <;> simp [hy, hx, List.idxOf?_cons]
+
+/-- From a tree that agrees with the search, the one pass gives what the search gives. -/
+private theorem distinctPlaces_foldl {α : Type} [Ord α] [Std.TransOrd α] [Std.LawfulEqOrd α]
+    [BEq α] [LawfulBEq α] (l : List α) (distinct : Array α) (places : Array Nat)
+    (seen : Std.TreeMap α Nat) (h : ∀ y, seen.get? y = distinct.idxOf? y) :
+    (fun r => (r.1, r.2.1)) (l.foldl (init := (distinct, places, seen))
+      fun (distinct, places, seen) x =>
+        match seen.get? x with
+        | some j => (distinct, places.push j, seen)
+        | none => (distinct.push x, places.push distinct.size, seen.insert x distinct.size)) =
+    l.foldl (fun acc x =>
+      match acc.1.idxOf? x with
+      | some j => (acc.1, acc.2.push j)
+      | none => (acc.1.push x, acc.2.push acc.1.size)) (distinct, places) := by
+  induction l generalizing distinct places seen with
+  | nil => rfl
+  | cons x xs ih =>
+    rw [List.foldl_cons, List.foldl_cons]
+    cases hc : distinct.idxOf? x with
+    | some j =>
+      -- A repeat leaves the distinct elements and the tree as they were.
+      simp only [(h x).trans hc]
+      exact ih _ _ _ h
+    | none =>
+      -- A new element takes the next place in both the array and the tree.
+      simp only [(h x).trans hc]
+      refine ih _ _ _ fun y => ?_
+      have hx : x ∉ distinct := Array.idxOf?_eq_none_iff.mp hc
+      rw [Std.TreeMap.get?_eq_getElem?, Std.TreeMap.getElem?_insert,
+        ← Std.TreeMap.get?_eq_getElem?, h, idxOf?_push]
+      by_cases hxy : x = y
+      · subst hxy
+        simp [hx]
+      · by_cases hy : y ∈ distinct
+        · simp [hxy, hy]
+        · simp [hxy, hy, Array.idxOf?_eq_none_iff.mpr hy]
+
+/-- The one-pass removal of repeats gives the removal that searches the distinct elements. -/
+theorem distinctPlaces_eq_foldl {α : Type} [Ord α] [Std.TransOrd α] [Std.LawfulEqOrd α]
+    [BEq α] [LawfulBEq α] (l : List α) :
+    distinctPlaces l = l.foldl (fun acc x =>
+      match acc.1.idxOf? x with
+      | some j => (acc.1, acc.2.push j)
+      | none => (acc.1.push x, acc.2.push acc.1.size)) (#[], #[]) := by
+  -- The empty tree maps nothing, as the empty array has no place to give.
+  exact distinctPlaces_foldl l #[] #[] ∅ fun y => by simp [Std.TreeMap.get?_eq_getElem?]
 
 end EthLib.Base

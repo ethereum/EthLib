@@ -172,23 +172,21 @@ theorem validates_of_verifyCellKzgProofBatch {s : TrustedSetup} {bs : Array Byte
   · cases h
   rename_i qs hqs
   constructor
-  · intro c hc
-    rw [← Array.foldlM_toList] at hdd
-    have hall := Base.foldlM_forall_of_ok (P := fun p : Bytes48 × Nat => validateKzgG1 p.1 = true)
-      (fun acc p r hr => by
-      cases hb : bytesToKzgCommitment p.1 with
-      | error e =>
-        simp [hb, throw, throwThe, MonadExceptOf.throw] at hr
-      | ok c =>
-        unfold bytesToKzgCommitment at hb
-        split at hb
-        · assumption
-        · cases hb) _ _ _ hdd
+  · -- Each commitment comes out of the map only after it validates.
+    obtain ⟨hsz, hk⟩ := array_mapM_ok hdd
+    intro c hc
     obtain ⟨i, hi, rfl⟩ := Array.getElem_of_mem hc
-    have hm : (bs[i], i) ∈ bs.zipIdx.toList := by
-      rw [Array.toList_zipIdx]
-      exact List.mem_iff_getElem.mpr ⟨i, by simpa using hi, by simp⟩
-    exact hall (bs[i], i) hm
+    have hi' : i < bs.zipIdx.size := by rw [Array.size_zipIdx]; exact hi
+    have hr := hk i hi' (by omega)
+    rw [Array.getElem_zipIdx] at hr
+    cases hb : bytesToKzgCommitment bs[i] with
+    | error e =>
+      simp [hb, throw, throwThe, MonadExceptOf.throw] at hr
+    | ok c =>
+      unfold bytesToKzgCommitment at hb
+      split at hb
+      · assumption
+      · cases hb
   · refine zipIdx_mapM_validates ?_ hqs
     intro p r hr
     cases hb : bytesToKzgProof p.1 with
