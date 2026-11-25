@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import VCVio.OracleComp.QueryTracking.QueryBound.Basic
 
@@ -120,18 +121,6 @@ theorem isQueryBoundP_merkleSiblings (hleaves : ∀ j, IsQueryBoundP (leaves j) 
       isQueryBoundP_bind (isQueryBoundP_merkleSiblings hleaves hhash q.parent n)
         fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
     simp only [Merkle.Position.sibling_level, Merkle.Position.parent_level]
-    omega
-
-/-- A climb costs one hash per sibling. -/
-theorem isQueryBoundP_climb (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
-    ∀ (siblings : List α) (q : Merkle.Position) (current : α),
-      IsQueryBoundP (Merkle.climb hash q current siblings) p siblings.length
-  | [], _, _ => isQueryBoundP_pure _ _ _
-  | _ :: rest, q, current => by
-    rw [Merkle.climb]
-    refine (isQueryBoundP_bind (hhash _ _ _) fun _ _ =>
-      isQueryBoundP_climb hhash rest _ _).mono ?_
-    simp only [List.length_cons]
     omega
 
 end Merkle
@@ -277,7 +266,7 @@ theorem isQueryBoundP_layerRoot (hH : ∀ x, IsQueryBoundP (H x) p 1) (publicPar
     (n := 176 + (LAYER_HEIGHT + 0)) (by simp [LAYER_HEIGHT])
   rcases r with _ | leaf
   · exact isQueryBoundP_pure _ _ _
-  · refine isQueryBoundP_bind ((isQueryBoundP_climb
+  · refine isQueryBoundP_bind ((Merkle.isQueryBoundP_climb
     (fun _ _ _ => isQueryBoundP_th hH publicParam _ _)
       sig.path.toList ⟨0, e⟩ leaf).mono (by simp)) fun _ _ => isQueryBoundP_pure _ _ 0
 

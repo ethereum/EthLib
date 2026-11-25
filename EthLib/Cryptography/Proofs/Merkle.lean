@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Merkle.Position
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Merkle.Build
+public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
 public import EthLib.Cryptography.Proofs.Merkle.Binding.SecondPreimage
 public import EthLib.Cryptography.Proofs.Merkle.Binding.Index
