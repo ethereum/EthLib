@@ -1524,6 +1524,10 @@ Their equation (6) approximates that term by the closed form, for `N` well below
 `spongeExact_le_spongeBound` (`Proofs/Indifferentiability.lean`) proves that the closed form bounds the exact term, at every rate, capacity and cost.
 So `keccak256Indifferentiable_of_spongeExact` derives the hypothesis from the same statement with the exact term.
 EthLib proves the hypothesis in neither form, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
+`keccak256_indifferentiable` (`Proofs/Hash/Keccak/Sponge.lean`) proves indifferentiability of the same hash with a weaker bound, with no hypothesis.
+For a cost `N`, its bound is `N (N - 1) / 2^1601 + (N (2N + 1) + N (N + 1)) / 2^512`, about six times the closed form in its capacity term.
+It is the Keccak-256 instance of `indifferentiable_spongeHash` (`Proofs/Sponge/Indifferentiability.lean`), whose simulator draws every fresh answer from all states.
+`keccak256_realProb_le_spongeIndiffBound` carries a random-oracle bound to the sponge with that bound.
 The source writes its proof for the padding of its §3.3, while Keccak-256 pads with pad10*1.
 Its §3.3 asks only for an injective padding whose last block is not zero, which pad10*1 meets.
 The distinguisher here asks only for 256-bit outputs of byte strings.
