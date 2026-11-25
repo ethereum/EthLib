@@ -233,6 +233,16 @@ def test_gloas_sidecars_from_block_and_sidecar(preset, case, name):
         assert (other["slot"], other["root"]) == (parts["slot"], parts["root"])
 
 
+@pytest.mark.parametrize("preset, case, name", _valid_gloas_messages()[:1])
+def test_gloas_no_sidecar_without_blobs(preset, case, name):
+    # From Gloas a block with no blob has no sidecar, since a sidecar needs a cell.
+    fork = FORKS[case.parts[-5]]
+    data = snappy.decompress((case / f"{name}.ssz_snappy").read_bytes())
+    block = case_blocks(case, preset, fork)[_gloas_sidecar_parts(data)["root"]]
+    assert consensus.get_data_column_sidecars_from_column_sidecar(preset, fork, data, []) == []
+    assert consensus.get_data_column_sidecars_from_block(preset, fork, block, []) == []
+
+
 def _first_message(case: Path) -> bytes:
     meta = _yaml(case / "meta.yaml")
     return snappy.decompress((case / f"{meta['messages'][0]['message']}.ssz_snappy").read_bytes())
@@ -315,6 +325,7 @@ def test_sidecars_from_block(preset, case):
     sidecars = consensus.get_data_column_sidecars_from_block(preset, "fusaka", block, rows)
     branch = b"".join(bytes.fromhex(node[2:]) for node in proof["branch"])
     body_root, _ = consensus.ssz_static(preset, "fusaka", "BeaconBlockBody", body)
+    assert count > 0
     assert len(sidecars) == 128
     for index, sidecar in enumerate(sidecars):
         parts = _sidecar_parts(sidecar)
@@ -324,6 +335,37 @@ def test_sidecars_from_block(preset, case):
         assert parts["header"] == message[:80] + body_root + bytes(96)
         assert len(parts["cells"]) == count
         assert consensus.verify_data_column_sidecar_inclusion_proof(preset, "fusaka", sidecar)
+
+
+def _without_commitments(preset: str, body: bytes) -> bytes:
+    """The same Fulu block body with an empty list of blob commitments."""
+    # The RANDAO reveal, the Eth1 data, the graffiti and five offsets, then the sync aggregate.
+    sync = consensus.preset(preset)["SYNC_COMMITTEE_SIZE"] // 8 + 96
+    # Then the offsets of the payload, the changes, the commitments and the requests.
+    at = 96 + 72 + 32 + 5 * 4 + sync + 2 * 4
+    start, end = (int.from_bytes(body[i : i + 4], "little") for i in (at, at + 4))
+    # The requests now start where the commitments did.
+    return body[: at + 4] + start.to_bytes(4, "little") + body[at + 8 : start] + body[end:]
+
+
+def test_fulu_no_sidecar_without_blobs():
+    # A block that commits to no blob has no sidecar, rather than one empty sidecar per column.
+    case = sorted(PROOFS.glob("minimal/fulu/merkle_proof/*/BeaconBlockBody/*"))[0]
+    body = _without_commitments(
+        "minimal", snappy.decompress((case / "object.ssz_snappy").read_bytes())
+    )
+    message = bytes(80) + (84).to_bytes(4, "little") + body
+    block = (100).to_bytes(4, "little") + bytes(96) + message
+    assert consensus.get_data_column_sidecars_from_block("minimal", "fusaka", block, []) == []
+
+
+def test_no_row_still_needs_one_row_per_commitment():
+    # A block with a blob and no row fails the count before it could return no sidecar.
+    case = sorted(PROOFS.glob("minimal/fulu/merkle_proof/*/BeaconBlockBody/*"))[0]
+    body = snappy.decompress((case / "object.ssz_snappy").read_bytes())
+    block = (100).to_bytes(4, "little") + bytes(96) + bytes(80) + (84).to_bytes(4, "little") + body
+    with raises(SszError, "sidecars rejected: EthLib.Serialization.Ssz.Err.count 1 0"):
+        consensus.get_data_column_sidecars_from_block("minimal", "fusaka", block, [])
 
 
 def test_sidecars_need_one_row_per_commitment():

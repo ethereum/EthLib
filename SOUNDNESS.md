@@ -1718,7 +1718,9 @@ It can then serve exactly their columns, and the bound says nothing about such a
 Nodes with overlapping ranges of IDs share oracle answers, so no theorem says that their acceptances are independent.
 The bound says nothing about SHA-256 itself (A4), nor about the KZG proofs of the columns, which other theorems cover.
 
-`getDataColumnSidecars_spec` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that a build of the sidecars of a block that succeeds gives one sidecar per column, for any rows.
+`getDataColumnSidecars_spec` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that a build of the sidecars of a block that succeeds gives one sidecar per column, or none when there is no row.
+EthLib builds none for a block with no blob, as the default branch of consensus-specs does since its pull request 5767.
+The pinned release `v1.7.0-beta.4` builds one empty sidecar per column there, and no pinned vector reaches that case.
 Sidecar `i` has index `i`, and holds the cell and the proof at position `i` of every row, in row order.
 Every sidecar carries the given header, commitments, branch, slot and root.
 Before Gloas, `getDataColumnSidecars_length_of_lt_glamsterdam` shows that a build that succeeds has as many rows as commitments.

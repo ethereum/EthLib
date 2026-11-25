@@ -343,7 +343,9 @@ theorem getDataColumnSidecars_length_of_lt_glamsterdam {preset : Preset} {fork :
     exact Classical.not_not.mp same
 
 open Cryptography.Kzg in
-/-- The built sidecars of a block number one per column, and entry `i` holds column `i`.
+/-- The built sidecars of a block number one per column, or none with no row.
+
+Entry `i` holds column `i`.
 
 Entry `i` has index `i`, with the cell and the proof at position `i` of every row, in row order.
 
@@ -358,7 +360,7 @@ theorem getDataColumnSidecars_spec {preset : Preset} {fork : Fork}
     {root : Since .glamsterdam fork Root} {slot : Since .glamsterdam fork Slot}
     {rows : List (Array Cell × Array KZGProof)} {sidecars : List (DataColumnSidecar preset fork)}
     (built : getDataColumnSidecars preset header commitments branch root slot rows = .ok sidecars) :
-    sidecars.length = preset.NUMBER_OF_COLUMNS.toNat ∧
+    sidecars.length = (if rows = [] then 0 else preset.NUMBER_OF_COLUMNS.toNat) ∧
       ∀ (i : Nat) (inside : i < sidecars.length),
         sidecars[i].index = i.toUInt64 ∧
         sidecars[i].column.data.toList.map some = rows.map (·.1[i]?) ∧
@@ -368,6 +370,16 @@ theorem getDataColumnSidecars_spec {preset : Preset} {fork : Fork}
         sidecars[i].beaconBlockRoot = root := by
   unfold getDataColumnSidecars at built
   dsimp only at built
+  -- With no row the build gives no sidecar.
+  by_cases empty : rows = []
+  · subst empty
+    have none : sidecars = [] := by
+      split at built <;> split at built <;>
+        simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+    subst none
+    simp
+  have filled : rows.isEmpty = false := by simpa using empty
+  simp only [filled, Bool.false_eq_true, ↓reduceIte] at built
   -- Every branch that does not fail is the map over the column indices.
   split at built <;> try split at built
   case isTrue.isTrue => cases built
@@ -409,7 +421,7 @@ theorem getDataColumnSidecars_spec {preset : Preset} {fork : Fork}
       built
     have lengths : sidecars.length = preset.NUMBER_OF_COLUMNS.toNat := by
       simpa using congrArg List.length parts
-    refine ⟨lengths, fun i inside => ?_⟩
+    refine ⟨by simpa [empty] using lengths, fun i inside => ?_⟩
     have entry := congrArg (·[i]?) parts
     simp only [List.getElem?_map, List.getElem?_eq_getElem inside,
       List.getElem?_range (lengths ▸ inside), Option.map_some, Option.some.injEq,
