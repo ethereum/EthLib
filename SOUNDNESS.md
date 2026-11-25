@@ -1485,7 +1485,8 @@ The batch challenge export decodes both of its buffers and checks the bounds of 
 It assumes that both buffers hold the 8-byte big-endian encodings of their indices, each below `2^64`.
 It also assumes as many cell indices, coset evaluations and proofs as commitment indices, and that each commitment reads and decodes as a point.
 `computeVerifyCellKzgProofBatchChallengeExport_cellIndexOutOfBounds` (`Proofs/Exports/Kzg.lean`) states that the export gives the error that names the first cell index of `CELLS_PER_EXT_BLOB` or more.
-It makes the same assumptions on the buffers, the counts and the commitments, and also assumes that each commitment index is below the count of commitments.
+It makes the same assumptions on the buffers, the counts and the commitments.
+It also assumes that each commitment index is below the count of commitments.
 
 Each operation takes the trusted setup as an argument and returns `Except KzgError`, so the kernel can unfold it.
 `computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return.
