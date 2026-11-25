@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Trie.Root
 public import EthLib.Execution.Proofs.Trie.HexPrefix
+public import EthLib.Base.Proofs.List
 
 /-!
 # Proofs: the root ignores insertion order
@@ -81,24 +82,6 @@ theorem min_commonPrefixLength_le : (a b c : List Nibble) →
 
 /-! ## Folds -/
 
-/-- `n` is below a fold of minimums exactly when it is below the start and below every term. -/
-theorem le_foldl_min_iff {α : Type} (f : α → Nat) (n : Nat) :
-    (l : List α) → (start : Nat) →
-      (n ≤ l.foldl (fun length entry => min length (f entry)) start ↔ n ≤ start ∧ ∀ entry ∈ l, n ≤ f entry)
-  | [], start => by simp
-  | entry :: rest, start => by
-    simp only [List.foldl_cons, le_foldl_min_iff f n rest, List.forall_mem_cons, Nat.le_min]
-    exact and_assoc
-
-/-- A fold of minimums does not depend on the order of its terms. -/
-theorem foldl_min_perm {α : Type} (f : α → Nat) {l l' : List α} (hperm : l.Perm l') (start : Nat) :
-    l.foldl (fun length entry => min length (f entry)) start = l'.foldl (fun length entry => min length (f entry)) start := by
-  apply Nat.le_antisymm
-  · have h := (le_foldl_min_iff f _ l start).mp (Nat.le_refl _)
-    exact (le_foldl_min_iff f _ l' start).mpr ⟨h.1, fun entry hmem => h.2 entry (hperm.mem_iff.mpr hmem)⟩
-  · have h := (le_foldl_min_iff f _ l' start).mp (Nat.le_refl _)
-    exact (le_foldl_min_iff f _ l start).mpr ⟨h.1, fun entry hmem => h.2 entry (hperm.mem_iff.mp hmem)⟩
-
 /-- The longest path does not depend on the order of the keys. -/
 theorem longestPath_perm {obj obj' : List (List Nibble × ByteArray)} (hperm : obj.Perm obj') :
     longestPath obj = longestPath obj' := by
@@ -110,46 +93,7 @@ theorem longestPath_perm {obj obj' : List (List Nibble × ByteArray)} (hperm : o
     intro entry hmem
     exact (longestPath_le_iff obj _).mp (Nat.le_refl _) entry (hperm.mem_iff.mpr hmem)
 
-/-- A fold that keeps the value of the last entry that satisfies `p` gives that value, or its start. -/
-theorem foldl_last {α β : Type} (p : α → Bool) (value : α → β) :
-    (l : List α) → (start : β) →
-      l.foldl (fun acc entry => if p entry then value entry else acc) start
-        = (((l.filter p).getLast?).map value).getD start
-  | [], _ => rfl
-  | entry :: rest, start => by
-    rw [List.foldl_cons, foldl_last p value rest]
-    by_cases h : p entry
-    · simp only [h, ↓reduceIte, List.filter_cons_of_pos h, List.getLast?_cons]
-      cases (rest.filter p).getLast? <;> rfl
-    · simp [h, List.filter_cons_of_neg h]
-
-/-- Two orderings of a list with at most one entry are the same list. -/
-theorem eq_of_perm_of_length_le_one {α : Type} {l l' : List α} (hperm : l.Perm l') (hlength : l.length ≤ 1) :
-    l = l' := by
-  match l, hlength with
-  | [], _ => exact List.Perm.nil_eq hperm
-  | [x], _ => exact (List.perm_singleton.mp hperm.symm).symm
-
-/-- A list without duplicates whose entries are all `c` has at most one entry. -/
-theorem length_le_one_of_nodup {α : Type} {c : α} :
-    (l : List α) → l.Nodup → (∀ x ∈ l, x = c) → l.length ≤ 1
-  | [], _, _ => Nat.zero_le _
-  | [_], _, _ => Nat.le_refl _
-  | x :: y :: _, hnodup, hall => by
-    have hx := hall x List.mem_cons_self
-    have hy := hall y (List.mem_cons_of_mem _ List.mem_cons_self)
-    exact ((List.nodup_cons.mp hnodup).1 ((hx.trans hy.symm) ▸ List.mem_cons_self)).elim
-
 /-! ## Distinct paths -/
-
-/-- A list whose image has no duplicates has none itself. -/
-theorem nodup_of_map {α β : Type} (f : α → β) {l : List α} (h : (l.map f).Nodup) : l.Nodup :=
-  List.Pairwise.of_map f (fun _ _ hne heq => hne (congrArg f heq)) h
-
-/-- An injective function keeps a list free of duplicates. -/
-theorem nodup_map_of_injective {α β : Type} {f : α → β} (hinjective : Function.Injective f) {l : List α}
-    (h : l.Nodup) : (l.map f).Nodup :=
-  List.Pairwise.map f (fun _ _ hne heq => hne (hinjective heq)) h
 
 /-- The paths of `obj` are distinct after their first `level` nibbles. -/
 def Distinct (obj : List (List Nibble × ByteArray)) (level : Nat) : Prop :=
