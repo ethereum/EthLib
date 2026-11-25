@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Except
+public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Libp2p.Tls
 public import EthLib.Networking.Proofs.Libp2p.PeerId
 public import EthLib.Serialization.Proofs.Der
@@ -634,19 +635,18 @@ theorem readCertificate_validity {bytes : ByteArray} {certificate : Certificate}
 /-- A list with a repeated value names one that occurs at least twice. -/
 theorem firstRepeated_some (l : List (List UInt8)) (h : ¬ l.Nodup) :
     ∃ x, firstRepeated l = some x ∧ 2 ≤ l.count x := by
-  induction l with
-  | nil => simp at h
-  | cons a t ih =>
-    by_cases m : a ∈ t
-    · refine ⟨a, by simp [firstRepeated, m], ?_⟩
-      have := List.count_pos_iff.mpr m
-      simp
-      omega
-    · have : ¬ t.Nodup := by simpa [List.nodup_cons, m] using h
-      obtain ⟨x, hx, d⟩ := ih this
-      refine ⟨x, by simp [firstRepeated, m, hx], ?_⟩
-      simp [List.count_cons]
-      omega
+  -- The list has a repeated value, so the search finds one, which occurs at least twice.
+  cases found : firstRepeated l with
+  | none => exact absurd ((firstRepeated_eq_none_iff l).mp found) h
+  | some x => exact ⟨x, rfl, two_le_count_of_firstRepeated found⟩
+
+/-- OIDs repeat exactly when their bytes repeat, so the reader may search the bytes. -/
+theorem nodup_iff_nodup_bytes (l : List ByteArray) :
+    l.Nodup ↔ (l.map (·.data.toList)).Nodup := by
+  -- Two OIDs with the same bytes are the same OID.
+  refine (List.nodup_map_iff ?_).symm
+  intro a b h
+  cases a; cases b; simp_all
 
 /-- When a critical extension other than the libp2p one is present, the error names its OID. -/
 theorem criticalOid_spec (es : List Extension)

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Except
+public import EthLib.Base.List
 public import EthLib.Serialization.Der
 public import EthLib.Networking.Libp2p.PeerId
 public import EthLib.Cryptography.Hash.Sha256
@@ -103,11 +104,6 @@ def TlsCertError.code : TlsCertError → UInt32
   | .selfSignature => 11
   | .hostSignature => 12
   | .peerId => 13
-
-/-- The first value of a list that occurs again later in it, if any. -/
-def firstRepeated : List (List UInt8) → Option (List UInt8)
-  | [] => none
-  | oid :: rest => if oid ∈ rest then some oid else firstRepeated rest
 
 /-- Lift a DER reader's error to the certificate boundary. -/
 def der {α : Type} (value : Except Der.Error α) : Except TlsCertError α :=
@@ -287,8 +283,9 @@ def readTail (version : Nat) (tail : List Der.Value) :
       -- §4.2: a certificate MUST NOT include more than one instance of a particular extension.
       --
       -- When the check fails, some OID repeats, so the error names a real OID.
-      ensure ((extensions.map (·.oid)).Nodup)
-        (.duplicateExtension ((firstRepeated (extensions.map (·.oid.data.toList))).getD []))
+      match Base.firstRepeated (extensions.map (·.oid.data.toList)) with
+      | some oid => throw (.duplicateExtension oid)
+      | none => pure ()
       pure extensions
     -- Any other value after the public key does not belong to a TBSCertificate.
     | _ => throw .certificate

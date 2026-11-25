@@ -1034,6 +1034,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the duplicate checks of TLS extensions share one linear scan, `Base.firstRepeated` (`Base/List.lean`), the first element of a list that occurs again later ([#4517](https://github.com/ethereum/EthLib/pull/4517)).
+  - `Libp2p.Tls.firstRepeated` is removed; use `Base.firstRepeated`, which gives the same value on every list.
+    `Base.firstRepeated_nil` and `Base.firstRepeated_cons` state its old recursion, `Base.firstRepeated_eq_none_iff` relates it to `List.Nodup`, and `Base.two_le_count_of_firstRepeated` says what it finds occurs twice (`Base/Proofs/List.lean`).
+  - `Quic.Tls.uniqueExtensions` and `Quic.Tls.repeatedKind` unfold to the scan, not to `eraseDups` and a recursion.
+    `Quic.Tls.uniqueExtensions_eq_true_iff`, `Quic.Tls.repeatedKind_nil` and `Quic.Tls.repeatedKind_cons` (`Networking/Proofs/Quic/Tls/Messages.lean`) state their old meaning; rewrite with them where a proof unfolded the old bodies.
+  - The certificate reader of `Libp2p.Tls` matches on the scan instead of checking `List.Nodup` on the OIDs; `Proofs.Libp2p.Tls.nodup_iff_nodup_bytes` (`Networking/Proofs/Libp2p/Tls.lean`) relates the two.
 - In Lean, `ByteOrder.ofBE` (`Base/ByteOrder.lean`) reads seven bytes at a time, and gives the same number on every list ([#4492](https://github.com/ethereum/EthLib/pull/4492)).
   - Unfolding it now gives `ofBE.go`, not the fold of Horner's rule.
     `ByteOrder.ofBE_eq_foldl` states the old fold; rewrite with it where a proof unfolded `ofBE`.
