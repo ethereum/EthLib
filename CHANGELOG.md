@@ -1069,6 +1069,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Engine.toOption_eq_some` (`Engine/Proofs/ExecutionEngine.lean`) moves to `Base.toOption_eq_some` (`Base/Proofs/Except.lean`), with the same statement ([#4671](https://github.com/ethereum/EthLib/pull/4671)).
+  `Base.toOption_eq_some_iff` states both directions, and `Base.Uint64.toNat_toUInt64` (`Base/Proofs/Uint64.lean`) says that a number below `2^64` keeps its value as a 64-bit integer.
+  Migration: open `EthLib.Base`, or write `Base.toOption_eq_some`.
 - In Lean, the onboarding of builders at the Gloas fork routes each pending deposit by its withdrawal credentials first ([#4151](https://github.com/ethereum/EthLib/issues/4151)).
   - `Consensus.onboardDeposit` (`Consensus/Transition/Upgrade.lean`) keeps a deposit without builder credentials in the queue, even for the key of a builder.
   - A builder deposit for the key of a builder tops it up, whatever its signature.

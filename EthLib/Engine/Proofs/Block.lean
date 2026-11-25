@@ -5,6 +5,7 @@ public import EthLib.Engine.Block
 public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Cryptography.Proofs.Hash.Sha256
+import EthLib.Base.Proofs.Uint64
 
 /-!
 # Proofs: a payload and its block determine each other
@@ -112,9 +113,6 @@ theorem decodeTransactions_of_encode {index : Nat} {bytes : List ByteArray}
 
 /-! ## Payload to block to payload -/
 
-private theorem toNat_toUInt64 {n : Nat} (h : n < 2 ^ 64) : n.toUInt64.toNat = n :=
-  UInt64.toNat_ofNat_of_lt' h
-
 private theorem pure_eq_ok {ε α : Type} {x y : α} : (pure x : Except ε α) = .ok y ↔ x = y := by
   simp [pure, Except.pure]
 
@@ -219,7 +217,7 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
     have hTime :
         BitVec.ofNat 256 b.header.timestamp.toNat.toUInt64.toNat = b.header.timestamp := by
       apply BitVec.eq_of_toNat_eq
-      rw [BitVec.toNat_ofNat, toNat_toUInt64 hT]
+      rw [BitVec.toNat_ofNat, Uint64.toNat_toUInt64 hT]
       exact Nat.mod_eq_of_lt (BitVec.isLt _)
     have hBase : ∀ x, (BitVec.ofNat 256 (b.header.baseFeePerGas x)).toNat =
         b.header.baseFeePerGas x := fun x => by
@@ -237,8 +235,8 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
         txs, ommers, ws⟩ := b
       dsimp only at *
       subst hOmmersHash hDifficulty hNonce
-      simp only [toNat_toUInt64 hN, toNat_toUInt64 hG, toNat_toUInt64 hU, hTime, hBase,
-        ← hRequests]
+      simp only [Uint64.toNat_toUInt64 hN, Uint64.toNat_toUInt64 hG, Uint64.toNat_toUInt64 hU,
+        hTime, hBase, ← hRequests]
     dsimp only at hHeader
     rw [hHeader]
     simp only [hHash, ite_true]

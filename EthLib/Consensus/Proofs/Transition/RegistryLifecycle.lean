@@ -28,11 +28,6 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
   {engine : ExecutionEngine preset fork}
   {state after : BeaconState preset fork}
 
-/-- A position below `2^64` is its own index of 64 bits. -/
-private theorem toNat_toUInt64_of_lt_pow {position : Nat} (small : position < 2 ^ 64) :
-    position.toUInt64.toNat = position := by
-  rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-
 /-- One validator, later in its life.
 
 An activation or exit epoch that was assigned stays exactly the same. -/
@@ -871,7 +866,7 @@ theorem preActivation_waiting {f : Fork} {s : BeaconState preset f} (early : f <
     (Nat.le_trans (s.validators.bound early)
       (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt))
   refine ⟨validator, ?_, by simpa using waiting⟩
-  rw [toNat_toUInt64_of_lt_pow small]
+  rw [Uint64.toNat_toUInt64 small]
   exact read
 
 /-- The activation queue holds each index at most once, while the registry is below `2^64`. -/
@@ -897,7 +892,7 @@ theorem activationQueue_nodup (small : state.validators.data.size < 2 ^ 64) :
     intro equal
     dsimp only at equal lt
     have equalNat := congrArg UInt64.toNat equal
-    rw [toNat_toUInt64_of_lt_pow (by omega), toNat_toUInt64_of_lt_pow (by omega)] at equalNat
+    rw [Uint64.toNat_toUInt64 (by omega), Uint64.toNat_toUInt64 (by omega)] at equalNat
     omega
   have unique : (entries.map (·.2)).Nodup := List.pairwise_map.mpr distinct
   exact ((List.mergeSort_perm entries _).map (·.2)).nodup_iff.mpr unique
@@ -1026,7 +1021,7 @@ theorem registryLifecycle_processRegistryUpdates
   refine ⟨validator, ?_, activationEpoch_of_isEligibleForActivation eligible⟩
   have inside := (Array.getElem?_eq_some_iff.mp found).1
   have exact : index.toNat = position := by
-    rw [← equal, toNat_toUInt64_of_lt_pow (by omega)]
+    rw [← equal, Uint64.toNat_toUInt64 (by omega)]
   simp [getValidator, exact, found]
 
 /-- An update of effective balances changes only the effective balances. -/

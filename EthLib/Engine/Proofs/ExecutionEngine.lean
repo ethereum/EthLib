@@ -55,11 +55,6 @@ theorem decodeTransactions_of_toBlock {f : Fork}
   cases result
   exact decoded
 
-/-- A computation whose option holds a value has succeeded with that value. -/
-theorem toOption_eq_some {ε α : Type} {x : Except ε α} {a : α}
-    (h : x.toOption = some a) : x = .ok a := by
-  cases x <;> simp_all [Except.toOption]
-
 /-- A payload at a fork keeps the transactions of the structure that it comes from. -/
 theorem atFork_transactions {any : Json.AnyPayload} {f : Fork} {q : ExecutionPayload f}
     (h : any.atFork f = .ok q) : q.transactions = any.common.transactions := by

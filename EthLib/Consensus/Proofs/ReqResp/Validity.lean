@@ -155,11 +155,6 @@ theorem pairwise_of_isValidBlocksByHeadResponse {config : Config}
     (fun _ _ h => of_decide_eq_true (Bool.and_eq_true _ _ ▸ h).1)
     (fun _ _ _ ab bc => UInt64.lt_trans bc ab) valid.2
 
-/-- A computation gives a digest exactly when its option holds that digest. -/
-private theorem toOption_eq_some_iff {digest : ForkDigest} (computed : Except Err ForkDigest) :
-    computed.toOption = some digest ↔ computed = .ok digest := by
-  cases computed <;> simp [Except.toOption]
-
 /-- The rules that a valid response for light client updates by range meets, and no others.
 
 It has at most 128 updates.
@@ -186,7 +181,7 @@ theorem isValidLightClientUpdatesByRangeResponse_iff (preset : Preset) (config :
           (computeSyncCommitteePeriodAtSlot preset updates[i].attestedSlot).toNat + 1) := by
   have limit : MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat = 128 := rfl
   simp only [isValidLightClientUpdatesByRangeResponse, ResponseUpdate.digestMatches,
-    lightClientDigestMatches, toOption_eq_some_iff, lightClientUpdatesLimit, Bool.and_eq_true,
+    lightClientDigestMatches, Base.toOption_eq_some_iff, lightClientUpdatesLimit, Bool.and_eq_true,
     decide_eq_true_eq, List.all_eq_true, allAdjacent_iff, beq_iff_eq, Nat.le_min]
   simp only [ResponseUpdate.period, InCountRange, limit, and_assoc]
   constructor <;> exact fun h => ⟨h.2.1, h.1, h.2.2.1, h.2.2.2⟩
@@ -306,8 +301,8 @@ theorem isValidLightClientBootstrapResponse_iff (preset : Preset) (config : Conf
         Base.Fork.altair ≤ config.forkAtEpoch (computeEpochAtSlot preset bootstrap.slot) ∧
         computeForkDigest config genesisValidatorsRoot (computeEpochAtSlot preset bootstrap.slot) =
           .ok bootstrap.digest := by
-  simp only [isValidLightClientBootstrapResponse, lightClientDigestMatches, toOption_eq_some_iff,
-    Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq]
+  simp only [isValidLightClientBootstrapResponse, lightClientDigestMatches,
+    Base.toOption_eq_some_iff, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq]
 
 /-- On a chain whose digests name their forks, the digest of a valid bootstrap names its fork.
 
