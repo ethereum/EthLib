@@ -62,7 +62,11 @@ private def setPairStep (state : Array ByteArray × Std.HashMap ByteArray (Nat �
     -- A key already set keeps its place, with the new value.
     | some (place, _) => (log, table.insert key (place, value))
     -- A new key goes last.
-    | none => (log.push key, table.insert key (log.size, value))
+    --
+    -- Its place is read before the push, so the push updates the log in place.
+    | none =>
+      let place := log.size
+      (log.push key, table.insert key (place, value))
 
 /-- The keys of a log with their values in a table, at the places that the table gives them. -/
 private def logEntries (log : Array ByteArray) (table : Std.HashMap ByteArray (Nat × ByteArray)) :
