@@ -3,13 +3,15 @@ module
 public import EthLib.Base.Proofs.ExceptT
 public import EthLib.Execution.Trie.Root
 import EthLib.Base.Proofs.CodeInjective
+import EthLib.Base.Proofs.List
+import Std.Data.HashMap.Lemmas
 
 /-!
 # Proofs: `Trie.Root`
 
 The theorems cover the budget of the node composition and the root of each map.
 
-They also say how setting a key changes the map.
+They also say which map setting pairs in order gives.
 -/
 
 @[expose] public section
@@ -343,122 +345,228 @@ theorem sameBytes_iff (a b : ByteArray) : sameBytes a b = true ↔ a = b := by
   cases a; cases b
   simp [sameBytes]
 
-/-- A key that was just set has the value it was set to. -/
-theorem trieGet_trieSet_self (trie : Trie) (key value : ByteArray) :
-    trieGet (trieSet trie key value) key = value := by
-  unfold trieSet trieGet
-  split
-  · -- The key is removed, so it has the default, the empty value it was set to.
-    rename_i hempty
-    rw [List.find?_filter, List.find?_eq_none.mpr (by simp)]
-    exact (ByteArray.size_eq_zero_iff.mp hempty).symm
-  · split
-    · -- The key is present, and every entry of it now holds the new value.
-      rename_i hany
-      simp only [List.find?_map, Function.comp_def, apply_ite Prod.fst, ite_self]
-      cases hfind : trie.data.find? (fun entry => sameBytes entry.1 key) with
-      | none => exact absurd (List.find?_isSome.mpr (List.any_eq_true.mp hany)) (by simp [hfind])
-      | some entry =>
-        have hkey : sameBytes entry.1 key = true :=
-          List.find?_some (p := fun entry : ByteArray × ByteArray => sameBytes entry.1 key) hfind
-        simp [hkey]
-    · -- The key is absent, so its only entry is the new one at the end.
-      rename_i hany
-      rw [List.find?_append, List.find?_eq_none.mpr fun entry hmem hsame =>
-        hany (List.any_eq_true.mpr ⟨entry, hmem, hsame⟩)]
-      simp [(sameBytes_iff key key).mpr rfl]
+/-- The keys of a trie that sets pairs in order are distinct, as Yellow Paper Appendix D assumes.
+-/
+theorem nodup_keys_setPairs (pairs : List (ByteArray × ByteArray)) :
+    ((setPairs pairs).map Prod.fst).Nodup := by
+  -- The places of a numbered list increase along it.
+  have places : ∀ (l : List ByteArray) (k : Nat),
+      (l.zipIdx k).Pairwise fun a b => a.2 < b.2 := by
+    intro l
+    induction l with
+    | nil => intro k; simp
+    | cons x l ih =>
+      intro k
+      refine List.pairwise_cons.2 ⟨fun b hb => ?_, ih (k + 1)⟩
+      exact Nat.lt_of_succ_le (List.le_snd_of_mem_zipIdx hb)
+  -- An entry kept at a place is the key that the table puts there, so one key has one place.
+  simp only [setPairs, logEntries, List.map_filterMap, List.Nodup]
+  rw [List.pairwise_filterMap]
+  refine (places _ 0).imp ?_
+  rintro ⟨k, i⟩ ⟨k', i'⟩ hlt b hb b' hb' heq
+  subst heq
+  split at hb <;> split at hb' <;> simp_all
 
-/-- Setting a key leaves the value of every other key unchanged. -/
-theorem trieGet_trieSet_of_ne (trie : Trie) {key other : ByteArray} (value : ByteArray)
-    (h : other ≠ key) : trieGet (trieSet trie key value) other = trieGet trie other := by
-  unfold trieSet trieGet
-  -- An entry of the other key is not an entry of the key that is set.
-  have hne : ∀ k, sameBytes k other = true → sameBytes k key = false := by
-    intro k hother
-    rw [(sameBytes_iff k other).mp hother]
-    exact Bool.eq_false_iff.mpr fun hkey => h ((sameBytes_iff other key).mp hkey)
-  split
-  · -- Removing the key keeps every entry of the other key.
-    rw [List.find?_filter]
-    congr 3
-    funext entry
-    cases hother : sameBytes entry.1 other <;> simp [hother, hne]
-  · split
-    · -- The first entry of the other key keeps its value.
-      simp only [List.find?_map, Function.comp_def, apply_ite Prod.fst, ite_self]
-      cases hfind : trie.data.find? (fun entry => sameBytes entry.1 other) with
-      | none => rfl
-      | some entry =>
-        have hother : sameBytes entry.1 other = true :=
-          List.find?_some (p := fun entry : ByteArray × ByteArray => sameBytes entry.1 other) hfind
-        simp [hne entry.1 hother]
-    · -- The new entry at the end is not an entry of the other key.
-      have hkey : sameBytes key other = false :=
-        Bool.eq_false_iff.mpr fun hother => h ((sameBytes_iff key other).mp hother).symm
-      simp [List.find?_append, hkey]
+/-- Each key of the table has its place in the log, holding that key. -/
+private def PlacesKeys (st : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray)) : Prop :=
+  ∀ k p v, st.2[k]? = some (p, v) → ∃ h : p < st.1.size, st.1[p] = k
 
-/-- Setting or removing a key keeps the keys distinct, as Yellow Paper Appendix D assumes. -/
-theorem nodup_keys_trieSet {trie : Trie} (hkeys : (trie.data.map Prod.fst).Nodup)
-    (key value : ByteArray) : ((trieSet trie key value).data.map Prod.fst).Nodup := by
-  unfold trieSet
-  split
-  · -- Removing entries takes a sublist of the distinct keys.
-    exact (List.Sublist.map Prod.fst List.filter_sublist).nodup hkeys
-  · split
-    · -- Replacing a value leaves every key in its place.
-      have unchanged : (trie.data.map (fun (k, v) =>
-          if sameBytes k key then (k, value) else (k, v))).map Prod.fst
-          = trie.data.map Prod.fst := by
-        simp only [List.map_map, Function.comp_def, apply_ite Prod.fst, ite_self]
-      rw [unchanged]
-      exact hkeys
-    · -- A new key is absent from the old keys, so appending it preserves uniqueness.
-      rename_i habsent
-      simp only [List.map_append, List.map_cons, List.map_nil, List.nodup_append]
-      refine ⟨hkeys, by simp, ?_⟩
-      intro old hold new hnew heq
-      simp only [List.mem_singleton] at hnew
-      obtain ⟨entry, hentry, hkey⟩ := List.mem_map.mp hold
-      exact habsent (List.any_eq_true.mpr
-        ⟨entry, hentry, (sameBytes_iff _ _).mpr (hkey.trans (heq.trans hnew))⟩)
+/-- One step keeps each key of the table at a place of the log that holds it. -/
+private theorem placesKeys_step {st : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray)}
+    (pair : ByteArray × ByteArray) (hst : PlacesKeys st) : PlacesKeys (setPairStep st pair) := by
+  obtain ⟨log, table⟩ := st
+  obtain ⟨key, value⟩ := pair
+  intro k p v h
+  by_cases h0 : value.size = 0
+  · -- An empty value only removes a key.
+    simp only [setPairStep, h0, ↓reduceIte, Std.HashMap.getElem?_erase] at h ⊢
+    split at h
+    · cases h
+    · exact hst _ _ _ h
+  · cases hk : table[key]? with
+    | some e =>
+      obtain ⟨place, old⟩ := e
+      simp only [setPairStep, h0, ↓reduceIte, hk] at h ⊢
+      obtain ⟨hp, hlog⟩ := hst _ _ _ hk
+      rw [Std.HashMap.getElem?_insert] at h
+      split at h
+      · cases h
+        rename_i hkey
+        rw [← eq_of_beq hkey]
+        exact ⟨hp, hlog⟩
+      · exact hst _ _ _ h
+    | none =>
+      simp only [setPairStep, h0, ↓reduceIte, hk] at h ⊢
+      rw [Std.HashMap.getElem?_insert] at h
+      split at h
+      · cases h
+        rename_i hkey
+        rw [← eq_of_beq hkey]
+        simp
+      · obtain ⟨hp, hlog⟩ := hst _ _ _ h
+        have hp' : p < log.size := hp
+        refine ⟨by simp only [Array.size_push]; omega, ?_⟩
+        simp [Array.getElem_push, hp, hlog]
 
-/-- Setting any list of pairs from an empty trie gives distinct keys.
+/-- One step sets the value of its key in the table, where an empty value removes it. -/
+private theorem value_step (st : Array ByteArray × Std.HashMap ByteArray (Nat × ByteArray))
+    (key value k : ByteArray) :
+    ((setPairStep st (key, value)).2[k]?).map Prod.snd =
+      if key = k then (some value).filter (fun v => decide (v.size ≠ 0))
+      else (st.2[k]?).map Prod.snd := by
+  obtain ⟨log, table⟩ := st
+  by_cases h0 : value.size = 0
+  · simp only [setPairStep, h0, ↓reduceIte, Std.HashMap.getElem?_erase]
+    by_cases hk : key = k
+    · subst hk
+      simp only [Option.filter_some, h0, ne_eq, not_true_eq_false, decide_false,
+        Bool.false_eq_true, ↓reduceIte, beq_self_eq_true, Option.map_none]
+    · simp [hk]
+  · cases hk : table[key]? with
+    | some e =>
+      obtain ⟨place, old⟩ := e
+      simp only [setPairStep, h0, ↓reduceIte, hk, Std.HashMap.getElem?_insert]
+      by_cases hkk : key = k
+      · subst hkk
+        simp only [Option.filter_some, h0, ne_eq, not_false_eq_true, decide_true, ↓reduceIte,
+          beq_self_eq_true, Option.map_some]
+      · simp [hkk]
+    | none =>
+      simp only [setPairStep, h0, ↓reduceIte, hk, Std.HashMap.getElem?_insert]
+      by_cases hkk : key = k
+      · subst hkk
+        simp only [Option.filter_some, h0, ne_eq, not_false_eq_true, decide_true, ↓reduceIte,
+          beq_self_eq_true, Option.map_some]
+      · simp [hkk]
 
-Yellow Paper Appendix D assumes distinct keys.
+/-- The fold of the steps keeps the places, and its table holds the last value of each key. -/
+private theorem foldl_setPairStep (pairs : List (ByteArray × ByteArray)) :
+    PlacesKeys (pairs.foldl setPairStep (#[], ∅)) ∧
+      ∀ k, ((pairs.foldl setPairStep (#[], ∅)).2[k]?).map Prod.snd =
+        ((pairs.reverse.find? fun pair => pair.1 == k).map Prod.snd).filter
+          (fun v => decide (v.size ≠ 0)) := by
+  -- Induct on the reversed list, so that the last pair is the head.
+  suffices h : ∀ l : List (ByteArray × ByteArray),
+      PlacesKeys (l.reverse.foldl setPairStep (#[], ∅)) ∧
+        ∀ k, ((l.reverse.foldl setPairStep (#[], ∅)).2[k]?).map Prod.snd =
+          ((l.find? fun pair => pair.1 == k).map Prod.snd).filter
+            (fun v => decide (v.size ≠ 0)) by
+    simpa using h pairs.reverse
+  intro l
+  induction l with
+  | nil => exact ⟨fun k p v h => by simp at h, fun k => by simp⟩
+  | cons x l ih =>
+    obtain ⟨ih1, ih2⟩ := ih
+    rw [List.reverse_cons, List.foldl_append, List.foldl_cons, List.foldl_nil]
+    refine ⟨placesKeys_step x ih1, fun k => ?_⟩
+    obtain ⟨key, value⟩ := x
+    rw [value_step, List.find?_cons]
+    by_cases hkk : key = k
+    · subst hkk; simp [Option.filter_some]
+    · have hf : (key == k) = false := by simpa using hkk
+      simp only [hkk, ↓reduceIte]
+      rw [ih2]
+      simp only [hf]
 
-This is the construction used by the trie root export, including repeated keys and deletions. -/
-theorem nodup_keys_foldl_trieSet (secured : Bool) (pairs : List (ByteArray × ByteArray)) :
-    ((pairs.foldl (fun trie (key, value) => trieSet trie key value)
-      ⟨secured, []⟩).data.map Prod.fst).Nodup := by
-  -- Each update preserves uniqueness, regardless of the keys still to be set.
-  have preserve : ∀ (rest : List (ByteArray × ByteArray)) (trie : Trie),
-      (trie.data.map Prod.fst).Nodup →
-      ((rest.foldl (fun trie (key, value) => trieSet trie key value) trie).data.map
-        Prod.fst).Nodup := by
-    intro rest
-    induction rest with
-    | nil => intro trie hkeys; exact hkeys
-    | cons entry rest ih =>
-      intro trie hkeys
-      exact ih _ (nodup_keys_trieSet hkeys entry.1 entry.2)
-  exact preserve pairs ⟨secured, []⟩ List.nodup_nil
+/-- An entry of the log is a key of the table, with the value that the table gives it. -/
+private theorem mem_logEntries {log : Array ByteArray}
+    {table : Std.HashMap ByteArray (Nat × ByteArray)} {e : ByteArray × ByteArray}
+    (he : e ∈ logEntries log table) : ∃ p, table[e.1]? = some (p, e.2) := by
+  obtain ⟨k, v⟩ := e
+  obtain ⟨⟨k', i⟩, -, hk⟩ := List.mem_filterMap.1 he
+  simp only at hk
+  split at hk
+  · rename_i p v' hs
+    split at hk
+    · cases hk; exact ⟨p, hs⟩
+    · cases hk
+  · cases hk
 
-/-- Setting a key does not change whether the trie hashes its keys. -/
-theorem secured_trieSet (trie : Trie) (key value : ByteArray) :
-    (trieSet trie key value).secured = trie.secured := by
-  simp only [trieSet]
-  split <;> first | rfl | (split <;> rfl)
+/-- The entries of the log are the table's pairs, once its places hold their keys. -/
+private theorem trieGet_logEntries (log : Array ByteArray)
+    (table : Std.HashMap ByteArray (Nat × ByteArray))
+    (hb : PlacesKeys (log, table)) (key : ByteArray) :
+    ((logEntries log table).find? fun (k, _) => sameBytes k key).map Prod.snd =
+      (table[key]?).map Prod.snd := by
+  -- An entry of the log is a key of the table with the value that the table gives it.
+  have hmem := fun e => @mem_logEntries log table e
+  cases hk : table[key]? with
+  | none =>
+    -- No entry has the key.
+    have : ((logEntries log table).find? fun (k, _) => sameBytes k key) = none := by
+      rw [List.find?_eq_none]
+      rintro ⟨k, v⟩ he hsame
+      have := sameBytes_iff _ _ |>.1 hsame
+      obtain ⟨_, h2⟩ := hmem _ he
+      simp only at h2 this
+      rw [this, hk] at h2
+      cases h2
+    rw [this]; rfl
+  | some e =>
+    obtain ⟨p, v⟩ := e
+    obtain ⟨hp, hlog⟩ := hb _ _ _ hk
+    -- The key has an entry, at its place.
+    have hin : (key, v) ∈ logEntries log table := by
+      refine List.mem_filterMap.2 ⟨(key, p), ?_, by simp [hk]⟩
+      rw [List.mem_zipIdx_iff_getElem?]
+      simp [hp, hlog]
+    have hsome : ((logEntries log table).find? fun (k, _) => sameBytes k key).isSome := by
+      rw [List.find?_isSome]
+      exact ⟨(key, v), hin, by simp [sameBytes_iff]⟩
+    obtain ⟨⟨k, v'⟩, hfind⟩ := Option.isSome_iff_exists.1 hsome
+    have hmem' := List.mem_of_find?_eq_some hfind
+    have hsame := List.find?_some hfind
+    obtain ⟨_, h2⟩ := hmem _ hmem'
+    have h3 := sameBytes_iff _ _ |>.1 hsame
+    simp only at h2 h3
+    rw [h3, hk] at h2
+    cases h2
+    rw [hfind]; rfl
 
-/-- Setting pairs does not change whether the trie hashes its keys. -/
-theorem secured_foldl_trieSet (pairs : List (ByteArray × ByteArray)) (trie : Trie) :
-    (pairs.foldl (fun trie (key, value) => trieSet trie key value) trie).secured
-      = trie.secured := by
-  induction pairs generalizing trie with
-  | nil => rfl
-  | cons entry rest ih =>
-    rw [List.foldl_cons, ih, secured_trieSet]
+/-- In a trie that sets pairs in order, a key has the value of its last pair.
+
+A key that no pair sets has the empty value, as a key whose last value is empty. -/
+theorem trieGet_setPairs (secured : Bool) (pairs : List (ByteArray × ByteArray))
+    (key : ByteArray) :
+    trieGet ⟨secured, setPairs pairs⟩ key =
+      ((pairs.reverse.find? fun pair => pair.1 == key).map Prod.snd).getD .empty := by
+  obtain ⟨h1, h2⟩ := foldl_setPairStep pairs
+  unfold setPairs trieGet
+  -- Read the state of the fold as a log and a table.
+  generalize hst : pairs.foldl setPairStep (#[], ∅) = st at h1 h2
+  obtain ⟨log, table⟩ := st
+  simp only
+  rw [trieGet_logEntries log table h1 key]
+  have h3 := h2 key
+  simp only at h3
+  rw [h3]
+  -- A last pair with an empty value gives the empty value, as a removed key does.
+  cases hf : (pairs.reverse.find? fun pair => pair.1 == key) with
+  | none => rfl
+  | some pair =>
+    simp only [Option.map_some, Option.filter_some]
+    by_cases h0 : pair.2.size = 0
+    · have : pair.2 = .empty := by simpa using h0
+      simp [this]
+    · simp [h0]
 
 /-! ## Error codes -/
+
+
+/-- A trie that sets pairs in order holds no empty value, which its root would reject. -/
+theorem size_ne_zero_of_mem_setPairs {pairs : List (ByteArray × ByteArray)}
+    {entry : ByteArray × ByteArray} (h : entry ∈ setPairs pairs) : entry.2.size ≠ 0 := by
+  obtain ⟨-, hvalues⟩ := foldl_setPairStep pairs
+  unfold setPairs at h
+  generalize pairs.foldl setPairStep (#[], ∅) = st at h hvalues
+  obtain ⟨log, table⟩ := st
+  obtain ⟨p, hp⟩ := mem_logEntries h
+  -- The table keeps only the values that pass the test of a nonzero size.
+  have hv := hvalues entry.1
+  simp only [hp, Option.map_some] at hv
+  intro h0
+  rcases hf : (pairs.reverse.find? fun pair => pair.1 == entry.1) with _ | pair <;>
+    simp_all [Option.filter_some]
 
 /-- Two errors with one code come from one constructor. -/
 theorem TrieError.code_injective (e₁ e₂ : TrieError) (h : e₁.code = e₂.code) :

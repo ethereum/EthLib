@@ -1040,6 +1040,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the trie has one setter, `Trie.setPairs` (`Execution/Trie/Root.lean`) ([#4525](https://github.com/ethereum/EthLib/pull/4525)).
+  It sets a list of pairs in order, in one pass, with a table of the keys.
+  `Trie.setPairStep` and `Trie.logEntries`, its step and its reading of the table, are now public.
+  - `Trie.trieSet` is removed, with `trieGet_trieSet_self`, `trieGet_trieSet_of_ne`, `nodup_keys_trieSet` and `secured_trieSet`; build the trie as `⟨secured, setPairs pairs⟩`.
+    `trieGet_setPairs` (`Execution/Proofs/Trie/Root.lean`) says that each key has the value of its last pair, or the empty value.
+    `size_ne_zero_of_mem_setPairs` says that the trie holds no empty value.
+  - `nodup_keys_foldl_trieSet`, `verifyProof_sound_foldl_trieSet` and `root_binding_foldl_trieSet` are `nodup_keys_setPairs`, `verifyProof_sound_setPairs` and `root_binding_setPairs`, stated on `⟨secured, setPairs pairs⟩` instead of the fold of `trieSet`.
+    `secured_foldl_trieSet` is removed, since that trie holds its flag by definition.
+  - `Trie.Exports.setPairs` and `Trie.Exports.setPairs_eq` are removed; the root export calls `Trie.setPairs`.
+    `root_of_rootExport` and `rootExport_of_root` (`Execution/Proofs/Exports/Trie.lean`) are stated on `⟨secured != 0, setPairs pairs⟩`.
 - In Lean, the duplicate checks of TLS extensions share one linear scan, `Base.firstRepeated` (`Base/List.lean`), the first element of a list that occurs again later ([#4517](https://github.com/ethereum/EthLib/pull/4517)).
   - `Libp2p.Tls.firstRepeated` is removed; use `Base.firstRepeated`, which gives the same value on every list.
     `Base.firstRepeated_nil` and `Base.firstRepeated_cons` state its old recursion, `Base.firstRepeated_eq_none_iff` relates it to `List.Nodup`, and `Base.two_le_count_of_firstRepeated` says what it finds occurs twice (`Base/Proofs/List.lean`).
