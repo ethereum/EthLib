@@ -1818,7 +1818,7 @@
       {"constructor": "privateKeyTooLarge", "code": 15}]}],
    "error_class": "Secp256k1Error",
    "docstring":
-   "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.\n\n`q` must be a valid public key, as SEC 1 v2 §3.2.2.1 checks: on the curve, and not `O`.\n\nA key from the decoder always is.\n\nThe key `O` would accept any `r` that some `u1 G` hits, so it is rejected here too."},
+   "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.\n\n`q` must be a valid public key, as SEC 1 v2 §3.2.2.1 checks: on the curve, and not `O`.\n\nA key from the decoder always is, and verification rejects any other."},
   {"summary": "The low-s rule of EIP-2: `s` is at most `n / 2`, rounded down.",
    "signature": "(signature: bytes) -> bool",
    "operation": "EthLib.Cryptography.Secp256k1.Ecdsa.isLowS",
@@ -1963,7 +1963,7 @@
       {"constructor": "badSignatureSize", "code": 4}]}],
    "error_class": "Secp256r1Error",
    "docstring":
-   "Whether `(r, s)` is a valid signature on the hash integer `e` under the public key `q`.\n\nIt is the verifying operation of SEC 1 v2 §4.1.4.\n\n`e` acts mod `n`, like every scalar.\n\nThe signature is valid when `R = (e / s) G + (r / s) q` is not `O` and its `x` is `r` mod `n`."},
+   "Whether `(r, s)` is a valid signature on the hash integer `e` under the public key `q`.\n\nIt is the verifying operation of SEC 1 v2 §4.1.4, that of every curve of cofactor 1.\n\n`e` acts mod `n`, like every scalar.\n\nThe signature is valid when `R = (e / s) G + (r / s) q` is not `O` and its `x` is `r` mod `n`."},
   {"summary": "The record of a text form.",
    "signature": "(text: str) -> bytes",
    "operation": "EthLib.Networking.Enr.fromText",

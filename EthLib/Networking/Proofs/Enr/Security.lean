@@ -56,7 +56,7 @@ So one content has two valid records: the scheme is not strongly unforgeable.
 /-- ECDSA rejects a scalar `s` outside `[1, n - 1]`. -/
 private theorem verify_eq_false_of_s {q : Point} {h : Vector UInt8 32} {r s : Nat}
     (hs : ¬(0 < s ∧ s < Fn.modulus)) : Ecdsa.verify q h r s = false := by
-  simp only [Ecdsa.verify, hs, dite_false, dite_eq_ite, ite_self]
+  simp only [Ecdsa.verify, Cryptography.Ecdsa.Curve.verify, hs, dite_false, dite_eq_ite, ite_self]
 
 /-- The bytes of the copy with `n - s`. -/
 private theorem negS_data (rec : Enr) : (negS rec).signature.data.toList =

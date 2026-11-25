@@ -54,12 +54,12 @@ theorem p256Verify_ok {data : ByteArray} {gas : Nat} {out : ByteArray}
 /-- A signature with `r` outside `(0, n)` never verifies, whatever the key and the hash. -/
 theorem verify_of_r_out (q : Point) (e : Nat) {r : Nat} (hr : ¬(0 < r ∧ r < Fn.modulus))
     (s : Nat) : verify q e r s = false := by
-  simp [verify, hr]
+  simp [verify, Cryptography.Ecdsa.Curve.verify, hr]
 
 /-- A signature with `s` outside `(0, n)` never verifies, whatever the key and the hash. -/
 theorem verify_of_s_out (q : Point) (e r : Nat) {s : Nat} (hs : ¬(0 < s ∧ s < Fn.modulus)) :
     verify q e r s = false := by
-  unfold verify
+  unfold verify Cryptography.Ecdsa.Curve.verify
   split <;> simp_all
 
 /-! ## Call data and signature verification -/

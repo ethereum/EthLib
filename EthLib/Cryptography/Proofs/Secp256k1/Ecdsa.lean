@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Ecdsa
+public import EthLib.Cryptography.Proofs.Ecdsa.Curve
 public import EthLib.Cryptography.Proofs.Secp256k1.MulAdd
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 
@@ -20,47 +21,52 @@ namespace Ecdsa
 
 open Point
 
+/-- secp256k1 satisfies the laws from which the facts of ECDSA follow.
+
+Each fact below is then that of every curve that satisfies these laws. -/
+theorem laws : domain.Laws toPoint Fn.toZMod where
+  isOnCurve_generator := isOnCurve_generator
+  toPoint_generator_ne_zero := toPoint_generator_ne_zero
+  isOnCurve_mul k _ hP := isOnCurve_mul k hP
+  toPoint_mul k _ hP := toPoint_mul' k hP
+  mulAdd_eq k l _ _ hP hQ := mulAdd_eq k l hP hQ
+  isOnCurve_add := isOnCurve_add
+  toPoint_add := toPoint_add
+  isOnCurve_neg := isOnCurve_neg
+  toPoint_neg := toPoint_neg
+  toPoint_inj := toPoint_inj
+  toPoint_infinity := rfl
+  y_eq_or_eq_neg {x y y'} hc hc' := by
+    -- The two `y` square to the same value, so they agree up to sign.
+    rcases Fp.eq_or_eq_neg_of_mul_self (((isOnCurve_affine _ _).mp hc').trans
+      ((isOnCurve_affine _ _).mp hc).symm) with h | h
+    · exact Or.inl (Fp.toZMod.injective h)
+    · exact Or.inr (Fp.toZMod.injective (h.trans (Fp.toZMod_neg y).symm))
+  toZMod_inv := Fn.toZMod_inv
+
 /-- The point the verifier rebuilds, in the group: `u1 G + u2 Q`. -/
 theorem toPoint_rebuilt (u1 u2 : Fn) {q : Point} (hq : q.isOnCurve = true) :
-    toPoint (mul u1 generator + mul u2 q) = Fn.toZMod u1 • toPoint generator + Fn.toZMod u2 • toPoint q := by
-  rw [toPoint_add (isOnCurve_mul _ isOnCurve_generator) (isOnCurve_mul _ hq), toPoint_mul' _ isOnCurve_generator,
-    toPoint_mul' _ hq]
+    toPoint (mul u1 generator + mul u2 q)
+      = Fn.toZMod u1 • toPoint generator + Fn.toZMod u2 • toPoint q :=
+  laws.toPoint_rebuilt u1 u2 hq
 
 /-- A valid signature has `r` and `s` in `[1, n - 1]`. -/
 theorem verify_range {q : Point} {hash : Vector UInt8 32} {r s : Nat} (h : verify q hash r s = true) :
-    (0 < r ∧ r < Fn.modulus) ∧ (0 < s ∧ s < Fn.modulus) := by
-  unfold verify at h
-  split at h
-  · split at h
-    · exact ⟨by assumption, by assumption⟩
-    · cases h
-  · cases h
+    (0 < r ∧ r < Fn.modulus) ∧ (0 < s ∧ s < Fn.modulus) :=
+  domain.verify_range h
 
 /-- The point at infinity is no public key, and verifies nothing. -/
-theorem verify_infinity (hash : Vector UInt8 32) (r s : Nat) : verify .infinity hash r s = false := by
-  unfold verify
-  split
-  · split
-    · simp
-    · rfl
-  · rfl
+theorem verify_infinity (hash : Vector UInt8 32) (r s : Nat) : verify .infinity hash r s = false :=
+  domain.verify_infinity _ r s
 
 /-- A point off the curve is no public key, and verifies nothing. -/
 theorem verify_of_not_isOnCurve {q : Point} (hq : q.isOnCurve = false) (hash : Vector UInt8 32) (r s : Nat) :
-    verify q hash r s = false := by
-  unfold verify
-  split
-  · split
-    · simp [hq]
-    · rfl
-  · rfl
+    verify q hash r s = false :=
+  domain.verify_of_not_isOnCurve hq _ r s
 
 /-- A product `k^(-1) a` that is not zero has a nonzero `k`, since the inverse of zero is zero. -/
-theorem ne_zero_of_inv_mul_ne_zero {k a : Fn} (h : k.inv * a ≠ 0) : k ≠ 0 := by
-  rintro rfl
-  apply h
-  apply Fn.toZMod.injective
-  rw [map_mul, Fn.toZMod_inv, map_zero, inv_zero, zero_mul]
+theorem ne_zero_of_inv_mul_ne_zero {k a : Fn} (h : k.inv * a ≠ 0) : k ≠ 0 :=
+  laws.ne_zero_of_inv_mul_ne_zero h
 
 /-- Completeness: a signature made by the signing operation of SEC 1 v2 §4.1.3 verifies.
 
@@ -73,84 +79,13 @@ theorem verify_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) {x y : Fp
     (hR : mul k generator = .affine x y) (hr : x.val % Fn.modulus ≠ 0)
     (hs : k.inv * (Fin.ofNat _ (hashToInt hash) + Fin.ofNat _ (x.val % Fn.modulus) * d) ≠ 0) :
     verify (mul d generator) hash (x.val % Fn.modulus)
-      (k.inv * (Fin.ofNat _ (hashToInt hash) + Fin.ofNat _ (x.val % Fn.modulus) * d)).val = true := by
-  set sig := k.inv * (Fin.ofNat _ (hashToInt hash) + Fin.ofNat _ (x.val % Fn.modulus) * d) with hsig
-  have hk : k ≠ 0 := ne_zero_of_inv_mul_ne_zero hs
-  have hrr : 0 < x.val % Fn.modulus ∧ x.val % Fn.modulus < Fn.modulus :=
-    ⟨Nat.pos_of_ne_zero hr, Nat.mod_lt _ (by decide)⟩
-  have hss : 0 < sig.val ∧ sig.val < Fn.modulus := ⟨Nat.pos_of_ne_zero (fun h => hs (Fin.ext h)), sig.isLt⟩
-  have hG := isOnCurve_generator
-  -- The key `d G` is valid: `d` is nonzero and `G` has order `n`.
-  have hQ : mul d generator ≠ .infinity ∧ (mul d generator).isOnCurve = true := by
-    refine ⟨fun h => ?_, isOnCurve_mul d hG⟩
-    have h0 := congrArg toPoint h
-    rw [toPoint_mul' d hG, toPoint_infinity, smul_eq_zero] at h0
-    rcases h0 with h0 | h0
-    · exact hd (Fn.toZMod.injective (h0.trans (map_zero _).symm))
-    · exact toPoint_generator_ne_zero h0
-  rw [verify, dite_eq_left hrr, dite_eq_left hss, ite_eq_left hQ]
-  dsimp only
-  rw [mulAdd_eq _ _ hG hQ.2]
-  -- The verifier rebuilds `R`: `u1 G + u2 (d G) = s^(-1) (e + r d) G = k G`.
-  have hrebuilt : toPoint (mul (Fin.ofNat _ (hashToInt hash) * Fn.inv ⟨sig.val, hss.2⟩) generator
-      + mul ((⟨x.val % Fn.modulus, hrr.2⟩ : Fn) * Fn.inv ⟨sig.val, hss.2⟩) (mul d generator)) = toPoint (.affine x y) := by
-    rw [toPoint_rebuilt _ _ hQ.2, toPoint_mul' d hG, ← hR, toPoint_mul' k hG, smul_smul, ← add_smul]
-    refine congrArg (· • toPoint generator) ?_
-    have hk' : Fn.toZMod k ≠ 0 := fun h => hk (Fn.toZMod.injective (h.trans (map_zero _).symm))
-    have hs' : Fn.toZMod sig ≠ 0 := fun h => hs (Fn.toZMod.injective (h.trans (map_zero _).symm))
-    have hr' : ((⟨x.val % Fn.modulus, hrr.2⟩ : Fn) : Fn) = Fin.ofNat _ (x.val % Fn.modulus) :=
-      Fin.ext (Nat.mod_eq_of_lt hrr.2).symm
-    have hsig' : Fn.toZMod sig = (Fn.toZMod k)⁻¹ * (Fn.toZMod (Fin.ofNat _ (hashToInt hash))
-        + Fn.toZMod (Fin.ofNat _ (x.val % Fn.modulus)) * Fn.toZMod d) := by
-      rw [hsig, map_mul, Fn.toZMod_inv, map_add, map_mul]
-    rw [Fin.eta sig hss.2, hr', map_mul, map_mul, Fn.toZMod_inv]
-    rw [hsig'] at hs' ⊢
-    have he : Fn.toZMod (Fin.ofNat _ (hashToInt hash)) + Fn.toZMod (Fin.ofNat _ (x.val % Fn.modulus)) * Fn.toZMod d ≠ 0 :=
-      fun h => hs' (by rw [h, mul_zero])
-    field_simp
-  split
-  · rename_i heq
-    rw [heq, toPoint_infinity] at hrebuilt
-    exact absurd ((toPoint_eq_zero (isOnCurve_mul k hG)).mp (hR ▸ hrebuilt.symm)) (by rw [hR]; simp)
-  · rename_i x' y' heq
-    rw [heq] at hrebuilt
-    have := (toPoint_inj (heq ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hQ.2))
-      (hR ▸ isOnCurve_mul k hG)).mp hrebuilt
-    cases this
-    simp
+      (k.inv * (Fin.ofNat _ (hashToInt hash) + Fin.ofNat _ (x.val % Fn.modulus) * d)).val = true :=
+  laws.verify_sign d k _ hd hR hr hs
 
 /-- `(r, s)` and `(r, n - s)` are valid together: `n - s` rebuilds `-R`, which has the same `x`. -/
 theorem verify_neg_s (q : Point) (hash : Vector UInt8 32) (r : Nat) {s : Nat} (hs : 0 < s ∧ s < Fn.modulus) :
-    verify q hash r (Fn.modulus - s) = verify q hash r s := by
-  have hs' : 0 < Fn.modulus - s ∧ Fn.modulus - s < Fn.modulus := by omega
-  by_cases hr : 0 < r ∧ r < Fn.modulus
-  · by_cases hq : q ≠ .infinity ∧ q.isOnCurve = true
-    · rw [verify, verify, dite_eq_left hr, dite_eq_left hr, dite_eq_left hs, dite_eq_left hs', ite_eq_left hq,
-        ite_eq_left hq]
-      dsimp only
-      rw [mulAdd_eq _ _ isOnCurve_generator hq.2, mulAdd_eq _ _ isOnCurve_generator hq.2]
-      -- `n - s` is `-s` mod `n`, so `u1`, `u2` and the rebuilt point change sign.
-      have hneg : (⟨Fn.modulus - s, hs'.2⟩ : Fn) = -⟨s, hs.2⟩ := Fin.ext (by simp only [Fin.neg_def]; exact (Nat.mod_eq_of_lt hs'.2).symm)
-      rw [hneg]
-      have hG := isOnCurve_generator
-      generalize hR : mul (Fin.ofNat _ (hashToInt hash) * Fn.inv ⟨s, hs.2⟩) generator
-        + mul ((⟨r, hr.2⟩ : Fn) * Fn.inv ⟨s, hs.2⟩) q = R
-      have hRc : R.isOnCurve = true := hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hq.2)
-      have hR' : mul (Fin.ofNat _ (hashToInt hash) * Fn.inv (-⟨s, hs.2⟩)) generator
-          + mul ((⟨r, hr.2⟩ : Fn) * Fn.inv (-⟨s, hs.2⟩)) q = -R := by
-        apply (toPoint_inj (isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hq.2)) (isOnCurve_neg hRc)).mp
-        rw [toPoint_neg hRc, ← hR, toPoint_rebuilt _ _ hq.2, toPoint_rebuilt _ _ hq.2]
-        simp only [map_mul, Fn.toZMod_inv, Fn.toZMod_neg, inv_neg, mul_neg, neg_smul, neg_add]
-      rw [hR']
-      cases R <;> rfl
-    · have hq' : q = .infinity ∨ q.isOnCurve = false := by
-        by_cases h : q = .infinity
-        · exact Or.inl h
-        · exact Or.inr (by simpa [h] using hq)
-      rcases hq' with rfl | hq'
-      · rw [verify_infinity, verify_infinity]
-      · rw [verify_of_not_isOnCurve hq', verify_of_not_isOnCurve hq']
-  · simp only [verify, dite_eq_right hr]
+    verify q hash r (Fn.modulus - s) = verify q hash r s :=
+  laws.verify_neg_s q _ r hs
 
 /-- Exactly one of `s` and `n - s` passes the low-s rule, since `n` is odd.
 

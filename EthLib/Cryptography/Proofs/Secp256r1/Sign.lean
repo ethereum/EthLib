@@ -24,29 +24,12 @@ theorem signWith_spec {d e r s : Fn} :
     ∀ {fuel : Nat} {state : NonceState}, signWith d e fuel state = some (r, s) →
       ∃ k : Fn, ∃ x y : Fp, k ≠ 0 ∧ mul k generator = .affine x y ∧
         r = Fin.ofNat _ x.val ∧ r ≠ 0 ∧ s = k.inv * (e + r * d) ∧ s ≠ 0 := by
-  intro fuel
-  induction fuel with
-  | zero => intro state h; cases h
-  | succ fuel ih =>
-    intro state h
-    unfold signWith at h
-    dsimp only at h
-    split at h
-    · rename_i ht
-      split at h
-      · exact ih h
-      · rename_i x y hR
-        split at h
-        · exact ih h
-        · rename_i hrs
-          simp only [Option.some.injEq, Prod.mk.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          refine ⟨⟨_, ht.2⟩, x, y, fun h0 => ?_, hR, rfl, fun h => hrs (Or.inl h), rfl,
-            fun h => hrs (Or.inr h)⟩
-          have := congrArg Fin.val h0
-          simp at this
-          omega
-    · exact ih h
+  intro fuel state h
+  -- The loop is that of every curve, which keeps the point `R` that this one drops.
+  obtain ⟨⟨r', s', x, y⟩, hw, he⟩ := Option.map_eq_some_iff.mp h
+  obtain ⟨rfl, rfl⟩ := Prod.mk.inj he
+  obtain ⟨k, hk, hR, hr, hr0, hs, hs0⟩ := domain.signWith_spec hw
+  exact ⟨k, x, y, hk, hR, hr, hr0, hs, hs0⟩
 
 /-- A signature from signing verifies under the public key `d G`, for the hash read mod `n`. -/
 theorem verify_sign_of_sign {d r s : Fn} {hash : Vector UInt8 32}
