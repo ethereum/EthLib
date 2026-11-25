@@ -7662,7 +7662,13 @@ It subtracts the amounts of the withdrawals to the fee recipient, each converted
 `verifyBidValue_iff` (`Consensus/Proofs/RelayApi.lean`) shows that it passes exactly when the change is the value of the bid plus those withdrawals.
 `verifyBidValue_of_excluded_eq_zero` shows that, when no Wei is withdrawn to the fee recipient, it passes exactly when the change is the value.
 The change is an input: computing it runs the payload on a state that the source does not fix.
-EthLib does not yet say which submissions a relay may serve; [#2131](https://github.com/ethereum/EthLib/issues/2131) tracks it.
+`SubmitBlockRequest.servable` (`Consensus/RelayApi.lean`) says whether the block scoring rule lets a relay serve a submission: from Deneb, only when its bid value passes the check, and before Deneb the rule sets no condition.
+The other conditions on serving, such as the signature, stay open, as listed below.
+The source says that the fee recipient is "provided by the builder in their payload submission".
+A submission holds two such addresses: the proposer's fee recipient in its bid trace and the fee recipient of its payload.
+The check is of "the payment delivered by the builder to the proposer", so EthLib reads the proposer's fee recipient of the bid trace ([ethereum/builder-specs#191](https://github.com/ethereum/builder-specs/issues/191)).
+`SubmitBlockRequest.servable_iff` (`Consensus/Proofs/RelayApi.lean`) shows that from Deneb a submission is servable exactly when the change of that recipient's balance is the value of its bid trace plus the withdrawals to it.
+`SubmitBlockRequest.servable_of_lt_deneb` shows that before Deneb the rule sets no condition.
 
 The source leaves four points about a submission open, and EthLib specifies none of them:
 

@@ -438,4 +438,20 @@ def SubmitBlockRequest.bid (request : SubmitBlockRequest preset fork)
     -- From Electra: the requests of the submission.
     (fun electra => request.executionRequests ⟨electra, range.2⟩)
 
+/-- Whether the block scoring rule lets a relay serve a submission to proposers.
+
+The balance difference is the change of the proposer's fee recipient over the payload.
+
+The relay rules run from Bellatrix to Fulu, and other rules on serving are not checked here. -/
+def SubmitBlockRequest.servable (request : SubmitBlockRequest preset fork)
+    (balanceDifference : U256) : Bool :=
+  -- From Deneb: a submission whose bid value fails the check must not be served.
+  --
+  -- The fee recipient is that of the proposer, in the bid trace.
+  if deneb : .dencun ≤ fork then
+    RelayApi.verifyBidValue request.executionPayload deneb request.message.proposerFeeRecipient
+      request.message.value balanceDifference
+  -- Before Deneb, the source sets no rule on the value.
+  else true
+
 end EthLib.Consensus
