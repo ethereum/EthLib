@@ -1,6 +1,6 @@
 module
 
-public import Std.Data.HashSet.Basic
+public import Std.Data.TreeSet.Basic
 
 /-!
 # `Base.List`
@@ -37,11 +37,13 @@ def replaceKey {κ α : Type} [BEq κ] (pairs : List (κ × α)) (key : κ) (val
   else pairs ++ [(key, value)]
 
 /-- The first element of a list that occurs again later in it, if any. -/
-def firstRepeated {α : Type} [BEq α] [Hashable α] (l : List α) : Option α :=
+def firstRepeated {α : Type} [Ord α] (l : List α) : Option α :=
   -- One pass from the end, with the set of the elements after the current one.
   --
-  -- So each element costs one lookup and one insertion, and the last one found is the first.
-  (l.foldr (init := ((∅ : Std.HashSet α), (none : Option α))) fun x (later, found) =>
+  -- The set is a search tree of the order, so each element costs one lookup and one insertion.
+  --
+  -- The last one found is the first.
+  (l.foldr (init := ((∅ : Std.TreeSet α), (none : Option α))) fun x (later, found) =>
     -- The lookup comes before the insertion, so the insertion updates the set in place.
     let again := later.contains x
     (later.insert x, if again then some x else found)).2
