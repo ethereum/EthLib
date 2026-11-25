@@ -6,7 +6,7 @@ It also gives the snapshot that a tree finalized at that block takes, after ever
 The suite pushes the roots in order, and checks every deposit root and snapshot against them.
 
 - Repository: [`ethereum/EIPs`](https://github.com/ethereum/EIPs).
-- Commit: `46976b2a9bf99f727fb87dc8c809e3a3cdc6b445`.
+- Commit: `b055feec322fbc37e9d77a393a50b3ff56b31c92`.
 - File: `assets/eip-4881/test_cases.yaml`.
 - Licence: CC0-1.0, as the EIP states.
 

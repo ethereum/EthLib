@@ -3,7 +3,7 @@
 The BLS12-381 cases of EIP-2537 and the P256VERIFY cases of EIP-7951 that the precompile tests read, taken from the assets of both EIPs.
 
 - Repository: [`ethereum/EIPs`](https://github.com/ethereum/EIPs)
-- Commit: `46976b2a9bf99f727fb87dc8c809e3a3cdc6b445`
+- Commit: `b055feec322fbc37e9d77a393a50b3ff56b31c92`
 - Files: `assets/eip-2537/*.json` and `assets/eip-7951/test-vectors.json`
 - Licence: CC0-1.0
 

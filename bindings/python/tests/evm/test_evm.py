@@ -36,7 +36,7 @@ def signed(value: int) -> int:
 #
 # File: EIPS/eip-145.md
 # Repository: ethereum/EIPs
-# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92
 # Licence: CC0-1.0
 EIP_145 = [
     (

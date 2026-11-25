@@ -14,7 +14,11 @@ from raising import raises
 GENESIS_TIME = 1_742_212_800
 
 # The first timestamp of each later fork, with the fork before it.
-# The "Activation" tables of EIP-7600 and EIP-7607 (with BPO1 and BPO2) give them.
+# The "Activation" tables of EIP-7600 and EIP-7607 give them.
+# EIP-7607 gives BPO1 and BPO2 under "Blob Parameter Only Forks".
+#
+# Repository: ethereum/EIPs
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92
 TIMES = [
     (1_742_999_832, "dencun", "pectra"),
     (1_761_677_592, "pectra", "fusaka"),
@@ -22,9 +26,9 @@ TIMES = [
     (1_762_955_544, "bpo1", "bpo2"),
 ]
 
-# The start of epoch 132352, the Glamsterdam time of Hoodi in EIP-7773 until its row was cleared.
-# The genesis file and EIP-7773 give Hoodi no Glamsterdam time now.
-# The row was cleared in ethereum/EIPs by "Update EIP-7773: Clear postponed Hoodi activation".
+# The start of epoch 132352, the Glamsterdam time that EIP-7773 once gave Hoodi.
+# At the pinned commit, the Hoodi row of its "Activation" table is empty.
+# The genesis file gives no Glamsterdam time either.
 UNSCHEDULED_GLAMSTERDAM = 1_793_036_568
 
 

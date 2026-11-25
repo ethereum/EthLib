@@ -11,7 +11,7 @@ from raising import raises
 # Section: Test Cases
 # Files: EIPS/eip-2124.md, EIPS/eip-6122.md
 # Repository: ethereum/EIPs
-# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92
 # Licence: CC0-1.0
 #
 # Each genesis hash is checked by the first fork hash of its chain, the CRC-32 of the hash alone.
@@ -290,7 +290,7 @@ def test_malformed_identifier(remote: str) -> None:
 #
 # File: EIPS/eip-7910.md
 # Repository: ethereum/EIPs
-# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92
 # Licence: CC0-1.0
 #
 # Hoodi starts with every fork up to Cancun at genesis, so none of them is a fork.

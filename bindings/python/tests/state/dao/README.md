@@ -5,7 +5,7 @@ It lists the 116 accounts whose ether the fork moves, and the recovery contract 
 It is the file `EIPS/eip-779.md` below, renamed so that the Markdown checks of the repository skip it.
 
 - Repository: [`ethereum/EIPs`](https://github.com/ethereum/EIPs).
-- Commit: `46976b2a9bf99f727fb87dc8c809e3a3cdc6b445`.
+- Commit: `b055feec322fbc37e9d77a393a50b3ff56b31c92`.
 - File: `EIPS/eip-779.md`.
 - Licence: CC0-1.0, as the file states.
 

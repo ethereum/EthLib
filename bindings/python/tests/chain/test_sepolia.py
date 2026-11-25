@@ -39,7 +39,7 @@ TERMINAL_HEADER = (FILES / "terminal_header.rlp").read_bytes()
 # EIP-7607 also gives the fork hash at Fusaka, BPO1 and BPO2.
 #
 # Repository: ethereum/EIPs
-# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92
 TIMES = [
     (1_677_557_088, "paris", "shapella", "shanghaiTime"),
     (1_706_655_072, "shapella", "dencun", "cancunTime"),
@@ -74,7 +74,7 @@ GENESIS_BLOCKS = [
 # EIP-4844, EIP-7691, EIP-8134 and EIP-8135 give them, each in its "Parameters" section.
 #
 # Repository: ethereum/EIPs
-# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92
 FORK_SCHEDULES = {
     "cancun": (3, 6, 3_338_477),
     "prague": (6, 9, 5_007_716),
