@@ -37,10 +37,39 @@ structure SimState (Dg E C : Type) where
 /-- The first state of the simulator: no pair yet, and the state `iv` with the empty path. -/
 def SimState.init (iv : SpongeState Dg E C) : SimState Dg E C := ⟨[], [(iv, [])]⟩
 
+/-- The state after a new pair `(x, y)`. -/
+abbrev SimState.record (σ : SimState Dg E C) (x y : SpongeState Dg E C) : SimState Dg E C :=
+  ⟨(x, y) :: σ.edges, σ.chains⟩
+
+/-- The state after a new pair `(x, y)` whose answer is rooted with the path `β`. -/
+abbrev SimState.recordRooted (σ : SimState Dg E C) (x y : SpongeState Dg E C)
+    (β : List (Dg × E)) : SimState Dg E C :=
+  ⟨(x, y) :: σ.edges, (y, β) :: σ.chains⟩
+
 /-- The first rooted state whose capacity is that of `x`, with its path. -/
 def chainOf [DecidableEq C] (chains : List (SpongeState Dg E C × List (Dg × E)))
     (x : SpongeState Dg E C) : Option (SpongeState Dg E C × List (Dg × E)) :=
   chains.find? fun p => decide (p.1.2 = x.2)
+
+/-- The rooted state that the search finds is a rooted state. -/
+theorem mem_of_chainOf_eq_some [DecidableEq C] {VC : List (SpongeState Dg E C × List (Dg × E))}
+    {x s : SpongeState Dg E C} {β : List (Dg × E)} (h : chainOf VC x = some (s, β)) :
+    (s, β) ∈ VC :=
+  List.mem_of_find?_eq_some h
+
+/-- The rooted state that the search finds has the capacity of the query. -/
+theorem cap_eq_of_chainOf_eq_some [DecidableEq C]
+    {VC : List (SpongeState Dg E C × List (Dg × E))} {x s : SpongeState Dg E C}
+    {β : List (Dg × E)} (h : chainOf VC x = some (s, β)) : s.2 = x.2 := by
+  simpa using List.find?_some h
+
+/-- When the search finds no rooted state, none has the capacity of the query. -/
+theorem cap_ne_of_chainOf_eq_none [DecidableEq C]
+    {VC : List (SpongeState Dg E C × List (Dg × E))} {x : SpongeState Dg E C}
+    (h : chainOf VC x = none) : ∀ p ∈ VC, p.1.2 ≠ x.2 := by
+  intro p hp hpx
+  have := List.find?_eq_none.mp h p hp
+  simp [hpx] at this
 
 variable [SampleableType Dg] [SampleableType E] [SampleableType C]
 
@@ -87,16 +116,16 @@ noncomputable def simulator (P : Padding Msg (Dg × E)) :
       match chainOf σ.chains x with
       | some (s, β) => do
         let y ← rootedAnswer P (β ++ [blockTo s x])
-        pure (y, ⟨(x, y) :: σ.edges, (y, β ++ [blockTo s x]) :: σ.chains⟩)
+        pure (y, σ.recordRooted x y (β ++ [blockTo s x]))
       | none => do
         let y ← (liftM ($ᵗ (SpongeState Dg E C)) : OracleComp (RomSpec Msg Dg) _)
-        pure (y, ⟨(x, y) :: σ.edges, σ.chains⟩)
+        pure (y, σ.record x y)
   | .inr y => StateT.mk fun σ =>
     match (σ.edges.map Prod.swap).lookup y with
     | some x => pure (x, σ)
     | none => do
       let x ← (liftM ($ᵗ (SpongeState Dg E C)) : OracleComp (RomSpec Msg Dg) _)
-      pure (x, ⟨(x, y) :: σ.edges, σ.chains⟩)
+      pure (x, σ.record x y)
 
 /-- The simulator asks the random oracle at most once per call, from every state. -/
 theorem asksOnce_simulator (P : Padding Msg (Dg × E)) :

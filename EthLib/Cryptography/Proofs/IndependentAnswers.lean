@@ -178,6 +178,16 @@ theorem indepPermOracle_inr_run (b : A) (c : PermCache A) (f : Bool) :
       | none => (fun a => (a, ((a, b) :: c, f || decide (a ∈ c.map Prod.fst)))) <$>
         (uniformOutside [] b : ProbComp A) := rfl
 
+/-- The answer and the cache of a query do not depend on the flag. -/
+theorem indepPermOracle_run_map_fst (q : (PermSpec A).Domain) (c : PermCache A) (f : Bool) :
+    Prod.map id Prod.fst <$> (indepPermOracle q).run (c, f) =
+      Prod.map id Prod.fst <$> (indepPermOracle q).run (c, false) := by
+  rcases q with a | b
+  · rw [indepPermOracle_inl_run, indepPermOracle_inl_run]
+    split <;> simp [Functor.map_map]
+  · rw [indepPermOracle_inr_run, indepPermOracle_inr_run]
+    split <;> simp [Functor.map_map]
+
 /-- A query of the permutation keeps the state, or adds one pair and keeps a raised flag. -/
 theorem indepPermOracle_step (q : (PermSpec A).Domain) (s : IndepState A) (z)
     (hz : z ∈ support ((indepPermOracle q).run s)) :
@@ -311,13 +321,11 @@ theorem sum_range_natCast_div (Q : ℕ) (N : ℝ≥0∞) :
 
 /-- **The birthday bound between a random permutation and independent answers.**
 
-Take a run that asks the permutation, in either direction, at most `Q` times.
+A run asks the permutation, in either direction, at most `Q` times, from the empty cache.
 
-Compare an event of its output under the lazy permutation with the event under independent answers.
+Under independent answers, only the runs that raise no flag count.
 
-Both runs start from the empty cache, and the second counts only runs that raise no flag.
-
-The first chance exceeds the second by at most `Q (Q - 1) / 2` over `|A|`. -/
+An event is then at most `Q (Q - 1) / 2` over `|A|` more likely under the lazy permutation. -/
 theorem prEvent_lazyPermImpl_le_indepPermImpl {α : Type} (oa : PermComp A α) {Q : ℕ}
     (hQ : IsQueryBoundP oa (·.isRight = true) Q) (P : α → Prop) :
     Pr{let z ← (simulateQ lazyPermImpl oa).run' []}[P z] ≤

@@ -1,0 +1,259 @@
+module
+
+public import EthLib.Cryptography.Proofs.Sponge.Games
+
+/-!
+# Proofs: the outcomes that the steps of the combined game can reach
+
+Each step runs in the random-oracle model of the hash and of the oracle on paths.
+
+A step caches each value of a path that it asks, and the cache only grows.
+
+The rest of the step is a function of these values and of the uniform draws.
+-/
+
+@[expose] public section
+
+namespace EthLib.Cryptography.Sponge.Indiff
+
+open OracleComp OracleSpec LazyPermutation Indifferentiability
+
+variable {Dg E C Msg : Type} (P : Padding Msg (Dg × E))
+
+/-- A cached value stays cached in a larger cache. -/
+theorem cachedPathValue_mono {c c' : ACache Msg Dg E C} (h : c ≤ c') {β : List (Dg × E)}
+    {v : SpongeState Dg E C} (hv : cachedPathValue P c β = some v) :
+    cachedPathValue P c' β = some v := by
+  unfold cachedPathValue at hv ⊢
+  split at hv
+  · obtain ⟨d, hd, hv⟩ := Option.bind_eq_some_iff.mp hv
+    obtain ⟨t, ht, rfl⟩ := Option.map_eq_some_iff.mp hv
+    simp [h hd, h ht]
+  · exact h hv
+
+variable [DecidableEq Dg] [DecidableEq E] [DecidableEq Msg]
+  [SampleableType Dg] [SampleableType E] [SampleableType C]
+
+/-- **The value step.** Asking the value of `β` caches it and keeps the cache elsewhere. -/
+theorem pathValue_support (β : List (Dg × E)) (c : ACache Msg Dg E C)
+    {z : SpongeState Dg E C × ACache Msg Dg E C}
+    (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c)) :
+    c ≤ z.2 ∧ cachedPathValue P z.2 β = some z.1 ∧ ∀ t, ¬ ValPt (C := C) P β t → z.2 t = c t := by
+  unfold pathValue at hz
+  split at hz
+  · next m hm =>
+    simp only [simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure, StateT.run_pure,
+      mem_support_bind_iff, support_pure, Set.mem_singleton_iff] at hz
+    obtain ⟨⟨d, c₁⟩, h₁, ⟨t, c₂⟩, h₂, rfl⟩ := hz
+    obtain ⟨hc₁, hd, hc₁'⟩ := caches_of_mem_support_randomOracle_run _ c h₁
+    obtain ⟨hc₂, ht, hc₂'⟩ := caches_of_mem_support_randomOracle_run _ c₁ h₂
+    refine ⟨le_trans hc₁ hc₂, ?_, fun t' ht' => ?_⟩
+    · simp only [cachedPathValue, hm]
+      rw [hc₂' (.inl m) (by simp), hd, ht]
+      rfl
+    · simp only at ht' ⊢
+      rw [hc₂' t' (by rintro rfl; exact ht' rfl), hc₁' t' (by rintro rfl; exact ht' hm)]
+  · next hm =>
+    rw [run_queryRight] at hz
+    obtain ⟨hc, ht, hc'⟩ := caches_of_mem_support_randomOracle_run _ c hz
+    refine ⟨hc, ?_, fun t' ht' => hc' t' (by rintro rfl; exact ht' rfl)⟩
+    simp only [cachedPathValue, hm]
+    exact ht
+
+/-- Asking a path whose value is cached returns that value and keeps the cache. -/
+theorem pathValue_run_of_cachedPathValue (β : List (Dg × E)) (c : ACache Msg Dg E C)
+    {v : SpongeState Dg E C}
+    (hv : cachedPathValue P c β = some v) :
+    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c = pure (v, c) := by
+  unfold cachedPathValue at hv
+  unfold pathValue
+  split at hv
+  · obtain ⟨d, hd, hv⟩ := Option.bind_eq_some_iff.mp hv
+    obtain ⟨t, ht, rfl⟩ := Option.map_eq_some_iff.mp hv
+    simp only [simulateQ_bind, StateT.run_bind, run_queryRight,
+      QueryImpl.withCaching_run_some _ hd, pure_bind, QueryImpl.withCaching_run_some _ ht,
+      simulateQ_pure, StateT.run_pure]
+  · simp only [run_queryRight, QueryImpl.withCaching_run_some _ hv]
+
+/-- A uniform draw leaves the cache alone. -/
+theorem drawSt_run (c : ACache Msg Dg E C) :
+    (simulateQ (ASpec Msg Dg E C).romImpl
+      (drawSt (Msg := Msg) (Dg := Dg) (E := E) (C := C))).run c =
+      (fun u => (u, c)) <$> ($ᵗ (SpongeState Dg E C)) :=
+  simulateQ_romImpl_liftM_run _ _
+
+/-- The value of a path that pads a message, at a path the oracle on paths has not answered. -/
+theorem pathValue_run_fresh_some {β : List (Dg × E)} {m : Msg} (hm : P.unpad β = some m)
+    (c : ACache Msg Dg E C) (hβ : c (.inr β) = none) :
+    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =
+      (((ASpec Msg Dg E C).randomOracle (.inl m)).run c >>= fun w =>
+        ($ᵗ (SpongeState Dg E C)) >>= fun t =>
+          pure (((w.1, t.1.2), t.2), w.2.cacheQuery (.inr β) t)) := by
+  simp only [pathValue, hm, simulateQ_bind, StateT.run_bind, run_queryRight, simulateQ_pure,
+    StateT.run_pure]
+  refine bind_congr_of_forall_mem_support _ fun w hw => ?_
+  have hwβ : w.2 (.inr β) = none := by
+    rw [(caches_of_mem_support_randomOracle_run _ c hw).2.2 _ (by simp)]
+    exact hβ
+  rw [randomOracle.run_eq]
+  simp [hwβ]
+
+/-- The value of a path that pads no message, at a path the oracle on paths has not answered. -/
+theorem pathValue_run_fresh_none {β : List (Dg × E)} (hm : P.unpad β = none)
+    (c : ACache Msg Dg E C) (hβ : c (.inr β) = none) :
+    (simulateQ (ASpec Msg Dg E C).romImpl (pathValue P β)).run c =
+      (($ᵗ (SpongeState Dg E C)) >>= fun t => pure (t, c.cacheQuery (.inr β) t)) := by
+  simp only [pathValue, hm, run_queryRight]
+  rw [randomOracle.run_eq]
+  simp [hβ]
+
+variable [DecidableEq C] [XorOp Dg] [XorOp E]
+
+/-- **The walk step.** The walk caches the values of its paths and keeps the cache elsewhere.
+
+Its outcome is the walk over any function that agrees with the cached values. -/
+theorem allWalk_support (used : List (Dg × E) → Bool) (pre : List (Dg × E))
+    (s : SpongeState Dg E C) (A : PermCache (SpongeState Dg E C)) (bs : List (Dg × E))
+    (c : ACache Msg Dg E C)
+    {z : (SpongeState Dg E C × PermCache (SpongeState Dg E C)) × ACache Msg Dg E C}
+    (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
+      (allWalk P used pre s A bs)).run c)) :
+    c ≤ z.2 ∧ (∀ i < bs.length, cachedPathValue P z.2 (pre ++ bs.take (i + 1)) ≠ none) ∧
+      (∀ t, (∀ i < bs.length, ¬ ValPt (C := C) P (pre ++ bs.take (i + 1)) t) → z.2 t = c t) ∧
+      ∃ us, ∀ vf : List (Dg × E) → SpongeState Dg E C,
+        (∀ i < bs.length, cachedPathValue P z.2 (pre ++ bs.take (i + 1)) =
+          some (vf (pre ++ bs.take (i + 1)))) →
+        z.1 = detWalk used vf pre s A bs us := by
+  induction bs generalizing pre s A c with
+  | nil =>
+    simp only [allWalk, simulateQ_pure, StateT.run_pure, support_pure,
+      Set.mem_singleton_iff] at hz
+    subst hz
+    exact ⟨le_rfl, by simp, fun _ _ => rfl, [], fun _ _ => rfl⟩
+  | cons B bs ih =>
+    simp only [allWalk, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
+    obtain ⟨⟨v, c₁⟩, h₁, w₂, h₂, hz⟩ := hz
+    rw [drawSt_run] at h₂
+    simp only [support_map, Set.mem_image] at h₂
+    obtain ⟨u, -, rfl⟩ := h₂
+    obtain ⟨hc₁, hv, hc₁'⟩ := pathValue_support P _ c h₁
+    dsimp only at hc₁ hv hc₁' hz
+    -- The rest of the walk, from either next state, gives the claim for the whole list.
+    have key : ∀ (y : SpongeState Dg E C) (A' : PermCache (SpongeState Dg E C)),
+        z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
+          (allWalk P used (pre ++ [B]) y A' bs)).run c₁) →
+        c₁ ≤ z.2 ∧ c ≤ z.2 ∧
+          (∀ i < (B :: bs).length, cachedPathValue P z.2 (pre ++ (B :: bs).take (i + 1)) ≠ none) ∧
+          (∀ t, (∀ i < (B :: bs).length,
+            ¬ ValPt (C := C) P (pre ++ (B :: bs).take (i + 1)) t) → z.2 t = c t) ∧
+          ∃ us', ∀ vf : List (Dg × E) → SpongeState Dg E C,
+            (∀ i < (B :: bs).length, cachedPathValue P z.2 (pre ++ (B :: bs).take (i + 1)) =
+              some (vf (pre ++ (B :: bs).take (i + 1)))) →
+            z.1 = detWalk used vf (pre ++ [B]) y A' bs us' := by
+      intro y A' hz'
+      obtain ⟨hc, hcached, hagree, us', hdet⟩ := ih (pre ++ [B]) y A' c₁ hz'
+      refine ⟨hc, le_trans hc₁ hc, fun i hi => ?_, fun t ht => ?_, us', fun vf hvf => hdet vf ?_⟩
+      · rcases i with _ | i
+        · simp [cachedPathValue_mono P hc hv]
+        · have := hcached i (by simp at hi; omega)
+          simpa [List.take_succ_cons] using this
+      · rw [hagree t fun i hi => ?_, hc₁' t (by simpa using ht 0 (by simp))]
+        simpa [List.take_succ_cons] using ht (i + 1) (by simp; omega)
+      · intro i hi
+        simpa [List.take_succ_cons] using hvf (i + 1) (by simp; omega)
+    split at hz
+    · next y hy =>
+      obtain ⟨-, hc, hcached, hagree, us', hdet⟩ := key y A hz
+      refine ⟨hc, hcached, hagree, u :: us', fun vf hvf => ?_⟩
+      simp only [detWalk, hy, List.tail_cons]
+      exact hdet vf hvf
+    · next hy =>
+      obtain ⟨hc₁z, hc, hcached, hagree, us', hdet⟩ := key _ _ hz
+      refine ⟨hc, hcached, hagree, u :: us', fun vf hvf => ?_⟩
+      have hvB : v = vf (pre ++ [B]) := by
+        have h0 := hvf 0 (by simp)
+        simp only [List.take_succ_cons, List.take_zero] at h0
+        rw [cachedPathValue_mono P hc₁z hv] at h0
+        exact Option.some.inj h0
+      simp only [detWalk, hy, List.tail_cons, List.headD_cons]
+      rw [← hvB]
+      exact hdet vf hvf
+
+/-- **The forward step of the simulator over path values** has three cases.
+
+- The query `x` is recorded.
+- The query is a new rooted state, and the step asks the value of its path.
+- The query is a new state that is not rooted, and the step answers `u`. -/
+theorem visFwd_support (x u : SpongeState Dg E C) (σ : SimState Dg E C) (c : ACache Msg Dg E C)
+    {z : (SpongeState Dg E C × SimState Dg E C × Option (List (Dg × E) × SpongeState Dg E C)) ×
+      ACache Msg Dg E C}
+    (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl (visFwd P x u σ)).run c)) :
+    (∃ y, σ.edges.lookup x = some y ∧ z = ((y, σ, none), c)) ∨
+    (∃ s β, σ.edges.lookup x = none ∧ chainOf σ.chains x = some (s, β) ∧
+      (z.1.1, z.2) ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
+        (pathValue P (β ++ [blockTo s x]))).run c) ∧
+      z.1 = (z.1.1, σ.recordRooted x z.1.1 (β ++ [blockTo s x]),
+        some (β ++ [blockTo s x], z.1.1))) ∨
+    (σ.edges.lookup x = none ∧ chainOf σ.chains x = none ∧
+      z = ((u, σ.record x u, none), c)) := by
+  unfold visFwd at hz
+  split at hz
+  · next y hy =>
+    simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
+    exact Or.inl ⟨y, hy, hz⟩
+  · next hy =>
+    split at hz
+    · next s β hch =>
+      simp only [simulateQ_bind, StateT.run_bind, simulateQ_pure, StateT.run_pure,
+        mem_support_bind_iff, support_pure, Set.mem_singleton_iff] at hz
+      obtain ⟨⟨v, c'⟩, hv, rfl⟩ := hz
+      exact Or.inr (Or.inl ⟨s, β, hy, hch, hv, rfl⟩)
+    · next hch =>
+      simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
+      exact Or.inr (Or.inr ⟨hy, hch, hz⟩)
+
+variable (iv : SpongeState Dg E C)
+
+/-- Each outcome of the combined forward step comes from a uniform draw and a simulator step. -/
+theorem combFwd_support (x : SpongeState Dg E C) (cs : CState Dg E C Msg) (c : ACache Msg Dg E C)
+    {z : ((SpongeState Dg E C × SpongeState Dg E C) × CState Dg E C Msg) × ACache Msg Dg E C}
+    (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
+      ((combFwd P iv x).run cs)).run c)) :
+    ∃ u r, (r, z.2) ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
+      (visFwd P x u cs.sim)).run c) ∧ z.1 = fwdOut P iv cs x u r := by
+  simp only [combFwd, StateT.run_mk, simulateQ_bind, StateT.run_bind, drawSt_run,
+    simulateQ_pure, StateT.run_pure, bind_map_left, mem_support_bind_iff, support_pure,
+    Set.mem_singleton_iff, support_uniformSample, Set.mem_univ, true_and] at hz
+  obtain ⟨u, ⟨r, c'⟩, hr, rfl⟩ := hz
+  exact ⟨u, r, hr, rfl⟩
+
+omit [XorOp Dg] [XorOp E] in
+/-- Each outcome of the combined inverse step comes from a uniform draw, with the cache kept. -/
+theorem combInverse_support (y : SpongeState Dg E C) (cs : CState Dg E C Msg)
+    (c : ACache Msg Dg E C)
+    {z : ((SpongeState Dg E C × SpongeState Dg E C) × CState Dg E C Msg) × ACache Msg Dg E C}
+    (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
+      ((combInverse iv y).run cs)).run c)) :
+    ∃ u, z = (invOut iv cs y u, c) := by
+  simp only [combInverse, StateT.run_mk, simulateQ_bind, StateT.run_bind, drawSt_run,
+    simulateQ_pure, StateT.run_pure, bind_map_left, mem_support_bind_iff, support_pure,
+    Set.mem_singleton_iff] at hz
+  obtain ⟨u, -, rfl⟩ := hz
+  exact ⟨u, rfl⟩
+
+/-- Each outcome of the combined hash step is a walk of the full view, then a hash query. -/
+theorem combHash_support (m : Msg) (cs : CState Dg E C Msg) (c : ACache Msg Dg E C)
+    {z : ((Dg × Dg) × CState Dg E C Msg) × ACache Msg Dg E C}
+    (hz : z ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
+      ((combHash P iv m).run cs)).run c)) :
+    ∃ w c₁ d, (w, c₁) ∈ support ((simulateQ (ASpec Msg Dg E C).romImpl
+      (allWalk P (usedPath P cs.sim.chains cs.hashed) [] iv cs.all (P.pad m))).run c) ∧
+      (d, z.2) ∈ support (((ASpec Msg Dg E C).randomOracle (.inl m)).run c₁) ∧
+      z.1 = hashOut cs m w d := by
+  simp only [combHash, StateT.run_mk, simulateQ_bind, StateT.run_bind, run_queryRight,
+    simulateQ_pure, StateT.run_pure, mem_support_bind_iff, support_pure,
+    Set.mem_singleton_iff] at hz
+  obtain ⟨⟨w, c₁⟩, hw, ⟨d, c₂⟩, hd, rfl⟩ := hz
+  exact ⟨w, c₁, d, hw, hd, rfl⟩
+
+end EthLib.Cryptography.Sponge.Indiff

@@ -139,6 +139,14 @@ theorem uniformFrom_toList_evalDistEq_bind {X Y : Type} [DecidableEq Y] [Fintype
       (by simpa using hx)]
     exact (Finset.sum_eq_zero fun y _ => hzero x y (by simp [hx])).symm
 
+/-! ## Lookups in a list -/
+
+/-- A lookup gives one result whichever decision of equality it uses. -/
+theorem lookup_eq_of_decidableEq {α β : Type} [DecidableEq α] {l : List (α × β)} {a : α}
+    {r : Option β} (h : l.lookup a = r) (i : DecidableEq α) :
+    @List.lookup α β (@instBEqOfDecidableEq α i) a l = r := by
+  convert h
+
 end EthLib.Cryptography
 
 namespace EthLib.Cryptography.LazyPermutation
@@ -202,6 +210,100 @@ theorem simulateQ_passthrough_add_liftM_run {σ α : Type}
   rw [QueryImpl.simulateQ_liftM_eq_of_query (unifSpec.passthrough + perm)
     ((QueryImpl.id' unifSpec).liftTarget (StateT σ ProbComp)) (fun t => by simp) oa]
   simp [StateT.run_monadLift]
+
+/-! ## Lookups in a cache -/
+
+section Lookup
+
+variable [DecidableEq A]
+
+/-- A query found in the cache is the first entry of a pair with that answer. -/
+theorem mem_of_lookup_eq_some {c : PermCache A} {a b : A} (h : c.lookup a = some b) :
+    (a, b) ∈ c := by
+  induction c with
+  | nil => simp at h
+  | cons p c ih =>
+    obtain ⟨k, v⟩ := p
+    by_cases hk : a = k
+    · subst hk
+      simp only [List.lookup, beq_self_eq_true, Option.some.injEq] at h
+      simp [h]
+    · simp only [List.lookup, beq_false_of_ne hk] at h
+      exact List.mem_cons_of_mem _ (ih h)
+
+/-- A query missing from the cache is no query of the cache. -/
+theorem ne_of_lookup_eq_none {c : PermCache A} {a : A} (h : c.lookup a = none) :
+    ∀ p ∈ c, p.1 ≠ a := fun p hp hpa => by
+  have := List.lookup_eq_none_iff.1 h p hp
+  simp [hpa] at this
+
+/-- A lookup that finds nothing means the query is not a cached query. -/
+theorem notMem_map_fst_of_lookup_eq_none {c : PermCache A} {a : A}
+    (h : c.lookup a = none) : a ∉ c.map Prod.fst := fun ha => by
+  obtain ⟨p, hp, hpa⟩ := List.mem_map.1 ha
+  exact ne_of_lookup_eq_none h p hp hpa
+
+/-- A reversed lookup that finds nothing means the answer is not a cached answer. -/
+theorem notMem_map_snd_of_lookup_swap_eq_none {c : PermCache A} {b : A}
+    (h : (c.map Prod.swap).lookup b = none) : b ∉ c.map Prod.snd := by
+  have := notMem_map_fst_of_lookup_eq_none h
+  simpa [Function.comp_def] using this
+
+/-- A lookup that finds nothing has no cached pair with the query. -/
+theorem notMem_of_lookup_eq_none {c : PermCache A} {a : A} (h : c.lookup a = none) (b : A) :
+    (a, b) ∉ c := fun hm => ne_of_lookup_eq_none h _ hm rfl
+
+/-- A reversed lookup that finds nothing has no cached pair with the answer. -/
+theorem notMem_of_lookup_swap_eq_none {c : PermCache A} {b : A}
+    (h : (c.map Prod.swap).lookup b = none) (a : A) : (a, b) ∉ c := fun hm =>
+  notMem_of_lookup_eq_none h a (List.mem_map.mpr ⟨(a, b), hm, rfl⟩)
+
+/-- A reversed lookup that finds a query found a cached pair. -/
+theorem mem_of_lookup_swap_eq_some {c : PermCache A} {a b : A}
+    (h : (c.map Prod.swap).lookup b = some a) : (a, b) ∈ c := by
+  obtain ⟨⟨a', b'⟩, hp, hab⟩ := List.mem_map.mp (mem_of_lookup_eq_some h)
+  simp only [Prod.swap_prod_mk, Prod.mk.injEq] at hab
+  obtain ⟨rfl, rfl⟩ := hab
+  exact hp
+
+/-- A lookup finds the answer of a cached pair whose query is unique. -/
+theorem lookup_eq_some_of_mem {c : PermCache A} {a b : A} (h : (a, b) ∈ c)
+    (huniq : ∀ p ∈ c, p.1 = a → p.2 = b) : c.lookup a = some b := by
+  induction c with
+  | nil => simp at h
+  | cons p c ih =>
+    obtain ⟨k, v⟩ := p
+    by_cases hk : a = k
+    · subst hk
+      simp only [List.lookup, beq_self_eq_true]
+      exact congrArg some (huniq (a, v) List.mem_cons_self rfl)
+    · simp only [List.lookup, beq_false_of_ne hk]
+      rcases List.mem_cons.mp h with h | h
+      · exact absurd (Prod.mk.inj h).1 hk
+      · exact ih h fun p hp => huniq p (List.mem_cons_of_mem _ hp)
+
+/-- A reversed lookup finds the query of a cached pair whose answer is unique. -/
+theorem lookup_swap_eq_some_of_mem {c : PermCache A} {a b : A} (h : (a, b) ∈ c)
+    (huniq : ∀ p ∈ c, p.2 = b → p.1 = a) : (c.map Prod.swap).lookup b = some a :=
+  lookup_eq_some_of_mem (List.mem_map.mpr ⟨(a, b), h, rfl⟩) fun p hp hpb => by
+    obtain ⟨p', hp', rfl⟩ := List.mem_map.mp hp
+    exact huniq p' hp' hpb
+
+/-- A lookup finds nothing when no cached pair has the query. -/
+theorem lookup_eq_none_of_forall {c : PermCache A} {a : A} (h : ∀ b, (a, b) ∉ c) :
+    c.lookup a = none := by
+  cases ha : c.lookup a with
+  | none => rfl
+  | some b => exact absurd (mem_of_lookup_eq_some ha) (h b)
+
+/-- A reversed lookup finds nothing when no cached pair has the answer. -/
+theorem lookup_swap_eq_none_of_forall {c : PermCache A} {b : A} (h : ∀ a, (a, b) ∉ c) :
+    (c.map Prod.swap).lookup b = none := by
+  cases hb : (c.map Prod.swap).lookup b with
+  | none => rfl
+  | some a => exact absurd (mem_of_lookup_swap_eq_some hb) (h a)
+
+end Lookup
 
 variable [FinEnum A]
 
@@ -335,38 +437,6 @@ theorem extensions_cons (p : A × A) (c : PermCache A) :
     extensions (p :: c) = (extensions c).filter fun π => π p.1 = p.2 := by
   ext π
   simp [extensions, Agrees, and_comm]
-
-/-- A query found in the cache is the first entry of a pair with that answer. -/
-theorem mem_of_lookup_eq_some {c : PermCache A} {a b : A} (h : c.lookup a = some b) :
-    (a, b) ∈ c := by
-  induction c with
-  | nil => simp at h
-  | cons p c ih =>
-    obtain ⟨k, v⟩ := p
-    by_cases hk : a = k
-    · subst hk
-      simp only [List.lookup, beq_self_eq_true, Option.some.injEq] at h
-      simp [h]
-    · simp only [List.lookup, beq_false_of_ne hk] at h
-      exact List.mem_cons_of_mem _ (ih h)
-
-/-- A query missing from the cache is no query of the cache. -/
-theorem ne_of_lookup_eq_none {c : PermCache A} {a : A} (h : c.lookup a = none) :
-    ∀ p ∈ c, p.1 ≠ a := fun p hp hpa => by
-  have := List.lookup_eq_none_iff.1 h p hp
-  simp [hpa] at this
-
-/-- A lookup that finds nothing means the query is not a cached query. -/
-theorem notMem_map_fst_of_lookup_eq_none {c : PermCache A} {a : A}
-    (h : c.lookup a = none) : a ∉ c.map Prod.fst := fun ha => by
-  obtain ⟨p, hp, hpa⟩ := List.mem_map.1 ha
-  exact ne_of_lookup_eq_none h p hp hpa
-
-/-- A reversed lookup that finds nothing means the answer is not a cached answer. -/
-theorem notMem_map_snd_of_lookup_swap_eq_none {c : PermCache A} {b : A}
-    (h : (c.map Prod.swap).lookup b = none) : b ∉ c.map Prod.snd := by
-  have := notMem_map_fst_of_lookup_eq_none h
-  simpa [Function.comp_def] using this
 
 /-- An agreeing permutation sends a query missing from the cache outside the answers. -/
 private theorem apply_mem_outside {c : PermCache A} {a : A} (h : c.lookup a = none)
