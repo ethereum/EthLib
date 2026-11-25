@@ -169,15 +169,6 @@ theorem attestationRewards_parts_of_lt_altair {config : Config} (before : fork <
   refine ⟨rfl, rfl, rfl, rfl, ?_⟩
   simp [netDelta, noReward]
 
-/-- The sum of pointwise sums is the sum of the two sums. -/
-private theorem sum_map_add_nat {α : Type} (items : List α) (f g : α → Nat) :
-    (items.map fun item => f item + g item).sum = (items.map f).sum + (items.map g).sum := by
-  induction items with
-  | nil => simp
-  | cons item rest ih =>
-    simp only [List.map_cons, List.sum_cons, ih]
-    omega
-
 /-- A fold whose steps each add an amount to the entries adds the sum of those amounts. -/
 private theorem foldlM_getD_sum {α : Type} {step : Array Gwei → ValidatorIndex →
       Except TransitionError (Array Gwei)} {key : α → ValidatorIndex} (amount : α → Nat → Nat) :
@@ -255,7 +246,7 @@ theorem attesterInclusionRewards_split (before : fork < .altair)
   refine ⟨attestations, signers, attesters, total, attestationsOk, signersOk, attestersOk,
     totalOk, shares, named, facts, fun j => ⟨?_, ?_⟩⟩
   · rw [own j, replicate_getD_zero, UInt64.toNat_zero, Nat.zero_add]
-  · rw [sums j, own j, replicate_getD_zero, UInt64.toNat_zero, Nat.zero_add, sum_map_add_nat,
+  · rw [sums j, own j, replicate_getD_zero, UInt64.toNat_zero, Nat.zero_add, List.sum_map_add,
       Nat.add_comm]
 
 /-- Before Altair, the inclusion part of a validator is at most its inclusion deltas. -/
