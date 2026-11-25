@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Bls.Security.MultiKey
+public import EthLib.Cryptography.Proofs.Bls.Security.MultiKeyBytes
 public import EthLib.Cryptography.Proofs.Bls.Security.PopBound
 public import EthLib.Cryptography.Proofs.Bls.Security.PopByteGame
 public import EthLib.Cryptography.Proofs.Bls.Security.PopEager

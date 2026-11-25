@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `DirectSafety.twoRunsForgeAdvantage_le_coCdhAdvantage` (`Consensus/Proofs/DirectSafety/SignedForgery.lean`) bounds a forged header call of two runs against `n` honest keys by `n * q` times a co-CDH solver ([#3433](https://github.com/ethereum/EthLib/issues/3433)).
+  `Security.multiByteForgeAdvantage_le_coCdhAdvantage` (`Cryptography/Proofs/Bls/Security/MultiKeyBytes.lean`) carries the BLS bound against `n` keys to EthLib's bytes.
+  `DirectSafety.exists_wins_of_not_bls_verifySoundOn` shows that a failure of the assumption on the header calls of signed direct safety is a winning call.
 - In Lean, `Xmss.Unforgeability.forgeAdvantage_le_ownQueries` (`Cryptography/Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) bounds an XMSS forgery by `(qH + 2^19 + 1) / 2^127` ([#3373](https://github.com/ethereum/EthLib/issues/3373)).
   The forger makes at most `qH` calls of `H` and at most `2^32` signing requests, and the requests cost nothing in the bound.
   `XmssSecurity.Bridge.realGame_le_model` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/Proof/Bridge/Security.lean`) now holds the hops from the real game to the model's game, and `realGame_security` keeps its statement.

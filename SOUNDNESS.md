@@ -692,7 +692,9 @@ Its one-key forger makes the same hash calls as the game against `n` keys (`hash
 The keys are honest from the start, and the game has no corruption oracle.
 A forgery under one key may be on a message that another key signed.
 A reduction that derives every key from one co-CDH challenge cannot sign that message, so this proof guesses the key and loses the factor `n`.
-This game covers single signatures only; no theorem yet bounds the forgeries among the accepted calls of two runs, nor aggregates registered by deposit signatures.
+This game covers single signatures only.
+`DirectSafety.twoRunsForgeAdvantage_le_coCdhAdvantage` applies it to the header calls of two runs.
+No theorem yet bounds aggregates registered by deposit signatures.
 
 ### secp256k1
 
@@ -8186,14 +8188,24 @@ The codeword searches of each scheme share the bullet of that scheme:
   That relation relates a key held by the adversary to every message the adversary chose to sign with it.
   `Security.byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound` (`Cryptography/Proofs/Bls/Security/Refinement.lean`) bounds a forger of one signature of one honest key on EthLib's bytes, under chosen messages, in the random oracle model.
   Its bound is `q` times the advantage of a named co-Diffie-Hellman solver, where `q` counts hash calls.
-  No theorem extends it to every honest key of the runs, so it does not prove the assumption on the header calls.
-  A bound would give a probability; reading it as the absence of forgery in one pair of runs is left informal.
+  `DirectSafety.twoRunsForgeAdvantage_le_coCdhAdvantage` (`Consensus/Proofs/DirectSafety/SignedForgery.lean`) extends it to `n` honest keys and to the header calls of two runs.
+  A forger picks two runs from one state and one of their header calls.
+  It wins when the call names an honest key that never signed its message, and the check accepts the call with the oracle's hash.
+  Its bound is `n * q` times the advantage of a named co-Diffie-Hellman solver.
+  `DirectSafety.exists_wins_of_not_bls_verifySoundOn` (same file) shows that a failure of the assumption on the header calls is such a winning call.
+  That holds for EthLib's checks and the relation of honest signers, with the hash to `G2` in place of the oracle.
+  So applying the bound to EthLib's checks treats the hash to `G2` as the random oracle, which is the idealisation of A4.
+  A forger that finds the failing call hashes the message of each header call of the runs, so `q` grows by their number, and no theorem states that step.
+  The bound loses `log2 n + log2 q` bits against the co-Diffie-Hellman solver.
+  The bound gives a probability, and reading it as the absence of forgery in one pair of runs is left informal.
   No theorem bounds the assumption on the aggregate calls for Ethereum.
   The bound with proofs of possession needs PopProve under the key tag, and Ethereum registers keys with deposit signatures under the message tag, which that game does not model.
   Without proofs of possession the aggregate assumption can fail for an honest key that never signed (`fastAggregateVerify_rogue`, `Cryptography/Proofs/Bls/SignaturesUnique.lean`).
-  The bound that the assumptions need is not proved; issue #3433 tracks it, and the reduction it needs is this.
+  The bound for the aggregate assumption is not proved, and issue #3433 tracks it.
   For one signature, the notion is existential unforgeability under chosen messages of the scheme of [Boneh, Lynn, Shacham](https://hovav.net/ucsd/dist/sigs.pdf), §3, as the game of `Cryptography/Proofs/Bls/Security/Game.lean` states it, extended to `n` honest keys at once.
-  A reduction guesses which honest key is forged and samples the other secret keys itself, so it loses a factor `n` on top of the bound above; no theorem states the `n`-key game or that reduction.
+  A reduction guesses which honest key is forged and samples the other secret keys itself, so it loses a factor `n` on top of the bound above.
+  `Security.multiForgeAdvantage_le_coCdhAdvantage` (`Cryptography/Proofs/Bls/Security/MultiKey.lean`) states that reduction.
+  `Security.multiByteForgeAdvantage_le_coCdhAdvantage` (`Cryptography/Proofs/Bls/Security/MultiKeyBytes.lean`) carries it to EthLib's bytes.
   The tighter reduction that spreads one challenge key over all `n` keys does not apply: honest keys sign the same attestation data, so a forgery for one key can fall on a message the challenge key already signed for another.
   For aggregates, the notion is that of the proof-of-possession scheme of [draft-irtf-cfrg-bls-signature-04, §3.3](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3), whose proofs hash the key alone under a tag of their own (§3.3.1); `Pop.byteForgeAdvantage_le_coCdhAdvantage` bounds it on EthLib's bytes.
   Ethereum's deposit signature differs from that proof in two ways, which that game does not model.
@@ -8449,6 +8461,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Consensus/Proofs/DataAvailability/`
 - `EthLib/Consensus/Proofs/DepositRandomOracle.lean`
 - `EthLib/Consensus/Proofs/DepositRandomOracleAccepted.lean`
+- `EthLib/Consensus/Proofs/DirectSafety/`
 - `EthLib/Consensus/Proofs/Gossip/`
 - `EthLib/Consensus/Proofs/LightClient/`
 - `EthLib/Consensus/Proofs/SigningRandomOracle.lean`
