@@ -128,9 +128,11 @@ def test_heze_upgrades_with_an_unset_start_index():
     # The fixed fields and offsets of the Gloas state that come before eth1_deposit_index.
     roots = preset["SLOTS_PER_HISTORICAL_ROOT"]
     processed_at = 8 + 32 + 8 + 16 + 112 + 2 * 32 * roots + 4 + 72 + 4
-    # Then the fields up to deposit_requests_start_index: two offsets, the RANDAO mixes and the
-    # slashings, two offsets, the justification bits and three checkpoints, an offset, the two
-    # sync committees, the latest block hash, two withdrawal indices and an offset.
+    # Then the fields up to deposit_requests_start_index:
+    # - two offsets, the RANDAO mixes and the slashings;
+    # - two offsets, the justification bits and three checkpoints;
+    # - an offset and the two sync committees;
+    # - the latest block hash, two withdrawal indices and an offset.
     committee = preset["SYNC_COMMITTEE_SIZE"] * 48 + 48
     start_at = processed_at + 8 + 8 + 32 * preset["EPOCHS_PER_HISTORICAL_VECTOR"]
     start_at += 8 * preset["EPOCHS_PER_SLASHINGS_VECTOR"] + 8 + 1 + 3 * 40 + 4
