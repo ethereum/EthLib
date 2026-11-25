@@ -51,7 +51,7 @@ instance {preset : Preset} {fork : Fork}
       · simp [DataColumnSidecar.names, sinceNames, untilNames, SszFields.descs, before,
           not_lt_glamsterdam before],
      by simp [DataColumnSidecar.names],
-     firstDuplicate_of_nodup _ DataColumnSidecar.names_nodup⟩
+     DataColumnSidecar.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 instance : LawfulSszType MatrixEntry := .container (by decide) (fun _ => rfl) (fun _ => rfl)
@@ -158,7 +158,7 @@ instance {preset : Preset} {fork : Fork}
       · simp [PartialDataColumnSidecar.names, untilNames, SszFields.descs, before]
       · simp [PartialDataColumnSidecar.names, untilNames, SszFields.descs, before],
      by simp [PartialDataColumnSidecar.names],
-     firstDuplicate_of_nodup _ PartialDataColumnSidecar.names_nodup⟩
+     PartialDataColumnSidecar.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 instance {preset : Preset} {fork : Fork} :
@@ -180,7 +180,7 @@ instance {fork : Fork} : LawfulSszType (PartialDataColumnGroupID fork) :=
       · simp [PartialDataColumnGroupID.names, sinceNames, SszFields.descs,
           not_lt_glamsterdam before],
      by simp [PartialDataColumnGroupID.names],
-     firstDuplicate_of_nodup _ PartialDataColumnGroupID.names_nodup⟩
+     PartialDataColumnGroupID.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 /-- Before Gloas, the version byte of a group ID is 0. -/

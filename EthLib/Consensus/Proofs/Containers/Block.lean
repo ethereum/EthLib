@@ -225,7 +225,7 @@ instance : LawfulSszType (BeaconBlockBody preset fork) :=
           altair, bellatrix, capella, deneb, electra, gloas, heze, not_lt_of_switch,
           lt_of_not_switch],
      by simp [BeaconBlockBody.names],
-     firstDuplicate_of_nodup _ BeaconBlockBody.names_nodup⟩
+     BeaconBlockBody.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 instance : LawfulSszType (BeaconBlock preset fork) :=

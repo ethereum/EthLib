@@ -54,7 +54,7 @@ instance [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] :
       by_cases electra : Fork.pectra ≤ fork <;>
         simp [Attestation.names, sinceNames, SszFields.descs, electra],
      by simp [Attestation.names],
-     firstDuplicate_of_nodup _ Attestation.names_nodup⟩
+     Attestation.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 -- From Gloas the progressive layout holds every field, so it is lawful too.

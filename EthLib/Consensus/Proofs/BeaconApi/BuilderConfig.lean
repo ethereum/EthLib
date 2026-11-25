@@ -32,8 +32,8 @@ private theorem ofValues_pair {α β : Type} [SszType α] [SszFields β] (a : α
 
 /-- The SSZ type of a builder entry is well formed. -/
 theorem BuilderEntry.wellFormed : (desc BuilderEntry).wellFormed = .ok () := by
-  have names : firstDuplicate ["url", "auth", "builder_pubkeys", "max_execution_payment",
-      "min_bid", "builder_boost_factor"] = none := by decide
+  have names : ["url", "auth", "builder_pubkeys", "max_execution_payment",
+      "min_bid", "builder_boost_factor"].Nodup := by decide
   have tail := LawfulSszFields.allWellFormed
     (β := SignedBuilderRequestAuth × SszList BLSPubkey MAX_BUILDER_PUBKEYS × Gwei × Gwei × UInt64)
   simp [desc, SszFields.descs, Desc.wellFormed, MAX_BUILDER_URL_SIZE, names,
@@ -76,7 +76,7 @@ theorem BuilderEntry.ofValue_toValue (entry : BuilderEntry) :
 
 /-- The SSZ type of a builder configuration is well formed. -/
 theorem BuilderConfig.wellFormed : (desc BuilderConfig).wellFormed = .ok () := by
-  have names : firstDuplicate ["min_bid", "builder_boost_factor", "builders"] = none := by
+  have names : ["min_bid", "builder_boost_factor", "builders"].Nodup := by
     decide
   have entry := BuilderEntry.wellFormed
   show (Desc.container ["min_bid", "builder_boost_factor", "builders"]

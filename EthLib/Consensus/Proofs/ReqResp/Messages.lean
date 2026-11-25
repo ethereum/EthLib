@@ -163,7 +163,7 @@ instance {fork : Fork} : LawfulSszType (Status fork) :=
   .container
     ⟨by by_cases fulu : Fork.fusaka ≤ fork <;> simp [sinceNames, SszFields.descs, fulu],
      by simp,
-     firstDuplicate_of_nodup _ (Status.names_nodup fork)⟩
+     Status.names_nodup fork⟩
     (fun _ => rfl) (fun _ => rfl)
 
 /-- The field names of the metadata are distinct at every fork. -/
@@ -185,7 +185,7 @@ instance {config : Config} {fork : Fork} [NeZero config.ATTESTATION_SUBNET_COUNT
       by_cases altair : Fork.altair ≤ fork <;> by_cases fulu : Fork.fusaka ≤ fork <;>
         simp [sinceNames, SszFields.descs, altair, fulu],
      by simp,
-     firstDuplicate_of_nodup _ (MetaData.names_nodup fork)⟩
+     MetaData.names_nodup fork⟩
     (fun _ => rfl) (fun _ => rfl)
 
 -- The requests of the protocols are lawful SSZ containers at every fork.

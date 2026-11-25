@@ -222,7 +222,7 @@ instance : LawfulSszType (BeaconState preset fork) :=
         simp [BeaconState.names, sinceNames, untilNames, duringNames, SszFields.descs, altair,
           bellatrix, capella, electra, fulu, gloas, heze, not_lt_of_switch, lt_of_not_switch],
      by simp [BeaconState.names],
-     firstDuplicate_of_nodup _ BeaconState.names_nodup⟩
+     BeaconState.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 end EthLib.Consensus

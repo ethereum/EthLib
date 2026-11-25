@@ -47,11 +47,12 @@ instance : LawfulSszType (SubmitBlockRequest preset fork) :=
         simp [SubmitBlockRequest.names, duringNames, SszFields.descs, deneb, electra, gloas,
           not_lt_of_switch, lt_of_not_switch],
      by simp [SubmitBlockRequest.names],
-     firstDuplicate_of_nodup _ SubmitBlockRequest.names_nodup⟩
+     SubmitBlockRequest.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 instance : LawfulSszType (BuilderSubmitNewBlockRequest preset fork) :=
-  .container ⟨rfl, by simp [BuilderSubmitNewBlockRequest.names], rfl⟩
+  .container ⟨rfl, by simp [BuilderSubmitNewBlockRequest.names],
+    by simp [BuilderSubmitNewBlockRequest.names]⟩
     (fun _ => rfl) (fun _ => rfl)
 
 end EthLib.Consensus

@@ -84,16 +84,6 @@ theorem zip_pairwise {α β : Type} (right : List β) :
       intro pair member same
       exact distinct.1 ((show a = pair.1 from same) ▸ (List.of_mem_zip member).1)
 
-/-- A declaration that reported no repeated name has none. -/
-theorem nodup_of_firstDuplicate {α : Type} [BEq α] [LawfulBEq α] :
-    ∀ (items : List α), firstDuplicate items = none → items.Nodup
-  | [], _ => by simp
-  | item :: rest, none? => by
-    rw [firstDuplicate] at none?
-    split at none?
-    · contradiction
-    · next fresh => exact List.nodup_cons.mpr ⟨by simpa using fresh, nodup_of_firstDuplicate rest none?⟩
-
 /-- The part written under one name is read back under that name. -/
 theorem getObjVal?_zip {names : List String} {parts : List Json} (distinct : names.Nodup)
     {offset : Nat} {name : String} {part : Json}
@@ -410,7 +400,7 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
           reduceCtorEq] at wrote
       subst wrote
       obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_container sound))
-        (nodup_of_firstDuplicate names once) counted paired each parts
+        once counted paired each parts
       rw [Base.Toolchain.Json.mkObj_eq, valueOf]
       simp only [Base.Toolchain.Json.mkObj_eq] at undeclared read
       simp only [undeclared, read, Bind.bind, Except.bind]
@@ -426,7 +416,7 @@ theorem valueOf_jsonOf : ∀ (shape : Desc), shape.wellFormed = .ok () → Rewri
           reduceCtorEq] at wrote
       subst wrote
       obtain ⟨undeclared, read⟩ := valueOf_struct (ih (wellFormed_progressiveContainer sound))
-        (nodup_of_firstDuplicate names once) counted paired each parts
+        once counted paired each parts
       rw [Base.Toolchain.Json.mkObj_eq, valueOf]
       simp only [Base.Toolchain.Json.mkObj_eq] at undeclared read
       simp only [undeclared, read, Bind.bind, Except.bind]

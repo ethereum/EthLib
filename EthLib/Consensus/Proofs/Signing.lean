@@ -109,7 +109,7 @@ theorem computeSigningRoot_eq_hashTreeRoot {α : Type} [SszType α] [LawfulSszTy
 /-- The signing type is well formed exactly when the type of the object is. -/
 theorem wellFormed_signingShape_iff (shape : Desc) :
     (signingShape shape).wellFormed = .ok () ↔ shape.wellFormed = .ok () := by
-  have distinct : firstDuplicate ["object_root", "domain"] = none := by decide
+  have distinct : ["object_root", "domain"].Nodup := by decide
   rw [signingShape, wellFormed_container_iff]
   cases sound : shape.wellFormed <;>
     simp [sound, distinct, Desc.allWellFormed, Desc.wellFormed, bind, Except.bind]

@@ -126,10 +126,13 @@ theorem BeaconState.nodeRoot_nextSyncCommittee
       ((SszType.hashTreeRoot_ok_iff (α := Rooted (SyncCommittee preset))).mp rooted)
     cases fork
     all_goals try exact absurd altair (by decide)
+    -- The kind of the container is read off its shape first, so no legality check is evaluated.
     all_goals first
-      | exact PathSelects.containerField (LawfulSszType.wellFormed (α := type_of% state))
+      | show PathSelects (.container _ _) _ _ _
+        exact PathSelects.containerField (LawfulSszType.wellFormed (α := type_of% state))
           (LawfulSszType.fits state) rfl rfl inner
-      | exact PathSelects.progressiveField (LawfulSszType.wellFormed (α := type_of% state))
+      | show PathSelects (.progressiveContainer _ _ _) _ _ _
+        exact PathSelects.progressiveField (LawfulSszType.wellFormed (α := type_of% state))
           (LawfulSszType.fits state) rfl rfl inner
   exact selected.nodeRoot_eq (lightClientGindices_eq altair).2.2
 
@@ -151,10 +154,13 @@ theorem BeaconState.nodeRoot_currentSyncCommittee
       ((SszType.hashTreeRoot_ok_iff (α := Rooted (SyncCommittee preset))).mp rooted)
     cases fork
     all_goals try exact absurd altair (by decide)
+    -- The kind of the container is read off its shape first, so no legality check is evaluated.
     all_goals first
-      | exact PathSelects.containerField (LawfulSszType.wellFormed (α := type_of% state))
+      | show PathSelects (.container _ _) _ _ _
+        exact PathSelects.containerField (LawfulSszType.wellFormed (α := type_of% state))
           (LawfulSszType.fits state) rfl rfl inner
-      | exact PathSelects.progressiveField (LawfulSszType.wellFormed (α := type_of% state))
+      | show PathSelects (.progressiveContainer _ _ _) _ _ _
+        exact PathSelects.progressiveField (LawfulSszType.wellFormed (α := type_of% state))
           (LawfulSszType.fits state) rfl rfl inner
   exact selected.nodeRoot_eq (lightClientGindices_eq altair).2.1
 
@@ -181,10 +187,13 @@ theorem BeaconState.nodeRoot_finalizedCheckpoint_root
       ⟨state.finalizedCheckpoint.root.toArray⟩ := by
     cases fork
     all_goals try exact absurd altair (by decide)
+    -- The kind of the container is read off its shape first, so no legality check is evaluated.
     all_goals first
-      | exact PathSelects.containerField (LawfulSszType.wellFormed (α := type_of% state))
+      | show PathSelects (.container _ _) _ _ _
+        exact PathSelects.containerField (LawfulSszType.wellFormed (α := type_of% state))
           (LawfulSszType.fits state) rfl rfl checkpoint
-      | exact PathSelects.progressiveField (LawfulSszType.wellFormed (α := type_of% state))
+      | show PathSelects (.progressiveContainer _ _ _) _ _ _
+        exact PathSelects.progressiveField (LawfulSszType.wellFormed (α := type_of% state))
           (LawfulSszType.fits state) rfl rfl checkpoint
   exact selected.nodeRoot_eq (lightClientGindices_eq altair).1
 
@@ -389,7 +398,7 @@ instance : LawfulSszType (LightClientHeader preset fork) :=
           simp [LightClientHeader.names, sinceNames, duringNames, SszFields.descs, capella,
             gloas, early],
      by simp [LightClientHeader.names],
-     firstDuplicate_of_nodup _ LightClientHeader.names_nodup⟩
+     LightClientHeader.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
 instance : NeZero (Nat.log2 (currentSyncCommitteeGindex fork)) :=
