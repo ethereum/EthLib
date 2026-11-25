@@ -51,9 +51,10 @@ def chainOf (config : PyValue) (state : ByteArray)
     ((recent.mapM (recentOf config)).mapError fun (_, m) => UnreadArgument.mk m)
   return ⟨config, pre, recent⟩
 
-/-- The accounts of a state, as the list of entries of the state root export. -/
-def accountsItem (state : Execution.State.State) : Item :=
-  .list (state.accounts.toList.map fun (address, account) => stateEntryItem state address account)
+/-- The accounts of a state as entries of the state root export, or the error of a missing code. -/
+def accountsItem (state : Execution.State.State) : Except Execution.State.StateError Item :=
+  .list <$> state.accounts.toList.mapM fun (address, account) =>
+    stateEntryItem state address account
 
 /-- A block from the name of its fork and its RLP form, with its transactions decoded.
 
@@ -87,7 +88,9 @@ def stateTransitionOf
   -- A block that fails a check comes back as the code and the message of its block error.
   let post ← toResult none (stateTransition chain block checkSeal)
   let root ← State.Exports.rootOf post
-  toResult none ((encode (Item.list [Codec.toItem root, accountsItem post])).mapError
+  -- An account whose code the state after the block lacks fails with the code of its state error.
+  let accounts ← toResult none (accountsItem post)
+  toResult none ((encode (Item.list [Codec.toItem root, accounts])).mapError
     fun e => UnreadArgument.mk s!"result: {reprStr e}")
 
 /-- Run the state transition of a block on a chain, and give the state after it.

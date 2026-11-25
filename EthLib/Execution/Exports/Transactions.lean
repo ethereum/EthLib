@@ -253,16 +253,20 @@ def ofEnvironmentItem (fork : Fork) (chainId : UInt64) (item : Item) :
 /-- An account of a state: its address, nonce, balance, code, and storage slots with values. -/
 abbrev StateEntry := Address × Nat × U256 × ByteArray × List (Bytes32 × U256)
 
-/-- An account of a state, with its code and its storage. -/
+/-- An account of a state, with its code and its storage, or the error of a missing code. -/
 def stateEntry (state : State.State) (address : Address) (account : State.Account) :
-    StateEntry :=
-  let code := (state.code[account.codeHash]?).getD .empty
-  (address, account.nonce, account.balance, code, ((state.storage[address]?).getD ∅).toList)
+    Except State.StateError StateEntry := do
+  -- The state's own read: a code hash other than that of the empty code must have its code.
+  let code ← state.getCode account.codeHash
+  return (address, account.nonce, account.balance, code,
+    ((state.storage[address]?).getD ∅).toList)
 
-/-- An account of a state as an item: its address, nonce, balance, code and storage. -/
-def stateEntryItem (state : State.State) (address : Address) (account : State.Account) : Item :=
-  let (address, nonce, balance, code, storage) := stateEntry state address account
-  .list [Codec.toItem address, Codec.toItem nonce, Codec.toItem balance, Codec.toItem code,
+/-- An account of a state as an item, or the error of a missing code. -/
+def stateEntryItem (state : State.State) (address : Address) (account : State.Account) :
+    Except State.StateError Item := do
+  let (address, nonce, balance, code, storage) ← stateEntry state address account
+  -- The list of its address, nonce, balance, code and storage.
+  return .list [Codec.toItem address, Codec.toItem nonce, Codec.toItem balance, Codec.toItem code,
     .list (storage.map fun (key, value) => Item.list [Codec.toItem key, Codec.toItem value])]
 
 /-- What a run leaves, and the accounts of the state after it.
@@ -290,8 +294,9 @@ def runOf (args : String × UInt64 × ByteArray × ByteArray × ByteArray) : Res
   let root ← State.Exports.rootOf post
   let logs ← toResult none ((encode (Codec.toItem out.logs.toList)).mapError
     fun e => UnreadArgument.mk s!"logs: {rlpMessage e}")
-  let accounts := post.accounts.toList.map fun (address, account) =>
-    stateEntry post address account
+  -- An account whose code the state after the run lacks fails with the code of its state error.
+  let accounts ← toResult none (post.accounts.toList.mapM fun (address, account) =>
+    stateEntry post address account)
   return (root, Cryptography.Hash.Keccak.keccak256 logs, out.gasUsed, out.error.isNone, accounts)
 
 /-- Run one transaction on a state, in a block with no transaction before.

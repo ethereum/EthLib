@@ -56,10 +56,11 @@ def buildPayloadOf
   -- The transactions are in the form of an execution payload.
   let ⟨_, built⟩ ← toResult none
     (buildPayloadOnChain chain version decoded ⟨feeRecipient, extraData, target⟩ txs)
+  -- An account whose code the state after the block lacks fails with the code of its state error.
+  let accounts ← toResult none (Execution.Blocks.Exports.accountsItem built.state)
   let encoded : Except BlockError (ByteArray × ByteArray) := do
     let block ← (Block.encode (← bodyItems built.block)).mapError .encoding
-    let accounts ← (Serialization.Rlp.encode
-      (Execution.Blocks.Exports.accountsItem built.state)).mapError .encoding
+    let accounts ← (Serialization.Rlp.encode accounts).mapError .encoding
     return (block, accounts)
   -- A result with no encoding has code 0.
   let (block, accounts) ← toResult none
