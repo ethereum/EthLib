@@ -429,7 +429,7 @@ def payloadAttributesOfVersion (version : Nat) (j : Json) :
 
 They come from [EIP-8070][eip8070].
 
-[eip8070]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8070.md#engine-api-extensions
+[eip8070]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-8070.md#engine-api-extensions
 -/
 def custodyColumnsOfJson : Json → Decode (Option (Vector UInt8 16))
   -- Version 4, parameter 3: `null` when the consensus layer gives no custody set.
