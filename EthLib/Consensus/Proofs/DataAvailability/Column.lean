@@ -183,6 +183,18 @@ instance {fork : Fork} : LawfulSszType (PartialDataColumnGroupID fork) :=
      firstDuplicate_of_nodup _ PartialDataColumnGroupID.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
+/-- Before Gloas, the version byte of a group ID is 0. -/
+theorem PartialDataColumnGroupID.version_of_lt_glamsterdam {fork : Fork}
+    (before : fork < .glamsterdam) :
+    PartialDataColumnGroupID.version fork = 0 := by
+  simp [PartialDataColumnGroupID.version, before]
+
+/-- From Gloas, the version byte of a group ID is 1. -/
+theorem PartialDataColumnGroupID.version_of_glamsterdam_le {fork : Fork}
+    (after : .glamsterdam ≤ fork) :
+    PartialDataColumnGroupID.version fork = 1 := by
+  simp [PartialDataColumnGroupID.version, show ¬fork < .glamsterdam from Nat.not_lt.mpr after]
+
 /-- Reading back the group ID of a group gives that group. -/
 theorem PartialDataColumnGroupID.ofGroupId_toGroupId {fork : Fork}
     {group : PartialDataColumnGroupID fork} {bytes : ByteArray}
@@ -195,17 +207,20 @@ theorem PartialDataColumnGroupID.ofGroupId_toGroupId {fork : Fork}
     simp only [hs, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
     subst h
     have hd := Serialization.Ssz.SszType.deserialize_serialize hs
-    have he : (ByteArray.mk #[0] ++ data).extract 1 (ByteArray.mk #[0] ++ data).size = data := by
+    have he : (ByteArray.mk #[PartialDataColumnGroupID.version fork] ++ data).extract 1
+        (ByteArray.mk #[PartialDataColumnGroupID.version fork] ++ data).size = data := by
       apply ByteArray.ext
       simp [ByteArray.data_append, ByteArray.data_extract]
-    have hc : (ByteArray.mk #[0] ++ data).data[0]? = some 0 := by simp [ByteArray.data_append]
+    have hc : (ByteArray.mk #[PartialDataColumnGroupID.version fork] ++ data).data[0]? =
+        some (PartialDataColumnGroupID.version fork) := by
+      simp [ByteArray.data_append]
     unfold PartialDataColumnGroupID.ofGroupId
     simp only [hc, ↓reduceIte, he, hd]
     rfl
 
-/-- A group ID whose first byte is not the version 0 names no group. -/
+/-- A group ID whose first byte is not the version of the fork names no group. -/
 theorem PartialDataColumnGroupID.ofGroupId_version {fork : Fork} {bytes : ByteArray}
-    (h : bytes.data[0]? ≠ some 0) :
+    (h : bytes.data[0]? ≠ some (PartialDataColumnGroupID.version fork)) :
     PartialDataColumnGroupID.ofGroupId fork bytes = none := by
   simp [PartialDataColumnGroupID.ofGroupId, h]
 
