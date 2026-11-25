@@ -9,7 +9,7 @@ public import EthLib.Base.Proofs.Json
 
 Reading what the writer wrote gives the configuration back, when a file can hold it whole.
 
-A file holds mainnet and Hoodi whole.
+A file holds mainnet, Hoodi and Sepolia whole.
 
 After a file is read, the blob schedule at a block is the latest entry that the block reached.
 
@@ -561,6 +561,14 @@ theorem writable_hoodi : Writable ChainConfig.hoodi := by
   simp [ChainConfig.hoodi] at h
   rcases h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
     decide
+
+/-- A file holds Sepolia whole, since Sepolia sets no blob schedule of its own. -/
+theorem writable_sepolia : Writable ChainConfig.sepolia := by
+  refine ⟨by decide, ?_, by simp [ChainConfig.sepolia], by simp [ChainConfig.sepolia]⟩
+  intro f t h
+  simp [ChainConfig.sepolia] at h
+  rcases h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+    ⟨rfl, rfl⟩ <;> decide
 
 /-- After a file is read, the blob schedule at a block is the latest entry that the block reached.
 

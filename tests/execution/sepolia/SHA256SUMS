@@ -1,0 +1,5 @@
+# Source: eth-clients/sepolia at 7b1b9d9549787b6bbf538f943304c4cf84f7e39e
+# Source: The Sepolia header with the TERMINAL_BLOCK_HASH of config.yaml, read from the chain
+53dbfc53e5039b6937851dbb53709a80532e0aa22450067d0d87bad544251458  config.yaml
+d558a75ef48e6fdb224b063c84c309de8a55995e263db63515b79ad4432a37df  genesis.json
+5a5b4a0aa27ce68ccd1ec0559469b72803773b786d7b4c400927ffe17c7d45cd  terminal_header.rlp

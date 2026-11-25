@@ -14,6 +14,16 @@ eth_hoodi_active_fork(
 );
 
 extern lean_object*
+eth_sepolia_active_fork(
+  lean_object* args
+);
+
+extern lean_object*
+eth_chain_config(
+  lean_object* args
+);
+
+extern lean_object*
 eth_active_fork(
   lean_object* args
 );
@@ -44,6 +54,22 @@ py_hoodi_active_fork(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_hoodi_active_fork, args, 2, CHAIN_ERROR);
+}
+
+PyObject*
+py_sepolia_active_fork(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_sepolia_active_fork, args, 2, CHAIN_ERROR);
+}
+
+PyObject*
+py_chain_config(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_chain_config, args, 1, CHAIN_ERROR);
 }
 
 PyObject*

@@ -581,6 +581,16 @@ checked = "the file holds the header, body and receipts of mainnet block 1942658
 cases = ["**"]
 generator = "go-ethereum default genesis"
 
+[[directories."tests/execution/sepolia"]]
+cases = ["genesis.json", "config.yaml"]
+generator = "not established"
+checked = "the configuration files of Sepolia, written by its maintainers; the tests compare the fork times of genesis.json with the meta EIPs, and the fork hashes they give with EIP-7607, and the files record no generating tool"
+
+[[directories."tests/execution/sepolia"]]
+cases = ["terminal_header.rlp"]
+generator = "not established"
+checked = "the header of Sepolia block 1450408, read from the chain; the tests check that its keccak256 is the TERMINAL_BLOCK_HASH of config.yaml"
+
 [[directories."tests/execution/precompiles"]]
 cases = ["prague/**", "msm_up_to_8_pairs.json"]
 generator = "bls12-381-tests eip-2537 branch"

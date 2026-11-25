@@ -164,6 +164,7 @@ commit = "8cad4805e9cb5aa5e8e74d30e3f5029a7f133372"
 
 [repositories."eth-clients/sepolia"]
 commit = "7b1b9d9549787b6bbf538f943304c4cf84f7e39e"
+directories = ["tests/execution/sepolia"]
 
 [repositories."ethereum/ssz-specs"]
 commit = "7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70"
@@ -293,6 +294,7 @@ sha256 = "f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]
+"tests/execution/sepolia" = "The Sepolia header with the TERMINAL_BLOCK_HASH of config.yaml, read from the chain"
 "tests/cryptography/keystore" = "Unicode Character Database 16.0.0, UnicodeData.txt and NormalizationTest.txt"
 "tests/cryptography/hash_to_curve" = "RFC 9380, Appendices J.10.1, K.1 and K.2"
 "tests/cryptography/keccak" = "KeccakKAT-3.zip of the Keccak team, and the digest of abc"

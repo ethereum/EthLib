@@ -1343,6 +1343,8 @@ static PyMethodDef methods[] = {
   {"state_rewards_root", py_state_rewards_root, METH_VARARGS, DOC_state_rewards_root},
   {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},
   {"hoodi_active_fork", py_hoodi_active_fork, METH_VARARGS, DOC_hoodi_active_fork},
+  {"sepolia_active_fork", py_sepolia_active_fork, METH_VARARGS, DOC_sepolia_active_fork},
+  {"chain_config", py_chain_config, METH_VARARGS, DOC_chain_config},
   {"active_fork", py_active_fork, METH_VARARGS, DOC_active_fork},
   {"execution_blob_schedule", py_execution_blob_schedule, METH_VARARGS,
     DOC_execution_blob_schedule},

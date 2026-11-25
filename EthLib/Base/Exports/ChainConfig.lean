@@ -11,7 +11,9 @@ public import Lean.Data.Json
 
 The C exports of the active fork of a chain, for the Python bindings.
 
-Mainnet and Hoodi have an export each, and any other chain passes its configuration.
+Mainnet, Hoodi and Sepolia have an export each, and any other chain passes its configuration.
+
+The configuration of each of these three also crosses as a `dict`.
 -/
 
 public section
@@ -44,6 +46,18 @@ def hoodiActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
 The arguments are the block number and the timestamp. -/
 @[export eth_hoodi_active_fork]
 def hoodiActiveForkExport (args : PyValue) : Result PyValue := pyExport hoodiActiveForkOf args
+
+/-- The name of the active fork of Sepolia at a block, if a fork is active. -/
+def sepoliaActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
+  let (number, timestamp) := args
+  pure ((sepolia.activeFork number.toNat timestamp.toNat).map (·.name))
+
+/-- The name of the active fork of Sepolia at a block, or `None` when none is active.
+
+The arguments are the block number and the timestamp. -/
+@[export eth_sepolia_active_fork]
+def sepoliaActiveForkExport (args : PyValue) : Result PyValue :=
+  pyExport sepoliaActiveForkOf args
 
 open Lean (Json)
 
@@ -129,6 +143,44 @@ def configOfJson (j : Json) : Result ChainConfig := do
     | _ => rejectArgument none "config: blobSchedules is not an array"
   return { chainId := UInt64.ofNat chainId, depositContractAddress := depositContractAddress,
             activations := activations, blobSchedules := schedules }
+
+/-- The configuration of a chain that EthLib holds, by its name. -/
+def namedConfigOf : String → Result ChainConfig
+  | "mainnet" => pure mainnet
+  | "hoodi" => pure hoodi
+  | "sepolia" => pure sepolia
+  -- No error type covers an unknown name, so it has code 0 and a message.
+  | name => rejectArgument none s!"no chain is named {name}"
+
+/-- An activation as the reader of a configuration takes it: its kind, then its number. -/
+def activationJson : Activation → List Json
+  | .block n => [.str "block", Lean.toJson n]
+  | .time t => [.str "time", Lean.toJson t]
+
+/-- A configuration as the JSON that the reader of a configuration takes. -/
+def configJsonOf (config : ChainConfig) : Json :=
+  Json.mkObj [
+    ("chainId", Lean.toJson config.chainId.toNat),
+    -- The address is `0x` and forty lowercase hex digits.
+    ("depositContractAddress", .str (hexString config.depositContractAddress.toList)),
+    -- Each activation is its fork's name, its kind and its number.
+    ("activations", .arr (config.activations.map fun (fork, a) =>
+      Json.arr (.str fork.name :: activationJson a).toArray).toArray),
+    -- Each schedule is its fork's name if it has one, its activation and its three numbers.
+    ("blobSchedules", .arr (config.blobSchedules.map fun (fork, a, s) =>
+      Json.arr ((fork.map fun f => Json.str f.name).toList ++ activationJson a ++
+        [Lean.toJson s.target.toNat, Lean.toJson s.max.toNat,
+          Lean.toJson s.baseFeeUpdateFraction]).toArray).toArray)]
+
+/-- The configuration of a chain that EthLib holds, as a `dict`. -/
+def chainConfigValue (name : String) : Result PyValue := do
+  return .ofJson (configJsonOf (← namedConfigOf name))
+
+/-- The configuration of a chain that EthLib holds, as a `dict`.
+
+The argument is the name of the chain: `mainnet`, `hoodi` or `sepolia`. -/
+@[export eth_chain_config]
+def chainConfigExport (args : PyValue) : Result PyValue := pyExport chainConfigValue args
 
 /-- The name of the active fork of a configured chain at a block, if a fork is active.
 

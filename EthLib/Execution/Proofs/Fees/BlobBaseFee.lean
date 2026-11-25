@@ -425,7 +425,7 @@ theorem calcExcessBlobGas_mono_used (parentExcessBlobGas parentBaseFeePerGas : N
 
 /-! ## The blob schedule of a chain
 
-A chain that sets no blob schedule of its own, as mainnet and Hoodi, has the forks' schedules.
+A chain with no blob schedule of its own, as mainnet, Hoodi and Sepolia, has the forks' schedules.
 -/
 
 /-- A chain that sets no blob schedule at a block gives the block the schedule of its fork. -/
@@ -450,5 +450,10 @@ theorem chainBlobSchedule_mainnet (number timestamp : Nat) :
 theorem chainBlobSchedule_hoodi (number timestamp : Nat) :
     chainBlobSchedule ChainConfig.hoodi fork number timestamp = blobSchedule fork :=
   chainBlobSchedule_of_none (ChainConfig.hoodi_blobScheduleAt number timestamp)
+
+/-- Every block of Sepolia has the blob schedule of its fork. -/
+theorem chainBlobSchedule_sepolia (number timestamp : Nat) :
+    chainBlobSchedule ChainConfig.sepolia fork number timestamp = blobSchedule fork :=
+  chainBlobSchedule_of_none (ChainConfig.sepolia_blobScheduleAt number timestamp)
 
 end EthLib.Execution.Fees.BlobBaseFee
