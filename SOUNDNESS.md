@@ -121,13 +121,14 @@ The constants are proved upper bounds on the calls of key generation, of one sig
 With `r <= 2^32`, `Unforgeability.advantage_le_lifetime` gives `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
 `Unforgeability.stronglyUnforgeable` (same file) charges the signer's calls nothing.
-It states the generic predicate of strong unforgeability with at most `2^32` requests, a slack of `2^19 + 1` and 127 bits.
-So it bounds a forgery by `(qH + 2^19 + 1) / 2^127`, just above `2^-108` for an adversary that makes no call of `H`.
+It states the generic predicate of strong unforgeability with at most `2^32` requests, a slack of `530` and 127 bits.
+So it bounds a forgery by `(qH + 530) / 2^127`, just above `2^-118` for an adversary that makes no call of `H`.
 The model's two lanes charge the signer's calls nothing.
 Only the two seed guesses count the whole game's calls.
 When the bound is below one, the bound on `r` keeps that count at most `2^128`.
-The constant `2^19 + 1` covers the slack of the proof's two lanes and the two seed guesses.
-The slack holds the verification and the probes of one forgery.
+Over `2^128`, lane 1 charges `qH + 674`: the verification's `384` calls and the `290` probes of one forgery.
+Lane 2 charges `qH + 384`, since the verification's encoding queries and structural queries are disjoint and together at most its `384` calls.
+With one unit for each seed guess, the sum is `2 qH + 1060` over `2^128`, that is `(qH + 530) / 2^127`.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.

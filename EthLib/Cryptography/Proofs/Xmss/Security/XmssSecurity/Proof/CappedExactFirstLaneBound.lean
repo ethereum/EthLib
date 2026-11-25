@@ -2259,45 +2259,46 @@ theorem sourceWinningExactFirstLane_probability_le_of_adversaryBound
     _ ≤ _ := public_eager_enforcedHit_probability_le fuel adversary
 
 open Ghost in
-/-- Lane 1's bound, charging only the adversary's own hash queries.
+/-- Lane 1's bound, charging only the adversary's own hash queries and constants.
 
-The verification's `384` queries and the forgery probes fit in the lane's slack. -/
-theorem hasExactFirstLaneBound_of_adversaryBound
+The constants are the verification's `384` calls and the `290` probes of one forgery. -/
+theorem cappedExactFirstLane_probability_le_of_adversaryBound
     (q : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q) :
-    HasExactFirstLaneBound q adversary := by
-  unfold HasExactFirstLaneBound
+    Pr{let x ← cappedDetailedGameWithEncodingTrace adversary}[
+        WinningExactFirstLaneBadEventOccurs x] ≤
+      ((q + 384 + forgeryProbeCount : Nat) : ENNReal) /
+        ((2 ^ digestBits : Nat) : ENNReal) := by
   rw [cappedExactFirstLane_probability_eq_sourceGlobalExact]
-  refine (sourceWinningExactFirstLane_probability_le_of_adversaryBound q adversary hadv).trans ?_
-  have hslack : 384 + forgeryProbeCount ≤ firstLaneSlack := by
-    simp [forgeryProbeCount, firstLaneSlack, numChains, chainLength, winternitzBits]
-  exact ENNReal.div_le_div_right (Nat.cast_le.2 (by omega)) _
+  exact sourceWinningExactFirstLane_probability_le_of_adversaryBound q adversary hadv
 
 open Ghost in
 /-- **The concrete scheme's forgery bound, charging only the adversary's own hash queries.**
 
 The adversary makes at most `q` hash queries, whatever its signing requests.
 
-A forgery then has probability at most `(2q + 2^20) / 2^128`. -/
+A forgery then has probability at most `(2q + 1058) / 2^128`. -/
 theorem capped_forgeAdvantage_le_of_adversaryBound
     (q : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q) :
     forgeAdvantage Concrete.scheme adversary ≤
-      ((2 * q + lowerOrderSlack : Nat) : ENNReal) / ((2 ^ 128 : Nat) : ENNReal) := by
+      ((2 * q + 1058 : Nat) : ENNReal) / ((2 ^ 128 : Nat) : ENNReal) := by
   by_cases hq : q < 2 ^ 127
   · refine (capped_forgeAdvantage_le_exactFirstLane_add_secondLane adversary).trans
-      ((add_le_add (hasExactFirstLaneBound_of_adversaryBound q adversary hadv)
+      ((add_le_add (cappedExactFirstLane_probability_le_of_adversaryBound q adversary hadv)
         (hasSecondLaneBound_of_adversaryBound q adversary hadv hq)).trans ?_)
-    -- Lane 1 charges `q + 2^19`, lane 2 charges `q + 384`, and the sum fits `2q + 2^20`.
+    -- Lane 1 charges the verification's `384` calls and the `58 + 58 * 4 = 290` probes.
+    --
+    -- Lane 2 charges the verification's `384` calls, so the two lanes sum to `2q + 1058`.
     rw [← ENNReal.add_div]
     apply ENNReal.div_le_div _ (by norm_num [digestBits])
-    exact_mod_cast (show q + firstLaneSlack + (q + 384) ≤ 2 * q + lowerOrderSlack by
-      simp only [firstLaneSlack, lowerOrderSlack]; omega)
+    exact_mod_cast (show q + 384 + forgeryProbeCount + (q + 384) ≤ 2 * q + 1058 by
+      simp only [forgeryProbeCount, numChains, chainLength, winternitzBits]; omega)
   · -- From `2^127` queries on, the bound is at least one.
     refine (prEvent_le_one _).trans ?_
     rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (ENNReal.natCast_ne_top _)),
       one_mul]
-    exact_mod_cast (show 2 ^ 128 ≤ 2 * q + lowerOrderSlack by omega)
+    exact_mod_cast (show 2 ^ 128 ≤ 2 * q + 1058 by omega)
 
 theorem hasExactFirstLaneBounds : HasExactFirstLaneBounds := by
   intro q adversary hbound

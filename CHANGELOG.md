@@ -69,7 +69,7 @@ Not yet released.
 - In Lean, `DirectSafety.twoRunsForgeAdvantage_le_coCdhAdvantage` (`Consensus/Proofs/DirectSafety/SignedForgery.lean`) bounds a forged header call of two runs against `n` honest keys by `n * q` times a co-CDH solver ([#3433](https://github.com/ethereum/EthLib/issues/3433)).
   `Security.multiByteForgeAdvantage_le_coCdhAdvantage` (`Cryptography/Proofs/Bls/Security/MultiKeyBytes.lean`) carries the BLS bound against `n` keys to EthLib's bytes.
   `DirectSafety.exists_wins_of_not_bls_verifySoundOn` shows that a failure of the assumption on the header calls of signed direct safety is a winning call.
-- In Lean, `Xmss.Unforgeability.forgeAdvantage_le_ownQueries` (`Cryptography/Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) bounds an XMSS forgery by `(qH + 2^19 + 1) / 2^127` ([#3373](https://github.com/ethereum/EthLib/issues/3373)).
+- In Lean, `Xmss.Unforgeability.stronglyUnforgeable` (`Cryptography/Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) bounds an XMSS forgery by `(qH + 530) / 2^127` ([#3373](https://github.com/ethereum/EthLib/issues/3373)).
   The forger makes at most `qH` calls of `H` and at most `2^32` signing requests, and the requests cost nothing in the bound.
   `XmssSecurity.Bridge.realGame_le_model` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/Proof/Bridge/Security.lean`) now holds the hops from the real game to the model's game, and `realGame_security` keeps its statement.
 - In Lean, `BeaconApi.dutiesResponse_proposer_error_code_of_run` (`Consensus/Proofs/BeaconApi/DutiesReachable.lean`) classifies the failures of a proposer answer ([#3585](https://github.com/ethereum/EthLib/issues/3585)).
@@ -1090,6 +1090,12 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, the strong unforgeability of leanXMSS for the adversary's own hash calls has the slack `530`, down from `2^19 + 1` ([#4712](https://github.com/ethereum/EthLib/pull/4712)).
+  `Xmss.Unforgeability.stronglyUnforgeable` (`Cryptography/Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) states `SufCma.StronglyUnforgeable scheme (SufCma.randomOracleModel HashSpec) (2 ^ LOG_LIFETIME) 530 127`.
+  - `XmssSecurity.CappedChain.capped_forgeAdvantage_le_of_adversaryBound` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/Proof/CappedExactFirstLaneBound.lean`) bounds the model by `(2q + 1058) / 2^128`, down from `(2q + 2^20) / 2^128`.
+  - `XmssSecurity.CappedChain.cappedExactFirstLane_probability_le_of_adversaryBound` (same file) bounds lane 1 by `(q + 384 + forgeryProbeCount) / 2^128`.
+    It replaces `XmssSecurity.CappedChain.hasExactFirstLaneBound_of_adversaryBound`, which stated the weaker `q + 2^19`.
 
 - In Lean, lane 2 of the leanXMSS security proof charges the final verification once, not twice ([#4710](https://github.com/ethereum/EthLib/pull/4710)).
   Its bound for the adversary's own hash calls drops from `q + 768` to `q + 384` over `2^128`.
