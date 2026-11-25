@@ -35,7 +35,7 @@ theorem seenKeys_contains_eq_false {keys : Std.TreeSet ValidatorIndex} {index : 
 section VoluntaryExit
 
 variable {signed : SignedVoluntaryExit} {future : Bool} {validator : Validator}
-  {eligible : Epoch} {valid : Bool}
+  {eligible : Epoch} {pending : Gwei} {valid : Bool}
 
 /-- An exit whose validator has a valid exit already is ignored. -/
 theorem validateVoluntaryExit_of_seen
@@ -69,12 +69,14 @@ theorem validateVoluntaryExit_of_missing
 
 /-- The outcome of an exit is its chain of checks, in order.
 
-This holds once the clock, the head state, the eligible epoch and the signature are computed. -/
+It holds once the clock, head state, eligible epoch, pending balance and signature are computed.
+-/
 theorem validateVoluntaryExit_eq
     (clock : store.isFutureEpoch config signed.message.epoch currentTimeMs = .ok future)
     (head : store.headState config = .ok state)
     (found : state.validators.data[signed.message.validatorIndex.toNat]? = some validator)
     (sum : addChecked validator.activationEpoch config.SHARD_COMMITTEE_PERIOD = .ok eligible)
+    (owed : pendingBalanceToWithdraw state signed.message.validatorIndex = .ok pending)
     (signature : isValidVoluntaryExitSignature config checks state validator.pubkey signed =
       .ok valid) :
     validateVoluntaryExit config checks seen store signed currentTimeMs =
@@ -87,28 +89,35 @@ theorem validateVoluntaryExit_eq
           "validator is not active").andThen fun _ =>
         (rejectUnless (decide (eligible ≤ getCurrentEpoch state))
           "validator has not been active long enough").andThen fun _ =>
+        (ignoreUnless (pending == 0) "validator has pending partial withdrawals").andThen fun _ =>
         rejectUnless valid "invalid voluntary exit signature") := by
   unfold validateVoluntaryExit
-  simp only [clock, head, found, sum, signature, bind, Except.bind, pure, Except.pure,
+  simp only [clock, head, found, sum, owed, signature, bind, Except.bind, pure, Except.pure,
     Except.mapError,
     ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
     apply_ite (Except.ok (ε := ForkChoiceError))]
 
-/-- Once its inputs are computed, an exit is ignored exactly in three cases.
+/-- Once its inputs are computed, an exit is ignored exactly in four cases.
 
-Its validator has a valid exit already, its epoch is in the future, or its validator exits. -/
+Its validator has a valid exit already, its epoch is in the future, or its validator exits.
+
+Or its validator is active and has been active long enough, but has a pending partial withdrawal.
+-/
 theorem validateVoluntaryExit_ignored
     (clock : store.isFutureEpoch config signed.message.epoch currentTimeMs = .ok future)
     (head : store.headState config = .ok state)
     (found : state.validators.data[signed.message.validatorIndex.toNat]? = some validator)
     (sum : addChecked validator.activationEpoch config.SHARD_COMMITTEE_PERIOD = .ok eligible)
+    (owed : pendingBalanceToWithdraw state signed.message.validatorIndex = .ok pending)
     (signature : isValidVoluntaryExitSignature config checks state validator.pubkey signed =
       .ok valid) :
     (∃ reason, validateVoluntaryExit config checks seen store signed currentTimeMs =
         .ok (.ignore reason)) ↔
       signed.message.validatorIndex ∈ seen.voluntaryExitIndices ∨
-        future = true ∨ validator.exitEpoch ≠ FAR_FUTURE_EPOCH := by
-  rw [validateVoluntaryExit_eq clock head found sum signature]
+        future = true ∨ validator.exitEpoch ≠ FAR_FUTURE_EPOCH ∨
+        (isActiveValidator validator (getCurrentEpoch state) = true ∧
+          eligible ≤ getCurrentEpoch state ∧ pending ≠ 0) := by
+  rw [validateVoluntaryExit_eq clock head found sum owed signature]
   simp only [Except.ok.injEq, ignoreUnless_andThen, rejectUnless_andThen]
   repeat' split
   all_goals simp_all [seenKeys_contains_eq_false, UInt64.le_iff_toNat_le]
@@ -120,14 +129,15 @@ theorem validateVoluntaryExit_eq_accept
     (head : store.headState config = .ok state)
     (found : state.validators.data[signed.message.validatorIndex.toNat]? = some validator)
     (sum : addChecked validator.activationEpoch config.SHARD_COMMITTEE_PERIOD = .ok eligible)
+    (owed : pendingBalanceToWithdraw state signed.message.validatorIndex = .ok pending)
     (signature : isValidVoluntaryExitSignature config checks state validator.pubkey signed =
       .ok valid) :
     validateVoluntaryExit config checks seen store signed currentTimeMs = .ok accept ↔
       signed.message.validatorIndex ∉ seen.voluntaryExitIndices ∧
         future = false ∧ validator.exitEpoch = FAR_FUTURE_EPOCH ∧
         isActiveValidator validator (getCurrentEpoch state) = true ∧
-        eligible ≤ getCurrentEpoch state ∧ valid = true := by
-  rw [validateVoluntaryExit_eq clock head found sum signature]
+        eligible ≤ getCurrentEpoch state ∧ pending = 0 ∧ valid = true := by
+  rw [validateVoluntaryExit_eq clock head found sum owed signature]
   simp only [Except.ok.injEq, ignoreUnless_andThen, rejectUnless_andThen]
   repeat' split
   all_goals simp_all [seenKeys_contains_eq_false, UInt64.le_iff_toNat_le]

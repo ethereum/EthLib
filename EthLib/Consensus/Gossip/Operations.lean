@@ -212,6 +212,11 @@ def validateVoluntaryExit (config : Config) (checks : SignatureChecks) (seen : S
     (addChecked validator.activationEpoch config.SHARD_COMMITTEE_PERIOD).mapError .arith
   (rejectUnless (eligible ≤ epoch) "validator has not been active long enough").andThenM
     fun _ => do
+  -- IGNORE when the validator has a pending partial withdrawal, from Electra.
+  --
+  -- The block would reject the exit.
+  let pending ← (pendingBalanceToWithdraw state index).mapError .accessor
+  (ignoreUnless (pending == 0) "validator has pending partial withdrawals").andThenM fun _ => do
   -- REJECT unless the validator signed the exit.
   let valid ← isValidVoluntaryExitSignature config checks state validator.pubkey signed
   return rejectUnless valid "invalid voluntary exit signature"
