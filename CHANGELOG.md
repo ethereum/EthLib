@@ -1093,6 +1093,7 @@ Not yet released.
   The Fulu specification also says that the limit of each blob schedule entry is at most `MAX_BLOB_COMMITMENTS_PER_BLOCK`.
   The readers took such a configuration, and of two blob schedule entries at one epoch the first in the list set the limit.
   So a replacement that moves `FULU_FORK_EPOCH` of mainnet past epoch 412672, the first entry of its schedule, now fails unless it also replaces `BLOB_SCHEDULE`.
+  Likewise, while `GLOAS_FORK_EPOCH` is in the far future, a `GAS_LIMIT_SCHEDULE` entry at an earlier epoch now fails for every export that reads a configuration.
   In Lean, `Config.blobScheduleValid` and `Config.gasLimitScheduleValid` in `EthLib.Consensus.ForkSchedule` are the checks.
   `blobScheduleValid_iff` and `gasLimitScheduleValid_iff` in `EthLib.Consensus.Proofs.ForkSchedule` state the rules that each accepts.
   `getBlobParameters_perm` states that a blob schedule with distinct epochs gives the same limits in any order.
