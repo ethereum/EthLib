@@ -1046,6 +1046,16 @@ Not yet released.
   - `Quic.Tls.uniqueExtensions` and `Quic.Tls.repeatedKind` unfold to the scan, not to `eraseDups` and a recursion.
     `Quic.Tls.uniqueExtensions_eq_true_iff`, `Quic.Tls.repeatedKind_nil` and `Quic.Tls.repeatedKind_cons` (`Networking/Proofs/Quic/Tls/Messages.lean`) state their old meaning; rewrite with them where a proof unfolded the old bodies.
   - The certificate reader of `Libp2p.Tls` matches on the scan instead of checking `List.Nodup` on the OIDs; `Proofs.Libp2p.Tls.nodup_iff_nodup_bytes` (`Networking/Proofs/Libp2p/Tls.lean`) relates the two.
+- In Lean, `Rpc.Tracer.record` (`Execution/Rpc/Trace.lean`) updates the slots it has seen only when the configuration prints the storage ([#4510](https://github.com/ethereum/EthLib/pull/4510)).
+  - Unfolding it now gives a test of `disableStorage` before the seen slots are updated; the entries and the refunds of every trace are unchanged.
+    `record_slots_of_disableStorage` and `record_logs_of_disableStorage` (`Execution/Proofs/Rpc/Trace.lean`) state what holds with the storage disabled, and `record_slots_of_stepError` keeps its statement.
+- In Lean, the RLPx frame reader reads each frame at an offset of the input, so a stream costs time linear in its size ([#4502](https://github.com/ethereum/EthLib/pull/4502)).
+  - `Rlpx.readFrameAt` (`Networking/Rlpx/Frame.lean`) is new: it reads the frame that starts at an offset and gives the offset after it.
+    `Rlpx.readFrame` is now `readFrameAt` at offset 0, and cuts the bytes after the frame with one copy; unfolding it gives `readFrameAt`.
+    `readFrame_eq` (`Networking/Proofs/Rlpx/Frame.lean`) states the old body on the input's list of bytes; rewrite with it where a proof unfolded `readFrame`.
+    `readFrameAt_eq` relates the reader at an offset to `readFrame` on the bytes from there; `readFrame_eq_ok` and `readFrame_writeFrame` keep their statements.
+  - `Rlpx.Exports.readFrames` (`Networking/Exports/Rlpx.lean`) takes the offset to start from as a fourth argument.
+    `readFrames_zero` and `readFrames_succ`, in the new module `Networking/Proofs/Exports/Rlpx.lean`, give its old equations at offset 0, and `readFrames_extract` relates an offset to the bytes from it.
 - In Lean, `ByteOrder.ofBE` (`Base/ByteOrder.lean`) reads seven bytes at a time, and gives the same number on every list ([#4492](https://github.com/ethereum/EthLib/pull/4492)).
   - Unfolding it now gives `ofBE.go`, not the fold of Horner's rule.
     `ByteOrder.ofBE_eq_foldl` states the old fold; rewrite with it where a proof unfolded `ofBE`.
