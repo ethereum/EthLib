@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ErrorsMeet
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
 
@@ -24,59 +25,7 @@ open EthLib.Execution.Transactions (Transaction checkInclusion processTransactio
 
 variable {fork : Fork}
 
-/-! ## Results whose errors meet a property
-
-A sequence, a map and a change of error keep that, so a proof follows the steps of a definition.
--/
-
-/-- Whether every failure of a result meets a property. -/
-def ErrorsMeet {α : Type} (P : BlockError → Prop) (r : Except BlockError α) : Prop :=
-  ∀ e, r = .error e → P e
-
-/-- A success has no failure. -/
-theorem ErrorsMeet.ok {α : Type} {P : BlockError → Prop} (a : α) :
-    ErrorsMeet P (.ok a : Except BlockError α) :=
-  fun _ h => by cases h
-
-/-- A pure result has no failure. -/
-theorem ErrorsMeet.pure {α : Type} {P : BlockError → Prop} (a : α) :
-    ErrorsMeet P (Pure.pure a : Except BlockError α) :=
-  fun _ h => by cases h
-
-/-- A failure with an error that meets the property meets it. -/
-theorem ErrorsMeet.error {α : Type} {P : BlockError → Prop} {e : BlockError} (h : P e) :
-    ErrorsMeet P (.error e : Except BlockError α) :=
-  fun _ he => by cases he; exact h
-
-/-- A throw of an error that meets the property meets it. -/
-theorem ErrorsMeet.throw {α : Type} {P : BlockError → Prop} {e : BlockError} (h : P e) :
-    ErrorsMeet P (MonadExcept.throw e : Except BlockError α) :=
-  fun _ he => by cases he; exact h
-
-/-- A sequence meets the property when its first part does, and its rest after it. -/
-theorem ErrorsMeet.bind {α β : Type} {P : BlockError → Prop} {x : Except BlockError α}
-    {f : α → Except BlockError β} (hx : ErrorsMeet P x)
-    (hf : ∀ a, x = .ok a → ErrorsMeet P (f a)) : ErrorsMeet P (x >>= f) := by
-  intro e h
-  rcases Base.bind_eq_error h with h | ⟨a, ha, h⟩
-  · exact hx e h
-  · exact hf a ha e h
-
-/-- A map of a result that meets the property meets it. -/
-theorem ErrorsMeet.map {α β : Type} {P : BlockError → Prop} {x : Except BlockError α}
-    (f : α → β) (hx : ErrorsMeet P x) : ErrorsMeet P (f <$> x) := by
-  intro e h
-  cases hx' : x with
-  | error e' => rw [hx'] at h; cases h; exact hx e hx'
-  | ok a => rw [hx'] at h; cases h
-
-/-- A change of error meets the property when each changed failure does. -/
-theorem ErrorsMeet.mapError {ε α : Type} {P : BlockError → Prop} {x : Except ε α}
-    {f : ε → BlockError} (hf : ∀ e, x = .error e → P (f e)) : ErrorsMeet P (x.mapError f) := by
-  intro e h
-  cases hx : x with
-  | error e' => rw [hx] at h; cases h; exact hf e' hx
-  | ok a => rw [hx] at h; cases h
+/-! ## Results whose errors meet a property -/
 
 /-- An abort meets the property when each of its errors does, as an abort. -/
 theorem ErrorsMeet.aborted {α : Type} {P : BlockError → Prop} {x : Except EvmError α}

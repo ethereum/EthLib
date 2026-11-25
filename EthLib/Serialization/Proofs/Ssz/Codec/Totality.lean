@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ErrorsMeet
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 
@@ -9,18 +10,12 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 
 namespace EthLib.Serialization.Ssz
 
-private def OnlyOverflow {α : Type} (result : Except Err α) : Prop :=
-  ∀ fault, result = .error fault → ∃ size,
-    fault = .offsetOverflow size ∧ 2 ^ (8 * bytesPerOffset) ≤ size
+open EthLib.Base (ErrorsMeet)
 
-private theorem overflow_bind {α β : Type} {first : Except Err α}
-    {next : α → Except Err β} (head : OnlyOverflow first)
-    (tail : ∀ value, first = .ok value → OnlyOverflow (next value)) :
-    OnlyOverflow (first >>= next) := by
-  -- A chain either propagates its first failure or returns the continuation's result.
-  cases step : first with
-  | error fault => simpa [OnlyOverflow, step, Bind.bind, Except.bind] using head
-  | ok value => simpa [Bind.bind, Except.bind] using tail value step
+/-- The result fails only with an encoding of `2^32` bytes or more, which no offset holds. -/
+private abbrev OnlyOverflow {α : Type} (result : Except Err α) : Prop :=
+  ErrorsMeet (fun fault => ∃ size, fault = .offsetOverflow size ∧ 2 ^ (8 * bytesPerOffset) ≤ size)
+    result
 
 private theorem overflow_assemble (inline : List Bool) (parts : List Bytes) :
     OnlyOverflow (assemble inline parts) := by
@@ -44,10 +39,10 @@ private theorem overflow_each {element : Desc} : ∀ values,
     intro each
     rw [serializeEach_cons]
     -- First account for a failure in the current element.
-    apply overflow_bind (each value List.mem_cons_self)
+    apply ErrorsMeet.bind (each value List.mem_cons_self)
     intro head _
     -- The remaining elements satisfy the same restriction by induction.
-    apply overflow_bind (ih (fun item member => each item (List.mem_cons_of_mem _ member)))
+    apply ErrorsMeet.bind (ih (fun item member => each item (List.mem_cons_of_mem _ member)))
     -- Combining successful element encodings introduces no new failure.
     intro tail _ fault failed
     cases failed
@@ -58,7 +53,7 @@ private theorem overflow_sequence {element : Desc} {values : List Value}
   -- Element failures propagate.
   -- Assembly adds only its own offset-range check.
   rw [serializeSequence]
-  exact overflow_bind (overflow_each values each) fun parts _ => overflow_assemble _ parts
+  exact ErrorsMeet.bind (overflow_each values each) fun parts _ => overflow_assemble _ parts
 
 private theorem overflow_fields : ∀ fields values,
     fields.length = values.length →
@@ -78,10 +73,10 @@ private theorem overflow_fields : ∀ fields values,
     | cons value values =>
       rw [serializeFields_cons]
       -- A field can fail only through the overflow already established for its own encoding.
-      apply overflow_bind (each (field, value) List.mem_cons_self)
+      apply ErrorsMeet.bind (each (field, value) List.mem_cons_self)
       intro head _
       -- The remaining paired fields inherit the same property.
-      apply overflow_bind (ih values (by simpa using paired)
+      apply ErrorsMeet.bind (ih values (by simpa using paired)
         (fun pair member => each pair (List.mem_cons_of_mem _ member)))
       -- Returning the completed list of field encodings cannot introduce an error.
       intro tail _ fault failed
@@ -94,7 +89,7 @@ private theorem overflow_struct {fields : List Desc} {values : List Value}
   -- A container first encodes its fields, then assembles their fixed entries and offset table.
   rw [serializeStruct]
   -- Once every field succeeds, only the total composite size can prevent assembly.
-  exact overflow_bind (overflow_fields fields values paired each) fun parts _ =>
+  exact ErrorsMeet.bind (overflow_fields fields values paired each) fun parts _ =>
     overflow_assemble _ parts
 
 private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits shape value) :
@@ -134,7 +129,7 @@ private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits sha
   | compatibleUnion ranged named _ ih =>
     simp only [serialize, named, checkSelector_of_range ranged, Bind.bind, Except.bind]
     -- A union propagates its selected payload failure.
-    apply overflow_bind ih
+    apply ErrorsMeet.bind ih
     -- Adding the selector byte to a successful payload creates no offset table.
     intro body _ fault failed
     cases failed

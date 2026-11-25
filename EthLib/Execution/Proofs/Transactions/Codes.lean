@@ -293,10 +293,6 @@ private theorem allCodes_runTransaction [LawfulGasMeter Meter] {env : BlockEnvir
 
 /-! ## No missing code -/
 
-/-- The result is not a failure for a missing code. -/
-private def NoMiss {α : Type} (r : Except EvmError α) : Prop :=
-  ∀ c, r ≠ .error (.state (.missingCode c))
-
 /-- The result is not a failure for a missing code, whatever state comes with the error. -/
 private def NoMissRead {α : Type} (r : Except (EvmError × TransactionState) α) : Prop :=
   ∀ c read, r ≠ .error (.state (.missingCode c), read)
@@ -305,7 +301,7 @@ private def NoMissRead {α : Type} (r : Except (EvmError × TransactionState) α
 private theorem noMiss_chargeAuthorization [LawfulGasMeter Meter] {done : Delegations Meter}
     {authority : Address} {auth : Authorization} (available : HasPreCodes done.state) :
     NoMiss (chargeAuthorization done authority auth) := by
-  intro c h
+  rintro _ h c rfl
   obtain ⟨code, hcode⟩ := available authority
   unfold chargeAuthorization at h
   simp only [hcode] at h
@@ -321,11 +317,11 @@ private theorem noMiss_chargeAuthorization [LawfulGasMeter Meter] {done : Delega
 private theorem noMiss_payAuthorization [LawfulGasMeter Meter] {done : Delegations Meter}
     {authority : Address} {auth : Authorization} (available : AllCodes done.state) :
     NoMiss (payAuthorization fork done authority auth) := by
-  intro c h
+  rintro _ h c rfl
   unfold payAuthorization at h
   split at h
   · rcases Base.bind_eq_error h with h | ⟨a, -, h⟩
-    · exact noMiss_chargeAuthorization available.2 c h
+    · exact noMiss_chargeAuthorization available.2 _ h c rfl
     · cases h
   · cases h
 
@@ -354,7 +350,7 @@ private theorem noMissRead_applyAuthorization [LawfulGasMeter Meter] {chainId : 
         · rcases Base.bind_eq_error h with h | ⟨d, -, h⟩
           · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
             cases hee
-            refine noMiss_payAuthorization ?_ c he
+            refine noMiss_payAuthorization ?_ _ he c rfl
             exact v
           · rcases Base.bind_eq_error h with h | ⟨⟨s, r⟩, -, h⟩
             · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
@@ -451,7 +447,7 @@ private theorem noMiss_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} (available : AllCodes state) :
     NoMiss (processMessageCall (Meter := Meter) chainId message state substate auths paid) := by
-  intro c h
+  rintro _ h c rfl
   rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
@@ -510,7 +506,7 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
     {block : BlockState} {included : Included} {tx : Transaction}
     (available : HasCodes (TransactionState.ofBlock block)) :
     NoMiss (runTransaction Meter env block included tx) := by
-  intro c h
+  rintro _ h c rfl
   rw [runTransaction_unfold] at h
   rcases Base.bind_eq_error h with h | ⟨target, -, h⟩
   · unfold messageTarget at h
@@ -537,7 +533,7 @@ private theorem noMiss_runTransaction [LawfulGasMeter Meter] {env : BlockEnviron
       cases h
     · cases h
   rcases Base.bind_eq_error h with h | ⟨output, hOutput, h⟩
-  · exact noMiss_processMessageCall vb c h
+  · exact noMiss_processMessageCall vb _ h c rfl
   rcases Base.bind_eq_error h with h | ⟨⟨settled, used⟩, -, h⟩
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
@@ -574,7 +570,7 @@ theorem processMessageCall_ne_missingCode [LawfulGasMeter Meter] {chainId : Nat}
     (available : HasCodes (TransactionState.ofBlock block)) (codeHash : Hash32) :
     processMessageCall (Meter := Meter) chainId message (.ofBlock block) substate auths paid ≠
       .error (.state (.missingCode codeHash)) :=
-  noMiss_processMessageCall (allCodes_ofBlock available) codeHash
+  fun h => noMiss_processMessageCall (allCodes_ofBlock available) _ h codeHash rfl
 
 end
 
@@ -604,8 +600,8 @@ theorem processTransaction_ne_missingCode {fork : Fork} {env : BlockEnvironment 
   split
   · nofun
   split
-  · exact noMiss_runTransaction available codeHash
-  · exact noMiss_runTransaction available codeHash
+  · exact fun h => noMiss_runTransaction available _ h codeHash rfl
+  · exact fun h => noMiss_runTransaction available _ h codeHash rfl
 
 /-- A failed check fails with its own error. -/
 private theorem failIf_eq_error {condition : Bool} {error error' : InclusionError}
