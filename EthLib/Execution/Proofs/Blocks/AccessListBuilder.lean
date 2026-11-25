@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Blocks.AccessListBuilder
 public import EthLib.Execution.Proofs.Blocks.BlockAccessList
 public import EthLib.Base.Proofs.U256
+import EthLib.Base.Proofs.List
 
 /-!
 # Proofs: the builder of a block access list
@@ -57,11 +58,6 @@ theorem pairwise_lt_positions {β γ : Type} (m : Std.ExtTreeMap UInt32 β) (f :
 theorem fromBeBytes_toNat_injective :
     Function.Injective fun key : Bytes32 => (U256.fromBeBytes key).toNat :=
   fun _ _ h => U256.fromBeBytes_injective (BitVec.eq_of_toNat_eq h)
-
-/-- An injective function keeps the elements of a list distinct. -/
-theorem nodup_map_of_injective {α β : Type} {f : α → β} (inj : Function.Injective f)
-    {l : List α} (h : l.Nodup) : (l.map f).Nodup :=
-  List.Pairwise.map f (fun _ _ hne heq => hne (inj heq)) h
 
 /-- The keys of a part of the entries of a map are distinct. -/
 theorem nodup_keys_filter {β : Type} (m : Std.ExtTreeMap Bytes32 β) (p : Bytes32 × β → Bool) :

@@ -1065,6 +1065,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, seven lemmas about lists move from the trie proofs (`Execution/Proofs/Trie/Order.lean`) to `Base/Proofs/List.lean`, with the same statements ([#4648](https://github.com/ethereum/EthLib/pull/4648)).
+  - `Trie.le_foldl_min_iff`, `Trie.foldl_min_perm`, `Trie.foldl_last`, `Trie.eq_of_perm_of_length_le_one`, `Trie.length_le_one_of_nodup`, `Trie.nodup_of_map` and `Trie.nodup_map_of_injective` are now in `Base`.
+  - `Blocks.nodup_map_of_injective` (`Execution/Proofs/Blocks/AccessListBuilder.lean`) is removed, since it stated the same fact as `Base.nodup_map_of_injective`.
+  Migration: open `EthLib.Base` and import `EthLib.Base.Proofs.List`.
 - In Lean, whether every failure of a result meets a property is one predicate, `Base.ErrorsMeet` (`Base/Proofs/ErrorsMeet.lean`), for any error type ([#4630](https://github.com/ethereum/EthLib/pull/4630)).
   - `Blocks.ErrorsMeet` (`Execution/Proofs/Blocks/Failures.lean`) and its lemmas `ok`, `pure`, `error`, `throw`, `bind`, `map` and `mapError` move to `Base.ErrorsMeet`, with the same bodies.
     `ErrorsMeet.aborted`, `ErrorsMeet.onBlock` and `errorsMeet_firstFailure` stay in `Blocks`, and every theorem keeps its statement.
