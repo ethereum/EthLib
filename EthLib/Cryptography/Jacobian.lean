@@ -158,19 +158,34 @@ It stops once no bit of `k` is left, so a small scalar costs only its own bits. 
     let rest := mulBits a fuel (k / 2) (double a p)
     if k % 2 = 1 then add a p rest else rest
 
-/-- `k P + l Q`, for `k, l < 2^fuel`, with one chain of doublings for both, high bits first.
+/-- One chain of doublings for two products, high bits first, from bit `s` of each scalar.
+
+When `kb` and `lb` read the bits of `k` and `l`, with `k, l < 2^(s + fuel)`, it is the sum below.
+
+That sum is `(k / 2^s) P + (l / 2^s) Q`.
 
 `pq` is `P + Q`, which each pair of bits that are both `1` adds at once.
 
 It recurses on `fuel`, so the kernel can run it. -/
-@[specialize] def mulAddAux (a : F) (p q pq : Coords F) : Nat → Nat → Nat → Coords F
-  | 0, _, _ => infinity
-  | fuel + 1, k, l =>
-    -- `k P + l Q = 2 ((k / 2) P + (l / 2) Q) + (k mod 2) P + (l mod 2) Q`.
-    let acc := double a (mulAddAux a p q pq fuel (k / 2) (l / 2))
-    if k % 2 = 1 then
-      if l % 2 = 1 then add a acc pq else add a acc p
-    else if l % 2 = 1 then add a acc q else acc
+@[specialize] def mulAddBits (a : F) (p q pq : Coords F) (kb lb : Nat → Bool) :
+    Nat → Nat → Coords F
+  | 0, _ => infinity
+  | fuel + 1, s =>
+    -- `k P + l Q = 2 ((k / 2) P + (l / 2) Q) + (k mod 2) P + (l mod 2) Q`, at bit `s`.
+    --
+    -- The chain reads bit `s` instead of halving the scalars.
+    --
+    -- A scalar in fixed words then needs no new big integer at each step.
+    let acc := double a (mulAddBits a p q pq kb lb fuel (s + 1))
+    if kb s then
+      if lb s then add a acc pq else add a acc p
+    else if lb s then add a acc q else acc
+
+/-- `k P + l Q`, for `k, l < 2^fuel`, with one chain of doublings for both, high bits first.
+
+`pq` is `P + Q`, which each pair of bits that are both `1` adds at once. -/
+@[specialize] def mulAddAux (a : F) (p q pq : Coords F) (fuel k l : Nat) : Coords F :=
+  mulAddBits a p q pq k.testBit l.testBit fuel 0
 
 /-- `k P + l Q`, for `k, l < 2^fuel`, by simultaneous multiple point multiplication.
 

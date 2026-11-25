@@ -95,6 +95,12 @@ theorem Raw.bit_iff (k : Raw) (s : Nat) : k.bit s = true ↔ (k.val >>> s) % 2 =
         (Nat.pow_le_pow_right (by decide) (by omega)))]
     simp only [UInt64.zero_shiftRight, UInt64.zero_and, bne_self_eq_false]
 
+/-- Reading the bits of four words is reading the bits of their value. -/
+theorem Raw.bit_eq_testBit (k : Raw) : k.bit = k.val.testBit := by
+  funext s
+  apply Bool.eq_iff_iff.mpr
+  rw [Raw.bit_iff, Nat.testBit_eq_decide_div_mod_eq, decide_eq_true_eq, Nat.shiftRight_eq_div_pow]
+
 /-! ## Four words and eight limbs -/
 
 /-- One word from two 32-bit limbs, the low one first. -/
