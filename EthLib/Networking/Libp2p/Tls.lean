@@ -395,7 +395,7 @@ def readP256 (spki : ByteArray) : Except TlsCertError EthLib.Cryptography.Secp25
     -- §2.2: the uncompressed form, 0x04, then the point on the curve, by SEC 1 v2 §2.3.4.
     --
     -- §2.2 lets an implementation support the compressed form; EthLib rejects it.
-    match EthLib.Cryptography.Secp256r1.decodeUncompressed bytes.data.toList with
+    match EthLib.Cryptography.Secp256r1.Point.decodeUncompressed bytes with
     | some point => return point
     | none => throw .publicKey
   | _ => throw .publicKey

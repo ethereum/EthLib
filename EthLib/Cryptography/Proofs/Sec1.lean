@@ -391,6 +391,11 @@ theorem validatePublicKey_eq_ok_iff {n h : Nat} {Q R : Point (Fin p)} :
       fun ⟨e, _⟩ => e ▸ rfl⟩
     exact (not_and_or.mp hsub).imp not_not.mp not_not.mp
 
+/-- With cofactor 1, validation keeps every point of the curve other than `O`. -/
+theorem validatePublicKey_one_eq_ok {n : Nat} {Q : Point (Fin p)} (hQ : Q.isOnCurve = true)
+    (hinf : Q ≠ .infinity) : validatePublicKey n 1 Q = .ok Q :=
+  validatePublicKey_eq_ok_iff.mpr ⟨rfl, hinf, hQ, Or.inl rfl⟩
+
 /-- Through a map of the field into a field, validation is §3.2.2.1 on the group of the curve.
 
 It accepts exactly the points of the curve other than `O` with `n Q = O`.
