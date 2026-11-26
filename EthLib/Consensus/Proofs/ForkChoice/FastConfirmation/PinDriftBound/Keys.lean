@@ -178,9 +178,8 @@ theorem creditScan_bounds {ι : Type} (S : Finset ι) (key : ι → ℕ)
               each e (List.mem_append_right _ (List.mem_filter.mp member).1)
                 (sub _ (by simpa using (List.mem_filter.mp member).2))
           _ = (added.map fun e => if p e.source = true then T e else 0).sum := by
-              rw [List.sum_map_ite (fun e : BalanceEvent preset => p e.source = true) T
-                (fun _ => 0)]
-              simp
+              simpa only [Bool.decide_eq_true] using
+                (Base.sum_map_ite_eq_sum_filter (fun e => p e.source = true) T added).symm
           _ ≤ _ := List.sum_le_sum fun e _ => by
               by_cases hp : p e.source = true
               · have := sub _ hp

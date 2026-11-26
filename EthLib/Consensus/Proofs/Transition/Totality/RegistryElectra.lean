@@ -490,11 +490,9 @@ private theorem exitCost_eq_exitCostAt (state : BeaconState preset fork) :
         validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1).sum =
       (validators.map (exitCostOf preset)).sum := by
     intro validators
-    induction validators with
-    | nil => rfl
-    | cons validator rest ih =>
-      by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH <;>
-        simp [far, exitCostOf, ih]
+    exact (Base.sum_map_ite_eq_sum_filter (fun v => v.exitEpoch = FAR_FUTURE_EPOCH)
+      (fun v => v.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1)
+      validators).symm
   unfold exitCost exitCostAt
   rw [filtered]
   congr 1

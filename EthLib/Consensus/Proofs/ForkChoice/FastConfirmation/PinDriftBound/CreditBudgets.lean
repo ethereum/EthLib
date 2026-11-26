@@ -1473,9 +1473,7 @@ theorem scan_le_events (blockP slotP : BalanceSource → Bool) (p : BalanceSourc
   simp only [Finset.sum_singleton] at scan
   refine scan.trans (le_of_eq ?_)
   simp only [selects]
-  rw [List.sum_map_ite (fun e : BalanceEvent preset => p e.source) (Internal.keyCredit v.toNat)
-    (fun _ => 0)]
-  simp
+  exact Base.sum_map_ite_eq_sum_filter (fun e => p e.source) (Internal.keyCredit v.toNat) events
 
 /-- The credits of a key on C's branch are its proposer credits and deposits, up to consolidations.
 
