@@ -577,32 +577,22 @@ theorem parentRoot_mem_payloadChain_iff (gloas : .glamsterdam ≤ fork) {root : 
 /-- Dropping the roots that fail a test leaves nothing when no root passes it. -/
 private theorem dropWhile_not_of_find?_eq_none {test : Root → Bool} {roots : List Root}
     (missing : roots.find? test = none) : (roots.dropWhile fun root => !test root) = [] := by
-  induction roots with
-  | nil => rfl
-  | cons root rest ih =>
-    simp only [List.find?_cons] at missing
-    split at missing
-    · cases missing
-    · rename_i failed
-      simp [failed, ih missing]
+  -- Every root fails the test, so the whole list is dropped.
+  have dropped := List.dropWhile_append_of_pos (l₂ := ([] : List Root))
+    (p := fun root => !test root) fun root member => by
+      simpa using List.find?_eq_none.mp missing root member
+  simpa using dropped
 
 /-- Dropping the roots that fail a test leaves the first root that passes it and the rest. -/
 private theorem dropWhile_not_of_find?_eq_some {test : Root → Bool} {roots : List Root}
     {first : Root} (search : roots.find? test = some first) :
     ∃ before after, roots = before ++ first :: after ∧
       (roots.dropWhile fun root => !test root) = first :: after := by
-  induction roots with
-  | nil => cases search
-  | cons root rest ih =>
-    simp only [List.find?_cons] at search
-    split at search
-    · rename_i passed
-      cases search
-      exact ⟨[], rest, rfl, by simp [passed]⟩
-    · rename_i failed
-      obtain ⟨before, after, split, dropped⟩ := ih search
-      exact ⟨root :: before, after, by rw [split, List.cons_append],
-        by simp [failed, dropped]⟩
+  -- The roots before the first passing one all fail the test, so they are dropped.
+  obtain ⟨passed, before, after, split, failed⟩ := List.find?_eq_some_iff_append.mp search
+  refine ⟨before, after, split, ?_⟩
+  rw [split, List.dropWhile_append_of_pos fun root member => by simpa using failed root member,
+    List.dropWhile_cons_of_neg (by simpa using passed)]
 
 /-- In a list without repeated roots, what follows a root is fixed by the list. -/
 private theorem suffix_eq_of_nodup {middle : Root} {before after other rest : List Root}
