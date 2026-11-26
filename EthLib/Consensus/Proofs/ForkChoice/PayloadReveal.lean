@@ -54,9 +54,8 @@ theorem shouldExtendPayload_of_timely {gloas : .glamsterdam ≤ fork} {root : Ro
   have present : store.payloadDataAvailability gloas root true = .ok true := by
     rw [payloadDataAvailability_of_verified availableFound verified]
     simpa [ptcMajority] using available
-  by_cases heze : .hegota ≤ fork <;>
-    simp [shouldExtendPayload, Store.block, found, nextOk, current, verified, heze, onTime,
-      present, Except.mapError, bind, Except.bind, pure, Except.pure, satisfied]
+  exact shouldExtendPayload_of_votes_or_no_boost found nextOk current verified satisfied onTime
+    present (.inl rfl)
 
 /-- From Gloas the walk from a node above the pending node of a block reaches that node.
 
