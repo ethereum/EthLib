@@ -41,27 +41,22 @@ private theorem foldlM_applyPendingDeposit_effectiveBalance_lt {config : Config}
       deposits.foldlM (applyPendingDeposit config checks) state = .ok after →
       (∀ validator ∈ state.validators.data, validator.effectiveBalance.toNat < bound) →
       (∀ deposit ∈ deposits, deposit.amount.toNat < bound) →
-      ∀ validator ∈ after.validators.data, validator.effectiveBalance.toNat < bound
-  | [], _, _, computed, old, _ => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact old
-  | deposit :: rest, state, after, computed, old, amounts => by
-    simp only [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨next, applied, later⟩ := computed
-    refine foldlM_applyPendingDeposit_effectiveBalance_lt later ?_
-      (fun other member => amounts other (List.mem_cons_of_mem _ member))
-    rcases applyPendingDeposit_cases applied with rfl | ⟨_, raised⟩ | ⟨_, added⟩
-    · exact old
-    · rw [increaseBalance_validators raised]
-      exact old
-    · rw [addValidatorToRegistry_validators_eq_push added]
-      intro validator member
-      rcases Array.mem_push.mp member with member | rfl
-      · exact old validator member
-      · exact Nat.lt_of_le_of_lt
-          (UInt64.le_iff_toNat_le.mp (getValidatorFromDeposit_effectiveBalance_le _ _ _))
-          (amounts deposit List.mem_cons_self)
+      ∀ validator ∈ after.validators.data, validator.effectiveBalance.toNat < bound :=
+  fun computed old amounts => foldlM_ok_invariant_of_mem
+    (fun s : BeaconState preset fork => ∀ v ∈ s.validators.data, v.effectiveBalance.toNat < bound)
+    (fun _ deposit _ member held applied => by
+      rcases applyPendingDeposit_cases applied with rfl | ⟨_, raised⟩ | ⟨_, added⟩
+      · exact held
+      · rw [increaseBalance_validators raised]
+        exact held
+      · rw [addValidatorToRegistry_validators_eq_push added]
+        intro validator member'
+        rcases Array.mem_push.mp member' with member' | rfl
+        · exact held validator member'
+        · exact Nat.lt_of_le_of_lt
+            (UInt64.le_iff_toNat_le.mp (getValidatorFromDeposit_effectiveBalance_le _ _ _))
+            (amounts deposit member))
+    old computed
 
 /-- From Electra, the pending deposits keep each effective balance below a bound.
 
