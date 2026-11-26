@@ -210,18 +210,11 @@ private theorem Rise.of_le {amount : Nat} {a b : BeaconState preset fork}
 
 /-- A fold raises the supply by at most the sum of the amounts of its steps. -/
 private theorem Rise.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
-    {amount : α → Nat} (each : ∀ a x b, step a x = .ok b → Rise (amount x) a b) :
-    ∀ {items : List α} {a b : BeaconState preset fork}, items.foldlM step a = .ok b →
-      Rise ((items.map amount).sum) a b
-  | [], a, b, computed => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact Rise.refl a
-  | x :: items, a, b, computed => by
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, first, rest⟩ := computed
-    simp only [List.map_cons, List.sum_cons]
-    exact (each _ _ _ first).trans (Rise.foldlM each rest)
+    {amount : α → Nat} (each : ∀ a x b, step a x = .ok b → Rise (amount x) a b)
+    {items : List α} {a b : BeaconState preset fork} (computed : items.foldlM step a = .ok b) :
+    Rise ((items.map amount).sum) a b := by
+  simpa using foldlM_ok_weighted (fun s c => Rise c a s) amount
+    (fun _ x _ _ held ok => held.trans (each _ x _ ok)) (c := 0) (Rise.refl a) computed
 
 /-- A fold of steps that each raise nothing raises nothing. -/
 private theorem Rise.foldlM_zero {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
@@ -1162,25 +1155,6 @@ private theorem baseAt_of_getBaseReward (altair : .altair ≤ fork)
   rw [value, UInt64.toNat_div]
   simp [baseAt, effectiveAt, found]
 
-/-- A sum grows by an offset when one term does and no other term falls. -/
-private theorem sum_range_offset {f g : Nat → Nat} {i a c : Nat} :
-    ∀ {count : Nat}, i < count → a + f i ≤ c + g i → (∀ j < count, j ≠ i → f j ≤ g j) →
-      a + ((List.range count).map f).sum ≤ c + ((List.range count).map g).sum
-  | 0, inside, _, _ => absurd inside (Nat.not_lt_zero _)
-  | count + 1, inside, here, others => by
-    simp only [List.range_succ, List.map_append, List.sum_append, List.map_cons, List.map_nil,
-      List.sum_cons, List.sum_nil]
-    by_cases last : i = count
-    · subst last
-      have below := sum_map_le_sum_map (xs := List.range i) (f := f) (g := g) fun j member =>
-        others j (by have := List.mem_range.mp member; omega)
-          (by have := List.mem_range.mp member; omega)
-      omega
-    · have below := sum_range_offset (count := count) (by omega) here
-        (fun j lt apart => others j (by omega) apart)
-      have top := others count (by omega) (Ne.symm last)
-      omega
-
 /-- Writing the flags of one position moves the flag sum by the change at that position. -/
 private theorem flagSumOf_step {base : Nat → Nat} {count : Nat}
     {p q : EpochParticipation preset fork} {i a c : Nat} {old new : ParticipationFlags}
@@ -1189,7 +1163,7 @@ private theorem flagSumOf_step {base : Nat → Nat} {count : Nat}
     (step : a + flagValue old (base i) ≤ c + flagValue new (base i)) :
     a + flagSumOf base count p ≤ c + flagSumOf base count q := by
   unfold flagSumOf
-  refine sum_range_offset inside (by simpa [oldAt, newAt] using step) fun j _ apart => ?_
+  refine add_sum_map_range_le inside (by simpa [oldAt, newAt] using step) fun j _ apart => ?_
   rw [others j apart]
 
 /-- Positions past the fixed registry add nothing to the flag sum. -/

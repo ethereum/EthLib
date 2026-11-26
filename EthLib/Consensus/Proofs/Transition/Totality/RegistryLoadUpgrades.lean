@@ -269,13 +269,12 @@ private theorem foldlM_onboardDeposit_size {validatorKeys : List Cryptography.Bl
       kept'.size ≤ kept.size + deposits.length := by
   intro deposits state after kept kept' folded
   -- Each step keeps at most one more deposit, for a weight of one per deposit read.
-  have bound := foldlM_ok_weighted
-    (fun (pair : BeaconState preset .glamsterdam × Array PendingDeposit) c =>
-      pair.2.size ≤ kept.size + c) (fun _ => 1)
-    (fun ⟨_, _⟩ _ ⟨_, _⟩ _ held step => by
+  have bound := foldlM_ok_le_add_sum
+    (fun pair : BeaconState preset .glamsterdam × Array PendingDeposit => pair.2.size) (fun _ => 1)
+    (fun ⟨_, _⟩ _ ⟨_, _⟩ step => by
       rcases onboardDeposit_cases step with ⟨-, rfl⟩ | ⟨rfl, -⟩ | ⟨-, rfl, -⟩ <;>
-        simp only [Array.size_push] at held ⊢ <;> omega)
-    (c := 0) (Nat.le_refl _) folded
+        simp only [Array.size_push] <;> omega)
+    folded
   simpa using bound
 
 /-- The onboarding of builders never raises the validators plus the pending deposits. -/

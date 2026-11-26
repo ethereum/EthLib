@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperUniqueness
+import EthLib.Base.Proofs.List
 
 /-! How many helper nodes a multiproof of several claims at one depth has to carry. -/
 
@@ -426,16 +427,6 @@ private theorem shiftSum_eq (levels value : Nat) :
     -- Halving first is one more shift on every later term.
     simp [shiftSum, ih, List.range_succ_eq_map, Function.comp_def, Nat.shiftRight_succ_inside]
 
-private theorem sum_map_add (l : List Nat) (f g : Nat → Nat) :
-    (l.map fun item => f item + g item).sum = (l.map f).sum + (l.map g).sum := by
-  induction l <;> simp_all
-  omega
-
-private theorem sum_map_le_pointwise {l : List Nat} {f g : Nat → Nat}
-    (pointwise : ∀ item ∈ l, f item ≤ g item) : (l.map f).sum ≤ (l.map g).sum := by
-  induction l <;> simp_all
-  omega
-
 private theorem shift_add_le (first last shift : Nat) (ordered : first ≤ last) :
     (last - first) >>> shift + first >>> shift ≤ last >>> shift := by
   rw [Nat.shiftRight_eq_div_pow, Nat.shiftRight_eq_div_pow, Nat.shiftRight_eq_div_pow]
@@ -560,11 +551,11 @@ theorem sharedPaths_length_ge_run {first count depth : Nat}
     have climbed := shift_add_le first (first + count - 1) shift ordered
     rw [show first + count - 1 - first = count - 1 from by omega] at climbed
     omega
-  have summed := sum_map_le_pointwise terms
+  have summed := Base.sum_map_le_sum_map terms
   have split : ((List.range depth).map fun shift => 1 + (count - 1) >>> shift).sum
       = depth + shiftSum depth (count - 1) := by
-    rw [sum_map_add (List.range depth) (fun _ => 1) (fun shift => (count - 1) >>> shift),
-      sum_map_const, List.length_range, shiftSum_eq]
+    rw [Base.sum_map_add (fun _ => 1) (fun shift => (count - 1) >>> shift), sum_map_const,
+      List.length_range, shiftSum_eq]
     omega
   have digits : digitSum (count - 1) ≤ Nat.log2 count :=
     digitSum_le_pred (Nat.log2 count) (count - 1) (by have := Nat.lt_log2_self (n := count); omega)

@@ -209,19 +209,6 @@ private theorem Moves.foldlM {α ε : Type} {step : BeaconState preset fork → 
     Moves config start ceiling 0 a b :=
   (foldlM_ok_steps (Moves config start ceiling 0) Moves.refl Moves.trans₀ each computed).1
 
-/-- A fold whose every step spends a cost of its item spends the sum of those costs. -/
-private theorem Moves.foldlM_sum {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
-    {f : α → Nat} (each : ∀ a x b, step a x = .ok b → Moves config start ceiling (f x) a b) :
-    ∀ {items : List α} {a b : BeaconState preset fork}, items.foldlM step a = .ok b →
-      Moves config start ceiling ((items.map f).sum) a b
-  | [], a, b, computed => by
-    cases computed
-    exact Moves.refl a
-  | x :: rest, a, b, computed => by
-    simp only [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, first, folded⟩ := computed
-    simpa using (each _ _ _ first).trans (Moves.foldlM_sum each folded)
-
 /-- A step that keeps the slot and the queues, and keeps each validator or appends new ones.
 
 Its new validators have not started to exit.

@@ -115,6 +115,21 @@ theorem ofNatChecked_ok_iff {n : Nat} {a : UInt64} :
 theorem toNat_toUInt64 {n : Nat} (h : n < 2 ^ 64) : n.toUInt64.toNat = n := by
   rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' h]
 
+/-- A number below the value of a 64-bit integer stays below it as a 64-bit integer. -/
+theorem toUInt64_lt_of_lt {n : Nat} {count : UInt64} (below : n < count.toNat) :
+    n.toUInt64 < count := by
+  rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64 (Nat.lt_trans below (UInt64.toNat_lt _))]
+  exact below
+
+/-- A remainder is at most the number divided. -/
+theorem mod_le (a b : UInt64) : a % b ≤ a := by
+  rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
+  exact Nat.mod_le _ _
+
+/-- Rounding down to a multiple commutes with the conversion to a natural number. -/
+theorem toNat_sub_mod (a b : UInt64) : (a - a % b).toNat = a.toNat - a.toNat % b.toNat := by
+  rw [UInt64.toNat_sub_of_le _ _ (mod_le a b), UInt64.toNat_mod]
+
 /-- Below `2^64` the conversion succeeds, and it returns the plain conversion. -/
 theorem ofNatChecked_of_lt {n : Nat} (h : n < 2 ^ 64) : ofNatChecked n = .ok n.toUInt64 :=
   ofNatChecked_ok_iff.mpr ⟨h, toNat_toUInt64 h⟩

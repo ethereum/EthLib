@@ -207,24 +207,6 @@ private theorem processEth1Data_room (before : fork < .hegota) {state : BeaconSt
 
 /-! ## The budget -/
 
-/-- A sum read in step with balances does not rise when no balance rises. -/
-private theorem sum_zipWith_max_le :
-    ∀ (items : List Validator) (low high : List UInt64), low.length = high.length →
-      (∀ i (lt : i < low.length) (lt' : i < high.length), low[i] ≤ high[i]) →
-      (items.zipWith (fun v b => max v.effectiveBalance.toNat b.toNat) low).sum ≤
-        (items.zipWith (fun v b => max v.effectiveBalance.toNat b.toNat) high).sum
-  | [], _, _, _, _ => by simp
-  | _ :: _, [], [], _, _ => by simp
-  | _ :: _, [], _ :: _, same, _ => by simp at same
-  | _ :: _, _ :: _, [], same, _ => by simp at same
-  | v :: items, l :: low, h :: high, same, le => by
-    simp only [List.zipWith_cons_cons, List.sum_cons]
-    have head := UInt64.le_iff_toNat_le.mp (le 0 (by simp) (by simp))
-    have tail := sum_zipWith_max_le items low high (by simpa using same)
-      (fun i lt lt' => le (i + 1) (by simp; omega) (by simp; omega))
-    simp only [List.getElem_cons_zero] at head
-    omega
-
 /-- A step that keeps the registry and the number of balances, and raises no balance.
 
 It does not raise the stake sum. -/
@@ -234,11 +216,15 @@ private theorem stakeSum_le {state after : BeaconState preset fork}
     (down : ∀ index, BalanceDown index state after) : stakeSum after ≤ stakeSum state := by
   unfold stakeSum
   rw [validators]
-  refine sum_zipWith_max_le _ _ _ (by simpa using sizes) fun i lt lt' => ?_
+  -- Each term after the step is at most the term before, at the same position.
+  refine List.Forall₂.sum_le_sum
+    (List.forall₂_iff_get.mpr ⟨by simp [sizes], fun i lt lt' => ?_⟩)
+  simp only [List.length_zipWith, Array.length_toList, Nat.lt_min] at lt lt'
+  simp only [List.get_eq_getElem, List.getElem_zipWith, Array.getElem_toList]
+  refine max_le_max (Nat.le_refl _) (UInt64.le_iff_toNat_le.mp ?_)
   -- The balance at the position after the step is at most the one before.
-  obtain ⟨later, found, le⟩ := down i _ (Array.getElem?_eq_getElem (by simpa using lt'))
-  simp only [Array.getElem_toList]
-  rw [Array.getElem?_eq_getElem (by simpa using lt), Option.some.injEq] at found
+  obtain ⟨later, found, le⟩ := down i _ (Array.getElem?_eq_getElem lt'.2)
+  rw [Array.getElem?_eq_getElem lt.2, Option.some.injEq] at found
   rw [found]
   exact le
 

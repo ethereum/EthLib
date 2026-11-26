@@ -476,6 +476,16 @@ theorem foldlM_ok_weighted {α β ε : Type} {g : β → α → Except ε β} (P
     have := foldlM_ok_weighted P weight step (step b x middle c holds first) rest
     simpa [Nat.add_assoc] using this
 
+/-- A successful fold raises a measure of its state by at most the summed weights of its inputs.
+
+Each successful step must raise the measure by at most the weight of its input. -/
+theorem foldlM_ok_le_add_sum {α β ε : Type} {g : β → α → Except ε β} (measure : β → Nat)
+    (weight : α → Nat) (step : ∀ b x b', g b x = .ok b' → measure b' ≤ measure b + weight x)
+    {xs : List α} {b b' : β} (computed : xs.foldlM g b = .ok b') :
+    measure b' ≤ measure b + (xs.map weight).sum := by
+  simpa using foldlM_ok_weighted (fun s c => measure s ≤ measure b + c) weight
+    (fun s x s' c held ok => by have := step s x s' ok; omega) (c := 0) (by simp) computed
+
 /-- A fold keeps a property when each step of an item of the list keeps it. -/
 theorem foldlM_ok_invariant_of_mem {g : β → α → Except ε β} (P : β → Prop) :
     ∀ {xs : List α}, (∀ b x b', x ∈ xs → P b → g b x = .ok b' → P b') →

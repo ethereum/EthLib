@@ -250,6 +250,56 @@ theorem sum_map_le_sum_map {α : Type} {f g : α → Nat} :
     simp only [List.map_cons, List.sum_cons]
     omega
 
+/-- The sum over the entries that pass a test is at most the sum over all entries. -/
+theorem sum_map_filter_le {α : Type} {test : α → Bool} {f : α → Nat} :
+    ∀ {xs : List α}, ((xs.filter test).map f).sum ≤ (xs.map f).sum
+  | [] => by simp
+  | x :: xs => by
+    have rest := sum_map_filter_le (test := test) (f := f) (xs := xs)
+    cases passes : test x <;> simp [passes] <;> omega
+
+/-- Offset sums over the first positions compare when their terms compare at one position.
+
+Each other term of the left sum must be at most the term of the right sum at its position. -/
+theorem add_sum_map_range_le {f g : Nat → Nat} {i a c : Nat} :
+    ∀ {count : Nat}, i < count → a + f i ≤ c + g i → (∀ j < count, j ≠ i → f j ≤ g j) →
+      a + ((List.range count).map f).sum ≤ c + ((List.range count).map g).sum
+  | 0, inside, _, _ => absurd inside (Nat.not_lt_zero _)
+  | count + 1, inside, here, others => by
+    simp only [List.range_succ, List.map_append, List.sum_append, List.map_cons, List.map_nil,
+      List.sum_cons, List.sum_nil]
+    by_cases last : i = count
+    · subst last
+      have below := sum_map_le_sum_map (xs := List.range i) (f := f) (g := g) fun j member =>
+        others j (by have := List.mem_range.mp member; omega)
+          (by have := List.mem_range.mp member; omega)
+      omega
+    · have below := add_sum_map_range_le (count := count) (by omega) here
+        (fun j lt apart => others j (by omega) apart)
+      have top := others count (by omega) (Ne.symm last)
+      omega
+
+/-- A sum over the positions of a list, each read with zero by default, is its sum. -/
+theorem sum_map_range_getElem? {α : Type} (f : α → Nat) :
+    ∀ xs : List α, ((List.range xs.length).map fun i => ((xs[i]?).map f).getD 0).sum =
+      (xs.map f).sum
+  | [] => by simp
+  | x :: xs => by
+    rw [List.length_cons, List.range_succ_eq_map]
+    simp only [List.map_cons, List.sum_cons, List.map_map, Function.comp_def,
+      List.getElem?_cons_zero, List.getElem?_cons_succ, Option.map_some, Option.getD_some]
+    rw [sum_map_range_getElem? f xs]
+
+/-- The sum of two terms at each entry is the sum of the two sums.
+
+Mathlib states it too, and this module imports no Mathlib. -/
+theorem sum_map_add {α : Type} (f g : α → Nat) :
+    ∀ xs : List α, (xs.map fun x => f x + g x).sum = (xs.map f).sum + (xs.map g).sum
+  | [] => rfl
+  | x :: xs => by
+    simp only [List.map_cons, List.sum_cons, sum_map_add f g xs]
+    omega
+
 /-- A factor on the left of every term comes out of the sum. -/
 theorem sum_map_mul_left {α : Type} (factor : Nat) (f : α → Nat) :
     ∀ xs : List α, (xs.map fun x => factor * f x).sum = factor * (xs.map f).sum

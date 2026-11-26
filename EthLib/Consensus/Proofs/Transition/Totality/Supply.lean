@@ -435,26 +435,6 @@ private theorem effectiveBalanceSum_applyPendingDeposit_le {config : Config}
     simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero]
     exact UInt64.le_iff_toNat_le.mp (getValidatorFromDeposit_effectiveBalance_le _ _ _)
 
-/-- Deposits applied in order raise the sum of the effective balances by at most their amounts. -/
-private theorem effectiveBalanceSum_foldlM_applyPendingDeposit_le {config : Config}
-    {checks : SignatureChecks} :
-    ∀ {deposits : List PendingDeposit} {state after : BeaconState preset fork},
-      deposits.foldlM (applyPendingDeposit config checks) state = .ok after →
-      effectiveBalanceSum after ≤ effectiveBalanceSum state + pendingAmount deposits
-  | [], _, _, computed => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    simp [pendingAmount]
-  | deposit :: rest, state, after, computed => by
-    simp only [List.foldlM_cons, bind, Except.bind] at computed
-    split at computed
-    · cases computed
-    rename_i next applied
-    have first := effectiveBalanceSum_applyPendingDeposit_le applied
-    have later := effectiveBalanceSum_foldlM_applyPendingDeposit_le computed
-    simp only [pendingAmount, List.map_cons, List.sum_cons] at later ⊢
-    omega
-
 /-- From Electra, the pending deposits do not raise the effective balances plus the pending amounts.
 
 A deposit to a known validator raises only its balance.
@@ -469,7 +449,9 @@ theorem processPendingDeposits_effectiveSupply_le {config : Config} {checks : Si
       effectiveBalanceSum state + pendingDepositSum state := by
   obtain ⟨read, rest, applied, postponed, next, pending, carried, queue, kept, _, _, _, perm,
     later, rfl⟩ := processPendingDeposits_applied computed
-  have raised := effectiveBalanceSum_foldlM_applyPendingDeposit_le later
+  -- Deposits applied in order raise the effective balances by at most their amounts.
+  have raised := foldlM_ok_le_add_sum effectiveBalanceSum (·.amount.toNat)
+    (fun _ _ _ step => effectiveBalanceSum_applyPendingDeposit_le step) later
   have amounts := (perm.map (·.amount.toNat)).sum_nat
   change effectiveBalanceSum next + pendingDepositSum { next with
     pendingDeposits := fun _ => pending, depositBalanceToConsume := fun _ => carried } ≤ _

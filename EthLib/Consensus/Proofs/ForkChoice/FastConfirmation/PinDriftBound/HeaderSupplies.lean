@@ -1606,8 +1606,9 @@ theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
       (events.map (Internal.syncDebit v)).sum := by
   unfold Internal.syncF
   rw [← Internal.sum_syncDebit_eq events v]
-  exact congrArg (· + ((events.map (Internal.syncDebit v)).sum)) (Internal.sum_map_sync events
-    (Internal.keyCredit v)).symm
+  exact congrArg (· + ((events.map (Internal.syncDebit v)).sum))
+    (Base.sum_map_ite_eq_sum_filter (fun e : BalanceEvent preset => e.source = .sync)
+      (Internal.keyCredit v) events).symm
 
 /-- The sync movement of keys on a run within a call's reach is within an envelope.
 

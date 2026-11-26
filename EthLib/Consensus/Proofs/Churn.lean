@@ -299,11 +299,8 @@ theorem getConsolidationChurnLimit_add {config : Config} {state : BeaconState pr
 /-- A balance rounded down to an increment is a whole number of increments. -/
 theorem sub_mod_mod_self (balance increment : Gwei) :
     (balance - balance % increment) % increment = 0 := by
-  have le : balance % increment ≤ balance := by
-    rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-    exact Nat.mod_le _ _
   apply UInt64.toNat_inj.mp
-  rw [UInt64.toNat_mod, UInt64.toNat_sub_of_le _ _ le, UInt64.toNat_mod]
+  rw [UInt64.toNat_mod, Base.Uint64.toNat_sub_mod]
   simpa using Nat.sub_mod_eq_zero_of_mod_eq (Nat.mod_mod _ _).symm
 
 /-- A balance rounded down to an increment and capped is whole, when the cap is whole. -/
@@ -416,9 +413,7 @@ theorem toNat_roundToIncrement (preset : Preset) (amount : Gwei) :
     (roundToIncrement preset amount).toNat =
       amount.toNat - amount.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   unfold roundToIncrement
-  rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by
-    rw [UInt64.toNat_mod]
-    exact Nat.mod_le _ _)), UInt64.toNat_mod]
+  rw [Base.Uint64.toNat_sub_mod]
 
 /-- A share of a total, raised to the least churn and rounded down to an increment, is bounded.
 

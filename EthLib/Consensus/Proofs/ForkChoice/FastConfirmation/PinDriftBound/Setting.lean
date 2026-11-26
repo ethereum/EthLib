@@ -613,18 +613,12 @@ def keyExtra (t : PinTerms preset) {x y : ForkedBeaconState preset}
   Internal.syncD eventsF i + Internal.flowK t tailC high eventsC events eventsF i cred +
     Internal.unitK t tailC high eventsC events eventsF i cred + Internal.inducedR t tail i
 
-/-- A quantity of the sync events, summed over all events with the others at zero. -/
-theorem sum_map_sync (events : List (BalanceEvent preset))
-    (k : BalanceEvent preset → ℕ) :
-    (events.map fun e => if e.source = .sync then k e else 0).sum =
-      ((events.filter (·.source = .sync)).map k).sum :=
-  Base.sum_map_ite_eq_sum_filter (fun e => e.source = .sync) k events
-
 /-- The sync debits of a key over a list of events are the debits of its sync events. -/
 theorem sum_syncDebit_eq (events : List (BalanceEvent preset)) (v : ℕ) :
     (events.map (Internal.syncDebit v)).sum =
       ((events.filter (·.source = .sync)).map (Internal.keyDebit v)).sum :=
-  Internal.sum_map_sync events (Internal.keyDebit v)
+  Base.sum_map_ite_eq_sum_filter (fun e : BalanceEvent preset => e.source = .sync)
+    (Internal.keyDebit v) events
 
 /-- The rounding band of a key is the band if the key has a sync debit, and zero otherwise. -/
 theorem bandR_eq (events : List (BalanceEvent preset)) (v : ℕ) :
@@ -870,11 +864,10 @@ private theorem slot_credit_split {g m n : ForkedBeaconState preset}
     (bounded : ∀ e ∈ events, e.credits ≤ e.creditLimit) :
     ((events.filter fun x => decide (x.source ≠ .rewards)).map (Internal.keyCredit i)).sum ≤
       ((events.filter fun x => decide (x.source = .consolidations ∨ x.source = .deposits)).map
-        (Internal.keyCredit i)).sum +
-      ((events.filter fun _ => false).map (Internal.keyCredit i)).sum + (events.map
-        (Internal.syncCredit i)).sum := by
+        (Internal.keyCredit i)).sum + (events.map (Internal.syncCredit i)).sum := by
   have each := slot_event_credit shared genesis early i replayed bounded
-  exact sum_credits_split events (Internal.keyCredit i) (Internal.syncCredit i)
+  -- No source passes the third test, so its sum is zero.
+  simpa using sum_credits_split events (Internal.keyCredit i) (Internal.syncCredit i)
     (fun s => decide (s ≠ .rewards)) (fun s => decide (s = .consolidations ∨ s = .deposits))
     (fun _ => false) (fun e m notRewards => by simpa using each e m (by simpa using notRewards))
 
@@ -1029,7 +1022,7 @@ private theorem step_gross_le_sources {g m n : ForkedBeaconState preset}
         (x.source = .rewards ∨ x.source = .slashings ∨ x.source = .sync)).map (Internal.keyCredit
           i)).sum ≤
         (events.map (Internal.keyCredit i)).sum :=
-      (((List.filter_sublist).map _).sum_le_sum fun _ _ => Nat.zero_le _)
+      Base.sum_map_filter_le
     simp only [Internal.stepNet, Internal.stepCredit, replayed, Except.toOption, Option.getD_some,
       List.filter_false, List.map_nil, List.sum_nil] at gross part split ⊢
     omega

@@ -1011,14 +1011,9 @@ private theorem ReservedReplay.source_once
 private theorem source_round_sum_le (sources : List Nat) (carrier : Finset Nat) (increment : Nat)
     (unique : sources.Nodup) :
     (sources.map fun i => if i ∈ carrier then increment else 0).sum ≤ increment * carrier.card := by
-  have exactSum : (sources.map fun i => if i ∈ carrier then increment else 0).sum =
-      increment * (sources.filter (fun i => decide (i ∈ carrier))).length := by
-    clear unique
-    induction sources with
-    | nil => simp
-    | cons i rest ih =>
-      by_cases inside : i ∈ carrier <;> simp [inside, ih, Nat.mul_add, Nat.add_comm]
-  rw [exactSum]
+  -- The sum is the increment once for each source in the carrier.
+  rw [sum_map_ite_eq_sum_filter (· ∈ carrier) (fun _ => increment), List.map_const',
+    List.sum_replicate, Nat.nsmul_eq_mul, Nat.mul_comm]
   have sub : (sources.filter (fun i => decide (i ∈ carrier))).toFinset ⊆ carrier := by
     intro i member
     exact of_decide_eq_true (List.mem_filter.mp (List.mem_toFinset.mp member)).2

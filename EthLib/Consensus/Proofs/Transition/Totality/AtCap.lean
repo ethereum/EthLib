@@ -492,12 +492,9 @@ private theorem effective_atCap (before : fork < .pectra)
       preset.MAX_EFFECTIVE_BALANCE.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
     have := congrArg UInt64.toNat aligned.1
     rwa [UInt64.toNat_mod] at this
-  have below : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance := by
-    rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-    exact Nat.mod_le _ _
   have rounded : preset.MAX_EFFECTIVE_BALANCE ≤
       balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT := by
-    rw [UInt64.le_iff_toNat_le, UInt64.toNat_sub_of_le _ _ below, UInt64.toNat_mod]
+    rw [UInt64.le_iff_toNat_le, Base.Uint64.toNat_sub_mod]
     simpa only [whole, Nat.sub_zero] using
       Base.rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat high
   have same : (if leaves = true then

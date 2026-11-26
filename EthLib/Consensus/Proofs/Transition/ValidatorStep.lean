@@ -293,9 +293,7 @@ private theorem UnassignedEligibleBalance.add {f : Fork} {s t : BeaconState pres
       change (min (amount - amount % preset.EFFECTIVE_BALANCE_INCREMENT) _).toNat ≤ amount.toNat
       rw [Uint64.toNat_min]
       apply Nat.le_trans (Nat.min_le_left _ _)
-      exact UInt64.le_iff_toNat_le.mp (UInt64.sub_le (by
-        rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-        exact Nat.mod_le _ _))
+      exact UInt64.le_iff_toNat_le.mp (UInt64.sub_le (Base.Uint64.mod_le _ _))
   · rename_i different
     obtain ⟨⟨b, read, low⟩, eligible, unslashed⟩ := held i v found pending
     exact ⟨⟨b, by simpa [balances, Array.getElem?_push, ← sizes, different] using read, low⟩,
@@ -2126,9 +2124,7 @@ private theorem preKeyCharge_add {f : Fork} {s t : BeaconState preset f}
       change (min (amount - amount % preset.EFFECTIVE_BALANCE_INCREMENT) _).toNat ≤ amount.toNat
       rw [Uint64.toNat_min]
       apply (Nat.min_le_left _ _).trans
-      exact UInt64.le_iff_toNat_le.mp (UInt64.sub_le (by
-        rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-        exact Nat.mod_le _ _))
+      exact UInt64.le_iff_toNat_le.mp (UInt64.sub_le (Base.Uint64.mod_le _ _))
     simp only [preKeyCharge, validators, balances, Array.getElem?_push,
       sizes, ↓reduceIte, Option.map_some, Option.getD_some]
     split
@@ -3797,9 +3793,8 @@ private theorem pre_effective_le {largest balance effective result : Gwei}
       max effective.toNat (min balance.toNat largest.toNat) := by
   rcases updatedEffectiveBalance_cases ok with rfl | rfl
   · exact Nat.le_refl _
-  · have remainder : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance := by
-      rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-      exact Nat.mod_le _ _
+  · have remainder : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
+      Base.Uint64.mod_le _ _
     have rounded := UInt64.le_iff_toNat_le.mp (UInt64.sub_le remainder)
     simp only [Uint64.toNat_min]
     omega

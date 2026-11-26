@@ -320,25 +320,6 @@ private theorem potential_le_of_kept {count : Nat} {a b : BeaconState preset for
   refine Nat.add_le_add_left (sum_map_le_sum_map fun j member => ?_) _
   exact unslashedAt_le kept.2.1 kept.2.2 (Nat.lt_of_lt_of_le (List.mem_range.mp member) covers)
 
-/-- A sum over the positions grows by a bonus at one position when each other term grows. -/
-private theorem sum_range_add_le {f g : Nat → Nat} {i bonus : Nat} :
-    ∀ {count : Nat}, i < count → f i + bonus ≤ g i → (∀ j < count, j ≠ i → f j ≤ g j) →
-      ((List.range count).map f).sum + bonus ≤ ((List.range count).map g).sum
-  | 0, inside, _, _ => absurd inside (Nat.not_lt_zero _)
-  | count + 1, inside, here, others => by
-    simp only [List.range_succ, List.map_append, List.sum_append, List.map_cons, List.map_nil,
-      List.sum_cons, List.sum_nil]
-    by_cases last : i = count
-    · subst last
-      have below := sum_map_le_sum_map (xs := List.range i) (f := f) (g := g) fun j member =>
-        others j (by have := List.mem_range.mp member; omega)
-          (by have := List.mem_range.mp member; omega)
-      omega
-    · have below := sum_range_add_le (count := count) (by omega) here
-        (fun j lt apart => others j (by omega) apart)
-      have top := others count (by omega) (Ne.symm last)
-      omega
-
 /-- Slashing a validator raises the slashed balances by at most its effective balance. -/
 private theorem slashedBalanceSum_slash {a b : BeaconState preset fork} {i : ValidatorIndex}
     {whistleblower : Option ValidatorIndex} (ok : slashValidator config a i whistleblower = .ok b) :
@@ -417,7 +398,10 @@ private theorem potential_slash {a b : BeaconState preset fork} {i : ValidatorIn
   have dropped : unslashedBalanceSum b a.validators.data.size + v.effectiveBalance.toNat ≤
       unslashedBalanceSum a a.validators.data.size := by
     rw [unslashedBalanceSum_eq, unslashedBalanceSum_eq]
-    refine sum_range_add_le inside ?_ fun j below _ => unslashedAt_le kept frame below
+    -- The slashed position loses its effective balance, and no other position rises.
+    refine (Nat.add_comm _ _).trans_le (Nat.le_trans (add_sum_map_range_le (c := 0) inside ?_
+      fun j below _ => unslashedAt_le kept frame below) (Nat.le_of_eq (Nat.zero_add _)))
+    rw [Nat.zero_add, Nat.add_comm]
     split at flagged <;> simp_all [unslashedAt, effectiveAt, getValidatorAt_eq_ok_iff]
   simp only [effectiveAt, found, Option.map_some, Option.getD_some] at raised
   unfold potential

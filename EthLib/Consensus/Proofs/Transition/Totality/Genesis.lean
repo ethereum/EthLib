@@ -163,9 +163,7 @@ private theorem sum_zipWith_le {α β : Type} (f : α → β → Nat) (g : β �
 /-- A value rounded down to a step and capped is at most the cap and at most the value. -/
 private theorem min_sub_mod_le (value step cap : UInt64) :
     min (value - value % step) cap ≤ cap ∧ min (value - value % step) cap ≤ value := by
-  have kept : value % step ≤ value := by
-    rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-    exact Nat.mod_le _ _
+  have kept : value % step ≤ value := Base.Uint64.mod_le _ _
   exact ⟨Std.min_le_right, UInt64.le_trans Std.min_le_left (UInt64.sub_le kept)⟩
 
 /-- Before Gloas, the activation at genesis keeps the balances, the slashed balances and the size.

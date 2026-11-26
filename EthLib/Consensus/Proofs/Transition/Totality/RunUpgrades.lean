@@ -231,9 +231,7 @@ private theorem getActivationExitChurnLimit_le {fork : Fork} {state : BeaconStat
   obtain ⟨_, ⟨total, totalOk, rfl⟩, rfl⟩ := computed
   have totalLe := (getTotalActiveBalance_bounds totalOk).2
   have remainder : ∀ amount : Gwei, amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount :=
-    fun amount => by
-      rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-      exact Nat.mod_le _ _
+    fun amount => Base.Uint64.mod_le _ _
   have share : (total / config.CHURN_LIMIT_QUOTIENT).toNat ≤ total.toNat := by
     rw [UInt64.toNat_div]
     exact Nat.div_le_self _ _

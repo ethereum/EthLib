@@ -749,10 +749,7 @@ private theorem isHeadWeak_exists {anchorState : BeaconState preset fork}
     (f := fun index => getBeaconCommittee headState block.slot index.toUInt64) fun i mem => by
       have lt := List.mem_range.mp mem
       refine getBeaconCommittee_exists seedRoom fit.lookahead (Nat.le_trans headWithin fit.registry)
-        committeeRoom fit.positive ?_
-      rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt'
-        (Nat.lt_trans lt (UInt64.toNat_lt _))]
-      exact lt
+        committeeRoom fit.positive (Base.Uint64.toUInt64_lt_of_lt lt)
   -- Each equivocating member is active in the block's state, so the justified state holds it.
   have known : ∀ v ∈ committees.flatMap Array.toList,
       store.equivocatingIndices.contains v = true → state.validators.data[v.toNat]?.isSome := by

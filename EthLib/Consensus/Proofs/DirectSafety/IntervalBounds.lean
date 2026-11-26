@@ -326,9 +326,8 @@ private theorem consolidation_rate_le {fork : Fork}
   subst churn
   have rounded : ∀ amount : Gwei, (roundToIncrement preset amount).toNat ≤ amount.toNat := by
     intro amount
-    have remainder : amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount := by
-      rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-      exact Nat.mod_le _ _
+    have remainder : amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount :=
+      Base.Uint64.mod_le _ _
     simp only [roundToIncrement, UInt64.toNat_sub_of_le _ _ remainder]
     exact Nat.sub_le _ _
   have subtract : min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT

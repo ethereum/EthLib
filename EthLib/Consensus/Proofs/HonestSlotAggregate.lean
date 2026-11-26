@@ -91,14 +91,6 @@ private theorem committeeAttesters_honest {honest : Finset ValidatorIndex}
     obtain ⟨seat, inside, rfl⟩ := Array.mem_iff_getElem.mp member
     exact ⟨seat, inside, rfl, by rw [read seat inside, decide_eq_true_iff]; exact honestMember⟩
 
-/-- A number below the value of a 64-bit count stays below it as a 64-bit number. -/
-theorem toUInt64_lt_of_lt {position : Nat} {count : UInt64}
-    (below : position < count.toNat) :
-    position.toUInt64 < count := by
-  rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq,
-    UInt64.toNat_ofNat_of_lt' (Nat.lt_trans below (UInt64.toNat_lt _))]
-  exact below
-
 /-- From Electra, committees of a slot with honest members, and bits for those members, pass.
 
 Each committee is read at its position, below the count of the slot, and has an honest member.
@@ -136,7 +128,7 @@ private theorem attestationCommitteesSize_honest (within : state.RegistryWithinL
     rw [List.length_append, List.length_ofFn] at rest'
     rw [List.map_cons, attestationCommitteesSize_cons,
       getCommitteeCountPerSlotChecked_of_within within, slotEpoch, committeeOk]
-    simp only [liftAccessor, mapError_ok_bind, ensure, toUInt64_lt_of_lt below, ↓reduceIte,
+    simp only [liftAccessor, mapError_ok_bind, ensure, Uint64.toUInt64_lt_of_lt below, ↓reduceIte,
       ok_bind, attestersOk, ne_eq, someAttester, not_false_eq_true, rest']
 
 /-- From Electra, bits for the honest members of committees of a slot show those members.
@@ -625,7 +617,7 @@ theorem honestSlotAggregate_exists_ok (electra : .pectra ≤ fork)
       obtain ⟨below, committeeOk, someSigner⟩ := good pair kept
       exact honestAttestation_exists_ok (fun before => absurd electra before) committeeOk
         (fun gloas => (sized pair kept).trans (fits gloas))
-        (fun _ => toUInt64_lt_of_lt (Nat.lt_of_lt_of_le below countBelow))
+        (fun _ => Uint64.toUInt64_lt_of_lt (Nat.lt_of_lt_of_le below countBelow))
         someSigner
   have made := List.forall₂_map_left_iff.mp (List.mapM_eq_ok_iff_forall₂.mp aggregatesOk)
   obtain ⟨domain, domained⟩ :=
@@ -912,6 +904,6 @@ theorem honestSlotAggregate_signers (electra : .pectra ≤ fork)
   obtain ⟨pair, kept, signer⟩ := signer
   obtain ⟨below, committeeOk, -⟩ := good pair kept
   obtain ⟨seated, honestMember⟩ := mem_honestSigners.mp signer
-  exact ⟨honestMember, pair.1.toUInt64, pair.2, toUInt64_lt_of_lt below, committeeOk, seated⟩
+  exact ⟨honestMember, pair.1.toUInt64, pair.2, Uint64.toUInt64_lt_of_lt below, committeeOk, seated⟩
 
 end EthLib.Consensus

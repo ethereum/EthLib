@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.Shuffle
+import EthLib.Base.Proofs.Uint64
 
 /-!
 # Proofs: the shuffle is a permutation
@@ -360,9 +361,7 @@ theorem computeCommittee_of_mem {preset : Preset} {indices : Array ValidatorInde
   have lt := List.mem_range.mp mem
   have natEq : (UInt64.ofNat index).toNat = index :=
     Nat.mod_eq_of_lt (Nat.lt_trans lt count.toNat_lt)
-  have ult : UInt64.ofNat index < count := by
-    rw [UInt64.lt_iff_toNat_lt, natEq]
-    exact lt
+  have ult : UInt64.ofNat index < count := Base.Uint64.toUInt64_lt_of_lt lt
   rw [computeCommittee_eq ult small fits, natEq]
   rfl
 

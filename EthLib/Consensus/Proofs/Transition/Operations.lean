@@ -1264,23 +1264,13 @@ theorem foldlM_applyPendingDeposit_partition :
       · exact all _ member
 
 /-- Deposits applied in order raise the sum of the balances by at most their amounts. -/
-theorem foldlM_applyPendingDeposit_le :
-    ∀ {deposits : List PendingDeposit} {state after : BeaconState preset fork},
-      deposits.foldlM (applyPendingDeposit config checks) state = .ok after →
-      balanceSum after ≤ balanceSum state + pendingAmount deposits
-  | [], _, _, computed => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    simp [pendingAmount]
-  | deposit :: rest, state, after, computed => by
-    simp only [List.foldlM_cons, bind, Except.bind] at computed
-    split at computed
-    · cases computed
-    rename_i next applied
-    have first := balanceSum_applyPendingDeposit_le applied
-    have later := foldlM_applyPendingDeposit_le computed
-    simp only [pendingAmount, List.map_cons, List.sum_cons] at later ⊢
-    omega
+theorem foldlM_applyPendingDeposit_le {deposits : List PendingDeposit}
+    {state after : BeaconState preset fork}
+    (computed : deposits.foldlM (applyPendingDeposit config checks) state = .ok after) :
+    balanceSum after ≤ balanceSum state + pendingAmount deposits := by
+  unfold pendingAmount
+  exact foldlM_ok_le_add_sum balanceSum (·.amount.toNat)
+    (fun _ _ _ applied => balanceSum_applyPendingDeposit_le applied) computed
 
 /-- From Electra, a deposit keeps one balance for each validator, and the deposit data. -/
 theorem applyDepositElectra_kept {electra : .pectra ≤ fork} {pubkey : BLSPubkey}
