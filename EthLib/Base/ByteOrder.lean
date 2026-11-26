@@ -159,4 +159,10 @@ theorem ofBE_lt (bytes : List UInt8) : ofBE bytes < 256 ^ bytes.length := by
         < 256 ^ rest.length * (b.toNat + 1) := by rw [Nat.mul_succ]; omega
       _ ≤ 256 ^ rest.length * 256 := Nat.mul_le_mul_left _ hb
 
+/-- The number of big-endian bytes, if it is below `n`.
+
+A larger number is rejected rather than reduced, so bytes of a fixed length encode it once. -/
+def ofBE? (n : Nat) (bytes : List UInt8) : Option (Fin n) :=
+  if h : ofBE bytes < n then some ⟨_, h⟩ else none
+
 end EthLib.Base.ByteOrder

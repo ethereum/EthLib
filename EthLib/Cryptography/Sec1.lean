@@ -59,7 +59,7 @@ def fieldOfBytes? (params : Params p) (M : ByteArray) : Option (Fin p) :=
   -- The input has `mlen` octets.
   if M.size = params.mlen then
     -- Step 1: `a` is the integer of `M` by §2.3.8, and "invalid" unless `a` is in `[0, p - 1]`.
-    if h : Base.ByteOrder.ofBE M.data.toList < p then some ⟨_, h⟩ else none
+    Base.ByteOrder.ofBE? p M.data.toList
   else none
 
 /-- Each cause of "invalid" in point decoding (§2.3.4) and public key validation (§3.2.2.1). -/
