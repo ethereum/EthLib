@@ -15,9 +15,9 @@ CASE = FILES / "minimal" / "altair" / "light_client" / "sync" / "pyspec_tests" /
 FINALITY = "light_client_finality_update"
 OPTIMISTIC = "light_client_optimistic_update"
 
-# Minimal slots last 6000 ms, and sync messages are due 3333 basis points in, at 1999 ms.
+# Minimal slots last 6000 ms, and sync messages are due 3333 basis points in, rounded to 2000 ms.
 SLOT_MS = 6000
-DUE_MS = 1999
+DUE_MS = 2000
 DISPARITY_MS = 500
 
 # The offset of the sync committee bits in an Altair update of the minimal preset.
