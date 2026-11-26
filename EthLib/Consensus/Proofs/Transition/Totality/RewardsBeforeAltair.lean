@@ -153,17 +153,12 @@ private theorem baseRewardBoundBeforeAltair_mono {a b : Nat} (le : a ≤ b) :
 /-- The bounds on the base rewards of some balances sum to at most the bound of their sum. -/
 private theorem sum_map_baseRewardBoundBeforeAltair_le {α : Type} (balance : α → Nat) :
     ∀ list : List α, (list.map fun x => preset.baseRewardBoundBeforeAltair (balance x)).sum ≤
-      preset.baseRewardBoundBeforeAltair (list.map balance).sum
-  | [] => by simp [Preset.baseRewardBoundBeforeAltair]
-  | x :: rest => by
-    have split : preset.baseRewardBoundBeforeAltair (balance x) +
-        preset.baseRewardBoundBeforeAltair (rest.map balance).sum ≤
-          preset.baseRewardBoundBeforeAltair (balance x + (rest.map balance).sum) := by
-      simp only [Preset.baseRewardBoundBeforeAltair, Nat.div_div_eq_div_mul, Nat.add_mul]
-      exact Nat.div_add_div_le_add_div
-    have := sum_map_baseRewardBoundBeforeAltair_le balance rest
-    simp only [List.map_cons, List.sum_cons]
-    omega
+      preset.baseRewardBoundBeforeAltair (list.map balance).sum := by
+  intro list
+  -- The two divisors become one, and the reward factor moves into each term of the sum.
+  simp only [Preset.baseRewardBoundBeforeAltair, Nat.div_div_eq_div_mul]
+  rw [← sum_map_mul_right]
+  exact sum_map_div_le (fun x => balance x * preset.BASE_REWARD_FACTOR.toNat) _ list
 
 /-- Before Altair, the base reward of a validator under the largest cap succeeds.
 

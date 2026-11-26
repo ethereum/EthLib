@@ -44,21 +44,12 @@ theorem exitCost_le (state : BeaconState preset fork) :
       effectiveBalanceSum state / preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
         state.validators.data.size := by
   unfold exitCost effectiveBalanceSum
-  have floors : ∀ values : List Nat,
-      (values.map (· / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)).sum ≤
-        values.sum / preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    intro values
-    induction values with
-    | nil => simp
-    | cons head tail step =>
-      simp only [List.map_cons, List.sum_cons]
-      exact Nat.le_trans (Nat.add_le_add_left step _) Nat.div_add_div_le_add_div
   refine Nat.le_trans (((List.filter_sublist).map _).sum_le_sum fun _ _ => Nat.zero_le _) ?_
   rw [List.sum_map_add, ← Array.length_toList]
   simp only [List.map_const', List.sum_replicate, Nat.nsmul_eq_mul, Nat.mul_one]
   refine Nat.add_le_add_right ?_ _
-  have := floors (state.validators.data.toList.map (·.effectiveBalance.toNat))
-  rwa [List.map_map] at this
+  exact sum_map_div_le (fun v : Validator => v.effectiveBalance.toNat)
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat _
 
 private abbrev ConsolidationKept (s t : BeaconState preset fork) : Prop :=
   t.earliestConsolidationEpoch = s.earliestConsolidationEpoch
