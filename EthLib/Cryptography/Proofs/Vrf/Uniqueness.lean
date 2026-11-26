@@ -140,6 +140,22 @@ private theorem verifyWith_eq_some {f : QueryImpl HashSpec Id} {root : Digest} {
     exact ⟨hc, (Option.some.inj h).symm⟩
   · cases h
 
+/-- With any function as the hash, a win makes the collision search of the two openings succeed.
+
+The search returns two different inputs with one hash. -/
+theorem findHashCollisionWith_of_outputsWin {H : ByteArray → Digest} {claim : OpeningsClaim}
+    (hwins : OutputsWin (extractOutputs (m := Id) (fun x => pure (H x)) claim).run) :
+    ∃ p, findHashCollisionWith H claim.index claim.first claim.second = some p ∧
+      IsHashCollisionWith H p := by
+  obtain ⟨y, y', hy, hy', hne⟩ := hwins
+  simp only [extractOutputs, Id.run_bind, Id.run_pure] at hy hy'
+  obtain ⟨hroot, rfl⟩ := verifyWith_eq_some (f := H) hy
+  obtain ⟨hroot', rfl⟩ := verifyWith_eq_some (f := H) hy'
+  -- Two different outputs come from two different secrets, so the search finds a collision.
+  refine (secret_unique_of_climb_eq (H := H) (i := claim.index) (o := claim.first)
+    (o' := claim.second) (hroot.trans hroot'.symm)).resolve_left fun hs => ?_
+  exact hne (congrArg (fun s => H (outputInput claim.index s)) hs)
+
 /-- A replayed winning extraction exposes a collision of the cache.
 
 The collision search with a table that extends the cache finds it. -/
@@ -153,20 +169,15 @@ theorem collision_of_extractOutputs {cache : HashSpec.QueryCache} {claim : Openi
   simp only [extractOutputs, evalWithAnswerFn_bind, evalWithAnswerFn_verifyWith,
     evalWithAnswerFn_pure] at hout
   subst hout
-  obtain ⟨y, y', hy, hy', hne⟩ := hwins
-  dsimp only at hy hy'
-  obtain ⟨hroot, rfl⟩ := verifyWith_eq_some hy
-  obtain ⟨hroot', rfl⟩ := verifyWith_eq_some hy'
   -- Both checks were replayed, so the cache holds their inputs with the table's answers.
   simp only [extractOutputs, simulateQ_bind] at hrun
   obtain ⟨_, hrun₁, hrun⟩ := Option.bind_eq_some_iff.mp hrun
   obtain ⟨_, hrun₂, -⟩ := Option.bind_eq_some_iff.mp hrun
   obtain ⟨hleaf₁, hnodes₁⟩ := cached_of_verifyWith hf hrun₁
   obtain ⟨hleaf₂, hnodes₂⟩ := cached_of_verifyWith hf hrun₂
-  -- Two different outputs come from two different secrets, so the search finds a collision.
-  rcases secret_unique_of_climb_eq (H := fun x => f x) (i := claim.index) (o := claim.first)
-      (o' := claim.second) (hroot.trans hroot'.symm) with hs | ⟨pair, hpair, hdistinct, hequal⟩
-  · exact absurd (congrArg (fun s => f (outputInput claim.index s)) hs) hne
+  -- With the table as the hash, the win makes the search find a collision of the table.
+  obtain ⟨pair, hpair, hdistinct, hequal⟩ :=
+    findHashCollisionWith_of_outputsWin (H := fun x => f x) (claim := claim) hwins
   unfold findHashCollisionWith at hpair
   split at hpair
   · -- Two node inputs, each of a pair that its own climb hashes.

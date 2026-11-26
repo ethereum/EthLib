@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
 public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 
 /-!
@@ -9,6 +9,8 @@ public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 Each node hash is charged at most `h`, and each leaf at most `L`.
 
 Then a climb is charged `h` per sibling.
+
+The collision search is charged `2 h` per level that both climbs reach.
 
 A node is charged its leaves and the hashes below it.
 
@@ -22,6 +24,46 @@ namespace EthLib.Cryptography.Merkle
 open OracleSpec OracleComp
 
 open PFunctor.FreeM (IsChargeBound isChargeBound_pure)
+
+/-! ## Answering the oracle -/
+
+/-- A monad morphism maps the collision search to the search over the image of the node hash. -/
+theorem mmap_findCollision {m n : Type → Type} [Monad m] [Monad n] {α : Type} [DecidableEq α]
+    (φ : m →ᵐ n) (hash : Position → α → α → m α) :
+    ∀ (s t : List α) (p : Position) (a b : α), φ (findCollision hash p a b s t) =
+      findCollision (fun p left right => φ (hash p left right)) p a b s t
+  | [], _, _, _, _ => φ.mmap_pure _
+  | _ :: _, [], _, _, _ => φ.mmap_pure _
+  | _ :: s, _ :: t, _, _, _ => by
+    -- The morphism passes through both hash calls and each branch of the test.
+    simp only [findCollision, MonadHom.mmap_bind, MonadHom.mmap_ite, MonadHom.mmap_pure,
+      mmap_findCollision φ hash s t]
+
+/-- With `pure` of `H` as the node hash, the search is the search in the identity monad, lifted. -/
+theorem findCollision_pure {m : Type → Type} [Monad m] [LawfulMonad m] {α : Type} [DecidableEq α]
+    (H : Position → α → α → α) (s t : List α) (p : Position) (a b : α) :
+    findCollision (m := m) (fun q left right => pure (H q left right)) p a b s t =
+      pure (findCollision (m := Id) (fun q left right => pure (H q left right)) p a b s t).run := by
+  -- Lifting the search in the identity monad by `pure` lifts each of its hashes.
+  have h := mmap_findCollision (MonadHom.pure m)
+    (fun q left right => (pure (H q left right) : Id α)) s t p a b
+  simp only [MonadHom.pure_apply, Id.run_pure] at h
+  exact h.symm
+
+/-- Run with answers that give each node hash the value `H`, the search is the search over `H`. -/
+theorem simulateQ_findCollision_of_pure {ι : Type} {spec : OracleSpec ι} {r : Type → Type}
+    [Monad r] [LawfulMonad r] {α : Type} [DecidableEq α] (impl : QueryImpl spec r)
+    (hash : Position → α → α → OracleComp spec α) (H : Position → α → α → α)
+    (hH : ∀ q left right, simulateQ impl (hash q left right) = pure (H q left right))
+    (s t : List α) (p : Position) (a b : α) :
+    simulateQ impl (findCollision hash p a b s t) =
+      pure (findCollision (m := Id) (fun q left right => pure (H q left right)) p a b s t).run := by
+  -- Answering the queries maps the search to the search over the answered node hashes.
+  have hmap : simulateQ impl (findCollision hash p a b s t) =
+      findCollision (fun q left right => simulateQ impl (hash q left right)) p a b s t :=
+    mmap_findCollision (simulateQ' impl) hash s t p a b
+  simp only [hH] at hmap
+  exact hmap.trans (findCollision_pure H s t p a b)
 
 /-! ## Charged calls
 
@@ -42,6 +84,24 @@ theorem isChargeBound_climb (hhash : ∀ q a b, IsChargeBound (hash q a b) c h) 
     rw [climb]
     refine ((hhash _ _ _).bind fun _ => isChargeBound_climb hhash rest _ _).mono ?_
     rw [List.length_cons, Nat.succ_mul, Nat.add_comm]
+
+/-- The collision search is charged at most two hashes per level that both climbs reach. -/
+theorem isChargeBound_findCollision [DecidableEq α]
+    (hhash : ∀ q a b, IsChargeBound (hash q a b) c h) :
+    ∀ (s t : List α) (q : Position) (a b : α),
+      IsChargeBound (findCollision hash q a b s t) c (2 * min s.length t.length * h)
+  | [], _, _, _, _ => isChargeBound_pure _
+  | _ :: _, [], _, _, _ => isChargeBound_pure _
+  | _ :: s, _ :: t, q, a, b => by
+    simp only [findCollision]
+    -- Each climb hashes its pair, then the search stops or goes on from the two parents.
+    refine ((hhash _ _ _).bind fun _ => (hhash _ _ _).bind (B₂ := 2 * min s.length t.length * h)
+      fun _ => ?_).mono (le_of_eq ?_)
+    · split
+      · exact isChargeBound_pure _
+      · exact isChargeBound_findCollision hhash s t _ _ _
+    · simp only [List.length_cons, min_add_add_right]
+      ring
 
 variable {leaves : Nat → OracleComp spec α} {L : ℕ}
 
@@ -128,6 +188,25 @@ theorem isTotalQueryBound_climb (hhash : ∀ q a b, IsTotalQueryBound (hash q a 
   -- A total count is the count of the queries that the always-true predicate accepts.
   (isQueryBoundP_true_iff _ _).mp <| isQueryBoundP_climb
     (fun q a b => (isQueryBoundP_true_iff _ _).mpr (hhash q a b)) siblings q current
+
+/-- The collision search costs at most two hashes per level that both climbs reach. -/
+theorem isQueryBoundP_findCollision [DecidableEq α]
+    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
+    ∀ (s t : List α) (q : Position) (a b : α),
+      IsQueryBoundP (findCollision hash q a b s t) p (2 * min s.length t.length) :=
+  fun s t q a b => (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_findCollision
+    (fun q a b => (isQueryBoundP_iff_isChargeBound p _ _).1 (hhash q a b)) s t q a b).mono
+      (le_of_eq (Nat.mul_one _))
+
+/-- The collision search costs at most two queries in all per level that both climbs reach.
+
+It holds when each node hash costs at most one query in all. -/
+theorem isTotalQueryBound_findCollision [DecidableEq α]
+    (hhash : ∀ q a b, IsTotalQueryBound (hash q a b) 1) (s t : List α) (q : Position) (a b : α) :
+    IsTotalQueryBound (findCollision hash q a b s t) (2 * min s.length t.length) :=
+  -- A total count is the count of the queries that the always-true predicate accepts.
+  (isQueryBoundP_true_iff _ _).mp <| isQueryBoundP_findCollision
+    (fun q a b => (isQueryBoundP_true_iff _ _).mpr (hhash q a b)) s t q a b
 
 variable {leaves : Nat → OracleComp spec α} {c : Nat}
 
