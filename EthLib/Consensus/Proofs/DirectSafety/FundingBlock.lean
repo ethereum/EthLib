@@ -183,15 +183,10 @@ private def funding_block_cost (event : BalanceEvent preset) : Nat :=
 private theorem funding_block_cost_le {events : List (BalanceEvent preset)}
     (bounded : EventsBounded events) :
     (events.map funding_block_cost).sum ≤ (events.map fundingCredit).sum := by
-  induction events with
-  | nil => simp
-  | cons e rest ih =>
-    have bound := (bounded e (by simp)).1
-    have one : funding_block_cost e ≤ fundingCredit e := by
-      cases source : e.source <;> simp only [funding_block_cost, fundingCredit, source] <;>
-        split <;> simp_all
-    simpa only [List.map_cons, List.sum_cons] using Nat.add_le_add one
-      (ih (fun x h => bounded x (by simp [h])))
+  refine Base.sum_map_le_sum_map fun e member => ?_
+  have bound := (bounded e member).1
+  cases source : e.source <;> simp only [funding_block_cost, fundingCredit, source] <;>
+    split <;> simp_all
 
 private theorem funding_block_same {fork : Fork} {s t : BeaconState preset fork}
     (matched : BalancesMatch t)
