@@ -166,13 +166,7 @@ private theorem min_sub_mod_le (value step cap : UInt64) :
   have kept : value % step ≤ value := by
     rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
     exact Nat.mod_le _ _
-  have lowered := UInt64.sub_le kept
-  rw [UInt64.min_def]
-  split
-  · exact ⟨by assumption, lowered⟩
-  · rename_i above
-    rw [UInt64.le_iff_toNat_le] at above lowered ⊢
-    exact ⟨Nat.le_refl _, by rw [UInt64.le_iff_toNat_le]; omega⟩
+  exact ⟨Std.min_le_right, UInt64.le_trans Std.min_le_left (UInt64.sub_le kept)⟩
 
 /-- Before Gloas, the activation at genesis keeps the balances, the slashed balances and the size.
 
