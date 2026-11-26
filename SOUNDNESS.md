@@ -7733,7 +7733,11 @@ The source leaves three points open:
 
 The signature covers the data and the slot, not the preferences of the request; `preferencesFailures_preferences` shows that a request with the same authentication and another cap passes the same checks.
 The store keeps the first preferences for a key and slot, so such a copy, replayed after the original, cannot replace them.
-A copy with another cap that reaches the builder first is kept, and the original is then ignored; only a signature over the preferences would stop this ([ethereum/builder-specs#183](https://github.com/ethereum/builder-specs/issues/183)).
+A copy with another cap that reaches the builder first is kept, and the original is then ignored.
+A maintainer of the source keeps the preferences out of the signature ([ethereum/builder-specs#183](https://github.com/ethereum/builder-specs/issues/183), closed as not planned on 2026-11-25).
+One signed authentication serves both the bid request and the preferences of a slot, since its data is not tied to an endpoint ([Gloas `validator.md`](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/validator.md#constructing-the-builderrequestauth)).
+A proposer and a builder who want signed preferences can put them in the agreed data.
+EthLib follows the source, so a copy that arrives first still wins.
 
 From Deneb to Fulu, a builder reveals the payload with a blobs bundle: the blobs, their commitments and their proofs.
 `BuilderBlobsBundle.names_nodup` and `ExecutionPayloadAndBlobsBundle.names_nodup` (`Consensus/Proofs/Containers/BuilderApi.lean`) give both containers distinct field names, so they decode back from their bytes when the logs bloom has a byte.
