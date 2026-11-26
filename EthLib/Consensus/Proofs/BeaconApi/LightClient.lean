@@ -7,6 +7,7 @@ public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
 import EthLib.Base.Proofs.MapM
 import EthLib.Consensus.Proofs.BeaconApi.Encoding
+import EthLib.Consensus.Proofs.ReqResp.Bounds
 
 /-!
 # Proofs: the light client answers of the Beacon API
@@ -332,6 +333,7 @@ private theorem decodeUpdateChunksFrom_chunk {config : Config} {genesisValidator
     (roundtrip : ∀ {fork : Fork} {update : LightClientUpdate preset fork} {payload : ByteArray},
       SszType.serialize update = .ok payload →
         SszType.deserialize (LightClientUpdate preset fork) payload = .ok update)
+    (scheduled : contextEpoch update ≠ FAR_FUTURE_EPOCH)
     (encoded : encodeUpdateChunk config genesisValidatorsRoot update = .ok chunk)
     (next : decodeUpdateChunksFrom preset config genesisValidatorsRoot (pre ++ chunk ++ rest)
       (pre.size + chunk.size) = .ok updates) :
@@ -339,13 +341,10 @@ private theorem decodeUpdateChunksFrom_chunk {config : Config} {genesisValidator
       .ok (⟨fork, update⟩ :: updates) := by
   obtain ⟨digest, payload, altair, same, digested, wrote, small, rfl⟩ :=
     encodeUpdateChunk_ok encoded
-  obtain ⟨start, found⟩ := Option.isSome_iff_exists.mp (forkOfDigest_isSome digested)
-  have recovers := forkOfDigest_recovers identify digested
-  rw [found] at recovers
-  have fork_eq : config.forkAtEpoch start = fork := by
+  -- The digest of the context epoch names the fork of the update.
+  have named : forkOfScheduledDigest config genesisValidatorsRoot digest = .ok fork := by
     rw [same]
-    simpa using recovers
-  subst fork_eq
+    exact Proofs.ReqResp.Bounds.forkOfScheduledDigest_computed identify digested scheduled
   have eight : (⟨(ByteOrder.toLE 8 (4 + payload.size)).toArray⟩ : ByteArray).size = 8 :=
     Vector.size_toArray _
   have four : (⟨digest.toArray⟩ : ByteArray).size = 4 := Vector.size_toArray _
@@ -381,10 +380,10 @@ private theorem decodeUpdateChunksFrom_chunk {config : Config} {genesisValidator
       show pre.size + 8 + (4 + payload.size) - (pre.size + 8 + 4 + payload.size) = 0 by omega]
     rw [ByteArray.extract_eq_empty_iff.mpr (by simp), ByteArray.append_empty]
   rw [decodeUpdateChunksFrom, dite_eq_right (by omega), dite_eq_left (by omega)]
-  simp only [length (fun i => by omega), digest_read (fun i => by omega), found, payload_read,
+  simp only [length (fun i => by omega), digest_read (fun i => by omega), named, payload_read,
     roundtrip wrote, next, altair, show ¬4 + payload.size < 4 by omega,
-    show pre.size + 8 + (4 + payload.size) ≤ data.size by omega, ↓reduceIte, ↓reduceDIte]
-  simp only [Except.mapError, digested, bind, Except.bind, ↓reduceIte]
+    show pre.size + 8 + (4 + payload.size) ≤ data.size by omega, Except.mapError, digested, bind,
+    Except.bind, ↓reduceIte, ↓reduceDIte]
   rfl
 
 /-- The chunks that the encoder appends decode back to their updates, after any bytes. -/
@@ -394,6 +393,7 @@ private theorem decodeUpdateChunksFrom_foldlM {config : Config} {genesisValidato
       SszType.serialize update = .ok payload →
         SszType.deserialize (LightClientUpdate preset fork) payload = .ok update)
     {updates : List (AnyLightClientUpdate preset)} {out data : ByteArray}
+    (scheduled : ∀ update ∈ updates, contextEpoch update.2 ≠ FAR_FUTURE_EPOCH)
     (encoded : updates.foldlM (fun out ⟨_, update⟩ => do
       return out ++ (← encodeUpdateChunk config genesisValidatorsRoot update)) out = .ok data) :
     ∃ rest, data = out ++ rest ∧ ∀ pre : ByteArray,
@@ -409,14 +409,16 @@ private theorem decodeUpdateChunksFrom_foldlM {config : Config} {genesisValidato
     cases chunked : encodeUpdateChunk config genesisValidatorsRoot update with
     | error fault => simp [chunked, bind, Except.bind] at encoded
     | ok chunk =>
-    obtain ⟨rest, hdata, decodes⟩ := ih (out := out ++ chunk) (by
+    obtain ⟨rest, hdata, decodes⟩ := ih (fun u member => scheduled u (by simp [member]))
+      (out := out ++ chunk) (by
       rw [List.foldlM_cons] at encoded
       dsimp only at encoded
       rw [chunked] at encoded
       exact encoded)
     refine ⟨chunk ++ rest, by rw [hdata, ByteArray.append_assoc], fun pre => ?_⟩
     rw [← ByteArray.append_assoc]
-    refine decodeUpdateChunksFrom_chunk identify roundtrip chunked ?_
+    refine decodeUpdateChunksFrom_chunk identify roundtrip (scheduled ⟨fork, update⟩ (by simp))
+      chunked ?_
     have := decodes (pre ++ chunk)
     rwa [ByteArray.size_append] at this
 
@@ -525,12 +527,14 @@ private theorem foldlM_of_decodeUpdateChunksFrom [NeZero preset.BYTES_PER_LOGS_B
     obtain ⟨digest, read_digest⟩ : ∃ digest : ForkDigest,
         (Vector.ofFn fun i : Fin 4 => data[start + 8 + i]'(bound4 i)) = digest := ⟨_, rfl⟩
     simp only [read_digest] at decoded
-    cases found : forkOfDigest config genesisValidatorsRoot digest with
-    | none =>
-      simp only [found] at decoded
+    cases named : forkOfScheduledDigest config genesisValidatorsRoot digest with
+    | error fault =>
+      simp only [named, Except.mapError, bind, Except.bind] at decoded
       cases decoded
-    | some epoch =>
-    simp only [found] at decoded
+    | ok fork =>
+    -- The fork is that of the first epoch with the digest.
+    obtain ⟨epoch, found, -, rfl⟩ := Proofs.ReqResp.Bounds.forkOfScheduledDigest_eq_ok named
+    simp only [named, Except.mapError, bind, Except.bind] at decoded
     by_cases altair : .altair ≤ config.forkAtEpoch epoch
     swap
     · rw [ite_eq_right altair] at decoded
@@ -539,26 +543,26 @@ private theorem foldlM_of_decodeUpdateChunksFrom [NeZero preset.BYTES_PER_LOGS_B
     cases read : SszType.deserialize (LightClientUpdate preset (config.forkAtEpoch epoch))
         (data.extract (start + 12) (start + 8 + length)) with
     | error fault =>
-      simp only [read, Except.mapError, bind, Except.bind] at decoded
+      simp only [read] at decoded
       cases decoded
     | ok update =>
     cases digested : computeForkDigest config genesisValidatorsRoot (contextEpoch update) with
     | error fault =>
-      simp only [read, digested, Except.mapError, bind, Except.bind] at decoded
+      simp only [read, digested] at decoded
       cases decoded
     | ok expected =>
     by_cases agrees : expected = digest
     swap
-    · simp only [read, digested, agrees, Except.mapError, bind, Except.bind, ↓reduceIte] at decoded
+    · simp only [read, digested, agrees, ↓reduceIte] at decoded
       cases decoded
     subst agrees
     cases next : decodeUpdateChunksFrom preset config genesisValidatorsRoot data
         (start + 8 + length) with
     | error fault =>
-      simp only [read, digested, next, Except.mapError, bind, Except.bind, ↓reduceIte] at decoded
+      simp only [read, digested, next, ↓reduceIte] at decoded
       cases decoded
     | ok tail =>
-    simp only [read, digested, next, Except.mapError, bind, Except.bind, ↓reduceIte, pure,
+    simp only [read, digested, next, ↓reduceIte, pure,
       Except.pure] at decoded
     cases decoded
     have chunk := encodeUpdateChunk_of_read identify bound8 read_length bound4
@@ -573,15 +577,18 @@ private theorem foldlM_of_decodeUpdateChunksFrom [NeZero preset.BYTES_PER_LOGS_B
 
 /-- The SSZ chunks of updates decode back to the updates, each with its fork.
 
-This holds on a chain whose digests name their forks, as the check of digests asks. -/
+This holds on a chain whose digests name their forks, as the check of digests asks.
+
+The epoch of each update's attested header must not be the far future epoch. -/
 theorem decodeUpdateChunks_encode [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {config : Config} {genesisValidatorsRoot : Root}
     {updates : List (AnyLightClientUpdate preset)} {data : ByteArray}
     (identify : digestsIdentify config genesisValidatorsRoot = true)
+    (scheduled : ∀ update ∈ updates, contextEpoch update.2 ≠ FAR_FUTURE_EPOCH)
     (encoded : encodeUpdateChunks config genesisValidatorsRoot updates = .ok data) :
     decodeUpdateChunks preset config genesisValidatorsRoot data = .ok updates := by
   obtain ⟨rest, rfl, decodes⟩ :=
-    decodeUpdateChunksFrom_foldlM identify SszType.deserialize_serialize encoded
+    decodeUpdateChunksFrom_foldlM identify SszType.deserialize_serialize scheduled encoded
   simpa [decodeUpdateChunks, ByteArray.empty_append] using decodes ByteArray.empty
 
 /-- Bytes that decode to updates are the SSZ chunks of those updates, so the decoder is canonical.
