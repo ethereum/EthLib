@@ -283,7 +283,7 @@ private theorem departureCharges_le_calls {charges : List DepartureCharge}
     change (List.ofFn (fun i : Fin xs.length =>
       if epoch xs[i.val] ≤ high then amount xs[i.val] else 0)).sum = _
     rw [List.ofFn_getElem_eq_map xs (fun x => if epoch x ≤ high then amount x else 0)]
-    simpa using List.sum_map_ite (fun x => epoch x ≤ high) amount (fun _ => 0) xs
+    exact Base.sum_map_ite_eq_sum_filter (fun x => epoch x ≤ high) amount xs
   rw [sums charges (·.epoch) (·.amount),
     sums calls (fun c => c.call.epoch.toNat) (fun c => c.call.amount.toNat)] at bound
   exact bound
