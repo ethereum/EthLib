@@ -314,6 +314,84 @@ theorem ghost_payloadTree {root : β → ρ} (hroot : Set.InjOn root {r | r ≠ 
     obtain rfl := kids_fst b n x hn
     exact h ⟨_, (kids b n).mp hn⟩
 
+/-- Lemma 2 of [arXiv 2405.00549v4][fcr], Appendix A.1, on the tree of payload-status nodes.
+
+It reads every pending node of the chain from just above `a` up to and including `b`.
+
+LMD-GHOST from the pending node of `a` then returns a node at or below the pending node of `b`.
+
+[fcr]: https://arxiv.org/abs/2405.00549v4 -/
+theorem ancestor_ghost_payloadTree_of_honest_support {key : β × Status → ρ} {a b : β}
+    -- Take any set `J` of validators; the paper takes the honest ones.
+    (J : Set ν) [DecidablePred (· ∈ J)]
+    -- Each block of the chain comes with a bound.
+    (Φ : β → ℕ)
+    -- The pending node of `b` is in the view, and `a` is in the chain of `b`.
+    (hb : (b, none) ∈ N.blocks) (hab : T.Ancestor a b)
+    -- Take each block `c` from just above `a` up to and including `b`.
+    --
+    -- The bound caps its pending node with any other child of the parent node it builds on.
+    (fits : ∀ c, T.Ancestor a c → T.Ancestor c b → c ≠ a →
+      ∀ c' ∈ children N (T.parent c, some (full c)), c' ≠ (c, none) →
+        weight V w N (c, none) + weight V w N c' ≤ Φ c)
+    -- It also caps that pending node with the other payload status of its parent, if in the view.
+    (cross : ∀ c, T.Ancestor a c → T.Ancestor c b → c ≠ a →
+      (T.parent c, some (!(full c))) ∈ N.blocks →
+      weight V w N (c, none) + weight V w N (T.parent c, some !(full c)) ≤ Φ c)
+    -- The supporters of that pending node in `J` hold more than half of the bound.
+    (honest : ∀ c, T.Ancestor a c → T.Ancestor c b → c ≠ a →
+      Φ c < 2 * stake w {v ∈ supporters V N (c, none) | v ∈ J}) :
+    -- The walk ends at or below `b` whatever payload status it picks at each block.
+    (T.payloadTree full).Ancestor (b, none) (ghost V w N key (a, none)) := by
+  -- A status node needs no hypothesis of its own.
+  --
+  -- It weighs at least as much as the pending child built on it.
+  --
+  -- Its one rival is the other status of its block.
+  --
+  -- The supporters of a pending node in `J` are some of its supporters.
+  have lower : ∀ c, stake w {v ∈ supporters V N (c, none) | v ∈ J} ≤ weight V w N (c, none) :=
+    fun _ => stake_mono (Finset.filter_subset _ _)
+  refine ancestor_ghost_of_heavier V w N key hb (payloadTree_ancestor_none_of hab)
+    fun n hn hnb hna n' hn' hne => ?_
+  obtain ⟨r, _ | x⟩ := n
+  · -- A pending node of the chain beats every other child of the node it builds on.
+    have hr : r ≠ a := fun e => hna (by rw [e])
+    have above := payloadTree_ancestor_fst hn
+    have upto := payloadTree_ancestor_fst hnb
+    have hg := Ancestor.ne_genesis above hr
+    rw [payloadTree_parent_none hg] at hn'
+    have := fits r above upto hr n' hn' hne
+    have := honest r above upto hr
+    have := lower r
+    omega
+  · -- A status node of the chain leads to the pending node of the next block of the chain.
+    obtain ⟨d, hd, hdb⟩ := hnb.exists_child (by simp)
+    obtain ⟨q, _ | y⟩ := d
+    swap
+    · exact absurd (payloadTree_isChild_some.mp hd) (by simp)
+    obtain ⟨-, rfl, hfull⟩ := payloadTree_isChild_none.mp hd
+    obtain rfl : x = full q := Option.some.inj hfull
+    -- Its one rival is the other payload status of the same block.
+    obtain ⟨hmem, hchild⟩ := mem_children.mp hn'
+    obtain ⟨r', _ | y'⟩ := n'
+    · exact absurd hchild not_payloadTree_isChild_none_none
+    obtain rfl := (Prod.mk.inj (payloadTree_isChild_some.mp hchild)).1
+    obtain rfl : y' = !(full q) := by
+      cases h : full q <;> cases y' <;> simp_all
+    -- The next block is above `a` and at most `b`.
+    have hqa : q ≠ a := by
+      rintro rfl
+      exact absurd (hn.antisymm hd.ancestor) (by simp)
+    have above : T.Ancestor a q :=
+      (payloadTree_ancestor_fst hn).trans ⟨1, rfl⟩
+    have upto := payloadTree_ancestor_fst hdb
+    have := cross q above upto hqa hmem
+    have := honest q above upto hqa
+    have := lower q
+    have := weight_mono (V := V) (w := w) (G := N) hd.ancestor
+    omega
+
 /-- The view of nodes in which every block of a view of blocks has its payload.
 
 It holds the pending and the full node of each block, and no empty node. -/

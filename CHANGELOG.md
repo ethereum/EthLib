@@ -9,6 +9,16 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `ancestor_ghost_payloadTree_of_honest_support` (`Consensus/Proofs/Models/ForkChoice/PayloadTree.lean`) is Lemma 2 of the fast confirmation paper ([arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4), Appendix A.1) on the tree of payload-status nodes ([#2057](https://github.com/ethereum/EthLib/issues/2057)).
+  Take a bound for each pending node of the chain from just above `a` up to and including `b`.
+  The bound caps the node together with any other child of the parent node it builds on.
+  It also caps the node together with the other payload status of that parent, when that status is in the view.
+  Suppose the supporters of each such node in a set of validators hold more than half of its bound.
+  The pending node of `b` must also be in the view.
+  Votes can support a node outside the view, and GHOST cannot visit it.
+  Then LMD-GHOST from the pending node of `a` ends at or below the pending node of `b`.
+  That holds whatever payload status the rule picks at each block.
+
 - In Lean, the column builder of PeerDAS ([EIP-7594](https://eips.ethereum.org/EIPS/eip-7594)) succeeds on full rows, and the sidecars it builds from blobs pass the batch check ([#4615](https://github.com/ethereum/EthLib/issues/4615)).
   `getDataColumnSidecars_exists_ok` (`Consensus/Proofs/DataAvailability/Column.lean`) needs each row to have a cell and a proof per column, and before Gloas as many rows as commitments.
   `getDataColumnSidecars_exists_ok_of_computed` gives the same for the rows of blobs, under a preset of at most 128 columns, and before Gloas one blob per commitment.
