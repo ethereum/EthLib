@@ -154,6 +154,16 @@ theorem ofLE_ofFn_succ {k : Nat} (f : Fin (k + 1) → UInt8) :
 /-- No bytes read as 0. -/
 @[simp] theorem ofBE_nil : ofBE [] = 0 := rfl
 
+/-- Bytes read as a number below `n` exactly when their number is that one. -/
+theorem ofBE?_eq_some_iff {n : Nat} {bytes : List UInt8} {a : Fin n} :
+    ofBE? n bytes = some a ↔ ofBE bytes = a.val := by
+  unfold ofBE?
+  split
+  · simp [Fin.ext_iff, eq_comm]
+  · simp only [reduceCtorEq, false_iff]
+    intro same
+    omega
+
 /-- Bytes appended on the right are the lower digits of a big-endian number. -/
 theorem ofBE_append (a b : List UInt8) :
     ofBE (a ++ b) = ofBE a * 256 ^ b.length + ofBE b := by

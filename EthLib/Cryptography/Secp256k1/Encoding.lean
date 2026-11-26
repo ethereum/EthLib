@@ -28,8 +28,7 @@ abbrev Fp.toBytes (x : Fp) : ByteArray := Sec1.fieldToBytes sec1 x
 /-- Big-endian bytes as a scalar, if their integer is below `n`.
 
 A larger value is rejected rather than reduced, so each scalar has one encoding. -/
-def Fn.ofBytes? (bytes : List UInt8) : Option Fn :=
-  if h : Base.ByteOrder.ofBE bytes < Fn.modulus then some ⟨_, h⟩ else none
+abbrev Fn.ofBytes? (bytes : List UInt8) : Option Fn := Base.ByteOrder.ofBE? Fn.modulus bytes
 
 namespace Point
 

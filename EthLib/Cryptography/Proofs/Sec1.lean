@@ -80,7 +80,7 @@ theorem fieldOfBytes?_eq_some_iff {M : ByteArray} {a : Fin p} :
     fieldOfBytes? params M = some a ↔ M = fieldToBytes params a := by
   constructor
   · intro h
-    unfold fieldOfBytes? at h
+    unfold fieldOfBytes? Base.ByteOrder.ofBE? at h
     split_ifs at h with hs hlt
     cases h
     obtain ⟨d⟩ := M
@@ -88,7 +88,7 @@ theorem fieldOfBytes?_eq_some_iff {M : ByteArray} {a : Fin p} :
     apply Array.toList_inj.mp
     exact (Base.ByteOrder.toList_toBE_ofBE_of_length hs).symm
   · rintro rfl
-    simp only [fieldOfBytes?, size_fieldToBytes, ofBE_fieldToBytes, a.isLt, ↓reduceIte, dite_true]
+    simp only [fieldOfBytes?, Base.ByteOrder.ofBE?, size_fieldToBytes, ofBE_fieldToBytes, a.isLt, ↓reduceIte, dite_true]
 
 /-- The octets of a field element read back as that element. -/
 theorem fieldOfBytes?_fieldToBytes (a : Fin p) :
