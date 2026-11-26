@@ -24,21 +24,6 @@ open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks} {fork : Fork}
 
-private theorem sum_range_le (f : Nat → Nat) (n C : Nat) :
-    ∀ k, (∀ j, n ≤ j → j < n + k → f j ≤ C) →
-      ((List.range (n + k)).map f).sum ≤ ((List.range n).map f).sum + k * C := by
-  intro k
-  induction k with
-  | zero => intro _; simp
-  | succ k ih =>
-    intro h
-    have := ih fun j a b => h j a (by omega)
-    have last := h (n + k) (by omega) (by omega)
-    rw [← Nat.add_assoc, List.range_succ, List.map_append, List.sum_append]
-    simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil]
-    rw [Nat.succ_mul]
-    omega
-
 /-- A block raises the sum of the effective balances by at most the largest cap per new validator.
 
 The effective balances before it must be within their caps.
@@ -66,15 +51,15 @@ theorem processBlock_effectiveBalanceSum_le {engine : ExecutionEngine preset for
     apply List.map_congr_left
     intro j hj
     exact kept j (List.mem_range.mp hj)
-  rw [← first]
-  apply sum_range_le
-  intro j _ inside
-  have size : j < after.validators.data.size := by omega
-  rw [Array.getElem?_eq_getElem size]
-  have := cap _ (Array.getElem_mem size)
-  have h2 := withdrawalMaxEffectiveBalance_le_largestEffectiveBalance preset fork
-    after.validators.data[j]
-  simp only [Option.map_some, Option.getD_some]
-  exact Nat.le_trans (UInt64.le_iff_toNat_le.mp this) h2
+  rw [← first, List.range_add, List.map_append, List.sum_append, List.map_map]
+  refine Nat.add_le_add_left ((sum_map_le (high := preset.largestEffectiveBalance)
+    fun i inside => ?_).trans_eq (by rw [List.length_range])) _
+  have size : state.validators.data.size + i < after.validators.data.size := by
+    have := List.mem_range.mp inside
+    omega
+  simp only [Function.comp_apply, Array.getElem?_eq_getElem size, Option.map_some,
+    Option.getD_some]
+  exact (UInt64.le_iff_toNat_le.mp (cap _ (Array.getElem_mem size))).trans
+    (withdrawalMaxEffectiveBalance_le_largestEffectiveBalance preset fork _)
 
 end EthLib.Consensus
