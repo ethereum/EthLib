@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
 public import EthLib.Cryptography.Proofs.Xmss.MapMonad
 public import EthLib.Cryptography.Proofs.Xmss.Cost
 public import EthLib.Cryptography.Proofs.DerivationTable
+public import EthLib.Cryptography.Proofs.ChargeBound
 
 /-!
 # Proofs: the signer's secrets as derivations, in two hidden-seed hops
@@ -647,32 +648,18 @@ theorem isQueryBoundP_run_keyed {R : Type}
     (hh : IsQueryBoundP oa IsAdversaryHash qH) (hr : IsQueryBoundP oa IsAdversaryRequest r)
     (sk : SecretKey) :
     IsQueryBoundP ((simulateQ impl oa).run sk).run p (qH + r * requestQueries) := by
-  induction oa using OracleComp.inductionOn generalizing qH r sk with
-  | pure a => simp
-  | query_bind t k ih =>
-    rw [isQueryBoundP_query_bind_iff] at hh hr
-    simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind, WriterT.run_bind']
-    rcases t with (n | x) | request
-    · simp only [IsAdversaryHash, IsAdversaryRequest, SignatureAlg.IsHashQuery,
-        SignatureAlg.IsSignQuery, ite_false] at hh hr
-      exact (isQueryBoundP_bind (n := 0) (hcoin n sk) fun u _ =>
-        (isQueryBoundP_map_iff _ _ _).2 (ih u.1.1 (hh.2 u.1.1) (hr.2 u.1.1) u.1.2)).mono
-        (by omega)
-    · simp only [IsAdversaryHash, IsAdversaryRequest, SignatureAlg.IsHashQuery,
-        SignatureAlg.IsSignQuery, ite_true, ite_false] at hh hr
-      have : 0 < qH := by simpa using hh.1
-      exact (isQueryBoundP_bind (n := 1) (hhash x sk) fun u _ =>
-        (isQueryBoundP_map_iff _ _ _).2 (ih u.1.1 (hh.2 u.1.1) (hr.2 u.1.1) u.1.2)).mono
-        (by omega)
-    · simp only [IsAdversaryHash, IsAdversaryRequest, SignatureAlg.IsHashQuery,
-        SignatureAlg.IsSignQuery, ite_true, ite_false] at hh hr
-      have : 0 < r := by simpa using hr.1
-      refine (isQueryBoundP_bind (hreq request sk)
-        fun u _ => (isQueryBoundP_map_iff _ _ _).2
-          (ih u.1.1 (hh.2 u.1.1) (hr.2 u.1.1) u.1.2)).mono ?_
-      have : (r - 1) * requestQueries + requestQueries = r * requestQueries := by
-        rw [← Nat.succ_mul, Nat.succ_eq_add_one, Nat.sub_add_cancel this]
-      omega
+  have h := ((isQueryBoundP_iff_isChargeBound _ _ _).1 hh).add_mul
+    ((isQueryBoundP_iff_isChargeBound _ _ _).1 hr) requestQueries
+  rw [zero_mul, add_zero] at h
+  refine (isQueryBoundP_iff_isChargeBound _ _ _).2
+    (OracleComp.isChargeBound_run_simulateQ impl (fun t sk => ?_) h sk)
+  rcases t with (n | x) | request
+  · simpa [SignatureAlg.IsHashQuery, SignatureAlg.IsSignQuery] using
+      (isQueryBoundP_iff_isChargeBound _ _ _).1 (hcoin n sk)
+  · simpa [SignatureAlg.IsHashQuery, SignatureAlg.IsSignQuery] using
+      (isQueryBoundP_iff_isChargeBound _ _ _).1 (hhash x sk)
+  · simpa [SignatureAlg.IsHashQuery, SignatureAlg.IsSignQuery] using
+      (isQueryBoundP_iff_isChargeBound _ _ _).1 (hreq request sk)
 
 /-- Answering an adversary costs one call per hash query and a request's worst case per request. -/
 theorem isQueryBoundP_run_failSignerOf (hcoin : ∀ n, IsQueryBoundP (pass (.inl n)) p 0)

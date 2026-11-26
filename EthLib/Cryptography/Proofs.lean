@@ -12,6 +12,7 @@ public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
 public import EthLib.Cryptography.Proofs.Unicode
 public import EthLib.Cryptography.Proofs.EvalDistEq
 public import EthLib.Cryptography.Proofs.SupportBind
+public import EthLib.Cryptography.Proofs.ChargeBound
 public import EthLib.Cryptography.Proofs.UniformReads
 public import EthLib.Cryptography.Proofs.RandomOracleTable
 public import EthLib.Cryptography.Proofs.RandomOracleFromCache
@@ -64,6 +65,7 @@ public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.SufCma
 public import EthLib.Cryptography.Proofs.SufCma.Permutation
+public import EthLib.Cryptography.Proofs.SufCma.Simulate
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs
 public import EthLib.Cryptography.Proofs.Vrf
