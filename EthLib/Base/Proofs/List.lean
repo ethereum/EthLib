@@ -154,6 +154,12 @@ theorem eraseDupsBy_sublist {α : Type} (r : α → α → Bool) :
 termination_by l => l.length
 decreasing_by exact Nat.lt_succ_of_le (List.length_filter_le _ _)
 
+/-- The first items of a zip are a sublist of the first list. -/
+theorem map_fst_zip_sublist {α β : Type} (xs : List α) (ys : List β) :
+    ((xs.zip ys).map Prod.fst).Sublist xs := by
+  rw [List.zip_eq_zip_take_min, List.map_fst_zip (by simp)]
+  exact List.take_sublist _ _
+
 /-- The keys of a list without repeated keys are its keys without duplicates. -/
 theorem map_eraseDupsBy {α β : Type} [BEq β] (key : α → β) :
     ∀ l : List α, (l.eraseDupsBy fun a b => key a == key b).map key = (l.map key).eraseDups
