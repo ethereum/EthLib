@@ -27,17 +27,9 @@ open Serialization.Ssz Cryptography.Bls
 
 /-! ## Justification reads the same values after the slots of an epoch -/
 
-/-- A state that differs from another only in its slot, roots, header and payload availability. -/
+/-- A state equal to another but for its slot and the fields that the caching of a slot writes. -/
 private def Moved (state moved : BeaconState preset fork) : Prop :=
-  ∃ (slot : Slot) (stateRoots blockRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    (header : BeaconBlockHeader)
-    (availability : Since .glamsterdam fork (ExecutionPayloadAvailability preset)),
-    moved = { state with
-      slot := slot
-      stateRoots := stateRoots
-      blockRoots := blockRoots
-      latestBlockHeader := header
-      executionPayloadAvailability := availability }
+  ∃ (slot : Slot) (w : SlotWrites preset fork), moved = { w.apply state with slot }
 
 /-- The same epoch gives the same previous epoch. -/
 private theorem previous_eq {moved : BeaconState preset fork}
@@ -53,7 +45,7 @@ private theorem participating_eq {moved : BeaconState preset fork} (same : Moved
     getUnslashedParticipatingIndices moved altair flag target =
       getUnslashedParticipatingIndices state altair flag target := by
   have previous := previous_eq epoch
-  obtain ⟨_, _, _, _, _, rfl⟩ := same
+  obtain ⟨_, _, rfl⟩ := same
   unfold getUnslashedParticipatingIndices
   rw [epoch, previous]
   rfl
@@ -62,7 +54,7 @@ private theorem participating_eq {moved : BeaconState preset fork} (same : Moved
 private theorem totalActive_eq {moved : BeaconState preset fork} (same : Moved state moved)
     (epoch : getCurrentEpoch moved = getCurrentEpoch state) :
     getTotalActiveBalance moved = getTotalActiveBalance state := by
-  obtain ⟨_, _, _, _, _, rfl⟩ := same
+  obtain ⟨_, _, rfl⟩ := same
   unfold getTotalActiveBalance
   rw [epoch]
   rfl
@@ -108,7 +100,7 @@ private theorem weigh_eq {moved : BeaconState preset fork} (same : Moved state m
   have previous := previous_eq epoch
   unfold weighJustificationAndFinalization at one two
   rw [epoch, previous] at two
-  obtain ⟨_, _, _, _, _, rfl⟩ := same
+  obtain ⟨_, _, rfl⟩ := same
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at one two
   obtain ⟨w1, hw1, th, hth, j1, hj1, w2, hw2, j2, hj2, f1, hf1, f2, hf2, f3, hf3, f4, hf4,
     rfl⟩ := one
@@ -129,7 +121,7 @@ private theorem weigh_eq {moved : BeaconState preset fork} (same : Moved state m
 private theorem attestingBalance_eq {moved : BeaconState preset fork} (same : Moved state moved)
     {attestations : Array (PendingAttestation preset)} :
     getAttestingBalance moved attestations = getAttestingBalance state attestations := by
-  obtain ⟨_, _, _, _, _, rfl⟩ := same
+  obtain ⟨_, _, rfl⟩ := same
   rfl
 
 /-- Before Altair, the votes for the first block of an epoch are the same in both states. -/
@@ -142,7 +134,7 @@ private theorem matchingTarget_eq {moved : BeaconState preset fork} (same : Move
   have previous := previous_eq epoch
   have source : getMatchingSourceAttestations moved before target =
       getMatchingSourceAttestations state before target := by
-    obtain ⟨_, _, _, _, _, rfl⟩ := same
+    obtain ⟨_, _, rfl⟩ := same
     unfold getMatchingSourceAttestations
     rw [epoch, previous]
   unfold getMatchingTargetAttestations at one two
@@ -177,7 +169,7 @@ private theorem justification_eq {moved : BeaconState preset fork} (same : Moved
       simp only [early, ↓reduceIte] at two
       simp only [pure, Except.pure, Except.ok.injEq] at one two
       subst one two
-      obtain ⟨_, _, _, _, _, rfl⟩ := same
+      obtain ⟨_, _, rfl⟩ := same
       exact ⟨rfl, rfl, rfl, rfl⟩
     rename_i late
     simp only [late, ↓reduceIte, previous, participating_eq same epoch,
@@ -189,10 +181,10 @@ private theorem justification_eq {moved : BeaconState preset fork} (same : Moved
     cases hc.symm.trans hc'
     cases ht.symm.trans ht'
     have hpb'' : getTotalBalance state p = .ok pb' := by
-      obtain ⟨_, _, _, _, _, rfl⟩ := same
+      obtain ⟨_, _, rfl⟩ := same
       exact hpb'
     have hcb'' : getTotalBalance state c = .ok cb' := by
-      obtain ⟨_, _, _, _, _, rfl⟩ := same
+      obtain ⟨_, _, rfl⟩ := same
       exact hcb'
     cases hpb.symm.trans hpb''
     cases hcb.symm.trans hcb''
@@ -204,7 +196,7 @@ private theorem justification_eq {moved : BeaconState preset fork} (same : Moved
       simp only [early, ↓reduceIte] at two
       simp only [pure, Except.pure, Except.ok.injEq] at one two
       subst one two
-      obtain ⟨_, _, _, _, _, rfl⟩ := same
+      obtain ⟨_, _, rfl⟩ := same
       exact ⟨rfl, rfl, rfl, rfl⟩
     rename_i late
     simp only [late, ↓reduceIte, previous, totalActive_eq same epoch,
@@ -252,14 +244,14 @@ private theorem sameRoots_of (keeps : KeepsRoots state moved) : SameRoots state 
 private theorem Moved.processSlot {cached : BeaconState preset fork} (same : Moved state moved)
     (computed : processSlot moved = .ok cached) : Moved state cached := by
   obtain ⟨_, rfl⟩ := processSlot_ok computed
-  obtain ⟨_, _, _, _, _, rfl⟩ := same
-  exact ⟨_, _, _, _, _, rfl⟩
+  obtain ⟨_, _, rfl⟩ := same
+  exact ⟨_, _, rfl⟩
 
 /-- A new slot keeps a moved state moved. -/
 private theorem Moved.slot (same : Moved state moved) (slot : Slot) :
     Moved state { moved with slot } := by
-  obtain ⟨_, _, _, _, _, rfl⟩ := same
-  exact ⟨_, _, _, _, _, rfl⟩
+  obtain ⟨_, _, rfl⟩ := same
+  exact ⟨_, _, rfl⟩
 
 /-- The first slot of the epoch of a state is at most its slot. -/
 private theorem epoch_bounds (state : BeaconState preset fork) :
@@ -382,8 +374,8 @@ theorem processSlots_checkpoints_eq_of_justification
     ⟨next.toNat - state.slot.toNat - 1, by omega⟩
   rw [counted] at advanced
   exact advanceSlots_outcome (moved := state) window pulled
-    ⟨state.slot, state.stateRoots, state.blockRoots, state.latestBlockHeader,
-      state.executionPayloadAvailability, rfl⟩
+    ⟨state.slot, ⟨state.stateRoots, state.blockRoots, state.latestBlockHeader,
+      state.executionPayloadAvailability⟩, rfl⟩
     (fun _ _ _ => rfl) (Nat.le_refl _) (by omega) advanced
 
 /-- The pulled-up tip of a block records the justified checkpoint of the next epoch.
