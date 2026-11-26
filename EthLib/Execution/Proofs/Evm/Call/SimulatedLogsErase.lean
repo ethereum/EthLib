@@ -709,23 +709,13 @@ private theorem resumeCreate_prepend' (logs : Array Blocks.Log) (caller : Evm fo
   funext (resumeCreate_prepend logs caller newAccount address)
 
 omit [GasMeter Meter] in
-/-- A successful step with the logs in front gives its result with the logs in front. -/
-private theorem map_ok_prepend (logs : Array Blocks.Log) (result : StepResult fork Meter) :
-    StepResult.prependSimulatedLogs logs <$> (Except.ok result : Except EvmError _) =
-      .ok (result.prependSimulatedLogs logs) := rfl
-
-/-- A successful value binds as itself. -/
-private theorem ok_bind {α β ε : Type} (a : α) (f : α → Except ε β) :
-    (Except.ok a : Except ε α) >>= f = f a := rfl
-
-omit [GasMeter Meter] in
 /-- The pops of the operands of a call keep the logs in front. -/
 private theorem popCallOperands_prepend (logs : Array Blocks.Log) (kind : CallKind)
     (evm : Evm fork Meter) :
     popCallOperands kind (evm.prependSimulatedLogs logs) =
       (fun p => (p.1, p.2.prependSimulatedLogs logs)) <$> popCallOperands kind evm := by
   simp only [popCallOperands, popCallValue]
-  prepend_free [ok_bind]
+  prepend_free [Base.ok_bind]
 
 /-- The access to a delegate keeps the logs in front. -/
 private theorem accessDelegation_prepend (logs : Array Blocks.Log) (evm : Evm fork Meter)
@@ -752,7 +742,7 @@ private theorem finishCall_prepend (logs : Array Blocks.Log) (kind : CallKind)
       StepResult.prependSimulatedLogs logs <$>
         finishCall kind call callee subCall newAccount expandBy evm := by
   simp only [finishCall, genericCall, callerFrame, callMessage]
-  prepend_free [skipCall_prepend, resumeCall_prepend', map_ok_prepend,
+  prepend_free [skipCall_prepend, resumeCall_prepend', Base.map_ok,
     StepResult.prependSimulatedLogs]
 
 /-- Each call keeps the logs in front. -/
@@ -778,7 +768,7 @@ private theorem launchCreate_prepend (logs : Array Blocks.Log) (evm : Evm fork M
     launchCreate (evm.prependSimulatedLogs logs) value initCode salt =
       StepResult.prependSimulatedLogs logs <$> launchCreate evm value initCode salt := by
   simp only [launchCreate]
-  prepend_free [skipCall_prepend, resumeCreate_prepend', map_ok_prepend,
+  prepend_free [skipCall_prepend, resumeCreate_prepend', Base.map_ok,
     StepResult.prependSimulatedLogs]
 
 /-- Each creation keeps the logs in front. -/
@@ -950,7 +940,7 @@ private theorem depositCode_prepend (logs : Array Blocks.Log) (snapshot : Transa
     depositCode fork snapshot (evm.prependSimulatedLogs logs) =
       (·.prependSimulatedLogs logs) <$> depositCode fork snapshot evm := by
   simp only [depositCode]
-  prepend_free [ok_bind]
+  prepend_free [Base.ok_bind]
 
 /-- A call that starts with `logs` in front of its simulated logs ends with them in front.
 
