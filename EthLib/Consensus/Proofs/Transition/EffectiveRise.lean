@@ -962,19 +962,9 @@ private theorem gain_sum_le {list due : List PendingConsolidation}
     (into : ∀ c ∈ list, 0 < gain c → c ∈ due ∧ gain c = value c) :
     (list.map gain).sum ≤ (due.map value).sum ∧
       (((list.filter fun c => 0 < gain c).map key).toFinset).card ≤ due.length := by
-  have dropZero : ∀ l : List PendingConsolidation,
-      (l.map gain).sum = ((l.filter fun c => 0 < gain c).map gain).sum := by
-    intro l
-    induction l with
-    | nil => rfl
-    | cons c rest ih =>
-      simp only [List.map_cons, List.sum_cons, List.filter_cons]
-      split
-      · simp [ih]
-      · rename_i zero
-        simp only [decide_eq_true_eq, Nat.not_lt, Nat.le_zero] at zero
-        rw [zero, ih, Nat.zero_add]
   set S := list.filter fun c => 0 < gain c with hS
+  have dropZero : (list.map gain).sum = (S.map gain).sum := by
+    simpa only [hS, Nat.pos_iff_ne_zero] using (Base.sum_map_filter_ne_zero gain list).symm
   have nodupS : S.Nodup := nodupList.filter _
   have sub : S.toFinset ⊆ due.toFinset := by
     intro c member
