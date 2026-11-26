@@ -768,7 +768,7 @@ private theorem syncAggregate_floor {f : Fork} {s t : BeaconState preset f}
     have prefixed : ((members.zip aggregate.syncCommitteeBits.bits.toArray).toList.map
         Prod.fst).Sublist members.toList := by
       rw [Array.toList_zip]
-      exact map_fst_zip_sublist _ _
+      exact (map_fst_zip_prefix _ _).sublist
     have sub := (prefixed.filter (·.toNat = index)).length_le
     rw [List.filter_map, List.length_map] at sub
     exact sub.trans counted
