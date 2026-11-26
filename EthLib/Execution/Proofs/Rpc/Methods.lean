@@ -45,7 +45,7 @@ theorem call_unknown (v : ChainView) {method : String} (params : List Json)
     v.call method params = .error (methodNotFound.toRpcError (some (.str method))) := by
   simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at h
   unfold call
-  split <;> simp_all
+  split <;> first | rfl | simp_all
 
 /-- The header of the tag `pending` is `null`. -/
 theorem headerByNumber_pending (v : ChainView) : v.headerByNumber (.tag .pending) = .ok .null :=

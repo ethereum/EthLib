@@ -149,7 +149,7 @@ theorem hexValue?_toUpper (c : Char) : hexValue? c.toUpper = hexValue? c := by
     have eF : 'F'.val.toNat = 70 := rfl
     simp only [e0, e9, ea, ef, ez, eA, eF] at *
     repeat' split
-    all_goals first | rfl | (exfalso; omega) | (congr 2; omega)
+    all_goals first | (exfalso; omega) | (congr 2; omega) | rfl
   · rw [toUpper_of_not_lower h]
 
 /-- Pairs of digits decode to the same bytes with every digit in uppercase. -/
