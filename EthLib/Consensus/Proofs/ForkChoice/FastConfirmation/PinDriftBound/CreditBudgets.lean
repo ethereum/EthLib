@@ -1854,11 +1854,7 @@ private theorem slot_idle_step {g m n : ForkedBeaconState preset}
   have sources := Internal.step_credit_le_sources shared genesis (Step.slot ok : Step config checks
     m n)
     early electra v replayed
-  have noSync := Internal.slot_noSync electra ok early replayed
-  have syncZero : (events.map (Internal.syncCredit v)).sum = 0 :=
-    List.sum_eq_zero fun x member => by
-      obtain ⟨e, mem, rfl⟩ := List.mem_map.mp member
-      simp [Internal.syncCredit, noSync e mem]
+  have syncZero := (Internal.slot_syncDebit_zero electra ok early replayed v).2
   have split := sum_filter_cons_dep_le events (Internal.keyCredit v)
   simp only [Internal.stepCredit, Internal.stepNet, replayed, Except.toOption, Option.getD_some,
     syncZero] at base sources ⊢
