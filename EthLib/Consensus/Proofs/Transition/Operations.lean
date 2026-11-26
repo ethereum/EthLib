@@ -1330,6 +1330,34 @@ theorem recordDepositRequestsStart_eq {index : UInt64} :
     · exact ⟨state.depositRequestsStartIndex, rfl⟩
   · exact ⟨state.depositRequestsStartIndex, rfl⟩
 
+/-- From Fulu, recording the start of the deposit requests keeps the state. -/
+theorem recordDepositRequestsStart_of_fusaka (fulu : .fusaka ≤ fork) {index : UInt64} :
+    recordDepositRequestsStart state index = state := by
+  unfold recordDepositRequestsStart
+  rw [dite_eq_right fun electra => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le electra.2 fulu)]
+
+/-- From Fulu, a deposit request only joins its deposit to the pending deposits.
+
+The deposit takes the current slot. -/
+theorem processDepositRequest_of_fusaka {electra : .pectra ≤ fork} (fulu : .fusaka ≤ fork)
+    {request : DepositRequest} :
+    processDepositRequest state electra request =
+      liftAccessor (addPendingDeposit state electra ⟨request.pubkey,
+        request.withdrawalCredentials, request.amount, request.signature, state.slot⟩) := by
+  rw [processDepositRequest, recordDepositRequestsStart_of_fusaka fulu]
+
+/-- From Fulu, a deposit request keeps the start index of the deposit requests.
+
+From Heze the state holds no start index, so both sides hold nothing. -/
+theorem depositRequestsStartIndex_processDepositRequest_of_fusaka {electra : .pectra ≤ fork}
+    (fulu : .fusaka ≤ fork) {request : DepositRequest}
+    (computed : processDepositRequest state electra request = .ok after) :
+    after.depositRequestsStartIndex = state.depositRequestsStartIndex := by
+  simp only [processDepositRequest_of_fusaka fulu, liftAccessor_ok, addPendingDeposit,
+    bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, rfl⟩ := computed
+  rfl
+
 /-- From Electra, a deposit request joins the end of the pending deposits, at the current slot.
 
 The registry and the balances stay.
