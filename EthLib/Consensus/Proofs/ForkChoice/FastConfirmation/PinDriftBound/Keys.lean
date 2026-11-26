@@ -519,17 +519,6 @@ def epochRewards (v : ℕ) {x y : ForkedBeaconState preset}
       (·.source = .rewards)).map (PinDrift.Internal.keyCredit v)).sum
   | .block .. => 0
 
-/-- The reward credits of a list of events are those of the events, read at one position. -/
-private theorem sum_filter_rewards (events : List (BalanceEvent preset)) (v : ℕ) :
-    ((events.filter (·.source = .rewards)).map (PinDrift.Internal.keyCredit v)).sum =
-      (events.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum := by
-  induction events with
-  | nil => rfl
-  | cons e rest ih =>
-    by_cases rewards : e.source = .rewards
-    · simp [rewards, PinDrift.Internal.keyCredit, DirectSafety.Apriori.Internal.rewardCredit, ih]
-    · simp [rewards, DirectSafety.Apriori.Internal.rewardCredit, ih]
-
 /-- A flag pays a key at most its base reward times the flag's weight, over the active stake. -/
 private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : BeaconState preset f}
     (within : state.RegistryWithinLimit) {flag : Fin PARTICIPATION_FLAG_WEIGHTS.length}
@@ -835,7 +824,9 @@ theorem epochRewards_le {m n : ForkedBeaconState preset}
     | error err => simp [Except.toOption]
     | ok events =>
       simp only [Except.toOption, Option.getD_some]
-      rw [sum_filter_rewards]
+      rw [← Base.sum_map_ite_eq_sum_filter (fun e : BalanceEvent preset => e.source = .rewards)
+        (PinDrift.Internal.keyCredit v) events]
+      change (events.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum ≤ _
       obtain ⟨advanced, cached, crossings, -, upgrades, cachedOk, crossingOk, kind⟩ :=
         Step.balanceEvents_slot ok early hev
       have crossed := upgradeBalanceReplay_crossing crossingOk
