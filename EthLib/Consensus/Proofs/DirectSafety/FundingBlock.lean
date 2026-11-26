@@ -183,7 +183,7 @@ private def funding_block_cost (event : BalanceEvent preset) : Nat :=
 private theorem funding_block_cost_le {events : List (BalanceEvent preset)}
     (bounded : EventsBounded events) :
     (events.map funding_block_cost).sum ≤ (events.map fundingCredit).sum := by
-  refine Base.sum_map_le_sum_map fun e member => ?_
+  refine sum_map_le_sum_map fun e member => ?_
   have bound := (bounded e member).1
   cases source : e.source <;> simp only [funding_block_cost, fundingCredit, source] <;>
     split <;> simp_all
