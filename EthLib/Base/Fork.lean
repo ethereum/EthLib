@@ -261,6 +261,16 @@ def Since (f fork : Fork) (α : Type) : Type := f ≤ fork → α
 def Since.congr {f a b : Fork} {α : Type} (h : f ≤ a ↔ f ≤ b) (x : Since f a α) : Since f b α :=
   fun hb => x (h.mpr hb)
 
+/-- A field whose value comes from an effect, such as a step that may fail, as an effect.
+
+The effect runs only when the fork has the field. -/
+def Since.sequence {m : Type → Type} [Applicative m] {f fork : Fork} {α : Type}
+    (x : Since f fork (m α)) : m (Since f fork α) :=
+  -- From `f` on, the field holds the result of the effect.
+  if h : f ≤ fork then (fun a _ => a) <$> x h
+  -- Before `f`, the field holds nothing, and nothing runs.
+  else pure fun h' => absurd h' h
+
 /-- A field that a fork `f` removes, in a type at fork `fork`.
 
 It maps a proof of `fork < f` to a value.
