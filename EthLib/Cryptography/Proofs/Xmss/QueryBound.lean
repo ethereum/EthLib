@@ -21,7 +21,7 @@ With the weight 1, each call of `H` and of the seed function counts at most 1:
 
 - A tree at level 16 takes at most `205 * 2^16 - 1` calls.
 - A one-time signature takes at most `2^32 + 204` calls.
-- Verification takes at most `384` calls.
+- Verification takes at most `172` calls.
 -/
 
 @[expose] public section
@@ -433,10 +433,10 @@ theorem isQueryBoundP_otsSign (hH : ∀ x, IsQueryBoundP (H x) p 1)
       publicParam layer e msg).mono
       (by simp [MAX_RANDOMIZER_TRIALS])
 
-/-- The leaf of a one-time signature is a digest, at most `174` steps and one hash. -/
+/-- The leaf of a one-time signature is a digest, `68` chain steps and one hash. -/
 theorem isQueryBoundP_otsLeaf (hH : ∀ x, IsQueryBoundP (H x) p 1) (publicParam : PublicParam)
     (layer : Layer) (e : UInt32) (msg : Array UInt64) (rho : Randomizer) (y : Vector Digest V) :
-    IsQueryBoundP (otsLeaf H publicParam layer e msg rho y) p 176 :=
+    IsQueryBoundP (otsLeaf H publicParam layer e msg rho y) p 70 :=
   (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_otsLeaf (w := fun _ => 1)
     (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x)) publicParam layer e msg rho
       y).mono (by norm_num)
@@ -444,7 +444,7 @@ theorem isQueryBoundP_otsLeaf (hH : ∀ x, IsQueryBoundP (H x) p 1) (publicParam
 /-- The root one layer's signature leads to is a leaf and a climb of `16` levels. -/
 theorem isQueryBoundP_layerRoot (hH : ∀ x, IsQueryBoundP (H x) p 1) (publicParam : PublicParam)
     (layer : Layer) (e : Nat) (msg : Array UInt64) (sig : LayerSignature) :
-    IsQueryBoundP (layerRoot H publicParam layer e msg sig) p 192 :=
+    IsQueryBoundP (layerRoot H publicParam layer e msg sig) p 86 :=
   (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_layerRoot (w := fun _ => 1)
     (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x)) publicParam layer e msg
       sig).mono (by norm_num)
@@ -452,7 +452,7 @@ theorem isQueryBoundP_layerRoot (hH : ∀ x, IsQueryBoundP (H x) p 1) (publicPar
 /-- Verification is the roots of both layers. -/
 theorem isQueryBoundP_verifyWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (pk : PublicKey)
     (msg : Message) (sig : Signature) :
-    IsQueryBoundP (verifyWith H pk msg sig) p 384 :=
+    IsQueryBoundP (verifyWith H pk msg sig) p 172 :=
   (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_verifyWith (w := fun _ => 1)
     (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x)) pk msg sig).mono (by norm_num)
 

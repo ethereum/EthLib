@@ -1051,7 +1051,7 @@ theorem relTriple_sourceExact_firstLane_detailedExecution_boundedHit
 open Ghost in
 /-- The first lane's coupling of one key, under a bound on the adversary's own hash queries.
 
-The count limit leaves `384` queries for the verification. -/
+The count limit leaves `172` queries for the verification. -/
 theorem relTriple_sourceExact_firstLane_detailedExecution_boundedHit_of_adversaryBound
     (q countLimit hitLimit : Nat)
     (adversary : Adversary)
@@ -1064,7 +1064,7 @@ theorem relTriple_sourceExact_firstLane_detailedExecution_boundedHit_of_adversar
     (hrightSupport : right.1.1 ∈ support
       trajectoryProgrammedGlobalChainKeygen)
     (hadv : IsQueryBoundP (adversary.main left.publicKey) IsAdvHash q)
-    (hcount : q + 384 ≤ countLimit) (hlimits : countLimit ≤ hitLimit) :
+    (hcount : q + 172 ≤ countLimit) (hlimits : countLimit ≤ hitLimit) :
     RelTriple
       (sourceGlobalExactTracedDetailedExecution adversary left)
       ((simulateQ (FirstLaneOracleSimulation.eagerTraceImpl right.1.2)
@@ -1080,12 +1080,12 @@ theorem relTriple_sourceExact_firstLane_detailedExecution_boundedHit_of_adversar
         FirstLaneOracleSimulation.CombinedHit right.1.2
           (FirstLaneOracleSimulation.enforceHazardTrace hitLimit
             firstLaneResult.2))) := by
-  -- The budget is the adversary's remaining hash queries, plus `384` for the verification.
+  -- The budget is the adversary's remaining hash queries, plus `172` for the verification.
   refine relTriple_sourceExact_firstLane_detailedExecution_boundedHit_of_budget countLimit hitLimit
     adversary left right hrel hleftSupport hrightSupport
-    (fun rest fuel _ => 384 ≤ fuel ∧ IsQueryBoundP rest IsAdvHash (fuel - 384)) ?_ ?_
+    (fun rest fuel _ => 172 ≤ fuel ∧ IsQueryBoundP rest IsAdvHash (fuel - 172)) ?_ ?_
     ⟨by omega, hadv.mono (by omega)⟩ hlimits
-  · rintro input next fuel state result ⟨h384, hrest⟩ -
+  · rintro input next fuel state result ⟨hverify, hrest⟩ -
     rw [isQueryBoundP_query_bind_iff] at hrest
     -- The direct cost of a query is one exactly on an adversary hash query.
     by_cases h : IsAdvHash input
@@ -1106,20 +1106,20 @@ theorem relTriple_sourceExact_firstLane_detailedExecution_boundedHit_of_adversar
       rw [ite_eq_right h] at hrest
       rw [hcost]
       exact ⟨Nat.zero_le _, by omega, (hrest.2 result.1).mono (by omega)⟩
-  · rintro forgery fuel state ⟨h384, -⟩
-    exact hashQueryBound_of_isQueryBoundP _ ((verify_isQueryBoundP _ _ _ _ _).mono h384) _
+  · rintro forgery fuel state ⟨hverify, -⟩
+    exact hashQueryBound_of_isQueryBoundP _ ((verify_isQueryBoundP _ _ _ _ _).mono hverify) _
 
 open Ghost in
 /-- A key's source game fits a count limit.
 
-Either its hash queries fit, or the adversary's own hash queries do with `384` left over. -/
+Either its hash queries fit, or the adversary's own hash queries do with `172` left over. -/
 def FirstLaneSourceBudget (adversary : Adversary) (left : ProgrammedGlobalChainKeygenView)
     (countLimit : Nat) : Prop :=
   HashQueryBound (sourceUnloggedDetailedGameAfterKeygen adversary
       (Concrete.materializeCachedKeyResult left.keyResult).1.1
       (Concrete.materializeCachedKeyResult left.keyResult).1.2)
     (Concrete.materializeCachedKeyResult left.keyResult).2 countLimit ∨
-  ∃ q, IsQueryBoundP (adversary.main left.publicKey) IsAdvHash q ∧ q + 384 ≤ countLimit
+  ∃ q, IsQueryBoundP (adversary.main left.publicKey) IsAdvHash q ∧ q + 172 ≤ countLimit
 
 set_option maxRecDepth 1000000
 
@@ -1212,11 +1212,11 @@ open Ghost in
 theorem relTriple_sourceGlobalExact_firstLane_program_boundedHit_of_adversaryBound
     (q hitLimit : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q)
-    (hlimits : q + 384 ≤ hitLimit) :
+    (hlimits : q + 172 ≤ hitLimit) :
     RelTriple (sourceGlobalExactTracedProgram adversary)
       (globalFirstLaneExactCoupledProgram adversary)
-      (SourceFirstLaneExactBoundedProgramRelation (q + 384) hitLimit) :=
-  relTriple_sourceGlobalExact_firstLane_program_boundedHit_of_sourceBudget (q + 384) hitLimit
+      (SourceFirstLaneExactBoundedProgramRelation (q + 172) hitLimit) :=
+  relTriple_sourceGlobalExact_firstLane_program_boundedHit_of_sourceBudget (q + 172) hitLimit
     adversary (fun left _ => .inr ⟨q, hadv left.publicKey, le_rfl⟩) hlimits
 
 def globalFirstLaneExactCoupledProjection
@@ -2220,7 +2220,7 @@ The fuel covers the adversary's queries, the verification and the forgery probes
 theorem sourceWinningExactFirstLane_probability_le_coupled_enforcedHit_of_adversaryBound
     (q fuel : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q)
-    (hfuel : q + 384 + forgeryProbeCount ≤ fuel) :
+    (hfuel : q + 172 + forgeryProbeCount ≤ fuel) :
     Pr{let x ← sourceGlobalExactTracedProgram adversary}[SourceWinningExactFirstLaneEvent x] ≤
       Pr{let x ← globalFirstLaneExactCoupledProgram adversary}[
         (GlobalFirstLaneExactCoupledEnforcedHit fuel) x] := by
@@ -2229,20 +2229,20 @@ theorem sourceWinningExactFirstLane_probability_le_coupled_enforcedHit_of_advers
       (relTriple_sourceGlobalExact_firstLane_program_boundedHit_of_adversaryBound
         q fuel adversary hadv (by omega)))
   intro left right hrelation hevent
-  exact sourceWinningExactFirstLane_implies_coupled_enforcedHit (q + 384) fuel adversary left right
+  exact sourceWinningExactFirstLane_implies_coupled_enforcedHit (q + 172) fuel adversary left right
     hrelation.2.1 hrelation.2.2 hrelation.1 hfuel hevent
 
 open Ghost in
 /-- The first lane's source event, charging the adversary's own hash queries and constants.
 
-The constants are `384` for the verification and one query per forgery probe. -/
+The constants are `172` for the verification and one query per forgery probe. -/
 theorem sourceWinningExactFirstLane_probability_le_of_adversaryBound
     (q : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q) :
     Pr{let x ← sourceGlobalExactTracedProgram adversary}[SourceWinningExactFirstLaneEvent x] ≤
-      ((q + 384 + forgeryProbeCount : Nat) : ENNReal) /
+      ((q + 172 + forgeryProbeCount : Nat) : ENNReal) /
         ((2 ^ digestBits : Nat) : ENNReal) := by
-  let fuel := q + 384 + forgeryProbeCount
+  let fuel := q + 172 + forgeryProbeCount
   calc
     _ ≤ Pr{let x ← globalFirstLaneExactCoupledProgram adversary}[
           (GlobalFirstLaneExactCoupledEnforcedHit fuel) x] :=
@@ -2256,13 +2256,13 @@ theorem sourceWinningExactFirstLane_probability_le_of_adversaryBound
 open Ghost in
 /-- Lane 1's bound, charging only the adversary's own hash queries and constants.
 
-The constants are the verification's `384` calls and the `290` probes of one forgery. -/
+The constants are the verification's `172` calls and the `290` probes of one forgery. -/
 theorem cappedExactFirstLane_probability_le_of_adversaryBound
     (q : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q) :
     Pr{let x ← cappedDetailedGameWithEncodingTrace adversary}[
         WinningExactFirstLaneBadEventOccurs x] ≤
-      ((q + 384 + forgeryProbeCount : Nat) : ENNReal) /
+      ((q + 172 + forgeryProbeCount : Nat) : ENNReal) /
         ((2 ^ digestBits : Nat) : ENNReal) := by
   rw [cappedExactFirstLane_probability_eq_sourceGlobalExact]
   exact sourceWinningExactFirstLane_probability_le_of_adversaryBound q adversary hadv
@@ -2272,28 +2272,28 @@ open Ghost in
 
 The adversary makes at most `q` hash queries, whatever its signing requests.
 
-A forgery then has probability at most `(2q + 1058) / 2^128`. -/
+A forgery then has probability at most `(2q + 634) / 2^128`. -/
 theorem capped_forgeAdvantage_le_of_adversaryBound
     (q : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q) :
     forgeAdvantage Concrete.scheme adversary ≤
-      ((2 * q + 1058 : Nat) : ENNReal) / ((2 ^ 128 : Nat) : ENNReal) := by
+      ((2 * q + 634 : Nat) : ENNReal) / ((2 ^ 128 : Nat) : ENNReal) := by
   by_cases hq : q < 2 ^ 127
   · refine (capped_forgeAdvantage_le_exactFirstLane_add_secondLane adversary).trans
       ((add_le_add (cappedExactFirstLane_probability_le_of_adversaryBound q adversary hadv)
         (hasSecondLaneBound_of_adversaryBound q adversary hadv hq)).trans ?_)
-    -- Lane 1 charges the verification's `384` calls and the `58 + 58 * 4 = 290` probes.
+    -- Lane 1 charges the verification's `172` calls and the `58 + 58 * 4 = 290` probes.
     --
-    -- Lane 2 charges the verification's `384` calls, so the two lanes sum to `2q + 1058`.
+    -- Lane 2 charges the verification's `172` calls, so the two lanes sum to `2q + 634`.
     rw [← ENNReal.add_div]
     apply ENNReal.div_le_div _ (by norm_num [digestBits])
-    exact_mod_cast (show q + 384 + forgeryProbeCount + (q + 384) ≤ 2 * q + 1058 by
+    exact_mod_cast (show q + 172 + forgeryProbeCount + (q + 172) ≤ 2 * q + 634 by
       simp only [forgeryProbeCount, numChains, chainLength, winternitzBits]; omega)
   · -- From `2^127` queries on, the bound is at least one.
     refine (prEvent_le_one _).trans ?_
     rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (ENNReal.natCast_ne_top _)),
       one_mul]
-    exact_mod_cast (show 2 ^ 128 ≤ 2 * q + 1058 by omega)
+    exact_mod_cast (show 2 ^ 128 ≤ 2 * q + 634 by omega)
 
 theorem hasExactFirstLaneBounds : HasExactFirstLaneBounds := by
   intro q adversary hbound

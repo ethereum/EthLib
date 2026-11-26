@@ -171,12 +171,12 @@ theorem isChargeBound_schemeRpm_verify (pk : PublicKey) (message : Message)
 
 The adversary itself makes at most `q` calls of the permutation or its inverse.
 
-It makes at most `2^32` requests, and forges with probability at most `(q + 531) * 2^-127`.
+It makes at most `2^32` requests, and forges with probability at most `(q + 319) * 2^-127`.
 
 Key generation, the signer and the final verification are not charged to `q`. -/
 theorem stronglyUnforgeable_randomPermutationModel :
     SufCma.StronglyUnforgeable schemeRpm (SufCma.randomPermutationModel State)
-      (2 ^ LOG_LIFETIME) 531 127 := by
+      (2 ^ LOG_LIFETIME) 319 127 := by
   rw [schemeRpm_eq_mapOracles]
   have hsmall : 13893633 + 2 ^ LOG_LIFETIME * 8603828495 + 186 ≤ 2 ^ 128 := by
     norm_num [LOG_LIFETIME, Constants.LAYER_HEIGHT]

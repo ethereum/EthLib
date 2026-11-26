@@ -94,7 +94,7 @@ It says nothing about unforgeability.
 The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
 Key generation makes at most `13434881` calls.
 Signing makes at most `8603369879` calls with any key, and at most `4294967500` in a bottom tree the key keeps; it never computes the top tree.
-Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
+Verification makes at most `172` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`): each of its two layers hashes a digest, `68` chain steps, a leaf and `16` nodes.
 Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
 
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
@@ -110,7 +110,7 @@ Signing inside the game, later signatures included, has its own bound, `Unforgea
 It runs that game against the random oracle from an empty cache, and reads the log of its signing requests.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
 Some request of its game fails with probability at most `Q (1 - p)^(2^31)`.
-Here `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384` bounds the game's hash calls (`isQueryBoundP_reasonRun`).
+Here `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 172` bounds the game's hash calls (`isQueryBoundP_reasonRun`).
 `p = |C| / 2^128` is the chance that one trial gives a codeword, about `2^-20.0045`.
 
 A search tries the randomizers `R_0 + c` modulo `2^128` for `c < 2^32`.
@@ -139,19 +139,19 @@ Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash 
 The budget `q` bounds the calls of that game on every run, key generation, signing and the final verification included.
 `Unforgeability.advantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
-It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384`.
+It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 172`.
 The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
-With `r <= 2^32`, `Unforgeability.advantage_le_lifetime` gives `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385) / 2^127`.
+With `r <= 2^32`, `Unforgeability.advantage_le_lifetime` gives `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 173) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
 `Unforgeability.stronglyUnforgeable` (same file) charges the signer's calls nothing.
-It states the generic predicate of strong unforgeability with at most `2^32` requests, a slack of `530` and 127 bits.
-So it bounds a forgery by `(qH + 530) / 2^127`, just above `2^-118` for an adversary that makes no call of `H`.
+It states the generic predicate of strong unforgeability with at most `2^32` requests, a slack of `318` and 127 bits.
+So it bounds a forgery by `(qH + 318) / 2^127`, just above `2^-118.7` for an adversary that makes no call of `H`.
 The model's two lanes charge the signer's calls nothing.
 Only the two seed guesses count the whole game's calls.
 When the bound is below one, the bound on `r` keeps that count at most `2^128`.
-Over `2^128`, lane 1 charges `qH + 674`: the verification's `384` calls and the `290` probes of one forgery.
-Lane 2 charges `qH + 384`, since the verification's encoding queries and structural queries are disjoint and together at most its `384` calls.
-With one unit for each seed guess, the sum is `2 qH + 1060` over `2^128`, that is `(qH + 530) / 2^127`.
+Over `2^128`, lane 1 charges `qH + 462`: the verification's `172` calls and the `290` probes of one forgery.
+Lane 2 charges `qH + 172`, since the verification's encoding queries and structural queries are disjoint and together at most its `172` calls.
+With one unit for each seed guess, the sum is `2 qH + 636` over `2^128`, that is `(qH + 318) / 2^127`.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.
