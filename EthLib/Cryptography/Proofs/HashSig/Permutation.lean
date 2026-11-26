@@ -71,6 +71,14 @@ theorem simulateQ_permImpl_keccakImpl (π : Equiv.Perm State) (input : HashInput
     (fun S => simulateQ_forward _ S)]
   exact LawfulApplicative.map_pure _ _
 
+/-- Over a fixed permutation, lifted to the same oracles, Keccak-256 of lanes is the pure one. -/
+theorem simulateQ_liftTarget_keccak256LanesWith (π : Equiv.Perm State) (input : Array UInt64) :
+    simulateQ ((permImpl π).liftTarget (PermComp State)) (keccak256LanesWith forward input) =
+      pure (keccak256LanesWith (pureHash π) input).run :=
+  simulateQ_keccak256LanesWith_of_pure _ forward π (fun S => by
+    rw [simulateQ_forward, QueryImpl.liftTarget_apply]
+    exact liftM_pure _) input
+
 /-- Coins pass through the run of the hash queries. -/
 theorem simulateQ_keccakImpl_liftM_prob {α : Type} (oa : ProbComp α) :
     simulateQ keccakImpl (liftM oa : OracleComp OracleWorld α) =

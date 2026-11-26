@@ -180,6 +180,13 @@ theorem simulateQ_permImpl_liftM {α : Type} (π : Equiv.Perm A) (oa : ProbComp 
   rw [QueryImpl.simulateQ_liftM_eq_of_query (permImpl π) (QueryImpl.id' unifSpec)
     (fun t => by simp [permImpl]) oa, simulateQ_id']
 
+/-- Answering through `π` after `π` lifted to the same oracles is answering through `π`. -/
+theorem simulateQ_permImpl_simulateQ_liftTarget {α : Type} (π : Equiv.Perm A)
+    (oa : PermComp A α) :
+    simulateQ (permImpl π) (simulateQ ((permImpl π).liftTarget (PermComp A)) oa) =
+      simulateQ (permImpl π) oa := by
+  rw [simulateQ_liftTarget, simulateQ_permImpl_liftM]
+
 /-- A run of coins alone asks the permutation oracle nothing.
 
 The queries to that oracle are the right part of the sum of oracles. -/
