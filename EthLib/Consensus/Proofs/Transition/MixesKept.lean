@@ -72,10 +72,8 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
 /-- An epoch one above another, as natural numbers, is its successor. -/
 private theorem eq_add_one_of_toNat {next epoch : Epoch}
     (succ : next.toNat = epoch.toNat + 1) : next = epoch + 1 := by
-  apply UInt64.toNat_inj.mp
-  have bound := next.toNat_lt
-  rw [UInt64.toNat_add, UInt64.toNat_one]
-  omega
+  simpa only [UInt64.ofNat_add, UInt64.ofNat_toNat, UInt64.ofNat_one] using
+    congrArg UInt64.ofNat succ
 
 /-- From Altair, the epoch step writes at most the RANDAO mix of the next epoch. -/
 private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
