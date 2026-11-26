@@ -153,13 +153,13 @@ theorem reads_copyElement {declared : Nat} {L : List UInt8} {p offset len : Nat}
 Each byte of the copy is the byte `offset` places before it in `L`. -/
 theorem reads_copyFour {declared : Nat} {L : List UInt8} {p offset len : Nat}
     -- The offset is from 1 to 2^32 - 1 and at most `p`, and the length is from 1 to 64.
-    (hoff : 0 < offset) (hle : offset ≤ p) (hlen1 : 1 ≤ len) (hlen2 : len ≤ maxCopyLength)
-    (hbound : offset < 2 ^ 32)
+    (hoff : 0 < offset) (hbound : offset < 2 ^ 32) (hle : offset ≤ p)
+    (hlen1 : 1 ≤ len) (hlen2 : len ≤ maxCopyLength)
     -- Both `L` and the declared length hold at least `p + len` bytes.
     (hL : p + len ≤ L.length) (hfit : p + len ≤ declared)
     (hmatch : ∀ (j : Nat) (_hj : p ≤ j) (_hjn : j < p + len) (h1 : j < L.length)
       (h2 : j - offset < L.length), L[j] = L[j - offset]) :
-    -- The tag holds the type 11 and len - 1, and a little-endian 32-bit offset follows (§2.2.3).
+    -- The tag holds type 11 and len - 1 (§2.2.2), then a little-endian 32-bit offset (§2.2.3).
     Reads declared (UInt8.ofNat (3 + (len - 1) * 4) :: (ByteOrder.toLE 4 offset).toList)
       (L.take p) (L.take (p + len)) := by
   have hlp : (L.take p).length = p := by simp; omega
