@@ -203,7 +203,7 @@ def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
   firstFailure (outputChecks block.header result.output result.roots)
   let baseFee := if h : .london ≤ fork then header.baseFeePerGas h else 0
   -- The list that the body recorded, whose hash the header already holds.
-  let blockAccessList ← sinceM fun _ =>
+  let blockAccessList ← Since.sequence fun _ =>
     (Serialization.Rlp.Codec.encode result.output.body.builder.build).mapError .encoding
   -- `engine_getPayloadV2`: the sum of the priority fees of the block, or any other rule.
   --

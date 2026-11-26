@@ -75,8 +75,8 @@ private theorem buildPayload_spec
         cases hp : parent.header.hash <;> simp_all [Except.mapError]
       refine ⟨hH, parent, parentHash, result, hP, hA, hHash', hR, hC, hF, rfl, rfl, rfl, rfl, ?_⟩
       intro hFork
-      -- The encoding runs only from Glamsterdam, where `sinceM` gives its result.
-      simp only [sinceM, hFork, dite_true] at hList
+      -- The encoding runs only from Glamsterdam, where the field holds its result.
+      simp only [Since.sequence, hFork, dite_true] at hList
       cases hE : (Serialization.Rlp.Codec.encode result.output.body.builder.build).mapError
           BlockError.encoding with
       | error e => simp [hE, Functor.map, Except.map] at hList

@@ -33,29 +33,6 @@ theorem toNat_ofNat_timestamp (t : UInt64) : (BitVec.ofNat 256 t.toNat).toNat = 
   rw [BitVec.toNat_ofNat]
   exact Nat.mod_eq_of_lt (Nat.lt_trans t.toNat_lt (by decide))
 
-/-- A field computed only at the forks that have it is exactly the step's value at each of them.
-
-Before its fork the field has one value, so the computation then always succeeds. -/
-theorem sinceM_eq_ok_iff {ε α : Type} {f : Fork} {g : f ≤ fork → Except ε α}
-    {x : Since f fork α} : sinceM g = .ok x ↔ ∀ hf, g hf = .ok (x hf) := by
-  unfold sinceM
-  by_cases hf : f ≤ fork
-  · rw [dite_eq_left hf]
-    constructor
-    · intro h hf'
-      cases hg : g hf with
-      | error e => simp [hg, Functor.map, Except.map] at h
-      | ok a =>
-        simp only [hg, Functor.map, Except.map] at h
-        cases h
-        rfl
-    · intro h
-      rw [h hf]
-      exact congrArg Except.ok (Since.eq_const hf x).symm
-  · rw [dite_eq_right hf]
-    exact ⟨fun _ hf' => absurd hf' hf,
-      fun _ => congrArg Except.ok (Since.eq_of_not_le hf _ _)⟩
-
 /-- Decoded transactions encode back to their bytes, and the fork has their kinds. -/
 theorem encode_of_decodeTransactions {index : Nat} {bytes : List ByteArray}
     {txs : List Transaction} (h : decodeTransactions fork index bytes = .ok txs) :
@@ -204,12 +181,12 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
     have hDec := decodeTransactions_of_encode (index := 0) hBytes hForks
     obtain ⟨_, hBytes', hRoot⟩ := transactionsRoot_eq_ok_iff.mp hTransactionsRoot
     cases hBytes.symm.trans hBytes'
-    have hWr : sinceM (fork := fork) (fun hf => (withdrawalsRoot (b.withdrawals hf)).mapError
+    have hWr : Since.sequence (fork := fork) (fun hf => (withdrawalsRoot (b.withdrawals hf)).mapError
         fun _ => PayloadError.noEncoding) = .ok b.header.withdrawalsRoot :=
-      sinceM_eq_ok_iff.mpr fun hf => by simp [hWithdrawalsRoot hf, Except.mapError]
+      Since.sequence_eq_ok_iff.mpr fun hf => by simp [hWithdrawalsRoot hf, Except.mapError]
     simp only [Except.mapError] at hWr
-    have hAl : sinceM (fork := fork) (fun hf => blockAccessListHashOf (accessList hf)) =
-        .ok b.header.blockAccessListHash := sinceM_eq_ok_iff.mpr hAccessList
+    have hAl : Since.sequence (fork := fork) (fun hf => blockAccessListHashOf (accessList hf)) =
+        .ok b.header.blockAccessListHash := Since.sequence_eq_ok_iff.mpr hAccessList
     have hSl : slot = b.header.slotNumber := funext hSlot
     subst hSl
     simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, hDec, hRoot, bind,
@@ -300,7 +277,7 @@ theorem toBlock_accessList {p : ExecutionPayload fork} {beacon : Since .dencun f
   simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_ok_iff, pure_eq_ok,
     mapError_ok_iff] at h
   obtain ⟨_, ⟨txs, -, root, -, accessHash, hAccess, _, ⟨wr, -, rfl⟩, rfl⟩, -, -, rfl⟩ := h
-  exact (blockAccessListHashOf_eq_ok_iff _ _).mp (sinceM_eq_ok_iff.mp hAccess hf)
+  exact (blockAccessListHashOf_eq_ok_iff _ _).mp (Since.sequence_eq_ok_iff.mp hAccess hf)
 
 /-- From Glamsterdam, the block of a payload holds the slot that it is given. -/
 theorem toBlock_slotNumber {p : ExecutionPayload fork} {beacon : Since .dencun fork Hash32}

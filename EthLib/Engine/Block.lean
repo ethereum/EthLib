@@ -44,10 +44,6 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 variable {fork : Fork}
 
-/-- A field from fork `f` on, computed by a step that may fail, only when the fork has the field. -/
-def sinceM {ε α : Type} {f : Fork} (g : f ≤ fork → Except ε α) : Except ε (Since f fork α) :=
-  if h : f ≤ fork then (fun a _ => a) <$> g h else pure fun h' => absurd h' h
-
 /-- Transactions decoded at the fork, in order, the first one at an index from 0. -/
 def decodeTransactions (fork : Fork) (index : Nat) :
     List ByteArray → Except PayloadError (List Transaction)
@@ -70,7 +66,7 @@ def toHeader (p : ExecutionPayload fork) (transactionsRoot : Hash32)
     (slotNumber : Since .glamsterdam fork UInt64) :
     Except PayloadError (Header fork) := do
   -- EIP-4895: from Shapella, the trie root of the withdrawals of the payload.
-  let withdrawalsRoot ← sinceM fun h =>
+  let withdrawalsRoot ← Since.sequence fun h =>
     (Execution.Blocks.withdrawalsRoot (p.withdrawals h)).mapError fun _ => .noEncoding
   -- Version 1, step 2: `ExecutionBlockHeader`, with the payload's values and the constants.
   --
@@ -137,7 +133,7 @@ def toBlockUnchecked (p : ExecutionPayload fork) (parentBeaconBlockRoot : Since 
   -- Version 5, step 3, from Glamsterdam: the list decodes, and its hash enters the header.
   --
   -- It runs before the block hash check of version 1, step 2, since the header needs that hash.
-  let accessListHash ← sinceM fun h => blockAccessListHashOf (blockAccessList h)
+  let accessListHash ← Since.sequence fun h => blockAccessListHashOf (blockAccessList h)
   let header ← p.toHeader root parentBeaconBlockRoot requests accessListHash slotNumber
   -- EIP-3675: the block has no ommers.
   return { header, transactions, ommers := [], withdrawals := p.withdrawals }

@@ -102,6 +102,29 @@ theorem eq_of_not_le (h : ¬f ≤ fork) (x y : Since f fork α) : x = y :=
 theorem eq_const (h : f ≤ fork) (x : Since f fork α) : x = fun _ => x h :=
   funext fun _ => rfl
 
+/-- A field computed only at the forks that have it is exactly the step's value at each of them.
+
+Before its fork the field has one value, so the computation then always succeeds. -/
+theorem sequence_eq_ok_iff {ε : Type} {g : Since f fork (Except ε α)}
+    {x : Since f fork α} : Since.sequence g = .ok x ↔ ∀ hf, g hf = .ok (x hf) := by
+  unfold Since.sequence
+  by_cases hf : f ≤ fork
+  · rw [dite_eq_left hf]
+    constructor
+    · intro h hf'
+      cases hg : g hf with
+      | error e => simp [hg, Functor.map, Except.map] at h
+      | ok a =>
+        simp only [hg, Functor.map, Except.map] at h
+        cases h
+        rfl
+    · intro h
+      rw [h hf]
+      exact congrArg Except.ok (eq_const hf x).symm
+  · rw [dite_eq_right hf]
+    exact ⟨fun _ hf' => absurd hf' hf,
+      fun _ => congrArg Except.ok (eq_of_not_le hf _ _)⟩
+
 end EthLib.Base.Since
 
 namespace EthLib.Base.Until
