@@ -1699,10 +1699,7 @@ theorem ledger_processSyncAggregate {altair : .altair ≤ fork}
       have zipped : ((list.zip aggregate.syncCommitteeBits.bits.toArray.toList).countP
           fun m => decide (m.1.toNat = v.toNat)) ≤
           list.countP fun m => decide (m.toNat = v.toNat) := by
-        have firsts : List.Sublist
-            ((list.zip aggregate.syncCommitteeBits.bits.toArray.toList).map Prod.fst) list := by
-          rw [List.zip_eq_zip_take_min, List.map_fst_zip (by simp)]
-          exact List.take_sublist _ _
+        have firsts := map_fst_zip_sublist list aggregate.syncCommitteeBits.bits.toArray.toList
         simpa [List.countP_map, Function.comp_def] using firsts.countP_le
           (p := fun m : ValidatorIndex => decide (m.toNat = v.toNat))
       have seats := countP_validatorIndexOfPubkey_le v listed

@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Base.map_fst_zip_sublist` (`Base/Proofs/List.lean`) states that the first items of a zip are a sublist of the first list, whatever the two lengths.
+  `blockBlobs_sublist` (`Consensus/Proofs/BeaconApi/Blocks.lean`), `ReservedReplay.selected_allocation_round_sum_le` (`Consensus/Proofs/DirectSafety/Apriori/Ownership.lean`), `ledger_processSyncAggregate` (`Consensus/Proofs/Transition/BlockLedger.lean`) and `syncAggregate_floor` (`Consensus/Proofs/Transition/EffectiveFall.lean`) read it in place of their own proofs.
+
 - In Lean, `ancestor_ghost_payloadTree_of_honest_support` (`Consensus/Proofs/Models/ForkChoice/PayloadTree.lean`) is Lemma 2 of the fast confirmation paper ([arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4), Appendix A.1) on the tree of payload-status nodes ([#2057](https://github.com/ethereum/EthLib/issues/2057)).
   Each block has a pending node, used before its payload status is known, and under it an empty and a full node.
   Take a bound for each block of the chain from just above `a` up to and including `b`.

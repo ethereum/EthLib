@@ -139,9 +139,7 @@ theorem blockBlobs_sublist (blobs : List Blob) (commitments : List KZGCommitment
     (hashes : Option (List VersionedHash)) :
     (blockBlobs blobs commitments hashes).Sublist blobs := by
   -- The first items of the zip are a prefix of the blobs.
-  have firsts : ((blobs.zip commitments).map Prod.fst).Sublist blobs := by
-    rw [List.zip_eq_zip_take_min, List.map_fst_zip (by simp)]
-    exact List.take_sublist _ _
+  have firsts := map_fst_zip_sublist blobs commitments
   cases hashes with
   | none => exact firsts
   | some requested =>

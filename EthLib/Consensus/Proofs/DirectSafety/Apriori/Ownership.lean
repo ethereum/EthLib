@@ -1037,9 +1037,7 @@ private theorem ReservedReplay.selected_allocation_round_sum_le
     (((tagged.zip allocations).filter select).map fun pair => pair.2.sourceRound).sum ≤
       increment * carrier.card := by
   -- The first items of the zip are a prefix of the tagged entries.
-  have firsts : ((tagged.zip allocations).map Prod.fst).Sublist tagged := by
-    rw [List.zip_eq_zip_take_min, List.map_fst_zip (by simp)]
-    exact List.take_sublist _ _
+  have firsts := map_fst_zip_sublist tagged allocations
   have selectedSub : (((tagged.zip allocations).filter select).map Prod.fst).Sublist tagged :=
     (List.filter_sublist.map _).trans firsts
   have unique := history.source_once.1.sublist (selectedSub.map (fun pair => pair.2.source))
