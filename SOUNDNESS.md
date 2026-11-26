@@ -8855,7 +8855,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/Sponge/`
-- `EthLib/Cryptography/Proofs/SufCma.lean`
+- `EthLib/Cryptography/Proofs/SufCma/`
 - `EthLib/Cryptography/Proofs/SupportBind.lean`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/UniformReads.lean`
