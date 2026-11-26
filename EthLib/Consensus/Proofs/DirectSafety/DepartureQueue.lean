@@ -882,15 +882,15 @@ private theorem credentials_coverage {fork : Fork} {s t : BeaconState preset for
 private theorem effectiveBalances_coverage {fork : Fork} {s t : BeaconState preset fork}
     (ok : processEffectiveBalanceUpdates s = .ok t) :
     DepartureCoverage (config := config) s t [] := by
-  apply DepartureCoverage.empty_fold ?_ ?_ ok
-  · intro a index b stepped
-    simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at stepped
-    obtain ⟨_, found, _, _, _, _, set⟩ := stepped
-    exact DepartureCoverage.setValidatorAt found set rfl
-  · intro a index b stepped
-    simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at stepped
-    obtain ⟨_, found, _, _, _, _, set⟩ := stepped
-    exact .setValidatorAt found set ⟨fun _ => rfl, fun _ => rfl⟩
+  -- The coverage composes only along a registry lifecycle, so the pass carries both.
+  refine (processEffectiveBalanceUpdates_invariant
+    (fun t => DepartureCoverage (config := config) s t [] ∧ RegistryLifecycle s t)
+    (fun a index b before stepped => ?_) ⟨DepartureCoverage.of_data rfl, .refl s⟩ ok).1
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at stepped
+  obtain ⟨_, found, _, _, _, _, set⟩ := stepped
+  have life : RegistryLifecycle a b := .setValidatorAt found set ⟨fun _ => rfl, fun _ => rfl⟩
+  exact ⟨before.1.suffix_of_empty (DepartureCoverage.setValidatorAt found set rfl) before.2 life,
+    before.2.trans life⟩
 
 /-- Crediting a pending deposit does not assign an exit to an existing validator. -/
 private theorem pendingDeposit_coverage {fork : Fork} {s t : BeaconState preset fork}
@@ -3976,8 +3976,8 @@ private theorem CountCohortStep.blsChange {f : Fork} {s t : BeaconState preset f
 private theorem CountCohortStep.effective {f : Fork} {s t : BeaconState preset f}
     (bound : Nat) (ok : processEffectiveBalanceUpdates s = .ok t) :
     CountCohortStep config bound s t := by
-  unfold processEffectiveBalanceUpdates at ok
-  refine CountCohortStep.fold (fun _ _ _ computed => ?_) ok
+  refine processEffectiveBalanceUpdates_invariant (CountCohortStep config bound s)
+    (fun _ _ _ previous computed => previous.trans ?_) (.refl s bound) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, found, _, _, _, _, set⟩ := computed
   exact .setExitUnchanged bound found set rfl

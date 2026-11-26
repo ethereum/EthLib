@@ -30,24 +30,8 @@ So it succeeds only when each validator has a balance. -/
 private theorem balance_of_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) {index : Nat}
     (inside : index < state.validators.data.size) :
-    ∃ balance, state.balances.data[index]? = some balance := by
-  unfold processEffectiveBalanceUpdates at computed
-  obtain ⟨middle, next, prefixOk, atIndex, -⟩ :=
-    (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial) (fun _ _ => trivial)
-      (fun _ _ _ _ => trivial) computed).2 index (by simpa using inside)
-  simp only [List.getElem_range] at atIndex
-  have balances : middle.balances = state.balances :=
-    foldlM_ok_invariant (fun current : BeaconState preset fork =>
-      current.balances = state.balances)
-      (fun _ _ _ kept step => by
-        simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
-        obtain ⟨_, _, _, _, _, _, set⟩ := step
-        obtain ⟨_, rfl⟩ := setValidatorAt_ok set
-        exact kept) rfl prefixOk
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at atIndex
-  obtain ⟨_, _, balance, read, -⟩ := atIndex
-  rw [← balances]
-  exact ⟨balance, getBalanceAt_eq_ok_iff.mp read⟩
+    ∃ balance, state.balances.data[index]? = some balance :=
+  processEffectiveBalanceUpdates_owned computed (Array.getElem?_eq_getElem inside)
 
 /-- The largest effective balance of a validator depends only on its credentials. -/
 theorem withdrawalMaxEffectiveBalance_of_credentials {old new : Validator}

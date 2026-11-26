@@ -525,13 +525,8 @@ theorem switchToCompounding_departureQueues {fork : Fork} {s t : BeaconState pre
 theorem effectiveBalances_departureQueues {fork : Fork} {s t : BeaconState preset fork}
     (electra : .pectra ≤ fork) (ok : processEffectiveBalanceUpdates s = .ok t) :
     departureQueues electra t = departureQueues electra s := by
-  refine foldlM_ok_invariant (fun t => departureQueues electra t = departureQueues electra s)
-    ?_ rfl ok
-  intro before index after kept updated
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at updated
-  obtain ⟨_, _, _, _, _, _, set⟩ := updated
-  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
-  exact kept
+  rw [processEffectiveBalanceUpdates_frame ok]
+  rfl
 
 /-- Settling checkpoints keeps both departure queues. -/
 theorem justification_departureQueues {fork : Fork} {s t : BeaconState preset fork}
