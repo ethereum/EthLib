@@ -222,6 +222,16 @@ theorem isQueryBoundP_isHashCall_iff {β : Type} (ob : OracleComp (unifSpec + hs
   rw [show (fun t => if IsHashCall hs t then 1 else 0) = hashCost from
     funext fun t => (hashCost_eq_ite t).symm]
 
+/-- Coins cost nothing under the charge of hash calls. -/
+theorem isChargeBound_hashCharge_liftM (c : ι → ℕ) {α : Type} (oa : ProbComp α) :
+    PFunctor.FreeM.IsChargeBound (liftM oa : OracleComp (unifSpec + hs) α)
+      (hashCharge (hs := hs) c) 0 := by
+  induction oa using OracleComp.inductionOn with
+  | pure a => exact PFunctor.FreeM.isChargeBound_pure a
+  | query_bind n k ih =>
+    rw [_root_.liftM_bind]
+    exact ⟨le_rfl, ih⟩
+
 /-- A computation against a model, with the count of its hash calls.
 
 A repeated input counts again. -/

@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.IdealFailure
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SearchFailure
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.AdversaryBudget
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Permutation
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -39,6 +40,10 @@ A second form counts only the adversary's own calls: `qH` calls of `H` and `r` r
 Its bound is `Q / 2^127`, with `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384`.
 
 For `r <= 2^32` it is at most `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385) / 2^127`.
+
+A third form runs `H` as Keccak-256 over a random permutation, whose inverse is an oracle too.
+
+With at most `q` own calls of `π` or `π⁻¹` and `2^32` requests, it is `(q + 531) * 2^-127`.
 
 The game runs EthLib's key generation, signing and verification.
 

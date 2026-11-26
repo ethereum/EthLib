@@ -71,6 +71,64 @@ theorem simulateQ_permImpl_keccakImpl (π : Equiv.Perm State) (input : HashInput
     (fun S => simulateQ_forward _ S)]
   exact LawfulApplicative.map_pure _ _
 
+/-- Coins pass through the run of the hash queries. -/
+theorem simulateQ_keccakImpl_liftM_prob {α : Type} (oa : ProbComp α) :
+    simulateQ keccakImpl (liftM oa : OracleComp OracleWorld α) =
+      (liftM oa : OracleComp (unifSpec + PermSpec State) α) := by
+  rw [QueryImpl.simulateQ_liftM_eq_of_query _ (fun t => liftM (unifSpec.query t)) fun _ => rfl]
+  rfl
+
+/-- `H` with its query run as Keccak-256 is Keccak-256 of the lanes over the permutation. -/
+theorem simulateQ_keccakImpl_queryLanes (input : Array UInt64) :
+    simulateQ keccakImpl (liftM (queryLanes input : OracleComp HashSpec Lanes4) :
+      OracleComp OracleWorld Lanes4) = keccak256LanesWith forward input := by
+  -- The answer read back as lanes is the lanes the bytes came from.
+  have hlanes : ∀ L : Lanes4, ofOutputLanes (digestEquiv.symm L.bytes) = L := fun L =>
+    Lanes4.bytes_injective ((bytes_ofOutputLanes _).trans
+      ((digestEquiv_eq_ofOutput _).symm.trans (Equiv.apply_symm_apply _ _)))
+  simp only [queryLanes, oracleHash, _root_.liftM_map]
+  change simulateQ keccakImpl (ofOutputLanes <$>
+    (liftM (OracleSpec.query (spec := OracleWorld) (Sum.inr (lanesBytes input))) :
+      OracleComp OracleWorld _)) = _
+  rw [simulateQ_map, simulateQ_spec_query]
+  change ofOutputLanes <$> (digestEquiv.symm <$>
+    keccak256With forward (listEquivByteArray (lanesBytes input))) = _
+  -- The byte array of a list of bytes is the array of that list.
+  have hbytes : listEquivByteArray (lanesBytes input) = ⟨(lanesBytes input).toArray⟩ :=
+    ByteArray.ext (by simp [listEquivByteArray])
+  rw [hbytes, ← keccak256LanesWith_lanesBytes]
+  refine ((comp_map _ _ _).symm.trans (comp_map _ _ _).symm).trans ?_
+  exact (congrArg (· <$> keccak256LanesWith forward input) (funext hlanes : _ = id)).trans
+    (LawfulFunctor.id_map _)
+
+/-- A call of `H` on lanes is charged at most one per block of its input. -/
+theorem isChargeBound_queryLanes (input : Array UInt64) :
+    IsChargeBound (liftM (queryLanes input : OracleComp HashSpec Lanes4) :
+      OracleComp OracleWorld Lanes4) (hashCharge (hs := HashSpec) blockCost)
+        (hashBlocks input.size) := by
+  simp only [queryLanes, oracleHash, _root_.liftM_map, isChargeBound_map_iff']
+  change IsChargeBound (liftM (OracleSpec.query (spec := OracleWorld)
+    (Sum.inr (lanesBytes input))) : OracleComp OracleWorld _) _ _
+  -- The query is on the bytes of the lanes, eight per lane.
+  have hcost : blockCost (lanesBytes input) ≤ hashBlocks input.size := by
+    simp [blockCost, listEquivByteArray, keccak256Cost, hashBlocks]
+  exact ⟨(zero_add _).trans_le hcost, fun _ => (zero_add _).trans_le hcost⟩
+
+/-- A forward call of the permutation is one call of it. -/
+theorem isChargeBound_forward {A : Type} (a : A) :
+    IsChargeBound (forward a) (hashCost (hs := PermSpec A)) 1 := by
+  change IsChargeBound (liftM (OracleSpec.query (spec := unifSpec + PermSpec A)
+    (Sum.inr (Sum.inl a))) : OracleComp (unifSpec + PermSpec A) _) _ _
+  have h : 0 + hashCost (hs := PermSpec A) (Sum.inr (Sum.inl a)) ≤ 1 := le_rfl
+  exact ⟨h, fun _ => h⟩
+
+/-- Keccak-256 of lanes over the permutation makes one call of it per block of its input. -/
+theorem isChargeBound_keccak256LanesWith_forward (input : Array UInt64) :
+    IsChargeBound (keccak256LanesWith forward input) (hashCost (hs := PermSpec State))
+      (hashBlocks input.size) := by
+  have h := isChargeBound_keccak256LanesWith isChargeBound_forward input
+  rwa [one_mul] at h
+
 variable {Request Message PublicKey SecretKey Signature : Type}
   [DecidableEq Message] [DecidableEq Signature]
 
