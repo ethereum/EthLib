@@ -3,6 +3,7 @@ module
 public import Lean.Data.Json
 public import Std.Data.TreeMap
 public import EthLib.Base.Except
+public import EthLib.Base.Uint64
 public import EthLib.Consensus.Types
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Serialization.Ssz.Codec.Json
@@ -157,7 +158,10 @@ def readUInt64 (path : String) (document : Json) : Except SlashingProtectionErro
   -- EthLib reads base 10 with no sign or leading zero, as the example of the EIP writes them.
   match Serialization.Ssz.readNat (.str text) with
   -- The EIP sets no bound; EthLib refuses `2^64` and above, since a slot or an epoch has 64 bits.
-  | .ok n => if n < 2 ^ 64 then .ok n.toUInt64 else .error (.field path)
+  | .ok n =>
+    match Uint64.ofNat? n with
+    | some value => .ok value
+    | none => .error (.field path)
   | .error _ => .error (.field path)
 
 /-- A fixed number of bytes, written as `0x` hex in a string, in either letter case. -/

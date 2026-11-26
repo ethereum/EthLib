@@ -62,20 +62,53 @@ theorem addChecked_of_lt {a b : UInt64} (h : a.toNat + b.toNat < 2 ^ 64) :
 theorem ne_zero_of_neZero_toNat {n : UInt64} [NeZero n.toNat] : n ≠ 0 :=
   fun zero => NeZero.ne n.toNat (by rw [zero]; rfl)
 
+/-- The conversion returns an integer exactly when the integer has the value `n`. -/
+theorem ofNat?_eq_some_iff {n : Nat} {a : UInt64} : ofNat? n = some a ↔ n = a.toNat := by
+  unfold ofNat?
+  split
+  · rename_i h
+    rw [Option.some.injEq]
+    constructor
+    · rintro rfl
+      rfl
+    · intro value
+      exact UInt64.toNat_inj.mp value
+  · rename_i h
+    simp only [reduceCtorEq, false_iff]
+    intro value
+    exact h (value ▸ a.toNat_lt)
+
+/-- The conversion returns none exactly from `2^64` on. -/
+theorem ofNat?_eq_none_iff {n : Nat} : ofNat? n = none ↔ 2 ^ 64 ≤ n := by
+  unfold ofNat?
+  split
+  · rename_i h
+    simp only [reduceCtorEq, false_iff, Nat.not_le]
+    exact h
+  · rename_i h
+    simp only [true_iff]
+    omega
+
+/-- The conversion of the value of a 64-bit integer returns that integer. -/
+theorem ofNat?_toNat (a : UInt64) : ofNat? a.toNat = some a :=
+  ofNat?_eq_some_iff.mpr rfl
+
 /-- The conversion succeeds exactly below `2^64`, and then it keeps the value. -/
 theorem ofNatChecked_ok_iff {n : Nat} {a : UInt64} :
     ofNatChecked n = .ok a ↔ n < 2 ^ 64 ∧ a.toNat = n := by
   unfold ofNatChecked
   split
-  · rename_i h
-    simp only [Except.ok.injEq, h, true_and]
+  · rename_i b converted
+    rw [Except.ok.injEq]
+    have value := ofNat?_eq_some_iff.mp converted
     constructor
     · rintro rfl
-      rfl
-    · intro value
-      exact UInt64.toNat_inj.mp value.symm
-  · rename_i h
+      exact ⟨value ▸ b.toNat_lt, value.symm⟩
+    · intro ⟨_, same⟩
+      exact UInt64.toNat_inj.mp (same.trans value).symm
+  · rename_i converted
     simp only [reduceCtorEq, false_iff, not_and]
+    have := ofNat?_eq_none_iff.mp converted
     omega
 
 /-- A number below `2^64` keeps its value as a 64-bit integer. -/

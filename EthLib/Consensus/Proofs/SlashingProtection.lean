@@ -110,7 +110,7 @@ theorem readUInt64_uint64Json (path : String) (value : UInt64) :
     readUInt64 path (uint64Json value) = .ok value := by
   simp only [readUInt64, uint64Json, Serialization.Ssz.decimal, readString, bind, Except.bind]
   rw [Serialization.Ssz.readNat_str]
-  simp [value.toNat_lt]
+  simp [Base.Uint64.ofNat?_toNat]
 
 /-- Bytes that the file writes read back as themselves. -/
 theorem readBytes_bytesJson (path : String) {size : Nat} (bytes : Vector UInt8 size) :

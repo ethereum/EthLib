@@ -11,6 +11,8 @@ The two's complement reading of a word is the signed value of its bit vector.
 On `[-2^255, 2^255)`, that reading inverts the encoding of an integer.
 
 A word and its 32 big-endian bytes determine each other.
+
+A natural number converts to a word exactly below 2^256, and the word keeps its value.
 -/
 
 @[expose] public section
@@ -71,5 +73,37 @@ theorem toBeBytes_fromBeBytes (bytes : Vector UInt8 32) :
 /-- Two words with the same bytes are the same word. -/
 theorem toBeBytes_inj {a b : U256} (h : toBeBytes a = toBeBytes b) : a = b := by
   rw [← fromBeBytes_toBeBytes a, h, fromBeBytes_toBeBytes]
+
+/-- The conversion returns a word exactly when the word has the value `n`. -/
+theorem ofNat?_eq_some_iff {n : Nat} {w : U256} : ofNat? n = some w ↔ n = w.toNat := by
+  unfold ofNat?
+  split
+  · rename_i h
+    rw [Option.some.injEq]
+    constructor
+    · rintro rfl
+      exact (Nat.mod_eq_of_lt h).symm
+    · intro value
+      apply BitVec.eq_of_toNat_eq
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h, value]
+  · rename_i h
+    simp only [reduceCtorEq, false_iff]
+    intro value
+    exact h (value ▸ w.isLt)
+
+/-- The conversion returns none exactly from `2^256` on. -/
+theorem ofNat?_eq_none_iff {n : Nat} : ofNat? n = none ↔ 2 ^ 256 ≤ n := by
+  unfold ofNat?
+  split
+  · rename_i h
+    simp only [reduceCtorEq, false_iff, Nat.not_le]
+    exact h
+  · rename_i h
+    simp only [true_iff]
+    omega
+
+/-- The conversion of the value of a word returns that word. -/
+theorem ofNat?_toNat (w : U256) : ofNat? w.toNat = some w :=
+  ofNat?_eq_some_iff.mpr rfl
 
 end EthLib.Base.U256

@@ -51,6 +51,10 @@ A word is below 2^256, so it always fits in 32 bytes. -/
 def toBeBytes (w : U256) : Bytes32 :=
   ByteOrder.toBE 32 w.toNat
 
+/-- `n` as a 256-bit word, or none if `n` is `2^256` or more. -/
+def ofNat? (n : Nat) : Option U256 :=
+  if n < 2 ^ 256 then some (BitVec.ofNat 256 n) else none
+
 end U256
 
 end EthLib.Base

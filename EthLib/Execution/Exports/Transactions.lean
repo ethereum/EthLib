@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Base.Uint64
 public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.Exports.State
 public import EthLib.Cryptography.Exports.Kzg
@@ -41,7 +42,9 @@ open EthLib.Serialization.Rlp
 /-- A count of gas as a `UInt64`, or an error from `2^64` on. -/
 def gasToUInt64 (gas : Nat) : Result UInt64 :=
   -- No error type covers this bound of the binding, so its code is 0.
-  if gas < 2 ^ 64 then pure (UInt64.ofNat gas) else rejectArgument none "gas is 2^64 or more"
+  match Uint64.ofNat? gas with
+  | some value => pure value
+  | none => rejectArgument none "gas is 2^64 or more"
 
 /-- The transaction that `bytes` encodes at the named fork, if it comes no later than `last`. -/
 def decodeAt (last : Fork) (fork bytes : ByteArray) : Result (Fork × Transaction) := do
@@ -171,13 +174,13 @@ def checkInBlockOf (args : InBlockArgs) : Result (Address × Nat × UInt64) := d
   -- No error type covers these inputs of the binding, so their code is 0.
   if fork < .london ∧ baseFee ≠ 0 then
     rejectArgument none "a fork before london has no base fee"
-  if 2 ^ 64 ≤ excess then
-    rejectArgument none "excess blob gas is 2^64 or more"
+  let some excessBlobGas := Uint64.ofNat? excess
+    | rejectArgument none "excess blob gas is 2^64 or more"
   -- The checks read no other field of the block, so the others hold 0.
   let env : Evm.BlockEnvironment fork := {
     chainId, coinbase := 0, number := 0, gasLimit,
     timestamp := 0, difficulty := 0, blockHashes := [], baseFeePerGas := fun _ => baseFee,
-    prevRandao := fun _ => 0, excessBlobGas := fun _ => UInt64.ofNat excess,
+    prevRandao := fun _ => 0, excessBlobGas := fun _ => excessBlobGas,
     parentBeaconBlockRoot := fun _ => 0, slotNumber := fun _ => 0 }
   -- Before Glamsterdam a block counts no state gas.
   let used : BlockGas := ⟨gasUsed, 0, blobGasUsed⟩

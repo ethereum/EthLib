@@ -489,15 +489,17 @@ theorem getPendingBalanceToWithdraw_ok_iff {state : BeaconState preset fork}
   simp only [EthLib.Base.sum_map_ite_eq_sum_filter
     fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]
   split
-  · rename_i small
-    simp only [Except.ok.injEq, small, true_and]
+  · rename_i sum converted
+    have value := Uint64.ofNat?_eq_some_iff.mp converted
+    simp only [Except.ok.injEq]
     constructor
     · rintro rfl
-      simp [Nat.mod_eq_of_lt small]
-    · intro sum
-      apply UInt64.toNat_inj.mp
-      simp [sum, Nat.mod_eq_of_lt small]
-  · simp only [reduceCtorEq, false_iff, not_and]
+      exact ⟨value ▸ sum.toNat_lt, value.symm⟩
+    · rintro ⟨-, same⟩
+      exact UInt64.toNat_inj.mp (same.trans value).symm
+  · rename_i converted
+    have := Uint64.ofNat?_eq_none_iff.mp converted
+    simp only [reduceCtorEq, false_iff, not_and]
     omega
 
 /-- From Electra, the pending balance of a validator fails exactly when its sum reaches `2^64`.
@@ -514,12 +516,17 @@ theorem getPendingBalanceToWithdraw_eq_error_iff {state : BeaconState preset for
   simp only [EthLib.Base.sum_map_ite_eq_sum_filter
     fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]
   split
-  · simp only [reduceCtorEq, false_iff, not_and]
+  · rename_i sum converted
+    have := Uint64.ofNat?_eq_some_iff.mp converted
+    have := sum.toNat_lt
+    simp only [reduceCtorEq, false_iff, not_and]
     omega
-  · simp only [Except.error.injEq]
+  · rename_i converted
+    have := Uint64.ofNat?_eq_none_iff.mp converted
+    simp only [Except.error.injEq]
     constructor
     · rintro rfl
-      exact ⟨by omega, rfl⟩
+      exact ⟨this, rfl⟩
     · rintro ⟨-, rfl⟩
       rfl
 

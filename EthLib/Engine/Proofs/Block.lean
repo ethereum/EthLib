@@ -5,6 +5,7 @@ public import EthLib.Engine.Block
 public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Cryptography.Proofs.Hash.Sha256
+import EthLib.Base.Proofs.U256
 import EthLib.Base.Proofs.Uint64
 
 /-!
@@ -134,9 +135,7 @@ theorem ofBlock_toBlock (hParis : .paris ≤ fork)
   subst hComputed
   obtain ⟨hEnc, -⟩ := encode_of_decodeTransactions hTxs
   simp only [ofBlock, hEnc, hHash, Except.toOption, Option.bind_eq_bind, Option.bind_some,
-    toNat_ofNat_timestamp]
-  rw [ite_eq_left ⟨p.blockNumber.toNat_lt, p.gasLimit.toNat_lt, p.gasUsed.toNat_lt,
-    p.timestamp.toNat_lt, p.baseFeePerGas.isLt⟩]
+    toNat_ofNat_timestamp, Uint64.ofNat?_toNat, U256.ofNat?_toNat]
   cases p
   simp [pure]
 
@@ -172,56 +171,52 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork)
   cases hHash : b.header.hash with
   | error => simp [hBytes, hHash] at h
   | ok blockHash =>
-  simp only [hBytes, hHash, Option.bind_some] at h
-  split at h
-  · rename_i hBounds
-    obtain ⟨hN, hG, hU, hT, hB⟩ := hBounds
-    simp only [pure, Option.some.injEq] at h
-    subst h
-    have hDec := decodeTransactions_of_encode (index := 0) hBytes hForks
-    obtain ⟨_, hBytes', hRoot⟩ := transactionsRoot_eq_ok_iff.mp hTransactionsRoot
-    cases hBytes.symm.trans hBytes'
-    have hWr : Since.sequence (fork := fork) (fun hf => (withdrawalsRoot (b.withdrawals hf)).mapError
-        fun _ => PayloadError.noEncoding) = .ok b.header.withdrawalsRoot :=
-      Since.sequence_eq_ok_iff.mpr fun hf => by simp [hWithdrawalsRoot hf, Except.mapError]
-    simp only [Except.mapError] at hWr
-    have hAl : Since.sequence (fork := fork) (fun hf => blockAccessListHashOf (accessList hf)) =
-        .ok b.header.blockAccessListHash := Since.sequence_eq_ok_iff.mpr hAccessList
-    have hSl : slot = b.header.slotNumber := funext hSlot
-    subst hSl
-    simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, hDec, hRoot, bind,
-      Except.bind, Except.mapError, pure, Except.pure, hWr, hAl]
-    have hTime :
-        BitVec.ofNat 256 b.header.timestamp.toNat.toUInt64.toNat = b.header.timestamp := by
-      apply BitVec.eq_of_toNat_eq
-      rw [BitVec.toNat_ofNat, Uint64.toNat_toUInt64 hT]
-      exact Nat.mod_eq_of_lt (BitVec.isLt _)
-    have hBase : ∀ x, (BitVec.ofNat 256 (b.header.baseFeePerGas x)).toNat =
-        b.header.baseFeePerGas x := fun x => by
-      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hB]
-    have hHeader : ({ b.header with
-        ommersHash := EMPTY_OMMER_HASH, difficulty := 0,
-        number := b.header.number.toUInt64.toNat, gasLimit := b.header.gasLimit.toUInt64.toNat,
-        gasUsed := b.header.gasUsed.toUInt64.toNat,
-        timestamp := BitVec.ofNat 256 b.header.timestamp.toNat.toUInt64.toNat,
-        nonce := Vector.replicate 8 0,
-        baseFeePerGas := fun x => (BitVec.ofNat 256 (b.header.baseFeePerGas x)).toNat,
-        requestsHash := fun hf => requestsHash (requests hf) } :
-        Header fork) = b.header := by
-      obtain ⟨⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _⟩,
-        txs, ommers, ws⟩ := b
-      dsimp only at *
-      subst hOmmersHash hDifficulty hNonce
-      simp only [Uint64.toNat_toUInt64 hN, Uint64.toNat_toUInt64 hG, Uint64.toNat_toUInt64 hU,
-        hTime, hBase, ← hRequests]
-    dsimp only at hHeader
-    rw [hHeader]
-    simp only [hHash, ite_true]
-    obtain ⟨header, txs, ommers, ws⟩ := b
-    dsimp only at hOmmers
-    subst hOmmers
-    rfl
-  · cases h
+  simp only [hBytes, hHash, Option.bind_some, Option.bind_eq_some_iff] at h
+  obtain ⟨number, hN, gasLimit, hG, gasUsed, hU, time, hT, base, hB, h⟩ := h
+  simp only [pure, Option.some.injEq] at h
+  subst h
+  replace hN := Uint64.ofNat?_eq_some_iff.mp hN
+  replace hG := Uint64.ofNat?_eq_some_iff.mp hG
+  replace hU := Uint64.ofNat?_eq_some_iff.mp hU
+  replace hT := Uint64.ofNat?_eq_some_iff.mp hT
+  replace hB := U256.ofNat?_eq_some_iff.mp hB
+  have hDec := decodeTransactions_of_encode (index := 0) hBytes hForks
+  obtain ⟨_, hBytes', hRoot⟩ := transactionsRoot_eq_ok_iff.mp hTransactionsRoot
+  cases hBytes.symm.trans hBytes'
+  have hWr : Since.sequence (fork := fork) (fun hf => (withdrawalsRoot (b.withdrawals hf)).mapError
+      fun _ => PayloadError.noEncoding) = .ok b.header.withdrawalsRoot :=
+    Since.sequence_eq_ok_iff.mpr fun hf => by simp [hWithdrawalsRoot hf, Except.mapError]
+  simp only [Except.mapError] at hWr
+  have hAl : Since.sequence (fork := fork) (fun hf => blockAccessListHashOf (accessList hf)) =
+      .ok b.header.blockAccessListHash := Since.sequence_eq_ok_iff.mpr hAccessList
+  have hSl : slot = b.header.slotNumber := funext hSlot
+  subst hSl
+  simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, hDec, hRoot, bind,
+    Except.bind, Except.mapError, pure, Except.pure, hWr, hAl]
+  -- Each number of the payload has the value of the field of the header that it came from.
+  have hTime : BitVec.ofNat 256 time.toNat = b.header.timestamp := by
+    apply BitVec.eq_of_toNat_eq
+    rw [toNat_ofNat_timestamp, hT]
+  have hHeader : ({ b.header with
+      ommersHash := EMPTY_OMMER_HASH, difficulty := 0,
+      number := number.toNat, gasLimit := gasLimit.toNat, gasUsed := gasUsed.toNat,
+      timestamp := BitVec.ofNat 256 time.toNat,
+      nonce := Vector.replicate 8 0,
+      baseFeePerGas := fun _ => base.toNat,
+      requestsHash := fun hf => requestsHash (requests hf) } :
+      Header fork) = b.header := by
+    obtain ⟨⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _⟩,
+      txs, ommers, ws⟩ := b
+    dsimp only at *
+    subst hOmmersHash hDifficulty hNonce
+    simp only [← hN, ← hG, ← hU, hTime, ← hB, ← hRequests]
+  dsimp only at hHeader
+  rw [hHeader]
+  simp only [hHash, ite_true]
+  obtain ⟨header, txs, ommers, ws⟩ := b
+  dsimp only at hOmmers
+  subst hOmmers
+  rfl
 
 /-! ## The block access list, from Glamsterdam -/
 

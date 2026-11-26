@@ -156,17 +156,21 @@ theorem getPendingBalanceToWithdrawForBuilder_ok_iff {state : BeaconState preset
       pendingBuilderTotal state gloas index < 2 ^ 64 ∧
         amount.toNat = pendingBuilderTotal state gloas index := by
   unfold getPendingBalanceToWithdrawForBuilder
-  by_cases large : 2 ^ 64 ≤ pendingBuilderTotal state gloas index
-  · simp [large, throw, throwThe, MonadExcept.throw, MonadExceptOf.throw, bind, Except.bind]
-    omega
-  · have small : pendingBuilderTotal state gloas index < 2 ^ 64 := Nat.lt_of_not_le large
-    simp only [large, ite_false, pure, Except.pure, Except.ok.injEq, small, true_and]
+  dsimp only
+  split
+  · rename_i sum converted
+    have value := Uint64.ofNat?_eq_some_iff.mp converted
+    simp only [pure, Except.pure, Except.ok.injEq]
     constructor
     · rintro rfl
-      simp [Nat.mod_eq_of_lt small]
-    · intro sum
-      apply UInt64.toNat_inj.mp
-      simp [sum, Nat.mod_eq_of_lt small]
+      exact ⟨value ▸ sum.toNat_lt, value.symm⟩
+    · rintro ⟨-, same⟩
+      exact UInt64.toNat_inj.mp (same.trans value).symm
+  · rename_i converted
+    have := Uint64.ofNat?_eq_none_iff.mp (Option.eq_none_iff_forall_ne_some.mpr converted)
+    simp only [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw, reduceCtorEq, false_iff,
+      not_and]
+    omega
 
 /-- A builder can cover a bid exactly when its balance holds the bid, its debt and the minimum.
 

@@ -46,8 +46,9 @@ local instance (priority := high) : FromJson UInt64 where
     | .str _ => Lean.UInt64.fromJson? json
     | _ => do
       let n ← fromJson? (α := Nat) json
-      if h : n < UInt64.size then return UInt64.ofNatLT n h
-      else throw s!"{n} does not fit in 64 bits"
+      match Uint64.ofNat? n with
+      | some value => return value
+      | none => throw s!"{n} does not fit in 64 bits"
 
 /-- A 256-bit integer as a JSON number, which Python reads as an `int`. -/
 local instance (priority := high) : ToJson U256 where
@@ -75,7 +76,9 @@ instance : FromJson U256 where
         | some n => pure n
         | none => throw s!"{text} is not a number"
       | _ => fromJson? (α := Nat) json
-    if n < 2 ^ 256 then return BitVec.ofNat 256 n else throw s!"{n} does not fit in 256 bits"
+    match U256.ofNat? n with
+    | some word => return word
+    | none => throw s!"{n} does not fit in 256 bits"
 
 deriving instance FromJson for BlobScheduleEntry
 deriving instance FromJson for GasLimitScheduleEntry

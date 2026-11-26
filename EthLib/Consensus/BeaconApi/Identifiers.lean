@@ -77,7 +77,7 @@ def parseUInt64 (text : String) : Option UInt64 :=
   -- EthLib's choice: plain decimal, with no sign and no leading zero.
   match readNat (.str text) with
   -- A slot and an index are 64-bit numbers.
-  | .ok n => if n < UInt64.size then some (UInt64.ofNat n) else none
+  | .ok n => Base.Uint64.ofNat? n
   | .error _ => none
 
 /-- The error of a text that names nothing, with code 400. -/

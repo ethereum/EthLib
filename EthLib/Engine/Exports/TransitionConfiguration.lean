@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Base.Uint64
 public import EthLib.Engine.Capabilities
 public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.TransitionConfiguration
@@ -32,14 +33,14 @@ def exchangeTransitionConfigurationOf (args : Nat × Bytes32 × Nat × PyValue) 
     Result PyValue := do
   let (difficulty, hash, number, request) := args
   -- A total difficulty of at least `2^256`, or a block number of at least `2^64`, has code 0.
-  unless difficulty < 2 ^ 256 do
-    rejectArgument none s!"config: a total difficulty of {difficulty}, not below 2^256"
-  unless number < 2 ^ 64 do
-    rejectArgument none s!"config: a block number of {number}, not below 2^64"
+  let some terminalTotalDifficulty := U256.ofNat? difficulty
+    | rejectArgument none s!"config: a total difficulty of {difficulty}, not below 2^256"
+  let some terminalBlockNumber := Uint64.ofNat? number
+    | rejectArgument none s!"config: a block number of {number}, not below 2^64"
   let own : TransitionConfiguration := {
-    terminalTotalDifficulty := BitVec.ofNat 256 difficulty
+    terminalTotalDifficulty
     terminalBlockHash := hash
-    terminalBlockNumber := number.toUInt64 }
+    terminalBlockNumber }
   -- The request is a JSON-RPC request object, with its method and its parameters.
   let request := request.toJson
   -- A request without a method, or with another method, has code 0.

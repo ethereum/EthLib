@@ -110,8 +110,8 @@ def getPendingBalanceToWithdrawForBuilder (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (index : BuilderIndex) : Except AccessorError Gwei := do
   -- The sum is taken in natural numbers, then must be below `2^64`.
   let total := pendingBuilderTotal state gloas index
-  if 2 ^ 64 ≤ total then throw (.balanceOverflow total)
-  return total.toUInt64
+  let some amount := Uint64.ofNat? total | throw (.balanceOverflow total)
+  return amount
 
 /-- Whether a builder can pay a bid of an amount. -/
 def canBuilderCoverBid (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)

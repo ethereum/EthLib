@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Uint64
 public import EthLib.Engine.Payload
 public import EthLib.Execution.Blocks.BlockAccessList
 public import EthLib.Execution.Blocks.Requests
@@ -171,28 +172,30 @@ def ofBlock (hParis : .paris ≤ fork) (b : Block fork Transaction) :
   -- `ExecutionPayloadV1`: the number, the gas limit, the gas used and the timestamp have 64 bits.
   --
   -- The base fee is a 256-bit quantity, and a number that does not fit gives none.
-  if h.number < 2 ^ 64 ∧ h.gasLimit < 2 ^ 64 ∧ h.gasUsed < 2 ^ 64 ∧
-      h.timestamp.toNat < 2 ^ 64 ∧ baseFee < 2 ^ 256 then
-    -- The fields of the header, back under the names of the payload.
-    return {
-      parentHash := h.parentHash
-      feeRecipient := h.coinbase
-      stateRoot := h.stateRoot
-      receiptsRoot := h.receiptRoot
-      logsBloom := h.bloom
-      prevRandao := h.prevRandao
-      blockNumber := h.number.toUInt64
-      gasLimit := h.gasLimit.toUInt64
-      gasUsed := h.gasUsed.toUInt64
-      timestamp := h.timestamp.toNat.toUInt64
-      extraData := h.extraData
-      baseFeePerGas := BitVec.ofNat 256 baseFee
-      blockHash
-      transactions
-      withdrawals := b.withdrawals
-      blobGasUsed := h.blobGasUsed
-      excessBlobGas := h.excessBlobGas }
-  else none
+  let blockNumber ← Uint64.ofNat? h.number
+  let gasLimit ← Uint64.ofNat? h.gasLimit
+  let gasUsed ← Uint64.ofNat? h.gasUsed
+  let timestamp ← Uint64.ofNat? h.timestamp.toNat
+  let baseFeePerGas ← U256.ofNat? baseFee
+  -- The fields of the header, back under the names of the payload.
+  return {
+    parentHash := h.parentHash
+    feeRecipient := h.coinbase
+    stateRoot := h.stateRoot
+    receiptsRoot := h.receiptRoot
+    logsBloom := h.bloom
+    prevRandao := h.prevRandao
+    blockNumber
+    gasLimit
+    gasUsed
+    timestamp
+    extraData := h.extraData
+    baseFeePerGas
+    blockHash
+    transactions
+    withdrawals := b.withdrawals
+    blobGasUsed := h.blobGasUsed
+    excessBlobGas := h.excessBlobGas }
 
 end ExecutionPayload
 
