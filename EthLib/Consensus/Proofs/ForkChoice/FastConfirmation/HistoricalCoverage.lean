@@ -1350,7 +1350,7 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
   have signedAll := Execution.justifiedHonestlySigned anchored start anchorSlot anchorHeader
     anchorZero slots parameters delay genesis pre roots absent heldEarly bounded enough terminal
     afterAnchor byzantine
-  -- The caller reads its head at each rollover, and every honest store has a head.
+  -- Every honest store has a head, unless stores collide or historical evidence holds.
   have signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 time :=
     anchorEpochOk ▸ signedAll
   rcases e.honestHeadsExist_or_evidence_of_gated sync slots admitted fits prompt votes

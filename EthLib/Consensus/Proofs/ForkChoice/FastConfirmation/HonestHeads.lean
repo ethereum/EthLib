@@ -973,7 +973,7 @@ theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous 
 
 The store is up to date, and the root strictly descends from its justified block.
 
-Otherwise two honest stores collide, or direct-safety or accountable-safety evidence holds.
+Otherwise two honest stores collide, or historical, held-state or cross-store evidence holds.
 
 The caller's head read at each rollover is derived, not assumed. -/
 theorem Execution.rootInFilteredTree_of_checked_or_evidence [DecidablePred (· ∈ J)]
@@ -1059,13 +1059,13 @@ theorem Execution.rootInFilteredTree_of_checked_or_evidence [DecidablePred (· �
   · exact .inr (.inl collision)
   · exact .inr (.inr (.inl historical))
 
-/-- An accepted current-target test has active honest signers with two thirds of the active balance.
+/-- An accepted current-target test has active honest signers with `2 * total + margin ≤ 3 * stake`.
 
 Each votes for the target before the next epoch.
 
-Otherwise two honest stores collide, or direct-safety evidence holds.
+Otherwise two honest stores collide, or historical direct-safety evidence holds.
 
-The caller's head read at each rollover and, from Gloas, the registry bound are derived. -/
+The caller's head read at the next epoch's start and, from Gloas, the registry bound are derived. -/
 theorem Execution.honestTargetVotes_signed_of_checked_or_evidence {anchor : Store preset fork}
     {Δ time : ℕ} {margin : ℕ} (slots : 0 < config.SLOT_DURATION_MS)
     (fits : DelayFits fork config genesisTimeMs Δ)
@@ -1095,7 +1095,7 @@ theorem Execution.honestTargetVotes_signed_of_checked_or_evidence {anchor : Stor
     (beginOk : computeTimeAtSlotMs config genesisTimeMs first = .ok begin)
     (beginLe : begin.toNat ≤ time)
     (covers : HonestHeadsCover (e := e) origin (e.world n).time (begin.toNat + 1))
-    -- The caller's head read at each rollover rests on these, up to the two alternatives.
+    -- The caller's head read at the next epoch's start rests on these, up to two alternatives.
     (sync : e.Synchronous Δ) (admitted : BlocksAdmitted e 0 Δ time)
     (signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 time)
     (absent : AnchorParentAbsent (e := e) time) {horizon : Epoch}

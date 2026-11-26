@@ -4042,11 +4042,11 @@ The theorem holds at every fork; from Gloas it also assumes that every honest st
 `HeldBlockStateRootsNonzero` assumes that their blocks have nonzero state roots.
 Block agreement between honest stores is not assumed: `Store.blocks_agree_or_collision` splits it from the collision disjunct.
 `CallerHeadAt` assumes that at the start of the next epoch the caller's up-to-date store has a head.
-The theorem assumes this read, since its conclusion has no evidence alternative; a companion with that alternative derives it.
+The theorem assumes this read, since its conclusion has the collision but no `HistoricalDirectSafetyEvidence` alternative; a companion with that alternative derives it.
 `Execution.callRolloverRead_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HonestHeads.lean` derives it for the caller of a checked call at every fork, up to a collision of two honest stores or `HistoricalDirectSafetyEvidence` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
 It also takes, gated on Gloas, the anchor registry's room (`AnchorRegistryRoom`), `Config.HeadWeightsFit`, `CheckpointHeadWeightCeiling` and `Config.CommitteeWindowsFit`.
 `Execution.honestTargetVotes_signed_of_checked_or_evidence`, in the same file, is that companion.
-It derives the read through `Execution.callRolloverRead_or_evidence`, and from Gloas the registry bound through `AnchorRegistryRoom`, so it takes neither.
+It derives the read from `Execution.callRolloverRead_or_evidence` at the start of the next epoch, and from Gloas the registry bound through `AnchorRegistryRoom`, so it takes neither.
 Its conclusion adds `HistoricalDirectSafetyEvidence` to the collision.
 The window of that head over the target's epoch is derived: the theorem takes `Config.CommitteeWindowsFit` and reads it through `Store.getCommitteesBetweenSlots_exists`.
 The head's state is held, and the window ends before the current slot.
