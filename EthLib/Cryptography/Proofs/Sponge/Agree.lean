@@ -166,13 +166,13 @@ variable [Fintype C]
 
 /-- On the ideal side, a game that costs at most `N` rarely gets a differing answer.
 
-Its chance is at most `(N (2N + 1) + N (N + 1)) / |C|`. -/
+Its chance is at most `(N^2 + N) / |C|`. -/
 theorem prEvent_foldIdeal_diff_le {α : Type}
     {oa : OracleComp (GameSpec (SpongeState Dg E C) Msg Dg) α} {N : ℕ}
     (hN : WithinCost (fun m => (P.pad m).length) oa N) :
     Pr{let z ← (simulateQ (foldIdeal P iv) oa).run ((CState.init iv : CState Dg E C Msg), ∅)}[
       z.2.1.diff = true] ≤
-      ((N * (2 * N + 1) + N * (N + 1) : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞) := by
+      ((N * N + N : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞) := by
   refine (prEvent_mono_of_support _ _ _ fun z hz h =>
     bad_or_hiddenCollision_of_diff P iv (fun _ p => p.2) oa hz h).trans ?_
   calc _ = Pr{let z ← (simulateQ (ASpec Msg Dg E C).romImpl

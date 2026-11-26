@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Proofs.Sponge.Switch
 /-!
 # Proofs: the sponge is indifferentiable from a random oracle
 
-A game of cost `N` has advantage at most `N (N - 1) / (2 |S|) + (N (2N + 1) + N (N + 1)) / |C|`.
+A game of cost `N` has advantage at most `N (N - 1) / (2 |S|) + (N^2 + N) / |C|`.
 
 Here `S` is the set of sponge states and `C` the set of capacities.
 
@@ -14,7 +14,7 @@ It is a version of Theorem 2 of [Bertoni et al., Eurocrypt 2008][sponge], §4.3,
 
 Its simulator is simpler.
 
-Its capacity term is about `3 N^2 / |C|`; the term of their Lemma 5 is about `N^2 / (2 |C|)`.
+Its capacity term is `(N^2 + N) / |C|`, about twice the term `N^2 / (2 |C|)` of their Lemma 5.
 
 [sponge]: https://keccak.team/files/SpongeIndifferentiability.pdf
 -/
@@ -29,8 +29,8 @@ open OracleComp OracleSpec ENNReal LazyPermutation Indifferentiability Indiff
 noncomputable def spongeIndiffBound (cardS cardC N : ℕ) : ℝ≥0∞ :=
   -- The switch from the uniform permutation to independent answers.
   (N.choose 2 : ℝ≥0∞) / cardS +
-    -- The visible collisions, then the hidden ones.
-    ((N * (2 * N + 1) + N * (N + 1) : ℕ) : ℝ≥0∞) / cardC
+    -- The visible and the hidden collisions, charged together.
+    ((N * N + N : ℕ) : ℝ≥0∞) / cardC
 
 variable {Dg E C Msg : Type} [XorOp Dg] [XorOp E]
   [DecidableEq Dg] [DecidableEq E] [DecidableEq C] [DecidableEq Msg]

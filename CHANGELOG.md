@@ -1111,6 +1111,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the capacity term of the sponge indifferentiability bound is `(N^2 + N) / |C|`, down from `(N (2N + 1) + N (N + 1)) / |C|` ([#4716](https://github.com/ethereum/EthLib/issues/4716)).
+  - `Sponge.spongeIndiffBound cardS cardC N` (`Cryptography/Proofs/Sponge/Indifferentiability.lean`) is `N.choose 2 / cardS + (N * N + N) / cardC`, and `Sponge.Indiff.prEvent_visRun_le` and `prEvent_foldIdeal_diff_le` state `(N * N + N) / |C|`; `keccak256_indifferentiable` and the leanXMSS transfer to the random-permutation model get the smaller bound.
+  - `prEvent_bad_le_of_weightBudget` and `size_le_of_mem_support_run_weightBudget` (`Cryptography/Proofs/BadOnBudget.lean`) are removed: use `tsum_le_of_isQueryBound`, which charges a potential on the budget and the state and a final charge for a good end.
+
 - In Lean, the first items of a zip are a prefix of the first list, not only a sublist.
   - `Base.map_fst_zip_sublist` (`Base/Proofs/List.lean`), which stated `((xs.zip ys).map Prod.fst).Sublist xs`, is renamed `Base.map_fst_zip_prefix` and states `(xs.zip ys).map Prod.fst <+: xs`.
   - `blockBlobs_sublist` (`Consensus/Proofs/BeaconApi/Blocks.lean`), `ReservedReplay.selected_allocation_round_sum_le` (`Consensus/Proofs/DirectSafety/Apriori/Ownership.lean`), `ledger_processSyncAggregate` (`Consensus/Proofs/Transition/BlockLedger.lean`) and `syncAggregate_floor` (`Consensus/Proofs/Transition/EffectiveFall.lean`) read its `.sublist`.

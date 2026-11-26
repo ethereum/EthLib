@@ -2,6 +2,7 @@ module
 
 public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
 public import VCVio.OracleComp.QueryTracking.QueryBound.Basic
+public import VCVio.OracleComp.EvalDist.Sum
 
 /-!
 # Proofs: a bad event charged to a query budget
@@ -12,9 +13,7 @@ A potential maps each budget to a bound in `[0, ∞]` on the chance that the run
 
 This is the union bound over the queries of the run.
 
-The budget can also count weights of queries.
-
-A run of budget `Q` then turns bad with chance at most `Q δ` when each unit of weight costs `δ`.
+The potential can also read the state, and charge a good final state.
 -/
 
 @[expose] public section
@@ -63,69 +62,77 @@ theorem prEvent_bad_le_of_isQueryBound {B : Type} {impl : QueryImpl spec (StateT
       (ε := Φ (cost t b)) fun z hz hbz ↦ ?_).trans (hstep t b s hb.1 hs hbad)
     exact ih z.1 (hb.2 z.1) (hinv t b s hb.1 hs hbad z hz hbz) hbz
 
-/-! ## Budgets of weights -/
+/-- Weigh a bad outcome one and a good outcome at most `c`.
 
-section Weights
+The weighted outcomes sum to at most the chance of a bad outcome plus `c`. -/
+theorem tsum_ite_le_prEvent_add {β : Type} (oa : ProbComp β) (bad : β → Prop) [DecidablePred bad]
+    (f : β → ℝ≥0∞) (c : ℝ≥0∞) (h : ∀ z ∈ support oa, ¬bad z → f z ≤ c) :
+    ∑' z, Pr{let y ← oa}[y = z] * (if bad z then 1 else f z) ≤ Pr{let z ← oa}[bad z] + c := by
+  rw [prEvent_eq_tsum_ite]
+  calc _ ≤ ∑' z, ((if bad z then Pr{let y ← oa}[y = z] else 0) + Pr{let y ← oa}[y = z] * c) :=
+        tsum_le_tsum fun z => by
+          by_cases hz : z ∈ support oa
+          · split_ifs with hb
+            · simp
+            · rw [zero_add]
+              gcongr
+              exact h z hz hb
+          · simp [prEvent_eq_zero_of_not_mem_support _ hz]
+    _ ≤ _ := by
+      rw [tsum_add, ENNReal.tsum_mul_right]
+      gcongr
+      exact mul_le_of_le_one_left' (tsum_prEvent_le_one oa)
 
-variable {ι' : Type} {spec' : OracleSpec ι'} {α : Type}
+/-- **The union bound with a potential on the budget and the state.**
 
-/-- Along a run within a budget of weights, a size grows by at most the budget.
+A run within a query budget, from a good state of the invariant, ends bad or good.
 
-Each step from a state of the invariant raises the size by at most the weight of its query. -/
-theorem size_le_of_mem_support_run_weightBudget
-    (impl : QueryImpl spec (StateT σ (OracleComp spec'))) (inv : σ → Prop) (w : ι → ℕ)
-    (size : σ → ℕ)
-    (hinv : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), inv z.2)
-    (hsize : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), size z.2 ≤ size s + w t)
-    {oa : OracleComp spec α} {Q : ℕ}
-    (hQ : IsQueryBound oa Q (fun t n => w t ≤ n) fun t n => n - w t) {s₀ : σ} (hs₀ : inv s₀) :
-    ∀ z ∈ support ((simulateQ impl oa).run s₀), size z.2 ≤ size s₀ + Q := by
-  induction oa using OracleComp.inductionOn generalizing Q s₀ with
-  | pure a =>
-    intro z hz
-    simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
-    subst hz
-    exact Nat.le_add_right _ _
+Weigh a bad end one and a good end its final charge: the total is at most the starting potential. -/
+theorem tsum_le_of_isQueryBound {B : Type} {impl : QueryImpl spec (StateT σ ProbComp)}
+    {canQuery : ι → B → Prop} {cost : ι → B → B} (inv : B → σ → Prop) (bad : σ → Prop)
+    [DecidablePred bad] (Φ : B → σ → ℝ≥0∞) (T : σ → ℝ≥0∞)
+    -- A bad state stays bad.
+    (hmono : ∀ t s, bad s → ∀ z ∈ support ((impl t).run s), bad z.2)
+    -- A good state after a query meets the invariant of the budget after it.
+    (hinv : ∀ t b s, canQuery t b → inv b s → ¬bad s →
+      ∀ z ∈ support ((impl t).run s), ¬bad z.2 → inv (cost t b) z.2)
+    -- From a good state, a query's outcomes weigh at most the potential.
+    --
+    -- A bad outcome weighs one, and a good one its potential after the query.
+    (hstep : ∀ t b s, canQuery t b → inv b s → ¬bad s →
+      ∑' z, Pr{let y ← (impl t).run s}[y = z] *
+        (if bad z.2 then 1 else Φ (cost t b) z.2) ≤ Φ b s)
+    -- A good state of the invariant is charged at most its potential at the end.
+    (hstop : ∀ b s, inv b s → ¬bad s → T s ≤ Φ b s)
+    {α : Type} {oa : OracleComp spec α} {b : B} (hb : IsQueryBound oa b canQuery cost) {s : σ}
+    (hs : inv b s) (hbad : ¬bad s) :
+    ∑' z, Pr{let y ← (simulateQ impl oa).run s}[y = z] * (if bad z.2 then 1 else T z.2) ≤
+      Φ b s := by
+  induction oa using OracleComp.inductionOn generalizing b s with
+  | pure x =>
+    simp only [simulateQ_pure, StateT.run_pure, OracleComp.tsum_prEvent_pure_mul, hbad,
+      ↓reduceIte]
+    exact hstop b s hs hbad
   | query_bind t k ih =>
-    rw [isQueryBound_query_bind_iff] at hQ
-    intro z hz
-    simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind, mem_support_bind_iff] at hz
-    obtain ⟨us, hus, hz⟩ := hz
-    have h1 := hsize t s₀ hs₀ us hus
-    have h2 := ih us.1 (hQ.2 us.1) (hinv t s₀ hs₀ us hus) z hz
-    omega
-
-/-- **The union bound over a budget of weights.**
-
-A run of budget `Q` from a good state turns bad with chance at most `Q δ`.
-
-Each step of weight `w` must turn bad with chance at most `w δ` while its size stays within `N`. -/
-theorem prEvent_bad_le_of_weightBudget (impl : QueryImpl spec (StateT σ ProbComp))
-    (bad inv : σ → Prop)
-    (w : ι → ℕ) (size : σ → ℕ) (N : ℕ) (δ : ℝ≥0∞)
-    (hinv : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), inv z.2)
-    (hsize : ∀ t s, inv s → ∀ z ∈ support ((impl t).run s), size z.2 ≤ size s + w t)
-    -- The step starts in a good state of the invariant, with room for its weight below `N`.
-    (hstep : ∀ t s, inv s → ¬bad s → size s + w t ≤ N →
-      Pr{let z ← (impl t).run s}[bad z.2] ≤ w t * δ)
-    {oa : OracleComp spec α} {Q : ℕ}
-    (hQ : IsQueryBound oa Q (fun t n => w t ≤ n) fun t n => n - w t) {s₀ : σ} (hs₀ : inv s₀)
-    -- The run starts in a good state, with room for its budget below `N`.
-    (hb : ¬bad s₀) (hN : size s₀ + Q ≤ N) :
-    Pr{let z ← (simulateQ impl oa).run s₀}[bad z.2] ≤ Q * δ := by
-  -- The potential of a budget `b` is `b δ`; the invariant also bounds the size by `N - b`.
-  refine prEvent_bad_le_of_isQueryBound (fun b s => inv s ∧ size s + b ≤ N) bad
-    (fun b => (b : ℝ≥0∞) * δ) (fun t b s hc hs _ z hz _ => ⟨hinv t s hs.1 z hz, ?_⟩)
-    (fun t b s hc hs hbs => ?_) hQ ⟨hs₀, hN⟩ hb
-  · have := hsize t s hs.1 z hz
-    have := hs.2
-    omega
-  · have hle := hstep t s hs.1 hbs (by have := hs.2; omega)
-    calc Pr{let z ← (impl t).run s}[bad z.2] + ((b - w t : ℕ) : ℝ≥0∞) * δ
-        ≤ (w t : ℝ≥0∞) * δ + ((b - w t : ℕ) : ℝ≥0∞) * δ := add_le_add hle le_rfl
-      _ = (b : ℝ≥0∞) * δ := by
-        rw [← add_mul, ← Nat.cast_add, Nat.add_sub_cancel' hc]
-
-end Weights
+    rw [isQueryBound_query_bind_iff] at hb
+    simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind]
+    simp_rw [OracleComp.prEvent_bind_eq_tsum _ _ (· = _), ← ENNReal.tsum_mul_right]
+    rw [tsum_comm]
+    refine (tsum_le_tsum fun u => ?_).trans (hstep t b s hb.1 hs hbad)
+    simp_rw [mul_assoc, ENNReal.tsum_mul_left]
+    -- An unreachable first step weighs nothing.
+    by_cases hu : u ∈ support ((impl t).run s)
+    swap
+    · simp [prEvent_eq_zero_of_not_mem_support _ hu]
+    gcongr
+    split_ifs with hbu
+    -- After a bad first step the run stays bad, and its masses sum to at most one.
+    · refine (tsum_le_tsum fun z => ?_).trans
+        (tsum_prEvent_le_one ((simulateQ impl (k u.1)).run u.2))
+      by_cases hz : z ∈ support ((simulateQ impl (k u.1)).run u.2)
+      · simp [simulateQ_run_preserves_inv_of_query impl bad hmono (k u.1) u.2 hbu z hz]
+      · simp [prEvent_eq_zero_of_not_mem_support _ hz]
+    -- After a good first step, the rest of the run is charged by induction.
+    · exact ih u.1 (hb.2 u.1) (hinv t b s hb.1 hs hbad u hu hbu) hbu
 
 end EthLib.Cryptography
