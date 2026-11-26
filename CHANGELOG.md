@@ -1136,6 +1136,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- The decoder of the SSZ updates answer of the light client takes the fork of each chunk's digest from `Consensus.forkOfScheduledDigest`.
+  The response chunk and gossip decoders already do so.
+  A digest that only the far future epoch has is refused with `BeaconApi.ChunkError.bounds (.unscheduledDigest d)`.
+  On a preset with two or more slots in an epoch, such a digest failed before too, later, on the digest check or the payload.
+  On a preset with one slot in an epoch, an update whose attested header is at slot `2^64 - 1` decoded before and is now refused.
+  `BeaconApi.ChunkError.unknownDigest d` is now `BeaconApi.ChunkError.bounds (.unknownDigest d)`.
+  The message of `api_light_client_decode_updates` of `ethlib.consensus` changes with them.
+  In Lean, `decodeUpdateChunks_encode` (`Consensus/Proofs/BeaconApi/LightClient.lean`) assumes that the epoch of each update's attested header is not the far future epoch.
+  Migration: match `ChunkError.bounds`, and derive that fact from `computeEpochAtSlot_succ_lt` (`Consensus/Proofs/BeaconApi/ChainEvents.lean`) on a preset with two or more slots in an epoch.
+
 - In Lean, proofs that restated a shared lemma are removed; each line gives the lemma to use.
   - `Serialization.Ssz.zip_pairwise`: `Base.pairwise_zip_of_pairwise`, since `Nodup` is `Pairwise (· ≠ ·)`.
   - `Serialization.Ssz.mapM_readable_list`: `Base.mapM_exists_ok`.

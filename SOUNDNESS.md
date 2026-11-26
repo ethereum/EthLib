@@ -7044,8 +7044,12 @@ The empty answer is accepted only when the range has no known update.
 `IsUpdatesAnswer.length_le` shows that no accepted answer holds more updates, and `IsUpdatesAnswer.length_le_limit` gives the limit itself.
 `decodeUpdateChunks_encode` shows that the SSZ chunks of updates decode back to the updates, each with its fork, on a chain that passes the check of fork digests.
 It assumes a preset with a nonempty logs bloom and sync committee, as the round trip of SSZ for these containers does.
+It also assumes that the epoch of each update's attested header is not the far future epoch.
+That holds on every preset with two or more slots in an epoch.
+The decoder refuses a digest that only that epoch has.
 The decoder also refuses a chunk whose digest is not the digest of the epoch of its update.
-`encodeUpdateChunks_decode` shows the converse under the same assumptions: bytes that decode are the chunks of the updates they give.
+`encodeUpdateChunks_decode` shows the converse: bytes that decode are the chunks of the updates they give.
+It takes the same assumptions on the preset and the digests, and none on the epochs.
 `finalityUpdateResponse_notFound_iff` and `optimisticUpdateResponse_notFound_iff` show that each latest update answer refuses with code 404 exactly when the node knows no update of its kind.
 The files `finality_update.yaml` and `optimistic_update.yaml` of that release list that code when "No `LightClientFinalityUpdate` is available" and "No `LightClientOptimisticUpdate` is available".
 `finalityUpdateResponse_eq_error_iff` and `optimisticUpdateResponse_eq_error_iff` show that each latest update answer refuses exactly when the node knows no update of its kind.
@@ -7056,6 +7060,7 @@ The JSON answer for a range of updates writes each update with the same writer.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_light_client.py`) reads the pinned data collection cases of the light client.
 It checks that the chunks of the best updates of each case carry the digests and the bytes that the case serves, and decode back to them.
 It checks the start, the count and the limit of 128 of a range, the versions of the JSON answer, and the refusal of an update of another fork than its epoch.
+It checks that the decoder refuses a chunk with an unknown digest, and one with a digest that only the far future epoch has.
 It builds the store of a Gloas fork choice case, checks the bootstrap of the head and of the anchor, and starts a light client from each.
 It checks code 404 for the bootstrap of an unknown block and under a schedule before Altair.
 It checks code 404 for the latest finality and optimistic updates when the node knows none.

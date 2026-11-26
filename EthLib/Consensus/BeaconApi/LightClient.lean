@@ -4,6 +4,7 @@ public import EthLib.Consensus.BeaconApi.Identifiers
 public import EthLib.Consensus.BeaconApi.StateQueries
 public import EthLib.Consensus.ForkDigest
 public import EthLib.Consensus.LightClient.FullNode
+public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.ReqResp.Messages
 
 /-!
@@ -158,8 +159,8 @@ inductive ChunkError where
   | truncated (offset needed available : Nat)
   /-- A chunk is shorter than its digest. -/
   | shortChunk (length : Nat)
-  /-- No fork of the configuration has the digest of a chunk. -/
-  | unknownDigest (digest : ForkDigest)
+  /-- The digest of a chunk names no fork: no epoch, or only the far future epoch, has it. -/
+  | bounds (error : BoundsError)
   /-- The digest of a chunk is not the digest of the epoch of its update's attested header.
 
   The error gives the digest of the chunk, then the digest of that epoch. -/
@@ -218,10 +219,10 @@ def decodeUpdateChunksFrom (preset : Preset) (config : Config) (genesisValidator
     else if inside : start + 8 + length ≤ data.size then do
       -- The source: the context, a 4-byte fork digest.
       let digest : ForkDigest := Vector.ofFn fun (i : Fin 4) => data[start + 8 + i]'(by omega)
-      -- The digest selects the fork of the response type.
-      let some epoch := forkOfDigest config genesisValidatorsRoot digest
-        | throw (.unknownDigest digest)
-      let fork := config.forkAtEpoch epoch
+      -- The digest selects the fork of the response type, that of the first epoch with it.
+      --
+      -- A digest that no epoch, or only the far future epoch, has is refused.
+      let fork ← (forkOfScheduledDigest config genesisValidatorsRoot digest).mapError .bounds
       -- The source: the genesis fork version has no update type.
       unless .altair ≤ fork do throw (.forkNotSpecified fork)
       -- The source: the payload, the SSZ serialization of an update of that fork.

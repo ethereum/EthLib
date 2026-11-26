@@ -12,6 +12,9 @@ from .containers import FORKS
 from .test_beacon_api_blocks import ANCHOR_ROOT, FORK_CASE, HEAD_ROOT, _store_case
 from .test_light_client_sync import _YAML, FILES, _read, case_config, fork_digests
 
+# The epoch that no slot reaches, where an unscheduled fork starts.
+FAR_FUTURE_EPOCH = 2**64 - 1
+
 # Every data collection case of the minimal preset.
 DATA_COLLECTION = sorted((FILES / "minimal").glob("*/light_client/data_collection/pyspec_tests/*"))
 
@@ -193,6 +196,48 @@ def test_decode_refuses_a_truncated_body() -> None:
     )
     with raises(consensus.ConsensusError, message) as error:
         consensus.api_light_client_decode_updates("minimal", served.root, body[:-1], served.config)
+    assert error.value.code == 0
+
+
+def _chunk(digest: bytes, payload: bytes) -> bytes:
+    """One chunk of an SSZ updates body: the length of the rest, the digest, then the payload."""
+    return (len(digest) + len(payload)).to_bytes(8, "little") + digest + payload
+
+
+def test_decode_refuses_an_unknown_digest() -> None:
+    served = Served(ALTAIR_CASE)
+    data = served.updates[0][3]
+    # No fork version of the configuration gives this digest.
+    digest = bytes(4)
+    assert consensus.fork_of_digest("minimal", served.root, digest, served.config) is None
+    message = (
+        "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.bounds "
+        "(EthLib.Consensus.BoundsError.unknownDigest #v[0, 0, 0, 0])"
+    )
+    with raises(consensus.ConsensusError, message) as error:
+        consensus.api_light_client_decode_updates(
+            "minimal", served.root, _chunk(digest, data), served.config
+        )
+    assert error.value.code == 0
+
+
+def test_decode_refuses_a_digest_of_the_far_future_epoch_alone() -> None:
+    served = Served(ALTAIR_CASE)
+    data = served.updates[0][3]
+    # The configuration of the case leaves the last fork unscheduled.
+    # So only the far future epoch has its digest, and no attested header has that epoch.
+    digest = consensus.compute_fork_digest("minimal", served.root, FAR_FUTURE_EPOCH, served.config)
+    found = consensus.fork_of_digest("minimal", served.root, digest, served.config)
+    assert found is not None and found[0] == FAR_FUTURE_EPOCH
+    shown = ", ".join(str(byte) for byte in digest)
+    message = (
+        "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.bounds "
+        f"(EthLib.Consensus.BoundsError.unscheduledDigest #v[{shown}])"
+    )
+    with raises(consensus.ConsensusError, message) as error:
+        consensus.api_light_client_decode_updates(
+            "minimal", served.root, _chunk(digest, data), served.config
+        )
     assert error.value.code == 0
 
 
