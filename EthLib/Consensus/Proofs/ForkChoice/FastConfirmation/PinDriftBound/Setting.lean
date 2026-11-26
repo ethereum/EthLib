@@ -845,14 +845,6 @@ private theorem sum_credits_split (events : List (BalanceEvent preset))
   · simp only [hr]
     exact Nat.zero_le _
 
-/-- A filter that selects no event sums to zero. -/
-private theorem sum_filter_none (events : List (BalanceEvent preset))
-    (f : BalanceEvent preset → ℕ) :
-    ((events.filter fun _ => false).map f).sum = 0 := by
-  induction events with
-  | nil => rfl
-  | cons e rest ih => simp
-
 /-- Proposer, whistleblower and sync rewards bound a key's block credits. -/
 private theorem block_credit_split {g : ForkedBeaconState preset} {fork : Fork}
     {s t : BeaconState preset fork} {engine : ExecutionEngine preset fork}
@@ -1001,12 +993,12 @@ theorem step_credit_le_sources {g m n : ForkedBeaconState preset}
     have split := block_credit_le_sources shared genesis (Step.block engine signed due ok)
       (by intro ok' h; cases h) early electra i replayed
     simp only [Internal.stepNet, Internal.stepCredit, replayed, Except.toOption, Option.getD_some,
-      sum_filter_none, List.filter_true] at base split ⊢
+      List.filter_false, List.map_nil, List.sum_nil, List.filter_true] at base split ⊢
     omega
   | slot ok =>
     have split := slot_credit_split shared genesis early i replayed bounded
     simp only [Internal.stepNet, Internal.stepCredit, replayed, Except.toOption, Option.getD_some,
-      sum_filter_none] at split ⊢
+      List.filter_false, List.map_nil, List.sum_nil] at split ⊢
     omega
 
 /-- The gross credits of a step, with its slot credits other than rewards, are within the sources.
@@ -1044,13 +1036,13 @@ private theorem step_gross_le_sources {g m n : ForkedBeaconState preset}
         (events.map (Internal.keyCredit i)).sum :=
       (((List.filter_sublist).map _).sum_le_sum fun _ _ => Nat.zero_le _)
     simp only [Internal.stepNet, Internal.stepCredit, replayed, Except.toOption, Option.getD_some,
-      sum_filter_none] at gross part split ⊢
+      List.filter_false, List.map_nil, List.sum_nil] at gross part split ⊢
     omega
   | slot ok =>
     have split := slot_credit_split shared genesis early i replayed bounded
     have zero := (Internal.slot_syncDebit_zero electra ok early replayed i).2
     simp only [Internal.stepNet, Internal.stepCredit, replayed, Except.toOption, Option.getD_some,
-      sum_filter_none] at split ⊢
+      List.filter_false, List.map_nil, List.sum_nil] at split ⊢
     omega
 
 /-- The replay bounds credits by source, using gross credits for block steps.
