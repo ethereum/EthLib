@@ -30,6 +30,31 @@ theorem type_of_mem_neighborsPackets {expiration : Nat} :
 termination_by nodes => nodes.length
 decreasing_by simp_all only [List.length_drop, MAX_NEIGHBORS]; omega
 
+/-- The Neighbors packets carry the nodes in order, at most twelve to a packet, with the expiration.
+
+Packet `i`, counting from 0, carries the nodes from position `12 * i`, at most twelve of them.
+
+There are `(n + 11) / 12` packets for `n` nodes, and one packet with no nodes for none. -/
+theorem neighborsPackets_eq (expiration : Nat) (nodes : List Node) :
+    neighborsPackets expiration nodes =
+      (List.range (max 1 ((nodes.length + 11) / 12))).map
+        fun i => .neighbors ((nodes.drop (12 * i)).take 12) expiration := by
+  unfold neighborsPackets
+  split
+  · rename_i short
+    simp only [MAX_NEIGHBORS] at short
+    rw [show max 1 ((nodes.length + 11) / 12) = 1 by omega]
+    simp [List.take_of_length_le short]
+  · rename_i long
+    simp only [MAX_NEIGHBORS] at long ⊢
+    rw [neighborsPackets_eq expiration (nodes.drop 12),
+      show max 1 ((nodes.length + 11) / 12) = max 1 (((nodes.drop 12).length + 11) / 12) + 1 by
+        simp only [List.length_drop]; omega,
+      List.range_succ_eq_map]
+    simp [List.drop_drop, Nat.mul_succ, Nat.add_comm]
+termination_by nodes.length
+decreasing_by simp_all only [List.length_drop, MAX_NEIGHBORS]; omega
+
 /-- A node sends Neighbors or an ENRResponse only to an address that is proven at that time.
 
 The state is any state, so this is one step of the bound along a run. -/
