@@ -47,6 +47,20 @@ theorem lanesBytes_index (n : Nat) (h : n < 2 ^ 64) :
   simp only [Hash.Keccak.Lanes2.toNat, Nat.toUInt64_eq, UInt64.toNat_ofNat', UInt64.toNat_zero]
   omega
 
+/-- The lanes of `n` digests are `2 n` lanes. -/
+theorem size_digestLanes {n : Nat} (ds : Vector Digest n) : (digestLanes ds).size = 2 * n := by
+  have key : ∀ (l : List Digest) (acc : Array UInt64),
+      (l.foldl (fun acc d => (acc.push d.lo).push d.hi) acc).size = acc.size + 2 * l.length := by
+    intro l
+    induction l with
+    | nil => simp
+    | cons d l ih =>
+      intro acc
+      simp only [List.foldl_cons, ih, Array.size_push, List.length_cons]
+      omega
+  rw [digestLanes, ← Array.foldl_toList, key]
+  simp
+
 /-- The lanes of a list of digests are, as bytes, the digests' bytes one after the other. -/
 theorem lanesBytes_digestLanes {n : Nat} (ds : Vector Digest n) :
     lanesBytes (digestLanes ds) = (ds.toList.map fun d => d.bytes.toList).flatten := by

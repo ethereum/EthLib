@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.QueryBound
 public import EthLib.Cryptography.Proofs.HashSig.Calls
+public import EthLib.Cryptography.Proofs.Hash.Keccak.QueryBound
 
 /-!
 # Proofs: the hash calls of leanXMSS key generation, signing and verification
@@ -13,6 +14,12 @@ For the bounds, each call of `H` makes at most one query on every path.
 - Signing with any key takes at most `2^33 + 205 * 2^16 + 407 = 8603369879` calls.
   That covers a tree the key must build, and the top key's signature of its root.
 - Verification takes at most `384` calls, as the query bounds of the algorithms already prove.
+
+Each call weighted by its Keccak-256 blocks, the same walks give:
+
+- Key generation takes at most `13893633` blocks.
+- Signing with any key takes at most `8603828495` blocks.
+- Verification takes at most `186` blocks.
 -/
 
 @[expose] public section
@@ -50,7 +57,147 @@ The top key's path is read from the key, so signing never hashes the top tree.
 section Bounds
 
 /- A concrete height would let Lean unfold a whole tree, so the height stays opaque. -/
-attribute [local irreducible] LAYER_HEIGHT
+attribute [local irreducible] LAYER_HEIGHT MAX_RANDOMIZER_TRIALS
+
+open PFunctor.FreeM (IsChargeBound isChargeBound_pure)
+
+/-! ### Charged calls
+
+A call of `H` on `n` lanes is charged at most `w n`.
+-/
+
+section Charge
+
+variable {ι : Type} {spec : OracleSpec ι} {c : ι → ℕ} {w : ℕ → ℕ}
+  {H : Array UInt64 → OracleComp spec Lanes4}
+
+/-- The scheme seed is one call of `H` on `5` lanes. -/
+theorem isChargeBound_schemeSeed (hH : ∀ x, IsChargeBound (H x) c (w x.size)) (seed : Seed) :
+    IsChargeBound (schemeSeed H seed) c (w 5) :=
+  hH _
+
+/-- A derivation from the scheme seed is one call of `H` on `8` lanes more than its suffix. -/
+theorem isChargeBound_seedPrf (hH : ∀ x, IsChargeBound (H x) c (w x.size)) (s : Seed)
+    (publicParam : PublicParam) (address : Address) (suffix : Array UInt64) :
+    IsChargeBound (seedPrf H s publicParam address suffix) c (w (8 + suffix.size)) := by
+  have h := hH (thInput publicParam address (s.toArray ++ suffix))
+  rwa [size_thInput, Array.size_append, show s.toArray.size = 4 from rfl,
+    ← Nat.add_assoc] at h
+
+/-- Key generation is the scheme seed, the parameter and the top tree. -/
+theorem isChargeBound_keyGenWith (hH : ∀ x, IsChargeBound (H x) c (w x.size)) (seed : Seed) :
+    IsChargeBound (keyGenWith H seed) c (w 5 + w 8 +
+      (2 ^ LAYER_HEIGHT * (203 * w 8 + w 120) + (2 ^ LAYER_HEIGHT - 1) * w 8)) := by
+  unfold keyGenWith Internal.keyGenFrom
+  refine ((isChargeBound_schemeSeed hH seed).bind fun s =>
+    (isChargeBound_publicParamOf (isChargeBound_seedPrf hH s)).bind fun publicParam =>
+      (isChargeBound_build hH (isChargeBound_seedPrf hH s) publicParam .top LAYER_HEIGHT
+        0).bind fun _ => isChargeBound_pure (B := 0) _).mono (le_of_eq ?_)
+  simp only [Nat.add_zero, Nat.add_assoc]
+
+/-- The top key's signature of a root is one search on `2` lanes of message. -/
+theorem isChargeBound_signRootWith (hH : ∀ x, IsChargeBound (H x) c (w x.size))
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsChargeBound
+      (prf publicParam a suffix) c (w (8 + suffix.size)))
+    (sk : SecretKey) (b : Nat) (root : Digest) :
+    IsChargeBound (signRootWith H prf sk b root) c
+      (w 10 + MAX_RANDOMIZER_TRIALS * w 8 + 135 * w 8) := by
+  unfold signRootWith
+  simp only [Internal.otsSignTrials_hashTrials]
+  refine ((isChargeBound_otsSign hH hprf _ _ _ _).bind (B₂ := 0) fun r => ?_).mono
+    (le_of_eq rfl)
+  rcases r with _ | ⟨rho, y⟩ <;> exact isChargeBound_pure _
+
+/-- A bottom tree is charged its build and the top key's signature of its root. -/
+theorem isChargeBound_cacheTreeWith (hH : ∀ x, IsChargeBound (H x) c (w x.size))
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsChargeBound
+      (prf publicParam a suffix) c (w (8 + suffix.size)))
+    (sk : SecretKey) (b : Nat) :
+    IsChargeBound (cacheTreeWith H prf sk b) c
+      (2 ^ LAYER_HEIGHT * (203 * w 8 + w 120) + (2 ^ LAYER_HEIGHT - 1) * w 8 +
+        (w 10 + MAX_RANDOMIZER_TRIALS * w 8 + 135 * w 8)) := by
+  unfold cacheTreeWith
+  exact (isChargeBound_build hH hprf _ .bottom LAYER_HEIGHT b).bind fun _ =>
+    ((isChargeBound_signRootWith hH hprf sk b _).bind fun _ =>
+      isChargeBound_pure (B := 0) _).mono le_rfl
+
+/-- Fetching a bottom tree is charged at most building it. -/
+theorem isChargeBound_fetchTreeWith (hH : ∀ x, IsChargeBound (H x) c (w x.size))
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsChargeBound
+      (prf publicParam a suffix) c (w (8 + suffix.size)))
+    (sk : SecretKey) (b : Nat) :
+    IsChargeBound (fetchTreeWith H prf sk b) c
+      (2 ^ LAYER_HEIGHT * (203 * w 8 + w 120) + (2 ^ LAYER_HEIGHT - 1) * w 8 +
+        (w 10 + MAX_RANDOMIZER_TRIALS * w 8 + 135 * w 8)) := by
+  unfold fetchTreeWith
+  split
+  · exact isChargeBound_pure _
+  · exact ((isChargeBound_cacheTreeWith hH hprf sk b).bind fun _ =>
+      isChargeBound_pure (B := 0) _).mono le_rfl
+
+/-- Fetching a bottom tree that the key keeps makes no call. -/
+theorem isChargeBound_fetchTreeWith_of_mem {prf : SeedPrf (OracleComp spec)} (sk : SecretKey)
+    {b : Nat} (hb : ∃ t ∈ sk.cache, t.index = b) :
+    IsChargeBound (fetchTreeWith H prf sk b) c 0 := by
+  unfold fetchTreeWith
+  split
+  · exact isChargeBound_pure _
+  · next hnone =>
+    obtain ⟨t, ht, rfl⟩ := hb
+    exact absurd (List.find?_eq_none.1 hnone t ht) (by simp)
+
+/-- Signing from any derivations: the bottom search, then at most one tree and the top search. -/
+theorem isChargeBound_signWithTrials (hH : ∀ x, IsChargeBound (H x) c (w x.size))
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsChargeBound
+      (prf publicParam a suffix) c (w (8 + suffix.size)))
+    (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
+    IsChargeBound (Internal.signWithTrials H prf sk idx msg (hashTrials H)) c
+      (w 12 + MAX_RANDOMIZER_TRIALS * w 10 + 135 * w 8 +
+        (2 ^ LAYER_HEIGHT * (203 * w 8 + w 120) + (2 ^ LAYER_HEIGHT - 1) * w 8 +
+          (w 10 + MAX_RANDOMIZER_TRIALS * w 8 + 135 * w 8))) := by
+  unfold Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
+  refine (isChargeBound_otsSign hH hprf _ .bottom _ _).bind fun r => ?_
+  rcases r with _ | ⟨rho, y⟩
+  · exact isChargeBound_pure _
+  · refine ((isChargeBound_fetchTreeWith hH hprf sk _).bind (B₂ := 0) fun r => ?_).mono le_rfl
+    obtain ⟨t, sk'⟩ := r
+    dsimp only
+    cases t.top <;> exact isChargeBound_pure (B := 0) _
+
+/-- Signing: the bottom search, then at most one bottom tree and the top search. -/
+theorem isChargeBound_signWith (hH : ∀ x, IsChargeBound (H x) c (w x.size)) (sk : SecretKey)
+    (idx : LeafIndex) (msg : Message) :
+    IsChargeBound (signWith H sk idx msg) c
+      (w 12 + MAX_RANDOMIZER_TRIALS * w 10 + 135 * w 8 +
+        (2 ^ LAYER_HEIGHT * (203 * w 8 + w 120) + (2 ^ LAYER_HEIGHT - 1) * w 8 +
+          (w 10 + MAX_RANDOMIZER_TRIALS * w 8 + 135 * w 8))) :=
+  isChargeBound_signWithTrials hH (isChargeBound_seedPrf hH _) sk idx msg
+
+/-- Signing in a bottom tree the key keeps is the bottom search alone. -/
+theorem isChargeBound_signWith_of_mem (hH : ∀ x, IsChargeBound (H x) c (w x.size))
+    (sk : SecretKey) (idx : LeafIndex) (msg : Message)
+    (hkept : ∃ t ∈ sk.cache, t.index = bottomTree idx) :
+    IsChargeBound (signWith H sk idx msg) c
+      (w 12 + MAX_RANDOMIZER_TRIALS * w 10 + 135 * w 8) := by
+  unfold signWith Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
+  refine ((isChargeBound_otsSign hH (isChargeBound_seedPrf hH _) _ .bottom _ _).bind (B₂ := 0)
+    fun r => ?_).mono le_rfl
+  rcases r with _ | ⟨rho, y⟩
+  · exact isChargeBound_pure _
+  · refine ((isChargeBound_fetchTreeWith_of_mem (prf := seedPrf H _) sk hkept).bind (B₂ := 0)
+      fun r => ?_).mono le_rfl
+    obtain ⟨t, sk'⟩ := r
+    dsimp only
+    cases t.top <;> exact isChargeBound_pure (B := 0) _
+
+end Charge
+
+/-! ### Counted calls
+
+Each bound is the charged one at the weight 1 on every input.
+-/
 
 variable {ι : Type} {spec : OracleSpec ι} {p : ι → Prop} [DecidablePred p]
   {H : Array UInt64 → OracleComp spec Lanes4}
@@ -70,63 +217,48 @@ theorem isQueryBoundP_seedPrf (hH : ∀ x, IsQueryBoundP (H x) p 1) (s : Seed)
 
 It makes at most `1 + 205 * 2^16` calls. -/
 theorem isQueryBoundP_keyGenWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : Seed) :
-    IsQueryBoundP (keyGenWith H seed) p (1 + 205 * 2 ^ LAYER_HEIGHT) := by
-  unfold keyGenWith Internal.keyGenFrom
-  refine isQueryBoundP_bind (isQueryBoundP_schemeSeed hH seed) fun s _ =>
-    (isQueryBoundP_bind (isQueryBoundP_publicParamOf
-      (isQueryBoundP_seedPrf hH s)) fun publicParam _ =>
-      isQueryBoundP_bind (m := 0)
-        (isQueryBoundP_build hH (isQueryBoundP_seedPrf hH s) publicParam .top LAYER_HEIGHT 0)
-        fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
-  simp [LAYER_HEIGHT]
+    IsQueryBoundP (keyGenWith H seed) p (1 + 205 * 2 ^ LAYER_HEIGHT) :=
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_keyGenWith (w := fun _ => 1)
+    (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x)) seed).mono (by simp [LAYER_HEIGHT])
 
 /-- The top key's signature of a root is one search: at most `2^32 + 204` calls. -/
 theorem isQueryBoundP_signRootWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
     {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
       (prf publicParam a suffix) p 1)
     (sk : SecretKey) (b : Nat) (root : Digest) :
-    IsQueryBoundP (signRootWith H prf sk b root) p (2 ^ 32 + 204) := by
-  unfold signRootWith
-  simp only [Internal.otsSignTrials_hashTrials]
-  refine (isQueryBoundP_bind (m := 0)
-    (isQueryBoundP_otsSign hH hprf _ _ _ _) fun r _ => ?_).mono
-    (le_of_eq (Nat.add_zero _))
-  rcases r with _ | ⟨rho, y⟩ <;> exact isQueryBoundP_pure _ _ _
+    IsQueryBoundP (signRootWith H prf sk b root) p (2 ^ 32 + 204) :=
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_signRootWith (w := fun _ => 1)
+    (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x))
+    (fun _ _ _ => (isQueryBoundP_iff_isChargeBound p _ _).1 (hprf _ _ _)) sk b root).mono
+      (by simp [MAX_RANDOMIZER_TRIALS])
 
 /-- A bottom tree with its top signature: at most `205 * 2^16 - 1 + 2^32 + 204` calls. -/
 theorem isQueryBoundP_cacheTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
     {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
       (prf publicParam a suffix) p 1)
     (sk : SecretKey) (b : Nat) :
-    IsQueryBoundP (cacheTreeWith H prf sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) := by
-  unfold cacheTreeWith
-  exact isQueryBoundP_bind
-    (isQueryBoundP_build hH hprf _ .bottom LAYER_HEIGHT b) fun _ _ =>
-      (isQueryBoundP_bind (m := 0) (isQueryBoundP_signRootWith hH hprf sk b _) fun _ _ =>
-        isQueryBoundP_pure _ _ 0).mono (le_of_eq (Nat.add_zero _))
+    IsQueryBoundP (cacheTreeWith H prf sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) :=
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_cacheTreeWith (w := fun _ => 1)
+    (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x))
+    (fun _ _ _ => (isQueryBoundP_iff_isChargeBound p _ _).1 (hprf _ _ _)) sk b).mono
+      (by simp [MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT])
 
 /-- Fetching a bottom tree costs at most building it. -/
 theorem isQueryBoundP_fetchTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
     {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
       (prf publicParam a suffix) p 1)
     (sk : SecretKey) (b : Nat) :
-    IsQueryBoundP (fetchTreeWith H prf sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) := by
-  unfold fetchTreeWith
-  split
-  · exact (isQueryBoundP_pure _ _ 0).mono (Nat.zero_le _)
-  · exact (isQueryBoundP_bind (m := 0) (isQueryBoundP_cacheTreeWith hH hprf sk b) fun _ _ =>
-      isQueryBoundP_pure _ _ 0).mono (le_of_eq (Nat.add_zero _))
+    IsQueryBoundP (fetchTreeWith H prf sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) :=
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_fetchTreeWith (w := fun _ => 1)
+    (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x))
+    (fun _ _ _ => (isQueryBoundP_iff_isChargeBound p _ _).1 (hprf _ _ _)) sk b).mono
+      (by simp [MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT])
 
 /-- Fetching a bottom tree that the key keeps makes no call. -/
 theorem isQueryBoundP_fetchTreeWith_of_mem {prf : SeedPrf (OracleComp spec)} (sk : SecretKey)
     {b : Nat} (hb : ∃ t ∈ sk.cache, t.index = b) :
-    IsQueryBoundP (fetchTreeWith H prf sk b) p 0 := by
-  unfold fetchTreeWith
-  split
-  · exact isQueryBoundP_pure _ _ 0
-  · next hnone =>
-    obtain ⟨t, ht, rfl⟩ := hb
-    exact absurd (List.find?_eq_none.1 hnone t ht) (by simp)
+    IsQueryBoundP (fetchTreeWith H prf sk b) p 0 :=
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| isChargeBound_fetchTreeWith_of_mem sk hb
 
 /-- Signing from any derivations: the bottom search, then at most one tree and the top search.
 
@@ -136,19 +268,11 @@ theorem isQueryBoundP_signWithTrials (hH : ∀ x, IsQueryBoundP (H x) p 1)
       (prf publicParam a suffix) p 1)
     (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     IsQueryBoundP (Internal.signWithTrials H prf sk idx msg (hashTrials H)) p
-      (2 * MAX_RANDOMIZER_TRIALS + 205 * 2 ^ LAYER_HEIGHT + 407) := by
-  unfold Internal.signWithTrials
-  simp only [Internal.otsSignTrials_hashTrials]
-  refine (isQueryBoundP_bind (isQueryBoundP_otsSign hH hprf _ .bottom _ _)
-    fun r _ => ?_).mono (n := 2 ^ 32 + 204 + (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)))
-    (by simp [MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT])
-  rcases r with _ | ⟨rho, y⟩
-  · exact (isQueryBoundP_pure _ _ 0).mono (Nat.zero_le _)
-  · refine (isQueryBoundP_bind (m := 0) (isQueryBoundP_fetchTreeWith hH hprf sk _)
-      fun r _ => ?_).mono (le_of_eq (Nat.add_zero _))
-    obtain ⟨t, sk'⟩ := r
-    dsimp only
-    cases t.top <;> exact isQueryBoundP_pure _ _ _
+      (2 * MAX_RANDOMIZER_TRIALS + 205 * 2 ^ LAYER_HEIGHT + 407) :=
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_signWithTrials (w := fun _ => 1)
+    (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x))
+    (fun _ _ _ => (isQueryBoundP_iff_isChargeBound p _ _).1 (hprf _ _ _)) sk idx msg).mono
+      (by simp [MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT])
 
 /-- Signing: the bottom search, then at most one bottom tree and the top search.
 
@@ -166,22 +290,66 @@ theorem isQueryBoundP_signWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : Secre
 A key that signing returned after a successful bottom search keeps that tree. -/
 theorem isQueryBoundP_signWith_of_mem (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : SecretKey)
     (idx : LeafIndex) (msg : Message) (hkept : ∃ t ∈ sk.cache, t.index = bottomTree idx) :
-    IsQueryBoundP (signWith H sk idx msg) p (MAX_RANDOMIZER_TRIALS + 204) := by
-  unfold signWith Internal.signWithTrials
-  simp only [Internal.otsSignTrials_hashTrials]
-  refine (isQueryBoundP_bind (m := 0)
-    (isQueryBoundP_otsSign hH (isQueryBoundP_seedPrf hH _) _ .bottom _ _) fun r _ => ?_).mono
-    (by simp [MAX_RANDOMIZER_TRIALS])
-  rcases r with _ | ⟨rho, y⟩
-  · exact isQueryBoundP_pure _ _ 0
-  · refine (isQueryBoundP_bind (m := 0)
-      (isQueryBoundP_fetchTreeWith_of_mem (prf := seedPrf H _) sk hkept)
-      fun r _ => ?_).mono le_rfl
-    obtain ⟨t, sk'⟩ := r
-    dsimp only
-    cases t.top <;> exact isQueryBoundP_pure _ _ _
+    IsQueryBoundP (signWith H sk idx msg) p (MAX_RANDOMIZER_TRIALS + 204) :=
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_signWith_of_mem (w := fun _ => 1)
+    (fun x => (isQueryBoundP_iff_isChargeBound p _ _).1 (hH x)) sk idx msg hkept).mono
+      (by simp; omega)
 
 end Bounds
+
+/-! ## Upper bounds weighted by blocks
+
+As Keccak-256 over a permutation, `H` on `n` lanes makes `8 n / 136 + 1` permutation calls.
+
+Every input of leanXMSS has at most 12 lanes, so one block, except the one-time leaf hash.
+
+That hash takes `4 + 2 * 58 = 120` lanes, 960 bytes, so 8 blocks.
+-/
+
+section Blocks
+
+attribute [local irreducible] LAYER_HEIGHT MAX_RANDOMIZER_TRIALS
+
+open Hash.Keccak (hashBlocks)
+
+variable {ι : Type} {spec : OracleSpec ι} {c : ι → ℕ}
+  {H : Array UInt64 → OracleComp spec Lanes4}
+
+/-- With each call of `H` charged at most its blocks, key generation is charged at most `13893633`.
+
+That is `1 + 212 * 2^16` blocks. -/
+theorem isChargeBound_keyGenWith_hashBlocks
+    (hH : ∀ x, PFunctor.FreeM.IsChargeBound (H x) c (hashBlocks x.size)) (seed : Seed) :
+    PFunctor.FreeM.IsChargeBound (keyGenWith H seed) c 13893633 :=
+  (isChargeBound_keyGenWith hH seed).mono (by
+    norm_num [hashBlocks, Hash.Keccak.blockCount, Hash.Keccak.RATE_256, LAYER_HEIGHT])
+
+/-- With each call of `H` charged at most its blocks, signing is charged at most `8603828495`.
+
+That is `2^33 + 212 * 2^16 + 271` blocks, for any key.
+
+Each one-time signature walks its chains to the digits of a codeword, `106` steps in all. -/
+theorem isChargeBound_signWith_hashBlocks
+    (hH : ∀ x, PFunctor.FreeM.IsChargeBound (H x) c (hashBlocks x.size)) (sk : SecretKey)
+    (idx : LeafIndex) (msg : Message) :
+    PFunctor.FreeM.IsChargeBound (signWith H sk idx msg) c 8603828495 :=
+  (isChargeBound_signWith hH sk idx msg).mono (by
+    norm_num [hashBlocks, Hash.Keccak.blockCount, Hash.Keccak.RATE_256, LAYER_HEIGHT,
+      MAX_RANDOMIZER_TRIALS])
+
+/-- With each call of `H` charged at most its blocks, verification is charged at most `186`.
+
+That is `2 * (1 + 68 + 8 + 16)` blocks.
+
+Each layer walks its chains from the digits of a codeword to the ends, `68` steps in all. -/
+theorem isChargeBound_verifyWith_hashBlocks
+    (hH : ∀ x, PFunctor.FreeM.IsChargeBound (H x) c (hashBlocks x.size)) (pk : PublicKey)
+    (msg : Message) (sig : Signature) :
+    PFunctor.FreeM.IsChargeBound (verifyWith H pk msg sig) c 186 :=
+  (isChargeBound_verifyWith hH pk msg sig).mono (by
+    norm_num [hashBlocks, Hash.Keccak.blockCount, Hash.Keccak.RATE_256])
+
+end Blocks
 
 /-! ## The exact count of key generation under fixed answers -/
 

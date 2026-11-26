@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Merkle.Build
+public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.HashSig
 public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
@@ -8,7 +9,9 @@ public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 /-!
 # Proofs: inputs a hash-based algorithm never queries
 
-The loops of leanXMSS and leanSPHINCS query only what their steps query.
+The loops of leanXMSS and leanSPHINCS are charged at most the sum of the charges of their steps.
+
+So they query only what their steps query.
 
 So a set of inputs that no step queries is never queried.
 
@@ -21,7 +24,77 @@ namespace EthLib.Cryptography
 
 open OracleSpec OracleComp ENNReal
 
-/-! ## The loops query what their steps query -/
+/-! ## The loops are charged what their steps are charged -/
+
+section ChargeLoops
+
+variable {ι : Type} {spec : OracleSpec ι} {c : ι → ℕ}
+
+open PFunctor.FreeM (IsChargeBound isChargeBound_pure wpFold)
+open PFunctor (OpSpec)
+
+/-- Computing `k` entries in order is charged the sum of the charges of the entries. -/
+theorem isChargeBound_ofFnInOrder {α : Type} :
+    ∀ (k : Nat) (f : Fin k → OracleComp spec α) (n : Fin k → Nat),
+      (∀ i, IsChargeBound (f i) c (n i)) →
+        IsChargeBound (HashSig.ofFnInOrder k f) c (∑ i, n i)
+  | 0, _, _, _ => isChargeBound_pure _
+  | k + 1, f, n, h => by
+    rw [HashSig.ofFnInOrder_succ]
+    refine ((h 0).bind fun _ => (isChargeBound_ofFnInOrder k _ _ fun i => h i.succ).bind
+      fun _ => isChargeBound_pure (B := 0) _).mono (le_of_eq ?_)
+    simp only [Fin.sum_univ_succ, Nat.add_zero]
+
+/-- Computing `k` entries in order is charged `k` times the charge of one. -/
+theorem isChargeBound_ofFnInOrder_const {α : Type} {n : Nat} (k : Nat)
+    (f : Fin k → OracleComp spec α) (h : ∀ i, IsChargeBound (f i) c n) :
+    IsChargeBound (HashSig.ofFnInOrder k f) c (k * n) :=
+  (isChargeBound_ofFnInOrder k f (fun _ => n) h).mono (by simp)
+
+/-- A walk of `steps` steps is charged `steps` times the charge of one step. -/
+theorem isChargeBound_chain {α : Type} {k n : Nat} (step : Fin k → α → OracleComp spec α)
+    (hstep : ∀ i v, IsChargeBound (step i v) c n) (start : Nat) :
+    ∀ (steps : Nat) (h : start + steps ≤ k) (value : α),
+      IsChargeBound (Wots.chain step start steps h value) c (steps * n)
+  | 0, _, _ => isChargeBound_pure _
+  | s + 1, h, value => by
+    rw [Wots.chain_succ, Nat.succ_mul]
+    exact (isChargeBound_chain step hstep start s _ value).bind fun _ => hstep _ _
+
+/-- A search of `fuel` trials is charged `fuel` times the charge of one test. -/
+theorem isChargeBound_findFirst {κ β : Type} {n : Nat} (trial : Nat → κ)
+    (test : κ → OracleComp spec (Option β)) (htest : ∀ k, IsChargeBound (test k) c n) :
+    ∀ (start fuel : Nat), IsChargeBound (Wots.findFirst trial test start fuel) c (fuel * n)
+  | _, 0 => isChargeBound_pure _
+  | start, fuel + 1 => by
+    rw [Wots.findFirst, Nat.succ_mul]
+    refine ((htest _).bind fun r => ?_).mono (le_of_eq (Nat.add_comm _ _))
+    cases r with
+    | none => exact isChargeBound_findFirst trial test htest (start + 1) fuel
+    | some x => exact isChargeBound_pure _
+
+/-- Every result of a search is a result of its test. -/
+theorem wpFold_findFirst {κ β : Type} (trial : Nat → κ) (test : κ → OracleComp spec (Option β))
+    {Q : β → Prop}
+    (htest : ∀ k, wpFold (OpSpec.demonic _) (test k) fun r => ∀ b, r = some b → Q b) :
+    ∀ (start fuel : Nat), wpFold (OpSpec.demonic _) (Wots.findFirst trial test start fuel)
+      fun r => ∀ t b, r = some (t, b) → Q b
+  | _, 0 => fun _ _ h => nomatch h
+  | start, fuel + 1 => by
+    rw [Wots.findFirst, PFunctor.FreeM.wpFold_bind]
+    refine PFunctor.FreeM.wpFold_mono OpSpec.demonic_mono _ (fun r hr => ?_) (htest _)
+    cases r with
+    | none => exact wpFold_findFirst trial test htest (start + 1) fuel
+    | some b => exact fun t b' h => by cases h; exact hr b rfl
+
+end ChargeLoops
+
+/-! ## The loops query what their steps query
+
+A count of the queries that `p` accepts charges one per such query.
+
+So making no such query is a charge of 0.
+-/
 
 section Loops
 
@@ -30,36 +103,26 @@ variable {ι : Type} {spec : OracleSpec ι} {p : spec.Domain → Prop} [Decidabl
 /-- Computing a vector in order queries `p` nowhere when no entry does. -/
 theorem ofFnInOrder_isQueryBoundP_zero {α : Type} :
     ∀ (k : Nat) (f : Fin k → OracleComp spec α), (∀ i, IsQueryBoundP (f i) p 0) →
-      IsQueryBoundP (HashSig.ofFnInOrder k f) p 0
-  | 0, _, _ => isQueryBoundP_pure _ _ _
-  | k + 1, f, h => by
-    rw [HashSig.ofFnInOrder_succ]
-    exact isQueryBoundP_bind_zero _ _ (h 0) fun _ =>
-      isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero k _ fun i => h i.succ)
-        fun _ => isQueryBoundP_pure _ _ _
+      IsQueryBoundP (HashSig.ofFnInOrder k f) p 0 := fun k f h =>
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_ofFnInOrder_const k f fun i =>
+    (isQueryBoundP_iff_isChargeBound p _ _).1 (h i)).mono (le_of_eq (Nat.mul_zero k))
 
 /-- A hash chain queries `p` nowhere when no step does. -/
 theorem chain_isQueryBoundP_zero {α : Type} {k : Nat} (step : Fin k → α → OracleComp spec α)
     (hstep : ∀ i v, IsQueryBoundP (step i v) p 0) (start : Nat) :
     ∀ (steps : Nat) (h : start + steps ≤ k) (value : α),
-      IsQueryBoundP (Wots.chain step start steps h value) p 0
-  | 0, _, _ => isQueryBoundP_pure _ _ _
-  | s + 1, h, value => by
-    rw [Wots.chain_succ]
-    exact isQueryBoundP_bind_zero _ _ (chain_isQueryBoundP_zero step hstep start s _ value)
-      fun _ => hstep _ _
+      IsQueryBoundP (Wots.chain step start steps h value) p 0 := fun steps h value =>
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_chain step
+    (fun i v => (isQueryBoundP_iff_isChargeBound p _ _).1 (hstep i v)) start steps h
+      value).mono (le_of_eq (Nat.mul_zero steps))
 
 /-- A search over trials queries `p` nowhere when no test does. -/
 theorem findFirst_isQueryBoundP_zero {κ β : Type} (trial : Nat → κ)
     (test : κ → OracleComp spec (Option β)) (htest : ∀ k, IsQueryBoundP (test k) p 0) :
-    ∀ (c fuel : Nat), IsQueryBoundP (Wots.findFirst trial test c fuel) p 0
-  | _, 0 => isQueryBoundP_pure _ _ _
-  | c, fuel + 1 => by
-    rw [Wots.findFirst]
-    refine isQueryBoundP_bind_zero _ _ (htest _) fun r => ?_
-    cases r with
-    | none => exact findFirst_isQueryBoundP_zero trial test htest (c + 1) fuel
-    | some x => exact isQueryBoundP_pure _ _ _
+    ∀ (c fuel : Nat), IsQueryBoundP (Wots.findFirst trial test c fuel) p 0 := fun c fuel =>
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (isChargeBound_findFirst trial test
+    (fun k => (isQueryBoundP_iff_isChargeBound p _ _).1 (htest k)) c fuel).mono
+      (le_of_eq (Nat.mul_zero fuel))
 
 /-- A Merkle node queries `p` nowhere when no leaf and no node hash does. -/
 theorem merkleNode_isQueryBoundP_zero {α : Type}
@@ -67,8 +130,10 @@ theorem merkleNode_isQueryBoundP_zero {α : Type}
     (leaves : Nat → OracleComp spec α) (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
     (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0)
     (q : Merkle.Position) : IsQueryBoundP (Merkle.node hash leaves q) p 0 :=
-  Merkle.node_rec hash (fun x => IsQueryBoundP x p 0)
-    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash q
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (Merkle.isChargeBound_node
+    (fun j => (isQueryBoundP_iff_isChargeBound p _ _).1 (hleaves j))
+    (fun q a b => (isQueryBoundP_iff_isChargeBound p _ _).1 (hhash q a b)) q).mono
+      (le_of_eq (by simp))
 
 /-- A Merkle build queries `p` nowhere when no leaf and no node hash does. -/
 theorem merkleBuild_isQueryBoundP_zero {α : Type}
@@ -76,8 +141,10 @@ theorem merkleBuild_isQueryBoundP_zero {α : Type}
     (leaves : Nat → OracleComp spec α) (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
     (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0)
     (q : Merkle.Position) : IsQueryBoundP (Merkle.build hash leaves q) p 0 :=
-  Merkle.build_rec hash (fun x => IsQueryBoundP x p 0) (fun _ => isQueryBoundP_pure _ _ _)
-    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash q
+  (isQueryBoundP_iff_isChargeBound p _ _).2 <| (Merkle.isChargeBound_build
+    (fun j => (isQueryBoundP_iff_isChargeBound p _ _).1 (hleaves j))
+    (fun q a b => (isQueryBoundP_iff_isChargeBound p _ _).1 (hhash q a b)) q).mono
+      (le_of_eq (by simp))
 
 /-- The siblings of a node query `p` nowhere when no leaf and no node hash does. -/
 theorem merkleSiblings_isQueryBoundP_zero {α : Type}
@@ -85,8 +152,10 @@ theorem merkleSiblings_isQueryBoundP_zero {α : Type}
     (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
     (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0) :
     ∀ (q : Merkle.Position) (k : Nat), IsQueryBoundP (Merkle.siblings hash leaves q k) p 0 :=
-  Merkle.siblings_rec hash (fun x => IsQueryBoundP x p 0) (fun _ => isQueryBoundP_pure _ _ _)
-    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash
+  fun q k => (isQueryBoundP_iff_isChargeBound p _ _).2 <| (Merkle.isChargeBound_siblings
+    (fun j => (isQueryBoundP_iff_isChargeBound p _ _).1 (hleaves j))
+    (fun q a b => (isQueryBoundP_iff_isChargeBound p _ _).1 (hhash q a b)) q k).mono
+      (le_of_eq (by simp))
 
 end Loops
 

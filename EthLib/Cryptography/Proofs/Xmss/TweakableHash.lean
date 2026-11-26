@@ -48,6 +48,12 @@ theorem thInput_eq_append (publicParam : PublicParam) (address : Address)
       = publicParam.toArray ++ address.encode.toArray ++ payload :=
   rfl
 
+/-- An input `P | A | M` has `4` lanes before its payload. -/
+theorem size_thInput (publicParam : PublicParam) (A : Address) (payload : Array UInt64) :
+    (thInput publicParam A payload).size = 4 + payload.size := by
+  rw [thInput_eq_append, Array.size_append, Array.size_append]
+  rfl
+
 /-- `Th(P, A, M)` with a hash `f` is the first half of `f` on the lanes `P | A | M`. -/
 theorem th_run (f : Array UInt64 → Lanes4) (publicParam : PublicParam)
     (address : Address) (payload : Array UInt64) :

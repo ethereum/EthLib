@@ -41,12 +41,6 @@ def IsTrialQuery (A : Address) (k : Nat) : XmssSecurity.OracleWorld.Domain → P
 noncomputable instance (A : Address) (k : Nat) : DecidablePred (IsTrialQuery A k) :=
   Classical.decPred _
 
-/-- An input `P | A | M` has `4` lanes before its payload. -/
-theorem size_thInput (publicParam : PublicParam) (A : Address) (payload : Array UInt64) :
-    (thInput publicParam A payload).size = 4 + payload.size := by
-  rw [thInput, Array.size_append]
-  rfl
-
 /-- A hash at another address is not a trial query. -/
 theorem isQueryBoundP_queryH_of_ne {A A' : Address} (k : Nat) (publicParam : PublicParam)
     (payload : Array UInt64) (hA : A' ≠ A) :
