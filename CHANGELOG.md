@@ -1136,6 +1136,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- A part of a slot, given in basis points, rounds to the nearest millisecond, a half up, where it rounded down, as consensus-specs v1.7.0-beta.5 does ([#4145](https://github.com/ethereum/EthLib/issues/4145)).
+  Before Gloas, on mainnet, an attestation and a sync committee message are due 4000 ms into the slot, up from 3999 ms.
+  Before Gloas, on the minimal configuration, they are due at 2000 ms, up from 1999 ms.
+  In Lean, `getSlotComponentDurationMs_ok_iff` (`Consensus/Proofs/Time.lean`) states the sum `b * SLOT_DURATION_MS + 5000` and its quotient by `10000`, and `getSlotComponentDurationMs_ok_of_le` assumes that sum fits in 64 bits.
+  `getSlotComponentDurationMs_lt` and `gloas_deadlines_ordered` assume `5000 < (10000 - b) * SLOT_DURATION_MS` for the last part `b`, where they assumed `b < 10000` and a nonempty slot.
+  A part just below the whole of a short slot can otherwise round up to the whole slot.
+  Migration: pass that bound, which `decide` proves for the mainnet and minimal configurations.
+
 - The decoder of the SSZ updates answer of the light client takes the fork of each chunk's digest from `Consensus.forkOfScheduledDigest`.
   The response chunk and gossip decoders already do so.
   A digest that only the far future epoch has is refused with `BeaconApi.ChunkError.bounds (.unscheduledDigest d)`.

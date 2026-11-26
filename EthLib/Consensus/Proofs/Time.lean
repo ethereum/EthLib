@@ -378,14 +378,17 @@ theorem computeSlotAtTime_computeTimeAtSlot {genesisTime time : UInt64} {slot : 
     rw [computeSlotAtTime, back]
     exact computeSlotAtTimeMs_computeTimeAtSlotMs positive started
 
-/-- A part of a slot exists exactly when its basis points times the slot fits in 64 bits.
+/-- A part of a slot exists exactly when the sum that it divides fits in 64 bits.
 
-It is then that product divided by the basis points of a whole. -/
+That sum is the basis points times the slot, plus half the basis points of a whole.
+
+The part is that sum divided by the basis points of a whole. -/
 theorem getSlotComponentDurationMs_ok_iff {basisPoints duration : UInt64} :
     getSlotComponentDurationMs config basisPoints = .ok duration ↔
-      basisPoints.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 ∧
-        duration.toNat = basisPoints.toNat * config.SLOT_DURATION_MS.toNat / 10000 := by
+      basisPoints.toNat * config.SLOT_DURATION_MS.toNat + 5000 < 2 ^ 64 ∧
+        duration.toNat = (basisPoints.toNat * config.SLOT_DURATION_MS.toNat + 5000) / 10000 := by
   unfold getSlotComponentDurationMs
+  have half : (BASIS_POINTS / 2).toNat = 5000 := rfl
   cases product : mulChecked basisPoints config.SLOT_DURATION_MS with
   | error fault =>
     have : ¬ basisPoints.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by
@@ -395,10 +398,21 @@ theorem getSlotComponentDurationMs_ok_iff {basisPoints duration : UInt64} :
     simp only [bind, Except.bind, reduceCtorEq, false_iff, not_and]
     omega
   | ok value =>
-    obtain ⟨fits, value⟩ := mulChecked_ok_iff.mp product
-    simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq, fits, true_and]
-    rw [← UInt64.toNat_inj, UInt64.toNat_div, value]
-    exact ⟨Eq.symm, Eq.symm⟩
+    obtain ⟨-, product⟩ := mulChecked_ok_iff.mp product
+    cases sum : addChecked value (BASIS_POINTS / 2) with
+    | error fault =>
+      have : ¬ value.toNat + (BASIS_POINTS / 2).toNat < 2 ^ 64 := fun fits => by
+        rw [addChecked_of_lt fits] at sum
+        cases sum
+      rw [half, product] at this
+      simp only [bind, Except.bind, sum, reduceCtorEq, false_iff, not_and]
+      omega
+    | ok total =>
+      obtain ⟨fits, total⟩ := addChecked_ok_iff.mp sum
+      rw [half, product] at fits total
+      simp only [bind, Except.bind, sum, pure, Except.pure, Except.ok.injEq, fits, true_and]
+      rw [← UInt64.toNat_inj, UInt64.toNat_div, total]
+      exact ⟨Eq.symm, Eq.symm⟩
 
 /-- More basis points give at least as long a part of the slot. -/
 theorem getSlotComponentDurationMs_mono {small large shorter longer : UInt64}
@@ -408,19 +422,22 @@ theorem getSlotComponentDurationMs_mono {small large shorter longer : UInt64}
   obtain ⟨-, shorter⟩ := getSlotComponentDurationMs_ok_iff.mp first
   obtain ⟨-, longer⟩ := getSlotComponentDurationMs_ok_iff.mp second
   rw [UInt64.le_iff_toNat_le, shorter, longer]
-  exact Nat.div_le_div_right (Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp le))
+  exact Nat.div_le_div_right
+    (Nat.add_le_add_right (Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp le)) _)
 
-/-- A part below the whole of a nonempty slot ends before the slot does. -/
+/-- A part ends before the slot does when the missing basis points times the slot exceed 5000.
+
+Rounding then cannot reach the whole slot. -/
 theorem getSlotComponentDurationMs_lt {basisPoints duration : UInt64}
-    (part : basisPoints < BASIS_POINTS) (positive : 0 < config.SLOT_DURATION_MS)
+    (room : 5000 < (10000 - basisPoints.toNat) * config.SLOT_DURATION_MS.toNat)
     (ok : getSlotComponentDurationMs config basisPoints = .ok duration) :
     duration < config.SLOT_DURATION_MS := by
   obtain ⟨-, value⟩ := getSlotComponentDurationMs_ok_iff.mp ok
-  have part : basisPoints.toNat < 10000 := UInt64.lt_iff_toNat_lt.mp part
-  have positive : 0 < config.SLOT_DURATION_MS.toNat := UInt64.lt_iff_toNat_lt.mp positive
   rw [UInt64.lt_iff_toNat_lt, value, Nat.div_lt_iff_lt_mul (by decide)]
-  have := Nat.mul_lt_mul_of_pos_right part positive
-  rwa [Nat.mul_comm 10000] at this
+  -- The part is `b * S + 5000` over `10000`, and the room keeps that sum below `10000 * S`.
+  rw [Nat.sub_mul] at room
+  rw [Nat.mul_comm config.SLOT_DURATION_MS.toNat]
+  omega
 
 /-- Before Gloas, an attestation is due at the part that the configuration gives before Gloas. -/
 theorem getAttestationDueMs_of_lt {fork : Fork} (before : fork < .glamsterdam) :
@@ -454,13 +471,13 @@ theorem getContributionDueMs_of_lt {fork : Fork} (before : fork < .glamsterdam) 
 
 All three fall due within the slot.
 
-The configuration orders their basis points below a whole, and its slot is nonempty. -/
+The configuration orders their basis points, and leaves room after the last for rounding. -/
 theorem gloas_deadlines_ordered {fork : Fork} {attestation payload payloadAttestation : UInt64}
     (gloas : fork ≥ .glamsterdam)
     (first : config.ATTESTATION_DUE_BPS_GLOAS ≤ config.PAYLOAD_DUE_BPS)
     (second : config.PAYLOAD_DUE_BPS ≤ config.PAYLOAD_ATTESTATION_DUE_BPS)
-    (part : config.PAYLOAD_ATTESTATION_DUE_BPS < BASIS_POINTS)
-    (positive : 0 < config.SLOT_DURATION_MS)
+    (room : 5000 <
+      (10000 - config.PAYLOAD_ATTESTATION_DUE_BPS.toNat) * config.SLOT_DURATION_MS.toNat)
     (attestationOk : getAttestationDueMs config fork = .ok attestation)
     (payloadOk : getPayloadDueMs config = .ok payload)
     (payloadAttestationOk : getPayloadAttestationDueMs config = .ok payloadAttestation) :
@@ -469,16 +486,16 @@ theorem gloas_deadlines_ordered {fork : Fork} {attestation payload payloadAttest
   simp only [getAttestationDueMs, gloas, ↓reduceIte] at attestationOk
   exact ⟨getSlotComponentDurationMs_mono first attestationOk payloadOk,
     getSlotComponentDurationMs_mono second payloadOk payloadAttestationOk,
-    getSlotComponentDurationMs_lt part positive payloadAttestationOk⟩
+    getSlotComponentDurationMs_lt room payloadAttestationOk⟩
 
 /-- A part of the slot exists when a larger part does not overflow. -/
 theorem getSlotComponentDurationMs_ok_of_le {small large : UInt64} (le : small ≤ large)
-    (fits : large.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64) :
+    (fits : large.toNat * config.SLOT_DURATION_MS.toNat + 5000 < 2 ^ 64) :
     ∃ duration, getSlotComponentDurationMs config small = .ok duration := by
   have le : small.toNat ≤ large.toNat := UInt64.le_iff_toNat_le.mp le
-  have fits' : small.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 :=
-    Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ le) fits
-  refine ⟨UInt64.ofNat (small.toNat * config.SLOT_DURATION_MS.toNat / 10000), ?_⟩
+  have fits' : small.toNat * config.SLOT_DURATION_MS.toNat + 5000 < 2 ^ 64 :=
+    Nat.lt_of_le_of_lt (Nat.add_le_add_right (Nat.mul_le_mul_right _ le) _) fits
+  refine ⟨UInt64.ofNat ((small.toNat * config.SLOT_DURATION_MS.toNat + 5000) / 10000), ?_⟩
   refine getSlotComponentDurationMs_ok_iff.mpr ⟨fits', ?_⟩
   rw [UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) fits')]
 
@@ -495,10 +512,10 @@ theorem gloas_deadlines_ordered_of_named {fork : Fork} (gloas : fork ≥ .glamst
       payloadAttestation < config.SLOT_DURATION_MS := by
   have values : config.ATTESTATION_DUE_BPS_GLOAS ≤ config.PAYLOAD_DUE_BPS ∧
       config.PAYLOAD_DUE_BPS ≤ config.PAYLOAD_ATTESTATION_DUE_BPS ∧
-      config.PAYLOAD_ATTESTATION_DUE_BPS < BASIS_POINTS ∧ 0 < config.SLOT_DURATION_MS ∧
-      config.PAYLOAD_ATTESTATION_DUE_BPS.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by
+      5000 < (10000 - config.PAYLOAD_ATTESTATION_DUE_BPS.toNat) * config.SLOT_DURATION_MS.toNat ∧
+      config.PAYLOAD_ATTESTATION_DUE_BPS.toNat * config.SLOT_DURATION_MS.toNat + 5000 < 2 ^ 64 := by
     rcases named with rfl | rfl <;> decide
-  obtain ⟨first, second, part, positive, fits⟩ := values
+  obtain ⟨first, second, room, fits⟩ := values
   obtain ⟨payloadAttestation, payloadAttestationOk⟩ :=
     getSlotComponentDurationMs_ok_of_le (UInt64.le_refl _) fits
   obtain ⟨payload, payloadOk⟩ := getSlotComponentDurationMs_ok_of_le second fits
@@ -507,7 +524,7 @@ theorem gloas_deadlines_ordered_of_named {fork : Fork} (gloas : fork ≥ .glamst
   have attestationOk : getAttestationDueMs config fork = .ok attestation := by
     simp only [getAttestationDueMs, gloas, ↓reduceIte, attestationOk]
   exact ⟨attestation, payload, payloadAttestation, attestationOk, payloadOk, payloadAttestationOk,
-    gloas_deadlines_ordered gloas first second part positive attestationOk payloadOk
+    gloas_deadlines_ordered gloas first second room attestationOk payloadOk
       payloadAttestationOk⟩
 
 /-! ## The slots of an epoch -/
