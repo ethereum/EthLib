@@ -5,6 +5,7 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 public import VCVio.OracleComp.QueryTracking.WriterCost
+import EthLib.Cryptography.Proofs.RandomOracleWithCoins
 import VCVio.OracleComp.EvalDist.Measure
 
 /-!
@@ -28,29 +29,6 @@ open OracleComp OracleSpec MeasureTheory
 variable {ι₀ : Type} [DecidableEq ι₀] {spec₀ : OracleSpec.{0, 0} ι₀}
   [∀ t : spec₀.Domain, SampleableType (spec₀.Range t)]
 
-/-- A query to the lazy random oracle commutes with a computation that also draws coins.
-
-The answer, the output and the final cache have the same joint distribution in either order. -/
-theorem evalDist_run_bind_romImpl_swap {β γ : Type} [MeasurableSpace γ] (t : ι₀)
-    (ob : OracleComp (unifSpec + spec₀) β) (cache : spec₀.QueryCache)
-    (f : spec₀.Range t → β → spec₀.QueryCache → ProbComp γ) :
-    𝒟[(spec₀.randomOracle t).run cache >>= fun z ↦
-        (simulateQ (OracleSpec.romImpl spec₀) ob).run z.2 >>= fun w ↦ f z.1 w.1 w.2] =
-      𝒟[(simulateQ (OracleSpec.romImpl spec₀) ob).run cache >>= fun w ↦
-        (spec₀.randomOracle t).run w.2 >>= fun z ↦ f z.1 w.1 z.2] := by
-  induction ob using OracleComp.inductionOn generalizing cache with
-  | pure b => simp only [simulateQ_pure, StateT.run_pure, pure_bind]
-  | query_bind t' k ih =>
-    simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind, bind_assoc]
-    rcases t' with n | t'
-    · simp only [roSim.run_apply_inl, bind_map_left]
-      rw [OracleComp.evalDist_bind_bind_swap]
-      exact evalDist_bind_congr_of_support _ _ _ fun u _ ↦ ih u cache
-    · rw [romImpl_apply_inr]
-      refine (randomOracle.evalDist_run_bind_run_swap t t' cache fun u u' c ↦
-        (simulateQ (OracleSpec.romImpl spec₀) (k u')).run c >>= fun w ↦ f u w.1 w.2).trans ?_
-      exact evalDist_bind_congr_of_support _ _ _ fun y _ ↦ ih y.1 y.2
-
 /-- A hash computation commutes with a computation that also draws coins.
 
 Both outputs and the final cache have the same joint distribution in either order. -/
@@ -61,13 +39,27 @@ theorem evalDist_simulateQ_run_bind_romImpl_swap {α β γ : Type} [MeasurableSp
         (simulateQ (OracleSpec.romImpl spec₀) ob).run w.2 >>= fun v ↦ f w.1 v.1 v.2] =
       𝒟[(simulateQ (OracleSpec.romImpl spec₀) ob).run cache >>= fun v ↦
         (simulateQ spec₀.randomOracle oa).run v.2 >>= fun w ↦ f w.1 v.1 w.2] := by
-  induction oa using OracleComp.inductionOn generalizing cache with
-  | pure a => simp only [simulateQ_pure, StateT.run_pure, pure_bind]
-  | query_bind t k ih =>
-    simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind, bind_assoc]
-    rw [evalDist_bind_congr_of_support _ _ _ fun z _ ↦ ih z.1 z.2]
-    exact evalDist_run_bind_romImpl_swap t ob cache fun u b c ↦
-      (simulateQ spec₀.randomOracle (k u)).run c >>= fun w ↦ f w.1 b w.2
+  -- Lifted beside the coins, the hash computation commutes with the other one.
+  have h := run_bind_bind_comm (OracleComp.liftComp oa (unifSpec + spec₀)) ob
+    (fun a b ↦ pure (a, b)) cache
+  simp only [simulateQ_bind, simulateQ_pure, StateT.run_bind, StateT.run_pure,
+    QueryImpl.simulateQ_add_liftComp_right] at h
+  simpa only [bind_assoc, pure_bind] using
+    (h.bind_left fun z ↦ f z.1.1 z.1.2 z.2).evalDist_eq
+
+/-- A query to the lazy random oracle commutes with a computation that also draws coins.
+
+The answer, the output and the final cache have the same joint distribution in either order. -/
+theorem evalDist_run_bind_romImpl_swap {β γ : Type} [MeasurableSpace γ] (t : ι₀)
+    (ob : OracleComp (unifSpec + spec₀) β) (cache : spec₀.QueryCache)
+    (f : spec₀.Range t → β → spec₀.QueryCache → ProbComp γ) :
+    𝒟[(spec₀.randomOracle t).run cache >>= fun z ↦
+        (simulateQ (OracleSpec.romImpl spec₀) ob).run z.2 >>= fun w ↦ f z.1 w.1 w.2] =
+      𝒟[(simulateQ (OracleSpec.romImpl spec₀) ob).run cache >>= fun w ↦
+        (spec₀.randomOracle t).run w.2 >>= fun z ↦ f z.1 w.1 z.2] := by
+  -- It is the case of a computation that asks one query.
+  simpa only [simulateQ_spec_query] using
+    evalDist_simulateQ_run_bind_romImpl_swap (liftM (spec₀.query t)) ob cache f
 
 /-- A hash computation whose output and cache are discarded changes nothing that follows.
 
@@ -284,8 +276,7 @@ theorem query_bind {β : Type} {known : spec₀.QueryCache} (t : ι₀)
       (OracleComp.liftComp (spec₀.query t : OracleComp spec₀ _) (unifSpec + spec₀) >>= k') := by
   refine bind_right_of_mem_support _ fun cache hc z hz ↦ ?_
   rw [QueryImpl.simulateQ_add_liftComp_right, simulateQ_spec_query] at hz
-  have hle : cache ≤ z.2 := QueryImpl.withCaching_cache_le _ t cache z hz
-  have hz' : z.2 t = some z.1 := QueryImpl.withCaching_run_caches _ t cache z hz
+  obtain ⟨hle, hz', -⟩ := caches_of_mem_support_randomOracle_run t cache hz
   have hknown : known t = none ∨ known t = some z.1 := by
     rcases hkt : known t with _ | v
     · exact Or.inl rfl
