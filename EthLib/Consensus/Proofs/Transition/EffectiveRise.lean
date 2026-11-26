@@ -238,20 +238,13 @@ private theorem appliedDeposits_balances {f : Fork} {s : BeaconState preset f} :
 private theorem pendingAmount_filter_le (l : List PendingDeposit) {p q : PendingDeposit → Bool}
     (le : ∀ d ∈ l, p d = true → q d = true) :
     pendingAmount (l.filter p) ≤ pendingAmount (l.filter q) := by
-  induction l with
-  | nil => simp [pendingAmount]
-  | cons d rest ih =>
-    have tail := ih (fun x member => le x (List.mem_cons_of_mem _ member))
-    simp only [List.filter_cons]
-    by_cases hp : p d = true
-    · simp only [hp, le d List.mem_cons_self hp, ↓reduceIte, pendingAmount, List.map_cons,
-        List.sum_cons] at tail ⊢
-      omega
-    · simp only [hp, Bool.false_eq_true, ↓reduceIte]
-      split
-      · simp only [pendingAmount, List.map_cons, List.sum_cons] at tail ⊢
-        omega
-      · exact tail
+  -- The deposits that pass `p` are those of the `q` deposits that pass `p`.
+  have kept : l.filter p = (l.filter q).filter p := by
+    rw [List.filter_filter]
+    exact List.filter_congr fun d member => by cases hp : p d <;> simp [hp, le d member]
+  unfold pendingAmount
+  rw [kept]
+  exact (List.filter_sublist.map _).sum_le_sum fun _ _ => Nat.zero_le _
 
 /-- From Electra, the pending deposits credit at most the limit of validators per epoch.
 
