@@ -1196,6 +1196,19 @@ Not yet released.
   A step added at the end of the update that changes no field then breaks only the proof files of the update.
   A step that writes a field adds one obligation to each user of the induction principle.
 
+- In Lean, `Engine.Node.newPayloadStep_valid_of_processExecutionPayload` (`Engine/Proofs/Node/ConsensusStep.lean`) states that a beacon payload step that passes makes an execution node answer valid.
+  From Bellatrix to Fulu, the step `Consensus.processExecutionPayload` passes with the engine `executionEngine (node.chainAt parent post)`, where `parent` is the parent hash of the payload.
+  The node holds `parent` as its valid head, with the state `post`, and `parent` passes the terminal block check.
+  The node does not know the payload as invalid.
+  Then the JSON of the payload request of the block exists.
+  The node's `newPayloadStep`, at the version that the beacon chain calls, answers it valid.
+  The latest valid hash of that answer is the block hash of the payload.
+  `newPayloadStep_valid_of_accepts` states the same for any request that this engine accepts, from Bellatrix to Gloas.
+  For a payload that the node knows at most as accepted, `newPayloadStep_valid_iff_accepts` states that the node answers valid exactly when the engine accepts.
+  In `Engine/Proofs/ConsensusRoute.lean`, `payloadBlock_of_checkNewPayload` states that the checks of the method read the JSON of a request as the block of its payload.
+  `header_of_payloadBlock` gives that block the parent hash of the payload, and a header that hashes to the block hash of the payload.
+  `header_of_checkNewPayload` combines the two.
+
 ### Changes that break callers
 
 - In Lean, the rules of `Execution/Proofs/Evm/Logic/Known.lean` for MSTORE, MSTORE8, MCOPY, CALLDATACOPY and CODECOPY keep the parts of a fact outside the range they write, as `keep start length facts`.
