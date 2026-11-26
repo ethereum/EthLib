@@ -1,6 +1,7 @@
 module
 
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Commute
+import EthLib.Cryptography.Proofs.RandomOracleWithCoins
 import VCVio.OracleComp.EvalDist.Measure
 
 /-!
@@ -10,7 +11,7 @@ Two computations run against the same lazily sampled random oracle can run in ei
 
 Their outputs and the final cache have the same joint distribution in both orders.
 
-No independence is needed: a query that both make is answered from the cache in the second run.
+They may share queries: a query that both make is answered from the cache in the second run.
 
 So a proof may reorder the steps of a signer, as when a model signs its layers in another order.
 
@@ -36,13 +37,13 @@ theorem evalDist_simulateQ_run_bind_swap {α β γ : Type} [MeasurableSpace γ]
         (simulateQ spec₀.randomOracle ob).run w.2 >>= fun v ↦ f w.1 v.1 v.2] =
       𝒟[(simulateQ spec₀.randomOracle ob).run cache >>= fun v ↦
         (simulateQ spec₀.randomOracle oa).run v.2 >>= fun w ↦ f w.1 v.1 w.2] := by
-  induction oa using OracleComp.inductionOn generalizing cache with
-  | pure a => simp only [simulateQ_pure, StateT.run_pure, pure_bind]
-  | query_bind t k ih =>
-    simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind, bind_assoc]
-    rw [evalDist_bind_congr_of_support _ _ _ fun z _ ↦ ih z.1 z.2]
-    exact randomOracle.evalDist_run_bind_simulateQ_run_swap t ob cache fun u b c ↦
-      (simulateQ spec₀.randomOracle (k u)).run c >>= fun w ↦ f w.1 b w.2
+  -- Lifted beside the coins, the two computations commute in the random-oracle model.
+  have h := run_bind_bind_comm (OracleComp.liftComp oa (unifSpec + spec₀))
+    (OracleComp.liftComp ob (unifSpec + spec₀)) (fun a b ↦ pure (a, b)) cache
+  simp only [simulateQ_bind, simulateQ_pure, StateT.run_bind, StateT.run_pure,
+    QueryImpl.simulateQ_add_liftComp_right] at h
+  simpa only [bind_assoc, pure_bind] using
+    (h.bind_left fun z ↦ f z.1.1 z.1.2 z.2).evalDist_eq
 
 /-- A computation whose output and cache are discarded changes nothing that follows.
 

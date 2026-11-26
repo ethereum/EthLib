@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Lemmas
+import EthLib.Cryptography.Proofs.RandomOracleWithCoins
 
 /-!
 # The lazy random oracle
@@ -42,18 +43,8 @@ theorem query_support_cached (input : HashInput) (cache : QueryCache HashSpec)
     (answer : HashOutput) (cache' : QueryCache HashSpec)
     (hmem : (answer, cache') ∈ support ((randomOracle (spec := HashSpec) input).run cache)) :
     cache ≤ cache' ∧ cache' input = some answer := by
-  refine ⟨QueryImpl.withCaching_cache_le uniformSampleImpl input cache (answer, cache') hmem, ?_⟩
-  cases hc : cache input with
-  | some old =>
-      rw [QueryImpl.withCaching_run_some uniformSampleImpl hc, support_pure,
-        Set.mem_singleton_iff] at hmem
-      obtain ⟨rfl, rfl⟩ := hmem
-      exact hc
-  | none =>
-      rw [QueryImpl.withCaching_run_none uniformSampleImpl hc, support_map] at hmem
-      obtain ⟨sample, _, heq⟩ := hmem
-      obtain ⟨rfl, rfl⟩ := heq
-      exact QueryCache.cacheQuery_self cache input answer
+  have h := EthLib.Cryptography.caches_of_mem_support_randomOracle_run input cache hmem
+  exact ⟨h.1, h.2.1⟩
 
 omit [Params] in
 /-- An answer function that agrees with the final cache of a lazy run replays that run. -/
