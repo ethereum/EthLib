@@ -969,11 +969,14 @@ private theorem slashingTurn_exitRoom {start : RunStart} {step : BlockStep}
             (exitChurnBound preset config budget) :=
         max_le carriedBefore (ceilingChurn.trans (le_max_right _ _))
       omega
-    exact initiateValidatorExit_total_of_electra electra registryLe (by omega) increment
+    exact initiateValidatorExit_total_of_electra electra baseRun.configPositive.exitQuotient
+      registryLe (by omega)
+      increment
       baseRun.minimum baseRun.maximum inside firstReached (queuesReached electra).1
       exitsReached carried (by omega)
   · obtain ⟨exited, ok, -⟩ := initiateValidatorExit_total_of_lt_electra (config := config)
-      (Nat.lt_of_not_le electra) inside firstReached exitsReached (by omega)
+      (Nat.lt_of_not_le electra) baseRun.configPositive.churn inside firstReached exitsReached
+      (by omega)
     exact ⟨exited, ok⟩
 
 /-- At the turn of an attester slashing of a block, slashing any validator in the registry succeeds.

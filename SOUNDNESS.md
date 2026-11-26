@@ -88,15 +88,15 @@ The report itself also prints the number of rules at each fork.
 <!-- generated: proof-coverage -->
 | Fork | Rules touched | Rules characterized |
 |------|------|------|
-| phase0 | 1317 | 8 |
-| altair | 1335 | 8 |
-| bellatrix | 1336 | 8 |
-| shapella | 1347 | 8 |
-| dencun | 1356 | 8 |
-| pectra | 1376 | 8 |
-| fusaka | 1383 | 8 |
-| glamsterdam | 1502 | 9 |
-| hegota | 1491 | 9 |
+| phase0 | 1318 | 11 |
+| altair | 1335 | 11 |
+| bellatrix | 1336 | 11 |
+| shapella | 1347 | 11 |
+| dencun | 1356 | 11 |
+| pectra | 1376 | 11 |
+| fusaka | 1383 | 11 |
+| glamsterdam | 1502 | 12 |
+| hegota | 1491 | 12 |
 <!-- end generated -->
 
 ### XMSS
@@ -3653,6 +3653,7 @@ Its state is not one that a chain can reach: one validator holds about 1.4 billi
 `computeWeakSubjectivityPeriodPhase0_le` bounds the Phase 0 period by the withdrawal delay plus the longer of two terms, `160 N / (600 delta)` and `230 N / (600 Delta)`.
 Here `N` is the number of active validators, `delta` the churn of validators in one epoch and `Delta` the deposits that fit in one epoch.
 The bound needs no condition beyond success of the computation.
+It takes `delta` from the churn limit, which succeeds whenever the period does.
 It depends on the state through `N` and `delta`, so it gives no number for the parameters alone.
 
 `isWithinWeakSubjectivityPeriod_eq_ok_iff` states when the check of a checkpoint succeeds and what it answers.

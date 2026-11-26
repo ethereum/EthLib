@@ -559,7 +559,7 @@ private theorem processRegistryUpdates
     obtain ⟨_, _, ok⟩ := ok
     exact foldlM (fun _ _ _ ok => updateRegistryEntryElectra ok) ok
   simp only [bind_ok_iff] at ok
-  obtain ⟨_, updated, activated⟩ := ok
+  obtain ⟨_, updated, _, _, activated⟩ := ok
   exact (foldlM (fun _ _ _ ok => updateRegistryEntry ok) updated).trans
     (foldlM (fun _ _ _ ok => activateValidator ok) activated)
 

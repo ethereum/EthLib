@@ -270,6 +270,83 @@ theorem churnQueue_foldlM_le {firstEpoch perEpochChurn earliestEpoch churnLeft e
   rw [same] at spent
   omega
 
+/-- From Electra, the churn of the epoch succeeds exactly with a total and a nonzero quotient.
+
+It is then the share of the total, raised to the least churn and rounded down to an increment. -/
+theorem getBalanceChurnLimit_ok_iff {config : Config} {state : BeaconState preset fork}
+    {churn : Gwei} :
+    getBalanceChurnLimit config state = .ok churn ↔ ∃ total,
+      getTotalActiveBalance state = .ok total ∧ config.CHURN_LIMIT_QUOTIENT ≠ 0 ∧
+        churn = roundToIncrement preset
+          (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA (total / config.CHURN_LIMIT_QUOTIENT)) := by
+  simp only [getBalanceChurnLimit, liftArith, bind_ok_iff, mapError_ok_iff, divChecked_ok_iff,
+    pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨total, totalOk, share, ⟨quotient, value⟩, rfl⟩
+    exact ⟨total, totalOk, quotient, by rw [UInt64.toNat_inj.mp (value.trans
+      (UInt64.toNat_div _ _).symm)]⟩
+  · rintro ⟨total, totalOk, quotient, rfl⟩
+    exact ⟨total, totalOk, _, ⟨quotient, UInt64.toNat_div _ _⟩, rfl⟩
+
+/-- From Electra, with the total computed, the churn of the epoch fails on a zero quotient alone.
+
+It then fails with a division by zero. -/
+theorem getBalanceChurnLimit_eq_error_iff {config : Config} {state : BeaconState preset fork}
+    {total : Gwei} (totalOk : getTotalActiveBalance state = .ok total) :
+    getBalanceChurnLimit config state = .error (.arith .divisionByZero) ↔
+      config.CHURN_LIMIT_QUOTIENT = 0 := by
+  unfold getBalanceChurnLimit liftArith divChecked
+  by_cases zero : config.CHURN_LIMIT_QUOTIENT = 0 <;>
+    simp [totalOk, zero, bind, Except.bind, Except.mapError, pure, Except.pure]
+
+/-- From Gloas, the churn of exits succeeds exactly with a total and a nonzero quotient.
+
+It is then the share of the total, raised to the least churn and rounded down to an increment. -/
+theorem getExitChurnLimit_ok_iff {config : Config} {state : BeaconState preset fork}
+    {churn : Gwei} :
+    getExitChurnLimit config state = .ok churn ↔ ∃ total,
+      getTotalActiveBalance state = .ok total ∧ config.CHURN_LIMIT_QUOTIENT_GLOAS ≠ 0 ∧
+        churn = roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
+          (total / config.CHURN_LIMIT_QUOTIENT_GLOAS)) := by
+  simp only [getExitChurnLimit, liftArith, bind_ok_iff, mapError_ok_iff, divChecked_ok_iff,
+    pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨total, totalOk, share, ⟨quotient, value⟩, rfl⟩
+    exact ⟨total, totalOk, quotient, by rw [UInt64.toNat_inj.mp (value.trans
+      (UInt64.toNat_div _ _).symm)]⟩
+  · rintro ⟨total, totalOk, quotient, rfl⟩
+    exact ⟨total, totalOk, _, ⟨quotient, UInt64.toNat_div _ _⟩, rfl⟩
+
+/-- From Gloas, with the total computed, the churn of exits fails on a zero quotient alone.
+
+It then fails with a division by zero. -/
+theorem getExitChurnLimit_eq_error_iff {config : Config} {state : BeaconState preset fork}
+    {total : Gwei} (totalOk : getTotalActiveBalance state = .ok total) :
+    getExitChurnLimit config state = .error (.arith .divisionByZero) ↔
+      config.CHURN_LIMIT_QUOTIENT_GLOAS = 0 := by
+  unfold getExitChurnLimit liftArith divChecked
+  by_cases zero : config.CHURN_LIMIT_QUOTIENT_GLOAS = 0 <;>
+    simp [totalOk, zero, bind, Except.bind, Except.mapError, pure, Except.pure]
+
+/-- From Electra, with the total computed, the churn of consolidations fails on a zero quotient.
+
+From Gloas the quotient is that of consolidations, and in Electra that of the whole churn.
+
+It then fails with a division by zero. -/
+theorem getConsolidationChurnLimit_eq_error_iff {config : Config}
+    {state : BeaconState preset fork} {total : Gwei}
+    (totalOk : getTotalActiveBalance state = .ok total) :
+    getConsolidationChurnLimit config state = .error (.arith .divisionByZero) ↔
+      (if .glamsterdam ≤ fork then config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT
+        else config.CHURN_LIMIT_QUOTIENT) = 0 := by
+  unfold getConsolidationChurnLimit getActivationExitChurnLimit getBalanceChurnLimit liftArith
+    divChecked
+  by_cases gloas : .glamsterdam ≤ fork
+  · by_cases zero : config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT = 0 <;>
+      simp [gloas, totalOk, zero, bind, Except.bind, Except.mapError, pure, Except.pure]
+  · by_cases zero : config.CHURN_LIMIT_QUOTIENT = 0 <;>
+      simp [gloas, totalOk, zero, bind, Except.bind, Except.mapError, pure, Except.pure]
+
 /-- In Electra, the churns of consolidations and of activations and exits add up to the whole churn.
 -/
 theorem getConsolidationChurnLimit_add {config : Config} {state : BeaconState preset fork}
@@ -316,8 +393,7 @@ theorem min_sub_mod_mod_self {cap increment : Gwei} (balance : Gwei)
 theorem getExitChurnLimit_mod {config : Config} {state : BeaconState preset fork} {exit : Gwei}
     (computed : getExitChurnLimit config state = .ok exit) :
     exit % preset.EFFECTIVE_BALANCE_INCREMENT = 0 := by
-  simp only [getExitChurnLimit, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨_, _, _, rfl⟩ := getExitChurnLimit_ok_iff.mp computed
   exact sub_mod_mod_self _ _
 
 /-- From Gloas, the churn of activations is the churn of exits up to its maximum. -/
@@ -339,6 +415,25 @@ theorem depositChurnLimit_of_lt {config : Config} {state : BeaconState preset fo
     depositChurnLimit config state = getActivationExitChurnLimit config state := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   simp only [depositChurnLimit, notGloas, ↓reduceIte]
+
+/-- From Electra, a churn of deposits that succeeds divides by a quotient that is not 0.
+
+From Gloas it is the quotient of exits, and before it the quotient of the whole churn. -/
+theorem churnQuotient_ne_zero_of_depositChurnLimit {config : Config}
+    {state : BeaconState preset fork} {churn : Gwei}
+    (computed : depositChurnLimit config state = .ok churn) :
+    (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0 := by
+  unfold depositChurnLimit at computed
+  split at computed <;> rename_i gloas <;> simp only [gloas, ↓reduceIte]
+  · simp only [getActivationChurnLimit, bind_ok_iff] at computed
+    obtain ⟨_, exitOk, -⟩ := computed
+    obtain ⟨_, -, quotient, -⟩ := getExitChurnLimit_ok_iff.mp exitOk
+    exact quotient
+  · simp only [getActivationExitChurnLimit, bind_ok_iff] at computed
+    obtain ⟨_, wholeOk, -⟩ := computed
+    obtain ⟨_, -, quotient, -⟩ := getBalanceChurnLimit_ok_iff.mp wholeOk
+    exact quotient
 
 /-- The churn update of an exit records its epoch as the earliest open one. -/
 theorem computeExitEpochAndUpdateChurn_earliest {config : Config}
