@@ -147,21 +147,14 @@ private theorem sum_range_getElem? (g : Validator → Nat) :
       List.getElem?_cons_zero, List.getElem?_cons_succ, Option.map_some, Option.getD_some]
     rw [sum_range_getElem? g t]
 
-/-- The sum of the effective balances of the validators that pass a test, as a sum of all. -/
-private theorem sum_filter_effective (p : Validator → Bool) :
-    ∀ l : List Validator, ((l.filter p).map (·.effectiveBalance.toNat)).sum =
-      (l.map fun v => if p v then v.effectiveBalance.toNat else 0).sum
-  | [] => rfl
-  | x :: t => by
-    rw [List.filter_cons]
-    cases h : p x <;> simp [h, sum_filter_effective p t]
-
 /-- The marked sum for the marks of an epoch is the active balance at that epoch. -/
 private theorem sumMarked_active (state : BeaconState preset fork) (epoch : Epoch) :
     sumMarked state.validators.data (state.validators.data.map (isActiveValidator · epoch)) =
       activeBalanceAt state epoch := by
-  rw [sumMarked_eq_sum, activeBalanceAt, sum_filter_effective,
-    ← Array.length_toList]
+  have split := sum_map_ite_eq_sum_filter (isActiveValidator · epoch = true)
+    (·.effectiveBalance.toNat) state.validators.data.toList
+  simp only [Bool.decide_eq_true] at split
+  rw [sumMarked_eq_sum, activeBalanceAt, ← split, ← Array.length_toList]
   rw [← sum_range_getElem? (fun v => if isActiveValidator v epoch = true then
     v.effectiveBalance.toNat else 0) state.validators.data.toList]
   congr 1
