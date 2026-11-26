@@ -81,14 +81,6 @@ namespace SphincsSecurity.Security.Prefix
 
 variable [Params]
 
-/-- Source-side hash calls, excluding private uniform samples. -/
-def SourceHash : OracleWorld.Domain → Prop
-  | .inl _ => False
-  | .inr _ => True
-
-instance (input : OracleWorld.Domain) : Decidable (SourceHash input) := by
-  cases input <;> unfold SourceHash <;> infer_instance
-
 /-- Fresh private uniform sampling together with a supplied fixed hash function. -/
 noncomputable def fixedHashWorld (outside : QueryImpl HashSpec Id) : QueryImpl OracleWorld ProbComp
   | .inl sample => liftM (unifSpec.query sample)

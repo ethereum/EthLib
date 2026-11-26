@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.SufCma
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.SufCma (hashCost)
 
 namespace XmssSecurity
 
@@ -73,15 +74,14 @@ noncomputable def gameCore {Key : Type} (scheme : Scheme Key) (adversary : Adver
 noncomputable def forgeAdvantage {Key : Type} (scheme : Scheme Key) (adversary : Adversary) : ℝ≥0∞ :=
   Pr{let x ← (simulateQ romImpl (gameCore scheme adversary)).run' ∅}[x = true]
 
-/-- Count one per hash call, including cache hits, and zero per uniform sample. -/
-noncomputable def countedRomImpl :=
-  romImpl.withAddCost EthLib.Cryptography.SufCma.hashCost
-
 /-- Every execution of the consistent random oracle uses at most `q` hash calls.
+
+Each hash call counts one, cache hits included, and a uniform sample counts nothing.
 
 The count includes key generation, adversarial hashing, signing, and final verification. -/
 def HasHashQueryBound {Key : Type} (scheme : Scheme Key) (adversary : Adversary) (q : Nat) : Prop :=
-  ∀ result ∈ support ((simulateQ countedRomImpl (gameCore scheme adversary)).run.run' ∅),
+  ∀ result ∈ support
+      ((simulateQ (romImpl.withAddCost hashCost) (gameCore scheme adversary)).run.run' ∅),
     result.2 ≤ q
 
 /-- The security bound for an intermediate scheme. -/
@@ -91,6 +91,8 @@ def HasClassicalSecurityBits {Key : Type} (scheme : Scheme Key) (bits : Nat) : P
 
 /-- Every execution after key generation uses at most `q` hash calls.
 
+Each hash call counts one, cache hits included, and a uniform sample counts nothing.
+
 This holds from any cache key generation can leave.
 
 The calls are the adversary's, the signer's and the final verification's.
@@ -99,7 +101,7 @@ Model key generation does more work than the real scheme's and is not charged. -
 def HasAfterKeygenHashQueryBound {Key : Type} (scheme : Scheme Key) (adversary : Adversary) (q : Nat) :
     Prop :=
   ∀ keyResult ∈ support ((simulateQ romImpl scheme.keygen).run ∅),
-    ∀ result ∈ support ((simulateQ countedRomImpl
+    ∀ result ∈ support ((simulateQ (romImpl.withAddCost hashCost)
       (Seeded.gameRest scheme adversary keyResult.1.1 keyResult.1.2)).run.run' keyResult.2),
       result.2 ≤ q
 

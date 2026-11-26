@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Seed.M
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Statement
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.Prelude
 public import EthLib.Cryptography.Proofs.HashSig.ProgrammedTable
+public import EthLib.Cryptography.Proofs.HashSig.Counted
 public import VCVio.OracleComp.QueryTracking.RandomOracle.DeferredSampling
 
 /-!
@@ -24,7 +25,9 @@ It has the same output distribution when it runs from the cache programmed with 
 So the master seed can be sampled after the material, also when the hash queries are counted.
 -/
 
-open EthLib.Cryptography.HashSig (counted counted_bind simulate_withCost)
+open EthLib.Cryptography.SufCma (hashCost)
+open EthLib.Cryptography.HashSig (countHashQueries countHashQueries_liftM_bind
+  simulateQ_countHashQueries)
 
 @[expose] public section
 
@@ -181,22 +184,6 @@ theorem evalDist_prepared_continuation {α : Type} (computation : OracleComp Ora
   refine ((evalDist_prepareTable seed).bind_left _).trans ?_
   rw [bind_map_left]
 
-/-- The computation, paired with the number of its hash queries.
-
-Queries with a cached answer count, and uniform draws do not. -/
-noncomputable def countHashQueries {α : Type} (computation : OracleComp OracleWorld α) :
-    OracleComp OracleWorld (α × Nat) :=
-  counted (fun input : OracleWorld.Domain => input matches .inr _) computation
-
-omit [Params] in
-theorem simulateQ_countHashQueries {α : Type} (computation : OracleComp OracleWorld α) :
-    simulateQ romImpl (countHashQueries computation) =
-      (simulateQ countedOracle computation).run := by
-  rw [countHashQueries, simulate_withCost, countedOracle, Completeness.romImpl]
-  congr 3
-  funext input
-  cases input <;> rfl
-
 /-- Sample the seed and run from an empty cache.
 
 This has the same output distribution as sampling the material and then the seed.
@@ -217,49 +204,17 @@ theorem evalDist_seeded_prepared {α : Type} (next : MasterSeed → OracleComp O
     exact evalDist_prepared_continuation (next seed) seed
   · exact EvalDistEq.bind_bind_swap _ _ _
 
-omit [Params] in
-theorem countHashQueries_query_bind {α : Type} (input : OracleWorld.Domain)
-    (next : OracleWorld.Range input → OracleComp OracleWorld α) :
-    countHashQueries (liftM (OracleWorld.query input) >>= next) = (do
-      let answer ← liftM (OracleWorld.query input)
-      let result ← countHashQueries (next answer)
-      pure (result.1,
-        (if (fun query : OracleWorld.Domain => query matches .inr _) input then 1 else 0) +
-          result.2)) := rfl
-
-omit [Params] in
-theorem countHashQueries_lift_prob {α : Type} (computation : ProbComp α) :
-    countHashQueries (liftM computation : OracleComp OracleWorld α) =
-      (fun value => (value, 0)) <$> (liftM computation : OracleComp OracleWorld α) := by
-  induction computation using OracleComp.inductionOn with
-  | pure value => rfl
-  | query_bind input next ih =>
-      rw [liftM_bind]
-      change countHashQueries (liftM (OracleWorld.query (.inl input)) >>= _) = _
-      simp only [countHashQueries_query_bind, ih, map_bind, bind_pure_comp, Functor.map_map]
-      rfl
-
-omit [Params] in
-theorem countHashQueries_sampling_bind {α β : Type} (sampling : ProbComp α)
-    (next : α → OracleComp OracleWorld β) :
-    countHashQueries ((liftM sampling : OracleComp OracleWorld α) >>= next) =
-      (liftM sampling : OracleComp OracleWorld α) >>= fun value =>
-        countHashQueries (next value) := by
-  rw [countHashQueries, counted_bind]
-  change (countHashQueries (liftM sampling : OracleComp OracleWorld α) >>= _) = _
-  rw [countHashQueries_lift_prob, bind_map_left]
-  simp only [Nat.zero_add, Prod.mk.eta, bind_pure]
-  rfl
-
 /-- The seed can be sampled after the material also when the hash queries are counted. -/
 theorem evalDist_seeded_prepared_counted {α : Type}
     (next : MasterSeed → OracleComp OracleWorld α) :
-    (simulateQ countedOracle
+    (simulateQ (HashSpec.romImpl.withAddCost hashCost)
       ((liftM sampleMasterSeed : OracleComp OracleWorld MasterSeed) >>= next)).run.run' ∅ =ᵈ
       (sampleMaterial >>= fun material => sampleMasterSeed >>= fun seed =>
-        (simulateQ countedOracle (next seed)).run.run' (programCache ∅ seed material)) := by
-  rw [← simulateQ_countHashQueries, countHashQueries_sampling_bind]
-  simpa only [simulateQ_countHashQueries] using
-    evalDist_seeded_prepared (fun seed => countHashQueries (next seed))
+        (simulateQ (HashSpec.romImpl.withAddCost hashCost) (next seed)).run.run'
+          (programCache ∅ seed material)) := by
+  rw [← simulateQ_countHashQueries, countHashQueries_liftM_bind]
+  have h := evalDist_seeded_prepared (fun seed => countHashQueries (next seed))
+  simp only [simulateQ_countHashQueries] at h
+  exact h
 
 end SphincsSecurity.Security.SeedCoupling

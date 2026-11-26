@@ -12,15 +12,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 @[expose] public section
 
 open OracleComp OracleSpec
+open EthLib.Cryptography.HashSig (simulateQ_countHashQueries)
 
 namespace XmssSecurity
-
-/-- A query to the hash oracle, not to the uniform sampler. -/
-def IsHashQuery : OracleWorld.Domain → Prop := fun input => input matches .inr _
-
-instance : DecidablePred IsHashQuery := by
-  intro input
-  cases input <;> unfold IsHashQuery <;> exact inferInstance
 
 /-- The after-key-generation budget bounds every run after key generation. -/
 theorem afterKeygen_hashQueryBound (adversary : Adversary) (q : Nat)

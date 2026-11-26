@@ -18,8 +18,8 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants (LOG_LIFETIME LAYER_HEIGHT)
-open XmssSecurity (OracleWorld HashSpec HashQueryBound simulateQ_countHashQueries
-  countHashQueries_pure countHashQueries_query_bind)
+open XmssSecurity (OracleWorld HashSpec HashQueryBound)
+open HashSig (simulateQ_countHashQueries countHashQueries_pure countHashQueries_query_bind)
 
 /-! ## The calls of the game
 

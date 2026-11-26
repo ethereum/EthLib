@@ -19,6 +19,7 @@ It can also be the PRF key in a randomizer derivation.
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.HashSig (countHashQueries)
 
 namespace SphincsSecurity.Security.Det
 

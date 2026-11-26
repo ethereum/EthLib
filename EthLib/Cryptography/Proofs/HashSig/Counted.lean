@@ -2,6 +2,7 @@ module
 
 public import VCVio.OracleComp.QueryTracking.WriterCost
 public import VCVio.OracleComp.QueryTracking.QueryBound
+public import EthLib.Cryptography.Proofs.SufCma
 
 /-!
 # Proofs: counting the queries of a computation
@@ -9,6 +10,8 @@ public import VCVio.OracleComp.QueryTracking.QueryBound
 A computation, paired with the number of its queries that a predicate selects.
 
 The leanXMSS and leanSPHINCS security proofs count their hash calls with it.
+
+Over coins and a hash oracle, the count of hash calls answers like the oracle charged one per call.
 -/
 
 @[expose] public section
@@ -94,5 +97,79 @@ theorem counted_map (computation : OracleComp spec Result) (f : Result → Next)
       (bind_pure_comp f computation).symm,
     counted_bind]
   simp only [counted_pure, Nat.add_zero, bind_pure_comp, map_pure]
+
+/-! ## The hash calls of a computation over coins and a hash oracle -/
+
+section HashCalls
+
+variable {ι : Type} {hs : OracleSpec ι} {α β : Type}
+
+/-- The computation, paired with the number of its hash calls. -/
+noncomputable def countHashQueries (oa : OracleComp (unifSpec + hs) α) :
+    OracleComp (unifSpec + hs) (α × ℕ) :=
+  counted (SufCma.IsHashCall hs) oa
+
+/-- A computation without a query counts none. -/
+theorem countHashQueries_pure (a : α) :
+    countHashQueries (pure a : OracleComp (unifSpec + hs) α) = pure (a, 0) := rfl
+
+/-- A query adds one to the count of the rest when it is a hash call. -/
+theorem countHashQueries_query_bind (t : (unifSpec + hs).Domain)
+    (next : (unifSpec + hs).Range t → OracleComp (unifSpec + hs) α) :
+    countHashQueries (liftM ((unifSpec + hs).query t) >>= next) = (do
+      let answer ← liftM ((unifSpec + hs).query t)
+      let result ← countHashQueries (next answer)
+      pure (result.1, (if SufCma.IsHashCall hs t then 1 else 0) + result.2)) := rfl
+
+/-- The count of a sequence is the sum of the counts of its two parts. -/
+theorem countHashQueries_bind (oa : OracleComp (unifSpec + hs) α)
+    (next : α → OracleComp (unifSpec + hs) β) :
+    countHashQueries (oa >>= next) = (do
+      let first ← countHashQueries oa
+      let second ← countHashQueries (next first.1)
+      pure (second.1, first.2 + second.2)) :=
+  counted_bind _ oa next
+
+/-- Mapping the result keeps the count. -/
+theorem countHashQueries_map (oa : OracleComp (unifSpec + hs) α) (f : α → β) :
+    countHashQueries (f <$> oa) = (fun result => (f result.1, result.2)) <$> countHashQueries oa :=
+  counted_map _ oa f
+
+/-- Forgetting the count gives the computation back. -/
+theorem countHashQueries_forget (oa : OracleComp (unifSpec + hs) α) :
+    Prod.fst <$> countHashQueries oa = oa :=
+  counted_forget _ oa
+
+/-- A computation over coins alone makes no hash call. -/
+theorem countHashQueries_liftM (oa : ProbComp α) :
+    countHashQueries (liftM oa : OracleComp (unifSpec + hs) α) =
+      (fun a => (a, 0)) <$> (liftM oa : OracleComp (unifSpec + hs) α) := by
+  induction oa using OracleComp.inductionOn with
+  | pure a => simp only [liftM_pure, countHashQueries_pure, map_pure]
+  | query_bind n next ih =>
+      rw [liftM_bind]
+      change countHashQueries (liftM ((unifSpec + hs).query (.inl n)) >>= _) = _
+      simp only [countHashQueries_query_bind, ih, SufCma.not_isHashCall_inl, ite_false,
+        Nat.zero_add, map_bind, bind_pure_comp, Functor.map_map]
+      rfl
+
+/-- Coins drawn first add nothing to the count of the rest. -/
+theorem countHashQueries_liftM_bind (oa : ProbComp α)
+    (next : α → OracleComp (unifSpec + hs) β) :
+    countHashQueries ((liftM oa : OracleComp (unifSpec + hs) α) >>= next) =
+      (liftM oa : OracleComp (unifSpec + hs) α) >>= fun a => countHashQueries (next a) := by
+  rw [countHashQueries_bind, countHashQueries_liftM, bind_map_left]
+  simp only [Nat.zero_add, Prod.mk.eta, bind_pure]
+
+/-- Answering the counted computation is answering it at a cost of one per hash call. -/
+theorem simulateQ_countHashQueries {m : Type → Type} [Monad m] [LawfulMonad m]
+    (impl : QueryImpl (unifSpec + hs) m) (oa : OracleComp (unifSpec + hs) α) :
+    simulateQ impl (countHashQueries oa) =
+      (simulateQ (impl.withAddCost SufCma.hashCost) oa).run := by
+  rw [countHashQueries, simulate_withCost,
+    show (fun t => if SufCma.IsHashCall hs t then 1 else 0) = SufCma.hashCost from
+      funext fun t => (SufCma.hashCost_eq_ite t).symm]
+
+end HashCalls
 
 end EthLib.Cryptography.HashSig
