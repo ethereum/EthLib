@@ -282,6 +282,23 @@ theorem forkOfDigest_recovers {epoch : Epoch} {digest : ForkDigest}
   rw [← Config.forkAtEpoch_digestStart epoch]
   simpa using checked
 
+/-- The search finds an epoch below the far future one for the digest of such an epoch. -/
+theorem forkOfDigest_ne_farFuture {epoch start : Epoch} {digest : ForkDigest}
+    (computed : computeForkDigest config genesisValidatorsRoot epoch = .ok digest)
+    (scheduled : epoch ≠ FAR_FUTURE_EPOCH)
+    (found : forkOfDigest config genesisValidatorsRoot digest = some start) :
+    start ≠ FAR_FUTURE_EPOCH := by
+  -- The epoch found is at or before the epoch, which is below the largest epoch.
+  rintro rfl
+  have le := forkOfDigest_le computed found
+  have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have below : epoch.toNat < 2 ^ 64 := epoch.toNat_lt_size
+  rw [UInt64.le_iff_toNat_le, far] at le
+  apply scheduled
+  apply UInt64.toNat_inj.mp
+  rw [far]
+  omega
+
 /-- Mainnet, with Altair given the version of genesis.
 
 Phase 0 and Altair then share a digest. -/

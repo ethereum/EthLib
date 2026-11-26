@@ -11,6 +11,7 @@ public import EthLib.Networking.Proofs.Gossip.Topic
 Properties of the gossip topics and of the subnets of messages.
 
 - Each topic name parses back to its topic, so no two topics share a name.
+- No topic name holds `/`, so the topic string of each topic parses back to it.
 - Every subnet of a topic of a fork is below the number of subnets of its kind.
 - Each subnet that a message is sent on is below that number.
 - A node subscribes to as many attestation subnets as the configuration says.
@@ -94,6 +95,18 @@ theorem name_injective : Function.Injective GossipTopic.name := fun a b same => 
   have := ofName?_name a
   rw [same, ofName?_name b] at this
   exact (Option.some.inj this).symm
+
+/-- No topic name contains `/`, so the topic string of a name parses back to it. -/
+theorem slash_not_mem_name (topic : GossipTopic) : '/' ∉ topic.name.toList := by
+  cases topic <;>
+    first
+    | decide
+    | exact slash_not_mem_subnetTopicName (by decide) _
+
+/-- The topic string of a topic, with some digest, parses back to that digest and that topic. -/
+theorem parseTopic_topicString_name (digest : ForkDigest) (topic : GossipTopic) :
+    parseTopic (topicString digest topic.name) = .ok (digest, topic.name) :=
+  parseTopic_topicString digest (slash_not_mem_name topic)
 
 /-- A number below a 64-bit count is the same number as a 64-bit integer. -/
 theorem ofNat_lt {a : Nat} {count : UInt64} (lt : a < count.toNat) : UInt64.ofNat a < count := by

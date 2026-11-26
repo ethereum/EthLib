@@ -11499,7 +11499,7 @@
    "docstring":
    "The largest length of the payload of a gossip topic at a fork."},
   {"summary":
-   "The data of a gossip message at the fork of its topic's digest, with that fork and the topic.",
+   "The payload of a gossip message at the fork of its topic's digest, with that fork and the topic.",
    "signature":
    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, topic: str, data: bytes) -> tuple[str, str, bytes]",
    "operation": "EthLib.Consensus.Exports.gossipDecodeAtTopicExport",
@@ -11526,7 +11526,7 @@
       {"constructor": "payloadTooLong", "code": 4}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "The data of a gossip message at the fork of its topic's digest, with that fork and the topic.\n\nThe configuration of the name holds, with the replacements that a `dict` gives."},
+   "The payload of a gossip message at the fork of its topic's digest, with that fork and the topic.\n\nThe configuration of the name holds, with the replacements that a `dict` gives."},
   {"summary":
    "The subnet of an attestation, from the committees per slot, its slot and its committee index.",
    "signature":

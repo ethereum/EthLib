@@ -8,11 +8,7 @@ from ethlib.networking import enr, snappy
 from raising import raises
 
 from .test_fork_digest import SEPOLIA, SEPOLIA_RECORD, SEPOLIA_ROOT
-
-# A root for the chains whose digests the tests compute rather than read from a source.
-ROOT = bytes(range(32))
-
-FAR_FUTURE_EPOCH = 2**64 - 1
+from .test_reqresp_chunk import FAR_FUTURE_EPOCH, MAINNET_DIGEST_FORKS, ROOT
 
 
 def _topic(digest: bytes, name: str) -> str:
@@ -20,7 +16,7 @@ def _topic(digest: bytes, name: str) -> str:
 
 
 def test_sepolia_record_digest() -> None:
-    # A bootnode record of Sepolia holds the digest of Bellatrix, read from the source.
+    # A bootnode record of Sepolia holds the digest of Bellatrix.
     digest = enr.consensus_entries("phase0", enr.from_text(SEPOLIA_RECORD)).eth2.fork_digest
     payload = bytes(consensus.gossip_topic_bound("bellatrix", "voluntary_exit"))
     decoded = consensus.gossip_decode_at_topic(
@@ -29,28 +25,9 @@ def test_sepolia_record_digest() -> None:
     assert decoded == ("bellatrix", "voluntary_exit", payload)
 
 
-# The epoch at which each fork of mainnet starts, and the two entries of its blob schedule.
-# EthLib names Capella `shapella`, Deneb `dencun`, Electra `pectra` and Fulu `fusaka`.
-#
-# File: configs/mainnet.yaml
-# Repository: ethereum/consensus-specs
-# Commit: aa16bb4c156184e9548a997d53efaf2a228a6304
-MAINNET_DIGEST_FORKS = [
-    (0, "phase0"),
-    (74240, "altair"),
-    (144896, "bellatrix"),
-    (194048, "shapella"),
-    (269568, "dencun"),
-    (364032, "pectra"),
-    (411392, "fusaka"),
-    (412672, "fusaka"),
-    (419072, "fusaka"),
-]
-
-
 @pytest.mark.parametrize(("start", "fork"), MAINNET_DIGEST_FORKS)
 def test_each_digest_epoch(start: int, fork: str) -> None:
-    # A message on the topic of each digest of mainnet has the fork of that digest.
+    # A message on the topic of each digest of the mainnet schedule has the fork of that digest.
     digest = consensus.compute_fork_digest("mainnet", ROOT, start)
     payload = bytes(consensus.gossip_topic_bound(fork, "beacon_aggregate_and_proof") // 2)
     decoded = consensus.gossip_decode_at_topic(
@@ -70,7 +47,28 @@ def test_subnet_topic() -> None:
 
 
 def test_bound_of_the_digest_fork() -> None:
-    # A message one byte over the bound of its topic at the fork of the digest is refused.
+    # An aggregate grows at Electra, so one payload fits under the digest of Electra alone.
+    deneb = consensus.gossip_topic_bound("dencun", "beacon_aggregate_and_proof")
+    electra = consensus.gossip_topic_bound("pectra", "beacon_aggregate_and_proof")
+    assert deneb < electra
+    payload = bytes(deneb + 1)
+    data = snappy.compress(payload)
+    digest = consensus.compute_fork_digest("mainnet", ROOT, 364032)
+    decoded = consensus.gossip_decode_at_topic(
+        _topic(digest, "beacon_aggregate_and_proof"), ROOT, data
+    )
+    assert decoded == ("pectra", "beacon_aggregate_and_proof", payload)
+    digest = consensus.compute_fork_digest("mainnet", ROOT, 269568)
+    with raises(
+        ConsensusError,
+        f"EthLib.Networking.Gossip.PayloadError.payloadTooLong {deneb + 1} {deneb}",
+    ) as info:
+        consensus.gossip_decode_at_topic(_topic(digest, "beacon_aggregate_and_proof"), ROOT, data)
+    assert info.value.code == 4
+
+
+def test_bound_of_a_fixed_size_message() -> None:
+    # A message one byte over the bound of its topic is refused.
     digest = consensus.compute_fork_digest("mainnet", ROOT, 0)
     # A signed voluntary exit is fixed-size: an epoch (8), a validator index (8), a signature (96).
     # Its topic has no size limit of its own, so its bound is that size.
@@ -98,6 +96,7 @@ def test_not_snappy() -> None:
 
 
 def test_unknown_digest() -> None:
+    assert consensus.fork_of_digest("mainnet", ROOT, bytes(4)) is None
     with raises(ConsensusError, "no epoch of the chain has the digest 0x00000000") as info:
         consensus.gossip_decode_at_topic(
             _topic(bytes(4), "beacon_block"), ROOT, snappy.compress(bytes(8))

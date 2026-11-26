@@ -494,6 +494,8 @@ def gossip_decode_at_topic(
     The payload of a gossip message at the fork that the digest of its topic names.
 
     It returns the name of that fork, the name of the topic and the SSZ bytes of the payload.
+
+    It neither deserializes the payload nor checks that the node subscribes to the topic.
     """
     return _native.consensus_gossip_decode_at_topic(
         name, config, genesis_validators_root, topic, data

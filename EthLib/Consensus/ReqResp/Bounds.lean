@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.ForkDigest
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Networking.ReqResp.Bounds
 
@@ -22,6 +23,8 @@ Each protocol has one request type, the same at every version, except the status
 - Metadata and the two light client update protocols carry no request.
 
 The type of a response depends on the context bytes of each chunk, so it is not part of this module.
+
+The errors of the bounds, and the fork that a received digest names, serve gossip as well.
 -/
 
 @[expose] public section
@@ -74,11 +77,11 @@ inductive BoundsError where
 
   The error gives the name of the topic and the fork. -/
   | topicNotAtFork (topic : String) (fork : Fork)
-  /-- No epoch of the chain has the digest of a successful response chunk.
+  /-- No epoch of the chain has the digest of a response chunk or a gossip topic.
 
-  So the digest names no fork, and the chunk has no type and no bounds. -/
+  So the digest names no fork, and the message has no type and no bounds. -/
   | unknownDigest (digest : ForkDigest)
-  /-- Only the far future epoch has the digest of a successful response chunk.
+  /-- Only the far future epoch has the digest of a response chunk or a gossip topic.
 
   An epoch has at least two slots, so no slot has that epoch, and no payload has the digest. -/
   | unscheduledDigest (digest : ForkDigest)
@@ -111,5 +114,22 @@ instance : ToString BoundsError where
 /-- The code and the message of an error, as the C exports return them. -/
 def BoundsError.fault (error : BoundsError) : UInt32 × String :=
   (error.code, toString error)
+
+/-- The fork whose types decode a message that carries a digest.
+
+It is the fork of the first epoch with the digest, below the far future epoch. -/
+def forkOfScheduledDigest (config : Config) (genesisValidatorsRoot : Root)
+    (digest : ForkDigest) : Except BoundsError Fork :=
+  match forkOfDigest config genesisValidatorsRoot digest with
+  -- On a chain whose digests identify their forks, it is the fork of the digest's epoch.
+  --
+  -- A slot or the clock gives the epoch of a message, and neither reaches the far future epoch.
+  --
+  -- So no message has a digest that only the far future epoch has.
+  | some start =>
+    if start = FAR_FUTURE_EPOCH then throw (.unscheduledDigest digest)
+    else pure (config.forkAtEpoch start)
+  -- No epoch of the chain has the digest, so it names no type and no bounds.
+  | none => throw (.unknownDigest digest)
 
 end EthLib.Consensus
