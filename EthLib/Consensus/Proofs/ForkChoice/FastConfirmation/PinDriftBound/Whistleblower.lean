@@ -1361,15 +1361,10 @@ private theorem induced_debited (h : Setting config checks g split fin pulled an
 private theorem depPre_le_deposits (L : List (BalanceEvent preset)) (i : ℕ) :
     Internal.depPre L i ≤ ((L.filter fun e => e.source = .deposits).map (Internal.keyCredit i)).sum
       := by
-  induction L with
-  | nil => simp [Internal.depPre]
-  | cons e rest ih =>
-    unfold Internal.depPre at ih ⊢
-    by_cases dep : e.source = .deposits
-    · by_cases slashed : slashedFlagAt e.before.state i = some true <;>
-        simp [dep, slashed] at ih ⊢ <;> omega
-    · simp [dep] at ih ⊢
-      omega
+  have sub := (List.filter_sublist (l := L.filter fun e => e.source = .deposits)
+    (p := fun e => decide (slashedFlagAt e.before.state i ≠ some true))).map (Internal.keyCredit i)
+  simpa only [Internal.depPre, List.filter_filter, Bool.decide_and, Bool.and_comm, ne_eq] using
+    sub.sum_le_sum fun _ _ => Nat.zero_le _
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key credited by a consolidation from the split, or on the shared segment, has a due entry.
