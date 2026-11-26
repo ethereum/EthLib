@@ -20,7 +20,7 @@ An envelope whose payload the store holds already gives no payload event.
 
 The [event stream] gives the topics, and an example of each payload.
 
-[event stream]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/eventstream/index.yaml
+[event stream]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/eventstream/index.yaml
 -/
 
 @[expose] public section

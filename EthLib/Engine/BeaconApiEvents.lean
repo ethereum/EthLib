@@ -16,7 +16,7 @@ How often a node sends the event may depend on its configuration, so only its co
 
 The [event stream] gives the fields of the event, and a step comment names the field it follows.
 
-[event stream]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/eventstream/index.yaml#L143
+[event stream]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/eventstream/index.yaml#L143
 -/
 
 @[expose] public section

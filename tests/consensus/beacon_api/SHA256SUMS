@@ -1,4 +1,4 @@
-# Source: ethereum/beacon-APIs at 0ed12552077c9927ba2599ee632e76b2caf021d7
+# Source: ethereum/beacon-APIs at 09256e18f0a575e0aef546e06ec773a35fc52938
 68f7dd07a96ea0eccf99369f06021d6755a2ad503c691cbb6f78d16c9a7dd2e7  apis/eventstream/index.yaml
 617035fd2a88cd7d59375b903a891012e1f1ccb3c0827ace4612a8a3c41c6abb  beacon-node-oapi.yaml
 f71b9a5ed11f9e2403bbf2ad177840167ac6870c1ab71b7c43cceab4f2c14558  types/altair/block.yaml
@@ -64,4 +64,4 @@ a567c84b411838e606e62d901c71dec25b80d051bf15a2e5143a8ee5e5e51473  types/phase0/d
 065c98f3ae3473faf61b1d35545fad73b07a54599fb8f189ae4fe674b9d6c27a  types/phase0/state.yaml
 1afe777cf48c544167d7100c2e9369f5bf4288d1a9346a19a1d09b1324e42b76  types/phase0/validator.yaml
 aae654c3edb7edbc74c8b6adcc42066a919b2e1edb1854059ed01a996d5493c7  types/phase0/voluntary_exit.yaml
-a0e98a1c0ce0bc2d073f355bc7ededb390c1568ed3afded6858ca0bcbdcc7dcf  types/primitive.yaml
+d7ba0c0db7955c7a2a2b3e8ad956d6afd6d889455c1d0501716d1e15478678cc  types/primitive.yaml

@@ -13,8 +13,8 @@ The [block endpoint] and the [envelope endpoint] give the levels and the three a
 
 SOUNDNESS.md records how this module reads the points that the source leaves open.
 
-[block endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/blocks/blocks.v2.yaml
-[envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/execution_payload/envelope_post.yaml
+[block endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/blocks/blocks.v2.yaml
+[envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/execution_payload/envelope_post.yaml
 -/
 
 @[expose] public section

@@ -19,9 +19,9 @@ The [heads endpoint] gives the leaves of the tree.
 
 SOUNDNESS.md records how this module reads the points that the source leaves open.
 
-[fork choice endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/debug/fork_choice.v2.yaml
-[node type]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/fork_choice.yaml
-[heads endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/debug/heads.v2.yaml
+[fork choice endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/debug/fork_choice.v2.yaml
+[node type]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/types/fork_choice.yaml
+[heads endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/debug/heads.v2.yaml
 -/
 
 @[expose] public section

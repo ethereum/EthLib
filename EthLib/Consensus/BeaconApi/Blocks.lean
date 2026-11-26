@@ -29,11 +29,11 @@ The flags `execution_optimistic` and `finalized` come from the store, not from t
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[blocks endpoints]: https://github.com/ethereum/beacon-APIs/tree/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/blocks
+[blocks endpoints]: https://github.com/ethereum/beacon-APIs/tree/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/blocks
 [blobs endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/blobs/blobs.yaml
-[columns endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/debug/data_column_sidecars.yaml
-[envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/execution_payload/envelope_get.yaml
-[proposer's envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/execution_payload_envelope.yaml
+[columns endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/debug/data_column_sidecars.yaml
+[envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/execution_payload/envelope_get.yaml
+[proposer's envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/validator/execution_payload_envelope.yaml
 -/
 
 @[expose] public section
@@ -379,7 +379,7 @@ The cache is an input: the caller vouches that it is the one envelope built for 
 
 The [source] says that the node keeps only that one.
 
-[source]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/execution_payload_envelope.yaml#L1-L77
+[source]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/validator/execution_payload_envelope.yaml#L1-L77
 -/
 def cachedEnvelopeOf (cache : Option (CachedEnvelope preset fork)) (slot : Slot) (root : Root) :
     Except ErrorMessage (ExecutionPayloadEnvelope preset fork) :=

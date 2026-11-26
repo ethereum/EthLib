@@ -24,10 +24,10 @@ The response [types] fix the fields of each answer.
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[attestation rewards]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/rewards/attestations.yaml
-[block rewards]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/rewards/blocks.yaml
-[sync committee rewards]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/rewards/sync_committee.yaml
-[types]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/rewards.yaml
+[attestation rewards]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/rewards/attestations.yaml
+[block rewards]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/rewards/blocks.yaml
+[sync committee rewards]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/rewards/sync_committee.yaml
+[types]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/types/rewards.yaml
 -/
 
 @[expose] public section
@@ -90,8 +90,8 @@ Before Altair, the reward of a matched vote can fall outside.
 
 A sync committee reward stays inside, since it is below `2^58` in absolute value.
 
-[types]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/rewards.yaml
-[int64]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/primitive.yaml -/
+[types]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/types/rewards.yaml
+[int64]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/types/primitive.yaml -/
 def int64Fits (n : Int) : Bool :=
   -- `-2^63 <= n < 2^63`.
   decide (-2 ^ 63 ≤ n ∧ n < 2 ^ 63)

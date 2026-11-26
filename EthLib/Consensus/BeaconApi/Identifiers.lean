@@ -21,9 +21,9 @@ The finalized flag is read from the same store, and the optimistic flag from the
 
 SOUNDNESS.md records how this module reads the points that the source leaves open.
 
-[`params/index.yaml`]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/params/index.yaml
-[`validator.yaml`]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/states/validator.yaml
-[`types/primitive.yaml`]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/primitive.yaml
+[`params/index.yaml`]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/params/index.yaml
+[`validator.yaml`]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/states/validator.yaml
+[`types/primitive.yaml`]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/types/primitive.yaml
 -/
 
 @[expose] public section

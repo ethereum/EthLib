@@ -43,7 +43,7 @@ directories = [
 ]
 
 [repositories."ethereum/beacon-APIs"]
-commit = "0ed12552077c9927ba2599ee632e76b2caf021d7"
+commit = "09256e18f0a575e0aef546e06ec773a35fc52938"
 directories = ["tests/consensus/beacon_api"]
 
 [repositories."ethereum/builder-specs"]
