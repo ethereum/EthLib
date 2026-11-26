@@ -65,15 +65,11 @@ private theorem foldl_maxExitEpoch_le {validators : List Validator} {start : Epo
     (exits : ∀ validator ∈ validators, validator.exitEpoch.toNat ≤ ceiling) :
     (validators.foldl (fun latest validator => max latest validator.exitEpoch) start).toNat ≤
       ceiling := by
-  induction validators generalizing start with
-  | nil => exact first
-  | cons validator rest ih =>
-    rw [List.foldl_cons]
-    apply ih
-    · have current := exits validator List.mem_cons_self
-      simp only [UInt64.max_def]
-      split <;> assumption
-    · exact fun other member => exits other (List.mem_cons_of_mem validator member)
+  -- Each step takes the larger of two epochs, both within the ceiling.
+  refine List.foldlRecOn (motive := fun epoch : Epoch => epoch.toNat ≤ ceiling) validators _
+    first ?_
+  intro latest held validator member
+  simpa only [Uint64.toNat_max] using Nat.max_le.mpr ⟨held, exits validator member⟩
 
 /-- A pre-Electra exit queue adds at most one to the ceiling of its existing exit epochs. -/
 private theorem exitQueueEpoch_exists_ok {config : Config} {state : BeaconState preset fork}
