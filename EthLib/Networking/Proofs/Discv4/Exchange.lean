@@ -30,9 +30,9 @@ theorem type_of_mem_neighborsPackets {expiration : Nat} :
 termination_by nodes => nodes.length
 decreasing_by simp_all only [List.length_drop, MAX_NEIGHBORS]; omega
 
-/-- The Neighbors packets carry the nodes in order, twelve to a packet, each with the expiration.
+/-- The Neighbors packets carry the nodes in order, at most twelve to a packet, with the expiration.
 
-Packet `i` carries the nodes from position `12 * i`, at most twelve of them.
+Packet `i`, counting from 0, carries the nodes from position `12 * i`, at most twelve of them.
 
 There are `(n + 11) / 12` packets for `n` nodes, and one packet with no nodes for none. -/
 theorem neighborsPackets_eq (expiration : Nat) (nodes : List Node) :

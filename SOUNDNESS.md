@@ -2912,7 +2912,7 @@ That Pong carried the hash of the node's last Ping to the address at that moment
 `proven_ping_pong` states that the Pong for a Ping proves the endpoint to the node that sent the Ping.
 `receive_other` states that a packet changes only what the node keeps of its sender.
 `acceptEnrResponse_eq_true_iff` states the check of an ENRResponse against its ENRRequest.
-`neighborsPackets_eq` states the Neighbors packets whole: the nodes in order, twelve to a packet, and one packet with no nodes for none.
+`neighborsPackets_eq` states the Neighbors packets whole: the nodes in order, at most twelve to a packet, and one packet with no nodes for none.
 
 Only the endpoint proof is a "must" in the source, and EthLib makes these "should" and "may" rules into rules of `receive`.
 An expired packet, whose expiration "lies in the past", is not processed, though the source says that it "may not be processed".
