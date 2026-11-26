@@ -1025,14 +1025,6 @@ private theorem source_round_sum_le (sources : List Nat) (carrier : Finset Nat) 
   have count := Finset.card_le_card sub
   rw [List.toFinset_card_of_nodup (unique.filter _)] at count
   exact Nat.mul_le_mul_left increment count
-private theorem zip_fst_sublist {α β : Type} (left : List α) (right : List β) :
-    ((left.zip right).map Prod.fst).Sublist left := by
-  induction left generalizing right with
-  | nil => simp
-  | cons a left ih =>
-    cases right with
-    | nil => simp
-    | cons b right => exact (ih right).cons_cons a
 private theorem ReservedReplay.selected_allocation_round_sum_le
     {tagged : List (TaggedEntry × Payment preset)}
     (history : ReservedReplay (config := config) (checks := checks) x high rounding
@@ -1044,8 +1036,12 @@ private theorem ReservedReplay.selected_allocation_round_sum_le
       pair.2.sourceRound = if pair.1.2.source ∈ carrier then increment else 0) :
     (((tagged.zip allocations).filter select).map fun pair => pair.2.sourceRound).sum ≤
       increment * carrier.card := by
+  -- The first items of the zip are a prefix of the tagged entries.
+  have firsts : ((tagged.zip allocations).map Prod.fst).Sublist tagged := by
+    rw [List.zip_eq_zip_take_min, List.map_fst_zip (by simp)]
+    exact List.take_sublist _ _
   have selectedSub : (((tagged.zip allocations).filter select).map Prod.fst).Sublist tagged :=
-    (List.filter_sublist.map _).trans (zip_fst_sublist tagged allocations)
+    (List.filter_sublist.map _).trans firsts
   have unique := history.source_once.1.sublist (selectedSub.map (fun pair => pair.2.source))
   have count := source_round_sum_le _ carrier increment unique
   simp only [List.map_map, Function.comp_def] at count

@@ -134,22 +134,19 @@ theorem requestedBlobs_nodup (requested : List VersionedHash) (blobs : List Blob
   rw [requestedBlobs, Base.map_eraseDupsBy]
   exact Base.nodup_eraseDups _
 
-/-- The first items of a zip keep the order of the first list. -/
-private theorem map_fst_zip_sublist {α β : Type} :
-    ∀ (xs : List α) (ys : List β), ((xs.zip ys).map Prod.fst).Sublist xs
-  | [], _ => by simp
-  | _ :: _, [] => by simp
-  | x :: xs, _ :: ys => (map_fst_zip_sublist xs ys).cons_cons x
-
 /-- The blobs of the answer keep the order of the blobs of the block. -/
 theorem blockBlobs_sublist (blobs : List Blob) (commitments : List KZGCommitment)
     (hashes : Option (List VersionedHash)) :
     (blockBlobs blobs commitments hashes).Sublist blobs := by
+  -- The first items of the zip are a prefix of the blobs.
+  have firsts : ((blobs.zip commitments).map Prod.fst).Sublist blobs := by
+    rw [List.zip_eq_zip_take_min, List.map_fst_zip (by simp)]
+    exact List.take_sublist _ _
   cases hashes with
-  | none => exact map_fst_zip_sublist _ _
+  | none => exact firsts
   | some requested =>
     refine ((requestedBlobs_sublist requested blobs commitments).map Prod.fst).trans ?_
-    simpa [blobHashes, List.map_map, Function.comp_def] using map_fst_zip_sublist blobs commitments
+    simpa [blobHashes, List.map_map, Function.comp_def] using firsts
 
 /-- Without hashes, the answer is every blob of the block. -/
 theorem blockBlobs_none {blobs : List Blob} {commitments : List KZGCommitment}
