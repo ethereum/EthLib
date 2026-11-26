@@ -88,7 +88,7 @@ Here the secret key also keeps what signing reads: the scheme seed, the public p
 `sign` returns the signature and an updated key.
 A signature at leaf index `idx` needs bottom tree `b = floor(idx / 2^16)` and the signature of its root by top key `b`.
 That top signature is the same for all `2^16` indices of the tree.
-So the key keeps up to 4 bottom trees, each with that top signature, and drops the one it used longest ago.
+So the key keeps up to 8 bottom trees, each with that top signature, and drops the one it used longest ago.
 A signature in a kept tree costs one one-time signature; otherwise it costs one bottom tree and the top key's search.
 Signing never rebuilds the top tree.
 
