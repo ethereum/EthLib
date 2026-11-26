@@ -357,4 +357,42 @@ theorem keccak256_realProb_le_spongeIndiffBound
       δ + spongeIndiffBound (2 ^ 1600) (2 ^ 512) N :=
   realProb_le_of_romProb_le keccak256_indifferentiable hN hδ
 
+/-- A count at most `2^k` over `2^m` is at most `2^-(m - k)`, for `k ≤ m`. -/
+private theorem natCast_div_two_pow_le {a k m : ℕ} (ha : a ≤ 2 ^ k) (hkm : k ≤ m) :
+    (a : ℝ≥0∞) / ((2 ^ m : ℕ) : ℝ≥0∞) ≤ (2 : ℝ≥0∞)⁻¹ ^ (m - k) := by
+  refine ENNReal.div_le_of_le_mul ?_
+  have hm : ((2 ^ m : ℕ) : ℝ≥0∞) = (2 : ℝ≥0∞) ^ (m - k) * 2 ^ k := by
+    rw [← pow_add, Nat.sub_add_cancel hkm]
+    norm_cast
+  rw [hm, ← mul_assoc, ← mul_pow, ENNReal.inv_mul_cancel (by norm_num) (by norm_num), one_pow,
+    one_mul]
+  exact_mod_cast ha
+
+/-- At a cost of at most `2^129`, Keccak-256's sponge term is at most `2^-bits`, `bits ≤ 128`.
+
+The sponge has `2^1600` states and capacity `2^512`. -/
+theorem spongeIndiffBound_le {N bits : ℕ} (hN : N ≤ 2 ^ 129) (hbits : bits ≤ 128) :
+    spongeIndiffBound (2 ^ 1600) (2 ^ 512) N ≤ (2 : ℝ≥0∞)⁻¹ ^ bits := by
+  have hN2 : N * N ≤ 2 ^ 258 := (Nat.mul_le_mul hN hN).trans_eq (by rw [← pow_add])
+  have h1 : N.choose 2 ≤ 2 ^ 258 :=
+    (Nat.choose_le_pow N 2).trans (by rw [sq]; exact hN2)
+  have h2 : N * (2 * N + 1) + N * (N + 1) ≤ 2 ^ 261 := by
+    have := Nat.le_mul_self N
+    have h8 : (2 : ℕ) ^ 261 = 2 ^ 3 * 2 ^ 258 := by rw [← pow_add]
+    have hring : N * (2 * N + 1) + N * (N + 1) = 3 * (N * N) + 2 * N := by ring
+    rw [h8, hring]
+    generalize (2 : ℕ) ^ 258 = M at hN2 ⊢
+    generalize N * N = x at hN2 this ⊢
+    simp only [Nat.reducePow]
+    omega
+  have hu : (2 : ℝ≥0∞)⁻¹ ^ (bits + 1) + (2 : ℝ≥0∞)⁻¹ ^ (bits + 1) = (2 : ℝ≥0∞)⁻¹ ^ bits := by
+    rw [pow_succ, ← div_eq_mul_inv, ENNReal.add_halves]
+  unfold spongeIndiffBound
+  rw [← hu]
+  have hle : ∀ j, bits + 1 ≤ j → (2 : ℝ≥0∞)⁻¹ ^ j ≤ (2 : ℝ≥0∞)⁻¹ ^ (bits + 1) := fun j hj =>
+    pow_le_pow_of_le_one (by positivity) (by norm_num) hj
+  gcongr
+  · exact (natCast_div_two_pow_le h1 (by norm_num)).trans (hle _ (by omega))
+  · exact (natCast_div_two_pow_le h2 (by norm_num)).trans (hle _ (by omega))
+
 end EthLib.Cryptography.Hash.Keccak

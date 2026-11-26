@@ -29,6 +29,7 @@ public import EthLib.Cryptography.Proofs.HashSig.Calls
 public import EthLib.Cryptography.Proofs.HashSig.FailedSearch
 public import EthLib.Cryptography.Proofs.HashSig.ProgrammedTable
 public import EthLib.Cryptography.Proofs.HashSig.Counted
+public import EthLib.Cryptography.Proofs.HashSig.Permutation
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
@@ -66,6 +67,7 @@ public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.SufCma
 public import EthLib.Cryptography.Proofs.SufCma.Permutation
 public import EthLib.Cryptography.Proofs.SufCma.Simulate
+public import EthLib.Cryptography.Proofs.SufCma.Indifferentiability
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs
 public import EthLib.Cryptography.Proofs.Vrf
