@@ -292,7 +292,9 @@ def getPendingBalanceToWithdraw (state : BeaconState preset fork) (electra : .pe
   -- The sum, in natural numbers, of the amounts of the queued withdrawals of the validator.
   let total := ((state.pendingPartialWithdrawals electra).data.toList.map fun withdrawal =>
     if withdrawal.validatorIndex = index then withdrawal.amount.toNat else 0).sum
-  if total < 2 ^ 64 then .ok total.toUInt64 else .error (.balanceOverflow total)
+  match Uint64.ofNat? total with
+  | some sum => .ok sum
+  | none => .error (.balanceOverflow total)
 
 /-- The seed of an epoch for one kind of duty.
 

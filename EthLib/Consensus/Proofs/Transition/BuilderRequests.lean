@@ -213,8 +213,8 @@ theorem addBuilderToRegistry_error_of_le {pubkey : BLSPubkey} {version : UInt8}
     (large : 2 ^ 64 ≤ getIndexForNewBuilder state gloas) :
     addBuilderToRegistry state gloas pubkey version executionAddress amount slot =
       .error (.accessor (.arith .overflow)) := by
-  simp [addBuilderToRegistry, liftAccessor, liftArith, ofNatChecked, Nat.not_lt.mpr large,
-    Except.mapError, bind, Except.bind]
+  simp [addBuilderToRegistry, liftAccessor, liftArith, ofNatChecked, ofNat?,
+    Nat.not_lt.mpr large, Except.mapError, bind, Except.bind]
 
 /-- A builder deposit with the builder prefix rejects a matching position of `2^64` or more. -/
 theorem processBuilderDepositRequest_error_of_le {request : BuilderDepositRequest}
@@ -225,7 +225,7 @@ theorem processBuilderDepositRequest_error_of_le {request : BuilderDepositReques
     processBuilderDepositRequest config checks state gloas request =
       .error (.accessor (.arith .overflow)) := by
   simp [processBuilderDepositRequest, credential, found, liftAccessor, liftArith, ofNatChecked,
-    Nat.not_lt.mpr large, Except.mapError, bind, Except.bind]
+    ofNat?, Nat.not_lt.mpr large, Except.mapError, bind, Except.bind]
 
 /-- A builder exit rejects a matching position of `2^64` or more before testing its activity. -/
 theorem processBuilderExitRequest_error_of_le {request : BuilderExitRequest}
@@ -235,7 +235,7 @@ theorem processBuilderExitRequest_error_of_le {request : BuilderExitRequest}
     processBuilderExitRequest config state gloas request =
       .error (.accessor (.arith .overflow)) := by
   simp [processBuilderExitRequest, found, liftAccessor, liftArith, ofNatChecked,
-    Nat.not_lt.mpr large, Except.mapError, bind, Except.bind]
+    ofNat?, Nat.not_lt.mpr large, Except.mapError, bind, Except.bind]
 
 /-- A builder deposit changes only the registry of builders. -/
 theorem processBuilderDepositRequest_eq {request : BuilderDepositRequest}

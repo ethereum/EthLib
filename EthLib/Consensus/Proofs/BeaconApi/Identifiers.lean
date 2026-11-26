@@ -42,10 +42,9 @@ private theorem toString_ne_of_mem {n : Nat} {text : String} {c : Char}
 /-- A slot written in decimal reads back as that slot. -/
 private theorem parseUInt64_print (slot : UInt64) :
     parseUInt64 (toString slot.toNat) = some slot := by
-  have lt : slot.toNat < UInt64.size := slot.toNat_lt_size
   unfold parseUInt64
   rw [readNat_str]
-  simp [lt]
+  exact Base.Uint64.ofNat?_toNat slot
 
 /-- A slot or an index reads only from its plain decimal text, with no sign or leading zero. -/
 theorem parseUInt64_print_of_some {text : String} {n : UInt64}
@@ -57,12 +56,8 @@ theorem parseUInt64_print_of_some {text : String} {n : UInt64}
     split at read
     · rename_i same
       cases read
-      split at parsed
-      · rename_i lt
-        cases parsed
-        rw [UInt64.toNat_ofNat_of_lt' lt]
-        simpa using same
-      · cases parsed
+      rw [← Base.Uint64.ofNat?_eq_some_iff.mp parsed]
+      simpa using same
     · cases read
   · cases parsed
 

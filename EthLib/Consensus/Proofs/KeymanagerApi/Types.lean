@@ -223,16 +223,15 @@ theorem readUint64_str_eq_ok_iff {path text : String} {value : UInt64} :
     split at read
     · rename_i n parsed
       split at read
-      · rename_i small
+      · rename_i converted
         simp only [ofProtection, Except.ok.injEq] at read
         subst read
-        rw [readNat_str_eq_ok_iff.mp parsed,
-          show n.toUInt64.toNat = n from UInt64.toNat_ofNat_of_lt' small]
+        rw [readNat_str_eq_ok_iff.mp parsed, Base.Uint64.ofNat?_eq_some_iff.mp converted]
       · simp [ofProtection] at read
     · simp [ofProtection] at read
   · intro eq
     have parsed : readNat (.str text) = .ok value.toNat := readNat_str_eq_ok_iff.mpr eq
-    simp [parsed, value.toNat_lt, ofProtection]
+    simp [parsed, Base.Uint64.ofNat?_toNat, ofProtection]
 
 /-- An integer reads from a string exactly when it matches the pattern and is below 2^64. -/
 theorem readUint64_str_ok_iff {path text : String} :

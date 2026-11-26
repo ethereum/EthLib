@@ -3,6 +3,7 @@ module
 public import EthLib.Base.ChainConfig
 public import EthLib.Base.ExecutionConfig
 public import EthLib.Base.Hex
+public import EthLib.Base.Uint64
 public import EthLib.Base.Exports.PyValue
 public import Lean.Data.Json
 
@@ -131,7 +132,8 @@ def configOfJson (j : Json) : Result ChainConfig := do
   -- The keys of the JSON are the chain ID, the deposit contract, the activations and the schedules.
   let some chainId := (j.getObjValAs? Nat "chainId").toOption
     | rejectArgument none "config: no chainId"
-  unless chainId < 2 ^ 64 do rejectArgument none "config: chainId is not below 2^64"
+  let some chainId := Uint64.ofNat? chainId
+    | rejectArgument none "config: chainId is not below 2^64"
   let depositContractAddress ← depositContractOfJson (j.getObjValD "depositContractAddress")
   let .arr activations := j.getObjValD "activations"
     | rejectArgument none "config: no activations"
@@ -143,7 +145,7 @@ def configOfJson (j : Json) : Result ChainConfig := do
     | .arr entries => entries.toList.mapM blobScheduleOfJson
     | .null => pure []
     | _ => rejectArgument none "config: blobSchedules is not an array"
-  return { chainId := UInt64.ofNat chainId, depositContractAddress := depositContractAddress,
+  return { chainId, depositContractAddress := depositContractAddress,
             activations := activations, blobSchedules := schedules }
 
 /-- The configuration of a chain that EthLib holds, by its name. -/

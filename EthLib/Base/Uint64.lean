@@ -42,9 +42,15 @@ def mulChecked (a b : UInt64) : Except ArithError UInt64 :=
 def divChecked (a b : UInt64) : Except ArithError UInt64 :=
   if b = 0 then .error .divisionByZero else .ok (a / b)
 
+/-- `n` as a 64-bit integer, or none if `n` is `2^64` or more. -/
+def ofNat? (n : Nat) : Option UInt64 :=
+  if h : n < 2 ^ 64 then some (UInt64.ofNatLT n h) else none
+
 /-- `n` as a 64-bit integer, an overflow if `n` is `2^64` or more. -/
 def ofNatChecked (n : Nat) : Except ArithError UInt64 :=
-  if h : n < 2 ^ 64 then .ok (UInt64.ofNatLT n h) else .error .overflow
+  match ofNat? n with
+  | some a => .ok a
+  | none => .error .overflow
 
 /-- `a - b`, or 0 when `b ≥ a`. -/
 def saturatingSub (a b : UInt64) : UInt64 :=

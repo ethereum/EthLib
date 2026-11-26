@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Uint64
 public import EthLib.Execution.Rpc.GenericTransaction
 public import EthLib.Execution.Rpc.Raw
 public import EthLib.Execution.Transactions.Process
@@ -82,12 +83,15 @@ def callRuleError (reason : String) : RpcError :=
 
 /-- A number of the request as a 256-bit word, or the error of a number that does not fit. -/
 def callWord (what : String) (n : Nat) : Except RpcError U256 :=
-  if n < 2 ^ 256 then .ok (BitVec.ofNat 256 n) else .error (callParamError s!"{what}: too large")
+  match U256.ofNat? n with
+  | some word => .ok word
+  | none => .error (callParamError s!"{what}: too large")
 
 /-- A number of the request as a 64-bit integer, or the error of a number that does not fit. -/
 def callUint64 (what : String) (n : Nat) : Except RpcError UInt64 :=
-  if h : n < 2 ^ 64 then .ok (UInt64.ofNatLT n h)
-  else .error (callParamError s!"{what}: too large")
+  match Uint64.ofNat? n with
+  | some value => .ok value
+  | none => .error (callParamError s!"{what}: too large")
 
 /-- The unsigned transaction of a request, with every signature field 0.
 

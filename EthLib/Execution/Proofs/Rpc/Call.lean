@@ -3,6 +3,8 @@ module
 public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Rpc.Call
 import ToMathlib.Data.ByteArray
+import EthLib.Base.Proofs.U256
+import EthLib.Base.Proofs.Uint64
 import EthLib.Execution.Proofs.State.Frame
 public import EthLib.Execution.Proofs.Rpc.Raw
 
@@ -76,7 +78,7 @@ private theorem callWord_ok {what : String} {n : Nat} {x : U256}
     (h : callWord what n = .ok x) : x.toNat = n := by
   unfold callWord at h
   split at h <;> cases h
-  exact Nat.mod_eq_of_lt ‹_›
+  exact (U256.ofNat?_eq_some_iff.mp ‹_›).symm
 
 /-- A number that fits its field is below `2 ^ 256`. -/
 private theorem lt_of_callWord_ok {what : String} {n : Nat} {x : U256}
@@ -88,7 +90,7 @@ private theorem callUint64_ok {what : String} {n : Nat} {x : UInt64}
     (h : callUint64 what n = .ok x) : x.toNat = n := by
   unfold callUint64 at h
   split at h <;> cases h
-  rfl
+  exact (Uint64.ofNat?_eq_some_iff.mp ‹_›).symm
 
 /-- A number that fits 64 bits is below `2 ^ 64`. -/
 private theorem lt_of_callUint64_ok {what : String} {n : Nat} {x : UInt64}
@@ -165,8 +167,8 @@ theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt
     rcases kind_cases hk with hk' | hk' | hk' | hk' | hk' <;>
     rcases hc : tx.chainId with _ | c <;>
     rcases hto : tx.to with _ | to <;>
-    simp_all [ensure, callWord, callUint64, Nat.mod_eq_of_lt hn, bind, Except.bind, pure,
-      Except.pure]
+    simp_all [ensure, callWord, callUint64, U256.ofNat?, Uint64.ofNat?, Nat.mod_eq_of_lt hn,
+      bind, Except.bind, pure, Except.pure]
 
 /-- The blobs, commitments and proofs of a request leave the result of the conversion unchanged.
 
