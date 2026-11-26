@@ -4540,7 +4540,7 @@ private theorem fallback_represents (k l : Fn) {p : Coordinates} {P : curve.Poin
     l.val hp.1 hg.1, ?_⟩
   rw [Jacobian.toPoint_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) two_ne_zero 256 k.val l.val
     hp.1 hg.1 (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]
-  exact congrArg₂ (k.val • · + l.val • ·) hp.2 hg.2
+  exact (congrArg₂ (k.val • · + l.val • ·) hp.2 hg.2 :)
 
 private theorem rawOfNat_val_of_lt (k : Fn) : (Montgomery.rawOfNat k.val).val = k.val :=
   Word64.rawOfNat_val _ (Nat.lt_trans k.isLt (by decide))
