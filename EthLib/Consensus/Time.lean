@@ -103,11 +103,14 @@ def computeActivationExitEpoch (preset : Preset) (epoch : Epoch) : Except ArithE
   -- `e + 1 + MAX_SEED_LOOKAHEAD`.
   addChecked (← addChecked epoch 1) preset.MAX_SEED_LOOKAHEAD
 
-/-- A part of a slot, in milliseconds and rounded down, from that part in basis points. -/
+/-- A part of a slot in milliseconds, from that part in basis points.
+
+It rounds to the nearest millisecond, and a half rounds up. -/
 def getSlotComponentDurationMs (config : Config) (basisPoints : UInt64) :
     Except ArithError UInt64 := do
-  -- `floor(b * SLOT_DURATION_MS / BASIS_POINTS)`, for `b` basis points.
-  return (← mulChecked basisPoints config.SLOT_DURATION_MS) / BASIS_POINTS
+  -- `floor((b * SLOT_DURATION_MS + floor(BASIS_POINTS / 2)) / BASIS_POINTS)`, for `b` basis points.
+  return (← addChecked (← mulChecked basisPoints config.SLOT_DURATION_MS) (BASIS_POINTS / 2)) /
+    BASIS_POINTS
 
 /-- The time into a slot after which a proposer does not reorganize its head. -/
 def getProposerReorgCutoffMs (config : Config) : Except ArithError UInt64 :=
