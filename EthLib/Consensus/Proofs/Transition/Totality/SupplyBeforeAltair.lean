@@ -213,19 +213,8 @@ private theorem mem_of_getMatchingHeadAttestations (before : fork < .altair) {ep
 /-- An amount at one position, summed over the first positions, counts at most once. -/
 private theorem sum_range_ite_le (n position amount : Nat) :
     ((List.range n).map fun j => if position = j then amount else 0).sum ≤ amount := by
-  induction n with
-  | zero => simp
-  | succ n ih =>
-    rw [List.range_succ, List.map_append, List.sum_append]
-    by_cases same : position = n
-    · subst same
-      have zero : ((List.range position).map fun j =>
-          if position = j then amount else 0).sum = 0 := by
-        refine List.sum_eq_zero fun term member => ?_
-        obtain ⟨j, below, rfl⟩ := List.mem_map.mp member
-        simp [Nat.ne_of_gt (List.mem_range.mp below)]
-      simp [zero]
-    · simpa [same] using ih
+  by_cases h : position < n <;>
+    simp [sum_map_ite_eq_sum_filter, eq_comm (a := position), List.filter_eq, h]
 
 /-- The inclusion shares, summed over the first positions, are at most their base rewards.
 
