@@ -214,7 +214,7 @@ private theorem mem_of_getMatchingHeadAttestations (before : fork < .altair) {ep
 private theorem sum_range_ite_le (n position amount : Nat) :
     ((List.range n).map fun j => if position = j then amount else 0).sum ≤ amount := by
   by_cases h : position < n <;>
-    simp [List.sum_map_ite, eq_comm (a := position), List.filter_eq, List.count_range, h]
+    simp [sum_map_ite_eq_sum_filter, eq_comm (a := position), List.filter_eq, h]
 
 /-- The inclusion shares, summed over the first positions, are at most their base rewards.
 
