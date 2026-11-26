@@ -210,6 +210,26 @@ theorem decreaseBalance_eq_ok_iff {state after : BeaconState preset fork}
   · simp [inside, bind, Except.bind, eq_comm]
   · simp [inside, bind, Except.bind]
 
+/-- Raising a balance at an index past the balances fails with that index. -/
+theorem increaseBalance_eq_error_of_le {state : BeaconState preset fork}
+    {index : ValidatorIndex} (delta : Gwei) (outside : state.balances.data.size ≤ index.toNat) :
+    increaseBalance state index delta = .error (.indexOutOfRange index) := by
+  simp [increaseBalance, getBalance, Array.getElem?_eq_none outside, bind, Except.bind]
+
+/-- Raising a balance to `2^64` or more fails with an overflow. -/
+theorem increaseBalance_eq_error_of_overflow {state : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei} (inside : index.toNat < state.balances.data.size)
+    (overflows : 2 ^ 64 ≤ state.balances.data[index.toNat].toNat + delta.toNat) :
+    increaseBalance state index delta = .error (.arith .overflow) := by
+  simp [increaseBalance, getBalance, inside, addChecked, Nat.not_lt.mpr overflows, liftArith,
+    bind, Except.bind, Except.mapError]
+
+/-- Lowering a balance at an index past the balances fails with that index. -/
+theorem decreaseBalance_eq_error_of_le {state : BeaconState preset fork}
+    {index : ValidatorIndex} (delta : Gwei) (outside : state.balances.data.size ≤ index.toNat) :
+    decreaseBalance state index delta = .error (.indexOutOfRange index) := by
+  simp [decreaseBalance, getBalance, Array.getElem?_eq_none outside, bind, Except.bind]
+
 /-- Raising a balance keeps the sizes. -/
 theorem sameSizes_increaseBalance {state after : BeaconState preset fork}
     {index : ValidatorIndex} {delta : Gwei} (computed : increaseBalance state index delta = .ok after) :
