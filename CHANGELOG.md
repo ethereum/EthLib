@@ -1128,9 +1128,9 @@ Not yet released.
 ### Changes that break callers
 
 - In Lean, `processSlot_ok` (`Consensus/Proofs/Transition/StateTransition.lean`) now states the result of the caching of a slot as `w.apply state`, for some `w : SlotWrites preset fork`.
-  `SlotWrites` holds the four fields that the step writes.
+  `SlotWrites` holds the four fields that the caching of a slot writes.
   They are the state roots, the block roots, the latest block header and, from Gloas, the payload availability bits.
-  A fork that writes another field adds it to `SlotWrites`, so the uses of the contract keep their proofs ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  A fork that writes another field adds it to `SlotWrites`, so the proofs that use `processSlot_ok` keep working ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
   Migration: destructure the contract with one witness, as `obtain ⟨_, h⟩ := processSlot_ok computed`, where it had four.
 
 - In Lean, the capacity term of the sponge indifferentiability bound is `(N^2 + N) / |C|`, down from `(N (2N + 1) + N (N + 1)) / |C|` ([#4716](https://github.com/ethereum/EthLib/issues/4716)).

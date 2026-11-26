@@ -37,22 +37,18 @@ theorem unsetNextPayloadAvailability_ok {gloas : .glamsterdam ≤ fork}
   obtain ⟨next, ⟨_, sum⟩, bits, written, rfl⟩ := computed
   exact ⟨next, bits, by simpa using sum, written, rfl⟩
 
-/-- The fields that the caching of a slot writes.
-
-A fork that writes a new field adds it here, and the users of the contract keep their proofs. -/
+/-- The fields that the caching of a slot writes. -/
 structure SlotWrites (preset : Preset) (fork : Base.Fork) where
-  /-- The state roots, with the root of the state at slot `s` at its position in the buffer. -/
+  /-- The state roots. -/
   stateRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
-  /-- The block roots, with the root of the latest block header at the same position. -/
+  /-- The block roots. -/
   blockRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
-  /-- The latest block header, with its state root filled if that root was 32 zero bytes. -/
+  /-- The latest block header. -/
   latestBlockHeader : BeaconBlockHeader
-  /-- From Gloas, the payload availability bits, with the bit of the next slot cleared. -/
+  /-- From Gloas, the payload availability bits. -/
   executionPayloadAvailability : Since .glamsterdam fork (ExecutionPayloadAvailability preset)
 
-/-- A state with the fields that the caching of a slot writes replaced.
-
-It is reducible, so `rfl` and `simp` read a field that it keeps as that of the state. -/
+/-- The state with the fields that the caching of a slot writes taken from the writes. -/
 abbrev SlotWrites.apply (w : SlotWrites preset fork) (state : BeaconState preset fork) :
     BeaconState preset fork :=
   { state with
@@ -61,7 +57,7 @@ abbrev SlotWrites.apply (w : SlotWrites preset fork) (state : BeaconState preset
     latestBlockHeader := w.latestBlockHeader
     executionPayloadAvailability := w.executionPayloadAvailability }
 
-/-- The caching of a slot keeps every field but those of `SlotWrites`.
+/-- The caching of a slot changes only the state and block roots, the header and the payload bits.
 
 The result is the state with those fields replaced. -/
 theorem processSlot_ok (computed : processSlot state = .ok after) :
