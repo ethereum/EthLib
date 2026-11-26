@@ -407,6 +407,12 @@ def firstFailure : List (Bool × BlockError) → Except BlockError Unit
   | [] => .ok ()
   | (condition, error) :: rest => if condition then firstFailure rest else .error error
 
+/-- The versioned hashes of the blob transactions of a block, in the order of the transactions. -/
+def Block.blobVersionedHashes {fork : Fork} (b : Block fork Transactions.Transaction) :
+    List Cryptography.Kzg.VersionedHash :=
+  -- EIP-4844: each blob transaction contributes its hashes, and any other transaction none.
+  b.transactions.flatMap Transactions.Transaction.blobHashes
+
 /-- The excess blob gas of a parent, or 0 for a parent before Dencun. -/
 def parentExcessBlobGas {parentFork : Fork} (parent : Header parentFork) : Nat :=
   -- EIP-4844: for the first block after the fork, the excess blob gas of the parent counts as 0.

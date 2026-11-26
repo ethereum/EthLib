@@ -82,7 +82,7 @@ theorem of_getPayload_eq_ok {config : ChainConfig} {setup : TrustedSetup}
       payloadOfBlock r.stored.built.block = some r.payload ∧
       (∃ block, r.stored.blockOfPayload r.payload = .ok block) ∧
       (3 ≤ version → validateBlobs setup r.stored.fork
-        (ExecutionPayload.blobVersionedHashes r.stored.built.block.transactions)
+        r.stored.built.block.blobVersionedHashes
         r.stored.bundle.blobs r.stored.bundle.commitments r.stored.bundle.proofs = .ok ()) := by
   have ok_of_ne_error {α ε : Type} {x : Except ε α} (H : ∀ e, x = .error e → False) :
       ∃ a, x = .ok a := by
@@ -109,7 +109,7 @@ theorem getPayload_bundle {config : ChainConfig} {setup : TrustedSetup}
     {store : PayloadStore} {version : Nat} {id : PayloadId} {r : GetPayloadResponse}
     (h : getPayload config setup store version id = .ok r) (hv : 3 ≤ version) :
     r.stored.bundle.commitments.map kzgCommitmentToVersionedHash =
-        ExecutionPayload.blobVersionedHashes r.stored.built.block.transactions ∧
+        r.stored.built.block.blobVersionedHashes ∧
       r.stored.bundle.commitments.length = r.stored.bundle.blobs.length ∧
       r.stored.bundle.proofs.length =
         proofCount r.stored.fork r.stored.bundle.blobs.length ∧
@@ -240,7 +240,7 @@ theorem getPayload_eq_error_of_validateBlobs_eq_error
     (hh : stored.blockOfPayload payload = .ok block)
     (hversion : 3 ≤ version)
     (hv3 : validateBlobs setup stored.fork
-      (ExecutionPayload.blobVersionedHashes stored.built.block.transactions)
+      stored.built.block.blobVersionedHashes
       stored.bundle.blobs stored.bundle.commitments stored.bundle.proofs = .error error) :
     getPayload config setup store version id = .error (.bundle error) := by
   simp [getPayload, hs, hf, hv, hr, hb, hp, hh, hversion, hv3, bind, Except.bind,

@@ -210,7 +210,7 @@ def getPayload (config : ChainConfig) (setup : TrustedSetup) (store : PayloadSto
   --
   -- EthLib checks every count, that of the versioned hashes too, before the hashes of step 3.
   if 3 ≤ version then
-    (validateBlobs setup stored.fork (ExecutionPayload.blobVersionedHashes block.transactions)
+    (validateBlobs setup stored.fork block.blobVersionedHashes
       stored.bundle.blobs stored.bundle.commitments stored.bundle.proofs).mapError .bundle
   return ⟨stored, payload⟩
 

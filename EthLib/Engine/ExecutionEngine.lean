@@ -213,7 +213,7 @@ def executionEngine (chain : BlockChain) : Consensus.ExecutionEngine preset fork
         --
         -- Before Deneb there is no expected array, so nothing to check.
         (sinceValue request.versionedHashes).all fun hashes =>
-          ExecutionPayload.blobVersionedHashes block.transactions == hashes.data.toList
+          block.blobVersionedHashes == hashes.data.toList
       -- A payload without a block has no valid versioned hashes.
       | none => false
     -- Request lists that cannot be made give no valid versioned hashes.

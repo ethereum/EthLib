@@ -828,7 +828,7 @@ theorem checkNewPayload_eq_ok {config : ChainConfig} {version : Nat}
     {b : Execution.Blocks.Block f Execution.Transactions.Transaction}
     (hBlock : payload.toBlock beacon lists accessList slot = .ok b)
     (hHashes : ∀ hs, hashes = some hs →
-      ExecutionPayload.blobVersionedHashes b.transactions = hs) :
+      b.blobVersionedHashes = hs) :
     checkNewPayload config version params = .ok (.ok ⟨f, hAccepted, b⟩) := by
   unfold checkNewPayload
   rw [hDecode]
