@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Consensus.ForkDigest
 public import EthLib.Consensus.ReqResp.ResponseBounds
 
 /-!
@@ -79,19 +78,8 @@ def responseChunkFork (config : Config) (genesisValidatorsRoot : Root) (fork : F
     --
     -- An error chunk sends no context bytes.
     if ResponseCode.ofByte b = .success ∧ id.sendsDigest then
-      match forkOfDigest config genesisValidatorsRoot #v[d₀, d₁, d₂, d₃] with
-      -- The fork of the first epoch with the digest.
-      --
-      -- On a chain whose digests identify their forks, it is the fork of the digest's epoch.
-      --
-      -- An epoch has at least two slots, so the epoch of a slot is below the far future epoch.
-      --
-      -- So no payload has a digest that only the far future epoch has.
-      | some start =>
-        if start = FAR_FUTURE_EPOCH then throw (.bounds (.unscheduledDigest #v[d₀, d₁, d₂, d₃]))
-        else pure (config.forkAtEpoch start)
-      -- No epoch of the chain has the digest, so it names no type and no bounds.
-      | none => throw (.bounds (.unknownDigest #v[d₀, d₁, d₂, d₃]))
+      -- The fork of the first epoch with the digest, below the far future epoch.
+      (forkOfScheduledDigest config genesisValidatorsRoot #v[d₀, d₁, d₂, d₃]).mapError .bounds
     else pure fork
   -- A chunk too short to hold a digest keeps the fork of the exchange.
   --

@@ -95,8 +95,7 @@ def gossipTopicBoundExport (name fork topic : ByteArray) : Result UInt64 := do
   let topicName ← nameOf topic
   let some topic := GossipTopic.ofName? topicName
     | rejectArgument none s!"{topicName} names no topic"
-  unless (config.gossipTopics fork).contains topic do
-    throw (BoundsError.topicNotAtFork topicName fork).fault
+  -- Only a topic that the fork lists has a bound.
   let some bound := topicBound preset config fork topic
     | throw (BoundsError.topicNotAtFork topicName fork).fault
   return bound
@@ -114,7 +113,7 @@ instance : ExportError GossipDecodeError where
     | .bounds error => toString error
     | .payload error => ExportError.message error
 
-/-- The data of a gossip message at the fork of its topic's digest, with that fork and the topic. -/
+/-- The payload of a gossip message at the fork of its topic's digest, with that fork and topic. -/
 def gossipDecodeAtTopicOf (args : String × Option PyValue × Root × String × ByteArray) :
     Result (String × String × ByteArray) := do
   -- The name of the preset and the configuration, its replacements and the genesis validators root.
@@ -127,7 +126,7 @@ def gossipDecodeAtTopicOf (args : String × Option PyValue × Root × String × 
     toResult none (decodeGossipAtTopic preset config genesisValidatorsRoot topicString data)
   return (fork.name, topic.name, payload)
 
-/-- The data of a gossip message at the fork of its topic's digest, with that fork and the topic.
+/-- The payload of a gossip message at the fork of its topic's digest, with that fork and the topic.
 
 The configuration of the name holds, with the replacements that a `dict` gives. -/
 @[export eth_consensus_gossip_decode_at_topic]

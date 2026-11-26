@@ -92,6 +92,18 @@ theorem responseChunkFork_of_error {b : UInt8} {rest : ByteArray}
     simp [h, pure, Except.pure]
   · rfl
 
+/-- A successful chunk of a protocol that sends a digest has the fork that its digest names. -/
+theorem responseChunkFork_success {digest : ForkDigest} {rest : ByteArray}
+    (sends : id.sendsDigest = true) :
+    responseChunkFork config genesisValidatorsRoot fork id
+      (⟨#[ResponseCode.success.toByte]⟩ ++ ⟨digest.toArray⟩ ++ rest) =
+      (forkOfScheduledDigest config genesisValidatorsRoot digest).mapError .bounds := by
+  obtain ⟨⟨d⟩, hd⟩ := digest
+  match d, hd with
+  | [d₀, d₁, d₂, d₃], _ =>
+    unfold responseChunkFork
+    simp [sends, ResponseCode.toByte, ResponseCode.ofByte]
+
 /-- The fork of a successful chunk whose digest an epoch other than the far future one has. -/
 theorem responseChunkFork_digest {digest : ForkDigest} {rest : ByteArray} {start : Epoch}
     (sends : id.sendsDigest = true)
@@ -100,11 +112,9 @@ theorem responseChunkFork_digest {digest : ForkDigest} {rest : ByteArray} {start
     responseChunkFork config genesisValidatorsRoot fork id
       (⟨#[ResponseCode.success.toByte]⟩ ++ ⟨digest.toArray⟩ ++ rest) =
       .ok (config.forkAtEpoch start) := by
-  obtain ⟨⟨d⟩, hd⟩ := digest
-  match d, hd with
-  | [d₀, d₁, d₂, d₃], _ =>
-    unfold responseChunkFork
-    simp [sends, ResponseCode.toByte, ResponseCode.ofByte, found, scheduled, pure, Except.pure]
+  rw [responseChunkFork_success sends,
+    Proofs.ReqResp.Bounds.forkOfScheduledDigest_of_found found scheduled]
+  rfl
 
 /-- The fork of a successful chunk fails when only the far future epoch has its digest.
 
@@ -115,12 +125,9 @@ theorem responseChunkFork_unscheduled {digest : ForkDigest} {rest : ByteArray}
     responseChunkFork config genesisValidatorsRoot fork id
       (⟨#[ResponseCode.success.toByte]⟩ ++ ⟨digest.toArray⟩ ++ rest) =
       .error (.bounds (.unscheduledDigest digest)) := by
-  obtain ⟨⟨d⟩, hd⟩ := digest
-  match d, hd with
-  | [d₀, d₁, d₂, d₃], _ =>
-    unfold responseChunkFork
-    simp [sends, ResponseCode.toByte, ResponseCode.ofByte, found, throw, throwThe,
-      MonadExceptOf.throw]
+  rw [responseChunkFork_success sends,
+    Proofs.ReqResp.Bounds.forkOfScheduledDigest_unscheduled found]
+  rfl
 
 /-- The decoder rejects a successful chunk whose digest only the far future epoch has.
 
@@ -169,18 +176,15 @@ theorem decodeChunkAtFork_fork_of_digest {bs : ByteArray} {found : Fork} {chunk 
     found = config.forkAtEpoch epoch := by
   obtain ⟨-, hf, -, low, high, -, hd⟩ := decodeChunkAtFork_eq_ok h
   obtain ⟨-, -, p, rfl, -⟩ := decodeResponseChunk_eq_ok_iff.mp hd
-  obtain ⟨start, start_found⟩ := Option.isSome_iff_exists.mp (forkOfDigest_isSome computed)
-  have recovers := forkOfDigest_recovers identify computed
-  rw [start_found] at recovers
   rw [success, context] at hf
-  -- The decoder rejects a digest that only the far future epoch has.
-  by_cases scheduled : start = FAR_FUTURE_EPOCH
-  · rw [scheduled] at start_found
-    rw [responseChunkFork_unscheduled sends start_found] at hf
-    cases hf
-  rw [responseChunkFork_digest sends start_found scheduled] at hf
-  cases hf
-  simpa using recovers
+  -- The fork of the chunk is the fork that the digest names.
+  rw [responseChunkFork_success sends] at hf
+  cases hs : forkOfScheduledDigest config genesisValidatorsRoot digest with
+  | error e => simp [hs, Except.mapError] at hf
+  | ok named =>
+    simp only [hs, Except.mapError, Except.ok.injEq] at hf
+    subst hf
+    exact Proofs.ReqResp.Bounds.forkOfScheduledDigest_eq_ok_of_computed identify computed hs
 
 /-- A served value decodes at the fork of the epoch whose digest it carries, and reads back.
 
@@ -208,17 +212,7 @@ theorem decodeChunkAtFork_response {α : Type} [SszType α] [LawfulSszType α] {
   obtain ⟨start, low, high, found, same, bounds, decoded, read⟩ :=
     decodeResponseChunk_forkOfDigest hcap identify computed h wrote within hlimit
   have four : id.contextBytes = 4 := by simp [ProtocolId.contextBytes, sends]
-  -- The epoch found is at or before the epoch, so it is not the far future one either.
-  have early : start ≠ FAR_FUTURE_EPOCH := by
-    rintro rfl
-    have le := forkOfDigest_le computed found
-    have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-    have below : epoch.toNat < 2 ^ 64 := epoch.toNat_lt_size
-    rw [UInt64.le_iff_toNat_le, far] at le
-    apply scheduled
-    apply UInt64.toNat_inj.mp
-    rw [far]
-    omega
+  have early := forkOfDigest_ne_farFuture computed scheduled found
   refine ⟨?_, read⟩
   unfold decodeChunkAtFork
   -- The chunk is the code of a success, then the digest, then the payload.
