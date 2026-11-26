@@ -1747,6 +1747,128 @@ theorem onExecutionPayloadEnvelope_ok {checks : SignatureChecks}
   cases checked
   exact ⟨state, blockState_ok_iff.mp found, data, verified, recorded, record, rfl⟩
 
+/-- With every check passed, the handler keeps the envelope in the recorded store.
+
+With the theorem above, this makes acceptance an equivalence. -/
+theorem onExecutionPayloadEnvelope_of_ok {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {state : BeaconState preset fork}
+    {recorded : Store preset fork}
+    (found : store.blockStates[signed.message.beaconBlockRoot]? = some state)
+    (data : validatePayloadData config sources signed.message.beaconBlockRoot
+      (state.latestExecutionPayloadBid gloas) = .ok ())
+    (verified : verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed =
+      .ok ())
+    (record : store.recordEnvelope sources signed.message.beaconBlockRoot
+      signed.message.payload = .ok recorded) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed =
+      .ok { recorded with payloads := fun _ =>
+        (recorded.payloads gloas).insert signed.message.beaconBlockRoot signed.message } := by
+  simp [onExecutionPayloadEnvelope, blockState_ok_iff.mpr found, data, verified, record,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- An envelope for a block whose state the store does not hold is an error. -/
+theorem onExecutionPayloadEnvelope_of_unknown {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork}
+    (missing : store.blockStates[signed.message.beaconBlockRoot]? = none) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed =
+      .error (.unknownBlockState signed.message.beaconBlockRoot) := by
+  simp [onExecutionPayloadEnvelope, blockState, missing, throw, throwThe, MonadExceptOf.throw,
+    bind, Except.bind]
+
+/-- With the block state held, an error of the payload data check is the error of the handler. -/
+theorem onExecutionPayloadEnvelope_of_data_error {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {state : BeaconState preset fork}
+    {e : ForkChoiceError}
+    (found : store.blockStates[signed.message.beaconBlockRoot]? = some state)
+    (data : validatePayloadData config sources signed.message.beaconBlockRoot
+      (state.latestExecutionPayloadBid gloas) = .error e) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed = .error e := by
+  simp [onExecutionPayloadEnvelope, blockState_ok_iff.mpr found, data, bind, Except.bind]
+
+/-- With the state and the data, an envelope that fails its checks is a transition error. -/
+theorem onExecutionPayloadEnvelope_of_invalid {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {state : BeaconState preset fork}
+    {e : TransitionError}
+    (found : store.blockStates[signed.message.beaconBlockRoot]? = some state)
+    (data : validatePayloadData config sources signed.message.beaconBlockRoot
+      (state.latestExecutionPayloadBid gloas) = .ok ())
+    (invalid : verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed =
+      .error e) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed =
+      .error (.transition e) := by
+  simp [onExecutionPayloadEnvelope, blockState_ok_iff.mpr found, data, invalid, Except.mapError,
+    bind, Except.bind]
+
+/-- With every check passed, an error of the record step is the error of the handler. -/
+theorem onExecutionPayloadEnvelope_of_record_error {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {state : BeaconState preset fork}
+    {e : ForkChoiceError}
+    (found : store.blockStates[signed.message.beaconBlockRoot]? = some state)
+    (data : validatePayloadData config sources signed.message.beaconBlockRoot
+      (state.latestExecutionPayloadBid gloas) = .ok ())
+    (verified : verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed =
+      .ok ())
+    (failed : store.recordEnvelope sources signed.message.beaconBlockRoot
+      signed.message.payload = .error e) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed = .error e := by
+  simp [onExecutionPayloadEnvelope, blockState_ok_iff.mpr found, data, verified, failed,
+    Except.mapError, bind, Except.bind]
+
+/-- From Heze: recording for a block that the store does not hold is an error. -/
+theorem recordPayloadInclusionListSatisfaction_of_unknown {sources : BlockSources preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {payload : ExecutionPayload preset fork}
+    (missing : store.blocks[root]? = none) :
+    store.recordPayloadInclusionListSatisfaction sources heze root payload =
+      .error (.unknownBlock root) := by
+  simp [recordPayloadInclusionListSatisfaction, Store.block, missing, throw, throwThe,
+    MonadExceptOf.throw, bind, Except.bind]
+
+/-- From Heze: a block at slot 0 has no slot before it, so recording underflows. -/
+theorem recordPayloadInclusionListSatisfaction_of_zero {sources : BlockSources preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {payload : ExecutionPayload preset fork}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (zero : block.slot = 0) :
+    store.recordPayloadInclusionListSatisfaction sources heze root payload =
+      .error (.arith (.underflow 0 1)) := by
+  simp [recordPayloadInclusionListSatisfaction, Store.block, found, zero, subChecked,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- From Heze: an error of the walk to the dependent root of the slot before is the error. -/
+theorem recordPayloadInclusionListSatisfaction_of_dependent_error
+    {sources : BlockSources preset fork} {heze : .hegota ≤ fork} {root : Root}
+    {payload : ExecutionPayload preset fork} {block : BeaconBlock preset fork} {slot : Slot}
+    {e : ForkChoiceError} (found : store.blocks[root]? = some block)
+    (previous : subChecked block.slot 1 = .ok slot)
+    (failed : store.getShufflingDependentRoot root (computeEpochAtSlot preset slot) = .error e) :
+    store.recordPayloadInclusionListSatisfaction sources heze root payload = .error e := by
+  simp [recordPayloadInclusionListSatisfaction, Store.block, found, previous, failed,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- From Heze: recording stores the answer of the execution layer for the block.
+
+The answer is on the payload and the timely transactions of the slot before the block.
+
+They are those of the dependent root of that slot, on the chain of the block. -/
+theorem recordPayloadInclusionListSatisfaction_of_ok {sources : BlockSources preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {payload : ExecutionPayload preset fork}
+    {block : BeaconBlock preset fork} {slot : Slot} {dependentRoot : Root}
+    (found : store.blocks[root]? = some block) (previous : subChecked block.slot 1 = .ok slot)
+    (dependent : store.getShufflingDependentRoot root (computeEpochAtSlot preset slot) =
+      .ok dependentRoot) :
+    store.recordPayloadInclusionListSatisfaction sources heze root payload =
+      .ok { store with
+        payloadInclusionListSatisfaction := fun _ =>
+          (store.payloadInclusionListSatisfaction heze).insert root
+            (sources.inclusionListSatisfied payload
+              ((store.inclusionLists heze).transactions slot dependentRoot true)) } := by
+  simp [recordPayloadInclusionListSatisfaction, Store.block, found, previous, dependent,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
+
 /-- After an accepted envelope, the payload of its block counts as verified. -/
 theorem onExecutionPayloadEnvelope_verified {checks : SignatureChecks}
     {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}

@@ -582,21 +582,47 @@ theorem updateCheckpoints_unrealizedJustifiedCheckpoint (justified finalized : C
   unfold updateCheckpoints
   split <;> dsimp only <;> split <;> rfl
 
+/-- Replacing the checkpoints is the store with each one taken when its epoch is greater.
+
+Every other field of the store stays. -/
+theorem updateCheckpoints_eq (s : Store preset fork) (j f : Checkpoint) :
+    s.updateCheckpoints j f = { s with
+      justifiedCheckpoint :=
+        if s.justifiedCheckpoint.epoch < j.epoch then j else s.justifiedCheckpoint
+      finalizedCheckpoint :=
+        if s.finalizedCheckpoint.epoch < f.epoch then f else s.finalizedCheckpoint } := by
+  unfold Store.updateCheckpoints
+  split <;> dsimp only <;> split <;> simp_all
+
+/-- The justified checkpoint after the update: the new one for a greater epoch, else the old one. -/
+theorem updateCheckpoints_justifiedCheckpoint_eq (s : Store preset fork) (j f : Checkpoint) :
+    (s.updateCheckpoints j f).justifiedCheckpoint =
+      if s.justifiedCheckpoint.epoch < j.epoch then j else s.justifiedCheckpoint := by
+  rw [updateCheckpoints_eq]
+
+/-- The finalized checkpoint after the update: the new one for a greater epoch, else the old one. -/
+theorem updateCheckpoints_finalizedCheckpoint_eq (s : Store preset fork) (j f : Checkpoint) :
+    (s.updateCheckpoints j f).finalizedCheckpoint =
+      if s.finalizedCheckpoint.epoch < f.epoch then f else s.finalizedCheckpoint := by
+  rw [updateCheckpoints_eq]
+
 /-- Replacing the checkpoints keeps the justified checkpoint, or adopts the given one. -/
 theorem updateCheckpoints_justifiedCheckpoint (s : Store preset fork) (j f : Checkpoint) :
     (s.updateCheckpoints j f).justifiedCheckpoint = s.justifiedCheckpoint ∨
       (s.updateCheckpoints j f).justifiedCheckpoint = j := by
-  unfold Store.updateCheckpoints
-  split <;> dsimp only <;> split
-  all_goals first | exact .inl rfl | exact .inr rfl
+  rw [updateCheckpoints_justifiedCheckpoint_eq]
+  split
+  · exact .inr rfl
+  · exact .inl rfl
 
 /-- Replacing the checkpoints keeps the finalized checkpoint, or adopts the given one. -/
 theorem updateCheckpoints_finalizedCheckpoint (s : Store preset fork) (j f : Checkpoint) :
     (s.updateCheckpoints j f).finalizedCheckpoint = s.finalizedCheckpoint ∨
       (s.updateCheckpoints j f).finalizedCheckpoint = f := by
-  unfold Store.updateCheckpoints
-  split <;> dsimp only <;> split
-  all_goals first | exact .inl rfl | exact .inr rfl
+  rw [updateCheckpoints_finalizedCheckpoint_eq]
+  split
+  · exact .inr rfl
+  · exact .inl rfl
 
 /-- A tick within a slot keeps the unrealized justified checkpoint.
 
