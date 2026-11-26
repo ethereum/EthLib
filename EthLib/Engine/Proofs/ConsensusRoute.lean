@@ -198,7 +198,7 @@ private theorem of_checkNewPayload_ok {config : ChainConfig} {version : Nat}
         Json.since "slotNumber" (amsterdam.map (·.2)) = .ok slot ∧
         payload.toBlock beacon lists accessList slot = .ok checked.block ∧
         ∀ hs, hashes = some hs →
-          ExecutionPayload.blobVersionedHashes checked.block.transactions = hs := by
+          checked.block.blobVersionedHashes = hs := by
   unfold checkNewPayload at h
   rw [hDecode] at h
   dsimp only at h
@@ -369,7 +369,7 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
       · simp [sinceValue, electra] at e
     have hHashesB : ∀ hs, (if 3 ≤ newPayloadVersion fork then
         some (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
-        else none) = some hs → ExecutionPayload.blobVersionedHashes b.transactions = hs := by
+        else none) = some hs → b.blobVersionedHashes = hs := by
       intro hs e
       have deneb : Fork.dencun ≤ fork := three.mp (by
         by_contra low

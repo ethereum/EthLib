@@ -282,12 +282,14 @@ def checkNewPayload (config : ChainConfig) (version : Nat) (params : Json) :
     | .ok block =>
       -- Version 3, step 3.1: the actual array is the versioned hashes of the blob transactions.
       --
+      -- Without blob transactions it is `[]`, which the expected array must then be.
+      --
       -- Step 3.2: `INVALID` with a null hash when the expected and the actual arrays differ.
       --
       -- EthLib runs it after the block hash, so only the reason differs from the source's order.
       if let some hashes := hashes then
-        if ExecutionPayload.blobVersionedHashes block.transactions ≠ hashes then
-          let actual := ExecutionPayload.blobVersionedHashes block.transactions
+        if block.blobVersionedHashes ≠ hashes then
+          let actual := block.blobVersionedHashes
           return .error (invalidStatus (.wrongVersionedHashes hashes actual))
       return .ok ⟨fork, hAccepted, block⟩
   else throw (.unsupportedFork (some fork))

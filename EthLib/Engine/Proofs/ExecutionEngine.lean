@@ -157,7 +157,7 @@ theorem executionEngine_accepts_iff {chain : BlockChain}
       ∃ requests, request.requestsList = .ok requests ∧ ∃ f b,
         payloadBlock chain.config request.executionPayload request.parentBeaconBlockRoot
           requests = some ⟨f, b⟩ ∧
-        (∀ deneb : .dencun ≤ fork, ExecutionPayload.blobVersionedHashes b.transactions =
+        (∀ deneb : .dencun ≤ fork, b.blobVersionedHashes =
           (request.versionedHashes deneb).data.toList) ∧
         ∃ post, stateTransition chain b (checkSeal := false) = .ok post := by
   unfold executionEngine
@@ -206,7 +206,7 @@ theorem executionEngine_accepts_newPayloadRequest_iff {chain : BlockChain}
             .ok (requests electra)) ∧
         ∃ f b, payloadBlock chain.config (body.executionPayload bellatrix)
             (fun _ => state.latestBlockHeader.parentRoot) requests = some ⟨f, b⟩ ∧
-          (∀ deneb : .dencun ≤ fork, ExecutionPayload.blobVersionedHashes b.transactions =
+          (∀ deneb : .dencun ≤ fork, b.blobVersionedHashes =
             (body.blobKzgCommitments ⟨deneb, bellatrix.2⟩).data.toList.map
               Consensus.commitmentVersionedHash) ∧
           ∃ post, stateTransition chain b (checkSeal := false) = .ok post := by
@@ -300,7 +300,7 @@ theorem executionEngine_accepts_iff_of_gloas (gloas : .glamsterdam ≤ fork)
       ∃ requests, request.requestsList = .ok requests ∧ ∃ b : Block .glamsterdam Transaction,
         payloadBlock chain.config request.executionPayload request.parentBeaconBlockRoot
           requests = some ⟨.glamsterdam, b⟩ ∧
-        ExecutionPayload.blobVersionedHashes b.transactions =
+        b.blobVersionedHashes =
           (request.versionedHashes (Nat.le_trans (by decide) gloas)).data.toList ∧
         ∃ post, stateTransition chain b (checkSeal := false) = .ok post := by
   rw [executionEngine_accepts_iff]
