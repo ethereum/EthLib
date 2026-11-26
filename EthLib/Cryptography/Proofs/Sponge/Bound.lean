@@ -14,7 +14,7 @@ A hidden collision needs a value of a hidden path to hit a visible capacity or a
 
 The values of the hidden paths are drawn in the end phase, after the game.
 
-Together they occur with chance at most `(N (2N + 1) + N (N + 1)) / |C|` for a game of cost `N`.
+Together they occur with chance at most `(N^2 + N) / |C|` for a game of cost `N`.
 -/
 
 @[expose] public section
@@ -248,6 +248,41 @@ theorem visF_support (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
   obtain ⟨w, hw, rfl⟩ := hz
   exact ⟨w, hw, rfl⟩
 
+omit [DecidableEq Msg] [Fintype C] in
+/-- A raised flag stays raised along a visible step. -/
+theorem visImpl_false_flag (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
+    (vs : VState Dg E C Msg) {z} (hz : z ∈ support ((visImpl P iv false t).run vs))
+    (h : vs.2.2 = true) : z.2.2.2 = true := by
+  rcases t with (n | x | y) | m
+  · simp [visImpl] at hz
+    obtain ⟨u, rfl⟩ := hz
+    exact h
+  · simp only [visImpl, StateT.run_mk, mem_support_bind_iff, support_pure,
+      Set.mem_singleton_iff] at hz
+    obtain ⟨u, -, r, -, rfl⟩ := hz
+    simp [h]
+  · simp only [visImpl, StateT.run_mk, mem_support_bind_iff, support_pure,
+      Set.mem_singleton_iff] at hz
+    obtain ⟨u, -, rfl⟩ := hz
+    simp [h]
+  · simp only [visImpl, StateT.run_mk, Bool.false_eq_true, ↓reduceIte,
+      mem_support_bind_iff, support_pure, Set.mem_singleton_iff] at hz
+    obtain ⟨d, -, rfl⟩ := hz
+    exact h
+
+omit [Fintype C] in
+/-- The hashed messages and the flag after a folded visible step. -/
+theorem visF_hashed_flag (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
+    (s : VState Dg E C Msg × ACache Msg Dg E C) {z} (hz : z ∈ support ((visF P iv t).run s)) :
+    z.2.1.2.1 = (match t with | .inr m => m :: s.1.2.1 | _ => s.1.2.1) ∧
+    (z.2.1.2.2 = true → s.1.2.2 = false → ∃ q, t = .inl (.inr q)) ∧
+    (s.1.2.2 = true → z.2.1.2.2 = true) := by
+  obtain ⟨w, hw, rfl⟩ := visF_support P iv t s hz
+  have hw' := fst_mem_support_of_mem_support_run_romImpl hw
+  obtain ⟨h1, -, h3⟩ := visImpl_false_support P iv t s.1 hw'
+  refine ⟨?_, h3, visImpl_false_flag P iv t s.1 hw'⟩
+  rcases t with (n | q) | m <;> exact h1
+
 /-- The size of a visible state: its pairs and the blocks of its hashed messages. -/
 def vsize (vs : VState Dg E C Msg) : ℕ :=
   vs.1.edges.length + (vs.2.1.map fun m => (P.pad m).length).sum
@@ -476,50 +511,131 @@ theorem prEvent_visF_bad_le (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
       obtain ⟨q, hq⟩ := h3 h (by simpa using hb)
       simp at hq
 
+/-- The hidden capacities of `h` paths against `e ≤ p` pairs fit in what the potential leaves.
+
+The potential of `p` paid calls leaves `N^2 + N - p^2`, and `p + h ≤ N`. -/
+theorem endPhase_count_le {N e p h : ℕ} (he : e ≤ p) (hp : p + h ≤ N) :
+    h * (2 * e + 1 + h) + p * p ≤ N * N + N := by
+  nlinarith [Nat.mul_le_mul hp hp, Nat.mul_le_mul_left h he]
+
+/-- A visible step of a game of cost `N` spends the potential of the budget it pays. -/
+theorem visF_step_le (N b : ℕ) (t : (GameSpec (SpongeState Dg E C) Msg Dg).Domain)
+    (s : VState Dg E C Msg × ACache Msg Dg E C) (hV : VStruct P iv s.1.1 s.2)
+    (hle : vsize P s.1 + b ≤ N) (hc : queryCost (fun m => (P.pad m).length) t ≤ b)
+    (hbad : ¬s.1.2.2 = true) :
+    ∑' z, Pr{let y ← (visF P iv t).run s}[y = z] * (if z.2.1.2.2 = true then 1 else
+      ((N * N + N - (N - (b - queryCost (fun m => (P.pad m).length) t) -
+        (z.2.1.2.1.map fun m => (P.pad m).length).sum) *
+        (N - (b - queryCost (fun m => (P.pad m).length) t) -
+        (z.2.1.2.1.map fun m => (P.pad m).length).sum) : ℕ) : ℝ≥0∞) /
+        (Fintype.card C : ℝ≥0∞)) ≤
+      ((N * N + N - (N - b - (s.1.2.1.map fun m => (P.pad m).length).sum) *
+        (N - b - (s.1.2.1.map fun m => (P.pad m).length).sum) : ℕ) : ℝ≥0∞) /
+        (Fintype.card C : ℝ≥0∞) := by
+  set p := N - b - (s.1.2.1.map fun m => (P.pad m).length).sum with hp
+  simp only [vsize] at hle
+  have he : s.1.1.edges.length ≤ p := by omega
+  rcases t with (n | q) | m
+  -- A coin keeps the hashed messages and the flag.
+  · refine (tsum_ite_le_prEvent_add _
+      (fun z : _ × (VState Dg E C Msg × ACache Msg Dg E C) => z.2.1.2.2 = true) _
+      (((N * N + N - p * p : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞)) fun z hz _ => ?_).trans ?_
+    · obtain ⟨h1, -, -⟩ := visF_hashed_flag P iv _ s hz
+      simp only at h1
+      simp [h1, queryCost, hp]
+    · rw [prEvent_eq_zero_of_forall_mem_support _ _ fun z hz hb => ?_, zero_add]
+      obtain ⟨-, h3, -⟩ := visF_hashed_flag P iv _ s hz
+      obtain ⟨q, hq⟩ := h3 hb (by simpa using hbad)
+      simp at hq
+  -- A permutation call keeps the hashed messages and spends one unit on the visible capacities.
+  · simp only [queryCost] at hc
+    have hp1 : p + 1 ≤ N := by omega
+    refine (tsum_ite_le_prEvent_add _
+      (fun z : _ × (VState Dg E C Msg × ACache Msg Dg E C) => z.2.1.2.2 = true) _
+      (((N * N + N - (p + 1) * (p + 1) : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞))
+      fun z hz _ => ?_).trans ?_
+    · obtain ⟨h1, -, -⟩ := visF_hashed_flag P iv _ s hz
+      simp only at h1
+      have : N - (b - 1) - (z.2.1.2.1.map fun m => (P.pad m).length).sum = p + 1 := by
+        rw [h1]
+        omega
+      simp only [queryCost, this, le_refl]
+    · refine (add_le_add (prEvent_visF_bad_le P iv _ s hV hbad) le_rfl).trans ?_
+      rw [length_knownC]
+      simp only [queryCost, Nat.cast_one, one_mul]
+      rw [ENNReal.div_add_div_same, ← Nat.cast_add]
+      gcongr
+      have h2 : (p + 1) * (p + 1) = p * p + 2 * p + 1 := by ring
+      have h3 : (p + 1) * (p + 1) ≤ N * N := Nat.mul_le_mul hp1 hp1
+      omega
+  -- A hash call never raises the flag, and its blocks move from the budget to the hashed ones.
+  · refine (tsum_ite_le_prEvent_add _
+      (fun z : _ × (VState Dg E C Msg × ACache Msg Dg E C) => z.2.1.2.2 = true) _
+      (((N * N + N - p * p : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞)) fun z hz _ => ?_).trans ?_
+    · obtain ⟨h1, -, -⟩ := visF_hashed_flag P iv _ s hz
+      simp only at h1
+      simp only [queryCost] at hc ⊢
+      have : N - (b - (P.pad m).length) - (z.2.1.2.1.map fun m => (P.pad m).length).sum = p := by
+        rw [h1, List.map_cons, List.sum_cons]
+        omega
+      simp only [this, le_refl]
+    · rw [prEvent_eq_zero_of_forall_mem_support _ _ fun z hz hb => ?_, zero_add]
+      obtain ⟨-, h3, -⟩ := visF_hashed_flag P iv _ s hz
+      obtain ⟨q, hq⟩ := h3 hb (by simpa using hbad)
+      simp at hq
+
 /-- **The collision bound.**
 
 Run the visible game without the queries of path values, then the end phase.
 
 A game of cost `N` makes a visible or a hidden collision there.
 
-It does so with chance at most `(N (2N + 1) + N (N + 1)) / |C|`. -/
+It does so with chance at most `(N^2 + N) / |C|`. -/
 theorem prEvent_visRun_le {α : Type} (oa : OracleComp (GameSpec (SpongeState Dg E C) Msg Dg) α)
     {N : ℕ} (hN : WithinCost (fun m => (P.pad m).length) oa N) :
     Pr{let z ← (simulateQ (ASpec Msg Dg E C).romImpl
         (visRun P iv false oa (SimState.init iv, [], false))).run ∅}[
       z.1.2.2.2 = true ∨ HiddenCollision P iv z.1.2 z.2] ≤
-      ((N * (2 * N + 1) + N * (N + 1) : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞) := by
+      ((N * N + N : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞) := by
   set vs₀ : VState Dg E C Msg := (SimState.init iv, [], false)
   have hfold := simulateQ_mapStateTBase_run_eq_map_flattenStateT (ASpec Msg Dg E C).romImpl
     (visImpl P iv false) oa vs₀ (∅ : ACache Msg Dg E C)
   simp only [visRun, simulateQ_bind, StateT.run_bind]
   rw [hfold, bind_map_left]
   have hinit : VStruct P iv vs₀.1 (∅ : ACache Msg Dg E C) := vStruct_init
-  -- The visible collisions along the run.
-  have hbad : Pr{let z ← (simulateQ (visF P iv) oa).run (vs₀, ∅)}[z.2.1.2.2 = true] ≤
-      N * ((2 * N + 1 : ℕ) / (Fintype.card C : ℝ≥0∞)) :=
-    prEvent_bad_le_of_weightBudget (visF P iv) (fun s => s.1.2.2 = true)
-      (fun s => VStruct P iv s.1.1 s.2) (queryCost (fun m => (P.pad m).length))
-      (fun s => vsize P s.1) N ((2 * N + 1 : ℕ) / (Fintype.card C : ℝ≥0∞))
-      (fun t s hs z hz => vStruct_visF P iv t s hs hz)
-      (fun t s _ z hz => vsize_visF P iv t s hz)
-      (fun t s hs hb hle => (prEvent_visF_bad_le P iv t s hs hb).trans (by
-        gcongr
-        rw [length_knownC]
-        have : s.1.1.edges.length ≤ vsize P s.1 := Nat.le_add_right _ _
-        omega)) hN hinit (by simp [vs₀]) (by simp [vsize, vs₀, SimState.init])
-  refine (prEvent_bind_le_prEvent_add_of_support _ _ (fun z => z.2.1.2.2 = true) _
-    (ε := ((N * (N + 1) : ℕ) : ℝ≥0∞) / (Fintype.card C : ℝ≥0∞)) fun z hz hzb => ?_).trans ?_
-  · -- The hidden collisions of the end phase.
+  rw [prEvent_bind_eq_tsum]
+  -- The potential of a budget `b` reads the permutation calls already paid.
+  --
+  -- They are `N - b` less the hashed blocks.
+  --
+  -- A raised flag is charged one, and a run that ends without it its hidden capacities.
+  refine (tsum_le_tsum fun z => ?_).trans ((tsum_le_of_isQueryBound
+    (fun b s => VStruct P iv s.1.1 s.2 ∧ vsize P s.1 + b ≤ N) (fun s => s.1.2.2 = true)
+    (fun b s => ((N * N + N - (N - b - (s.1.2.1.map fun m => (P.pad m).length).sum) *
+      (N - b - (s.1.2.1.map fun m => (P.pad m).length).sum) : ℕ) : ℝ≥0∞) /
+      (Fintype.card C : ℝ≥0∞))
+    (fun s => (((s.1.2.1.map fun m => (P.pad m).length).sum *
+      (2 * s.1.1.edges.length + 1 + (s.1.2.1.map fun m => (P.pad m).length).sum) : ℕ) :
+      ℝ≥0∞) / (Fintype.card C : ℝ≥0∞))
+    (fun t s hs z hz => (visF_hashed_flag P iv t s hz).2.2 hs)
+    (fun t b s hc hs _ z hz _ => ⟨vStruct_visF P iv t s hs.1 hz, by
+      have := vsize_visF P iv t s hz
+      have := hs.2
+      omega⟩)
+    (fun t b s hc hs hbad => visF_step_le P iv N b t s hs.1 hs.2 hc hbad)
+    (fun b s hs _ => ?_) hN (s := (vs₀, ∅)) ⟨hinit, by simp [vsize, vs₀, SimState.init]⟩
+    (by simp [vs₀])).trans ?_)
+  · -- An unreachable end of the visible run weighs nothing.
+    by_cases hz : z ∈ support ((simulateQ (visF P iv) oa).run (vs₀, ∅))
+    swap
+    · simp [prEvent_eq_zero_of_not_mem_support _ hz]
+    gcongr
+    split_ifs with hzb
+    · exact prEvent_le_one _
+    -- The hidden collisions of the end phase.
     have hV := simulateQ_run_preserves_inv_of_query (visF P iv)
       (fun s => VStruct P iv s.1.1 s.2) (fun t s hs z hz => vStruct_visF P iv t s hs hz) oa _
       hinit z hz
-    have hsize := size_le_of_mem_support_run_weightBudget (visF P iv)
-      (fun s => VStruct P iv s.1.1 s.2) (queryCost (fun m => (P.pad m).length))
-      (fun s => vsize P s.1) (fun t s hs z hz => vStruct_visF P iv t s hs hz)
-      (fun t s _ z hz => vsize_visF P iv t s hz) hN hinit z hz
-    simp only [vsize, vs₀, SimState.init, List.length_nil, List.map_nil, List.sum_nil,
-      add_zero, zero_add] at hsize
     simp only [simulateQ_pure, StateT.run_pure, bind_pure_comp, prEvent_map]
     refine (prEvent_mono _ _ _ fun w hw => ?_).trans
       ((prEvent_coll_endPhase P (hiddenSet P z.2.1) (knownC iv z.2.1.1) z.2.1.2.1 z.2.2
@@ -535,10 +651,14 @@ theorem prEvent_visRun_le {α : Type} (oa : OracleComp (GameSpec (SpongeState Dg
       calc (h : ℝ≥0∞) * ((2 * z.2.1.1.edges.length + 1 : ℕ) + (hiddenSet P z.2.1).card)
           ≤ (h : ℝ≥0∞) * ((2 * z.2.1.1.edges.length + 1 : ℕ) + h) := by gcongr
         _ = ((h * (2 * z.2.1.1.edges.length + 1 + h) : ℕ) : ℝ≥0∞) := by push_cast; ring
-        _ ≤ _ := Nat.cast_le.mpr (by nlinarith [hsize])
-  · rw [Nat.cast_add, ENNReal.add_div]
+  · -- The hidden capacities fit in what the potential leaves.
     gcongr
-    refine hbad.trans (le_of_eq ?_)
-    rw [mul_div_assoc', Nat.cast_mul]
+    have h := hs.2
+    simp only [vsize] at h
+    have := endPhase_count_le (N := N)
+      (e := s.1.1.edges.length) (h := (s.1.2.1.map fun m => (P.pad m).length).sum)
+      (p := N - b - (s.1.2.1.map fun m => (P.pad m).length).sum) (by omega) (by omega)
+    omega
+  · simp [vs₀]
 
 end Bound

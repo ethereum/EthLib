@@ -376,11 +376,10 @@ theorem spongeIndiffBound_le {N bits : ℕ} (hN : N ≤ 2 ^ 129) (hbits : bits �
   have hN2 : N * N ≤ 2 ^ 258 := (Nat.mul_le_mul hN hN).trans_eq (by rw [← pow_add])
   have h1 : N.choose 2 ≤ 2 ^ 258 :=
     (Nat.choose_le_pow N 2).trans (by rw [sq]; exact hN2)
-  have h2 : N * (2 * N + 1) + N * (N + 1) ≤ 2 ^ 261 := by
+  have h2 : N * N + N ≤ 2 ^ 261 := by
     have := Nat.le_mul_self N
     have h8 : (2 : ℕ) ^ 261 = 2 ^ 3 * 2 ^ 258 := by rw [← pow_add]
-    have hring : N * (2 * N + 1) + N * (N + 1) = 3 * (N * N) + 2 * N := by ring
-    rw [h8, hring]
+    rw [h8]
     generalize (2 : ℕ) ^ 258 = M at hN2 ⊢
     generalize N * N = x at hN2 this ⊢
     simp only [Nat.reducePow]
