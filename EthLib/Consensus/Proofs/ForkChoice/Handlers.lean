@@ -589,19 +589,6 @@ private theorem mem_foldl_addMissing {i : ValidatorIndex} :
     rw [List.foldl_cons, mem_foldl_addMissing indices]
     by_cases found : j ∈ known <;> simp [found] <;> grind
 
-/-- Adding indices one at a time, each only when missing, keeps a list without repeats. -/
-private theorem nodup_foldl_addMissing :
-    ∀ (indices known : List ValidatorIndex), known.Nodup →
-      (indices.foldl (fun known j => if known.contains j then known else known ++ [j])
-        known).Nodup
-  | [], _, nodup => nodup
-  | j :: indices, known, nodup => by
-    rw [List.foldl_cons]
-    apply nodup_foldl_addMissing indices
-    by_cases found : j ∈ known
-    · simpa [found] using nodup
-    · simpa [found, List.nodup_append] using ⟨nodup, fun a mem same => found (same ▸ mem)⟩
-
 /-- After a slashing a validator equivocates exactly when it did, or is in both attestations. -/
 theorem mem_addEquivocators {slashing : AttesterSlashing preset fork} {i : ValidatorIndex} :
     i ∈ (store.addEquivocators slashing).equivocatingIndices ↔
@@ -614,8 +601,14 @@ theorem mem_addEquivocators {slashing : AttesterSlashing preset fork} {i : Valid
 /-- A slashing lists no equivocator twice when the store listed none twice. -/
 theorem nodup_addEquivocators {slashing : AttesterSlashing preset fork}
     (nodup : store.equivocatingIndices.Nodup) :
-    (store.addEquivocators slashing).equivocatingIndices.Nodup :=
-  nodup_foldl_addMissing _ _ nodup
+    (store.addEquivocators slashing).equivocatingIndices.Nodup := by
+  simp only [addEquivocators]
+  -- Each index is added only when missing, so no step adds a repeat.
+  refine List.foldlRecOn (motive := List.Nodup) _ _ nodup ?_
+  intro known held j _
+  by_cases found : j ∈ known
+  · simpa [found] using held
+  · simpa [found, List.nodup_append] using ⟨held, fun a mem same => found (same ▸ mem)⟩
 
 /-- An attester slashing passes exactly when its votes are slashable together and both are valid.
 
