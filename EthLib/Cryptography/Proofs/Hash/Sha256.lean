@@ -13,6 +13,8 @@ The file restates the standard as a model over 32-bit bit vectors.
 The model shares only the 64 round constants with the executable code.
 
 A theorem below derives them from the cube roots of the first 64 primes.
+
+The last section states the padding and the words of a block on bit strings, as the standard does.
 -/
 
 @[expose] public section
@@ -478,5 +480,266 @@ theorem hash_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
 theorem hash32_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
     Base.packBytes (hash32 message) = Spec.hash message :=
   hash_eq_spec message admitted
+
+/-! ## The message in bits
+
+FIPS 180-4 defines the padding and the parsing on bit strings.
+
+The statements below read the byte arrays as those bit strings.
+
+So they state the standard's own text.
+-/
+
+namespace Spec
+
+/-- The bits of one byte, most significant first, FIPS 180-4 §3.1. -/
+def byteBits (byte : UInt8) : List Bool := (List.range 8).reverse.map byte.toNat.testBit
+
+/-- The bits of a byte string, FIPS 180-4 §3.1: its bytes in order, most significant bit first. -/
+def messageBits (bytes : ByteArray) : List Bool := bytes.toList.flatMap byteBits
+
+/--
+The padding of a message `M` of `ℓ` bits, FIPS 180-4 §5.1.1.
+
+It appends the bit 1, then `k` zero bits, then the low 64 bits of `ℓ`, most significant first.
+
+FIPS 180-4 §5.1.1 admits only `ℓ < 2^64`, where these 64 bits are `ℓ` itself.
+
+The number `k` is the smallest non-negative solution of `ℓ + 1 + k ≡ 448 (mod 512)`.
+-/
+def bitPad (M : List Bool) : List Bool :=
+  let ℓ := M.length
+  -- The solutions repeat every 512, so the smallest one is below 512.
+  let k := ((List.range 512).find? fun k => (ℓ + 1 + k) % 512 = 448).getD 0
+  M ++ [true] ++ List.replicate k false ++ (List.range 64).reverse.map ℓ.testBit
+
+/-- The loop that lists a byte array reads the array from the index on. -/
+private theorem toList_loop (b : ByteArray) (i : Nat) (r : List UInt8) :
+    ByteArray.toList.loop b i r = r.reverse ++ b.data.toList.drop i := by
+  fun_induction ByteArray.toList.loop b i r with
+  | case1 i r h ih =>
+    rw [ih]
+    have : i < b.data.toList.length := by simpa using h
+    rw [List.drop_eq_getElem_cons this]
+    have inside : i < b.data.size := h
+    simp [ByteArray.get!]
+    exact getElem!_pos b.data i inside
+  | case2 i r h =>
+    simp at h
+    simp [List.drop_eq_nil_of_le (show b.data.toList.length ≤ i by simpa using h)]
+
+/-- The list of a byte array is the list of its bytes. -/
+private theorem toList_eq (b : ByteArray) : b.toList = b.data.toList := by
+  simp [ByteArray.toList, toList_loop]
+
+/-- The zero byte is eight zero bits. -/
+theorem byteBits_zero : byteBits 0 = List.replicate 8 false := by
+  simp [byteBits, List.range_succ]
+
+/-- A byte has eight bits. -/
+@[simp] theorem byteBits_length (byte : UInt8) : (byteBits byte).length = 8 := by
+  simp [byteBits]
+
+/-- Bit `r` from the left of a byte is bit `7 - r` of its value. -/
+theorem byteBits_getElem (byte : UInt8) (r : Nat) (h : r < (byteBits byte).length) :
+    (byteBits byte)[r] = byte.toNat.testBit (7 - r) := by
+  simp [byteBits]
+
+/-- The bits of a byte string are the bits of its bytes, in order. -/
+theorem messageBits_eq (b : ByteArray) : messageBits b = b.data.toList.flatMap byteBits := by
+  rw [messageBits, toList_eq]
+
+/-- Each byte contributes eight bits. -/
+theorem flatMap_byteBits_length (l : List UInt8) : (l.flatMap byteBits).length = 8 * l.length := by
+  induction l with
+  | nil => simp
+  | cons x l ih => simp [List.flatMap_cons, ih]; omega
+
+/-- Bit `j` of a list of bytes is a bit of byte `j / 8`. -/
+theorem flatMap_byteBits_getElem (l : List UInt8) (j : Nat) (h : j < (l.flatMap byteBits).length) :
+    (l.flatMap byteBits)[j] =
+      (l[j / 8]'(by rw [flatMap_byteBits_length] at h; omega)).toNat.testBit (7 - j % 8) := by
+  induction l generalizing j with
+  | nil => simp at h
+  | cons x l ih =>
+    rw [flatMap_byteBits_length] at h
+    simp only [List.flatMap_cons]
+    by_cases small : j < 8
+    · have quotient : j / 8 = 0 := Nat.div_eq_of_lt small
+      have remainder : j % 8 = j := Nat.mod_eq_of_lt small
+      rw [List.getElem_append_left (by simpa using small), byteBits_getElem]
+      simp [quotient, remainder]
+    · rw [List.getElem_append_right (by simpa using small)]
+      rw [ih]
+      have quotient : (j - 8) / 8 + 1 = j / 8 := by omega
+      have remainder : (j - 8) % 8 = j % 8 := by omega
+      simp [remainder, ← quotient]
+
+/-- The bits of two byte strings put end to end are their bits put end to end. -/
+theorem messageBits_append (a b : ByteArray) :
+    messageBits (a ++ b) = messageBits a ++ messageBits b := by
+  simp [messageBits_eq, List.flatMap_append]
+
+/-- Appending a byte appends its eight bits. -/
+theorem messageBits_push (a : ByteArray) (x : UInt8) :
+    messageBits (a.push x) = messageBits a ++ byteBits x := by
+  simp [messageBits_eq]
+
+/-- A byte string of `n` bytes has `8 n` bits. -/
+theorem messageBits_length (b : ByteArray) : (messageBits b).length = 8 * b.size := by
+  rw [messageBits_eq, flatMap_byteBits_length]
+  simp
+
+/-- Bit `j` of a byte string is bit `7 - j % 8` of byte `j / 8`. -/
+theorem messageBits_getElem (b : ByteArray) (j : Nat) (h : j < (messageBits b).length) :
+    (messageBits b)[j] =
+      (b[j / 8]'(by rw [messageBits_length] at h; omega)).toNat.testBit (7 - j % 8) := by
+  simp only [messageBits_eq] at h ⊢
+  rw [flatMap_byteBits_getElem]
+  rfl
+
+/-- `n` zero bytes are `8 n` zero bits. -/
+theorem messageBits_replicate_zero (n : Nat) :
+    messageBits ⟨Array.replicate n 0⟩ = List.replicate (8 * n) false := by
+  induction n with
+  | zero => simp [messageBits_eq]
+  | succ n ih =>
+    simp [messageBits_eq, List.replicate_succ, List.flatMap_cons, byteBits_zero] at ih ⊢
+    rw [ih, show 8 * (n + 1) = 8 + 8 * n by omega, ← List.replicate_append_replicate]
+    rfl
+
+end Spec
+
+/-- The 64 bits of the length are the low bits of the bit length, `8 size` modulo 2^64. -/
+theorem messageBits_lengthBytes (size : Nat) :
+    Spec.messageBits (lengthBytes size) = (List.range 64).reverse.map (8 * size).testBit := by
+  apply List.ext_getElem
+  · simp [Spec.messageBits_length]
+  · intro j left right
+    rw [Spec.messageBits_getElem]
+    simp only [lengthBytes, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn,
+      UInt64.toNat_toUInt8, UInt64.toNat_shiftRight]
+    have inside : j < 64 := by simpa using right
+    have shift : (56 - 8 * UInt64.ofNat (j / 8)).toNat = 56 - 8 * (j / 8) :=
+      shift_toNat ⟨j / 8, by omega⟩
+    rw [shift, Nat.mod_eq_of_lt (show 56 - 8 * (j / 8) < 64 by omega)]
+    simp only [UInt64.toNat_mul, List.getElem_map, List.getElem_reverse,
+      List.getElem_range, List.length_range]
+    have byte : 7 - j % 8 < 8 := by omega
+    have index : 56 - 8 * (j / 8) + (7 - j % 8) = 64 - 1 - j := by omega
+    have bits : (UInt64.ofNat size).toNat * UInt64.toNat 8 % 2 ^ 64 = 8 * size % 2 ^ 64 := by
+      simp only [UInt64.toNat_ofNat', UInt64.toNat_ofNat]
+      omega
+    rw [bits, Nat.testBit_mod_two_pow, Nat.testBit_shiftRight, Nat.testBit_mod_two_pow, index]
+    simp [byte]
+    omega
+
+namespace Spec
+
+/-- The padding congruence of FIPS 180-4 §5.1.1 first holds at `7` plus eight bits per zero byte. -/
+theorem find_padding_bits (size : Nat) :
+    ((List.range 512).find? fun k => (8 * size + 1 + k) % 512 = 448).getD 0 =
+      7 + 8 * Padding.paddingZeros size := by
+  have below : Padding.paddingZeros size < 64 := by
+    unfold Padding.paddingZeros
+    omega
+  have found : (List.range 512).find? (fun k => decide ((8 * size + 1 + k) % 512 = 448)) =
+      some (7 + 8 * Padding.paddingZeros size) := by
+    rw [List.find?_eq_some_iff_getElem]
+    refine ⟨?_, 7 + 8 * Padding.paddingZeros size, by simp; omega, by simp, ?_⟩
+    · simp only [decide_eq_true_eq]
+      unfold Padding.paddingZeros
+      omega
+    · intro j smaller
+      simp only [List.getElem_range, Bool.not_eq_true', decide_eq_false_iff_not]
+      unfold Padding.paddingZeros at smaller
+      omega
+  rw [found]
+  rfl
+
+/-- The byte `0x80` is the bit 1 and seven zero bits, FIPS 180-4 §5.1.1. -/
+theorem byteBits_delimiter : byteBits 0x80 = true :: List.replicate 7 false := by
+  decide
+
+end Spec
+
+/--
+The padded bytes are the padded bits of FIPS 180-4 §5.1.1.
+
+The 64 length bits are the low bits of `ℓ`, so the statement needs no bound on the message.
+-/
+theorem pad_bits (message : ByteArray) :
+    Spec.messageBits (pad message) = Spec.bitPad (Spec.messageBits message) := by
+  unfold Spec.bitPad
+  simp only [Spec.messageBits_length, Spec.find_padding_bits]
+  -- The message, the delimiter byte, the zero bytes and the length are the four parts.
+  simp only [pad, Padding.pad, Spec.messageBits_append, Spec.messageBits_push,
+    Spec.messageBits_replicate_zero, messageBits_lengthBytes, Spec.byteBits_delimiter]
+  rw [← List.replicate_append_replicate]
+  simp [List.append_assoc]
+
+/-- A word of a block is its 32 bits from the offset, FIPS 180-4 §5.2.1, byte by byte. -/
+private theorem inputWord_getMsbD (block : ByteArray) (start : Nat) (whole : start + 4 ≤ block.size)
+    (i : Nat) (inside : i < 32) :
+    (Spec.inputWord block start).getMsbD i =
+      (block[start + i / 8]'(by omega)).toNat.testBit (7 - i % 8) := by
+  have b0 : block[start]! = block[start]'(by omega) := getElem!_pos block start (by omega)
+  have b1 : block[start + 1]! = block[start + 1]'(by omega) :=
+    getElem!_pos block (start + 1) (by omega)
+  have b2 : block[start + 2]! = block[start + 2]'(by omega) :=
+    getElem!_pos block (start + 2) (by omega)
+  have b3 : block[start + 3]! = block[start + 3]'(by omega) :=
+    getElem!_pos block (start + 3) (by omega)
+  obtain ⟨q, r, hr, hq, rfl⟩ : ∃ q r, r < 8 ∧ q < 4 ∧ i = 8 * q + r :=
+    ⟨i / 8, i % 8, by omega, by omega, by omega⟩
+  have high (byte : UInt8) (k : Nat) (above : 8 ≤ k) : byte.toNat.testBit k = false :=
+    Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le (UInt8.toNat_lt byte)
+      (Nat.pow_le_pow_right (by decide) above))
+  have quotient : (8 * q + r) / 8 = q := by omega
+  have remainder : (8 * q + r) % 8 = r := by omega
+  simp only [quotient, remainder]
+  rw [BitVec.getMsbD_eq_getLsbD]
+  rcases (by omega : q = 0 ∨ q = 1 ∨ q = 2 ∨ q = 3) with rfl | rfl | rfl | rfl <;>
+    rcases (by omega : r = 0 ∨ r = 1 ∨ r = 2 ∨ r = 3 ∨ r = 4 ∨ r = 5 ∨ r = 6 ∨ r = 7) with
+      rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+    (simp only [Spec.inputWord, b0, b1, b2, b3, BitVec.getLsbD_or, BitVec.getLsbD_shiftLeft,
+      BitVec.getLsbD_ofNat]
+     simp [high])
+
+/--
+A word of a block is its 32 bits from the offset, FIPS 180-4 §5.2.1.
+
+Bit `i` from the left of the word is bit `8 start + i` of the block, for each `i` below 32.
+-/
+theorem inputWord_bits (block : ByteArray) (start : Nat) (whole : start + 4 ≤ block.size)
+    (i : Nat) (inside : i < 32) :
+    (Spec.inputWord block start).getMsbD i =
+      (Spec.messageBits block)[8 * start + i]'(by
+        rw [Spec.messageBits_length]
+        omega) := by
+  rw [Spec.messageBits_getElem, inputWord_getMsbD block start whole i inside]
+  simp only [show (8 * start + i) / 8 = start + i / 8 by omega,
+    show (8 * start + i) % 8 = i % 8 by omega]
+
+/-- The model's padded message is the padded bits of FIPS 180-4 §5.1.1, below 2^61 bytes. -/
+theorem padded_bits (message : ByteArray) (admitted : message.size < 2 ^ 61) :
+    Spec.messageBits (Spec.padded message) = Spec.bitPad (Spec.messageBits message) := by
+  rw [← pad_eq_spec message admitted, pad_bits]
+
+/--
+Word `t` of the block from byte `start` is its bits `32 t` to `32 t + 31`, FIPS 180-4 §5.2.1.
+
+Bit `i` from the left of the word is bit `8 start + 32 t + i` of the bytes, for each `i` below 32.
+-/
+theorem inputWords_bits (block : ByteArray) (start : Nat) (whole : start + 64 ≤ block.size)
+    (t : Fin 16) (i : Nat) (inside : i < 32) :
+    (Spec.inputWords block start)[t].getMsbD i =
+      (Spec.messageBits block)[8 * start + 32 * t.val + i]'(by
+        rw [Spec.messageBits_length]
+        omega) := by
+  have word : (Spec.inputWords block start)[t] = Spec.inputWord block (start + 4 * t.val) := by
+    simp [Spec.inputWords]
+  rw [word, inputWord_bits block (start + 4 * t.val) (by omega) i inside]
+  simp only [show 8 * (start + 4 * t.val) + i = 8 * start + 32 * t.val + i by omega]
 
 end EthLib.Cryptography.Hash.Sha256
