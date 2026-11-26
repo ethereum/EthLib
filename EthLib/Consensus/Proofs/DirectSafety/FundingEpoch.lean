@@ -86,7 +86,7 @@ theorem funding_rewards_balance {fork : Fork} {s t : BeaconState preset fork}
     (∑ i ∈ Finset.range s.validators.data.size,
       (actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i)) ≤
       (events.map fundingCredit).sum := by
-  have coverage := coverage_rewards (coverage_refl ⟨fork, s⟩) replayed
+  have coverage := coverage_rewards (pre := (s, [])) (coverage_refl ⟨fork, s⟩) replayed
   have bounded := replayRewards_bounded (by simp [EventsBounded]) replayed
   have ordinary := funding_ordinary_rewards (by simp [FundingOrdinary]) replayed
   have balanceBound : (∑ i ∈ Finset.range s.validators.data.size,
