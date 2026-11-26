@@ -180,7 +180,7 @@ def reqRespResponseBoundsExport (args : PyValue) : Result PyValue :=
 /-- The code and the message of an error of a chunk.
 
 An error of bounds keeps its code, from 301, and an error of the chunk its own, below 301. -/
-instance : ExportError ChunkError where
+instance : ExportError ResponseChunkError where
   code
     | .bounds error => error.code
     | .chunk error => ExportError.code error

@@ -3880,17 +3880,25 @@ Not yet released.
   It also takes the configuration with its replacements, and returns the name of the fork of the chunk with the chunk.
   A successful chunk of a protocol that sends a fork digest has the fork of the first epoch with that digest.
   The other chunks have the fork of the exchange.
-  Blocks by range and by root send a digest from version 2, and so do blocks by head and the four light client protocols.
+  Blocks by range and by root send a digest from version 2.
+  Blocks by head and the four light client protocols send one in every version.
   So do the blob and data column sidecar protocols, the payload envelope protocols and inclusion lists by indices.
   A digest that no epoch of the chain has raises `ConsensusError` with the new code 305.
   A digest of a fork before the first type of the protocol raises it with code 301.
   The Phase 0 digest on a light client protocol is such a digest.
+  A digest that only the far future epoch has raises it with the new code 306, whatever the fork of the exchange, since no slot has that epoch.
+  On a chain that leaves its last fork unscheduled, the digest of that fork is such a digest.
+  A digest of a scheduled fork after the fork of the exchange names that fork, since the type of a chunk depends on the epoch of its digest alone.
+  Near a fork boundary, a peer can serve a block of a fork that the requester has not reached.
   A chunk that does not decode raises it with the code of `ReqRespError`.
-  In Lean, `Consensus.decodeChunkAtFork` in the new module `EthLib.Consensus.ReqResp.Chunk` decodes, and `Consensus.BoundsError` has the new constructor `unknownDigest`, so a match over it needs that case.
+  In Lean, `Consensus.decodeChunkAtFork` in the new module `EthLib.Consensus.ReqResp.Chunk` decodes, and fails with `Consensus.ResponseChunkError`.
+  `Consensus.BoundsError` has the new constructors `unknownDigest` and `unscheduledDigest`, so a match over it needs those cases.
   `EthLib.Consensus.Proofs.ReqResp.Chunk` states that a decoded chunk is one that `decodeResponseChunk` accepts at the bounds of the fork returned (`decodeChunkAtFork_eq_ok`).
   Take a chain where `digestsIdentify` holds.
   A successful chunk with the digest of an epoch has the fork of that epoch (`decodeChunkAtFork_fork_of_digest`).
-  A value that a server serializes at that fork decodes and reads back (`decodeChunkAtFork_response`).
+  A value that a server serializes at that fork decodes and reads back, when the epoch is not the far future one (`decodeChunkAtFork_response`).
+  A successful chunk whose digest only the far future epoch has is rejected (`decodeChunkAtFork_unscheduled`).
+  The search for the epoch of a digest finds one at or before every epoch with that digest (`forkOfDigest_le`).
   The fork of a decoded chunk is at or after `ReqRespProtocol.firstChunkFork`, the first fork at which the payload of the protocol has a type.
   `responseDesc_isSome` states that each protocol version of a fork has a response type at the fork of every chunk.
 

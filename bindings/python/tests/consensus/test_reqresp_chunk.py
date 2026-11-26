@@ -1,13 +1,14 @@
-"""A response chunk decodes at the bounds of the fork that its digest names."""
+"""A response chunk decodes at the bounds of its fork: the fork of its digest or of the exchange."""
 
 import pytest
 
-from consensus.test_fork_digest import SEPOLIA, SEPOLIA_RECORD, SEPOLIA_ROOT
 from ethlib import consensus
 from ethlib.errors import ConsensusError
-from ethlib.networking import enr, reqresp
+from ethlib.networking import enr, reqresp, uvarint
 from ethlib.networking.reqresp import ResponseChunk
 from raising import raises
+
+from .test_fork_digest import SEPOLIA, SEPOLIA_RECORD, SEPOLIA_ROOT
 
 PREFIX = "/eth2/beacon_chain/req/"
 
@@ -27,7 +28,7 @@ def _success(context: bytes, payload: bytes) -> bytes:
 
 
 def test_sepolia_record_digest() -> None:
-    # A bootnode record of Sepolia holds the digest of Bellatrix, read from the source.
+    # A bootnode record of Sepolia holds the digest of Bellatrix.
     digest = enr.consensus_entries("phase0", enr.from_text(SEPOLIA_RECORD)).eth2.fork_digest
     low, _ = consensus.reqresp_response_bounds("bellatrix", _id("beacon_blocks_by_range", 2))
     payload = bytes(low)
@@ -73,7 +74,7 @@ MAINNET_DIGEST_FORKS = [
 
 @pytest.mark.parametrize(("start", "fork"), MAINNET_DIGEST_FORKS)
 def test_each_digest_epoch(start: int, fork: str) -> None:
-    # A chunk with the digest of each epoch at which it changes has the fork of that epoch.
+    # A chunk with the digest of each epoch at which the digest changes has the fork of that epoch.
     digest = consensus.compute_fork_digest("mainnet", ROOT, start)
     low, _ = consensus.reqresp_response_bounds(
         fork, _id("beacon_blocks_by_root", 1 if fork == "phase0" else 2)
@@ -112,7 +113,7 @@ def test_blocks_by_head_phase0_digest() -> None:
     ],
 )
 def test_digest_before_the_type_table(protocol: str, start: int, fork: str) -> None:
-    # A digest of a fork before the first row of the message's table names no type.
+    # A digest of a fork before the first fork of the protocol names no payload type.
     digest = consensus.compute_fork_digest("mainnet", ROOT, start)
     data = _success(digest, bytes(8))
     with raises(ConsensusError, f"{protocol} is not a protocol of {fork}") as info:
@@ -133,7 +134,65 @@ def test_bounds_of_the_digest_fork() -> None:
     assert info.value.code == 9
 
 
+def test_upper_bound_of_the_digest_fork() -> None:
+    # The largest Phase 0 block is shorter than the largest Fulu block.
+    _, phase0_high = consensus.reqresp_response_bounds("phase0", _id("beacon_blocks_by_range", 1))
+    _, fusaka_high = consensus.reqresp_response_bounds("fusaka", _id("beacon_blocks_by_range", 2))
+    assert phase0_high < fusaka_high
+    # So under the digest of Phase 0, a declared length above the Phase 0 bound fails.
+    # The chunk holds the code of a success, the digest and the length prefix, with no frame.
+    digest = consensus.compute_fork_digest("mainnet", ROOT, 0)
+    data = bytes([0]) + digest + uvarint.encode(phase0_high + 1)
+    with raises(
+        ConsensusError, f"declared length {phase0_high + 1} is above {phase0_high}"
+    ) as info:
+        consensus.reqresp_decode_chunk("fusaka", _id("beacon_blocks_by_range", 2), ROOT, data)
+    assert info.value.code == 2
+
+
+# The fork before the digest's, and the digest's own fork.
+@pytest.mark.parametrize("exchange", ["pectra", "fusaka"])
+def test_digest_of_a_scheduled_fork(exchange: str) -> None:
+    # The type of a chunk depends on the epoch of its digest alone, not on the fork of the exchange.
+    # Near a fork boundary, a peer can serve a block of a fork that the requester has not reached.
+    protocol = _id("beacon_blocks_by_root", 2)
+    digest = consensus.compute_fork_digest("mainnet", ROOT, 411392)
+    low, _ = consensus.reqresp_response_bounds("fusaka", protocol)
+    decoded = consensus.reqresp_decode_chunk(exchange, protocol, ROOT, _success(digest, bytes(low)))
+    assert decoded == ("fusaka", ResponseChunk(0, digest, bytes(low)))
+
+
+@pytest.mark.parametrize("exchange", ["fusaka", "glamsterdam", "hegota"])
+def test_unscheduled_digest(exchange: str) -> None:
+    # Mainnet schedules neither Gloas (`glamsterdam`) nor Heze (`hegota`).
+    # So no epoch but the far future one has its digest, which uses the version of Heze.
+    # No slot has that epoch, so no payload has that digest, whatever the fork of the exchange.
+    digest = consensus.compute_fork_digest("mainnet", ROOT, FAR_FUTURE_EPOCH)
+    assert consensus.fork_of_digest("mainnet", ROOT, digest) == (FAR_FUTURE_EPOCH, "hegota")
+    # A payload that fits the bounds of Heze, so only the digest is wrong.
+    low, _ = consensus.reqresp_response_bounds("hegota", _id("beacon_blocks_by_range", 2))
+    data = _success(digest, bytes(low))
+    message = f"only the far future epoch has the digest 0x{digest.hex()}"
+    with raises(ConsensusError, message) as info:
+        consensus.reqresp_decode_chunk(exchange, _id("beacon_blocks_by_range", 2), ROOT, data)
+    assert info.value.code == 306
+
+
+def test_digest_of_the_last_scheduled_fork() -> None:
+    # On a chain that schedules every fork, the far future epoch has the digest of the last one.
+    # The first epoch with that digest starts Heze, so the chunk decodes at Heze.
+    config = {"GLOAS_FORK_EPOCH": 500000, "HEZE_FORK_EPOCH": 600000}
+    digest = consensus.compute_fork_digest("mainnet", ROOT, FAR_FUTURE_EPOCH, config)
+    assert consensus.fork_of_digest("mainnet", ROOT, digest, config) == (600000, "hegota")
+    protocol = _id("beacon_blocks_by_range", 2)
+    low, _ = consensus.reqresp_response_bounds("hegota", protocol)
+    data = _success(digest, bytes(low))
+    decoded = consensus.reqresp_decode_chunk("hegota", protocol, ROOT, data, config=config)
+    assert decoded == ("hegota", ResponseChunk(0, digest, bytes(low)))
+
+
 def test_unknown_digest() -> None:
+    # A digest that no epoch of the chain has names no fork.
     digest = bytes(4)
     assert consensus.fork_of_digest("mainnet", ROOT, digest) is None
     data = _success(digest, bytes(8))
@@ -177,6 +236,7 @@ def test_error_chunk() -> None:
 
 
 def test_protocol_not_at_fork() -> None:
+    # The fork of the exchange must define the protocol, whatever the chunk carries.
     protocol = _id("blob_sidecars_by_range", 1)
     with raises(ConsensusError, f"{protocol} is not a protocol of altair") as info:
         consensus.reqresp_decode_chunk("altair", protocol, ROOT, _success(bytes(4), b""))

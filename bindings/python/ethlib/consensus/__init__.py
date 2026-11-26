@@ -426,8 +426,10 @@ def reqresp_decode_chunk(
     """
     One response chunk at the bounds of its fork, with the name of that fork.
 
-    A successful chunk of a protocol that sends a fork digest has the fork of the digest.
-    Any other chunk has the fork of the exchange, which must define the protocol.
+    The fork of the exchange must define the protocol.
+    A successful chunk of a protocol that sends a digest has the fork of the first epoch with it.
+    That epoch must not be the far future one, and the protocol must have a type at its fork.
+    Any other chunk has the fork of the exchange.
     """
     chunk_fork, code, context, payload = _native.consensus_reqresp_decode_chunk(
         name, config, genesis_validators_root, fork, protocol, data
