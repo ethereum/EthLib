@@ -9,8 +9,8 @@ Not yet released.
 
 ### Proof additions
 
-- In Lean, `Base.map_fst_zip_sublist` (`Base/Proofs/List.lean`) states that the first items of a zip are a sublist of the first list, whatever the two lengths.
-  `blockBlobs_sublist` (`Consensus/Proofs/BeaconApi/Blocks.lean`), `ReservedReplay.selected_allocation_round_sum_le` (`Consensus/Proofs/DirectSafety/Apriori/Ownership.lean`), `ledger_processSyncAggregate` (`Consensus/Proofs/Transition/BlockLedger.lean`) and `syncAggregate_floor` (`Consensus/Proofs/Transition/EffectiveFall.lean`) read it in place of their own proofs.
+- In Lean, `Base.map_fst_zip_prefix` (`Base/Proofs/List.lean`) states that the first items of a zip are a prefix of the first list, whatever the two lengths.
+  `blockBlobs_sublist` (`Consensus/Proofs/BeaconApi/Blocks.lean`), `ReservedReplay.selected_allocation_round_sum_le` (`Consensus/Proofs/DirectSafety/Apriori/Ownership.lean`), `ledger_processSyncAggregate` (`Consensus/Proofs/Transition/BlockLedger.lean`) and `syncAggregate_floor` (`Consensus/Proofs/Transition/EffectiveFall.lean`) read its `.sublist` in place of their own proofs.
 
 - In Lean, `ancestor_ghost_payloadTree_of_honest_support` (`Consensus/Proofs/Models/ForkChoice/PayloadTree.lean`) is Lemma 2 of the fast confirmation paper ([arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4), Appendix A.1) on the tree of payload-status nodes ([#2057](https://github.com/ethereum/EthLib/issues/2057)).
   Each block has a pending node, used before its payload status is known, and under it an empty and a full node.
@@ -1110,6 +1110,11 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, the first items of a zip are a prefix of the first list, not only a sublist.
+  - `Base.map_fst_zip_sublist` (`Base/Proofs/List.lean`), which stated `((xs.zip ys).map Prod.fst).Sublist xs`, is renamed `Base.map_fst_zip_prefix` and states `(xs.zip ys).map Prod.fst <+: xs`.
+  - `blockBlobs_sublist` (`Consensus/Proofs/BeaconApi/Blocks.lean`), `ReservedReplay.selected_allocation_round_sum_le` (`Consensus/Proofs/DirectSafety/Apriori/Ownership.lean`), `ledger_processSyncAggregate` (`Consensus/Proofs/Transition/BlockLedger.lean`) and `syncAggregate_floor` (`Consensus/Proofs/Transition/EffectiveFall.lean`) read its `.sublist`.
+  Migration: replace `map_fst_zip_sublist xs ys` with `(map_fst_zip_prefix xs ys).sublist`.
 
 - In Lean, leanXMSS and leanSPHINCS are stated through one strong-unforgeability game, `Cryptography/Proofs/SufCma.lean` ([#4707](https://github.com/ethereum/EthLib/pull/4707), [#4718](https://github.com/ethereum/EthLib/pull/4718)).
   A scheme (`SufCma.Scheme`) has a signer that keeps its key and may fail, and a rule of use on its requests.
