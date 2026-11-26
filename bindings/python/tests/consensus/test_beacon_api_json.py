@@ -22,7 +22,7 @@ from raising import raises, raises_shape
 from .containers import FORKS
 
 VECTORS = Path(__file__).resolve().parents[4] / "tests" / "consensus"
-# The types of ethereum/beacon-APIs at 0ed1255, pinned in tests/sources.toml.
+# The types of ethereum/beacon-APIs at 09256e1, pinned in tests/sources.toml.
 # Some of them refer to others through the OpenAPI document at the top of the repository.
 BEACON_API = VECTORS / "beacon_api"
 SSZ_STATIC = VECTORS / "ssz_static"
@@ -58,7 +58,7 @@ REFERENCE_KEYWORDS = {"$ref", "description", "example", "minLength", "maxLength"
 API_NAMES = {"SyncCommitteeMessage": "SyncCommitteeSignature"}
 
 # The containers of the vendored cases that no types file defines, with what each one is.
-# Neither the types files nor the endpoints of beacon-APIs at 0ed1255 name them.
+# Neither the types files nor the endpoints of beacon-APIs at 09256e1 name them.
 # A test checks that this is exactly the set of containers without a schema.
 NO_SCHEMA = {
     "SigningData": "the object whose root a signature signs",

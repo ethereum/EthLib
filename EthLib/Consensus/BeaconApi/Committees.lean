@@ -21,9 +21,9 @@ The flags `execution_optimistic` and `finalized` come from the store, not from t
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[committees]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/states/committee.yaml
-[sync committees]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/states/sync_committees.yaml
-[PTC]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/states/ptc.yaml
+[committees]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/states/committee.yaml
+[sync committees]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/states/sync_committees.yaml
+[PTC]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/states/ptc.yaml
 -/
 
 @[expose] public section

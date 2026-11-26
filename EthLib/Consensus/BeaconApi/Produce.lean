@@ -23,10 +23,10 @@ From Gloas, the [v4] request carries a [builder configuration] with the terms of
 
 A bid's terms may name the builders they accept, and they set a floor, a cap and a factor.
 
-[v3]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/block.v3.yaml
-[v4]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/block.v4.yaml
-[builder configuration]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/gloas/builder_entry.yaml
-[consensus block value]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/beacon-node-oapi.yaml#L615-L624
+[v3]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/validator/block.v3.yaml
+[v4]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/validator/block.v4.yaml
+[builder configuration]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/types/gloas/builder_entry.yaml
+[consensus block value]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/beacon-node-oapi.yaml#L615-L624
 -/
 
 @[expose] public section

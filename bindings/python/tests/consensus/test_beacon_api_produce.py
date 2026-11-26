@@ -304,7 +304,7 @@ def test_builder_config_rejects_bad_bytes(data: bytes, message: str):
 # A builder configuration built from the examples of ethereum/beacon-APIs.
 # The source is pinned in tests/sources.toml.
 # Each field takes the example of the field, or of its type where the field has none.
-# Commit: 0ed12552077c9927ba2599ee632e76b2caf021d7
+# Commit: 09256e18f0a575e0aef546e06ec773a35fc52938
 # Files: types/gloas/builder_entry.yaml, types/gloas/request_auth.yaml, types/primitive.yaml
 # The source gives no example of a list of keys, so the list holds the one example key.
 EXAMPLE_PUBKEY = (

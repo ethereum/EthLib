@@ -14,7 +14,7 @@ The flags `execution_optimistic` and `finalized` come from the store, not from t
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[states endpoints]: https://github.com/ethereum/beacon-APIs/tree/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/states
+[states endpoints]: https://github.com/ethereum/beacon-APIs/tree/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/states
 -/
 
 @[expose] public section
@@ -197,7 +197,7 @@ def randaoOutOfRange : ErrorMessage :=
 
 [beacon-APIs, `getStateRandao`][randao] gives the error with code 400 for an epoch out of range.
 
-[randao]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/states/randao.yaml
+[randao]: https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/beacon/states/randao.yaml
 -/
 def stateRandao (state : BeaconState preset fork) (epoch : Option Epoch) :
     Except ErrorMessage Bytes32 := do

@@ -6464,7 +6464,7 @@ That chain mines its blocks before the merge with a zero mix hash and a zero non
 
 ### Beacon API
 
-The Beacon API is the HTTP interface of a consensus client, as commit `0ed1255` of `ethereum/beacon-APIs` defines it.
+The Beacon API is the HTTP interface of a consensus client, as commit `09256e1` of `ethereum/beacon-APIs` defines it.
 EthLib specifies the consensus version that its responses carry and their JSON encodings; it leaves out the transport.
 
 A response names the fork of its data by a consensus version, one name for each fork of the consensus layer.
@@ -6665,7 +6665,7 @@ The same module gives the headers, the data column sidecars and the payload enve
 The Python suite builds the store of a Gloas fork choice case with one block and its envelope.
 It checks the header and headers answers of that block and of the anchor, with each filter, against headers that it builds from the JSON of the blocks.
 It checks the envelope answer against the pinned envelope, and code 404 for the anchor and for another message.
-The [endpoint that gives a proposer its envelope](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/execution_payload_envelope.yaml) reads the envelope that the node built for the current slot.
+The [endpoint that gives a proposer its envelope](https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/validator/execution_payload_envelope.yaml) reads the envelope that the node built for the current slot.
 That cache is an input of at most one entry, since the source says the node keeps only that one.
 `cachedEnvelopeOf_ok` shows that an answer is the cached envelope, cached for the slot of the request and naming its block root.
 So a client never gets an envelope of another slot, or one committed to a block that a reorg replaced.
@@ -6694,7 +6694,7 @@ The mixes must also still hold the seed of the epoch.
 In the window a repeated index gets code 400.
 Distinct indices run the duty of each requested validator in turn, in request order, and the first index that fails ends the answer.
 The PTC of the Gloas fork epoch is computed at the fork, from balances of the epoch before, so blocks of the epoch before the fork can still change it.
-So its dependent root is the block root at the last slot before the fork epoch, as [`ptc.yaml`](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/duties/ptc.yaml#L19-L27) requires, and every other epoch keeps a lag of one epoch (`dutiesResponse_ptc_root`).
+So its dependent root is the block root at the last slot before the fork epoch, and every later epoch keeps a lag of one epoch, as [`ptc.yaml`](https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/apis/validator/duties/ptc.yaml#L19-L27) requires (`dutiesResponse_ptc_root`).
 The upgrade to Fulu computes the proposers of the Fulu fork epoch in the same way, after the epoch processing of the epoch before.
 So up to the Fulu fork epoch, the second proposer answer gives the block root at the last slot before the epoch (`dutiesResponse_proposerV2_of_le_fulu`).
 After it, the root keeps a lag of one epoch (`dutiesResponse_proposerV2_of_fulu_lt`).
@@ -7098,8 +7098,8 @@ Both assume that the balance covers the participant reward once per seat of the 
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_sync_rewards.py`) checks each reward against the balances of the pinned sync aggregate vectors, the proposer with its share.
 It checks the selection of named members once each, by index or key, and code 400 for an invalid identifier and for a state before Altair.
 
-The [response types](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/rewards.yaml) give each signed amount of the attestation and sync committee rewards the type `Int64`.
-The [schema of `Int64`](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/primitive.yaml) is a decimal string with no stated range, and EthLib reads its name as the signed 64-bit range, from `-2^63` to `2^63 - 1`.
+The [response types](https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/types/rewards.yaml) give each signed amount of the attestation and sync committee rewards the type `Int64`.
+The [schema of `Int64`](https://github.com/ethereum/beacon-APIs/blob/09256e18f0a575e0aef546e06ec773a35fc52938/types/primitive.yaml) is a decimal string with no stated range, and EthLib reads its name as the signed 64-bit range, from `-2^63` to `2^63 - 1`.
 EthLib computes these amounts as unbounded integers.
 Before Altair, the reward of a matched vote can fall outside that range.
 Rather than a 64-bit signed field, which would wrap or need a check at each part, the response checks every amount once, before it writes the answer.
