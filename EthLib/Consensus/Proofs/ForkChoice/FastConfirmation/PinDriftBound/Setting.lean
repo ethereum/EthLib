@@ -617,13 +617,8 @@ def keyExtra (t : PinTerms preset) {x y : ForkedBeaconState preset}
 theorem sum_map_sync (events : List (BalanceEvent preset))
     (k : BalanceEvent preset → ℕ) :
     (events.map fun e => if e.source = .sync then k e else 0).sum =
-      ((events.filter (·.source = .sync)).map k).sum := by
-  induction events with
-  | nil => rfl
-  | cons e rest ih =>
-    by_cases sync : e.source = .sync
-    · simp [sync, ih]
-    · simp [sync, ih]
+      ((events.filter (·.source = .sync)).map k).sum :=
+  Base.sum_map_ite_eq_sum_filter (fun e => e.source = .sync) k events
 
 /-- The sync debits of a key over a list of events are the debits of its sync events. -/
 theorem sum_syncDebit_eq (events : List (BalanceEvent preset)) (v : ℕ) :
@@ -835,8 +830,8 @@ private theorem sum_credits_split (events : List (BalanceEvent preset))
       ((events.filter (q ·.source)).map f).sum + (events.map g).sum := by
   have ite (p : BalanceSource → Bool) : ((events.filter (p ·.source)).map f).sum =
       (events.map fun e => if p e.source = true then f e else 0).sum := by
-    rw [List.sum_map_ite (fun e : BalanceEvent preset => p e.source = true) f (fun _ => 0)]
-    simp
+    simpa only [Bool.decide_eq_true] using
+      (Base.sum_map_ite_eq_sum_filter (fun e => p e.source = true) f events).symm
   rw [ite, ite, ite, ← List.sum_map_add, ← List.sum_map_add]
   refine List.sum_le_sum fun e member => ?_
   by_cases hr : r e.source = true

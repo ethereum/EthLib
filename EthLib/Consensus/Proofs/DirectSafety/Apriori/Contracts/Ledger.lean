@@ -443,9 +443,9 @@ private theorem opened_exit_capacity_le_paid (x : ForkedBeaconState preset) (hig
       ∑ t ∈ Finset.range (driftHorizon x high + 2),
         if exitQueueStart x - (getCurrentEpoch x.state).toNat ≤ t then
           exitFlowAt (config := config) x high t else 0 := by
-    have sums := List.sum_map_ite
+    have sums := Base.sum_map_ite_eq_sum_filter
       (fun t => exitQueueStart x - (getCurrentEpoch x.state).toNat ≤ t)
-      (exitFlowAt (config := config) x high) (fun _ => 0) (List.range (driftHorizon x high + 2))
+      (exitFlowAt (config := config) x high) (List.range (driftHorizon x high + 2))
     rw [← List.sum_toFinset _ List.nodup_range] at sums
     simpa [zero, List.toFinset_range] using sums.symm
   rw [convertSum]
@@ -845,8 +845,7 @@ theorem stopped_charges_le_run {x y : ForkedBeaconState preset}
         tail.departureCharges[j.val].amount else 0)).sum = _
     rw [List.ofFn_getElem_eq_map tail.departureCharges
       (fun c => if c.epoch ≤ cutoff then c.amount else 0)]
-    simpa using List.sum_map_ite (fun c : DepartureCharge => c.epoch ≤ cutoff)
-      (·.amount) (fun _ => 0) tail.departureCharges
+    exact Base.sum_map_ite_eq_sum_filter _ _ tail.departureCharges
   exact bound.trans_eq sums
 private theorem Stop.charge_endpoint {x y : ForkedBeaconState preset}
     {tail : Run config checks x y} {i : Nat} (stop : Stop tail i)

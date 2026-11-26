@@ -1155,14 +1155,10 @@ private theorem cut_whistle (h : Setting config checks g split fin pulled anc co
     BalanceEvent.credits pre replayed fun e _ _ => by
       simpa [Internal.keyCredit] using Internal.keys_credits_le keys e
   have limits := Internal.slashing_credits_le_limits events fun e member => (bounded e member).1
-  have slashings : (events.map fun e =>
-      if decide (e.source = .slashings) = true ∨ false = true then e.credits else 0).sum =
-      ((events.filter (·.source = .slashings)).map BalanceEvent.credits).sum := by
-    simp only [decide_eq_true_eq, Bool.false_eq_true, or_false]
-    rw [List.sum_map_ite (fun e : BalanceEvent preset => e.source = .slashings)
-      BalanceEvent.credits (fun _ => 0)]
-    simp
-  refine (scan.trans (slashings.le.trans limits)).trans ?_
+  simp only [decide_eq_true_eq, Bool.false_eq_true, or_false] at scan
+  rw [Base.sum_map_ite_eq_sum_filter (fun e : BalanceEvent preset => e.source = .slashings)
+    BalanceEvent.credits events] at scan
+  refine (scan.trans limits).trans ?_
   by_cases late : high + 1 < (getCurrentEpoch b).toNat
   · rw [balanceEvents_late pre sameEpoch late] at replayed
     cases replayed
