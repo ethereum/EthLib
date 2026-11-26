@@ -314,6 +314,71 @@ theorem checkForgery_eq_false_of_returned (pk : PublicKey)
   obtain ⟨_, _, rfl⟩ := hb
   simp [h]
 
+/-! ## A signer whose key keeps an invariant -/
+
+omit [DecidableEq Message] [DecidableEq Signature] in
+/-- A signer whose key keeps an invariant answers each request as one logged signer.
+
+From a key with the invariant, one computation gives the answer of both and the next key.
+
+One computation gives both: mapped, it is the scheme's step, and its first part the signer's answer.
+
+The next key has the invariant too.
+
+The final key is read only through a map that is constant on keys with the invariant.
+
+A map to a single point drops the final key. -/
+theorem run_simulateQ_signingOracle_of_invariant (P : SecretKey → Prop)
+    (signer : Request → OracleComp (unifSpec + hs) (Option Signature))
+    (hsign : ∀ sk, P sk → ∀ request,
+      ∃ c : OracleComp (unifSpec + hs) (Option Signature × {sk' // P sk'}),
+        scheme.sign sk request = (fun x => (x.1, x.2.1)) <$> c ∧
+          signer request = Prod.fst <$> c)
+    {β : Type} (g : SecretKey → β) (b : β) (hg : ∀ sk, P sk → g sk = b)
+    {α : Type} (oa : OracleComp ((unifSpec + hs) + SigningSpec Request Signature) α)
+    (sk : SecretKey) (hsk : P sk) :
+    (fun p => ((p.1.1, g p.1.2), p.2)) <$> ((simulateQ (QueryImpl.ofLift (unifSpec + hs)
+      (StateT SecretKey (WriterT (QueryLog (SigningSpec Request Signature))
+        (OracleComp (unifSpec + hs)))) + signingOracle scheme) oa).run sk).run =
+      (fun p => ((p.1, b), p.2)) <$> (simulateQ (QueryImpl.ofLift (unifSpec + hs)
+        (WriterT (QueryLog (SigningSpec Request Signature)) (OracleComp (unifSpec + hs))) +
+          QueryImpl.withLogging signer) oa).run := by
+  induction oa using OracleComp.inductionOn generalizing sk with
+  | pure a => simp [hg sk hsk]
+  | query_bind t k ih =>
+    rcases t with t | request
+    · -- A coin or a hash passes through, and the key stays.
+      simp
+      exact bind_congr fun x => by
+        simpa [Functor.map_map] using congrArg (fun z => (fun q => (q.1, x.2 ++ q.2)) <$> z)
+          (ih x.1 sk hsk)
+    · -- A request runs the shared computation, and the next key keeps the invariant.
+      obtain ⟨c, hc, hsigner⟩ := hsign sk hsk request
+      simp [signingOracle, hc, hsigner]
+      exact bind_congr fun x => by
+        simpa [Functor.map_map] using
+          congrArg (fun z => (fun q => (q.1, ⟨request, x.1⟩ :: q.2)) <$> z) (ih x.1 x.2.1 x.2.2)
+
+/-- After key generation, a signer whose key keeps an invariant logs one signer's answers.
+
+The key that the game starts from has the invariant. -/
+theorem gameAfterKeys_of_invariant
+    (adversary : Adversary hs Request Message PublicKey Signature) (pk : PublicKey)
+    (P : SecretKey → Prop) (signer : Request → OracleComp (unifSpec + hs) (Option Signature))
+    (hsign : ∀ sk, P sk → ∀ request,
+      ∃ c : OracleComp (unifSpec + hs) (Option Signature × {sk' // P sk'}),
+        scheme.sign sk request = (fun x => (x.1, x.2.1)) <$> c ∧
+          signer request = Prod.fst <$> c)
+    (sk : SecretKey) (hsk : P sk) :
+    gameAfterKeys scheme adversary pk sk =
+      (simulateQ (QueryImpl.ofLift (unifSpec + hs)
+        (WriterT (QueryLog (SigningSpec Request Signature)) (OracleComp (unifSpec + hs))) +
+          QueryImpl.withLogging signer) (adversary.main pk)).run >>= checkForgery scheme pk := by
+  have h := run_simulateQ_signingOracle_of_invariant scheme P signer hsign (fun _ => ()) ()
+    (fun _ _ => rfl) (adversary.main pk) sk hsk
+  exact (bind_map_left _ _ fun y => checkForgery scheme pk (y.1.1, y.2)).symm.trans
+    ((congrArg (· >>= _) h).trans (bind_map_left _ _ _))
+
 /-! ## A signer that keeps its key -/
 
 omit [DecidableEq Message] [DecidableEq Signature] in
@@ -330,13 +395,12 @@ theorem run_simulateQ_signingOracle_of_sign_eq (sk : SecretKey)
       (fun p => ((p.1, sk), p.2)) <$> (simulateQ (QueryImpl.ofLift (unifSpec + hs)
         (WriterT (QueryLog (SigningSpec Request Signature)) (OracleComp (unifSpec + hs))) +
           QueryImpl.withLogging signer) oa).run := by
-  induction oa using OracleComp.inductionOn with
-  | pure a => simp
-  | query_bind t k ih =>
-    -- A coin or a hash passes through, and a request signs and logs; the key stays.
-    rcases t with t | request
-    · simp [ih]
-    · simp [signingOracle, hsign, ih]
+  -- The key is the invariant, and the signer's step returns it unchanged.
+  have h := run_simulateQ_signingOracle_of_invariant scheme (· = sk) signer
+    (fun _ h request => ⟨(fun s => (s, ⟨sk, rfl⟩)) <$> signer request,
+      by rw [h, hsign, Functor.map_map], by rw [Functor.map_map, id_map']⟩)
+    id sk (fun _ => id) oa sk rfl
+  simpa using h
 
 /-- After key generation, the game of a signer that keeps its key logs one signer's answers. -/
 theorem gameAfterKeys_of_sign_eq
@@ -346,9 +410,10 @@ theorem gameAfterKeys_of_sign_eq
     gameAfterKeys scheme adversary pk sk =
       (simulateQ (QueryImpl.ofLift (unifSpec + hs)
         (WriterT (QueryLog (SigningSpec Request Signature)) (OracleComp (unifSpec + hs))) +
-          QueryImpl.withLogging signer) (adversary.main pk)).run >>= checkForgery scheme pk := by
-  unfold gameAfterKeys
-  rw [run_simulateQ_signingOracle_of_sign_eq scheme sk signer hsign, bind_map_left]
+          QueryImpl.withLogging signer) (adversary.main pk)).run >>= checkForgery scheme pk :=
+  gameAfterKeys_of_invariant scheme adversary pk (· = sk) signer
+    (fun _ h request => ⟨(fun s => (s, ⟨sk, rfl⟩)) <$> signer request,
+      by rw [h, hsign, Functor.map_map], by rw [Functor.map_map, id_map']⟩) sk rfl
 
 /-! ## A larger slack -/
 

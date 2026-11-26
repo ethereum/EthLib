@@ -226,6 +226,13 @@ theorem SecretKey.Reachable.signWith_fst {H : Array UInt64 → Id Lanes4} {seed 
         (node H sk.publicParam (seedPrf H sk.schemeSeed) .bottom LAYER_HEIGHT
           (bottomTree idx)).run.toArray).run <;> rfl
 
+/-- Two keys reachable from one seed sign alike: the same signature or the same error. -/
+theorem SecretKey.Reachable.signWith_fst_eq {H : Array UInt64 → Id Lanes4} {seed : Seed}
+    {sk sk' : SecretKey} (h : sk.Reachable H seed) (h' : sk'.Reachable H seed)
+    (idx : LeafIndex) (msg : Message) :
+    (signWith H sk idx msg).run.1 = (signWith H sk' idx msg).run.1 := by
+  rw [h.signWith_fst rfl rfl, h'.signWith_fst rfl rfl]
+
 /-- **A reachable key's signature holds one honest signature per layer.**
 
 - The bottom key `idx` signs the message, and the path is the key's path in bottom tree `b`.
