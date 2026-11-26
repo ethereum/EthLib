@@ -80,6 +80,7 @@ public import EthLib.Consensus.Gossip.InclusionList
 public import EthLib.Consensus.Gossip.LightClient
 public import EthLib.Consensus.Gossip.Message
 public import EthLib.Consensus.Gossip.Bounds
+public import EthLib.Consensus.Gossip.Decode
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.Payload
 public import EthLib.Consensus.Gossip.ProposerPreferences

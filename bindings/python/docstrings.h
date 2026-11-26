@@ -1037,6 +1037,9 @@
 #define DOC_consensus_gossip_topic_bound \
   "The largest length of the payload of a gossip topic at a fork."
 
+#define DOC_consensus_gossip_decode_at_topic \
+  "The data of a gossip message at the fork of its topic's digest, with that fork and the topic."
+
 #define DOC_consensus_compute_subnet_for_attestation \
   "The subnet of an attestation, from the committees per slot, its slot and its committee index."
 

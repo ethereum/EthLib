@@ -553,6 +553,11 @@ eth_consensus_gossip_topic_bound(
 );
 
 extern lean_object*
+eth_consensus_gossip_decode_at_topic(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_compute_subnet_for_attestation(
   lean_object* name,
   uint64_t committees_per_slot,
@@ -2664,6 +2669,14 @@ py_consensus_gossip_topic_bound(
   lean_object* a[3];
   if (!three_str_args(args, "name", "fork", "topic", a)) return NULL;
   return except_into_pyint(eth_consensus_gossip_topic_bound(a[0], a[1], a[2]), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_gossip_decode_at_topic(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_gossip_decode_at_topic, args, 5, CONSENSUS_ERROR);
 }
 
 PyObject*

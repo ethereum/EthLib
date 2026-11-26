@@ -57,6 +57,15 @@ inductive TopicError where
   | name (name : String)
   deriving Repr, DecidableEq
 
+/-- The stable code of a topic error, one per constructor, for the C exports.
+
+The codes start at 201, after those of the payload and RPC errors of gossip. -/
+def TopicError.code : TopicError → UInt32
+  | .notEth2 => 201
+  | .forkDigest _ => 202
+  | .encoding => 203
+  | .name _ => 204
+
 /-- The value of a lowercase hex digit. -/
 def hexDigit? (c : Char) : Option Nat :=
   (Base.hexValue? c (upper := false)).map UInt8.toNat

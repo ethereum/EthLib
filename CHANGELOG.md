@@ -9,6 +9,18 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Consensus.decodeGossipAtTopic` (`Consensus/Gossip/Decode.lean`) decodes the data of a gossip message at the bound of its topic.
+  The bound is that of the fork that the topic's digest names, so the caller passes no fork and no bound.
+  That fork is the fork of the first epoch with the digest, as `forkOfDigest` finds it.
+  A digest that no epoch has raises `BoundsError.unknownDigest`, code 305.
+  A digest that only the far future epoch has raises `BoundsError.unscheduledDigest`, code 306, since no message has it.
+  A name that is no topic of the fork raises `BoundsError.topicNotAtFork`, code 303.
+  A malformed topic raises the new codes of `Networking.Gossip.TopicError`, 201 to 204, and refused data the code of `PayloadError`.
+  The new `gossip_decode_at_topic` of `ethlib.consensus` returns the names of the fork and the topic, with the payload.
+  `EthLib.Consensus.Proofs.Gossip.Decode` states that a decoded message is one that the payload decoder accepts at the bound of a topic of its fork (`decodeGossipAtTopic_eq_ok`).
+  With `digestsIdentify`, the topic of an epoch's digest decodes at that epoch's fork (`decodeGossipAtTopic_fork_of_digest`).
+  A message that a node serializes at that fork, sent on that topic, decodes and reads back (`decodeGossipAtTopic_message`).
+
 - In Lean, `Base.map_fst_zip_prefix` (`Base/Proofs/List.lean`) states that the first items of a zip are a prefix of the first list, whatever the two lengths.
   `blockBlobs_sublist` (`Consensus/Proofs/BeaconApi/Blocks.lean`), `ReservedReplay.selected_allocation_round_sum_le` (`Consensus/Proofs/DirectSafety/Apriori/Ownership.lean`), `ledger_processSyncAggregate` (`Consensus/Proofs/Transition/BlockLedger.lean`) and `syncAggregate_floor` (`Consensus/Proofs/Transition/EffectiveFall.lean`) read its `.sublist` in place of their own proofs.
 
