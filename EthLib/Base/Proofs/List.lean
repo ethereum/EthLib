@@ -160,6 +160,11 @@ theorem map_fst_zip_prefix {α β : Type} (xs : List α) (ys : List β) :
   rw [List.zip_eq_zip_take_min, List.map_fst_zip (by simp)]
   exact List.take_prefix _ _
 
+/-- A relation that holds pairwise on a list holds pairwise on the first items of its zip. -/
+theorem pairwise_zip_of_pairwise {α β : Type} {R : α → α → Prop} {xs : List α}
+    (holds : xs.Pairwise R) (ys : List β) : (xs.zip ys).Pairwise fun a b => R a.1 b.1 :=
+  List.pairwise_map.mp (holds.sublist (map_fst_zip_prefix xs ys).sublist)
+
 /-- The keys of a list without repeated keys are its keys without duplicates. -/
 theorem map_eraseDupsBy {α β : Type} [BEq β] (key : α → β) :
     ∀ l : List α, (l.eraseDupsBy fun a b => key a == key b).map key = (l.map key).eraseDups
@@ -382,6 +387,37 @@ theorem sum_map_ite_eq_sum_filter {α : Type} (test : α → Prop) [DecidablePre
   induction entries with
   | nil => rfl
   | cons entry rest ih => by_cases passes : test entry <;> simp [passes, ih]
+
+/-- A prefix that a predicate keeps is the first elements, as many as it keeps. -/
+theorem _root_.List.takeWhile_eq_take {α : Type} (p : α → Bool) :
+    ∀ l : List α, l.takeWhile p = l.take (l.takeWhile p).length
+  | [] => rfl
+  | a :: l => by
+    cases h : p a
+    · simp [h]
+    · simp only [List.takeWhile_cons, h, ↓reduceIte, List.length_cons, List.take_succ_cons]
+      exact congrArg _ (List.takeWhile_eq_take p l)
+
+/-- What a predicate drops from the front is the rest after the prefix it keeps. -/
+theorem _root_.List.dropWhile_eq_drop {α : Type} (p : α → Bool) :
+    ∀ l : List α, l.dropWhile p = l.drop (l.takeWhile p).length
+  | [] => rfl
+  | a :: l => by
+    cases h : p a
+    · simp [h]
+    · simp only [List.takeWhile_cons, List.dropWhile_cons, h, ↓reduceIte, List.length_cons,
+        List.drop_succ_cons]
+      exact List.dropWhile_eq_drop p l
+
+/-- In a list without repeats, the first index of the element at `j` is `j`. -/
+theorem _root_.List.findIdx?_eq_of_nodup {α : Type} [DecidableEq α] {l : List α}
+    (hl : l.Nodup) {j : Nat} (hj : j < l.length) : l.findIdx? (· = l[j]) = some j := by
+  rw [List.findIdx?_eq_some_iff_getElem]
+  refine ⟨hj, by simp, fun k hk => ?_⟩
+  simp only [decide_eq_true_eq]
+  intro h
+  have := hl.eq_of_getElem_eq (by omega) hj h
+  omega
 
 /-- Dropping the front where a test holds keeps each member that fails the test. -/
 theorem mem_dropWhile_of_eq_false {α : Type} {test : α → Bool} {member : α}

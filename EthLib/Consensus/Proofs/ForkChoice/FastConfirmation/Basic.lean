@@ -114,7 +114,7 @@ private theorem mem_foldl_insert {committee participants : Std.TreeSet Validator
   rw [Std.TreeSet.foldl_eq_foldl_toList, mem_list_foldl_insert, Std.TreeSet.mem_toList]
 
 /-- The members of a set with an array folded in: those of the set and of the array. -/
-private theorem mem_array_foldl_insert {committee : Array ValidatorIndex}
+theorem mem_array_foldl_insert {committee : Array ValidatorIndex}
     {participants : Std.TreeSet ValidatorIndex} {v : ValidatorIndex} :
     v ∈ committee.foldl (·.insert ·) participants ↔ v ∈ participants ∨ v ∈ committee := by
   rw [← Array.foldl_toList, mem_list_foldl_insert, Array.mem_toList_iff]

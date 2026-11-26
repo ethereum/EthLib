@@ -261,19 +261,6 @@ private theorem coverage_exists_of_maximum {store : Store preset fork} {head : R
   simp only [isFullValidatorSetCovered, firstOk, lastFirstOk, afterOk, Except.mapError,
     bind, Except.bind, pure, Except.pure]
 
-
-/-- Folding a committee into a set preserves a property held by both inputs. -/
-private theorem members_array_insert {committee : Array ValidatorIndex}
-    {members : Std.TreeSet ValidatorIndex} (P : ValidatorIndex → Prop)
-    (old : ∀ v ∈ members, P v) (new : ∀ v ∈ committee, P v) :
-    ∀ v ∈ committee.foldl (·.insert ·) members, P v := by
-  apply Array.foldl_induction (fun _ set => ∀ v ∈ set, P v) old
-  intro i set held v member
-  rcases Std.TreeSet.mem_insert.mp member with same | previous
-  · have same : committee[i] = v := Std.LawfulEqCmp.compare_eq_iff_eq.mp same
-    exact same ▸ new _ (Array.getElem_mem i.isLt)
-  · exact held v previous
-
 /-- Every member of a successful slot committee is active at that slot in the head state. -/
 private theorem active_of_slotCommittee {store : Store preset fork} {head : Root} {slot : Slot}
     {state : BeaconState preset fork} {members : Std.TreeSet ValidatorIndex}
@@ -286,11 +273,13 @@ private theorem active_of_slotCommittee {store : Store preset fork} {head : Root
     (fun set index next old step => ?_) (by simp) read
   obtain ⟨committee, computed, result⟩ := bind_ok_iff.mp step
   cases result
-  apply members_array_insert _ old
+  -- A member of the new set is an old member or a member of the committee.
   intro v member
-  exact isActiveAt_eq_true_iff.mpr
-    ((mem_getActiveValidatorIndices within).mp
-      (mem_getActiveValidatorIndices_of_getBeaconCommittee (mapError_ok_iff.mp computed) member))
+  rcases mem_array_foldl_insert.mp member with previous | seated
+  · exact old v previous
+  · exact isActiveAt_eq_true_iff.mpr
+      ((mem_getActiveValidatorIndices within).mp
+        (mem_getActiveValidatorIndices_of_getBeaconCommittee (mapError_ok_iff.mp computed) seated))
 
 /-- A window member is active at a queried epoch of the held head state. -/
 private theorem active_of_committeeWindow {store : Store preset fork} {head : Root}

@@ -26,22 +26,6 @@ theorem buildProof_rebuilds_value_root (shape : Desc) (value : Value) (root : By
   cases readRoot
   exact ⟨branch, by simpa only [buildProof, indexed, Bind.bind, Except.bind] using built, correct⟩
 
-private theorem mapM_node_width (read : Nat → Except Err Bytes)
-    (widths : ∀ index node, read index = .ok node → node.size = bytesPerChunk)
-    (indices : List Nat) (nodes : List Bytes) (built : indices.mapM read = .ok nodes) :
-    ∀ node ∈ nodes, node.size = bytesPerChunk := by
-  -- Every output node comes from one successful read, so its width follows individually.
-  induction indices generalizing nodes with
-  | nil => simp_all [Pure.pure, Except.pure]
-  | cons index rest ih =>
-    cases head : read index <;> cases tail : rest.mapM read <;>
-      simp [List.mapM_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at built
-    subst nodes
-    intro value member
-    rcases List.mem_cons.mp member with rfl | member
-    · exact widths index _ head
-    · exact ih _ tail value member
-
 /-- Every constructed branch for a readable node passes verification against the value's root. -/
 theorem buildProof_verifies (shape : Desc) (value : Value) (root : Bytes)
     (rooted : hashTreeRoot shape value = .ok root)
@@ -56,8 +40,11 @@ theorem buildProof_verifies (shape : Desc) (value : Value) (root : Bytes)
   refine ⟨branch, built, (verifyMerkleProof_eq_true_iff leaf branch index root).mpr
     ⟨widths index leaf readLeaf, ?_, rebuilt⟩⟩
   -- Every generated sibling inherits its width from a successful node read.
-  apply mapM_node_width (nodeRoot shape value) widths indices branch
-  simpa only [buildProof, indexed, Bind.bind, Except.bind] using built
+  have read : indices.mapM (nodeRoot shape value) = .ok branch := by
+    simpa only [buildProof, indexed, Bind.bind, Except.bind] using built
+  intro node member
+  obtain ⟨position, _, ok⟩ := Base.mapM_ok_mem read node member
+  exact widths position node ok
 
 /-- An admissible value has a root and a verified branch for every readable non-root node. -/
 theorem buildProof_fits_verifies (shape : Desc) (value : Value)

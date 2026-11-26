@@ -116,19 +116,6 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
     subst hw
     exact lengthWord_size selector
 
-private theorem mapM_width {α : Type} (f : α → Except Err Bytes)
-    (widths : ∀ value node, f value = .ok node → node.size = bytesPerChunk)
-    (values : List α) (nodes : List Bytes) (success : values.mapM f = .ok nodes) :
-    ∀ node ∈ nodes, node.size = bytesPerChunk := by
-  -- A successful traversal contributes one complete root for each retained value.
-  induction values generalizing nodes with
-  | nil => simp_all [Pure.pure, Except.pure]
-  | cons value values ih =>
-    cases head : f value <;> cases tail : values.mapM f <;>
-      simp [List.mapM_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at success
-    subst nodes
-    exact List.forall_mem_cons.mpr ⟨widths value _ head, ih _ tail⟩
-
 private theorem layoutChunksAt_width (budget : Nat) (layout : MerkleLayout)
     (layoutWidth : LayoutWidth layout)
     (rootWidth : ∀ shape value node, hashTreeRootAt budget shape value = .ok node →
@@ -158,11 +145,11 @@ private theorem layoutChunksAt_width (budget : Nat) (layout : MerkleLayout)
       simp only [bind, Except.bind, h, pure, Except.pure, Except.ok.injEq] at success
       subst chunks
       -- Every occupied slot contributes a complete child root, and every inactive slot contributes a complete zero node.
-      have each := mapM_width f (by
-        intro slot node made
+      have each : ∀ node ∈ nodes, node.size = bytesPerChunk := fun node member => by
+        obtain ⟨slot, _, made⟩ := Base.mapM_ok_mem h node member
         cases slot with
         | none => cases made; exact zeroChunk_size
-        | some pair => exact rootWidth pair.1 pair.2 node made) _ _ h
+        | some pair => exact rootWidth pair.1 pair.2 node made
       simpa using each
 
 /-- Every successful value root is a complete hash node, even without declaration assumptions. -/

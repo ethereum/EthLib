@@ -578,8 +578,8 @@ theorem parentRoot_mem_payloadChain_iff (gloas : .glamsterdam ≤ fork) {root : 
 private theorem dropWhile_not_of_find?_eq_none {test : Root → Bool} {roots : List Root}
     (missing : roots.find? test = none) : (roots.dropWhile fun root => !test root) = [] := by
   -- Every root fails the test, so the whole list is dropped.
-  have dropped := List.dropWhile_append_of_pos (l₂ := ([] : List Root))
-    (p := fun root => !test root) fun root member => by
+  have dropped : ((roots ++ []).dropWhile fun root => !test root) = [] :=
+    List.dropWhile_append_of_pos fun root member => by
       simpa using List.find?_eq_none.mp missing root member
   simpa using dropped
 
