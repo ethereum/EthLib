@@ -273,17 +273,14 @@ private theorem foldlM_addFlags_ok {fork : Fork} (flags : List UInt64) :
             let old := participation.data[index.toNat]
             return ⟨participation.data.set index.toNat (flags.foldl addFlag old) inside,
               fun before => by simpa using participation.bound before⟩
-          else throw (.accessor (.indexOutOfRange index))) = .ok out
-  | [], participation, _ => ⟨participation, rfl⟩
-  | index :: rest, participation, inside => by
-    have here := inside index List.mem_cons_self
-    obtain ⟨out, folded⟩ := foldlM_addFlags_ok flags rest
-      ⟨participation.data.set index.toNat (flags.foldl addFlag participation.data[index.toNat])
-        here, fun before => by simpa using participation.bound before⟩
-      (fun other member => by simpa using inside other (List.mem_cons_of_mem _ member))
-    refine ⟨out, ?_⟩
-    simp only [List.foldlM_cons, here, ↓reduceDIte, pure, Except.pure, bind, Except.bind]
-    exact folded
+          else throw (.accessor (.indexOutOfRange index))) = .ok out := by
+  intro attesters participation inside
+  -- Each step sets one entry, so the size stays that of the start and each attester is in range.
+  refine foldlM_exists_ok_of_invariant (fun current : EpochParticipation preset fork =>
+    current.data.size = participation.data.size) ?_ participation rfl
+  intro current index member sized
+  have here : index.toNat < current.data.size := sized ▸ inside index member
+  simpa [here, pure, Except.pure] using sized
 
 /-- One pending attestation translates when its flags and attesters read, each attester in range. -/
 private theorem translateAttestation_exists_ok {state : BeaconState preset .altair}
