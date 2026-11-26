@@ -92,7 +92,7 @@ private theorem LookaheadActive.advanceSlot
     {state after : BeaconState preset fork} (h : LookaheadActive state)
     (ok : Consensus.advanceSlot config checks state = .ok after) : LookaheadActive after := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   unfold epochIfLast at epochedOk
   split at epochedOk
   · rename_i end_

@@ -118,7 +118,7 @@ theorem mixesKeptBut_processEpoch (computed : processEpoch config checks state =
 theorem mixesKeptBut_advanceSlot (computed : advanceSlot config checks state = .ok after) :
     MixesKeptBut (getCurrentEpoch after) state after := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   -- The slot step writes neither the mixes nor the slot.
   have cachedMixes : cached.randaoMixes = state.randaoMixes := by rw [cachedEq]
   have cachedSlot : cached.slot = state.slot := by rw [cachedEq]

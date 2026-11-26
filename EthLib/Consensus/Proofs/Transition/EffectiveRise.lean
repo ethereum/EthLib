@@ -77,7 +77,7 @@ private theorem run_queueFrom {x y : ForkedBeaconState preset} (tail : Run confi
         exact .inr ⟨w', read', by rw [kept.exitEpoch assigned]; exact later⟩
     · exact .inr ⟨w, read, UInt64.lt_of_le_of_lt le later⟩
   · subst lastEq
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     exact prior altair
 
 /-! ### What the epoch keeps up to the update of the effective balances -/
@@ -817,7 +817,7 @@ private theorem rise_edge {z z' : ForkedBeaconState preset}
   obtain ⟨nextSlot, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok advancedOk
   have slotAfter : z'.state.slot = nextSlot := processUpgrades_slot upgraded
   have cachedOk' := cachedOk
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   unfold epochIfLast at epochedOk
   split at epochedOk
   swap
@@ -949,7 +949,7 @@ private theorem run_depositCarry {x y : ForkedBeaconState preset} (tail : Run co
       exact prior one two)
     (fun _ _ lastEq cachedOk _ prior => by
       subst lastEq
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+      obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
       exact prior)
     tail same
 
@@ -1260,7 +1260,7 @@ theorem effectiveRise_le
   have effZR : ∀ i < r.validators.data.size, effectiveAt ⟨F, zs⟩ i = effectiveAt ⟨F, r⟩ i :=
     fun i inside => keptZ i inside
   -- The state that the rewards read is the last state of the epoch, after justification.
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have justifiedSame :=
     (show EpochStage.Edge config checks .justification cached justified from justifiedOk).records
       ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩

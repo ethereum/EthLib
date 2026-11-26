@@ -487,7 +487,7 @@ theorem advanceSlot_validators_size_le {fork : Base.Fork} {s t : BeaconState pre
         ((getCurrentEpoch t).toNat - (getCurrentEpoch s).toNat) *
           preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
   obtain ⟨next, cached, epoched, nextOk, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, cacheEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cacheEq⟩ := processSlot_ok cachedOk
   have cacheSize : cached.validators.data.size = s.validators.data.size := by rw [cacheEq]
   have cacheSlot := processSlot_slot cachedOk
   unfold epochIfLast at epochedOk

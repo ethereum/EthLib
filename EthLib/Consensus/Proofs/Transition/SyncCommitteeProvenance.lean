@@ -1134,7 +1134,7 @@ private theorem advanceSlotStep (ok : Consensus.advanceSlot config checks state 
               after.currentSyncCommittee altair = state.nextSyncCommittee altair)) := by
   have later := (runKept_advanceSlot ok).later
   obtain ⟨next, cached, epoched, nextVal, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have cachedEpoch : getCurrentEpoch cached = getCurrentEpoch state := by
     rw [cachedEq]
     rfl

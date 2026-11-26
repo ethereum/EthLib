@@ -369,7 +369,7 @@ private theorem crossing_fall {z z' : ForkedBeaconState preset} (altair : .altai
     advanceSlot_ok advancedOk
   have slotAfter : z'.state.slot = nextSlot := by
     rw [processUpgrades_slot upgraded, advancedEq]
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   unfold epochIfLast at epochedOk
   split at epochedOk
   swap
@@ -1080,7 +1080,7 @@ private theorem partialsSame_advanceSlot (altair : .altair ≤ fork)
     (computed : advanceSlot config checks state = .ok after) : PartialsSame state after := by
   intro electra
   obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   unfold epochIfLast at epochedOk
   split at epochedOk
   · exact partialsSame_processEpoch altair epochedOk electra
@@ -1710,7 +1710,7 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
       epochNext.symm.trans epochLast
     obtain ⟨appended, consumed, paid, bounded, queue, charged, beyond, entries, sums⟩ :=
       ih epochMiddle electraLast
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
     refine ⟨appended, consumed, paid, bounded, ?_, charged, beyond, entries, fun v => ?_⟩
     · rw [← queue, cachedEq]
     · simp only [runQueuePaid, stepQueuePaid, Nat.add_zero]
@@ -1960,7 +1960,7 @@ private theorem run_floor {x y : ForkedBeaconState preset} (tail : Run config ch
     subst lastEq
     obtain ⟨extra, floor, paid, single⟩ :=
       ih withinMiddle (epochNext.symm.trans epochLast) clearMiddle
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
     refine ⟨extra, ?_, ?_, ?_⟩
     · simpa [Run.blockCount, actualBalanceAt, cachedEq] using floor
     · simpa [runQueuePaid, stepQueuePaid] using paid
@@ -2001,7 +2001,7 @@ private theorem scores_of_same_epoch {x y : ForkedBeaconState preset}
       exact ih aw)
     (fun _ _ lastEq cachedOk _ ih aw => by
       subst lastEq
-      obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+      obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
       subst cachedEq
       exact ih aw)
     tail same ay
@@ -2364,7 +2364,7 @@ theorem effectiveFall_le
     have yEff : effectiveAt y v.toNat = effectiveAt z' v.toNat :=
       fromZ'.effectiveKept_of_same_epoch z'Epoch.symm v.toNat insideZ'
     -- The state that the rewards read is the last state of the epoch, after justification.
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
     have justifiedSame := justification_same justifiedOk
     have Jvalidators : justified.validators = z.state.validators := by
       rw [justifiedSame.1, cachedEq]

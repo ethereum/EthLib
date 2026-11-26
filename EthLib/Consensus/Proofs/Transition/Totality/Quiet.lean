@@ -127,7 +127,7 @@ private theorem advanceSlot_records (computed : advanceSlot config checks state 
         ∃ epoched, processEpoch config checks cached = .ok epoched ∧
           SameRecords epoched after) := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   refine ⟨cached, by subst cachedEq; exact ⟨rfl, rfl, rfl, rfl⟩, ?_⟩
   obtain ⟨_, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
   · exact .inr ⟨epoched, epochedOk, rfl, rfl, rfl, rfl⟩

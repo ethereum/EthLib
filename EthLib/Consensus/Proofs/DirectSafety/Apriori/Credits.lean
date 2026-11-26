@@ -672,7 +672,7 @@ private theorem step_credits_generic {r m l : ForkedBeaconState preset}
       exact addedOk.symm
     subst kept none
     obtain ⟨root, _, header⟩ := advanceSlot_latestBlockHeader advanceOk
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     refine ⟨effectiveEnd, ?_⟩
     refine ⟨.inr ⟨by simp [sourceCredits], by simp [sourceCredits],
       by simp [sourceDebits], by simp [PenaltyFree]⟩, ?_⟩

@@ -2713,7 +2713,7 @@ theorem processEpoch_invariant (holds : Invariant state)
 /-! ## Slots and blocks -/
 
 theorem frame_processSlot (computed : processSlot state = .ok after) : Frame state after := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   exact Frame.of_validators ⟨rfl, rfl⟩
 
 /-- One slot keeps the invariant, and the finalized epoch does not decrease.

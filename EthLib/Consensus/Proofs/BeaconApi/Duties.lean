@@ -298,7 +298,7 @@ private theorem advanceSlots_kept {config : Config} {checks : SignatureChecks} :
       exact inside 1 le_rfl (by omega) natural
     simp only [epochIfLast, noEpoch, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at epochedOk
     subst epochedOk
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
     have middleSlot : middle.slot.toNat = state.slot.toNat + 1 := by
       rw [middleEq]
       exact sum

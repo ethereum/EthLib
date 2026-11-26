@@ -1705,7 +1705,7 @@ private theorem advance
     PendingConsolidationsOrdered config (getCurrentEpoch after).toNat after ∧
       PendingApart after := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have first : PendingConsolidationsOrdered config (getCurrentEpoch cached).toNat cached ∧
       PendingApart cached := by
     rw [cachedEq]; exact holds

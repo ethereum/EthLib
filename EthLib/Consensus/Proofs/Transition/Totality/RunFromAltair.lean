@@ -277,7 +277,7 @@ private theorem Tracked.of_advanceSlot {fork : Fork} {state advanced : BeaconSta
   obtain ⟨altair, before, -, keys, found, atCap, later, held, scored⟩ := holds
   dsimp only at altair before keys found atCap later held scored
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, advancedEq⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   have validators : advanced.validators = epoched.validators := by rw [advancedEq]
   have balances : advanced.balances = epoched.balances := by rw [advancedEq]
   have scores : ∀ altair, (advanced.inactivityScores altair).data =
@@ -462,7 +462,7 @@ theorem runHypotheses_of_quiet_altair {forked : ForkedBeaconState preset} {count
   refine ⟨?_, ?_, fun early => absurd (Nat.lt_of_le_of_lt altair early) (by decide)⟩
   · intro steps short reached computed _ _ cached cachedOk
     obtain ⟨holds, -⟩ := run steps short reached computed
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     -- The state stays quiet, so the signers hold at most the total active balance.
     exact holds.quiet.signers
   · intro steps short reached computed
@@ -472,7 +472,7 @@ theorem runHypotheses_of_quiet_altair {forked : ForkedBeaconState preset} {count
       passes.early holds.altair holds.before (Nat.lt_of_le_of_lt (Nat.div_le_div_right
         (by dsimp only; rw [advanceSlot_slot advancedOk]; omega)) beforeElectra)⟩
     -- The caching of the slot keeps the registry, the balances, the scores and the slot.
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
     have validators : cached.validators = reached.state.validators := by rw [cachedEq]
     have balances : cached.balances = reached.state.balances := by rw [cachedEq]
     have scores : ∀ altair, (cached.inactivityScores altair).data =

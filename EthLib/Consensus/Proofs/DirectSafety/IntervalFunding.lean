@@ -2307,7 +2307,7 @@ private theorem step_balanceChain {x y : ForkedBeaconState preset}
   | slot ok =>
     obtain ⟨advanced, cached, crossings, advanceOk, upgrades, cachedOk, crossingOk, split⟩ :=
       Step.balanceEvents_slot ok early replayed
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
     have path : (Step.slot ok).balancePath = [x, ⟨x.fork, advanced⟩, y] := by
       simp [Step.balancePath, advanceOk, Except.toOption]
     have crossed := coverage_upgrades upgrades early crossingOk
@@ -4169,13 +4169,13 @@ private theorem funding_step_capacity_rate {x y : ForkedBeaconState preset}
     obtain ⟨next, nextOk, cached, cachedOk, epoched, epochOk, advancedEq⟩ := advanceCopy
     have cachedMatch := (frame_processSlot cachedOk).balancesMatch matched
     have cachedCarry : cached.depositBalanceToConsume = x.state.depositBalanceToConsume := by
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+      obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
       rfl
     have cachedValidators : cached.validators = x.state.validators := by
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+      obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
       rfl
     have cachedSlot : cached.slot = x.state.slot := by
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+      obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
       rfl
     have sum := (Uint64.addChecked_ok_iff.mp
       (mapError_ok_iff.mp (liftAccessor_ok.mp nextOk))).2

@@ -52,7 +52,7 @@ private theorem advanceSlot_read (computed : advanceSlot config checks state = .
       readCircular state.randaoMixes.elements epoch := by
   have kept := mixesKeptBut_advanceSlot computed
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have cachedMixes : cached.randaoMixes = state.randaoMixes := by rw [cachedEq]
   unfold epochIfLast at epochedOk
   split at epochedOk

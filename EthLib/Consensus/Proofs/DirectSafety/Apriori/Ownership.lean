@@ -722,7 +722,7 @@ private theorem reserveCut_cache {fork : Fork} {s t : BeaconState preset fork}
     (ok : processSlot s = .ok t)
     (reserve : ReserveCut x high ⟨fork, s⟩ epoch suffix owned) :
     ReserveCut x high ⟨fork, t⟩ epoch suffix owned := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok ok
+  obtain ⟨_, rfl⟩ := processSlot_ok ok
   simpa only [ReserveCut, potential, FundingRelevant, effectiveAt, actualBalanceAt,
     getCurrentEpoch, pendingQueue] using reserve
 private theorem reserveCut_justification {fork : Fork} {s t : BeaconState preset fork}
@@ -755,7 +755,7 @@ theorem reservedFrame_cache {fork : Fork} {s t : BeaconState preset fork}
     ReservedFrame (config := config) (checks := checks) x high rounding
       ⟨fork, s⟩ ⟨fork, t⟩ epoch epoch queue owned owned := by
   have sameQueue : pendingQueue ⟨fork, t⟩ = pendingQueue ⟨fork, s⟩ := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok ok
+    obtain ⟨_, rfl⟩ := processSlot_ok ok
     rfl
   have identity : OwnedFrame owned owned := by
     exact ⟨reserve.1, reserve.1, rfl, fun _ => Or.inl rfl,

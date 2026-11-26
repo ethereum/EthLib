@@ -581,10 +581,10 @@ private theorem activationCohortBound_advanceSlot (early : fork < .pectra)
     (bounded : ActivationCohortBound config state) : ActivationCohortBound config after := by
   obtain ⟨next, cached, epoched, nextOk, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
   have cachedData : cached.validators.data = state.validators.data := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     rfl
   have cachedSlot : cached.slot = state.slot := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     rfl
   have atCached : ActivationCohortBound config cached := by
     constructor
@@ -833,7 +833,7 @@ private theorem assigned_advanceSlot (early : fork < .pectra)
       ((getCurrentEpoch state).toNat < (getCurrentEpoch after).toNat ∧
         assignedCount after ≤ assignedCount state + cap) := by
   obtain ⟨next, cached, epoched, nextOk, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
   · right
     obtain ⟨before, registered, head, registeredOk, tail, beforeSlot, -, -, beforeValidators⟩ :=

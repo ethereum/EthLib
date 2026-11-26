@@ -261,7 +261,7 @@ theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store 
     · exact fewCounted root counted counted total held (.inl rfl) walk epochLt justifiedLe
         countedEpoch.1 (insideHeld held) totalOk
     · -- Caching a slot keeps the registry, the balances and the slot that the count reads.
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok countedOk
+      obtain ⟨_, rfl⟩ := processSlot_ok countedOk
       obtain ⟨childState, childStored, -⟩ := reached.reachable.blockStatesFromParents childFound
       have childSlot := reached.reachable.blockState_slot_eq anchorSlot childFound childStored
       rcases path with rfl | ⟨reachedSlot, slotsOk⟩

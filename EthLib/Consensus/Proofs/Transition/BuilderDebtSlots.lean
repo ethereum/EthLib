@@ -166,7 +166,7 @@ theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
       subst computed
       dsimp only
       split <;> rfl
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   exact ⟨rfl, header, rfl, rfl, rfl, rfl⟩
 
 /-- From Gloas, one slot caches its roots, then may run the epoch step of the payments. -/

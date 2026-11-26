@@ -57,7 +57,7 @@ theorem EpochCall.selected_prefix {g a : ForkedBeaconState preset}
   refine ⟨pre, (Run.nil.snoc (.slot call.advanced)).append post,
     same.trans (Run.append_assoc pre (Run.nil.snoc (.slot call.advanced)) post).symm,
     frame_processSlot call.cachedOk, ?_⟩
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok call.cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok call.cachedOk
   rw [cachedEq]
   exact ⟨rfl, rfl⟩
 

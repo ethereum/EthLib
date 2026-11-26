@@ -206,7 +206,7 @@ theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     penaltyDebit_sum_zero_of_free laterFree, penaltyDebit_sum_zero_of_free crossingsFree,
     Nat.zero_add, Nat.add_zero]
   -- The pass reads the registry, the slot and the scores of `u`, after one update of the scores.
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   have one := justified.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have two := scored.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have validators : pass.validators = u.state.validators := two.1.trans one.1

@@ -114,7 +114,7 @@ private theorem assignedProposers_advanceSlot {fork : Fork} {s t : BeaconState p
     AssignedProposers t := by
   obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
   have cachedHeld : AssignedProposers cached := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     exact held.transfer (.of_data rfl) (fun late => ⟨late, rfl⟩)
   have epochedHeld : AssignedProposers epoched := by
     unfold epochIfLast at epochedOk

@@ -1081,7 +1081,7 @@ theorem registryLifecycle_advanceSlot
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨next, _, cached, cachedOk, epoched, epochedOk, rfl⟩ := computed
   have cachedKept : RegistryLifecycle state cached := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     exact .of_data rfl
   have epochedKept : RegistryLifecycle cached epoched := by
     unfold epochIfLast at epochedOk
@@ -1521,7 +1521,7 @@ private theorem newUnassigned_advanceSlot
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨next, _, cached, cachedOk, epoched, epochedOk, rfl⟩ := computed
   have cachedSize : cached.validators.data.size = state.validators.data.size := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     rfl
   have epochedFrom : UnassignedFrom state.validators.data.size epoched := by
     unfold epochIfLast at epochedOk

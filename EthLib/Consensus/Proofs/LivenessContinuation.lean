@@ -297,7 +297,7 @@ private theorem slotStep_inside {fork : Fork} {w : BeaconState preset fork}
     exact notFirst
   have reached := Except.ok.inj ((processUpgrades_of_not_due due).symm.trans upgraded)
   subst reached kept
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   refine ⟨advanced, rfl, by rw [advancedEq]; exact sum, runKept, ?_, ?_, ?_, ?_⟩
   · rw [advancedEq]
   · rw [advancedEq]

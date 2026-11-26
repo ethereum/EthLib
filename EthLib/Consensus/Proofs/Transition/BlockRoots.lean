@@ -485,7 +485,7 @@ private theorem advanceSlots_keeps :
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨_, first, rest⟩ := computed
     obtain ⟨_, cachedOk, genesisKept, -, -, hashKept, bidKept, -⟩ := advanceSlot_cachedRoots first
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     obtain ⟨genesis, hash, bid⟩ := advanceSlots_keeps count rest
     exact ⟨genesis.trans genesisKept, hash.trans hashKept, bid.trans bidKept⟩
 

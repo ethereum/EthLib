@@ -324,7 +324,7 @@ theorem advanceSlot_slackBits
       SlackFinalized V U W genesis votes (after.finalizedCheckpoint.toFfg block) := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, afterEq⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   obtain ⟨cached', cachedOk', -, afterRoots, -, -, -, afterSlot⟩ :=
     advanceSlot_cachedRoots computed
   rw [cachedOk, Except.ok.injEq] at cachedOk'

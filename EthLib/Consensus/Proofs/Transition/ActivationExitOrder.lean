@@ -862,7 +862,7 @@ private theorem advanceSlot (valid : Invariant state)
     (ok : Consensus.advanceSlot config checks state = .ok after) :
     Kept config state after := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have frame := frame_processSlot cachedOk
   have first : Kept config state cached := of_data (by rw [cachedEq]) frame.finalized frame.slot
   have second : Kept config cached epoched := by

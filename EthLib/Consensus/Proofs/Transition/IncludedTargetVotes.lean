@@ -206,7 +206,7 @@ theorem advanceSlot_justifies {config : Config} {checks : SignatureChecks}
   obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
   change _ ≤ epoched.currentJustifiedCheckpoint.epoch
   rw [frame.currentJustified]
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have current : getCurrentEpoch cached = getCurrentEpoch state := by rw [cachedEq]; rfl
   have previous : getPreviousEpoch cached = getPreviousEpoch state := by rw [cachedEq]; rfl
   have roots : getBlockRoot cached
@@ -260,7 +260,7 @@ theorem advanceSlot_total_of_last {config : Config} {checks : SignatureChecks}
     simpa [UInt64.toNat_mod, sum] using lastSlot
   simp only [epochIfLast, boundary, ↓reduceIte] at epochedOk
   obtain ⟨justified, justifiedOk, -⟩ := processEpoch_frame epochedOk
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have current : getCurrentEpoch cached = getCurrentEpoch state := by rw [cachedEq]; rfl
   obtain ⟨total, totalOk⟩ := processJustificationAndFinalization_totalActiveBalance justifiedOk
       (current.symm ▸ counted)
@@ -315,7 +315,7 @@ private theorem advanceSlot_inside_keeps {config : Config} {checks : SignatureCh
   have epochedEq : cached = epoched := by
     simpa [epochIfLast, notBoundary, pure, Except.pure] using epochedOk
   subst epochedEq
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   refine ⟨fun other => ?_, fun _ _ => by rw [cachedEq]; rfl,
     fun _ _ => by rw [cachedEq]; rfl⟩
   have epochOther : epochIfLast config other next cached = .ok cached := by

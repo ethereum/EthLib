@@ -224,7 +224,7 @@ theorem advanceSlot_flagsKept {state after : BeaconState preset fork}
       ∀ perIncrement, flagRewardWeight preset perIncrement after =
         flagRewardWeight preset perIncrement state := by
   obtain ⟨next, cached, epoched, nextEq, cachedOk, epochOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   have notZero : ¬ next % preset.SLOTS_PER_EPOCH = 0 := by
     intro zero
     have := congrArg UInt64.toNat zero

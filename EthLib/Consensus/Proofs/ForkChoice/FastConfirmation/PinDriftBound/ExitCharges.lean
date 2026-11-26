@@ -1501,7 +1501,7 @@ private theorem slot_compounding_kept {m n : ForkedBeaconState preset}
   obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
   obtain rfl := DirectSafety.Apriori.Internal.processUpgrades_eq_of_window upgraded fulu early
   obtain ⟨_, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok advancedOk
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   rcases epochIfLast_cases epochedOk with ⟨_, epochOk⟩ | ⟨_, rfl⟩
   · have altair : .altair ≤ m.fork := Nat.le_trans (by decide) fulu
     simp only [processEpoch, altair, ↓reduceDIte] at epochOk

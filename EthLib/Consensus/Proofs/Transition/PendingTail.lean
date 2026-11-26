@@ -692,7 +692,7 @@ private theorem pendingTail_advanceSlot {config : Config} {checks : SignatureChe
   apply advanceSlot_transport (PendingTail count boundEpoch) run
   intro next cached epoched cacheOk result epochStep
   subst after
-  obtain ⟨_, _, _, _, cacheEq⟩ := processSlot_ok cacheOk
+  obtain ⟨_, cacheEq⟩ := processSlot_ok cacheOk
   have cachedTail : PendingTail count boundEpoch cached :=
     pendingTail_of_validators (by rw [cacheEq]) tail
   have epochedTail : PendingTail count boundEpoch epoched := by

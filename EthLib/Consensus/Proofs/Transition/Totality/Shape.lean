@@ -295,7 +295,7 @@ theorem advanceSlot_shaped (computed : advanceSlot config checks state = .ok aft
   simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨next, _, cached, cachedOk, epoched, epochedOk, rfl⟩ := computed
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   have epochedSized : Sized epoched := by
     obtain ⟨_, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
     · exact processEpoch_sized epochedOk shaped.sized.of_eq
