@@ -405,6 +405,88 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
       (callerBlocks root block callerHeld) rfl covers high receiver atTime upToDate hdOk
       currentOk late signer).resolve_right collide)
 
+/-- At a time `T`, the confirmed root of a call is viable, given its coverage before `T`.
+
+Otherwise two honest stores collide, or direct-safety, held-state or cross-store evidence holds.
+
+The caller's head read at each rollover is derived, not assumed.
+
+From Gloas, the anchor's registry must leave room up to the horizon. -/
+public theorem Execution.rootViableAt_of_checked_or_evidence [DecidablePred (· ∈ J)]
+    {anchor : Store preset fork} {Δ time : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
+    {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
+    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
+    (admitted : BlocksAdmitted e 0 Δ time) (fits : DelayFits fork config genesisTimeMs Δ)
+    (prompt : Prompt e time) (votes : ValidatedDutyVotes (e := e) time)
+    (windows : AssignmentWindowAgreement (e := e) time)
+    (fit : config.CommitteeWindowsFit preset)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (incrementPositive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (start : ∀ w ∈ J, e.start w = anchor)
+    (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time) (absent : AnchorParentAbsent (e := e) time)
+    (pinned : JustifiedPinned (e := e) anchorEpoch margin 0 time)
+    (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 time)
+    (quorumDrift : QuorumDriftWithin (e := e) horizon time)
+    (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+    (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
+    (parameters : DirectSafety.Parameters preset) (genesis : Genesis config checks g)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
+    (enough : HeldRunStakeFloor (e := e) pre horizon time)
+    (included : TargetIncluded (e := e) time)
+    -- The caller's head read rests on the active-stake ceiling and the proposer-score bound.
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
+    -- From Gloas it also rests on the head-weight bundle and on each weak-head weight.
+    (weights : .glamsterdam ≤ fork → config.HeadWeightsFit preset (2 * 10 ^ 17))
+    (supply : .glamsterdam ≤ fork → CheckpointHeadWeightCeiling (e := e) (2 * 10 ^ 17) time)
+    {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    (callerUpToDate : UpToDate config checks sources (e.world n).time ((e.world n).view u)
+      ((e.world n).state u))
+    {slot : Slot} {begin : UInt64}
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (timeEq : (e.world n).time = begin.toNat)
+    {fcr : FastConfirmationStore} {head : ForkChoiceNode} {startRoot root : Root}
+    {chain later : List Root} (headOk : ((e.world n).state u).getHead config = .ok head)
+    (inputs : CallCheckpointInputs (e := e) margin anchor.finalizedCheckpoint.root u n fcr head
+      startRoot root)
+    (walked : ((e.world n).state u).getAncestorRoots head.root startRoot =
+      .ok (chain ++ root :: later))
+    (realized : AcceptedRealizedRecent ((e.world n).state u) (chain ++ [root]))
+    (realizedHead : AcceptedRealizedHead ((e.world n).state u) config head.root (chain ++ [root]))
+    (startCovers : HonestHeadsCover (e := e) startRoot (e.world n).time (time + 1))
+    (holds : HonestHoldsFrom (e := e) root (e.world n).time time)
+    (T : ℕ) (low : (e.world n).time ≤ T) (high : T ≤ time)
+    (covers : HonestHeadsCover (e := e) root (e.world n).time T)
+    (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon) :
+    RootViableAt (e := e) root T ∨ HonestCollision (e := e) time ∨
+      HistoricalDirectSafetyEvidence (e := e) pre time ∨
+        HeldStateFinalityEvidence (e := e) pre time ∨
+          CrossStoreJustifiedEvidence (e := e) pre time := by
+  have sound := (DirectSafety.run_justified_separated pre genesis).1
+  rcases e.callRolloverRead_or_evidence sync slots admitted fits prompt votes anchored start
+      anchorSlot anchorBoundary (anchorEpochOk ▸ signedAll) roots absent bounded parameters genesis
+      pre heldEarly enough terminal ceiling scoreFits fit.seeds caller n head.root room weights
+      supply (fun _ => fit) with rollover | collision | historical
+  · rcases e.rootViableAt_of_checked pre sync slots admitted fits prompt votes windows fit ring
+        incrementPositive anchored sound anchorSlot anchorBoundary start anchorEpochOk bounded
+        roots absent pinned signedAll quorumDrift unslashed terminal anchorGenesis parameters
+        genesis heldEarly enough included caller callerUpToDate slotOk beginOk timeEq headOk
+        rollover inputs walked realized realizedHead startCovers holds T low high covers room with
+      viable | collision | held | cross
+    · exact .inl viable
+    · exact .inr (.inl collision)
+    · exact .inr (.inr (.inr (.inl held)))
+    · exact .inr (.inr (.inr (.inr cross)))
+  · exact .inr (.inl collision)
+  · exact .inr (.inr (.inl historical))
+
 /-- The root is on every up-to-date honest head chain from the call up to the time.
 
 The alternatives are a block collision of honest stores and historical direct-safety evidence. -/
@@ -1271,14 +1353,6 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
   -- The caller reads its head at each rollover, and every honest store has a head.
   have signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 time :=
     anchorEpochOk ▸ signedAll
-  rcases e.callRolloverRead_or_evidence sync slots admitted fits prompt votes
-      anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
-      heldEarly enough terminal ceiling scoreFits fit.seeds caller n head.root room weights supply
-      (fun _ => fit) with
-    rollover | collision | evidence
-  rotate_left
-  · exact .inr (.inl collision)
-  · exact .inr (.inr (.inl evidence))
   rcases e.honestHeadsExist_or_evidence_of_gated sync slots admitted fits prompt votes
       anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
       heldEarly enough terminal ceiling scoreFits fit.seeds room weights supply (fun _ => fit)
@@ -1325,18 +1399,20 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
   -- The root's step at each time, split once on a collision and on each evidence.
   by_cases collide : HonestCollision (e := e) time
   · exact .inr (.inl collide)
+  by_cases historical : HistoricalDirectSafetyEvidence (e := e) pre time
+  · exact .inr (.inr (.inl historical))
   by_cases crossJustified : CrossStoreJustifiedEvidence (e := e) pre time
   · exact .inr (.inr (.inr (.inl crossJustified)))
   by_cases heldEvidence : HeldStateFinalityEvidence (e := e) pre time
   · exact .inr (.inr (.inr (.inr heldEvidence)))
   refine .inl ⟨fun T low high covers => ?_, exist⟩
-  exact (e.rootViableAt_of_checked (room := room)
-      pre sync slots admitted fits prompt votes
-      windows fit ring incrementPositive anchored sound anchorSlot anchorBoundary start
-      anchorEpochOk bounded roots absent pinned signedAll quorumDrift unslashed terminal
-      anchorGenesis parameters genesis heldEarly enough included caller callerUpToDate slotOk
-      beginOk timeEq headOk rollover inputs walked realized realizedHead startCovers holds T low
-      high covers).resolve_right (not_or.mpr ⟨collide, not_or.mpr ⟨heldEvidence, crossJustified⟩⟩)
+  exact (e.rootViableAt_of_checked_or_evidence pre sync slots admitted fits prompt votes
+      windows fit ring incrementPositive anchored anchorSlot anchorBoundary start anchorEpochOk
+      bounded roots absent pinned signedAll quorumDrift unslashed terminal anchorGenesis
+      parameters genesis heldEarly enough included ceiling scoreFits weights supply caller
+      callerUpToDate slotOk beginOk timeEq headOk inputs walked realized realizedHead startCovers
+      holds T low high covers room).resolve_right
+    (not_or.mpr ⟨collide, not_or.mpr ⟨historical, not_or.mpr ⟨heldEvidence, crossJustified⟩⟩⟩)
 
 /-- Every up-to-date honest head descends from a checked call's confirmed root, up to `time`.
 

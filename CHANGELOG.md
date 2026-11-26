@@ -13,6 +13,12 @@ Not yet released.
   `prEvent_storageWins_le` and `prEvent_stateWins_le` give the bound `Q^2 / 2^256`, for `Q` hash calls of the experiment.
   `Execution/Proofs/Trie/RandomOracle.lean` gains `queryWitnesses`, the queries of the binding inputs of two tries at one key, which `extract` now runs after the two roots.
 
+- In Lean, three fast confirmation theorems derive the caller's head read at each rollover, `CallRolloverRead`, that their originals assume ([#3352](https://github.com/ethereum/EthLib/issues/3352)).
+  `Execution.rootInFilteredTree_of_checked_or_evidence` and `Execution.honestTargetVotes_signed_of_checked_or_evidence` are in `Consensus/Proofs/ForkChoice/FastConfirmation/HonestHeads.lean`.
+  `Execution.rootViableAt_of_checked_or_evidence` is in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalCoverage.lean`.
+  Each applies `Execution.callRolloverRead_or_evidence` once, so its conclusion adds `HistoricalDirectSafetyEvidence`.
+  The two proofs of confirmed-root coverage that split on that read now apply `Execution.rootViableAt_of_checked_or_evidence`.
+
 - In Lean, `Base.pairwise_zip_of_pairwise` (`Base/Proofs/List.lean`) states that a relation that holds pairwise on a list holds pairwise on the first items of its zip.
   `List.takeWhile_eq_take`, `List.dropWhile_eq_drop` and `List.findIdx?_eq_of_nodup` move to `Base/Proofs/List.lean` from `Networking/Proofs/Devp2p/ForkId.lean`.
   `Consensus.mem_array_foldl_insert` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) is public.
