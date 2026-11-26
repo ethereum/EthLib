@@ -8,6 +8,7 @@ public import EthLib.Cryptography.HashSig
 public import EthLib.Cryptography.Wots
 public import EthLib.Cryptography.Xmss
 public import EthLib.Cryptography.Sphincs
+public import EthLib.Cryptography.LeanVm
 public import EthLib.Cryptography.Vrf
 public import EthLib.Cryptography.Secp256k1
 public import EthLib.Cryptography.Secp256r1
