@@ -22,8 +22,8 @@ namespace EthLib.Cryptography.Vrf
 
 open EthLib.Cryptography.Vrf.Constants
 open OracleSpec OracleComp ENNReal
-open EthLib.Cryptography.LazyPermutation (PermComp permImpl forward simulateQ_permImpl_forward
-  oneCallHash collisionAdvantage)
+open EthLib.Cryptography.LazyPermutation (PermComp permImpl forward isQueryBoundP_forward
+  simulateQ_permImpl_forward oneCallHash collisionAdvantage)
 open EthLib.Cryptography.Hash.Keccak (State RATE_256 blockCount ShortMessage keccakF keccak256With
   keccak256With_eq_squeeze256 keccak256With_keccakF simulateQ_keccak256With_of_pure
   isQueryBoundP_keccak256With oneBlockState oneCallHash_eq keccak256_collisionAdvantage_le)
@@ -35,32 +35,6 @@ open EthLib.Cryptography.Hash.Keccak.Internal (squeeze256)
 def permHash (x : ByteArray) : PermComp State Digest :=
   keccak256With forward x
 
-/-- Run with a permutation, the collision search is the search with `H` as the hash.
-
-It holds when each hash, run with the permutation, returns its value under `H`. -/
-theorem simulateQ_findCollision_permHash {π : Equiv.Perm State} {H : ByteArray → Digest}
-    (hH : ∀ x, simulateQ (permImpl π) (permHash x) = pure (H x))
-    (s t : List Digest) (p : Merkle.Position) (a b : Digest) :
-    simulateQ (permImpl π) (Merkle.findCollision (nodeWith permHash) p a b s t) =
-      pure (Merkle.findCollision (m := Id) (fun _ left right => pure (H (nodeInput left right)))
-        p a b s t).run := by
-  have hnode : ∀ (q : Merkle.Position) (left right : Digest),
-      simulateQ (permImpl π) (nodeWith permHash q left right) = pure (H (nodeInput left right)) :=
-    fun _ _ _ => hH _
-  -- Answering the calls maps the search to the search over the answered node hashes.
-  have hmap : simulateQ (permImpl π) (Merkle.findCollision (nodeWith permHash) p a b s t) =
-      Merkle.findCollision
-        (fun q left right => simulateQ (permImpl π) (nodeWith permHash q left right)) p a b s t :=
-    Merkle.mmap_findCollision (simulateQ' (permImpl π)) (nodeWith permHash) s t p a b
-  -- The search in the identity monad, lifted by `pure`, is the search over the lifted hashes.
-  have hlift : (pure (Merkle.findCollision (m := Id)
-      (fun _ left right => pure (H (nodeInput left right))) p a b s t).run : ProbComp _) =
-        Merkle.findCollision (fun _ left right => pure (H (nodeInput left right))) p a b s t :=
-    Merkle.mmap_findCollision (MonadHom.pure ProbComp)
-      (fun _ left right => (pure (H (nodeInput left right)) : Id Digest)) s t p a b
-  simp only [hnode] at hmap
-  exact hmap.trans hlift.symm
-
 /-! ## The reduction to a collision -/
 
 /-- The collision search of two openings, with each hash Keccak-256 over the permutation.
@@ -71,7 +45,7 @@ def collisionSearch (claim : OpeningsClaim) : PermComp State (ShortMessage × Sh
   let leaf' ← permHash (leafInput claim.second.secret)
   let found ← Merkle.findCollision (nodeWith permHash) ⟨0, claim.index.toNat⟩ leaf leaf'
     claim.first.path.toList claim.second.path.toList
-  -- Leaf and node inputs are 43 and 75 bytes, so each is one block.
+  -- Leaf and node inputs are 43 and 75 bytes, below the 136 bytes of a block.
   pure (match found with
     | some c =>
       (⟨nodeInput c.x.1 c.x.2, by simp [RATE_256]⟩,
@@ -85,12 +59,11 @@ def collisionSearch (claim : OpeningsClaim) : PermComp State (ShortMessage × Sh
 It hashes the two leaves, then at most two nodes per level. -/
 theorem isQueryBoundP_collisionSearch (claim : OpeningsClaim) :
     IsQueryBoundP (collisionSearch claim) (·.isRight = true) (2 * (VRF_TREE_HEIGHT + 1)) := by
-  have hforward : ∀ S : State, IsQueryBoundP (forward S) (·.isRight = true) 1 := fun _ =>
-    (isQueryBoundP_query_iff _ _ _).2 fun _ => Nat.one_pos
   -- Keccak-256 calls the permutation once per block, and each input of the tree is one block.
   have hcall : ∀ x : ByteArray, x.size < RATE_256 →
       IsQueryBoundP (permHash x) (·.isRight = true) 1 := fun x hx =>
-    (isQueryBoundP_keccak256With hforward x).mono (by simp [blockCount, Nat.div_eq_of_lt hx])
+    (isQueryBoundP_keccak256With isQueryBoundP_forward x).mono
+      (by simp [blockCount, Nat.div_eq_of_lt hx])
   have hsearch := Merkle.isQueryBoundP_findCollision (hash := nodeWith permHash)
     (fun _ _ _ => hcall _ (by simp [RATE_256])) claim.first.path.toList
     claim.second.path.toList ⟨0, claim.index.toNat⟩
@@ -113,7 +86,9 @@ theorem collisionSearch_collision_of_outputsWin {π : Equiv.Perm State} {H : Byt
     (hr : r ∈ support (simulateQ (permImpl π) (collisionSearch claim))) :
     IsHashCollisionWith H (r.1.1, r.2.1) := by
   obtain ⟨pair, hpair, hcollision⟩ := findHashCollisionWith_of_outputsWin hwin
-  simp only [collisionSearch, simulateQ_bind, hH, pure_bind, simulateQ_findCollision_permHash hH,
+  simp only [collisionSearch, simulateQ_bind, hH, pure_bind,
+    Merkle.simulateQ_findCollision_of_pure (permImpl π) (nodeWith permHash)
+      (fun _ left right => H (nodeInput left right)) (fun _ _ _ => hH _),
     simulateQ_pure, support_pure, Set.mem_singleton_iff] at hr
   subst hr
   -- The search returns the pair that the win exposes.
@@ -136,7 +111,7 @@ theorem collisionSearch_collision_of_outputsWin {π : Equiv.Perm State} {H : Byt
 
 The adversary makes at most `q` classical queries to the permutation and its inverse.
 
-For the tree height `h`, let `Q = q + 2 (h + 2)` count the calls of the whole game.
+For the tree height `h`, `Q = q + 2 (h + 2)` adds the calls of the search and of the collision game.
 
 A win has chance at most `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)`. -/
 theorem prEvent_outputsWin_keccak256With_le (adversary : PermComp State OpeningsClaim) {q : ℕ}

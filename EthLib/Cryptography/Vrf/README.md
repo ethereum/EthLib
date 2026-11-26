@@ -115,7 +115,7 @@ The search reads only the index and the two openings.
 It is an efficient algorithm, so the theorem is a security reduction: whoever finds two outputs at one index also finds a Keccak-256 collision.
 The search makes at most 68 Keccak-256 calls, no more than verifying the two openings.
 A theorem bounds the two checks by 68 calls (`extractOutputs_queryBound`), but the count of the search is read from the definitions.
-Run over a permutation, the search (`collisionSearch`) hashes each leaf once and makes at most 66 calls (`isQueryBoundP_collisionSearch`).
+The variant over a permutation (`collisionSearch`) hashes each leaf once instead of twice, so it makes at most 66 calls to the permutation (`isQueryBoundP_collisionSearch`).
 
 In the random oracle model, two outputs at one index are unlikely (`prEvent_outputsWin_le_of_adversary`, `Uniqueness.lean`).
 There Keccak-256 is a random oracle on byte strings, for the leaves, the nodes and the outputs.

@@ -563,7 +563,7 @@ Here `Q` bounds the oracle queries of the whole experiment, and `N` is the numbe
 `extractOutputs_queryBound` shows that the two checks make at most `2 (h + 2)` queries, for a tree of height `h`.
 `prEvent_outputsWin_le_of_adversary` states the bound with `Q = q + 2 (h + 2)`, which is `q + 68` at the height of 32.
 `prEvent_outputsWin_keccak256With_le` (`Proofs/Vrf/UniquenessPermutation.lean`) bounds the same win with Keccak-256 over a uniform permutation of the `2^1600` states, in place of Keccak-f[1600].
-With Keccak-f[1600] itself, the event is the win under `verify` (`outputsWin_keccak256With_keccakF_iff`).
+With Keccak-f[1600] itself, a win is two openings that `verify` accepts, with two different outputs (`outputsWin_keccak256With_keccakF_iff`).
 The adversary makes at most `q` classical queries to the permutation and its inverse.
 The bound is `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)` with `Q = q + 2 (h + 2)`, about `Q (Q - 1) / 2^257 + Q / 2^512`.
 `findHashCollisionWith_of_outputsWin` shows, for any hash, that a win makes the search return two different inputs with one hash.
@@ -572,8 +572,8 @@ So Keccak-256 of each makes at most one call to the permutation, as it makes at 
 `collisionSearch` runs the search with Keccak-256 over forward calls to the permutation.
 `isQueryBoundP_collisionSearch` shows that it makes at most `2 (h + 1)` calls, two for the leaves and two per level (`isQueryBoundP_findCollision`, `Proofs/Merkle/QueryBound.lean`).
 `keccak256_collisionAdvantage_le` (`Proofs/Hash/Keccak/OneBlock.lean`) bounds the chance that the adversary, followed by the search, returns a collision.
-The game of that bound checks the two messages with two more calls, which gives `Q`.
-Carrying the first bound over to Keccak-256, or the second to Keccak-f[1600], is an idealisation of A4, not a theorem.
+The game of that bound hashes the two messages with two more calls, so `Q = q + 2 (h + 1) + 2 = q + 2 (h + 2)`, which is `q + 68` at the height of 32.
+Carrying the random-oracle bound over to Keccak-256, or the permutation bound over to Keccak-f[1600], is an idealisation of A4, not a theorem.
 
 In the random oracle model, `prEvent_guess_le` (`Proofs/Vrf/Unpredictability.lean`) bounds the chance of guessing an unopened output.
 The secret at the guessed index is uniform, and the adversary sees the root, the hash and the openings at other indices.
@@ -8537,8 +8537,9 @@ The codeword searches of each scheme share the bullet of that scheme:
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
-- VRF uniqueness over a permutation: Keccak-f[1600] is a uniform permutation of the `2^1600` states, which the adversary evaluates in both directions.
-  Every hash of the tree is Keccak-256 with that permutation in place of Keccak-f[1600], a fixed permutation, so the model idealises it.
+- VRF uniqueness over a permutation: Keccak-f[1600] is a uniform permutation of the `2^1600` states, drawn once before the run.
+  The adversary evaluates it in both directions.
+  Every Keccak-256 call of the experiment, for the leaves, the nodes and the outputs, uses that permutation in place of Keccak-f[1600].
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak-f[1600].
 - VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.

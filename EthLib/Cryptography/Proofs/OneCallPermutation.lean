@@ -33,6 +33,10 @@ theorem simulateQ_forward {m : Type → Type} [Monad m] [LawfulMonad m]
     simulateQ impl (forward a) = impl (.inr (.inl a)) :=
   simulateQ_spec_query (spec := unifSpec + PermSpec A) (impl := impl) (.inr (.inl a))
 
+/-- A forward call asks the permutation oracle once. -/
+theorem isQueryBoundP_forward (a : A) : IsQueryBoundP (forward a) (·.isRight = true) 1 :=
+  (isQueryBoundP_query_iff _ _ _).2 fun _ => Nat.one_pos
+
 /-- The hash of a message: encode it, permute it, and read the output. -/
 def oneCallHash (encode : M → A) (output : A → D) (π : A → A) (m : M) : D :=
   output (π (encode m))

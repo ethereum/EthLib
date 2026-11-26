@@ -8,13 +8,13 @@ public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 
 Each node hash is charged at most `h`, and each leaf at most `L`.
 
-Then a climb is charged `h` per sibling, and the collision search `2 h` per level of both climbs.
+Then a climb is charged `h` per sibling.
+
+The collision search is charged `2 h` per level that both climbs reach.
 
 A node is charged its leaves and the hashes below it.
 
 A count of the queries that a predicate accepts is the charge of one per such query.
-
-A monad morphism, such as answering the queries, maps the search to the search over its hash.
 -/
 
 @[expose] public section
@@ -27,7 +27,7 @@ open PFunctor.FreeM (IsChargeBound isChargeBound_pure)
 
 /-! ## Answering the oracle -/
 
-/-- A monad morphism maps the collision search to the search over its image of the node hash. -/
+/-- A monad morphism maps the collision search to the search over the image of the node hash. -/
 theorem mmap_findCollision {m n : Type → Type} [Monad m] [Monad n] {α : Type} [DecidableEq α]
     (φ : m →ᵐ n) (hash : Position → α → α → m α) :
     ∀ (s t : List α) (p : Position) (a b : α), φ (findCollision hash p a b s t) =
@@ -38,6 +38,32 @@ theorem mmap_findCollision {m n : Type → Type} [Monad m] [Monad n] {α : Type}
     -- The morphism passes through both hash calls and each branch of the test.
     simp only [findCollision, MonadHom.mmap_bind, MonadHom.mmap_ite, MonadHom.mmap_pure,
       mmap_findCollision φ hash s t]
+
+/-- With `pure` of `H` as the node hash, the search is the search in the identity monad, lifted. -/
+theorem findCollision_pure {m : Type → Type} [Monad m] [LawfulMonad m] {α : Type} [DecidableEq α]
+    (H : Position → α → α → α) (s t : List α) (p : Position) (a b : α) :
+    findCollision (m := m) (fun q left right => pure (H q left right)) p a b s t =
+      pure (findCollision (m := Id) (fun q left right => pure (H q left right)) p a b s t).run := by
+  -- Lifting the search in the identity monad by `pure` lifts each of its hashes.
+  have h := mmap_findCollision (MonadHom.pure m)
+    (fun q left right => (pure (H q left right) : Id α)) s t p a b
+  simp only [MonadHom.pure_apply, Id.run_pure] at h
+  exact h.symm
+
+/-- Run with answers that give each node hash the value `H`, the search is the search over `H`. -/
+theorem simulateQ_findCollision_of_pure {ι : Type} {spec : OracleSpec ι} {r : Type → Type}
+    [Monad r] [LawfulMonad r] {α : Type} [DecidableEq α] (impl : QueryImpl spec r)
+    (hash : Position → α → α → OracleComp spec α) (H : Position → α → α → α)
+    (hH : ∀ q left right, simulateQ impl (hash q left right) = pure (H q left right))
+    (s t : List α) (p : Position) (a b : α) :
+    simulateQ impl (findCollision hash p a b s t) =
+      pure (findCollision (m := Id) (fun q left right => pure (H q left right)) p a b s t).run := by
+  -- Answering the queries maps the search to the search over the answered node hashes.
+  have hmap : simulateQ impl (findCollision hash p a b s t) =
+      findCollision (fun q left right => simulateQ impl (hash q left right)) p a b s t :=
+    mmap_findCollision (simulateQ' impl) hash s t p a b
+  simp only [hH] at hmap
+  exact hmap.trans (findCollision_pure H s t p a b)
 
 /-! ## Charged calls
 
