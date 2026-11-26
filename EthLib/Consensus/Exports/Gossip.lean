@@ -3,8 +3,10 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Gossip.Bounds
+public import EthLib.Consensus.Gossip.Decode
 public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.Gossip.Topics
+public import EthLib.Networking.Exports.Gossip
 
 /-!
 # `Exports.Gossip`
@@ -98,5 +100,38 @@ def gossipTopicBoundExport (name fork topic : ByteArray) : Result UInt64 := do
   let some bound := topicBound preset config fork topic
     | throw (BoundsError.topicNotAtFork topicName fork).fault
   return bound
+
+/-- The code and the message of an error of a gossip message.
+
+An error of bounds keeps its code, from 301, and the topic and payload errors keep theirs. -/
+instance : ExportError GossipDecodeError where
+  code
+    | .topic error => ExportError.code error
+    | .bounds error => error.code
+    | .payload error => ExportError.code error
+  message
+    | .topic error => ExportError.message error
+    | .bounds error => toString error
+    | .payload error => ExportError.message error
+
+/-- The data of a gossip message at the fork of its topic's digest, with that fork and the topic. -/
+def gossipDecodeAtTopicOf (args : String × Option PyValue × Root × String × ByteArray) :
+    Result (String × String × ByteArray) := do
+  -- The name of the preset and the configuration, its replacements and the genesis validators root.
+  --
+  -- Then the topic string and the data of the message.
+  let (name, replacements, genesisValidatorsRoot, topicString, data) := args
+  let preset ← presetOf name
+  let config ← configWithValue name replacements
+  let (fork, topic, payload) ←
+    toResult none (decodeGossipAtTopic preset config genesisValidatorsRoot topicString data)
+  return (fork.name, topic.name, payload)
+
+/-- The data of a gossip message at the fork of its topic's digest, with that fork and the topic.
+
+The configuration of the name holds, with the replacements that a `dict` gives. -/
+@[export eth_consensus_gossip_decode_at_topic]
+def gossipDecodeAtTopicExport (args : PyValue) : Result PyValue :=
+  pyExport gossipDecodeAtTopicOf args
 
 end EthLib.Consensus.Exports

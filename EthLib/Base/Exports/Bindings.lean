@@ -1380,6 +1380,11 @@ def bindings : List Binding := [
   ⟨"consensus_gossip_topic_bound", `EthLib.Consensus.Exports.gossipTopicBoundExport,
     "(name: str, fork: str, topic: str) -> int",
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,
+  ⟨"consensus_gossip_decode_at_topic", `EthLib.Consensus.Exports.gossipDecodeAtTopicExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "topic: str, data: bytes) -> tuple[str, str, bytes]",
+    [`EthLib.Networking.Gossip.TopicError, `EthLib.Consensus.BoundsError,
+      `EthLib.Networking.Gossip.PayloadError], some "ConsensusError"⟩,
   ⟨"consensus_compute_subnet_for_attestation", `EthLib.Consensus.computeSubnetForAttestation,
     "(name: str, committees_per_slot: int, slot: int, committee_index: int) -> int",
     [`EthLib.Networking.Gossip.SubnetError], some "ConsensusError"⟩,

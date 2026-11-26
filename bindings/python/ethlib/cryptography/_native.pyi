@@ -1392,6 +1392,10 @@ def consensus_gossip_topic_bound(name: str, fork: str, topic: str) -> int:
     """The largest length of the payload of a gossip topic at a fork."""
     ...
 
+def consensus_gossip_decode_at_topic(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, topic: str, data: bytes) -> tuple[str, str, bytes]:
+    """The data of a gossip message at the fork of its topic's digest, with that fork and the topic."""
+    ...
+
 def consensus_compute_subnet_for_attestation(name: str, committees_per_slot: int, slot: int, committee_index: int) -> int:
     """The subnet of an attestation, from the committees per slot, its slot and its committee index."""
     ...

@@ -7,6 +7,7 @@ public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Payload
 public import EthLib.Networking.Gossip.Router
 public import EthLib.Networking.Gossip.Rpc
+public import EthLib.Networking.Gossip.Topic
 
 /-!
 # `Exports.Gossip`
@@ -58,6 +59,11 @@ derive_py_laws Rpc
 /-- A rejected payload reaches Python with its code, and its message is the printed error. -/
 instance : ExportError PayloadError where
   code := PayloadError.code
+  message := reprStr
+
+/-- A rejected topic reaches Python with its code, and its message is the printed error. -/
+instance : ExportError TopicError where
+  code := TopicError.code
   message := reprStr
 
 /-- A rejected RPC reaches Python with its code, and its message is the printed error. -/

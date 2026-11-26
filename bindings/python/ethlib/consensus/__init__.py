@@ -483,6 +483,23 @@ def gossip_topic_bound(fork: str, topic: str, name: str = "mainnet") -> int:
     return _native.consensus_gossip_topic_bound(name, fork, topic)
 
 
+def gossip_decode_at_topic(
+    topic: str,
+    genesis_validators_root: bytes,
+    data: bytes,
+    name: str = "mainnet",
+    config: dict[str, Any] | None = None,
+) -> tuple[str, str, bytes]:
+    """
+    The payload of a gossip message at the fork that the digest of its topic names.
+
+    It returns the name of that fork, the name of the topic and the SSZ bytes of the payload.
+    """
+    return _native.consensus_gossip_decode_at_topic(
+        name, config, genesis_validators_root, topic, data
+    )
+
+
 def compute_subnet_for_attestation(
     committees_per_slot: int, slot: int, committee_index: int, name: str = "mainnet"
 ) -> int:
@@ -2477,6 +2494,7 @@ __all__ = [
     "compute_min_epochs_for_block_requests",
     "gossip_topics",
     "gossip_topic_bound",
+    "gossip_decode_at_topic",
     "reqresp_request_bounds",
     "reqresp_response_bounds",
     "reqresp_decode_chunk",

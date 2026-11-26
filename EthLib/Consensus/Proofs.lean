@@ -163,6 +163,7 @@ public import EthLib.Consensus.Proofs.Gossip.BlockHandler
 public import EthLib.Consensus.Proofs.Gossip.InclusionList
 public import EthLib.Consensus.Proofs.Gossip.LightClient
 public import EthLib.Consensus.Proofs.Gossip.Bounds
+public import EthLib.Consensus.Proofs.Gossip.Decode
 public import EthLib.Consensus.Proofs.Gossip.Message
 public import EthLib.Consensus.Proofs.Gossip.Operations
 public import EthLib.Consensus.Proofs.Gossip.Payload

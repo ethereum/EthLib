@@ -1156,6 +1156,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_reqresp_response_valid},
   {"consensus_gossip_topic_bound", py_consensus_gossip_topic_bound, METH_VARARGS,
    DOC_consensus_gossip_topic_bound},
+  {"consensus_gossip_decode_at_topic", py_consensus_gossip_decode_at_topic, METH_VARARGS,
+   DOC_consensus_gossip_decode_at_topic},
   {"consensus_compute_subnet_for_attestation", py_consensus_compute_subnet_for_attestation,
    METH_VARARGS, DOC_consensus_compute_subnet_for_attestation},
   {"consensus_compute_subnet_for_blob_sidecar", py_consensus_compute_subnet_for_blob_sidecar,
