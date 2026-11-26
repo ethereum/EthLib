@@ -139,8 +139,8 @@ def toBlockUnchecked (p : ExecutionPayload fork) (parentBeaconBlockRoot : Since 
   -- It runs before the block hash check of version 1, step 2, since the header needs that hash.
   let accessListHash ← sinceM fun h => blockAccessListHashOf (blockAccessList h)
   let header ← p.toHeader root parentBeaconBlockRoot requests accessListHash slotNumber
-  -- EIP-3675: the block has no ommers, `[]`.
-  return ⟨header, transactions, [], p.withdrawals⟩
+  -- EIP-3675: the block has no ommers.
+  return { header, transactions, ommers := [], withdrawals := p.withdrawals }
 
 /-- Check that the block hash of a payload is the hash of a header. -/
 def checkBlockHash (p : ExecutionPayload fork) (header : Header fork) :
