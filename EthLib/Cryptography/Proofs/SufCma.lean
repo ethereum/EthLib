@@ -210,6 +210,14 @@ theorem hashCost_eq_ite (t : (unifSpec + hs).Domain) :
     hashCost t = if IsHashCall hs t then 1 else 0 := by
   cases t <;> rfl
 
+/-- A bound on the hash calls is a charge bound with one per hash call. -/
+theorem isQueryBoundP_isHashCall_iff {β : Type} (ob : OracleComp (unifSpec + hs) β) (n : ℕ) :
+    IsQueryBoundP ob (IsHashCall hs) n ↔
+      PFunctor.FreeM.IsChargeBound ob (hashCost (hs := hs)) n := by
+  rw [isQueryBoundP_iff_isChargeBound]
+  rw [show (fun t => if IsHashCall hs t then 1 else 0) = hashCost from
+    funext fun t => (hashCost_eq_ite t).symm]
+
 /-- A computation against a model, with the count of its hash calls.
 
 A repeated input counts again. -/
@@ -327,5 +335,13 @@ theorem gameAfterKeys_of_sign_eq
           QueryImpl.withLogging signer) (adversary.main pk)).run >>= checkForgery scheme pk := by
   unfold gameAfterKeys
   rw [run_simulateQ_signingOracle_of_sign_eq scheme sk signer hsign, bind_map_left]
+
+/-! ## A larger slack -/
+
+/-- A bound with a slack holds with any larger slack. -/
+theorem StronglyUnforgeable.of_slack_le {model : Model hs} {maxSignings slack slack' bits : ℕ}
+    (h : StronglyUnforgeable scheme model maxSignings slack bits) (hslack : slack ≤ slack') :
+    StronglyUnforgeable scheme model maxSignings slack' bits := fun q adversary hq hn =>
+  (h q adversary hq hn).trans (by gcongr)
 
 end EthLib.Cryptography.SufCma

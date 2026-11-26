@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.SufCma.Simulate
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
 
 /-!
@@ -70,18 +71,13 @@ theorem isQueryBoundP_run_signingOracle {α : Type}
       (StateT SecretKey (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld))) +
         SufCma.signingOracle scheme) oa).run sk).run (SufCma.IsHashCall HashSpec)
       (qH + r * requestQueries) := by
-  refine isQueryBoundP_run_keyed _ (fun n sk => ?_) (fun x sk => ?_) (fun request sk => ?_) oa
-    hh hr sk
-  · rw [XmssSecurity.Bridge.run_keyedOracles_inl]
-    exact (isQueryBoundP_map_iff _ _ _).2
-      ((isQueryBoundP_query_iff (spec := OracleWorld) _ (.inl n) 0).2 fun h => by
-        simp [SufCma.IsHashCall] at h)
-  · rw [XmssSecurity.Bridge.run_keyedOracles_inl]
-    exact (isQueryBoundP_map_iff _ _ _).2
-      ((isQueryBoundP_query_iff (spec := OracleWorld) _ (.inr x) 1).2 fun _ => Nat.one_pos)
-  · rw [XmssSecurity.Bridge.run_keyedOracles_inr]
-    exact (isQueryBoundP_map_iff _ _ _).2
-      (isQueryBoundP_liftM_hash _ (isQueryBoundP_signWith_requestQueries sk _ _))
+  rw [SufCma.isQueryBoundP_isHashCall_iff]
+  refine SufCma.isChargeBound_adversaryPhase SufCma.hashCost scheme (fun sk request =>
+    (SufCma.isQueryBoundP_isHashCall_iff _ _).1 ((isQueryBoundP_map_iff _ _ _).2
+      (isQueryBoundP_liftM_hash _ (isQueryBoundP_signWith_requestQueries sk _ _)))) oa ?_ hr sk
+  -- An adversary's query costs one exactly when it is a hash call.
+  exact ((isQueryBoundP_iff_isChargeBound _ _ _).1 hh).mono_charge
+    fun t => (SufCma.adversaryCharge_hashCost t).le
 
 /-- The game makes at most `Q` hash calls, for `qH` calls of `H` and `r` requests. -/
 theorem isQueryBoundP_game (adversary : Adversary) {qH r : Nat}
@@ -89,20 +85,23 @@ theorem isQueryBoundP_game (adversary : Adversary) {qH r : Nat}
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
     IsQueryBoundP (SufCma.game scheme adversary) (SufCma.IsHashCall HashSpec)
       (gameQueries qH r) := by
-  rw [game_eq]
-  unfold SufCma.gameAfterKeys SufCma.checkForgery
-  refine (isQueryBoundP_bind (isQueryBoundP_liftM_prob sampleSeed) fun seed _ =>
-    isQueryBoundP_bind
-      (isQueryBoundP_liftM_hash _ (isQueryBoundP_keyGenWith_keyGenQueries seed))
-      fun keys _ =>
-      isQueryBoundP_bind (isQueryBoundP_run_signingOracle (adversary.main keys.1)
-        (hh keys.1) (hr keys.1) keys.2) fun z _ =>
-        isQueryBoundP_bind (m := 0) (isQueryBoundP_liftM_hash _
-          (isQueryBoundP_verifyWith isQueryBoundP_H _ _ _)) fun _ _ =>
-          isQueryBoundP_pure _ _ 0).mono ?_
-  -- Sum the bounds of key generation, the requests and the verification.
-  simp only [gameQueries, verifyQueries]
-  omega
+  rw [SufCma.isQueryBoundP_isHashCall_iff]
+  have h := SufCma.isChargeBound_game SufCma.hashCost
+    (K := keyGenQueries) (S := requestQueries) (V := verifyQueries) scheme adversary
+    ((SufCma.isQueryBoundP_isHashCall_iff _ _).1 ?_)
+    (fun sk request => (SufCma.isQueryBoundP_isHashCall_iff _ _).1 ?_)
+    (fun pk message signature => (SufCma.isQueryBoundP_isHashCall_iff _ _).1 ?_)
+    (fun pk => ((isQueryBoundP_iff_isChargeBound _ _ _).1 (hh pk)).mono_charge ?_) hr
+  · simp only [gameQueries, ← add_assoc] at h ⊢
+    exact h
+  -- Key generation: the seed's coins, then the key.
+  · exact (isQueryBoundP_bind (isQueryBoundP_liftM_prob sampleSeed) fun seed _ =>
+      isQueryBoundP_liftM_hash _ (isQueryBoundP_keyGenWith_keyGenQueries seed)).mono (by omega)
+  · exact (isQueryBoundP_map_iff _ _ _).2
+      (isQueryBoundP_liftM_hash _ (isQueryBoundP_signWith_requestQueries sk _ _))
+  · exact isQueryBoundP_liftM_hash _ (isQueryBoundP_verifyWith isQueryBoundP_H _ _ _)
+  -- An adversary's query costs one exactly when it is a hash call.
+  · exact fun t => (SufCma.adversaryCharge_hashCost t).le
 
 /-! ## From the calls of the game to its counted run -/
 
