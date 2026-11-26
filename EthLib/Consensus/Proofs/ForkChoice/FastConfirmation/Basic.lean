@@ -102,20 +102,10 @@ theorem validatorAt_ok_iff {state : BeaconState preset fork} {index : ValidatorI
 /-- The members of a set with a list folded in: those of the set and of the list. -/
 private theorem mem_list_foldl_insert {v : ValidatorIndex} :
     ∀ {members : List ValidatorIndex} {start : Std.TreeSet ValidatorIndex},
-      v ∈ members.foldl (·.insert ·) start ↔ v ∈ start ∨ v ∈ members
-  | [], start => by simp
-  | first :: rest, start => by
-    simp only [List.foldl_cons, mem_list_foldl_insert, Std.TreeSet.mem_insert, List.mem_cons,
-      Std.LawfulEqCmp.compare_eq_iff_eq]
-    constructor
-    · rintro ((rfl | inside) | later)
-      · exact .inr (.inl rfl)
-      · exact .inl inside
-      · exact .inr (.inr later)
-    · rintro (inside | rfl | later)
-      · exact .inl (.inr inside)
-      · exact .inl (.inl rfl)
-      · exact .inr later
+      v ∈ members.foldl (·.insert ·) start ↔ v ∈ start ∨ v ∈ members := by
+  intro members start
+  rw [← (Std.TreeSet.insertMany_list_equiv_foldl (t₁ := start) (l := members)).mem_iff,
+    Std.TreeSet.mem_insertMany_list, List.contains_iff_mem]
 
 /-- The members of a set with a committee folded in: those of the set and of the committee. -/
 private theorem mem_foldl_insert {committee participants : Std.TreeSet ValidatorIndex}
