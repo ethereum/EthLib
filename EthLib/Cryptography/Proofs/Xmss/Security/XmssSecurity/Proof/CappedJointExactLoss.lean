@@ -177,13 +177,13 @@ theorem adversaryEncoding_add_structural_le (q : Nat) (adversary : Adversary)
 open Ghost in
 /-- Lane 2's bound, charging only the adversary's own hash queries and the verification's.
 
-The adversary makes at most `q` hash queries, and the verification at most `384`.
+The adversary makes at most `q` hash queries, and the verification at most `172`.
 
 The verification is counted once: its two kinds of query are disjoint, as the adversary's are. -/
 theorem hasSecondLaneBound_of_adversaryBound (q : Nat) (adversary : Adversary)
     (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q)
     (hq : q < 2 ^ 127) :
-    HasSecondLaneBound (q + 384) adversary := by
+    HasSecondLaneBound (q + 172) adversary := by
   -- The structural class of a key result.
   let structural := fun keyResult : (PublicKey × SecretKey) × QueryCache HashSpec =>
     Rom.IsRelevantHashQuery fun input =>
@@ -220,9 +220,9 @@ theorem hasSecondLaneBound_of_adversaryBound (q : Nat) (adversary : Adversary)
       enc keyResult + str keyResult ≤ q := fun keyResult =>
     adversaryEncoding_add_structural_le q adversary keyResult.1.1 keyResult.1.2 keyResult.2
       (hadv keyResult.1.1)
-  -- The verification's two kinds are disjoint too, at most `384` of them.
+  -- The verification's two kinds are disjoint too, at most `172` of them.
   have hver : ∀ keyResult : (PublicKey × SecretKey) × QueryCache HashSpec,
-      venc keyResult + vstr keyResult ≤ 384 := fun keyResult =>
+      venc keyResult + vstr keyResult ≤ 172 := fun keyResult =>
     tsum_expectedVerifyQueries_add_le_of_disjoint _ _
       (encodingHashQuery_structuralQuery_disjoint keyResult.1.2 keyResult.2) _ _
   unfold HasSecondLaneBound WinningSecondLaneBadEventOccurs
@@ -259,12 +259,12 @@ theorem hasSecondLaneBound_of_adversaryBound (q : Nat) (adversary : Adversary)
   rw [ENNReal.div_add_div_same, ← tsum_add]
   refine ENNReal.div_le_div_right ?_ _
   calc _ ≤ ∑' keyResult, Pr{let x ← (simulateQ romImpl Concrete.scheme.keygen).run ∅}[
-          x = keyResult] * ((q + 384 : Nat) : ENNReal) := tsum_le_tsum fun keyResult => by
+          x = keyResult] * ((q + 172 : Nat) : ENNReal) := tsum_le_tsum fun keyResult => by
         rw [← mul_add]
         refine mul_le_mul' le_rfl ?_
         calc enc keyResult + venc keyResult + (str keyResult + vstr keyResult) =
               enc keyResult + str keyResult + (venc keyResult + vstr keyResult) := by ring
-          _ ≤ q + 384 := add_le_add (hsum keyResult) (hver keyResult)
+          _ ≤ q + 172 := add_le_add (hsum keyResult) (hver keyResult)
           _ = _ := by norm_cast
     _ ≤ _ := by
         rw [ENNReal.tsum_mul_right]

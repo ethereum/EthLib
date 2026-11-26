@@ -160,37 +160,37 @@ theorem isQueryBoundP_liftM_hashSpec {p : OracleWorld.Domain → Prop} [Decidabl
         omega
       · omega
 
-/-- The scheme's verifier makes at most `384` queries of the game in any class. -/
+/-- The scheme's verifier makes at most `172` queries of the game in any class. -/
 theorem verify_isQueryBoundP (p : OracleWorld.Domain → Prop) [DecidablePred p]
     (publicKey : PublicKey) (leafIndex : LeafIndex) (message : Message) (signature : Signature) :
-    IsQueryBoundP (Concrete.scheme.verify publicKey leafIndex message signature) p 384 :=
+    IsQueryBoundP (Concrete.scheme.verify publicKey leafIndex message signature) p 172 :=
   isQueryBoundP_liftM_hashSpec _ (EthLib.Cryptography.Xmss.isQueryBoundP_verifyWith
     (fun _ => (isQueryBoundP_map_iff _ _ _).2
       ((isQueryBoundP_query_iff (spec := HashSpec) _ _ 1).2 fun _ => Nat.one_pos)) _ _ _)
 
-/-- The verification makes at most `384` queries of the game in any class. -/
+/-- The verification makes at most `172` queries of the game in any class. -/
 theorem verifyCont_isQueryBoundP (p : OracleWorld.Domain → Prop) [DecidablePred p]
     (publicKey : PublicKey) (forgery : Forgery) :
-    IsQueryBoundP (verifyCont publicKey forgery) p 384 :=
+    IsQueryBoundP (verifyCont publicKey forgery) p 172 :=
   isQueryBoundP_bind (m := 0) (verify_isQueryBoundP p publicKey _ _ _)
     fun _ _ => isQueryBoundP_pure _ _ 0
 
-/-- After any run, the verification makes at most `384` queries of a class in expectation. -/
+/-- After any run, the verification makes at most `172` queries of a class in expectation. -/
 theorem tsum_expectedVerifyQueries_le (R : OracleWorld.Domain → Prop) [DecidablePred R]
     (publicKey : PublicKey) (run : ProbComp (Forgery × QueryCache HashSpec)) :
     ∑' y, Pr{let x ← run}[x = y] *
-      expectedSimulatedQueryCount romImpl R (verifyCont publicKey y.1) y.2 ≤ 384 := by
+      expectedSimulatedQueryCount romImpl R (verifyCont publicKey y.1) y.2 ≤ 172 := by
   -- Each run's count is at most the verification's query bound.
-  calc _ ≤ ∑' y, Pr{let x ← run}[x = y] * (384 : ℝ≥0∞) := tsum_le_tsum fun y => by
+  calc _ ≤ ∑' y, Pr{let x ← run}[x = y] * (172 : ℝ≥0∞) := tsum_le_tsum fun y => by
         refine mul_le_mul' le_rfl ?_
         rw [← expectedSimulatedCost_indicator]
         exact_mod_cast Ghost.expectedSimulatedCost_le_of_isQueryBoundP romImpl
-          (fun _ _ => le_rfl) _ 384 y.2 (verifyCont_isQueryBoundP R publicKey y.1)
-    _ ≤ 384 := by
+          (fun _ _ => le_rfl) _ 172 y.2 (verifyCont_isQueryBoundP R publicKey y.1)
+    _ ≤ 172 := by
         rw [ENNReal.tsum_mul_right]
         exact mul_le_of_le_one_left' (OracleComp.tsum_prEvent_le_one _)
 
-/-- The verification's expected queries of two disjoint classes add to at most `384`.
+/-- The verification's expected queries of two disjoint classes add to at most `172`.
 
 The bound holds after any run of the adversary. -/
 theorem tsum_expectedVerifyQueries_add_le_of_disjoint (R S : OracleWorld.Domain → Prop)
@@ -199,7 +199,7 @@ theorem tsum_expectedVerifyQueries_add_le_of_disjoint (R S : OracleWorld.Domain 
     (∑' y, Pr{let x ← run}[x = y] *
         expectedSimulatedQueryCount romImpl R (verifyCont publicKey y.1) y.2) +
       ∑' y, Pr{let x ← run}[x = y] *
-        expectedSimulatedQueryCount romImpl S (verifyCont publicKey y.1) y.2 ≤ 384 := by
+        expectedSimulatedQueryCount romImpl S (verifyCont publicKey y.1) y.2 ≤ 172 := by
   -- A query of the union is in exactly one class, so the two counts add to the union's.
   rw [← tsum_add]
   simp_rw [← mul_add, ← expectedSimulatedQueryCount_or_of_disjoint romImpl R S hdisjoint]

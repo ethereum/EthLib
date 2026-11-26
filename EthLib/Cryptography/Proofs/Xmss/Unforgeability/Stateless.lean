@@ -165,12 +165,12 @@ theorem advantage_schemeRpmStateless
 
 The adversary itself makes at most `q` calls of the permutation or its inverse and `2^32` requests.
 
-It forges with probability at most `(q + 531) * 2^-127`.
+It forges with probability at most `(q + 319) * 2^-127`.
 
 Key generation, the signer and the final verification are not charged to `q`. -/
 theorem stronglyUnforgeable_randomPermutationModel_stateless :
     SufCma.StronglyUnforgeable schemeRpmStateless (SufCma.randomPermutationModel State)
-      (2 ^ LOG_LIFETIME) 531 127 := fun q adversary hq hn => by
+      (2 ^ LOG_LIFETIME) 319 127 := fun q adversary hq hn => by
   rw [advantage_schemeRpmStateless]
   exact stronglyUnforgeable_randomPermutationModel q adversary hq hn
 

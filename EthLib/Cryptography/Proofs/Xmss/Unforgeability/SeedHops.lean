@@ -602,8 +602,8 @@ Each one-time signature makes at most `2^32 + 204` calls: all `2^32` trials, its
 The tree makes `205 * 2^16 - 1` calls. -/
 def requestQueries : ℕ := 2 ^ 33 + 205 * 2 ^ 16 + 407
 
-/-- The verification of the forgery: two layers of a digest, 58 chains, a leaf and a path. -/
-def verifyQueries : ℕ := 384
+/-- Verifying the forgery: per layer, a digest, `68` chain steps, a leaf and `16` nodes. -/
+def verifyQueries : ℕ := 172
 
 /-- The hash calls of a game whose adversary makes `qH` hash queries and `r` requests. -/
 def gameQueries (qH r : ℕ) : ℕ := keyGenQueries + qH + r * requestQueries + verifyQueries

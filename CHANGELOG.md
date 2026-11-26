@@ -89,7 +89,7 @@ Not yet released.
 - In Lean, `DirectSafety.twoRunsForgeAdvantage_le_coCdhAdvantage` (`Consensus/Proofs/DirectSafety/SignedForgery.lean`) bounds a forged header call of two runs against `n` honest keys by `n * q` times a co-CDH solver ([#3433](https://github.com/ethereum/EthLib/issues/3433)).
   `Security.multiByteForgeAdvantage_le_coCdhAdvantage` (`Cryptography/Proofs/Bls/Security/MultiKeyBytes.lean`) carries the BLS bound against `n` keys to EthLib's bytes.
   `DirectSafety.exists_wins_of_not_bls_verifySoundOn` shows that a failure of the assumption on the header calls of signed direct safety is a winning call.
-- In Lean, `Xmss.Unforgeability.stronglyUnforgeable` (`Cryptography/Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) bounds an XMSS forgery by `(qH + 530) / 2^127` ([#3373](https://github.com/ethereum/EthLib/issues/3373)).
+- In Lean, `Xmss.Unforgeability.stronglyUnforgeable` (`Cryptography/Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) bounds an XMSS forgery by `(qH + 318) / 2^127` ([#3373](https://github.com/ethereum/EthLib/issues/3373)).
   The forger makes at most `qH` calls of `H` and at most `2^32` signing requests, and the requests cost nothing in the bound.
   `XmssSecurity.Bridge.realGame_le_model` (`Cryptography/Proofs/Xmss/Security/XmssSecurity/Proof/Bridge/Security.lean`) now holds the hops from the real game to the model's game, and `realGame_security` keeps its statement.
 - In Lean, `BeaconApi.dutiesResponse_proposer_error_code_of_run` (`Consensus/Proofs/BeaconApi/DutiesReachable.lean`) classifies the failures of a proposer answer ([#3585](https://github.com/ethereum/EthLib/issues/3585)).
@@ -1114,6 +1114,18 @@ Not yet released.
 - In Lean, the capacity term of the sponge indifferentiability bound is `(N^2 + N) / |C|`, down from `(N (2N + 1) + N (N + 1)) / |C|` ([#4716](https://github.com/ethereum/EthLib/issues/4716)).
   - `Sponge.spongeIndiffBound cardS cardC N` (`Cryptography/Proofs/Sponge/Indifferentiability.lean`) is `N.choose 2 / cardS + (N * N + N) / cardC`, and `Sponge.Indiff.prEvent_visRun_le` and `prEvent_foldIdeal_diff_le` state `(N * N + N) / |C|`; `keccak256_indifferentiable` and the leanXMSS transfer to the random-permutation model get the smaller bound.
   - `prEvent_bad_le_of_weightBudget` and `size_le_of_mem_support_run_weightBudget` (`Cryptography/Proofs/BadOnBudget.lean`) are removed: use `tsum_le_of_isQueryBound`, which charges a potential on the budget and the state and a final charge for a good end.
+
+- In Lean, leanXMSS verification is charged its `172` calls of `H`, down from `384`, so the slack of its strong unforgeability for the adversary's own calls is `318`, down from `530`, and `319` in the random-permutation model, down from `531`.
+  Each layer hashes a digest, walks the `68` chain steps a codeword leaves, hashes a leaf and climbs `16` nodes.
+  - `Xmss.isQueryBoundP_otsLeaf`, `isQueryBoundP_layerRoot` and `isQueryBoundP_verifyWith` (`Cryptography/Proofs/Xmss/QueryBound.lean`) bound `70`, `86` and `172` calls, down from `176`, `192` and `384`.
+  - `Xmss.Unforgeability.stronglyUnforgeable` states slack `318`; `stronglyUnforgeable_randomPermutationModel` and `stronglyUnforgeable_randomPermutationModel_stateless` state slack `319`.
+  - `XmssSecurity.CappedChain.capped_forgeAdvantage_le_of_adversaryBound` bounds the model by `(2q + 634) / 2^128`, lane 1 is `q + 172 + forgeryProbeCount` and `XmssSecurity.hasSecondLaneBound_of_adversaryBound` states `HasSecondLaneBound (q + 172)`.
+  - `Xmss.Unforgeability.verifyQueries` is `172`, so `gameQueries` is `212` smaller, and `lifetimeQueries_eq` ends in `+ 173`.
+
+- In Lean, leanXMSS and leanSPHINCS share one count of hash calls, `HashSig.countHashQueries` (`Cryptography/Proofs/HashSig/Counted.lean`), stated with `SufCma.IsHashCall` and `SufCma.hashCost` ([#4744](https://github.com/ethereum/EthLib/pull/4744)).
+  - `XmssSecurity.countHashQueries` and `SphincsSecurity.Security.SeedCoupling.countHashQueries` and their lemmas are removed; `_lift_prob` and `_sampling_bind` are `HashSig.countHashQueries_liftM` and `_liftM_bind`, and `HashSig.simulateQ_countHashQueries` takes the handler first.
+  - `XmssSecurity.countedRomImpl` and `SphincsSecurity.Security.countedOracle` are removed: write `romImpl.withAddCost SufCma.hashCost`.
+  - `XmssSecurity.IsHashQuery`, `XmssSecurity.Seeded.queryCost`, `XmssSecurity.CappedChain.verifierHashQueryCost` and `SphincsSecurity.Security.Prefix.SourceHash` are removed: use `SufCma.IsHashCall HashSpec` and `SufCma.hashCost`.
 
 - In Lean, the first items of a zip are a prefix of the first list, not only a sublist.
   - `Base.map_fst_zip_sublist` (`Base/Proofs/List.lean`), which stated `((xs.zip ys).map Prod.fst).Sublist xs`, is renamed `Base.map_fst_zip_prefix` and states `(xs.zip ys).map Prod.fst <+: xs`.

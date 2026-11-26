@@ -13,7 +13,7 @@ For the bounds, each call of `H` makes at most one query on every path.
 - Signing in a tree the key keeps takes at most `2^32 + 204 = 4294967500` calls.
 - Signing with any key takes at most `2^33 + 205 * 2^16 + 407 = 8603369879` calls.
   That covers a tree the key must build, and the top key's signature of its root.
-- Verification takes at most `384` calls, as the query bounds of the algorithms already prove.
+- Verification takes at most `172` calls, as the query bounds of the algorithms already prove.
 
 Each call weighted by its Keccak-256 blocks, the same walks give:
 

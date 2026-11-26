@@ -25,7 +25,7 @@ open HashSig (simulateQ_countHashQueries countHashQueries_pure countHashQueries_
 
 Key generation, each request and the final verification make at most a fixed number of calls.
 
-The bounds are `205 * 2^16 + 1`, `2^33 + 205 * 2^16 + 407` and `384`.
+The bounds are `205 * 2^16 + 1`, `2^33 + 205 * 2^16 + 407` and `172`.
 -/
 
 /-- Coins make no hash call. -/
@@ -118,7 +118,7 @@ theorem isGameQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
 
 /-- With at most `qH` calls of `H` and `r` requests, a forgery has chance `<= Q / 2^127`.
 
-`Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384` bounds the calls of the game. -/
+`Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 172` bounds the calls of the game. -/
 theorem advantage_le_adversaryBudget (adversary : Adversary) {qH r : Nat}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
@@ -132,7 +132,7 @@ def lifetimeQueries : Nat := gameQueries 0 (2 ^ LOG_LIFETIME)
 
 /-- With at most `qH` calls of `H` and `2^32` requests, a forgery has chance `<= (qH + C) / 2^127`.
 
-`C = 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`.
+`C = 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 173`.
 
 It covers key generation, the signer and the verifier. -/
 theorem advantage_le_lifetime (adversary : Adversary) {qH r : Nat}
@@ -152,9 +152,9 @@ theorem advantage_le_lifetime (adversary : Adversary) {qH r : Nat}
   have := Nat.mul_le_mul_right requestQueries hr
   omega
 
-/-- The constant of the lifetime bound is `2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`. -/
+/-- The constant of the lifetime bound is `2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 173`. -/
 theorem lifetimeQueries_eq :
-    lifetimeQueries = 2 ^ 65 + 205 * 2 ^ 48 + 407 * 2 ^ 32 + 205 * 2 ^ 16 + 385 := by
+    lifetimeQueries = 2 ^ 65 + 205 * 2 ^ 48 + 407 * 2 ^ 32 + 205 * 2 ^ 16 + 173 := by
   simp only [lifetimeQueries, gameQueries, keyGenQueries, requestQueries, verifyQueries,
     LOG_LIFETIME, LAYER_HEIGHT]
   norm_num
@@ -248,19 +248,19 @@ theorem isQueryBoundP_modelAdversary (adversary : Adversary) {qH : Nat}
 
 The adversary itself makes at most `q` calls of `H` and `2^32` requests.
 
-It forges with probability at most `(q + 530) * 2^-127`.
+It forges with probability at most `(q + 318) * 2^-127`.
 
 Key generation, the signer and the final verification are not charged to `q`. -/
 theorem stronglyUnforgeable :
     SufCma.StronglyUnforgeable scheme (SufCma.randomOracleModel HashSpec) (2 ^ LOG_LIFETIME)
-      530 127 := by
+      318 127 := by
   intro qH adversary hh hreq
   rw [SufCma.mul_inv_two_pow, ← Nat.cast_add]
   -- The request budget `r` is the key's lifetime.
   obtain ⟨r, hr, hreq⟩ : ∃ r, r ≤ 2 ^ LOG_LIFETIME ∧
       ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r :=
     ⟨_, le_rfl, hreq⟩
-  by_cases hbig : 2 ^ 127 ≤ qH + 530
+  by_cases hbig : 2 ^ 127 ≤ qH + 318
   · -- From there on, the bound is at least one.
     refine (prEvent_le_one _).trans ?_
     rw [ENNReal.le_div_iff_mul_le (Or.inl (by norm_num)) (Or.inl (ENNReal.natCast_ne_top _)),
@@ -280,10 +280,10 @@ theorem stronglyUnforgeable :
       (hashQueryBound_realGame adversary _ (isGameQueryBound_of_budget adversary hh hreq))).trans
       ((add_le_add (add_le_add hmodel (XmssSecurity.Bridge.guesses_le (by omega)))
         (XmssSecurity.Bridge.guesses_le (by omega))).trans ?_))
-  -- The model's bound is `(2 qH + 1058) / 2^128`, and the two guesses add `2 / 2^128`.
+  -- The model's bound is `(2 qH + 634) / 2^128`, and the two guesses add `2 / 2^128`.
   rw [← ENNReal.add_div, ← ENNReal.add_div]
   rw [show ((2 ^ 128 : Nat) : ℝ≥0∞) = 2 * ((2 ^ 127 : Nat) : ℝ≥0∞) by norm_num]
-  rw [show ((2 * qH + 1058 : Nat) : ℝ≥0∞) + 1 + 1 = 2 * ((qH + 530 : Nat) : ℝ≥0∞) by
+  rw [show ((2 * qH + 634 : Nat) : ℝ≥0∞) + 1 + 1 = 2 * ((qH + 318 : Nat) : ℝ≥0∞) by
     push_cast; ring]
   exact (ENNReal.mul_div_mul_left _ _ (by norm_num) (by norm_num)).le
 
