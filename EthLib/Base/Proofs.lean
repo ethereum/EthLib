@@ -7,6 +7,7 @@ public import EthLib.Base.Proofs.ByteList
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.ByteOrder.Digits
 public import EthLib.Base.Proofs.Bytes
+public import EthLib.Base.Proofs.Bytes.Equiv
 public import EthLib.Base.Proofs.ChainConfig
 public import EthLib.Base.Proofs.CodeInjective
 public import EthLib.Base.Proofs.ErrorsMeet

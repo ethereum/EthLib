@@ -200,10 +200,14 @@ def IsHashCall (hs : OracleSpec ι) (t : (unifSpec + hs).Domain) : Prop :=
 instance : DecidablePred (IsHashCall hs) := fun t =>
   inferInstanceAs (Decidable (t.isRight = true))
 
-/-- A hash query costs one, and a coin nothing. -/
-def hashCost : (unifSpec + hs).Domain → ℕ
+/-- The charge of a query: `c t` for a hash call on `t`, nothing for a coin. -/
+@[simp] def hashCharge (c : ι → ℕ) : (unifSpec + hs).Domain → ℕ
   | .inl _ => 0
-  | .inr _ => 1
+  | .inr t => c t
+
+/-- A hash query costs one, and a coin nothing. -/
+def hashCost : (unifSpec + hs).Domain → ℕ :=
+  hashCharge fun _ => 1
 
 /-- A query costs one exactly when it is a hash call. -/
 theorem hashCost_eq_ite (t : (unifSpec + hs).Domain) :
