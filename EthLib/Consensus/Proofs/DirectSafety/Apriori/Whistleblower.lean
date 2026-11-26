@@ -822,7 +822,7 @@ private theorem prefix_withdrawable {fork : Fork}
         getCurrentEpoch s < v.withdrawableEpoch →
           ∃ w, reset.validators.data[i]? = some w ∧
             getCurrentEpoch reset < w.withdrawableEpoch := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   have one := epoch.justifiedOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have two := epoch.scoredOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have three := EpochStage.Edge.validators_eq (stage := .rewards) (config := config)
@@ -1150,7 +1150,7 @@ private theorem slot_credits_le {g u v : ForkedBeaconState preset}
   obtain ⟨_, epochReset, _⟩ := prefix_withdrawable electra cachedOk stages
   have cachedSame : cached.validators = u.state.validators ∧
       cached.pendingConsolidations = u.state.pendingConsolidations := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     exact ⟨rfl, rfl⟩
   have queue : deposited.pendingConsolidations electra = u.state.pendingConsolidations electra := by
     have one := justifiedOk.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩

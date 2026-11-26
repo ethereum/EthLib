@@ -481,7 +481,7 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
           (epochedKept.trans (advancedKept.trans upgraded))
       have ordered : PendingConsolidationsOrdered config (getCurrentEpoch cached).toNat
           cached := by
-        obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+        obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
         exact shared.pendingConsolidationsOrdered genesis delay
       refine ⟨fun _ e mem deposit => ?_,
         fun across' same => ⟨fun e mem deposit => ?_, fun _ => ?_, ?_⟩⟩
@@ -697,7 +697,7 @@ private theorem ScoresBelowAt.pass {f : Fork} {s cached just pass : BeaconState 
     (justified : processJustificationAndFinalization cached = .ok just)
     (scored : processInactivityUpdates config just altair = .ok pass) :
     ScoresBelowAt n (fun i => bound i + config.INACTIVITY_SCORE_BIAS.toNat) ⟨f, pass⟩ := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   refine ScoresBelowAt.inactivity altair scored (ScoresBelowAt.of_kept (fun i _ =>
     ScoreKept.of_scores (processJustificationAndFinalization_inactivityScores justified) i) ?_)
   exact ScoresBelowAt.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
@@ -803,7 +803,7 @@ private theorem ScoresBelowAt.step_all {m l : ForkedBeaconState preset}
       · simp [zero]
     · -- Another slot keeps the epoch and the scores.
       simp only [nextSlot_epoch_of_inside sum within, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+      obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
       exact ScoresBelowAt.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
 
 /-- On a branch from `x` from Altair, each score below `n` follows its start bound plus `bias * t`.
@@ -1259,7 +1259,7 @@ theorem pass_kept_of_effective {r s : ForkedBeaconState preset}
   -- The stages before the rewards keep the validators and the slot.
   have one := justified.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
   have two := scored.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   have validators : pass.validators = s.state.validators := two.1.trans one.1
   have slot : pass.slot = s.state.slot := two.2.2.2.2.trans one.2.2.2.2
   refine ⟨(activeKept_of_chainSteps inner.chainSteps).trans fun _ _ _ => by
@@ -1317,7 +1317,7 @@ theorem previousStake_le_ceiling {g z w : ForkedBeaconState preset}
   have registry : w.state.validators.data = e.validators.data := by
     rw [processUpgrades_validators_of_electra (s := ⟨z.fork, advanced⟩) electra wEarly upgrades,
       ← advancedEq]
-  obtain ⟨_, _, _, _, cachedZEq⟩ := processSlot_ok cachedZOk
+  obtain ⟨_, cachedZEq⟩ := processSlot_ok cachedZOk
   -- The slot from `z` ends epoch `t - 1`, so it runs the epoch transition.
   have last : next % preset.SLOTS_PER_EPOCH = 0 := by
     by_contra inside

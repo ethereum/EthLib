@@ -288,7 +288,7 @@ private theorem epochInput_facts {g x u : ForkedBeaconState preset}
   have invariant := (run_justified_separated run genesis).1
   have start := currentEpoch_le_of_chainSteps pre.chainSteps
   have bounded := getCurrentEpoch_succ_lt_farFuture twoSlots u.state
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cached
+  obtain ⟨_, rfl⟩ := processSlot_ok cached
   exact ⟨invariant.balancesMatch, invariant.exitsOrdered,
     run.pendingConsolidationsOrdered genesis delay,
     run.exit_withdrawable_delay genesis,
@@ -375,7 +375,7 @@ private theorem reservedReplay_slot_inside {x u v : ForkedBeaconState preset} {h
     apply UInt64.toNat_inj.mp
     rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, advancedEq]
     exact nextSlot_epoch_of_inside sum notLast
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   subst advancedEq
   refine ⟨replayed.symm, .nil frame, retired.lifecycle (.of_data rfl), ?_,
     futureCover_records (u := s) rfl (UInt64.le_of_eq sameEpoch.symm) future, ?_⟩
@@ -455,7 +455,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     startCurrent, finite⟩ :=
     epochInput_facts (u := ⟨fork, s⟩) shared pre genesis caps delay twoSlots cachedOk
   -- The cache keeps the registry, the balances, the slot and the queue.
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have sameEpoch : getCurrentEpoch cached = getCurrentEpoch s := by
     simp only [getCurrentEpoch, processSlot_slot cachedOk]
   have cacheFrame : ReservedFrame (config := config) (checks := checks) x high rounding

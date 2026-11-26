@@ -67,7 +67,7 @@ private theorem advanceSlotAcross_justification {forked after : ForkedBeaconStat
   have finalized := processUpgrades_finalized upgraded
   -- From Altair the target votes are flags, which caching the roots keeps.
   have targets : targetIndices cached = targetIndices state := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     funext epoch
     unfold targetIndices
     simp only [altair, ↓reduceDIte]
@@ -75,7 +75,7 @@ private theorem advanceSlotAcross_justification {forked after : ForkedBeaconStat
   -- Caching the roots changes neither the registry, nor the flags, nor the slot.
   --
   -- So the stake and the target votes that justification reads are those of the state of the run.
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   exact ⟨_, justified, justifiedOk, rfl, rfl, rfl, targets, rfl, rfl,
     current.trans frame.currentJustified, bits.trans frame.justificationBits,
     finalized.trans frame.finalized⟩

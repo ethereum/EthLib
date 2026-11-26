@@ -1101,7 +1101,7 @@ private theorem advanceSlot_kept (computed : advanceSlot config checks state = .
     state.validators.data.size ≤ after.validators.data.size ∧
       ActiveKept (activityFixedEpoch state) state after := by
   obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   -- The slot step writes neither the registry nor the slot.
   have validators : cached.validators = state.validators := by rw [cachedEq]
   have epoch : activityFixedEpoch cached = activityFixedEpoch state :=
@@ -1500,7 +1500,7 @@ private theorem ExitsStart.of_data_right {f g h : Fork} {state : BeaconState pre
 private theorem exitsStart_advanceSlot (electra : .pectra ≤ fork)
     (computed : advanceSlot config checks state = .ok after) : ExitsStart state after := by
   obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have first : BlockKeeps state cached :=
     BlockKeeps.of_validators (by rw [cachedEq]) (by rw [cachedEq])
   unfold epochIfLast at epochedOk

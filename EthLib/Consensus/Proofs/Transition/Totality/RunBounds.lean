@@ -137,7 +137,7 @@ theorem RunBounded.of_processSlot {config : Config} {start : RunStart} {budget e
     (holds : RunBounded config start budget elapsed state)
     (computed : processSlot state = .ok after) : RunBounded config start budget elapsed after := by
   -- The caching writes only the roots, the header and the availability bits.
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   exact ⟨holds.supply, holds.effective, holds.load, holds.scores, holds.exits, holds.queue,
     holds.consolidations, holds.roots, holds.summaries, holds.depositChurn, holds.exitChurn,
     holds.slashed⟩

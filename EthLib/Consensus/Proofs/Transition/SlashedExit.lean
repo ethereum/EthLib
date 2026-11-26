@@ -267,7 +267,7 @@ theorem Run.slashed_withdrawableEpoch_mono_epoch
   have runStep := (CapStep.run run caps).1
   -- The cache step keeps the registry, the slot and the proposer lookahead.
   have cacheStep : CapStep config outer.state s := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cached
+    obtain ⟨_, rfl⟩ := processSlot_ok cached
     exact CapStep.data
   have span := (runStep.trans cacheStep).trans (CapStep.epochTrace trace)
   obtain ⟨flag, exit, same⟩ := (span.withdrawal i v w before after).1 slashed assigned

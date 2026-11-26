@@ -291,7 +291,7 @@ theorem advanceSlot_slackJustifiedCheckpoints
     SlackJustifiedCheckpoints V U W genesis votes block after := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have validators : cached.validators = state.validators := by rw [cachedEq]
   have currentEq : getCurrentEpoch cached = getCurrentEpoch state := by
     simp only [getCurrentEpoch, cachedFrame.slot]

@@ -958,7 +958,7 @@ theorem balanceDrift_slot_upper {f : Fork} {s t : BeaconState preset f}
     effectiveAt ⟨f, t⟩ i ≤ max (effectiveAt ⟨f, s⟩ i) (actualBalanceAt ⟨f, t⟩ i) := by
   simp only [advanceSlot, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
   obtain ⟨next, _, cached, cache, advanced, advance, rfl⟩ := ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   unfold epochIfLast at advance
   split at advance
   · obtain ⟨before, after, kept, updated, validators, balances⟩ := balanceDrift_epoch advance
@@ -1117,7 +1117,7 @@ theorem Run.effectiveKept_of_same_epoch {x y : ForkedBeaconState preset}
         pre.registryLifecycle.size_le)
     (fun _ _ lastEq cachedOk _ prior => by
       subst lastEq
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+      obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
       exact prior)
     _tail _same
 
@@ -1299,7 +1299,7 @@ private theorem balanceDrift_reference_slot {f : Fork} {s t : BeaconState preset
     reference.toNat ≤ effectiveAt ⟨f, t⟩ i := by
   simp only [advanceSlot, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
   obtain ⟨next, _, cached, cache, advanced, advance, rfl⟩ := ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   unfold epochIfLast at advance
   split at advance
   · exact balanceDrift_reference_epoch advance i v found reference aligned funded previous cap
@@ -2089,7 +2089,7 @@ private theorem admissionFunded_slot {f : Fork} {s t : BeaconState preset f}
     (ok : advanceSlot config checks s = .ok t) : AdmissionFunded s.validators.data.size t := by
   simp only [advanceSlot, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
   obtain ⟨next, _, cached, cache, advanced, advance, rfl⟩ := ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   unfold epochIfLast at advance
   split at advance
   · have funded := admissionFunded_epoch (s := _) (t := advanced) (by exact matched)

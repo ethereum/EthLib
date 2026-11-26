@@ -1651,7 +1651,7 @@ private theorem intervalLoss_step_sites {x y : ForkedBeaconState preset}
     obtain ⟨sited, sitedOk, crossingStep, crossingSites, crossingCounts, upgradeFlags⟩ :=
       intervalLoss_sites_upgrades upgrades
     obtain rfl : crossings = sited := Except.ok.inj (crossingOk.symm.trans sitedOk)
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
     have cachedStep : intervalLoss_SiteStep x ⟨x.fork, cached⟩ := by
       rw [cachedEq]
       exact ⟨.of_data rfl, rfl, id, id, Nat.le_refl _, .of_data rfl⟩

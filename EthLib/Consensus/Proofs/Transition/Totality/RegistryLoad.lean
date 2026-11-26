@@ -223,7 +223,7 @@ The slot stays in its fork: the upgrades come after it. -/
 theorem advanceSlot_registryLoad_le (computed : advanceSlot config checks state = .ok after) :
     registryLoad after ≤ registryLoad state := by
   obtain ⟨next, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   -- No step of a slot other than the pending deposits adds a validator or a pending deposit.
   have slotKept : LoadKept epoched { epoched with slot := next } := ⟨rfl, rfl⟩
   rw [LoadKept.registryLoad_eq slotKept]

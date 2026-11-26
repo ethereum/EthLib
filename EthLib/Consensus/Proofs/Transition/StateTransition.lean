@@ -37,27 +37,44 @@ theorem unsetNextPayloadAvailability_ok {gloas : .glamsterdam ≤ fork}
   obtain ⟨next, ⟨_, sum⟩, bits, written, rfl⟩ := computed
   exact ⟨next, bits, by simpa using sum, written, rfl⟩
 
-/-- The caching of a slot keeps every field but the roots and, from Gloas, the availability bits.
+/-- The fields that the caching of a slot writes.
+
+A fork that writes a new field adds it here, and the users of the contract keep their proofs. -/
+structure SlotWrites (preset : Preset) (fork : Base.Fork) where
+  /-- The state roots, with the root of the state at slot `s` at its position in the buffer. -/
+  stateRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
+  /-- The block roots, with the root of the latest block header at the same position. -/
+  blockRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
+  /-- The latest block header, with its state root filled if that root was 32 zero bytes. -/
+  latestBlockHeader : BeaconBlockHeader
+  /-- From Gloas, the payload availability bits, with the bit of the next slot cleared. -/
+  executionPayloadAvailability : Since .glamsterdam fork (ExecutionPayloadAvailability preset)
+
+/-- A state with the fields that the caching of a slot writes replaced.
+
+It is reducible, so `rfl` and `simp` read a field that it keeps as that of the state. -/
+abbrev SlotWrites.apply (w : SlotWrites preset fork) (state : BeaconState preset fork) :
+    BeaconState preset fork :=
+  { state with
+    stateRoots := w.stateRoots
+    blockRoots := w.blockRoots
+    latestBlockHeader := w.latestBlockHeader
+    executionPayloadAvailability := w.executionPayloadAvailability }
+
+/-- The caching of a slot keeps every field but those of `SlotWrites`.
 
 The result is the state with those fields replaced. -/
 theorem processSlot_ok (computed : processSlot state = .ok after) :
-    ∃ (stateRoots blockRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-      (header : BeaconBlockHeader)
-      (availability : Since .glamsterdam fork (ExecutionPayloadAvailability preset)),
-      after = { state with
-        stateRoots := stateRoots
-        blockRoots := blockRoots
-        latestBlockHeader := header
-        executionPayloadAvailability := availability } := by
+    ∃ w : SlotWrites preset fork, after = w.apply state := by
   unfold processSlot at computed
   simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, computed⟩ := computed
   split at computed
   · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
-    exact ⟨_, _, _, _, rfl⟩
+    exact ⟨⟨_, _, _, _⟩, rfl⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨_, _, _, _, rfl⟩
+    exact ⟨⟨_, _, _, _⟩, rfl⟩
 
 /-- The caching of a slot writes one block root, at the position of the slot.
 
@@ -79,7 +96,7 @@ theorem processSlot_blockRoots (computed : processSlot state = .ok after) :
 
 /-- The caching of a slot keeps the slot. -/
 theorem processSlot_slot (computed : processSlot state = .ok after) : after.slot = state.slot := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   rfl
 
 /-- From Gloas, after the caching of a slot, the payload of the next slot is not available.
@@ -102,7 +119,7 @@ theorem processSlot_nextPayloadUnavailable (gloas : .glamsterdam ≤ fork)
 theorem processSlot_participation (computed : processSlot state = .ok after) :
     after.previousEpochParticipation = state.previousEpochParticipation ∧
       after.currentEpochParticipation = state.currentEpochParticipation := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   exact ⟨rfl, rfl⟩
 
 /-- One slot step caches the roots of the slot, then runs the epoch step if that slot ends an epoch.

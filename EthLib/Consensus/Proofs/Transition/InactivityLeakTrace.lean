@@ -291,7 +291,7 @@ theorem leakEpoch_advanceSlot (altair : .altair ≤ fork)
   unfold epochIfLast at epochedOk
   simp only [same, ends, ↓reduceIte] at epochedOk
   -- The other steps of the slot keep these facts.
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   exact leakEpoch_processEpoch altair epochedOk within leak stalled found unnamed untargeted
 
 end EthLib.Consensus

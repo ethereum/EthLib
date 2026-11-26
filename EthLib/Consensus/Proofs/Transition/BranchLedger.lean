@@ -300,7 +300,7 @@ private theorem Tally.slot {a s cached : BeaconState preset fork} {next : Slot} 
     (epoch : getCurrentEpoch ({ cached with slot := next } : BeaconState preset fork) =
       getCurrentEpoch s) :
     Tally a { cached with slot := next } n deb conv props sl pc credits shares := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   exact { tally with
     within := { tally.within with epoch := epoch.trans tally.within.epoch
                                   active := tally.within.active }

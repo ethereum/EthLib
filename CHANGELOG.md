@@ -1111,6 +1111,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `processSlot_ok` (`Consensus/Proofs/Transition/StateTransition.lean`) now states the result of the caching of a slot as `w.apply state`, for some `w : SlotWrites preset fork`.
+  `SlotWrites` holds the four fields that the step writes.
+  They are the state roots, the block roots, the latest block header and, from Gloas, the payload availability bits.
+  A fork that writes another field adds it to `SlotWrites`, so the uses of the contract keep their proofs ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  Migration: destructure the contract with one witness, as `obtain ⟨_, h⟩ := processSlot_ok computed`, where it had four.
+
 - In Lean, the capacity term of the sponge indifferentiability bound is `(N^2 + N) / |C|`, down from `(N (2N + 1) + N (N + 1)) / |C|` ([#4716](https://github.com/ethereum/EthLib/issues/4716)).
   - `Sponge.spongeIndiffBound cardS cardC N` (`Cryptography/Proofs/Sponge/Indifferentiability.lean`) is `N.choose 2 / cardS + (N * N + N) / cardC`, and `Sponge.Indiff.prEvent_visRun_le` and `prEvent_foldIdeal_diff_le` state `(N * N + N) / |C|`; `keccak256_indifferentiable` and the leanXMSS transfer to the random-permutation model get the smaller bound.
   - `prEvent_bad_le_of_weightBudget` and `size_le_of_mem_support_run_weightBudget` (`Cryptography/Proofs/BadOnBudget.lean`) are removed: use `tsum_le_of_isQueryBound`, which charges a potential on the budget and the state and a final charge for a good end.

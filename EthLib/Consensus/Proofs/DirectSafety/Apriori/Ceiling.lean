@@ -1177,7 +1177,7 @@ private theorem epoch_delayed_slashing_nondebit {x m n : ForkedBeaconState prese
       actualBalanceAt event.before i.toNat ≤ actualBalanceAt event.after i.toNat ∧
         event.after.state.validators.data = event.before.state.validators.data := by
   have same : cached.validators = m.state.validators := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     rfl
   have sameEpoch : getCurrentEpoch cached = getCurrentEpoch m.state := by
     simp only [getCurrentEpoch, (frame_processSlot cachedOk).slot]

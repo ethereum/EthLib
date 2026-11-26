@@ -374,7 +374,7 @@ private theorem effective_floor_slot {f : Fork} {s t : BeaconState preset f}
   have life := (registryLifecycle_advanceSlot ok).size_le
   simp only [advanceSlot, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
   obtain ⟨next, _, cached, cache, advanced, advance, rfl⟩ := ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   unfold epochIfLast at advance
   split at advance
   · obtain ⟨before, after, kept, updated, validators, balances⟩ := balanceDrift_epoch advance
@@ -464,7 +464,7 @@ private theorem effective_ceiling_slot {f : Fork} {s t : BeaconState preset f}
       (effectiveAt ⟨f, t⟩ i ≤ ceil + preset.downwardBand ∧
         (getCurrentEpoch s).toNat < (getCurrentEpoch t).toNat)) := by
   obtain ⟨next, cached, epoched, sum, cache, edge, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
   have cases : ∀ c : BeaconState preset f, epochIfLast config checks next c = .ok epoched →
       next % preset.SLOTS_PER_EPOCH = 0 ∧ processEpoch config checks c = .ok epoched ∨
@@ -868,7 +868,7 @@ theorem epochRewards_le {m n : ForkedBeaconState preset}
         have passBalances : pass.balances = m.state.balances := by
           have first := justified.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
           have second := scored.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
-          obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+          obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
           exact second.2.1.trans first.2.1
         rw [replayRewards_absent rewardedOk (by
           unfold BalancesMatch at matched ⊢
@@ -2268,7 +2268,7 @@ private theorem slot_step_targets {g x m last : ForkedBeaconState preset}
   obtain ⟨next, nextOk, cached, cachedOk, epoched, epochOk, afterEq⟩ := advanceCopy
   have sum : next.toNat = m.state.slot.toNat + 1 :=
     (Uint64.addChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp nextOk))).2
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have shapeCached : Shape (queueX x electra) (getCurrentEpoch x.state) n cached := by
     rw [cachedEq]; exact shape
   by_cases boundary : next % preset.SLOTS_PER_EPOCH = 0
@@ -2829,7 +2829,7 @@ private theorem ExitFarFrom.of_chainStep {a b : ForkedBeaconState preset}
   | slot ok =>
     obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
     obtain ⟨next, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok slotOk
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
     have atEpoched : ExitFarFrom a.state.validators.data.size epoched := by
       unfold epochIfLast at epochedOk
       split at epochedOk

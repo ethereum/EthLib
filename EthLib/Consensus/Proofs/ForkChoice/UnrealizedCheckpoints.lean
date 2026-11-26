@@ -251,7 +251,7 @@ private theorem sameRoots_of (keeps : KeepsRoots state moved) : SameRoots state 
 /-- The caching of a slot keeps a moved state moved. -/
 private theorem Moved.processSlot {cached : BeaconState preset fork} (same : Moved state moved)
     (computed : processSlot moved = .ok cached) : Moved state cached := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   obtain ⟨_, _, _, _, _, rfl⟩ := same
   exact ⟨_, _, _, _, _, rfl⟩
 

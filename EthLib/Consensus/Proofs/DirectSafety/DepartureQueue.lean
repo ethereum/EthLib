@@ -1841,7 +1841,7 @@ private theorem slot_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
       PartialsAppended electra s t calls := by
   simp only [advanceSlot, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
   obtain ⟨_, _, cached, cache, advanced, advance, rfl⟩ := ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   unfold epochIfLast at advance
   split at advance
   · obtain ⟨calls, firsts, trace, covered, rates, appended⟩ :=
@@ -3009,7 +3009,7 @@ private theorem slot_consolidationFrame {fork : Fork} {s t : BeaconState preset 
   obtain ⟨_, _, cached, cache, stepped, advance, rfl⟩ := ok
   have cachedFrame : (departureQueues electra cached).2.2 =
       (departureQueues electra s).2.2 := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+    obtain ⟨_, rfl⟩ := processSlot_ok cache
     rfl
   change (departureQueues electra stepped).2.2 = (departureQueues electra s).2.2
   unfold epochIfLast at advance
@@ -4043,7 +4043,7 @@ private theorem CountCohortStep.slot {f : Fork} {s t : BeaconState preset f}
     (counted : activeCount s ≤ bound) : CountCohortStep config bound s t := by
   obtain ⟨next, cached, epoched, sum, cachedOk, advanced, rfl⟩ := advanceSlot_ok ok
   have cachedSame : cached.validators = s.validators := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     rfl
   have cachedSlot := processSlot_slot cachedOk
   have head : CountCohortStep config bound s cached :=
@@ -6590,7 +6590,7 @@ private theorem slot_exit_rates
           exitEnvelope (n - (getCurrentEpoch x.state).toNat) := by
   simp only [advanceSlot, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
   obtain ⟨_, _, cached, cache, advanced, advance, rfl⟩ := ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   unfold epochIfLast at advance
   split at advance
   · obtain ⟨calls, trace, covered, appended, firsts, rates⟩ :=

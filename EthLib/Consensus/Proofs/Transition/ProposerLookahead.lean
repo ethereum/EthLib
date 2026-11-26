@@ -112,7 +112,7 @@ private theorem proposerLookaheadShifted_advanceSlot
     (computed : advanceSlot config checks state = .ok after) :
     ProposerLookaheadShifted ⟨fork, state⟩ ⟨fork, after⟩ := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   have startAfter : currentEpochStart { epoched with slot := next } =
       (state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat := by
     rw [currentEpochStart, getCurrentEpoch_toNat, sum]

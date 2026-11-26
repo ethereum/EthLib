@@ -167,7 +167,7 @@ private theorem kept_slot {u w : ForkedBeaconState preset} (electra : .pectra �
   obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
   obtain ⟨_, cached, epoched, _, cachedOk, epochedOk, afterEq⟩ := advanceSlot_ok slotOk
   have cachedKept : PinDrift.Internal.Kept u.state cached := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     exact PinDrift.Internal.Kept.of_data rfl
   have epochKept : PinDrift.Internal.Kept cached epoched := by
     unfold epochIfLast at epochedOk
@@ -422,7 +422,7 @@ theorem Step.deposit_input {u w : ForkedBeaconState preset}
     cases member
   rw [eventsEq, noCrossings, List.append_nil] at member
   have cachedKept : PinDrift.Internal.Kept u.state cached := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     exact PinDrift.Internal.Kept.of_data rfl
   have cachedSlot : cached.slot = u.state.slot := (frame_processSlot cachedOk).slot
   have trace := epochBalanceReplay_trace recordOk
@@ -449,7 +449,7 @@ theorem Step.deposit_input {u w : ForkedBeaconState preset}
           · exact absurd source other
         · rw [List.mem_singleton.mp added]
           have cachedSize : cached.validators.data.size = u.state.validators.data.size := by
-            obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+            obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
             rfl
           have same : getCurrentEpoch six.1 = getCurrentEpoch u.state := by
             simp only [getCurrentEpoch, grew.slot, cachedSlot]

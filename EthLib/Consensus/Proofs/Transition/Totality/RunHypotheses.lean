@@ -408,7 +408,7 @@ private theorem upgradeDue_phase0 {state : BeaconState preset .phase0}
 /-- The caching of a slot keeps the absence of signers. -/
 private theorem Quiet.of_processSlot {state cached : BeaconState preset fork}
     (quiet : Quiet state) (computed : processSlot state = .ok cached) : Quiet cached := by
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   exact quiet
 
 /-- A run before the Altair fork epoch stays at Phase 0 and moves the slot by its length.

@@ -137,7 +137,7 @@ theorem advanceSlot_pending {fork : Fork} {state after : BeaconState preset fork
       after.previousEpochAttestations before = state.currentEpochAttestations before ∧
       (after.currentEpochAttestations before).data = #[]) := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have stateEpoch := getCurrentEpoch_toNat state
   have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
   dsimp only at afterEpoch

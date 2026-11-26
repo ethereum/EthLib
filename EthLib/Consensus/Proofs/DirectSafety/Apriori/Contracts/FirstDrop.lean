@@ -728,7 +728,7 @@ private theorem effective_origin_slot {f : Fork} {s t : BeaconState preset f}
       effectiveAt ⟨f, t⟩ i ≤ actualBalanceAt ⟨f, t⟩ i := by
   have life := (registryLifecycle_advanceSlot ok).size_le
   obtain ⟨next, cached, epoched, sum, cache, edge, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   have cases : ∀ c : BeaconState preset f, epochIfLast config checks next c = .ok epoched →
       processEpoch config checks c = .ok epoched ∨ epoched = c := by
     intro c edge
@@ -1838,7 +1838,7 @@ theorem advanceSlot_decrease_last
     by_contra nonlast
     simp only [epochIfLast, nonlast, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at epochOk
     subst epoched
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     simp only [effectiveAt, Nat.lt_irrefl] at decreases
   simp only [epochIfLast, last, ↓reduceIte] at epochOk
   exact ⟨next, cached, epoched, checked, last, cachedOk, epochOk, rfl⟩
@@ -1903,7 +1903,7 @@ private theorem slot_replay_middle_effective
       .ok (middle, events)) : EffectiveKept s middle := by
   have kept := effectiveKept_epoch_replay_middle early epochOk replayed
   have same : cached.validators = s.validators := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     rfl
   intro i inside
   have valid : i < cached.validators.data.size := by simpa only [same] using inside
@@ -1924,7 +1924,7 @@ private theorem reachable_replay_middle_bounds
     v.effectiveBalance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 ∧
       v.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset outer.fork v := by
   have same : cached.validators = outer.state.validators := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     rfl
   have originalCaps := shared.effectiveBalance_capped genesis caps
   have middleCaps := capped_epoch_replay_middle early epochOk replayed

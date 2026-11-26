@@ -194,7 +194,7 @@ private theorem validators_advanceSlotsAcross_of_epoch {config : Config}
         x.state.slot.toNat + (count + 1) by omega]
       exact inside
     obtain ⟨cached, next, cachedOk, rfl⟩ := advanceSlotAcross_of_same_epoch middleOk sameEpoch
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     obtain ⟨last, rfl, same⟩ := validators_advanceSlotsAcross_of_epoch count rest restInside
     exact ⟨last, rfl, same⟩
 

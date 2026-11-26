@@ -240,7 +240,7 @@ theorem PendingVoted.of_processSlot {votes : Set (ValidatorIndex × AttestationD
     (holds : PendingVoted votes state) (computed : processSlot state = .ok after) :
     PendingVoted votes after := by
   have frame := frame_processSlot computed
-  obtain ⟨_, _, _, _, afterEq⟩ := processSlot_ok computed
+  obtain ⟨_, afterEq⟩ := processSlot_ok computed
   have currentEq : getCurrentEpoch after = getCurrentEpoch state := by
     simp only [getCurrentEpoch, frame.slot]
   have previousEq : getPreviousEpoch after = getPreviousEpoch state := by
@@ -279,7 +279,7 @@ theorem recentPending_advanceSlot (before : fork < .altair)
         ∀ current, recentPending after before current = recentPending state before current) := by
   obtain ⟨next, cached, epoched, cachedOk, rfl, split⟩ := advanceSlot_epochs computed
   have cachedFrame := frame_processSlot cachedOk
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have cachedLists : ∀ current, recentPending cached before current =
       recentPending state before current := by
     intro current

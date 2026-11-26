@@ -101,7 +101,7 @@ private theorem same_epoch_balance_le (i high : ℕ) {c a : ForkedBeaconState pr
     omega
   · intro middle last cached next pre' ok lastEq cachedOk kept prior within
     subst lastEq
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     have net := Internal.netScan_snoc i high pre' (Step.slot ok)
     have credit := Internal.creditScan_snoc (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
       pre' (Step.slot ok)

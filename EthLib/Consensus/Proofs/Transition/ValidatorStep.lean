@@ -4301,7 +4301,7 @@ private theorem CapStepR.slot {f : Fork} {s t : BeaconState preset f}
   have later := (runKept_advanceSlot ok).later
   obtain ⟨next, cached, advanced, sum, cache, advance, rfl⟩ := advanceSlot_ok ok
   have cachedInvariant := (frame_processSlot cache).invariant
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cache
+  obtain ⟨_, rfl⟩ := processSlot_ok cache
   unfold epochIfLast at advance
   split at advance
   · rename_i boundary
@@ -5211,7 +5211,7 @@ private theorem preKeyCharge_slot {f : Fork} {s t : BeaconState preset f}
   have slot := (frame_processSlot cachedOk).slot
   have fields : cached.validators = s.validators ∧ cached.balances = s.balances ∧
       cached.depositBalanceToConsume = s.depositBalanceToConsume := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     exact ⟨rfl, rfl, rfl⟩
   unfold epochIfLast at epochedOk
   split at epochedOk
@@ -5378,7 +5378,7 @@ theorem preKeyCharge_run {g x u : ForkedBeaconState preset}
           have held := funded ⟨_, _, _, phase0, initialized⟩ aligned finiteA
           have cacheValid := (frame_processSlot cacheOk).invariant valid
           have cacheTargets : AssignedTargets cached := by
-            obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cacheOk
+            obtain ⟨_, rfl⟩ := processSlot_ok cacheOk
             exact targets
           have epoch := preKeyCharge_epoch previous.1 earlyA caps.activation aligned
             (minimum_cap caps) cacheValid

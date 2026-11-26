@@ -227,7 +227,7 @@ theorem funding_slot_of {x y : ForkedBeaconState preset}
   have sum := (Uint64.addChecked_ok_iff.mp
     (mapError_ok_iff.mp (liftAccessor_ok.mp nextOk))).2
   simp only [UInt64.toNat_one] at sum
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have cachedFund := cachedBound cachedOk
   have cachedCarry : fundingCarry ⟨x.fork, cached⟩ = fundingCarry x := by
     rw [cachedEq]; rfl
@@ -297,12 +297,12 @@ theorem funding_slot {x y : ForkedBeaconState preset}
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
       (events.map fundingCredit).sum := by
   apply funding_slot_of fundedStake
-    (fun cachedOk => by obtain ⟨_, _, _, _, eq⟩ := processSlot_ok cachedOk; rw [eq]; rfl)
+    (fun cachedOk => by obtain ⟨_, eq⟩ := processSlot_ok cachedOk; rw [eq]; rfl)
     funding_slot_increment (fun upgrades => funding_slot_upgrades upgrades early)
     (fun cachedOk _ epochOk middle added replay => ?_) early ok events replayed
   have before : x.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (Step.slot ok).chainStep.fork_le early
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   exact funding_epoch before delay
     ((frame_processSlot cachedOk).balancesMatch matched)
     ((frame_processSlot cachedOk).exitsOrdered ordered)

@@ -90,7 +90,7 @@ private theorem RunHolds.signers {start : RunStart} {budget startEpoch : Nat} {f
   intro boundary cached cachedOk
   by_cases early : (getCurrentEpoch state).toNat < startEpoch + 2
   · exact signers early boundary cached cachedOk
-  · obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  · obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     exact (holds.quiet (by omega)).signers
 
 /-- One slot keeps the absence of signers of a run, with the upgrades on the way. -/

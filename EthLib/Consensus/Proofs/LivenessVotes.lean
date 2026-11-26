@@ -399,7 +399,7 @@ private theorem ChainStep.insideKept
       exact notFirst
     have reached := Except.ok.inj ((processUpgrades_of_not_due due).symm.trans upgraded)
     subst reached kept
-    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
     obtain ⟨committees, count⟩ := committees_of_runKept apart (runKept_advanceSlot advancedOk) same
     refine ⟨rfl, by rw [advancedEq], UInt64.le_iff_toNat_le.mpr (by omega), committees, count,
       fun slot root below read => ?_⟩

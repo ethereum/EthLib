@@ -114,7 +114,7 @@ theorem slashedFlagAt_advanceSlot {config : Config} {checks : SignatureChecks}
     {s t : BeaconState preset fork} (ok : advanceSlot config checks s = .ok t) :
     ∀ i, (slashedFlagAt t i).getD false = (slashedFlagAt s i).getD false := by
   obtain ⟨next, cached, epoched, _, cachedOk, epochOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
   have first := slashFlags_of_validators (state := s) (after := cached) (by rw [cachedEq])
   have middle : ∀ i, (slashedFlagAt epoched i).getD false =
       (slashedFlagAt cached i).getD false := by

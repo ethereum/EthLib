@@ -617,7 +617,7 @@ theorem voterEpoch_advanceSlot (altair : .altair ≤ fork)
     omega
   unfold epochIfLast at epochedOk
   simp only [same, ends, ↓reduceIte] at epochedOk
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   exact voterEpoch_processEpoch altair epochedOk within leak stalled found unslashed voted unsourced
 
 end EthLib.Consensus

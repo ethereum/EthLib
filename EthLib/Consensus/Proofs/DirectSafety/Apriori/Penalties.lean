@@ -1223,7 +1223,7 @@ private theorem retained_slot {a b : ForkedBeaconState preset}
     apply funding_slot_of (x := a) (y := b)
       (fun u => retainedFundingPotential x u.state (fundingSources u.state)
         (getCurrentEpoch b.state))
-      (fun cachedOk => by obtain ⟨_, _, _, _, eq⟩ := processSlot_ok cachedOk; rw [eq]; rfl)
+      (fun cachedOk => by obtain ⟨_, eq⟩ := processSlot_ok cachedOk; rw [eq]; rfl)
       (fun s next later => ?_)
       (fun {advanced} upgrades =>
         (retained_upgrades (s := ⟨a.fork, advanced⟩) x _ electra early upgrades).le)
@@ -1232,7 +1232,7 @@ private theorem retained_slot {a b : ForkedBeaconState preset}
     · exact retained_epoch_change x (fundingSources s) _ rfl rfl (by
         rw [UInt64.le_iff_toNat_le, getCurrentEpoch_toNat, getCurrentEpoch_toNat]
         exact Nat.div_le_div_right later)
-    · obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+    · obtain ⟨_, cachedEq⟩ := processSlot_ok cachedOk
       have before : a.fork < .glamsterdam :=
         Nat.lt_of_le_of_lt (Step.slot ok).chainStep.fork_le early
       have finite : getCurrentEpoch cached < FAR_FUTURE_EPOCH :=

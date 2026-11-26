@@ -247,7 +247,7 @@ private theorem PendingResolved.of_processSlot {fork : Fork}
     {state cached : BeaconState preset fork}
     (resolved : PendingResolved state) (computed : processSlot state = .ok cached) :
     PendingResolved cached := by
-  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok computed
+  obtain ⟨_, cachedEq⟩ := processSlot_ok computed
   intro before attestation member
   rw [cachedEq] at member
   obtain ⟨signers, ok⟩ := resolved before attestation member
@@ -272,7 +272,7 @@ private theorem ChainHolds.of_processSlot {start : RunStart} {step : BlockStep}
   have invariant := frame.invariant holds.invariant
   have early := holds.early.of_frame frame
   have rewarded := holds.rewarded
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  obtain ⟨_, rfl⟩ := processSlot_ok computed
   have shaped := holds.shaped
   exact ⟨holds.started, invariant, ⟨shaped.balancesMatch, shaped.participationMatches,
     shaped.inactivityScoresMatch, shaped.capped, shaped.inside⟩, holds.wellFormed, resolved,
@@ -428,7 +428,7 @@ private theorem ChainHolds.of_advanceSlot {start : RunStart} {step : BlockStep}
     · rw [elapsed]
       exact cachedBounded.withSlot next
     · -- A slot inside an epoch keeps the supply and the weight of the flags.
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+      obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
       rw [elapsed, perIncrement, weight]
       exact rewarded
 

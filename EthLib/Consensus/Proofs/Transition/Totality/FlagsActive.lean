@@ -405,7 +405,7 @@ theorem FlagsActive.of_advanceSlot (holds : FlagsActive state)
     (computed : advanceSlot config checks state = .ok after) : FlagsActive after := by
   have kept := activeKept_advanceSlot computed
   obtain ⟨next, cached, epoched, sum, cachedOk, epochOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   intro altair j flags validator present nonzero
   have inside : j < epoched.validators.data.size := (Array.getElem?_eq_some_iff.mp present).1
   unfold epochIfLast at epochOk

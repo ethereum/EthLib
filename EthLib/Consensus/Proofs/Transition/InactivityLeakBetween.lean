@@ -87,7 +87,7 @@ theorem advanceSlot_quiet (ok : advanceSlot config checks state = .ok after)
     omega
   obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
   · exact absurd (same ▸ boundary) inside
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  obtain ⟨_, rfl⟩ := processSlot_ok cachedOk
   exact ⟨rfl, rfl, rfl⟩
 
 /-- Steps that credit nothing to a validator keep what the trace bound reads of it.
