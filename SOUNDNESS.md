@@ -75,6 +75,7 @@ That reduction holds in a model of the target group of the pairing.
 
 The binding of the batch check of blobs reduces to a challenge that is a root of a nonzero polynomial, or to recovery of the setup secret.
 That reduction holds for algebraic adversaries, with the challenge hash modelled as a random oracle.
+The secret-recovery term is in turn at most the advantage of one reduction against the bilinear strong Diffie–Hellman problem, in a model of the target group of the pairing.
 No theorem covers the code that runs, the C boundary, or timing.
 
 For the consensus layer, `lake exe proof-coverage` measures how far the theorems reach at each fork of the beacon chain.
@@ -1667,7 +1668,11 @@ The reduction runs the same experiment once and recovers `τ` from roots of repr
 The secret-recovery term is defined on the full setup powers.
 Root search is noncomputable in the model; no theorem proves the reduction's running time.
 `length_setupSecretCandidates_le_points` (`Proofs/Kzg/BlobBindingReduction.lean`) bounds the roots that the search tests by 4096 for each annotated point, plus 4096 for the final batch error.
-No theorem relates the secret-recovery term to the discrete logarithm or the strong Diffie–Hellman problem.
+`blobBindingAdvantage_le_bsdh` (`Proofs/Kzg/BlobBindingBsdh.lean`) replaces the secret-recovery term by the advantage of one reduction against BSDH, Definition 1 of Wagner and Zapico, ePrint 2025/1683.
+A reduction that knows `τ` answers `c = τ - 1` and the generator of the target group, which represents `1 / (τ - c) = 1` (`setupSecretAdvantage_le_bsdhAdvantage`).
+That bound holds in a model of the target group of the pairing.
+The secret-recovery term is itself the advantage against the `(4095, 64)` discrete logarithm problem on the full setup powers.
+That problem is weaker than BSDH, so the bound with BSDH rests on a stronger assumption, the one of the PeerDAS games.
 `verifyBlobKzgProofBatch_ok_iff_symbolic` (`Proofs/Kzg/BlobBindingVerifier.lean`) connects the game's scalar acceptance equation to the concrete verifier at its concrete challenges.
 `verifyBlobKzgProofBatch_ok_iff_game` specializes it to openings that match the submission, as every successful challenge loop gives: when each blob challenge is the concrete hash of its blob and commitment, those openings are the concrete batch.
 
