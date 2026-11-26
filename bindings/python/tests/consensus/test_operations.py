@@ -426,6 +426,60 @@ def test_bad_sync_aggregate_carries_the_signing_root():
     assert info.value.code == 71
 
 
+# A minimal state from Altair to Gloas has the offset of its validators at byte 4360.
+# It follows the eth1 deposit index, and the fields before it keep their sizes at every fork.
+VALIDATORS_OFFSET = 4360
+
+# A validator takes 121 bytes, and its key is the first 48.
+VALIDATOR_SIZE = 121
+
+# The current sync committee follows the fixed fields of the state up to the inactivity scores.
+# Its 32 member keys of 48 bytes each start at byte 7061 of a minimal state.
+COMMITTEE_OFFSET = 7061
+
+
+@pytest.mark.parametrize("fork", ["altair", "fulu"])
+@pytest.mark.parametrize("participates", [True, False])
+def test_sync_committee_member_without_validator(fork, participates):
+    # Every committee key needs a validator before any reward, whether its bit is set or not.
+    # The case comes from Etheorem, whose model skipped such a member (etheorem#116).
+    name = "proposer_in_committee_with_participation"
+    case = FILES / "minimal" / fork / "operations" / "sync_aggregate" / "pyspec_tests" / name
+    pre, aggregate = vector(fork, "sync_aggregate", name)
+    members = [pre[COMMITTEE_OFFSET + 48 * i : COMMITTEE_OFFSET + 48 * (i + 1)] for i in range(32)]
+    key = members[0]
+    bits = int.from_bytes(aggregate[:4], "little")
+    # Each of the 32 members of this case signs.
+    assert bits == 2**32 - 1
+    if not participates:
+        # The member signs at none of its positions.
+        # The aggregate then no longer matches its signature, so the case runs without that check.
+        positions = [i for i, member in enumerate(members) if member == key]
+        bits &= ~sum(1 << i for i in positions)
+        aggregate = bits.to_bytes(4, "little") + aggregate[4:]
+    # The member's validator is the first one with its key.
+    start = int.from_bytes(pre[VALIDATORS_OFFSET : VALIDATORS_OFFSET + 4], "little")
+    end = int.from_bytes(pre[VALIDATORS_OFFSET + 4 : VALIDATORS_OFFSET + 8], "little")
+    keys = [pre[at : at + 48] for at in range(start, end, VALIDATOR_SIZE)]
+    at = start + VALIDATOR_SIZE * keys.index(key)
+    # With the key in the registry, the operation succeeds.
+    got = consensus.process_operation(
+        "minimal", FORKS[fork], "sync_aggregate", pre, aggregate, verify=participates
+    )
+    if participates:
+        assert got == snappy.decompress((case / "post.ssz_snappy").read_bytes())
+    # Without it, the lookup of the member fails.
+    unknown = bytes(48)
+    assert unknown not in keys
+    forged = pre[:at] + unknown + pre[at + 48 :]
+    message = f"{REJECTED}unknownSyncCommitteeMember 0x{key.hex()}"
+    with raises(consensus.TransitionError, message) as info:
+        consensus.process_operation(
+            "minimal", FORKS[fork], "sync_aggregate", forged, aggregate, verify=participates
+        )
+    assert info.value.code == 73
+
+
 @pytest.mark.parametrize("fork", ["capella", "electra"])
 def test_wrong_withdrawals_names_the_first_difference(fork):
     # The payload carries the one expected partial withdrawal, with a wrong amount.

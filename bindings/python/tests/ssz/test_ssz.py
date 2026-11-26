@@ -16,6 +16,9 @@ FIXED_PAIR = {"container": [["a", UINT16], ["b", UINT16]]}
 # A container of a fixed field a: uint16 and a variable field b: List[uint16, 4].
 MIXED_PAIR = {"container": [["a", UINT16], ["b", {"list": [UINT16, 4]}]]}
 
+# A Vector[List[uint8, 4], 2], whose encoding starts with a table of two four-byte offsets.
+VECTOR_OF_LISTS = {"vector": [{"list": [{"uint": 1}, 4]}, 2]}
+
 # Each type, value and the bytes of the value.
 CASES = [
     # A uint16 puts its low byte first.
@@ -44,6 +47,9 @@ CASES = [
         {"seq": [{"uint": 7}, {"bytes": "0xaabb"}]},
         "0705000000aabb",
     ),
+    # A Vector[List[uint8, 4], 2] starts with a table of two offsets, so its first body is at 8.
+    # Two empty lists both start and end there.
+    (VECTOR_OF_LISTS, {"seq": [{"seq": []}, {"seq": []}]}, "0800000008000000"),
 ]
 
 
@@ -168,6 +174,9 @@ NESTED_LIST = {"list": [{"list": [UINT16, 4]}, 4]}
 @pytest.mark.parametrize(
     ("ssz_type", "encoded", "fault"),
     [
+        # A first offset of 0 would give a count of 0 and drop the 4 bytes.
+        # The case comes from Etheorem, whose decoder accepted it (etheorem#81).
+        (NESTED_LIST, "00000000", "offsetBelowTable 0"),
         # A first offset of 2 points inside its own four-byte entry.
         (NESTED_LIST, "02000000", "offsetBelowTable 2"),
         # A first offset of 6 is no whole number of four-byte entries.
@@ -176,6 +185,12 @@ NESTED_LIST = {"list": [{"list": [UINT16, 4]}, 4]}
         (NESTED_LIST, "0c00000000000000", "offsetPastScope 12 8"),
         # The second body would start at 4, before the first one at 8.
         (NESTED_LIST, "0800000004000000", "offsetUnordered 8 4"),
+        # A vector of one variable-size element has a table of 4 bytes, so its first offset is 4.
+        # An offset of 0 points back into the table.
+        # The case comes from Etheorem, whose decoder accepted it (etheorem#81).
+        ({"vector": [{"list": [{"uint": 1}, 4]}, 1]}, "00000000", "firstOffset 4 0"),
+        # The table of two offsets ends at 8, and a first offset of 4 points inside it.
+        (VECTOR_OF_LISTS, "0400000008000000", "firstOffset 8 4"),
         # The byte 0x09 of a Bitvector[3] sets bit 3, above the three declared bits.
         ({"bitvector": 3}, "09", "paddingBits 9"),
     ],
