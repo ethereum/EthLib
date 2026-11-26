@@ -242,6 +242,30 @@ theorem forkOfDigest_isSome {epoch : Epoch} {digest : ForkDigest}
   refine List.find?_isSome.mpr ⟨config.digestStart epoch, Config.digestStart_mem epoch, ?_⟩
   simp [computeForkDigest_digestStart, computed]
 
+/-- The search finds an epoch at or before every epoch that has the digest. -/
+theorem forkOfDigest_le {epoch start : Epoch} {digest : ForkDigest}
+    (computed : computeForkDigest config genesisValidatorsRoot epoch = .ok digest)
+    (found : forkOfDigest config genesisValidatorsRoot digest = some start) :
+    start ≤ epoch := by
+  obtain ⟨-, before, after, split, skipped⟩ := List.find?_eq_some_iff_append.mp found
+  -- The latest epoch of the list at or before the epoch has the digest too.
+  have member := Config.digestStart_mem (config := config) epoch
+  have sorted := Config.digestEpochs_sorted (config := config)
+  rw [split] at member sorted
+  rcases List.mem_append.mp member with early | late
+  -- The search skips no epoch with the digest.
+  · have := skipped _ early
+    simp [computeForkDigest_digestStart, computed] at this
+  · rcases List.mem_cons.mp late with same | later
+    · rw [← same]
+      exact Config.digestStart_le epoch
+    -- An epoch after the one found is larger, since the list is sorted.
+    · have lt := (List.pairwise_cons.mp (List.pairwise_append.mp sorted).2.1).1 _ later
+      have le := Config.digestStart_le (config := config) epoch
+      rw [UInt64.lt_iff_toNat_lt] at lt
+      rw [UInt64.le_iff_toNat_le] at le ⊢
+      omega
+
 /-- On a chain that passes the check, the search reads back the fork at which a digest was computed.
 
 This holds at every epoch, not only at those of the list. -/

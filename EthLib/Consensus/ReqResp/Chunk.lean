@@ -56,8 +56,8 @@ def ReqRespProtocol.firstChunkFork : ReqRespProtocol → Fork
   | .inclusionListsByIndices => .hegota
 
 /-- Why a response chunk does not decode. -/
-inductive ChunkError where
-  /-- The chunk has no bounds: an unknown digest, or a protocol version the exchange lacks. -/
+inductive ResponseChunkError where
+  /-- The exchange lacks the protocol, or the digest names no scheduled fork with a type. -/
   | bounds (error : BoundsError)
   /-- The bytes are not a chunk with a payload within the bounds of its fork. -/
   | chunk (error : ReqRespError)
@@ -67,9 +67,11 @@ inductive ChunkError where
 
 A successful chunk of a protocol that sends a digest has the fork of the first epoch with it.
 
+It fails when no epoch, or only the far future epoch, has the digest.
+
 Any other chunk has the fork of the exchange. -/
 def responseChunkFork (config : Config) (genesisValidatorsRoot : Root) (fork : Fork)
-    (id : ProtocolId) (bs : ByteArray) : Except ChunkError Fork :=
+    (id : ProtocolId) (bs : ByteArray) : Except ResponseChunkError Fork :=
   match bs.data.toList with
   -- The code is one byte, and the digest, when the chunk has one, the next four.
   | b :: d₀ :: d₁ :: d₂ :: d₃ :: _ =>
@@ -81,13 +83,19 @@ def responseChunkFork (config : Config) (genesisValidatorsRoot : Root) (fork : F
       -- The fork of the first epoch with the digest.
       --
       -- On a chain whose digests identify their forks, it is the fork of the digest's epoch.
-      | some start => pure (config.forkAtEpoch start)
+      --
+      -- An epoch has at least two slots, so the epoch of a slot is below the far future epoch.
+      --
+      -- So no payload has a digest that only the far future epoch has.
+      | some start =>
+        if start = FAR_FUTURE_EPOCH then throw (.bounds (.unscheduledDigest #v[d₀, d₁, d₂, d₃]))
+        else pure (config.forkAtEpoch start)
       -- No epoch of the chain has the digest, so it names no type and no bounds.
       | none => throw (.bounds (.unknownDigest #v[d₀, d₁, d₂, d₃]))
     else pure fork
   -- A chunk too short to hold a digest keeps the fork of the exchange.
   --
-  -- The chunk decoder then rejects a success that a digest should follow.
+  -- The chunk decoder then rejects a success of a protocol that sends a digest.
   | _ => pure fork
 
 /-- One response chunk of a protocol version, with the fork that selects the type of its payload.
@@ -98,7 +106,7 @@ It does not deserialize the payload, so it does not check that the payload is of
 -/
 def decodeChunkAtFork (preset : Preset) (config : Config) (genesisValidatorsRoot : Root)
     (fork : Fork) (id : ProtocolId) (bs : ByteArray) :
-    Except ChunkError (Fork × ResponseChunk) := do
+    Except ResponseChunkError (Fork × ResponseChunk) := do
   -- The fork of the exchange defines the protocol version.
   unless (protocolIds fork).contains id do throw (.bounds (.notAtFork id.toString fork))
   let chunkFork ← responseChunkFork config genesisValidatorsRoot fork id bs

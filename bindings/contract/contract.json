@@ -11338,7 +11338,8 @@
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
       {"constructor": "topicNotAtFork", "code": 303},
-      {"constructor": "unknownDigest", "code": 305}]}],
+      {"constructor": "unknownDigest", "code": 305},
+      {"constructor": "unscheduledDigest", "code": 306}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The smallest and the largest length of a request payload, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID."},
@@ -11354,7 +11355,8 @@
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
       {"constructor": "topicNotAtFork", "code": 303},
-      {"constructor": "unknownDigest", "code": 305}]}],
+      {"constructor": "unknownDigest", "code": 305},
+      {"constructor": "unscheduledDigest", "code": 306}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The smallest and the largest length of the payload of a successful response chunk, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork of the chunk and the ID.\n\nThat fork is the one that the context bytes of the chunk name, and it must define the protocol."},
@@ -11370,7 +11372,8 @@
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
       {"constructor": "topicNotAtFork", "code": 303},
-      {"constructor": "unknownDigest", "code": 305}]},
+      {"constructor": "unknownDigest", "code": 305},
+      {"constructor": "unscheduledDigest", "code": 306}]},
     {"type": "EthLib.Networking.ReqResp.ReqRespError",
      "codes":
      [{"constructor": "varint", "code": 1},
@@ -11397,7 +11400,8 @@
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
       {"constructor": "topicNotAtFork", "code": 303},
-      {"constructor": "unknownDigest", "code": 305}]},
+      {"constructor": "unknownDigest", "code": 305},
+      {"constructor": "unscheduledDigest", "code": 306}]},
     {"type": "EthLib.Serialization.Ssz.Err",
      "codes":
      [{"constructor": "typeMismatch", "code": 1},
@@ -11489,7 +11493,8 @@
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
       {"constructor": "topicNotAtFork", "code": 303},
-      {"constructor": "unknownDigest", "code": 305}]}],
+      {"constructor": "unknownDigest", "code": 305},
+      {"constructor": "unscheduledDigest", "code": 306}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The largest length of the payload of a gossip topic at a fork."},
