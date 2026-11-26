@@ -23,7 +23,7 @@ An error response of the API has its own code, such as 404.
 
 An unknown name or fork, or an input that does not decode, has code 0.
 
-A chunk that cannot be built or read also has code 0.
+A chunk that cannot be built or read has the code of its error, as in the response chunk decoder.
 -/
 
 @[expose] public section
@@ -31,7 +31,16 @@ A chunk that cannot be built or read also has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument toResult)
+
+/-- The code and the message of an error of a chunk.
+
+An error of bounds keeps its code and its message, as in the response chunk and gossip decoders. -/
+instance : ExportError BeaconApi.ChunkError where
+  code := BeaconApi.ChunkError.code
+  message
+    | .bounds error => toString error
+    | error => reprStr error
 
 /-- The bootstrap answer for a block of the store after the steps of a fork choice case. -/
 def apiLightClientBootstrapOf (args : StoreCaseArgs (Option PyValue × Root)) :
@@ -91,8 +100,7 @@ def apiLightClientUpdatesOf
   let known ← knownUpdates preset known
   let updates := BeaconApi.updatesInRange known startPeriod count
   for ⟨_, update⟩ in updates do
-    toResult none ((BeaconApi.checkUpdateFork config update).mapError fun e =>
-      UnreadArgument.mk s!"chunk rejected: {reprStr e}")
+    toResult "chunk rejected" (BeaconApi.checkUpdateFork config update)
   return PyValue.ofJson (← toResult none (BeaconApi.updatesJson updates))
 
 /-- The JSON response of the updates endpoint, as a `list` of `dict`.
@@ -114,7 +122,7 @@ def apiLightClientUpdatesSszOf (args : UpdatesArgs) : Result ByteArray := do
   let known ← knownUpdates preset known
   let chunks := BeaconApi.encodeUpdateChunks config genesisValidatorsRoot
     (BeaconApi.updatesInRange known startPeriod count)
-  toResult none (chunks.mapError fun e => UnreadArgument.mk s!"chunk rejected: {reprStr e}")
+  toResult "chunk rejected" chunks
 
 /-- The SSZ body of the updates answer, as `bytes`.
 
@@ -135,11 +143,13 @@ def apiLightClientDecodeUpdatesOf (args : String × Option PyValue × Root × By
   let (name, replacements, genesisValidatorsRoot, data) := args
   let preset ← presetOf name
   let config ← configWithValue name replacements
-  let updates ← toResult none
-    ((BeaconApi.decodeUpdateChunks preset config genesisValidatorsRoot data).mapError fun e =>
-      UnreadArgument.mk s!"chunk rejected: {reprStr e}")
+  let updates ← toResult "chunk rejected"
+    (BeaconApi.decodeUpdateChunks preset config genesisValidatorsRoot data)
   updates.mapM fun ⟨fork, update⟩ => do
-    return (fork.name, ← toResult "value rejected" (SszType.serialize update))
+    -- An update that does not serialize again has code 0, like an input that does not decode.
+    let data ← toResult none ((SszType.serialize update).mapError fun e =>
+      UnreadArgument.mk s!"value rejected: {reprStr e}")
+    return (fork.name, data)
 
 /-- The fork name and the SSZ bytes of each update of the SSZ body of an updates answer.
 
