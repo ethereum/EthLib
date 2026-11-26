@@ -31,11 +31,11 @@ open HashSig (HashSpec OracleWorld)
 /-- The chance of a true result of a counted run is an expectation over the plain random oracle. -/
 theorem prEvent_eq_wp_of_eq_withAddCost (oa : OracleComp OracleWorld Bool)
     (X : ProbComp (Bool × Nat))
-    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) :
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost) oa).run.run' ∅) :
     Pr{let result ← X}[result.1 = true] =
       wp ((simulateQ HashSpec.romImpl oa).run ∅) (fun x => propInd (x.1 = true)) := by
   subst hX
-  refine (HashSig.prEvent_run_withAddCost oa hashCost).trans ?_
+  refine (HashSig.prEvent_run_withAddCost oa SufCma.hashCost).trans ?_
   rw [prEvent_eq_wp_propInd, StateT.run'_eq, wp_map]
   rfl
 
@@ -48,7 +48,7 @@ A failed search is one whose first `T` trials all failed, with `1 <= T <= 2^32`.
 `p` is the chance that one counter gives a codeword, `CODE_SIZE / 2^128`. -/
 theorem wp_failedSearch_le_of_eq {α : Type} (T : Nat) (hT₁ : 1 ≤ T)
     (hT : T ≤ MAX_COUNTER_TRIALS) (oa : OracleComp OracleWorld α) (X : ProbComp (α × Nat))
-    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) (n : Nat)
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost) oa).run.run' ∅) (n : Nat)
     (hn : ∀ z ∈ support X, z.2 ≤ n) :
     wp ((simulateQ HashSpec.romImpl oa).run ∅)
       (fun x => propInd (HashSig.FailedSearch searchPoint SearchMiss T x.2)) ≤
@@ -57,7 +57,7 @@ theorem wp_failedSearch_le_of_eq {α : Type} (T : Nat) (hT₁ : 1 ≤ T)
   rw [← prEvent_eq_wp_propInd, ← prEvent_searchMiss]
   exact HashSig.prEvent_failedSearch_le searchPoint SearchMiss T hT₁
     (fun p p' j j' hj hj' he => searchPoint_inj p p' j j' (by omega) (by omega) he)
-    hashCost (fun _ => le_rfl) oa n hn
+    SufCma.hashCost (fun _ => le_rfl) oa n hn
 
 /-- The game ends with a failed search of `T` trials with probability `<= (q + C) (1 - p)^T`.
 
@@ -66,14 +66,15 @@ The adversary makes at most `q` hash calls of its own and `r` signing requests.
 Here `1 <= T <= 2^32`, and `C` bounds the scheme's calls.
 
 `p` is the chance that one counter gives a codeword. -/
-theorem wp_failedSearch_gameCore_le (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MAX_COUNTER_TRIALS)
+theorem wp_failedSearch_game_le (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MAX_COUNTER_TRIALS)
     (adversary : Adversary) (q r : Nat) (h : HasAdversaryQueryBound adversary q r) :
-    wp ((simulateQ HashSpec.romImpl (gameCore adversary)).run ∅)
+    wp ((simulateQ HashSpec.romImpl (SufCma.game scheme adversary)).run ∅)
       (fun x => propInd (HashSig.FailedSearch searchPoint SearchMiss T x.2)) ≤
       ((q + schemeCalls r : Nat) : ℝ≥0∞) *
         (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T :=
-  wp_failedSearch_le_of_eq T hT₁ hT (gameCore adversary) (experiment adversary)
-    (experiment_eq adversary) _ (hasHashQueryBound_of_adversary adversary q r h)
+  wp_failedSearch_le_of_eq T hT₁ hT (SufCma.game scheme adversary)
+    (SufCma.countedRunIn (SufCma.randomOracleModel HashSpec) (SufCma.game scheme adversary))
+    (countedRunIn_game_eq adversary) _ (isGameQueryBound_of_adversary adversary q r h)
 
 /-- **The adversary forges at most as often as the wrapped one, plus a long-search term.**
 
@@ -84,22 +85,25 @@ The bound on the searches is `1 <= T <= 2^32`.
 The extra term is `(q + C) * (1 - p)^T`, where `C` bounds the scheme's calls.
 
 `p` is the chance that one counter gives a codeword, `CODE_SIZE / 2^128`. -/
-theorem forgeAdvantage_le_capSearches (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MAX_COUNTER_TRIALS)
+theorem advantage_le_capSearches (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MAX_COUNTER_TRIALS)
     (adversary : Adversary) (q r : Nat) (h : HasAdversaryQueryBound adversary q r) :
-    forgeAdvantage adversary ≤ forgeAdvantage (capSearches T adversary) +
+    SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) adversary ≤
+      SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) (capSearches T adversary) +
       ((q + schemeCalls r : Nat) : ℝ≥0∞) *
         (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T := by
   -- Both advantages are expectations over the plain random oracle, from the empty cache.
-  have hE : ∀ B, forgeAdvantage B = wp ((simulateQ HashSpec.romImpl (gameCore B)).run ∅)
-      (fun x => propInd (x.1 = true)) := fun B =>
-    prEvent_eq_wp_of_eq_withAddCost (gameCore B) (experiment B) (experiment_eq B)
+  have hE : ∀ B, SufCma.advantage scheme (SufCma.randomOracleModel HashSpec) B =
+      wp ((simulateQ HashSpec.romImpl (SufCma.game scheme B)).run ∅)
+        (fun x => propInd (x.1 = true)) := fun B =>
+    (SufCma.prEvent_countedRunIn _ _ fun b => b = true).symm.trans
+      (prEvent_eq_wp_of_eq_withAddCost (SufCma.game scheme B) _ (countedRunIn_game_eq B))
   -- A long search somewhere in the honest game leaves a failed search in its final cache.
   --
   -- Such a failed search of `T` trials is unlikely.
-  have hFS := wp_failedSearch_gameCore_le T hT₁ hT adversary q r h
+  have hFS := wp_failedSearch_game_le T hT₁ hT adversary q r h
   rw [hE, hE]
   refine le_trans ?_ (add_le_add le_rfl hFS)
-  rw [wp_run_gameCore, wp_run_gameCore, wp_run_gameCore, ← ExpectationWP.Lower.wp_add_of_oracle]
+  rw [wp_run_game, wp_run_game, wp_run_game, ← ExpectationWP.Lower.wp_add_of_oracle]
   -- After key generation, compare the two runs with the same check.
   --
   -- Up to the first answer with a long search, the two runs are the same.

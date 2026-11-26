@@ -252,6 +252,13 @@ theorem runIn_randomOracleModel [DecidableEq ι] [∀ t, SampleableType (hs.Rang
     runIn (randomOracleModel hs) oa = (simulateQ hs.romImpl oa).run' ∅ :=
   pure_bind _ _
 
+/-- Against the random oracle, the counted run starts from the empty cache. -/
+theorem countedRunIn_randomOracleModel [DecidableEq ι] [∀ t, SampleableType (hs.Range t)]
+    {α : Type} (oa : OracleComp (unifSpec + hs) α) :
+    countedRunIn (randomOracleModel hs) oa =
+      (simulateQ (hs.romImpl.withAddCost hashCost) oa).run.run' ∅ :=
+  pure_bind _ _
+
 /-- The count of hash calls does not change a computation's result. -/
 theorem fst_map_countedRunIn (model : Model hs) {α : Type} (oa : OracleComp (unifSpec + hs) α) :
     Prod.fst <$> countedRunIn model oa = runIn model oa := by
@@ -269,5 +276,56 @@ theorem prEvent_countedRunIn (model : Model hs) {α : Type} (oa : OracleComp (un
     (P : α → Prop) :
     Pr{let result ← countedRunIn model oa}[P result.1] = Pr{let x ← runIn model oa}[P x] := by
   rw [← fst_map_countedRunIn, prEvent_map]
+
+/-! ## A pair the signer returned never wins -/
+
+/-- A forgery whose pair some request returned loses, whatever the verification says.
+
+So replaying an answer of the signer never wins. -/
+theorem checkForgery_eq_false_of_returned (pk : PublicKey)
+    (y : Forgery Message Signature × QueryLog (SigningSpec Request Signature))
+    (h : Returned scheme y.2 y.1) :
+    ∀ b ∈ support (checkForgery scheme pk y), b = false := by
+  intro b hb
+  simp only [checkForgery, support_bind, support_pure, Set.mem_iUnion, Set.mem_singleton_iff]
+    at hb
+  obtain ⟨_, _, rfl⟩ := hb
+  simp [h]
+
+/-! ## A signer that keeps its key -/
+
+omit [DecidableEq Message] [DecidableEq Signature] in
+/-- A signer that keeps its key answers each request as one logged signer.
+
+So the game of a stateless scheme is the game with that signer alone. -/
+theorem run_simulateQ_signingOracle_of_sign_eq (sk : SecretKey)
+    (signer : Request → OracleComp (unifSpec + hs) (Option Signature))
+    (hsign : ∀ request, scheme.sign sk request = (fun s => (s, sk)) <$> signer request)
+    {α : Type} (oa : OracleComp ((unifSpec + hs) + SigningSpec Request Signature) α) :
+    ((simulateQ (QueryImpl.ofLift (unifSpec + hs)
+      (StateT SecretKey (WriterT (QueryLog (SigningSpec Request Signature))
+        (OracleComp (unifSpec + hs)))) + signingOracle scheme) oa).run sk).run =
+      (fun p => ((p.1, sk), p.2)) <$> (simulateQ (QueryImpl.ofLift (unifSpec + hs)
+        (WriterT (QueryLog (SigningSpec Request Signature)) (OracleComp (unifSpec + hs))) +
+          QueryImpl.withLogging signer) oa).run := by
+  induction oa using OracleComp.inductionOn with
+  | pure a => simp
+  | query_bind t k ih =>
+    -- A coin or a hash passes through, and a request signs and logs; the key stays.
+    rcases t with t | request
+    · simp [ih]
+    · simp [signingOracle, hsign, ih]
+
+/-- After key generation, the game of a signer that keeps its key logs one signer's answers. -/
+theorem gameAfterKeys_of_sign_eq
+    (adversary : Adversary hs Request Message PublicKey Signature) (pk : PublicKey)
+    (sk : SecretKey) (signer : Request → OracleComp (unifSpec + hs) (Option Signature))
+    (hsign : ∀ request, scheme.sign sk request = (fun s => (s, sk)) <$> signer request) :
+    gameAfterKeys scheme adversary pk sk =
+      (simulateQ (QueryImpl.ofLift (unifSpec + hs)
+        (WriterT (QueryLog (SigningSpec Request Signature)) (OracleComp (unifSpec + hs))) +
+          QueryImpl.withLogging signer) (adversary.main pk)).run >>= checkForgery scheme pk := by
+  unfold gameAfterKeys
+  rw [run_simulateQ_signingOracle_of_sign_eq scheme sk signer hsign, bind_map_left]
 
 end EthLib.Cryptography.SufCma

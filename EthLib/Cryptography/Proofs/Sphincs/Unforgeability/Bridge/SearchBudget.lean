@@ -55,8 +55,8 @@ theorem mem_support_runOf_inl {α : Type} (w : OracleWorld.Domain)
     y ∈ support (countedRun f (runOf sign
         ((OracleWorld + SigningSpec).query (.inl w) >>= k))) ↔
       ∃ u ∈ support (unifFwdAnswerImpl f w), ∃ z ∈ support (countedRun f (runOf sign (k u))),
-        y = (((z.1.1.1, (if isHashCall w then 1 else 0) + z.1.1.2), z.1.2),
-          (if isHashCall w then 1 else 0) + z.2) := by
+        y = (((z.1.1.1, (if (SufCma.IsHashCall HashSpec) w then 1 else 0) + z.1.1.2), z.1.2),
+          (if (SufCma.IsHashCall HashSpec) w then 1 else 0) + z.2) := by
   rw [HashSig.counted_query_bind]
   simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind,
     QueryImpl.add_apply_inl, QueryImpl.ofLift_apply, simulateQ_pure, WriterT.run_pure',
@@ -66,7 +66,7 @@ theorem mem_support_runOf_inl {α : Type} (w : OracleWorld.Domain)
         (fun u => (u, ∅)) <$> liftM (OracleWorld.query w) := rfl
   rw [hl, bind_map_left, mem_support_countedRun_bind]
   simp only [bind_pure_comp, countedRun_map, support_map, countedRun_query]
-  have hc : IsAdversaryHashCall (.inl w) ↔ isHashCall w := Iff.rfl
+  have hc : IsAdversaryHashCall (.inl w) ↔ (SufCma.IsHashCall HashSpec) w := Iff.rfl
   simp only [hc, Set.mem_image, List.empty_eq, List.nil_append, List.append_nil]
   constructor
   · rintro ⟨_, ⟨u, hu, rfl⟩, _, ⟨_, ⟨z, hz, rfl⟩, rfl⟩, rfl⟩
@@ -160,7 +160,7 @@ theorem runOf_capRun_true {α : Type} (T : Nat) (A : OracleComp (OracleWorld + S
     · rw [capRun_inl T (.inl n) true (Or.inl rfl), mem_support_runOf_inl] at hy
       obtain ⟨u, -, z, hz, rfl⟩ := hy
       obtain ⟨h₁, h₂, h₃⟩ := ih u z hz
-      have hc : ¬isHashCall (.inl n) := by simp [isHashCall]
+      have hc : ¬(SufCma.IsHashCall HashSpec) (.inl n) := by simp [SufCma.IsHashCall]
       simp only [hc, ↓reduceIte, Nat.zero_add]
       exact ⟨h₁, h₂, h₃⟩
     · rw [capRun_hash_true] at hy
@@ -224,9 +224,10 @@ theorem runOf_capRun_false {α : Type} (T C L : Nat)
 theorem calls_capGame {Seed' SK PK : Type} (seeds : ProbComp Seed')
     (keygen : Seed' → OracleComp HashSpec (SK × PK))
     (signer : SK → Message → OracleComp HashSpec (Option Signature))
-    (verify : PK → Forgery → OracleComp HashSpec Bool)
-    (win : Forgery → QueryLog SigningSpec → Bool → Bool)
-    (main : PK → OracleComp (OracleWorld + SigningSpec) Forgery) (T K C L V : Nat)
+    (verify : PK → SufCma.Forgery Message Signature → OracleComp HashSpec Bool)
+    (win : SufCma.Forgery Message Signature → QueryLog SigningSpec → Bool → Bool)
+    (main : PK → OracleComp (OracleWorld + SigningSpec) (SufCma.Forgery Message Signature))
+    (T K C L V : Nat)
     (hK : ∀ seed, hashCalls f (keygen seed) ≤ K)
     (hbelow : ∀ sk msg, SearchesBelow T (evalWithAnswerFn f (signer sk msg)) →
       hashCalls f (signer sk msg) ≤ C)
@@ -332,12 +333,13 @@ theorem adversaryGameCore_capSearches_eq (T : Nat) (adversary : Adversary) :
 /-- **The wrapped adversary's runs make at most `q + cappedCalls T r` hash calls in all.**
 
 The adversary makes at most `q` hash calls of its own and `r` signing requests. -/
-theorem hasHashQueryBound_capSearches (T : Nat) (adversary : Adversary) (q r : Nat)
+theorem isGameQueryBound_capSearches (T : Nat) (adversary : Adversary) (q r : Nat)
     (h : HasAdversaryQueryBound adversary q r) :
-    HasHashQueryBound (capSearches T adversary) (q + cappedCalls T r) := by
+    SufCma.IsGameQueryBound scheme (SufCma.randomOracleModel HashSpec) (capSearches T adversary)
+      (q + cappedCalls T r) := by
   intro result hr
-  obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _ (experiment_eq _) result hr
-  rw [gameCore_eq_map] at hr
+  obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _ (countedRunIn_game_eq _) result hr
+  rw [game_eq_map] at hr
   obtain ⟨run, hrun, rfl⟩ := mem_support_countedRun_map f _ _ result hr
   rw [adversaryGameCore_capSearches_eq] at hrun
   obtain ⟨run', hrun', hle⟩ := calls_capGame f sampleSeed (keyGenWith H) signerOf verifierOf

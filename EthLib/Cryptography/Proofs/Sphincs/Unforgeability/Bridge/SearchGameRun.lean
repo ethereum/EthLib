@@ -145,24 +145,25 @@ theorem failedSearch_of_mem_support_run (hT : T ≤ MAX_COUNTER_TRIALS) (sk : Se
       · exact ih w.1 w.2 z' hz' hb
 
 /-- The game is key generation, then the adversary's run with its oracles, then the verdict. -/
-theorem gameCore_eq_keys_run (adversary : Adversary) :
-    gameCore adversary = (do
+theorem game_eq_keys_run (adversary : Adversary) :
+    SufCma.game scheme adversary = (do
       let keys : SecretKey × PublicKey ← (do
         let seed ← liftM sampleSeed
         liftM (keyGenWith H seed) : OracleComp OracleWorld (SecretKey × PublicKey))
-      let run : Forgery × QueryLog SigningSpec ←
+      let run : SufCma.Forgery Message Signature × QueryLog SigningSpec ←
         (simulateQ (QueryImpl.ofLift OracleWorld
           (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
             QueryImpl.withLogging (fun msg => liftM (signerOf keys.1 msg) :
               QueryImpl SigningSpec (OracleComp OracleWorld))) (adversary.main keys.2)).run
       let verified ← liftM (verifierOf keys.2 run.1)
       pure (verdictOf run.1 run.2 verified)) := by
-  unfold gameCore signingOracle signerOf verifierOf verdictOf
+  rw [game_eq]
+  unfold signingOracle signer signerOf verifierOf verdictOf
   rw [bind_assoc]
 
 /-- In the random-oracle model, an expectation over the game is one over its three stages. -/
-theorem wp_run_gameCore (adversary : Adversary) (E : Bool × HashSpec.QueryCache → ℝ≥0∞) :
-    wp ((simulateQ HashSpec.romImpl (gameCore adversary)).run ∅) E =
+theorem wp_run_game (adversary : Adversary) (E : Bool × HashSpec.QueryCache → ℝ≥0∞) :
+    wp ((simulateQ HashSpec.romImpl (SufCma.game scheme adversary)).run ∅) E =
       wp ((simulateQ HashSpec.romImpl (do
         let seed ← liftM sampleSeed
         liftM (keyGenWith H seed) : OracleComp OracleWorld (SecretKey × PublicKey))).run ∅)
@@ -174,13 +175,13 @@ theorem wp_run_gameCore (adversary : Adversary) (E : Bool × HashSpec.QueryCache
         fun v => wp ((simulateQ HashSpec.romImpl (liftM (verifierOf w.1.2 v.1.1) >>=
           fun verified => pure (verdictOf v.1.1 v.1.2 verified) :
             OracleComp OracleWorld Bool)).run v.2) E := by
-  rw [gameCore_eq_keys_run]
+  rw [game_eq_keys_run]
   simp only [simulateQ_bind, StateT.run_bind, wp_bind]
 
 /-- From the same keys, the adversary wins at most as often as the wrapped one or a search fails. -/
 theorem wp_run_le_wp_capSearches (hT : T ≤ MAX_COUNTER_TRIALS) (adversary : Adversary)
     (sk : SecretKey) (pk : PublicKey) (cache : HashSpec.QueryCache)
-    (P : Forgery × QueryLog SigningSpec → OracleComp OracleWorld Bool) :
+    (P : SufCma.Forgery Message Signature × QueryLog SigningSpec → OracleComp OracleWorld Bool) :
     wp ((simulateQ HashSpec.romImpl (simulateQ (QueryImpl.ofLift OracleWorld
         (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
           QueryImpl.withLogging (fun msg => liftM (signerOf sk msg) :
@@ -204,7 +205,8 @@ theorem wp_run_le_wp_capSearches (hT : T ≤ MAX_COUNTER_TRIALS) (adversary : Ad
   have hcap := wp_cut_le_wp_capImpl T (fun msg => liftM (signerOf sk msg)) (adversary.main pk)
     cache (fun v => wp ((simulateQ HashSpec.romImpl (P v.1)).run v.2)
       fun x => propInd (x.1 = true))
-  have heq : ∀ (f : (Forgery × QueryLog SigningSpec) × HashSpec.QueryCache → ℝ≥0∞),
+  have heq : ∀ (f : (SufCma.Forgery Message Signature × QueryLog SigningSpec) ×
+      HashSpec.QueryCache → ℝ≥0∞),
       wp ((simulateQ HashSpec.romImpl (simulateQ (QueryImpl.ofLift OracleWorld
         (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
           QueryImpl.withLogging (fun msg => liftM (signerOf sk msg) :
