@@ -223,6 +223,11 @@ theorem signWithTrials_map_monad (sk : SecretKey) (idx : LeafIndex) (msg : Messa
     | error err => exact map_pure _
     | ok top => exact map_pure _
 
+/-- Signing, over the image of `H`. -/
+theorem signWith_map_monad (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
+    φ (signWith H sk idx msg) = signWith (fun x => φ (H x)) sk idx msg :=
+  signWithTrials_map_monad φ map_pure map_bind H _ sk idx msg
+
 end Sign
 
 /-! ## The algorithms -/
@@ -232,6 +237,20 @@ theorem publicParamOf_map_monad :
     φ (publicParamOf prf) = publicParamOf fun publicParam a suffix => φ
       (prf publicParam a suffix) := by
   exact (map_bind _ _).trans (bind_congr fun _ => map_pure _)
+
+/-- Key generation from a scheme seed, over the images of `H` and of the seed function. -/
+theorem keyGenFrom_map_monad (s : Seed) :
+    φ (Internal.keyGenFrom H prf s) =
+      Internal.keyGenFrom (fun x => φ (H x)) (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) s := by
+  simp only [Internal.keyGenFrom, map_bind, publicParamOf_map_monad φ map_pure map_bind,
+    build_map_monad φ map_pure map_bind, map_pure]
+
+/-- Key generation, over the image of `H`. -/
+theorem keyGenWith_map_monad (seed : Seed) :
+    φ (keyGenWith H seed) = keyGenWith (fun x => φ (H x)) seed := by
+  simp only [keyGenWith, map_bind, keyGenFrom_map_monad φ map_pure map_bind]
+  rfl
 
 /-- Verification, over the image of `H`. -/
 theorem verifyWith_map_monad (pk : PublicKey) (msg : Message) (sig : Signature) :

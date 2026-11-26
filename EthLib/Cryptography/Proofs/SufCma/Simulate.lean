@@ -358,6 +358,46 @@ theorem adversaryCharge_hashCost (t : ((unifSpec + hs) + SigningSpec Request Sig
   rcases t with (n | x) | request <;> rfl
 
 omit [DecidableEq Message] [DecidableEq Signature] in
+/-- An adversary makes at most `q` hash calls of its own exactly when its queries cost at most `q`.
+
+A hash call costs one, and a coin or a request nothing. -/
+theorem isQueryBoundP_adversaryHash_iff
+    {α : Type} (oa : OracleComp ((unifSpec + hs) + SigningSpec Request Signature) α) (q : ℕ) :
+    IsQueryBoundP oa (IsAdversaryHash hs Request Signature) q ↔
+      IsQueryBound oa q
+        (fun t b =>
+          adversaryCharge (Request := Request) (Signature := Signature) (hashCost (hs := hs)) t ≤ b)
+        (fun t b =>
+          b - adversaryCharge (Request := Request) (Signature := Signature)
+            (hashCost (hs := hs)) t) := by
+  rw [isQueryBoundP_iff_isChargeBound, isChargeBound_iff_isRollBound_nat]
+  simp only [adversaryCharge_hashCost]
+  rfl
+
+/-- An adversary's request costs one, and a coin or a hash call nothing. -/
+def requestCharge : ((unifSpec + hs) + SigningSpec Request Signature).Domain → ℕ
+  | .inl _ => 0
+  | .inr _ => 1
+
+omit [DecidableEq Message] [DecidableEq Signature] in
+/-- An adversary makes at most `n` requests exactly when its queries cost at most `n`.
+
+A request costs one, and a coin or a hash call nothing. -/
+theorem isQueryBoundP_adversaryRequest_iff
+    {α : Type} (oa : OracleComp ((unifSpec + hs) + SigningSpec Request Signature) α) (n : ℕ) :
+    IsQueryBoundP oa (IsAdversaryRequest hs Request Signature) n ↔
+      IsQueryBound oa n
+        (fun t b => requestCharge (hs := hs) (Request := Request) (Signature := Signature) t ≤ b)
+        (fun t b =>
+          b - requestCharge (hs := hs) (Request := Request) (Signature := Signature) t) := by
+  rw [isQueryBoundP_iff_isChargeBound,
+    show (fun t => if IsAdversaryRequest hs Request Signature t then 1 else 0) = requestCharge
+      from funext fun t => by
+        rcases t with _ | _ <;> simp [SignatureAlg.IsSignQuery, requestCharge],
+    isChargeBound_iff_isRollBound_nat]
+  rfl
+
+omit [DecidableEq Message] [DecidableEq Signature] in
 /-- The adversary's phase is charged its own queries, and the signer's bound `S` per request. -/
 theorem isChargeBound_adversaryPhase (c : (unifSpec + hs).Domain → ℕ) {S q n : ℕ}
     (scheme : Scheme hs Request Message PublicKey SecretKey Signature)
