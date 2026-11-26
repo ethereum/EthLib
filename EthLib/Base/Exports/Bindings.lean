@@ -1367,6 +1367,11 @@ def bindings : List Binding := [
   ⟨"consensus_reqresp_response_bounds", `EthLib.Consensus.Exports.reqRespResponseBoundsExport,
     "(name: str, chunk_fork: str, protocol: str) -> tuple[int, int]",
     [`EthLib.Consensus.BoundsError], some "ConsensusError"⟩,
+  ⟨"consensus_reqresp_decode_chunk", `EthLib.Consensus.Exports.reqRespDecodeChunkExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, fork: str, " ++
+      "protocol: str, data: bytes) -> tuple[str, int, bytes, bytes]",
+    [`EthLib.Consensus.BoundsError, `EthLib.Networking.ReqResp.ReqRespError],
+    some "ConsensusError"⟩,
   ⟨"consensus_reqresp_response_valid", `EthLib.Consensus.Exports.reqRespResponseValidExport,
     "(name: str, fork: str, protocol: str, request: bytes, " ++
       "items: list[tuple[int | bytes, ...]], committee: list[int], " ++

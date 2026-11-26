@@ -207,6 +207,7 @@ public import EthLib.Consensus.Proofs.Models.ForkChoice.HonestSupport
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Models.ForkChoice.PayloadTree
 public import EthLib.Consensus.Proofs.ReqResp.Bounds
+public import EthLib.Consensus.Proofs.ReqResp.Chunk
 public import EthLib.Consensus.Proofs.ReqResp.Messages
 public import EthLib.Consensus.Proofs.ReqResp.ResponseBounds
 public import EthLib.Consensus.Proofs.ReqResp.Validity
