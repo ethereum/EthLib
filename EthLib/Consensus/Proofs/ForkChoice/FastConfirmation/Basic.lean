@@ -421,10 +421,8 @@ private theorem getSlotCommittee_exists {head : Root} {headState : BeaconState p
     -- Each index of the fold is below the count of committees of the slot.
     have indexLt := List.mem_range.mp inside
     have below : index.toUInt64 <
-        getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot) := by
-      rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt'
-        (Nat.lt_trans indexLt (UInt64.toNat_lt _))]
-      exact indexLt
+        getCommitteeCountPerSlot headState (computeEpochAtSlot preset slot) :=
+      Base.Uint64.toUInt64_lt_of_lt indexLt
     obtain ⟨committee, committeeOk⟩ :=
       getBeaconCommittee_exists seedRoom lookahead few committeeRoom positive below
     exact ⟨committee.foldl (·.insert ·) acc,

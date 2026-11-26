@@ -108,12 +108,6 @@ theorem parseTopic_topicString_name (digest : ForkDigest) (topic : GossipTopic) 
     parseTopic (topicString digest topic.name) = .ok (digest, topic.name) :=
   parseTopic_topicString digest (slash_not_mem_name topic)
 
-/-- A number below a 64-bit count is the same number as a 64-bit integer. -/
-theorem ofNat_lt {a : Nat} {count : UInt64} (lt : a < count.toNat) : UInt64.ofNat a < count := by
-  rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_ofNat',
-    Nat.mod_eq_of_lt (Nat.lt_trans lt count.toNat_lt)]
-  exact lt
-
 /-- Every attestation subnet topic of a fork is below the number of attestation subnets. -/
 theorem gossipTopics_beaconAttestation {config : Config} {fork : Fork} {subnet : SubnetID}
     (member : .beaconAttestation subnet ∈ config.gossipTopics fork) :
@@ -124,7 +118,7 @@ theorem gossipTopics_beaconAttestation {config : Config} {fork : Fork} {subnet :
     List.mem_nil_iff, reduceCtorEq, or_false, false_or] at member
   rcases member with (((((⟨a, lt, same⟩ | other) | other) | other) | other) | other) | other
   · cases same
-    exact ofNat_lt lt
+    exact Base.Uint64.toUInt64_lt_of_lt lt
   all_goals simp [GossipTopic.gloas] at other
 
 /-- The topics of Gloas are those of Fulu, then the four topics that Gloas adds. -/
@@ -203,8 +197,7 @@ theorem computeShuffledIndex_bounded (preset : Preset) :
   refine ⟨_, computeShuffledIndex_eq lt fits, ?_⟩
   have bound := Shuffle.shuffledIndex_lt (rounds := preset.SHUFFLE_ROUND_COUNT.toNat)
     (seed := seed) (UInt64.lt_iff_toNat_lt.mp lt)
-  rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans bound n.toNat_lt)]
-  exact bound
+  exact Base.Uint64.toUInt64_lt_of_lt bound
 
 /--
 A node gets the subnets per node, each below the number of attestation subnets.

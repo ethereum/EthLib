@@ -398,9 +398,7 @@ private theorem getValidatorFromDeposit_capped (pubkey : Cryptography.Bls.BLSPub
 theorem getValidatorFromDeposit_effectiveBalance_le (pubkey : Cryptography.Bls.BLSPubkey)
     (credentials : Bytes32) (amount : Gwei) :
     (getValidatorFromDeposit preset fork pubkey credentials amount).effectiveBalance ≤ amount := by
-  have mod : amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount := by
-    rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-    exact Nat.mod_le _ _
+  have mod : amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount := Base.Uint64.mod_le _ _
   exact UInt64.le_trans Std.min_le_left (UInt64.sub_le mod)
 
 /-- A pending deposit keeps each effective balance at most the largest one of its validator. -/

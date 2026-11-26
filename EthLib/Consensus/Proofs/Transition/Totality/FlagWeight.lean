@@ -136,17 +136,6 @@ private theorem weigh_le (perIncrement : Nat) (state : BeaconState preset fork)
     _ = _ := step2
     _ ≤ _ := Nat.mul_le_mul_right 54 (Nat.mul_le_mul_right perIncrement step3)
 
-/-- The sum of a function over the positions of a list is the sum over its elements. -/
-private theorem sum_range_getElem? (g : Validator → Nat) :
-    ∀ l : List Validator, ((List.range l.length).map fun j => ((l[j]?).map g).getD 0).sum =
-      (l.map g).sum
-  | [] => by simp
-  | x :: t => by
-    rw [List.length_cons, List.range_succ_eq_map]
-    simp only [List.map_cons, List.sum_cons, List.map_map, Function.comp_def,
-      List.getElem?_cons_zero, List.getElem?_cons_succ, Option.map_some, Option.getD_some]
-    rw [sum_range_getElem? g t]
-
 /-- The marked sum for the marks of an epoch is the active balance at that epoch. -/
 private theorem sumMarked_active (state : BeaconState preset fork) (epoch : Epoch) :
     sumMarked state.validators.data (state.validators.data.map (isActiveValidator · epoch)) =
@@ -155,7 +144,7 @@ private theorem sumMarked_active (state : BeaconState preset fork) (epoch : Epoc
     (·.effectiveBalance.toNat) state.validators.data.toList
   simp only [Bool.decide_eq_true] at split
   rw [sumMarked_eq_sum, activeBalanceAt, ← split, ← Array.length_toList]
-  rw [← sum_range_getElem? (fun v => if isActiveValidator v epoch = true then
+  rw [← sum_map_range_getElem? (fun v => if isActiveValidator v epoch = true then
     v.effectiveBalance.toNat else 0) state.validators.data.toList]
   congr 1
   refine List.map_congr_left fun j _ => ?_

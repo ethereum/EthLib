@@ -3480,11 +3480,13 @@ theorem syncCr_gross {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.f
       simp only [decide_eq_true_eq] at covered ⊢
       exact Or.inr (Or.inr covered))
     (Or.inr fun ok _ fork early replayed i =>
-      (Internal.sum_map_sync _ (Internal.keyCredit i)).symm.trans
+      (Base.sum_map_ite_eq_sum_filter (fun e : BalanceEvent preset => e.source = .sync)
+        (Internal.keyCredit i) _).symm.trans
         (Internal.slot_syncDebit_zero fork ok early replayed i).2) electra early v
   have conv : Internal.syncCr eventsC v = ((eventsC.filter (·.source = .sync)).map
     (Internal.keyCredit v)).sum :=
-    Internal.sum_map_sync _ (Internal.keyCredit v)
+    Base.sum_map_ite_eq_sum_filter (fun e : BalanceEvent preset => e.source = .sync)
+      (Internal.keyCredit v) _
   unfold Internal.grossScan
   rw [conv] at positive
   omega

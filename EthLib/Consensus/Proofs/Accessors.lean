@@ -1152,11 +1152,8 @@ theorem getBeaconCommittees_nodup {state : BeaconState preset fork}
     (committees.flatMap Array.toList).Nodup := by
   obtain ⟨length, each⟩ := mapM_eq_ok_iff.mp mapped
   have below : ∀ i, i < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat →
-      i.toUInt64 < getCommitteeCountPerSlot state (computeEpochAtSlot preset slot) := by
-    intro i lt
-    rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt'
-      (Nat.lt_trans lt (UInt64.toNat_lt _))]
-    exact lt
+      i.toUInt64 < getCommitteeCountPerSlot state (computeEpochAtSlot preset slot) :=
+    fun _ lt => Base.Uint64.toUInt64_lt_of_lt lt
   have read : ∀ i (lt : i < committees.length),
       getBeaconCommittee state slot i.toUInt64 = .ok committees[i] ∧
         i < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat := by

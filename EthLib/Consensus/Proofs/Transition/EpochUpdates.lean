@@ -109,10 +109,8 @@ theorem updatedEffectiveBalance_split {largest balance effectiveBalance result :
 /-- The balance rounded down to an increment is that balance less the remainder. -/
 theorem toNat_rounded {balance : Gwei} :
     (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT).toNat =
-      balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-  have le : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
-    UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)
-  rw [UInt64.toNat_sub_of_le _ _ le, UInt64.toNat_mod]
+      balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+  Base.Uint64.toNat_sub_mod _ _
 
 /-- The rounded balance capped at the largest is either the rounded balance or the largest. -/
 private theorem toNat_min_rounded {balance largest : Gwei} :

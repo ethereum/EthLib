@@ -175,7 +175,7 @@ private theorem committees_exists_ok {state : BeaconState preset fork} {slot : S
       preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 :=
     Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_left _ nonempty) room
   refine mapM_exists_ok fun position listed => ?_
-  have below := toUInt64_lt_of_lt (List.mem_range.mp listed)
+  have below := Uint64.toUInt64_lt_of_lt (List.mem_range.mp listed)
   simp only [getBeaconCommittee, shuffleOk, bind, Except.bind]
   exact beaconCommitteeOf_ok_of_lt positive countFits
     (by simpa only [activeEq, List.size_toArray] using room) below
@@ -415,7 +415,7 @@ theorem exists_honestBlock_gathersVotes [LawfulSszType (BeaconBlockBody preset f
           (high := preset.MAX_VALIDATORS_PER_COMMITTEE.toNat) fun committee committeeListed => by
         obtain ⟨position, positionListed, read⟩ := mapM_ok_mem listedOk committee committeeListed
         exact conditions.committeeSizes slot _ committee sameEpoch
-          (toUInt64_lt_of_lt (List.mem_range.mp positionListed)) read
+          (Uint64.toUInt64_lt_of_lt (List.mem_range.mp positionListed)) read
       rw [mapM_ok_length listedOk, List.length_range] at total
       simp only [maxAttesters, electra, ↓reduceIte]
       exact total.trans (Nat.mul_comm _ _ ▸ Nat.mul_le_mul_left _ countBelow)
@@ -532,7 +532,8 @@ theorem exists_honestBlock_gathersVotes [LawfulSszType (BeaconBlockBody preset f
         constructor
         · rintro ⟨slot, member, committeeIndex, ⟨⟨position, below, rfl⟩, members, committeeOk,
             someSigner⟩, rfl⟩
-          exact ⟨slot, member, _, members, toUInt64_lt_of_lt below, committeeOk, someSigner, rfl⟩
+          exact ⟨slot, member, _, members, Uint64.toUInt64_lt_of_lt below, committeeOk, someSigner,
+            rfl⟩
         · rintro ⟨slot, member, committeeIndex, members, below, committeeOk, someSigner, rfl⟩
           exact ⟨slot, member, committeeIndex, ⟨⟨committeeIndex.toNat,
             UInt64.lt_iff_toNat_lt.mp below, by simp⟩, members, committeeOk, someSigner⟩, rfl⟩

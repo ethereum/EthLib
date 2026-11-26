@@ -276,13 +276,8 @@ private theorem foldlM_registryLoad_le {α ε : Type}
       items.foldlM step state = .ok after →
         registryLoad after ≤ registryLoad state + bound * items.length := by
   intro items state after computed
-  have raised := foldlM_ok_weighted
-    (fun b c => registryLoad b ≤ registryLoad state + bound * c) (fun _ => 1)
-    (fun b x b' c held ok => by
-      have := each b x b' ok
-      rw [Nat.mul_add, Nat.mul_one]
-      omega) (c := 0) (by simp) computed
-  simpa using raised
+  have raised := foldlM_ok_le_add_sum registryLoad (fun _ => bound) each computed
+  simpa [Nat.mul_comm] using raised
 
 /-- A pending deposit added to the queue raises the count by one. -/
 private theorem registryLoad_addPendingDeposit {electra : .pectra ≤ fork}

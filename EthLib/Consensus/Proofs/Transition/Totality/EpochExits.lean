@@ -44,7 +44,7 @@ theorem exitCost_le (state : BeaconState preset fork) :
       effectiveBalanceSum state / preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
         state.validators.data.size := by
   unfold exitCost effectiveBalanceSum
-  refine Nat.le_trans (((List.filter_sublist).map _).sum_le_sum fun _ _ => Nat.zero_le _) ?_
+  refine Nat.le_trans Base.sum_map_filter_le ?_
   rw [List.sum_map_add, ← Array.length_toList]
   simp only [List.map_const', List.sum_replicate, Nat.nsmul_eq_mul, Nat.mul_one]
   refine Nat.add_le_add_right ?_ _

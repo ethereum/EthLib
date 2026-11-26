@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Sphincs.Digest
 public import EthLib.Base.Proofs.ByteOrder
+import EthLib.Base.Proofs.List
 
 /-!
 # Proofs: the leanSPHINCS message digest
@@ -119,13 +120,6 @@ theorem msbField_eq_ofBE {k : Nat} (x : Vector UInt8 k) :
       Vector.getElem?_eq_getElem (by omega)]
     simp [EthLib.Base.ByteOrder.ofBE_eq_foldl]
 
-/-- A sum scaled by `c` is the sum of its terms scaled by `c`. -/
-private theorem sum_map_mul_right (l : List Nat) (g : Nat → Nat) (c : Nat) :
-    (l.map fun i => g i * c).sum = (l.map g).sum * c := by
-  induction l with
-  | nil => simp
-  | cons i l ih => simp only [List.map_cons, List.sum_cons, ih, Nat.add_mul]
-
 /-- A field of `n` blocks of `a` bits is the sum of the blocks, block 0 on top. -/
 theorem msbField_mul {k : Nat} (x : Vector UInt8 k) (offset a : Nat) : ∀ n,
     msbField x offset (a * n)
@@ -135,7 +129,7 @@ theorem msbField_mul {k : Nat} (x : Vector UInt8 k) (offset a : Nat) : ∀ n,
     -- Block `n` comes last, below the `n` blocks before it.
     rw [Nat.mul_succ, msbField_add, msbField_mul x offset a n, List.range_succ, List.map_append,
       List.sum_append_nat, List.map_singleton, List.sum_singleton, Nat.add_sub_cancel,
-      Nat.sub_self, Nat.mul_zero, Nat.pow_zero, Nat.mul_one, ← sum_map_mul_right]
+      Nat.sub_self, Nat.mul_zero, Nat.pow_zero, Nat.mul_one, ← Base.sum_map_mul_right]
     refine congrArg (· + _) (congrArg List.sum (List.map_congr_left fun i hi => ?_))
     -- Each earlier block moves up by `a` bits.
     rw [List.mem_range] at hi

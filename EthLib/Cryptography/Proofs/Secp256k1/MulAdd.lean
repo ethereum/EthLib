@@ -7,6 +7,7 @@ import all EthLib.Cryptography.Secp256k1.MulAdd
 import all EthLib.Cryptography.Secp256k1.Montgomery
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 import EthLib.Cryptography.Proofs.Secp256k1.Montgomery
+import EthLib.Base.Proofs.Uint64
 
 /-!
 # Proofs: the double scalar multiplication of secp256k1
@@ -716,12 +717,6 @@ private theorem window_pivot (window : Window) :
     window.pivot.toNat = 2 * window.entries := by
   cases window <;> decide
 
-private theorem word_round_down (lo pivot : UInt64) :
-    (lo - lo % pivot).toNat = lo.toNat - lo.toNat % pivot.toNat := by
-  rw [UInt64.toNat_sub_of_le, UInt64.toNat_mod]
-  rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]
-  exact Nat.mod_le _ _
-
 private theorem mul_mod_radix (a b k : Nat) (hd : k ∣ 2^64) :
     (a + b * 2^64) % k = a % k := by
   obtain ⟨t, ht⟩ := hd
@@ -758,7 +753,7 @@ private theorem WordPair.roundDown_toNat (window : Window) (w : WordPair) :
     (w.roundDown window.pivot).toNat = w.toNat - w.toNat % (2 * window.entries) := by
   change (w.lo - w.lo % window.pivot).toNat + w.hi.toNat * 2^64 =
     w.lo.toNat + w.hi.toNat * 2^64 - (w.lo.toNat + w.hi.toNat * 2^64) % (2 * window.entries)
-  rw [word_round_down, window_pivot, mul_mod_radix _ _ _ (by cases window <;> decide)]
+  rw [Base.Uint64.toNat_sub_mod, window_pivot, mul_mod_radix _ _ _ (by cases window <;> decide)]
   have := Nat.mod_le w.lo.toNat (2 * window.entries)
   omega
 

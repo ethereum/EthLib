@@ -1225,9 +1225,7 @@ private theorem balanceDrift_reference_update {f : Fork} {s t : BeaconState pres
         simp only [effectiveAt, nextRead, Option.map_some, Option.getD_some]
         rcases updatedEffectiveBalance_cases changed with rfl | rfl
         · exact previous
-        · have rounded : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
-            UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)
-          rw [Base.Uint64.toNat_min, UInt64.toNat_sub_of_le _ _ rounded, UInt64.toNat_mod]
+        · rw [Base.Uint64.toNat_min, Base.Uint64.toNat_sub_mod]
           refine Nat.le_min.mpr ⟨?_, UInt64.le_iff_toNat_le.mp capped⟩
           simpa only [aligned, Nat.sub_zero] using
             Base.rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat funded
@@ -1646,7 +1644,7 @@ private theorem admissionFunded_add {f : Fork} {s t : BeaconState preset f}
   by_cases same : s.validators.data.size = i
   · subst i
     have rounded : amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount :=
-      UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)
+      Base.Uint64.mod_le _ _
     simp only [effectiveAt, actualBalanceAt, validators, balances,
       Array.getElem?_push, matched,
       ↓reduceIte, Option.map_some, Option.getD_some,

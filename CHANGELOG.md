@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, shared lemmas replace sums, folds and 64-bit facts that several modules proved again.
+  `Base/Proofs/List.lean` gains `sum_map_filter_le`, `add_sum_map_range_le`, `sum_map_range_getElem?` and `sum_map_add`.
+  `Base/Proofs/MapM.lean` gains `foldlM_ok_le_add_sum`, a bound on a measure that a fold raises.
+  `Base/Proofs/Uint64.lean` gains `toUInt64_lt_of_lt`, `mod_le` and `toNat_sub_mod`.
+
 - In Lean, `Consensus.decodeGossipAtTopic` (`Consensus/Gossip/Decode.lean`) decodes the payload of a gossip message at the bound of its topic.
   The bound is that of the fork that the topic's digest names, so the caller passes no fork and no bound.
   That fork is the fork of the first epoch with the digest, as `forkOfDigest` finds it.
@@ -1126,6 +1131,10 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, proofs that restated a shared lemma are removed; each line gives the lemma to use.
+  - `Consensus.Models.Network.PinDrift.Internal.sum_map_sync`: `Base.sum_map_ite_eq_sum_filter` with the test `(·.source = .sync)`.
+  - `Consensus.toUInt64_lt_of_lt` and `Consensus.Proofs.Gossip.Topics.ofNat_lt`: `Base.Uint64.toUInt64_lt_of_lt`.
 
 - In Lean, `processSlot_ok` (`Consensus/Proofs/Transition/StateTransition.lean`) now states the result of the caching of a slot as `w.apply state`, for some `w : SlotWrites preset fork`.
   `SlotWrites` holds the four fields that the caching of a slot writes.

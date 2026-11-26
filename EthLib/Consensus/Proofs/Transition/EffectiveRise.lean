@@ -244,7 +244,7 @@ private theorem pendingAmount_filter_le (l : List PendingDeposit) {p q : Pending
     exact List.filter_congr fun d member => by cases hp : p d <;> simp [hp, le d member]
   unfold pendingAmount
   rw [kept]
-  exact (List.filter_sublist.map _).sum_le_sum fun _ _ => Nat.zero_le _
+  exact Base.sum_map_filter_le
 
 /-- From Electra, the pending deposits credit at most the limit of validators per epoch.
 
@@ -529,13 +529,11 @@ private theorem rise_update {f : Fork} {s t : BeaconState preset f}
   rw [eff, ← balanceValue]
   rcases updatedEffectiveBalance_split updated with ⟨rfl, -, -⟩ | ⟨rfl, crossed⟩
   · exact .inl (Nat.le_refl _)
-  · have rounded : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
-      UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)
-    have value : (min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT)
+  · have value : (min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT)
         (withdrawalMaxEffectiveBalance preset f v)).toNat =
         min (balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
           (withdrawalMaxEffectiveBalance preset f v).toNat := by
-      rw [Base.Uint64.toNat_min, UInt64.toNat_sub_of_le _ _ rounded, UInt64.toNat_mod]
+      rw [Base.Uint64.toNat_min, Base.Uint64.toNat_sub_mod]
     rw [value]
     have := Nat.mod_le balance.toNat preset.EFFECTIVE_BALANCE_INCREMENT.toNat
     have low := Nat.min_le_left (balance.toNat - balance.toNat %

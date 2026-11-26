@@ -263,10 +263,7 @@ theorem computePtc_ok {state : BeaconState preset fork} {slot : Slot}
       .ok members := by
     unfold slotCommitteeMembersOf
     refine foldlM_committees_ok _ fun i lt => beaconCommitteeOf_ok_of_lt epochPos countFits (by
-      simpa only [List.size_toArray] using activeFits) ?_
-    rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' (Nat.lt_trans lt
-      (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat_lt)]
-    exact lt
+      simpa only [List.size_toArray] using activeFits) (Base.Uint64.toUInt64_lt_of_lt lt)
   have found : slotCommitteeMembers state slot = .ok members := by
     unfold slotCommitteeMembers
     simp only [shuffleOk, bind, Except.bind]

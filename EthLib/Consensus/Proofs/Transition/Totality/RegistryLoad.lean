@@ -115,9 +115,7 @@ theorem foldlM_validators_size_le {α ε : Type}
     {items : List α} {s t : BeaconState preset fork}
     (ok : items.foldlM action s = .ok t) :
     t.validators.data.size ≤ s.validators.data.size + items.length := by
-  simpa using foldlM_ok_weighted
-    (fun b c => b.validators.data.size ≤ s.validators.data.size + c) (fun _ => 1)
-    (fun b x b' c held step => by have := bound b x b' step; omega) (c := 0) (by simp) ok
+  simpa using foldlM_ok_le_add_sum (·.validators.data.size) (fun _ => 1) bound ok
 
 /-- The pending deposits of an epoch never raise the validators plus the pending deposits. -/
 theorem processPendingDeposits_registryLoad_le {electra : .pectra ≤ fork}

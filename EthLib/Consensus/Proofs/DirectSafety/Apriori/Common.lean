@@ -377,7 +377,7 @@ private theorem keys_stake_le_validators {x : ForkedBeaconState preset}
   rw [sameKeys, List.sum_toFinset _ nodup, List.map_map]
   change (listed.map (fun v => effectiveWeight x.state v.pubkey)).sum ≤ _
   rw [counted]
-  exact (List.filter_sublist.map _).sum_le_sum (fun _ _ => Nat.zero_le _)
+  exact Base.sum_map_filter_le
 
 /-- The slashed common stake is paid from the scheduled keys' common reserve. -/
 theorem commonSlashed_le_commonReserve {x y : ForkedBeaconState preset}
@@ -713,17 +713,6 @@ private theorem scheduled_effective_le_cap {g x y : ForkedBeaconState preset}
   rw [atEnd]
   exact (UInt64.le_iff_toNat_le.mp cap).trans (UInt64.le_iff_toNat_le.mp kept)
 
-/-- A sum over list positions is the sum over the list. -/
-private theorem sum_range_getElem? (F : Validator → Nat) (l : List Validator) :
-    ∑ i ∈ Finset.range l.length, ((l[i]?).map F).getD 0 = (l.map F).sum := by
-  induction l with
-  | nil => simp
-  | cons b l ih =>
-    rw [List.length_cons, Finset.sum_range_succ', List.map_cons, List.sum_cons]
-    simp only [List.getElem?_cons_succ, List.getElem?_cons_zero, Option.map_some,
-      Option.getD_some]
-    rw [ih, Nat.add_comm]
-
 /-- One exit cohort's residual is at most the exit-cohort growth. -/
 private theorem cohort_le_Rhat (x : ForkedBeaconState preset) (high j : Nat)
     (within : j ≤ horizonEnd x high) :
@@ -777,7 +766,7 @@ theorem scheduledBoundaryProducer {g x y : ForkedBeaconState preset} :
         ((x.state.validators.data.toList[i]?).map F).getD 0 := Finset.sum_le_sum termwise
     _ = (x.state.validators.data.toList.map F).sum := by
         rw [← Array.length_toList]
-        exact sum_range_getElem? F _
+        exact (list_map_sum_range _ F).symm
     _ ≤ exitCohortGrowth x high := cohort_le_Rhat x high j within
 
 section
@@ -1265,7 +1254,7 @@ theorem oldBoundary_le {g x y : ForkedBeaconState preset}
     !v.slashed && decide (v.exitEpoch.toNat = Ey)
   have asList : scheduled = (x.state.validators.data.toList.map fun v =>
       if test v then v.effectiveBalance.toNat else 0).sum := by
-    rw [hScheduled, ← sum_range_getElem?]
+    rw [hScheduled, list_map_sum_range]
     simp only [Array.length_toList, Array.getElem?_toList]
     refine Finset.sum_congr rfl fun i _ => ?_
     cases found : x.state.validators.data[i]? <;> simp [effectiveAt, found, test]

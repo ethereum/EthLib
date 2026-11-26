@@ -284,9 +284,7 @@ theorem mem_committeePositions {state : BeaconState preset fork} {epoch : Epoch}
   simp only [List.mem_flatMap, List.mem_range, List.mem_map, Prod.mk.injEq] at mem
   obtain ⟨slot', mem', index', indexLt, rfl, rfl⟩ := mem
   have perSmall := (getCommitteeCountPerSlot state epoch).toNat_lt
-  refine ⟨mem_epochSlots sloted mem', UInt64.lt_iff_toNat_lt.mpr ?_⟩
-  rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans indexLt perSmall)]
-  exact indexLt
+  exact ⟨mem_epochSlots sloted mem', Base.Uint64.toUInt64_lt_of_lt indexLt⟩
 
 /-- With a shuffle that has a value, the search over it computes each committee alone.
 
