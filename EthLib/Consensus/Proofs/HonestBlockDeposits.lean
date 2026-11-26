@@ -63,27 +63,17 @@ theorem expectedDepositCount_index_lt {state : BeaconState preset fork} {before 
     have := Nat.min_le_right preset.MAX_DEPOSITS.toNat outstanding.toNat
     omega
 
-/-- A sum of balances is at most the sum of each balance or effective balance, read in step.
-
-The registry must be at least as long as the balances. -/
-private theorem sum_le_sum_zipWith_max :
-    ∀ (validators : List Validator) (balances : List UInt64),
-      balances.length ≤ validators.length →
-      (balances.map (·.toNat)).sum ≤ (validators.zipWith (fun validator balance =>
-        max validator.effectiveBalance.toNat balance.toNat) balances).sum
-  | _, [], _ => by simp
-  | [], _ :: _, long => by simp at long
-  | validator :: validators, balance :: balances, long => by
-    have := sum_le_sum_zipWith_max validators balances (by simpa using long)
-    have := Nat.le_max_right validator.effectiveBalance.toNat balance.toNat
-    simp only [List.map_cons, List.sum_cons, List.zipWith_cons_cons]
-    omega
-
 /-- The balances sum to at most the stake sum, when there is one balance for each validator. -/
 theorem balanceSum_le_stakeSum {state : BeaconState preset fork} (matched : BalancesMatch state) :
     balanceSum state ≤ stakeSum state := by
   unfold BalancesMatch at matched
-  exact sum_le_sum_zipWith_max _ _ (by simp [matched])
+  unfold balanceSum stakeSum
+  -- The balances are the second items of the zip with the registry, and each is at most its max.
+  conv_lhs => rw [← List.map_snd_zip (l₁ := state.validators.data.toList)
+    (l₂ := state.balances.data.toList) (by simp [matched]), List.map_map]
+  exact (List.map_zip_eq_zipWith (f := fun pair : Validator × UInt64 =>
+    max pair.1.effectiveBalance.toNat pair.2.toNat)) ▸
+      sum_map_le_sum_map fun pair _ => Nat.le_max_right _ _
 
 /-! ## One deposit -/
 
