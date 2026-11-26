@@ -411,15 +411,12 @@ theorem exists_honestBlock_gathersVotes [LawfulSszType (BeaconBlockBody preset f
         ⟨members, mem_of_mapM_getBeaconCommittee listedOk (UInt64.lt_iff_toNat_lt.mp below)
           committeeOk, List.ne_nil_of_mem (mem_honestSigners.mpr ⟨seated, honestIndex⟩)⟩
       -- Each committee of the slot has at most the largest size, and there are few enough.
-      have sizes : ∀ size ∈ committees.map Array.size,
-          size ≤ preset.MAX_VALIDATORS_PER_COMMITTEE.toNat := by
-        intro size sized
-        obtain ⟨committee, committeeListed, rfl⟩ := List.mem_map.mp sized
+      have total := Base.sum_map_le (xs := committees) (f := Array.size)
+          (high := preset.MAX_VALIDATORS_PER_COMMITTEE.toNat) fun committee committeeListed => by
         obtain ⟨position, positionListed, read⟩ := mapM_ok_mem listedOk committee committeeListed
         exact conditions.committeeSizes slot _ committee sameEpoch
           (toUInt64_lt_of_lt (List.mem_range.mp positionListed)) read
-      have total := List.sum_le_length_nsmul _ _ sizes
-      rw [List.length_map, mapM_ok_length listedOk, List.length_range, smul_eq_mul] at total
+      rw [mapM_ok_length listedOk, List.length_range] at total
       simp only [maxAttesters, electra, ↓reduceIte]
       exact total.trans (Nat.mul_comm _ _ ▸ Nat.mul_le_mul_left _ countBelow)
     have made := List.mapM_eq_ok_iff_forall₂.mp attestationsOk
@@ -540,14 +537,11 @@ theorem exists_honestBlock_gathersVotes [LawfulSszType (BeaconBlockBody preset f
           exact ⟨slot, member, committeeIndex, ⟨⟨committeeIndex.toNat,
             UInt64.lt_iff_toNat_lt.mp below, by simp⟩, members, committeeOk, someSigner⟩, rfl⟩
       · rw [List.length_flatMap]
-        refine Nat.le_trans (List.sum_le_length_nsmul _
-          (getCommitteeCountPerSlot state (getCurrentEpoch state)).toNat
-          fun length listed => ?_) ?_
-        · obtain ⟨slot, -, rfl⟩ := List.mem_map.mp listed
-          rw [List.length_map]
-          exact (List.length_filter_le _ _).trans (by simp)
-        · rw [List.length_map, smul_eq_mul]
-          exact Nat.mul_le_mul_right _ windowLength
+        refine Nat.le_trans (Base.sum_map_le (xs := window)
+          (high := (getCommitteeCountPerSlot state (getCurrentEpoch state)).toNat)
+          fun slot _ => ?_) (Nat.mul_le_mul_right _ windowLength)
+        rw [List.length_map]
+        exact (List.length_filter_le _ _).trans (by simp)
     have lengthFits : votes.length ≤ (parameters preset fork).MAX_ATTESTATIONS.toNat := by
       have capacity := conditions.capacity
       rw [ite_eq_right electra] at capacity

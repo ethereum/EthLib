@@ -106,13 +106,10 @@ private theorem syncParticipantReward_exists {budget scoreBound : Nat}
   -- Each effective balance is at most the largest cap, so their sum is at most that many caps.
   have summed : effectiveBalanceSum state ≤
       state.validators.data.size * preset.largestEffectiveBalance := by
-    unfold effectiveBalanceSum
-    have := List.sum_le_length_nsmul (state.validators.data.toList.map (·.effectiveBalance.toNat))
-      preset.largestEffectiveBalance fun balance member => by
-        obtain ⟨validator, inside, rfl⟩ := List.mem_map.mp member
-        exact (UInt64.le_iff_toNat_le.mp (holds.capped validator (by simpa using inside))).trans
+    simpa [effectiveBalanceSum] using Base.sum_map_le (xs := state.validators.data.toList)
+      (f := (·.effectiveBalance.toNat)) fun validator inside =>
+        (UInt64.le_iff_toNat_le.mp (holds.capped validator (by simpa using inside))).trans
           (withdrawalMaxEffectiveBalance_le_largestEffectiveBalance preset fork validator)
-    simpa using this
   -- The whole increments of the total are at most two for each validator and cap ratio.
   have incrementsLe : total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
       2 * (state.validators.data.size *
