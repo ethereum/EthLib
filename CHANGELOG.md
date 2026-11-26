@@ -3959,6 +3959,16 @@ Not yet released.
   The fork of a decoded chunk is at or after `ReqRespProtocol.firstChunkFork`, the first fork at which the payload of the protocol has a type.
   `responseDesc_isSome` states that each protocol version of a fork has a response type at the fork of every chunk.
 
+- In Lean, `Cryptography.Bls.BLSPubkey` is now a structure over its 48 bytes, as `KZGCommitment` and `KZGProof` are.
+  `EthLib.Cryptography.Bls.Signatures` defines it, so Lean rejects a KZG commitment, a KZG proof or other 48 bytes where a public key is expected.
+  Keys compare as their bytes, and the order has the laws that a search tree needs.
+  `pointToPubkey`, `skToPk` and `ethAggregatePubkeys` return the structure, and the scheme operations take it.
+  Key validation and the core verifications still take bytes, as the BLS signature draft writes them.
+  A theorem about a key changes its statement only where the type forces it, with `.bytes` or `BLSPubkey.mk`.
+  `Consensus.map_toValue_blsPubkey` (`Consensus/Proofs/Types.lean`) states that the SSZ values of keys are the values of their bytes.
+  The SSZ, JSON and Python forms are those of the bytes, so no encoding and no C or Python signature changes.
+  Migration: build a key with `BLSPubkey.mk`, and read its bytes with `.bytes`.
+
 ## 0.3.0
 
 Released on 2026-11-06.

@@ -144,7 +144,8 @@ The signature `c • H(msg)` then passes for the victim's key together with the 
 The attacker never learns the victim's secret key. -/
 theorem fastAggregateVerify_rogue (sk : SecretKey) {c : Fr} (hc0 : c ≠ 0)
     (hc : c ≠ sk.val) (msg : ByteArray) :
-    ∃ P Q, G1.keyValidatePoint (skToPk sk) = .ok P ∧ HashToCurve.hashToG2 msg DST = .ok Q ∧
+    ∃ P Q, G1.keyValidatePoint (skToPk sk).bytes = .ok P ∧
+      HashToCurve.hashToG2 msg DST = .ok Q ∧
       fastAggregateVerify
         #[skToPk sk, pointToPubkey (G1.add (G1.mul G1.generator c) (G1.neg P))] msg
         (pointToSignature (G2.mul Q c)) = true := by
@@ -157,7 +158,8 @@ theorem fastAggregateVerify_rogue (sk : SecretKey) {c : Fr} (hc0 : c ≠ 0)
   have hrep : G1.Represents (G1.add (G1.mul G1.generator c) (G1.neg P)) rogue.val :=
     (G1.represents_mul_generator c).add hPrep.neg
   have hrogue : pointToPubkey (G1.add (G1.mul G1.generator c) (G1.neg P)) = skToPk rogue :=
-    G1.compress_congr hrep.1 (G1.represents_mul_generator rogue.val).1 hrep.2
+    congrArg BLSPubkey.mk
+      (G1.compress_congr hrep.1 (G1.represents_mul_generator rogue.val).1 hrep.2)
   have hkeys : #[skToPk sk, skToPk rogue] = ([sk, rogue].map skToPk).toArray := rfl
   have hsum : ([sk, rogue].map (·.val)).sum = c := rogue_sum sk.val c
   rw [hrogue, hkeys]

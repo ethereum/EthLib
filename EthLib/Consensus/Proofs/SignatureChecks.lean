@@ -43,7 +43,8 @@ Here no key signed any message, and the checks still accept a signature by one k
 theorem SignatureChecks.not_aggregateSound_acceptAll :
     ¬SignatureChecks.acceptAll.AggregateSound fun _ _ => False :=
   fun sound =>
-    sound #[Vector.replicate _ 0] .empty (Vector.replicate _ 0) rfl (Vector.replicate _ 0) (by simp)
+    sound #[⟨Vector.replicate _ 0⟩] .empty (Vector.replicate _ 0) rfl ⟨Vector.replicate _ 0⟩
+      (by simp)
 
 /-- The assumption on aggregate checks, for a given set of calls only.
 

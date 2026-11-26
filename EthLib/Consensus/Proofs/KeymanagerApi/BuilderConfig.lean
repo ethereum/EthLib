@@ -80,10 +80,15 @@ private theorem readBuilderEntrySetting_resolvedBuilderEntryJson (path : String)
     intro path
     simp [readBuilderUrl, readString_stringJson, urlLow, urlHigh, bind, Except.bind]
   have readKeys : ∀ path,
-      readBuilderPubkeys path (.arr (keys.map Interchange.bytesJson).toArray) = .ok keys := by
+      readBuilderPubkeys path (.arr (keys.map (Interchange.bytesJson ·.bytes)).toArray) =
+        .ok keys := by
     intro path
-    have arr := Interchange.readArray_arr path (fun path => Interchange.readBytes path 48)
-      Interchange.bytesJson (fun path key => Interchange.readBytes_bytesJson path key) keys
+    -- A key is written and read as its 48 bytes.
+    have arr := Interchange.readArray_arr path
+      (fun path item => BLSPubkey.mk <$> Interchange.readBytes path 48 item)
+      (Interchange.bytesJson ·.bytes)
+      (fun path key => by
+        simp [Interchange.readBytes_bytesJson, Functor.map, Except.map]) keys
     simp [readBuilderPubkeys, readPubkeys, arr, ofProtection, fewKeys, bind, Except.bind]
   simp (disch := simp) [readBuilderEntrySetting, resolvedBuilderEntryJson, requiredField,
     optionalField, Interchange.field, getObjVal?_mkObj_eq, List.lookup, readUrl,

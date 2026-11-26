@@ -61,10 +61,10 @@ def syncParticipantPubkeys (committee : SyncCommittee preset)
       | .invalidPubkey (some i) =>
         .invalidSyncCommitteeKey (absent.getD i committee.aggregatePubkey)
       | _ => .invalidSyncCommitteeKey committee.aggregatePubkey
-    let total ← (G1.uncompress committee.aggregatePubkey).mapError
+    let total ← (G1.uncompress committee.aggregatePubkey.bytes).mapError
       fun _ => .invalidSyncCommitteeKey committee.aggregatePubkey
     -- The sum of the absent keys is no key of the committee, so this error names the aggregate key.
-    let absentPoint ← (G1.uncompress absentSum).mapError
+    let absentPoint ← (G1.uncompress absentSum.bytes).mapError
       fun _ => .invalidSyncCommitteeKey committee.aggregatePubkey
     return #[Signatures.pointToPubkey (G1.add total (G1.neg absentPoint))]
   -- Otherwise: the keys of the members that signed, in committee order.

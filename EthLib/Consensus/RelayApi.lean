@@ -390,7 +390,7 @@ def getValidatorRegistration (registry : Registry) (pubkey : Option String) : Re
     | none => .badRequest ⟨400, "invalid pubkey argument", none⟩
     | some key =>
       -- The latest registration that the relay holds for the key.
-      match registry.find? key with
+      match registry.find? ⟨key⟩ with
       | some signed => .found signed
       | none => .notHeld
 

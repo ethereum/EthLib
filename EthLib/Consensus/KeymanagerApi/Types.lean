@@ -112,7 +112,7 @@ def readUint64 (path : String) (document : Json) : Except KeymanagerError UInt64
 -/
 def readPubkey (path : String) (document : Json) : Except KeymanagerError BLSPubkey :=
   -- The schema: the pattern ^0x[a-fA-F0-9]{96}$, so 48 bytes.
-  ofProtection (Interchange.readBytes path 48 document)
+  ofProtection (BLSPubkey.mk <$> Interchange.readBytes path 48 document)
 
 /-- An execution address of 20 bytes, from [`eth_address.yaml`].
 
@@ -286,7 +286,7 @@ def readSignerDefinition (path : String) (document : Json) :
 
 /-- The definition of a remote key as the API writes it. -/
 def signerDefinitionJson (definition : SignerDefinition) : Json :=
-  Json.mkObj ([("pubkey", Interchange.bytesJson definition.pubkey)] ++
+  Json.mkObj ([("pubkey", Interchange.bytesJson definition.pubkey.bytes)] ++
     optionalFields "url" stringJson definition.url ++
     optionalFields "readonly" Json.bool definition.readonly)
 
@@ -300,7 +300,7 @@ def readImportRemoteSignerDefinition (path : String) (document : Json) :
 
 /-- A remote key to import as the API writes it. -/
 def importRemoteSignerDefinitionJson (definition : ImportRemoteSignerDefinition) : Json :=
-  Json.mkObj ([("pubkey", Interchange.bytesJson definition.pubkey)] ++
+  Json.mkObj ([("pubkey", Interchange.bytesJson definition.pubkey.bytes)] ++
     optionalFields "url" stringJson definition.url)
 
 /-- A fee recipient, from its object. -/
@@ -312,7 +312,7 @@ def readFeeRecipient (path : String) (document : Json) : Except KeymanagerError 
 
 /-- A fee recipient as the API writes it. -/
 def feeRecipientJson (recipient : FeeRecipient) : Json :=
-  Json.mkObj (optionalFields "pubkey" Interchange.bytesJson recipient.pubkey ++
+  Json.mkObj (optionalFields "pubkey" Interchange.bytesJson (recipient.pubkey.map (·.bytes)) ++
     [("ethaddress", Interchange.bytesJson recipient.ethaddress)])
 
 /-- A gas limit, from its object. -/
@@ -324,7 +324,7 @@ def readGasLimit (path : String) (document : Json) : Except KeymanagerError GasL
 
 /-- A gas limit as the API writes it. -/
 def gasLimitJson (limit : GasLimit) : Json :=
-  Json.mkObj (optionalFields "pubkey" Interchange.bytesJson limit.pubkey ++
+  Json.mkObj (optionalFields "pubkey" Interchange.bytesJson (limit.pubkey.map (·.bytes)) ++
     [("gas_limit", Interchange.uint64Json limit.gasLimit)])
 
 /-- The body of an error response, from its object. -/
@@ -368,7 +368,8 @@ structure DeleteKeysRequest where
 /-- An array of public keys, each read in turn. -/
 def readPubkeys (path : String) (document : Json) : Except KeymanagerError (List BLSPubkey) :=
   -- The schema: an array whose items are public keys.
-  ofProtection (Interchange.readArray path (fun path => Interchange.readBytes path 48) document)
+  ofProtection (Interchange.readArray path
+    (fun path item => BLSPubkey.mk <$> Interchange.readBytes path 48 item) document)
 
 /-- A request to delete keys, from its object. -/
 def readDeleteKeysRequest (document : Json) : Except KeymanagerError DeleteKeysRequest := do

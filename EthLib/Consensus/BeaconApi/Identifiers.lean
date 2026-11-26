@@ -123,7 +123,7 @@ def parseValidatorId (text : String) : Except ErrorMessage ValidatorId :=
   | some index => .ok (.index index)
   -- Else a public key: any 48 bytes, hex encoded with the 0x prefix.
   | none => match parseHexBytes 48 text with
-    | some pubkey => .ok (.pubkey pubkey)
+    | some pubkey => .ok (.pubkey ⟨pubkey⟩)
     -- Else an invalid validator identifier: code 400.
     | none => .error (invalidId "validator" text)
 
@@ -147,7 +147,7 @@ def printBlockId : BlockId → String
 /-- The text of a validator identifier, with lowercase hex. -/
 def printValidatorId : ValidatorId → String
   | .index index => toString index.toNat
-  | .pubkey pubkey => toHex ⟨pubkey.toArray⟩
+  | .pubkey pubkey => toHex ⟨pubkey.bytes.toArray⟩
 
 variable {preset : Preset} {fork : Base.Fork}
 

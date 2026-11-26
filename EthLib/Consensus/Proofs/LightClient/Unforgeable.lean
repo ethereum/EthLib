@@ -63,7 +63,7 @@ structure Adversary (preset : Preset) (fork : Fork) where
 /-- The keys of the members whose bit is set, as bytes. -/
 def Forgery.signers (f : Forgery preset fork) : List ByteArray :=
   ((f.store.signatureCommittee f.update).participantKeys f.update.syncAggregate).toList.map
-    packBytes
+    (packBytes ·.bytes)
 
 /-- The message that the signers sign: the signing root of the update, as bytes.
 
@@ -86,7 +86,7 @@ The light client never checks a single signature, so that check rejects. -/
 noncomputable def oracleChecks (msg : ByteArray) (h : G2Sub) : SignatureChecks where
   verify _ _ _ := false
   fastAggregateVerify keys m sig :=
-    decide (m = msg) && byteFastAggregateVerify (keys.map packBytes) (packBytes sig) h
+    decide (m = msg) && byteFastAggregateVerify (keys.map (packBytes ·.bytes)) (packBytes sig) h
 
 /-- With the hash to `G2` of the message, the aggregate check is the light client's. -/
 theorem oracleChecks_hashPoint (msg : ByteArray) (keys : Array BLSPubkey) (sig : BLSSignature) :
@@ -176,7 +176,7 @@ theorem byteWins_of_wins {pk : G1Sub} {signed : List ByteArray} {f : Forgery pre
   have hz' : (f.signers.zip f.proofs).length = f.signers.length := by
     simp only [List.length_zip, hlen, Nat.min_self]
   simp only [Pop.byteWins, Forgery.toAggregate, hz, Bool.and_eq_true, decide_eq_true_eq]
-  have hsig : f.signers.toArray = Array.map packBytes
+  have hsig : f.signers.toArray = Array.map (packBytes ·.bytes)
       ((f.store.signatureCommittee f.update).participantKeys f.update.syncAggregate) := by
     rw [Forgery.signers, ← Array.toList_map, Array.toArray_toList]
   rw [hsig]

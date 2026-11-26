@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Cryptography.Bls.Constants
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Bls.KeyGen
@@ -22,7 +23,7 @@ public section
 
 namespace EthLib.Cryptography.Bls.Exports
 
-open EthLib.Exports (Result ExportError toResult)
+open EthLib.Exports (FromPy LawfulPy PlainPy Result ExportError ToPy fromPy toPy toResult)
 open EthLib.Base (packBytes exactBytes?)
 
 open EthLib.Cryptography.Bls.Constants
@@ -33,6 +34,20 @@ open EthLib.Cryptography.Bls.Signatures
 instance : ExportError BlsError where
   code := BlsError.code
   message := BlsError.message
+
+/-- A public key reaches Python as its 48 bytes. -/
+instance : ToPy BLSPubkey := ⟨fun pubkey => toPy pubkey.bytes⟩
+
+/-- A public key comes from Python as 48 bytes, not yet checked as a point. -/
+instance : FromPy BLSPubkey := ⟨fun v => BLSPubkey.mk <$> fromPy v⟩
+
+instance : LawfulPy BLSPubkey where
+  fromPy_toPy pubkey := by
+    show BLSPubkey.mk <$> fromPy (toPy pubkey.bytes) = _
+    rw [LawfulPy.fromPy_toPy]
+    rfl
+
+instance : PlainPy BLSPubkey := ⟨fun _ => rfl⟩
 
 /-! ## Sizes
 
@@ -60,7 +75,7 @@ def ofBool (b : Bool) : UInt8 := if b then 1 else 0
 It fails with the size of any other input. -/
 def readPubkey (bytes : ByteArray) : Except BlsError BLSPubkey :=
   match exactBytes? 48 bytes with
-  | some pk => .ok pk
+  | some pk => .ok ⟨pk⟩
   | none => .error (.badPubkeySize bytes.size)
 
 /-- A signature of 96 bytes.
@@ -95,7 +110,7 @@ It is `0` on an input of another size, as no key or signature of that size verif
 def checkSized (pks : Array ByteArray) (sig : ByteArray)
     (check : Array BLSPubkey → BLSSignature → Bool) : UInt8 :=
   match pks.mapM (exactBytes? 48), exactBytes? 96 sig with
-  | some pks, some sig => ofBool (check pks sig)
+  | some pks, some sig => ofBool (check (pks.map BLSPubkey.mk) sig)
   | _, _ => 0
 
 /-! ## Operations -/
@@ -110,7 +125,7 @@ def ethAggregatePubkeysExport
     (pubkeys : Array ByteArray) : Result ByteArray := do
   let pubkeys ← toResult none (pubkeys.mapM readPubkey)
   let pk ← toResult none (ethAggregatePubkeys pubkeys)
-  return packBytes pk
+  return packBytes pk.bytes
 
 @[export eth_bls_fast_aggregate_verify]
 def ethFastAggregateVerifyExport
@@ -139,7 +154,7 @@ def signExport (sk msg : ByteArray) : Result ByteArray := do
 @[export eth_bls_verify]
 def verifyExport (pk msg sig : ByteArray) : Result UInt8 :=
   return match exactBytes? 48 pk, exactBytes? 96 sig with
-    | some pk, some sig => ofBool (verify pk msg sig)
+    | some pk, some sig => ofBool (verify ⟨pk⟩ msg sig)
     | _, _ => 0
 
 @[export eth_bls_aggregate]
@@ -166,7 +181,7 @@ def popProveExport (sk : ByteArray) : Result ByteArray := do
 @[export eth_bls_pop_verify]
 def popVerifyExport (pk proof : ByteArray) : Result UInt8 :=
   return match exactBytes? 48 pk, exactBytes? 96 proof with
-    | some pk, some proof => ofBool (popVerify pk proof)
+    | some pk, some proof => ofBool (popVerify ⟨pk⟩ proof)
     | _, _ => 0
 
 /-! ## Point decoding
@@ -219,7 +234,7 @@ The key is secret, and this function does not run in constant time. -/
 @[export eth_bls_sk_to_pk]
 def skToPkExport (secretKey : ByteArray) : Result ByteArray := do
   let sk ← toResult none (SecretKey.fromBytes secretKey)
-  return packBytes (skToPk sk)
+  return packBytes (skToPk sk).bytes
 
 /-- A compressed `G1` point, decoded without the subgroup check, and compressed again.
 

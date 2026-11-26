@@ -172,7 +172,8 @@ def graffitiCalls : SettingCalls String where
   refuse _ := none
   -- The response schema: the key and its graffiti.
   answer _ pubkey graffiti := dataResponse
-    (Json.mkObj [("pubkey", Interchange.bytesJson pubkey), ("graffiti", stringJson graffiti)])
+    (Json.mkObj [("pubkey", Interchange.bytesJson pubkey.bytes),
+      ("graffiti", stringJson graffiti)])
 
 /-! ## The builder configuration -/
 

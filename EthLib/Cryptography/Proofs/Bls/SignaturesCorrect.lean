@@ -60,7 +60,7 @@ private theorem one_mul_add_neg_mul (a b : Fr) : 1 * (a * b) + -a * b = 0 := by
 
 It is stated on a variable point, so the kernel never evaluates a compression. -/
 theorem pointToPubkey_bytes (p : G1) :
-    (⟨(pointToPubkey p).toArray⟩ : ByteArray) = packBytes (G1.compress p) :=
+    (⟨(pointToPubkey p).bytes.toArray⟩ : ByteArray) = packBytes (G1.compress p) :=
   rfl
 
 /-- The bytes of the signature of a point are its compression. -/
@@ -70,12 +70,13 @@ theorem pointToSignature_bytes (p : G2) :
 
 /-- The bytes of the public key of a secret key are the compressed multiple of the generator. -/
 theorem skToPk_bytes (sk : SecretKey) :
-    (⟨(skToPk sk).toArray⟩ : ByteArray) = packBytes (G1.compress (G1.mul G1.generator sk.val)) := by
+    (⟨(skToPk sk).bytes.toArray⟩ : ByteArray) =
+      packBytes (G1.compress (G1.mul G1.generator sk.val)) := by
   unfold skToPk
   exact pointToPubkey_bytes _
 
 /-- The public key of a point is its compression. -/
-theorem pointToPubkey_eq (p : G1) : pointToPubkey p = G1.compress p :=
+theorem pointToPubkey_eq (p : G1) : pointToPubkey p = ⟨G1.compress p⟩ :=
   rfl
 
 /-- The signature of a point is its compression. -/
@@ -83,7 +84,7 @@ theorem pointToSignature_eq (p : G2) : pointToSignature p = G2.compress p :=
   rfl
 
 /-- The public key of a secret key is the compressed multiple of the generator. -/
-theorem skToPk_eq (sk : SecretKey) : skToPk sk = G1.compress (G1.mul G1.generator sk.val) :=
+theorem skToPk_eq (sk : SecretKey) : skToPk sk = ⟨G1.compress (G1.mul G1.generator sk.val)⟩ :=
   rfl
 
 /-- A success passed on to a pure function gives its value. -/
@@ -127,7 +128,7 @@ theorem coreVerify_of_represents {P : G1} {S Q : G2} {a b : Fr}
 /-- An honest core signature passes the core verification under the same tag. -/
 theorem coreVerify_coreSign (sk : SecretKey) (msg dst : ByteArray) :
     ∃ sig, coreSign sk msg dst = .ok sig ∧
-      coreVerify ⟨(skToPk sk).toArray⟩ msg ⟨sig.toArray⟩ dst = true := by
+      coreVerify ⟨(skToPk sk).bytes.toArray⟩ msg ⟨sig.toArray⟩ dst = true := by
   obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup msg dst
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
   refine ⟨pointToSignature (G2.mul Q sk.val), ?_, ?_⟩
@@ -151,7 +152,7 @@ theorem popVerify_popProve (sk : SecretKey) :
 /-! ## Aggregation on one message -/
 
 /-- The bytes of the public key of a secret key. -/
-abbrev pkBytes (sk : SecretKey) : ByteArray := ⟨(skToPk sk).toArray⟩
+abbrev pkBytes (sk : SecretKey) : ByteArray := ⟨(skToPk sk).bytes.toArray⟩
 
 /-- Folding one more term into a running sum is associative. -/
 private theorem add_sum_cons (a x : Fr) (l : List Fr) :
@@ -205,13 +206,13 @@ theorem pkBytes_eq (sk : SecretKey) :
 
 /-- Key validation accepts the public key of a secret key, as a representative of its scalar. -/
 private theorem skToPk_checks (sk : SecretKey) :
-    ∃ P, G1.keyValidatePoint (skToPk sk) = .ok P ∧ G1.Represents P sk.val := by
+    ∃ P, G1.keyValidatePoint (skToPk sk).bytes = .ok P ∧ G1.Represents P sk.val := by
   obtain ⟨P, hP, hrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   exact ⟨P, hP, hrep⟩
 
 /-- Adding a key that passes key validation adds its point. -/
 private theorem addPubkeyPoint_ok {pk : BLSPubkey} {P : G1}
-    (h : G1.keyValidatePoint pk = .ok P) (agg : G1) (i : Nat) :
+    (h : G1.keyValidatePoint pk.bytes = .ok P) (agg : G1) (i : Nat) :
     addPubkeyPoint agg (pk, i) = .ok (G1.add agg P) := by
   simp only [addPubkeyPoint, h]
   rfl
@@ -267,7 +268,7 @@ theorem fastAggregateVerify_of_represents {sks : List SecretKey}
 /-- A point that represents a scalar has the public key of that multiple of `g1`. -/
 private theorem pointToPubkey_eq_of_represents {P : G1} {s : Fr} (hP : G1.Represents P s) :
     pointToPubkey P = pointToPubkey (G1.mul G1.generator s) :=
-  G1.compress_congr hP.1 (G1.valid_mul G1.valid_generator s) hP.2
+  congrArg BLSPubkey.mk (G1.compress_congr hP.1 (G1.valid_mul G1.valid_generator s) hP.2)
 
 /-- Fast verification of honest keys is verification under the key of their scalar sum.
 
@@ -498,7 +499,7 @@ private noncomputable def keyPoint (sk : SecretKey) : G1 :=
   Classical.choose (G1.keyValidatePoint_compress_mul sk.property)
 
 private theorem keyPoint_spec (sk : SecretKey) :
-    G1.keyValidatePoint (skToPk sk) = .ok (keyPoint sk) ∧
+    G1.keyValidatePoint (skToPk sk).bytes = .ok (keyPoint sk) ∧
       G1.Represents (keyPoint sk) sk.val :=
   Classical.choose_spec (G1.keyValidatePoint_compress_mul sk.property)
 
@@ -522,13 +523,13 @@ private theorem keyMessagePair_of_valid {k : Vector UInt8 48} {msg : ByteArray} 
 
 /-- The pairs that the aggregate verification builds from honest keys and messages.
 
-The key of each pair is any vector that key validation reads as the key point of its secret key.
+The key of each pair is any public key that key validation reads as the key point of its secret key.
 
 It stays a variable, so the kernel never evaluates a key to check its length. -/
-private theorem mapM_pairs (keyOf : SecretKey × ByteArray → Vector UInt8 48)
-    (hkey : ∀ p, G1.keyValidatePoint (keyOf p) = .ok (keyPoint p.1))
+private theorem mapM_pairs (keyOf : SecretKey × ByteArray → BLSPubkey)
+    (hkey : ∀ p, G1.keyValidatePoint (keyOf p).bytes = .ok (keyPoint p.1))
     (l : List (SecretKey × ByteArray)) :
-    (l.map fun p => (packBytes (keyOf p), p.2)).mapM (keyMessagePair DST) =
+    (l.map fun p => (packBytes (keyOf p).bytes, p.2)).mapM (keyMessagePair DST) =
       .ok (l.map fun p => (G1.neg (keyPoint p.1), hashPoint p.2)) := by
   induction l with
   | nil => rfl
@@ -587,7 +588,7 @@ theorem aggregateVerify_aggregate (l : List (SecretKey × ByteArray))
     dsimp only
     -- Name the keys, so the kernel never evaluates one to check its length.
     have hkey : ∀ p : SecretKey × ByteArray,
-        G1.keyValidatePoint ((fun x : SecretKey × ByteArray => skToPk x.1) p) =
+        G1.keyValidatePoint ((fun x : SecretKey × ByteArray => skToPk x.1) p).bytes =
           .ok (keyPoint p.1) :=
       fun p => (keyPoint_spec p.1).1
     generalize (fun x : SecretKey × ByteArray => skToPk x.1) = keyOf at hkey ⊢

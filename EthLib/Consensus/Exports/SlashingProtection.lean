@@ -66,7 +66,7 @@ It returns true, or the code of the condition that the block breaks. -/
 def checkBlockSigningExport (text pubkey : ByteArray) (slot : UInt64) (signingRoot : ByteArray) :
     Result Bool := do
   let interchange ← interchangeOf text
-  let pubkey ← fixedBytesOf "the public key" 48 pubkey
+  let pubkey ← BLSPubkey.mk <$> fixedBytesOf "the public key" 48 pubkey
   let signingRoot ← fixedBytesOf "the signing root" 32 signingRoot
   toResult none (interchange.checkBlock pubkey slot signingRoot)
   return true
@@ -78,7 +78,7 @@ It returns true, or the code of the condition that the vote breaks. -/
 def checkAttestationSigningExport (text pubkey : ByteArray) (sourceEpoch targetEpoch : UInt64)
     (signingRoot : ByteArray) : Result Bool := do
   let interchange ← interchangeOf text
-  let pubkey ← fixedBytesOf "the public key" 48 pubkey
+  let pubkey ← BLSPubkey.mk <$> fixedBytesOf "the public key" 48 pubkey
   let signingRoot ← fixedBytesOf "the signing root" 32 signingRoot
   toResult none (interchange.checkAttestation pubkey sourceEpoch targetEpoch signingRoot)
   return true
@@ -88,7 +88,7 @@ def checkAttestationSigningExport (text pubkey : ByteArray) (sourceEpoch targetE
 def recordBlockSigningExport (text pubkey : ByteArray) (slot : UInt64) (signingRoot : ByteArray) :
     Result ByteArray := do
   let interchange ← interchangeOf text
-  let pubkey ← fixedBytesOf "the public key" 48 pubkey
+  let pubkey ← BLSPubkey.mk <$> fixedBytesOf "the public key" 48 pubkey
   let signingRoot ← fixedBytesOf "the signing root" 32 signingRoot
   return interchangeText (interchange.recordBlock pubkey slot signingRoot)
 
@@ -97,7 +97,7 @@ def recordBlockSigningExport (text pubkey : ByteArray) (slot : UInt64) (signingR
 def recordAttestationSigningExport (text pubkey : ByteArray) (sourceEpoch targetEpoch : UInt64)
     (signingRoot : ByteArray) : Result ByteArray := do
   let interchange ← interchangeOf text
-  let pubkey ← fixedBytesOf "the public key" 48 pubkey
+  let pubkey ← BLSPubkey.mk <$> fixedBytesOf "the public key" 48 pubkey
   let signingRoot ← fixedBytesOf "the signing root" 32 signingRoot
   return interchangeText
     (interchange.recordAttestation pubkey sourceEpoch targetEpoch signingRoot)
