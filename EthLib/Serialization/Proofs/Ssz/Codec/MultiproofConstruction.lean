@@ -100,32 +100,6 @@ theorem buildMultiproof_rebuilds_value_root (shape : Desc) (value : Value) (root
   cases rootRead
   exact reconstructed
 
-/-- Every index in a successfully read list has a successful individual read. -/
-theorem mapM_readable {read : Nat → Except Err Bytes} {indices : List Nat} {values : List Bytes}
-    (built : indices.mapM read = .ok values) {index : Nat} (member : index ∈ indices) :
-    ∃ node, read index = .ok node := by
-  -- The paired output retains all input positions because successful reading preserves length.
-  obtain ⟨count, reads⟩ := mapM_readNodes built
-  have keys := List.map_fst_zip (by omega : indices.length ≤ values.length)
-  rw [← keys] at member
-  obtain ⟨pair, pairMember, same⟩ := List.mem_map.mp member
-  exact ⟨pair.2, same ▸ reads pair.1 pair.2 pairMember⟩
-
-/-- A finite list of individually readable indices can be read as a complete list. -/
-theorem mapM_readable_list (read : Nat → Except Err Bytes) :
-    ∀ indices : List Nat, (∀ index ∈ indices, ∃ node, read index = .ok node) →
-      ∃ values, indices.mapM read = .ok values := by
-  -- Reading the head and the remaining list constructs the result in the same order.
-  intro indices
-  induction indices with
-  | nil => intro _; exact ⟨[], rfl⟩
-  | cons index rest ih =>
-    intro readable
-    obtain ⟨node, head⟩ := readable index (by simp)
-    obtain ⟨tail, tailRead⟩ := ih (fun i member => readable i (by simp [member]))
-    exact ⟨node :: tail,
-      by simp [List.mapM_cons, head, tailRead, Bind.bind, Except.bind, Pure.pure, Except.pure]⟩
-
 /-- Every helper needed by readable claims is readable in a tree closed under branches. -/
 theorem closed_helper_reads {read : Nat → Except Err Bytes} (closed : WalkerClosed read)
     {indices helpers : List Nat} {leaves : List Bytes}
@@ -133,23 +107,22 @@ theorem closed_helper_reads {read : Nat → Except Err Bytes} (closed : WalkerCl
     ∃ proof, helpers.mapM read = .ok proof := by
   -- Every helper is a sibling along one of the claimed nodes' readable branches.
   obtain ⟨_, valid, shape⟩ := getHelperIndices_frontier indexed
-  apply mapM_readable_list read helpers
-  intro helper member
+  refine Base.mapM_exists_ok fun helper member => ?_
   -- Every necessary helper belongs to a claimed node’s finite sibling path.
   obtain ⟨siblingPath, _⟩ := (shape helper).mp member
   obtain ⟨ancestor, pathMember, siblingEq⟩ := List.mem_map.mp siblingPath
   obtain ⟨claim, claimed, stepMember⟩ := List.mem_flatMap.mp pathMember
   obtain ⟨step, below, ancestorEq⟩ := List.mem_map.mp stepMember
   -- The claim’s successful input read starts an upward branch whose siblings all remain readable.
-  obtain ⟨leaf, leafRead⟩ := mapM_readable leafReads claimed
+  obtain ⟨leaf, leafRead⟩ := Base.mapM_ok_of_mem leafReads claim claimed
   have named : 1 ≤ claim := by have := valid claim claimed; omega
   obtain ⟨branch, root, branchRead, _, _⟩ :=
     closed_branch_climb read closed (Nat.log2 claim) claim 0 leaf
       (by simpa only [Nat.zero_add, shiftRight_depth named] using Nat.le_refl 1)
       (by simpa only [Nat.shiftRight_zero] using leafRead)
   simp only [Nat.zero_add] at branchRead
-  apply mapM_readable branchRead
-  exact List.mem_map.mpr ⟨step, below, (congrArg gindexSibling ancestorEq).trans siblingEq⟩
+  exact Base.mapM_ok_of_mem branchRead helper
+    (List.mem_map.mpr ⟨step, below, (congrArg gindexSibling ancestorEq).trans siblingEq⟩)
 
 /-- Every valid request for readable value nodes builds a multiproof that reconstructs the value root. -/
 theorem buildMultiproof_correct (shape : Desc) (value : Value) (root : Bytes)

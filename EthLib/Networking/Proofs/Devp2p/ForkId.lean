@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.ByteOrder
+import EthLib.Base.Proofs.List
 public import EthLib.Cryptography.Proofs.Hash.Crc.Basic
 public import EthLib.Networking.Devp2p.ForkId
 public import EthLib.Serialization.Proofs.Rlp.Codec
@@ -59,37 +60,6 @@ theorem Schedule.remainder_checksumInput_append (g : Hash32) (forks : List Activ
   rfl
 
 /-! ## The passed forks -/
-
-/-- A prefix that a predicate keeps is the first elements, as many as it keeps. -/
-theorem _root_.List.takeWhile_eq_take {α : Type} (p : α → Bool) :
-    ∀ l : List α, l.takeWhile p = l.take (l.takeWhile p).length
-  | [] => rfl
-  | a :: l => by
-    cases h : p a
-    · simp [h]
-    · simp only [List.takeWhile_cons, h, ↓reduceIte, List.length_cons, List.take_succ_cons]
-      exact congrArg _ (List.takeWhile_eq_take p l)
-
-/-- What a predicate drops from the front is the rest after the prefix it keeps. -/
-theorem _root_.List.dropWhile_eq_drop {α : Type} (p : α → Bool) :
-    ∀ l : List α, l.dropWhile p = l.drop (l.takeWhile p).length
-  | [] => rfl
-  | a :: l => by
-    cases h : p a
-    · simp [h]
-    · simp only [List.takeWhile_cons, List.dropWhile_cons, h, ↓reduceIte, List.length_cons,
-        List.drop_succ_cons]
-      exact List.dropWhile_eq_drop p l
-
-/-- In a list without repeats, the first index of the element at `j` is `j`. -/
-theorem _root_.List.findIdx?_eq_of_nodup {α : Type} [DecidableEq α] {l : List α}
-    (hl : l.Nodup) {j : Nat} (hj : j < l.length) : l.findIdx? (· = l[j]) = some j := by
-  rw [List.findIdx?_eq_some_iff_getElem]
-  refine ⟨hj, by simp, fun k hk => ?_⟩
-  simp only [decide_eq_true_eq]
-  intro h
-  have := hl.eq_of_getElem_eq (by omega) hj h
-  omega
 
 /-- Values below 2^64 that give the same 8-byte big-endian bytes, one after the other, are equal. -/
 theorem flatMap_toBE_inj :

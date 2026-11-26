@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
+import EthLib.Base.Proofs.List
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-! A JSON document written for a value reads back as that value, at every shape. -/
@@ -71,25 +72,12 @@ theorem zip_getElem? {α β : Type} :
   intros
   simp_all [List.getElem?_zip_eq_some]
 
-/-- Distinct names stay distinct once paired with what they hold. -/
-theorem zip_pairwise {α β : Type} (right : List β) :
-    ∀ (left : List α), left.Nodup → (left.zip right).Pairwise fun x y => x.1 ≠ y.1
-  | [], _ => by simp
-  | a :: rest, distinct => by
-    cases right with
-    | nil => simp
-    | cons b others =>
-      rw [List.nodup_cons] at distinct
-      refine List.Pairwise.cons ?_ (zip_pairwise others rest distinct.2)
-      intro pair member same
-      exact distinct.1 ((show a = pair.1 from same) ▸ (List.of_mem_zip member).1)
-
 /-- The part written under one name is read back under that name. -/
 theorem getObjVal?_zip {names : List String} {parts : List Json} (distinct : names.Nodup)
     {offset : Nat} {name : String} {part : Json}
     (named : names[offset]? = some name) (held : parts[offset]? = some part) :
     (Json.mkObj (names.zip parts)).getObjVal? name = .ok part :=
-  getObjVal?_mkObj (zip_pairwise parts names distinct)
+  getObjVal?_mkObj (Base.pairwise_zip_of_pairwise distinct parts)
     (List.mem_of_getElem? (zip_getElem? names parts offset name part named held))
 
 /--

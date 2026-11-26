@@ -1166,16 +1166,6 @@ theorem map_toArray_of_mapM_hashTreeRoot {α : Type} [SszType α] [LawfulSszType
     rw [← LawfulSszType.root_eq, root_eq_leafRoot, Except.ok.injEq] at same
     simp [ih restRooted, same]
 
-/-- Every list of elements has a list of roots. -/
-theorem exists_mapM_hashTreeRoot {α : Type} [SszType α] [LawfulSszType α] (items : List α) :
-    ∃ roots, items.mapM SszType.hashTreeRoot = .ok roots := by
-  induction items with
-  | nil => exact ⟨[], rfl⟩
-  | cons item rest ih =>
-    obtain ⟨root, rooted⟩ := SszType.hashTreeRoot_total item
-    obtain ⟨roots, restRooted⟩ := ih
-    exact ⟨root :: roots, by simp [List.mapM_cons, rooted, restRooted]; rfl⟩
-
 /--
 After pushing the roots of some deposit data, the deposit root is the SSZ root of their list.
 
@@ -1324,7 +1314,8 @@ theorem hashTreeRoot_eq_getRoot_new (deposits : Array DepositData)
           (⟨deposits, Nat.le_trans bound (Nat.sub_le _ _)⟩ :
             SszList DepositData DEPOSIT_CONTRACT_LIMIT)
         = .ok tree.getRoot := by
-  obtain ⟨roots, rooted⟩ := exists_mapM_hashTreeRoot deposits.toList
+  obtain ⟨roots, rooted⟩ := mapM_exists_ok fun item (_ : item ∈ deposits.toList) =>
+    SszType.hashTreeRoot_total item
   have count : roots.length = deposits.size := by
     simpa using congrArg List.length (map_toArray_of_mapM_hashTreeRoot rooted)
   have pushed := pushLeaves_new roots (count ▸ bound)

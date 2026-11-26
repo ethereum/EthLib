@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Base.pairwise_zip_of_pairwise` (`Base/Proofs/List.lean`) states that a relation that holds pairwise on a list holds pairwise on the first items of its zip.
+  `List.takeWhile_eq_take`, `List.dropWhile_eq_drop` and `List.findIdx?_eq_of_nodup` move to `Base/Proofs/List.lean` from `Networking/Proofs/Devp2p/ForkId.lean`.
+  `Consensus.mem_array_foldl_insert` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) is public.
+
 - In Lean, shared lemmas replace sums, folds and 64-bit facts that several modules proved again.
   `Base/Proofs/List.lean` gains `sum_map_filter_le`, `add_sum_map_range_le`, `sum_map_range_getElem?` and `sum_map_add`.
   `Base/Proofs/MapM.lean` gains `foldlM_ok_le_add_sum`, a bound on a measure that a fold raises.
@@ -1133,6 +1137,10 @@ Not yet released.
 ### Changes that break callers
 
 - In Lean, proofs that restated a shared lemma are removed; each line gives the lemma to use.
+  - `Serialization.Ssz.zip_pairwise`: `Base.pairwise_zip_of_pairwise`, since `Nodup` is `Pairwise (· ≠ ·)`.
+  - `Serialization.Ssz.mapM_readable_list`: `Base.mapM_exists_ok`.
+  - `Serialization.Ssz.mapM_readable`: `Base.mapM_ok_of_mem`.
+  - `Consensus.exists_mapM_hashTreeRoot`: `Base.mapM_exists_ok` with `SszType.hashTreeRoot_total`.
   - `Consensus.Models.Network.PinDrift.Internal.sum_map_sync`: `Base.sum_map_ite_eq_sum_filter` with the test `(·.source = .sync)`.
   - `Consensus.toUInt64_lt_of_lt` and `Consensus.Proofs.Gossip.Topics.ofNat_lt`: `Base.Uint64.toUInt64_lt_of_lt`.
 

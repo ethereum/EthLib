@@ -1813,18 +1813,12 @@ omit [DecidableEq α] in
 /-- Inserting each key of a set into another gives their union. -/
 theorem mem_foldl_insert (s t : ExtTreeSet α compare) (k : α) :
     k ∈ s.foldl (fun acc a => acc.insert a) t ↔ k ∈ s ∨ k ∈ t := by
-  have h : ∀ (l : List α) (t : ExtTreeSet α compare),
-      k ∈ l.foldl (fun acc a => acc.insert a) t ↔ k ∈ l ∨ k ∈ t := by
-    intro l
-    induction l with
-    | nil => simp
-    | cons a rest ih =>
-      intro t
-      simp only [List.foldl_cons, ih, ExtTreeSet.mem_insert, List.mem_cons, compare_eq_iff_eq]
-      constructor
-      · rintro (h | h | h) <;> simp_all
-      · rintro ((h | h) | h) <;> simp_all
-  simp [ExtTreeSet.foldl_eq_foldl_toList, h]
+  -- The fold is the insertion of the keys of the set, in order.
+  --
+  -- The membership test of that insertion needs an equality on keys.
+  classical
+  rw [ExtTreeSet.foldl_eq_foldl_toList, ← ExtTreeSet.insertMany_list_eq_foldl,
+    ExtTreeSet.mem_insertMany_list, List.contains_iff_mem, ExtTreeSet.mem_toList, or_comm]
 
 end Fold
 

@@ -5,6 +5,7 @@ import EthLib.Base.Except
 public import EthLib.Base.Proofs.ChainConfig
 public import EthLib.Base.Proofs.Json
 import EthLib.Base.Proofs.List
+import EthLib.Base.Proofs.MapM
 
 /-!
 # Proofs: the fork times and blob schedules of a configuration file
@@ -25,33 +26,6 @@ Two errors of the reader with one code come from one constructor.
 namespace EthLib.Base.ExecutionConfig
 
 open Lean (Json)
-
-/-- A list of steps that each succeed succeeds, with the list of their results. -/
-private theorem mapM_eq_ok {α β ε : Type} {g : α → Except ε β} {h : α → β} :
-    ∀ {l : List α}, (∀ a ∈ l, g a = .ok (h a)) → l.mapM g = .ok (l.map h)
-  | [], _ => rfl
-  | a :: l, hg => by
-    rw [List.mapM_cons, hg a (by simp), mapM_eq_ok fun b hb => hg b (by simp [hb])]
-    rfl
-
-/-- The results of steps that keep the first part of each input keep the first parts. -/
-private theorem map_fst_of_mapM_eq_ok {α β γ ε : Type} {g : α → Except ε (β × γ)} {k : α → β}
-    (hg : ∀ a r, g a = .ok r → r.1 = k a) :
-    ∀ {l : List α} {r : List (β × γ)}, l.mapM g = .ok r → r.map Prod.fst = l.map k
-  | [], r, h => by
-    cases h
-    rfl
-  | a :: l, r, h => by
-    rw [List.mapM_cons] at h
-    cases ha : g a with
-    | error e => simp [ha, bind, Except.bind] at h
-    | ok b =>
-      cases hl : l.mapM g with
-      | error e => simp [ha, hl, bind, Except.bind] at h
-      | ok bs =>
-        simp [ha, hl, bind, Except.bind, pure, Except.pure] at h
-        subst h
-        simp [hg a b ha, map_fst_of_mapM_eq_ok hg hl]
 
 /-- A list where no element failing a test precedes one passing it splits by the test. -/
 private theorem eq_filter_append {α : Type} {R : α → α → Prop} {p : α → Bool}
@@ -444,7 +418,8 @@ theorem readExecutionConfig_write {config : ChainConfig} (h : Writable config) :
   dsimp only
   rw [ite_eq_left (by unfold writeExecutionConfig; rw [Toolchain.Json.mkObj_eq]),
     ite_eq_left (by rw [Toolchain.Json.mkObj_eq]; rfl),
-    mapM_eq_ok (h := fun p => (p.1, timeOf config p.1, scheduleOf config p.1)) fun p hp => ?_]
+    mapM_eq_ok_map (g := fun p => (p.1, timeOf config p.1, scheduleOf config p.1))
+      fun p hp => ?_]
   rotate_left
   · obtain ⟨f, n⟩ := p
     -- The base keeps only the forks by block number, so it times no fork.
@@ -571,7 +546,7 @@ theorem blobScheduleAt_read {base config : ChainConfig} {j : Json} {n t : Nat}
   clear h
   -- The forks read come in the order of the names.
   have hfst : read.map Prod.fst = forkNames.map Prod.fst := by
-    refine map_fst_of_mapM_eq_ok (fun ⟨f, n⟩ r hr => ?_) hread
+    refine map_of_mapM_ok (p := Prod.fst) (fun ⟨f, n⟩ r hr => ?_) hread
     obtain ⟨l, -, h⟩ := bind_ok_iff.mp hr
     cases h
     rfl

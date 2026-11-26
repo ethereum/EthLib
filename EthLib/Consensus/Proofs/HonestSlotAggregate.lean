@@ -243,8 +243,7 @@ private theorem mapM_committeeOfAggregate {electra : .pectra ≤ fork} {keys : L
 private theorem pairwise_zip_keys {keys : List CommitteeIndex}
     {aggregates : List (Attestation preset fork)} (ordered : keys.Pairwise (· ≤ ·)) :
     (keys.zip aggregates).Pairwise fun a b => decide (a.1 ≤ b.1) = true := by
-  have firsts := ordered.sublist (map_fst_zip_prefix keys aggregates).sublist
-  simpa only [decide_eq_true_eq] using List.pairwise_map.mp firsts
+  simpa only [decide_eq_true_eq] using pairwise_zip_of_pairwise ordered aggregates
 
 /-- Keys zipped with as many aggregates, then mapped on the aggregates, map the aggregates. -/
 private theorem map_zip_snd {β : Type} {keys : List CommitteeIndex}
