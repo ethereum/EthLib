@@ -2167,11 +2167,8 @@ private theorem intervalLoss_scheduled_sum (x : ForkedBeaconState preset)
       (vs.map fun v => if isActiveValidator v (getCurrentEpoch x.state) then weight v else 0).sum =
         ((vs.filter fun v => isActiveValidator v (getCurrentEpoch x.state) && selected v).map
           (·.effectiveBalance.toNat)).sum := by
-    induction vs with
-    | nil => rfl
-    | cons v rest ih =>
-      cases active : isActiveValidator v (getCurrentEpoch x.state) <;>
-        cases chosen : selected v <;> simp [active, chosen, weight, ih]
+    simp only [weight, Base.sum_map_ite_eq_sum_filter, Bool.decide_eq_true, List.filter_filter,
+      Bool.and_comm]
   rw [sumFiltered]
   unfold scheduledExitCarry
   simp only [selected, Bool.and_assoc]
