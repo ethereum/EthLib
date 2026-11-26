@@ -3,8 +3,8 @@ module
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Serialization.E2store
-public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
-public import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
+import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
+import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
 
 /-!
 # Proofs: the e2store records read back
@@ -379,7 +379,7 @@ theorem readIndex_size {data : ByteArray} {index : Index}
   simp only [List.length_map, List.length_range]
   exact Decidable.of_not_not hs
 
-/-- An offset read from 8 bytes lies from `-2^63` up to below `2^63`. -/
+/-- An offset read from 8 bytes lies in `[-2^63, 2^63)`. -/
 private theorem readInt64_bounds (data : ByteArray) (pos : Nat) :
     -2 ^ 63 ≤ readInt64 data pos ∧ readInt64 data pos < 2 ^ 63 :=
   ⟨by simpa [readInt64] using BitVec.le_toInt (BitVec.ofNat 64 (Ssz.readUint data pos 8)),
@@ -398,7 +398,7 @@ private theorem readUint_eight_lt (data : ByteArray) (pos : Nat) :
     Ssz.readUint data pos 8 < 2 ^ 64 := by
   simpa using Ssz.readUint_lt data pos 8
 
-/-- The bytes of `count` slots of 8 from `pos`, each written back from its unsigned read. -/
+/-- The `count` words of 8 bytes from `pos`, each written back from its unsigned read. -/
 private theorem extract_eq_flatMap (data : ByteArray) (pos : Nat) :
     ∀ count, pos + 8 * count ≤ data.size →
       (data.extract pos (pos + 8 * count)).data.toList =
@@ -437,32 +437,37 @@ private theorem toList_of_size {data : ByteArray} {count : Nat} (h : data.size =
   rfl
 
 /-- Two lists of offsets in range, whose 8-byte writings agree, are the same list. -/
-private theorem offsets_inj : ∀ {xs ys : List Int}, xs.length = ys.length →
-    (∀ x ∈ xs, -2 ^ 63 ≤ x ∧ x < 2 ^ 63) → (∀ y ∈ ys, -2 ^ 63 ≤ y ∧ y < 2 ^ 63) →
-    xs.flatMap (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList) =
-      ys.flatMap (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList) → xs = ys
-  | [], [], _, _, _, _ => rfl
-  | x :: xs, y :: ys, hl, hx, hy, h => by
-    simp only [List.flatMap_cons] at h
-    obtain ⟨head, tail⟩ := List.append_inj h (by simp)
-    have bx := hx x (by simp)
-    have by' := hy y (by simp)
-    have := ByteOrder.toLE_inj (k := 8) (by simp; omega) (by simp; omega)
-      (Vector.toList_inj.mp head)
-    have hxy : x = y := by omega
-    rw [hxy, offsets_inj (by simpa using hl) (fun a ha => hx a (by simp [ha]))
-      (fun a ha => hy a (by simp [ha])) tail]
+private theorem offsets_inj {xs ys : List Int}
+    (hx : ∀ x ∈ xs, -2 ^ 63 ≤ x ∧ x < 2 ^ 63) (hy : ∀ y ∈ ys, -2 ^ 63 ≤ y ∧ y < 2 ^ 63)
+    (h : xs.flatMap (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList) =
+      ys.flatMap (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList)) :
+    xs = ys := by
+  -- On offsets in range, the 8-byte writing is injective.
+  --
+  -- So the lemma on joined pieces applies to the lists with their range attached.
+  have joined := EthLib.Base.flatMap_inj_of_length
+    (f := fun x : {x : Int // -2 ^ 63 ≤ x ∧ x < 2 ^ 63} =>
+      (ByteOrder.toLE 8 (x.1 % 2 ^ 64).toNat).toList)
+    (n := 8) (by decide) (fun _ => by simp)
+    (fun x y hxy => Subtype.ext (by
+      have := ByteOrder.toLE_inj (k := 8) (by have := x.2; simp; omega)
+        (by have := y.2; simp; omega) (Vector.toList_inj.mp hxy)
+      have := x.2
+      have := y.2
+      omega))
+    (l := xs.attachWith _ hx) (l' := ys.attachWith _ hy) (by simpa using h)
+  simpa using congrArg List.unattach joined
 
-/-- An index record reads exactly from the bytes of its index, each number in its 8 bytes.
+/-- The data of an index record reads as an index exactly when it holds its numbers, 8 bytes each.
 
-So the first number and the count are below `2^64`, and each offset lies in `[-2^63, 2^63)`. -/
+The first number and the count are below `2^64`, and each offset lies in `[-2^63, 2^63)`. -/
 theorem readIndex_eq_ok_iff {data : ByteArray} {index : Index} :
     readIndex data = .ok index ↔
       index.start < 2 ^ 64 ∧ index.offsets.length < 2 ^ 64 ∧
         (∀ offset ∈ index.offsets, -2 ^ 63 ≤ offset ∧ offset < 2 ^ 63) ∧
-        -- The first number comes first, little-endian, and the count of offsets comes last.
+        -- Each number takes 8 little-endian bytes: the first number, the offsets, then the count.
         --
-        -- Each offset comes in between, in order, as its two's complement, modulo `2^64`.
+        -- The offsets come in order, each as its two's complement, its value modulo `2^64`.
         data.data.toList = (ByteOrder.toLE 8 index.start).toList ++
           index.offsets.flatMap (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList) ++
           (ByteOrder.toLE 8 index.offsets.length).toList := by
@@ -504,7 +509,7 @@ theorem readIndex_eq_ok_iff {data : ByteArray} {index : Index} :
       (by simpa using readUint_eight_lt data 0) (Vector.toList_inj.mp hfirst)
     have hc := ByteOrder.toLE_inj (k := 8) (by simpa using hlen)
       (by simpa using readUint_eight_lt data _) (Vector.toList_inj.mp hlast)
-    have ho := offsets_inj (by simp) hrange
+    have ho := offsets_inj hrange
       (fun offset ho => by
         obtain ⟨i, -, rfl⟩ := List.mem_map.mp ho
         exact readInt64_bounds data _) hmiddle
