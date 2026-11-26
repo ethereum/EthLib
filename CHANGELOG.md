@@ -19,6 +19,13 @@ Not yet released.
   The pending node of `b` must also be in the view, since GHOST only visits nodes of the view.
   Then LMD-GHOST from the pending node of `a` ends at the pending node of `b` or below it, at any payload status.
 
+- In Lean, `E2store.readIndex_eq_ok_iff` in `EthLib.Serialization.Proofs.E2store` says that the data of an e2store index record reads exactly as its first number, its offsets and its count.
+  Each takes 8 little-endian bytes, and an offset is in two's complement, as the SlotIndex document lays out.
+  Era files read their SlotIndex records this way.
+  Era1 files read their BlockIndex record the same way, since the era1 document gives no width or sign.
+  So the reader takes all 8 bytes of each number, and returns the one index that the data writes.
+  No statement changes.
+
 - In Lean, the column builder of PeerDAS ([EIP-7594](https://eips.ethereum.org/EIPS/eip-7594)) succeeds on full rows, and the sidecars it builds from blobs pass the batch check ([#4615](https://github.com/ethereum/EthLib/issues/4615)).
   `getDataColumnSidecars_exists_ok` (`Consensus/Proofs/DataAvailability/Column.lean`) needs each row to have a cell and a proof per column, and before Gloas as many rows as commitments.
   `getDataColumnSidecars_exists_ok_of_computed` gives the same for the rows of blobs, under a preset of at most 128 columns, and before Gloas one blob per commitment.
