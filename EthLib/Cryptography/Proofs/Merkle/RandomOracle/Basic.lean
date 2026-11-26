@@ -112,25 +112,8 @@ The search stops when the shorter list runs out. -/
 theorem findCollision_queryBound [DecidableEq R] :
     ∀ (s t : List R) (p : Position) (a b : R),
       IsTotalQueryBound (findCollision queryNode p a b s t)
-        (2 * min s.length t.length) := by
-  intro s
-  induction s with
-  | nil => intros; trivial
-  | cons u s ih =>
-    intro t p a b
-    cases t with
-    | nil => trivial
-    | cons v t =>
-      -- This level makes two queries, one per climb.
-      simp only [List.length_cons, min_add_add_right,
-        findCollision, queryNode, isTotalQueryBound_query_bind_iff]
-      refine ⟨by omega, fun x => ⟨by omega, fun y => ?_⟩⟩
-      split
-      · -- A collision here stops the search, with no more queries.
-        trivial
-      · -- Otherwise the rest of the search makes two queries per remaining common level.
-        convert ih t p.parent x y using 1
-        omega
+        (2 * min s.length t.length) :=
+  isTotalQueryBound_findCollision queryNode_queryBound
 
 /-- Computing an honest node from fixed leaves makes `2^level - 1` hash calls.
 
