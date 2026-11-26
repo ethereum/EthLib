@@ -1268,6 +1268,16 @@ Not yet released.
   `header_of_payloadBlock` gives that block the parent hash of the payload, and a header that hashes to the block hash of the payload.
   `header_of_checkNewPayload` combines the two.
 
+- In Lean, the Gloas step of the caching of a slot is its own function, `processNextPayloadAvailability` (`Consensus/Transition/StateTransition.lean`).
+  Before Gloas it returns the state, and from Gloas it marks the payload of the next slot as not yet available.
+  `processNextPayloadAvailability_ok` states that it changes only the availability bits, and `processNextPayloadAvailability_total` that it succeeds when a next slot exists.
+  Three proofs that read the body of `processSlot` use the first lemma instead of a case split on the fork.
+  The totality of `processSlot` uses the second.
+  `builderFrame_processSlot` now cites `processSlot_latestBlockHeader` and no longer reads the body.
+  A later step of a fork, written as its own function, then costs each proof that reads the body one binder and one line.
+  It no longer adds a branch to them ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  No statement changes.
+
 ### Changes that break callers
 
 - In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).

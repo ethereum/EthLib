@@ -39,6 +39,21 @@ theorem unsetNextPayloadAvailability_total [NeZero preset.SLOTS_PER_HISTORICAL_R
     Except.bind]
   exact ⟨_, rfl⟩
 
+/-- The availability step of a slot succeeds when a next slot exists.
+
+Before Gloas it succeeds without a next slot. -/
+theorem processNextPayloadAvailability_total
+    -- The circular buffer of availability bits must have a positive length.
+    [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat] (fits : state.slot.toNat + 1 < 2 ^ 64) :
+    ∃ after, processNextPayloadAvailability state = .ok after := by
+  unfold processNextPayloadAvailability
+  split
+  · rename_i gloas
+    obtain ⟨a, ha⟩ := unsetNextPayloadAvailability_total gloas fits
+    simp only [liftAccessor, ha, Except.mapError]
+    exact ⟨_, rfl⟩
+  · exact ⟨_, rfl⟩
+
 /-- The caching of a slot succeeds when a next slot exists.
 
 Before Gloas the step succeeds without a next slot.
@@ -61,14 +76,7 @@ theorem processSlot_total [LawfulSszType (BeaconState preset fork)]
   obtain ⟨r, hr'⟩ := hashTreeRoot_total header
   obtain ⟨w', hw'⟩ := writeCircularRooted_total state.blockRoots state.slot r
   simp only [hr', hw']
-  split
-  · rename_i gloas
-    obtain ⟨a, ha⟩ := unsetNextPayloadAvailability_total
-      (state := { state with latestBlockHeader := header, blockRoots := w', stateRoots := w })
-      gloas fits
-    simp only [ha]
-    exact ⟨_, rfl⟩
-  · exact ⟨_, rfl⟩
+  exact processNextPayloadAvailability_total fits
 
 /-- The reset of the slashed balances succeeds when a next slot exists.
 
