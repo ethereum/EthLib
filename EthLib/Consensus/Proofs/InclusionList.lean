@@ -36,27 +36,13 @@ theorem lookup_append_of_some {member : ValidatorIndex}
     {entries : List (ValidatorIndex × InclusionListEntry)} {entry : InclusionListEntry}
     (extra : ValidatorIndex × InclusionListEntry) (found : entries.lookup member = some entry) :
     (entries ++ [extra]).lookup member = some entry := by
-  induction entries with
-  | nil => simp at found
-  | cons head tail ih =>
-    obtain ⟨key, value⟩ := head
-    cases same : member == key
-    · simp only [List.cons_append, List.lookup, same] at found ⊢
-      exact ih found
-    · simpa [List.lookup, same] using found
+  simp [List.lookup_append, found]
 
 theorem lookup_append_of_none {member : ValidatorIndex}
     {entries : List (ValidatorIndex × InclusionListEntry)} (entry : InclusionListEntry)
     (missing : entries.lookup member = none) :
     (entries ++ [(member, entry)]).lookup member = some entry := by
-  induction entries with
-  | nil => simp
-  | cons head tail ih =>
-    obtain ⟨key, value⟩ := head
-    cases same : member == key
-    · simp only [List.cons_append, List.lookup, same] at missing ⊢
-      exact ih missing
-    · simp [List.lookup, same] at missing
+  simp [List.lookup_append, missing]
 
 /-- A stored list stays stored, whatever list arrives. -/
 theorem lookup_process {member : ValidatorIndex} {entry : InclusionListEntry}
