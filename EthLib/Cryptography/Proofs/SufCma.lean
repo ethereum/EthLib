@@ -209,6 +209,19 @@ instance : DecidablePred (IsHashCall hs) := fun t =>
 def hashCost : (unifSpec + hs).Domain → ℕ :=
   hashCharge fun _ => 1
 
+/-- A coin is not a hash call. -/
+@[simp] theorem not_isHashCall_inl (n : unifSpec.Domain) : ¬IsHashCall hs (.inl n) := by
+  simp [IsHashCall]
+
+/-- A query of the hash oracle is a hash call. -/
+@[simp] theorem isHashCall_inr (t : ι) : IsHashCall hs (.inr t) := rfl
+
+/-- A coin costs nothing. -/
+@[simp] theorem hashCost_inl (n : unifSpec.Domain) : hashCost (hs := hs) (.inl n) = 0 := rfl
+
+/-- A hash call costs one. -/
+@[simp] theorem hashCost_inr (t : ι) : hashCost (hs := hs) (.inr t) = 1 := rfl
+
 /-- A query costs one exactly when it is a hash call. -/
 theorem hashCost_eq_ite (t : (unifSpec + hs).Domain) :
     hashCost t = if IsHashCall hs t then 1 else 0 := by

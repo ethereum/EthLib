@@ -8,6 +8,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDe
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.SufCma (IsHashCall)
 set_option backward.isDefEq.respectTransparency false
 
 namespace XmssSecurity
@@ -153,21 +154,21 @@ theorem winningStructuralCollision_probability_le_expectedPostKeygenStructuralQu
 
 theorem expectedSimulatedHashQueryCount_le {α : Type} (computation : OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) (q : Nat) (hbound : HashQueryBound computation cache q) :
-    expectedSimulatedQueryCount romImpl IsHashQuery computation cache ≤ q := by
+    expectedSimulatedQueryCount romImpl (IsHashCall HashSpec) computation cache ≤ q := by
   induction computation using OracleComp.inductionOn generalizing cache q with
   | pure value => simp
   | query_bind input next ih =>
-      let cost : Nat := if IsHashQuery input then 1 else 0
+      let cost : Nat := if IsHashCall HashSpec input then 1 else 0
       have hstep (result : OracleWorld.Range input × QueryCache HashSpec)
           (hr : result ∈ support ((romImpl input).run cache)) :
           cost ≤ q ∧ HashQueryBound (next result.1) result.2 (q - cost) := by
         have h := hashQueryBound_query_bind input next cache q hbound result hr
-        cases input <;> simpa [cost, IsHashQuery] using h
+        cases input <;> simpa [cost, IsHashCall] using h
       obtain ⟨result, hr⟩ := probComp_support_nonempty ((romImpl input).run cache)
       have hcost := (hstep result hr).1
       have hsum :
           (∑' result, Pr{let x ← (romImpl input).run cache}[x = result] *
-            expectedSimulatedQueryCount romImpl IsHashQuery (next result.1) result.2) ≤
+            expectedSimulatedQueryCount romImpl (IsHashCall HashSpec) (next result.1) result.2) ≤
           (∑' result, Pr{let x ← (romImpl input).run cache}[x = result]) * (q - cost : Nat) := by
         rw [← ENNReal.tsum_mul_right]
         apply tsum_le_tsum
@@ -176,7 +177,8 @@ theorem expectedSimulatedHashQueryCount_le {α : Type} (computation : OracleComp
         · exact mul_le_mul' le_rfl (ih result.1 result.2 (q - cost) (hstep result hr).2)
         · simp only [(prEvent_eq_zero_of_not_mem_support _) hr, zero_mul, le_refl]
       rw [expectedSimulatedQueryCount_query_bind]
-      have hprefix : (if IsHashQuery input then (1 : ENNReal) else 0) = (cost : ENNReal) := by
+      have hprefix :
+          (if IsHashCall HashSpec input then (1 : ENNReal) else 0) = (cost : ENNReal) := by
         simp only [cost, Nat.cast_ite, Nat.cast_one, Nat.cast_zero]
       rw [hprefix]
       calc
@@ -224,7 +226,7 @@ theorem postKeygenEncoding_add_structural_expected_le
                   encodingPredicate structuralPredicate
                   (encodingHashQuery_structuralQuery_disjoint
                     keyResult.1.2 keyResult.2) source keyResult.2
-          _ ≤ expectedSimulatedQueryCount romImpl IsHashQuery source
+          _ ≤ expectedSimulatedQueryCount romImpl (IsHashCall HashSpec) source
               keyResult.2 := by
             apply expectedSimulatedQueryCount_mono
             intro input hinput
@@ -234,7 +236,7 @@ theorem postKeygenEncoding_add_structural_expected_le
                 · simp [encodingPredicate,
                     CappedEncodingMonitor.IsEncodingHashQuery] at hencoding
                 · simp [structuralPredicate, Rom.IsRelevantHashQuery] at hstructural
-            | inr hashInput => simp [IsHashQuery]
+            | inr hashInput => simp [IsHashCall]
           _ ≤ q := by
             apply expectedSimulatedHashQueryCount_le
             exact cappedSourceUnloggedDetailedGameAfterKeygen_hashQueryBound_sub_keygen

@@ -4,7 +4,9 @@ public import EthLib.Cryptography.Proofs.HashSig.Counted
 public import VCVio.OracleComp.QueryTracking.SubSpec
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 
-open EthLib.Cryptography.HashSig (counted counted_bind counted_forget counted_map simulate_withCost)
+open EthLib.Cryptography.HashSig (countHashQueries countHashQueries_pure countHashQueries_query_bind
+  countHashQueries_bind countHashQueries_map countHashQueries_forget countHashQueries_liftM)
+open EthLib.Cryptography.SufCma (hashCost)
 
 @[expose] public section
 
@@ -13,35 +15,9 @@ namespace XmssSecurity
 open OracleComp OracleSpec
 set_option backward.isDefEq.respectTransparency false
 
-noncomputable def countHashQueries {α : Type} (computation : OracleComp OracleWorld α) :
-    OracleComp OracleWorld (α × Nat) :=
-  counted (fun input : OracleWorld.Domain => input matches .inr _) computation
-
 def HashQueryBound {α : Type} (computation : OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) (q : Nat) : Prop :=
   ∀ result ∈ support ((simulateQ romImpl (countHashQueries computation)).run' cache), result.2 ≤ q
-
-theorem countHashQueries_pure {α : Type} (value : α) :
-    countHashQueries (pure value) = pure (value, 0) := rfl
-
-theorem countHashQueries_query_bind {α : Type} (input : OracleWorld.Domain)
-    (next : OracleWorld.Range input → OracleComp OracleWorld α) :
-    countHashQueries (liftM (OracleWorld.query input) >>= next) = (do
-      let answer ← liftM (OracleWorld.query input)
-      let result ← countHashQueries (next answer)
-      pure (result.1, (if (fun input : OracleWorld.Domain => input matches .inr _) input then 1 else 0) + result.2)) := rfl
-
-theorem countHashQueries_bind {α β : Type} (first : OracleComp OracleWorld α)
-    (next : α → OracleComp OracleWorld β) :
-    countHashQueries (first >>= next) = (do
-      let a ← countHashQueries first
-      let b ← countHashQueries (next a.1)
-      pure (b.1, a.2 + b.2)) :=
-  counted_bind (fun input : OracleWorld.Domain => input matches .inr _) first next
-
-theorem countHashQueries_map {α β : Type} (first : OracleComp OracleWorld α) (f : α → β) :
-    countHashQueries (f <$> first) = (fun result => (f result.1, result.2)) <$> countHashQueries first :=
-  counted_map (fun input : OracleWorld.Domain => input matches .inr _) first f
 
 theorem probComp_support_nonempty {α : Type} (computation : ProbComp α) :
     (support computation).Nonempty := by
@@ -90,40 +66,17 @@ theorem hashQueryBound_bind {α β : Type} (first : OracleComp OracleWorld α)
     ((simulateQ romImpl (countHashQueries (next result.1.1))).run result.2)
   exact ⟨(Nat.le_add_right _ _).trans (hsum tail htail), fun tail ht => by have := hsum tail ht; omega⟩
 
-theorem countHashQueries_lift_prob {α : Type} (computation : ProbComp α) :
-    countHashQueries (liftM computation : OracleComp OracleWorld α) =
-      (fun value => (value, 0)) <$> (liftM computation : OracleComp OracleWorld α) := by
-  induction computation using OracleComp.inductionOn with
-  | pure value => simp only [liftM_pure, countHashQueries_pure, map_pure]
-  | query_bind input next ih =>
-      rw [liftM_bind]
-      change countHashQueries (liftM (OracleWorld.query (.inl input)) >>= _) = _
-      simp only [countHashQueries_query_bind, ih, map_bind, bind_pure_comp, Functor.map_map]
-      rfl
-
 theorem hashQueryBound_of_sampling_bind {α β : Type} (first : ProbComp α)
     (next : α → OracleComp OracleWorld β) (cache : QueryCache HashSpec) (q : Nat)
     (hbound : HashQueryBound ((liftM first : OracleComp OracleWorld α) >>= next) cache q)
     (value : α) (hvalue : value ∈ support first) : HashQueryBound (next value) cache q := by
   have hrun : ((value, 0), cache) ∈
       support ((simulateQ romImpl (countHashQueries (liftM first : OracleComp OracleWorld α))).run cache) := by
-    rw [countHashQueries_lift_prob, simulateQ_map, StateT.run_map, romImpl,
+    rw [countHashQueries_liftM, simulateQ_map, StateT.run_map, romImpl,
       QueryImpl.simulateQ_add_liftM_left, unifFwdImpl.simulateQ_run]
     simp only [Functor.map_map, support_map]
     exact ⟨value, hvalue, rfl⟩
   exact (hashQueryBound_bind _ next cache q hbound _ hrun).2
-
-theorem simulateQ_countHashQueries {α : Type} (computation : OracleComp OracleWorld α) :
-    simulateQ romImpl (countHashQueries computation) = (simulateQ countedRomImpl computation).run := by
-  rw [countHashQueries, simulate_withCost]
-  congr 2
-  funext input
-  -- Each side's cost is 0 on a uniform query and 1 on a hash query.
-  cases input <;> simp [countedRomImpl, EthLib.Cryptography.SufCma.hashCost]
-
-theorem countHashQueries_forget {α : Type} (computation : OracleComp OracleWorld α) :
-    Prod.fst <$> countHashQueries computation = computation :=
-  counted_forget _ computation
 
 theorem countHashQueries_run_forget {α : Type} (computation : OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) :
@@ -161,10 +114,9 @@ theorem hashQueryBound_query_bind {α : Type} (input : OracleWorld.Domain)
     (hbound : HashQueryBound (liftM (OracleWorld.query input) >>= next) cache q)
     (result : OracleWorld.Range input × QueryCache HashSpec)
     (hr : result ∈ support ((romImpl input).run cache)) :
-    (if (fun input : OracleWorld.Domain => input matches .inr _) input then 1 else 0) ≤ q ∧
-      HashQueryBound (next result.1) result.2 (q - (if (fun input : OracleWorld.Domain => input matches .inr _) input then 1 else 0)) := by
+    hashCost input ≤ q ∧ HashQueryBound (next result.1) result.2 (q - hashCost input) := by
   apply hashQueryBound_bind _ next cache q hbound
-    ((result.1, if (fun input : OracleWorld.Domain => input matches .inr _) input then 1 else 0), result.2)
+    ((result.1, hashCost input), result.2)
   rw [← bind_pure (liftM (OracleWorld.query input)), countHashQueries_query_bind]
   simp only [countHashQueries_pure, map_pure, Nat.add_zero, bind_pure_comp,
     simulateQ_map, simulateQ_spec_query, StateT.run_map, support_map]
@@ -193,9 +145,10 @@ theorem hashQueryBound_of_isQueryBoundP {α : Type} {n : Nat} :
       simp only [StateT.run'_eq, support_map]
       exact ⟨v, hv, rfl⟩)
     rcases t with n' | x
-    · simp only [Sum.isRight_inl, Bool.false_eq_true, ite_false] at h hk ⊢
+    · simp only [Sum.isRight_inl, EthLib.Cryptography.SufCma.not_isHashCall_inl,
+        Bool.false_eq_true, ite_false] at h hk ⊢
       simpa using hk
-    · simp only [Sum.isRight_inr, ite_true] at h hk ⊢
+    · simp only [Sum.isRight_inr, EthLib.Cryptography.SufCma.isHashCall_inr, ite_true] at h hk ⊢
       have := h.1.resolve_left (not_not_intro trivial)
       omega
 

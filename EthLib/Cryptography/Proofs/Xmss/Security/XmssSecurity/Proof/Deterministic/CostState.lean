@@ -6,6 +6,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Consis
 @[expose] public section
 
 open OracleComp OracleSpec
+open EthLib.Cryptography.SufCma (hashCost hashCost_eq_ite)
+open EthLib.Cryptography.HashSig (countHashQueries countHashQueries_pure
+  countHashQueries_query_bind)
 
 namespace XmssSecurity.Seeded
 
@@ -17,11 +20,10 @@ noncomputable def costHash : QueryImpl HashSpec (StateT CostState ProbComp) := f
   let result ← (randomOracle input).run state.1
   return (result.1, result.2, state.2 + 1)
 
-def queryCost (input : OracleWorld.Domain) : Nat := if input matches .inr _ then 1 else 0
-
 theorem run_costQuery (input : OracleWorld.Domain) (cache : QueryCache HashSpec) (cost : Nat) :
     ((worldHandler costHash) input).run (cache, cost) =
-      (fun result => (result.1, result.2, cost + queryCost input)) <$> (romImpl input).run cache := by
+      (fun result => (result.1, result.2, cost + hashCost input)) <$>
+        (romImpl input).run cache := by
   cases input with
   | inl input => rfl
   | inr input =>
@@ -44,8 +46,7 @@ theorem run_costWorld {α : Type} (computation : OracleComp OracleWorld α)
       apply bind_congr
       intro result
       rw [ih]
-      simp only [map_pure, bind_pure_comp, queryCost, Nat.add_assoc]
-      rfl
+      simp only [map_pure, bind_pure_comp, hashCost_eq_ite, Nat.add_assoc]
 
 theorem hashQueryBound_iff_costState {α : Type} (computation : OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) (q : Nat) :

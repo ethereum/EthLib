@@ -90,7 +90,7 @@ theorem mem_support_countedRun_map_of_mem {α β : Type} (oa : OracleComp Oracle
   rw [countedRun_map, support_map]
   exact ⟨(a, n), h, rfl⟩
 
-/-! ## The counted oracles as the plain random oracle with a cost -/
+/-! ## The counted run as the plain random oracle with a cost -/
 
 /-- The game's counted run is its run against the plain random oracle, charging 1 per hash call. -/
 theorem countedRunIn_game_eq (adversary : Adversary) :
@@ -98,17 +98,6 @@ theorem countedRunIn_game_eq (adversary : Adversary) :
       (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost)
         (SufCma.game scheme adversary)).run.run' ∅ :=
   SufCma.countedRunIn_randomOracleModel _
-
-/-- The model's counted oracle is the plain random oracle, charging 1 per hash call. -/
-theorem modelCountedOracle_eq :
-    SphincsSecurity.Security.countedOracle = HashSpec.romImpl.withAddCost SufCma.hashCost := rfl
-
-/-- The model's experiment runs its game against the plain random oracle, at 1 per hash call. -/
-theorem modelExperiment_eq (adversary : SphincsSecurity.Security.Adversary) :
-    SphincsSecurity.Security.experiment adversary =
-      (simulateQ (HashSpec.romImpl.withAddCost SufCma.hashCost)
-        (SphincsSecurity.Security.gameCore adversary)).run.run' ∅ := by
-  rw [SphincsSecurity.Security.experiment, modelCountedOracle_eq]
 
 /-- A computation equal to a counted run has the same results as that run. -/
 theorem mem_support_iff_of_eq_withAddCost {α : Type} (oa : OracleComp OracleWorld α)
@@ -313,7 +302,7 @@ theorem hasHashQueryBound_translate {a b : Nat} (ha : 0 < a) (hab : a ≤ b)
     SphincsSecurity.Security.HasHashQueryBound (translate adversary) (b * q / a) := by
   intro result hr
   obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _
-    (modelExperiment_eq (translate adversary)) result hr
+    (SphincsSecurity.Security.experiment.eq_1 (translate adversary)) result hr
   rw [gameCore_translate] at hr
   obtain ⟨⟨run, n⟩, hrun, rfl⟩ := mem_support_countedRun_map f _ _ result hr
   have hsigned : (wins run, n) ∈ support (countedRun f (signedGame adversary)) := by

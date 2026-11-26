@@ -92,7 +92,7 @@ theorem hashQueryBound_iff_counted {α : Type} (oa : OracleComp OracleWorld α) 
     XmssSecurity.HashQueryBound oa ∅ q ↔
       ∀ result ∈ support (SufCma.countedRunIn (SufCma.randomOracleModel HashSpec) oa),
         result.2 ≤ q := by
-  simp only [XmssSecurity.HashQueryBound, XmssSecurity.simulateQ_countHashQueries]
+  simp only [XmssSecurity.HashQueryBound, HashSig.simulateQ_countHashQueries]
   exact Iff.rfl
 
 /-- The game's budget bounds the calls of the real game, which is the same computation. -/

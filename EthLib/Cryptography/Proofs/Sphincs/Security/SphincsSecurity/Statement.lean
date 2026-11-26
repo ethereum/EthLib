@@ -60,14 +60,6 @@ It can sample uniform randomness and query the hash (the random oracle) and the 
 structure Adversary where
   main : PublicKey → OracleComp (OracleWorld + SigningSpec) Forgery
 
-/-- The counted random oracle: a lazily sampled cache of uniform 32-byte answers.
-
-Each hash query costs one, repeated queries included.
-
-Uniform sampling costs nothing. -/
-noncomputable def countedOracle :=
-  HashSpec.romImpl.withAddCost EthLib.Cryptography.SufCma.hashCost
-
 /-- The signing oracle: the deterministic signer with the secret key.
 
 The signer derives each randomizer from `SK.prf`, `PK.seed` and the message.
@@ -101,13 +93,16 @@ noncomputable def gameCore (adversary : Adversary) : OracleComp OracleWorld Bool
     (Concrete.verify pk forgery.message forgery.signature : OracleComp HashSpec Bool)
   return decide (SigningTranscript.Valid log ∧ ¬SigningTranscript.Contains log forgery) && verified
 
-/-- The game under the counted random oracle, from an empty cache.
+/-- The game under the lazy random oracle, from an empty cache.
 
 It returns whether the adversary won and the number of hash queries of the whole run.
 
+Each hash query counts one, repeated queries included, and uniform sampling counts nothing.
+
 That number includes the queries of key generation, signing and verification. -/
 noncomputable def experiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
-  (simulateQ countedOracle (gameCore adversary)).run.run' ∅
+  (simulateQ (HashSpec.romImpl.withAddCost EthLib.Cryptography.SufCma.hashCost)
+    (gameCore adversary)).run.run' ∅
 
 /-- The probability that the adversary wins. -/
 noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=

@@ -23,6 +23,7 @@ A budget of `q - 1` from `S` leaves `q - K` hash calls after key generation.
 @[expose] public section
 
 open OracleComp OracleSpec
+open EthLib.Cryptography.HashSig (countHashQueries countHashQueries_forget)
 open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary ofPublicKey ofSeed ofParam scheme)
 open EthLib.Cryptography.SufCma (gameAfterKeys)
 

@@ -11,6 +11,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.SufCma (hashCost)
 open OracleComp.ProgramLogic.Relational
 
 namespace XmssSecurity.CappedChain
@@ -2362,7 +2363,7 @@ theorem globalFirstLaneExactTracedOracleImpl_hazardBound
     (state : GlobalHighDirectTracedState) :
     ((globalFirstLaneExactTracedOracleImpl keyView edgeHigh input).run state)
       |>.IsQueryBoundP FirstLaneOracleSimulation.IsHazardQuery
-        (if input matches .inr _ then 1 else 0) := by
+        (hashCost input) := by
   unfold globalFirstLaneExactTracedOracleImpl
   apply globalExactTracedLift_hazardBound
   exact globalFirstLaneOracleExecution_hazardBound keyView edgeHigh input
@@ -2408,11 +2409,11 @@ theorem globalFirstLaneExactTracedVerifierImpl_hazardBound
     (state : GlobalHighDirectTracedState) :
     ((globalFirstLaneExactTracedVerifierImpl keyView edgeHigh input).run state)
       |>.IsQueryBoundP FirstLaneOracleSimulation.IsHazardQuery
-        (if input matches .inr _ then 1 else 0) := by
+        (hashCost input) := by
   rw [globalFirstLaneExactTracedVerifierImpl_run_eq_map]
   rw [map_eq_bind_pure_comp]
   apply OracleComp.isQueryBoundP_bind
-    (n := if input matches .inr _ then 1 else 0) (m := 0)
+    (n := hashCost input) (m := 0)
     (globalFirstLaneOracleImpl_hazardBound keyView edgeHigh input
       state.causalState)
   intro result _hresult

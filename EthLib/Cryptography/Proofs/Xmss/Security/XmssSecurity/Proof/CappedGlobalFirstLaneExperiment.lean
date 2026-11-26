@@ -9,6 +9,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 @[expose] public section
 
 open OracleComp OracleSpec
+open EthLib.Cryptography.SufCma (hashCost)
 open OracleComp.ProgramLogic.Relational
 
 namespace XmssSecurity.CappedChain
@@ -458,7 +459,7 @@ theorem globalFirstLaneOracleExecution_hazardBound
     (input : OracleWorld.Domain) (state : GlobalCausalHashState) :
     (globalFirstLaneOracleExecution keyView edgeHigh input state)
       |>.IsQueryBoundP FirstLaneOracleSimulation.IsHazardQuery
-        (if input matches .inr _ then 1 else 0) := by
+        (hashCost input) := by
   cases input with
   | inl n =>
       exact globalFirstLaneUniformImpl_hazardBound n state
@@ -472,7 +473,7 @@ theorem globalFirstLaneOracleImpl_hazardBound
     (input : OracleWorld.Domain) (state : GlobalCausalHashState) :
     ((globalFirstLaneOracleImpl keyView edgeHigh input).run state)
       |>.IsQueryBoundP FirstLaneOracleSimulation.IsHazardQuery
-        (if input matches .inr _ then 1 else 0) := by
+        (hashCost input) := by
   exact globalFirstLaneOracleExecution_hazardBound keyView edgeHigh input state
 
 theorem globalFirstLaneSigningImpl_hazardBound

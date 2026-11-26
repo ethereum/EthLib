@@ -8,17 +8,13 @@ public import VCVio.OracleComp.SimSemantics.StateT.StateProjection
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.SufCma (hashCost)
 set_option backward.isDefEq.respectTransparency false
 open OracleComp.ProgramLogic.Relational
 
 namespace XmssSecurity.CappedChain
 
 set_option maxRecDepth 1000000
-
-theorem verifierHashQueryCost_eq_if (input : OracleWorld.Domain) :
-    verifierHashQueryCost input =
-      (if input matches .inr _ then 1 else 0) := by
-  rcases input with n | hashInput <;> rfl
 
 def globalFirstLaneExactFullProjection {α : Type}
     (chainPrefix : RevealProbeOracleSimulation.ActionTrace
@@ -526,12 +522,12 @@ theorem relTriple_sourceExact_firstLane_verifier_action
             firstLaneResult.1.2 (trace ++ firstLaneResult.2) ∧
           FirstLaneOracleSimulation.hazardCount
               (trace ++ firstLaneResult.2) ≤
-            used + verifierHashQueryCost input) ∨
+            used + hashCost input) ∨
         (FirstLaneOracleSimulation.CombinedHit right.1.2
             (trace ++ firstLaneResult.2) ∧
           FirstLaneOracleSimulation.hazardCount
               (trace ++ firstLaneResult.2) ≤
-            used + verifierHashQueryCost input)) := by
+            used + hashCost input)) := by
   let highState := globalStateOfFirstLane firstLaneState trace
   have hsourceHigh : GlobalSigningMonitoredTracedStateRelation left right.1
       (sourceExactSigningProjection leftState) highState := hstate.1
@@ -549,23 +545,22 @@ theorem relTriple_sourceExact_firstLane_verifier_action
   obtain ⟨highResult, hsourceResult, hhighResult⟩ := hglued
   obtain ⟨hprojection, hhighSupport, hfirstLaneSupport⟩ := hhighResult
   have hfragmentCount : FirstLaneOracleSimulation.hazardCount
-      firstLaneResult.2 ≤ verifierHashQueryCost input := by
+      firstLaneResult.2 ≤ hashCost input := by
     apply FirstLaneOracleSimulation.simulate_eagerTrace_support_hazardCount_le
       right.1.2
       ((globalFirstLaneExactTracedVerifierImpl right.1.1 right.2 input).run
         (GlobalHighDirectTracedState.mk highState.1.causal highState.2))
-      (verifierHashQueryCost input) _ firstLaneResult hfirstLaneSupport
+      (hashCost input) _ firstLaneResult hfirstLaneSupport
     change ((globalFirstLaneExactTracedVerifierImpl right.1.1 right.2 input
       ).run (GlobalHighDirectTracedState.mk highState.1.causal
         highState.2)).IsQueryBoundP
-        FirstLaneOracleSimulation.IsHazardQuery (verifierHashQueryCost input)
-    rw [verifierHashQueryCost_eq_if]
+        FirstLaneOracleSimulation.IsHazardQuery (hashCost input)
     exact globalFirstLaneExactTracedVerifierImpl_hazardBound right.1.1
       right.2 input
         (GlobalHighDirectTracedState.mk highState.1.causal highState.2)
   have htotalCount : FirstLaneOracleSimulation.hazardCount
       (trace ++ firstLaneResult.2) ≤
-        used + verifierHashQueryCost input := by
+        used + hashCost input := by
     rw [FirstLaneOracleSimulation.hazardCount_append]
     omega
   have hfragmentValid :=
@@ -656,7 +651,7 @@ theorem relTriple_sourceExact_firstLane_verifier_boundedHit
   have hgeneric := relTriple_simulateQ_bind_bounded_firstLane right.1.2
     sourceExactTracedVerifierImpl
     (globalFirstLaneExactTracedVerifierImpl right.1.1 right.2)
-    leftFinish rightFinish verifierHashQueryCost
+    leftFinish rightFinish hashCost
     (SourceFirstLaneExactGoodStateRelation left right.1)
     (fun _state _spent => True)
     (fun rest remaining state => HashQueryBound rest state.1.1.1 remaining)
@@ -666,7 +661,7 @@ theorem relTriple_sourceExact_firstLane_verifier_boundedHit
         rw [← sourceExactTracedVerifierImpl_cache_projection, support_map]
         exact ⟨result, hresult, rfl⟩
       have h := hashQueryBound_query_bind input next state.1.1.1 remaining hrest _ hr
-      cases input <;> simpa [verifierHashQueryCost] using h)
+      exact h)
     (by
       intro spent input state firstState history hstates hprefix _haccounted
       apply relTriple_post_mono

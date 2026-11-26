@@ -24,6 +24,7 @@ The real budget bounds the model's calls after key generation.
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.HashSig (simulateQ_countHashQueries)
 open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)
 
 open EthLib.Cryptography.Xmss.Unforgeability renaming Adversary → EthAdversary

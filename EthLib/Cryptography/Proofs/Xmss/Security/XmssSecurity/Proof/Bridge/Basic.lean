@@ -15,6 +15,7 @@ Generic facts about oracle computations under a cache, for three kinds of comput
 @[expose] public section
 
 open OracleComp OracleSpec
+open EthLib.Cryptography.HashSig (countHashQueries countHashQueries_query_bind)
 
 namespace DeterministicSigning
 

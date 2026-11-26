@@ -21,6 +21,8 @@ open EthLib.Cryptography.HashSig
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.HashSig (countHashQueries countHashQueries_liftM
+  countHashQueries_query_bind)
 
 namespace SphincsSecurity.Security.Internalize
 
@@ -398,7 +400,7 @@ omit [Params] in
 theorem rightRun_liftProb {α : Type} (p : ProbComp α) (cache : QueryCache HashSpec) :
     rightRun (liftM p : OracleComp OracleWorld α) cache =
       (fun value => ((value, 0), cache)) <$> p := by
-  rw [rightRun, countHashQueries_lift_prob, simulateQ_map, StateT.run_map, run_lift_prob,
+  rw [rightRun, countHashQueries_liftM, simulateQ_map, StateT.run_map, run_lift_prob,
     Functor.map_map]
 
 omit [Params] in

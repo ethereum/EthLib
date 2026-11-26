@@ -5,6 +5,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.SufCma (hashCost)
+open EthLib.Cryptography.HashSig (countHashQueries countHashQueries_pure
+  countHashQueries_query_bind)
 
 namespace XmssSecurity.Seeded
 
@@ -25,10 +28,10 @@ theorem exists_seed_not_hit {hit : HashInput → MasterSeed → Prop} (hhit : Gu
 theorem hashQueryBound_query_bind_of {α : Type} (input : OracleWorld.Domain)
     (next : OracleWorld.Range input → OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) (q : Nat)
-    (hcost : (if (fun input : OracleWorld.Domain => input matches .inr _) input then 1 else 0) ≤ q)
+    (hcost : hashCost input ≤ q)
     (hnext : ∀ result ∈ support ((romImpl input).run cache),
       HashQueryBound (next result.1) result.2
-        (q - (if (fun input : OracleWorld.Domain => input matches .inr _) input then 1 else 0))) :
+        (q - hashCost input)) :
     HashQueryBound (liftM (OracleWorld.query input) >>= next) cache q := by
   intro result hresult
   rw [countHashQueries_query_bind, run'_query_bind, mem_support_bind_iff] at hresult
@@ -149,7 +152,7 @@ theorem hashQueryBound_of_seed_caches {hit : HashInput → MasterSeed → Prop} 
         romImpl_support_transfer (fun input => hit input seed) (caches seed) cache
           (hagree seed (havoid seed hseed).2) input (havoid seed hseed).1 answer hresult
       apply ih answer
-        (q - (if (fun input : OracleWorld.Domain => input matches .inr _) input then 1 else 0))
+        (q - hashCost input)
         (prependHash input inputs) (fun seed => cacheAfter (caches seed) input answer)
         (cacheAfter cache input answer)
       · cases input <;> simp_all [prependHash]

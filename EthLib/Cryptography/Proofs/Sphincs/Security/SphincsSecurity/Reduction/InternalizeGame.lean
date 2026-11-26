@@ -17,6 +17,7 @@ open EthLib.Cryptography.HashSig (counted_pure counted_query)
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.HashSig (countHashQueries simulateQ_countHashQueries)
 
 namespace SphincsSecurity.Security.Det
 

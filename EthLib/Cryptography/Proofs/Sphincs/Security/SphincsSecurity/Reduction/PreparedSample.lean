@@ -18,6 +18,7 @@ open EthLib.Cryptography.HashSig (counted_query_bind simulate_withCost)
 @[expose] public section
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.HashSig (countHashQueries)
 
 namespace SphincsSecurity.Security.Assembly
 
@@ -180,9 +181,7 @@ theorem fixedHashWorld_countHashQueries (f : QueryImpl HashSpec Id) {α : Type}
     (oa : OracleComp OracleWorld α) :
     simulateQ (Prefix.fixedHashWorld f) (countHashQueries oa) =
       (simulateQ (Prefix.fixedWorldCost f) oa).run := by
-  rw [countHashQueries, simulate_withCost, Prefix.fixedWorldCost]
-  congr 3
-  funext input
-  cases input <;> rfl
+  rw [Prefix.fixedWorldCost]
+  exact EthLib.Cryptography.HashSig.simulateQ_countHashQueries _ oa
 
 end SphincsSecurity.Security.Assembly

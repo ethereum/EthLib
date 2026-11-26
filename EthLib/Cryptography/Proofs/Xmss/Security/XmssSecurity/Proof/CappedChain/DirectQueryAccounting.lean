@@ -24,10 +24,6 @@ theorem attackerActionFragment_hashInputs_length
   · rcases uniformOrHash with n | hashInput <;> rfl
   · rfl
 
-def verifierHashQueryCost : OracleWorld.Domain → Nat
-  | .inl _ => 0
-  | .inr _ => 1
-
 theorem sourceUnloggedMappedAdversaryImpl_consistent_query_bound
     (publicKey : PublicKey) (secretKey : SecretKey) (input : (OracleWorld + SigningSpec).Domain)
     (next : (OracleWorld + SigningSpec).Range input → OracleComp OracleWorld α)

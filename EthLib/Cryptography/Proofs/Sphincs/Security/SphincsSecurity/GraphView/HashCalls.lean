@@ -220,22 +220,25 @@ namespace SphincsSecurity.Security.Prefix
 
 variable [Params]
 open Concrete
-open EthLib.Cryptography.HashSig (counted counted_pure counted_query_bind)
+open EthLib.Cryptography.HashSig (counted counted_pure counted_query_bind countHashQueries
+  countHashQueries_pure countHashQueries_query_bind)
+open EthLib.Cryptography.SufCma (isHashCall_inr)
 
 attribute [local irreducible] encodingAttemptLimit digestAttemptLimit Seeded.finishSign
   Seeded.signAttempt
 
 omit [Params] in
-theorem counted_lift_hash {α : Type} (computation : OracleComp HashSpec α) :
-    counted SourceHash (liftM computation : OracleComp OracleWorld α) =
+theorem countHashQueries_lift_hash {α : Type} (computation : OracleComp HashSpec α) :
+    countHashQueries (liftM computation : OracleComp OracleWorld α) =
     (liftM (counted (fun _ => True) computation) : OracleComp OracleWorld (α × Nat)) := by
   induction computation using OracleComp.inductionOn with
-  | pure value => simp only [liftM_pure, counted_pure]
+  | pure value => simp only [liftM_pure, countHashQueries_pure, counted_pure]
   | query_bind input next ih =>
       simp only [liftM_bind]
-      change counted SourceHash
+      change countHashQueries
           (liftM (OracleWorld.query (.inr input)) >>= fun output => liftM (next output)) = _
-      simp only [counted_query_bind, SourceHash, ite_true, ih, liftM_bind, liftM_pure]
+      simp only [countHashQueries_query_bind, counted_query_bind, isHashCall_inr, ite_true, ih,
+        liftM_bind, liftM_pure]
       rfl
 
 omit [Params] in
@@ -253,12 +256,12 @@ theorem eval_counted_hash {α : Type} (f : QueryImpl HashSpec Id)
       simp only [hashCalls, queriedInputs_query_bind, List.length_cons, Nat.add_comm]
 
 omit [Params] in
-theorem fixedHashWorld_counted_lift_hash {α : Type} (f : QueryImpl HashSpec Id)
+theorem fixedHashWorld_countHashQueries_lift_hash {α : Type} (f : QueryImpl HashSpec Id)
     (computation : OracleComp HashSpec α) :
     simulateQ (fixedHashWorld f)
-        (counted SourceHash (liftM computation : OracleComp OracleWorld α)) =
+        (countHashQueries (liftM computation : OracleComp OracleWorld α)) =
       pure (evalWithAnswerFn f computation, hashCalls f computation) := by
-  rw [counted_lift_hash, fixedHashWorld_lift_hash, eval_counted_hash]
+  rw [countHashQueries_lift_hash, fixedHashWorld_lift_hash, eval_counted_hash]
 
 end SphincsSecurity.Security.Prefix
 
@@ -337,14 +340,16 @@ namespace SphincsSecurity.Security.Prefix
 variable [Params]
 open Concrete Completeness SeedModel
 open SeedCoupling
-open EthLib.Cryptography.HashSig (counted counted_pure counted_query_bind)
+open EthLib.Cryptography.HashSig (counted counted_pure counted_query_bind countHashQueries
+  countHashQueries_pure countHashQueries_query_bind)
+open EthLib.Cryptography.SufCma (isHashCall_inr)
 
 set_option maxHeartbeats 40000
 attribute [local irreducible] digestAttemptLimit encodingAttemptLimit
 
 noncomputable def fixedWorldCost (f : QueryImpl HashSpec Id) :
     QueryImpl OracleWorld (AddWriterT Nat ProbComp) :=
-  (fixedHashWorld f).withAddCost (fun | .inl _ => 0 | .inr _ => 1)
+  (fixedHashWorld f).withAddCost EthLib.Cryptography.SufCma.hashCost
 
 omit [Params] in
 theorem map_logging_query {I J : Type} {spec : OracleSpec I} {target : OracleSpec J}

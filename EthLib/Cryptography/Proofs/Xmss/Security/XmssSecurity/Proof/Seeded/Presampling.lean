@@ -8,6 +8,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Consis
 @[expose] public section
 
 open OracleComp OracleSpec
+open EthLib.Cryptography.HashSig (countHashQueries)
 
 namespace XmssSecurity.Seeded
 
