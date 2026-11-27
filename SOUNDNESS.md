@@ -4526,7 +4526,8 @@ It also records the bound that the start is at most one epoch behind the current
 It assumes only that the call succeeds.
 `Store.onFastConfirmation_checkpoints` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states how the same call sets the observed justified checkpoints at the epoch boundaries.
 These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
-No theorem here proves conditional or accountable safety of the confirmed block; the safety of each start is below.
+These call characterizations do not prove conditional or accountable safety of the confirmed block.
+The start theorems below have separate hypotheses.
 
 `Store.ForwardReachable.finalized_epoch_add_two_le` in `Consensus/Proofs/ForkChoice/CheckpointBlocks.lean` states how old a finalized checkpoint other than the anchor's is ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
 The store is forward reachable from the store initialized from the anchor state and block.
@@ -4540,7 +4541,7 @@ It also assumes a history of at least two epochs of block roots, and that the st
 It assumes the anchor invariant, an anchor block not after the anchor state, an anchor state that does not hash to the zero root, a nonempty epoch and at least two epochs of block-root history.
 
 `Execution.observedRestart_covers_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` is the safety of the restart from the observed justified block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
-The restart assumes synchrony, delayed block admission from time zero through the limit, and a delay that fits between the attestation deadline and the next slot.
+Both starts assume synchrony, delayed block admission from time zero through the limit, and a delay that fits between the attestation deadline and the next slot.
 The anchor state is reached by a run from genesis.
 All honest validators start at the store initialized from the anchor state and block, whose shared slot starts an epoch.
 The slot duration is positive and the preset meets the direct-safety parameters.
@@ -4555,21 +4556,23 @@ The vote is from an earlier slot and appears in a message sent by the store's ev
 The observed block is on every up-to-date honest head from the call through the limit, unless honest stores collide or give cross-store direct-safety or justified evidence.
 
 `Execution.finalized_ancestor_of_heads_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalReads.lean` is the safety of the fallback to the finalized block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
-It concerns an honest caller at the start of a slot.
-It also concerns an up-to-date honest receiver at an event from the start of the next slot through `last`.
-The caller's finalized root is then an ancestor of the receiver's head.
-Otherwise two honest stores collide by `last`, or `CrossStoreDirectSafetyEvidence` holds.
-The successor slot and both slot-start times are computed successfully, and the receiver's head read succeeds.
-It assumes synchrony, delayed block admission (`BlocksAdmitted`), and a delay that satisfies `DelayFits`.
-Honest participants start at the store initialized from the anchor state and block, whose shared slot starts an epoch, and the slot duration is positive.
-It takes the run from the genesis to the anchor, the held states before the next fork, and the two stake floors.
-It takes nonzero state roots of held blocks (`roots`) and the anchor's absent parent (`absent`).
-It takes honest store epochs within the horizon (`bounded`) and the preset conditions of `DirectSafety.Parameters`.
-`Execution.finalized_epoch_le_justified_of_late` gives the step, an order of epochs.
-A delay after a sender's event, an up-to-date honest receiver's justified epoch, at an event up to `last`, is at least the sender's finalized epoch.
-It does not show that this particular epoch is justified.
-It takes the agreement of honest stores on blocks, and no honest held block with a zero state root.
-It also takes the finality reads: whenever one bounded honest store's finalized epoch is no greater than another's justified epoch, the latter's justified root reads the former's finalized checkpoint at that epoch.
+`Execution.finalized_ancestor_of_heads_or_evidence` takes an honest caller at a slot's computed start.
+The successor slot and its start time are read successfully.
+An up-to-date honest receiver reads its head at an event from that next start through the limit.
+The caller's finalized root is an ancestor of that head, unless honest stores collide or give cross-store direct-safety evidence by the limit.
+
+The delivery and epoch-order lemmas assume synchrony, delayed block admission from time zero through the limit, nonempty epochs and at least two epochs of block-root history.
+All honest validators start at the store initialized from an invariant anchor state and block with matching slots.
+Through the limit their stores agree on blocks at common roots and hold only blocks with nonzero state roots.
+Both lemmas take an honest sender and an up-to-date honest receiver, with the receiver at least a delay later and both events by the limit.
+For `Execution.carrier_delivered`, the sender holds a block and its state and reads the receiver's finalized checkpoint on that block's chain at the checkpoint's epoch.
+The receiver then holds the same block and state at that root.
+`Execution.finalized_epoch_le_justified_of_late` also requires positive slot duration and cross-store finality reads through the limit.
+Whenever one honest store's finalized epoch is at most another's justified epoch, the latter's justified root reads the former's finalized checkpoint at that epoch.
+The receiver's justified epoch is at least the sender's finalized epoch; this does not say that the sender's epoch itself is justified.
+
+For `anchorState_hash_nonzero`, all honest validators start at the store initialized from the anchor state and block, and their held blocks have nonzero state roots through the limit.
+Given an honest validator's event by that limit, hashing the anchor state cannot return the zero root.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.

@@ -233,13 +233,13 @@ public theorem Execution.crossStoreFinality_or_evidence {anchor : Store preset f
     early enough terminal honestA honestB timeA timeB ordered
   exact .inr ⟨a, honestA, b, honestB, i, j, timeA, timeB, result.resolve_left failed⟩
 
-/-- A block of an honest store reaches each up-to-date honest receiver a delay later.
+/-- A block an honest sender holds reaches each up-to-date honest receiver a delay later, by `last`.
 
-The sender's read at the block must give the finalized checkpoint of the receiver.
+The sender reads the receiver's finalized checkpoint at it; the receiver holds it and its state.
 
-The receiver then holds the block with the sender's state for it.
+It assumes synchrony, delayed admission, block agreement and no held block with a zero state root.
 
-Honest stores must agree on their blocks, and hold no state of a block with a zero state root. -/
+It also needs the invariant anchor, a nonempty epoch and two epochs of root history. -/
 public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset fork} {last : ℕ}
     (sync : e.Synchronous Δ) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
@@ -282,13 +282,13 @@ public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset for
   · obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
     exact absurd (agree a ha b hb i j hi hj r left right leftFound rightFound) different
 
-/-- A delay after a sender's event, an up-to-date receiver's justified epoch is no earlier.
+/-- A delay after an event, a receiver's justified epoch is at least the sender's finalized epoch.
 
-It is at least the sender's finalized epoch at the event, for a receiver's event up to `last`.
+The receiver is up to date at an event by `last`; honest stores agree on blocks, with nonzero roots.
 
-It assumes block agreement, and that a justified root reads lower-or-equal finalized checkpoints.
+Each justified root reads every honest finalized checkpoint of an epoch no later than its own.
 
-It also assumes that no honest held block has a zero state root. -/
+It also assumes synchrony, delayed admission, the invariant anchor, slot facts and root history. -/
 public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
@@ -376,13 +376,13 @@ public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor
     exact UInt64.le_trans finalLe ((forward w receiver k).justified_le_of_pulledUp sound positive
       slots currentWOk blockHeld stateHeld run (UInt64.lt_of_lt_of_le earlier epochLe))
 
-/-- A caller's slot-start finalized root is on the head of each up-to-date honest receiver.
-
-The receiver is at an event from the next slot start through `last`, and reads its head.
+/-- A caller's slot-start finalized root is on each up-to-date honest head, next slot to `last`.
 
 Otherwise two honest stores collide by `last`, or cross-store direct-safety evidence holds.
 
-It assumes synchrony, delayed admission, `DelayFits`, direct safety and nonzero held roots. -/
+It assumes synchrony, delayed admission, `DelayFits`, direct-safety premises and nonzero roots.
+
+It also needs the anchor at an epoch start, positive slot duration, next-slot reads and the head. -/
 public theorem Execution.finalized_ancestor_of_heads_or_evidence
     {Δ last : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)

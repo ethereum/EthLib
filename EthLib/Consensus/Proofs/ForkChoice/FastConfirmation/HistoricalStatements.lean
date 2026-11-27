@@ -319,9 +319,9 @@ omit [DecidablePred (· ∈ J)] in
 open Serialization.Ssz SszType in
 /-- The anchor state does not hash to the zero root, as no honest store holds a zero state root.
 
-It assumes that honest validators start at the anchor, with no zero state root held through `last`.
+It assumes honest stores start at the store initialized from the anchor state and block.
 
-It also takes an event of an honest validator by `last`. -/
+Held blocks have nonzero state roots through `last`; an honest validator has an event by then. -/
 theorem anchorState_hash_nonzero {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) {last : ℕ}
