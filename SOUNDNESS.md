@@ -4481,6 +4481,15 @@ It assumes the anchor invariant, a positive slot duration, and that an epoch has
 It also assumes that the anchor block is not after the anchor state, and that the anchor state does not hash to the zero root.
 It also assumes a history of at least two epochs of block roots, and that the store's current epoch can be read.
 
+`Execution.observedRestart_covers_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` is the safety of the restart from the observed justified block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+It concerns a call of an honest validator's run that replaces its base by that block.
+The block is then on every up-to-date honest head from the call through the limit.
+Otherwise two honest stores collide, or `CrossStoreDirectSafetyEvidence` or `CrossStoreJustifiedEvidence` holds.
+It assumes synchrony, delayed block admission (`BlocksAdmitted`), fitting delays, and that honest validators sign each justified checkpoint after the anchor's epoch.
+It also takes the premises of the direct safety theorems.
+These are the run from the genesis to the anchor, the held states before the next fork, and the two stake floors.
+The run starts after the anchor's epoch, at one call per slot from its first slot.
+
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
 The block is due from the first slot two epochs after that one.

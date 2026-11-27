@@ -123,6 +123,10 @@ Not yet released.
   They also assume that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root.
   `Execution.data_eq_of_signed_of_target_epoch`, `Execution.latest_slot_floor_of_signed_rank` and `VoteAt.signed_sent` move to `Consensus/Proofs/ForkChoice/VoteDelivery.lean` from `Consensus/Proofs/ForkChoice/FastConfirmation/DutySupport.lean`, with their names and statements.
 
+- In Lean, `Execution.observedRestart_covers_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`) states that a restart of the fast confirmation rule from the observed justified block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+  At a call that replaces its base, that block is on every up-to-date honest head from the call through the limit.
+  Otherwise two honest stores collide, or cross-store direct-safety or justified evidence holds.
+
 - In Lean, `Store.ForwardReachable.finalized_epoch_add_two_le` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`) states the timing of a finalized checkpoint other than the anchor's ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   The store is forward reachable from the store initialized from the anchor state and block, and it reads its current epoch.
   Suppose its finalized checkpoint differs from the anchor's.
