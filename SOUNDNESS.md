@@ -1940,6 +1940,7 @@ It states the size of the code, its bytes and the data of a PUSH from that numbe
 `NatCode.valid_of_walk` proves that a JUMPDEST is a valid jump destination when a walk along the opcodes from position 0 reaches it.
 `decide +kernel` checks the walk.
 `Logic/Steps.lean` defines the tactic `evm_step`, which applies the rule of the opcode at the program counter and proves the facts about the code by evaluation.
+The tactic `evm_stepK` does the same over frames that know a few ranges of memory, with the rules of `Logic/Known.lean` for MSTORE, MLOAD, KECCAK256, CALLDATACOPY and MCOPY.
 The tactic proves nothing on its own: each step it takes applies one of the rules above, and the kernel checks the result.
 `Logic/Fault.lean` gives the postcondition `Faulted` of a frame that halts exceptionally: no output, the error, no gas with the one-counter meter, and the state and substate the frame had.
 The caller discards that state; no theorem here states it.
