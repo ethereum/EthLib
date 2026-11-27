@@ -517,6 +517,98 @@ A header from Deneb to Fulu at a slot before Deneb climbs from the root of its h
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 From Gloas the header carries the parent block hash instead, which climbs by a normalized branch, and no theorem composes that check with the branch bound.
 
+### RLP
+
+Recursive Length Prefix (RLP) is the encoding of the execution layer.
+Many hashes of the chain, such as the hash of a block header, are taken over RLP bytes.
+So every item must have one encoding, and every client must reject what is not an encoding.
+The source is Appendix B of the [Yellow Paper](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), Shanghai version.
+It defines the encoding, and of the decoding it asks only that a scalar with a leading zero byte be dismissed.
+EthLib's decoder accepts exactly the outputs of EthLib's encoder, and the theorems of `Proofs/Rlp/` prove it.
+
+Every length of 56 or more, and every scalar, is written as `BE(n)`, the bytes of `n` in base 256 with no leading zero byte.
+`bigEndian_value` and `bigEndian_head_ne_zero` (`Proofs/Rlp/Item.lean`) prove that `bigEndian n` has both properties.
+`bigEndian_unique` proves that no other bytes have them, so `bigEndian` computes the `BE` of the Yellow Paper.
+
+The Yellow Paper gives no encoding to a payload of `2^64` bytes or more.
+The payload of a byte string is its bytes, and the payload of a list is the encodings of its items.
+`encode_error` (`Proofs/Rlp/Bound.lean`) proves that the only failure of `encode` is `payloadTooLong`, with a length of at least `2^64`.
+`encode_bytes_succeeds_iff` proves that a byte string encodes exactly when it has fewer than `2^64` bytes.
+`encode_list_succeeds_iff` takes a list whose items encode.
+It proves that the list encodes exactly when the joined encodings of its items have fewer than `2^64` bytes.
+Below that bound, `lengthPrefix_first_byte_le` (`Proofs/Rlp/Encode.lean`) bounds the first byte of a long prefix by `0xbf` for a byte string and `0xff` for a list.
+So that byte never wraps around 256, and the long prefix of a byte string stays below `0xc0`, where lists start.
+
+`Proofs/Rlp/Bound.lean` also bounds the size of an encoding.
+A prefix has at most 9 bytes, and 1 byte for a length below 56 (`lengthPrefix_size_le`).
+So a byte string encodes to at most 9 more bytes than it has, and to at most 1 more below 56 bytes (`encode_bytes_size_le`).
+A list encodes to at most 9 more bytes than the joined encodings of its items (`encode_list_size_le`).
+Every encoding has at least 1 byte (`one_le_encode_size`).
+The encoding of a list has more bytes than the list has items, and each item encodes to fewer bytes than the list (`encode_list_size_gt`).
+
+`decode_encode` (`Proofs/Rlp/RoundTrip.lean`) proves that decoding undoes encoding: if `encode x = .ok b`, then `decode b = .ok x`.
+Its one hypothesis is that the encoding exists, and by `encode_error` it is missing only for a payload of `2^64` bytes or more.
+`encode_injective` follows: two items with one encoding are equal.
+`encode_prefix_free` proves that no encoding is a proper prefix of another, so a sequence of encodings splits into items in only one way.
+`decode_trailing` proves that an encoding followed by more bytes is rejected with `trailingBytes`, which carries the number of extra bytes.
+`decodeItem_encode` proves that the decoder reads an encoding at any position of a longer input, and stops right after it.
+
+The converse is `encode_decode` (`Proofs/Rlp/Canonical.lean`): if `decode b = .ok x`, then `encode x = .ok b`.
+It assumes nothing about `b` beyond its acceptance, so the decoder accepts only canonical input, including every item nested in a list.
+`decode_eq_ok_iff` joins the two directions, so `encode` is a bijection between the items that have an encoding and the inputs that `decode` accepts.
+`decode_isOk_iff` states that `decode` succeeds exactly on the encodings of items.
+For a stream, `decodeItem_append` proves that the decoder reads the same item, and stops at the same position, when more bytes follow.
+`encode_of_decodeItem` proves that the bytes it read are the encoding of that item.
+
+`Proofs/Rlp/Strict.lean` names the error of each of five non-canonical forms, in three groups, whatever bytes follow the form:
+
+- `81 x` with `x < 0x80` puts a prefix before a byte that is its own encoding, and fails with `singleByteWithPrefix` (`decodeItem_singleByteWithPrefix`).
+- `b8 l` or `f8 l` with `0 < l < 56` writes a short length in the long form, and fails with `longFormForShortLength` (`decodeItem_longFormForShortLength_bytes`, `decodeItem_longFormForShortLength_list`).
+- `b7 + k` or `f7 + k` with `1 <= k <= 8`, then `k` length bytes whose first is zero, fails with `leadingZeroInLength` (`decodeItem_leadingZero_bytes`, `decodeItem_leadingZero_list`).
+
+Each theorem holds for the form at any position of the input, and `decode_eq_error` lifts it to a whole input that starts with the form.
+No theorem of `Proofs/Rlp/Strict.lean` names the error of an input that ends before the bytes its prefix announces.
+`encode_decode` still covers such an input, as it covers every input: what the decoder accepts is an encoding.
+`RlpError.code_injective` (`Proofs/Rlp/Item.lean`) proves that two errors with one code come from one constructor.
+That code is the number that the C exports give for an error.
+
+A scalar is a non-negative integer, and its item is the byte string `BE(n)`.
+`decodeScalar_eq_ok_iff` (`Proofs/Rlp/Scalar.lean`) proves that `decodeScalar b = .ok n` exactly when `encode (.scalar n) = .ok b`.
+With `encode_decode`, `encode_injective` and `bigEndian_head_ne_zero`, it follows that the scalar decoder rejects every input whose byte string starts with a zero byte.
+For example, it rejects `00` and `82 00 01`.
+`toScalar_scalar` and `eq_scalar_of_toScalar` state the same on items, and `scalar_injective` proves that two scalars never share an item.
+`encode_scalar_succeeds_iff` proves that a scalar encodes exactly when `BE(n)` has fewer than `2^64` bytes.
+`encode_scalar_succeeds` proves that every scalar below `2^256` encodes, so every 256-bit word does.
+
+A codec writes a typed value as an item, and reads an item back as a value (`Rlp/Codec.lean`).
+`LawfulCodec` (`Proofs/Rlp/Codec.lean`) asks that the two directions undo each other.
+For every lawful codec, `Codec.decode_encode` and `Codec.encode_decode` carry the two directions above to typed values, and `Codec.decode_eq_ok_iff` joins them.
+So a typed decoder accepts a byte string for a value exactly when it is the encoding of that value.
+`Codec.encode_injective` proves that two values with one encoding are equal.
+
+The file proves the laws for `Nat`, `U256`, `UInt64`, `UInt32`, `UInt16`, `UInt8`, `Bool`, `ByteArray`, `Vector UInt8 n` and `Item`, and for a list of a lawful type.
+So each bounded integer type rejects a scalar too large for it, and `Vector UInt8 n` rejects a byte string of another length.
+An `Option α` is lawful when `α` is lawful and `NeverEmpty`: no value of `α` has the empty byte string as its item.
+Then `none` is written as the empty byte string, and `Codec.decode_eq_ok_none_iff` proves that `none` decodes exactly from the byte `80`.
+`not_neverEmpty_nat` proves that `Nat` is not `NeverEmpty`, since 0 is the empty byte string.
+`LawfulCodec.wrapper` carries the laws to a structure around one value, when its two conversions undo each other.
+The structures of the execution layer, such as the block header and the transactions, have their own `LawfulCodec` instances, proved under `Execution/Proofs/`.
+
+`listEncodings_of_encode` (`Proofs/Rlp/Encodings.lean`) proves that the encoding of a list splits into the encodings of its items, in order.
+An `Encoded` value keeps an item next to the bytes that the decoder read it from.
+Take a list kept with its own encoding.
+`Encoded.parts_of_encode` and `Encoded.parts_eq_ok_iff` prove that its parts are its items, each kept with its own encoding.
+So a caller can hash the bytes of each part in place of encoding its item again.
+
+The round trip and canonicity relate the decoder to the encoder, and both are EthLib's definitions.
+That the encoder is the `RLP` of Appendix B rests on its shape, case by case, which A1 covers.
+The cases of `RLPTests` in `ethereum/tests` also check it, both ways, as the RLP README says.
+Only `BE` is proved against the definition in the paper.
+`R_l`, the encoding of a list, has the guard `s(x) ≠ ∅`, where `s(x)` is the joined encodings of the items.
+The encoder reads that `∅` as no encoding, so the empty list encodes as `c0`.
+The paper also writes `∅` for an empty value, so this reading is EthLib's choice.
+No theorem covers the depth of nesting that the compiled code handles, which B1 records.
+
 ### leanSPHINCS
 
 The correctness theorem is `verify_keyGen_sign` (`Proofs/Sphincs/Correctness.lean`).
