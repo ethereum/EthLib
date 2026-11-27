@@ -115,9 +115,9 @@ def test_optimistic_candidate_rejected(candidate: bytes, code: int, message: str
     ids=["two optimistic", "verified", "head verified", "genesis"],
 )
 def test_latest_verified_ancestor(optimistic: list, start: bytes, expected: bytes):
-    assert (
-        consensus.latest_verified_ancestor("mainnet", FORK, BLOCKS, optimistic, start) == expected
-    )
+    # Before Gloas the walk keeps the status of the node, pending by default.
+    got = consensus.latest_verified_ancestor("mainnet", FORK, BLOCKS, optimistic, start)
+    assert got == (expected, 2)
 
 
 def test_latest_verified_ancestor_rejected():
@@ -273,39 +273,62 @@ EMPTY, FULL, PENDING = 0, 1, 2
 
 
 @pytest.mark.parametrize(
-    ("optimistic", "status", "expected"),
+    ("optimistic", "start", "status", "expected"),
     [
-        # The payload chain of c holds c, b and g, and not a; a full node holds all three payloads.
-        ([GB, GC], FULL, GG),
-        ([GA, GC], FULL, GB),
-        ([GA], FULL, GC),
-        # An empty or pending node holds only the payloads of b and g, so c is never the answer.
-        ([GA], EMPTY, GB),
-        ([GB], EMPTY, GG),
-        ([], PENDING, GB),
+        # A full node whose payload is not optimistic is its own answer.
+        ([GA], GC, FULL, (GC, FULL)),
+        # A full node with an optimistic payload reads as pending, which reads the payload of b.
+        ([GA, GC], GC, FULL, (GC, PENDING)),
+        # An empty node of c builds on the payload of b, which is not optimistic.
+        ([GA], GC, EMPTY, (GC, EMPTY)),
+        ([], GC, PENDING, (GC, PENDING)),
+        # The payload of b is optimistic, so the walk climbs to the full node of b.
+        # That node reads as pending, and b builds on the payload of g, which is verified.
+        ([GB, GC], GC, FULL, (GB, PENDING)),
+        ([GB], GC, EMPTY, (GB, PENDING)),
     ],
-    ids=["two optimistic", "a skipped", "verified", "empty", "empty parent", "pending"],
+    ids=["full verified", "full", "empty", "pending", "climb from full", "climb from empty"],
 )
-def test_gloas_latest_verified_ancestor(optimistic: list[bytes], status: int, expected: bytes):
+def test_gloas_latest_verified_ancestor(
+    optimistic: list[bytes], start: bytes, status: int, expected: tuple[bytes, int]
+):
     got = consensus.latest_verified_ancestor(
-        "minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, GC, payload_status=status
+        "minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, start, payload_status=status
     )
     assert got == expected
 
 
 @pytest.mark.parametrize(
-    ("optimistic", "start", "status"),
-    [([GG, GB, GC], GC, FULL), ([GB, GG], GC, EMPTY), ([], GG, EMPTY)],
-    ids=["all optimistic", "held all optimistic", "nothing held"],
+    ("optimistic", "start", "status", "expected"),
+    [
+        # The payloads of c, b and g are optimistic: b builds on g past the empty node of a.
+        ([GG, GB, GC], GC, FULL, (GG, PENDING)),
+        ([GB, GG], GC, EMPTY, (GG, PENDING)),
+        # A node of the genesis block that builds on a verified payload ends the walk as it is.
+        ([], GG, EMPTY, (GG, EMPTY)),
+        # An optimistic node of the genesis block ends it as the pending node of its block.
+        # The block z names the zero hash, which g builds on.
+        ([GZ], GG, EMPTY, (GG, PENDING)),
+        ([GZ], GG, PENDING, (GG, PENDING)),
+        ([GG, GZ], GG, FULL, (GG, PENDING)),
+    ],
+    ids=[
+        "all optimistic",
+        "climb to genesis",
+        "genesis",
+        "optimistic empty genesis",
+        "optimistic pending genesis",
+        "optimistic full genesis",
+    ],
 )
-def test_gloas_no_verified_ancestor(optimistic: list[bytes], start: bytes, status: int):
-    # Every payload that the node holds is optimistic, or it holds none.
-    message = f"optimistic sync: the payload of the block 0x{GG.hex()} is not verified"
-    with raises(ERROR, message) as info:
-        consensus.latest_verified_ancestor(
-            "minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, start, payload_status=status
-        )
-    assert info.value.code == 39
+def test_gloas_latest_verified_ancestor_genesis(
+    optimistic: list[bytes], start: bytes, status: int, expected: tuple[bytes, int]
+):
+    # The walk stops at a node of the genesis block, whose parent root is zero.
+    got = consensus.latest_verified_ancestor(
+        "minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, start, payload_status=status
+    )
+    assert got == expected
 
 
 RESTRICTED = [0, 1, 5, 6, 7, 8, 9]

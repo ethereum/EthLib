@@ -858,7 +858,7 @@
   "From Bellatrix: whether a block may be imported optimistically, given the known blocks."
 
 #define DOC_consensus_latest_verified_ancestor \
-  "From Bellatrix: the root of the latest block of a chain that is not optimistic."
+  "From Bellatrix: the latest node at or above a node that is verified or of genesis."
 
 #define DOC_consensus_on_valid_payload \
   "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list."

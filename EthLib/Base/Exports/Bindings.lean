@@ -1136,7 +1136,7 @@ def bindings : List Binding := [
   ⟨"consensus_latest_verified_ancestor",
     `EthLib.Consensus.Exports.latestVerifiedAncestorExport,
     "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
-      "root: bytes, payload_status: int) -> bytes",
+      "root: bytes, payload_status: int) -> tuple[bytes, int]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_on_valid_payload", `EthLib.Consensus.Exports.onValidPayloadExport,
     "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
