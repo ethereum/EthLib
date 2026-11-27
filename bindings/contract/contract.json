@@ -4159,7 +4159,7 @@
       {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The events of the fork choice between two stores of a case.\n\nThe first arguments build the store as a fork choice case does.\n\nNext comes the number of first steps that the earlier store takes.\n\nThen come the genesis root and the roots not yet verified.\n\nLast come replacements of the configuration, or None."},
+   "The events of the fork choice between two stores of a case.\n\nThe first arguments build the store as a fork choice case does.\n\nNext comes the number of first steps that the earlier store takes.\n\nThen come the genesis root, and the roots of the blocks whose payload is not yet verified.\n\nLast come replacements of the configuration, or None."},
   {"summary":
    "The event of the last run of the fast confirmation rule in a case that passed.",
    "signature":
