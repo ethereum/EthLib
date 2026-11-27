@@ -1219,6 +1219,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the words and the log data of a request of the withdrawal and consolidation request contracts are defined once, as `requestWordsOf` and `requestLog` (`Execution/Proofs/Blocks/SystemCall/AddPath.lean`) ([#4796](https://github.com/ethereum/EthLib/issues/4796)).
+  `requestWords` and `logData` of each contract keep their names and values, and now unfold to them.
+
 - In Lean, the rules of the calls that send no value of their own (`Execution/Proofs/Evm/Logic/Call.lean`) hold at every fork from Berlin, with one counter of gas ([#4788](https://github.com/ethereum/EthLib/issues/4788), [#4790](https://github.com/ethereum/EthLib/issues/4790)).
   `callKindWith`, `callWith`, `call`, `staticcallWith`, `staticcall`, `delegatecallWith`, `callcodeWith`, `staticcall_noCode` and `staticcall_noCode_returndatasize` lose the hypothesis `fork < .glamsterdam`.
   They state the price of the access as `callBaseCost fork cold`, in place of `if cold then 2600 else 100`, so a cold access costs 3000 from Glamsterdam by EIP-8038.

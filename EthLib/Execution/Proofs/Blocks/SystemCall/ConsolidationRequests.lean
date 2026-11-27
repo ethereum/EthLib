@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
+public import EthLib.Execution.Proofs.Blocks.SystemCall.AddPath
 
 /-!
 # Proofs: the consolidation request contract of EIP-7251 does what its EIP describes
@@ -83,11 +84,11 @@ theorem supportedCode_CODE : SupportedCode CODE = true := by
 
 They are the caller, then the three words of the input, read big-endian. -/
 def requestWords (caller : Address) (input : ByteArray) : List U256 :=
-  [caller.toU256, loadWord input 0 32, loadWord input 32 32, loadWord input 64 32]
+  requestWordsOf 3 caller input
 
 /-- The data of the log of a request: the 20 bytes of the caller, then the input. -/
 def logData (caller : Address) (input : ByteArray) : ByteArray :=
-  (wordBytes caller.toU256).extract 12 32 ++ input
+  requestLog caller input
 
 /-- The record of 116 bytes of the request at the index `index` of the queue, from `read`.
 
@@ -216,6 +217,33 @@ theorem dequeueTailCode_CODE : DequeueTailCode CODE 297 1 116 where
   target_lt := by decide
   size_lt := by decide
 
+/-- From byte 143, the code adds a request of 3 input words, 96 bytes long. -/
+theorem addPathCode_CODE : AddPathCode CODE 3 96 where
+  two_le := by decide
+  log_lt := by decide
+  size_le := by simp [CODE, NatCode.size_ofNat]
+  head := fun i h h1 h2 h3 => by
+    obtain ⟨k, rfl⟩ : ∃ k, i = 143 + k := ⟨i - 143, by omega⟩
+    rw [Nat.add_sub_cancel_left]
+    exact AddPathCode.getElem_of_holdsExcept (skip := [14]) (by decide +kernel) h (by omega)
+      (by simp; omega)
+  push156 := by evm_code [CODE, CODE_NUMBER_eq]
+  word := fun j h1 h2 i h hi h1' => by
+    obtain rfl : j = 1 := by omega
+    exact AddPathCode.getElem_of_holdsExcept (skip := [1]) (by decide +kernel) h hi
+      (by simpa using h1')
+  pushWord := fun j h1 h2 => by
+    obtain rfl : j = 1 := by omega
+    evm_code [CODE, CODE_NUMBER_eq]
+  last := fun i h hi h1 =>
+    AddPathCode.getElem_of_holdsExcept (skip := [1]) (by decide +kernel) h hi (by simpa using h1)
+  pushLast := by evm_code [CODE, CODE_NUMBER_eq]
+  log := fun i h hi h1 h2 =>
+    AddPathCode.getElem_of_holdsExcept (skip := [7, 13]) (by decide +kernel) h hi
+      (by simp; omega)
+  pushSize := by evm_code [CODE, CODE_NUMBER_eq]
+  pushLog := by evm_code [CODE, CODE_NUMBER_eq]
+
 /-! ## A call that adds no request -/
 
 variable {fork : Fork} {message : Message fork} {gas : Nat} {state : TransactionState}
@@ -246,156 +274,6 @@ theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork)
 
 /-! ## A call that adds a request -/
 
-/-- From byte 143, the code adds the request of the caller and the input, and logs it. -/
-private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
-    (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam) (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hsize : message.data.size = 96) (hgas : 150000 ≤ g) :
-    Spec fork (At CODE message 143 [] .empty g S ss returnData)
-      (Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
-        (logData message.caller message.data) S ss) := by
-  have hscale := storageGasScale_of_lt hglam
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g0 ss0 hg0 hl0 => ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
-    fun S1 hw1 hacc1 g1 ss1 hg1 hl1 => ?_
-  have hw1 := WritesStorage.trans (WritesStorage.recordStorageRead _ _ _ _) hw1
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g2 ss2 hg2 hl2 => ?_
-  have h3 : storageOf S1 message.currentTarget 3#256 = storageOf S message.currentTarget 3#256 := by
-    rw [hw1.1]
-    simp only [setSlot]
-    rfl
-  rw [h3]
-  have hw2 := WritesStorage.trans hw1
-    (WritesStorage.recordStorageRead _ S1 message.currentTarget (U256.toBeBytes 3#256))
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  generalize ht : storageOf S message.currentTarget 3#256 = t at hw2 ⊢
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc1 (by omega)
-    fun S3 hw3 hacc3 g3 ss3 hg3 hl3 => ?_
-  have hw3 := WritesStorage.trans hw2 hw3
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc3 (by omega)
-    fun S4 hw4 hacc4 g4 ss4 hg4 hl4 => ?_
-  have hw4 := WritesStorage.trans hw3 hw4
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc4 (by omega)
-    fun S5 hw5 hacc5 g5 ss5 hg5 hl5 => ?_
-  have hw5 := WritesStorage.trans hw4 hw5
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc5 (by omega)
-    fun S6 hw6 hacc6 g6 ss6 hg6 hl6 => ?_
-  have hw6 := WritesStorage.trans hw5 hw6
-  have hg6' : 35000 ≤ g6 := by omega
-  clear hg0 hg1 hg2 hg3 hg4 hg5 hg6 hgas
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine Triple.seq (mstore (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq])
-    (by simp only [ByteArray.size_empty, extendMemory_word]; omega)) ?_
-  rw [ByteArray.size_empty, extendMemory_word]
-  dsimp only
-  rw [show BitVec.toNat (0 : U256) = 0 from rfl,
-    memoryWrite_whole (by rw [size_memoryExtend, size_wordBytes]; rfl)]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have hext : extendMemory 32 [(20#256, 96#256)] = ⟨9, 96⟩ := by decide
-  have hwc : wordCount (96#256).toNat = 3 := by decide
-  refine Triple.seq (calldatacopy (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by rw [size_wordBytes, hext, hwc]; dsimp only; omega)) ?_
-  rw [size_wordBytes, hext]
-  dsimp only
-  simp only [BitVec.reduceToNat, show BitVec.toNat (0 : U256) = 0 from rfl,
-    show wordCount 96 = 3 by decide]
-  have hM := log_memory (c := message.caller.toU256) hsize (e := 96) (by omega)
-  have hMs : (memoryWrite (memoryExtend (wordBytes (bitwiseShl 96#256 message.caller.toU256)) 96)
-      20 ⟨(bufferRead message.data 0 96).toArray⟩).size = 128 := by
-    have hb : (⟨(bufferRead message.data 0 96).toArray⟩ : ByteArray).size = 96 := by
-      show (bufferRead _ _ _).toArray.size = 96
-      rw [List.size_toArray, bufferRead_length]
-    rw [size_memoryWrite (by rw [hb, size_memoryExtend, size_wordBytes]; omega), size_memoryExtend,
-      size_wordBytes]
-  generalize memoryWrite (memoryExtend (wordBytes (bitwiseShl 96#256 message.caller.toU256)) 96)
-    20 ⟨(bufferRead message.data 0 96).toArray⟩ = M at hM hMs ⊢
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have hle : extendMemory M.size [((0 : U256), 116#256)] = ⟨0, 0⟩ :=
-    extendMemory_of_le (by rw [hMs]; decide)
-  refine Triple.seq (log (n := 0) (words := []) (rest := [t]) rfl
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq]) (by decide)
-    hstatic (by rw [hle]; simp only [logCost, OPCODE_LOG_BASE, OPCODE_LOG_DATA_PER_BYTE,
-      OPCODE_LOG_TOPIC, BitVec.reduceToNat]; omega)) ?_
-  rw [hle]
-  dsimp only
-  rw [memoryExtend_zero]
-  have hM' : memoryReadBytes M 0 116 = logData message.caller message.data := hM
-  simp only [BitVec.reduceToNat, show BitVec.toNat (0 : U256) = 0 from rfl, List.map_nil, hM',
-    logCost, OPCODE_LOG_BASE, OPCODE_LOG_DATA_PER_BYTE, OPCODE_LOG_TOPIC, Nat.add_zero,
-    Fin.val_zero, Nat.mul_zero, Nat.reduceMul, Nat.reduceAdd, Nat.sub_sub]
-  clear hM hM' hle hMs hext hwc
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine Triple.seq (binary (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (ofByte_of_decode rfl (Fork.frontier_le _))
-    (instruction_of_stackOnlyStep rfl) (by simp only [OPCODE_ADD, VERY_LOW]; omega)) ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc6 (by omega)
-    fun S7 hw7 _ g7 ss7 _ hl7 => ?_
-  have hw7 := WritesStorage.trans hw6 hw7
-  refine Spec.consequence (stop (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq])) (fun _ h => h) ?_
-  rintro evm ⟨-, herr, hout, -, hst, hss⟩
-  refine ⟨by simpa using herr, hout, ?_, ?_⟩
-  · rw [hst]
-    refine ⟨fun slot => ?_, hw7.2.1, hw7.2.2.1, hw7.2.2.2⟩
-    have e1 := funext hw1.1
-    have e3 := funext hw3.1
-    have e4 := funext hw4.1
-    have e5 := funext hw5.1
-    have e6 := funext hw6.1
-    rw [hw7.1, e6, e5, e4, e3]
-    change setSlot (setSlot (setSlot (setSlot (setSlot (storageOf S1 message.currentTarget) _ _)
-      _ _) _ _) _ _) _ _ slot = _
-    rw [e1, ← ht]
-    simp only [afterAdd, requestWords, SLOTS_PER_REQUEST, List.zipIdx_cons, List.zipIdx_nil,
-      List.foldl_cons, List.foldl_nil]
-    refine congrFun (setSlot_congr (setSlot_congr (setSlot_congr (setSlot_congr (setSlot_congr
-      (setSlot_congr rfl rfl ?_) ?_ rfl) ?_ rfl) ?_ rfl) ?_ rfl) rfl ?_) slot <;>
-      simp only [add, mul] <;> bv_omega
-  · rw [hss, hl7]
-    simp only [hl6, hl5, hl4, hl3, hl2, hl1, hl0]
-
 /-- A call from another address with 96 bytes of input adds a request, as EIP-7251 describes.
 
 It holds from Shapella up to BPO5, on a frame that may change the state. -/
@@ -420,11 +298,11 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamste
       -- Otherwise it reverts with no output, and its state reads as the state it starts from.
       else Answer state none evm := by
   refine CONSOLIDATION_REQUEST.spec_pay feePathCode_CODE rfl hfork hcaller hsize hfits (by omega)
-    fun _ g ss hg hlogs => Spec.consequence (add_tail
+    fun _ g ss hg hlogs => Spec.consequence (addPathCode_CODE.spec_add
       (S := state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) hfork hglam
       hstatic hacc hsize (by omega)) (fun _ h => h) ?_
-  rintro evm ⟨herr, hout, hw, hlog⟩
-  exact ⟨herr, hout, hw, by rw [hlog, hlogs]⟩
+  rintro evm ⟨⟨herr, hout, hw, hlog⟩, -⟩
+  exact ⟨herr, hout, hw, by rw [hlog, hlogs]; rfl⟩
 
 /-! ## The system call -/
 
