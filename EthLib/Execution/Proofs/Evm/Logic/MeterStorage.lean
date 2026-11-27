@@ -58,7 +58,7 @@ theorem sstoreStep_bridge : Bridge (fork := fork) 1 sstoreStep sstoreStep := by
     simp only [message_withStateGas]
     refine (Sim.ite (fun _ => Sim.error (R := Lands start (start.pc + 1)))
       fun _ => ?_).lifts
-    refine Sim.refl.bind ?_
+    refine Sim.ofState.bind ?_
     rintro _ _ rfl
     exact Sim.pure (Tracks.advance (by keep) 1)
 
@@ -85,9 +85,9 @@ theorem selfdestructStep_bridge :
     simp only [message_withStateGas, state_withStateGas]
     refine (Sim.ite (fun _ => Sim.error (R := Lands start (start.pc + 1)))
       fun _ => ?_).lifts
-    refine Sim.refl.bind ?_
+    refine Sim.ofState.bind ?_
     rintro _ _ rfl
     exact Sim.pure ⟨⟨meter, below, rfl⟩, hc, hf, fun h => by simp at h,
-      fun h => he ▸ h⟩
+      fun h => he ▸ h, fun h => by simp at h⟩
 
 end EthLib.Execution.Evm.Logic
