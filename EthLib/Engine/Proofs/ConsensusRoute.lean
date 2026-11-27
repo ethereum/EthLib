@@ -120,56 +120,6 @@ private theorem toBlock_extraData {f : Fork} {p : ExecutionPayload f}
   cases built
   rfl
 
-/-- A payload of the beacon chain has a block exactly when each of its steps succeeds.
-
-The structure of the payload gives a payload at the active fork, which the version must take.
-
-The root, the requests, the access list and the slot decode at that fork.
-
-The block of that payload, with them, must then decode. -/
-private theorem payloadBlock_eq_some_iff {config : ChainConfig}
-    {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
-    {requests : Since .pectra fork (List ByteArray)} {f : Fork}
-    {b : Execution.Blocks.Block f Execution.Transactions.Transaction} :
-    payloadBlock config p root requests = some ⟨f, b⟩ ↔
-      ∃ any, anyPayloadOf p = some any ∧
-        config.activeFork p.blockNumber.toNat p.timestamp.toNat = some f ∧
-        acceptsFork (newPayloadVersion fork) f = true ∧
-        ∃ (payload : ExecutionPayload f) (beacon : Since .dencun f Hash32)
-          (lists : Since .pectra f (List ByteArray)) (accessList : Since .glamsterdam f ByteArray)
-          (slot : Since .glamsterdam f UInt64),
-          any.atFork f = .ok payload ∧
-          Json.since "parentBeaconBlockRoot" (sinceValue root) = .ok beacon ∧
-          Json.since "executionRequests" (sinceValue requests) = .ok lists ∧
-          Json.since "blockAccessList"
-            ((sinceValue p.blockAccessList).map fun list => ⟨list.data⟩) = .ok accessList ∧
-          Json.since "slotNumber" (sinceValue p.slotNumber) = .ok slot ∧
-          payload.toBlock beacon lists accessList slot = .ok b := by
-  unfold payloadBlock
-  constructor
-  · intro h
-    cases hAny : anyPayloadOf p with
-    | none => simp [hAny] at h
-    | some any =>
-    cases hActive : config.activeFork p.blockNumber.toNat p.timestamp.toNat with
-    | none => simp [hAny, hActive] at h
-    | some active =>
-    simp only [hAny, hActive, Option.bind_eq_bind, Option.bind_some] at h
-    split at h
-    · rename_i hAccepted
-      simp only [Option.bind_eq_some_iff] at h
-      obtain ⟨payload, hPayload, beacon, hBeacon, lists, hLists, accessList, hAccess, slot, hSlot,
-        block, hBlock, result⟩ := h
-      cases result
-      exact ⟨any, rfl, rfl, hAccepted, payload, beacon, lists, accessList, slot,
-        toOption_eq_some hPayload, toOption_eq_some hBeacon, toOption_eq_some hLists,
-        toOption_eq_some hAccess, toOption_eq_some hSlot, toOption_eq_some hBlock⟩
-    · cases h
-  · rintro ⟨any, hAny, hActive, hAccepted, payload, beacon, lists, accessList, slot, hPayload,
-      hBeacon, hLists, hAccess, hSlot, hBlock⟩
-    simp [hAny, hActive, hAccepted, hPayload, hBeacon, hLists, hAccess, hSlot, hBlock,
-      Except.toOption]
-
 /-! ## The checks of the method on decoded parameters -/
 
 /-- A payload that passes the checks has its block at the active fork of its decoded structure.
@@ -225,19 +175,29 @@ private theorem sinceValue_eq_none {α : Type} {f : Fork} {x : Since f fork α} 
   simp only [sinceValue, dite_eq_right_iff, reduceCtorEq, imp_false]
   exact Nat.not_le.mpr h
 
-/-- From Bellatrix to Gloas, the written JSON of a request is valid exactly when the model accepts.
+/-- From Bellatrix to Gloas, the checks of the method read the written JSON of a request.
 
-The last block of the chain must pass the terminal block check. -/
-private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
-    {totalDifficulty : Nat} {chain : BlockChain} {r : Consensus.NewPayloadRequest preset fork}
+A block that they give is the block of the payload, with the request lists and hashes of the model.
+
+A request that the model accepts is valid on a chain whose last block passes the terminal check. -/
+private theorem json_route {r : Consensus.NewPayloadRequest preset fork}
     {params : Lean.Json} {inclusionList : Since .hegota fork (List ByteArray)}
     (hFork : .bellatrix ≤ fork ∧ fork < .hegota)
-    (hJson : newPayloadRequestJson r inclusionList = some params)
-    (hTerminal : ∀ parent, chain.recent.getLast? = some parent →
-      passesTerminalCheck transition totalDifficulty parent = true) :
-    (∃ answer, newPayloadOnChain transition totalDifficulty chain (newPayloadVersion fork) params =
-        .ok answer ∧ answer.1.status = .valid) ↔
-      (executionEngine chain).verifyAndNotifyNewPayload r = .ok true := by
+    (hJson : newPayloadRequestJson r inclusionList = some params) :
+    (∀ {config : ChainConfig} {checked : CheckedBlock (newPayloadVersion fork)},
+      checkNewPayload config (newPayloadVersion fork) params = .ok (.ok checked) →
+      ∃ requests, r.requestsList = .ok requests ∧
+        payloadBlock config r.executionPayload r.parentBeaconBlockRoot requests =
+          some ⟨checked.fork, checked.block⟩ ∧
+        ∀ deneb : .dencun ≤ fork,
+          checked.block.blobVersionedHashes =
+            (r.versionedHashes deneb).data.toList) ∧
+    (∀ {transition : TransitionConfiguration} {totalDifficulty : Nat} {chain : BlockChain},
+      (∀ parent, chain.recent.getLast? = some parent →
+        passesTerminalCheck transition totalDifficulty parent = true) →
+      (executionEngine chain).verifyAndNotifyNewPayload r = .ok true →
+      ∃ answer, newPayloadOnChain transition totalDifficulty chain (newPayloadVersion fork)
+        params = .ok answer ∧ answer.1.status = .valid) := by
   obtain ⟨hv, layout, dencunShape, five, four, three⟩ := version_facts hFork
   unfold newPayloadRequestJson at hJson
   have hne : newPayloadVersion fork ≠ 0 := by omega
@@ -312,11 +272,8 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
     exact ⟨any', hDec, atFork_eq_of_atFork hat hPay,
       hatCommon.1.symm.trans (hPayCommon.1.trans hCommon.1),
       hatCommon.2.1.symm.trans (hPayCommon.2.1.trans hCommon.2.1)⟩
-  constructor
-  · -- A valid answer comes from a block that passed the checks and the state transition.
-    rintro ⟨⟨status, reason, next⟩, hRun, hValid⟩
-    obtain ⟨block, post, rfl⟩ := (valid_iff_of_newPayloadOnChain hRun).mp hValid
-    obtain ⟨-, checked, hC, hST, -⟩ := of_newPayloadOnChain_some hRun
+  refine ⟨fun {config checked} hC => ?_, fun {transition totalDifficulty chain} hTerminal => ?_⟩
+  · -- The checks read back the structure written, so their block is the block of the payload.
     have hC' := hC
     unfold checkNewPayload at hC'
     obtain ⟨x, hx, -⟩ := bind_ok_iff.mp hC'
@@ -325,11 +282,10 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
     obtain ⟨hActive, pl, beacon, lists, acc, slot, hPl, hB, hL, hA, hS, hBlock, hH⟩ :=
       of_checkNewPayload_ok hDec hC
     rw [hNum, hTime] at hActive
-    rw [executionEngine_accepts_iff]
-    refine ⟨requests, hReq, checked.fork, checked.block, payloadBlock_eq_some_iff.mpr
+    refine ⟨requests, hReq, payloadBlock_eq_some_iff.mpr
       ⟨any, hAny, hActive, checked.accepted, pl, beacon, lists, acc, slot,
         (hAt _).symm.trans hPl, by rw [← hRoot]; exact hB, by rw [← hRequests]; exact hL,
-        by rw [← hA1]; exact hA, by rw [← hA2]; exact hS, hBlock⟩, fun deneb => ?_, post, hST⟩
+        by rw [← hA1]; exact hA, by rw [← hA2]; exact hS, hBlock⟩, fun deneb => ?_⟩
     have e : (if 3 ≤ newPayloadVersion fork then
         some (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
         else none) =
@@ -406,8 +362,12 @@ theorem newPayloadOnChain_valid_iff_accepts {transition : TransitionConfiguratio
           .ok answer ∧ answer.1.status = .valid) ↔
       (executionEngine chain).verifyAndNotifyNewPayload r = .ok true := by
   constructor
-  · rintro ⟨params, answer, hJson, hRun, hValid⟩
-    exact (valid_iff_accepts_of_json hFork hJson hTerminal).mp ⟨answer, hRun, hValid⟩
+  · -- A valid answer comes from a block that passed the checks and the state transition.
+    rintro ⟨params, ⟨status, reason, next⟩, hJson, hRun, hValid⟩
+    obtain ⟨block, post, rfl⟩ := (valid_iff_of_newPayloadOnChain hRun).mp hValid
+    obtain ⟨-, checked, hC, hST, -⟩ := of_newPayloadOnChain_some hRun
+    obtain ⟨requests, hReq, hPB, hHashes⟩ := (json_route hFork hJson).1 hC
+    exact executionEngine_accepts_iff.mpr ⟨requests, hReq, _, _, hPB, hHashes, post, hST⟩
   · intro hAccept
     -- An accepted request has request lists and a structure, which the JSON writes.
     obtain ⟨requests, hReq, f, b, hPB, -⟩ := executionEngine_accepts_iff.mp hAccept
@@ -432,9 +392,43 @@ theorem newPayloadOnChain_valid_iff_accepts {transition : TransitionConfiguratio
       simp only [hne, ne_eq, not_false_eq_true, guard, ite_true, pure_bind, hAny, hPay, hReq,
         Except.toOption, Option.bind_eq_bind, Option.bind_some, noList]
       rfl
-    obtain ⟨answer, hRun, hValid⟩ :=
-      (valid_iff_accepts_of_json hFork hJson hTerminal).mpr hAccept
+    obtain ⟨answer, hRun, hValid⟩ := (json_route hFork hJson).2 hTerminal hAccept
     exact ⟨_, answer, hJson, hRun, hValid⟩
+
+/-! ## The block that the checks give -/
+
+/-- From Bellatrix to Gloas, the checks read the JSON of a request as the block of its payload.
+
+They read the request lists of the request, and the versioned hashes of its blob transactions. -/
+theorem payloadBlock_of_checkNewPayload {config : ChainConfig}
+    {r : Consensus.NewPayloadRequest preset fork} {params : Lean.Json}
+    {inclusionList : Since .hegota fork (List ByteArray)}
+    {checked : CheckedBlock (newPayloadVersion fork)}
+    (hFork : .bellatrix ≤ fork ∧ fork < .hegota)
+    (hJson : newPayloadRequestJson r inclusionList = some params)
+    (hCheck : checkNewPayload config (newPayloadVersion fork) params = .ok (.ok checked)) :
+    ∃ requests, r.requestsList = .ok requests ∧
+      payloadBlock config r.executionPayload r.parentBeaconBlockRoot requests =
+        some ⟨checked.fork, checked.block⟩ ∧
+      ∀ deneb : .dencun ≤ fork,
+        checked.block.blobVersionedHashes =
+          (r.versionedHashes deneb).data.toList :=
+  (json_route hFork hJson).1 hCheck
+
+/-- From Bellatrix to Gloas, the block that the checks read from the JSON of a request extends it.
+
+Its parent hash is that of the payload, and its header hashes to the block hash of the payload. -/
+theorem header_of_checkNewPayload {config : ChainConfig}
+    {r : Consensus.NewPayloadRequest preset fork} {params : Lean.Json}
+    {inclusionList : Since .hegota fork (List ByteArray)}
+    {checked : CheckedBlock (newPayloadVersion fork)}
+    (hFork : .bellatrix ≤ fork ∧ fork < .hegota)
+    (hJson : newPayloadRequestJson r inclusionList = some params)
+    (hCheck : checkNewPayload config (newPayloadVersion fork) params = .ok (.ok checked)) :
+    checked.block.header.parentHash = r.executionPayload.parentHash ∧
+      checked.block.header.hash = .ok r.executionPayload.blockHash :=
+  let ⟨_, _, hBlock, _⟩ := payloadBlock_of_checkNewPayload hFork hJson hCheck
+  header_of_payloadBlock hBlock
 
 /-! ## From Heze
 

@@ -643,7 +643,8 @@ theorem applyDeposit_known {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32
     balanceSum after = balanceSum state + amount.toNat ∧ after.validators = state.validators := by
   have notElectra : ¬Fork.pectra ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
   simp only [applyDeposit, notElectra, ↓reduceDIte] at computed
-  exact applyPendingDeposit_known known computed
+  exact applyPendingDeposit_known (deposit := ⟨pubkey, withdrawalCredentials, amount, signature,
+    GENESIS_SLOT⟩) known computed
 
 /-- A set or an append adds one entry exactly when the index is the size of the list. -/
 theorem setOrAppendList_size {switch : Base.Fork} {α : Type} {limit : Nat}
