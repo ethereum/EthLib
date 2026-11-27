@@ -613,7 +613,7 @@ def names(expected: str, message: str) -> bool:
 
 
 RecentBlocks = list[tuple[str, bytes, list[bytes]]]
-BlockTransition = Callable[[dict, bytes, RecentBlocks, str, bytes, bool], bytes]
+BlockTransition = Callable[[dict, bytes, RecentBlocks, str, bytes, bool, list[dict] | None], bytes]
 
 
 def advance_block(
@@ -623,6 +623,7 @@ def advance_block(
     fork: str,
     raw: bytes,
     seal: bool,
+    _receipts: list[dict] | None = None,
 ) -> bytes:
     """Run a block and encode the accounts after it for the next block."""
     _, accounts = blocks.state_transition(config, state, recent, fork, raw, seal)
@@ -654,13 +655,18 @@ def run_blockchain(root: Path, case: Case, *, transition: BlockTransition = adva
             item = rlp.decode(raw)
             header, ommers = item[0], item[2]
             number, parent = _number(header), chains.get(bytes(header[0]))
-        except Exception:
-            # A block that is not a list of a header, transactions and ommers is invalid.
+        except (IndexError, TypeError, ValueError):
             assert expected is not None, entry
+            # No header identifies the fork. Decode the envelope at the current head's fork.
+            state, recent_blocks, _ = chains[head]
+            with pytest.raises(BlockError) as error:
+                blocks.state_transition(
+                    config, state, recent_blocks, recent_blocks[-1][0], raw, sealed(test)
+                )
+            assert names(expected, str(error.value)), (expected, str(error.value))
             continue
         if parent is None:
-            # The parent of the block is missing or invalid.
-            assert expected is not None, entry
+            assert expected is not None and UNKNOWN_PARENT.intersection(expected.split("|")), entry
             continue
         state, recent_blocks, difficulty = parent
         fork = fork_at(network, number)
@@ -681,7 +687,9 @@ def run_blockchain(root: Path, case: Case, *, transition: BlockTransition = adva
                 blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
             assert names(expected, str(error.value)), (expected, str(error.value))
             continue
-        state = transition(config, state, recent_blocks, fork, raw, sealed(test))
+        state = transition(
+            config, state, recent_blocks, fork, raw, sealed(test), entry.get("receipts")
+        )
         block_hash = keccak256(rlp.encode(header))
         recent_blocks = recent_blocks + [
             (fork, rlp.encode(header), [rlp.encode(o) for o in ommers])

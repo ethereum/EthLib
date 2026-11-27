@@ -17,7 +17,6 @@ open EthLib.Execution.Evm
 
 private inductive GasRule where
   | fixedPrice (gas : Nat)
-  | fixedPriceOther
   | memory (grew : Bool)
   | copy (nonempty : Bool)
   | hash (nonempty : Bool)
@@ -61,7 +60,6 @@ private inductive GasRule where
 
 private def GasRule.label : GasRule → String
   | .fixedPrice gas => s!"opcode.fixed-price.{gas}"
-  | .fixedPriceOther => "opcode.fixed-price.other"
   | .memory false => "opcode.memory.within-size"
   | .memory true => "opcode.memory.expand"
   | .copy false => "opcode.copy.zero-length"
@@ -118,12 +116,18 @@ private def GasRule.label : GasRule → String
 private def whenRule (condition : Bool) (rule : GasRule) : Array GasRule :=
   if condition then #[rule] else #[]
 
-private def fixedTiers : Array Nat :=
-  #[GasCosts.ZERO, GasCosts.BASE, GasCosts.VERY_LOW, GasCosts.LOW, GasCosts.MID, GasCosts.HIGH]
+private def fixedPrices (fork : Fork) : Array Nat := Id.run do
+  let mut prices := #[GasCosts.ZERO, GasCosts.OPCODE_JUMPDEST, GasCosts.BASE, GasCosts.VERY_LOW,
+    GasCosts.LOW, GasCosts.MID, GasCosts.HIGH, GasCosts.OPCODE_BLOCKHASH]
+  if fork < .berlin then
+    prices := prices ++ #[balanceCost fork false, externalBaseCost fork false]
+    if fork ≥ Op.extcodehash.since then prices := prices.push (extcodehashCost fork false)
+  if fork ≥ Op.tload.since then prices := prices.push GasCosts.OPCODE_TLOAD
+  return prices.toList.eraseDups.toArray
 
 /-- The gas rules this observer can distinguish at `fork`. -/
 public def gasRuleInventory (fork : Fork) : Array String := Id.run do
-  let mut rules : Array GasRule := (fixedTiers.map .fixedPrice) ++ #[.fixedPriceOther,
+  let mut rules : Array GasRule := ((fixedPrices fork).map .fixedPrice) ++ #[
     .memory false, .memory true, .copy false, .copy true, .hash false, .hash true,
     .exponent false, .exponent true, .logTopics, .logData false, .logData true, .sstoreClearRefund,
     .callValue, .callStipend, .callGrant false, .callSkipped, .createGrant, .createCollision,
@@ -213,22 +217,28 @@ private def callRules (evm : Evm fork Meter) (kind : CallKind) (child : Option (
     Array GasRule := Id.run do
   let .ok (call, evm) := popCallOperands kind evm | return #[]
   let (cold, evm) := accessAddress evm call.address
+  let .ok (callee, evm) := accessDelegation evm call.address 0 | return #[]
   let mut rules := whenRule (fork ≥ .berlin) (.callAccess cold)
-  if fork ≥ .pectra then
-    if let .ok (callee, _) := accessDelegation evm call.address 0 then
-      if callee.delegated then
-        rules := rules.push (.callDelegateAccess (callee.accessCost == accountAccessCost fork true))
+  if callee.delegated then
+    rules := rules.push (.callDelegateAccess (callee.accessCost == accountAccessCost fork true))
   rules := rules ++ whenRule (callValueCost fork call.value > 0) .callValue
   rules := rules ++ whenRule (kind == .call &&
     callNewAccountCost fork evm.state call.address call.value > 0) .callNewAccount
-  rules := rules ++ whenRule (callNewAccountStateGas fork kind evm.state call > 0)
-    .callNewAccountState
+  let newAccount := callNewAccountStateGas fork kind evm.state call
+  rules := rules ++ whenRule (newAccount > 0) .callNewAccountState
   -- The call grant includes the stipend, even when a skipped call gives the grant back.
   let stipend := if call.value = 0 then 0 else GasCosts.CALL_STIPEND
   rules := rules ++ whenRule (stipend > 0) .callStipend
+  let requested := call.gas.toNat + stipend
   if let some message := child then
-    return rules.push (.callGrant (message.gas < call.gas.toNat + stipend))
-  return rules.push .callSkipped
+    return rules.push (.callGrant (message.gas < requested))
+  -- A skipped call has already returned its grant. Recover it with the same charge it paid.
+  rules := rules.push .callSkipped
+  let growth := extendMemory evm.memory.size
+    [(call.inputStart, call.inputSize), (call.outputStart, call.outputSize)]
+  let extra := callExtraGas fork kind evm.state call cold callee
+  let .ok (grant, _) := payCall kind call growth.cost extra newAccount evm | return rules
+  return rules.push (.callGrant (grant < requested))
 
 private def creationRules (evm after : Evm fork Meter) (create2 : Bool)
     (child : Option (Message fork)) : Array GasRule := Id.run do
@@ -298,8 +308,7 @@ public def stepGasRules (evm : Evm fork Meter) (step : StepResult fork Meter) :
   let op := if h : evm.pc < evm.code.size then Op.ofByte fork evm.code[evm.pc] else some .stop
   let some op := op | return #[]
   let price := GasMeter.gasHeld evm.gas - GasMeter.gasHeld after.gas
-  let fixed := whenRule (usesFixedPrice fork op)
-    (if fixedTiers.contains price then .fixedPrice price else .fixedPriceOther)
+  let fixed := whenRule (usesFixedPrice fork op) (.fixedPrice price)
   let memory := whenRule (usesMemory op) (.memory (after.memory.size > evm.memory.size))
   return (fixed ++ memory ++ variableRules op evm after child).map GasRule.label
 

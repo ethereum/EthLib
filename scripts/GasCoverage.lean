@@ -112,15 +112,15 @@ def observeSystemCall {fork : Fork} (env : BlockEnvironment fork) (target : Addr
   let body ← (body.join output.state).mapError .state
   return (body, counts)
 
-structure BodyReplay (fork : Fork) where
+structure BodyReplay where
   body : BodyState
   counts : Counts
   blockGas : BlockGas := .zero
   cumulativeGasUsed : Nat := 0
-  receiptsRev : List (UInt8 × Receipt fork) := []
+  receiptsRev : List ByteArray := []
 
-def observeBodyTransaction {fork : Fork} (env : BlockEnvironment fork) (before : BodyReplay fork)
-    (entry : Transaction × Nat) : Except BlockError (BodyReplay fork) := do
+def observeBodyTransaction {fork : Fork} (env : BlockEnvironment fork) (before : BodyReplay)
+    (entry : Transaction × Nat) : Except BlockError BodyReplay := do
   let (tx, index) := entry
   let included ← (checkInclusion env.chainId env before.blockGas (.ofBlock before.body.block)
     tx).mapError (.invalidTransaction index)
@@ -131,17 +131,18 @@ def observeBodyTransaction {fork : Fork} (env : BlockEnvironment fork) (before :
   let outcome : Outcome fork ← if h : .byzantium ≤ fork then pure (.status h output.error.isNone)
     else .postState (Nat.lt_of_not_le h) <$>
       (stateRoot keccak256 body.block.applyChanges).mapError .trie
-  let receipt := makeReceipt outcome cumulativeGasUsed output.logs.toList
+  let receipt ← (encodeReceipt tx.type (makeReceipt outcome cumulativeGasUsed output.logs.toList))
+    |>.mapError (.trie ∘ .rlp)
   return {
     body
     counts
     blockGas := before.blockGas.add output.blockGas
     cumulativeGasUsed
-    receiptsRev := (tx.type, receipt) :: before.receiptsRev }
+    receiptsRev := receipt :: before.receiptsRev }
 
 /-- Observe an accepted block and check the state and receipt roots of the replay. -/
 def observeBlock {fork : Fork} (chain : BlockChain) (block : Block fork Transaction) :
-    Except BlockError Counts := do
+    Except BlockError (Counts × List ByteArray) := do
   let hashes ← recentHashes chain.recent
   let env := blockEnvironment chain.config hashes block.header
   let start ← daoTransfer chain.config fork block.header.number ⟨chain.state, ∅, ∅, ∅, ∅⟩
@@ -166,10 +167,11 @@ def observeBlock {fork : Fork} (chain : BlockChain) (block : Block fork Transact
     payRewards fork tx block.header.coinbase block.header.number ommers
   let root ← (stateRoot keccak256 state.applyChanges).mapError .trie
   unless root = block.header.stateRoot do throw (.wrongStateRoot block.header.stateRoot root)
-  let receipts ← (receiptsRoot replay.receiptsRev.reverse).mapError .trie
-  unless receipts = block.header.receiptRoot do
-    throw (.wrongReceiptRoot block.header.receiptRoot receipts)
-  return counts
+  let receipts := replay.receiptsRev.reverse
+  let receiptRoot ← (indexedRoot receipts).mapError .trie
+  unless receiptRoot = block.header.receiptRoot do
+    throw (.wrongReceiptRoot block.header.receiptRoot receiptRoot)
+  return (counts, receipts)
 
 def countsJson (counts : Counts) : Json :=
   Json.mkObj (counts.toList.map fun (rule, n) => (rule, toJson n))
@@ -228,17 +230,19 @@ def blockRequest (request : Json) (forkName : String) : Result Json := do
   let ⟨_, block⟩ ← Blocks.Exports.blockOf config forkName (← fromHexField request "block")
   let checkSeal : Bool ← field request "checkSeal"
   let post ← toResult none (stateTransition chain block checkSeal)
-  let counts ← toResult "observed block" (observeBlock chain block)
+  let (counts, receipts) ← toResult "observed block" (observeBlock chain block)
   let accounts ← toResult none (Blocks.Exports.accountsItem post)
   let state ← toResult "accounts" (encode accounts)
-  return Json.mkObj [("gasRules", countsJson counts), ("state", encodeHex state)]
+  return Json.mkObj [("gasRules", countsJson counts), ("state", encodeHex state),
+    ("receipts", Json.arr (receipts.toArray.map encodeHex))]
 
 def request (value : Json) : Result Json := do
   let name : String ← field value "fork"
   match ← field value "kind" with
   | "inventory" =>
     let fork ← forkUpTo .glamsterdam name.toUTF8
-    return Json.mkObj [("gasRules", toJson (gasRuleInventory fork ++ transactionGasInventory fork))]
+    return Json.mkObj [("forkIndex", toJson fork.ctorIdx),
+      ("gasRules", toJson (gasRuleInventory fork ++ transactionGasInventory fork))]
   | "state" => stateRequest value name
   | "block" => blockRequest value name
   | _ => throw (0, "unknown coverage request")

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 from collections import Counter
 from collections.abc import Callable, Generator, Iterable, Mapping, Set
@@ -53,6 +54,10 @@ FORMATS = {
 }
 RUNNABLE = {"state_test", "blockchain_test"}
 EXECUTABLE = archives.REPO / ".lake/build/bin/gas-coverage"
+EXECUTION_NETWORK_RANK = {
+    name: rank for rank, name in enumerate(catalogue.EXECUTION_FORKS + catalogue.BOGOTA_NETWORKS)
+}
+LEGACY_NETWORK_RANK = {name: rank for rank, name in enumerate(catalogue.LEGACY_FORKS)}
 Request = Callable[[dict], dict]
 Outcome = tuple[str, str, str, str, str]
 
@@ -69,14 +74,28 @@ class Bridge:
     stdout: IO[str]
 
     def request(self, payload: dict) -> dict:
-        self.stdin.write(json.dumps(payload, separators=(",", ":")) + "\n")
-        self.stdin.flush()
+        request = f"{payload['kind']} request for {payload['fork']}"
+        try:
+            self.stdin.write(json.dumps(payload, separators=(",", ":")) + "\n")
+            self.stdin.flush()
+        except BrokenPipeError as error:
+            raise RuntimeError(f"gas-coverage closed its input during the {request}") from error
         line = self.stdout.readline()
         if not line:
-            raise RuntimeError("gas-coverage stopped before replying")
-        result = json.loads(line)
+            raise RuntimeError(f"gas-coverage stopped before replying to the {request}")
+        try:
+            result = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f"gas-coverage returned invalid JSON for the {request}") from error
+        if not isinstance(result, dict):
+            raise RuntimeError(f"gas-coverage returned a non-object reply to the {request}")
         if "error" in result:
-            raise FixtureError(result["error"]["message"])
+            rejection = result["error"]
+            if not isinstance(rejection, dict) or not isinstance(
+                message := rejection.get("message"), str
+            ):
+                raise RuntimeError(f"gas-coverage returned an invalid error for the {request}")
+            raise FixtureError(message)
         return result
 
 
@@ -229,7 +248,7 @@ def replay_state(root: Path, case: Case, request: Request) -> dict[str, Counts]:
             expected,
             str(error),
         )
-        return {}
+        return {fork: Counts()}
     if expected is not None:
         raise AssertionError(f"transaction accepted despite expected exception {expected}")
     assert bytes.fromhex(response["stateRoot"]) == bytes.fromhex(post["hash"][2:]), (
@@ -242,14 +261,29 @@ def replay_state(root: Path, case: Case, request: Request) -> dict[str, Counts]:
         assert bytes.fromhex(response["receipt"]) == bytes.fromhex(pinned[2:]), (
             "receipt bytes differ"
         )
-    return {fork: Counts(Counter(response["gasRules"]), state_transactions=1)}
+    return {fork: Counts(gas_rules=gas_events(response), state_transactions=1)}
+
+
+def gas_events(response: dict) -> Counter[str]:
+    counts = response.get("gasRules")
+    if not isinstance(counts, dict) or any(
+        type(count) is not int or count <= 0 for count in counts.values()
+    ):
+        raise RuntimeError("gas-coverage returned invalid gas event counts")
+    return Counter(counts)
 
 
 def replay_blockchain(root: Path, case: Case, request: Request) -> dict[str, Counts]:
     by_fork: dict[str, Counts] = {}
 
     def transition(
-        config: dict, state: bytes, recent: legacy.RecentBlocks, fork: str, raw: bytes, seal: bool
+        config: dict,
+        state: bytes,
+        recent: legacy.RecentBlocks,
+        fork: str,
+        raw: bytes,
+        seal: bool,
+        receipts: list[dict] | None = None,
     ) -> bytes:
         if isinstance(address := config.get("depositContractAddress"), bytes):
             config = {**config, "depositContractAddress": "0x" + address.hex()}
@@ -267,16 +301,29 @@ def replay_blockchain(root: Path, case: Case, request: Request) -> dict[str, Cou
                 "checkSeal": seal,
             }
         )
+        if receipts is not None:
+            observed = response["receipts"]
+            assert len(observed) == len(receipts), "block receipt count differs"
+            for index, (receipt, encoded) in enumerate(zip(receipts, observed, strict=True)):
+                if "rlp" in receipt:
+                    assert bytes.fromhex(encoded) == bytes.fromhex(receipt["rlp"][2:]), (
+                        f"block receipt {index} bytes differ"
+                    )
         raw_state = bytes.fromhex(response["state"])
         counts = by_fork.setdefault(fork, Counts())
-        counts.gas_rules.update(response["gasRules"])
+        counts.gas_rules.update(gas_events(response))
         counts.blocks += 1
         return raw_state
 
     if case.group == LEGACY_FORMAT:
         legacy.run_blockchain(root, case, transition=transition)
+        forks = catalogue.LEGACY_FORKS[case.fork]
+        if not by_fork and len(forks) == 1:
+            return {forks[0]: Counts()}
     else:
         runners.check_blockchain_test(root, case, transition)
+        if not by_fork and (fork := runners.static_fork(case.fork)) is not None:
+            return {fork: Counts()}
     return by_fork
 
 
@@ -356,8 +403,19 @@ def table_cell(value: str) -> str:
     return " ".join(value.splitlines()).replace("|", "\\|")
 
 
+def outcome_order(row: Outcome) -> tuple[str, int, str, str, str, str]:
+    suite, network, group, status, reason = row
+    ranks = LEGACY_NETWORK_RANK if suite == LEGACY else EXECUTION_NETWORK_RANK
+    return suite, ranks.get(network, len(ranks)), network, group, status, reason
+
+
 def render_fork(fork: str, inventory: dict, counts: Counts) -> list[str]:
-    gas_rules = set(inventory["gasRules"])
+    rules = inventory.get("gasRules")
+    if not isinstance(rules, list) or not all(isinstance(rule, str) for rule in rules):
+        raise RuntimeError(f"invalid gas rule inventory for {fork}")
+    gas_rules = set(rules)
+    if len(gas_rules) != len(rules):
+        raise RuntimeError(f"duplicate gas rules in the {fork} inventory")
     observed_gas = gas_rules & counts.gas_rules.keys()
     missed_gas = gas_rules - counts.gas_rules.keys()
     if unexpected := counts.gas_rules.keys() - gas_rules:
@@ -407,7 +465,9 @@ def render_report(
         legacy_scope.append("selected archived gas fixtures in block form")
     fixture_scope = {LEGACY: " and ".join(legacy_scope)}
     if heze_supplement:
-        fixture_scope[HEZE] = "Block fixtures for BPO2 → BPO3 and BPO3 → BPO4"
+        networks = {row[1] for row in report.outcomes if row[0] == HEZE}
+        labels = ", ".join(f"`{network}`" for network in sorted(networks))
+        fixture_scope[HEZE] = f"Block fixtures for {labels}"
     lines = [
         "# Gas-rule coverage of execution fixtures",
         "",
@@ -455,12 +515,20 @@ def render_report(
         "| --- | --- | --- | --- | --- | ---: |",
         *(
             "| " + " | ".join(map(table_cell, row)) + f" | {count} |"
-            for row, count in sorted(report.outcomes.items())
+            for row, count in sorted(
+                report.outcomes.items(), key=lambda item: outcome_order(item[0])
+            )
         ),
     ]
-    for fork in sorted(report.counts):
+    inventories = []
+    for fork, counts in report.counts.items():
         inventory = request({"kind": "inventory", "fork": fork})
-        lines.extend(render_fork(fork, inventory, report.counts[fork]))
+        rank = inventory.get("forkIndex")
+        if type(rank) is not int or rank < 0:
+            raise RuntimeError(f"invalid fork index in the {fork} inventory")
+        inventories.append((rank, fork, inventory, counts))
+    for _, fork, inventory, counts in sorted(inventories):
+        lines.extend(render_fork(fork, inventory, counts))
     if report.failures:
         lines.extend(
             (
@@ -500,6 +568,8 @@ def main() -> None:
         parser.error("fixture validation requires Python assertions")
     if not args.executable.is_file():
         parser.error("build the coverage executable with lake build gas-coverage")
+    if not os.access(args.executable, os.X_OK):
+        parser.error(f"coverage executable lacks execute permission: {args.executable}")
     if args.jobs < 1:
         parser.error("--jobs must be positive")
 

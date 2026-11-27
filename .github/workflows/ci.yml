@@ -381,6 +381,10 @@ jobs:
       - name: bindings
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
+      - name: build the gas coverage runner
+        if: matrix.python == '3.12'
+        run: lake build --wfail gas-coverage
+
       # One test process per core, and the 25 slowest tests in the log.
       # An idle process takes queued tests from a busy one, so a few long consensus cases do not run alone at the end.
       - name: vector suites

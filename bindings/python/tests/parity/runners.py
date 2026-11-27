@@ -313,6 +313,11 @@ _SCENARIOS = {
 }
 
 
+def static_fork(network: str) -> str | None:
+    """The active fork of a network that keeps one execution fork for all its blocks."""
+    return _NETWORK_FORK.get("Amsterdam" if network in _SCENARIOS else network)
+
+
 def chain_of(fixture: dict) -> tuple[dict, list]:
     """The chain configuration of a blockchain test, and its activations as tuples."""
     scenario = _SCENARIOS.get(fixture["network"])
@@ -416,10 +421,10 @@ def check_blockchain_test(
         try:
             item = rlp.decode(raw)
             fork = active_fork(activations, item[0])
-        except Exception:
-            # A block that is not even an RLP list of headers is invalid.
+        except (IndexError, TypeError, ValueError):
+            # Without a readable block number and timestamp, decode at the parent's fork.
             assert expected, block
-            continue
+            fork = recent[-1][0]
         if expected:
             with pytest.raises(ValueError) as error:
                 legacy.advance_block(config, state, recent, fork, raw, seal)
@@ -429,7 +434,7 @@ def check_blockchain_test(
                 str(error.value),
             )
             continue
-        state = transition(config, state, recent, fork, raw, seal)
+        state = transition(config, state, recent, fork, raw, seal, block.get("receipts"))
         recent = (recent + [(fork, rlp.encode(item[0]), [rlp.encode(o) for o in item[2]])])[-256:]
     assert "0x" + keccak256(recent[-1][1]).hex() == fixture["lastblockhash"]
 

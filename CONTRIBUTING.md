@@ -742,6 +742,7 @@ ETHLIB_ARCHIVES=~/.cache/ethlib/archives PYTHONPATH=bindings/python/tests \
 
 The report reads the pinned execution release and selected legacy and devnet block fixtures.
 It counts a block at its active fork after checking its state and receipt roots.
+It also checks the encoded block receipts when the fixture supplies them.
 For a state test, it checks the state root and logs hash.
 It checks the encoded receipt, cumulative gas used and status when the fixture supplies them.
 Use `--network`, `--format` or `--group` to limit the replay.
