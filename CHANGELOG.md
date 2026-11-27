@@ -1219,6 +1219,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `spec_add` of the withdrawal and consolidation request contracts (`Execution/Proofs/Blocks/SystemCall/WithdrawalRequests.lean`, `ConsolidationRequests.lean`) holds at every fork from Shapella, Glamsterdam included, on the one-counter meter ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  It loses the hypothesis `fork < .glamsterdam`, and its gas hypothesis becomes `200000 * storageGasScale fork + 100 * m ≤ gas`.
+  `AddPathCode.spec_add` (`AddPath.lean`) loses `fork < .glamsterdam` as well, and scales its budget and its bound by `storageGasScale fork`.
+  Its steps `head_then`, `word_then`, `words_then` and `last_then` lose `fork < .glamsterdam` and scale their budgets the same way.
+
 - In Lean, the product of the BLS12-381 base field runs on six 64-bit words, through `Word64.mul6` (`Cryptography/Word64/Six.lean`), with the law `Word64.mul6_spec`.
   `Bls.Fp.mulWords` is that product on the constants `Bls.Fp.pLimbs`, now `@[noinline]` so that its words stay in memory, and `Bls.Fp.pinvWord`.
   `Bls.Fp.mulWords_eq` states that it equals the twelve-limb CIOS product, so the field and every statement above it are unchanged.

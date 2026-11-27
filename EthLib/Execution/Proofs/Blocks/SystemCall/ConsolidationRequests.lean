@@ -276,8 +276,8 @@ theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork)
 
 /-- A call from another address with 96 bytes of input adds a request, as EIP-7251 describes.
 
-It holds from Shapella up to BPO5, on a frame that may change the state. -/
-theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+It holds from Shapella, with the one-counter meter, on a frame that may change the state. -/
+theorem spec_add {m : Nat} (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
     -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
@@ -287,8 +287,13 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamste
     (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
       FeeFits MIN_CONSOLIDATION_REQUEST_FEE CONSOLIDATION_REQUEST_FEE_UPDATE_FRACTION
         (storageOf state message.currentTarget 0).toNat m)
-    -- The frame has at least 200,000 gas, and 100 more for each of these steps.
-    (hgas : 200000 + 100 * m ≤ gas) :
+    -- The frame has at least 200,000 gas before Glamsterdam and 1,000,000 from it.
+    --
+    -- It has 100 more for each of these steps.
+    (hgas : 200000 * storageGasScale fork + 100 * m ≤ gas) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
+    --
+    -- A run that reverts or stops with no error carries to a state gas meter with this gas left.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
       -- When the value pays the fee, the frame adds the request of the caller and the input.
       if pays (storageOf state message.currentTarget) message.value then
@@ -297,9 +302,10 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamste
           (logData message.caller message.data) state substate evm
       -- Otherwise it reverts with no output, and its state reads as the state it starts from.
       else Answer state none evm := by
+  have hscale := one_le_storageGasScale fork
   refine CONSOLIDATION_REQUEST.spec_pay feePathCode_CODE rfl hfork hcaller hsize hfits (by omega)
     fun _ g ss hg hlogs => Spec.consequence (addPathCode_CODE.spec_add
-      (S := state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) hfork hglam
+      (S := state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) hfork
       hstatic hacc hsize (by omega)) (fun _ h => h) ?_
   rintro evm ⟨⟨herr, hout, hw, hlog⟩, -⟩
   exact ⟨herr, hout, hw, by rw [hlog, hlogs]; rfl⟩

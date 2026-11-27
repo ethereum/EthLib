@@ -229,22 +229,24 @@ local macro "head_code" : tactic => `(tactic| evm_code [hc.head, hl, ne_eq, Nat.
 
 /-- From byte 143, the code counts the request, stores the caller and the first word of the input.
 
-It reaches byte 175 with the slot of the next word and the tail, for at most 72,200 gas. -/
+It reaches byte 175 with the slot of the next word and the tail.
+
+It spends at most 72,200 gas, five times that from Glamsterdam. -/
 theorem head_then (hc : AddPathCode code n size) {S : TransactionState} {ss : Substate}
     {g : Nat} {Q : Evm fork Nat → Prop}
-    (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam) (hstatic : message.isStatic = false)
+    (hfork : .shapella ≤ fork) (hstatic : message.isStatic = false)
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hgas : 100000 ≤ g)
+    (hgas : 100000 * storageGasScale fork ≤ g)
     (next : ∀ S' g' ss', WritesStorage message.currentTarget
         (addedPrefix (n + 1) (requestWordsOf n message.caller message.data)
           (storageOf S message.currentTarget) 2) S S' →
       (S'.getAccountOptional message.currentTarget).isSome = true →
-      g ≤ g' + 72200 → ss'.logs = ss.logs →
+      g ≤ g' + 72200 * storageGasScale fork → ss'.logs = ss.logs →
       Spec fork (At code message 175
         [4 + storageOf S message.currentTarget 3 * BitVec.ofNat 256 (n + 1) + BitVec.ofNat 256 2,
           storageOf S message.currentTarget 3] .empty g' S' ss' returnData) Q) :
     Spec fork (At code message 143 [] .empty g S ss returnData) Q := by
-  have hscale := storageGasScale_of_lt hglam
+  have hscale := one_le_storageGasScale fork
   have hl : ∀ i, i < 203 → i < code.size := fun i h => by have := hc.size_le; omega
   head_step
   refine sload_then (Nat.le_trans (by decide) hfork) (by head_code) (by head_code) (by omega)
@@ -330,21 +332,21 @@ local macro "word_code" : tactic => `(tactic| evm_code [hw, hl, ne_eq, Nat.reduc
 
 It goes to the slot `j + 1` of the request.
 
-It reaches the block of the next word, for at most 22,200 gas. -/
+It reaches the block of the next word, for at most 22,200 gas, five times that from Glamsterdam. -/
 theorem word_then (hc : AddPathCode code n size) {j : Nat} (hj1 : 1 ≤ j) (hj2 : j + 2 ≤ n)
     {S S' : TransactionState} {ss ss' : Substate} {g g' : Nat} {Q : Evm fork Nat → Prop}
-    (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam) (hstatic : message.isStatic = false)
-    (hgas : 25000 * (n + 4) ≤ g)
+    (hfork : .shapella ≤ fork) (hstatic : message.isStatic = false)
+    (hgas : 25000 * storageGasScale fork * (n + 4) ≤ g)
     (hw' : WritesStorage message.currentTarget
       (addedPrefix (n + 1) (requestWordsOf n message.caller message.data)
         (storageOf S message.currentTarget) (j + 1)) S S')
     (hacc : (S'.getAccountOptional message.currentTarget).isSome = true)
-    (hg : g ≤ g' + 50000 + 22200 * j) (hlogs : ss'.logs = ss.logs)
+    (hg : g ≤ g' + storageGasScale fork * (50000 + 22200 * j)) (hlogs : ss'.logs = ss.logs)
     (next : ∀ S'' g'' ss'', WritesStorage message.currentTarget
         (addedPrefix (n + 1) (requestWordsOf n message.caller message.data)
           (storageOf S message.currentTarget) (j + 2)) S S'' →
       (S''.getAccountOptional message.currentTarget).isSome = true →
-      g ≤ g'' + 50000 + 22200 * (j + 1) → ss''.logs = ss.logs →
+      g ≤ g'' + storageGasScale fork * (50000 + 22200 * (j + 1)) → ss''.logs = ss.logs →
       Spec fork (At code message (175 + 8 * j)
         [4 + storageOf S message.currentTarget 3 * BitVec.ofNat 256 (n + 1) +
           BitVec.ofNat 256 (j + 2), storageOf S message.currentTarget 3] .empty g'' S'' ss''
@@ -353,7 +355,16 @@ theorem word_then (hc : AddPathCode code n size) {j : Nat} (hj1 : 1 ≤ j) (hj2 
       [4 + storageOf S message.currentTarget 3 * BitVec.ofNat 256 (n + 1) +
         BitVec.ofNat 256 (j + 1), storageOf S message.currentTarget 3] .empty g' S' ss'
         returnData) Q := by
-  have hscale := storageGasScale_of_lt hglam
+  have hscale := one_le_storageGasScale fork
+  -- The words left after this one pay for its write.
+  have hA : storageGasScale fork * (50000 + 22200 * j) + 100000 * storageGasScale fork ≤
+      25000 * storageGasScale fork * (n + 4) := by
+    rw [Nat.mul_comm 25000, Nat.mul_assoc, Nat.mul_comm 100000, ← Nat.mul_add]
+    exact Nat.mul_le_mul_left _ (by omega)
+  have hB : storageGasScale fork * (50000 + 22200 * (j + 1)) =
+      storageGasScale fork * (50000 + 22200 * j) + 22200 * storageGasScale fork := by
+    simp only [Nat.mul_add, Nat.mul_one]
+    omega
   have h9 := hc.le_eight
   have hw := hc.word j hj1 hj2
   have hpw : pushData code (175 + 8 * (j - 1) + 0) 1 = BitVec.ofNat 256 (32 * j) :=
@@ -416,22 +427,29 @@ local macro "log_code" : tactic => `(tactic| evm_code [hlg, hl2, ne_eq, Nat.redu
 
 The tail grows by one, and the request is added. -/
 theorem last_then (hc : AddPathCode code n size) {S S' : TransactionState} {ss ss' : Substate}
-    {g g' : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+    {g g' : Nat} (hfork : .shapella ≤ fork)
     (hstatic : message.isStatic = false) (hsize : message.data.size = size)
-    (hgas : 25000 * (n + 4) ≤ g)
+    (hgas : 25000 * storageGasScale fork * (n + 4) ≤ g)
     (hw' : WritesStorage message.currentTarget
       (addedPrefix (n + 1) (requestWordsOf n message.caller message.data)
         (storageOf S message.currentTarget) n) S S')
     (hacc : (S'.getAccountOptional message.currentTarget).isSome = true)
-    (hg : g ≤ g' + 50000 + 22200 * (n - 1)) (hlogs : ss'.logs = ss.logs) :
+    (hg : g ≤ g' + storageGasScale fork * (50000 + 22200 * (n - 1)))
+    (hlogs : ss'.logs = ss.logs) :
     Spec fork (At code message (175 + 8 * (n - 2))
       [4 + storageOf S message.currentTarget 3 * BitVec.ofNat 256 (n + 1) + BitVec.ofNat 256 n,
         storageOf S message.currentTarget 3] .empty g' S' ss' returnData) fun evm =>
       Added (n + 1) message.currentTarget (requestWordsOf n message.caller message.data)
-        (requestLog message.caller message.data) S ss evm ∧ g ≤ evm.gas + 25000 * (n + 4) := by
-  have hscale := storageGasScale_of_lt hglam
+        (requestLog message.caller message.data) S ss evm ∧
+      g ≤ evm.gas + 25000 * storageGasScale fork * (n + 4) := by
+  have hscale := one_le_storageGasScale fork
   have h9 := hc.le_eight
   have h2 := hc.two_le
+  -- The budget left pays for the two writes and the log.
+  have hA : storageGasScale fork * (50000 + 22200 * (n - 1)) + 72200 * storageGasScale fork ≤
+      25000 * storageGasScale fork * (n + 4) := by
+    rw [Nat.mul_comm 25000, Nat.mul_assoc, Nat.mul_comm 72200, ← Nat.mul_add]
+    exact Nat.mul_le_mul_left _ (by omega)
   have hls := hc.log_lt
   have hw := hc.last
   have hpw : pushData code (175 + 8 * (n - 2) + 0) 1 = BitVec.ofNat 256 (32 * (n - 1)) :=
@@ -544,57 +562,66 @@ theorem last_then (hc : AddPathCode code n size) {S S' : TransactionState} {ss s
 
 `k` middle words are left, the word `j` included. -/
 theorem words_then (hc : AddPathCode code n size) {S : TransactionState} {ss : Substate}
-    {g : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+    {g : Nat} (hfork : .shapella ≤ fork)
     (hstatic : message.isStatic = false) (hsize : message.data.size = size)
-    (hgas : 25000 * (n + 4) ≤ g) (k : Nat) :
+    (hgas : 25000 * storageGasScale fork * (n + 4) ≤ g) (k : Nat) :
     ∀ j, j + k + 1 = n → 1 ≤ j → ∀ S' g' ss', WritesStorage message.currentTarget
       (addedPrefix (n + 1) (requestWordsOf n message.caller message.data)
         (storageOf S message.currentTarget) (j + 1)) S S' →
       (S'.getAccountOptional message.currentTarget).isSome = true →
-      g ≤ g' + 50000 + 22200 * j → ss'.logs = ss.logs →
+      g ≤ g' + storageGasScale fork * (50000 + 22200 * j) → ss'.logs = ss.logs →
       Spec fork (At code message (175 + 8 * (j - 1))
         [4 + storageOf S message.currentTarget 3 * BitVec.ofNat 256 (n + 1) +
           BitVec.ofNat 256 (j + 1), storageOf S message.currentTarget 3] .empty g' S' ss'
           returnData) fun evm =>
         Added (n + 1) message.currentTarget (requestWordsOf n message.caller message.data)
-          (requestLog message.caller message.data) S ss evm ∧ g ≤ evm.gas + 25000 * (n + 4) := by
+          (requestLog message.caller message.data) S ss evm ∧
+        g ≤ evm.gas + 25000 * storageGasScale fork * (n + 4) := by
   induction k with
   | zero =>
     intro j hj _ S' g' ss' hw hacc hg hlogs
     have hn : j + 1 = n := hj
     subst hn
-    have h := hc.last_then (returnData := returnData) hfork hglam hstatic hsize hgas hw hacc
+    have h := hc.last_then (returnData := returnData) hfork hstatic hsize hgas hw hacc
       (by rw [Nat.add_sub_cancel]; exact hg) hlogs
     rwa [show j + 1 - 2 = j - 1 by omega] at h
   | succ k ih =>
     intro j hj hj1 S' g' ss' hw hacc hg hlogs
-    refine hc.word_then hj1 (by omega) hfork hglam hstatic hgas hw hacc hg hlogs
+    refine hc.word_then hj1 (by omega) hfork hstatic hgas hw hacc hg hlogs
       fun S'' g'' ss'' hw' hacc' hg' hlogs' => ?_
     have h := ih (j + 1) (by omega) (by omega) S'' g'' ss'' hw' hacc' hg' hlogs'
     rwa [Nat.add_sub_cancel] at h
 
-/-- From byte 143, before Glamsterdam, the code adds the request of the caller and the input.
+/-- From byte 143, the code adds the request of the caller and the input.
 
 It stores the words of the request at the tail of the queue, and logs the caller and the input. -/
 theorem spec_add (hc : AddPathCode code n size) {S : TransactionState} {ss : Substate} {g : Nat}
-    (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam) (hstatic : message.isStatic = false)
+    (hfork : .shapella ≤ fork) (hstatic : message.isStatic = false)
     (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
     (hsize : message.data.size = size)
     -- The frame has 25,000 gas for each of the `n + 3` writes of the storage.
     --
     -- It has 25,000 more for the two reads and the log.
-    (hgas : 25000 * (n + 4) ≤ g) :
+    --
+    -- From Glamsterdam, each of these budgets is five times larger.
+    (hgas : 25000 * storageGasScale fork * (n + 4) ≤ g) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
     Spec fork (At code message 143 [] .empty g S ss returnData) fun evm =>
       Added (n + 1) message.currentTarget (requestWordsOf n message.caller message.data)
         (requestLog message.caller message.data) S ss evm ∧
       -- The run spends at most that gas.
-      g ≤ evm.gas + 25000 * (n + 4) := by
+      g ≤ evm.gas + 25000 * storageGasScale fork * (n + 4) := by
   have h2 := hc.two_le
-  refine hc.head_then hfork hglam hstatic hacc (by omega) fun S' g' ss' hw hacc' hg hlogs => ?_
-  have h := hc.words_then (returnData := returnData) (S := S) (ss := ss) hfork hglam hstatic
+  -- The head needs the budget of four writes.
+  have hhead : 100000 * storageGasScale fork ≤ g := by
+    refine Nat.le_trans ?_ hgas
+    rw [Nat.mul_comm 25000, Nat.mul_assoc, Nat.mul_comm 100000]
+    exact Nat.mul_le_mul_left _ (by omega)
+  refine hc.head_then hfork hstatic hacc hhead fun S' g' ss' hw hacc' hg hlogs => ?_
+  have h := hc.words_then (returnData := returnData) (S := S) (ss := ss) hfork hstatic
     hsize hgas (n - 2) 1 (by omega) (Nat.le_refl 1)
   simp only [Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul] at h
-  exact h S' g' ss' hw hacc' (by rw [Nat.add_assoc]; exact hg) hlogs
+  exact h S' g' ss' hw hacc' (by rw [Nat.mul_comm]; exact hg) hlogs
 
 end AddPathCode
 
