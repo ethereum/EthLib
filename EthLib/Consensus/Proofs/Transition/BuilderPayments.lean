@@ -57,6 +57,26 @@ theorem processBuilderPendingPayments_spec {state after : BeaconState preset for
   cases rest
   exact ⟨quorum, found, by simp, rfl⟩
 
+/-- With a quorum, the step appends the released withdrawals and moves the payments by one epoch.
+
+Every other field of the state stays. -/
+theorem processBuilderPendingPayments_eq_ok_of_quorum {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {quorum : Gwei}
+    (computed : getBuilderPaymentQuorumThreshold state = .ok quorum) :
+    processBuilderPendingPayments state gloas = .ok { state with
+      builderPendingWithdrawals := fun _ => ⟨(state.builderPendingWithdrawals gloas).data ++
+        (releasedPayments (state.builderPendingPayments gloas).elements.toList
+          preset.SLOTS_PER_EPOCH.toNat quorum).toArray⟩
+      builderPendingPayments := fun _ => shiftPayments (state.builderPendingPayments gloas) } := by
+  simp [processBuilderPendingPayments, computed, bind, Except.bind, pure, Except.pure]
+
+/-- When the quorum fails, the step fails with its error. -/
+theorem processBuilderPendingPayments_eq_error {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {error : AccessorError}
+    (failed : getBuilderPaymentQuorumThreshold state = .error error) :
+    processBuilderPendingPayments state gloas = .error error := by
+  simp [processBuilderPendingPayments, failed, bind, Except.bind]
+
 /-- The step changes only the queue of builder withdrawals and the pending payments. -/
 theorem processBuilderPendingPayments_eq {state after : BeaconState preset fork}
     {gloas : .glamsterdam ≤ fork}
