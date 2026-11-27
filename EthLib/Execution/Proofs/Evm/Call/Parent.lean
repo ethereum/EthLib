@@ -63,7 +63,7 @@ theorem stepRules_parent :
     StepRules fork (fun a b : Evm fork Meter => b.state.parent = a.state.parent) where
   trans hab hbc := hbc.trans hab
   static h := h.parent
-  sstore _ _ _ _ _ _ h := TransactionState.parent_setStorage h
+  sstore _ _ _ _ _ h := TransactionState.parent_setStorage h
   tstore _ _ _ _ := rfl
   log _ hs _ _ _ := by rw [hs]
   selfdestruct _ _ h := parent_finishSelfdestruct h

@@ -37,7 +37,7 @@ theorem stepRules_keepsNonceOrCode :
   trans := KeepsNonceOrCode.trans
   static h := keepsNonceOrCode_of_getAccountOptional fun address =>
     (h.state address List.not_mem_nil).1
-  sstore _ _ _ _ _ _ h := keepsNonceOrCode_of_getAccountOptional fun _ =>
+  sstore _ _ _ _ _ h := keepsNonceOrCode_of_getAccountOptional fun _ =>
     TransactionState.getAccountOptional_setStorage h
   tstore _ _ _ _ := keepsNonceOrCode_of_getAccountOptional fun _ => rfl
   log _ hs _ _ _ := by rw [hs]; exact .refl _

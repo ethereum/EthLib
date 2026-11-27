@@ -104,8 +104,8 @@ private theorem stepRules_state : StepRules fork (StateRel (fork := fork)) where
   trans hab hbc := ⟨stepRules_keepsNonceOrCodeFrame.trans hab.1 hbc.1,
     CreatesPlain.trans hab.1.1.1 hab.2 hbc.2⟩
   static h := ⟨stepRules_keepsNonceOrCodeFrame.static h, createsPlain_of_eq h.created⟩
-  sstore evm address key value state gain h :=
-    ⟨stepRules_keepsNonceOrCodeFrame.sstore evm address key value state gain h,
+  sstore evm key value state gain h :=
+    ⟨stepRules_keepsNonceOrCodeFrame.sstore evm key value state gain h,
       createsPlain_of_eq (TransactionState.createdAccounts_setStorage h)⟩
   tstore evm address key value :=
     ⟨stepRules_keepsNonceOrCodeFrame.tstore evm address key value, createsPlain_of_eq rfl⟩

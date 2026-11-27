@@ -40,9 +40,11 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
 
   It cannot see the refund counter, the gas, the memory or the stack. -/
   static : ∀ {a b}, StaticStep a b → R a b
-  /-- A write of storage that changes the refund counter keeps the relation. -/
-  sstore : ∀ (evm : Evm fork Meter) (address : Address) (key : Bytes32) (value : U256)
-    (state : TransactionState) (gain : Int), evm.state.setStorage address key value = .ok state →
+  /-- A write of storage that changes the refund counter keeps the relation.
+
+  The word is in the storage of the account of the frame, the only storage that SSTORE writes. -/
+  sstore : ∀ (evm : Evm fork Meter) (key : Bytes32) (value : U256) (state : TransactionState)
+    (gain : Int), evm.state.setStorage evm.message.currentTarget key value = .ok state →
     R evm (advance { evm with
       state, substate := { evm.substate with refundCounter := evm.substate.refundCounter + gain } })
   /-- A write of transient storage keeps the relation. -/
@@ -99,7 +101,7 @@ theorem stepRules_messageCode :
     StepRules fork (fun a b : Evm fork Meter => b.message = a.message ∧ b.code = a.code) where
   trans hab hbc := ⟨hbc.1.trans hab.1, hbc.2.trans hab.2⟩
   static h := ⟨h.message, h.code⟩
-  sstore _ _ _ _ _ _ _ := ⟨rfl, rfl⟩
+  sstore _ _ _ _ _ _ := ⟨rfl, rfl⟩
   tstore _ _ _ _ := ⟨rfl, rfl⟩
   log _ _ _ hm hc := ⟨hm, hc⟩
   selfdestruct _ _ h := ⟨message_finishSelfdestruct h, code_finishSelfdestruct h⟩
@@ -152,7 +154,10 @@ theorem sstoreStep (rules : OrdinaryStepRules fork R) {evm after : Evm fork Mete
       · simp [throw, throwThe, MonadExceptOf.throw] at h
       · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
         cases h
-        exact rules.trans (rules.static m5) (rules.sstore _ _ _ _ _ _ (Base.mapError_ok_iff.mp hst))
+        have hm : e2.message.currentTarget = e5.message.currentTarget := by
+          rw [m5.message, c2.message]
+        rw [hm] at hst
+        exact rules.trans (rules.static m5) (rules.sstore _ _ _ _ _ (Base.mapError_ok_iff.mp hst))
     · exact rules.static (ha.trans (staticStep_exceptionalHalt _ _))
 
 /-- A successful TSTORE keeps the relation. -/
@@ -438,8 +443,8 @@ theorem and {S : Evm fork Meter → Evm fork Meter → Prop} (r : StepRules fork
     (s : StepRules fork S) : StepRules fork (fun a b => R a b ∧ S a b) where
   trans hab hbc := ⟨r.trans hab.1 hbc.1, s.trans hab.2 hbc.2⟩
   static h := ⟨r.static h, s.static h⟩
-  sstore evm address key value state gain h :=
-    ⟨r.sstore evm address key value state gain h, s.sstore evm address key value state gain h⟩
+  sstore evm key value state gain h :=
+    ⟨r.sstore evm key value state gain h, s.sstore evm key value state gain h⟩
   tstore evm address key value := ⟨r.tstore evm address key value, s.tstore evm address key value⟩
   log log hs hsub hm hc := ⟨r.log log hs hsub hm hc, s.log log hs hsub hm hc⟩
   selfdestruct beneficiary refund h :=

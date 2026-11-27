@@ -64,7 +64,7 @@ theorem stepRules_touchedLe (hfork : .paris ≤ fork) :
       TouchedSubset b.substate.touchedAccounts a.substate.touchedAccounts) where
   trans hab hbc x hx := hab x (hbc x hx)
   static h x hx := h.touched ▸ hx
-  sstore _ _ _ _ _ _ _ _ hx := hx
+  sstore _ _ _ _ _ _ _ hx := hx
   tstore _ _ _ _ _ hx := hx
   log _ _ hsub _ _ x hx := by rw [hsub] at hx; exact hx
   selfdestruct _ _ h x hx := touchedAccounts_finishSelfdestruct hfork h ▸ hx

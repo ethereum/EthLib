@@ -38,6 +38,7 @@ public import EthLib.Execution.Proofs.Blocks.Roots
 public import EthLib.Execution.Proofs.Blocks.RootsRandomOracle
 public import EthLib.Execution.Proofs.Blocks.SimulatedLogs
 public import EthLib.Execution.Proofs.Blocks.StateAborts
+public import EthLib.Execution.Proofs.Blocks.StorageAt
 public import EthLib.Execution.Proofs.Blocks.Supply
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.SystemCall.BeaconRoots
