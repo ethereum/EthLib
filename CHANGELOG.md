@@ -1206,14 +1206,17 @@ Not yet released.
   `getValidatorChurnLimit_of_exitQueueEpoch` and `getValidatorChurnLimit_of_computeWeakSubjectivityPeriodPhase0` give the churn limit from a successful exit queue or Phase 0 period.
   The run-level totality theorems keep their statements, since `RunConditions.configPositive` gives these quotients.
   Migration: pass the field `churn` of `Config.divisorsPositive_mainnet` or `Config.divisorsPositive_minimal`, or `Config.DivisorsPositive.exitQuotient`.
-- From Gloas, a pending head of the fork choice is optimistic exactly when the payload its block builds on is, like an empty head, as consensus-specs v1.7.0-beta.5 states ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
-  It read the payload of its own block first, so a block whose own payload alone was optimistic made the node optimistic.
-  A head whose parent payload the store lacks still fails, where the source reads the parent block hash; #4627 tracks that difference.
+- From Gloas, the head of an optimistic node reads a payload by its block hash, as consensus-specs v1.7.0-beta.5 does ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
+  A full head reads the block hash of its bid, and an empty or pending head the parent block hash.
+  A payload is optimistic when an optimistic root names a block whose bid has that block hash.
+  A pending head read the payload of its own block first, so a block whose own payload alone was optimistic made the node optimistic.
+  A head that builds on a payload that no known block names still fails, where the source reads its block hash; a store of one fork cannot know a payload of Fulu.
   `is_optimistic_node` of `ethlib.consensus` changes with it.
-  In Lean, `isHeadOptimistic_eq_buildsOnOptimistic` (`Consensus/Proofs/ForkChoice/OptimisticSync.lean`) states it for any head that is not full, and replaces `isHeadOptimistic_eq_buildsOnOptimistic_of_empty`.
-  `isHeadOptimistic_of_empty`, `isHeadOptimistic_of_empty_of_named` and `isHeadOptimistic_of_empty_of_unnamed` become `isHeadOptimistic_of_not_full`, `isHeadOptimistic_of_not_full_of_named` and `isHeadOptimistic_of_not_full_of_unnamed`, and take `payloadStatus ≠ .full`.
-  `isHeadOptimistic_of_pending_of_optimistic` and `isHeadOptimistic_of_pending_of_not_optimistic` are removed.
-  Migration: pass that the head is not full.
+  In Lean, `OptimisticStore.isOptimisticPayload` and `knowsPayload` (`Consensus/ForkChoice/OptimisticSync.lean`) read a payload by its block hash, and `buildsOnOptimistic` is removed.
+  `isHeadOptimistic_of_full` and `isHeadOptimistic_of_not_full` (`Consensus/Proofs/ForkChoice/OptimisticSync.lean`) take the head block and state the read by block hash.
+  `isHeadOptimistic_of_not_full_of_unknown_payload`, `isHeadOptimistic_of_unknown`, `isOptimisticPayload_eq_true_iff` and `isOptimisticPayload_eq_isOptimistic` are new.
+  `isHeadOptimistic_eq_buildsOnOptimistic_of_empty`, `isHeadOptimistic_of_empty`, `isHeadOptimistic_of_empty_of_named`, `isHeadOptimistic_of_empty_of_unnamed`, `isHeadOptimistic_of_pending_of_optimistic` and `isHeadOptimistic_of_pending_of_not_optimistic` are removed.
+  Migration: give the head block, and relate the read by block hash to the read by root with `isOptimisticPayload_eq_isOptimistic`.
 - In Lean, the checks of a block body take their hash in any monad: `checkTransactions`, `checkWithdrawals`, `checkOmmers` and `checkBody` are the new `checkTransactionsM`, `checkWithdrawalsM`, `checkOmmersM` and `checkBodyM` with Keccak-256, in the identity monad.
   `Execution.Blocks.withdrawalsRoot` is likewise the new `withdrawalsRootM` with Keccak-256.
   The checks and the root are unchanged.

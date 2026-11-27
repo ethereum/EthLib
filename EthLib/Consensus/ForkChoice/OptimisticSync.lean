@@ -55,6 +55,8 @@ From Gloas a root of the optimistic set names a block whose payload is not yet j
 
 From Gloas the status of a payload is keyed by the root of its block, in gossip too.
 
+The head reads that set through the block hashes that the bids name.
+
 From Gloas the ancestors of a payload are the payloads that it builds on, not every ancestor block.
 
 A bid builds on the payload whose block hash it names as its parent block hash.
@@ -234,36 +236,40 @@ def payloadChain (root : Root) : Except ForkChoiceError (List Root) := do
   if gloas : .glamsterdam ≤ fork then return store.payloadsOnChain gloas none roots
   else return roots
 
-/-- From Gloas: whether a known block builds on an optimistic payload.
+/-- From Gloas: whether a payload, by its block hash, is optimistic.
 
-That payload is the second root of the payload chain of the block.
+It is when an optimistic root names a block whose bid names that hash. -/
+def isOptimisticPayload (gloas : .glamsterdam ≤ fork) (hash : Hash32) : Bool :=
+  store.optimisticRoots.any (store.namesBlockHash gloas hash)
 
-It fails as the payload chain of the block does.
-
-It also fails when the chain has no second root, since the store then lacks that payload.
-
-That happens at the first block of Gloas, which builds on a payload of Fulu. -/
-def buildsOnOptimistic (root : Root) : Except ForkChoiceError Bool := do
-  -- The second root of the payload chain is optimistic.
-  let some parent := (← store.payloadChain root)[1]? | throw (.payloadNotVerified root)
-  return store.isOptimistic parent
+/-- From Gloas: whether a known block names a payload, by its block hash. -/
+def knowsPayload (gloas : .glamsterdam ≤ fork) (hash : Hash32) : Bool :=
+  store.blocks.keys.any (store.namesBlockHash gloas hash)
 
 /-- Whether the head of the node is optimistic, the first case of an optimistic node.
 
 Before Gloas it is whether the head block is optimistic.
 
-From Gloas a full head reads the payload of its block.
+From Gloas a full head reads the payload of its block, by the block hash of its bid.
 
-An empty or pending head reads the payload that its block builds on.
+An empty or pending head reads the payload that its block builds on, by the parent block hash.
 
-It fails as that read does. -/
+From Gloas it fails when the store does not know the head block.
+
+It also fails when no known block names the payload that the head builds on, a choice of EthLib. -/
 def isHeadOptimistic : Except ForkChoiceError Bool :=
-  if .glamsterdam ≤ fork then
+  if gloas : .glamsterdam ≤ fork then do
+    let some block := store.blocks[store.head.root]? | throw (.unknownBlock store.head.root)
+    let bid := (block.body.signedExecutionPayloadBid gloas).message
     match store.head.payloadStatus with
     -- A full head reads the payload of its block.
-    | .full => return store.isOptimistic store.head.root
+    | .full => return store.isOptimisticPayload gloas bid.blockHash
     -- An empty or pending head reads the payload that its block builds on.
-    | .empty | .pending => store.buildsOnOptimistic store.head.root
+    | .empty | .pending =>
+      -- The store must know a block that names that payload, else it cannot tell its status.
+      unless store.knowsPayload gloas bid.parentBlockHash do
+        throw (.payloadNotVerified store.head.root)
+      return store.isOptimisticPayload gloas bid.parentBlockHash
   -- Before Gloas, whether the head block is optimistic.
   else return store.isOptimistic store.head.root
 

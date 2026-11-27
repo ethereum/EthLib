@@ -794,71 +794,85 @@ theorem latestVerifiedAncestor_eq_error_of_payloadChain (gloas : .glamsterdam �
 theorem isHeadOptimistic_of_lt_glamsterdam (before : fork < .glamsterdam) :
     store.isHeadOptimistic = .ok (store.isOptimistic store.head.root) := by
   have notGloas : ¬(Fork.glamsterdam ≤ fork) := Nat.not_le_of_lt before
-  rw [isHeadOptimistic, ite_eq_right_of_eq_false _ _ (eq_false notGloas)]
+  simp only [isHeadOptimistic, notGloas, ↓reduceDIte]
   rfl
 
-/-- From Gloas, a full head is optimistic exactly when the payload of its block is. -/
+/-- From Gloas, a full head is optimistic exactly when the payload its bid names is. -/
 theorem isHeadOptimistic_of_full (gloas : .glamsterdam ≤ fork)
-    (full : store.head.payloadStatus = .full) :
-    store.isHeadOptimistic = .ok (store.isOptimistic store.head.root) := by
-  rw [isHeadOptimistic, ite_eq_left_of_eq_true _ _ (eq_true gloas), full]
+    (full : store.head.payloadStatus = .full) {block : BeaconBlock preset fork}
+    (found : store.blocks[store.head.root]? = some block) :
+    store.isHeadOptimistic = .ok (store.isOptimisticPayload gloas
+      (block.body.signedExecutionPayloadBid gloas).message.blockHash) := by
+  simp only [isHeadOptimistic, gloas, ↓reduceDIte, found, full]
   rfl
 
-/-- From Gloas, an empty or pending head reads the payload that its block builds on. -/
-theorem isHeadOptimistic_eq_buildsOnOptimistic (gloas : .glamsterdam ≤ fork)
-    (notFull : store.head.payloadStatus ≠ .full) :
-    store.isHeadOptimistic = store.buildsOnOptimistic store.head.root := by
-  rw [isHeadOptimistic, ite_eq_left_of_eq_true _ _ (eq_true gloas)]
-  cases status : store.head.payloadStatus
-  · rfl
-  · exact absurd status notFull
-  · rfl
+/-- From Gloas, an empty or pending head is optimistic exactly when the payload it builds on is.
 
-/-- From Gloas, an empty or pending head reads the payload that its block builds on.
+That payload is the one whose block hash is the parent block hash of the bid of the head.
 
-That payload is the second root of the payload chain of the head. -/
+A known block must name it. -/
 theorem isHeadOptimistic_of_not_full (gloas : .glamsterdam ≤ fork)
-    (notFull : store.head.payloadStatus ≠ .full) {roots : List Root} {parent : Root}
-    (walked : store.payloadChain store.head.root = .ok roots) (second : roots[1]? = some parent) :
-    store.isHeadOptimistic = .ok (store.isOptimistic parent) := by
-  rw [isHeadOptimistic_eq_buildsOnOptimistic store gloas notFull]
-  simp only [buildsOnOptimistic, walked, bind, Except.bind, second]
-  rfl
-
-/-- From Gloas, an empty or pending head is optimistic exactly when the payload its bid names is.
-
-That payload is held by the first block below the head whose bid names the parent block hash. -/
-theorem isHeadOptimistic_of_not_full_of_named (gloas : .glamsterdam ≤ fork)
-    (notFull : store.head.payloadStatus ≠ .full) {block : BeaconBlock preset fork} {next : Root}
-    {all : List Root} (found : store.blocks[store.head.root]? = some block)
-    (chained : store.chain store.head.root = .ok (store.head.root :: all))
-    (named : all.find? (store.namesBlockHash gloas
-      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) = some next) :
-    store.isHeadOptimistic = .ok (store.isOptimistic next) := by
-  obtain ⟨-, -, -, -, tail, nextWalked, walked⟩ :=
-    payloadChain_of_find?_some store gloas found chained named
-  have first := payloadChain_head? store nextWalked
-  cases tail with
-  | nil => simp at first
-  | cons head rest =>
-    simp only [List.head?_cons, Option.some.injEq] at first
-    subst first
-    exact isHeadOptimistic_of_not_full store gloas notFull walked rfl
-
-/-- From Gloas, an empty or pending head whose bid names no payload of the store fails.
-
-The store then lacks the payload that the head builds on, so it cannot tell if it is verified. -/
-theorem isHeadOptimistic_of_not_full_of_unnamed (gloas : .glamsterdam ≤ fork)
     (notFull : store.head.payloadStatus ≠ .full) {block : BeaconBlock preset fork}
-    {all : List Root} (found : store.blocks[store.head.root]? = some block)
-    (chained : store.chain store.head.root = .ok (store.head.root :: all))
-    (unnamed : all.find? (store.namesBlockHash gloas
-      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) = none) :
+    (found : store.blocks[store.head.root]? = some block)
+    (known : store.knowsPayload gloas
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash = true) :
+    store.isHeadOptimistic = .ok (store.isOptimisticPayload gloas
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash) := by
+  simp only [isHeadOptimistic, gloas, ↓reduceDIte, found]
+  cases status : store.head.payloadStatus
+  · simp [known]
+    rfl
+  · exact absurd status notFull
+  · simp [known]
+    rfl
+
+/-- From Gloas, an empty or pending head fails when no known block names the payload it builds on.
+
+The store then cannot tell whether that payload is verified. -/
+theorem isHeadOptimistic_of_not_full_of_unknown_payload (gloas : .glamsterdam ≤ fork)
+    (notFull : store.head.payloadStatus ≠ .full) {block : BeaconBlock preset fork}
+    (found : store.blocks[store.head.root]? = some block)
+    (unknown : store.knowsPayload gloas
+      (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash = false) :
     store.isHeadOptimistic = .error (.payloadNotVerified store.head.root) := by
-  rw [isHeadOptimistic_eq_buildsOnOptimistic store gloas notFull]
-  simp only [buildsOnOptimistic, payloadChain_of_find?_none store gloas found chained unnamed,
-    bind, Except.bind]
+  simp only [isHeadOptimistic, gloas, ↓reduceDIte, found]
+  cases status : store.head.payloadStatus
+  · simp [unknown]
+    rfl
+  · exact absurd status notFull
+  · simp [unknown]
+    rfl
+
+/-- From Gloas, the head rule fails at a head block that the store does not know. -/
+theorem isHeadOptimistic_of_unknown (gloas : .glamsterdam ≤ fork)
+    (missing : store.blocks[store.head.root]? = none) :
+    store.isHeadOptimistic = .error (.unknownBlock store.head.root) := by
+  simp only [isHeadOptimistic, gloas, ↓reduceDIte, missing]
   rfl
+
+/-- From Gloas, a payload is optimistic exactly when an optimistic root names its block hash. -/
+theorem isOptimisticPayload_eq_true_iff (gloas : .glamsterdam ≤ fork) {hash : Hash32} :
+    store.isOptimisticPayload gloas hash = true ↔
+      ∃ root ∈ store.optimisticRoots, store.namesBlockHash gloas hash root = true := by
+  simp only [isOptimisticPayload, List.any_eq_true]
+
+/-- From Gloas, a payload is optimistic as a block that names it is, when no other root does.
+
+So the read by block hash and the read by root agree when no two optimistic roots share a payload.
+-/
+theorem isOptimisticPayload_eq_isOptimistic (gloas : .glamsterdam ≤ fork) {hash : Hash32}
+    {root : Root} (named : store.namesBlockHash gloas hash root = true)
+    (only : ∀ other ∈ store.optimisticRoots,
+      store.namesBlockHash gloas hash other = true → other = root) :
+    store.isOptimisticPayload gloas hash = store.isOptimistic root := by
+  apply Bool.eq_iff_iff.mpr
+  rw [isOptimisticPayload_eq_true_iff store gloas]
+  simp only [isOptimistic, List.contains_iff_mem]
+  constructor
+  · rintro ⟨other, mem, names⟩
+    rwa [← only other mem names]
+  · intro mem
+    exact ⟨root, mem, named⟩
 
 /-- The roots of a payload chain are distinct. -/
 theorem payloadChain_nodup {root : Root} {roots : List Root}

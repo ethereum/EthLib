@@ -608,6 +608,15 @@ def test_gloas_head_on_a_payload_the_store_lacks(roots: list[bytes], status: int
     assert info.value.code == 39
 
 
+@pytest.mark.parametrize("status", [FULL, EMPTY, PENDING], ids=["full", "empty", "pending"])
+def test_gloas_unknown_head_block(status: int):
+    # The head reads the bid of its block, so the store must know that block.
+    head = bytes([0x11]) * 32
+    with raises(ERROR, f"optimistic sync: no known block has root 0x{head.hex()}") as info:
+        _gloas_optimistic_node([], status, head)
+    assert info.value.code == 2
+
+
 def test_unknown_head_payload_status():
     with raises(ERROR, "unknown payload status 3") as info:
         _gloas_optimistic_node([], 3)
