@@ -100,18 +100,19 @@ The preset, the configuration and the fork are named by `str`. -/
 def isAssignedToSyncCommitteeExport (args : PyValue) : Result PyValue :=
   pyExport isAssignedToSyncCommitteeOf args
 
-/-- From Altair: the sync committee subnets of a validator for the next slot, as a list. -/
+/-- From Altair: the sync committee subnets of a validator for its messages of a slot, as a list.
+-/
 def computeSubnetsForSyncCommitteeOf
-    (args : String × String × ByteArray × Option PyValue × UInt64) :
+    (args : String × String × ByteArray × Option PyValue × UInt64 × UInt64) :
     Result (List UInt64) := do
-  let (name, fork, state, replacements, validatorIndex) := args
+  let (name, fork, state, replacements, slot, validatorIndex) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let _ ← configWithValue name replacements
   let ⟨altair⟩ ← altairOf fork
   let state ← decodeInput (BeaconState preset fork) state
-  toResult none (computeSubnetsForSyncCommittee state altair validatorIndex)
+  toResult none (computeSubnetsForSyncCommittee state altair slot validatorIndex)
 
-/-- From Altair: the sync committee subnets of a validator for the next slot, as a list.
+/-- From Altair: the sync committee subnets of a validator for its messages of a slot, as a list.
 
 The preset, the configuration and the fork are named by `str`. -/
 @[export eth_consensus_compute_subnets_for_sync_committee]

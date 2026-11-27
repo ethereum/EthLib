@@ -4388,8 +4388,8 @@ It rests on `fastAggregateVerify_sign`: an honest signature passes the fast aggr
 `isAssignedToSyncCommittee_ok_iff` states when the sync committee seat check succeeds.
 Its answer is then whether the validator's key is in the current or the next committee.
 `computeSubnetsForSyncCommittee_ok` shows that its sync committee subnets come once each, in increasing order, from the seats of its key.
-`syncCommitteeAtNextSlot_eq` (`Consensus/Proofs/Gossip/SyncCommittee.lean`) states the committee that signs in the slot after a state.
-It is the next committee of the state when that slot starts a period, and the current one otherwise; it fails with an overflow at the largest slot.
+`syncCommitteeAtSlot_of_period` (`Consensus/Proofs/Gossip/SyncCommittee.lean`) states the committee that signs in a slot of the period of the state, such as the slot of a message while the head state lags behind it.
+It is the next committee of the state when the slot after it starts a period, and the current one otherwise; there is none at the largest slot.
 `getSyncSubcommitteePubkeys_eq` states that, for a subcommittee index below the number of subnets, the keys that gossip checks are the slice of that committee.
 The Python suite checks each duty signature against py_ecc, on signing roots computed in the test, and each committee against the shuffle export.
 It checks each payload timeliness assignment and the upcoming proposal slots against the window and the lookahead that it reads from a Gloas state.
@@ -6981,7 +6981,7 @@ It refuses with code 400 exactly when the slot is not that of the state, or the 
 Else it refuses with code 503 exactly when the root is optimistic.
 Else it refuses with code 404 exactly when no message of the slot on the root comes from a member of the subcommittee.
 A member is a known validator with a key of the subcommittee.
-That refusal also needs the sync committee of the next slot, which `syncCommitteeAtNextSlot_eq` gives at every slot but the last.
+That refusal also needs the sync committee that signs in the slot, which `syncCommitteeAtSlot_of_period` gives at every slot but the last.
 The three theorems share `checkVerified_bind_error_iff`.
 After the check of a block, an answer refuses with code 503 for an optimistic block, and else as the rest does.
 `aggregateAttestationResponse_error_iff` and `syncCommitteeContributionResponse_error_iff` lift these codes to the responses of the two endpoints.
@@ -7026,8 +7026,8 @@ It combines the same lemma with `aggregateAttestation_internal_iff_of_electra`, 
 The committee has no value, an attester is outside it, or before Gloas it is above the limit of an attestation.
 The fourth is that a single attestation of the committee with the data of the first match has a signature that does not decode.
 `produceSyncCommitteeContribution_internal_iff` states when the contribution answer refuses with code 500, once the slot, the subcommittee index and the root pass their checks.
-It then refuses so exactly when the sync committee of the next slot has no value, or the construction fails on a signature.
-The sync committee of the next slot has no value only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtNextSlot_eq`).
+It then refuses so exactly when the state holds no sync committee that signs in the slot, or the construction fails on a signature.
+At the slot of the state, that committee is missing only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtSlot_of_period`).
 The answer hands the construction only the messages of members.
 A private lemma of the same file shows that the construction then fails only for want of messages, or on a signature.
 `produceAttestationData_internal_iff` states when the attestation data answer refuses with code 500.
@@ -7417,7 +7417,7 @@ They call the same dispatch as gossip, `validateGossipMessage` (`Consensus/Gossi
 `syncSubnets_pairwise` shows that the subnets of a sync committee message come once each, in increasing order.
 `mem_syncSubnets_of_seat` shows that a validator that holds a seat gets the subnets of its seats.
 `syncSubnets_of_no_seat` shows that any other validator gets subnet 0 alone, as does a message whose head state, validator or sync committee cannot be read.
-`validateItem_syncSubnets_seat` shows that an item of a sync committee message passes only if its validator holds a seat in the sync committee of the slot after the head state.
+`validateItem_syncSubnets_seat` shows that an item of a sync committee message passes only if its validator holds a seat in the sync committee that signs in the slot of the message.
 It rests on `seat_of_validateSyncCommitteeMessage_accept` (`Consensus/Proofs/Gossip/SyncCommittee.lean`): gossip accepts a message only on a subnet of a seat of its validator.
 `submitPool_syncCommitteeMessages_seat` shows the same for each message of an accepted request.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_pool.py`) submits each object of the pinned gossip cases of the pool topics to its endpoint.
@@ -7616,7 +7616,7 @@ Points that remain open:
 - The payload attestation data answers code 204 when the chain of the head has no block at the slot, even if the store holds one off that chain.
 - From Electra a committee index out of range with no matching message gets code 404, since the match comes before the range check of the aggregate.
 - The source names no code for a subcommittee index that names no subnet; EthLib gives code 400.
-- The contribution answer requires the slot of the state, and joins the messages of the sync committee of the next slot, as gossip checks them.
+- The contribution answer requires the slot of the state, and joins the messages of the sync committee that signs in that slot, as gossip checks them.
   It keeps only the messages of validators with a key of the requested subcommittee, so the messages of other subcommittees do not refuse the request.
   A message of a validator that the state does not know is left out too.
 - The weight of a view is "the raw stored weight" of the node; EthLib gives the weight of the head computation, with the votes of the justified state and the proposer boost.

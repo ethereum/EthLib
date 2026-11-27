@@ -834,14 +834,14 @@ theorem aggregateAttestation_internal_iff_faults_of_electra {state : BeaconState
 
 The message must be of the requested slot and root, from a validator with the key of the seat.
 
-The seat is one of the sync committee of the next slot, and the root is verified. -/
+The seat is one of the sync committee that signs in the slot, and the root is verified. -/
 theorem produceSyncCommitteeContribution_bits {state : BeaconState preset fork}
     {altair : .altair ≤ fork} {optimistic : OptimisticStore preset fork}
     {messages : List SyncCommitteeMessage} {slot : Slot} {subcommitteeIndex : UInt64}
     {root : Root} {contribution : SyncCommitteeContribution preset}
     (produced : produceSyncCommitteeContribution state altair optimistic messages slot
       subcommitteeIndex root = .ok contribution) :
-    ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧
+    ∃ committee, syncCommitteeAtSlot state altair slot = some committee ∧
       ∃ inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT,
         isExecutionOptimistic optimistic root = false ∧
         contribution.slot = slot ∧ contribution.beaconBlockRoot = root ∧
@@ -860,8 +860,13 @@ theorem produceSyncCommitteeContribution_bits {state : BeaconState preset fork}
   swap
   · simp [inRange, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at produced
   simp only [inRange, ite_true, bind_ok_iff, checkVerified] at produced
-  obtain ⟨_, checked, committee, got, built⟩ := produced
-  refine ⟨committee, mapError_ok_iff.mp got, inRange, ?_⟩
+  obtain ⟨_, checked, produced⟩ := produced
+  cases got : syncCommitteeAtSlot state altair state.slot with
+  | none => simp [got, throw, throwThe, MonadExceptOf.throw] at produced
+  | some committee =>
+  simp only [got] at produced
+  have built := produced
+  refine ⟨committee, rfl, inRange, ?_⟩
   cases built' : constructSyncCommitteeContribution state committee root subcommitteeIndex
     (messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
       subcommitteeIndex.toNat))) with
@@ -1010,9 +1015,9 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
             --
             -- A member is a known validator with a key of the subcommittee.
             --
-            -- That refusal also needs the sync committee of the next slot to have a value.
+            -- That refusal also needs the state to hold the sync committee of the slot.
             isExecutionOptimistic optimistic root = false ∧ code = 404 ∧
-              ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧
+              ∃ committee, syncCommitteeAtSlot state altair slot = some committee ∧
                 ¬∃ message ∈ messages, message.slot = slot ∧ message.beaconBlockRoot = root ∧
                   ∃ validator, getValidator state message.validatorIndex = .ok validator ∧
                     validator.pubkey ∈
@@ -1034,11 +1039,11 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
   swap
   · simp
   simp only [Bool.false_eq_true, false_and, false_or, true_and]
-  cases got : syncCommitteeAtNextSlot state altair with
-  | error fault =>
-    simp [Except.mapError, internalError, bind, Except.bind, notInternal, @eq_comm _ 500 code]
-  | ok committee =>
-    simp only [Except.mapError, bind, Except.bind, Except.ok.injEq, exists_eq_left']
+  cases got : syncCommitteeAtSlot state altair state.slot with
+  | none =>
+    simp [internalError, throw, throwThe, MonadExceptOf.throw, notInternal, @eq_comm _ 500 code]
+  | some committee =>
+    simp only [Option.some.injEq, exists_eq_left']
     obtain ⟨noMessages, sameFields, noIndex⟩ := constructSyncCommitteeContribution_noMessages_iff
       (state := state) (committee := committee) (blockRoot := root)
       (messages := messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
@@ -1090,12 +1095,12 @@ theorem produceSyncCommitteeContribution_internal_iff {state : BeaconState prese
       -- They also need an index that names a subnet.
       slot = state.slot ∧ subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT ∧
         isExecutionOptimistic optimistic root = false ∧
-        -- Code 500 when the sync committee of the next slot has no value.
+        -- Code 500 when the state holds no sync committee of the slot.
         --
         -- That happens only at the largest 64-bit slot, whose next slot overflows.
-        ((∃ fault, syncCommitteeAtNextSlot state altair = .error fault) ∨
+        (syncCommitteeAtSlot state altair slot = none ∨
           -- Else code 500 when the construction of the contribution fails on a signature.
-          ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧ ∃ fault,
+          ∃ committee, syncCommitteeAtSlot state altair slot = some committee ∧ ∃ fault,
             constructSyncCommitteeContribution state committee root subcommitteeIndex
               (messages.filter (inSubcommittee state
                 (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))) =
@@ -1114,11 +1119,10 @@ theorem produceSyncCommitteeContribution_internal_iff {state : BeaconState prese
   swap
   · simp
   simp only [Bool.false_eq_true, false_and, false_or, true_and]
-  cases got : syncCommitteeAtNextSlot state altair with
-  | error fault => simp [Except.mapError, internalError, bind, Except.bind]
-  | ok committee =>
-    simp only [Except.mapError, bind, Except.bind, Except.ok.injEq, exists_eq_left',
-      reduceCtorEq, exists_false, false_or]
+  cases got : syncCommitteeAtSlot state altair state.slot with
+  | none => simp [internalError, throw, throwThe, MonadExceptOf.throw]
+  | some committee =>
+    simp only [Option.some.injEq, exists_eq_left', reduceCtorEq, false_or]
     cases built : constructSyncCommitteeContribution state committee root subcommitteeIndex
         (messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
           subcommitteeIndex.toNat))) with

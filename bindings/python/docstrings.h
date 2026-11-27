@@ -783,7 +783,7 @@
   "From Altair: whether a validator serves on the sync committee of the period of an epoch."
 
 #define DOC_consensus_compute_subnets_for_sync_committee \
-  "From Altair: the sync committee subnets of a validator for the next slot, as a list."
+  "From Altair: the sync committee subnets of a validator for its messages of a slot, as a list."
 
 #define DOC_consensus_get_ptc_assignment \
   "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator."
