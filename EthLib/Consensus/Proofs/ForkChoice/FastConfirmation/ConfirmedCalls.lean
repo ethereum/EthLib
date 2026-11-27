@@ -1557,21 +1557,11 @@ theorem walkMembers_cover [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store 
   have maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := by
     have : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := ctx.exitWindow
     omega
-  -- The caller reads its head at each rollover, unless stores collide or historical evidence holds.
-  have signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 limit :=
-    ctx.anchorEpochOk ▸ ctx.signedAll
-  rcases e.callRolloverRead_or_evidence ctx.sync ctx.slots ctx.admitted
-      ctx.fits ctx.prompt ctx.votes ctx.anchored ctx.start ctx.anchorSlot ctx.anchorBoundary signed
-      ctx.roots ctx.absent ctx.bounded ctx.parameters ctx.genesis pre ctx.heldEarly ctx.enough
-      ctx.terminal ctx.ceiling ctx.scoreFits ctx.fit.seeds ctx.caller n head.root
-      ctx.room ctx.weights ctx.supply (fun _ => ctx.fit) with
-    rollover | collision | evidence
-  rotate_left
-  · exact .inr (.inl collision)
-  · exact .inr (.inr (.inl evidence))
-  -- The root is viable at each covered time, unless stores collide or held-state evidence holds.
+  -- The root is viable at each covered time, unless stores collide or evidence holds.
   by_cases collision : HonestCollision (e := e) limit
   · exact .inr (.inl collision)
+  by_cases historical : HistoricalDirectSafetyEvidence (e := e) pre limit
+  · exact .inr (.inr (.inl historical))
   by_cases heldEvidence : HeldStateFinalityEvidence (e := e) pre limit
   · exact .inr (.inr (.inr (.inr (.inr heldEvidence))))
   by_cases cross : CrossStoreJustifiedEvidence (e := e) pre limit
@@ -1579,15 +1569,15 @@ theorem walkMembers_cover [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store 
   have rootViable : ∀ T, (e.world n).time ≤ T → T ≤ limit →
       HonestHeadsCover (e := e) after.confirmedRoot (e.world n).time T →
       RootViableAt (e := e) after.confirmedRoot T := fun T low high covers =>
-    (e.rootViableAt_of_checked (room := ctx.room)
-      pre ctx.sync ctx.slots ctx.admitted
-      ctx.fits ctx.prompt ctx.votes ctx.windows ctx.fit ctx.ring ctx.incrementPositive
-      ctx.anchored ctx.sound ctx.anchorSlot ctx.anchorBoundary ctx.start ctx.anchorEpochOk
-      ctx.bounded ctx.roots ctx.absent ctx.pinned ctx.signedAll
-      good.quorum ctx.unslashed ctx.terminal ctx.anchorGenesis ctx.parameters ctx.genesis
-      ctx.heldEarly ctx.enough ctx.included ctx.caller upToDate slotOk beginOk timeEq
-      headOk rollover inputs walked recent realizedHead startCovers holds T low high
-      covers).resolve_right (not_or.mpr ⟨collision, not_or.mpr ⟨heldEvidence, cross⟩⟩)
+    (e.rootViableAt_of_checked_or_evidence pre ctx.sync ctx.slots ctx.admitted ctx.fits
+      ctx.prompt ctx.votes ctx.windows ctx.fit ctx.ring ctx.incrementPositive ctx.anchored
+      ctx.anchorSlot ctx.anchorBoundary ctx.start ctx.anchorEpochOk ctx.bounded ctx.roots
+      ctx.absent ctx.pinned ctx.signedAll good.quorum ctx.unslashed ctx.terminal
+      ctx.anchorGenesis ctx.parameters ctx.genesis ctx.heldEarly ctx.enough ctx.included
+      ctx.ceiling ctx.scoreFits ctx.weights ctx.supply ctx.caller upToDate slotOk beginOk timeEq
+      headOk inputs walked recent realizedHead startCovers holds T low high covers
+      ctx.room).resolve_right
+      (not_or.mpr ⟨collision, not_or.mpr ⟨historical, not_or.mpr ⟨heldEvidence, cross⟩⟩⟩)
   -- The start's recent historical root, from the call invariant at the start.
   obtain ⟨epoch, -, -, startEpoch, epochOk, -, -, startEpochOk, recentStart, -⟩ := checked
   obtain ⟨historical, historicalEpoch, epochStart, epochStartTime, startBelow,
