@@ -306,8 +306,10 @@ theorem specG_get (hfork : .shapella ≤ fork)
 
 /-- A call from an address other than the system address gets a hash, as EIP-2935 describes.
 
-It holds from Shapella up to BPO5, the forks whose frames count gas as one number. -/
-theorem spec_get (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
+It holds from Shapella, with the one-counter meter.
+
+From Glamsterdam, a run with no error carries to the state gas meter of the protocol. -/
+theorem spec_get (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
     -- The block number is at least 1 and less than `2^256`.
     (hnumber : 1 ≤ message.blockEnv.number) (hbound : message.blockEnv.number < 2 ^ 256)

@@ -7,29 +7,70 @@ public import EthLib.Execution.Proofs.Evm.Instructions.MemoryData
 public import EthLib.Execution.Proofs.Evm.Instructions.Return
 public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Instructions.LogData
+public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
+public import EthLib.Execution.Proofs.Evm.Machine.JumpDest
 
 /-!
 # Proofs: a conservative counter for the state gas meter
 
 A one-counter meter pays both execution gas and state gas from its counter.
 
-The state gas meter can pay state gas from its reservoir, and refills can return execution gas.
+The state gas meter of EIP-8037 can pay state gas from its reservoir.
 
 So its execution gas stays at least the counter when it starts there and makes the same payments.
+
+The parts of the instructions here keep that bound, and every other field of the frame.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm.Logic
 
-open EthLib.Base (Fork U256)
+open EthLib.Base (Fork U256 Address)
 
 variable {fork : Fork}
+
+/-! ## Two meters -/
 
 /-- A frame with the same fields and a state gas meter in place of its counter. -/
 def withStateGas (evm : Evm fork Nat) (meter : StateGasMeter) : Evm fork StateGasMeter :=
   ⟨evm.pc, evm.stack, evm.memory, evm.code, evm.validJumpDestinations, meter, evm.running,
     evm.message, evm.output, evm.returnData, evm.state, evm.substate, evm.error⟩
+
+section Fields
+
+variable (evm : Evm fork Nat) (meter : StateGasMeter)
+
+/-- The frame with a state gas meter keeps the program counter. -/
+@[simp] theorem pc_withStateGas : (withStateGas evm meter).pc = evm.pc := rfl
+/-- The frame with a state gas meter keeps the stack. -/
+@[simp] theorem stack_withStateGas : (withStateGas evm meter).stack = evm.stack := rfl
+/-- The frame with a state gas meter keeps the memory. -/
+@[simp] theorem memory_withStateGas : (withStateGas evm meter).memory = evm.memory := rfl
+/-- The frame with a state gas meter keeps the code. -/
+@[simp] theorem code_withStateGas : (withStateGas evm meter).code = evm.code := rfl
+/-- The frame with a state gas meter keeps the jump destinations. -/
+@[simp] theorem validJumpDestinations_withStateGas :
+    (withStateGas evm meter).validJumpDestinations = evm.validJumpDestinations := rfl
+/-- The frame with a state gas meter has the meter it is given. -/
+@[simp] theorem gas_withStateGas : (withStateGas evm meter).gas = meter := rfl
+/-- The frame with a state gas meter keeps the running flag. -/
+@[simp] theorem running_withStateGas : (withStateGas evm meter).running = evm.running := rfl
+/-- The frame with a state gas meter keeps the message. -/
+@[simp] theorem message_withStateGas : (withStateGas evm meter).message = evm.message := rfl
+/-- The frame with a state gas meter keeps the output. -/
+@[simp] theorem output_withStateGas : (withStateGas evm meter).output = evm.output := rfl
+/-- The frame with a state gas meter keeps the return data. -/
+@[simp] theorem returnData_withStateGas :
+    (withStateGas evm meter).returnData = evm.returnData := rfl
+/-- The frame with a state gas meter keeps the state. -/
+@[simp] theorem state_withStateGas : (withStateGas evm meter).state = evm.state := rfl
+/-- The frame with a state gas meter keeps the substate. -/
+@[simp] theorem substate_withStateGas : (withStateGas evm meter).substate = evm.substate := rfl
+/-- The frame with a state gas meter keeps the error. -/
+@[simp] theorem error_withStateGas : (withStateGas evm meter).error = evm.error := rfl
+
+end Fields
 
 /-- The frames agree outside their meters, and the execution gas covers the counter. -/
 def FollowsMeter (low : Evm fork Nat) (high : Evm fork StateGasMeter) : Prop :=
@@ -77,344 +118,280 @@ theorem refill_followsMeter {gas amount : Nat} {meter : StateGasMeter}
   simp only [GasMeter.refill, StateGasMeter.refill]
   omega
 
-/-- A frame constructor independent of gas preserves the relation after an execution payment. -/
-theorem map_charge_followsMeter {gas cost : Nat} {meter : StateGasMeter}
-    {low : Nat → Evm fork Nat} {high : StateGasMeter → Evm fork StateGasMeter}
-    {after : Evm fork Nat} (below : gas ≤ meter.gasLeft)
-    (same : ∀ g m, high m = withStateGas (low g) m) (gas_low : ∀ g, (low g).gas = g)
-    (paid : (GasMeter.charge gas cost).map low = .ok after) :
-    ∃ next, (meter.charge cost).map high = .ok next ∧ FollowsMeter after next := by
-  cases charge : GasMeter.charge gas cost with
-  | error e => simp only [charge, Except.map] at paid; cases paid
-  | ok g =>
-    simp only [charge, Except.map, Except.ok.injEq] at paid
-    subst after
-    obtain ⟨m, hm, hbelow⟩ := charge_followsMeter below charge
-    exact ⟨high m, by simp only [hm, Except.map], m,
-      by simpa only [gas_low] using hbelow, same g m⟩
+/-! ## Runs under the two meters -/
 
-/-- A frame constructor independent of gas preserves the relation after a state payment. -/
-theorem map_chargeState_followsMeter {gas cost : Nat} {meter : StateGasMeter}
-    {low : Nat → Evm fork Nat} {high : StateGasMeter → Evm fork StateGasMeter}
-    {after : Evm fork Nat} (below : gas ≤ meter.gasLeft)
-    (same : ∀ g m, high m = withStateGas (low g) m) (gas_low : ∀ g, (low g).gas = g)
-    (paid : (GasMeter.chargeState gas cost).map low = .ok after) :
-    ∃ next, (meter.chargeState cost).map high = .ok next ∧ FollowsMeter after next := by
-  cases charge : GasMeter.chargeState gas cost with
-  | error e => simp only [charge, Except.map] at paid; cases paid
-  | ok g =>
-    simp only [charge, Except.map, Except.ok.injEq] at paid
-    subst after
-    obtain ⟨m, hm, hbelow⟩ := chargeState_followsMeter below charge
-    exact ⟨high m, by simp only [hm, Except.map], m,
-      by simpa only [gas_low] using hbelow, same g m⟩
+/-- Each success of the run under one counter has a success of the run under the state gas meter.
 
-/-- A binary stack operation gives the same words under the state gas meter. -/
-theorem binaryOp_followsMeter {cost : Nat} {f : U256 → U256 → U256}
-    {evm after : Evm fork Nat} {meter : StateGasMeter} (below : evm.gas ≤ meter.gasLeft)
-    (ok : binaryOp cost f evm = .ok after) :
-    ∃ next, binaryOp cost f (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, _ | ⟨y, rest⟩⟩, hp⟩
-  · simp [binaryOp, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · simp [binaryOp, popWord, Stack.pop, stack, bind, Except.bind,
-      pure, Except.pure] at ok
-  · have words : evm.stack.val = x :: y :: rest := by rw [stack]
-    rw [binaryOp_cons words] at ok
-    rw [binaryOp_cons (evm := withStateGas evm meter) words]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+The two results are related by `R`. -/
+def Sim {α β : Type} (R : α → β → Prop) (low : Except EvmError α) (high : Except EvmError β) :
+    Prop :=
+  ∀ a, low = .ok a → ∃ b, high = .ok b ∧ R a b
 
-/-- A unary stack operation gives the same word under the state gas meter. -/
-theorem unaryOp_followsMeter {cost : Nat} {f : U256 → U256}
-    {evm after : Evm fork Nat} {meter : StateGasMeter} (below : evm.gas ≤ meter.gasLeft)
-    (ok : unaryOp cost f evm = .ok after) :
-    ∃ next, unaryOp cost f (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, rest⟩, hp⟩
-  · simp [unaryOp, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · have words : evm.stack.val = x :: rest := by rw [stack]
-    rw [unaryOp_cons words] at ok
-    rw [unaryOp_cons (evm := withStateGas evm meter) words]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+namespace Sim
 
-/-- POP drops the same word under the state gas meter. -/
-theorem popStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : popStep evm = .ok after) :
-    ∃ next, popStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, rest⟩, hp⟩
-  · simp [popStep, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · have words : evm.stack.val = x :: rest := by rw [stack]
-    rw [popStep_cons words] at ok
-    rw [popStep_cons (evm := withStateGas evm meter) words]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+variable {α β γ δ : Type} {R : α → β → Prop} {S : γ → δ → Prop}
 
-/-- PUSH reads the same bytes under the state gas meter. -/
-theorem pushN_followsMeter {n : Fin 33} {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : pushN n evm = .ok after) :
-    ∃ next, pushN n (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  by_cases room : evm.stack.val.length < STACK_LIMIT
-  · rw [pushN_of_length_lt room] at ok
-    rw [pushN_of_length_lt (evm := withStateGas evm meter) room]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
-  · have full : evm.stack.val.length = STACK_LIMIT := by have := evm.stack.property; omega
-    rcases paid : GasMeter.charge evm.gas
-        (if n = 0 then GasCosts.OPCODE_PUSH0 else GasCosts.OPCODE_PUSH) with _ | _ <;>
-      simp [pushN, chargeGas, paid, bind, Except.bind, pure, Except.pure, pushWord,
-        Stack.push, full] at ok
+/-- Two successes whose values are related. -/
+theorem ok {a : α} {b : β} (h : R a b) : Sim R (.ok a) (.ok b) :=
+  fun _ ha => ⟨b, rfl, by cases ha; exact h⟩
 
-/-- DUP reads the same stack depth under the state gas meter. -/
-theorem dupN_followsMeter {n : Fin 16} {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : dupN n evm = .ok after) :
-    ∃ next, dupN n (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  cases value : evm.stack.val[n.val]? with
-  | none =>
-    rcases paid : GasMeter.charge evm.gas GasCosts.OPCODE_DUP with _ | _ <;>
-      simp [dupN, chargeGas, paid, bind, Except.bind, pure, Except.pure, value] at ok
-  | some x =>
-    by_cases room : evm.stack.val.length < STACK_LIMIT
-    · rw [dupN_of_getElem? value room] at ok
-      rw [dupN_of_getElem? (evm := withStateGas evm meter) value room]
-      exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
-    · have full : evm.stack.val.length = STACK_LIMIT := by have := evm.stack.property; omega
-      rcases paid : GasMeter.charge evm.gas GasCosts.OPCODE_DUP with _ | _ <;>
-        simp [dupN, chargeGas, paid, bind, Except.bind, pure, Except.pure, value,
-          pushWord, Stack.push, full] at ok
+/-- Two returns whose values are related. -/
+theorem pure {a : α} {b : β} (h : R a b) : Sim R (Pure.pure a) (Pure.pure b) := ok h
 
-/-- SWAP exchanges the same words under the state gas meter. -/
-theorem swapN_followsMeter {n : Fin 16} {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : swapN n evm = .ok after) :
-    ∃ next, swapN n (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨top, rest⟩, hp⟩
-  · rcases paid : GasMeter.charge evm.gas GasCosts.OPCODE_SWAP with _ | _ <;>
-      simp [swapN, chargeGas, paid, bind, Except.bind, pure, Except.pure, stack] at ok
-  · have words : evm.stack.val = top :: rest := by rw [stack]
-    cases value : rest[n.val]? with
-    | none =>
-      rcases paid : GasMeter.charge evm.gas GasCosts.OPCODE_SWAP with _ | _ <;>
-        simp [swapN, chargeGas, paid, bind, Except.bind, pure, Except.pure, stack, value] at ok
-    | some x =>
-      rw [swapN_of_getElem? words value] at ok
-      rw [swapN_of_getElem? (evm := withStateGas evm meter) words value]
-      exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+/-- A failure of the run under one counter asks nothing of the other run. -/
+theorem error {e : EvmError} {high : Except EvmError β} : Sim R (.error e) high :=
+  fun _ ha => by cases ha
 
-/-- CALLDATALOAD reads the same word under the state gas meter. -/
-theorem calldataloadStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : calldataloadStep evm = .ok after) :
-    ∃ next, calldataloadStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, rest⟩, hp⟩
-  · simp [calldataloadStep, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · have words : evm.stack.val = x :: rest := by rw [stack]
-    rw [calldataloadStep_cons words] at ok
-    rw [calldataloadStep_cons (evm := withStateGas evm meter) words]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+/-- A throw of the run under one counter asks nothing of the other run. -/
+theorem throw {e : EvmError} {high : Except EvmError β} : Sim R (MonadExcept.throw e) high :=
+  error
 
-/-- MSTORE writes the same word under the state gas meter. -/
-theorem mstoreStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : mstoreStep evm = .ok after) :
-    ∃ next, mstoreStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, _ | ⟨y, rest⟩⟩, hp⟩
-  · simp [mstoreStep, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · simp [mstoreStep, popWord, Stack.pop, stack, bind, Except.bind, pure, Except.pure] at ok
-  · have words : evm.stack.val = x :: y :: rest := by rw [stack]
-    rw [mstoreStep_cons words] at ok
-    rw [mstoreStep_cons (evm := withStateGas evm meter) words]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+/-- Two runs in sequence, with related first results and related rests. -/
+theorem bind {low : Except EvmError α} {high : Except EvmError β}
+    {f : α → Except EvmError γ} {g : β → Except EvmError δ} (h : Sim R low high)
+    (rest : ∀ a b, R a b → Sim S (f a) (g b)) : Sim S (low >>= f) (high >>= g) := by
+  intro c hc
+  obtain ⟨a, ha, hf⟩ := EthLib.Base.bind_ok_iff.mp hc
+  obtain ⟨b, hb, hab⟩ := h a ha
+  obtain ⟨d, hd, hcd⟩ := rest a b hab c hf
+  exact ⟨d, by rw [hb]; exact hd, hcd⟩
 
-/-- MSTORE8 writes the same byte under the state gas meter. -/
-theorem mstore8Step_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : mstore8Step evm = .ok after) :
-    ∃ next, mstore8Step (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, _ | ⟨y, rest⟩⟩, hp⟩
-  · simp [mstore8Step, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · simp [mstore8Step, popWord, Stack.pop, stack, bind, Except.bind, pure, Except.pure] at ok
-  · have words : evm.stack.val = x :: y :: rest := by rw [stack]
-    rw [mstore8Step_cons words] at ok
-    rw [mstore8Step_cons (evm := withStateGas evm meter) words]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+/-- A weaker relation of the results. -/
+theorem mono {low : Except EvmError α} {high : Except EvmError β} {R' : α → β → Prop}
+    (h : Sim R low high) (weaker : ∀ a b, R a b → R' a b) : Sim R' low high := fun a ha =>
+  let ⟨b, hb, hab⟩ := h a ha
+  ⟨b, hb, weaker a b hab⟩
 
-/-- RETURN gives the same bytes under the state gas meter. -/
-theorem returnStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : returnStep evm = .ok after) :
-    ∃ next, returnStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, _ | ⟨y, rest⟩⟩, hp⟩
-  · simp [returnStep, haltWithOutput, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · simp [returnStep, haltWithOutput, popWord, Stack.pop, stack, bind, Except.bind,
-      pure, Except.pure] at ok
-  · have words : evm.stack.val = x :: y :: rest := by rw [stack]
-    rw [returnStep_cons words] at ok
-    rw [returnStep_cons (evm := withStateGas evm meter) words]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+/-- A run related to itself by equality. -/
+theorem refl {low : Except EvmError α} : Sim (· = ·) low low := fun a ha => ⟨a, ha, rfl⟩
 
-/-- STOP gives the same halt under the state gas meter. -/
-theorem stopStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : stopStep evm = .ok after) :
-    ∃ next, stopStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  simp only [stopStep_eq, Except.ok.injEq] at ok
-  subst after
-  exact ⟨_, rfl, meter, below, rfl⟩
+/-- A branch on one condition in both runs. -/
+theorem ite {c : Prop} [Decidable c] {x₁ x₂ : Except EvmError α} {y₁ y₂ : Except EvmError β}
+    (yes : c → Sim R x₁ y₁) (no : ¬c → Sim R x₂ y₂) :
+    Sim R (if c then x₁ else x₂) (if c then y₁ else y₂) := by
+  by_cases h : c
+  · simp only [h, ↓reduceIte]
+    exact yes h
+  · simp only [h, ↓reduceIte]
+    exact no h
 
-/-- JUMPDEST gives the same next opcode under the state gas meter. -/
-theorem jumpdestStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : jumpdestStep evm = .ok after) :
-    ∃ next, jumpdestStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rw [jumpdestStep_eq] at ok
-  rw [jumpdestStep_eq]
-  exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+end Sim
 
-/-- A read of a field independent of gas gives the same word under the state gas meter. -/
-theorem readFrame_followsMeter {cost : Nat} {value : Evm fork Nat → U256}
-    {highValue : Evm fork StateGasMeter → U256} {evm after : Evm fork Nat}
-    {meter : StateGasMeter} (below : evm.gas ≤ meter.gasLeft)
-    (values : ∀ g m, highValue (withStateGas evm m) = value { evm with gas := g })
-    (ok : readFrame cost value evm = .ok after) :
-    ∃ next, readFrame cost highValue (withStateGas evm meter) = .ok next ∧
-      FollowsMeter after next := by
-  by_cases room : evm.stack.val.length < STACK_LIMIT
-  · rw [readFrame_of_length_lt room] at ok
-    rw [readFrame_of_length_lt (evm := withStateGas evm meter) room]
-    apply map_charge_followsMeter below _ (fun _ => rfl) ok
-    intro g m
-    rw [show highValue { withStateGas evm meter with gas := m } =
-      value { evm with gas := g } from values g m]
-    rfl
-  · have full : evm.stack.val.length = STACK_LIMIT := by have := evm.stack.property; omega
-    rcases paid : GasMeter.charge evm.gas cost with _ | _ <;>
-      simp [readFrame, chargeGas, paid, bind, Except.bind, pure, Except.pure, pushWord,
-        Stack.push, full] at ok
+/-! ## The fields that an instruction keeps -/
 
-/-- Copying bytes to memory writes the same bytes under the state gas meter. -/
-theorem copyToMemory_followsMeter {base : Nat} {data : ByteArray}
-    {evm after : Evm fork Nat} {meter : StateGasMeter} (below : evm.gas ≤ meter.gasLeft)
-    (ok : copyToMemory base data evm = .ok after) :
-    ∃ next, copyToMemory base data (withStateGas evm meter) = .ok next ∧
-      FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, _ | ⟨y, _ | ⟨z, rest⟩⟩⟩, hp⟩
-  · simp [copyToMemory, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · simp [copyToMemory, popWord, Stack.pop, stack, bind, Except.bind,
-      pure, Except.pure] at ok
-  · simp [copyToMemory, popWord, Stack.pop, stack, bind, Except.bind,
-      pure, Except.pure] at ok
-  · have words : evm.stack.val = x :: y :: z :: rest := by rw [stack]
-    rw [copyToMemory_cons words] at ok
-    rw [copyToMemory_cons (evm := withStateGas evm meter) words]
-    exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+/-- The code and flags stay, and a running result advances or reaches a valid jump destination.
 
-/-- SLOAD accesses the same slot under the state gas meter. -/
-theorem sloadStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : sloadStep evm = .ok after) :
-    ∃ next, sloadStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨x, rest⟩, hp⟩
-  · simp [sloadStep, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · have words : evm.stack.val = x :: rest := by rw [stack]
-    rw [sloadStep_cons words] at ok
-    rw [sloadStep_cons (evm := withStateGas evm meter) words]
-    by_cases berlin : fork ≥ .berlin <;>
-      simp only [accessStorageKey, berlin, ↓reduceIte] at ok ⊢ <;>
-      exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+A normal result can only follow a frame with no error. -/
+def MeterFields (before after : Evm fork Nat) (next : Nat) : Prop :=
+  after.code = before.code ∧ after.validJumpDestinations = before.validJumpDestinations ∧
+    (after.running = true → after.pc = next ∨
+      isValidJumpDest before.validJumpDestinations after.pc = true) ∧
+    (after.error = none → before.error = none)
 
-/-- JUMP reaches the same destination under the state gas meter. -/
-theorem jumpStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : jumpStep evm = .ok after) :
-    ∃ next, jumpStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨destination, rest⟩, hp⟩
-  · simp [jumpStep, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · have words : evm.stack.val = destination :: rest := by rw [stack]
-    cases paid : GasMeter.charge evm.gas GasCosts.OPCODE_JUMP with
-    | error e =>
-      simp [jumpStep, popWord, Stack.pop, stack, chargeGas, paid, bind, Except.bind,
-        pure, Except.pure] at ok
-    | ok gas =>
-      cases valid : isValidJumpDest evm.validJumpDestinations destination.toNat with
-      | false =>
-        simp [jumpStep, popWord, Stack.pop, stack, chargeGas, paid, bind, Except.bind,
-          pure, Except.pure, valid, throw, throwThe, MonadExceptOf.throw] at ok
-      | true =>
-        rw [jumpStep_of_isValidJumpDest words paid valid] at ok
-        cases ok
-        obtain ⟨m, hm, hb⟩ := charge_followsMeter below paid
-        rw [jumpStep_of_isValidJumpDest (evm := withStateGas evm meter) words hm valid]
-        exact ⟨_, rfl, m, hb, rfl⟩
+/-- The high frame follows the low frame.
 
-/-- JUMPI takes the same branch under the state gas meter. -/
-theorem jumpiStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : jumpiStep evm = .ok after) :
-    ∃ next, jumpiStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rcases stack : evm.stack with ⟨_ | ⟨destination, _ | ⟨condition, rest⟩⟩, hp⟩
-  · simp [jumpiStep, popWord, Stack.pop, stack, bind, Except.bind] at ok
-  · simp [jumpiStep, popWord, Stack.pop, stack, bind, Except.bind, pure, Except.pure] at ok
-  · have words : evm.stack.val = destination :: condition :: rest := by rw [stack]
-    by_cases zero : condition = 0
-    · subst condition
-      rw [jumpiStep_zero words] at ok
-      rw [jumpiStep_zero (evm := withStateGas evm meter) words]
-      exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
-    · cases paid : GasMeter.charge evm.gas GasCosts.OPCODE_JUMPI with
-      | error e =>
-        simp [jumpiStep, popWord, Stack.pop, stack, chargeGas, paid, bind, Except.bind,
-          pure, Except.pure] at ok
-      | ok gas =>
-        cases valid : isValidJumpDest evm.validJumpDestinations destination.toNat with
-        | false =>
-          have nz : ¬condition = 0#256 := zero
-          simp [jumpiStep, popWord, Stack.pop, stack, chargeGas, paid, bind, Except.bind,
-            pure, Except.pure, valid, nz, throw, throwThe, MonadExceptOf.throw] at ok
-        | true =>
-          rw [jumpiStep_of_isValidJumpDest words zero paid valid] at ok
-          cases ok
-          obtain ⟨m, hm, hb⟩ := charge_followsMeter below paid
-          rw [jumpiStep_of_isValidJumpDest
-            (evm := withStateGas evm meter) words zero hm valid]
-          exact ⟨_, rfl, m, hb, rfl⟩
+The low frame keeps the code, the flags, the program counter and the error of `start`.
 
-/-- REVERT gives the same bytes and error under the state gas meter. -/
-theorem revertStep_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : revertStep evm = .ok after) :
-    ∃ next, revertStep (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  rw [revertStep_eq] at ok
-  cases returned : returnStep evm with
-  | error e => simp only [returned, Except.map] at ok; cases ok
-  | ok stopped =>
-    simp only [returned, Except.map, Except.ok.injEq] at ok
-    subst after
-    obtain ⟨next, hn, m, hb, rfl⟩ := returnStep_followsMeter below returned
-    rw [revertStep_eq, hn]
-    exact ⟨_, rfl, m, hb, rfl⟩
+It holds inside an instruction, before the instruction moves the program counter. -/
+def Tracks (start low : Evm fork Nat) (high : Evm fork StateGasMeter) : Prop :=
+  FollowsMeter low high ∧ low.code = start.code ∧
+    low.validJumpDestinations = start.validJumpDestinations ∧ low.pc = start.pc ∧
+    low.error = start.error
 
-/-- LOG0 pays, grows memory, and records a log with no topics. -/
-private theorem logStep_zero_cons {Meter : Type} [GasMeter Meter]
-    {evm : Evm fork Meter} {start size : U256} {rest : List U256}
-    (words : evm.stack.val = start :: size :: rest) (static : evm.message.isStatic = false) :
-    logStep 0 evm =
-      let growth := extendMemory evm.memory.size [(start, size)]
-      let memory := memoryExtend evm.memory growth.expandBy
-      (GasMeter.charge evm.gas (logCost 0 size + growth.cost)).map fun gas =>
-        { evm with
-          stack := ⟨rest, by have := evm.stack.property; rw [words] at this; simp at this; omega⟩
-          gas
-          memory
-          substate := { evm.substate with
-            logs := evm.substate.logs.push
-              ⟨evm.message.currentTarget, [], memoryReadBytes memory start.toNat size.toNat⟩
-            simulatedLogs := evm.substate.simulatedLogs.push
-              ⟨evm.message.currentTarget, [], memoryReadBytes memory start.toNat size.toNat⟩ }
-          pc := evm.pc + 1 } := by
-  have stack : evm.stack = ⟨start :: size :: rest, words ▸ evm.stack.property⟩ := Subtype.ext words
-  simp only [logStep, popWord, popTopics, chargeGasAndMemory, chargeGas, stack, Stack.pop]
-  rcases paid : GasMeter.charge evm.gas
-      (logCost 0 size + (extendMemory evm.memory.size [(start, size)]).cost) with _ | _ <;>
-    simp [paid, static, bind, Except.bind, pure, Except.pure, Except.map, advance]
+/-- The high frame follows the low frame, which keeps the fields of `start` and moves on to `next`.
+-/
+def Lands (start : Evm fork Nat) (next : Nat) (low : Evm fork Nat)
+    (high : Evm fork StateGasMeter) : Prop :=
+  FollowsMeter low high ∧ MeterFields start low next
 
-/-- LOG0 records the same log under the state gas meter. -/
-theorem logStep_zero_followsMeter {evm after : Evm fork Nat} {meter : StateGasMeter}
-    (below : evm.gas ≤ meter.gasLeft) (ok : logStep 0 evm = .ok after) :
-    ∃ next, logStep 0 (withStateGas evm meter) = .ok next ∧ FollowsMeter after next := by
-  cases static : evm.message.isStatic with
-  | true => exact (logStep_ne_ok_of_isStatic static ok).elim
-  | false =>
-    rcases stack : evm.stack with ⟨_ | ⟨x, _ | ⟨y, rest⟩⟩, hp⟩
-    · simp [logStep, popWord, Stack.pop, stack, bind, Except.bind] at ok
-    · simp [logStep, popWord, Stack.pop, stack, bind, Except.bind, pure, Except.pure] at ok
-    · have words : evm.stack.val = x :: y :: rest := by rw [stack]
-      rw [logStep_zero_cons words static] at ok
-      rw [logStep_zero_cons (evm := withStateGas evm meter) words static]
-      exact map_charge_followsMeter below (fun _ _ => rfl) (fun _ => rfl) ok
+/-- Each success of the run under one counter keeps the fields of `start` and moves on to `next`.
+
+Each normal success has a success of the run under the state gas meter that follows it. -/
+def Lifts (start : Evm fork Nat) (next : Nat) (low : Except EvmError (Evm fork Nat))
+    (high : Except EvmError (Evm fork StateGasMeter)) : Prop :=
+  ∀ after, low = .ok after → MeterFields start after next ∧
+    (after.error = none → ∃ b, high = .ok b ∧ FollowsMeter after b)
+
+/-- Runs whose successes land lift. -/
+theorem Sim.lifts {start : Evm fork Nat} {next : Nat} {low : Except EvmError (Evm fork Nat)}
+    {high : Except EvmError (Evm fork StateGasMeter)} (h : Sim (Lands start next) low high) :
+    Lifts start next low high := fun after ok =>
+  let ⟨b, hb, follows, fields⟩ := h after ok
+  ⟨fields, fun _ => ⟨b, hb, follows⟩⟩
+
+/-- A failure of the run under one counter lifts. -/
+theorem Lifts.error {start : Evm fork Nat} {next : Nat} {e : EvmError}
+    {high : Except EvmError (Evm fork StateGasMeter)} : Lifts start next (.error e) high :=
+  fun _ h => nomatch h
+
+/-- A run with related first results, then rests that lift. -/
+theorem Sim.bindLifts {α β : Type} {R : α → β → Prop} {start : Evm fork Nat} {next : Nat}
+    {low : Except EvmError α} {high : Except EvmError β}
+    {f : α → Except EvmError (Evm fork Nat)} {g : β → Except EvmError (Evm fork StateGasMeter)}
+    (h : Sim R low high) (rest : ∀ a b, R a b → Lifts start next (f a) (g b)) :
+    Lifts start next (low >>= f) (high >>= g) := by
+  intro c hc
+  obtain ⟨a, ha, hf⟩ := EthLib.Base.bind_ok_iff.mp hc
+  obtain ⟨b, hb, hab⟩ := h a ha
+  refine ⟨(rest a b hab c hf).1, fun normal => ?_⟩
+  obtain ⟨d, hd, hcd⟩ := (rest a b hab c hf).2 normal
+  exact ⟨d, by rw [hb]; exact hd, hcd⟩
+
+/-- An instruction under one counter, and the same instruction under the state gas meter.
+
+Each success of the first keeps the code and the flags.
+
+When it runs on, it moves the program counter by `width` or to a valid jump destination.
+
+Each normal success has a success of the second, from execution gas that covers the counter.
+
+A success that reverts or halts asks nothing of the second. -/
+def Bridge (width : Nat) (low : Evm fork Nat → Except EvmError (Evm fork Nat))
+    (high : Evm fork StateGasMeter → Except EvmError (Evm fork StateGasMeter)) : Prop :=
+  ∀ evm meter, evm.gas ≤ meter.gasLeft →
+    Lifts evm (evm.pc + width) (low evm) (high (withStateGas evm meter))
+
+/-- An instruction whose successes have related successes under the state gas meter is a bridge.
+-/
+theorem Bridge.of_sim {width : Nat} {low : Evm fork Nat → Except EvmError (Evm fork Nat)}
+    {high : Evm fork StateGasMeter → Except EvmError (Evm fork StateGasMeter)}
+    (h : ∀ evm meter, evm.gas ≤ meter.gasLeft →
+      Sim (Lands evm (evm.pc + width)) (low evm) (high (withStateGas evm meter))) :
+    Bridge width low high := fun evm meter below => (h evm meter below).lifts
+
+namespace Tracks
+
+variable {start low : Evm fork Nat} {high : Evm fork StateGasMeter}
+
+/-- A frame and its frame with a state gas meter that covers its counter. -/
+theorem init {meter : StateGasMeter} (below : start.gas ≤ meter.gasLeft) :
+    Tracks start start (withStateGas start meter) :=
+  ⟨⟨meter, below, rfl⟩, rfl, rfl, rfl, rfl⟩
+
+/-- A move of the program counter by `width` lands on `start.pc + width`. -/
+theorem advance (t : Tracks start low high) (width : Nat) :
+    Lands start (start.pc + width) (Evm.advance low width) (Evm.advance high width) := by
+  obtain ⟨⟨meter, below, rfl⟩, code, flags, pc, error⟩ := t
+  exact ⟨⟨meter, below, rfl⟩, code, flags, fun _ => .inl (by simp [Evm.advance, pc]),
+    fun h => error ▸ h⟩
+
+/-- A pop takes the same word, and keeps the relation. -/
+theorem popWord (t : Tracks start low high) :
+    Sim (fun p q => p.1 = q.1 ∧ Tracks start p.2 q.2) (Evm.popWord low) (Evm.popWord high) := by
+  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  rcases low with ⟨pc, ⟨_ | ⟨x, rest⟩, hs⟩, memory, code, flags, gas, running, message, output,
+    returnData, state, substate, error⟩
+  · exact Sim.error
+  · exact Sim.ok ⟨rfl, ⟨meter, below, rfl⟩, hc, hf, hp, he⟩
+
+/-- A push of the same word keeps the relation. -/
+theorem pushWord (t : Tracks start low high) (x : U256) :
+    Sim (Tracks start) (Evm.pushWord low x) (Evm.pushWord high x) := by
+  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  intro after ok
+  obtain ⟨stack, hs, h⟩ := EthLib.Base.bind_ok_iff.mp ok
+  simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  refine ⟨withStateGas { low with stack } meter, ?_, ⟨meter, below, rfl⟩, hc, hf, hp, he⟩
+  change (low.stack.push x >>= fun stack => Pure.pure { withStateGas low meter with stack }) = _
+  rw [hs]
+  rfl
+
+/-- A charge of execution gas keeps the relation. -/
+theorem chargeGas (t : Tracks start low high) (amount : Nat) :
+    Sim (Tracks start) (Evm.chargeGas low amount) (Evm.chargeGas high amount) := by
+  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  intro after ok
+  obtain ⟨gas, paid, h⟩ := EthLib.Base.bind_ok_iff.mp ok
+  simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  obtain ⟨next, hn, hb⟩ := charge_followsMeter below paid
+  refine ⟨withStateGas { low with gas } next, ?_, ⟨next, hb, rfl⟩, hc, hf, hp, he⟩
+  change (meter.charge amount >>= fun gas => Pure.pure { withStateGas low meter with gas }) = _
+  rw [hn]
+  rfl
+
+/-- A charge of state gas keeps the relation. -/
+theorem chargeStateGas (t : Tracks start low high) (amount : Nat) :
+    Sim (Tracks start) (Evm.chargeStateGas low amount) (Evm.chargeStateGas high amount) := by
+  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  intro after ok
+  obtain ⟨gas, paid, h⟩ := EthLib.Base.bind_ok_iff.mp ok
+  simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  obtain ⟨next, hn, hb⟩ := chargeState_followsMeter below paid
+  refine ⟨withStateGas { low with gas } next, ?_, ⟨next, hb, rfl⟩, hc, hf, hp, he⟩
+  change (meter.chargeState amount >>= fun gas => Pure.pure { withStateGas low meter with gas }) =
+    _
+  rw [hn]
+  rfl
+
+/-- A charge of execution gas and of the growth of memory keeps the relation. -/
+theorem chargeGasAndMemory (t : Tracks start low high) (cost : Nat)
+    (ranges : List (U256 × U256)) :
+    Sim (Tracks start) (Evm.chargeGasAndMemory low cost ranges)
+      (Evm.chargeGasAndMemory high cost ranges) := by
+  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  refine (chargeGas ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ _).bind fun l h t => ?_
+  obtain ⟨⟨m, b, rfl⟩, hc, hf, hp, he⟩ := t
+  exact Sim.pure ⟨⟨m, b, rfl⟩, hc, hf, hp, he⟩
+
+/-- A pop of topics takes the same topics, and keeps the relation. -/
+theorem popTopics (t : Tracks start low high) (n : Nat) :
+    Sim (fun p q => p.1 = q.1 ∧ Tracks start p.2 q.2) (Evm.popTopics low n)
+      (Evm.popTopics high n) := by
+  induction n generalizing low high with
+  | zero => exact Sim.ok ⟨rfl, t⟩
+  | succ k ih =>
+    refine t.popWord.bind ?_
+    rintro ⟨x, _⟩ ⟨_, _⟩ ⟨rfl, t⟩
+    refine (ih t).bind ?_
+    rintro ⟨ts, _⟩ ⟨_, _⟩ ⟨rfl, t⟩
+    exact Sim.pure ⟨rfl, t⟩
+
+/-- A refill of state gas keeps the relation. -/
+theorem refillStateGas (t : Tracks start low high) (amount : Nat) :
+    Tracks start (Evm.refillStateGas low amount) (Evm.refillStateGas high amount) := by
+  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  exact ⟨⟨meter.refill amount, refill_followsMeter below, rfl⟩, hc, hf, hp, he⟩
+
+/-- A check of the gas left that passes under one counter passes under the state gas meter. -/
+theorem checkGas (t : Tracks start low high) (amount : Nat) :
+    Sim (fun _ _ => True) (Evm.checkGas low amount) (Evm.checkGas high amount) := by
+  obtain ⟨⟨meter, below, rfl⟩, -⟩ := t
+  intro _ ok
+  refine ⟨(), ?_, trivial⟩
+  unfold Evm.checkGas at ok ⊢
+  split at ok
+  · cases ok
+  · rename_i pass
+    split
+    · rename_i fail
+      exact absurd ⟨fail.1, Nat.lt_of_le_of_lt below fail.2⟩ pass
+    · rfl
+
+/-- The rest of an instruction that keeps its reads lifts when the rest lifts. -/
+theorem keepReads {next : Nat} (t : Tracks start low high)
+    {rest : Except EvmError (Evm fork Nat)} {highRest : Except EvmError (Evm fork StateGasMeter)}
+    (h : Lifts start next rest highRest) :
+    Lifts start next (Evm.keepReads low id rest) (Evm.keepReads high id highRest) := by
+  obtain ⟨_, hc, hf, -, -⟩ := t
+  intro after ok
+  cases hr : rest with
+  | error e =>
+    simp only [Evm.keepReads, hr] at ok
+    split at ok
+    · cases ok
+    · cases ok
+      exact ⟨⟨hc, hf, fun h => by simp [exceptionalHalt] at h,
+        fun h => by simp [exceptionalHalt] at h⟩, fun h => by simp [exceptionalHalt] at h⟩
+  | ok a =>
+    simp only [Evm.keepReads, hr, Except.ok.injEq] at ok
+    subst ok
+    refine ⟨(h a hr).1, fun normal => ?_⟩
+    obtain ⟨b, hb, follows⟩ := (h a hr).2 normal
+    exact ⟨b, by simp only [Evm.keepReads, hb], follows⟩
+
+end Tracks
 
 end EthLib.Execution.Evm.Logic

@@ -1162,6 +1162,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the bridge from one counter of gas to the state gas meter of EIP-8037 covers every instruction other than GAS, the calls, the creations, DUPN, SWAPN and EXCHANGE ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  `Evm.Logic.meterSupported` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) accepts them, so `Evm.Logic.Reaches.followsMeter` carries to Glamsterdam a run of code that hashes memory, copies memory, and uses the bitwise, arithmetic, environment and account instructions.
+  `Evm.Logic.Bridge` (`MeterSimulation.lean`) states the bridge of one instruction, and `Evm.Logic.instruction_bridge` (`MeterReach.lean`) gives it for each supported opcode.
+  The module `MeterBoundary`, the lemmas `*_followsMeter` and `*_meterFields` of single instructions, `instruction_followsMeter`, `instruction_meterFields` and `Step.followsMeter` are removed.
+  `charge_followsMeter`, `chargeState_followsMeter` and `refill_followsMeter` stay.
+  Migration: use `instruction_bridge`, or `Reaches.followsMeter`, which keeps its statement.
+  `spec_getFee` of the request contracts of EIP-7002 and EIP-7251, and `spec_get` of the contracts of EIP-2935 and EIP-4788, drop a hypothesis `fork < .glamsterdam` that their proofs did not use.
+  From Glamsterdam, their runs with no error carry to the state gas meter through `Reaches.followsMeter`.
+  Migration: drop that argument.
+
 - From Heze, `Consensus.Store.onExecutionPayloadEnvelope` returns the store unchanged for an envelope of a block whose payload the store already holds, before any other check.
   So a second delivery of an envelope no longer records its answer on the inclusion lists again.
   `Store.onExecutionPayloadEnvelope_ok`, `Store.onExecutionPayloadEnvelope_inclusionListSatisfied`, `Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated` and `Store.isPayloadInclusionListSatisfied_of_notValidated` take a hypothesis that the payload is new from Heze.

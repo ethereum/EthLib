@@ -360,8 +360,10 @@ theorem specG_get (hfork : .shapella ≤ fork)
 
 /-- A call from an address other than the system address gets a root, as EIP-4788 describes.
 
-It holds from Shapella up to BPO5, the forks whose frames count gas as one number. -/
-theorem spec_get (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
+It holds from Shapella, with the one-counter meter.
+
+From Glamsterdam, a run with no error carries to the state gas meter of the protocol. -/
+theorem spec_get (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
     -- It assumes fewer than 2^256 bytes of input, which the size word of the EVM can hold.
     --
