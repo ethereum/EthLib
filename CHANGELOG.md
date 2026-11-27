@@ -1302,6 +1302,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the MODEXP output (`Evm.Precompiles.Modexp.compute`) reads the modulus first, and reads the base and the exponent only for a modulus other than 0 ([#4950](https://github.com/ethereum/EthLib/issues/4950)).
+  Its value is unchanged, and `compute_data` keeps its statement, but a proof that unfolds the definition sees the new order.
+  Before Fusaka, such a call costs the least price, whatever the exponent length.
+  The definition no longer relies on the compiler to skip reading the exponent.
+
 - In Lean, the relation that a state reads as another moves from `Logic.ReadsAs` (`Execution/Proofs/Evm/Logic/Keeps.lean`) to `State.TransactionState.ReadsAs` (`Execution/Proofs/State/Frame.lean`), with its definition unchanged.
   Its lemmas `refl`, `trans`, `recordAccountRead` and `recordStorageRead` move with it, and `routeState` keeps its file under the new namespace.
   The theorems on a failed call, in files that `Logic/Keeps.lean` imports, then state it by name.

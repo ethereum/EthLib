@@ -135,6 +135,41 @@ def test_example_3_before_fusaka(fork: str) -> None:
         run(fork, 0x05, EXAMPLE_3, 2**64 - 1)
 
 
+# Exponent lengths that no call could pay to read: 2^32 bytes, and the largest 32-byte length.
+HUGE_EXPONENT_LENGTHS = [2**32, 2**256 - 1]
+
+
+@pytest.mark.parametrize("length", HUGE_EXPONENT_LENGTHS)
+@pytest.mark.parametrize(
+    "fork, cost",
+    [
+        # EIP-198: an empty base and modulus have the complexity 0, so the price is 0.
+        *((fork, 0) for fork in EIP_198_FORKS),
+        # EIP-2565: no 8-byte word gives the complexity 0, raised to the least price, 200.
+        *((fork, 200) for fork in EIP_2565_FORKS),
+    ],
+)
+def test_empty_base_and_modulus_before_fusaka(fork: str, cost: int, length: int) -> None:
+    # Before EIP-7823, the call is cheap whatever the exponent length, and returns nothing.
+    data = word(0) + word(length) + word(0)
+    assert price(fork, 0x05, data) == cost
+    assert run(fork, 0x05, data, cost) == b""
+
+
+@pytest.mark.parametrize("length", HUGE_EXPONENT_LENGTHS)
+@pytest.mark.parametrize("fork", EIP_7883_FORKS)
+def test_empty_base_and_modulus_from_fusaka(fork: str, length: int) -> None:
+    # EIP-7823, from Fusaka like EIP-7883, rejects the exponent length before any gas is charged.
+    with raises(
+        ValueError,
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+        "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.lengthTooLarge "
+        "(field := EthLib.Execution.Evm.Precompiles.Modexp.LengthField.exponent) "
+        f"(length := {length}))",
+    ):
+        run(fork, 0x05, word(0) + word(length) + word(0), 2**64 - 1)
+
+
 @pytest.mark.parametrize("fork", since("frontier", "byzantium"))
 def test_absent_before_byzantium(fork: str) -> None:
     with raises(ValueError, f"no precompile at address 5 at fork {fork}"):
