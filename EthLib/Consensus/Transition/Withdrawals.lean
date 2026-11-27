@@ -522,7 +522,7 @@ def processBlsToExecutionChange (config : Config) (checks : SignatureChecks)
   let credentials := validator.withdrawalCredentials
   ensure (credentials[0] = BLS_WITHDRAWAL_PREFIX[0]) (.notBlsCredentials index)
   -- Bytes 1 to 31 of the credentials are those of the SHA-256 hash of the key of the change.
-  let keyHash := Cryptography.Hash.Sha256.hash32 ⟨change.fromBlsPubkey.toArray⟩
+  let keyHash := Cryptography.Hash.Sha256.hash32 ⟨change.fromBlsPubkey.bytes.toArray⟩
   ensure (∀ i : Fin 31, credentials[i.val + 1] = keyHash[i.val + 1]) (.wrongBlsKey index)
   -- That key signs the change, under the genesis fork version and the genesis validators root.
   let domain ← liftSsz (computeDomain config DOMAIN_BLS_TO_EXECUTION_CHANGE

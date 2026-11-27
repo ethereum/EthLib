@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.LightClient.Sync
 public import EthLib.Serialization.Proofs.Ssz.BranchRandomOracle
 import EthLib.Consensus.Proofs.Containers.SyncCommittee
+import EthLib.Consensus.Proofs.Types
 import EthLib.Consensus.Proofs.LightClient.Authenticate
 
 /-!
@@ -104,16 +105,16 @@ theorem hashTreeRootM_syncCommittee {m : Type → Type} [Monad m] [LawfulMonad m
           (.vector (SszType.desc (Vector UInt8 48)) preset.SYNC_COMMITTEE_SIZE.toNat)
           (.seq (committee.pubkeys.toList.map SszType.toValue))).run with
       | .ok keys =>
-        let aggregate ← hash ⟨committee.aggregatePubkey.toArray ++ Array.replicate 16 0⟩
+        let aggregate ← hash ⟨committee.aggregatePubkey.bytes.toArray ++ Array.replicate 16 0⟩
         return .ok (← hash (keys ++ aggregate))
       | .error error => return .error error) := by
   have aggregate : (hashTreeRootAtM (Hasher.ofHash hash) 2 (.byteVector 48)
-      (.bytes ⟨committee.aggregatePubkey.toArray⟩)).run = _ :=
-    hashTreeRootAtM_bytes48 (Hasher.ofHash hash) 1 committee.aggregatePubkey
+      (.bytes ⟨committee.aggregatePubkey.bytes.toArray⟩)).run = _ :=
+    hashTreeRootAtM_bytes48 (Hasher.ofHash hash) 1 committee.aggregatePubkey.bytes
   show (hashTreeRootAtM (Hasher.ofHash hash) 3 (.container ["pubkeys", "aggregate_pubkey"]
     [.vector (.byteVector 48) preset.SYNC_COMMITTEE_SIZE.toNat, .byteVector 48])
     (.seq [.seq (committee.pubkeys.toList.map SszType.toValue),
-      .bytes ⟨committee.aggregatePubkey.toArray⟩])).run = _
+      .bytes ⟨committee.aggregatePubkey.bytes.toArray⟩])).run = _
   unfold hashTreeRootAtM
   simp only [merkleLayout, List.length_cons, List.length_nil, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, liftM_pure, pure_bind, List.zip_cons_cons, List.zip_nil_left,
@@ -166,10 +167,17 @@ private theorem collision_or_eq_of_hashTreeRootM_syncCommittee {cache : HashOrac
     ((size_of_queryHash hdigest₁).trans (size_of_queryHash hdigest₂).symm)
   obtain rfl : node₁ = node₂ := ByteArray.ext sameKeys
   refine (collision_or_eq_of_queryHash hdigest₁ hdigest₂ sameAggregate).elim .inl fun key => ?_
+  -- A key is rooted as its bytes.
+  rw [map_toValue_blsPubkey] at hkeys₁ hkeys₂
   refine (collision_or_eq_of_hashTreeRootM_bytes48Vector (by simp) (by simp) hkeys₁
     hkeys₂).elim .inl fun keys => .inr ?_
   simp only [SyncCommittee.mk.injEq]
-  exact ⟨Vector.toList_inj.mp keys, Vector.toArray_inj.mp ((Array.append_left_inj _).mp key)⟩
+  -- A key is its 48 bytes, so equal bytes are one key.
+  have bytes : Function.Injective (·.bytes : Cryptography.Bls.BLSPubkey → _) :=
+    fun ⟨_⟩ ⟨_⟩ same => by cases same; rfl
+  exact ⟨Vector.toList_inj.mp ((List.map_injective_iff.mpr bytes) keys),
+    congrArg Cryptography.Bls.BLSPubkey.mk
+      (Vector.toArray_inj.mp ((Array.append_left_inj _).mp key))⟩
 
 /-- A replayed winning committee extraction exposes a collision of the cache.
 
@@ -222,7 +230,7 @@ private theorem hashTreeRootM_syncCommittee_queryBound (committee : SyncCommitte
     IsQueryBoundP (hashTreeRootM (Hasher.ofHash queryHash) (SszType.desc (SyncCommittee preset))
       (SszType.toValue committee)).run (fun _ => True)
       (preset.SYNC_COMMITTEE_SIZE.toNat + 2 ^ depthFor preset.SYNC_COMMITTEE_SIZE.toNat + 1) := by
-  rw [hashTreeRootM_syncCommittee]
+  rw [hashTreeRootM_syncCommittee, map_toValue_blsPubkey]
   have tree := Nat.one_le_two_pow (n := depthFor preset.SYNC_COMMITTEE_SIZE.toNat)
   refine (isQueryBoundP_bind (m := 2) (hashTreeRootM_bytes48Vector_queryBound (by simp))
     fun keys _ => ?_).mono (by omega)

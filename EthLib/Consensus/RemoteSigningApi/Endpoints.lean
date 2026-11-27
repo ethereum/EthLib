@@ -44,7 +44,7 @@ def readIdentifier (identifier : String) : Option BLSPubkey :=
   -- The source: a BLS public key in hex format.
   --
   -- EthLib's reading: the `0x` prefix and 96 hex digits, so other spellings are refused.
-  parseHexBytes 48 identifier
+  BLSPubkey.mk <$> parseHexBytes 48 identifier
 
 /-- A rule of slashing protection: it refuses a request of a key, or records it.
 

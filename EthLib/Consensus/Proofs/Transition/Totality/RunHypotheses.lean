@@ -57,7 +57,7 @@ structure EpochDraws (config : Config) (checks : SignatureChecks)
     (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
     ∀ ready, run (action config checks) readyStages state = .ok ready →
       ∀ validator ∈ ready.validators.data,
-        ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point
+        ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey.bytes = .ok point
   /-- From Altair, at a sync committee period, a validator at the cap is active next epoch. -/
   sync : .altair ≤ fork →
     (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
@@ -96,7 +96,7 @@ def UpgradeDraws (forked : ForkedBeaconState preset) : Prop :=
   -- A validator at the cap must be active in the next epoch.
   | ⟨.phase0, pre⟩ =>
     (∀ validator ∈ pre.validators.data,
-      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point) ∧
+      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey.bytes = .ok point) ∧
     ∃ validator ∈ pre.validators.data, isActiveValidator validator (getCurrentEpoch pre + 1) ∧
       validator.effectiveBalance.toNat = drawCap preset .phase0
   -- The upgrade to Fulu draws the proposers of the epochs up to the seed lookahead.
@@ -162,7 +162,7 @@ structure EpochDrawsEnd (config : Config) (checks : SignatureChecks)
     (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
     ∀ ready, run (action config checks) readyStages state = .ok ready →
       ∀ validator ∈ ready.validators.data,
-        ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point
+        ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey.bytes = .ok point
   /-- From Altair, at a sync committee period, the draw of the next committee ends. -/
   sync : .altair ≤ fork →
     (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
@@ -212,7 +212,7 @@ def UpgradeDrawsEnd (forked : ForkedBeaconState preset) : Prop :=
   -- Every key must also pass validation.
   | ⟨.phase0, pre⟩ =>
     (∀ validator ∈ pre.validators.data,
-      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point) ∧
+      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey.bytes = .ok point) ∧
     -- No effective balance is above the cap of the draw.
     --
     -- The registry holds at most `2^40` validators.

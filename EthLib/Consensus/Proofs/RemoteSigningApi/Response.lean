@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.RemoteSigningApi.Response
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
+public import EthLib.Consensus.Proofs.Types
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
 

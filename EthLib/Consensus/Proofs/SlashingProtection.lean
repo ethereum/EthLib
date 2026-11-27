@@ -198,12 +198,12 @@ theorem readArray_arr {α : Type} (path : String)
 /-- What one key signed, as the file writes it, reads back as itself. -/
 theorem readEntry_entryJson (path : String) (entry : InterchangeEntry) :
     readEntry path (entryJson entry) = .ok entry := by
-  have distinct : ([("pubkey", bytesJson entry.pubkey),
+  have distinct : ([("pubkey", bytesJson entry.pubkey.bytes),
       ("signed_blocks", Json.arr (entry.signedBlocks.map blockJson).toArray),
       ("signed_attestations", Json.arr (entry.signedAttestations.map attestationJson).toArray)] :
         List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
   have pubkey := Base.Json.getObjVal?_mkObj distinct
-    (name := "pubkey") (value := bytesJson entry.pubkey) (by simp)
+    (name := "pubkey") (value := bytesJson entry.pubkey.bytes) (by simp)
   have blocks := Base.Json.getObjVal?_mkObj distinct (name := "signed_blocks")
     (value := Json.arr (entry.signedBlocks.map blockJson).toArray) (by simp)
   have attestations := Base.Json.getObjVal?_mkObj distinct (name := "signed_attestations")
@@ -367,12 +367,12 @@ private theorem canonical_arr_map {α : Type} (write : α → Json) (xs : List �
 /-- What one key signed reads back from its rebuilt document. -/
 theorem readEntry_canonical (path : String) (entry : InterchangeEntry) :
     readEntry path (canonical (entryJson entry)) = .ok entry := by
-  have distinct : ([("pubkey", bytesJson entry.pubkey),
+  have distinct : ([("pubkey", bytesJson entry.pubkey.bytes),
       ("signed_blocks", Json.arr (entry.signedBlocks.map blockJson).toArray),
       ("signed_attestations", Json.arr (entry.signedAttestations.map attestationJson).toArray)] :
         List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
   have pubkey := Base.Json.getObjVal?_canonical_mkObj distinct
-    (name := "pubkey") (value := bytesJson entry.pubkey) (by simp)
+    (name := "pubkey") (value := bytesJson entry.pubkey.bytes) (by simp)
   have blocks := Base.Json.getObjVal?_canonical_mkObj distinct (name := "signed_blocks")
     (value := Json.arr (entry.signedBlocks.map blockJson).toArray) (by simp)
   have attestations := Base.Json.getObjVal?_canonical_mkObj distinct

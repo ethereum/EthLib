@@ -119,7 +119,7 @@ private theorem crossing {slot limit epochLength : Nat} (within : slot + 1 ≤ l
 /-- Every key of the registry passes validation. -/
 private def KeysValid {fork : Fork} (state : BeaconState preset fork) : Prop :=
   ∀ validator ∈ state.validators.data,
-    ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point
+    ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey.bytes = .ok point
 
 /-- A state with the same keys keeps their validity. -/
 private theorem KeysValid.of_keys {fork fork' : Fork} {state : BeaconState preset fork}
@@ -429,7 +429,7 @@ theorem runHypotheses_of_quiet_altair {forked : ForkedBeaconState preset} {count
     -- Every key of its registry passes validation.
     (quiet : Quiet forked.state)
     (keys : ∀ validator ∈ forked.state.validators.data,
-      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point)
+      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey.bytes = .ok point)
     -- One validator is at the cap.
     {index : Nat} {validator : Validator} {balance : Gwei} {scoreStart : Nat}
     (found : forked.state.validators.data[index]? = some validator)

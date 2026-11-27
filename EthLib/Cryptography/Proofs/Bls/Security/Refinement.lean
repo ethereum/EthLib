@@ -270,7 +270,7 @@ theorem verify_iff (sk : SecretKey) (msg : ByteArray) (sig : BLSSignature) :
   obtain ⟨P, hP, hPrep⟩ := G1.keyValidatePoint_compress_mul sk.property
   obtain ⟨hQ, hv, hs⟩ := hashRep_spec msg
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
-  refine (coreVerify_iff (pk := skToPk sk) hP hPrep hQ hb).trans
+  refine (coreVerify_iff (pk := (skToPk sk).bytes) hP hPrep hQ hb).trans
     (exists_congr fun R => and_congr_right fun hR => ?_)
   have hpt : G2.toPoint (G2.mul G2.generator (sk.val * b)) =
       (Scalar.ofFr sk.val • hashPoint msg : G2Sub) := by
@@ -592,8 +592,8 @@ theorem byteVerify_hashPointWith (dst pk msg sig : ByteArray) :
 
 /-- Replacing the random oracle with EthLib's hash gives EthLib's verification. -/
 theorem byteVerify_hashPoint (pk : BLSPubkey) (msg : ByteArray) (sig : BLSSignature) :
-    byteVerify (packBytes pk) (packBytes sig) (hashPoint msg) = verify pk msg sig :=
-  byteVerify_hashPointWith DST (packBytes pk) msg (packBytes sig)
+    byteVerify (packBytes pk.bytes) (packBytes sig) (hashPoint msg) = verify pk msg sig :=
+  byteVerify_hashPointWith DST (packBytes pk.bytes) msg (packBytes sig)
 
 /-- The byte game for the secret scalar `a`.
 

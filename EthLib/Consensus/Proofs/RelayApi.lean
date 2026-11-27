@@ -468,15 +468,18 @@ theorem getValidatorRegistration_none (registry : Registry) :
 This is how a validator checks that its own registration succeeded, as the source says. -/
 theorem getValidatorRegistration_insert (registry : Registry)
     (signed : SignedValidatorRegistrationV1) {text : String}
-    (spells : Serialization.Ssz.parseHexBytes 48 text = some signed.message.pubkey) :
+    (spells : Serialization.Ssz.parseHexBytes 48 text = some signed.message.pubkey.bytes) :
     getValidatorRegistration (registry.insert signed) (some text) = .found signed := by
-  simp [getValidatorRegistration, spells, Registry.find?_insert_self]
+  -- The key that the text spells is the key of the registration.
+  have kept : (registry.insert signed).find? ⟨signed.message.pubkey.bytes⟩ = some signed :=
+    Registry.find?_insert_self registry signed
+  simp [getValidatorRegistration, spells, kept]
 
 /-- A request with the hex text of the key of a kept registration gets 200 with it. -/
 theorem getValidatorRegistration_insert_toHex (registry : Registry)
     (signed : SignedValidatorRegistrationV1) :
     getValidatorRegistration (registry.insert signed)
-        (some (Serialization.Ssz.toHex ⟨signed.message.pubkey.toArray⟩)) = .found signed :=
+        (some (Serialization.Ssz.toHex ⟨signed.message.pubkey.bytes.toArray⟩)) = .found signed :=
   getValidatorRegistration_insert registry signed (Serialization.Ssz.parseHexBytes_toHex _)
 
 /-- After a registration passes and is kept, a request for its key gets 200 with it.
@@ -487,7 +490,7 @@ theorem getValidatorRegistration_insert_monotone {preset : Preset} {fork : Fork}
     {signed previous : SignedValidatorRegistrationV1} {now : UInt64} {text : String}
     (kept : processRegistration config checks state registry signed now = .ok ())
     (before : registry.find? signed.message.pubkey = some previous)
-    (spells : Serialization.Ssz.parseHexBytes 48 text = some signed.message.pubkey) :
+    (spells : Serialization.Ssz.parseHexBytes 48 text = some signed.message.pubkey.bytes) :
     getValidatorRegistration (registry.insert signed) (some text) = .found signed ∧
       previous.message.timestamp ≤ signed.message.timestamp :=
   ⟨getValidatorRegistration_insert registry signed spells,
@@ -502,10 +505,12 @@ theorem getValidatorRegistration_malformed {registry : Registry} {text : String}
 
 /-- A key that the relay does not hold gets no status, since the source gives none. -/
 theorem getValidatorRegistration_notHeld {registry : Registry} {text : String}
-    {pubkey : BLSPubkey} (spells : Serialization.Ssz.parseHexBytes 48 text = some pubkey)
+    {pubkey : BLSPubkey} (spells : Serialization.Ssz.parseHexBytes 48 text = some pubkey.bytes)
     (absent : registry.find? pubkey = none) :
     getValidatorRegistration registry (some text) = .notHeld ∧
       (getValidatorRegistration registry (some text)).status = none := by
+  -- The key that the text spells is the key that the relay does not hold.
+  have absent : registry.find? ⟨pubkey.bytes⟩ = none := absent
   simp [getValidatorRegistration, spells, absent, RegistrationAnswer.status]
 
 /-! ## Block scoring -/

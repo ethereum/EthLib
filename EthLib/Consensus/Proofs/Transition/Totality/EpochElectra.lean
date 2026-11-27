@@ -211,7 +211,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
     (keys : (getCurrentEpoch state + 1) % preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD = 0 →
       ∀ ready, run (action config checks) readyStages state = .ok ready →
         ∀ validator ∈ ready.validators.data,
-          ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point)
+          ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey.bytes = .ok point)
     -- Each draw must end on the state it reads, under the bounds of the draw.
     --
     -- No bound on the state makes a draw end, so that is assumed.

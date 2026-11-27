@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.RelayApi
+public import EthLib.Cryptography.Exports.Bls
 
 /-!
 # `Exports.RelayApi`
