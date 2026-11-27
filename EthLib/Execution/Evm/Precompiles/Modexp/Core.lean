@@ -79,16 +79,24 @@ def checkLengthsAt (fork : Fork) (l : Lengths) : Except ModexpError Unit :=
 
 - The power is computed by square-and-multiply, one step per bit of the exponent.
 - A zero modulus gives `length_of_MODULUS` zero bytes, since the Yellow Paper takes `x mod 0 = 0`.
-- An empty base and modulus give an empty output. -/
+- An empty modulus gives an empty output, whatever the base and the exponent. -/
 def compute (data : ByteArray) (l : Lengths) : ByteArray :=
   -- EIP-198: `<BASE> <EXPONENT> <MODULUS>`, and any data after them is ignored.
-  let base := readNat data BASE_OFFSET l.base
-  let exponent := readNat data l.exponentStart l.exponent
+  --
+  -- The modulus is read first: an empty modulus reads no byte and is 0.
   let modulus := readNat data l.modulusStart l.modulus
   -- EIP-198: the output is `BASE^EXPONENT mod MODULUS`.
   --
   -- EIP-198 leaves the modulus 0 open; the Yellow Paper, Appendix E, takes `x mod 0` to be zero.
-  let result := if modulus = 0 then 0 else Nat.powMod base exponent modulus
+  --
+  -- A zero modulus gives 0 at once and never reads the base or the exponent, whatever their size.
+  --
+  -- Before Fusaka, an empty base and modulus cost the least price, whatever the exponent length.
+  --
+  -- So the output reads no more than the call pays for.
+  let result := if modulus = 0 then 0
+    else Nat.powMod (readNat data BASE_OFFSET l.base) (readNat data l.exponentStart l.exponent)
+      modulus
   -- EIP-198: the output is a byte array with the same length as the modulus.
   --
   -- The result is below the modulus, so it fits in `length_of_MODULUS` bytes.
