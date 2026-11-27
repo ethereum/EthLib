@@ -226,8 +226,9 @@ theorem relocated_ofNat {n size o b bsize fixed reloc dest : Nat}
 
 /-! ## Steps over a relocated block
 
-Each tactic takes a proof `h` that the code holds a relocated block, and rules `ls` that unfold
-the block and its masks into numbers.
+Each tactic takes a proof `h` that the code holds a relocated block.
+
+It also takes rules `ls` that unfold the block and its masks into numbers.
 -/
 
 open Lean.Parser.Tactic
@@ -265,8 +266,8 @@ macro_rules
 
 It steps as on a frame that knows a few ranges of memory, with the code facts from `h`.
 
-A jump to a position of the block, or to a destination that a hypothesis proves valid, comes
-back at `o + k` too. -/
+A jump into the block, or to a destination a hypothesis proves valid, also comes back at `o + k`.
+-/
 syntax "evm_stepR " term:max " [" simpLemma,* "]" : tactic
 
 macro_rules
