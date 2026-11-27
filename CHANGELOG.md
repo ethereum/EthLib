@@ -4358,8 +4358,9 @@ Not yet released.
   `responseDesc_isSome` states that each protocol version of a fork has a response type at the fork of every chunk.
 
 - In Lean, `Cryptography.Bls.BLSPubkey` is now a structure over its 48 bytes, as `KZGCommitment` and `KZGProof` are.
-  `EthLib.Cryptography.Bls.Signatures` defines it, so Lean rejects plain 48 bytes where a public key is expected.
+  So Lean rejects plain 48 bytes where a public key is expected.
   It also rejects a public key where the KZG operations read untrusted 48 bytes.
+  `EthLib.Cryptography.Bls.Types` defines it and imports no curve arithmetic, so `Consensus.Types` does not import the pairing.
   Keys compare as their bytes, and the order has the laws that a search tree needs.
   `pointToPubkey`, `skToPk` and `ethAggregatePubkeys` return the structure, and the scheme operations take it.
   Key validation and the core verifications still take bytes, as the BLS signature draft writes them.
