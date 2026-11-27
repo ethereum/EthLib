@@ -982,11 +982,13 @@ variable {Δ k : ℕ} (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATIO
   (deadline : IsAttestationDeadline fork config genesisTimeMs s d)
 include sync slots admitted anchored anchorSlot anchorBoundary start hv hw nextOk deadline
 
-/-- A receiver up to date at the next slot, a delay after the deadline, keeps a duty-slot vote.
+/-- Later, a receiver's latest message for a duty's validator is a vote from the duty slot or later.
 
-At each later event `k` its latest message for the validator is a signed vote of that slot or later.
+The receiver is up to date at the next slot, a delay after the deadline.
 
-That vote need not be the duty vote; otherwise honest stores up to time `T k` collide. -/
+At each later event `k` this floor holds, or honest stores up to time `T k` collide.
+
+The vote is signed by the validator, and need not be the duty vote. -/
 theorem VoteAt.latest_signed_at_next_slot {n j : ℕ} {a : Attestation preset fork}
     {i : IndexedAttestation preset fork}
     (vote : VoteAt e v s c d n a i)
@@ -1052,9 +1054,11 @@ theorem VoteAt.latest_signed_at_next_slot {n j : ℕ} {a : Attestation preset fo
     (e.view_subset_sent k w seen) dutySigned originSigned originVote
     (by rw [dataEpoch, dataSlot]) rank (UInt64.le_of_eq dataSlot.symm)
 
-/-- From an up-to-date next slot boundary on, a receiver keeps a signed vote of an honest duty.
+/-- From the next slot boundary, a receiver's latest message is a vote from the duty slot or later.
 
-At event `k` the latest message is a vote from the duty slot or later, or stores collide by `T k`.
+The receiver is up to date there; each later event `k` keeps the floor, or stores collide by `T k`.
+
+That vote is signed by the validator and need not be the duty vote.
 
 It assumes delayed block admission up to `T k` (`admitted`) and that delays fit (`fits`). -/
 theorem Execution.latest_signed_of_duty

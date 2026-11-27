@@ -3821,7 +3821,7 @@ The slot floor persists at later events.
 The receiver must be up to date at the next slot and at least a delay after the deadline.
 The vote that it then holds need not be the duty vote.
 They give a floor on the slot of the latest vote, not that the latest vote is the duty vote.
-They cover both forks, including votes for a full payload from Gloas.
+They hold before and from Gloas, including votes for a full payload from Gloas.
 `Execution.latest_signed_of_duty` starts from an up-to-date receiver at the next slot boundary, not from its first up-to-date event later in the window.
 `BlocksAdmitted` assumes that the block handler succeeds, so they do not derive the provenance of the voted block.
 
