@@ -101,6 +101,36 @@ theorem right {more : ByteArray} (h : Holds memory start (bytes ++ more)) :
   rw [EthLib.Base.byteAtOrZero_append, ite_eq_right (by omega), Nat.add_sub_cancel_left] at this
   rwa [Nat.add_assoc]
 
+/-- A part of a range that holds bytes holds the same part of the bytes. -/
+theorem read (h : Holds memory start bytes) {offset length : Nat}
+    (hfit : offset + length ≤ bytes.size) :
+    Holds memory (start + offset) (memoryReadBytes bytes offset length) := by
+  have hsize := size_memoryReadBytes hfit
+  refine of_byteAtOrZero (by rw [hsize]; have := h.1; omega) fun i hi => ?_
+  rw [hsize] at hi
+  rw [byteAtOrZero_memoryReadBytes hfit, ite_eq_left hi, Nat.add_assoc]
+  exact h.byteAtOrZero_eq (by omega)
+
+/-- A write within a range that holds bytes makes the range hold those bytes with the same write.
+
+The write may cover any part of the range, from none of it to all of it. -/
+theorem memoryWrite_within (h : Holds memory start bytes) {value : ByteArray} {s : Nat}
+    (hs : start ≤ s) (hw : s + value.size ≤ start + bytes.size) :
+    Holds (memoryWrite memory s value) start (memoryWrite bytes (s - start) value) := by
+  have fit := h.1
+  have hb : s - start + value.size ≤ bytes.size := by omega
+  have hm : s + value.size ≤ memory.size := by omega
+  refine of_byteAtOrZero (by rw [size_memoryWrite hb, size_memoryWrite hm]; exact fit)
+    fun i hi => ?_
+  rw [size_memoryWrite hb] at hi
+  rw [byteAtOrZero_memoryWrite hm, byteAtOrZero_memoryWrite hb]
+  by_cases hin : s ≤ start + i ∧ start + i < s + value.size
+  · rw [ite_eq_left hin, ite_eq_left (by omega)]
+    congr 1
+    omega
+  · rw [ite_eq_right hin, ite_eq_right (by omega)]
+    exact h.byteAtOrZero_eq hi
+
 /-- A range that holds the bytes of a word reads as that word. -/
 theorem loadWord {word : U256} (h : Holds memory start (wordBytes word)) :
     loadWord (memoryReadBytes memory start 32) 0 32 = word := by

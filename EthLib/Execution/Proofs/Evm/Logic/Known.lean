@@ -7,7 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Region
 
 A frame of this kind names its memory only by its size and by ranges that hold known bytes.
 
-The rules here give this form to MSTORE, MSTORE8 and MCOPY.
+The rules here give this form to MSTORE, MSTORE8, MCOPY and KECCAK256.
 
 They give it to CALLDATACOPY, CODECOPY, RETURNDATACOPY and EXTCODECOPY too.
 
@@ -31,6 +31,13 @@ def HoldsAll (memory : ByteArray) (facts : List (Nat × ByteArray)) : Prop :=
 /-- Whether a fact ends before the range of `length` bytes from `start`, or starts after it. -/
 def Apart (start length : Nat) (fact : Nat × ByteArray) : Bool :=
   fact.1 + fact.2.size ≤ start || start + length ≤ fact.1
+
+/-- A fact that ends before a range, or starts after it, is kept by the filter of that range. -/
+theorem mem_filter_apart {facts : List (Nat × ByteArray)} {start length : Nat}
+    {fact : Nat × ByteArray} (h : fact ∈ facts)
+    (hd : fact.1 + fact.2.size ≤ start ∨ start + length ≤ fact.1) :
+    fact ∈ facts.filter (Apart start length) :=
+  List.mem_filter.mpr ⟨h, by simpa [Apart] using hd⟩
 
 /-- A running frame of the code, whose memory has the size `size` and holds the facts.
 
@@ -70,6 +77,18 @@ theorem Known.mono {evm : Evm fork Nat} {fewer : List (Nat × ByteArray)}
     (sub : ∀ fact ∈ fewer, fact ∈ facts) :
     Known code message pc stack size fewer gas state substate returnData evm :=
   ⟨h.1, h.2.1, h.2.2.1, fun fact hfact => h.2.2.2 fact (sub fact hfact)⟩
+
+/-- A frame knows each part of the range of a fact. -/
+theorem Known.read {evm : Evm fork Nat} {start offset length : Nat} {bytes : ByteArray}
+    (h : Known code message pc stack size facts gas state substate returnData evm)
+    (hfact : (start, bytes) ∈ facts) (hfit : offset + length ≤ bytes.size) :
+    Known code message pc stack size
+      ((start + offset, memoryReadBytes bytes offset length) :: facts) gas state substate
+      returnData evm :=
+  ⟨h.1, h.2.1, h.2.2.1, fun fact hf => by
+    rcases List.mem_cons.mp hf with rfl | hf
+    · exact (h.2.2.2 _ hfact).read hfit
+    · exact h.2.2.2 fact hf⟩
 
 /-- A write within memory keeps the facts apart from it, and holds what it writes. -/
 theorem holdsAll_memoryWrite {memory value : ByteArray} {start : Nat}
@@ -229,6 +248,31 @@ theorem revert_known (hfork : .byzantium ≤ fork) {start length : U256} {out : 
   rw [memoryExtend_zero, ← hlen, hold.2, Nat.sub_zero] at hq
   exact ⟨after, hreach, halted, hq⟩
 
+/-- KECCAK256 of the range of a fact pushes the hash of the bytes of the fact.
+
+The hash stays a function of those bytes, so a proof never computes it.
+
+It pays its price on those bytes, and memory does not grow. -/
+theorem keccak256_known {start length : U256} {bytes : ByteArray} {rest : List U256}
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x20) (hfact : (start.toNat, bytes) ∈ facts)
+    (hlen : bytes.size = length.toNat) (hgas : keccak256Cost length ≤ gas) :
+    Hoare fork (Known code message pc (start :: length :: rest) size facts gas state substate
+        returnData)
+      (Known code message (pc + 1) (keccak bytes :: rest) size facts
+        (gas - keccak256Cost length) state substate returnData) := by
+  rintro evm ⟨hat, hsize, hmod, hall⟩
+  have hold := hall _ hfact
+  have hext : extendMemory evm.memory.size [(start, length)] = ⟨0, 0⟩ :=
+    extendMemory_of_le (by rw [← hlen]; exact hold.1)
+  obtain ⟨after, hreach, hat'⟩ := Logic.keccak256 (fork := fork) hlt hbyte
+    (by rw [hext]; dsimp only; omega) evm hat
+  rw [hext] at hat'
+  dsimp only at hat'
+  rw [memoryExtend_zero, ← hlen, hold.2, Nat.add_zero] at hat'
+  have hm := hat'.2.2.2.2.2.1
+  exact ⟨after, hreach, by rw [hm]; exact hat', by rw [hm]; exact hsize, hmod,
+    by rw [hm]; exact hall⟩
+
 /-- The bytes of a read of a buffer have the size of the read. -/
 theorem size_bufferRead (data : ByteArray) (offset length : Nat) :
     (⟨(bufferRead data offset length).toArray⟩ : ByteArray).size = length := by
@@ -261,6 +305,64 @@ theorem mcopy_known (hfork : .dencun ≤ fork) {destination source length : U256
     rwa [hlen] at this
   rw [hread, hsize] at hat'
   exact ⟨after, hreach, known_of_write hz hlen (by simp) hsize hmod hall hat'⟩
+
+/-- From Dencun, MCOPY with both ranges within the range of a fact writes the copy into it.
+
+The source and the destination may overlap: the copy reads the source before it writes.
+
+It keeps the facts apart from the destination.
+
+It pays 3 and 3 gas a word, and memory does not grow. -/
+theorem mcopy_known_within (hfork : .dencun ≤ fork) {destination source length : U256}
+    {base : Nat} {bytes : ByteArray} {rest : List U256} (hlt : pc < code.size)
+    (hbyte : code[pc] = 0x5e) (hfact : (base, bytes) ∈ facts)
+    -- Both ranges lie within the range of the fact.
+    (hsource : base ≤ source.toNat) (hsource' : source.toNat + length.toNat ≤ base + bytes.size)
+    (hdest : base ≤ destination.toNat)
+    (hdest' : destination.toNat + length.toNat ≤ base + bytes.size)
+    (hgas : 3 + 3 * wordCount length.toNat ≤ gas) :
+    Hoare fork (Known code message pc (destination :: source :: length :: rest) size facts gas
+        state substate returnData)
+      (Known code message (pc + 1) rest size
+        -- The fact holds its bytes with the copy of its source part written at the destination.
+        ((base, memoryWrite bytes (destination.toNat - base)
+            (memoryReadBytes bytes (source.toNat - base) length.toNat)) ::
+          facts.filter (Apart destination.toNat length.toNat))
+        (gas - (3 + 3 * wordCount length.toNat)) state substate returnData) := by
+  rintro evm ⟨hat, hsize, hmod, hall⟩
+  have hold : Holds evm.memory base bytes := hall _ hfact
+  have fit := hold.1
+  have hext : extendMemory evm.memory.size [(source, length), (destination, length)] = ⟨0, 0⟩ :=
+    extendMemory_eq_zero _ _ fun p hp => .inr <| by
+      have hend : p.1.toNat + p.2.toNat ≤ evm.memory.size := by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hp
+        rcases hp with rfl | rfl <;> dsimp only <;> omega
+      exact ceil32_le (ceil32_mod _) (Nat.le_trans hend (le_ceil32 _))
+  obtain ⟨after, hreach, hat'⟩ := mcopy (fork := fork) hfork hlt hbyte
+    (by rw [hext]; dsimp only; omega) evm hat
+  rw [hext] at hat'
+  dsimp only at hat'
+  -- The copy reads the source part of the fact.
+  have hpart := hold.read (offset := source.toNat - base) (length := length.toNat) (by omega)
+  have hvsize := size_memoryReadBytes (memory := bytes) (start := source.toNat - base)
+    (size := length.toNat) (by omega)
+  have hread := hpart.2
+  rw [hvsize, show base + (source.toNat - base) = source.toNat by omega] at hread
+  rw [memoryExtend_zero, hread, Nat.add_zero] at hat'
+  have hw : destination.toNat +
+      (memoryReadBytes bytes (source.toNat - base) length.toNat).size ≤ evm.memory.size := by
+    rw [hvsize]
+    omega
+  have hm := hat'.2.2.2.2.2.1
+  refine ⟨after, hreach, by rw [hm]; exact hat', by rw [hm, size_memoryWrite hw]; exact hsize,
+    hmod, ?_⟩
+  rw [hm]
+  intro fact hf
+  rcases List.mem_cons.mp hf with rfl | hf
+  · exact hold.memoryWrite_within hdest (by rw [hvsize]; exact hdest')
+  · obtain ⟨hmem, hapart⟩ := List.mem_filter.mp hf
+    simp only [Apart, Bool.or_eq_true, decide_eq_true_eq] at hapart
+    exact (hall fact hmem).memoryWrite_of_disjoint hw (by rw [hvsize]; exact hapart)
 
 /-- CALLDATACOPY of a range of some bytes writes the fact of the call data, with zeros past its end.
 
