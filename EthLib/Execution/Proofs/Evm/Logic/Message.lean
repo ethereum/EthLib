@@ -31,6 +31,12 @@ open EthLib.Base (Fork)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
+/-- A message that differs from `low` at most in its gas, which is no less, and its reservoir.
+
+The state gas meter sends such a message where one counter sends `low`. -/
+def MessageCovers (low high : Message fork) : Prop :=
+  low.gas ≤ high.gas ∧ high = { low with gas := high.gas, reservoir := high.reservoir }
+
 /-! ## Steps under a runner of messages -/
 
 /-- One step of a running frame under a runner of messages, which ends each message with a frame.

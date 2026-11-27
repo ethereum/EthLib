@@ -477,18 +477,21 @@ theorem tableRunner_meets {callee : Evm fork Nat → Message fork → Evm fork N
     {start : Evm fork Nat × Evm fork StateGasMeter} {boundLow : Nat}
     (startReady : JointReady bound start) (meets : Meets calleeH runChild)
     (compat : ∀ caller caller' message message' child, FollowsMeter caller caller' →
-      MessageCovers message message' → calleeH caller' message' child →
+      MessageCovers message message' → message'.gas < 2 ^ 256 → calleeH caller' message' child →
       callee caller message (lowerMeter child message)) :
     Meets callee (tableRunner runChild start boundLow) := by
   refine ⟨fun caller message ltLow child ran => ?_, fun caller message ltLow e ran => ?_⟩
   · obtain ⟨low, high, caller', message', resume, resume', lt, ended, reached, runs, sent, sentH,
       ranH, same⟩ := tableRunner_ok ran
-    obtain ⟨_, _, _, highOk, -, follows, covers, -⟩ :=
-      (JointReady.reaches reached startReady).sends runs sent
+    have ready := JointReady.reaches reached startReady
+    obtain ⟨_, _, _, highOk, runsH, follows, covers, -⟩ := ready.sends runs sent
     rw [sentH] at highOk
     cases highOk
     rw [same]
-    exact compat _ _ _ _ _ follows covers (meets.ok _ _ _ _ ranH)
+    -- The message holds less gas than its caller, whose gas fits a word.
+    have fits : message'.gas < 2 ^ 256 := Nat.lt_trans (step_decreases fork runsH sentH).1
+      (ready.2.1 (.inl (ready.1.2 runs))).1
+    exact compat _ _ _ _ _ follows covers fits (meets.ok _ _ _ _ ranH)
   · rcases tableRunner_error ran with aborts | ⟨_, _, _, ranH⟩
     · exact aborts
     · exact meets.aborts _ _ _ _ ranH
@@ -585,7 +588,7 @@ theorem HoareUnder.meterCovers {callee : Evm fork Nat → Message fork → Evm f
     (ends : ∀ low, Q low → Carried low.error)
     -- A frame that ends a covering message meets the assumption under one counter, gas capped.
     (compat : ∀ caller caller' message message' child, FollowsMeter caller caller' →
-      MessageCovers message message' → calleeH caller' message' child →
+      MessageCovers message message' → message'.gas < 2 ^ 256 → calleeH caller' message' child →
       callee caller message (lowerMeter child message)) :
     HoareUnder (Meter := StateGasMeter) fork calleeH (Covered P)
       fun high => ∃ low, Q low ∧ MeterCovers low high := by
@@ -609,7 +612,7 @@ theorem SpecUnder.covered {callee : Evm fork Nat → Message fork → Evm fork N
       (low.code.size ≤ low.pc ∨ low.pc ∈ opcodePositions low.code) ∧ low.error = none)
     (ends : ∀ low, Q low → Carried low.error)
     (compat : ∀ caller caller' message message' child, FollowsMeter caller caller' →
-      MessageCovers message message' → calleeH caller' message' child →
+      MessageCovers message message' → message'.gas < 2 ^ 256 → calleeH caller' message' child →
       callee caller message (lowerMeter child message)) :
     SpecUnder (Meter := StateGasMeter) fork calleeH (Covered P) (Covered Q) :=
   (HoareUnder.meterCovers h ready (fun low hq => ends low hq.2) compat).consequence
