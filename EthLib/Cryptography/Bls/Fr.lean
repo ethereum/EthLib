@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Bls.Constants
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Word64.Four
@@ -27,16 +28,9 @@ Scalars and base-field elements have distinct types, so they cannot mix by accid
 
 namespace EthLib.Cryptography.Bls
 
-/-- BLS12-381 scalar field modulus (= group order). -/
-def Fr.modulus : Nat :=
-  52435875175126190479447740508185965837690552500527637822603658699938581184513
-
 protected theorem Fr.modulus_pos : 0 < Fr.modulus := by decide
 
 instance : NeZero Fr.modulus := ⟨by decide⟩
-
-/-- `|t|` for the BLS parameter `t = -0xd201000000010000`, which the pairing calls `x`. -/
-def blsX : Nat := 0xD201000000010000
 
 /-- The subgroup order `r` is `|t|^4 - |t|^2 + 1`, for the BLS parameter `t`. -/
 theorem Fr.modulus_eq_blsX : Fr.modulus = blsX ^ 4 - blsX ^ 2 + 1 := by decide
