@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Noninterference
 public import EthLib.Execution.Proofs.Evm.Call.Candidate
 public import EthLib.Execution.Proofs.Evm.Call.CodeOrigin
 public import EthLib.Execution.Proofs.Evm.Call.ReadsGrow
+public import EthLib.Execution.Proofs.Evm.Call.ToDelete
 
 /-!
 # Proofs: a message depends only on what it records
@@ -375,30 +376,6 @@ private theorem step_keptStep {evm : Evm fork Meter} {result : StepResult fork M
       exact hk
     · rw [same.message, message_incorporateChild]
       exact r.1.2.1
-
-/-- A deposit of code keeps the message of the frame. -/
-private theorem message_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
-    (h : depositCode fork snapshot evm = .ok after) : after.message = evm.message := by
-  unfold depositCode at h
-  dsimp only at h
-  split at h
-  · cases h
-    rfl
-  split at h
-  · cases h
-    rfl
-  split at h
-  · cases h
-    rfl
-  split at h
-  · cases h
-    split <;> rfl
-  split at h
-  · cases h
-    rfl
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  rfl
 
 /-- By induction on gas, every call and creation ends with its own message. -/
 private theorem processMessage_message [LawfulGasMeter Meter] (n : Nat) :

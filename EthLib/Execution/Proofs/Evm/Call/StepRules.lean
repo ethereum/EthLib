@@ -591,7 +591,9 @@ private def Sends (evm : Evm fork Meter) : StepResult fork Meter → Prop
     -- The message has the block and the transaction of `evm`.
     message.blockEnv = evm.message.blockEnv ∧ message.txEnv = evm.message.txEnv ∧
     -- A creation runs the code of no account, so it selects no precompile.
-    (message.target = none → message.codeAddress = none)
+    (message.target = none → message.codeAddress = none) ∧
+    -- A message that moves value moves it from the account of `evm`.
+    (message.shouldTransferValue = true → message.caller = evm.message.currentTarget)
 
 /-- A result that says what it sends from a frame says it from a frame with the same accounts.
 
@@ -601,13 +603,13 @@ private theorem Sends.lift {evm evm' : Evm fork Meter} {result : StepResult fork
   cases result with
   | next _ => trivial
   | child caller message resume =>
-    obtain ⟨r1, r2, r3, r4, r7, r5, r6, r8⟩ := r
+    obtain ⟨r1, r2, r3, r4, r7, r5, r6, r8, r9⟩ := r
     have hd : ∀ a, evm'.state.accountDeployable a = evm.state.accountDeployable a := by
       intro a
       exact State.TransactionState.accountDeployable_congr (getAccount_of_staticStep h a)
         (h.state a List.not_mem_nil).2.1
     refine ⟨r1, fun c => ?_, fun c => ?_, r4, fun c hne => (r7 c (h.message ▸ hne)).of_staticStep h,
-      h.message ▸ r5, h.message ▸ r6, r8⟩
+      h.message ▸ r5, h.message ▸ r6, r8, fun t => h.message ▸ r9 t⟩
     · rw [← hd]
       exact r2 c
     · rcases r3 c with hc | hc
@@ -644,7 +646,12 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
     · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
       trivial
     · cases h
-      refine ⟨.inl ⟨_, _, _, rfl⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      -- CALL, CALLCODE and STATICCALL move value from the current account; DELEGATECALL none.
+      refine ⟨.inl ⟨_, _, _, rfl⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_, by
+        intro t
+        by_cases hk : kind = .delegatecall
+        · simp [callMessage, hk] at t
+        · simp [callMessage, hk, callerFrame]⟩
       rotate_right
       · intro c
         simp at c
@@ -745,7 +752,7 @@ private theorem sends_launchCreate {evm : Evm fork Meter} {value : U256}
     · rename_i hd
       cases hr
       refine ⟨.inr ⟨_, _, rfl⟩, fun _ => ?_, fun c => absurd rfl c, ?_, fun c => absurd rfl c, ?_,
-        ?_, fun _ => rfl⟩
+        ?_, fun _ => rfl, fun _ => rfl⟩
       rotate_left
       · obtain ⟨_, -, hacc, -⟩ := State.TransactionState.reads_modifyState
           (Base.mapError_ok_iff.mp hstate)
@@ -853,7 +860,17 @@ theorem step_eq_child_codeAddress {evm caller : Evm fork Meter} {message : Messa
     {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (h : step fork evm = .ok (.child caller message resume)) (create : message.target = none) :
     message.codeAddress = none :=
-  (sends_step h).2.2.2.2.2.2.2 create
+  (sends_step h).2.2.2.2.2.2.2.1 create
+
+/-- A message that a successful step sends moves value only from the account of the frame.
+
+DELEGATECALL keeps the sender of its frame, but it moves no value. -/
+theorem step_eq_child_caller {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : step fork evm = .ok (.child caller message resume))
+    (moves : message.shouldTransferValue = true) :
+    message.caller = evm.message.currentTarget :=
+  (sends_step h).2.2.2.2.2.2.2.2 moves
 
 /-- A call instruction sends only messages with a target. -/
 theorem callStep_target_ne {kind : CallKind} {evm caller : Evm fork Meter}

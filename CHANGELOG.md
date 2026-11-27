@@ -1257,6 +1257,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).
+  `KeptOrWipedEmpty` and `EmptyAt` (`Execution/Proofs/State/Wiped.lean`) state it, with the fact that an account empty at the end was empty at the start.
+  `RunBurns.keptOrWipedEmpty`, `keptOrWipedEmpty_processMessage_of_away` and `keptOrWipedEmpty_processCreateMessage_of_away` (`Execution/Proofs/Evm/Call/StorageAway.lean`) replace `RunBurns.keptOrWiped`, `keptOrWiped_processMessage_of_away` and `keptOrWiped_processCreateMessage_of_away`.
+  They also show that the run does not mark the account for deletion unless it was marked at its start.
+  They ask `BurnStart.Funded` of the start: `SenderHasNonce` of the first message, and no code address for a creation.
+  `keptOrWipedEmpty_processMessageCall_of_away`, `keptOrWipedEmpty_runTransaction_of_away` and `keptOrWipedEmpty_processTransaction_of_away` (`Execution/Proofs/Transactions/StorageAt.lean`) replace the `keptOrWiped` theorems of the same names, and ask `CodelessAtZero` of the authorizations.
+  `keptOrWipedEmpty_systemCall_of_away` (`Execution/Proofs/Blocks/StorageAt.lean`) replaces `keptOrWiped_systemCall_of_away`, with the same hypotheses.
+  The form over transactions without `CodelessAtZero` is dropped; `KeptOrWipedEmpty.keptOrWiped` gives the old conclusion from the new one.
+  `step_eq_child_caller` (`Execution/Proofs/Evm/Call/StepRules.lean`) shows that a message that a step sends moves value only from the account of the frame.
+  `message_depositCode` moves to `Execution/Proofs/Evm/Call/ToDelete.lean` and `caller_transactionMessage` to `Execution/Proofs/Transactions/Process.lean`, both now public.
+
 - In Lean, the invariant of the storage of a contract no longer assumes that no other code has the Keccak-256 hash of its code ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
   `CodeHyp.hashOnly` (`Execution/Proofs/Evm/Call/StorageInvariant.lean`), which is believed false for Keccak-256 as a function, is removed.
   The theorems instead assume that the runs they cover output and set no code that collides with the code: `Collides` and `NoCollision` (`Execution/Proofs/Evm/Call/StorageInvariant.lean`), and `CallApart`, `TransactionApartWith` and `TransactionApart` (`Execution/Proofs/Transactions/StorageInvariant.lean`), `SystemCallApart`, `BodyApart` and `BlockApart` (`Execution/Proofs/Blocks/StorageInvariant.lean`).
