@@ -1023,11 +1023,10 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
     {pre : Run config checks g ⟨fork, anchorState⟩} {u : ValidatorIndex} {events : List ℕ}
     {firstSlot : Slot}
     (ctx : StepCtx (e := e) pre Δ anchor limit horizon anchorEpoch u events firstSlot)
-    -- The first call observes the anchor's finalized checkpoint, whose facts are given.
-    (anchorFacts : ∀ n ∈ events, (e.world n).time ≤ limit →
+    -- The first call observes the anchor's finalized checkpoint, whose invariant is given.
+    (anchorInvariant : ∀ n ∈ events, (e.world n).time ≤ limit →
       CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n
-          anchor.finalizedCheckpoint.root ∧
-        HonestHeadsCover (e := e) anchor.finalizedCheckpoint.root (e.world n).time (limit + 1))
+        anchor.finalizedCheckpoint.root)
     {i n : ℕ} {fcr after : FastConfirmationStore}
     (calls : CallAt (e := e) u events (getFastConfirmationStore anchor) i n fcr after)
     (nBound : (e.world n).time ≤ limit)
@@ -1049,19 +1048,19 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
   · exact .inr (.inl collision)
   · exact .inr (.inr (.inr (.inl direct)))
   · exact .inr (.inr (.inr (.inr (.inl justified))))
-  left
+  refine .inl ⟨?_, coverAll⟩
   cases i with
   | zero =>
     -- The first call observes the anchor's finalized checkpoint.
     rw [(call_zero ctx.long calls).2]
-    exact anchorFacts n (List.mem_of_getElem? calls.1) nBound
+    exact anchorInvariant n (List.mem_of_getElem? calls.1) nBound
   | succ j =>
     obtain ⟨slot', begin, slotOk', -, beginOk, timeEq⟩ := ctx.atSlots (j + 1) n calls.1
     rw [slotOk, Except.ok.injEq] at slotOk'
     subst slot'
     obtain ⟨observedBlock, callerHeld, observedNat, -, callSlotOk⟩ :=
       replaces_facts slotOk replaces
-    refine ⟨⟨?_, ?_, ?_⟩, coverAll⟩
+    refine ⟨?_, ?_, ?_⟩
     · -- From the next slot.
       intro slot2 next following slotOk2 nextOk followingOk
       rw [slotOk, Except.ok.injEq] at slotOk2
@@ -1236,7 +1235,8 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
           fun same => ?_⟩)
         rw [same]
         exact (anchorFacts n member nBound).2
-    · rcases observed_facts ctx anchorFacts calls nBound slotOk replaces with facts | bad
+    · rcases observed_facts ctx (fun n member bound => (anchorFacts n member bound).1) calls nBound
+          slotOk replaces with facts | bad
       · exact .inl facts
       · exact .inr (.inl bad)
   -- The call's stored root is its start, or a root on the walk from its head to that start.

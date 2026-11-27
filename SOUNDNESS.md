@@ -4485,10 +4485,14 @@ It also assumes a history of at least two epochs of block roots, and that the st
 It concerns a call of an honest validator's run that replaces its base by that block.
 The block is then on every up-to-date honest head from the call through the limit.
 Otherwise two honest stores collide, or `CrossStoreDirectSafetyEvidence` or `CrossStoreJustifiedEvidence` holds.
-It assumes synchrony, delayed block admission (`BlocksAdmitted`), fitting delays, and that honest validators sign each justified checkpoint after the anchor's epoch.
-It also takes the premises of the direct safety theorems.
-These are the run from the genesis to the anchor, the held states before the next fork, and the two stake floors.
-The run starts after the anchor's epoch, at one call per slot from its first slot.
+It assumes synchrony, delayed block admission (`BlocksAdmitted`) and fitting delays.
+It also assumes `JustifiedHonestlySigned` up to the limit.
+When an up-to-date honest store's justified checkpoint is after the anchor's epoch, some honest validator signed a vote with that checkpoint as its target.
+That vote is of an earlier slot, in a message sent by the store's time.
+It takes the run from the genesis to the anchor, the held states before the next fork, and the two stake floors.
+It takes nonzero state roots of held blocks (`roots`) and the anchor's absent parent (`absent`).
+It takes honest store epochs within the horizon (`bounded`) and the preset conditions of `DirectSafety.Parameters`.
+The call sequence starts after the anchor's epoch, with one call per slot from its first slot.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
