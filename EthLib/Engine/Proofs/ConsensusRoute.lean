@@ -120,56 +120,6 @@ private theorem toBlock_extraData {f : Fork} {p : ExecutionPayload f}
   cases built
   rfl
 
-/-- A payload of the beacon chain has a block exactly when each of its steps succeeds.
-
-The structure of the payload gives a payload at the active fork, which the version must take.
-
-The root, the requests, the access list and the slot decode at that fork.
-
-The block of that payload, with them, must then decode. -/
-private theorem payloadBlock_eq_some_iff {config : ChainConfig}
-    {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
-    {requests : Since .pectra fork (List ByteArray)} {f : Fork}
-    {b : Execution.Blocks.Block f Execution.Transactions.Transaction} :
-    payloadBlock config p root requests = some ⟨f, b⟩ ↔
-      ∃ any, anyPayloadOf p = some any ∧
-        config.activeFork p.blockNumber.toNat p.timestamp.toNat = some f ∧
-        acceptsFork (newPayloadVersion fork) f = true ∧
-        ∃ (payload : ExecutionPayload f) (beacon : Since .dencun f Hash32)
-          (lists : Since .pectra f (List ByteArray)) (accessList : Since .glamsterdam f ByteArray)
-          (slot : Since .glamsterdam f UInt64),
-          any.atFork f = .ok payload ∧
-          Json.since "parentBeaconBlockRoot" (sinceValue root) = .ok beacon ∧
-          Json.since "executionRequests" (sinceValue requests) = .ok lists ∧
-          Json.since "blockAccessList"
-            ((sinceValue p.blockAccessList).map fun list => ⟨list.data⟩) = .ok accessList ∧
-          Json.since "slotNumber" (sinceValue p.slotNumber) = .ok slot ∧
-          payload.toBlock beacon lists accessList slot = .ok b := by
-  unfold payloadBlock
-  constructor
-  · intro h
-    cases hAny : anyPayloadOf p with
-    | none => simp [hAny] at h
-    | some any =>
-    cases hActive : config.activeFork p.blockNumber.toNat p.timestamp.toNat with
-    | none => simp [hAny, hActive] at h
-    | some active =>
-    simp only [hAny, hActive, Option.bind_eq_bind, Option.bind_some] at h
-    split at h
-    · rename_i hAccepted
-      simp only [Option.bind_eq_some_iff] at h
-      obtain ⟨payload, hPayload, beacon, hBeacon, lists, hLists, accessList, hAccess, slot, hSlot,
-        block, hBlock, result⟩ := h
-      cases result
-      exact ⟨any, rfl, rfl, hAccepted, payload, beacon, lists, accessList, slot,
-        toOption_eq_some hPayload, toOption_eq_some hBeacon, toOption_eq_some hLists,
-        toOption_eq_some hAccess, toOption_eq_some hSlot, toOption_eq_some hBlock⟩
-    · cases h
-  · rintro ⟨any, hAny, hActive, hAccepted, payload, beacon, lists, accessList, slot, hPayload,
-      hBeacon, hLists, hAccess, hSlot, hBlock⟩
-    simp [hAny, hActive, hAccepted, hPayload, hBeacon, hLists, hAccess, hSlot, hBlock,
-      Except.toOption]
-
 /-! ## The checks of the method on decoded parameters -/
 
 /-- A payload that passes the checks has its block at the active fork of its decoded structure.
@@ -446,40 +396,6 @@ theorem newPayloadOnChain_valid_iff_accepts {transition : TransitionConfiguratio
     exact ⟨_, answer, hJson, hRun, hValid⟩
 
 /-! ## The block that the checks give -/
-
-/-- The block of a payload of the beacon chain has the parent hash of the payload.
-
-Its header hashes to the block hash of the payload. -/
-theorem header_of_payloadBlock {config : ChainConfig}
-    {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
-    {requests : Since .pectra fork (List ByteArray)} {f : Fork}
-    {b : Execution.Blocks.Block f Execution.Transactions.Transaction}
-    (h : payloadBlock config p root requests = some ⟨f, b⟩) :
-    b.header.parentHash = p.parentHash ∧ b.header.hash = .ok p.blockHash := by
-  obtain ⟨any, hAny, -, -, payload, _, _, _, _, hPayload, -, -, -, -, hBlock⟩ :=
-    payloadBlock_eq_some_iff.mp h
-  -- The structure of the payload, and the payload at the fork, keep both hashes.
-  have hp : payload.parentHash = p.parentHash ∧ payload.blockHash = p.blockHash := by
-    unfold anyPayloadOf at hAny
-    split at hAny
-    · cases hAny
-      simp only [Json.AnyPayload.atFork, bind_ok_iff] at hPayload
-      obtain ⟨_, _, _, _, _, _, result⟩ := hPayload
-      cases result
-      exact ⟨rfl, rfl⟩
-    · cases hAny
-  -- The header of the block takes the parent hash of the payload.
-  have hParent : b.header.parentHash = payload.parentHash := by
-    have h' := hBlock
-    simp only [ExecutionPayload.toBlock, ExecutionPayload.toBlockUnchecked,
-      ExecutionPayload.toHeader, bind_ok_iff] at h'
-    obtain ⟨_, ⟨_, -, _, -, _, -, _, ⟨_, -, built⟩, result⟩, _, -, final⟩ := h'
-    cases final
-    cases result
-    cases built
-    rfl
-  -- The block hash check makes the hash of the header the block hash of the payload.
-  exact ⟨hParent.trans hp.1, (ExecutionPayload.toBlock_shape hBlock).1.trans (by rw [hp.2])⟩
 
 /-- From Bellatrix to Gloas, the checks read the JSON of a request as the block of its payload.
 

@@ -79,23 +79,9 @@ theorem newPayloadStep_valid_of_accepts {r : Consensus.NewPayloadRequest preset 
   obtain ⟨last, hLast, -, hLastHash⟩ := Execution.Blocks.checkBlock_link hBlockCheck
   have hOn := newPayloadOnChain_of_stateTransition_ok hCheck hLast hLastHash
     (hTerminal' _ hLast) hRunBlock
-  -- A payload that the node does not know as valid or invalid runs on the head, its parent.
-  have run (hNew : ∀ b, node.blocks.lookup r.executionPayload.blockHash = some b →
-      b.validity.isAccepted = true) :
-      (node.newPayloadStep (newPayloadVersion fork) params).1 =
-        .ok (⟨.valid, some r.executionPayload.blockHash⟩, none) := by
-    rw [newPayloadStep_of_head hCheck hHash hNew (by rw [hParentHash]; exact hParent)
-      (by rw [hParentHash]; exact hHead), hParentHash, hOn]
-    simp [hHash, Except.toOption, Functor.map, Except.map]
-  cases hb : node.blocks.lookup r.executionPayload.blockHash with
-  | none => exact run (by simp [hb])
-  | some b =>
-    obtain ⟨blk, pow, v⟩ := b
-    cases v with
-    -- A payload that the node knows as valid is valid again, with its own hash.
-    | valid => rw [newPayloadStep_of_known_valid hCheck hHash hb rfl]
-    | invalid => exact absurd rfl (hKnown _ hb)
-    | accepted => exact run fun b e => by cases e.symm.trans hb; rfl
+  -- The node runs the payload on the head, its parent, or knows it as valid.
+  exact newPayloadStep_valid_of_newPayloadOnChain hCheck hHash (by rw [hParentHash]; exact hParent)
+    (by rw [hParentHash]; exact hHead) hKnown (by rw [hParentHash]; exact hOn)
 
 /-- From Bellatrix to Gloas, a payload new to a node is valid on it exactly when the model accepts.
 
