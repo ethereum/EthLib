@@ -2027,13 +2027,12 @@ theorem updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
 
 theorem processRegistryUpdates
     (computed : Consensus.processRegistryUpdates config state = .ok after) : R state after := by
-  unfold Consensus.processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    exact laws.foldlM (fun _ _ _ ok => laws.updateRegistryEntryElectra ok) computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
+  by_cases electra : .pectra ≤ fork
+  · exact processRegistryUpdates_invariant_of_electra electra (R state)
+      (fun _ _ _ _ _ before ok => laws.trans before (laws.updateRegistryEntryElectra ok))
+      (laws.refl state) computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) computed
   exact laws.trans (laws.foldlM (fun _ _ _ ok => laws.updateRegistryEntry ok) updatedOk)
     (laws.foldlM (fun _ _ _ ok => laws.activateValidator ok) activated)
 
