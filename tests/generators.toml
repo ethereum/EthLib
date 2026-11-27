@@ -445,6 +445,11 @@ cases = ["ecrecover_cases.json", "alt_bn128_cases.json"]
 generator = "not established"
 checked = "the pytest.param lists of execution-specs at 391d8a05, in tests/frontier/precompiles/test_ecrecover.py and tests/byzantium, which write each expected output in the test source and name no program that computed it"
 
+[[directories."bindings/python/tests/precompile/execution_specs"]]
+cases = ["modexp_vectors.json"]
+generator = "not established"
+checked = "tests/osaka/eip7883_modexp_gas_increase/vector/vectors.json of execution-specs at 391d8a05 and the tests that read it, which give each output and price as data and name no program that computed them"
+
 [[directories."bindings/python/tests/noise/published_vector"]]
 cases = ["**"]
 generator = "noise-c vector-gen"
