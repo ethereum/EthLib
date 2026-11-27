@@ -4768,8 +4768,10 @@ The verdict of the execution layer follows from the same status.
 `BlockSources.withPayloadStatus` puts the status into the sources that the handlers read.
 For a payload not yet validated, its execution layer accepts every payload and the payload satisfies its lists.
 For an invalidated one, it rejects every payload and the payload does not satisfy them.
-`Store.isPayloadInclusionListSatisfied_of_notValidated` shows the answer `true` for an envelope that the handler accepts.
-`Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated` shows that an invalidated payload is never kept.
+`Store.isPayloadInclusionListSatisfied_of_notValidated` shows the answer `true` for an envelope of a new payload that the handler accepts.
+`Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated` shows that the handler never keeps an invalidated payload for a block without one.
+From Heze the handler skips an envelope for a block whose payload the store already holds, so a later envelope never changes the answer recorded for that payload.
+`Store.onExecutionPayloadEnvelope_isPayloadInclusionListSatisfied_of_known` shows that the handler never changes the answer for a payload that the store holds.
 A status outside the three of the guide counts as invalidated, a choice of EthLib: such a payload is never kept.
 The export rejects such a status before any step runs.
 `Store.recordValidatedInclusionListSatisfaction_satisfied` shows that a payload that turns valid takes the answer that the execution layer gives with its verdict.
