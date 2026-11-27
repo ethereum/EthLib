@@ -1226,6 +1226,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the bridge from one counter of gas to the state gas meter of EIP-8037 accepts GAS right before a call ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  `Evm.Logic.SupportedCode` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) accepts GAS when the next opcode is a call, and `Evm.Logic.meterSupported_of_supportedCode` gives that case.
+  Right after GAS, each frame holds its own execution gas left on its stack (`Evm.Logic.GasPending`, `MeterCall.lean`).
+  The call then asks the state gas meter for more gas, by exactly its excess of execution gas (`Evm.Logic.AsksMore`), and `Evm.Logic.callStep_asks` lifts that step.
+  `Evm.Logic.messageCallGas_mono`, `Tracks.chargeCall` and `Tracks.payCall` take a request of more gas, within that excess.
+  GAS pushes a word, so the lifts ask that the execution gas held under the state gas meter fit a word.
+  `Evm.Logic.Reaches.followsMeter` and `Reaches.followsMeter_revert` take that bound, and `Reaches.followsMeter` asks for a stopped frame.
+  `Evm.Logic.Covered` adds the bound, and `Evm.Logic.Reaches.meterCovers` lifts a run to a frame that follows or waits for its call (`Evm.Logic.MeterCovers`).
+
 - In Lean, the sum and the difference of the BLS12-381 base field run on six 64-bit words, through `Word64.add6` and `Word64.sub6` (`Cryptography/Word64/Six.lean`), with the laws `Word64.add6_spec` and `Word64.sub6_spec`.
   `Word64.sum6`, `Word64.diff6`, `Word64.Words6.mask` and `Word64.addBack` are the steps they share, with `Word64.sum6_val`, `Word64.diff6_val`, `Word64.Words6.val_lt`, `Word64.Words6.val_mask` and `Word64.addBack_val`.
   `Word64.reduce6` now reads its difference from `Word64.diff6`.
