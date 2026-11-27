@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Logic.MeterSimulation
 public import EthLib.Execution.Proofs.Evm.Call.Instructions
+public import EthLib.Execution.Proofs.Evm.Logic.Message
 
 /-!
 # Proofs: the step of a call under the state gas meter
@@ -28,12 +29,6 @@ open GasCosts
 variable {fork : Fork}
 
 /-! ## The relation of the results -/
-
-/-- The message under the state gas meter is the one under one counter, with at least its gas.
-
-It may also carry a reservoir. -/
-def MessageCovers (low high : Message fork) : Prop :=
-  low.gas ≤ high.gas ∧ high = { low with gas := high.gas, reservoir := high.reservoir }
 
 /-- A result of a step under one counter relates to the run of that step under the state gas meter.
 

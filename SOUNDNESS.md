@@ -2200,11 +2200,20 @@ The frame must be one that may change the state.
 It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
 From Glamsterdam, it pays 3000 for a cold access and 11300 for the value by EIP-8038, and the state gas of a new account in place of the 25000 by EIP-8037.
 With one counter, that state gas is never refilled, although EIP-8037 refills it when the callee fails or never runs.
-`Logic.HoareUnder.meterCovers` carries a rule for the calls to the meter of EIP-8037 for checked code whose frames end with no error or a revert.
-It needs the assumption under that meter to give the one under one counter, for the frame that ends a covering message, with its gas capped.
-The rules under a specification of the callee code (`Logic.RunsAs`) do not yet carry, since no theorem shows that the runner of that meter meets a form of it.
 The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
 The message is not static.
+`Logic.HoareUnder.meterCovers` carries a rule for the calls to the meter of EIP-8037 for checked code whose frames end with no error or a revert.
+It needs the assumption under that meter to give the one under one counter, for the frame that ends a covering message, with its gas capped.
+It may use that the gas of the covering message fits a word, which holds since the gas of its caller fits one.
+The rules under a specification of the callee code carry through `Logic.RunsAsUpToGas` (`Logic/Callee.lean`).
+It is the form of `RunsAs` whose specification holds of a covering message, with at least the gas of the message.
+It leaves open the gas of the frame that ends the message, down to the least of the gas of the stopped frame and of the message.
+It also leaves open the message of that frame, all but its current target.
+`Logic.Meets.upToGas` gives it from `RunsAs`, so the runner of one counter meets it.
+`Logic.meets_runsAsMeter` (`Logic/CallMeter.lean`) proves that the runner of the meter of EIP-8037 meets `Logic.RunsAsMeter`.
+It needs a specification under one counter of checked callee code, whose stopped frames end with no error or a revert.
+It also needs the runner of that meter to meet, at every bound, an assumption on the messages of the callee that gives the one of the specification.
+`Logic.RunsAsMeter.lowerMeter` gives `RunsAsUpToGas` from it, when the assumption on the start of the message carries to a covering message.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
 From Glamsterdam, with one counter, it keeps the state gas of a new account paid, which EIP-8037 refills.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
