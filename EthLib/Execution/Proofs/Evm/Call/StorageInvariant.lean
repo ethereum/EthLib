@@ -57,6 +57,29 @@ theorem CodeHyp.noDelegateAt {code : ByteArray} (hyp : CodeHyp code) :
   · exact hyp.noDelegate
   · rfl
 
+/-- The code is not empty. -/
+theorem CodeHyp.size_ne {code : ByteArray} (hyp : CodeHyp code) : code.size ≠ 0 := by
+  intro h
+  apply hyp.hash_ne
+  have : code = .empty := by
+    cases code with
+    | mk data =>
+      simp only [ByteArray.size] at h
+      rw [Array.size_eq_zero_iff] at h
+      subst h
+      rfl
+  rw [this]
+  rfl
+
+/-- The code is no delegation indicator. -/
+theorem CodeHyp.not_valid {code : ByteArray} (hyp : CodeHyp code) :
+    isValidDelegation code = false := by
+  have h := hyp.noDelegate
+  unfold delegatedAddress at h
+  split at h
+  · cases h
+  · simpa using ‹¬isValidDelegation code = true›
+
 /-- A change keeps the code of `address` and its storage, when the account holds `code`. -/
 def KeepsAt (address : Address) (code : ByteArray) (tx tx' : TransactionState) : Prop :=
   HoldsCode address code tx →
@@ -205,6 +228,16 @@ theorem HoldsCode.not_deployable (hyp : CodeHyp code) (h : HoldsCode address cod
   unfold accountDeployable
   have : (tx.getAccount address).codeHash ≠ EMPTY_CODE_HASH := by rw [h.1]; exact hyp.hash_ne
   simp [this]
+
+/-- An account that holds code is not empty. -/
+theorem HoldsCode.not_empty (hyp : CodeHyp code) {tx : TransactionState}
+    (h : HoldsCode address code tx) : tx.accountExistsAndIsEmpty address = false := by
+  cases he : tx.accountExistsAndIsEmpty address
+  · rfl
+  · have hsome := (accountExistsAndIsEmpty_iff_eq_some tx address).mp he
+    have : (tx.getAccount address).codeHash = EMPTY_CODE_HASH := by
+      simp [getAccount, hsome, EMPTY_ACCOUNT]
+    exact absurd (h.1.symm.trans this) hyp.hash_ne
 
 /-- The preparation of a creation at another address keeps the account that holds `code`. -/
 theorem keepsAt_prepareCreation (hyp : CodeHyp code) {target : Address}

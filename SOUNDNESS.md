@@ -2451,11 +2451,16 @@ The assumption under the state gas meter must give the one under one counter, fo
 `Execution/Proofs/Evm/Call/StorageInvariant.lean` proves that a message keeps an invariant of the storage of an account that holds a given code.
 Each call that runs that code at the account must keep the invariant, as a proof about the contract shows.
 The message must start where the account holds the code and its storage meets the invariant, run the code if it goes there, and return a frame.
-The theorem assumes that no other code has the Keccak-256 hash of that code (`CodeHyp.hashOnly`).
+`Execution/Proofs/Transactions/StorageInvariant.lean` and `Execution/Proofs/Blocks/StorageInvariant.lean` carry it to transactions, system calls, blocks and chains.
+They need the account to have a nonce of at least 1, which leaves out a contract deployed before Spurious Dragon with nonce 0.
+The theorems over transactions, blocks and chains also need Cancun or later, where SELFDESTRUCT deletes only accounts that the transaction created.
+From Hegotá a transaction and a block fail, so those theorems hold there with nothing to show.
+Each of these theorems assumes that no other code has the Keccak-256 hash of that code (`CodeHyp.hashOnly`).
 The state keeps each code under its hash.
 So a creation that deploys a second preimage would change the code that a later call to the account runs.
 `CodeHyp.hashOnly` is not provable for any code, and is believed false for Keccak-256 as a function.
 Until a random-oracle bound on Keccak-256, like the bounds for the trie and state roots, replaces it, these theorems hold only under the assumption, and say nothing formally if it is false.
+That includes the theorem over chains, `BlockChain.Reaches.liveAt`.
 
 ### SHA-256 precompile
 
