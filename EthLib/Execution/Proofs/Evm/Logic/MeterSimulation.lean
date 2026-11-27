@@ -20,6 +20,8 @@ The state gas meter of EIP-8037 can pay state gas from its reservoir.
 So its execution gas stays at least the counter when it starts there and makes the same payments.
 
 The parts of the instructions here keep that bound, and every other field of the frame.
+
+A frame that reverts keeps its gas, so a revert carries to the state gas meter too.
 -/
 
 @[expose] public section
@@ -111,6 +113,13 @@ theorem chargeState_followsMeter {gas after amount : Nat} {meter : StateGasMeter
       · simp only
         omega
 
+/-- A rollback of a revert cannot lower the execution gas that covers the counter. -/
+theorem rollback_followsMeter {gas : Nat} {meter : StateGasMeter} (below : gas ≤ meter.gasLeft) :
+    GasMeter.rollback gas ≤ (GasMeter.rollback meter).gasLeft := by
+  change gas ≤ (StateGasMeter.restore meter).gasLeft
+  simp only [StateGasMeter.restore]
+  omega
+
 /-- A refill cannot lower the execution gas that covers the counter. -/
 theorem refill_followsMeter {gas amount : Nat} {meter : StateGasMeter}
     (below : gas ≤ meter.gasLeft) :
@@ -122,10 +131,12 @@ theorem refill_followsMeter {gas amount : Nat} {meter : StateGasMeter}
 
 /-- Each success of the run under one counter has a success of the run under the state gas meter.
 
-The two results are related by `R`. -/
+The two results are related by `R`.
+
+The run under one counter never fails with the error of a revert. -/
 def Sim {α β : Type} (R : α → β → Prop) (low : Except EvmError α) (high : Except EvmError β) :
     Prop :=
-  ∀ a, low = .ok a → ∃ b, high = .ok b ∧ R a b
+  (∀ a, low = .ok a → ∃ b, high = .ok b ∧ R a b) ∧ low ≠ .error .revert
 
 namespace Sim
 
@@ -133,37 +144,56 @@ variable {α β γ δ : Type} {R : α → β → Prop} {S : γ → δ → Prop}
 
 /-- Two successes whose values are related. -/
 theorem ok {a : α} {b : β} (h : R a b) : Sim R (.ok a) (.ok b) :=
-  fun _ ha => ⟨b, rfl, by cases ha; exact h⟩
+  ⟨fun _ ha => ⟨b, rfl, by cases ha; exact h⟩, nofun⟩
 
 /-- Two returns whose values are related. -/
 theorem pure {a : α} {b : β} (h : R a b) : Sim R (Pure.pure a) (Pure.pure b) := ok h
 
-/-- A failure of the run under one counter asks nothing of the other run. -/
-theorem error {e : EvmError} {high : Except EvmError β} : Sim R (.error e) high :=
-  fun _ ha => by cases ha
+/-- A failure of the run under one counter, other than a revert, asks nothing of the other run.
+-/
+theorem error {e : EvmError} {high : Except EvmError β}
+    (other : e ≠ .revert := by intro h; cases h) : Sim R (.error e) high :=
+  ⟨fun _ ha => (by cases ha), fun h => other (Except.error.inj h)⟩
 
-/-- A throw of the run under one counter asks nothing of the other run. -/
-theorem throw {e : EvmError} {high : Except EvmError β} : Sim R (MonadExcept.throw e) high :=
-  error
+/-- A throw of the run under one counter, other than a revert, asks nothing of the other run. -/
+theorem throw {e : EvmError} {high : Except EvmError β}
+    (other : e ≠ .revert := by intro h; cases h) : Sim R (MonadExcept.throw e) high :=
+  error other
 
 /-- Two runs in sequence, with related first results and related rests. -/
 theorem bind {low : Except EvmError α} {high : Except EvmError β}
     {f : α → Except EvmError γ} {g : β → Except EvmError δ} (h : Sim R low high)
     (rest : ∀ a b, R a b → Sim S (f a) (g b)) : Sim S (low >>= f) (high >>= g) := by
-  intro c hc
-  obtain ⟨a, ha, hf⟩ := EthLib.Base.bind_ok_iff.mp hc
-  obtain ⟨b, hb, hab⟩ := h a ha
-  obtain ⟨d, hd, hcd⟩ := rest a b hab c hf
-  exact ⟨d, by rw [hb]; exact hd, hcd⟩
+  refine ⟨fun c hc => ?_, fun hc => ?_⟩
+  · obtain ⟨a, ha, hf⟩ := EthLib.Base.bind_ok_iff.mp hc
+    obtain ⟨b, hb, hab⟩ := h.1 a ha
+    obtain ⟨d, hd, hcd⟩ := (rest a b hab).1 c hf
+    exact ⟨d, by rw [hb]; exact hd, hcd⟩
+  · cases ha : low with
+    | error e =>
+      rw [ha] at hc h
+      change Except.error e = _ at hc
+      exact h.2 (by rw [Except.error.inj hc])
+    | ok a =>
+      rw [ha] at hc
+      obtain ⟨b, -, hab⟩ := h.1 a ha
+      exact (rest a b hab).2 hc
 
 /-- A weaker relation of the results. -/
 theorem mono {low : Except EvmError α} {high : Except EvmError β} {R' : α → β → Prop}
-    (h : Sim R low high) (weaker : ∀ a b, R a b → R' a b) : Sim R' low high := fun a ha =>
-  let ⟨b, hb, hab⟩ := h a ha
-  ⟨b, hb, weaker a b hab⟩
+    (h : Sim R low high) (weaker : ∀ a b, R a b → R' a b) : Sim R' low high :=
+  ⟨fun a ha =>
+    let ⟨b, hb, hab⟩ := h.1 a ha
+    ⟨b, hb, weaker a b hab⟩, h.2⟩
 
-/-- A run related to itself by equality. -/
-theorem refl {low : Except EvmError α} : Sim (· = ·) low low := fun a ha => ⟨a, ha, rfl⟩
+/-- A run that never fails with the error of a revert, related to itself by equality. -/
+theorem refl {low : Except EvmError α} (other : low ≠ .error .revert) : Sim (· = ·) low low :=
+  ⟨fun a ha => ⟨a, ha, rfl⟩, other⟩
+
+/-- A read that fails only with an error of the state, related to itself by equality. -/
+theorem ofState {x : Except State.StateError α} :
+    Sim (· = ·) (x.mapError .state) (x.mapError .state) :=
+  refl (by cases x <;> simp [Except.mapError])
 
 /-- A branch on one condition in both runs. -/
 theorem ite {c : Prop} [Decidable c] {x₁ x₂ : Except EvmError α} {y₁ y₂ : Except EvmError β}
@@ -181,12 +211,16 @@ end Sim
 
 /-- The code and flags stay, and a running result advances or reaches a valid jump destination.
 
-A normal result can only follow a frame with no error. -/
+A normal result can only follow a frame with no error, and a running result keeps the error. -/
 def MeterFields (before after : Evm fork Nat) (next : Nat) : Prop :=
   after.code = before.code ∧ after.validJumpDestinations = before.validJumpDestinations ∧
     (after.running = true → after.pc = next ∨
       isValidJumpDest before.validJumpDestinations after.pc = true) ∧
-    (after.error = none → before.error = none)
+    (after.error = none → before.error = none) ∧ (after.running = true → after.error = before.error)
+
+/-- An error that the state gas meter carries: none, or a revert, which keeps the gas left. -/
+def Carried (error : Option EvmError) : Prop :=
+  error = none ∨ error = some .revert
 
 /-- The high frame follows the low frame.
 
@@ -206,23 +240,27 @@ def Lands (start : Evm fork Nat) (next : Nat) (low : Evm fork Nat)
 
 /-- Each success of the run under one counter keeps the fields of `start` and moves on to `next`.
 
-Each normal success has a success of the run under the state gas meter that follows it. -/
+Each success whose error is none or a revert has a success of the run under the state gas meter.
+
+That success follows it, and the run under one counter never fails with the error of a revert. -/
 def Lifts (start : Evm fork Nat) (next : Nat) (low : Except EvmError (Evm fork Nat))
     (high : Except EvmError (Evm fork StateGasMeter)) : Prop :=
-  ∀ after, low = .ok after → MeterFields start after next ∧
-    (after.error = none → ∃ b, high = .ok b ∧ FollowsMeter after b)
+  (∀ after, low = .ok after → MeterFields start after next ∧
+    (Carried after.error → ∃ b, high = .ok b ∧ FollowsMeter after b)) ∧ low ≠ .error .revert
 
 /-- Runs whose successes land lift. -/
 theorem Sim.lifts {start : Evm fork Nat} {next : Nat} {low : Except EvmError (Evm fork Nat)}
     {high : Except EvmError (Evm fork StateGasMeter)} (h : Sim (Lands start next) low high) :
-    Lifts start next low high := fun after ok =>
-  let ⟨b, hb, follows, fields⟩ := h after ok
-  ⟨fields, fun _ => ⟨b, hb, follows⟩⟩
+    Lifts start next low high :=
+  ⟨fun after ok =>
+    let ⟨b, hb, follows, fields⟩ := h.1 after ok
+    ⟨fields, fun _ => ⟨b, hb, follows⟩⟩, h.2⟩
 
-/-- A failure of the run under one counter lifts. -/
+/-- A failure of the run under one counter, other than a revert, lifts. -/
 theorem Lifts.error {start : Evm fork Nat} {next : Nat} {e : EvmError}
-    {high : Except EvmError (Evm fork StateGasMeter)} : Lifts start next (.error e) high :=
-  fun _ h => nomatch h
+    {high : Except EvmError (Evm fork StateGasMeter)} (other : e ≠ .revert := by intro h; cases h) :
+    Lifts start next (.error e) high :=
+  ⟨fun _ h => (nomatch h), fun h => other (Except.error.inj h)⟩
 
 /-- A run with related first results, then rests that lift. -/
 theorem Sim.bindLifts {α β : Type} {R : α → β → Prop} {start : Evm fork Nat} {next : Nat}
@@ -230,24 +268,34 @@ theorem Sim.bindLifts {α β : Type} {R : α → β → Prop} {start : Evm fork 
     {f : α → Except EvmError (Evm fork Nat)} {g : β → Except EvmError (Evm fork StateGasMeter)}
     (h : Sim R low high) (rest : ∀ a b, R a b → Lifts start next (f a) (g b)) :
     Lifts start next (low >>= f) (high >>= g) := by
-  intro c hc
-  obtain ⟨a, ha, hf⟩ := EthLib.Base.bind_ok_iff.mp hc
-  obtain ⟨b, hb, hab⟩ := h a ha
-  refine ⟨(rest a b hab c hf).1, fun normal => ?_⟩
-  obtain ⟨d, hd, hcd⟩ := (rest a b hab c hf).2 normal
-  exact ⟨d, by rw [hb]; exact hd, hcd⟩
+  refine ⟨fun c hc => ?_, fun hc => ?_⟩
+  · obtain ⟨a, ha, hf⟩ := EthLib.Base.bind_ok_iff.mp hc
+    obtain ⟨b, hb, hab⟩ := h.1 a ha
+    refine ⟨((rest a b hab).1 c hf).1, fun carried => ?_⟩
+    obtain ⟨d, hd, hcd⟩ := ((rest a b hab).1 c hf).2 carried
+    exact ⟨d, by rw [hb]; exact hd, hcd⟩
+  · cases ha : low with
+    | error e =>
+      rw [ha] at hc h
+      change Except.error e = _ at hc
+      exact h.2 (by rw [Except.error.inj hc])
+    | ok a =>
+      rw [ha] at hc
+      obtain ⟨b, -, hab⟩ := h.1 a ha
+      exact (rest a b hab).2 hc
 
 /-- An instruction under one counter, and the same instruction under the state gas meter.
 
-Each success of the first keeps the code and the flags.
-
-When it runs on, it moves the program counter by `width` or to a valid jump destination.
-
-Each normal success has a success of the second, from execution gas that covers the counter.
-
-A success that reverts or halts asks nothing of the second. -/
+Each result of the first whose error is none or a revert has a matching result of the second. -/
 def Bridge (width : Nat) (low : Evm fork Nat → Except EvmError (Evm fork Nat))
     (high : Evm fork StateGasMeter → Except EvmError (Evm fork StateGasMeter)) : Prop :=
+  -- Each success of the first keeps the code and the flags.
+  --
+  -- When it runs on, it moves the program counter by `width` or to a valid jump destination.
+  --
+  -- The second starts from execution gas that covers the counter.
+  --
+  -- An exceptional halt asks nothing of the second, and the first never fails with a revert.
   ∀ evm meter, evm.gas ≤ meter.gasLeft →
     Lifts evm (evm.pc + width) (low evm) (high (withStateGas evm meter))
 
@@ -273,7 +321,7 @@ theorem advance (t : Tracks start low high) (width : Nat) :
     Lands start (start.pc + width) (Evm.advance low width) (Evm.advance high width) := by
   obtain ⟨⟨meter, below, rfl⟩, code, flags, pc, error⟩ := t
   exact ⟨⟨meter, below, rfl⟩, code, flags, fun _ => .inl (by simp [Evm.advance, pc]),
-    fun h => error ▸ h⟩
+    fun h => error ▸ h, fun _ => error⟩
 
 /-- A pop takes the same word, and keeps the relation. -/
 theorem popWord (t : Tracks start low high) :
@@ -288,43 +336,51 @@ theorem popWord (t : Tracks start low high) :
 theorem pushWord (t : Tracks start low high) (x : U256) :
     Sim (Tracks start) (Evm.pushWord low x) (Evm.pushWord high x) := by
   obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
-  intro after ok
-  obtain ⟨stack, hs, h⟩ := EthLib.Base.bind_ok_iff.mp ok
-  simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
-  subst h
-  refine ⟨withStateGas { low with stack } meter, ?_, ⟨meter, below, rfl⟩, hc, hf, hp, he⟩
-  change (low.stack.push x >>= fun stack => Pure.pure { withStateGas low meter with stack }) = _
-  rw [hs]
-  rfl
+  refine ⟨fun after ok => ?_, ?_⟩
+  · obtain ⟨stack, hs, h⟩ := EthLib.Base.bind_ok_iff.mp ok
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    refine ⟨withStateGas { low with stack } meter, ?_, ⟨meter, below, rfl⟩, hc, hf, hp, he⟩
+    change (low.stack.push x >>= fun stack => Pure.pure { withStateGas low meter with stack }) = _
+    rw [hs]
+    rfl
+  · unfold Evm.pushWord Stack.push
+    split <;> simp [bind, Except.bind, pure, Except.pure]
 
 /-- A charge of execution gas keeps the relation. -/
 theorem chargeGas (t : Tracks start low high) (amount : Nat) :
     Sim (Tracks start) (Evm.chargeGas low amount) (Evm.chargeGas high amount) := by
   obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
-  intro after ok
-  obtain ⟨gas, paid, h⟩ := EthLib.Base.bind_ok_iff.mp ok
-  simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
-  subst h
-  obtain ⟨next, hn, hb⟩ := charge_followsMeter below paid
-  refine ⟨withStateGas { low with gas } next, ?_, ⟨next, hb, rfl⟩, hc, hf, hp, he⟩
-  change (meter.charge amount >>= fun gas => Pure.pure { withStateGas low meter with gas }) = _
-  rw [hn]
-  rfl
+  refine ⟨fun after ok => ?_, ?_⟩
+  · obtain ⟨gas, paid, h⟩ := EthLib.Base.bind_ok_iff.mp ok
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    obtain ⟨next, hn, hb⟩ := charge_followsMeter below paid
+    refine ⟨withStateGas { low with gas } next, ?_, ⟨next, hb, rfl⟩, hc, hf, hp, he⟩
+    change (meter.charge amount >>= fun gas => Pure.pure { withStateGas low meter with gas }) = _
+    rw [hn]
+    rfl
+  · unfold Evm.chargeGas
+    simp only [GasMeter.charge]
+    split <;> simp [bind, Except.bind, pure, Except.pure]
 
 /-- A charge of state gas keeps the relation. -/
 theorem chargeStateGas (t : Tracks start low high) (amount : Nat) :
     Sim (Tracks start) (Evm.chargeStateGas low amount) (Evm.chargeStateGas high amount) := by
   obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
-  intro after ok
-  obtain ⟨gas, paid, h⟩ := EthLib.Base.bind_ok_iff.mp ok
-  simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
-  subst h
-  obtain ⟨next, hn, hb⟩ := chargeState_followsMeter below paid
-  refine ⟨withStateGas { low with gas } next, ?_, ⟨next, hb, rfl⟩, hc, hf, hp, he⟩
-  change (meter.chargeState amount >>= fun gas => Pure.pure { withStateGas low meter with gas }) =
-    _
-  rw [hn]
-  rfl
+  refine ⟨fun after ok => ?_, ?_⟩
+  · obtain ⟨gas, paid, h⟩ := EthLib.Base.bind_ok_iff.mp ok
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    obtain ⟨next, hn, hb⟩ := chargeState_followsMeter below paid
+    refine ⟨withStateGas { low with gas } next, ?_, ⟨next, hb, rfl⟩, hc, hf, hp, he⟩
+    change (meter.chargeState amount >>= fun gas => Pure.pure { withStateGas low meter with gas }) =
+      _
+    rw [hn]
+    rfl
+  · unfold Evm.chargeStateGas
+    simp only [GasMeter.chargeState]
+    split <;> simp [bind, Except.bind, pure, Except.pure]
 
 /-- A charge of execution gas and of the growth of memory keeps the relation. -/
 theorem chargeGasAndMemory (t : Tracks start low high) (cost : Nat)
@@ -359,16 +415,18 @@ theorem refillStateGas (t : Tracks start low high) (amount : Nat) :
 theorem checkGas (t : Tracks start low high) (amount : Nat) :
     Sim (fun _ _ => True) (Evm.checkGas low amount) (Evm.checkGas high amount) := by
   obtain ⟨⟨meter, below, rfl⟩, -⟩ := t
-  intro _ ok
-  refine ⟨(), ?_, trivial⟩
-  unfold Evm.checkGas at ok ⊢
-  split at ok
-  · cases ok
-  · rename_i pass
-    split
-    · rename_i fail
-      exact absurd ⟨fail.1, Nat.lt_of_le_of_lt below fail.2⟩ pass
-    · rfl
+  refine ⟨fun _ ok => ?_, ?_⟩
+  · refine ⟨(), ?_, trivial⟩
+    unfold Evm.checkGas at ok ⊢
+    split at ok
+    · cases ok
+    · rename_i pass
+      split
+      · rename_i fail
+        exact absurd ⟨fail.1, Nat.lt_of_le_of_lt below fail.2⟩ pass
+      · rfl
+  · unfold Evm.checkGas
+    split <;> simp [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
 /-- The rest of an instruction that keeps its reads lifts when the rest lifts. -/
 theorem keepReads {next : Nat} (t : Tracks start low high)
@@ -376,21 +434,35 @@ theorem keepReads {next : Nat} (t : Tracks start low high)
     (h : Lifts start next rest highRest) :
     Lifts start next (Evm.keepReads low id rest) (Evm.keepReads high id highRest) := by
   obtain ⟨_, hc, hf, -, -⟩ := t
-  intro after ok
-  cases hr : rest with
-  | error e =>
-    simp only [Evm.keepReads, hr] at ok
-    split at ok
-    · cases ok
-    · cases ok
-      exact ⟨⟨hc, hf, fun h => by simp [exceptionalHalt] at h,
-        fun h => by simp [exceptionalHalt] at h⟩, fun h => by simp [exceptionalHalt] at h⟩
-  | ok a =>
-    simp only [Evm.keepReads, hr, Except.ok.injEq] at ok
-    subst ok
-    refine ⟨(h a hr).1, fun normal => ?_⟩
-    obtain ⟨b, hb, follows⟩ := (h a hr).2 normal
-    exact ⟨b, by simp only [Evm.keepReads, hb], follows⟩
+  refine ⟨fun after ok => ?_, fun hk => ?_⟩
+  · cases hr : rest with
+    | error e =>
+      simp only [Evm.keepReads, hr] at ok
+      split at ok
+      · cases ok
+      · cases ok
+        refine ⟨⟨hc, hf, fun h => by simp [exceptionalHalt] at h,
+          fun h => by simp [exceptionalHalt] at h, fun h => by simp [exceptionalHalt] at h⟩,
+          fun carried => ?_⟩
+        -- The rest fails with no revert, so the halt carries no error.
+        rcases carried with hv | hv <;> simp only [id, exceptionalHalt, reduceCtorEq,
+          Option.some.injEq] at hv
+        subst hv
+        exact (h.2 hr).elim
+    | ok a =>
+      simp only [Evm.keepReads, hr, Except.ok.injEq] at ok
+      subst ok
+      refine ⟨(h.1 a hr).1, fun carried => ?_⟩
+      obtain ⟨b, hb, follows⟩ := (h.1 a hr).2 carried
+      exact ⟨b, by simp only [Evm.keepReads, hb], follows⟩
+  · cases hr : rest with
+    | error e =>
+      simp only [Evm.keepReads, hr] at hk
+      split at hk
+      · cases hk
+        exact h.2 hr
+      · cases hk
+    | ok a => simp [Evm.keepReads, hr] at hk
 
 end Tracks
 

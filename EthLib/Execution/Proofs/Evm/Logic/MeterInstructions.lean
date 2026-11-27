@@ -192,7 +192,8 @@ theorem exchangeStep_bridge : Bridge (fork := fork) 2 exchangeStep exchangeStep 
 /-- STOP runs alike under the state gas meter. -/
 theorem stopStep_bridge : Bridge (fork := fork) 1 stopStep stopStep :=
   .of_sim fun _ _ below =>
-    Sim.ok ⟨⟨_, below, rfl⟩, rfl, rfl, fun h => by simp [advance] at h, id⟩
+    Sim.ok ⟨⟨_, below, rfl⟩, rfl, rfl, fun h => by simp [advance] at h, id,
+      fun h => by simp [advance] at h⟩
 
 /-- JUMP runs alike under the state gas meter. -/
 theorem jumpStep_bridge : Bridge (fork := fork) 1 jumpStep jumpStep :=
@@ -204,7 +205,7 @@ theorem jumpStep_bridge : Bridge (fork := fork) 1 jumpStep jumpStep :=
   split_tracks t
   simp only [validJumpDestinations_withStateGas]
   exact Sim.ite (fun valid => Sim.pure ⟨⟨meter, below, rfl⟩, hc, hf,
-    fun _ => .inr (hf ▸ valid), fun h => he ▸ h⟩) fun _ => Sim.error
+    fun _ => .inr (hf ▸ valid), fun h => he ▸ h, fun _ => he⟩) fun _ => Sim.error
 
 /-- JUMPI runs alike under the state gas meter. -/
 theorem jumpiStep_bridge : Bridge (fork := fork) 1 jumpiStep jumpiStep :=
@@ -219,7 +220,7 @@ theorem jumpiStep_bridge : Bridge (fork := fork) 1 jumpiStep jumpiStep :=
   simp only [validJumpDestinations_withStateGas]
   exact Sim.ite (fun _ => Sim.pure (Tracks.advance (by keep) 1)) fun _ =>
     Sim.ite (fun valid => Sim.pure ⟨⟨meter, below, rfl⟩, hc, hf,
-      fun _ => .inr (hf ▸ valid), fun h => he ▸ h⟩) fun _ => Sim.error
+      fun _ => .inr (hf ▸ valid), fun h => he ▸ h, fun _ => he⟩) fun _ => Sim.error
 
 /-- JUMPDEST runs alike under the state gas meter. -/
 theorem jumpdestStep_bridge : Bridge (fork := fork) 1 jumpdestStep jumpdestStep :=
@@ -369,7 +370,8 @@ private theorem haltWithOutput_sim {start : Evm fork Nat} {meter : StateGasMeter
   rintro ⟨y, _⟩ ⟨_, _⟩ ⟨rfl, t⟩
   refine (t.chargeGasAndMemory _ _).bind fun _ _ t => ?_
   split_tracks t
-  exact Sim.pure ⟨⟨⟨meter, below, rfl⟩, hc, hf, fun h => by simp at h, fun h => he ▸ h⟩, rfl⟩
+  exact Sim.pure ⟨⟨⟨meter, below, rfl⟩, hc, hf, fun h => by simp at h, fun h => he ▸ h,
+    fun h => by simp at h⟩, rfl⟩
 
 /-- RETURN runs alike under the state gas meter. -/
 theorem returnStep_bridge : Bridge (fork := fork) 1 returnStep returnStep :=
@@ -380,8 +382,9 @@ theorem revertStep_bridge : Bridge (fork := fork) 1 revertStep revertStep :=
   .of_sim fun start _ below => by
   unfold revertStep
   refine (haltWithOutput_sim (next := start.pc + 1) below).bind ?_
-  rintro a _ ⟨⟨⟨meter, below, rfl⟩, hc, hf, -, -⟩, running⟩
-  exact Sim.pure ⟨⟨meter, below, rfl⟩, hc, hf, fun h => by simp_all, fun h => nomatch h⟩
+  rintro a _ ⟨⟨⟨meter, below, rfl⟩, hc, hf, -, -, -⟩, running⟩
+  exact Sim.pure ⟨⟨meter, below, rfl⟩, hc, hf, fun h => by simp_all, fun h => (nomatch h),
+    fun h => by simp_all⟩
 
 /-! ## The instructions of the environment -/
 
@@ -433,7 +436,7 @@ theorem extcodesizeStep_bridge : Bridge (fork := fork) 1 extcodesizeStep extcode
   by_cases hb : fork ≥ .berlin <;> simp only [accessAddress, hb, ↓reduceIte] <;>
   · refine (Tracks.chargeGas (by keep) _).bind fun _ _ t => ?_
     split_tracks t
-    refine Sim.refl.bind ?_
+    refine Sim.ofState.bind ?_
     rintro c _ rfl
     refine (Tracks.pushWord (by keep) _).bind fun _ _ t => ?_
     exact Sim.pure (t.advance 1)
@@ -454,7 +457,7 @@ theorem extcodecopyStep_bridge : Bridge (fork := fork) 1 extcodecopyStep extcode
   by_cases hb : fork ≥ .berlin <;> simp only [accessAddress, hb, ↓reduceIte] <;>
   · refine (Tracks.chargeGasAndMemory (by keep) _ _).bind fun _ _ t => ?_
     split_tracks t
-    refine Sim.refl.bind ?_
+    refine Sim.ofState.bind ?_
     rintro c _ rfl
     exact Sim.pure (Tracks.advance (by keep) 1)
 

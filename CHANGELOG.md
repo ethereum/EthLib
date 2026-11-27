@@ -9,6 +9,14 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, the bridge to the state gas meter of EIP-8037 carries a run that ends in a revert ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  `Evm.Logic.Reaches.followsMeter_revert` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) lifts a run of checked code from a frame with no error to a frame that reverts.
+  `Evm.Logic.rollback_followsMeter` (`MeterSimulation.lean`) shows that the rollback of a revert keeps the execution gas at least the counter.
+  `Evm.Logic.Sim` and `Evm.Logic.Lifts` now also say that the run under one counter never fails with the error of a revert, and `Lifts` asks for a success under the state gas meter after a revert too (`Evm.Logic.Carried`).
+  `Evm.Logic.MeterFields` adds that a running result keeps the error of the frame.
+  `Sim.error`, `Sim.throw` and `Lifts.error` take a proof that the error is no revert, found by default.
+  `Sim.refl` takes a proof that the run never fails with the error of a revert, and `Sim.ofState` gives it for a read of the state.
+
 - In Lean, the bridge to the state gas meter of EIP-8037 also covers DUPN, SWAPN and EXCHANGE ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `Evm.Logic.meterSupported` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) accepts them, and `dupnStep_bridge`, `swapnStep_bridge` and `exchangeStep_bridge` (`MeterInstructions.lean`) move the program counter past the immediate byte.
   `nextOpcode_succ_of_immediate` and `immediateByte_range_of_ok` show that, after a success of one of them, an opcode starts 2 bytes on.

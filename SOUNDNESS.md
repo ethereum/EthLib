@@ -2404,6 +2404,7 @@ They require the specified bytecode at the contract's address.
 The queue theorems assume bounds on the storage counters, and the history theorem requires a block number from 1 to below `2^256`.
 
 `Logic.Reaches.followsMeter` lifts a normal one-counter run to the state gas meter when its execution gas initially covers that counter.
+`Logic.Reaches.followsMeter_revert` lifts, under the same bound, a run from a normal frame that ends in a revert.
 The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
 `Logic.SupportedCode` checks each opcode, skipping PUSH data, against a fixed list of instructions.
 The list leaves out GAS and every instruction that sends a message.
