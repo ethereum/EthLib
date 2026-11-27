@@ -347,8 +347,8 @@ theorem get_of_mem {r : Enr} {key : ByteArray} {value : Item}
         exact List.lt_irrefl _ hlt
       simp [hne, ih hk.2 hrest]
 
-/-- A record that the builder makes passes its four steps on the pairs with its own two inserted. -/
-private theorem makeRecordV4_steps {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × Item)}
+/-- A record that the builder makes passes the key check, signing, encoding and the size bound. -/
+private theorem steps_of_makeRecordV4 {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × Item)}
     {r : Enr} (h : makeRecordV4 sk seq pairs = .ok r) :
     ∃ all u bytes, insertPair (KEY_ID, .bytes SCHEME_V4)
         (insertPair (KEY_SECP256K1, .bytes (Point.mul sk Point.generator).encodeCompressed)
@@ -384,7 +384,7 @@ theorem makeRecordV4_eq_ok {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × 
     ∃ bytes, r.encode = .ok bytes ∧ decode bytes = .ok r ∧ verifyV4 r = true ∧ r.seq = seq ∧
       r.get KEY_ID = some (.bytes SCHEME_V4) ∧
       r.get KEY_SECP256K1 = some (.bytes (Point.mul sk Point.generator).encodeCompressed) := by
-  obtain ⟨all, u, bytes, hall, hc, hs, he, hsize⟩ := makeRecordV4_steps h
+  obtain ⟨all, -, bytes, hall, hc, hs, he, hsize⟩ := steps_of_makeRecordV4 h
   -- The keys strictly increase, and both key pairs are among the pairs.
   have hk := pairwise_of_checkKeys all hc
   have hid : (KEY_ID, Item.bytes SCHEME_V4) ∈ all := by
@@ -413,7 +413,7 @@ theorem makeRecordV4_eq_ok {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × 
 theorem get_of_makeRecordV4 {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × Item)} {r : Enr}
     {key : ByteArray} (h : makeRecordV4 sk seq pairs = .ok r) (hid : KEY_ID ≠ key)
     (hsk : KEY_SECP256K1 ≠ key) : r.get key = (pairs.find? (·.1 = key)).map (·.2) := by
-  obtain ⟨all, -, -, hall, -, hs, -, -⟩ := makeRecordV4_steps h
+  obtain ⟨all, -, -, hall, -, hs, -, -⟩ := steps_of_makeRecordV4 h
   -- Signing keeps the pairs, and neither inserted pair has the key.
   unfold Enr.get
   rw [(seq_pairs_signV4 hs).2, ← hall, find?_insertPair hid, find?_insertPair hsk]
