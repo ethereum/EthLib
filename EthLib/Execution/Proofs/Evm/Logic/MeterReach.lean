@@ -10,7 +10,7 @@ A successful run of supported instructions can use the state gas meter instead o
 
 The execution gas of the state gas meter must initially cover the counter.
 
-The supported instructions are all but GAS, the calls, the creations, DUPN, SWAPN and EXCHANGE.
+The supported instructions are all but GAS, the calls and the creations.
 
 The code check reads only opcode positions, skipping the data of PUSH instructions.
 -/
@@ -28,27 +28,58 @@ variable {fork : Fork}
 def meterSupported : Op → Bool
   -- GAS pushes the execution gas left, which the state gas meter can make larger.
   | .gas => false
-  -- From Glamsterdam, these read an immediate byte, so they move two bytes on.
-  | .dupn | .swapn | .exchange => false
   -- The calls and the creations send a message.
   | .create | .create2 | .call | .callcode | .delegatecall | .staticcall => false
   | _ => true
 
 /-- Every opcode position contains a supported instruction, or an invalid opcode. -/
 def SupportedCode (code : ByteArray) : Bool :=
+  -- EIP-8024 keeps the jump analysis, so the immediate byte of DUPN, SWAPN or EXCHANGE is read too.
+  --
+  -- So a byte of GAS, a call or a creation there fails the check.
   (opcodePositions code).all fun pc => (Op.decode (byteAtOrZero code pc)).all meterSupported
 
-/-- The bytes that an opcode takes: its own, and the data of a PUSH. -/
+/-- The bytes that an instruction takes: its own, the data of a PUSH, or an immediate byte. -/
 def opWidth : Op → Nat
   | .push n => 1 + n.val
+  -- From Glamsterdam, DUPN, SWAPN and EXCHANGE read the byte after them and move two bytes on.
+  | .dupn | .swapn | .exchange => 2
   | _ => 1
 
-/-- The next opcode starts past the bytes that the opcode at the program counter takes. -/
+/-- The next opcode starts past the bytes that an opcode with no immediate byte takes. -/
 theorem nextOpcode_eq {code : ByteArray} {pc : Nat} {op : Op}
-    (decoded : Op.decode (byteAtOrZero code pc) = some op) :
+    (decoded : Op.decode (byteAtOrZero code pc) = some op)
+    (plain : op ≠ .dupn ∧ op ≠ .swapn ∧ op ≠ .exchange) :
     nextOpcode code pc = pc + opWidth op := by
-  cases op <;> simp only [nextOpcode, decoded, opWidth]
-  omega
+  cases op <;> simp only [nextOpcode, decoded, opWidth] at plain ⊢
+  all_goals first | omega | simp at plain
+
+/-- An immediate byte outside 91 to 127 is no PUSH, so an opcode follows it. -/
+theorem nextOpcode_succ_of_immediate {code : ByteArray} {pc : Nat}
+    (depth : ¬(90 < (immediateByte code pc).toNat ∧ (immediateByte code pc).toNat < 128)) :
+    nextOpcode code (pc + 1) = pc + 2 := by
+  rw [EthLib.Execution.Evm.nextOpcode_eq]
+  simp only [immediateByte] at depth
+  split <;> omega
+
+/-- A success of DUPN, SWAPN or EXCHANGE read an immediate byte outside 91 to 127. -/
+theorem immediateByte_range_of_ok {op : Op} {run : Evm fork Nat → Except EvmError (Evm fork Nat)}
+    {evm after : Evm fork Nat} (reads : op = .dupn ∨ op = .swapn ∨ op = .exchange)
+    (dispatch : instruction fork op = some run) (ok : run evm = .ok after) :
+    ¬(90 < (immediateByte evm.code evm.pc).toNat ∧
+      (immediateByte evm.code evm.pc).toNat < 128) := by
+  intro depth
+  rcases reads with rfl | rfl | rfl <;> by_cases glam : Fork.glamsterdam ≤ fork <;>
+    simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep,
+      environmentStep, accountStep, storageStep, transientStorageStep, logOpStep,
+      selfdestructOpStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse, glam] at dispatch
+  all_goals
+    subst dispatch
+    obtain ⟨charged, paid, rest⟩ := EthLib.Base.bind_ok_iff.mp ok
+    obtain ⟨gas, -, rfl⟩ := chargeGas_eq_ok_iff_charge.mp paid
+  · simp [decodeSingle, depth] at rest
+  · simp [decodeSingle, depth] at rest
+  · simp [decodePair, show 81 < (immediateByte evm.code evm.pc).toNat by omega, depth.2] at rest
 
 /-- A supported opcode that exists at the fork has an instruction without a message. -/
 theorem instruction_isSome_of_meterSupported {op : Op}
@@ -99,6 +130,9 @@ private theorem stackOnlyStep_bridges {op : Op} (supported : meterSupported op =
     | with_reducible exact pushN_bridge _
     | with_reducible exact dupN_bridge _
     | with_reducible exact swapN_bridge _
+    | with_reducible exact dupnStep_bridge
+    | with_reducible exact swapnStep_bridge
+    | with_reducible exact exchangeStep_bridge
 
 private theorem controlFlowStep_bridges {op : Op} (supported : meterSupported op = true) :
     Bridges (fork := fork) (opWidth op) (controlFlowStep op) (controlFlowStep op) := by
@@ -215,6 +249,36 @@ private theorem boundaryFrom_next {code : ByteArray} {start pc : Nat}
   | here h => exact .step h (.here inside)
   | step h _ ih => exact .step h (ih inside)
 
+/-- The opcode after an opcode position starts in the code or past its end. -/
+private theorem next_boundary {code : ByteArray} {pc : Nat} (boundary : pc ∈ opcodePositions code) :
+    code.size ≤ nextOpcode code pc ∨ nextOpcode code pc ∈ opcodePositions code := by
+  by_cases fits : nextOpcode code pc < code.size
+  · exact .inr (mem_opcodePositions_iff.mpr
+      (boundaryFrom_next (mem_opcodePositions_iff.mp boundary) fits))
+  · exact .inl (Nat.le_of_not_gt fits)
+
+/-- A success at an opcode position moves on to an opcode position, or past the end. -/
+private theorem landing {low after : Evm fork Nat} {op : Op}
+    {run : Evm fork Nat → Except EvmError (Evm fork Nat)}
+    (boundary : low.pc ∈ opcodePositions low.code)
+    (decoded : Op.decode (byteAtOrZero low.code low.pc) = some op)
+    (dispatch : instruction fork op = some run) (ok : run low = .ok after) :
+    low.code.size ≤ low.pc + opWidth op ∨ low.pc + opWidth op ∈ opcodePositions low.code := by
+  by_cases reads : op = .dupn ∨ op = .swapn ∨ op = .exchange
+  · have first : nextOpcode low.code low.pc = low.pc + 1 := by
+      rcases reads with rfl | rfl | rfl <;> simp [nextOpcode, decoded]
+    have second := nextOpcode_succ_of_immediate (immediateByte_range_of_ok reads dispatch ok)
+    have width : opWidth op = 2 := by rcases reads with rfl | rfl | rfl <;> rfl
+    rw [width]
+    rcases next_boundary boundary with h | h
+    · rw [first] at h
+      exact .inl (by omega)
+    · rw [first] at h
+      rw [← second]
+      exact next_boundary h
+  · rw [← nextOpcode_eq decoded (by simpa only [not_or] using reads)]
+    exact next_boundary boundary
+
 /-- Checked code with the flags of its scan, at an opcode position when the frame runs. -/
 private def MeterReady (evm : Evm fork Nat) : Prop :=
   SupportedCode evm.code = true ∧
@@ -253,18 +317,14 @@ private theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low af
             StepResult.next.injEq] at hs
           subst next
           obtain ⟨highRun, dispatchHigh, bridge⟩ := instruction_bridge supportedOp dispatch
-          have next := nextOpcode_eq (Option.filter_eq_some_iff.mp decodedAt).1
           obtain ⟨⟨code, sameFlags, pc, normal⟩, -⟩ :=
             bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _) after ok
           refine ⟨⟨by simpa only [code] using supported,
             by simpa only [code, sameFlags] using flags, ?_⟩, fun hn => ⟨normal hn, ?_⟩⟩
           · intro runs
             rcases pc runs with hn | hj
-            · rw [code, hn, ← next]
-              by_cases fits : nextOpcode low.code low.pc < low.code.size
-              · exact .inr (mem_opcodePositions_iff.mpr
-                  (boundaryFrom_next (mem_opcodePositions_iff.mp boundary) fits))
-              · exact .inl (Nat.le_of_not_gt fits)
+            · rw [code, hn]
+              exact landing boundary (Option.filter_eq_some_iff.mp decodedAt).1 dispatch ok
             · rw [flags] at hj
               exact .inr (by rw [code]; exact (isValidJumpDest_iff.mp hj).1)
           · intro meter below

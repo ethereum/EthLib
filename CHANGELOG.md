@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, the bridge to the state gas meter of EIP-8037 also covers DUPN, SWAPN and EXCHANGE ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  `Evm.Logic.meterSupported` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) accepts them, and `dupnStep_bridge`, `swapnStep_bridge` and `exchangeStep_bridge` (`MeterInstructions.lean`) move the program counter past the immediate byte.
+  `nextOpcode_succ_of_immediate` and `immediateByte_range_of_ok` show that, after a success of one of them, an opcode starts 2 bytes on.
+  GAS stays out.
+  It pushes the execution gas left, which the state gas meter can make larger, so code that reads it can take another path.
+
 - In Lean, `wp` (`Execution/Proofs/Evm/Logic/Wp.lean`) is the weakest precondition of an opcode at a fork, defined by a match on every opcode ([#4789](https://github.com/ethereum/EthLib/issues/4789)).
   `wp_iff` and `wpFrame_iff` (`Logic/Message.lean`) prove, for every opcode and every fork, that a running frame whose byte decodes to the opcode meets it exactly when one step under a runner of messages reaches a frame of the postcondition.
   `Hoare.of_wp` turns it into a triple of one step.
@@ -1197,6 +1203,9 @@ Not yet released.
   A step that writes a field adds one obligation to each user of the induction principle.
 
 ### Changes that break callers
+
+- In Lean, `Evm.Logic.opWidth` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) gives 2 bytes to DUPN, SWAPN and EXCHANGE, in place of 1 ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  `Evm.Logic.nextOpcode_eq` now takes a proof that the opcode is not DUPN, SWAPN or EXCHANGE.
 
 - From Gloas, the latest verified ancestor walks the nodes of the fork choice and returns a node, as consensus-specs v1.7.0-beta.5 does ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
   An optimistic node reads as the pending node of its block, and an optimistic pending node climbs to the node of its parent.

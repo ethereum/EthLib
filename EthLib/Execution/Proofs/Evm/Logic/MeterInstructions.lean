@@ -5,11 +5,11 @@ public import EthLib.Execution.Proofs.Evm.Logic.MeterSimulation
 /-!
 # Proofs: each instruction under the state gas meter
 
-Each instruction other than GAS runs under the state gas meter as it runs under one counter.
+Each instruction that sends no message and pays no state gas, other than GAS, runs alike.
+
+It runs under the state gas meter as it runs under one counter.
 
 The run under the state gas meter starts with at least as much execution gas.
-
-The instructions that read an immediate byte, from Glamsterdam, are left out.
 -/
 
 @[expose] public section
@@ -138,6 +138,54 @@ theorem swapN_bridge (n : Fin 16) : Bridge (fork := fork) 1 (swapN n) (swapN n) 
     cases rest[n.val]? with
     | none => exact Sim.error
     | some x => exact Sim.pure (Tracks.advance (by keep) 1)
+
+/-- DUPN runs alike under the state gas meter, and moves past its immediate byte. -/
+theorem dupnStep_bridge : Bridge (fork := fork) 2 dupnStep dupnStep :=
+  .of_sim fun _ _ below => by
+  unfold dupnStep
+  refine ((Tracks.init below).chargeGas _).bind fun l _ t => ?_
+  split_tracks t
+  simp only [code_withStateGas, pc_withStateGas, stack_withStateGas]
+  cases decodeSingle (immediateByte l.code l.pc) with
+  | none => exact Sim.error
+  | some n =>
+    dsimp only
+    cases l.stack.val[n - 1]? with
+    | none => exact Sim.error
+    | some x =>
+      refine (Tracks.pushWord (by keep) _).bind fun _ _ t => ?_
+      exact Sim.pure (t.advance 2)
+
+/-- SWAPN runs alike under the state gas meter, and moves past its immediate byte. -/
+theorem swapnStep_bridge : Bridge (fork := fork) 2 swapnStep swapnStep :=
+  .of_sim fun _ _ below => by
+  unfold swapnStep
+  refine ((Tracks.init below).chargeGas _).bind fun l _ t => ?_
+  split_tracks t
+  simp only [code_withStateGas, pc_withStateGas, stack_withStateGas]
+  cases decodeSingle (immediateByte l.code l.pc) with
+  | none => exact Sim.error
+  | some n =>
+    dsimp only
+    cases exchangeItems l.stack 0 n with
+    | none => exact Sim.error
+    | some stack => exact Sim.pure (Tracks.advance (low := { l with stack }) (by keep) 2)
+
+/-- EXCHANGE runs alike under the state gas meter, and moves past its immediate byte. -/
+theorem exchangeStep_bridge : Bridge (fork := fork) 2 exchangeStep exchangeStep :=
+  .of_sim fun _ _ below => by
+  unfold exchangeStep
+  refine ((Tracks.init below).chargeGas _).bind fun l _ t => ?_
+  split_tracks t
+  simp only [code_withStateGas, pc_withStateGas, stack_withStateGas]
+  cases decodePair (immediateByte l.code l.pc) with
+  | none => exact Sim.error
+  | some p =>
+    obtain ⟨n, m⟩ := p
+    dsimp only
+    cases exchangeItems l.stack n m with
+    | none => exact Sim.error
+    | some stack => exact Sim.pure (Tracks.advance (low := { l with stack }) (by keep) 2)
 
 /-! ## The instructions of control flow -/
 
