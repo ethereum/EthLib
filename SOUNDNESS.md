@@ -3901,7 +3901,7 @@ It needs slots that last a positive time, and honest stores that start with no h
 A store built from an anchor starts with none, by `Store.getForkchoiceStore_equivocatingIndices`.
 In the model an honest validator signs a vote only after checking it against its own votes in its view.
 Each of its votes in a sent message stays in its view, so no two of them can be slashed together.
-`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
+`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
 
 `Execution.isSlashableAttestationData_honest` (`Consensus/Proofs/ForkChoice/HonestEquivocators.lean`) proves that no two votes of one honest validator in sent messages can be slashed together, when slots last a positive time.
 The check before signing that gives it is the last condition of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`), a rule on the votes in the validator's view.

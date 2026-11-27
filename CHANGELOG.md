@@ -83,6 +83,12 @@ Not yet released.
   `indexedRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the root of a list for any plain hash, with `indexedRootM_eq` and `indexedRootM_eq_ok_iff` ([#4612](https://github.com/ethereum/EthLib/issues/4612)).
   `Execution/Proofs/Trie/RandomOracle.lean` gains `mem_witnesses_of_findCollision`, the proof-node half of the secured-trie lemma.
 
+- In Lean, `VoteAt.slot_le_of_latest_rank` (`Consensus/Proofs/ForkChoice/VoteDelivery.lean`) bounds a receiver's latest vote below by the slot of an honest duty vote.
+  It applies when the latest vote ranks at least as high as the duty vote, to each signed vote that the latest vote records.
+  `VoteAt.latest_signed_at_next_slot` and `Execution.mem_supportersOf_of_duty_interval_core` now apply it, in place of two copies of its proof.
+  `Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` moves to `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean` from `Consensus/Proofs/ForkChoice/HonestEquivocators.lean`, with its name and statement.
+  `HonestEquivocators.lean` no longer imports the fast confirmation proof modules, so neither does `VoteDelivery.lean`.
+
 - In Lean, `applyBody_toBodyOutput` (`Execution/Proofs/Blocks/Transition.lean`) reads a body that runs with any overrides.
   Its output agrees with the output of its transactions on every field of that output but the body state.
   `applyBody_receipts` and three proofs of the RPC and simulation modules now apply it.

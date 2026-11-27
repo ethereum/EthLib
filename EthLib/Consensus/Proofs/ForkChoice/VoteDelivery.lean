@@ -948,6 +948,51 @@ theorem VoteAt.signed_sent {anchor : Store preset fork}
   have alone := vote.alone
   simp only [← Array.mem_toList_iff, alone, List.mem_singleton]
 
+/-- A latest vote that ranks at least as high as an honest duty vote is from the duty slot or later.
+
+It bounds each vote of the validator signed in the receiver's view with that latest message. -/
+theorem VoteAt.slot_le_of_latest_rank (slots : 0 < config.SLOT_DURATION_MS)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ u ∈ J, e.start u = anchor) {v w : ValidatorIndex} (honest : v ∈ J)
+    (receiver : w ∈ J) {slot : Slot} {committee : CommitteeIndex} {deadline n : ℕ}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committee deadline n attestation indexed)
+    (dataSlot : attestation.data.slot = slot)
+    (dataEpoch : attestation.data.target.epoch = computeEpochAtSlot preset slot) {k : ℕ}
+    {message : LatestMessage fork}
+    (latest : ((e.world k).state w).latestMessages[v]? = some message)
+    (rank : (LatestMessage.ofAttestation attestation).rank ≤ message.rank)
+    {other : Attestation preset fork} {signedIn : Message preset fork}
+    (seen : signedIn ∈ (e.world k).view w)
+    (signed : (v, other.data) ∈ statements config checks anchorState anchorBlock signedIn)
+    (latestEq : message = LatestMessage.ofAttestation other) : slot ≤ other.data.slot := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · -- From Gloas the latest vote ranks by its slot, at least the duty slot.
+    rw [latestEq, LatestMessage.ofAttestation_rank_of_gloas gloas,
+      LatestMessage.ofAttestation_rank_of_gloas gloas, dataSlot] at rank
+    exact rank
+  have preGloas : fork < .glamsterdam := Nat.lt_of_not_le gloas
+  rw [LatestMessage.ofAttestation_rank_of_lt preGloas] at rank
+  obtain ⟨origin, originIn, originSeen, originEq, originSigned, originVote⟩ :=
+    e.exists_signed_origin_of_latestMessages anchored start receiver latest
+  -- The two signed votes share the target epoch of the latest vote, so they carry one data.
+  have sameData := Execution.data_eq_of_signed_of_target_epoch slots
+    (e.view_subset_sent k w originSeen) (e.view_subset_sent k w seen) originSigned signed
+    honest (by
+      have both := originEq.symm.trans latestEq
+      have ranks := congrArg LatestMessage.rank both
+      rw [LatestMessage.ofAttestation_rank_of_lt preGloas,
+        LatestMessage.ofAttestation_rank_of_lt preGloas] at ranks
+      exact ranks)
+  -- The duty vote is a sent message that signs its own data.
+  obtain ⟨dutySent, dutySigned⟩ := vote.signed_sent anchored start honest
+  have floor := Execution.latest_slot_floor_of_signed_rank slots preGloas honest dutySent
+    (e.view_subset_sent k w originSeen) dutySigned originSigned originVote
+    (by rw [dataEpoch, dataSlot]) (by rw [← originEq]; exact rank)
+    (UInt64.le_of_eq dataSlot.symm)
+  rwa [sameData] at floor
+
 section LatestSigned
 
 /-! ## The latest vote of an honest duty at the next slot -/
@@ -1039,20 +1084,11 @@ theorem VoteAt.latest_signed_at_next_slot {n j : ℕ} {a : Attestation preset fo
   swap
   · exact .inr collision
   -- The latest vote has a signed origin, whose slot is at least the duty slot.
-  obtain ⟨origin, m, seen, originEq, originSigned, originVote⟩ :=
+  obtain ⟨origin, m, seen, originEq, originSigned, -⟩ :=
     e.exists_signed_origin_of_latestMessages anchored start hw latestOk
   subst originEq
-  refine .inl ⟨origin, m, seen, originSigned, latestOk, ?_⟩
-  by_cases gloas : .glamsterdam ≤ fork
-  · rw [LatestMessage.ofAttestation_rank_of_gloas gloas,
-      LatestMessage.ofAttestation_rank_of_gloas gloas, dataSlot] at rank
-    exact rank
-  have preGloas : fork < .glamsterdam := Nat.lt_of_not_le gloas
-  rw [LatestMessage.ofAttestation_rank_of_lt preGloas] at rank
-  obtain ⟨dutySent, dutySigned⟩ := vote.signed_sent anchored start hv
-  exact Execution.latest_slot_floor_of_signed_rank slots preGloas hv dutySent
-    (e.view_subset_sent k w seen) dutySigned originSigned originVote
-    (by rw [dataEpoch, dataSlot]) rank (UInt64.le_of_eq dataSlot.symm)
+  exact .inl ⟨origin, m, seen, originSigned, latestOk, vote.slot_le_of_latest_rank slots anchored
+    start hv hw dataSlot dataEpoch latestOk rank seen originSigned rfl⟩
 
 /-- From the next slot boundary, a receiver's latest message is a vote from the duty slot or later.
 
