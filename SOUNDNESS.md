@@ -4150,6 +4150,17 @@ The paper's conclusion is a seed whose unrealized justification is the target or
 The premise also allows two honest stores that collide, since the seed reads the call's block at the target root.
 Votes for the target of epoch E count until start(E+1) − 1, and the conclusion applies once a receiver's epoch is E + 2 or later.
 
+`Execution.justified_eq_currentTarget_of_noConflictingCheckpoint` in the same file addresses Theorem 1 of [#2058](https://github.com/ethereum/EthLib/issues/2058).
+Suppose an honest caller passes the no-conflict test at a slot start for a target of an epoch after the anchor's justified epoch.
+Assume the reserved honest count and the pin on justified checkpoints, and that block states held by honest stores by the time limit have slots before the next scheduled fork.
+Up-to-date honest heads must descend from an origin of the target epoch on the caller's head chain, from the call through the start of the next epoch.
+If both events are by the limit, an up-to-date honest receiver's justified checkpoint of that epoch equals the caller's target, or honest stores exhibit a block collision or cross-store justified evidence.
+From Fulu until Gloas the corollary derives the pin under the setting's hypotheses, including cross-store finality and the pin guard, and derives the held-state bound from the fork window; it still assumes origin coverage.
+The confirmed-root coverage theorem does not supply this origin coverage, even from Fulu.
+Its confirmed root may predate the target epoch.
+Its coverage starts at the following slot, not at the call.
+And it applies to the last event of a consecutive run of calls, not an arbitrary caller at a slot start.
+
 `Execution.confirmedRoot_covers` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` addresses Theorem 1 of [#1458](https://github.com/ethereum/EthLib/issues/1458).
 It takes consecutive calls of the rule by one honest validator, one per slot from `firstSlot`, run from the anchor store.
 The first slot's epoch is at least two and after the anchor state's epoch.

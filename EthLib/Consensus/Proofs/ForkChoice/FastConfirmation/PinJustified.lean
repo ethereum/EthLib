@@ -352,6 +352,108 @@ theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.minimal) :
 
 end Deployed
 
+section
+
+variable {Δ time : ℕ} {anchor : Store preset fork} {horizon : Epoch} {margin : ℕ}
+  {g : ForkedBeaconState preset}
+  -- The anchor and its store: every honest store starts there, at an epoch boundary.
+  (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+  (start : ∀ a ∈ J, e.start a = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+  (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+  -- Slots are nonempty, the delay fits a slot, and honest stores agree on duty windows.
+  (slots : 0 < config.SLOT_DURATION_MS) (fits : DelayFits fork config genesisTimeMs Δ)
+  (windows : AssignmentWindowAgreement (e := e) time) (params : DirectSafety.Parameters preset)
+  -- Held block states have nonzero roots, and no honest store holds the anchor's parent.
+  (roots : HeldBlockStateRootsNonzero (e := e) time) (absent : AnchorParentAbsent (e := e) time)
+  -- The anchor state comes from genesis by a run.
+  (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+  -- Honest store epochs are within the horizon, with the run and terminal stake floors.
+  (storeBound : HonestStoreEpochsBounded (e := e) horizon time)
+  (enough : HeldRunStakeFloor (e := e) pre horizon time)
+  (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+  {u w : ValidatorIndex} (caller : u ∈ J) (receiver : w ∈ J) {n k : ℕ}
+  {head : ForkChoiceNode} {origin : Root} {target : Checkpoint}
+  -- The caller's head passes the no-conflict test for its current target.
+  (headOk : ((e.world n).state u).getHead config = .ok head)
+  (check : ((e.world n).state u).willNoConflictingCheckpointBeJustified config head.root =
+    .ok true)
+  (targetOk : ((e.world n).state u).getCurrentTarget config head.root = .ok target)
+  -- The call's count is reserved, and the target is after the anchor's justified epoch.
+  (reserved : ReservedTargetVotes (e := e) margin u n head.root)
+  (afterAnchor : anchor.justifiedCheckpoint.epoch < target.epoch)
+  -- The call is at the start of its slot.
+  {callSlot : Slot} {callBegin : UInt64}
+  (callOk : ((e.world n).state u).getCurrentSlot config = .ok callSlot)
+  (callBeginOk : computeTimeAtSlotMs config genesisTimeMs callSlot = .ok callBegin)
+  (atCall : (e.world n).time = callBegin.toNat)
+  -- The origin is a block of the target epoch on the caller's head chain.
+  (originEpochOk : ((e.world n).state u).getBlockEpoch origin = .ok target.epoch)
+  (descends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩ ⟨origin, .pending⟩ =
+    .ok true)
+  -- Honest heads descend from the origin from the call to the start of the next epoch.
+  {nextEpoch : Epoch} {first : Slot} {begin : UInt64}
+  (nextOk : addChecked target.epoch 1 = .ok nextEpoch)
+  (firstOk : computeStartSlotAtEpoch preset nextEpoch = .ok first)
+  (beginOk : computeTimeAtSlotMs config genesisTimeMs first = .ok begin)
+  (covers : HonestHeadsCover (e := e) origin (e.world n).time (begin.toNat + 1))
+  -- The caller and receiver events are both by the limit, in either order.
+  (callBound : (e.world n).time ≤ time) (byTime : (e.world k).time ≤ time)
+  -- The receiver is up to date, and its justified checkpoint is of the target epoch.
+  (ready : UpToDate config checks sources (e.world k).time ((e.world k).view w)
+    ((e.world k).state w))
+  (sameEpoch : ((e.world k).state w).justifiedCheckpoint.epoch = target.epoch)
+include anchored start anchorSlot anchorBoundary slots fits windows params roots absent genesis pre
+  storeBound enough terminal caller receiver headOk check targetOk reserved afterAnchor callOk
+  callBeginOk atCall originEpochOk descends nextOk firstOk beginOk covers callBound byTime
+  ready sameEpoch
+
+/-- From Fulu until Gloas, the setting gives the pin and the held-state bound.
+
+The conclusion is the main theorem's, under the same coverage and reserved count. -/
+theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setting
+    [DecidablePred (· ∈ J)]
+    -- Honest stores check signatures with BLS, and the anchor state's header is the anchor block's.
+    (bls : checks = .bls)
+    (header : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
+      anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
+      anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
+      SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
+    (zero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
+    -- The inclusion delay is positive, and honest validators are unslashed in counted states.
+    (delay : preset.InclusionDelayPositive) (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    -- Honest justified chains read each honest store's finalized checkpoint at its epoch.
+    (finality : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
+      ((e.world i).state a).finalizedCheckpoint.epoch ≤
+        ((e.world j).state b).justifiedCheckpoint.epoch →
+      ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state a).finalizedCheckpoint.root)
+    -- The pin guard holds, the fork is Fulu until Gloas, and the horizon is before the next fork.
+    (guarded : PinGuarded (e := e) time) (preGloas : fork < .glamsterdam) (fusaka : .fusaka ≤ fork)
+    (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
+    -- The facts of the preset that the pin reads.
+    (bands : preset.IncrementWithinUpwardBand) (caps : CapOrder preset)
+    (exitWindow : preset.SeedLookaheadAtLeastThree)
+    (maxAligned : MaxEffectiveBalancesAligned preset) (long : 1 < preset.SLOTS_PER_EPOCH)
+    (facts : PinPresetFacts preset) :
+    ((e.world k).state w).justifiedCheckpoint = target ∨ HonestCollision (e := e) time ∨
+      CrossStoreJustifiedEvidence (e := e) pre time := by
+  -- The fork window bounds the held states before the next fork.
+  have early := Execution.heldStatesBeforeUpgrade_of_bounded (e := e) anchored start anchorSlot
+    slots params.slots forkWindow storeBound
+  -- The setting pins the justified checkpoints of the call's epoch, at the anchor's epoch.
+  have pins := justifiedPinned_of_setting (margin := margin) (first := 0) bls anchored start
+    anchorSlot rfl header zero slots params delay genesis pre roots absent storeBound enough
+    terminal unslashed finality guarded preGloas fusaka forkWindow bands caps exitWindow
+    maxAligned long facts
+  exact Execution.justified_eq_currentTarget_of_noConflictingCheckpoint anchored start anchorSlot
+    anchorBoundary slots fits windows params roots absent genesis pre storeBound enough terminal
+    caller receiver headOk check targetOk reserved afterAnchor callOk callBeginOk atCall
+    originEpochOk descends nextOk firstOk beginOk covers callBound byTime ready sameEpoch early
+    pins
+
+end
+
 end PinReader
 
 end EthLib.Consensus.Models.Network
