@@ -179,17 +179,29 @@ macro_rules
       BitVec.reduceHShiftLeft, BitVec.reduceHShiftRight, BitVec.reduceToNat, BitVec.reduceEq,
       BitVec.reduceOfNat, Nat.reduceLT, Nat.reduceGT, Nat.reduceDiv, Nat.reduceMod, ↓reduceIte])
 
+/-- A frame at an offset plus two numbers is the frame at the offset plus their sum.
+
+So the program counter of a block at an offset `o` stays `o + k` from step to step. -/
+theorem At.pc_add_add {code : ByteArray} {message : Message fork} {o a b : Nat}
+    {stack : List U256} {memory : ByteArray} {gas : Nat} {state : State.TransactionState}
+    {substate : Substate} {returnData : ByteArray} :
+    At code message (o + a + b) stack memory gas state substate returnData =
+      At code message (o + (a + b)) stack memory gas state substate returnData := by
+  rw [Nat.add_assoc]
+
 /-- Evaluates the program counter, the pushed word and the gas of the frame after a step.
 
 It also evaluates each closed operation on words and each closed comparison.
 
-It also reduces each `if` on numbers. -/
+It also reduces each `if` on numbers.
+
+A program counter at an offset `o` comes back as `o + k`, with `k` a number. -/
 syntax "evm_tidy" : tactic
 
 macro_rules
   | `(tactic| evm_tidy) => `(tactic| ((try evm_prices) <;> (try simp only [UInt8.reduceToNat,
       BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub, Nat.sub_sub, List.set_cons_zero,
-      List.set_cons_succ]) <;> (try evm_words)))
+      List.set_cons_succ, At.pc_add_add]) <;> (try evm_words)))
 
 /-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
 
