@@ -1242,6 +1242,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the inverse of `Fp` is `a ^ (p - 2)` on the Montgomery form, by Fermat's little theorem, as for `Fr` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Bls.Fp.inverse` (`Cryptography/Bls/Fp.lean`) unfolds to `Montgomery.inv` instead of the extended Euclidean algorithm, so `Bls.Fp.inverse_eq_inv` holds by `rfl`.
+  `Bls.Fp.toZMod_inverse` and every other statement about `Fp` are unchanged.
+  `Bls/Fp.lean` and `Proofs/Bls/FpZMod.lean` no longer import the Euclidean inverse, so a user of `euclid` or `Fin.inverse` imports `Cryptography/Inverse.lean` or its proofs directly.
+
 - In Lean, the rows of the `Fp` product on six 64-bit words keep no word above the six ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `Word64.row6` and `Word64.reduce6` (`Cryptography/Word64/Six.lean`) now take and return `Word64.Words6` instead of `Word64.Acc6`.
   `Word64.row6_spec` asks for `2 * p.val < 2^384`, and `Word64.reduce6_val` no longer does.
