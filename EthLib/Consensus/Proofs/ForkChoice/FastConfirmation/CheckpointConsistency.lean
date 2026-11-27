@@ -929,11 +929,11 @@ include anchored start anchorSlot anchorBoundary slots fits windows params roots
 
 /-- By `time`, an up-to-date honest receiver justified at the target epoch has the caller's target.
 
-Else honest stores collide or give cross-store justified evidence, under the reserve and the pin.
+Else honest stores collide or give cross-store justified evidence; it assumes the reserve and pin.
 
 By `time` the caller passes the no-conflict test at a slot start after the anchor's justified epoch.
 
-It needs the anchor run, timing, parameters, nonzero held roots, other state bounds and coverage. -/
+It needs anchor run, timing, duty windows, parameters, nonzero roots, state bounds and coverage. -/
 theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint
     (early : HeldStatesBeforeUpgrade (e := e) time)
     (pins : JustifiedPinned (e := e) anchor.justifiedCheckpoint.epoch margin 0 time) :
