@@ -269,6 +269,7 @@ def embedding : FieldOps.Embedding Fp2 Fp2 where
   map_zero := rfl
   map_one := rfl
   map_inverse _ := rfl
+  map_square a := Cryptography.Fp2.square_eq Fp.embedding a
   beq_iff _ _ := beq_iff_eq
   isZero_iff _ := isZero_iff
 

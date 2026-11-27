@@ -36,6 +36,7 @@ structure Hom (F G : Type) [FieldOps F] [FieldOps G] where
   map_beq : ∀ a b, beq (toFun a) (toFun b) = beq a b
   map_isZero : ∀ a, isZero (toFun a) = isZero a
   map_inverse : ∀ a, toFun (inverse a) = inverse (toFun a)
+  map_square : ∀ a, toFun (square a) = square (toFun a)
 
 instance {F G : Type} [FieldOps F] [FieldOps G] : CoeFun (Hom F G) (fun _ => F → G) :=
   ⟨Hom.toFun⟩
@@ -52,6 +53,8 @@ structure Embedding (F K : Type) [FieldOps F] [Field K] where
   map_zero : toFun FieldOps.zero = 0
   map_one : toFun FieldOps.one = 1
   map_inverse : ∀ a, toFun (FieldOps.inverse a) = (toFun a)⁻¹
+  /-- The square maps to the product of the image by itself. -/
+  map_square : ∀ a, toFun (FieldOps.square a) = toFun a * toFun a
   /-- The boolean equality holds exactly when the images are equal. -/
   beq_iff : ∀ a b, FieldOps.beq a b = true ↔ toFun a = toFun b
   /-- The zero test holds exactly when the image is zero. -/
