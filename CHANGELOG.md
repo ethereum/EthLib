@@ -1140,13 +1140,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, a run from genesis stays on the fork schedule at every ordered configuration, Altair at epoch zero included, whenever the upgrades due at genesis succeed ([#4624](https://github.com/ethereum/EthLib/issues/4624)).
+  `Run.onSchedule_of_genesis` (`Consensus/Proofs/Transition/Schedule.lean`) takes the run from the state after the upgrades due at the slot of genesis, in place of a run from genesis itself.
+  It no longer assumes that Altair starts after epoch zero, nor that the genesis fork is Phase 0, which every genesis now is.
+  Migration: pass `processUpgrades config checks g = .ok launched` and a run from `launched`; when Altair starts after epoch zero, `launched` is `g`.
+
 - In Lean, the genesis rule is defined at Phase 0 only ([#4623](https://github.com/ethereum/EthLib/issues/4623)).
   - `initializeBeaconStateFromEth1` (`Consensus/Transition/Genesis.lean`) takes a last argument `phase0 : fork = .phase0` in place of `before : fork < .altair`.
     Its value at Phase 0 is the same.
   - `lt_altair_of_phase0` (`Consensus/Transition/Genesis.lean`) states that Phase 0 comes before Altair.
   - `Genesis` (`Consensus/Proofs/Transition/Trace.lean`) holds the new proof, `Genesis.phase0` reads it, and `Genesis.before` still gives the fact that the fork comes before Altair.
   - Each theorem about the genesis rule takes the new proof as an implicit argument.
-  - `Run.onSchedule_of_genesis` (`Consensus/Proofs/Transition/Schedule.lean`) drops its hypothesis that the genesis fork is Phase 0.
   - In Python, `initialize_genesis` at Berlin or London now raises an error of code 0, `no genesis at <fork>`, in place of returning a state.
   Migration: pass a proof of `fork = .phase0` to the genesis rule, and use `lt_altair_of_phase0` where the old proof was used.
 
