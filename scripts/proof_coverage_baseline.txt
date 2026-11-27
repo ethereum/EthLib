@@ -3459,8 +3459,6 @@ touched pectra EthLib.Consensus.ForkChoiceNode.compare
 touched fusaka EthLib.Consensus.ForkChoiceNode.compare
 touched glamsterdam EthLib.Consensus.ForkChoiceNode.compare
 touched hegota EthLib.Consensus.ForkChoiceNode.compare
-touched glamsterdam EthLib.Consensus.ForkChoiceNode.heldPayloads
-touched hegota EthLib.Consensus.ForkChoiceNode.heldPayloads
 touched phase0 EthLib.Consensus.ForkDigest
 touched altair EthLib.Consensus.ForkDigest
 touched bellatrix EthLib.Consensus.ForkDigest
