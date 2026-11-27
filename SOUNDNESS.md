@@ -2149,6 +2149,15 @@ Each specification holds from every frame that a message with its code enters, s
 The proof is an induction on the bound on the gas of messages.
 `HoareUnder.of_exists` proves a triple from a precondition that gives a witness, with a triple for each witness.
 `StepBy` (`Logic/Message.lean`) adds the steps that send a message, which a runner of messages ends with a frame.
+`wp` (`Logic/Wp.lean`) is the weakest precondition of an opcode at a fork, for a postcondition, under a runner of messages.
+It is defined by a match on every opcode, so Lean rejects it if one is missing.
+`Logic.wp_iff` proves, for every opcode and every fork, that a running frame whose byte decodes to the opcode meets `wp` exactly when one `StepBy` step reaches a frame of the postcondition.
+That step continues, halts exceptionally, or resumes after a message that the runner ends.
+`Logic.wpFrame_iff` extends it to every running frame, past the end of its code and on a byte that is no opcode.
+`Hoare.of_wp` turns the weakest precondition of an opcode with an instruction into a triple of one step, by `Logic.wp_iff_step`.
+`At.rule` is proved from it, and `Step.of_instruction`, which `At.ruleG` and `At.ruleGA` use, from `Logic.wp_iff_step`.
+The rules of a step that sends a message (`HoareUnder.of_child`, `HoareOn.of_child`) are proved from `Logic.wpFrame_iff`.
+The rules of an exceptional halt (`Logic/Fault.lean`) state the error of the step directly.
 `runFrame_eq_of_reaches` proves that `runFrame` runs a frame as it runs each frame that it reaches.
 It holds for every relation whose steps `runFrame` runs alike at both ends, as `Step` and `StepBy` do.
 A runner can also fail on a message, and then `runFrame` fails with the error of the runner.
