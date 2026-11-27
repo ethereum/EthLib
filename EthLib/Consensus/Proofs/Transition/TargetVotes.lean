@@ -167,19 +167,13 @@ private theorem voteFrame_processAttestationAltair {attestation : Attestation pr
   -- A block accepts an attestation only when the signature checks accept its aggregate signature.
   have frame := frame_processAttestationAltair computed
   have flagsOf := processAttestationAltair_targetFlag computed
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, attesters, attestersOk, ⟨updated, _⟩, _, _, _,
-    raised, raisedOk, final⟩ := computed
+  obtain ⟨-, _, _, _, attesters, updated, _, _, raised, -, -, -, -, attestersOk, -, -, raisedOk,
+    written⟩ := processAttestationAltair_reads computed
   obtain ⟨indexed, indexedOk, members, -, -⟩ :=
     getIndexedAttestation_of_getAttestingIndices attestersOk
   have last : BlockFrame raised after := by
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact BlockFrame.of_validators ⟨rfl, rfl⟩
-    · cases final
-      exact BlockFrame.refl _
+    rw [written]
+    exact BlockFrame.of_validators ⟨rfl, rfl⟩
   have kept := (frame_increaseBalance raisedOk).toBlockFrame.trans last
   generalize (attestation.data.target.epoch == getCurrentEpoch state) = same at kept
   refine ⟨frame, ?_, fun altair' current position flagged => ?_⟩
@@ -199,14 +193,12 @@ private theorem voteFrame_processAttestationAltair {attestation : Attestation pr
 theorem voteFrame_processAttestation {attestation : Attestation preset fork} {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     VoteFrame (attestationVotes state attestation) state after := by
-  unfold processAttestation at computed
-  split at computed
-  · exact voteFrame_processAttestationAltair computed
+  by_cases altair : Fork.altair ≤ fork
+  · rw [processAttestation_of_altair altair] at computed
+    exact voteFrame_processAttestationAltair computed
   refine (VoteFrame.of_blockFrame ?_).mono fun _ chosen => chosen.elim
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, _, _, _, recorded, _⟩ :=
+    processAttestation_records (Nat.lt_of_not_le altair) computed
   have kept := recordPendingAttestation_ok recorded
   split at kept <;>
   · obtain ⟨_, rest⟩ := kept

@@ -470,28 +470,20 @@ theorem registryLifecycle_processAttestation {attestation : Attestation preset f
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     RegistryLifecycle state after := by
-  unfold processAttestation at computed
-  split at computed
-  · unfold processAttestationAltair at computed
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := computed
+  by_cases altair : Fork.altair ≤ fork
+  · rw [processAttestation_of_altair altair] at computed
+    obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes computed
     have last : RegistryLifecycle raised after := by
-      split at final
-      · rw [recordPaymentWeight_eq final]
-        exact .of_data rfl
-      · cases final
-        exact .refl _
+      rw [written]
+      exact .of_data rfl
     have flagged : ∀ (current : Bool) (participation : EpochParticipation preset fork),
         RegistryLifecycle state (setEpochParticipation state current participation) := by
       intro current participation
       unfold setEpochParticipation
       split <;> exact .of_data rfl
     exact (flagged _ _).trans ((RegistryLifecycle.increaseBalance raisedOk).trans last)
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, _, _, _, recorded, _⟩ :=
+    processAttestation_records (Nat.lt_of_not_le altair) computed
   have kept := recordPendingAttestation_ok recorded
   split at kept <;>
   · obtain ⟨_, rest⟩ := kept

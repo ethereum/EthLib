@@ -547,16 +547,10 @@ theorem frame_processAttestationAltair {attestation : Attestation preset fork}
     (computed :
       processAttestationAltair config checks state attestation altair parentSlot = .ok after) :
     Frame state after := by
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, final⟩ := computed
+  obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes computed
   have last : Frame raised after := by
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact Frame.of_validators ⟨rfl, rfl⟩
-    · cases final
-      exact Frame.refl _
+    rw [written]
+    exact Frame.of_validators ⟨rfl, rfl⟩
   exact (frame_setEpochParticipation _ _).trans
     ((frame_increaseBalance raisedOk).toFrame.trans last)
 
@@ -564,13 +558,11 @@ theorem frame_processAttestation {attestation : Attestation preset fork}
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     Frame state after := by
-  unfold processAttestation at computed
-  split at computed
-  · exact frame_processAttestationAltair computed
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
+  by_cases altair : Fork.altair ≤ fork
+  · rw [processAttestation_of_altair altair] at computed
+    exact frame_processAttestationAltair computed
+  obtain ⟨_, _, _, _, _, recorded, _⟩ :=
+    processAttestation_records (Nat.lt_of_not_le altair) computed
   have kept := recordPendingAttestation_ok recorded
   split at kept
   all_goals

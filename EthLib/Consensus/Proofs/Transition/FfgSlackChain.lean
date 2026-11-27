@@ -61,13 +61,8 @@ private theorem processAttestation_checked {fork : Fork} {state after : BeaconSt
       isValidIndexedAttestation config checks (if .altair ≤ fork then state else after)
         indexed = .ok true := by
   by_cases altair : Fork.altair ≤ fork
-  · unfold processAttestation at computed
-    simp only [altair, ↓reduceDIte] at computed
-    unfold processAttestationAltair at computed
-    simp only [bind_ok_iff, liftAccessor_ok, ensure_ok_iff] at computed
-    obtain ⟨_, -, _, -, _, -, _, -, _, -, _, -, _, -, indexed, indexedOk, valid, validOk, _,
-      validTrue, -⟩ := computed
-    subst validTrue
+  · rw [processAttestation_of_altair altair, processAttestationAltair_eq_ok_iff] at computed
+    obtain ⟨-, _, indexed, _, _, _, _, _, _, -, indexedOk, validOk, -⟩ := computed
     simp only [altair, ↓reduceIte]
     exact ⟨indexed, indexedOk, validOk⟩
   · obtain ⟨_, _, _, _, _, _, indexed, indexedOk, validOk⟩ :=
@@ -155,14 +150,9 @@ private theorem processAttestation_window {fork : Fork}
       attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
         state.slot.toNat := by
   by_cases altair : Fork.altair ≤ fork
-  · unfold processAttestation at computed
-    simp only [altair, ↓reduceDIte] at computed
-    unfold processAttestationAltair at computed
-    simp only [bind_ok_iff, liftAccessor_ok, ensure_ok_iff, liftArith, mapError_ok_iff,
-      Uint64.addChecked_ok_iff] at computed
-    obtain ⟨_, recent, _, epoch, earliest, ⟨_, sum⟩, _, early, -⟩ := computed
-    have := UInt64.le_iff_toNat_le.mp early
-    exact ⟨recent, epoch, by omega⟩
+  · rw [processAttestation_of_altair altair, processAttestationAltair_eq_ok_iff] at computed
+    obtain ⟨⟨recent, epoch, early, -⟩, -⟩ := computed
+    exact ⟨recent, epoch, early⟩
   · obtain ⟨recent, epoch, early, -⟩ := processAttestation_checks (Nat.lt_of_not_le altair) computed
     exact ⟨recent, epoch, early⟩
 

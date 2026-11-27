@@ -384,11 +384,6 @@ theorem processAttestation_exists_ok {budget scoreBound : Nat}
     refine ⟨_, increaseBalance_eq_ok_iff.mpr ⟨by rw [kept]; omega, ?_, rfl⟩⟩
     simp only [kept]
     omega
-  -- The earliest slot of inclusion fits, and the slot of the state is past it.
-  have earliestOk : addChecked data.slot preset.MIN_ATTESTATION_INCLUSION_DELAY =
-      .ok (data.slot + preset.MIN_ATTESTATION_INCLUSION_DELAY) := addChecked_of_lt (by omega)
-  have earliestLe : data.slot + preset.MIN_ATTESTATION_INCLUSION_DELAY ≤ state.slot :=
-    UInt64.le_iff_toNat_le.mpr (by rw [toNat_add_of_lt (by omega)]; omega)
   -- Before Deneb the slot of the state is within one epoch of the slot, which fits.
   have deadlineOk : checkInclusionDeadline state data.slot = .ok () := by
     by_cases before : fork < .dencun
@@ -397,11 +392,10 @@ theorem processAttestation_exists_ok {budget scoreBound : Nat}
   have notGloas : ¬.glamsterdam ≤ fork := Nat.not_le.mpr beforeGloas
   refine ⟨raised, ?_, ?_⟩
   -- The rest of the step reads the state and adds rewards with checked arithmetic.
-  · simp only [processAttestationAltair, ← dataEq, ensure, eq_true recent, eq_true slotEpoch,
-      liftAccessor, liftArith, earliestOk, eq_true earliestLe, deadlineOk, committees, earnedOk,
-      indexedOk, validOk, totalOk, attestersOk, folded,
-      getBeaconProposerIndex_setEpochParticipation, proposerOk, raisedOk, notGloas,
-      Except.mapError, bind, Except.bind, pure, Except.pure, ↓reduceIte, ↓reduceDIte]
+  · exact processAttestationAltair_eq_ok_iff.mpr
+      ⟨⟨recent, slotEpoch, early, deadlineOk, committees⟩, earned, indexed, total, attesters,
+        updated, numerator, proposerIndex, raised, earnedOk, indexedOk, validOk, totalOk,
+        attestersOk, folded, proposerOk, raisedOk, by rw [dite_eq_right notGloas]⟩
   intro named namedOk matching attester member
   rw [attestersOk, Except.ok.injEq] at namedOk
   subst namedOk

@@ -266,16 +266,12 @@ private theorem attestation {attestation : Attestation preset fork} {parentSlot 
     (electra : .pectra ≤ fork)
     (ok : processAttestation config checks state parentSlot attestation = .ok after) :
     QueueKept state after := by
-  unfold processAttestation at ok
-  rw [dite_eq_left (show .altair ≤ fork from Nat.le_trans (by decide) electra)] at ok
-  unfold processAttestationAltair at ok
-  simp only [bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, final⟩ := ok
+  rw [processAttestation_of_altair (show .altair ≤ fork from Nat.le_trans (by decide) electra)]
+    at ok
+  obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes ok
   have last : QueueKept raised after := by
-    split at final
-    · rw [recordPaymentWeight_eq final]; rfl
-    · cases final; rfl
+    rw [written]
+    rfl
   have flagged : ∀ (current : Bool) (participation : EpochParticipation preset fork),
       QueueKept state (setEpochParticipation state current participation) := by
     intro current participation

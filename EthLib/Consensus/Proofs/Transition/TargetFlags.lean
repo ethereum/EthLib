@@ -250,25 +250,18 @@ theorem processAttestationAltair_targetFlag {attestation : Attestation preset fo
           else state.previousJustifiedCheckpoint) ∧
         -- The target root is the root of the block at the first slot of that epoch.
         getBlockRoot state attestation.data.target.epoch = .ok attestation.data.target.root := by
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, recent, _, _, _, _, _, _, _, _, _, _, earned, earnedOk, indexed, indexedOk,
-    valid, validOk, _, checked, _, _, attesters, attestersOk, ⟨updated, _⟩, fold, _, _,
-    raised, raisedOk, final⟩ := computed
+  obtain ⟨⟨recent, -⟩, earned, indexed, _, attesters, updated, _, _, raised, earnedOk,
+    indexedOk, validOk, -, attestersOk, fold, -, raisedOk, written⟩ :=
+    processAttestationAltair_reads computed
   have kept :
       recentParticipation after altair current = recentParticipation raised altair current := by
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      rfl
-    · cases final
-      rfl
+    rw [written]
+    rfl
   obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
   obtain ⟨_, rfl⟩ := setBalance_ok set
   simp only [BeaconState.putBalance, recentParticipation] at kept
   unfold recentParticipation at flagged
   rw [kept] at flagged
-  rw [ensure_ok_iff] at checked recent
-  subst checked
   obtain ⟨indexed', indexedOk', indices, dataEq, -⟩ :=
     getIndexedAttestation_of_getAttestingIndices attestersOk
   rw [indexedOk] at indexedOk'
