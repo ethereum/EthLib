@@ -1270,10 +1270,9 @@ Not yet released.
   `payloadBlock_eq_some_iff` (`Engine/Proofs/ExecutionEngine.lean`) states that a payload of the beacon chain has a block exactly when each step of `payloadBlock` succeeds.
   `Engine.Node.newPayloadStep_valid_of_newPayloadOnChain` (`Engine/Proofs/Node.lean`) states that a payload valid on the chain of the valid head, its parent, is valid on the node, when the node does not know it as invalid.
 
-- In Lean, `Bls.HashToCurve.bI` (`Cryptography/Bls/HashToCurve.lean`) is the block `b_i` of step 10 of RFC 9380 §5.3.1, computed from `b_(i-1)`.
-  `Bls.HashToCurve.expandMessageXmd` computes steps 9 and 10 as a scan of it over `i = 2, ..., ell`, in place of a `for` loop, with the same output bytes.
+- In Lean, `Bls.HashToCurve.bI` (`Cryptography/Bls/HashToCurve.lean`) is the block `b_i` of step 10 of RFC 9380 §5.3.1, computed from `b_(i-1)`, for `2 <= i <= 255`.
+  `Bls.HashToCurve.expandMessageXmd` calls it in its loop over `i = 2, ..., ell`, and appends each block to one output buffer, with the same output bytes.
   The proof of `Bls.HashToCurve.expandMessageXmd_eq_spec` reads that step, in place of a private copy of the loop body, and its statement is unchanged.
-  A proof that unfolds the body of `Bls.HashToCurve.expandMessageXmd` must change, as `expandMessageXmd_256_ok` (`Cryptography/Proofs/Bls/HashToCurveValidity.lean`) did, since it no longer meets a loop.
 
 - In Lean, `Evm.processMessage_reads_of_error` (`Execution/Proofs/Evm/Call/Parent.lean`) says that a call that ends with an error reads as the state it is sent from.
   That holds for each account, each word of storage and transient storage, and the code at each code hash.
