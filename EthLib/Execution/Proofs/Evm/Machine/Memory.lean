@@ -161,6 +161,28 @@ theorem size_memoryReadBytes_le (memory : ByteArray) (start size : Nat) :
   · simp only [ByteArray.size_extract]
     omega
 
+/-- A read within the bytes of a read of a buffer is the read of the buffer at that part. -/
+theorem memoryReadBytes_bufferRead (data : ByteArray) {start size a k : Nat}
+    (h : a + k ≤ size) :
+    memoryReadBytes ⟨(bufferRead data start size).toArray⟩ a k =
+      ⟨(bufferRead data (start + a) k).toArray⟩ := by
+  unfold memoryReadBytes
+  split
+  · rename_i hk
+    subst hk
+    simp [bufferRead_eq]
+  · apply ByteArray.ext
+    simp only [ByteArray.data_extract]
+    apply Array.toList_inj.mp
+    simp only [Array.toList_extract, List.extract_eq_take_drop, List.toList_toArray, bufferRead_eq]
+    apply List.ext_getElem
+    · simp
+      omega
+    · intro i h1 h2
+      simp at h1 h2 ⊢
+      congr 1
+      omega
+
 /-- A read of the range that a write covers gives the written bytes. -/
 theorem memoryReadBytes_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) :
