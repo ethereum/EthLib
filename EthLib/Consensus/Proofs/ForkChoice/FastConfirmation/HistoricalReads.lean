@@ -378,7 +378,7 @@ public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor
 
 /-- An honest caller's slot-start finalized root is on up-to-date honest heads, barring evidence.
 
-It takes a genesis run, an initialized epoch-start anchor, synchrony, admission and fitting delays.
+It takes a genesis run, a slot-matched epoch-start anchor, synchrony, admission and fitting delays.
 
 It assumes preset parameters, positive slot duration, store/stake bounds and nonzero held roots.
 
