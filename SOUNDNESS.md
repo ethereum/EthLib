@@ -2193,13 +2193,16 @@ It passes on at most all but one 64th of the gas left, by EIP-150.
 Its postcondition gives the state and substate that the frame that ends the message gives, and nothing more.
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
+`Logic.staticcall_noCode_meter` and `Logic.staticcall_noCode_returndatasize_meter` (`Logic/CallMeter.lean`) give STATICCALL to no code under the meter of EIP-8037, so a check of 32 bytes of return data fails closed there too.
 `Logic.callWith` and `Logic.call` also state that the message is static when the frame is.
 `Logic.callValue` is the rule for CALL with a value that is not 0, at every fork from Berlin, with the one-counter meter.
 The frame must be one that may change the state.
 It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
 From Glamsterdam, it pays 3000 for a cold access and 11300 for the value by EIP-8038, and the state gas of a new account in place of the 25000 by EIP-8037.
 With one counter, that state gas is never refilled, although EIP-8037 refills it when the callee fails or never runs.
-These rules do not yet carry to the meter of EIP-8037 for calls.
+`Logic.HoareUnder.meterCovers` carries a rule for the calls to the meter of EIP-8037 for checked code whose frames end with no error or a revert.
+It needs the assumption under that meter to give the one under one counter, for the frame that ends a covering message, with its gas capped.
+The rules under a specification of the callee code (`Logic.RunsAs`) do not yet carry, since no theorem shows that the runner of that meter meets a form of it.
 The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
 The message is not static.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.

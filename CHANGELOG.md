@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, STATICCALL to an account with no code that is no precompile returns no data under the state gas meter of EIP-8037, at every fork from Berlin ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  `Evm.Logic.staticcall_noCode_meter` and `Evm.Logic.staticcall_noCode_returndatasize_meter` (`Execution/Proofs/Evm/Logic/CallMeter.lean`) hold for code that passes the check of that meter, with the call at an opcode position.
+  So a check that the call returned 32 bytes fails closed under that meter too.
+  `Evm.Logic.NoCodeSucceeds.lowerMeter` gives the assumption on a call to no code under one counter from the one under the state gas meter.
+  The other rules for the calls (`Logic/Call.lean`) carry to that meter through `Evm.Logic.HoareUnder.meterCovers`, when the assumption under that meter gives the one under one counter for the frame that ends a covering message.
+  The rules under a specification of the callee code (`Evm.Logic.RunsAs`) do not yet carry: no theorem shows that the runner of that meter meets a form of it.
+
 - In Lean, a triple under an assumption on the frames that end messages, over one counter of gas, carries to the state gas meter of EIP-8037 ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
   `Evm.Logic.HoareUnder.meterCovers` and `Evm.Logic.SpecUnder.covered` (`Execution/Proofs/Evm/Logic/MeterRun.lean`) hold for checked code whose runs end with no error or a revert.
   The assumption on the frames that end messages under the state gas meter must give the one under one counter (`compat`).

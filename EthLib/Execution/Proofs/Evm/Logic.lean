@@ -60,6 +60,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.RunsOk
 public import EthLib.Execution.Proofs.Evm.Logic.Marks
 -- A triple over one counter, with messages, carries to the state gas meter of EIP-8037.
 public import EthLib.Execution.Proofs.Evm.Logic.MeterRun
+-- STATICCALL to no code fails closed under that meter.
+public import EthLib.Execution.Proofs.Evm.Logic.CallMeter
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`
