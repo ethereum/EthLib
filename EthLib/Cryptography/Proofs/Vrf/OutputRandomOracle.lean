@@ -68,7 +68,7 @@ theorem run_outputs_evalDistEq (secret : Digest) (indices : List UInt32)
   refine List.map_congr_left fun i hi => ?_
   simp only [fresh i hi, Option.getD_none]
 
-/-- Two outputs of one secret at different indices meet two events with the product chance.
+/-- Two events, one on each output of one secret at two indices, hold with the product chance.
 
 A random oracle answers their hash calls, from a cache with no answer for either input.
 
@@ -81,16 +81,8 @@ theorem prEvent_outputs_pair_of_fresh (secret : Digest) (i j : UInt32) (differen
       let right ← oracleHash (outputInput j secret)
       pure (left, right))).run' cache}[P z.1 ∧ Q z.2] =
       Pr{let y ← $ᵗ Digest}[P y] * Pr{let y ← $ᵗ Digest}[Q y] := by
-  have other : outputInput j secret ≠ outputInput i secret := fun equal =>
-    different (outputInput_inj.mp equal).1.symm
-  -- Caching the first answer leaves the second input, which differs, without an answer.
-  have after (y : Digest) :
-      (cache.cacheQuery (outputInput i secret) y) (outputInput j secret) = none := by
-    rw [QueryCache.cacheQuery_of_ne _ _ other, rightFresh]
-  simp only [oracleHash, simulateQ_bind, simulateQ_pure, simulateQ_spec_query, StateT.run'_eq,
-    StateT.run_bind, StateT.run_pure, randomOracle.run_eq, leftFresh, after, bind_assoc,
-    pure_bind, map_bind, map_pure]
-  simpa only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_def] using
-    prEvent_bind_bind_and ($ᵗ Digest) ($ᵗ Digest) P Q
+  -- Different indices give different output inputs.
+  exact prEvent_run'_query_pair_of_fresh _ _
+    (fun equal => different (outputInput_inj.mp equal).1) cache leftFresh rightFresh P Q
 
 end EthLib.Cryptography.Vrf
