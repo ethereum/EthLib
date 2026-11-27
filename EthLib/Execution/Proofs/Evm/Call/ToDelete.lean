@@ -131,7 +131,7 @@ theorem stepRules_deletesCreated (hfork : .dencun ≤ fork) :
     StepRules fork (DeletesCreated (fork := fork) (Meter := Meter)) where
   trans := DeletesCreated.trans
   static := .of_staticStep
-  sstore _ _ _ _ _ _ h := .of_eq (TransactionState.createdAccounts_setStorage h) rfl
+  sstore _ _ _ _ _ h := .of_eq (TransactionState.createdAccounts_setStorage h) rfl
   tstore _ _ _ _ := .of_eq rfl rfl
   log _ hs hsub _ _ := .of_eq (by rw [hs]) (by rw [hsub])
   selfdestruct _ _ h := deletesCreated_finishSelfdestruct hfork h

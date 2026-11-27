@@ -38,7 +38,7 @@ No write removes an account from that set, so a frame keeps its marks until it e
 theorem stepRules_toDeleteLe : StepRules fork (ToDeleteLe (fork := fork) (Meter := Meter)) where
   trans hab hbc x hx := hbc x (hab x hx)
   static h x hx := h.toDelete ▸ hx
-  sstore _ _ _ _ _ _ _ _ hx := hx
+  sstore _ _ _ _ _ _ _ hx := hx
   tstore _ _ _ _ _ hx := hx
   log _ _ hsub _ _ x hx := by rw [hsub]; exact hx
   selfdestruct _ _ h := by

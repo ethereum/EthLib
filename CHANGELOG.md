@@ -21,6 +21,13 @@ Not yet released.
   The opcodes that read the block and the transaction have theirs in `Execution/Proofs/Evm/Logic/Environment.lean`: COINBASE, TIMESTAMP, NUMBER, PREVRANDAO and the difficulty before Paris, GASLIMIT, CHAINID, BASEFEE, BLOBBASEFEE, SLOTNUM and GASPRICE.
   An opcode that reads a number takes the hypothesis that the number fits a word.
 
+- In Lean, `Execution/Proofs/Evm/Call/StorageAt.lean` proves that a message keeps the storage of an account that it does not read, or wipes it.
+  Every frame at an account starts from a state that has read it, and no revert drops that read.
+  So `keptOrRead_processMessage` and `keptOrRead_processCreateMessage` state that a message keeps or wipes the storage of an account, unless the account is among its reads.
+  `keptOrRead_processTransaction` (`Execution/Proofs/Transactions/StorageAt.lean`) and `keptOrRead_systemCall` (`Execution/Proofs/Blocks/StorageAt.lean`) state the same for every transaction and every system call.
+  `KeptOrWiped` (`Execution/Proofs/State/Wiped.lean`) names the writes that keep or wipe the storage of an address, and covers each write of the state but a write of storage.
+  The reads lemmas of the end of a transaction in `Execution/Proofs/Transactions/NoninterferenceRun.lean` are public.
+
 - In Lean, `Execution/Proofs/State/RandomOracle.lean` bounds the probability of finding two storages, or two states, with one root that differ, with the hash a random oracle.
   `prEvent_storageWins_le` and `prEvent_stateWins_le` give the bound `Q^2 / 2^256`, for `Q` hash calls of the experiment.
   `Execution/Proofs/Trie/RandomOracle.lean` gains `queryWitnesses`, the queries of the binding inputs of two tries at one key, which `extract` now runs after the two roots.
@@ -1214,6 +1221,9 @@ Not yet released.
   - Each theorem about the genesis rule takes the new proof as an implicit argument.
   - In Python, `initialize_genesis` at Berlin or London now raises an error of code 0, `no genesis at <fork>`, in place of returning a state.
   Migration: pass a proof of `fork = .phase0` to the genesis rule, and use `lt_altair_of_phase0` where the old proof was used.
+
+- In Lean, the `sstore` rule of `Evm.StepRules` (`Execution/Proofs/Evm/Call/StepRules.lean`) covers only a write to the storage of the account of the frame, the only storage that SSTORE writes.
+  It takes no address, so each instance drops that argument.
 
 - In Lean, `Execution.State.storageRoot`, `stateEntries` and `stateRoot` are the new `storageRootM`, `stateEntriesM` and `stateRootM` with a plain hash, in the identity monad.
   The monadic forms let the random oracle experiments run these roots with a hash that queries the oracle.

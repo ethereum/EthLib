@@ -129,7 +129,7 @@ theorem stepRules_readsLe :
     StepRules fork (fun a b : Evm fork Meter => a.state.ReadsLe b.state) where
   trans hab hbc := hab.trans hbc
   static h := h.tracker.readsLe
-  sstore _ _ _ _ _ _ h := readsLe_setStorage h
+  sstore _ _ _ _ _ h := readsLe_setStorage h
   tstore _ _ _ _ := ⟨fun _ h => h, fun _ _ h => h⟩
   log _ hs _ _ _ := by rw [hs]; exact .refl _
   selfdestruct _ _ h := readsLe_finishSelfdestruct h

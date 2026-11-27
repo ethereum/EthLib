@@ -54,6 +54,7 @@ public import EthLib.Execution.Proofs.Evm.Call.StateErrors
 public import EthLib.Execution.Proofs.Evm.Call.StaticMessage
 public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 public import EthLib.Execution.Proofs.Evm.Call.StepRules
+public import EthLib.Execution.Proofs.Evm.Call.StorageAt
 public import EthLib.Execution.Proofs.Evm.Call.Supply
 public import EthLib.Execution.Proofs.Evm.Call.ToDelete
 public import EthLib.Execution.Proofs.Evm.Call.Touched
