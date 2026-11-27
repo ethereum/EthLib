@@ -407,9 +407,13 @@ include anchored start anchorSlot anchorBoundary slots fits windows params roots
   callBeginOk atCall originEpochOk descends nextOk firstOk beginOk covers callBound byTime
   ready sameEpoch
 
-/-- From Fulu until Gloas, the setting gives the pin and the held-state bound.
+/-- From Fulu until Gloas, the setting gives the main theorem's pin and held-state fork bound.
 
-The conclusion is the main theorem's, under the same coverage and reserved count. -/
+The conclusion is the main theorem's, under its other premises, including coverage and the reserve.
+
+The setting is BLS checks, the anchor header, a positive delay and unslashed honest validators.
+
+It also needs cross-store finality, the pin guard, the fork, the fork window and preset facts. -/
 theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setting
     [DecidablePred (· ∈ J)]
     -- Honest stores check signatures with BLS, and the anchor state's header is the anchor block's.

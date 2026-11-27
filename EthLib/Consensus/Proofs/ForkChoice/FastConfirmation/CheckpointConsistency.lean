@@ -925,13 +925,13 @@ include anchored start anchorSlot anchorBoundary slots fits windows params roots
   callBeginOk atCall originEpochOk descends nextOk firstOk beginOk covers callBound byTime
   ready sameEpoch
 
-/-- An up-to-date honest receiver justified at the target epoch has the caller's target.
+/-- By `time`, an up-to-date honest receiver justified at the target epoch has the caller's target.
 
 Otherwise honest stores collide or give cross-store justified evidence.
 
-The caller passes the no-conflict test at a slot start, after the anchor's justified epoch.
+By `time` the caller passes the no-conflict test at a slot start after the anchor's justified epoch.
 
-It assumes the reserved count, the pin and origin coverage to the next epoch's start. -/
+It needs the anchor, timing, parameters, held-state and store bounds, reserve, pin and coverage. -/
 theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint
     (early : HeldStatesBeforeUpgrade (e := e) time)
     (pins : JustifiedPinned (e := e) anchor.justifiedCheckpoint.epoch margin 0 time) :
