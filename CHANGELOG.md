@@ -1219,6 +1219,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the bridge from one counter of gas to the state gas meter of EIP-8037 covers the four calls ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  `Evm.Logic.callStep_bridge` (`Execution/Proofs/Evm/Logic/MeterCall.lean`) lifts the step of CALL, CALLCODE, DELEGATECALL and STATICCALL, with no hypothesis on the gas they ask for or on the reservoir.
+  When the step sends a message, the message under the state gas meter has at least its gas (`Evm.Logic.MessageCovers`), and the two callers resume alike (`Evm.Logic.ResultLifts`, inside `Evm.Logic.StepLifts`).
+  `Evm.Logic.meterSupported` (`MeterReach.lean`) now accepts the calls, so `Evm.Logic.Reaches.followsMeter` carries a run of code that holds calls.
+  GAS and the creations stay out.
+  `Evm.Logic.instruction_isSome_of_meterSupported` takes a proof that the opcode is no call (`Evm.Logic.callKindOf`), and `Evm.Logic.step_of_callKindOf` gives the step of a call.
+
 - In Lean, the byte checks of the request contracts are one function, `holdsExcept` with `getElem_of_holdsExcept` (`Execution/Proofs/Blocks/SystemCall/RequestQueue.lean`) ([#4796](https://github.com/ethereum/EthLib/issues/4796)).
   `feePathNat` (`FeePath.lean`), `DequeueTailCode.holdsNat` (`DequeueTail.lean`) and `AddPathCode.holdsExcept` (`AddPath.lean`) are removed; `FeePathCode.byte_ofNat` and `DequeueTailCode.byte_ofNat` take the check of `holdsExcept`.
 
