@@ -487,8 +487,26 @@ syntax "evm_tidyK" : tactic
 
 macro_rules
   | `(tactic| evm_tidyK) => `(tactic| ((try evm_mem) <;> (try simp (config := { decide := true })
-      only [List.filter_cons, List.filter_nil, Apart, size_wordBytes, ByteArray.size_append,
-        size_bufferRead, BitVec.reduceToNat, Nat.reduceAdd, ↓reduceIte]) <;> evm_tidy))
+      only [keep, outside, List.flatMap_cons, List.flatMap_nil, List.nil_append,
+        List.cons_append, List.append_nil, Apart, size_wordBytes, ByteArray.size_append,
+        size_bufferRead, size_memoryReadBytes, memoryReadBytes_of_size, loadWord_wordBytes,
+        wordBytes_loadWord, BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub, ↓reduceIte]) <;>
+      evm_tidy))
+
+/-- Proves that a read along the facts of a frame gives some bytes, by evaluation.
+
+The bytes are the parts of the facts that cover the range, joined in order. -/
+syntax "evm_read" : tactic
+
+macro_rules
+  -- Each unfolding reads one piece, which is evaluated before the next unfolding.
+  | `(tactic| evm_read) => `(tactic| ((repeat (rw [readFacts]; simp (config := { decide := true })
+      only [List.find?_cons_of_pos, List.find?_cons_of_neg, List.find?_nil, Bool.and_eq_true,
+        decide_eq_true_eq, Bool.not_eq_true, Bool.and_eq_false_iff, decide_eq_false_iff_not,
+        Nat.not_le, Nat.not_lt, size_wordBytes, ByteArray.size_append, size_bufferRead,
+        size_memoryReadBytes, memoryReadBytes_of_size, Nat.min_def, BitVec.reduceToNat,
+        Nat.reduceAdd, Nat.reduceSub, ↓reduceIte, Option.map_some, Option.map_none])) <;>
+      try rfl))
 
 /-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
 
@@ -502,6 +520,8 @@ macro_rules
       -- MSTORE, MLOAD, KECCAK256, CALLDATACOPY and MCOPY take their rules on such frames.
       --
       -- MLOAD, KECCAK256 and MCOPY read the first fact in the list that starts where they read.
+      --
+      -- Otherwise MLOAD and KECCAK256 read along the facts that cover the range.
       | (refine' Triple.seq (mstore_known ?lt ?op ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -511,11 +531,23 @@ macro_rules
          case op => evm_code [$ls,*]
          case fact => evm_fact
          case gas => evm_gas)
+      -- MLOAD of a part of a fact, or of a range along adjacent facts.
+      | (refine' Triple.seq (mload_known_read ?lt ?op ?read ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case read => evm_read
+         case gas => evm_gas)
       | (refine' Triple.seq (keccak256_known ?lt ?op ?fact ?len ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case fact => evm_fact
          case len => evm_size
+         case gas => evm_memGas)
+      -- KECCAK256 of a part of a fact, or of a range along adjacent facts.
+      | (refine' Triple.seq (keccak256_known_read ?lt ?op ?read ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case read => evm_read
          case gas => evm_memGas)
       | (refine' Triple.seq (calldatacopy_known ?lt ?op ?nz ?gas) ?next
          case lt => evm_code [$ls,*]
@@ -524,7 +556,7 @@ macro_rules
          case gas => evm_memGas)
       -- MCOPY of the whole range of a fact, tried first.
       --
-      -- The destination loses the facts it overlaps.
+      -- The destination keeps only the parts of the facts outside it.
       | (refine' Triple.seq (mcopy_known ?fork ?lt ?op ?nz ?fact ?len ?gas) ?next
          case fork => evm_fork
          case lt => evm_code [$ls,*]
