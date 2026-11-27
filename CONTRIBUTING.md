@@ -225,7 +225,8 @@ What an entry point does with a wrong input is part of the protocol, so its sour
   When the operation returns its input state on failure, state it as equality of the returned state.
   Inside a step, such as an EVM call that fails, state it over the values a caller can read: balances, nonces, code, storage and transient storage.
   Do not state it over the fields of the representation, since a new representation would break the statement.
-  `processMessage_sameWrites_of_error` states it over the fields of `SameWrites`; a new theorem states it over readable values.
+  `processMessage_reads_of_error` states it for a failed EVM call, over each account, each word of storage and transient storage, and the code at each code hash.
+  `processCreateMessage_reads_of_error` states the same for a failed creation.
 
 ### Proofs
 
