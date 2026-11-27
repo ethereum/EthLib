@@ -126,4 +126,24 @@ theorem toNat_bitwiseShr (shift value : U256) :
     (bitwiseShr shift value).toNat = value.toNat / 2 ^ shift.toNat := by
   rw [bitwiseShr_eq, BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
 
+/-- AND with the word `2 ^ p` is nonzero exactly when bit `p` is set. -/
+theorem decide_bitwiseAnd_ne_zero {x m : U256} {p : Nat} (hm : m.toNat = 2 ^ p) :
+    decide (bitwiseAnd x m ≠ 0) = x.toNat.testBit p := by
+  have h : (bitwiseAnd x m).toNat = x.toNat &&& 2 ^ p := by rw [toNat_bitwiseAnd, hm]
+  have hz : bitwiseAnd x m = 0 ↔ (bitwiseAnd x m).toNat = 0 := by
+    constructor
+    · intro h0; rw [h0]; rfl
+    · intro h0; exact BitVec.eq_of_toNat_eq (by rw [h0]; rfl)
+  rw [h] at hz
+  cases hb : x.toNat.testBit p
+  · have : x.toNat &&& 2 ^ p = 0 := Nat.eq_of_testBit_eq fun i => by
+      by_cases hi : i = p
+      · subst hi; simp [Nat.testBit_and, hb]
+      · simp [Nat.testBit_and, Ne.symm hi]
+    simp [hz.mpr this]
+  · have : x.toNat &&& 2 ^ p ≠ 0 := fun h0 => by
+      have := congrArg (·.testBit p) h0
+      simp [Nat.testBit_and, hb] at this
+    exact decide_eq_true fun h0 => this (hz.mp h0)
+
 end EthLib.Execution.Evm
