@@ -46,6 +46,8 @@ theorem hkdf_eq_hkdf2 (chainingKey : ChainingKey) (input : ByteArray) :
     rw [Hkdf.blocks_size]; rfl, ByteArray.extract_zero_size]
   -- The two blocks of RFC 5869 are the two outputs, with the empty info dropped.
   congr 1
+  simp only [Hkdf.blocks, Hkdf.block, ByteArray.empty_append, ByteArray.append_empty]
+  rfl
 
 /-- Two errors with one code are of the same kind. -/
 theorem NoiseError.code_injective (e₁ e₂ : NoiseError) (h : e₁.code = e₂.code) :
