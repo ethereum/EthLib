@@ -985,15 +985,10 @@ private theorem applyBody_gas {fork : Fork} {config : ChainConfig}
   refine ⟨body, txs, hTxs, ?_⟩
   dsimp only at h
   split at h
-  · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  -- From Shapella the withdrawal state comes first; the rest is the same in both branches.
+  case' isTrue => obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  all_goals
     obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨_, _⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
-  · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
     obtain ⟨⟨_, _⟩, -, h⟩ := bind_ok_iff.mp h
     dsimp only at h
     obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
