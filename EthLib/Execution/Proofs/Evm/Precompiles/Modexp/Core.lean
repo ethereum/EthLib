@@ -362,4 +362,25 @@ theorem chargedGas_le {fork : Fork} (hfork : fork ≥ .fusaka) {data : ByteArray
     exact gasCost_le hfork (Nat.le_of_not_lt h1) (Nat.le_of_not_lt h3) (Nat.le_of_not_lt h2)
       (exponentHead_lt _ _)
 
+/-- Before Fusaka, an empty base and modulus return no byte once the gas covers the least price.
+
+The least price is 0 before Berlin and 200 from Berlin, whatever the exponent length. -/
+theorem modexp_empty_base_modulus {fork : Fork} (before : fork < .fusaka) {data : ByteArray}
+    {gas : Nat} (hb : (parseLengths data).base = 0) (hm : (parseLengths data).modulus = 0)
+    (hg : (if fork ≥ .berlin then 200 else 0) ≤ gas) :
+    modexp fork data gas = .ok .empty := by
+  have hf : ¬fork ≥ .fusaka := Nat.not_le.mpr before
+  -- The price is the one of an empty base and modulus, which does not read the exponent.
+  have hp : requiredGas fork data (parseLengths data) = if fork ≥ .berlin then 200 else 0 := by
+    unfold requiredGas
+    rw [hb, hm]
+    split
+    · next h => exact gasCost_empty_of_berlin_le h before _ _
+    · next h => exact gasCost_empty_of_lt_berlin (Nat.not_le.mp h) _ _
+  -- An empty modulus gives an output of no byte.
+  have ho : compute data (parseLengths data) = .empty := by
+    have h0 := compute_modulus_len_zero data (parseLengths data) hm
+    exact ByteArray.ext (Array.eq_empty_of_size_eq_zero h0)
+  exact modexp_eq_ok_iff.mpr ⟨fun h => absurd h hf, hp ▸ hg, ho.symm⟩
+
 end EthLib.Execution.Evm.Precompiles.Modexp
