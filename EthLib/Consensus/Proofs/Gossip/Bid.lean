@@ -298,90 +298,20 @@ theorem builderMayExit_eq_error_iff {state : BeaconState preset fork}
     | some envelope => simp [latest, pure, Except.pure]
   · simp [latest, pure, Except.pure]
 
-/-- For a valid bid, the exit check answers no.
+/-- A valid bid finds the parent state, its advance, its builder and the builder's bid limit.
 
-The check reads the state of the parent block, advanced to the slot of the bid.
-
-The builder is the one at the index of the bid in that state.
--/
-theorem builderMayExit_of_validateExecutionPayloadBid_eq_accept
+The count of its key is below that limit, and the exit check answers no. -/
+private theorem steps_of_validateExecutionPayloadBid
     (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
       .ok accept) :
-    ∃ state advanced builder,
+    ∃ state advanced builder limit,
       store.blockStates[signed.message.parentBlockRoot]? = some state ∧
         processSlots config checks state signed.message.slot = .ok advanced ∧
         (advanced.builders gloas).data[signed.message.builderIndex.toNat]? = some builder ∧
-        builderMayExit store gloas advanced signed.message builder = .ok false := by
-  unfold validateExecutionPayloadBid at valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  cases known : store.blocks[signed.message.parentBlockRoot]? with
-  | none => simp [known, pure, Except.pure] at valid
-  | some _ =>
-  simp only [known] at valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  cases held : store.blockStates[signed.message.parentBlockRoot]? with
-  | none => simp [held, pure, Except.pure] at valid
-  | some state =>
-  simp only [held] at valid
-  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨dependentRoot, -, valid⟩ := bind_ok_iff.mp valid
-  cases preferred : seen.proposerPreferencesFor (signed.message.slot, dependentRoot) with
-  | none => simp [preferred, pure, Except.pure] at valid
-  | some _ =>
-  simp only [preferred] at valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  cases payload : seen.executionPayloadGasLimitFor signed.message.parentBlockHash with
-  | none => simp [payload, pure, Except.pure] at valid
-  | some _ =>
-  simp only [payload] at valid
-  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨advanced, slots, valid⟩ := bind_ok_iff.mp valid
-  replace slots : processSlots config checks state signed.message.slot = .ok advanced := by
-    revert slots
-    cases processSlots config checks state signed.message.slot <;> simp [Except.mapError]
-  cases found : (advanced.builders gloas).data[signed.message.builderIndex.toNat]? with
-  | none => simp [found, pure, Except.pure] at valid
-  | some builder =>
-  simp only [found] at valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
-  replace valid := (andThenM_eq_ok_accept.mp valid).2
-  obtain ⟨exiting, exit, valid⟩ := bind_ok_iff.mp valid
-  have staying := (andThenM_eq_ok_accept.mp valid).1
-  refine ⟨state, advanced, builder, rfl, slots, found, ?_⟩
-  cases exiting
-  · exact exit
-  · simp at staying
-
-/-- A valid bid finds its builder below its bid limit for its slot and parents.
-
-The limit is read in the state of the parent block, advanced to the slot of the bid.
-
-So once the count has reached the limit, no bid with that key is valid. -/
-theorem lt_limit_of_validateExecutionPayloadBid_eq_accept
-    (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
-      .ok accept) :
-    ∃ state advanced limit,
-      store.blockStates[signed.message.parentBlockRoot]? = some state ∧
-        processSlots config checks state signed.message.slot = .ok advanced ∧
         getBuilderBidLimit advanced gloas signed.message.builderIndex = .ok limit ∧
         seen.executionPayloadBidCount (signed.message.slot, signed.message.parentBlockHash,
-          signed.message.parentBlockRoot, signed.message.builderIndex) < limit.toNat := by
+          signed.message.parentBlockRoot, signed.message.builderIndex) < limit.toNat ∧
+        builderMayExit store gloas advanced signed.message builder = .ok false := by
   unfold validateExecutionPayloadBid at valid
   replace valid := (andThenM_eq_ok_accept.mp valid).2
   obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
@@ -433,8 +363,52 @@ theorem lt_limit_of_validateExecutionPayloadBid_eq_accept
     revert bounded
     cases getBuilderBidLimit advanced gloas signed.message.builderIndex <;>
       simp [Except.mapError]
-  refine ⟨state, advanced, limit, rfl, slots, bounded, ?_⟩
-  simpa using under
+  -- The exit check runs only if the count is below the limit.
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨_, -, valid⟩ := bind_ok_iff.mp valid
+  replace valid := (andThenM_eq_ok_accept.mp valid).2
+  obtain ⟨exiting, exit, valid⟩ := bind_ok_iff.mp valid
+  have staying := (andThenM_eq_ok_accept.mp valid).1
+  refine ⟨state, advanced, builder, limit, rfl, slots, found, bounded, by simpa using under, ?_⟩
+  cases exiting
+  · exact exit
+  · simp at staying
+
+/-- For a valid bid, the exit check answers no.
+
+The check reads the state of the parent block, advanced to the slot of the bid.
+
+The builder is the one at the index of the bid in that state.
+-/
+theorem builderMayExit_of_validateExecutionPayloadBid_eq_accept
+    (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
+      .ok accept) :
+    ∃ state advanced builder,
+      store.blockStates[signed.message.parentBlockRoot]? = some state ∧
+        processSlots config checks state signed.message.slot = .ok advanced ∧
+        (advanced.builders gloas).data[signed.message.builderIndex.toNat]? = some builder ∧
+        builderMayExit store gloas advanced signed.message builder = .ok false := by
+  obtain ⟨state, advanced, builder, _, held, slots, found, _, _, exit⟩ :=
+    steps_of_validateExecutionPayloadBid valid
+  exact ⟨state, advanced, builder, held, slots, found, exit⟩
+
+/-- A valid bid finds its builder below its bid limit for its slot and parents.
+
+The limit is read in the state of the parent block, advanced to the slot of the bid.
+
+So once the count has reached the limit, no bid with that key is valid. -/
+theorem lt_limit_of_validateExecutionPayloadBid_eq_accept
+    (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
+      .ok accept) :
+    ∃ state advanced limit,
+      store.blockStates[signed.message.parentBlockRoot]? = some state ∧
+        processSlots config checks state signed.message.slot = .ok advanced ∧
+        getBuilderBidLimit advanced gloas signed.message.builderIndex = .ok limit ∧
+        seen.executionPayloadBidCount (signed.message.slot, signed.message.parentBlockHash,
+          signed.message.parentBlockRoot, signed.message.builderIndex) < limit.toNat := by
+  obtain ⟨state, advanced, _, limit, held, slots, _, bounded, under, _⟩ :=
+    steps_of_validateExecutionPayloadBid valid
+  exact ⟨state, advanced, limit, held, slots, bounded, under⟩
 
 /-- After a valid bid, the count of its builder for its slot and parents is at most its limit.
 
