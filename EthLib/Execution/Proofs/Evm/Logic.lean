@@ -44,6 +44,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
 -- A template lemma proves one shape of block at any offset of any code that holds its bytes.
 public import EthLib.Execution.Proofs.Evm.Logic.Template
+public import EthLib.Execution.Proofs.Evm.Logic.Relocated
 -- A tactic steps through the opcodes of a code.
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.GasMono
