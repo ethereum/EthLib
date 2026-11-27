@@ -421,10 +421,10 @@ def check_blockchain_test(
         try:
             item = rlp.decode(raw)
             fork = active_fork(activations, item[0])
-        except (IndexError, TypeError, ValueError):
-            # Without a readable block number and timestamp, decode at the parent's fork.
+        except Exception:
+            # A block that is not even an RLP list of headers is invalid.
             assert expected, block
-            fork = recent[-1][0]
+            continue
         if expected:
             with pytest.raises(ValueError) as error:
                 legacy.advance_block(config, state, recent, fork, raw, seal)

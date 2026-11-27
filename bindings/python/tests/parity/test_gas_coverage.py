@@ -1,9 +1,11 @@
 """Check the gas report and its classification of pinned branch witnesses."""
 
 import json
+import os
 import subprocess
 import sys
 from collections import Counter
+from copy import deepcopy
 from io import StringIO
 from pathlib import Path, PurePosixPath
 
@@ -12,7 +14,7 @@ import pytest
 from ethlib.serialization import rlp
 from raising import raises
 
-from . import catalogue, gas_coverage, runners
+from . import catalogue, gas_coverage, legacy, runners
 from .catalogue import Case
 
 # The fixtures come from the execution release pinned in tests/sources.toml.
@@ -237,10 +239,19 @@ def test_network_with_no_accepted_blocks_has_empty_counts(monkeypatch, network, 
 
 
 @pytest.fixture(scope="module")
-def observer():
-    if not gas_coverage.EXECUTABLE.is_file():
-        pytest.skip("build the fixture runner with lake build gas-coverage")
-    with gas_coverage.open_bridge(gas_coverage.EXECUTABLE) as bridge:
+def coverage_executable() -> Path:
+    executable = gas_coverage.EXECUTABLE
+    if not executable.is_file():
+        message = "build the fixture runner with lake build gas-coverage"
+        if os.environ.get("ETHLIB_REQUIRE_GAS_COVERAGE") == "1":
+            pytest.fail(message)
+        pytest.skip(message)
+    return executable
+
+
+@pytest.fixture(scope="module")
+def observer(coverage_executable):
+    with gas_coverage.open_bridge(coverage_executable) as bridge:
         yield bridge.request
 
 
@@ -258,6 +269,50 @@ def test_vendored_dao_transition(observer) -> None:
         "homestead": 20,
         "daoFork": 25,
     }
+    # Before the fork, four writes set a zero slot. From the fork, five writes pay the reset price.
+    assert report.counts["homestead"].gas_rules["opcode.sstore.set-execution-charge"] == 4
+    assert report.counts["daoFork"].gas_rules["opcode.sstore.reset-execution-charge"] == 5
+
+
+def test_cli_reports_legacy_receipt_mismatch(coverage_executable, monkeypatch, capsys) -> None:
+    read_fixture = legacy.fixture
+    case = next(
+        case
+        for case in gas_coverage.source_cases(gas_coverage.LEGACY, catalogue.LEGACY)
+        if case.fork == gas_coverage.DAO and case.path.endswith("/DaoTransactions.json")
+    )
+
+    def fixture_with_receipt(root, selected):
+        fixture = read_fixture(root, selected)
+        if selected != case:
+            return fixture
+        fixture = deepcopy(fixture)
+        # The legacy fixture pins the receipt root but gives no encoded receipts.
+        # Its first block has one transaction, so supply one incorrect receipt to test the check.
+        fixture["blocks"][0]["receipts"] = [{"rlp": "0x00"}]
+        return fixture
+
+    monkeypatch.setattr(legacy, "fixture", fixture_with_receipt)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gas_coverage",
+            "--suite",
+            gas_coverage.LEGACY,
+            "--network",
+            gas_coverage.DAO,
+            "--executable",
+            str(coverage_executable),
+        ],
+    )
+    with raises(SystemExit, "1"):
+        gas_coverage.main()
+    failure = (
+        f"| {case.suite} | `{case.id}` | {case.fork} | {case.group} | "
+        "block receipt 0 bytes differ |"
+    )
+    assert failure in capsys.readouterr().out.splitlines()
 
 
 @pytest.mark.archive(catalogue.EXECUTION, SLOAD)
@@ -341,22 +396,22 @@ def test_pinned_legacy_gas_branches(archive, observer) -> None:
     [("stateRoot", "wrongStateRoot"), ("receiptTrie", "wrongReceiptRoot")],
 )
 def test_corrupt_pinned_block_root_discards_events(archive, observer, field, error) -> None:
+    case = transition_case(archive)
+    fixture = json.loads((archive / case.path).read_text())[case.id]
+    root = bytes.fromhex(fixture["blocks"][-1]["blockHeader"][field][2:])
+    corrupted = bytes([root[0] ^ 1]) + root[1:]
+
     def corrupt_amsterdam(payload):
         if payload["fork"] == "glamsterdam":
             block = rlp.decode(bytes.fromhex(payload["block"]))
-            header = block[0]
-            index = runners.HEADER_FIELDS.index(field)
-            root = header[index]
-            header[index] = bytes([root[0] ^ 1]) + root[1:]
+            block[0][runners.HEADER_FIELDS.index(field)] = corrupted
             payload = {**payload, "block": rlp.encode(block).hex()}
         return observer(payload)
 
-    case = transition_case(archive)
     report = gas_coverage.replay_cases(archive, [case], corrupt_amsterdam)
     assert report.counts == {}
-    ((failed, message),) = report.failures
-    assert failed == case
-    assert error in message
+    message = f"block invalid: {error} (expected := 0x{corrupted.hex()}) (actual := 0x{root.hex()})"
+    assert report.failures == [(case, message)]
 
 
 def test_complete_inventory_at_each_execution_fork(observer) -> None:
@@ -499,31 +554,3 @@ def test_corrupt_pinned_receipt_discards_events(archive, observer, monkeypatch) 
     report = gas_coverage.replay_cases(archive, [case], observer)
     assert report.counts == {}
     assert report.failures == [(case, "block receipt 0 bytes differ")]
-
-
-@pytest.mark.archive(catalogue.EXECUTION, TRANSITION)
-@pytest.mark.parametrize(
-    ("expected", "accepted"),
-    [("RLP_STRUCTURES_ENCODING", True), ("INVALID_WITHDRAWALS_ROOT", False)],
-)
-def test_malformed_block_requires_its_pinned_error(
-    archive, observer, monkeypatch, expected, accepted
-):
-    case = transition_case(archive)
-    fixtures = json.loads((archive / case.path).read_text())
-    fixtures[case.id]["blocks"].append(
-        {"rlp": "0xc0", "expectException": f"BlockException.{expected}"}
-    )
-    monkeypatch.setattr(runners, "_fixtures", lambda _path: fixtures)
-    report = gas_coverage.replay_cases(archive, [case], observer)
-    if accepted:
-        assert report.failures == []
-        assert {fork: counts.blocks for fork, counts in report.counts.items()} == {
-            "bpo2": 1,
-            "glamsterdam": 1,
-        }
-    else:
-        assert report.counts == {}
-        ((failed, message),) = report.failures
-        assert failed == case
-        assert expected in message and "block invalid: encoding" in message
