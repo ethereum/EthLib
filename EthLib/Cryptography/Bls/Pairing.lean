@@ -72,18 +72,21 @@ The line is the draft's line times `c w^3`, as derived above the line value.
 
 Here `c = -2 Y Z^3` for `T = (X, Y, Z)`. -/
 def millerDouble (T : G2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
-  let two := Fp2.ofFp (BaseField.ofNat 2)
-  let three := Fp2.ofFp (BaseField.ofNat 3)
-  let xx := T.x * T.x
-  let zz := T.z * T.z
+  let xx := FieldOps.square T.x
+  let zz := FieldOps.square T.z
+  let yy := FieldOps.square T.y
   -- The line function, case `Q_1 = Q_2`: `l := (3 * x_1^2) / (2 * y_1)`, on `E`.
   --
   -- On the twist, `x_1 = X / Z^2`, `y_1 = Y / Z^3`, and the slope is `lambda = 3 X^2 / (2 Y Z)`.
   --
   -- The line `lambda x_1 - y_1 - lambda xp w^2 + yp w^3`, times `2 Y Z^3` gives these coefficients.
-  let c0 := three * xx * T.x - two * (T.y * T.y)
-  let c2 := -(three * xx * zz * Fp2.ofFp xp)
-  let c3 := two * T.y * zz * T.z * Fp2.ofFp yp
+  --
+  -- The products by 3 and 2 are sums, which are cheaper than a product.
+  let xx3 := xx + xx + xx
+  let c0 := xx3 * T.x - (yy + yy)
+  -- `xp` and `yp` lie in the base field, so their products take two products of it, not four.
+  let c2 := -(xx3 * zz).mulFp xp
+  let c3 := ((T.y + T.y) * (zz * T.z)).mulFp yp
   -- A.2: `f := f^2 * g` and `T := T + T`, with `g` the tangent line at `T`, evaluated at `P`.
   (T.double, f.square.mulLine c0 c2 c3)
 
@@ -95,7 +98,7 @@ Here `c = -D` for the `D` below.
 
 The loop never adds `T = ±Q` on points of order `r`, so the draft's other cases never arise. -/
 def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
-  let zz := T.z * T.z
+  let zz := FieldOps.square T.z
   -- The line function, last case: `l := (y_2 - y_1) / (x_2 - x_1)`, on `E`.
   --
   -- On the twist, `x_1 = X / Z^2`, `y_1 = Y / Z^3`, and the slope is `lambda = N / D`.
@@ -105,8 +108,8 @@ def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12
   --
   -- The line `lambda xq - yq - lambda xp w^2 + yp w^3`, times `D` gives these coefficients.
   let c0 := n * xq - d * yq
-  let c2 := -(n * Fp2.ofFp xp)
-  let c3 := d * Fp2.ofFp yp
+  let c2 := -n.mulFp xp
+  let c3 := d.mulFp yp
   -- A.2: `f := f * g` and `T := T + Q`, with `g` the line through `T` and `Q`, evaluated at `P`.
   (G2.add T ⟨xq, yq, Fp2.one⟩, f.mulLine c0 c2 c3)
 

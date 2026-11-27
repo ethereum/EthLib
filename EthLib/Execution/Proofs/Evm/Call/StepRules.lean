@@ -40,9 +40,11 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
 
   It cannot see the refund counter, the gas, the memory or the stack. -/
   static : ∀ {a b}, StaticStep a b → R a b
-  /-- A write of storage that changes the refund counter keeps the relation. -/
-  sstore : ∀ (evm : Evm fork Meter) (address : Address) (key : Bytes32) (value : U256)
-    (state : TransactionState) (gain : Int), evm.state.setStorage address key value = .ok state →
+  /-- A write of storage that changes the refund counter keeps the relation.
+
+  The word is in the storage of the account of the frame, the only storage that SSTORE writes. -/
+  sstore : ∀ (evm : Evm fork Meter) (key : Bytes32) (value : U256) (state : TransactionState)
+    (gain : Int), evm.state.setStorage evm.message.currentTarget key value = .ok state →
     R evm (advance { evm with
       state, substate := { evm.substate with refundCounter := evm.substate.refundCounter + gain } })
   /-- A write of transient storage keeps the relation. -/
@@ -99,7 +101,7 @@ theorem stepRules_messageCode :
     StepRules fork (fun a b : Evm fork Meter => b.message = a.message ∧ b.code = a.code) where
   trans hab hbc := ⟨hbc.1.trans hab.1, hbc.2.trans hab.2⟩
   static h := ⟨h.message, h.code⟩
-  sstore _ _ _ _ _ _ _ := ⟨rfl, rfl⟩
+  sstore _ _ _ _ _ _ := ⟨rfl, rfl⟩
   tstore _ _ _ _ := ⟨rfl, rfl⟩
   log _ _ _ hm hc := ⟨hm, hc⟩
   selfdestruct _ _ h := ⟨message_finishSelfdestruct h, code_finishSelfdestruct h⟩
@@ -152,7 +154,10 @@ theorem sstoreStep (rules : OrdinaryStepRules fork R) {evm after : Evm fork Mete
       · simp [throw, throwThe, MonadExceptOf.throw] at h
       · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
         cases h
-        exact rules.trans (rules.static m5) (rules.sstore _ _ _ _ _ _ (Base.mapError_ok_iff.mp hst))
+        have hm : e2.message.currentTarget = e5.message.currentTarget := by
+          rw [m5.message, c2.message]
+        rw [hm] at hst
+        exact rules.trans (rules.static m5) (rules.sstore _ _ _ _ _ (Base.mapError_ok_iff.mp hst))
     · exact rules.static (ha.trans (staticStep_exceptionalHalt _ _))
 
 /-- A successful TSTORE keeps the relation. -/
@@ -438,8 +443,8 @@ theorem and {S : Evm fork Meter → Evm fork Meter → Prop} (r : StepRules fork
     (s : StepRules fork S) : StepRules fork (fun a b => R a b ∧ S a b) where
   trans hab hbc := ⟨r.trans hab.1 hbc.1, s.trans hab.2 hbc.2⟩
   static h := ⟨r.static h, s.static h⟩
-  sstore evm address key value state gain h :=
-    ⟨r.sstore evm address key value state gain h, s.sstore evm address key value state gain h⟩
+  sstore evm key value state gain h :=
+    ⟨r.sstore evm key value state gain h, s.sstore evm key value state gain h⟩
   tstore evm address key value := ⟨r.tstore evm address key value, s.tstore evm address key value⟩
   log log hs hsub hm hc := ⟨r.log log hs hsub hm hc, s.log log hs hsub hm hc⟩
   selfdestruct beneficiary refund h :=
@@ -528,6 +533,43 @@ end StepRules
 
 /-! ## The messages that a step sends -/
 
+/-- A call that names no delegate runs the code that its frame reads at the called address. -/
+theorem accessDelegation_code {evm after : Evm fork Meter} {address : Address} {known : Nat}
+    {callee : Callee} (h : accessDelegation evm address known = .ok (callee, after))
+    {code : ByteArray} (hc : evm.state.getCode (evm.state.getAccount address).codeHash = .ok code)
+    (hnone : (if fork ≥ .pectra then delegatedAddress code else none) = none) :
+    callee.code = code := by
+  unfold accessDelegation at h
+  obtain ⟨read, hread, h⟩ := Base.bind_ok_iff.mp h
+  have hsame : read = code := by
+    unfold accountCode at hread
+    rw [hc] at hread
+    exact (Except.ok.inj hread).symm
+  subst hsame
+  dsimp only at h
+  split at h
+  · rename_i delegate hdelegate
+    rw [hnone] at hdelegate
+    cases hdelegate
+  · cases h
+    rfl
+
+/-- The message runs the code that the state holds for its account.
+
+It is asked only of a code that names no delegate at the fork. -/
+def CallsCode (state : TransactionState) (message : Message fork) : Prop :=
+  ∀ code, state.getCode (state.getAccount message.currentTarget).codeHash = .ok code →
+    (if fork ≥ .pectra then delegatedAddress code else none) = none → message.code = code
+
+omit [GasMeter Meter] in
+/-- A message that runs the code of a frame after a static step runs that of the frame before. -/
+theorem CallsCode.of_staticStep {a b : Evm fork Meter} (h : StaticStep a b)
+    {message : Message fork} (r : CallsCode b.state message) : CallsCode a.state message := by
+  intro code hcode hnone
+  refine r code ?_ hnone
+  rw [getAccount_of_staticStep h, h.tracker.rest]
+  exact hcode
+
 /-- What a result of a step from `evm` says of the message it sends, if it sends one. -/
 private def Sends (evm : Evm fork Meter) : StepResult fork Meter → Prop
   | .next _ => True
@@ -543,6 +585,9 @@ private def Sends (evm : Evm fork Meter) : StepResult fork Meter → Prop
       StaticCode evm.state message) ∧
     -- The state that the message starts from has read the account that the message runs at.
     message.currentTarget ∈ caller.state.accountReads ∧
+    -- A call to another account runs its code, when that code names no delegate.
+    (message.target ≠ none → message.currentTarget ≠ evm.message.currentTarget →
+      CallsCode evm.state message) ∧
     -- The message has the block and the transaction of `evm`.
     message.blockEnv = evm.message.blockEnv ∧ message.txEnv = evm.message.txEnv
 
@@ -554,12 +599,13 @@ private theorem Sends.lift {evm evm' : Evm fork Meter} {result : StepResult fork
   cases result with
   | next _ => trivial
   | child caller message resume =>
-    obtain ⟨r1, r2, r3, r4, r5, r6⟩ := r
+    obtain ⟨r1, r2, r3, r4, r7, r5, r6⟩ := r
     have hd : ∀ a, evm'.state.accountDeployable a = evm.state.accountDeployable a := by
       intro a
       exact State.TransactionState.accountDeployable_congr (getAccount_of_staticStep h a)
         (h.state a List.not_mem_nil).2.1
-    refine ⟨r1, fun c => ?_, fun c => ?_, r4, h.message ▸ r5, h.message ▸ r6⟩
+    refine ⟨r1, fun c => ?_, fun c => ?_, r4, fun c hne => (r7 c (h.message ▸ hne)).of_staticStep h,
+      h.message ▸ r5, h.message ▸ r6⟩
     · rw [← hd]
       exact r2 c
     · rcases r3 c with hc | hc
@@ -577,6 +623,8 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
     (hcallee : callee.code.size ≠ 0 →
       (evm.state.getAccount call.address).codeHash ≠ State.EMPTY_CODE_HASH)
     (hread : call.address ∈ evm.state.accountReads)
+    (hcode : ∀ code, evm.state.getCode (evm.state.getAccount call.address).codeHash = .ok code →
+      (if fork ≥ .pectra then delegatedAddress code else none) = none → callee.code = code)
     (h : finishCall kind call callee subCall newAccount expandBy evm = .ok result) :
     Sends evm result := by
   unfold Evm.finishCall at h
@@ -594,7 +642,7 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
     · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
       trivial
     · cases h
-      refine ⟨.inl ⟨_, _, _, rfl⟩, ?_, ?_, ?_, ?_, ?_⟩
+      refine ⟨.inl ⟨_, _, _, rfl⟩, ?_, ?_, ?_, ?_, ?_, ?_⟩
       · intro c
         simp at c
       rotate_left
@@ -603,6 +651,13 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
           exact pre.tracker.accountReads _ hread
         · simp only [currentTarget_callMessage, hk, ↓reduceIte]
           exact Std.ExtTreeSet.mem_insert_self
+      · -- CALL and STATICCALL run the code of the address they call.
+        intro _ hne code hc hnone
+        by_cases hk : kind = .call ∨ kind = .staticcall
+        · simp only [code_callMessage, currentTarget_callMessage, hk, ↓reduceIte] at hc hne ⊢
+          rw [getAccount_of_staticStep pre, pre.tracker.rest] at hc
+          exact hcode code hc hnone
+        · exact absurd (by simp [hk]) hne
       -- A call message copies the block and the transaction of its caller.
       · simp
       · simp
@@ -638,7 +693,13 @@ private theorem sends_callStep {kind : CallKind} {evm : Evm fork Meter}
     dsimp only at h
     rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
     · obtain ⟨⟨subCall, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
-      refine Sends.lift (s4.trans (staticStep_payCall h5)) (sends_finishCall ?_ ?_ h)
+      refine Sends.lift (s4.trans (staticStep_payCall h5)) (sends_finishCall ?_ ?_ ?_ h)
+      rotate_left 2
+      · -- The callee runs the code that the access to the address read.
+        intro code hc hnone
+        have p5 := (staticStep_accessDelegation h4).trans (staticStep_payCall h5)
+        rw [getAccount_of_staticStep p5, p5.tracker.rest] at hc
+        exact accessDelegation_code h4 hc hnone
       rotate_left
       · exact ((staticStep_accessDelegation h4).trans (staticStep_payCall h5)).tracker.accountReads
           _ Std.ExtTreeSet.mem_insert_self
@@ -678,7 +739,8 @@ private theorem sends_launchCreate {evm : Evm fork Meter} {value : U256}
     split at hr
     · rename_i hd
       cases hr
-      refine ⟨.inr ⟨_, _, rfl⟩, fun _ => ?_, fun c => absurd rfl c, ?_, ?_, ?_⟩
+      refine ⟨.inr ⟨_, _, rfl⟩, fun _ => ?_, fun c => absurd rfl c, ?_, fun c => absurd rfl c, ?_,
+        ?_⟩
       rotate_left
       · obtain ⟨_, -, hacc, -⟩ := State.TransactionState.reads_modifyState
           (Base.mapError_ok_iff.mp hstate)
@@ -769,7 +831,17 @@ theorem env_of_step_eq_child {evm caller : Evm fork Meter} {message : Message fo
     {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (h : step fork evm = .ok (.child caller message resume)) :
     message.blockEnv = evm.message.blockEnv ∧ message.txEnv = evm.message.txEnv :=
-  (sends_step h).2.2.2.2
+  (sends_step h).2.2.2.2.2
+
+/-- A call that a successful step sends to another account runs the code of that account.
+
+The code must name no delegate at the fork. -/
+theorem step_eq_child_callsCode {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : step fork evm = .ok (.child caller message resume)) (call : message.target ≠ none)
+    (other : message.currentTarget ≠ evm.message.currentTarget) :
+    CallsCode evm.state message :=
+  (sends_step h).2.2.2.2.1 call other
 
 /-- A call instruction sends only messages with a target. -/
 theorem callStep_target_ne {kind : CallKind} {evm caller : Evm fork Meter}

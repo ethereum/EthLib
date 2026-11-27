@@ -615,7 +615,8 @@ theorem ChainHolds.advanceSlotAcross_exists_ok
       have ready := UpgradeReady.of_run advancedRun bounded shaped resolved (by omega)
         (by rw [epochEq]; omega) (upgradeDraws advanced advancedOk reached passes due) due voted
         fun _ => nonzero
-      obtain ⟨next, nextOk⟩ := upgradeNext_exists_ok (config := config) (checks := checks) ready
+      obtain ⟨next, nextOk⟩ := upgradeNext_exists_ok (config := config) (checks := checks)
+        (fun _ => advancedRun.configPositive.churn) ready
       have altair := (upgradeNext_altair nextOk).1
       refine ⟨next, nextOk, passes.snoc due nextOk,
         (upgradeFrame_upgradeNext nextOk).slot.trans slotEq,

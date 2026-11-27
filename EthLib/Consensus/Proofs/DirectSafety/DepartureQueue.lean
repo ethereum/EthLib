@@ -1930,18 +1930,21 @@ private theorem activeCount_le_size {fork : Fork} (s : BeaconState preset fork) 
 
 /-- The validator-count churn is bounded by the churn of any bound on the active count. -/
 theorem validatorChurnLimit_le_of_active {fork : Fork} (s : BeaconState preset fork)
+    {limit : UInt64} (limitOk : getValidatorChurnLimit config s = .ok limit)
     (bound : Nat) (counted : activeCount s ≤ bound) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound := by
+    limit.toNat ≤ cohortCap config bound := by
   have converted : (getActiveValidatorIndices s (getCurrentEpoch s)).length.toUInt64.toNat ≤
       bound := (Nat.mod_le _ _).trans counted
-  simp only [getValidatorChurnLimit, Uint64.toNat_max, UInt64.toNat_div, cohortCap]
+  obtain ⟨-, rfl⟩ := getValidatorChurnLimit_ok_iff.mp limitOk
+  simp only [Uint64.toNat_max, UInt64.toNat_div, cohortCap]
   exact max_le_max_left _ (Nat.div_le_div_right converted)
 
 /-- The validator-count churn is bounded by the registry size, not just active entries. -/
 theorem validatorChurnLimit_le_cohortCap {fork : Fork} (s : BeaconState preset fork)
+    {limit : UInt64} (limitOk : getValidatorChurnLimit config s = .ok limit)
     (bound : Nat) (bounded : s.validators.data.size ≤ bound) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound :=
-  validatorChurnLimit_le_of_active s bound ((activeCount_le_size s).trans bounded)
+    limit.toNat ≤ cohortCap config bound :=
+  validatorChurnLimit_le_of_active s limitOk bound ((activeCount_le_size s).trans bounded)
 
 /-- A finite pre-Electra exit is assigned only while its count cohort has room. -/
 private theorem exitQueue_count_room {fork : Fork} {s queued : BeaconState preset fork}
@@ -1955,8 +1958,9 @@ private theorem exitQueue_count_room {fork : Fork} {s queued : BeaconState prese
   simp only [exitQueue, notElectra, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
     Except.ok.injEq, Prod.mk.injEq] at ok
   obtain ⟨placed, scheduled, rfl, rfl⟩ := ok
-  exact ⟨rfl, (exitQueueEpoch_churn scheduled finite).trans_le
-    (max_le_max_left _ (validatorChurnLimit_le_of_active s bound counted))⟩
+  obtain ⟨limit, limitOk⟩ := getValidatorChurnLimit_of_exitQueueEpoch scheduled
+  exact ⟨rfl, (exitQueueEpoch_churn scheduled limitOk finite).trans_le
+    (max_le_max_left _ (validatorChurnLimit_le_of_active s limitOk bound counted))⟩
 
 /-- Voluntary exits retain concrete charge coverage across their entire operation fold. -/
 private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
@@ -3933,7 +3937,7 @@ private theorem CountedStep.registry {f : Fork} {s t : BeaconState preset f}
   refine ⟨activeStep_processRegistryUpdates early ok, fun counted => ?_⟩
   have notElectra : ¬ .pectra ≤ f := Nat.not_le_of_lt early
   simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff] at ok
-  obtain ⟨_, updated, activated⟩ := ok
+  obtain ⟨_, updated, _, _, activated⟩ := ok
   exact ((CountedStep.fold (fun _ _ _ => CountedStep.registryEntry early bound) updated).2
     counted).trans (.fold (fun _ _ _ => CountCohortStep.activate bound) activated)
 

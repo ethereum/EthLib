@@ -208,6 +208,25 @@ theorem no_ok_stuck {B : Nat}
   obtain ⟨z, hr, hz⟩ := h (gas + B) (Nat.le_add_left B gas) _ (start.addGas B)
   exact not_ok_of_reaches hr hz B evm rfl within hs
 
+/-- A frame that, with any gas from `B` on, halts with `Q` or gets stuck, by steps monotone in gas.
+
+Say the loop runs that frame with any gas to a frame `s` with no error.
+
+Then `s` with `B` more gas meets `Q`. -/
+theorem low_of_halts_or_stuck {B : Nat} {Q : Evm fork Nat → Prop}
+    (h : ∀ g, B ≤ g → HoareG fork (At code message pc stack memory g state substate returnData)
+      fun z => (z.running = false ∧ Q z) ∨ Stuck z)
+    {evm s : Evm fork Nat}
+    (start : At code message pc stack memory gas state substate returnData evm)
+    (within : GasMeter.gasHeld evm.gas ≤ bound)
+    (hs : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok s)
+    (hok : s.error = none) : Q (addGas B s) := by
+  obtain ⟨z, hr, hz⟩ := h (gas + B) (Nat.le_add_left B gas) _ (start.addGas B)
+  rcases hz with ⟨hzr, hq⟩ | hst
+  · rw [← low_of_reaches hr hzr B evm rfl within hs hok]
+    exact hq
+  · exact absurd hok (not_ok_of_reaches hr hst B evm rfl within hs)
+
 /-- A frame that, with its own gas, reaches a stuck frame by steps monotone in gas.
 
 Every frame that the loop runs it to has an error. -/
@@ -262,6 +281,20 @@ theorem sstore_stuck {key new : U256} {rest : List U256}
   · exact .inl ⟨e, rfl⟩
   · obtain ⟨hbr, hbe⟩ := sstoreStep_halts (by rw [hm, hs]; exact bad) h
     exact .inr ⟨b, rfl, hbr, by simpa [Option.isSome_iff_ne_none] using hbe⟩
+
+/-- NUMBER is stuck when the number of the block does not fit a word.
+
+It fails at every fork and with any gas. -/
+theorem number_stuck (hlt : pc < code.size) (hbyte : code[pc] = 0x43)
+    (hbig : 2 ^ 256 ≤ message.blockEnv.number) :
+    HoareG fork (At code message pc stack memory gas state substate returnData) Stuck := by
+  refine At.stuck hlt hbyte (ofByte_of_decode (op := .number) rfl (Fork.frontier_le _)) rfl
+    fun low hm _ _ _ => .inl ?_
+  have hnot : ¬low.message.blockEnv.number < 2 ^ 256 := by rw [hm]; omega
+  simp only [readNumber, hnot, ↓reduceIte]
+  cases chargeGas low OPCODE_NUMBER with
+  | error e => exact ⟨e, rfl⟩
+  | ok _ => exact ⟨_, rfl⟩
 
 /-- From Istanbul, SSTORE with at most 2300 gas is stuck, by EIP-2200.
 

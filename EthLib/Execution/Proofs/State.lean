@@ -13,6 +13,7 @@ public import EthLib.Execution.Proofs.State.Errors
 public import EthLib.Execution.Proofs.State.FreshSlots
 public import EthLib.Execution.Proofs.State.Frame
 public import EthLib.Execution.Proofs.State.Supply
+public import EthLib.Execution.Proofs.State.Wiped
 
 /-!
 # `EthLib.Execution.Proofs.State`

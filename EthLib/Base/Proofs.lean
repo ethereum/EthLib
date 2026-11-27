@@ -7,6 +7,7 @@ public import EthLib.Base.Proofs.BitVec.Mask
 public import EthLib.Base.Proofs.BitVec.Popcount
 public import EthLib.Base.Proofs.ByteList
 public import EthLib.Base.Proofs.ByteOrder
+public import EthLib.Base.Proofs.ByteOrder.Bits
 public import EthLib.Base.Proofs.ByteOrder.Digits
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.Bytes.Equiv

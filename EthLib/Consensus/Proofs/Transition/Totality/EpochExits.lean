@@ -307,6 +307,19 @@ theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureCheck
       · exact (edge.records ⟨rewards, by rintro rfl; simp at member,
           by rintro rfl; simp at member, by rintro rfl; simp at member,
           by rintro rfl; simp at member, by rintro rfl; simp at member⟩).2.2.2.2
+  -- The pending deposits after the registry updates succeed.
+  --
+  -- So the churn quotient of deposits, which is that of exits, is not 0.
+  have quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0 := by
+    simp only [List.cons_append, List.nil_append] at tail
+    obtain _ | ⟨_, rest⟩ := tail
+    obtain _ | ⟨_, rest⟩ := rest
+    obtain _ | ⟨deposits, -⟩ := rest
+    simp only [action, electra, ↓reduceDIte, processPendingDeposits, bind_ok_iff,
+      liftAccessor_ok] at deposits
+    obtain ⟨_, -, _, churnOk, -⟩ := deposits
+    exact churnQuotient_ne_zero_of_depositChurnLimit churnOk
   have costSame : exitCost preset before = exitCost preset state := by
     unfold exitCost
     rw [validators]
@@ -332,7 +345,7 @@ theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureCheck
   --
   -- The registry updates move the exit queue by at most the cost owed.
   obtain ⟨registered, registeredOk, queued, exits, carried', -⟩ :=
-    processRegistryUpdates_total_of_electra (config := config) before electra
+    processRegistryUpdates_total_of_electra (config := config) before electra quotient
       (by unfold BeaconState.RegistryWithinLimit; rw [validators]; exact within)
       (by rw [sumSame]; exact summed) increment minimum maximum ceiling
       (by rw [epochSame]; exact first) (by rw [epoch]; exact bounded.1)
@@ -397,9 +410,12 @@ theorem processEpoch_exits_of_lt_electra {config : Config} {checks : SignatureCh
     rw [validators]
   have epochSame : getCurrentEpoch middle = getCurrentEpoch state := by
     simp only [getCurrentEpoch, slot]
-  -- The registry updates set each exit epoch to at most the ceiling plus the registry size.
+  -- The registry updates succeed, so the churn quotient that they read is not 0.
+  obtain ⟨_, _, _, _, churnOk, -⟩ := processRegistryUpdates_activationEpochs before registryOk
+  -- They set each exit epoch to at most the ceiling plus the registry size.
   obtain ⟨registered, registeredOk, bounded⟩ :=
-    processRegistryUpdates_total_of_lt_electra (config := config) middle before ceiling
+    processRegistryUpdates_total_of_lt_electra (config := config) middle before
+      (getValidatorChurnLimit_ok_iff.mp churnOk).1 ceiling
       (by rw [epochSame]; exact first) (by rw [validators]; exact exits)
       (by rw [sizeSame]; exact room)
   obtain rfl : registered = _ :=

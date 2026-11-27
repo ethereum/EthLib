@@ -62,7 +62,7 @@ private theorem stepRules_logsMatch (hfork : fork ≥ .glamsterdam) :
     unfold LogsMatch at hm ⊢
     rw [h.simulatedLogs, h.logs]
     exact hm
-  sstore _ _ _ _ _ _ _ h := h
+  sstore _ _ _ _ _ _ h := h
   tstore _ _ _ _ h := h
   log _ _ hsub _ _ h := by
     unfold LogsMatch at h ⊢

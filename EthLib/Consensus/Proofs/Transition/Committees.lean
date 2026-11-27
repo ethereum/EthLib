@@ -504,7 +504,7 @@ theorem exitQueue_lt {exitBalance : Gwei} {queued : BeaconState preset fork} {ex
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
     obtain ⟨epoch, epochOk, -, rfl⟩ := computed
     simp only [exitQueueEpoch, bind_ok_iff, liftArith, mapError_ok_iff] at epochOk
-    obtain ⟨earliest, earliestOk, rest⟩ := epochOk
+    obtain ⟨earliest, earliestOk, _, _, rest⟩ := epochOk
     have earliestEq := (computeActivationExitEpoch_ok_iff.mp earliestOk).2
     have latest := UInt64.le_iff_toNat_le.mp (le_foldl_maxExitEpoch
       (state.validators.data.toList.filter (·.exitEpoch != FAR_FUTURE_EPOCH)) earliest).1
@@ -1003,7 +1003,7 @@ private theorem keeps_processRegistryUpdates (before : fork < .pectra)
   have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
   unfold processRegistryUpdates at computed
   simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
+  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
   have first := Keeps.foldlM (fun _ _ _ ok => keeps_updateRegistryEntry ok) updatedOk
   refine first.trans (keeps_foldlM_activateValidator (fun index member validator found => ?_)
     activated)

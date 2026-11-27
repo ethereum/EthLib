@@ -166,9 +166,24 @@ theorem mem_configSystemContracts_iff (config : ChainConfig) (fork : Fork) (addr
         .pectra ≤ fork ∧ (address = Blocks.HISTORY_STORAGE_ADDRESS ∨
           address = config.depositContractAddress ∨
           address ∈ (Blocks.requestContracts fork).map Prod.snd) := by
-  cases fork <;>
-    simp +decide [configSystemContracts, Blocks.requestContracts,
-      Blocks.REQUEST_CONTRACTS, Blocks.BUILDER_REQUEST_CONTRACTS, or_comm, or_left_comm]
+  -- The system contracts of each fork, and its request contracts, as plain lists.
+  have hconfig : (configSystemContracts config fork).map Prod.snd =
+      (if .dencun ≤ fork then [Blocks.BEACON_ROOTS_ADDRESS] else []) ++
+        (if .pectra ≤ fork then [Blocks.HISTORY_STORAGE_ADDRESS,
+          Blocks.WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+          Blocks.CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS] else []) ++
+        (if .glamsterdam ≤ fork then [Blocks.BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+          Blocks.BUILDER_EXIT_CONTRACT_ADDRESS] else []) ++
+        (if .pectra ≤ fork then [config.depositContractAddress] else []) := by
+    cases fork <;> rfl
+  have hrequests : (Blocks.requestContracts fork).map Prod.snd =
+      (if .pectra ≤ fork then [Blocks.WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+          Blocks.CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS] else []) ++
+        (if .glamsterdam ≤ fork then [Blocks.BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+          Blocks.BUILDER_EXIT_CONTRACT_ADDRESS] else []) := by
+    cases fork <;> rfl
+  rw [hconfig, hrequests]
+  cases fork <;> simp +decide [or_comm, or_left_comm]
 
 /-- A view without the genesis hash and timestamp answers with an internal error. -/
 theorem ChainView.configReport_no_genesis (v : ChainView) (absent : v.genesis = none) :

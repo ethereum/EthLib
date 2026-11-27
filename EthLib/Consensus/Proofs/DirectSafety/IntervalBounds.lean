@@ -320,9 +320,14 @@ private theorem consolidation_rate_le {fork : Fork}
     {stake : Nat} (bounded : total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat stake) :
     churn.toNat ≤ consolidationRate (preset := preset) (config := config) stake := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
+  -- The churn is computed, so its quotient is not 0.
+  have quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0 := by
+    simp only [getConsolidationChurnLimit, notGloas, ↓reduceIte, bind_ok_iff] at computed
+    obtain ⟨_, wholeOk, -⟩ := computed
+    exact (getBalanceChurnLimit_ok_iff.mp wholeOk).choose_spec.2.1
   simp only [getConsolidationChurnLimit, notGloas, ↓reduceIte,
-    getActivationExitChurnLimit, getBalanceChurnLimit, read,
-    bind, Except.bind, pure, Except.pure, Except.ok.injEq] at computed
+    getActivationExitChurnLimit, getBalanceChurnLimit, read, liftArith, Uint64.divChecked,
+    quotient, Except.mapError, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at computed
   subst churn
   have rounded : ∀ amount : Gwei, (roundToIncrement preset amount).toNat ≤ amount.toNat := by
     intro amount

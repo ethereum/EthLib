@@ -2566,7 +2566,7 @@ private theorem CapStepR.registry {f : Fork} {s t : BeaconState preset f}
       (refl s) ok
   · rename_i notElectra
     simp only [bind_ok_iff] at ok
-    obtain ⟨middle, updated, activated⟩ := ok
+    obtain ⟨middle, updated, _, _, activated⟩ := ok
     have before : f < .glamsterdam :=
       Nat.lt_trans (Nat.lt_of_not_le notElectra) (by decide)
     have small : middle.validators.data.size < 2 ^ 64 :=

@@ -64,6 +64,27 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory memory' 
   {gas : Nat} {state state' : State.TransactionState} {substate substate' : Substate}
   {returnData returnData' : ByteArray}
 
+/-- PUSHn of the address of a block, then JUMP to it, keeps the stack and costs 11 gas. -/
+theorem pushJump {n : Fin 33} {entry : U256} {stack : List U256} (hn : n.val ≠ 0)
+    (hlt : pc < code.size) (hbyte : code[pc] = 0x5f + UInt8.ofNat n.val)
+    (decoded : Op.decode (0x5f + UInt8.ofNat n.val) = some (.push n))
+    (hword : pushData code pc n = entry) (hjlt : pc + (1 + n) < code.size)
+    (hjump : code[pc + (1 + n)] = 0x56)
+    (ventry : isValidJumpDest (validJumpDestinations code) entry.toNat = true)
+    (hpush : stack.length < STACK_LIMIT)
+    -- The push pays 3 and the jump 8.
+    (hgas : 11 ≤ gas) :
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message entry.toNat stack memory (gas - 11) state substate returnData) := by
+  have h1 := push (fork := fork) (code := code) (message := message) (pc := pc) (stack := stack)
+    (memory := memory) (gas := gas) (state := state) (substate := substate)
+    (returnData := returnData) hn hlt hbyte decoded hword (by omega) hpush
+  have h2 := jump (fork := fork) (code := code) (message := message) (pc := pc + (1 + n))
+    (memory := memory) (gas := gas - 3) (state := state) (substate := substate)
+    (returnData := returnData) (destination := entry) (rest := stack) hjlt hjump (by omega) ventry
+  rw [show gas - 3 - 8 = gas - 11 by omega] at h2
+  exact h1.seq h2
+
 /-- A call of a subroutine: PUSHn of the address of its block, then JUMP to it.
 
 The frame reaches the return address with the results of the block on its stack. -/
@@ -87,21 +108,13 @@ theorem callSubroutine {n : Fin 33} {entry ret : U256} {args results rest : List
     Hoare fork (At code message pc (args ++ ret :: rest) memory gas state substate returnData)
       (At code message ret.toNat (results ++ rest) memory' (gas - (11 + cost)) state'
         substate' returnData') := by
-  have h1 := push (fork := fork) (code := code) (message := message) (pc := pc)
-    (stack := args ++ ret :: rest) (memory := memory) (gas := gas) (state := state)
-    (substate := substate) (returnData := returnData) hn hlt hbyte decoded hword (by omega)
-    (by simp only [List.length_append, List.length_cons]; omega)
-  have h2 := jump (fork := fork) (code := code) (message := message) (pc := pc + (1 + n))
-    (memory := memory) (gas := gas - 3) (state := state) (substate := substate)
-    (returnData := returnData) (destination := entry) (rest := args ++ ret :: rest) hjlt hjump
-    (by omega) ventry
-  have h3 := h ret rest (gas - 3 - 8) vret hroom (by omega)
-  have hg : gas - 3 - 8 - cost = gas - (11 + cost) := by omega
-  rw [hg] at h3
+  have h3 := h ret rest (gas - 11) vret hroom (by omega)
+  rw [show gas - 11 - cost = gas - (11 + cost) by omega] at h3
   -- The rule for a call composes the push of the address of the block and the JUMP.
   --
   -- It then composes them with the proof of the block.
-  exact (h1.seq h2).seq h3
+  exact (pushJump hn hlt hbyte decoded hword hjlt hjump ventry
+    (by simp only [List.length_append, List.length_cons]; omega) (by omega)).seq h3
 
 /-! ## Subroutines over frames that know ranges of memory -/
 
@@ -146,18 +159,12 @@ theorem callKnownSubroutine {n : Fin 33} {entry ret : U256} {args results rest :
       (Known code message ret.toNat (results ++ rest) size' facts' (gas - (11 + cost)) state'
         substate' returnData') := by
   have h1 := Known.of_at (size := size) (facts := facts) fun memory =>
-    push (fork := fork) (code := code) (message := message) (pc := pc)
-      (stack := args ++ ret :: rest) (memory := memory) (gas := gas) (state := state)
-      (substate := substate) (returnData := returnData) hn hlt hbyte decoded hword (by omega)
-      (by simp only [List.length_append, List.length_cons]; omega)
-  have h2 := Known.of_at (size := size) (facts := facts) fun memory =>
-    jump (fork := fork) (code := code) (message := message) (pc := pc + (1 + n))
-      (memory := memory) (gas := gas - 3) (state := state) (substate := substate)
-      (returnData := returnData) (destination := entry) (rest := args ++ ret :: rest) hjlt hjump
-    (by omega) ventry
-  have h3 := h ret rest (gas - 3 - 8) vret hroom (by omega)
-  have hg : gas - 3 - 8 - cost = gas - (11 + cost) := by omega
-  rw [hg] at h3
-  exact (h1.seq h2).seq h3
+    pushJump (fork := fork) (message := message) (memory := memory) (state := state) (gas := gas)
+      (stack := args ++ ret :: rest)
+      (substate := substate) (returnData := returnData) hn hlt hbyte decoded hword hjlt hjump
+      ventry (by simp only [List.length_append, List.length_cons]; omega) (by omega)
+  have h3 := h ret rest (gas - 11) vret hroom (by omega)
+  rw [show gas - 11 - cost = gas - (11 + cost) by omega] at h3
+  exact h1.seq h3
 
 end EthLib.Execution.Evm.Logic

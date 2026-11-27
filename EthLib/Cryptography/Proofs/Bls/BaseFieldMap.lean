@@ -59,6 +59,15 @@ theorem map_mul (f : Hom F G) (a b : Fp2 F) : map f (a * b) = map f a * map f b 
   show map f (mul a b) = mul (map f a) (map f b)
   simp only [map, mul, f.map_add, f.map_sub, f.map_mul]
 
+theorem map_square (f : Hom F G) (a : Fp2 F) :
+    map f (FieldOps.square a) = FieldOps.square (map f a) := by
+  show map f (Cryptography.Fp2.square a) = Cryptography.Fp2.square (map f a)
+  simp only [map, Cryptography.Fp2.square, f.map_add, f.map_sub, f.map_mul]
+
+theorem map_mulFp (f : Hom F G) (a : Fp2 F) (x : F) :
+    map f (a.mulFp x) = (map f a).mulFp (f x) := by
+  simp only [map, Cryptography.Fp2.mulFp, f.map_mul]
+
 theorem map_beq (f : Hom F G) (a b : Fp2 F) : (map f a).beq (map f b) = a.beq b := by
   simp only [map, beq, f.map_beq]
 
@@ -124,6 +133,7 @@ def hom (f : Hom F G) : FieldOps.Hom (Fp2 F) (Fp2 G) where
   map_beq := map_beq f
   map_isZero := map_isZero f
   map_inverse := map_inverse f
+  map_square := map_square f
 
 end Fp2
 

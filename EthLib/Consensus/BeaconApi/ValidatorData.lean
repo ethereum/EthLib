@@ -59,11 +59,29 @@ def constructionError : ValidatorDutyError → ErrorMessage
   -- Any other failure is internal.
   | fault => internalError (toString fault.code.toNat)
 
-/-- Nothing when a block is verified, or the error with code 503. -/
-def checkVerified (optimistic : OptimisticStore preset fork) (root : Root) :
+/-- Nothing when a node of the fork choice is verified, or the error with code 503. -/
+def checkNodeVerified (optimistic : OptimisticStore preset fork) (node : ForkChoiceNode) :
     Except ErrorMessage Unit :=
   -- The source: code 503 for a block not yet fully verified by an execution engine.
-  if isExecutionOptimistic optimistic root then .error (optimisticBlock root) else .ok ()
+  if isNodeExecutionOptimistic optimistic node then .error (optimisticBlock node.root) else .ok ()
+
+/-- The node of the fork choice that the data of an attestation resolves to, a choice of EthLib.
+
+From Gloas an index of 1 votes for the payload of the block, so the data reads the full node.
+
+Any other data reads the pending node, which reads the same payload as the empty node. -/
+def attestationNode (fork : Fork) (data : AttestationData) : ForkChoiceNode :=
+  -- From Gloas the index of the data is the payload vote: 1 for present, as EIP-7732 specifies.
+  if .glamsterdam ≤ fork ∧ data.index = 1 then ⟨data.beaconBlockRoot, .full⟩
+  -- Any other data reads the pending node of its block, which reads the payload it builds on.
+  else ⟨data.beaconBlockRoot, .pending⟩
+
+/-- Nothing when a block is verified, or the error with code 503.
+
+A request for a block resolves to its pending node, as for the other requests. -/
+def checkVerified (optimistic : OptimisticStore preset fork) (root : Root) :
+    Except ErrorMessage Unit :=
+  checkNodeVerified optimistic ⟨root, .pending⟩
 
 /-! ## Attestation data -/
 
@@ -84,8 +102,12 @@ def produceAttestationData (config : Config) (store : Store preset fork)
   let head ← (store.getHead config).mapError fun _ => internalError "no head"
   let some block := store.blocks[head.root]? | .error (internalError "unknown head block")
   let some headState := store.blockStates[head.root]? | .error (internalError "unknown head state")
-  -- The source: code 503 when the block of the data is optimistic, here the head block.
-  checkVerified optimistic head.root
+  -- The source: code 503 when the block of the data is optimistic, here the head node.
+  --
+  -- EthLib's choice: an optimistic full head gives code 503 even for data of its own slot.
+  --
+  -- That data votes for its pending node, so the choice errs on the safe side.
+  checkNodeVerified optimistic head
   -- EthLib's choice: a slot after the current slot of the store gives code 400.
   let current ← (store.getCurrentSlot config).mapError fun _ => internalError "no current slot"
   if current < slot then
@@ -163,10 +185,11 @@ def aggregateAttestation (state : BeaconState preset fork)
     (constructAggregate state before first.data attestations).mapError constructionError
   -- From Electra: the single attestations.
   else do
-    -- As above: the first match, else code 404; then code 503 when its block is optimistic.
+    -- As above: the first match, else code 404; then code 503 when its node is optimistic.
     let some first := singles.find? (singleMatchesRequest · dataRoot slot committeeIndex)
       | .error (noMatch "attestation")
-    checkVerified optimistic first.data.beaconBlockRoot
+    -- From Gloas the check reads the node that the data votes for, full for an index of 1.
+    checkNodeVerified optimistic (attestationNode fork first.data)
     -- The aggregate of the single attestations with that data and of the requested committee.
     (constructAggregateOfSingleAttestations state first.data committeeIndex singles).mapError
       constructionError
@@ -194,9 +217,9 @@ def produceSyncCommitteeContribution (state : BeaconState preset fork) (altair :
     throw (constructionError (.indexOutOfRange subcommitteeIndex SYNC_COMMITTEE_SUBNET_COUNT))
   -- The source: code 503 when the block of the root is optimistic.
   checkVerified optimistic root
-  -- The messages of a slot come from the sync committee of the next slot.
-  let committee ← (syncCommitteeAtNextSlot state altair).mapError fun _ =>
-    internalError "no sync committee"
+  -- The sync committee that signs in the slot.
+  let some committee := syncCommitteeAtSlot state altair slot
+    | throw (internalError "no sync committee")
   -- Only the messages of validators with a key of the subcommittee count.
   --
   -- So the messages of the other subcommittees are left out.

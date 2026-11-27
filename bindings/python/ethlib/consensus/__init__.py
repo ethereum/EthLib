@@ -1956,11 +1956,16 @@ def is_assigned_to_sync_committee(
 
 
 def compute_subnets_for_sync_committee(
-    name: str, fork: str, state: bytes, validator_index: int, config: dict[str, Any] | None = None
+    name: str,
+    fork: str,
+    state: bytes,
+    slot: int,
+    validator_index: int,
+    config: dict[str, Any] | None = None,
 ) -> list[int]:
-    """The sync committee subnets of a validator for the next slot, in increasing order."""
+    """The sync committee subnets of a validator for its messages of a slot, in increasing order."""
     return _native.consensus_compute_subnets_for_sync_committee(
-        name, fork, state, config, validator_index
+        name, fork, state, config, slot, validator_index
     )
 
 
@@ -2170,10 +2175,10 @@ def latest_verified_ancestor(
     optimistic_roots: Sequence[bytes],
     root: bytes,
     payload_status: int = 2,
-) -> bytes:
-    """From Bellatrix, the root of the latest block of a chain that is not optimistic."""
-    # The status of the payload of the block in the node: 0 empty, 1 full and 2 pending.
-    # From Gloas the status matters: a pending node holds only the payloads its block builds on.
+) -> tuple[bytes, int]:
+    """From Bellatrix, the latest node at or above a node that is verified, or of genesis."""
+    # A node is a block root and the status of its payload: 0 empty, 1 full and 2 pending.
+    # Before Gloas the walk keeps the status; from Gloas it walks the nodes of the fork choice.
     return _native.consensus_latest_verified_ancestor(
         name, fork, list(blocks), list(optimistic_roots), root, payload_status
     )
@@ -2212,7 +2217,7 @@ def is_optimistic_node(
 ) -> bool:
     """From Bellatrix, whether a node is optimistic after the steps of a fork choice run."""
     # The status of the payload of the head: 0 empty, 1 full and 2 pending, read from Gloas.
-    # A pending head is optimistic when its own payload or the one it builds on is.
+    # A full head reads its own payload, and an empty or pending head the one it builds on.
     return _native.consensus_is_optimistic_node(
         name,
         fork,

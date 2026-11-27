@@ -1005,7 +1005,7 @@ theorem registryLifecycle_processRegistryUpdates
       exact ok ▸ .refl _
   rename_i notElectra
   simp only [bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
+  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
   -- Before Electra the registry is within its limit, far below `2^64`.
   have before : fork < .glamsterdam := Nat.lt_trans (Nat.lt_of_not_le notElectra) (by decide)
   have small : updated.validators.data.size < 2 ^ 64 :=

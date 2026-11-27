@@ -49,6 +49,23 @@ instance : One (Fp2 F) := ⟨one⟩
   -- (a0 + a1·i)(b0 + b1·i) = (a0·b0 − a1·b1) + (a0·b1 + a1·b0)·i
   ⟨a.c0 * b.c0 - a.c1 * b.c1, a.c0 * b.c1 + a.c1 * b.c0⟩
 
+/-- Squaring, by the complex method of [Devegili et al.][dev], §3, with `β = -1`.
+
+It takes two products of the base field, where the product of two elements takes four.
+
+[dev]: https://eprint.iacr.org/2006/471
+-/
+@[inline] def square (a : Fp2 F) : Fp2 F :=
+  -- §3: `v0 = a0 a1`.
+  let t := a.c0 * a.c1
+  -- §3: `c0 = (a0 + a1)(a0 + β a1) - v0 - β v0`, which is `(a0 + a1)(a0 - a1)` for `β = -1`.
+  --
+  -- §3: `c1 = 2 v0`.
+  ⟨(a.c0 + a.c1) * (a.c0 - a.c1), t + t⟩
+
+/-- The product by an element of the base field, with two products of the base field. -/
+@[inline] def mulFp (a : Fp2 F) (x : F) : Fp2 F := ⟨a.c0 * x, a.c1 * x⟩
+
 instance : Add (Fp2 F) := ⟨add⟩
 instance : Sub (Fp2 F) := ⟨sub⟩
 instance : Mul (Fp2 F) := ⟨mul⟩
@@ -84,6 +101,7 @@ instance : FieldOps (Fp2 F) where
   beq := beq
   isZero := isZero
   inverse := inverse
+  square := square
 
 /-- Square-and-multiply by a `Nat`. -/
 def powNat (base : Fp2 F) (e : Nat) : Fp2 F :=

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Blocks.Roots
+public import EthLib.Base.Proofs.ExceptT
 
 /-!
 # Proofs: the roots of typed lists
@@ -33,11 +34,27 @@ theorem transactionsRoot_eq_ok_iff {transactions : List Transaction} {root' : Ha
         indexedRoot values = .ok root' :=
   bind_indexedRoot_eq_ok_iff
 
+/-- The withdrawals root, with a plain hash. -/
+theorem withdrawalsRootM_eq (hash : ByteArray → Hash32) (withdrawals : List Withdrawal) :
+    (withdrawalsRootM (m := Id) hash withdrawals).run =
+      (withdrawals.mapM Codec.encode).mapError TrieError.rlp >>= fun values =>
+        (indexedRootM (m := Id) hash values).run := by
+  simp only [withdrawalsRootM, ExceptT.run, exceptT_id_bind, exceptT_id_monadLift, except_bind_eq]
+
+/-- A list of withdrawals has a root with a plain hash exactly when their encodings have it. -/
+theorem withdrawalsRootM_eq_ok_iff (hash : ByteArray → Hash32) {withdrawals : List Withdrawal}
+    {root' : Hash32} :
+    (withdrawalsRootM (m := Id) hash withdrawals).run = .ok root' ↔
+      ∃ values, withdrawals.mapM Codec.encode = .ok values ∧
+        (indexedRootM (m := Id) hash values).run = .ok root' := by
+  rw [withdrawalsRootM_eq]
+  cases withdrawals.mapM Codec.encode <;> simp [Except.mapError, bind, Except.bind]
+
 /-- A list of withdrawals has a root exactly when the list of their encodings has that root. -/
 theorem withdrawalsRoot_eq_ok_iff {withdrawals : List Withdrawal} {root' : Hash32} :
     withdrawalsRoot withdrawals = .ok root' ↔
       ∃ values, withdrawals.mapM Codec.encode = .ok values ∧ indexedRoot values = .ok root' :=
-  bind_indexedRoot_eq_ok_iff
+  withdrawalsRootM_eq_ok_iff Cryptography.Hash.Keccak.keccak256
 
 /-- A list of receipts has a root exactly when the list of their bytes has that root. -/
 theorem receiptsRoot_eq_ok_iff {fork : Fork} {receipts : List (UInt8 × Receipt fork)}

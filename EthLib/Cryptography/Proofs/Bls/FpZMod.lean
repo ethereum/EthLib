@@ -2,7 +2,6 @@ module
 
 public import EthLib.Cryptography.Bls.Fp
 public import EthLib.Cryptography.Proofs.Pratt
-public import EthLib.Cryptography.Proofs.Inverse
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.Tactic.NormNum.Prime
@@ -393,15 +392,9 @@ theorem powLimbs_sqrtExponent (a : Fp) :
 theorem toZMod_powNat (a : Fp) (n : Nat) : toZMod (a.powNat n) = toZMod a ^ n :=
   toZMod_pow a n
 
-/-- The Euclidean inverse is the inverse of `ZMod p`, and both send `0` to `0`. -/
-theorem toZMod_inverse (a : Fp) : toZMod a.inverse = (toZMod a)⁻¹ := by
-  have hx : (Fin.ofNat modulus a.val).val = a.val := by
-    rw [Fin.val_ofNat, Nat.mod_eq_of_lt (val_lt a)]
-  have h := Fin.inverse_val (Fin.ofNat modulus a.val)
-  rw [hx] at h
-  rw [show toZMod a = (a.val : ZMod modulus) by rw [val_eq, ZMod.natCast_zmod_val], ← h,
-    Fin.inverse, Fin.val_ofNat, ZMod.natCast_mod, hx]
-  exact toZMod_ofNat _
+/-- The inverse `a ^ (p - 2)` is the inverse of `ZMod p`, and both send `0` to `0`. -/
+theorem toZMod_inverse (a : Fp) : toZMod a.inverse = (toZMod a)⁻¹ :=
+  Montgomery.toZMod_inv a
 
 /-- The field structure of `ZMod p`, carried to `Fp` by the isomorphism.
 
@@ -432,9 +425,10 @@ theorem ofNat_eq_natCast (n : Nat) : Fp.ofNat n = (n : Fp) := rfl
 /-- The spec's `Fp.powNat` is Mathlib's monoid power. -/
 theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n := rfl
 
-/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
-theorem inverse_eq_inv (a : Fp) : a.inverse = a⁻¹ :=
-  toZMod.injective (by rw [toZMod_inverse]; exact (toZMod_inv a).symm)
+/-- The inverse of the specification is the field inverse, and both send `0` to `0`.
+
+The field instance inverts as the Montgomery form does, so the two agree by definition. -/
+theorem inverse_eq_inv (a : Fp) : a.inverse = a⁻¹ := rfl
 
 /-- The spec's division, a product by the inverse, is field division. -/
 theorem div_eq_mul_inv' (a b : Fp) : a / b = a * b⁻¹ := by
@@ -451,7 +445,8 @@ macro "push_toZMod" loc:(Lean.Parser.Tactic.location)? : tactic =>
 -- Smoke tests: the lemmas of the scoped field apply to the operations of the specification.
 example (a b : Fp) : a * b = b * a := mul_comm a b
 example (a b : Fp) : a - b = a + -b := sub_eq_add_neg a b
-example (a : Fp) (h : a ≠ 0) : a * a⁻¹ = 1 := mul_inv_cancel₀ h
+-- The lemma is elaborated first, so its instance is known before the unifier meets the inverse.
+example (a : Fp) (h : a ≠ 0) : a * a⁻¹ = 1 := (mul_inv_cancel₀ h :)
 
 /-- `Fp` maps into `ZMod p`, injectively and respecting each field operation. -/
 def embedding : FieldOps.Embedding Fp (ZMod modulus) where
@@ -464,6 +459,7 @@ def embedding : FieldOps.Embedding Fp (ZMod modulus) where
   map_zero := toZMod_zero
   map_one := toZMod_one
   map_inverse := toZMod_inverse
+  map_square a := toZMod_mul a a
   beq_iff _ _ := beq_iff.trans toZMod_inj.symm
   isZero_iff _ := isZero_iff.trans (by rw [← toZMod_zero, toZMod_inj])
 

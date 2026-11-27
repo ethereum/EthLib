@@ -635,6 +635,35 @@ theorem applyBody_eq_ok {config : ChainConfig} {env : BlockEnvironment fork}
       fun hYes => absurd hYes hShapella, fun _ => rfl, hRequests, hRewarded, rfl, hHash, rfl,
       rfl⟩
 
+/-- A body that runs with any overrides gives the output of its transactions with a new body state.
+
+The DAO transfer and the system calls run before the transactions. -/
+theorem applyBody_toBodyOutput {config : ChainConfig} {env : BlockEnvironment fork}
+    {block : Block fork Transaction} {start : BlockState} {overrides : BodyOverrides}
+    {output : BlockOutput fork} (h : applyBody config env block start overrides = .ok output) :
+    ∃ state body txs, daoTransfer config fork block.header.number start = .ok state ∧
+      startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
+      applyTransactions env body block.transactions overrides = .ok txs ∧
+      output.toBodyOutput = { txs with body := output.body } := by
+  unfold applyBody at h
+  dsimp only at h
+  obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
+  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
+  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
+  refine ⟨state, body, txs, hState, mapError_ok_iff.mp hBody, hTxs, ?_⟩
+  split at h
+  -- From Shapella the withdrawal state comes first; the rest is the same in both branches.
+  case' isTrue => obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  all_goals
+    -- The withdrawals join, then the requests, the rewards and the hash run.
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, -, h⟩ := bind_ok_iff.mp h
+    dsimp only at h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+    cases h
+    rfl
+
 /-- A body that runs takes the DAO transfer, then the system calls, then its transactions.
 
 Its receipts are those of the run of its transactions. -/
@@ -645,28 +674,8 @@ theorem applyBody_receipts {config : ChainConfig} {env : BlockEnvironment fork}
       startSystemCalls env block.header.parentHash (.init state) = .ok body ∧
       applyTransactions env body block.transactions = .ok txs ∧
       output.receipts = txs.receipts := by
-  unfold applyBody at h
-  dsimp only at h
-  obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
-  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
-  refine ⟨state, body, txs, hState, mapError_ok_iff.mp hBody, hTxs, ?_⟩
-  split at h
-  · obtain ⟨tx, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
-  · obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
+  obtain ⟨state, body, txs, hState, hBody, hTxs, hOutput⟩ := applyBody_toBodyOutput h
+  exact ⟨state, body, txs, hState, hBody, hTxs, (congrArg BodyOutput.receipts hOutput).trans rfl⟩
 
 /-- From Glamsterdam, a body gives the hash of the list that its builder built. -/
 theorem applyBody_accessListHash {config : ChainConfig} {env : BlockEnvironment fork}

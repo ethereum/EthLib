@@ -28,6 +28,27 @@ variable {preset : Preset} {fork : Fork}
 
 /-! ## Errors -/
 
+/-- After the check of a node, an answer refuses with a code in two cases only.
+
+It refuses an optimistic node with code 503.
+
+For a verified node, it refuses with a code exactly when the rest of the answer does. -/
+theorem checkNodeVerified_bind_error_iff {α : Type} {optimistic : OptimisticStore preset fork}
+    {node : ForkChoiceNode} {rest : Unit → Except ErrorMessage α} {code : Nat} :
+    (∃ error, (checkNodeVerified optimistic node >>= rest) = .error error ∧ error.code = code) ↔
+      isNodeExecutionOptimistic optimistic node = true ∧ code = 503 ∨
+        isNodeExecutionOptimistic optimistic node = false ∧
+          ∃ error, rest () = .error error ∧ error.code = code := by
+  unfold checkNodeVerified
+  cases isNodeExecutionOptimistic optimistic node <;>
+    simp [optimisticBlock, bind, Except.bind, eq_comm]
+
+/-- The check of a block reads whether the block is optimistic. -/
+theorem checkVerified_eq {optimistic : OptimisticStore preset fork} {root : Root} :
+    checkVerified optimistic root =
+      if isExecutionOptimistic optimistic root then .error (optimisticBlock root) else .ok () :=
+  rfl
+
 /-- After the check of a block, an answer refuses with a code in two cases only.
 
 It refuses an optimistic block with code 503.
@@ -38,10 +59,19 @@ theorem checkVerified_bind_error_iff {α : Type} {optimistic : OptimisticStore p
     (∃ error, (checkVerified optimistic root >>= rest) = .error error ∧ error.code = code) ↔
       isExecutionOptimistic optimistic root = true ∧ code = 503 ∨
         isExecutionOptimistic optimistic root = false ∧
-          ∃ error, rest () = .error error ∧ error.code = code := by
-  unfold checkVerified
-  cases isExecutionOptimistic optimistic root <;>
-    simp [optimisticBlock, bind, Except.bind, eq_comm]
+          ∃ error, rest () = .error error ∧ error.code = code :=
+  checkNodeVerified_bind_error_iff
+
+/-- From Gloas, data with an index of 1 reads the full node of its block. -/
+theorem attestationNode_of_gloas_of_index {data : AttestationData} (gloas : .glamsterdam ≤ fork)
+    (one : data.index = 1) : attestationNode fork data = ⟨data.beaconBlockRoot, .full⟩ := by
+  simp [attestationNode, gloas, one]
+
+/-- Before Gloas, the data of an attestation reads the pending node of its block. -/
+theorem attestationNode_of_lt_gloas {data : AttestationData} (before : fork < .glamsterdam) :
+    attestationNode fork data = ⟨data.beaconBlockRoot, .pending⟩ := by
+  have notGloas : ¬ .glamsterdam ≤ fork := fun after => Nat.not_le_of_lt before after
+  simp [attestationNode, notGloas]
 
 /-- A failed construction refuses with a code other than 500 only for an index out of range.
 
@@ -111,7 +141,7 @@ private theorem produceAttestationData_spec {config : Config} {store : Store pre
     (produced : produceAttestationData config store optimistic slot committeeIndex = .ok data) :
     ∃ (head : ForkChoiceNode) (blockSlot : Slot) (state : BeaconState preset fork),
       store.getHead config = .ok head ∧
-      isExecutionOptimistic optimistic head.root = false ∧
+      isNodeExecutionOptimistic optimistic head = false ∧
       getAttestationData state head.root blockSlot committeeIndex head.payloadStatus =
         .ok data ∧ state.slot = slot := by
   unfold produceAttestationData at produced
@@ -123,7 +153,7 @@ private theorem produceAttestationData_spec {config : Config} {store : Store pre
     cases hs : store.blockStates[head.root]? with
     | none => simp [hb, hs] at produced
     | some headState =>
-      simp only [hb, hs, bind_ok_iff, checkVerified] at produced
+      simp only [hb, hs, bind_ok_iff, checkNodeVerified] at produced
       obtain ⟨_, checked, current, _, produced⟩ := produced
       by_cases late : current < slot
       · simp [late, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at produced
@@ -131,7 +161,7 @@ private theorem produceAttestationData_spec {config : Config} {store : Store pre
       obtain ⟨state, atSlot, built⟩ := produced
       refine ⟨head, block.slot, state, mapError_ok_iff.mp got, ?_, mapError_ok_iff.mp built,
         stateAtSlot_slot atSlot⟩
-      cases h : isExecutionOptimistic optimistic head.root <;> simp [h] at checked ⊢
+      cases h : isNodeExecutionOptimistic optimistic head <;> simp [h] at checked ⊢
 
 /-- The attestation data names the head of the store, at the requested slot.
 
@@ -141,7 +171,7 @@ theorem produceAttestationData_head {config : Config} {store : Store preset fork
     {data : AttestationData}
     (produced : produceAttestationData config store optimistic slot committeeIndex = .ok data) :
     ∃ head, store.getHead config = .ok head ∧ data.beaconBlockRoot = head.root ∧
-      isExecutionOptimistic optimistic head.root = false ∧ data.slot = slot := by
+      isNodeExecutionOptimistic optimistic head = false ∧ data.slot = slot := by
   obtain ⟨head, blockSlot, state, got, verified, made, same⟩ := produceAttestationData_spec produced
   obtain ⟨-, -, slotOf, rootOf, -⟩ := getAttestationData_eq_ok_iff.mp made
   exact ⟨head, got, rootOf, verified, by rw [slotOf, same]⟩
@@ -252,7 +282,7 @@ theorem produceAttestationData_internal_iff {config : Config} {store : Store pre
           ∃ block headState, store.blocks[head.root]? = some block ∧
             store.blockStates[head.root]? = some headState ∧
             -- The next step reads the current slot of the store, and needs a verified head block.
-            isExecutionOptimistic optimistic head.root = false ∧
+            isNodeExecutionOptimistic optimistic head = false ∧
             ((∃ fault, store.getCurrentSlot config = .error fault) ∨
               -- The later steps also need a requested slot not after the current slot.
               ∃ current, store.getCurrentSlot config = .ok current ∧ slot ≤ current ∧
@@ -279,8 +309,8 @@ theorem produceAttestationData_internal_iff {config : Config} {store : Store pre
       | none => simp [internalError]
       | some headState =>
         simp only [reduceCtorEq, false_or, Option.some.injEq, exists_and_left, exists_eq_left']
-        unfold checkVerified
-        cases isExecutionOptimistic optimistic head.root with
+        unfold checkNodeVerified
+        cases isNodeExecutionOptimistic optimistic head with
         | true => simp [optimisticBlock]
         | false =>
           simp only [Bool.false_eq_true, ite_false, true_and]
@@ -349,7 +379,7 @@ private theorem aggregateAttestation_lt {state : BeaconState preset fork}
   | none => simp [found] at built
   | some first =>
     rw [found] at built
-    simp only [bind_ok_iff, checkVerified] at built
+    simp only [bind_ok_iff, checkVerified_eq] at built
     obtain ⟨_, checked, built⟩ := built
     refine ⟨first, rfl, ?_, mapError_ok_iff.mp built⟩
     cases h : isExecutionOptimistic optimistic first.data.beaconBlockRoot <;>
@@ -364,7 +394,7 @@ private theorem aggregateAttestation_ge {state : BeaconState preset fork}
     (built : aggregateAttestation state optimistic attestations singles dataRoot slot
       committeeIndex = .ok aggregate) :
     ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
-      isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+      isNodeExecutionOptimistic optimistic (attestationNode fork first.data) = false ∧
       constructAggregateOfSingleAttestations state first.data committeeIndex singles =
         .ok aggregate := by
   unfold aggregateAttestation at built
@@ -374,13 +404,13 @@ private theorem aggregateAttestation_ge {state : BeaconState preset fork}
   | none => simp [found] at built
   | some first =>
     rw [found] at built
-    simp only [bind_ok_iff, checkVerified] at built
+    simp only [bind_ok_iff, checkNodeVerified] at built
     obtain ⟨_, checked, built⟩ := built
     refine ⟨first, rfl, ?_, mapError_ok_iff.mp built⟩
-    cases h : isExecutionOptimistic optimistic first.data.beaconBlockRoot <;>
+    cases h : isNodeExecutionOptimistic optimistic (attestationNode fork first.data) <;>
       simp [h] at checked ⊢
 
-/-- An aggregate has the requested data root and slot, and its block is verified. -/
+/-- An aggregate has the requested data root and slot, and the node it votes for is verified. -/
 theorem aggregateAttestation_matching {state : BeaconState preset fork}
     {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
     {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
@@ -388,13 +418,13 @@ theorem aggregateAttestation_matching {state : BeaconState preset fork}
     (built : aggregateAttestation state optimistic attestations singles dataRoot slot
       committeeIndex = .ok aggregate) :
     hasRoot aggregate.data dataRoot = true ∧ aggregate.data.slot = slot ∧
-      isExecutionOptimistic optimistic aggregate.data.beaconBlockRoot = false := by
+      isNodeExecutionOptimistic optimistic (attestationNode fork aggregate.data) = false := by
   by_cases before : fork < .pectra
   · obtain ⟨first, found, verified, made⟩ := aggregateAttestation_lt before built
     have matched := List.find?_some found
     obtain ⟨_, _, _, _, _, sameData, _⟩ := constructAggregate_spec made
     simp only [matchesRequest, Bool.and_eq_true, beq_iff_eq] at matched
-    rw [sameData]
+    rw [sameData, attestationNode_of_lt_gloas (Nat.lt_trans before (by decide))]
     exact ⟨matched.1.1, matched.1.2, verified⟩
   · obtain ⟨first, found, verified, made⟩ :=
       aggregateAttestation_ge (Nat.not_lt.mp before) built
@@ -639,14 +669,16 @@ theorem aggregateAttestation_error_iff_of_electra {state : BeaconState preset fo
       code = 404 ∧ (¬∃ single ∈ singles, hasRoot single.data dataRoot = true ∧
         single.data.slot = slot ∧ single.committeeIndex = committeeIndex) ∨
       ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
-        -- Code 503 when the block of the first match is optimistic.
-        (isExecutionOptimistic optimistic first.data.beaconBlockRoot = true ∧ code = 503 ∨
-          -- When that block is verified, code 400 for a committee index out of range.
+        -- Code 503 when the node that the first match votes for is optimistic.
+        (isNodeExecutionOptimistic optimistic (attestationNode fork first.data) = true ∧
+            code = 503 ∨
+          -- When that node is verified, code 400 for a committee index out of range.
           --
           -- That index is not below the most committees a slot can have.
           --
           -- A lower index never gives code 400, even when the epoch has fewer committees.
-          isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧ code = 400 ∧
+          isNodeExecutionOptimistic optimistic (attestationNode fork first.data) = false ∧
+            code = 400 ∧
             preset.MAX_COMMITTEES_PER_SLOT ≤ committeeIndex) := by
   unfold aggregateAttestation
   have notBefore : ¬ fork < .pectra := fun h => Nat.not_le_of_lt h electra
@@ -659,7 +691,7 @@ theorem aggregateAttestation_error_iff_of_electra {state : BeaconState preset fo
   cases singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) with
   | none => simp [noMatch, @eq_comm _ 404 code]
   | some first =>
-    simp only [checkVerified_bind_error_iff, mapError_constructionError_iff notInternal,
+    simp only [checkNodeVerified_bind_error_iff, mapError_constructionError_iff notInternal,
       constructAggregateOfSingleAttestations_indexOutOfRange_iff]
     simp
 
@@ -694,7 +726,7 @@ theorem aggregateAttestation_internal_iff_of_lt_electra {state : BeaconState pre
 
 The construction joins the single attestations of the committee with the data of the first match.
 
-That refusal also needs a match whose block is verified. -/
+That refusal also needs a match whose node is verified. -/
 theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset fork}
     {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
     {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
@@ -702,7 +734,7 @@ theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset
     (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
       committeeIndex = .error error ∧ error.code = 500) ↔
       ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
-        isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        isNodeExecutionOptimistic optimistic (attestationNode fork first.data) = false ∧
         -- It also needs a committee index below the most committees a slot can have.
         committeeIndex < preset.MAX_COMMITTEES_PER_SLOT ∧
         ∃ fault, constructAggregateOfSingleAttestations state first.data committeeIndex singles =
@@ -729,7 +761,7 @@ theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset
       · rintro ⟨inside, fault, failed⟩
         exact ⟨fault, failed, fun index limit same => UInt64.not_le.mpr inside
           (outside.mp ⟨index, limit, same ▸ failed⟩)⟩
-    simp only [checkVerified_bind_error_iff, mapError_constructionError_internal_iff,
+    simp only [checkNodeVerified_bind_error_iff, mapError_constructionError_internal_iff,
       inRangeFault]
     simp
 
@@ -800,7 +832,7 @@ theorem aggregateAttestation_internal_iff_faults_of_electra {state : BeaconState
     (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
       committeeIndex = .error error ∧ error.code = 500) ↔
       ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
-        isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        isNodeExecutionOptimistic optimistic (attestationNode fork first.data) = false ∧
         -- It also needs a committee index below the most committees a slot can have.
         committeeIndex < preset.MAX_COMMITTEES_PER_SLOT ∧
         -- The committee of the requested slot and index has no value.
@@ -834,14 +866,14 @@ theorem aggregateAttestation_internal_iff_faults_of_electra {state : BeaconState
 
 The message must be of the requested slot and root, from a validator with the key of the seat.
 
-The seat is one of the sync committee of the next slot, and the root is verified. -/
+The seat is one of the sync committee that signs in the slot, and the root is verified. -/
 theorem produceSyncCommitteeContribution_bits {state : BeaconState preset fork}
     {altair : .altair ≤ fork} {optimistic : OptimisticStore preset fork}
     {messages : List SyncCommitteeMessage} {slot : Slot} {subcommitteeIndex : UInt64}
     {root : Root} {contribution : SyncCommitteeContribution preset}
     (produced : produceSyncCommitteeContribution state altair optimistic messages slot
       subcommitteeIndex root = .ok contribution) :
-    ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧
+    ∃ committee, syncCommitteeAtSlot state altair slot = some committee ∧
       ∃ inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT,
         isExecutionOptimistic optimistic root = false ∧
         contribution.slot = slot ∧ contribution.beaconBlockRoot = root ∧
@@ -859,9 +891,14 @@ theorem produceSyncCommitteeContribution_bits {state : BeaconState preset fork}
   by_cases inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT
   swap
   · simp [inRange, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at produced
-  simp only [inRange, ite_true, bind_ok_iff, checkVerified] at produced
-  obtain ⟨_, checked, committee, got, built⟩ := produced
-  refine ⟨committee, mapError_ok_iff.mp got, inRange, ?_⟩
+  simp only [inRange, ite_true, bind_ok_iff, checkVerified_eq] at produced
+  obtain ⟨_, checked, produced⟩ := produced
+  cases got : syncCommitteeAtSlot state altair state.slot with
+  | none => simp [got, throw, throwThe, MonadExceptOf.throw] at produced
+  | some committee =>
+  simp only [got] at produced
+  have built := produced
+  refine ⟨committee, rfl, inRange, ?_⟩
   cases built' : constructSyncCommitteeContribution state committee root subcommitteeIndex
     (messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
       subcommitteeIndex.toNat))) with
@@ -1010,9 +1047,9 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
             --
             -- A member is a known validator with a key of the subcommittee.
             --
-            -- That refusal also needs the sync committee of the next slot to have a value.
+            -- That refusal also needs the state to hold the sync committee of the slot.
             isExecutionOptimistic optimistic root = false ∧ code = 404 ∧
-              ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧
+              ∃ committee, syncCommitteeAtSlot state altair slot = some committee ∧
                 ¬∃ message ∈ messages, message.slot = slot ∧ message.beaconBlockRoot = root ∧
                   ∃ validator, getValidator state message.validatorIndex = .ok validator ∧
                     validator.pubkey ∈
@@ -1034,11 +1071,11 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
   swap
   · simp
   simp only [Bool.false_eq_true, false_and, false_or, true_and]
-  cases got : syncCommitteeAtNextSlot state altair with
-  | error fault =>
-    simp [Except.mapError, internalError, bind, Except.bind, notInternal, @eq_comm _ 500 code]
-  | ok committee =>
-    simp only [Except.mapError, bind, Except.bind, Except.ok.injEq, exists_eq_left']
+  cases got : syncCommitteeAtSlot state altair state.slot with
+  | none =>
+    simp [internalError, throw, throwThe, MonadExceptOf.throw, notInternal, @eq_comm _ 500 code]
+  | some committee =>
+    simp only [Option.some.injEq, exists_eq_left']
     obtain ⟨noMessages, sameFields, noIndex⟩ := constructSyncCommitteeContribution_noMessages_iff
       (state := state) (committee := committee) (blockRoot := root)
       (messages := messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
@@ -1090,12 +1127,12 @@ theorem produceSyncCommitteeContribution_internal_iff {state : BeaconState prese
       -- They also need an index that names a subnet.
       slot = state.slot ∧ subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT ∧
         isExecutionOptimistic optimistic root = false ∧
-        -- Code 500 when the sync committee of the next slot has no value.
+        -- Code 500 when the state holds no sync committee of the slot.
         --
         -- That happens only at the largest 64-bit slot, whose next slot overflows.
-        ((∃ fault, syncCommitteeAtNextSlot state altair = .error fault) ∨
+        (syncCommitteeAtSlot state altair slot = none ∨
           -- Else code 500 when the construction of the contribution fails on a signature.
-          ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧ ∃ fault,
+          ∃ committee, syncCommitteeAtSlot state altair slot = some committee ∧ ∃ fault,
             constructSyncCommitteeContribution state committee root subcommitteeIndex
               (messages.filter (inSubcommittee state
                 (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))) =
@@ -1114,11 +1151,10 @@ theorem produceSyncCommitteeContribution_internal_iff {state : BeaconState prese
   swap
   · simp
   simp only [Bool.false_eq_true, false_and, false_or, true_and]
-  cases got : syncCommitteeAtNextSlot state altair with
-  | error fault => simp [Except.mapError, internalError, bind, Except.bind]
-  | ok committee =>
-    simp only [Except.mapError, bind, Except.bind, Except.ok.injEq, exists_eq_left',
-      reduceCtorEq, exists_false, false_or]
+  cases got : syncCommitteeAtSlot state altair state.slot with
+  | none => simp [internalError, throw, throwThe, MonadExceptOf.throw]
+  | some committee =>
+    simp only [Option.some.injEq, exists_eq_left', reduceCtorEq, false_or]
     cases built : constructSyncCommitteeContribution state committee root subcommitteeIndex
         (messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
           subcommitteeIndex.toNat))) with

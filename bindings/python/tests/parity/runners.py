@@ -197,19 +197,24 @@ def _state_diff(got: dict, expected: dict) -> list:
     ]
 
 
-def _state_test(root: Path, case: Case) -> None:
-    from ethlib.execution import transactions
-
+def state_test_input(root: Path, case: Case) -> tuple[tuple[str, int, bytes, bytes, bytes], dict]:
+    """Read the transaction arguments and expected result of a state test."""
     fixture = _fixtures(root / case.path)[case.id]
     (post,) = fixture["post"][case.fork]
-    fork = FORK_OF_NETWORK[case.fork]
     args = (
-        fork,
+        FORK_OF_NETWORK[case.fork],
         int(fixture["config"]["chainid"], 16),
         _hex(post["txbytes"]),
         pre_state(fixture["pre"]),
         _environment(fixture["env"]),
     )
+    return args, post
+
+
+def _state_test(root: Path, case: Case) -> None:
+    from ethlib.execution import transactions
+
+    args, post = state_test_input(root, case)
     if "expectException" in post:
         with pytest.raises(ValueError) as error:
             transactions.run(*args)

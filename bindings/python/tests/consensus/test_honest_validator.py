@@ -88,9 +88,13 @@ def phase0_state(count: int, slot: int = 0) -> bytes:
     )
 
 
-def altair_state(count: int, slot: int = 0) -> bytes:
-    """A mainnet Altair state of `count` validators, the key in every seat of both committees."""
-    committee = PUBKEY * 513
+def altair_state(
+    count: int,
+    slot: int = 0,
+    current: bytes = PUBKEY * 513,
+    next_committee: bytes = PUBKEY * 513,
+) -> bytes:
+    """A mainnet Altair state of `count` validators, by default the key in every seat."""
     return _container(
         _ALTAIR_FIELDS,
         {
@@ -100,8 +104,8 @@ def altair_state(count: int, slot: int = 0) -> bytes:
             "previous_epoch_participation": bytes(count),
             "current_epoch_participation": bytes(count),
             "inactivity_scores": bytes(8 * count),
-            "current_sync_committee": committee,
-            "next_sync_committee": committee,
+            "current_sync_committee": current,
+            "next_sync_committee": next_committee,
         },
     )
 
@@ -286,12 +290,68 @@ def test_sync_committee_assignment():
 def test_sync_committee_subnets():
     # A seat in each of the four subcommittees gives all four subnets.
     state = altair_state(64, slot=70)
-    assert consensus.compute_subnets_for_sync_committee("mainnet", "altair", state, 5) == [
+    assert consensus.compute_subnets_for_sync_committee("mainnet", "altair", state, 70, 5) == [
         0,
         1,
         2,
         3,
     ]
+
+
+# A period lasts 256 epochs of 32 slots, and a subcommittee holds 128 of the 512 seats.
+PERIOD_SLOTS = 256 * SLOTS_PER_EPOCH
+OTHER_PUBKEY = G2ProofOfPossession.SkToPk(2)
+
+
+def _committee(subnet: int) -> bytes:
+    """A committee with the key of every validator in the seats of one subcommittee only."""
+    seats = [OTHER_PUBKEY] * 512
+    seats[128 * subnet : 128 * (subnet + 1)] = [PUBKEY] * 128
+    return b"".join(seats) + OTHER_PUBKEY
+
+
+@pytest.mark.parametrize(
+    ("state_slot", "slot", "subnet"),
+    [
+        # The slot after the message slot is in the period of the state: the current committee.
+        (PERIOD_SLOTS - 2, PERIOD_SLOTS - 2, 0),
+        # The head lags behind a missed last slot of the period, whose message the next one signs.
+        (PERIOD_SLOTS - 2, PERIOD_SLOTS - 1, 3),
+        # The last slot of the state's own period is signed by the next committee too.
+        (PERIOD_SLOTS - 1, PERIOD_SLOTS - 1, 3),
+        # A slot inside the next period is signed by the next committee.
+        (70, PERIOD_SLOTS + 5, 3),
+    ],
+)
+def test_sync_committee_subnets_of_message_slot(state_slot: int, slot: int, subnet: int):
+    state = altair_state(64, slot=state_slot, current=_committee(0), next_committee=_committee(3))
+    assert consensus.compute_subnets_for_sync_committee("mainnet", "altair", state, slot, 5) == [
+        subnet
+    ]
+
+
+@pytest.mark.parametrize(
+    ("state_slot", "slot", "message"),
+    [
+        # The slot after the message slot is two periods after the state.
+        (
+            70,
+            2 * PERIOD_SLOTS - 1,
+            "sync committee period 2 is neither the current period 0 nor the next",
+        ),
+        # The slot after the message slot is in a period before the state.
+        (
+            PERIOD_SLOTS + 10,
+            70,
+            "sync committee period 0 is neither the current period 1 nor the next",
+        ),
+    ],
+)
+def test_sync_committee_subnets_of_unknown_period(state_slot: int, slot: int, message: str):
+    state = altair_state(64, slot=state_slot)
+    with raises(consensus.ValidatorDutyError, message) as info:
+        consensus.compute_subnets_for_sync_committee("mainnet", "altair", state, slot, 5)
+    assert info.value.code == 6
 
 
 @pytest.mark.parametrize(
@@ -305,7 +365,7 @@ def test_no_sync_committee_duty_before_altair(duty: str):
 
 def test_no_sync_committee_before_altair():
     with raises(consensus.ValidatorDutyError, "no sync committee at phase0") as info:
-        consensus.compute_subnets_for_sync_committee("mainnet", "phase0", phase0_state(1), 0)
+        consensus.compute_subnets_for_sync_committee("mainnet", "phase0", phase0_state(1), 0, 0)
     assert info.value.code == 0
 
 

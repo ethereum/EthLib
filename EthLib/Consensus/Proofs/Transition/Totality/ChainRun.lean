@@ -280,13 +280,13 @@ theorem BlockBounded.mainnet {fork : Fork} (before : fork < .glamsterdam)
 
 /-- The step of a block on mainnet, which covers the mainnet limits at a budget of `2^57` Gwei.
 
-The supply rises by at most 25,000 ETH, and the effective balances by 16 times 2048 ETH.
+The supply rises by at most 15,000 ETH, and the effective balances by 16 times 32 ETH.
 
 The load rises by at most `2^15`, and the exit ceiling by at most `2^32` epochs.
 
 The slashed balances rise by at most `2^10` times 2048 ETH. -/
 def BlockStep.mainnet : BlockStep :=
-  { supply := 25 * 10 ^ 12, effective := 16 * 2048 * 10 ^ 9, load := 2 ^ 15, ceiling := 2 ^ 32,
+  { supply := 15 * 10 ^ 12, effective := 16 * 32 * 10 ^ 9, load := 2 ^ 15, ceiling := 2 ^ 32,
     slashed := 2 ^ 10 * 2048 * 10 ^ 9,
     -- In each epoch, the rewards for attestations raise the supply by at most 71,000 ETH.
     rewards := 71 * 10 ^ 12 }
@@ -302,9 +302,10 @@ theorem blockStep_covers_mainnet (startEpoch : Nat) :
     unfold Preset.largestPerIncrement
     rw [increment, root]
     decide
-  have sync : syncRewardBound Preset.mainnet (2 ^ 57) = 325530956800 := by
+  have sync : syncRewardBound Preset.mainnet (2 ^ 57) = 27115520 := by
+    have root : Nat.sqrt (2 ^ 57) = 379625062 := (Nat.eq_sqrt.mpr ⟨by decide, by decide⟩).symm
     unfold syncRewardBound
-    rw [increment, perIncrement]
+    rw [root]
     decide
   have weight : flagWeightBound Preset.mainnet (2 ^ 57) = 31500979682347728 := by
     unfold flagWeightBound
@@ -313,10 +314,11 @@ theorem blockStep_covers_mainnet (startEpoch : Nat) :
   have blocks : Preset.mainnet.chainBlocks 64 = 2080 := by decide
   have hysteresis : Preset.mainnet.HYSTERESIS_QUOTIENT.toNat = 4 ∧
       Preset.mainnet.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat = 1 := by decide
+  have cap : Preset.mainnet.MAX_EFFECTIVE_BALANCE.toNat = 32 * 10 ^ 9 := by decide
   refine ⟨?_, ?_, ?_, fun fork => ?_, ?_, ?_, ?_⟩
   · simp only [BlockLimits.mainnet, BlockStep.mainnet, largest]
     omega
-  · simp only [BlockLimits.mainnet, BlockStep.mainnet, largest]
+  · simp only [BlockLimits.mainnet, BlockStep.mainnet, cap]
     omega
   · simp only [BlockLimits.mainnet, BlockStep.mainnet]
     omega

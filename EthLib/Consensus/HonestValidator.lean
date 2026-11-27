@@ -73,7 +73,7 @@ inductive ValidatorDutyError where
   | arith (error : ArithError)
   /-- An assignment is asked for an epoch after the last one whose committees are known. -/
   | epochTooFar (epoch lastEpoch : Epoch)
-  /-- A sync committee assignment is asked for a period other than the current or the next. -/
+  /-- A sync committee is asked for a period other than the current or the next. -/
   | periodOutOfRange (period currentPeriod : UInt64)
   /-- A step of the fork choice fails. -/
   | forkChoice (error : ForkChoiceError)
@@ -290,13 +290,20 @@ def isAssignedToSyncCommittee (state : BeaconState preset fork) (altair : .altai
   else
     return (state.nextSyncCommittee altair).value.pubkeys.contains pubkey
 
-/-- From Altair: the sync committee subnets of a validator for the next slot.
+/-- From Altair: the sync committee subnets of a validator for its messages of a slot.
+
+It fails when the state does not hold the committee that signs in that slot.
 
 The subnets come once each, in increasing order. -/
 def computeSubnetsForSyncCommittee (state : BeaconState preset fork) (altair : .altair ≤ fork)
-    (validatorIndex : ValidatorIndex) : Except ValidatorDutyError (List UInt64) := do
-  -- The committee of the next slot: the current one, unless the next slot starts a new period.
-  let syncCommittee ← (syncCommitteeAtNextSlot state altair).mapError .arith
+    (slot : Slot) (validatorIndex : ValidatorIndex) : Except ValidatorDutyError (List UInt64) := do
+  -- The committee assigned to the slot `s + 1` signs in the slot `s`.
+  let nextSlot ← (addChecked slot 1).mapError .arith
+  -- Let `p` be the period of `s + 1`.
+  let period := computeSyncCommitteePeriodAtSlot preset nextSlot
+  -- EthLib's choice: the committee of `p`, which the state must hold, else an error.
+  let some syncCommittee := syncCommitteeOfPeriod state altair period
+    | throw (.periodOutOfRange period (computeSyncCommitteePeriod preset (getCurrentEpoch state)))
   -- The key of the validator.
   let targetPubkey := (← (getValidator state validatorIndex).mapError .accessor).pubkey
   -- Let `m = floor(SYNC_COMMITTEE_SIZE / SYNC_COMMITTEE_SUBNET_COUNT)`, the size of a subcommittee.
@@ -444,6 +451,8 @@ def getSignedProposerPreferences (config : Config) (store : Store preset fork)
 /-! ## Inclusion lists -/
 
 /-- From Heze: the signed inclusion list of a committee member for a slot, on the chain of a head.
+
+The member sends it during that slot, by the deadline of inclusion lists.
 
 The dependent root is the block that fixes the committees of the epoch of the slot, on that chain.
 

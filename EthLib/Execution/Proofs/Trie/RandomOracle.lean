@@ -355,6 +355,20 @@ theorem cached_of_extract {cache : HashOracle.QueryCache} {f : QueryImpl HashOra
   obtain ⟨_, hwitnesses, -⟩ := Option.bind_eq_some_iff.mp hrun
   exact cached_of_queryWitnesses hf hwitnesses
 
+/-- The proof search returns two witnesses of the two tries at the key. -/
+theorem mem_witnesses_of_findCollision (hash : ByteArray → Hash32) {first second : Trie}
+    {key : ByteArray} {pair : ByteArray × ByteArray}
+    (h : findCollision hash first second key = some pair) :
+    pair.1 ∈ witnesses first second key (getProof hash first key) (getProof hash second key) ∧
+      pair.2 ∈ witnesses first second key (getProof hash first key) (getProof hash second key) := by
+  unfold findCollision at h
+  split at h
+  · rename_i p q hp hq
+    obtain ⟨hmem₁, hmem₂⟩ := mem_of_findProofCollision hash p q h
+    exact ⟨by simp [witnesses, hp, hq, Except.toOption, hmem₁],
+      by simp [witnesses, hp, hq, Except.toOption, hmem₂]⟩
+  · cases h
+
 /-- The secured-trie search returns two witnesses of the two tries at the key. -/
 theorem mem_witnesses_of_findSecuredCollision (hash : ByteArray → Hash32)
     {entries₁ entries₂ : List (ByteArray × ByteArray)} {key : ByteArray}
@@ -367,13 +381,7 @@ theorem mem_witnesses_of_findSecuredCollision (hash : ByteArray → Hash32)
   unfold findSecuredCollision at h
   rcases Option.or_eq_some_iff.mp h with hcol | ⟨-, hkeys⟩
   · -- Two nodes of the proofs of the key.
-    unfold findCollision at hcol
-    split at hcol
-    · rename_i p q hp hq
-      obtain ⟨hmem₁, hmem₂⟩ := mem_of_findProofCollision hash p q hcol
-      exact ⟨by simp [witnesses, hp, hq, Except.toOption, hmem₁],
-        by simp [witnesses, hp, hq, Except.toOption, hmem₂]⟩
-    · cases hcol
+    exact mem_witnesses_of_findCollision hash hcol
   · -- Two of the key and the keys of both tries.
     split at hkeys
     · cases hkeys

@@ -56,7 +56,9 @@ def laneEquiv : State ≃ (Fin 5 → Fin 5 → UInt64) where
   left_inv := ofLanes_lane
   right_inv f := funext fun x => funext fun y => lane_ofLanes f x y
 
-instance : FinEnum State := FinEnum.ofEquiv _ laneEquiv
+/-- The states are finitely many, listed through their lanes. -/
+-- Noncomputable: compiled, it would list all `2^1600` states when a program starts.
+noncomputable instance : FinEnum State := FinEnum.ofEquiv _ laneEquiv
 
 /-- There are `2^1600` states. -/
 theorem card_state : FinEnum.card State = 2 ^ 1600 := by

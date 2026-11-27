@@ -89,6 +89,27 @@ theorem bufferRead_length (data : ByteArray) (start size : Nat) :
     (bufferRead data start size).length = size := by
   simp [bufferRead_eq]
 
+/-- A read of `a + b` bytes is the read of the first `a`, then the read of the next `b`. -/
+theorem bufferRead_add (data : ByteArray) (start a b : Nat) :
+    bufferRead data start (a + b) = bufferRead data start a ++ bufferRead data (start + a) b := by
+  simp only [bufferRead_eq, List.range_add, List.map_append, List.map_map]
+  congr 1
+  apply List.map_congr_left
+  intro i _
+  simp only [Function.comp, Nat.add_assoc]
+
+/-- A read inside a list of bytes is a slice of the list. -/
+theorem bufferRead_of_le {bytes : List UInt8} {start size : Nat}
+    (h : start + size ≤ bytes.length) :
+    bufferRead ⟨bytes.toArray⟩ start size = (bytes.drop start).take size := by
+  apply List.ext_getElem
+  · rw [bufferRead_length, List.length_take_of_le (by simp; omega)]
+  · intro j hj _
+    rw [bufferRead_length] at hj
+    have hlt : start + j < bytes.length := by omega
+    simp [bufferRead_eq, EthLib.Base.byteAtOrZero_eq_getD, Array.getD_eq_getD_getElem?,
+      List.getElem?_eq_getElem hlt]
+
 /-- A read of a whole buffer from its start gives its bytes. -/
 theorem bufferRead_zero_size (data : ByteArray) :
     bufferRead data 0 data.size = data.data.toList := by
@@ -160,6 +181,28 @@ theorem size_memoryReadBytes_le (memory : ByteArray) (start size : Nat) :
   · simp
   · simp only [ByteArray.size_extract]
     omega
+
+/-- A read within the bytes of a read of a buffer is the read of the buffer at that part. -/
+theorem memoryReadBytes_bufferRead (data : ByteArray) {start size a k : Nat}
+    (h : a + k ≤ size) :
+    memoryReadBytes ⟨(bufferRead data start size).toArray⟩ a k =
+      ⟨(bufferRead data (start + a) k).toArray⟩ := by
+  unfold memoryReadBytes
+  split
+  · rename_i hk
+    subst hk
+    simp [bufferRead_eq]
+  · apply ByteArray.ext
+    simp only [ByteArray.data_extract]
+    apply Array.toList_inj.mp
+    simp only [Array.toList_extract, List.extract_eq_take_drop, List.toList_toArray, bufferRead_eq]
+    apply List.ext_getElem
+    · simp
+      omega
+    · intro i h1 h2
+      simp at h1 h2 ⊢
+      congr 1
+      omega
 
 /-- A read of the range that a write covers gives the written bytes. -/
 theorem memoryReadBytes_memoryWrite {memory value : ByteArray} {start : Nat}

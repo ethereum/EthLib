@@ -37,6 +37,12 @@ class FieldOps (F : Type) extends Add F, Sub F, Mul F, Neg F where
 
   Each instance states its value at zero. -/
   inverse : F → F
+  /-- The square.
+
+  It equals the product of the element by itself.
+
+  An instance can give a faster form with the same value. -/
+  square : F → F := fun a => a * a
 
 /-- The operations of a base field: the field operations, numerals, powers, square roots and signs.
 

@@ -76,7 +76,7 @@ theorem mem_syncSubnetsOfPubkey {committee : SyncCommittee preset} {pubkey : BLS
   · rintro ⟨position, found, rfl⟩
     exact ⟨(pubkey, position), by simpa using found, rfl, rfl⟩
 
-/-! ## The committee of the next slot -/
+/-! ## The committee that signs in a slot -/
 
 /-- A slot and the slot after it share a period exactly when the slot after does not start one.
 
@@ -95,42 +95,63 @@ private theorem period_eq_iff {slot : Slot} (fits : slot.toNat + 1 < 2 ^ 64) :
   · rw [Nat.succ_div, Ne, ← Nat.dvd_iff_mod_eq_zero]
     split <;> simp_all
 
-/-- The sync committee of the slot after a state.
+/-- The period of the slot after a slot is one more when that slot starts a period. -/
+private theorem period_succ_of_starts {slot : Slot} (fits : slot.toNat + 1 < 2 ^ 64)
+    (starts : (slot.toNat + 1) %
+      (preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) = 0) :
+    (computeSyncCommitteePeriodAtSlot preset (slot + 1)).toNat =
+      (computeSyncCommitteePeriodAtSlot preset slot).toNat + 1 := by
+  simp only [computeSyncCommitteePeriodAtSlot, computeSyncCommitteePeriod, computeEpochAtSlot,
+    UInt64.toNat_div, Uint64.toNat_add_of_lt (a := slot) (b := 1) fits, UInt64.toNat_one,
+    Nat.div_div_eq_div_mul] at starts ⊢
+  generalize preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
+    length at starts ⊢
+  rcases Nat.eq_zero_or_pos length with zero | pos
+  · simp [zero] at starts
+  · simp [Nat.succ_div, Nat.dvd_of_mod_eq_zero starts]
 
-When that slot starts a period, it is the next committee of the state.
+/-- The sync committee that signs in a slot of the period of the state.
+
+It is the next committee of the state when the slot after it starts a period.
 
 Otherwise it is the current committee of the state.
 
-It fails with an overflow when the slot of the state is the largest 64-bit integer. -/
-theorem syncCommitteeAtNextSlot_eq :
-    syncCommitteeAtNextSlot state altair =
-      if state.slot.toNat + 1 < 2 ^ 64 then
+This covers a head state behind the slot, as after a missed slot at the end of a period.
+
+It is none when the slot is the largest 64-bit integer. -/
+theorem syncCommitteeAtSlot_of_period {slot : Slot}
+    (same : computeSyncCommitteePeriod preset (getCurrentEpoch state) =
+      computeSyncCommitteePeriodAtSlot preset slot) :
+    syncCommitteeAtSlot state altair slot =
+      if slot.toNat + 1 < 2 ^ 64 then
         -- A period is the slots of a fixed number of epochs.
-        .ok (if (state.slot.toNat + 1) %
+        some (if (slot.toNat + 1) %
             (preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) = 0
           then (state.nextSyncCommittee altair).value
           else (state.currentSyncCommittee altair).value)
-      else .error .overflow := by
-  unfold syncCommitteeAtNextSlot
+      else none := by
+  unfold syncCommitteeAtSlot syncCommitteeOfPeriod
   split
   · rename_i fits
-    rw [addChecked_of_lt fits]
-    simp only [getCurrentEpoch, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
-      beq_iff_eq, period_eq_iff fits]
-    split <;> simp_all
+    rw [addChecked_of_lt fits, same]
+    simp only [Except.toOption, bind, Option.bind]
+    have iff := period_eq_iff (preset := preset) fits
+    by_cases starts : (slot.toNat + 1) %
+        (preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) = 0
+    · have differ : computeSyncCommitteePeriodAtSlot preset (slot + 1) ≠
+          computeSyncCommitteePeriodAtSlot preset slot := fun h => iff.mp h.symm starts
+      simp only [differ, period_succ_of_starts fits starts, starts, ↓reduceIte]
+    · have same : computeSyncCommitteePeriodAtSlot preset (slot + 1) =
+          computeSyncCommitteePeriodAtSlot preset slot := (iff.mpr starts).symm
+      simp only [same, starts, ↓reduceIte]
   · rename_i over
-    simp [addChecked, over, bind, Except.bind]
+    simp [addChecked, over, Except.toOption]
 
-/-- The keys of a subcommittee whose index is below the number of subnets.
-
-They are its slice of the sync committee of the slot after the state.
-
-They fail exactly when that committee does. -/
-theorem getSyncSubcommitteePubkeys_eq {subcommitteeIndex : UInt64}
-    (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT) :
-    getSyncSubcommitteePubkeys state altair subcommitteeIndex =
-      (syncCommitteeAtNextSlot state altair).map
-        (syncSubcommitteePubkeys · subcommitteeIndex.toNat) := by
+/-- The keys of a subcommittee whose index is below the number of subnets are its slice. -/
+theorem getSyncSubcommitteePubkeys_eq {committee : SyncCommittee preset}
+    {subcommitteeIndex : UInt64} (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT) :
+    getSyncSubcommitteePubkeys committee subcommitteeIndex =
+      .ok (syncSubcommitteePubkeys committee subcommitteeIndex.toNat) := by
   have below : subcommitteeIndex.toNat < 4 := by
     simpa [SYNC_COMMITTEE_SUBNET_COUNT, Networking.Enr.SYNC_COMMITTEE_SUBNET_COUNT,
       UInt64.lt_iff_toNat_lt] using inRange
@@ -146,9 +167,8 @@ theorem getSyncSubcommitteePubkeys_eq {subcommitteeIndex : UInt64}
     have := Nat.mul_le_mul_right (syncSubcommitteeSize preset).toUInt64.toNat
       (show subcommitteeIndex.toNat ≤ 3 by omega)
     omega
-  unfold getSyncSubcommitteePubkeys
-  cases syncCommitteeAtNextSlot state altair <;>
-    simp [mulChecked_of_lt product, bind, Except.bind, pure, Except.pure, Except.map]
+  simp [getSyncSubcommitteePubkeys, mulChecked_of_lt product, bind, Except.bind, pure,
+    Except.pure]
 
 /-! ## Sync committee messages -/
 
@@ -188,6 +208,24 @@ theorem validateSyncCommitteeMessage_of_missing
   simp only [clock, head, missing, bind, Except.bind, pure, Except.pure,
     ignoreUnless_andThenM, ignoreUnless_andThen, apply_ite (Except.ok (ε := ForkChoiceError))]
 
+/-- A message whose committee the head state does not hold is ignored.
+
+That check comes after the checks of the seen keys, of the slot and of the validator index. -/
+theorem validateSyncCommitteeMessage_of_unknown_committee
+    (clock : store.isCurrentSlot config message.slot currentTimeMs = .ok current)
+    (head : store.headState config = .ok state)
+    (found : state.validators.data[message.validatorIndex.toNat]? = some validator)
+    (unknown : syncCommitteeAtSlot state altair message.slot = none) :
+    validateSyncCommitteeMessage config checks seen store altair message currentTimeMs subnetId =
+      .ok ((ignoreUnless
+          (!seen.syncMessageKeys.contains (message.slot, message.validatorIndex, subnetId))
+          "already seen message from this validator for this slot and subnet").andThen fun _ =>
+        (ignoreUnless current "message is not for the current slot").andThen fun _ =>
+        .ignore "sync committee of the message slot is not known") := by
+  unfold validateSyncCommitteeMessage
+  simp only [clock, head, found, unknown, bind, Except.bind, pure, Except.pure,
+    ignoreUnless_andThenM, ignoreUnless_andThen, apply_ite (Except.ok (ε := ForkChoiceError))]
+
 /-- The outcome of a sync committee message is its chain of checks, in order.
 
 This holds once the slot check, the head state, the committee and the signature are computed. -/
@@ -195,7 +233,7 @@ theorem validateSyncCommitteeMessage_eq
     (clock : store.isCurrentSlot config message.slot currentTimeMs = .ok current)
     (head : store.headState config = .ok state)
     (found : state.validators.data[message.validatorIndex.toNat]? = some validator)
-    (seats : syncCommitteeAtNextSlot state altair = .ok committee)
+    (seats : syncCommitteeAtSlot state altair message.slot = some committee)
     (signature : isValidSignatureAtSlot config checks state DOMAIN_SYNC_COMMITTEE message.slot
       message.beaconBlockRoot validator.pubkey message.signature = .ok valid) :
     validateSyncCommitteeMessage config checks seen store altair message currentTimeMs subnetId =
@@ -208,7 +246,6 @@ theorem validateSyncCommitteeMessage_eq
         rejectUnless valid "invalid sync committee message signature") := by
   unfold validateSyncCommitteeMessage
   simp only [clock, head, found, seats, signature, bind, Except.bind, pure, Except.pure,
-    Except.mapError,
     ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
     apply_ite (Except.ok (ε := ForkChoiceError))]
 
@@ -219,7 +256,7 @@ theorem validateSyncCommitteeMessage_ignored
     (clock : store.isCurrentSlot config message.slot currentTimeMs = .ok current)
     (head : store.headState config = .ok state)
     (found : state.validators.data[message.validatorIndex.toNat]? = some validator)
-    (seats : syncCommitteeAtNextSlot state altair = .ok committee)
+    (seats : syncCommitteeAtSlot state altair message.slot = some committee)
     (signature : isValidSignatureAtSlot config checks state DOMAIN_SYNC_COMMITTEE message.slot
       message.beaconBlockRoot validator.pubkey message.signature = .ok valid) :
     (∃ reason, validateSyncCommitteeMessage config checks seen store altair message currentTimeMs
@@ -236,7 +273,7 @@ theorem validateSyncCommitteeMessage_eq_accept
     (clock : store.isCurrentSlot config message.slot currentTimeMs = .ok current)
     (head : store.headState config = .ok state)
     (found : state.validators.data[message.validatorIndex.toNat]? = some validator)
-    (seats : syncCommitteeAtNextSlot state altair = .ok committee)
+    (seats : syncCommitteeAtSlot state altair message.slot = some committee)
     (signature : isValidSignatureAtSlot config checks state DOMAIN_SYNC_COMMITTEE message.slot
       message.beaconBlockRoot validator.pubkey message.signature = .ok valid) :
     validateSyncCommitteeMessage config checks seen store altair message currentTimeMs subnetId =
@@ -251,20 +288,20 @@ theorem validateSyncCommitteeMessage_eq_accept
 
 /-- A message accepted on a subnet comes from a validator with a seat in that subnet.
 
-The seat is in the sync committee of the slot after the head state. -/
+The seat is in the sync committee that signs in the slot of the message. -/
 theorem seat_of_validateSyncCommitteeMessage_accept
     (accepted : validateSyncCommitteeMessage config checks seen store altair message currentTimeMs
       subnetId = .ok .accept) :
     ∃ state validator committee, store.headState config = .ok state ∧
       state.validators.data[message.validatorIndex.toNat]? = some validator ∧
-      syncCommitteeAtNextSlot state altair = .ok committee ∧
+      syncCommitteeAtSlot state altair message.slot = some committee ∧
       subnetId ∈ syncSubnetsOfPubkey committee validator.pubkey := by
   unfold validateSyncCommitteeMessage at accepted
   simp only [ignoreUnless_andThenM, rejectUnless_andThenM, bind, Except.bind, pure,
     Except.pure] at accepted
   repeat' split at accepted
   all_goals first
-    | exact ⟨_, _, _, ‹_›, ‹_›, mapError_ok_iff.mp ‹_›,
+    | exact ⟨_, _, _, ‹_›, ‹_›, ‹_›,
         by simpa using ‹(syncSubnetsOfPubkey _ _).contains subnetId = true›⟩
     | simp at accepted
 
@@ -275,7 +312,8 @@ end Message
 section Contribution
 
 variable {signed : SignedContributionAndProof preset} {current selected signedByAggregator
-  aggregate : Bool} {aggregator : Validator} {pubkeys : List BLSPubkey}
+  aggregate : Bool} {aggregator : Validator} {committee : SyncCommittee preset}
+  {pubkeys : List BLSPubkey}
 
 /-- A contribution whose bits valid ones for its slot, root and subcommittee cover is ignored. -/
 theorem validateContributionAndProof_of_covered
@@ -303,7 +341,8 @@ theorem validateContributionAndProof_eq
       .ok current)
     (head : store.headState config = .ok state)
     (found : state.validators.data[signed.message.aggregatorIndex.toNat]? = some aggregator)
-    (members : getSyncSubcommitteePubkeys state altair
+    (seats : syncCommitteeAtSlot state altair signed.message.contribution.slot = some committee)
+    (members : getSyncSubcommitteePubkeys committee
       signed.message.contribution.subcommitteeIndex = .ok pubkeys)
     (selection : isValidSignatureAtSlot config checks state DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF
       signed.message.contribution.slot
@@ -338,7 +377,8 @@ theorem validateContributionAndProof_eq
         (rejectUnless signedByAggregator "invalid aggregator signature").andThen fun _ =>
         rejectUnless aggregate "invalid aggregate signature") := by
   unfold validateContributionAndProof
-  simp only [clock, head, found, members, selection, bySigner, participants, bind, Except.bind,
+  simp only [clock, head, found, seats, members, selection, bySigner, participants, bind,
+    Except.bind,
     pure, Except.pure, Except.mapError,
     ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
     apply_ite (Except.ok (ε := ForkChoiceError))]
@@ -355,7 +395,8 @@ theorem validateContributionAndProof_ignored
       .ok current)
     (head : store.headState config = .ok state)
     (found : state.validators.data[signed.message.aggregatorIndex.toNat]? = some aggregator)
-    (members : getSyncSubcommitteePubkeys state altair
+    (seats : syncCommitteeAtSlot state altair signed.message.contribution.slot = some committee)
+    (members : getSyncSubcommitteePubkeys committee
       signed.message.contribution.subcommitteeIndex = .ok pubkeys)
     (selection : isValidSignatureAtSlot config checks state DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF
       signed.message.contribution.slot
@@ -376,7 +417,8 @@ theorem validateContributionAndProof_ignored
         (signed.message.contribution.slot, signed.message.aggregatorIndex,
           signed.message.contribution.subcommitteeIndex) ∈ seen.syncContributionAggregatorKeys ∨
         current = false := by
-  rw [validateContributionAndProof_eq clock head found members selection bySigner participants]
+  rw [validateContributionAndProof_eq clock head found seats members selection
+    bySigner participants]
   simp only [Except.ok.injEq, ignoreUnless_andThen, rejectUnless_andThen]
   repeat' split
   all_goals simp_all
@@ -387,7 +429,8 @@ theorem validateContributionAndProof_eq_accept
       .ok current)
     (head : store.headState config = .ok state)
     (found : state.validators.data[signed.message.aggregatorIndex.toNat]? = some aggregator)
-    (members : getSyncSubcommitteePubkeys state altair
+    (seats : syncCommitteeAtSlot state altair signed.message.contribution.slot = some committee)
+    (members : getSyncSubcommitteePubkeys committee
       signed.message.contribution.subcommitteeIndex = .ok pubkeys)
     (selection : isValidSignatureAtSlot config checks state DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF
       signed.message.contribution.slot
@@ -413,7 +456,8 @@ theorem validateContributionAndProof_eq_accept
         isSyncCommitteeAggregator preset signed.message.selectionProof = true ∧
         aggregator.pubkey ∈ pubkeys ∧ selected = true ∧ signedByAggregator = true ∧
         aggregate = true := by
-  rw [validateContributionAndProof_eq clock head found members selection bySigner participants]
+  rw [validateContributionAndProof_eq clock head found seats members selection
+    bySigner participants]
   simp only [Except.ok.injEq, ignoreUnless_andThen, rejectUnless_andThen]
   repeat' split
   all_goals simp_all [UInt64.lt_iff_toNat_lt]

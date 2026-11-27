@@ -40,17 +40,17 @@ variable {fork : Fork}
 section Reads
 
 /-- A wipe of the storage of an account keeps every read. -/
-private theorem readsLe_destroyStorage (tx : TransactionState) (address : Address) :
+theorem readsLe_destroyStorage (tx : TransactionState) (address : Address) :
     tx.ReadsLe (tx.destroyStorage address) :=
   ⟨fun _ h => h, fun _ _ h => TransactionState.mem_storageReads_destroyStorage_of_mem h⟩
 
 /-- A deletion of an account keeps every read. -/
-private theorem readsLe_destroyAccount (tx : TransactionState) (address : Address) :
+theorem readsLe_destroyAccount (tx : TransactionState) (address : Address) :
     tx.ReadsLe (tx.destroyAccount address) :=
   ⟨fun _ h => h, fun _ _ h => TransactionState.mem_storageReads_destroyStorage_of_mem h⟩
 
 /-- A credit of ether keeps every read. -/
-private theorem readsLe_creditEther {tx tx' : TransactionState} {address : Address}
+theorem readsLe_creditEther {tx tx' : TransactionState} {address : Address}
     {amount : Nat} (h : creditEther fork tx address amount = .ok tx') : tx.ReadsLe tx' := by
   unfold creditEther at h
   split at h
@@ -90,7 +90,7 @@ private theorem reads_settleGas (hfork : .paris ≤ fork) {env : BlockEnvironmen
     (readsLe_creditEther hpay).accountReads _ (mem_creditEther hrefund), mem_creditEther hpay⟩
 
 /-- A deletion of the touched empty accounts keeps every read. -/
-private theorem readsLe_destroyTouchedEmptyAccounts (tx : TransactionState)
+theorem readsLe_destroyTouchedEmptyAccounts (tx : TransactionState)
     (touched : List Address) : tx.ReadsLe (tx.destroyTouchedEmptyAccounts fork touched) := by
   unfold TransactionState.destroyTouchedEmptyAccounts
   split
@@ -104,7 +104,7 @@ private theorem readsLe_destroyTouchedEmptyAccounts (tx : TransactionState)
       · exact ih tx
 
 /-- The deletions at the end of a transaction keep every read. -/
-private theorem readsLe_deleteAccounts {tx tx' : TransactionState} {output : CallOutput}
+theorem readsLe_deleteAccounts {tx tx' : TransactionState} {output : CallOutput}
     (h : deleteAccounts fork tx output = .ok tx') : tx.ReadsLe tx' := by
   have step : ∀ (init mid : TransactionState) (address : Address),
       (if fork ≥ .glamsterdam then init.clearAccountPreservingBalance fork address

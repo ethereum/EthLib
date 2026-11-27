@@ -316,18 +316,6 @@ private theorem length_encodePairs (pairs : List (Point × Point2)) :
     rw [List.map_cons, List.flatten_cons, List.length_append, ih, length_encodePair,
       List.length_cons, Nat.mul_succ, Nat.add_comm]
 
-/-- Slicing `size` bytes at `start` takes `size` bytes after dropping `start`. -/
-private theorem bufferRead_of_le {bytes : List UInt8} {start size : Nat}
-    (h : start + size ≤ bytes.length) :
-    bufferRead ⟨bytes.toArray⟩ start size = (bytes.drop start).take size := by
-  apply List.ext_getElem
-  · rw [bufferRead_length, List.length_take_of_le (by simp; omega)]
-  · intro j hj _
-    rw [bufferRead_length] at hj
-    have hlt : start + j < bytes.length := by omega
-    simp [bufferRead_eq, EthLib.Base.byteAtOrZero_eq_getD, Array.getD_eq_getD_getElem?,
-      List.getElem?_eq_getElem hlt]
-
 /-- Dropping `size * i` bytes from blocks of `size` bytes leaves the blocks from `i` on. -/
 private theorem drop_flatten_of_length {size : Nat} :
     ∀ (blocks : List (List UInt8)) (i : Nat),
@@ -354,17 +342,9 @@ private theorem take_drop_flatten {size : Nat} {blocks : List (List UInt8)}
 private theorem bufferRead_split (data : ByteArray) (start a b : Nat) :
     bufferRead data start a = (bufferRead data start (a + b)).take a ∧
       bufferRead data (start + a) b = (bufferRead data start (a + b)).drop a := by
-  constructor
-  · apply List.ext_getElem
-    · rw [bufferRead_length, List.length_take_of_le (by rw [bufferRead_length]; omega)]
-    · intro j hj _
-      rw [bufferRead_length] at hj
-      simp [bufferRead_eq]
-  · apply List.ext_getElem
-    · rw [bufferRead_length, List.length_drop, bufferRead_length, Nat.add_sub_cancel_left]
-    · intro j hj _
-      rw [bufferRead_length] at hj
-      simp [bufferRead_eq, Nat.add_assoc]
+  rw [bufferRead_add]
+  exact ⟨(List.take_left' (bufferRead_length _ _ _)).symm,
+    (List.drop_left' (bufferRead_length _ _ _)).symm⟩
 
 /-- The bytes of block `i` of the encoded pairs, read by ECPAIRING. -/
 private theorem bufferRead_encodePairs {pairs : List (Point × Point2)} {i : Nat}
