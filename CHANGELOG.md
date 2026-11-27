@@ -1219,6 +1219,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the rules of CALL with a value (`Execution/Proofs/Evm/Logic/Call.lean`, `Effect.lean`) hold at every fork from Berlin, with one counter of gas ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  `callStep_value`, `callStep_value_low`, `callValue`, `callValueLow` and `callValue_stored` lose the hypothesis `fork < .glamsterdam`.
+  They state the price of a new account as `callNewAccountGas`, which adds the state gas of EIP-8037 from Glamsterdam to `callNewAccountCost`.
+  `callValue_stored` asks for `callBaseCost fork true` in place of 2600.
+  Migration: drop the hypothesis, and rewrite with `callNewAccountGas_of_lt` and `callBaseCost_of_berlin` before Glamsterdam.
+
 - In Lean, `spec_add` of the withdrawal and consolidation request contracts (`Execution/Proofs/Blocks/SystemCall/WithdrawalRequests.lean`, `ConsolidationRequests.lean`) holds at every fork from Shapella, Glamsterdam included, on the one-counter meter ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   It loses the hypothesis `fork < .glamsterdam`, and its gas hypothesis becomes `200000 * storageGasScale fork + 100 * m ≤ gas`.
   `AddPathCode.spec_add` (`AddPath.lean`) loses `fork < .glamsterdam` as well, and scales its budget and its bound by `storageGasScale fork`.
