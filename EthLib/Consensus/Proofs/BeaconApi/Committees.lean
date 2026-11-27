@@ -335,25 +335,27 @@ theorem syncCommitteeOf_ok {state : BeaconState preset fork} {altair : .altair �
     committee = (state.currentSyncCommittee altair).value ∨
       committee = (state.nextSyncCommittee altair).value := by
   unfold syncCommitteeOf at committeeOk
-  dsimp only at committeeOk
   split at committeeOk
-  · exact .inl (Except.ok.inj committeeOk).symm
-  split at committeeOk
-  · exact .inr (Except.ok.inj committeeOk).symm
-  cases committeeOk
+  · rename_i found
+    cases committeeOk
+    unfold syncCommitteeOfPeriod at found
+    dsimp only at found
+    split at found
+    · exact .inl (Option.some.inj found).symm
+    split at found
+    · exact .inr (Option.some.inj found).symm
+    cases found
+  · cases committeeOk
 
 /-- Every error of the period lookup has code 400. -/
 theorem syncCommitteeOf_error_code {state : BeaconState preset fork} {altair : .altair ≤ fork}
     {epoch : Epoch} {error : ErrorMessage}
     (failed : syncCommitteeOf state altair epoch = .error error) : error.code = 400 := by
   unfold syncCommitteeOf at failed
-  dsimp only at failed
   split at failed
   · cases failed
-  split at failed
   · cases failed
-  cases failed
-  rfl
+    rfl
 
 /-- The answer for an epoch has a value when the period lookup selects a committee.
 

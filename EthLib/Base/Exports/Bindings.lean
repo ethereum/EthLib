@@ -1034,7 +1034,7 @@ def bindings : List Binding := [
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_compute_subnets_for_sync_committee",
     `EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport,
-    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, " ++
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int, " ++
       "validator_index: int) -> list[int]",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_get_ptc_assignment", `EthLib.Consensus.Exports.getPtcAssignmentExport,

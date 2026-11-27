@@ -1052,8 +1052,8 @@ def consensus_is_assigned_to_sync_committee(name: str, fork: str, state: bytes, 
     """From Altair: whether a validator serves on the sync committee of the period of an epoch."""
     ...
 
-def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]:
-    """From Altair: the sync committee subnets of a validator for the next slot, as a list."""
+def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int, validator_index: int) -> list[int]:
+    """From Altair: the sync committee subnets of a validator for its messages of a slot, as a list."""
     ...
 
 def consensus_get_ptc_assignment(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> int | None:

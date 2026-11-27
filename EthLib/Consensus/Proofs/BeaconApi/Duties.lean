@@ -737,7 +737,7 @@ private theorem syncCommitteeOf_exists {state : BeaconState preset fork}
       (computeSyncCommitteePeriod preset epoch).toNat ≤
         (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1) :
     ∃ committee, syncCommitteeOf state altair epoch = .ok committee := by
-  unfold syncCommitteeOf
+  unfold syncCommitteeOf syncCommitteeOfPeriod
   by_cases same : computeSyncCommitteePeriod preset epoch =
       computeSyncCommitteePeriod preset (getCurrentEpoch state)
   · simp [same]
@@ -800,7 +800,8 @@ theorem dutiesResponse_sync_outside {config : Config} {state : BeaconState prese
   have notNext : (computeSyncCommitteePeriod preset epoch).toNat ≠
       (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1 := by
     omega
-  simp [dutiesResponse, altair, syncDuties, syncCommitteeOf, other, notNext, bind, Except.bind]
+  simp [dutiesResponse, altair, syncDuties, syncCommitteeOf, syncCommitteeOfPeriod, other, notNext,
+    bind, Except.bind]
 
 /-- Each refusal of the sync answer is one of four errors.
 
@@ -833,11 +834,11 @@ theorem dutiesResponse_sync_error {config : Config} {state : BeaconState preset 
   · -- The committee of a period fails only outside the current and next periods.
     by_cases same : computeSyncCommitteePeriod preset epoch =
         computeSyncCommitteePeriod preset (getCurrentEpoch state)
-    · simp [syncCommitteeOf, same] at outside
+    · simp [syncCommitteeOf, syncCommitteeOfPeriod, same] at outside
     by_cases next : (computeSyncCommitteePeriod preset epoch).toNat =
         (computeSyncCommitteePeriod preset (getCurrentEpoch state)).toNat + 1
-    · simp [syncCommitteeOf, same, next] at outside
-    simp [syncCommitteeOf, same, next] at outside
+    · simp [syncCommitteeOf, syncCommitteeOfPeriod, same, next] at outside
+    simp [syncCommitteeOf, syncCommitteeOfPeriod, same, next] at outside
     exact .inr (.inr (.inl outside.symm))
   rcases bind_eq_error refused with unknown | ⟨_, -, refused⟩
   · -- Each duty fails only by an index that names no validator.

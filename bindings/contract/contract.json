@@ -8090,9 +8090,9 @@
    "docstring":
    "From Altair: whether a validator serves on the sync committee of the period of an epoch.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
-   "From Altair: the sync committee subnets of a validator for the next slot, as a list.",
+   "From Altair: the sync committee subnets of a validator for its messages of a slot, as a list.",
    "signature":
-   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]",
+   "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int, validator_index: int) -> list[int]",
    "operation": "EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport",
    "method": "consensus_compute_subnets_for_sync_committee",
    "errors":
@@ -8113,7 +8113,7 @@
       {"constructor": "pendingPayloadStatus", "code": 13}]}],
    "error_class": "ValidatorDutyError",
    "docstring":
-   "From Altair: the sync committee subnets of a validator for the next slot, as a list.\n\nThe preset, the configuration and the fork are named by `str`."},
+   "From Altair: the sync committee subnets of a validator for its messages of a slot, as a list.\n\nThe preset, the configuration and the fork are named by `str`."},
   {"summary":
    "From Gloas: the slot of an epoch whose payload timeliness committee holds a validator.",
    "signature":

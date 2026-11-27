@@ -194,9 +194,9 @@ def produceSyncCommitteeContribution (state : BeaconState preset fork) (altair :
     throw (constructionError (.indexOutOfRange subcommitteeIndex SYNC_COMMITTEE_SUBNET_COUNT))
   -- The source: code 503 when the block of the root is optimistic.
   checkVerified optimistic root
-  -- The messages of a slot come from the sync committee of the next slot.
-  let committee ← (syncCommitteeAtNextSlot state altair).mapError fun _ =>
-    internalError "no sync committee"
+  -- The sync committee that signs in the slot.
+  let some committee := syncCommitteeAtSlot state altair slot
+    | throw (internalError "no sync committee")
   -- Only the messages of validators with a key of the subcommittee count.
   --
   -- So the messages of the other subcommittees are left out.

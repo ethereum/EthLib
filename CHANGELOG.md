@@ -1181,6 +1181,18 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Altair, gossip and the validator choose the sync committee from the slot of a message, not from the slot after the state, as consensus-specs v1.7.0-beta.5 does ([#4625](https://github.com/ethereum/EthLib/issues/4625)).
+  The committee that signs in a slot `s` is the one of the period of `s + 1`.
+  A head state behind a missed last slot of a period now gives the next committee for that slot, which block processing expects.
+  `compute_subnets_for_sync_committee` of `ethlib.consensus` takes the slot of the message before the validator index, and raises `ValidatorDutyError` code 6 when the state holds no committee of that period.
+  A sync committee message or contribution whose committee the head state does not hold is ignored, where consensus-specs takes the next committee (reported as ethereum/consensus-specs#5870).
+  In Lean, `syncCommitteeAtNextSlot` is replaced by `syncCommitteeAtSlot` (`Consensus/Gossip/SyncCommittee.lean`), which takes the slot and returns an `Option`, and `syncCommitteeOfPeriod` gives the committee of a period.
+  `getSyncSubcommitteePubkeys` takes the committee, and `computeSubnetsForSyncCommittee` takes the slot.
+  `getSyncSubcommitteePubkeys_eq` states the slice of the committee, and the two honest contribution theorems of `Consensus/Proofs/HonestContributionSignatures.lean` take `seats` in place of `members`.
+  `BeaconApi.syncCommitteeOf` reads the committee of a period from `syncCommitteeOfPeriod`, with the same answers.
+  The theorems on the two gossip checks, the pool submission and the contribution answer take `syncCommitteeAtSlot state altair slot = some committee`.
+  `syncCommitteeAtNextSlot_eq` becomes `syncCommitteeAtSlot_of_period`, for any slot of the period of the state.
+  Migration: pass the slot of the message.
 - In Lean, `Execution.Blocks.indexedRoot` is the new `indexedRootM` with Keccak-256, in the identity monad, so that a random oracle experiment can run it.
   `findIndexedCollision`, `findIndexedCollision_valid`, `findIndexedCollision_self` and `valueAt_of_indexedEntries` take the hash as their first argument.
   `indexedRoot_binding`, the typed root bindings, `TransactionsBound` and `WithdrawalsBound` pass Keccak-256.

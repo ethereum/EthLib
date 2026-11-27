@@ -1956,11 +1956,16 @@ def is_assigned_to_sync_committee(
 
 
 def compute_subnets_for_sync_committee(
-    name: str, fork: str, state: bytes, validator_index: int, config: dict[str, Any] | None = None
+    name: str,
+    fork: str,
+    state: bytes,
+    slot: int,
+    validator_index: int,
+    config: dict[str, Any] | None = None,
 ) -> list[int]:
-    """The sync committee subnets of a validator for the next slot, in increasing order."""
+    """The sync committee subnets of a validator for its messages of a slot, in increasing order."""
     return _native.consensus_compute_subnets_for_sync_committee(
-        name, fork, state, config, validator_index
+        name, fork, state, config, slot, validator_index
     )
 
 
