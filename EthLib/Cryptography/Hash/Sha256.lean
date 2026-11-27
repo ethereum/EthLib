@@ -88,7 +88,10 @@ FIPS 180-4 §5.1.1 admits fewer than 2^64 bits, so the length of an admitted mes
 -/
 def lengthBytes (size : Nat) : ByteArray :=
   let bits : UInt64 := UInt64.ofNat size * 8
-  ⟨Array.ofFn fun i : Fin 8 => (bits >>> (56 - 8 * UInt64.ofNat i.val)).toUInt8⟩
+  -- Bits 63 to 56 first, then each next eight bits, down to bits 7 to 0.
+  (ByteArray.emptyWithCapacity 8).push (bits >>> 56).toUInt8 |>.push (bits >>> 48).toUInt8
+    |>.push (bits >>> 40).toUInt8 |>.push (bits >>> 32).toUInt8 |>.push (bits >>> 24).toUInt8
+    |>.push (bits >>> 16).toUInt8 |>.push (bits >>> 8).toUInt8 |>.push bits.toUInt8
 
 /--
 The padded message, FIPS 180-4 §5.1.1.
@@ -280,21 +283,27 @@ def chain
 /-- The size of a message digest, 256 bits, in bytes, FIPS 180-4 §1. -/
 def DIGEST_SIZE_BYTES : Nat := 32
 
+/-- The bytes `out`, then the word `w` as four bytes, most significant first, FIPS 180-4 §3.1. -/
+@[inline] def pushWord (out : ByteArray) (w : UInt32) : ByteArray :=
+  out.push (byteAt w 24) |>.push (byteAt w 16) |>.push (byteAt w 8) |>.push (byteAt w 0)
+
 /--
 The message digest `H_0^(N) ‖ H_1^(N) ‖ ... ‖ H_7^(N)`, FIPS 180-4 §6.2.2, as 32 bytes.
 
 Each word is written big-endian, as FIPS 180-4 §3.1 does.
 -/
 def digest (H : State) : ByteArray :=
-  -- One word per line, `H_0^(N)` to `H_7^(N)`, each most significant byte first.
-  ⟨#[byteAt H.a 24, byteAt H.a 16, byteAt H.a 8, byteAt H.a 0,
-    byteAt H.b 24, byteAt H.b 16, byteAt H.b 8, byteAt H.b 0,
-    byteAt H.c 24, byteAt H.c 16, byteAt H.c 8, byteAt H.c 0,
-    byteAt H.d 24, byteAt H.d 16, byteAt H.d 8, byteAt H.d 0,
-    byteAt H.e 24, byteAt H.e 16, byteAt H.e 8, byteAt H.e 0,
-    byteAt H.f 24, byteAt H.f 16, byteAt H.f 8, byteAt H.f 0,
-    byteAt H.g 24, byteAt H.g 16, byteAt H.g 8, byteAt H.g 0,
-    byteAt H.h 24, byteAt H.h 16, byteAt H.h 8, byteAt H.h 0]⟩
+  -- One byte array of 32 bytes, written in place.
+  let out := ByteArray.emptyWithCapacity DIGEST_SIZE_BYTES
+  -- `H_0^(N)` to `H_7^(N)`, in order.
+  let out := pushWord out H.a
+  let out := pushWord out H.b
+  let out := pushWord out H.c
+  let out := pushWord out H.d
+  let out := pushWord out H.e
+  let out := pushWord out H.f
+  let out := pushWord out H.g
+  pushWord out H.h
 
 /--
 SHA-256 of a message, FIPS 180-4 §6.2.
@@ -318,7 +327,7 @@ def hash (message : ByteArray) : ByteArray :=
 
 /-- SHA-256 of a message, as its 32 bytes. -/
 def hash32 (message : ByteArray) : Vector UInt8 32 :=
-  ⟨(hash message).data, by simp [hash, digest]⟩
+  ⟨(hash message).data, by simp [hash, digest, pushWord]; rfl⟩
 
 end EthLib.Cryptography.Hash.Sha256
 
