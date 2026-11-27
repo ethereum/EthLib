@@ -33,12 +33,14 @@ public import EthLib.Execution.Proofs.Blocks.Ommers
 public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Execution.Proofs.Blocks.Replay
 public import EthLib.Execution.Proofs.Blocks.Rewards
+public import EthLib.Execution.Proofs.Blocks.Reaches
 public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots
 public import EthLib.Execution.Proofs.Blocks.RootsRandomOracle
 public import EthLib.Execution.Proofs.Blocks.SimulatedLogs
 public import EthLib.Execution.Proofs.Blocks.StateAborts
 public import EthLib.Execution.Proofs.Blocks.StorageAt
+public import EthLib.Execution.Proofs.Blocks.StorageInvariant
 public import EthLib.Execution.Proofs.Blocks.Supply
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.SystemCall.AddCost
