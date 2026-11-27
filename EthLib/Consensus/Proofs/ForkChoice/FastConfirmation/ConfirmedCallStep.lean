@@ -857,9 +857,9 @@ private theorem replaces_facts {store : Store preset fork} {after : FastConfirma
     rw [slotEpochNat, eq]
     exact ⟨slot.toNat_lt, rfl⟩
 
-/-- Up-to-date honest heads hold a base-replacing call's observed justified block, barring evidence.
+/-- From restart to limit, up-to-date honest heads descend from the observed root, barring evidence.
 
-It takes a genesis run, an initialized epoch-start anchor, synchrony, admission and fitting delays.
+It takes a genesis run, a slot-matched epoch-start anchor, synchrony, admission and fitting delays.
 
 It assumes preset parameters, multi-slot epochs, positive slot duration and store/stake bounds.
 
