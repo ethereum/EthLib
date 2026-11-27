@@ -1,4 +1,4 @@
-"""Report opcode coverage and gas observations by fork for pinned execution state tests."""
+"""Report opcode coverage, gas costs and memory growth by fork for pinned execution state tests."""
 
 # Run from bindings/python/tests with the Python bindings built and ETHLIB_ARCHIVES set.
 #     python -m parity.opcode_coverage [group]
@@ -9,6 +9,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
+from typing import NamedTuple, TypedDict
 
 import archives
 from ethlib.cryptography.keccak import keccak256
@@ -24,7 +25,7 @@ from .catalogue import Case
 from .runners import state_test_input
 
 
-@dataclass
+@dataclass(slots=True, kw_only=True)
 class OpcodeStats:
     """Observations for one opcode byte at one fork."""
 
@@ -78,27 +79,53 @@ def select_cases(cases: Iterable[Case], group: PurePosixPath | None) -> dict[str
     return {fork: matches for fork, matches in by_fork.items() if matches}
 
 
+class StepFields(TypedDict):
+    """The fields of every EIP-3155 trace step that the report reads."""
+
+    op: int
+    depth: int
+    memSize: int
+    gasCost: str
+
+
+class TraceStep(StepFields, total=False):
+    """A trace step, with the error of a step that faults."""
+
+    error: str
+
+
+class FrameStep(NamedTuple):
+    """The last recorded step of an open call frame."""
+
+    depth: int
+    opcode: OpcodeStats
+    memory_size: int
+
+
 def record_trace(stats: defaultdict[int, OpcodeStats], trace: Sequence[str]) -> None:
     """Record the steps before the summary of one EIP-3155 transaction trace."""
-    previous_steps: list[tuple[int, OpcodeStats, int]] = []
+    open_frames: list[FrameStep] = []
     for line in trace[:-1]:
-        step = json.loads(line)
+        step: TraceStep = json.loads(line)
         depth = step["depth"]
         size = step["memSize"]
         # Discard finished child frames before a later call can reuse their depth.
-        while previous_steps and previous_steps[-1][0] > depth:
-            previous_steps.pop()
-        if previous_steps and previous_steps[-1][0] == depth:
-            _, previous, previous_size = previous_steps.pop()
+        while open_frames and open_frames[-1].depth > depth:
+            open_frames.pop()
+        if open_frames and open_frames[-1].depth == depth:
+            previous = open_frames.pop()
             # The snapshot is taken before the step (EIP-3155, Output).
-            previous.memory_growth.add(size - previous_size)
+            previous.opcode.memory_growth.add(size - previous.memory_size)
 
         opcode = stats[step["op"]]
         opcode.steps += 1
-        opcode.gas_costs.add(int(step["gasCost"], 16))
-        if step.get("error") == "out of gas":
+        error = step.get("error")
+        # A faulting step reports the gas its frame had left, not a price.
+        if error is None:
+            opcode.gas_costs.add(int(step["gasCost"], 16))
+        elif error == "out of gas":
             opcode.out_of_gas += 1
-        previous_steps.append((depth, opcode, size))
+        open_frames.append(FrameStep(depth, opcode, size))
 
 
 STATS_COLUMNS = "Steps | Gas costs | Memory growth (bytes) | Out of gas |"
@@ -107,7 +134,7 @@ STATS_ALIGNMENT = "---: | ---: | ---: | ---: |"
 
 def render_stats(opcode: OpcodeStats) -> str:
     """Render the observations for a byte that the trace reached."""
-    gas = ", ".join(map(str, sorted(opcode.gas_costs)))
+    gas = ", ".join(map(str, sorted(opcode.gas_costs))) or "-"
     growth = ", ".join(map(str, sorted(opcode.memory_growth))) or "-"
     return f"{opcode.steps} | {gas} | {growth} | {opcode.out_of_gas} |"
 
@@ -190,10 +217,12 @@ def main() -> None:
         source,
         "Each fork's opcode inventory comes from tracing all 256 one-byte programs.",
         "Counts include faulting steps and the implicit `STOP` at the end of code.",
-        "Gas costs are distinct trace `gasCost` values in decimal. "
-        "Calls can include gas passed to the callee, and faults can include all remaining gas. "
-        "At Amsterdam the trace measures execution gas.",
-        "Memory growth lists distinct changes in bytes at the next step in the same call frame. "
+        "Gas costs are the distinct `gasCost` values in decimal of the steps without a fault. "
+        "A call or creation that starts a message counts the gas it passes on. "
+        "From Amsterdam, `gasCost` counts only execution gas, "
+        "without the state gas that the reservoir pays (EIP-8037).",
+        "Memory growth lists the distinct changes of `memSize` from a step "
+        "to the next step of the same call frame, so the last step of a frame has none. "
         "A zero records an observed step with no growth. "
         "A dash means there was no such measurement for that byte.",
         "Out-of-gas counts use the `out of gas` error on a trace step.",

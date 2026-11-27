@@ -1,4 +1,4 @@
-"""The opcode report probes each fork's inventory and counts the steps of its state tests."""
+"""The opcode report probes each fork's inventory and the steps, gas and memory of its tests."""
 
 import json
 import sys
@@ -105,7 +105,7 @@ def _without(key: str) -> Edit:
 
 
 def test_record_trace_counts_distinct_costs_and_out_of_gas() -> None:
-    """Faulting steps count and a fault can supply a memory snapshot for the preceding step."""
+    """Faulting steps count without a gas cost, and give a memory snapshot to the step before."""
     stats: defaultdict[int, OpcodeStats] = defaultdict(OpcodeStats)
     record_trace(
         stats,
@@ -125,9 +125,9 @@ def test_record_trace_counts_distinct_costs_and_out_of_gas() -> None:
     record_trace(stats, fault)
     record_trace(stats, fault)
     assert stats == {
-        0x60: OpcodeStats(steps=4, gas_costs={2, 3}, memory_growth={0}, out_of_gas=2),
+        0x60: OpcodeStats(steps=4, gas_costs={3}, memory_growth={0}, out_of_gas=2),
         0x53: OpcodeStats(steps=1, gas_costs={6}, memory_growth={32}),
-        0xFE: OpcodeStats(steps=1, gas_costs={16}),
+        0xFE: OpcodeStats(steps=1),
     }
 
 
@@ -157,22 +157,31 @@ def test_memory_growth_in_nested_calls() -> None:
 
     stats: defaultdict[int, OpcodeStats] = defaultdict(OpcodeStats)
     record_trace(stats, trace)
-    # Account access costs 2600 and 100 (EIP-2929, Storage read changes).
-    # Memory costs 6 and 3 (Yellow Paper H.1), and the calls pass 256 and 7 gas.
-    assert stats[0xFA] == OpcodeStats(steps=2, gas_costs={2862, 110}, memory_growth={32, 64})
-    # MSTORE8 costs 3 plus 9 for memory, and two PUSH1s leave 1 of 7 gas (Yellow Paper H.1 and H.2).
-    assert stats[0x53] == OpcodeStats(steps=2, gas_costs={12, 1}, memory_growth={96}, out_of_gas=1)
-    # RETURN pays 3 for the fourth word of memory and ends its frame.
-    assert stats[0xF3] == OpcodeStats(steps=1, gas_costs={3})
+    assert stats == {
+        # The caller pushes 5 and 6 bytes, and each callee pushes 4 and 2.
+        0x60: OpcodeStats(steps=17, gas_costs={3}, memory_growth={0}),
+        0x61: OpcodeStats(steps=1, gas_costs={3}, memory_growth={0}),
+        # Account access costs 2600 and 100 (EIP-2929, Storage read changes).
+        # Memory costs 6 and 3 (Yellow Paper H.1), and the calls pass 256 and 7 gas.
+        0xFA: OpcodeStats(steps=2, gas_costs={2862, 110}, memory_growth={32, 64}),
+        0x50: OpcodeStats(steps=1, gas_costs={2}, memory_growth={0}),
+        # The STOP that ends the caller is the last step of its frame.
+        0x00: OpcodeStats(steps=1, gas_costs={0}),
+        # MSTORE8 costs 3 plus 9 for memory (Yellow Paper H.1).
+        # In the second call two PUSH1s leave 1 of the 7 gas, so MSTORE8 runs out of gas.
+        0x53: OpcodeStats(steps=2, gas_costs={12}, memory_growth={96}, out_of_gas=1),
+        # RETURN pays 3 for the fourth word of memory and ends its frame.
+        0xF3: OpcodeStats(steps=1, gas_costs={3}),
+    }
 
 
 def test_report_lists_missed_and_undefined_bytes_separately() -> None:
     """The report sorts each table by byte and gives each undefined byte its own count."""
     stats = {
         0x60: OpcodeStats(steps=3, gas_costs={3, 2}, memory_growth={0}, out_of_gas=1),
-        0xFE: OpcodeStats(steps=2, gas_costs={12}),
+        0xFE: OpcodeStats(steps=2),
         0x4B: OpcodeStats(steps=1, gas_costs={2}, memory_growth={0}),
-        0x0C: OpcodeStats(steps=5, gas_costs={6, 16}),
+        0x0C: OpcodeStats(steps=5),
     }
     report = render_fork("Amsterdam", OPCODES, stats, traced=3, rejected=1)
     assert report == "\n".join(
@@ -206,43 +215,84 @@ def test_report_lists_missed_and_undefined_bytes_separately() -> None:
             "",
             "| Byte | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
             "| --- | ---: | ---: | ---: | ---: |",
-            "| `0x0c` | 5 | 6, 16 | - | 0 |",
-            "| `0xfe` | 2 | 12 | - | 0 |",
+            "| `0x0c` | 5 | - | - | 0 |",
+            "| `0xfe` | 2 | - | - | 0 |",
         ]
     )
 
 
+def amsterdam_report(observed: list[str], missed: list[str], undefined: list[str]) -> str:
+    """The whole report of one fork of OPCODES with one traced case and one step per row."""
+    lines = [
+        "## Amsterdam",
+        "",
+        f"Observed **{len(observed)} of 5** defined opcodes.",
+        "",
+        "| Measure | Count |",
+        "| --- | ---: |",
+        "| Traced cases | 1 |",
+        "| Cases skipped for expected transaction errors | 0 |",
+        f"| Trace steps | {len(observed) + len(undefined)} |",
+        "",
+        f"### Observed opcodes ({len(observed)})",
+        "",
+        "| Byte | Opcode | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+        *observed,
+        "",
+        f"### Missed opcodes ({len(missed)})",
+        "",
+        "| Byte | Opcode |",
+        "| --- | --- |",
+        *missed,
+    ]
+    if undefined:
+        lines += [
+            "",
+            "### Undefined bytes reached",
+            "",
+            "| Byte | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+            "| --- | ---: | ---: | ---: | ---: |",
+            *undefined,
+        ]
+    return "\n".join(lines)
+
+
 def test_report_sorts_undefined_bytes_by_byte() -> None:
-    """The undefined table follows the byte, not the step count."""
+    """The undefined table follows the byte, not the order in which the trace reached it."""
     stats = {
-        0x60: OpcodeStats(steps=3, gas_costs={3}),
-        0x4B: OpcodeStats(steps=1, gas_costs={2}),
-        0xFE: OpcodeStats(steps=5, gas_costs={5}),
-        0x0C: OpcodeStats(steps=2, gas_costs={5}),
-        0x21: OpcodeStats(steps=1, gas_costs={5}),
+        0x60: OpcodeStats(steps=1, gas_costs={3}),
+        0xFE: OpcodeStats(steps=1),
+        0x0C: OpcodeStats(steps=1),
+        0x21: OpcodeStats(steps=1),
     }
     report = render_fork("Amsterdam", OPCODES, stats, traced=1, rejected=0)
-    assert report.endswith(
-        "\n".join(
-            [
-                "### Undefined bytes reached",
-                "",
-                "| Byte | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
-                "| --- | ---: | ---: | ---: | ---: |",
-                "| `0x0c` | 2 | 5 | - | 0 |",
-                "| `0x21` | 1 | 5 | - | 0 |",
-                "| `0xfe` | 5 | 5 | - | 0 |",
-            ]
-        )
+    assert report == amsterdam_report(
+        ["| `0x60` | `PUSH1` | 1 | 3 | - | 0 |"],
+        [
+            "| `0x00` | `STOP` |",
+            "| `0x01` | `ADD` |",
+            "| `0x4b` | `SLOTNUM` |",
+            "| `0x55` | `SSTORE` |",
+        ],
+        ["| `0x0c` | 1 | - | - | 0 |", "| `0x21` | 1 | - | - | 0 |", "| `0xfe` | 1 | - | - | 0 |"],
     )
 
 
 def test_report_without_undefined_bytes_ends_at_the_missed_table() -> None:
     """The undefined section appears only when the trace reaches an undefined byte."""
-    stats = {0x60: OpcodeStats(steps=2, gas_costs={3}, memory_growth={0})}
+    stats = {0x60: OpcodeStats(steps=1, gas_costs={3}, memory_growth={0})}
     report = render_fork("Amsterdam", OPCODES, stats, traced=1, rejected=0)
-    assert report.endswith("| `0x55` | `SSTORE` |")
-    assert "Undefined" not in report
+    assert report == amsterdam_report(
+        ["| `0x60` | `PUSH1` | 1 | 3 | 0 | 0 |"],
+        [
+            "| `0x00` | `STOP` |",
+            "| `0x01` | `ADD` |",
+            "| `0x4b` | `SLOTNUM` |",
+            "| `0x55` | `SSTORE` |",
+        ],
+        [],
+    )
 
 
 @pytest.mark.parametrize(
@@ -369,47 +419,159 @@ def test_select_cases_keeps_every_case_of_a_file() -> None:
     assert select_cases(cases, GROUP) == {"Osaka": [first, second]}
 
 
+LONDON = Case("execution-spec-tests", "", "London", "state_test", "ok", f"{GROUP}/test.json")
+PARIS = Case("execution-spec-tests", "", "Paris", "state_test", "fault", f"{GROUP}/test.json")
+REJECTED = Case("execution-spec-tests", "", "London", "state_test", "reject", f"{GROUP}/test.json")
+
+# A transfer with no data and no access list has intrinsic gas 21000 (Yellow Paper, Appendix G).
+# With two gas left, PUSH1 runs out of gas at Paris before the implicit STOP.
+LOW_GAS = _fee_market(CHAIN_ID, 21_002)
+
+# Small inventories keep the whole report short.
+INVENTORIES = {
+    "london": {0x00: "STOP", 0x60: "PUSH1", 0x01: "ADD"},
+    "paris": {0x00: "STOP", 0x60: "PUSH1", 0x44: "PREVRANDAO"},
+}
+
+
+def read_case(
+    root: Path, case: Case
+) -> tuple[tuple[str, int, bytes, bytes, bytes], dict[str, str]]:
+    """The transaction of each case, with a rejection for REJECTED."""
+    fork = FORK_OF_NETWORK[case.fork]
+    if case == REJECTED:
+        return (fork, CHAIN_ID, b"", STATE, ENV), {"expectException": "invalid transaction"}
+    return (fork, CHAIN_ID, TX if case == LONDON else LOW_GAS, STATE, ENV), {}
+
+
+@pytest.mark.parametrize("group", [GROUP, None])
 def test_main_reports_only_selected_transactions_by_fork(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    group: PurePosixPath | None,
 ) -> None:
     """The report isolates each fork and excludes rejected transactions and inventory probes."""
-    london = Case("execution-spec-tests", "", "London", "state_test", "ok", f"{GROUP}/test.json")
-    paris = Case("execution-spec-tests", "", "Paris", "state_test", "fault", f"{GROUP}/test.json")
-    rejected = Case(
-        "execution-spec-tests", "", "London", "state_test", "reject", f"{GROUP}/test.json"
-    )
-    # The transaction intrinsic cost is 21000 (Yellow Paper H.1).
-    # With two gas left, PUSH1 faults at Paris before the implicit STOP.
-    low_gas = _fee_market(CHAIN_ID, 21_002)
+    unpacked: list[tuple[str, list[Case]]] = []
 
-    def read_case(
+    def unpack_read(name: str, cases: list[Case]) -> Path:
+        unpacked.append((name, cases))
+        return tmp_path
+
+    def read_unpacked(
         root: Path, case: Case
     ) -> tuple[tuple[str, int, bytes, bytes, bytes], dict[str, str]]:
         assert root == tmp_path
-        fork = FORK_OF_NETWORK[case.fork]
-        if case == rejected:
-            return (fork, CHAIN_ID, b"", STATE, ENV), {"expectException": "invalid transaction"}
-        tx = TX if case == london else low_gas
-        return (fork, CHAIN_ID, tx, STATE, ENV), {}
+        return read_case(root, case)
 
-    monkeypatch.setattr(sys, "argv", ["opcode_coverage", str(GROUP)])
+    argv = ["opcode_coverage"] if group is None else ["opcode_coverage", str(group)]
+    monkeypatch.setattr(sys, "argv", argv)
     monkeypatch.setattr(opcode_coverage.archives, "CACHE", tmp_path)
     monkeypatch.setattr(
-        opcode_coverage.catalogue, "execution_cases", lambda: [paris, london, rejected]
+        opcode_coverage.catalogue, "execution_cases", lambda: [PARIS, LONDON, REJECTED]
     )
-    monkeypatch.setattr(opcode_coverage.harness, "unpack_read", lambda name, cases: tmp_path)
-    monkeypatch.setattr(opcode_coverage, "state_test_input", read_case)
+    monkeypatch.setattr(opcode_coverage.harness, "unpack_read", unpack_read)
+    monkeypatch.setattr(opcode_coverage, "state_test_input", read_unpacked)
+    monkeypatch.setattr(opcode_coverage, "opcode_inventory", INVENTORIES.__getitem__)
     opcode_coverage.main()
 
-    _, london_report, paris_report = capsys.readouterr().out.split("\n## ")
-    assert london_report.startswith("London\n")
-    assert "| Traced cases | 1 |" in london_report
-    assert "| Cases skipped for expected transaction errors | 1 |" in london_report
-    assert "| Trace steps | 2 |" in london_report
-    assert "| `0x00` | `STOP` | 1 | 0 | - | 0 |" in london_report
-    assert "| `0x60` | `PUSH1` | 1 | 3 | 0 | 0 |" in london_report
-    assert paris_report.startswith("Paris\n")
-    assert "| Traced cases | 1 |" in paris_report
-    assert "| Cases skipped for expected transaction errors | 0 |" in paris_report
-    assert "| Trace steps | 1 |" in paris_report
-    assert "| `0x60` | `PUSH1` | 1 | 2 | - | 1 |" in paris_report
+    execution = opcode_coverage.catalogue.EXECUTION
+    assert unpacked == [(execution, [LONDON, REJECTED, PARIS])]
+    source = (
+        f"State tests from `{execution}`."
+        if group is None
+        else f"Fixture group `{GROUP}` from `{execution}`."
+    )
+    header = [
+        "# EVM opcode coverage",
+        source,
+        "Each fork's opcode inventory comes from tracing all 256 one-byte programs.",
+        "Counts include faulting steps and the implicit `STOP` at the end of code.",
+        "Gas costs are the distinct `gasCost` values in decimal of the steps without a fault. "
+        "A call or creation that starts a message counts the gas it passes on. "
+        "From Amsterdam, `gasCost` counts only execution gas, "
+        "without the state gas that the reservoir pays (EIP-8037).",
+        "Memory growth lists the distinct changes of `memSize` from a step "
+        "to the next step of the same call frame, so the last step of a frame has none. "
+        "A zero records an observed step with no growth. "
+        "A dash means there was no such measurement for that byte.",
+        "Out-of-gas counts use the `out of gas` error on a trace step.",
+    ]
+    london = [
+        "## London",
+        "",
+        "Observed **2 of 3** defined opcodes.",
+        "",
+        "| Measure | Count |",
+        "| --- | ---: |",
+        "| Traced cases | 1 |",
+        "| Cases skipped for expected transaction errors | 1 |",
+        "| Trace steps | 2 |",
+        "",
+        "### Observed opcodes (2)",
+        "",
+        "| Byte | Opcode | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| `0x00` | `STOP` | 1 | 0 | - | 0 |",
+        "| `0x60` | `PUSH1` | 1 | 3 | 0 | 0 |",
+        "",
+        "### Missed opcodes (1)",
+        "",
+        "| Byte | Opcode |",
+        "| --- | --- |",
+        "| `0x01` | `ADD` |",
+    ]
+    paris = [
+        "## Paris",
+        "",
+        "Observed **1 of 3** defined opcodes.",
+        "",
+        "| Measure | Count |",
+        "| --- | ---: |",
+        "| Traced cases | 1 |",
+        "| Cases skipped for expected transaction errors | 0 |",
+        "| Trace steps | 1 |",
+        "",
+        "### Observed opcodes (1)",
+        "",
+        "| Byte | Opcode | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| `0x60` | `PUSH1` | 1 | - | - | 1 |",
+        "",
+        "### Missed opcodes (2)",
+        "",
+        "| Byte | Opcode |",
+        "| --- | --- |",
+        "| `0x00` | `STOP` |",
+        "| `0x44` | `PREVRANDAO` |",
+    ]
+    sections = [*header, "\n".join(london), "\n".join(paris)]
+    assert capsys.readouterr().out == "\n\n".join(sections) + "\n"
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        ([], "set ETHLIB_ARCHIVES to the fixture archive cache directory"),
+        ([], "no state tests"),
+        ([str(GROUP)], f"no state tests under {GROUP}"),
+    ],
+)
+def test_main_usage_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    argv: list[str],
+    message: str,
+) -> None:
+    """Without an archive cache or a selected state test, the report stops with a usage error."""
+    cache = None if message.startswith("set ") else tmp_path
+    monkeypatch.setattr(sys, "argv", ["opcode_coverage", *argv])
+    monkeypatch.setattr(opcode_coverage.archives, "CACHE", cache)
+    monkeypatch.setattr(opcode_coverage.catalogue, "execution_cases", lambda: [])
+    # The argparse usage error exits with status 2.
+    with raises(SystemExit, "2"):
+        opcode_coverage.main()
+    assert capsys.readouterr().err == (
+        f"usage: opcode_coverage [-h] [group]\nopcode_coverage: error: {message}\n"
+    )
