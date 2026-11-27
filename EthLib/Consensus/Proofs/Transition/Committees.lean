@@ -1063,7 +1063,7 @@ private theorem keeps_processEth1DataReset {hegota : fork < .hegota}
 
 private theorem keeps_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : Keeps state after := by
-  refine processEffectiveBalanceUpdates_invariant (Keeps state)
+  refine processEffectiveBalanceUpdates_induction (Keeps state)
     (fun _ _ _ before ok => before.trans ?_) (Keeps.refl state) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨validator, found, _, _, effectiveBalance, _, set⟩ := ok

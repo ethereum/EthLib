@@ -804,7 +804,7 @@ private theorem upgradeNext {pre : ForkedBeaconState preset}
 private theorem processEffectiveBalanceUpdates
     (ok : Consensus.processEffectiveBalanceUpdates state = .ok after) :
     Kept config state after := by
-  refine Consensus.processEffectiveBalanceUpdates_invariant (Kept config state)
+  refine Consensus.processEffectiveBalanceUpdates_induction (Kept config state)
     (fun _ _ _ before ok => before.trans ?_) (refl state) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, found, _, _, _, _, set⟩ := ok

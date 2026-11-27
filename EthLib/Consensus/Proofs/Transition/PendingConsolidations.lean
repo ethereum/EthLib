@@ -680,7 +680,7 @@ private theorem slash {i : ValidatorIndex} {whistleblower : Option ValidatorInde
 private theorem effectiveUpdates
     (ok : processEffectiveBalanceUpdates state = .ok after) : WithdrawalKept state after := by
   -- The withdrawals compose only along a registry lifecycle, so the pass carries both.
-  refine (processEffectiveBalanceUpdates_invariant
+  refine (processEffectiveBalanceUpdates_induction
     (fun s => WithdrawalKept state s ∧ RegistryLifecycle state s)
     (fun _ _ _ prior ok => ?_) ⟨of_data, RegistryLifecycle.refl _⟩ ok).1
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok

@@ -1153,12 +1153,12 @@ Not yet released.
 - `Internal.assigned_of_active` is moved to `Transition.ActiveKept` and says that an active validator has an assigned activation epoch.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
-- In Lean, `processEffectiveBalanceUpdates_invariant` (`Consensus/Proofs/Transition/EpochUpdates.lean`) is an invariant principle for the update of the effective balances.
+- In Lean, `processEffectiveBalanceUpdates_induction` (`Consensus/Proofs/Transition/EpochUpdates.lean`) is an induction principle for the update of the effective balances.
   A property holds after the update when it holds before and each successful update of one effective balance keeps it.
   The 25 proofs outside the two proof files of the update no longer read its body ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
   They use this theorem, or the theorems of the update on its frame, its balances and the validator at each index.
   A step added at the end of the update that changes no field then breaks only the proof files of the update.
-  A step that writes a field adds one obligation to each user of the invariant principle.
+  A step that writes a field adds one obligation to each user of the induction principle.
 
 ### Changes that break callers
 

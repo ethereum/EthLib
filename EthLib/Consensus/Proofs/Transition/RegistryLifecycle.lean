@@ -1028,7 +1028,7 @@ theorem registryLifecycle_processRegistryUpdates
 theorem registryLifecycle_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) :
     RegistryLifecycle state after := by
-  refine processEffectiveBalanceUpdates_invariant (RegistryLifecycle state)
+  refine processEffectiveBalanceUpdates_induction (RegistryLifecycle state)
     (fun _ _ _ before ok => before.trans ?_) (.refl state) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨validator, found, _, _, _, _, set⟩ := ok
@@ -1408,7 +1408,7 @@ private theorem processPendingDeposits {electra : .pectra ≤ fork}
 private theorem processEffectiveBalanceUpdates
     (computed : Consensus.processEffectiveBalanceUpdates state = .ok after) :
     UnassignedKept state after := by
-  refine Consensus.processEffectiveBalanceUpdates_invariant (UnassignedKept state)
+  refine Consensus.processEffectiveBalanceUpdates_induction (UnassignedKept state)
     (fun _ _ _ before ok => before.trans ?_) (refl state) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, found, _, _, _, _, set⟩ := ok

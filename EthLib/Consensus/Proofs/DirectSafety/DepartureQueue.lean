@@ -883,7 +883,7 @@ private theorem effectiveBalances_coverage {fork : Fork} {s t : BeaconState pres
     (ok : processEffectiveBalanceUpdates s = .ok t) :
     DepartureCoverage (config := config) s t [] := by
   -- The coverage composes only along a registry lifecycle, so the pass carries both.
-  refine (processEffectiveBalanceUpdates_invariant
+  refine (processEffectiveBalanceUpdates_induction
     (fun t => DepartureCoverage (config := config) s t [] ∧ RegistryLifecycle s t)
     (fun a index b before stepped => ?_) ⟨DepartureCoverage.of_data rfl, .refl s⟩ ok).1
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at stepped
@@ -3976,7 +3976,7 @@ private theorem CountCohortStep.blsChange {f : Fork} {s t : BeaconState preset f
 private theorem CountCohortStep.effective {f : Fork} {s t : BeaconState preset f}
     (bound : Nat) (ok : processEffectiveBalanceUpdates s = .ok t) :
     CountCohortStep config bound s t := by
-  refine processEffectiveBalanceUpdates_invariant (CountCohortStep config bound s)
+  refine processEffectiveBalanceUpdates_induction (CountCohortStep config bound s)
     (fun _ _ _ previous computed => previous.trans ?_) (.refl s bound) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, found, _, _, _, _, set⟩ := computed
