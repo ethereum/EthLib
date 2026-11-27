@@ -1209,15 +1209,33 @@ theorem spec_dequeue (hfork : .shapella ≤ fork)
       (fun _ h => h) post
     omega
 
-/-- The consolidation request address is not a precompile. -/
-theorem addedAt_CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS :
-    Precompiles.addedAt CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS.toU256.toNat = none := by
-  rw [CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, EthLib.Base.toNat_toU256_toAddressMasked]
-  rfl
-
 /-- The code is not a delegation indicator: it has 414 bytes, not 23. -/
 theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
   simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
+
+/-- The contract as a request contract, with the code, the constants and the record of EIP-7251. -/
+def CONSOLIDATION_REQUEST : RequestContract where
+  entry := CONSOLIDATION_REQUEST_CONTRACT
+  type := CONSOLIDATION_REQUEST_TYPE
+  code := CODE
+  maxPerBlock := MAX_CONSOLIDATION_REQUESTS_PER_BLOCK
+  targetPerBlock := TARGET_CONSOLIDATION_REQUESTS_PER_BLOCK
+  record := record
+  mem := by simp [SYSTEM_CONTRACTS]
+  kind_eq := rfl
+  size_ne_zero := by simp [CODE, NatCode.size_ofNat]
+  supported := supportedCode_CODE
+  delegatedAddress_eq_none := delegatedAddress_CODE
+
+/-- The consolidation request address is not a precompile. -/
+theorem addedAt_CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS :
+    Precompiles.addedAt CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS.toU256.toNat = none :=
+  CONSOLIDATION_REQUEST.addedAt
+
+/-- From Shapella, the code takes the requests with 200,000 gas, scaled from Glamsterdam. -/
+theorem dequeues (hfork : .shapella ≤ fork) : CONSOLIDATION_REQUEST.Dequeues fork 200000 :=
+  fun _ _ _ _ hcaller hstatic hacc hread hgas =>
+    spec_dequeue hfork hcaller hstatic hacc hread hgas
 
 /-- From Pectra, the system call of a block to the contract takes its requests.
 
@@ -1240,18 +1258,10 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
         (afterDequeue MAX_CONSOLIDATION_REQUESTS_PER_BLOCK TARGET_CONSOLIDATION_REQUESTS_PER_BLOCK
           (storageOf (.ofBlock block) CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS))
         (.ofBlock block) out.state :=
-  systemCall_of_writesStorage (P := Bounded) _ _ (Nat.le_trans (by decide) hfork)
-    (fun _ => supportedCode_CODE) hcode
-    (by simp [CODE, NatCode.size_ofNat]) addedAt_CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS
-    delegatedAddress_CODE hbounded
-    fun message _ _ hcaller htarget hstatic _ _ hgas hacc hread => by
-      rw [← htarget]
-      exact spec_dequeue (Nat.le_trans (by decide) hfork) hcaller hstatic (htarget ▸ hacc)
-        (htarget ▸ hread) (by
-          rw [hgas]
-          have := storageGasScale_le fork
-          simp only [SYSTEM_TRANSACTION_GAS]
-          omega)
+  CONSOLIDATION_REQUEST.systemCall_dequeue (Nat.le_trans (by decide) hfork)
+    (dequeues (Nat.le_trans (by decide) hfork))
+    (by have := storageGasScale_le fork; simp only [SYSTEM_TRANSACTION_GAS]; omega)
+    hcode hbounded
 
 /-- Empty consolidation code after the withdrawal request call rejects the request phase.
 
@@ -1266,11 +1276,10 @@ theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
       (WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) = .ok mid)
     (hcode : codeAt mid.1.block CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS = .ok .empty) :
     readRequests env body =
-      .error (.systemContractEmpty CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS) := by
-  have hread := readRequest_of_empty (env := env)
-    (contract := (CONSOLIDATION_REQUEST_TYPE, CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS)) hcode
-  rw [readRequests_of_pectra hfork, requestContracts_of_pectra hfork]
-  simp [List.foldlM_cons, hwithdrawal, hread, bind, Except.bind]
+      .error (.systemContractEmpty CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS) :=
+  readRequests_of_empty_after
+    (pre := [(WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)])
+    (requestContracts_of_pectra hfork) (by simp [List.foldlM_cons, hwithdrawal]) hcode
 
 /-- No block request result succeeds when consolidation code is empty after withdrawals.
 
