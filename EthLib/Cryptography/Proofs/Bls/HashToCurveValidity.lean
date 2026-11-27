@@ -163,7 +163,8 @@ private theorem expandMessageXmd_256_ok (msg dst : ByteArray) :
     ∃ uniform, expandMessageXmd msg dst 256 = .ok uniform := by
   unfold expandMessageXmd
   dsimp only [bind, Except.bind, pure, Except.pure]
-  rw [ite_eq_right (by decide), ite_eq_right (by decide)]
+  rw [ite_eq_right (by decide), ite_eq_right (by decide),
+    Std.Legacy.Range.forIn_eq_forIn_range']
   exact ⟨_, rfl⟩
 
 private theorem hashToFieldFp2_two_ok (msg dst : ByteArray) :
