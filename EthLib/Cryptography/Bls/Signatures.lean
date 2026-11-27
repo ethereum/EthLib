@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Bls.HashToCurve
 public import EthLib.Cryptography.Bls.Pairing
 public import EthLib.Cryptography.Bls.Errors
+public import EthLib.Cryptography.Bls.Types
 
 /-!
 # BLS signatures
@@ -23,29 +24,6 @@ The core verifications of §2.7 and §2.9 take the encodings as bytes, as the dr
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls
-
-/-- A public key: the 48 bytes of a compressed `G1` point.
-
-The type names the role of the bytes, not their validity as a key. -/
-structure BLSPubkey where
-  /-- The 48 bytes of the compressed point. -/
-  bytes : Vector UInt8 48
-deriving DecidableEq, Repr, Inhabited
-
-/-- Public keys compare as their bytes, so a search tree can hold them. -/
-instance : Ord BLSPubkey where
-  compare a b := compare a.bytes b.bytes
-
-/-- The order of public keys is transitive, as the order of their bytes. -/
-instance : Std.TransCmp (compare : BLSPubkey → BLSPubkey → Ordering) :=
-  inferInstanceAs (Std.TransCmp (compareOn BLSPubkey.bytes))
-
-/-- Two public keys that the order finds equal are equal. -/
-instance : Std.LawfulEqCmp (compare : BLSPubkey → BLSPubkey → Ordering) where
-  eq_of_compare {a b} same := by
-    cases a
-    cases b
-    exact congrArg BLSPubkey.mk (Std.LawfulEqCmp.eq_of_compare (cmp := compare) same)
 
 /-- A signature: a compressed point of `G2`, 96 bytes. -/
 abbrev BLSSignature := Vector UInt8 96
