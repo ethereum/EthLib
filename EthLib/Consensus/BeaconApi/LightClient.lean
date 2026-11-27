@@ -167,6 +167,21 @@ inductive ChunkError where
   | digestMismatch (digest expected : ForkDigest)
   deriving Repr
 
+/-- The stable code of an error, from 1 to 7, or the code of the error of bounds that it wraps.
+
+An error of bounds keeps the code of its error, from 301, so no code has two meanings.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def ChunkError.code : ChunkError → UInt32
+  | .forkNotSpecified _ => 1
+  | .forkMismatch .. => 2
+  | .ssz _ => 3
+  | .tooLong _ => 4
+  | .truncated .. => 5
+  | .shortChunk _ => 6
+  | .bounds error => error.code
+  | .digestMismatch .. => 7
+
 /-- The epoch of the attested header of an update, which selects the digest of its chunk. -/
 def contextEpoch (update : LightClientUpdate preset fork) : Epoch :=
   -- The source: the epoch of the slot of the beacon header of the attested header.

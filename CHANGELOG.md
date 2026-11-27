@@ -1153,6 +1153,15 @@ Not yet released.
   A part just below the whole of a short slot can otherwise round up to the whole slot.
   Migration: pass that bound, which `decide` proves for the mainnet and minimal configurations.
 
+- The light client exports `api_light_client_updates`, `api_light_client_updates_ssz` and `api_light_client_decode_updates` of `ethlib.consensus` give each chunk error a code, from `BeaconApi.ChunkError.code` (`Consensus/BeaconApi/LightClient.lean`).
+  Before, every chunk error had code 0.
+  `api_light_client_updates` raises codes 1 and 2, `api_light_client_updates_ssz` codes 1 to 4, and `api_light_client_decode_updates` codes 1, 3, 5, 6 and 7, and the contract lists them.
+  A digest that names no fork, which only `api_light_client_decode_updates` refuses, now has the code of the response chunk and gossip decoders.
+  The code is 305 when no epoch has the digest, and 306 when only the far future epoch has it.
+  The message of a refused digest is the message of `Consensus.BoundsError`, after `chunk rejected: `.
+  An update of the decoded body that does not serialize again now has code 0, like an input that does not decode.
+  Migration: read the code of the `ConsensusError` instead of its message.
+
 - The decoder of the SSZ updates answer of the light client takes the fork of each chunk's digest from `Consensus.forkOfScheduledDigest`.
   The response chunk and gossip decoders already do so.
   A digest that only the far future epoch has is refused with `BeaconApi.ChunkError.bounds (.unscheduledDigest d)`.

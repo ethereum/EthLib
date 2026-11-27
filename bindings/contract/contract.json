@@ -3745,7 +3745,17 @@
    "(name: str, config: dict[str, Any] | None, known: list[tuple[int, str, bytes]], start_period: int, count: int) -> list[dict[str, Any]]",
    "operation": "EthLib.Consensus.Exports.apiLightClientUpdatesExport",
    "method": "consensus_api_light_client_updates",
-   "errors": [],
+   "errors":
+   [{"type": "EthLib.Consensus.BeaconApi.ChunkError",
+     "codes":
+     [{"constructor": "forkNotSpecified", "code": 1},
+      {"constructor": "forkMismatch", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "tooLong", "code": 4},
+      {"constructor": "truncated", "code": 5},
+      {"constructor": "shortChunk", "code": 6},
+      {"constructor": "bounds", "code": null},
+      {"constructor": "digestMismatch", "code": 7}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The JSON response of the updates endpoint, as a `list` of `dict`.\n\nThe arguments are the name and replacements of values of the configuration.\n\nThen come the known updates, as periods, fork names and SSZ bytes.\n\nThe last arguments are the start period and the count."},
@@ -3754,7 +3764,17 @@
    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, known: list[tuple[int, str, bytes]], start_period: int, count: int) -> bytes",
    "operation": "EthLib.Consensus.Exports.apiLightClientUpdatesSszExport",
    "method": "consensus_api_light_client_updates_ssz",
-   "errors": [],
+   "errors":
+   [{"type": "EthLib.Consensus.BeaconApi.ChunkError",
+     "codes":
+     [{"constructor": "forkNotSpecified", "code": 1},
+      {"constructor": "forkMismatch", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "tooLong", "code": 4},
+      {"constructor": "truncated", "code": 5},
+      {"constructor": "shortChunk", "code": 6},
+      {"constructor": "bounds", "code": null},
+      {"constructor": "digestMismatch", "code": 7}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The SSZ body of the updates answer, as `bytes`.\n\nThe first arguments are the name, replacements of values of the configuration and a root.\n\nThat root is the root of the genesis validators.\n\nThen come the known updates, as periods, fork names and SSZ bytes.\n\nThe last arguments are the start period and the count."},
@@ -3764,7 +3784,24 @@
    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, data: bytes) -> list[tuple[str, bytes]]",
    "operation": "EthLib.Consensus.Exports.apiLightClientDecodeUpdatesExport",
    "method": "consensus_api_light_client_decode_updates",
-   "errors": [],
+   "errors":
+   [{"type": "EthLib.Consensus.BeaconApi.ChunkError",
+     "codes":
+     [{"constructor": "forkNotSpecified", "code": 1},
+      {"constructor": "forkMismatch", "code": 2},
+      {"constructor": "ssz", "code": 3},
+      {"constructor": "tooLong", "code": 4},
+      {"constructor": "truncated", "code": 5},
+      {"constructor": "shortChunk", "code": 6},
+      {"constructor": "bounds", "code": null},
+      {"constructor": "digestMismatch", "code": 7}]},
+    {"type": "EthLib.Consensus.BoundsError",
+     "codes":
+     [{"constructor": "notAtFork", "code": 301},
+      {"constructor": "noRequest", "code": 302},
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "unknownDigest", "code": 305},
+      {"constructor": "unscheduledDigest", "code": 306}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The fork name and the SSZ bytes of each update of the SSZ body of an updates answer.\n\nThe first arguments are the name, replacements of values of the configuration and a root.\n\nThat root is the root of the genesis validators, and the last argument is the body."},
