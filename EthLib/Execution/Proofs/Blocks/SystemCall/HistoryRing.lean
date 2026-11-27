@@ -15,7 +15,7 @@ So every state that a chain reaches from Cancun to BPO5 keeps it.
 
 The chain must start where the contract holds its code and its storage meets the ring.
 
-The proof assumes that no other code has the Keccak-256 hash of the code, which SOUNDNESS.md lists.
+No block on the way may output or set another code with the Keccak-256 hash of the code.
 
 Source: [EIP-2935][eip-2935-contract].
 
@@ -167,21 +167,19 @@ private theorem hoare_frame (hyp : CodeHyp CODE) (hfork : .shapella ≤ fork)
         exact Triple.consequence (get_revertG hfork (by simp) (by omega)) (fun _ h => h)
           fun _ h => .inl ⟨h.1, goodAt_of_readsAs good h.2.1⟩
 
-/-- What the proofs ask of the code of the contract holds when no other code has its hash. -/
-theorem codeHyp_CODE
-    (hashOnly : ∀ other, Cryptography.Hash.Keccak.keccak256 other =
-      Cryptography.Hash.Keccak.keccak256 CODE → other = CODE) : CodeHyp CODE where
-  -- The empty code has another hash, since it is not the code.
+/-- The code of the contract meets what the proofs ask of it. -/
+theorem codeHyp_CODE : CodeHyp CODE where
+  -- The two hashes differ in their first byte, which the kernel computes.
   hash_ne h := by
-    have := congrArg ByteArray.size (hashOnly .empty h.symm)
-    simp [CODE, NatCode.size_ofNat] at this
+    have := congrArg (fun v : Vector UInt8 32 => v[0]) h
+    revert this
+    decide +kernel
   noDelegate := delegatedAddress_CODE
-  hashOnly := hashOnly
 
 /-- From Shapella, each call that runs the code keeps the ring, with one counter of gas. -/
 theorem framesKeepCode (hyp : CodeHyp CODE) (hfork : .shapella ≤ fork) :
     FramesKeepCode HISTORY_STORAGE_ADDRESS CODE fork Nat Ring := by
-  intro bound runChild _ message state substate meter after within hat hcode _ _ good hrun herr
+  intro bound runChild _ message state substate meter after within hat hcode _ _ good _ hrun herr
   have start : At CODE message 0 [] .empty meter state substate .empty
       (startFrame message state substate meter) := by
     refine ⟨hcode, ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
@@ -194,18 +192,14 @@ theorem framesKeepCode (hyp : CodeHyp CODE) (hfork : .shapella ≤ fork) :
 
 The chain must start where the contract holds its code and its storage meets the ring.
 
-It assumes that no other code has the Keccak-256 hash of the code.
-
-That is an assumption on Keccak-256, which SOUNDNESS.md lists. -/
-theorem ring_of_reaches
-    (hashOnly : ∀ other, Cryptography.Hash.Keccak.keccak256 other =
-      Cryptography.Hash.Keccak.keccak256 CODE → other = CODE)
-    {chain chain' : BlockChain}
-    (reaches : chain.Reaches (fun fork => .dencun ≤ fork ∧ fork < .glamsterdam) chain')
+No block on the way may output or set a code that collides with the code of the contract. -/
+theorem ring_of_reaches {chain chain' : BlockChain}
+    (reaches : chain.Reaches (fun chain fork block => .dencun ≤ fork ∧ fork < .glamsterdam ∧
+      BlockApart CODE chain block) chain')
     (start : GoodAt HISTORY_STORAGE_ADDRESS CODE Ring (.ofBlock ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
     GoodAt HISTORY_STORAGE_ADDRESS CODE Ring (.ofBlock ⟨chain'.state, ∅, ∅, ∅, ∅⟩) :=
-  reaches.goodAt (codeHyp_CODE hashOnly) (fun _ h => h.1)
-    (fun _ h _ => framesKeepCode (codeHyp_CODE hashOnly) (Nat.le_trans (by decide) h.1))
-    (fun _ h hg => absurd h.2 (Nat.not_lt.mpr hg)) start
+  reaches.goodAt codeHyp_CODE (fun _ _ _ h => h.1)
+    (fun _ _ _ h _ => framesKeepCode codeHyp_CODE (Nat.le_trans (by decide) h.1))
+    (fun _ _ _ h hg => absurd h.2.1 (Nat.not_lt.mpr hg)) (fun _ _ _ h => h.2.2) start
 
 end EthLib.Execution.Blocks.HistoryStorage

@@ -419,6 +419,20 @@ theorem target_transactionMessage {env : BlockEnvironment fork}
   · cases h
     exact ⟨rfl, rfl⟩
 
+/-- The message of a transaction that creates runs the code of no account. -/
+theorem codeAddress_transactionMessage {env : BlockEnvironment fork}
+    {txEnv : TransactionEnvironment fork} {state : State.TransactionState}
+    {sender target : Address} {gas : Nat} {tx : Transaction} {message : Message fork}
+    (h : transactionMessage env txEnv state sender target gas tx = .ok message)
+    (create : message.target = none) : message.codeAddress = none := by
+  unfold transactionMessage at h
+  split at h
+  · obtain ⟨_, -, h⟩ := map_ok_iff.mp h
+    rw [← h] at create ⊢
+    simp_all
+  · cases h
+    rfl
+
 /-- With one counter of gas, a message given no reservoir hands back none. -/
 private theorem processMessageCall_reservoir {chainId : Nat} {message : Message fork}
     {state : State.TransactionState} {substate : Substate} {auths : List Authorization}

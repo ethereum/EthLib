@@ -72,11 +72,11 @@ Not yet released.
   `withdrawalsRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the withdrawals root for any plain hash, with `withdrawalsRootM_eq` and `withdrawalsRootM_eq_ok_iff` (`Execution/Proofs/Blocks/TypedRoots.lean`).
   `checkTransactionsM_eq`, `checkWithdrawalsM_eq`, `checkOmmersM_eq`, `checkBodyM_eq`, `checkOmmers_eq` and `checkBody_eq` (`Execution/Proofs/Network/Bodies.lean`) state the checks with a plain hash.
 
-- In Lean, `Execution/Proofs/Evm/Call/StorageInvariant.lean` proves, under an assumption on Keccak-256 (`CodeHyp.hashOnly`), that every message keeps an invariant of the storage of an account that holds a given code ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
+- In Lean, `Execution/Proofs/Evm/Call/StorageInvariant.lean` proves that every message keeps an invariant of the storage of an account that holds a given code, when no frame of its run outputs another code with the Keccak-256 hash of that code (`NoCollision`) ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
   Each frame that runs that code at the account must keep it: `FramesKeepCode`.
   `goodAt_processMessage` and `goodAt_processCreateMessage` then keep the invariant and the code over each call that returns a frame, and each creation at another address.
   A call must start where the account holds the code, and run it if it goes there (`RunsCode`).
-  `CodeHyp` states what the code must meet, including the assumption that no other code has its hash, which SOUNDNESS.md lists.
+  `CodeHyp` states what the code must meet: a hash other than that of the empty code, and no delegate.
   `step_eq_child_callsCode` (`Execution/Proofs/Evm/Call/StepRules.lean`) states that a call to another account runs the code that the state holds there, when that code names no delegate.
 
 - In Lean, `prEvent_indexedWins_le` (`Execution/Proofs/Blocks/RootsRandomOracle.lean`) bounds the probability of finding two different lists with one root, with the hash a random oracle, by `Q^2 / 2^256`.
@@ -1250,6 +1250,17 @@ Not yet released.
   A step that writes a field adds one obligation to each user of the induction principle.
 
 ### Changes that break callers
+
+- In Lean, the invariant of the storage of a contract no longer assumes that no other code has the Keccak-256 hash of its code ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
+  `CodeHyp.hashOnly` (`Execution/Proofs/Evm/Call/StorageInvariant.lean`), which is believed false for Keccak-256 as a function, is removed.
+  The theorems instead assume that the runs they cover output and set no code that collides with the code: `Collides` and `NoCollision` (`Execution/Proofs/Evm/Call/StorageInvariant.lean`), and `CallApart`, `TransactionApartWith` and `TransactionApart` (`Execution/Proofs/Transactions/StorageInvariant.lean`), `SystemCallApart`, `BodyApart` and `BlockApart` (`Execution/Proofs/Blocks/StorageInvariant.lean`).
+  `keepsAt_setCode`, `keepsAt_applyAuthorization`, `keepsAt_foldlM_applyAuthorization`, `prepareFirstFrame_keepsAt`, `goodAt_runFrame`, `goodAt_processMessage`, `goodAt_processCreateMessage` and the `goodAt` theorems over transactions, system calls, blocks and chains take these hypotheses.
+  `goodAt_processMessageCall` also asks that a creation run the code of no account, and `prepareFirstFrame_keepsAt` also says that a creation keeps the code address of its message.
+  `CallGood` and `CreateGood` also carry a certificate of the run, and `FramesKeepCode` gives the frame `NoCollision` and its runner `CallGood` and `CreateGood`.
+  `BlockChain.Reaches` (`Execution/Proofs/Blocks/Reaches.lean`) takes a predicate on the chain, the fork and the block of each step instead of a set of forks.
+  `HistoryStorage.codeHyp_CODE` takes no hypothesis: the kernel computes that the hash of the code is not that of the empty code.
+  `ReachesAll`, `CallAll` and `TransactionAll` generalize `RunsAway`, `CallAway` and `TransactionAway`, which now unfold to them.
+  `RunBurns.reaches_of_frame`, `RunBurns.reaches_of_call`, `step_eq_child_codeAddress`, `codeAddress_transactionMessage`, `CodeHyp.not_collides_empty`, `goodAt_depositCode`, `runBurns_of_childGood`, `FoldVisits` and `foldlM_ok_invariant_of_visits` are new.
 
 - In Lean, the invariant of the storage of a contract no longer needs the account to have a nonce ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
   `CreatesFresh` (`Execution/Proofs/Evm/Call/Fresh.lean`) now says that an account that a message creates had nonce 0 and no code at its start.

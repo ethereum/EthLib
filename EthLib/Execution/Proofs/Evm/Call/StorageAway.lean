@@ -29,7 +29,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter] {address : Address}
 
 A precompile runs no frame. -/
 def RunsAway (address : Address) (start : BurnStart fork Meter) : Prop :=
-  ∀ reached, RunReaches fork Meter start reached → reached.message.currentTarget ≠ address
+  ReachesAll (fun reached => reached.message.currentTarget ≠ address) start
 
 /-- A certified run that reaches no frame at `address` keeps or wipes its storage. -/
 theorem RunBurns.keptOrWiped {start : BurnStart fork Meter} {ended : Evm fork Meter}

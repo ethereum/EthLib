@@ -287,13 +287,20 @@ def FirstFrame.start (first : FirstFrame fork Meter) : BurnStart fork Meter :=
   | some _ => .call first.message first.state first.substate first.meter
   | none => .create first.message first.state first.substate first.meter
 
-/-- No frame of the message that a transaction or a system call runs is at `address`. -/
-def CallAway (address : Address) (chainId : Nat) (message : Message fork)
+/-- Every frame of the message that a transaction or a system call runs meets `P`. -/
+def CallAll (P : Evm fork Meter → Prop) (chainId : Nat) (message : Message fork)
     (state : State.TransactionState) (substate : Substate) (auths : List Authorization)
     (paid : Std.ExtTreeSet Address) : Prop :=
   ∀ first : FirstFrame fork Meter,
     prepareFirstFrame chainId message state substate auths paid = .ok first →
-      RunsAway address first.start
+      ReachesAll P first.start
+
+/-- No frame of the message that a transaction or a system call runs is at `address`. -/
+def CallAway (address : Address) (chainId : Nat) (message : Message fork)
+    (state : State.TransactionState) (substate : Substate) (auths : List Authorization)
+    (paid : Std.ExtTreeSet Address) : Prop :=
+  CallAll (Meter := Meter) (fun reached => reached.message.currentTarget ≠ address) chainId message
+    state substate auths paid
 
 /-- The message of a transaction keeps or wipes the storage of `address`, if no frame runs there.
 -/
@@ -337,15 +344,23 @@ theorem keptOrWiped_processMessageCall_of_away {chainId : Nat} {message : Messag
       exact hstart.trans (keptOrWiped_processMessage_of_away hrun hfar)
 
 variable (Meter) in
-/-- No frame of the message that a transaction runs, with the gas meter `Meter`, is at `address`. -/
-def TransactionAway (address : Address) (env : BlockEnvironment fork) (block : State.BlockState)
-    (included : Included) (tx : Transaction) (out : TransactionOutput) : Prop :=
+/-- Every frame of the message that a transaction runs, with the gas meter `Meter`, meets `P`. -/
+def TransactionAll (P : Evm fork Meter → Prop) (env : BlockEnvironment fork)
+    (block : State.BlockState) (included : Included) (tx : Transaction) (out : TransactionOutput) :
+    Prop :=
   ∀ {target bought message output settled},
     TransactionRun Meter env block included tx out target bought message output settled →
-    CallAway (Meter := Meter) address env.chainId.toNat
+    CallAll P env.chainId.toNat
       { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
       (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
       (paidWrites included.sender target tx)
+
+variable (Meter) in
+/-- No frame of the message that a transaction runs, with the gas meter `Meter`, is at `address`. -/
+def TransactionAway (address : Address) (env : BlockEnvironment fork) (block : State.BlockState)
+    (included : Included) (tx : Transaction) (out : TransactionOutput) : Prop :=
+  TransactionAll Meter (fun reached => reached.message.currentTarget ≠ address) env block included
+    tx out
 
 /-- A transaction keeps or wipes the storage of `address`, if no frame of its message runs there.
 

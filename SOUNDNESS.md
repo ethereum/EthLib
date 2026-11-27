@@ -2454,14 +2454,19 @@ The message must start where the account holds the code and its storage meets th
 `Execution/Proofs/Transactions/StorageInvariant.lean` and `Execution/Proofs/Blocks/StorageInvariant.lean` carry it to transactions, system calls, blocks and chains.
 The theorems over transactions, blocks and chains also need Cancun or later, where SELFDESTRUCT deletes only accounts that the transaction created.
 From Hegotá a transaction and a block fail, so those theorems hold there with nothing to show.
-Each of these theorems assumes that no other code has the Keccak-256 hash of that code (`CodeHyp.hashOnly`).
 The state keeps each code under its hash.
-So a creation that deploys a second preimage would change the code that a later call to the account runs.
-`CodeHyp.hashOnly` is not provable for any code, and is believed false for Keccak-256 as a function.
-Until a random-oracle bound on Keccak-256, like the bounds for the trie and state roots, replaces it, these theorems hold only under the assumption, and say nothing formally if it is false.
-That includes the theorem over chains, `BlockChain.Reaches.goodAt`.
+So a code with the Keccak-256 hash of that code, stored by the run, would change the code that a later call to the account runs.
+Each theorem assumes that the runs it covers output and set no such code.
+A code that a run stores is the output of a frame of a creation, or the delegation code of an authorization.
+`NoCollision` says that no frame that the run reaches outputs a code other than that code with its hash (`Collides`).
+`CallApart`, `TransactionApart`, `SystemCallApart`, `BodyApart` and `BlockApart` add that no authorization sets such a code, for a transaction, a system call, a block and a block on a chain.
+For a block that passes its transition, each of these hypotheses names the runs that it performs, from the states where it performs them, and the authorizations that its transactions list.
+So it fails only if a frame of one of those runs outputs, or an authorization sets, a code other than that code with its hash: an explicit collision.
+When the code is fixed before the chain, as the code of EIP-2935 is, falsifying the hypothesis means finding a second preimage of its hash.
+No theorem bounds the probability of that; the theorems turn each failure into an explicit pair.
+The theorem over chains, `BlockChain.Reaches.goodAt`, takes it for each block through the predicate of `BlockChain.Reaches`.
 `HistoryStorage.ring_of_reaches` (`Execution/Proofs/Blocks/SystemCall/HistoryRing.lean`) applies it to the history storage contract of EIP-2935: from Cancun to BPO5, every slot at or above 8191 reads 0 in every state that a chain reaches from a state where the contract holds its code and that property.
-It takes the assumption on the hash of that code as a named hypothesis, and covers no fork from Glamsterdam, whose gas meter needs its own proof about the code.
+It covers no fork from Glamsterdam, whose gas meter needs its own proof about the code.
 
 ### SHA-256 precompile
 

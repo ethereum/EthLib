@@ -499,6 +499,29 @@ theorem foldlM_ok_invariant_of_mem {g : β → α → Except ε β} (P : β → 
     exact foldlM_ok_invariant_of_mem P (fun b y b' mem => step b y b' (List.mem_cons_of_mem x mem))
       (step b x middle List.mem_cons_self holds first) rest
 
+/-- A fold of `g` from `init` over `xs` reaches `before` just before the element `x` of `xs`. -/
+def FoldVisits (g : β → α → Except ε β) (init : β) (xs : List α) (before : β) (x : α) : Prop :=
+  ∃ pre post, xs = pre ++ x :: post ∧ pre.foldlM g init = .ok before
+
+/-- A fold keeps a property when each step from a value that the fold reaches keeps it. -/
+theorem foldlM_ok_invariant_of_visits {g : β → α → Except ε β} (P : β → Prop) :
+    ∀ {xs : List α} {init b' : β},
+      (∀ b x b', FoldVisits g init xs b x → P b → g b x = .ok b' → P b') →
+      P init → xs.foldlM g init = .ok b' → P b'
+  | [], _, _, _, holds, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ holds
+  | x :: rest, init, _, step, holds, computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, tail⟩ := computed
+    refine foldlM_ok_invariant_of_visits P (fun b y b' visits => step b y b' ?_)
+      (step init x middle ⟨[], rest, rfl, rfl⟩ holds first) tail
+    -- A value that the rest reaches, the whole fold reaches after the first step.
+    obtain ⟨pre, post, hxs, hpre⟩ := visits
+    refine ⟨x :: pre, post, by rw [hxs]; rfl, ?_⟩
+    rw [List.foldlM_cons, first]
+    exact hpre
+
 /-- A fold reads the same result when its two steps agree on every element of the list. -/
 theorem foldlM_congr_mem {α β ε : Type} {f g : β → α → Except ε β} :
     ∀ (items : List α) (init : β), (∀ x ∈ items, ∀ acc, f acc x = g acc x) →
