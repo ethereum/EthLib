@@ -27,7 +27,7 @@ NOT_IN_G1 = (
 ARRAYS = {"g1LagrangeHex": 4096, "g1MonomialHex": 4096, "g2MonomialHex": 65}
 
 # The setup file of the mainnet presets, from which the embedded setup was taken.
-SETUP_ARCHIVE = "consensus-specs@aa16bb4c/trusted_setup_4096.json"
+SETUP_ARCHIVE = "consensus-specs@36888ee8/trusted_setup_4096.json"
 
 # The list of the setup file that each array of the embedded setup holds.
 FILE_LISTS = {

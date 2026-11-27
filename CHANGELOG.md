@@ -1346,6 +1346,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- The consensus vectors move to consensus-specs `v1.7.0-beta.5` ([#1368](https://github.com/ethereum/EthLib/issues/1368)).
+  In Lean, `Config.INCLUSION_LIST_DUE_BPS` is 7500 basis points in both configurations, in place of 6667: that is 9 s of a 12-second slot, as EIP-7805 states.
+  The new field `Config.MIN_TRANSACTION_GAS`, 4096 in both configurations, is a lower bound on the gas of one transaction from Gloas, and the Beacon API lists it.
+  The upgrade to Gloas clears the availability bit of the payload of the fork slot ([#3515](https://github.com/ethereum/EthLib/issues/3515)).
+  `upgradeToGloas_executionPayloadAvailability` (`Consensus/Proofs/Transition/Upgrade.lean`) shows that every other bit is set.
+
 - In Lean, the MODEXP output (`Evm.Precompiles.Modexp.compute`) reads the modulus first, and reads the base and the exponent only for a modulus other than 0 ([#4950](https://github.com/ethereum/EthLib/issues/4950)).
   Its value is unchanged, and `compute_data` keeps its statement, but a proof that unfolds the definition sees the new order.
   Before Fusaka, such a call costs the least price, whatever the exponent length.

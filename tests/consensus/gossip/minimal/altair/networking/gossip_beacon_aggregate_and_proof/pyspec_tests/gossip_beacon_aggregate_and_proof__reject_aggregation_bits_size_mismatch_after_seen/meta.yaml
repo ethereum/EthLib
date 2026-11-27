@@ -1,0 +1,12 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0x67edb637bc6cf09b5357b803ca539181e484d285713d199d0a4f60c2dc68e784,
+  expected: valid}
+- {current_time_ms: 6600, message: 
+    aggregate_0xa4aec0248d6489ee4b06bfa372c8a8ab3aae7576011907ff067a33b2123fafa2,
+  expected: reject, reason: aggregation bits length does not match committee 
+    size}

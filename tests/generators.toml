@@ -37,19 +37,19 @@
 
 # The Python specification of the consensus layer and the test vectors of its releases.
 
-[generators."pyspec v1.7.0-beta.4"]
+[generators."pyspec v1.7.0-beta.5"]
 computes = "the consensus-specs Python specification, run by its reference-test plugin, with SSZ in eth-ssz-specs, BLS in py_arkworks_bls12381, KZG in ckzg and Snappy in python-snappy"
-version = "consensus-specs v1.7.0-beta.4 (aa16bb4c), eth-ssz-specs 0.1.0, py_arkworks_bls12381 0.5.0, ckzg 2.1.8, python-snappy 0.7.3 on cramjam 2.11.0"
-source = "https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/pyproject.toml, and .github/workflows/release.yml:77"
+version = "consensus-specs v1.7.0-beta.5 (36888ee8), eth-ssz-specs 0.1.0, py_arkworks_bls12381 0.5.0, ckzg 2.1.8, python-snappy 0.7.3 on cramjam 2.11.0"
+source = "https://github.com/ethereum/consensus-specs/blob/36888ee87b0faa6ad7804b017a0184e8e6e6a1c6/pyproject.toml, and .github/workflows/release.yml:77"
 
-[generators."pyspec v1.7.0-beta.4 compliance generator"]
+[generators."pyspec v1.7.0-beta.5 compliance generator"]
 computes = "the fork choice compliance generator of consensus-specs, with its small configuration: block trees from MiniZinc models, then the steps and checks from the consensus-specs Python specification"
-version = "consensus-specs v1.7.0-beta.4 (aa16bb4c); the archive also holds the generator and the specification that it ran"
-source = "https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/tests/generators/compliance_runners/fork_choice/README.md, and .github/workflows/comptests.yml"
+version = "consensus-specs v1.7.0-beta.5 (36888ee8); the archive also holds the generator and the specification that it ran"
+source = "https://github.com/ethereum/consensus-specs/blob/36888ee87b0faa6ad7804b017a0184e8e6e6a1c6/tests/generators/compliance_runners/fork_choice/README.md, and .github/workflows/comptests.yml"
 
-[generators."pyspec v1.7.0-beta.4, EthLib scenarios"]
+[generators."pyspec v1.7.0-beta.5, EthLib scenarios"]
 computes = "the consensus-specs Python specification, unchanged, run by its reference-test plugin on test functions that EthLib wrote"
-version = "consensus-specs v1.7.0-beta.4 (aa16bb4c), with the libraries of its uv.lock"
+version = "consensus-specs v1.7.0-beta.5 (36888ee8), with the libraries of its uv.lock"
 source = "tests/consensus/large_amounts/README.md"
 imports = ["eth_consensus_specs"]
 
@@ -75,8 +75,8 @@ source = "for the version, https://github.com/ethereum/consensus-specs/blob/e262
 
 [generators."consensus-specs config files"]
 computes = "nothing: the configuration and preset files of consensus-specs, written by its authors"
-version = "consensus-specs v1.7.0-beta.4 (aa16bb4c)"
-source = "https://github.com/ethereum/consensus-specs/tree/aa16bb4c156184e9548a997d53efaf2a228a6304/configs"
+version = "consensus-specs v1.7.0-beta.5 (36888ee8)"
+source = "https://github.com/ethereum/consensus-specs/tree/36888ee87b0faa6ad7804b017a0184e8e6e6a1c6/configs"
 
 [generators."pyspec 63aa303c KZG"]
 computes = "the KZG test generator of the consensus-specs Python specification, with the group arithmetic in py_arkworks_bls12381"
@@ -273,51 +273,51 @@ source = "bindings/python/tests/state/dao/eip-779.md.txt"
 
 [[directories."tests/consensus/data_columns"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/epoch_processing"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/fork"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/fork_choice"]]
 cases = ["minimal/*/fork_choice/**", "minimal/*/sync/**", "minimal/*/fast_confirmation/**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/fork_choice"]]
 cases = ["minimal/*/fork_choice_compliance/**"]
-generator = "pyspec v1.7.0-beta.4 compliance generator"
+generator = "pyspec v1.7.0-beta.5 compliance generator"
 
 [[directories."tests/consensus/genesis"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/gossip"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/large_amounts"]]
 cases = ["minimal/**"]
-generator = "pyspec v1.7.0-beta.4, EthLib scenarios"
+generator = "pyspec v1.7.0-beta.5, EthLib scenarios"
 
 [[directories."tests/consensus/light_client"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/merkle_proof"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/networking"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/operations"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/parameters"]]
 cases = ["**"]
@@ -325,16 +325,16 @@ generator = "consensus-specs config files"
 
 [[directories."tests/consensus/rewards"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/shuffling"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/snappy"]]
 cases = ["**"]
 subset = "the compressed bytes, and the SSZ data inside them"
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/snappy"]]
 cases = ["**"]
@@ -343,11 +343,11 @@ generator = "cramjam 2.11.0, run once"
 
 [[directories."tests/consensus/ssz_static"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/transition"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/consensus/builder_api"]]
 cases = ["**"]
@@ -388,7 +388,7 @@ generator = "bls12-381-tests hand-written"
 
 [[directories."tests/cryptography/bls"]]
 cases = ["eth_aggregate_pubkeys/**", "eth_fast_aggregate_verify/**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
 [[directories."tests/cryptography/kzg"]]
 cases = ["**"]
@@ -728,17 +728,17 @@ cases = ["tests/general/deneb/kzg/compute_challenge/**", "tests/general/fulu/kzg
 subset = "the handlers compute_challenge and compute_verify_cell_kzg_proof_batch_challenge"
 generator = "pyspec v1.7.0-alpha.12"
 
-[[archives."consensus-specs/v1.7.0-beta.4/minimal"]]
+[[archives."consensus-specs/v1.7.0-beta.5/minimal"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
-[[archives."consensus-specs/v1.7.0-beta.4/mainnet"]]
+[[archives."consensus-specs/v1.7.0-beta.5/mainnet"]]
 cases = ["**"]
-generator = "pyspec v1.7.0-beta.4"
+generator = "pyspec v1.7.0-beta.5"
 
-[[archives."consensus-specs/v1.7.0-beta.4/comptests"]]
+[[archives."consensus-specs/v1.7.0-beta.5/comptests"]]
 cases = ["tests/minimal/*/fork_choice_compliance/**"]
-generator = "pyspec v1.7.0-beta.4 compliance generator"
+generator = "pyspec v1.7.0-beta.5 compliance generator"
 
 [[archives."bls12-381-tests/v0.1.2/bls_tests_yaml"]]
 cases = ["sign/**", "verify/**", "aggregate/**", "fast_aggregate_verify/**", "aggregate_verify/**", "batch_verify/**"]
@@ -817,7 +817,7 @@ cases = ["**"]
 generator = "not established"
 checked = "the file is the SSZ genesis state of mainnet; the tests read only its genesis validators root, and it records no generating tool"
 
-[[archives."consensus-specs@aa16bb4c/trusted_setup_4096.json"]]
+[[archives."consensus-specs@36888ee8/trusted_setup_4096.json"]]
 cases = ["**"]
 generator = "kzg-ceremony-verifier"
 

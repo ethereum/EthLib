@@ -458,8 +458,8 @@ GLOAS_CASE = (
     / "tests/consensus/fork_choice/minimal/gloas/fork_choice/on_block/pyspec_tests"
     / "on_block_parent_full_accepts_verified_payload"
 )
-BLOCK_1 = bytes.fromhex("29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4")
-BLOCK_2 = bytes.fromhex("68066a5504528f3329d4ee97b17219501b21c1cdec09843ee5b5357eff6b8054")
+BLOCK_1 = bytes.fromhex("9e730e250edfb8e490bf2aa43d8b5d0b82203a624cfb72ac0fedc4cb4a91bdb3")
+BLOCK_2 = bytes.fromhex("3e8ac25638193767a244f325d88d77cb796749ca03275e1fb4da4f91126c72fe")
 
 
 def _pinned_file(name: str, case: Path = GLOAS_CASE) -> bytes:
@@ -524,7 +524,7 @@ def test_gloas_head_not_optimistic(roots: list[bytes], status: int):
 
 # The signed envelope of block 1, whose payload block 2 builds on.
 GLOAS_ENVELOPE_1 = _pinned_file(
-    "execution_payload_envelope_0x131ab93ae0a85b4dae8dd199874c24c136c7c8645f3a7b21bb0135cff179e47a"
+    "execution_payload_envelope_0xa317ae13e173dde4c61a04b8e74b95a3f897a3d7b581ddaf820a777d0f6cc05f"
 )
 
 
@@ -580,7 +580,7 @@ def _envelope_block_hash(signed: bytes) -> bytes:
 
 def test_gloas_hash_of_the_payload_itself_removes_nothing():
     # The envelope fails, but the hash names its own payload as valid, so block 2 stays.
-    # The payload hash in these vectors is zero, while the hash it builds on is not.
+    # The hash of the payload differs from the hash that it builds on.
     reads = consensus.fork_choice(
         "minimal",
         GLOAS_FORK,
@@ -686,9 +686,9 @@ HEZE_CASE = (
     / "on_block_parent_full_accepts_verified_payload"
 )
 HEZE_FORK = "hegota"
-HEZE_ANCHOR = bytes.fromhex("d7f0e221095c825ae64f6498843aeaffc47921a3cdb00562f6239ae5662c1c36")
-HEZE_BLOCK_1 = bytes.fromhex("67fe41cbe723d01b8e1dd2e0e7a20b8f2e4e0f3210c831854e46c333c61c2e3a")
-HEZE_BLOCK_2 = bytes.fromhex("c26cf871349a93b1968126b51a88d909bc8287a46d078d22b81300ce984951e3")
+HEZE_ANCHOR = bytes.fromhex("ac6e0b8e5ad2f81b5e2b04a86e2eefe36775d89cf2e6d9b5dc905ccb30598de0")
+HEZE_BLOCK_1 = bytes.fromhex("40a936b9cf3cc2bcfa2d69a6676cc6cd6fb9c8ab7860e4b49615e3c2160e274c")
+HEZE_BLOCK_2 = bytes.fromhex("f4a0273327017058e413c22d3604a22f3fcead262f9151f9bd58293d80f3e489")
 VALID, INVALIDATED, NOT_VALIDATED = 0, 1, 2
 
 

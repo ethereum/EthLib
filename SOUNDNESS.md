@@ -1997,8 +1997,7 @@ Nodes with overlapping ranges of IDs share oracle answers, so no theorem says th
 The bound says nothing about SHA-256 itself (A4), nor about the KZG proofs of the columns, which other theorems cover.
 
 `getDataColumnSidecars_spec` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that a build of the sidecars of a block that succeeds gives one sidecar per column, or none when there is no row.
-EthLib builds none for a block with no blob, as the default branch of consensus-specs does since its pull request 5767.
-The pinned release `v1.7.0-beta.4` builds one empty sidecar per column there, and no pinned vector reaches that case.
+EthLib builds none for a block with no blob, as consensus-specs does from its release `v1.7.0-beta.5`.
 Sidecar `i` has index `i`, and holds the cell and the proof at position `i` of every row, in row order.
 Every sidecar carries the given header, commitments, branch, slot and root.
 Before Gloas, `getDataColumnSidecars_length_of_lt_glamsterdam` shows that a build that succeeds has as many rows as commitments.
@@ -3974,11 +3973,8 @@ The rule weighs the committees of a range of slots exactly.
 Each active member of their union counts once, by its effective balance in the source of balances, and a range with a whole epoch weighs the total active balance.
 An earlier form of the rule estimated that weight as an average per slot, which is not an upper bound on a given committee.
 [A counterexample on #1458](https://github.com/ethereum/EthLib/issues/1458#issuecomment-6764027413) shows that the estimate lets the rule confirm a block that an attack then reorgs, under the assumptions of the paper.
-The pinned fast confirmation vectors of consensus-specs `v1.7.0-beta.4` were generated with that estimate.
-In 24 of them, five cases at several forks, the rule now confirms another block, and `tests/parity/disagreements.toml` lists them as expected failures.
-The vendored fast confirmation cases in `tests/consensus/fork_choice` still pass.
-From Gloas the discount for empty slots also counts the votes for the pending node of the parent, which the rule of consensus-specs `v1.7.0-beta.4` leaves out.
-No pinned vector reaches that case, so review alone checks it until the vectors move to a release with it.
+The fast confirmation vectors of consensus-specs `v1.7.0-beta.5` weigh the committees exactly, and EthLib passes every one of them.
+From Gloas the discount for empty slots also counts the votes for the pending node of the parent, as consensus-specs does from that release.
 
 `Consensus/Proofs/Models/ForkChoice/HonestSupport.lean` proves Lemmas 1, 3 and 4 of Appendix A.1 of the paper on sets of validators weighed by stake.
 `lt_two_mul_honest_support_later` takes the honest ratio that Lemma 4 gives at one slot, and chains Lemmas 1 and 3 across slots.

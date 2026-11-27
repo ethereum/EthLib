@@ -1,11 +1,11 @@
 topic: payload_attestation_message
 blocks:
 - {block: 
-    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+    block_0x918b7ca270ce21670d51e686aeee56e658e58f920b5fdaa4ba38a892059d173b}
 - {block: 
-    block_0xdca934c46061b174930cccbebed949a5561c2669583171927fba4d12335cd896, 
+    block_0x4bdf7370a238bd275b69a21ebed3af31729c4798331f318a7fa6c1a5ff885809, 
     failed: true}
 messages:
 - {current_time_ms: 6100, message: 
-    payload_attestation_message_0xeb826d2fa8e143b36bc444908983e82e45641ad475377c2c1a79d3ee2e9a2f73,
+    payload_attestation_message_0xa20e933e32c514a45e28d7380fb70dd5d84d522f7b4b3d5c39ae0e76a97358ae,
   expected: reject, reason: payload attestation's block failed validation}

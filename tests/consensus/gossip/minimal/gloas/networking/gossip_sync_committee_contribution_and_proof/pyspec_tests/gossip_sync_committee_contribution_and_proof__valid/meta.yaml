@@ -1,7 +1,7 @@
 topic: sync_committee_contribution_and_proof
 blocks:
 - {block: 
-    block_0x9f87a12d020fe5f111a8e388f428594715e83c39314fecf4b523dd7da27848b5}
+    block_0x918b7ca270ce21670d51e686aeee56e658e58f920b5fdaa4ba38a892059d173b}
 messages:
 - {current_time_ms: 500, message: 
     contribution_0xd3b2d2737a44198d2e1930c721c4e6f1b1436d39e46978c52946d6d6ce51afaa,
