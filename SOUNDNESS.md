@@ -8537,8 +8537,12 @@ From Electra one attester slashing may name `2048 * 64` validators.
 A step that covers that many names would pass `2^64` Gwei over the 2080 blocks of 64 epochs.
 So the slashing limit is far below what the protocol allows at every fork: the mainnet corollary allows `2^10` slashed validators in a block.
 At 2048 ETH each, the slashed balances reach `2^62` Gwei after about 2,180 blocks, so that limit alone stops the corollary at 67 epochs.
-With fewer slashings a block, the supply step would bind next.
-The hysteresis ratio asks at least 24,576 ETH of supply step for 16 joins of 2048 ETH, which stops it at about 82 epochs.
+In a block, a new validator joins with at most 32 ETH of effective balance before Electra, and with none from Electra.
+The sync aggregate of a block pays at most about 0.03 ETH at that budget, since its rewards grow with the root of the total active balance.
+So the mainnet step charges 15,000 ETH of supply a block, for the 10,000 ETH deposit limit and 4,096 ETH of whistleblower rewards.
+With fewer slashings a block, the registry load would bind next.
+The body types allow a load of `2^14` a block, a step of `2^15` at the weight before Electra.
+The load reaches the `2^27` pending deposits after about 3,970 blocks, so that limit alone stops the corollary at 123 epochs.
 A tight bound on the weight would read the flags, which `FlagsActive` sets only at active validators.
 It also needs the previous active balance to stay near the current one, which is not proved.
 Years of epochs would also need limits on the deposits and the slashings of the whole chain, not of each block.

@@ -1170,6 +1170,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the block step of a chain (`Consensus/Proofs/Transition/Totality/ChainBlock.lean`) charges each new validator `MAX_EFFECTIVE_BALANCE` in place of the largest cap, and bounds the sync rewards by the root of the budget.
+  `processBlock_effectiveBalanceSum_le` bounds the rise of the effective balances by `MAX_EFFECTIVE_BALANCE` for each new validator, in place of the largest cap, and takes no hypothesis on the caps.
+  `BlockStep.Covers.effective` asks `limits.joins * MAX_EFFECTIVE_BALANCE ≤ step.effective`.
+  `syncRewardBound` reads `BASE_REWARD_FACTOR * (√budget + 2)` in place of `budget / EFFECTIVE_BALANCE_INCREMENT * largestPerIncrement`.
+  `BlockStep.mainnet` charges 15,000 ETH of supply and 512 ETH of effective balances a block, down from 25,000 ETH and 32,768 ETH.
+
 - In Lean, the bridge from one counter of gas to the state gas meter of EIP-8037 covers every instruction other than GAS, the calls, the creations, DUPN, SWAPN and EXCHANGE ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `Evm.Logic.meterSupported` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) accepts them, so `Evm.Logic.Reaches.followsMeter` carries to Glamsterdam a run of code that hashes memory, copies memory, and uses the bitwise, arithmetic, environment and account instructions.
   `Evm.Logic.Bridge` (`MeterSimulation.lean`) states the bridge of one instruction, and `Evm.Logic.instruction_bridge` (`MeterReach.lean`) gives it for each supported opcode.
