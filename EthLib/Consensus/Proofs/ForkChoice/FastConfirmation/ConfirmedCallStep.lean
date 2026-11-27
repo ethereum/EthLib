@@ -861,9 +861,9 @@ private theorem replaces_facts {store : Store preset fork} {after : FastConfirma
 
 It holds to the limit, or stores collide, or cross-store direct-safety or justified evidence holds.
 
-It assumes synchrony, delayed admission, fitting delays, signed justifications and nonzero roots.
+It assumes the genesis run, preset parameters, synchrony, delayed admission and fitting delays.
 
-It also needs direct-safety premises, the anchor at an epoch start, slot reads and the call run. -/
+It needs held-store and stake bounds, nonzero held roots, signed justifications and call timing. -/
 theorem Execution.observedRestart_covers_or_evidence
     {Δ limit : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)
