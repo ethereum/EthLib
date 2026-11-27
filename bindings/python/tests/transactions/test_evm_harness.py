@@ -26,10 +26,12 @@ ECHO = bytes.fromhex("365f5f37365ff3")
     ],
 )
 def test_outcome(code: bytes, expected: Outcome) -> None:
+    """The trace tells a return, an explicit revert and an exceptional halt apart."""
     assert run_bytecode(code, Call(b"hello")) == expected
 
 
 def test_seed_replays_the_same_calls() -> None:
+    """One seed gives the same calls on each run, and another seed gives other calls."""
     seen: list[bytes] = []
 
     def cases(rng: Random) -> Iterator[Call]:
@@ -49,6 +51,7 @@ def test_seed_replays_the_same_calls() -> None:
 
 
 def test_mismatch_reports_the_replay_input() -> None:
+    """A mismatch names the seed, the case index, the input and both outcomes."""
     call = Call(b"x")
     expected = Outcome("success", b"y")
     actual = Outcome("success", b"x")

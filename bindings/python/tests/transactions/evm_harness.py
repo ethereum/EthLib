@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable, Iterable, Mapping
 from random import Random
+from types import MappingProxyType
 from typing import Literal, NamedTuple
 
 from ethlib.execution import transactions
@@ -12,11 +13,11 @@ from .test_amsterdam import CHAIN_ID, OTHER, SENDER, _fee_market, _int
 
 
 class Call(NamedTuple):
-    """The calldata, block number and initial storage of a contract call."""
+    """The calldata, block number and initial storage of a call, whose values are 32-byte words."""
 
     calldata: bytes
     block_number: int = 1
-    storage: Mapping[int, bytes] | None = None
+    storage: Mapping[int, bytes] = MappingProxyType({})
 
 
 class Outcome(NamedTuple):
@@ -33,22 +34,31 @@ def run_bytecode(code: bytes, call: Call, *, fork: str = "pectra", to: bytes = O
     Use a 20-byte destination outside the fork's precompiles and distinct from the sender.
     """
     storage = [
-        [slot.to_bytes(32, "big"), value.lstrip(b"\0")]
-        for slot, value in (call.storage or {}).items()
+        [slot.to_bytes(32, "big"), value.lstrip(b"\0")] for slot, value in call.storage.items()
     ]
     state = rlp.encode([[SENDER, b"", _int(10**18), b"", []], [to, b"\x01", b"", code, storage]])
-    # Block environment fields in the order expected by the transaction export.
+    # The block environment, in the order of the fields that the transaction export reads.
     env = rlp.encode(
         [
+            # Coinbase.
             bytes(20),
+            # Gas limit.
             _int(30_000_000),
+            # Number.
             _int(call.block_number),
+            # Timestamp.
             b"\x01",
+            # Difficulty.
             b"",
+            # Base fee.
             b"\x01",
+            # Previous RANDAO mix.
             bytes(32),
+            # Excess blob gas.
             b"",
+            # Block hashes.
             [],
+            # Slot number.
             b"",
         ]
     )
