@@ -3815,6 +3815,16 @@ The ancestry needs only the two block reads and that local slot order, not `Reac
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
 In an execution of the network model, `Execution.equivocatingIndices_honest` gives the assumption on known equivocators for the store of an honest validator.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
+`VoteAt.latest_signed_at_next_slot` and `Execution.latest_signed_of_duty` in `Consensus/Proofs/ForkChoice/VoteDelivery.lean` close the later-store side only in part ([#2053](https://github.com/ethereum/EthLib/issues/2053)).
+An up-to-date honest receiver at the next slot holds a signed vote from the duty slot or later, or bounded honest stores exhibit a block collision.
+This assumes delayed block admission, and that no block in the voter's store has a zero state root.
+It also assumes that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root: the root's ancestor at the first slot of that epoch is the finalized root.
+The slot floor persists at later events.
+The receiver must be up to date at the next slot and at least a delay after the deadline.
+They give a floor on the slot of the latest vote, not that the latest vote is the duty vote.
+They hold before and from Gloas, including votes for a full payload from Gloas.
+`Execution.latest_signed_of_duty` starts from an up-to-date receiver at the next slot boundary, not from its first up-to-date event later in the window.
+`BlocksAdmitted` assumes that the block handler succeeds, so they do not derive the provenance of the voted block.
 
 `Execution.isAncestor_getHead_of_historical_anchor` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalAnchor.lean` derives later head ancestry from a guarded historical margin.
 It applies `Execution.source_surplus_or_historical_evidence`, which derives the receiver's source-weight surplus from the caller's checked reads, rather than assuming that surplus.
