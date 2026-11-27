@@ -365,18 +365,9 @@ theorem compress_toState (s : State) (block : ByteArray) (start : Nat)
 
 /-! ## Padding -/
 
-/-- Byte `i` of the length is the low eight bits of the bit length shifted right by `56 - 8 i`. -/
-private theorem lengthBytes_eq_ofFn (size : Nat) : lengthBytes size =
-    ⟨Array.ofFn fun i : Fin 8 =>
-      ((UInt64.ofNat size * 8) >>> (56 - 8 * UInt64.ofNat i.val)).toUInt8⟩ := by
-  apply ByteArray.ext
-  apply Array.toList_inj.mp
-  simp [lengthBytes, ByteArray.push, ByteArray.emptyWithCapacity, List.ofFn_succ]
-  rfl
-
 /-- The length takes eight bytes. -/
 @[simp] theorem lengthBytes_size (size : Nat) : (lengthBytes size).size = 8 := by
-  simp only [lengthBytes_eq_ofFn, ByteArray.size, Array.size_ofFn]
+  simp only [lengthBytes, ByteArray.size, Array.size_ofFn]
 
 private theorem bits_toNat (size : Nat) (admitted : size < 2 ^ 61) :
     (UInt64.ofNat size * 8).toNat = size * 8 := by
@@ -399,7 +390,7 @@ private theorem shift_toNat (i : Fin 8) : (56 - 8 * UInt64.ofNat i.val).toNat = 
 /-- Below 2^61 bytes, the length bytes are the base-256 digits of the bit length. -/
 theorem lengthBytes_digit (size : Nat) (admitted : size < 2 ^ 61) (i : Fin 8) :
     ((lengthBytes size)[i.val]'(by simp)).toNat = (size * 8 / 2 ^ (56 - 8 * i.val)) % 256 := by
-  simp only [lengthBytes_eq_ofFn, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn,
+  simp only [lengthBytes, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn,
     UInt64.toNat_toUInt8, UInt64.toNat_shiftRight, bits_toNat size admitted, shift_toNat]
   change ((size * 8) >>> ((56 - 8 * i.val) % 64)) % 256 = _
   rw [Nat.mod_eq_of_lt (show 56 - 8 * i.val < 64 by omega), Nat.shiftRight_eq_div_pow]
@@ -425,25 +416,9 @@ theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
 
 /-! ## The hash -/
 
-/-- The digest is the 32 bytes of the eight words, each most significant byte first. -/
-private theorem digest_eq_bytes (H : State) : digest H =
-    ⟨#[byteAt H.a 24, byteAt H.a 16, byteAt H.a 8, byteAt H.a 0,
-      byteAt H.b 24, byteAt H.b 16, byteAt H.b 8, byteAt H.b 0,
-      byteAt H.c 24, byteAt H.c 16, byteAt H.c 8, byteAt H.c 0,
-      byteAt H.d 24, byteAt H.d 16, byteAt H.d 8, byteAt H.d 0,
-      byteAt H.e 24, byteAt H.e 16, byteAt H.e 8, byteAt H.e 0,
-      byteAt H.f 24, byteAt H.f 16, byteAt H.f 8, byteAt H.f 0,
-      byteAt H.g 24, byteAt H.g 16, byteAt H.g 8, byteAt H.g 0,
-      byteAt H.h 24, byteAt H.h 16, byteAt H.h 8, byteAt H.h 0]⟩ := by
-  apply ByteArray.ext
-  apply Array.toList_inj.mp
-  simp [digest, pushWord, ByteArray.push, ByteArray.emptyWithCapacity]
-  rfl
-
 /-- Every digest is 32 bytes long, whatever the message. -/
 @[simp] theorem hash_size (message : ByteArray) : (hash message).size = 32 := by
-  simp only [hash, digest_eq_bytes]
-  rfl
+  simp only [hash, digest, ByteArray.size, List.size_toArray, List.length_cons, List.length_nil]
 
 /-- The 32-byte digest holds exactly the bytes of the byte-array digest. -/
 @[simp] theorem packBytes_hash32 (message : ByteArray) :
@@ -472,8 +447,7 @@ theorem chain_toState (block : ByteArray) (initial : Spec.State) :
 /-- The digest is the model's digest. -/
 theorem digest_eq_spec (s : State) : digest s = Spec.digest (interpret s) := by
   apply ByteArray.ext
-  rw [digest_eq_bytes]
-  simp only [byteAt, Spec.digest, Spec.State.words, interpret]
+  simp only [digest, byteAt, Spec.digest, Spec.State.words, interpret]
   apply Array.toList_inj.mp
   simp only [Array.toList_ofFn, List.ofFn_succ, List.ofFn_zero,
     Fin.val_succ, Fin.val_zero]
@@ -643,7 +617,7 @@ theorem messageBits_lengthBytes (size : Nat) :
   · simp [Spec.messageBits_length]
   · intro j left right
     rw [Spec.messageBits_getElem]
-    simp only [lengthBytes_eq_ofFn, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn,
+    simp only [lengthBytes, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn,
       UInt64.toNat_toUInt8, UInt64.toNat_shiftRight]
     have inside : j < 64 := by simpa using right
     have shift : (56 - 8 * UInt64.ofNat (j / 8)).toNat = 56 - 8 * (j / 8) :=
