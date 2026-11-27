@@ -3,6 +3,8 @@ module
 public import EthLib.Base.Proofs.Address
 public import EthLib.Base.Proofs.Base64
 public import EthLib.Base.Proofs.BitVec
+public import EthLib.Base.Proofs.BitVec.Mask
+public import EthLib.Base.Proofs.BitVec.Popcount
 public import EthLib.Base.Proofs.ByteList
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.ByteOrder.Digits
