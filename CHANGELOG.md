@@ -1268,6 +1268,17 @@ Not yet released.
   `header_of_payloadBlock` gives that block the parent hash of the payload, and a header that hashes to the block hash of the payload.
   `header_of_checkNewPayload` combines the two.
 
+- In Lean, `processAttestationAltair_eq_ok_iff` (`Consensus/Proofs/Transition/Operations.lean`) says when an attestation from Altair passes, and what each of its steps returns.
+  Its five checks form one leading conjunct.
+  `processAttestationAltair_reads` states the same checks and reads, and that the steps after the proposer reward write only the pending payments of the builders.
+  `processAttestationAltair_reads_of_lt_gloas` states the same checks and reads before Gloas, where the proposer reward is the last step.
+  `processAttestationAltair_writes` says that the attestation writes the flags of its target epoch and raises one balance.
+  From Gloas it also writes the pending payments of the builders.
+  `processAttestation_of_altair` and `getBeaconProposerIndex_setEpochParticipation` move to the same file from `Transition/BlockRewards.lean`, with the same statements.
+  The 40 proofs outside the proof file of the attestation step no longer read its body ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  A step that a fork adds at the end of the attestation step, and that changes no field, then breaks only its own proof file.
+  In an experiment, a step at the end that writes one more field broke 3 proofs outside that file, although none of them reads that field.
+
 ### Changes that break callers
 
 - In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).

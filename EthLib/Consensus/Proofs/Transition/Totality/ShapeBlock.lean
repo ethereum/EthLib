@@ -313,11 +313,9 @@ private theorem listed_attestation {attestation : Attestation preset fork} {pare
     (ok : processAttestation config checks s parentSlot attestation = .ok t)
     (listed : Listed s) : Listed t := by
   by_cases altair : Fork.altair ≤ fork
-  · simp only [processAttestation, altair, ↓reduceDIte] at ok
-    unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      ⟨updated, _⟩, folded, _, _, _, raisedOk, final⟩ := ok
+  · rw [processAttestation_of_altair altair] at ok
+    obtain ⟨-, _, _, _, _, updated, _, _, _, -, -, -, -, -, folded, -, raisedOk, written⟩ :=
+      processAttestationAltair_reads ok
     have sized := (foldlM_addAttesterFlags_target folded).1
     obtain ⟨flags, scored, inside⟩ := listed
     -- The new flags have the length of the flags that they replace.
@@ -328,11 +326,8 @@ private theorem listed_attestation {attestation : Attestation preset fork} {pare
       · exact ⟨fun altair => ⟨sized.trans (flags altair).1, (flags altair).2⟩, scored, inside⟩
       · exact ⟨fun altair => ⟨(flags altair).1, sized.trans (flags altair).2⟩, scored, inside⟩
     have raised := (Kept.increase raisedOk).listed flagged
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact raised
-    · cases final
-      exact raised
+    rw [written]
+    exact raised
   · obtain ⟨_, _, _, _, _, recorded, _⟩ := processAttestation_records (Nat.lt_of_not_le altair) ok
     have kept := recordPendingAttestation_ok recorded
     split at kept
@@ -539,21 +534,15 @@ From Altair it sets flags in place, and before Altair it records a pending attes
 private theorem kept_attestation {attestation : Attestation preset fork} {parentSlot : Slot}
     (ok : processAttestation config checks s parentSlot attestation = .ok t) : BlockKept s t := by
   by_cases altair : Fork.altair ≤ fork
-  · simp only [processAttestation, altair, ↓reduceDIte] at ok
-    unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      ⟨updated, _⟩, folded, _, _, _, raisedOk, final⟩ := ok
+  · rw [processAttestation_of_altair altair] at ok
+    obtain ⟨updated, _, _, _, raisedOk, written⟩ := processAttestationAltair_writes ok
     have flagged : BlockKept s (setEpochParticipation s
         (attestation.data.target.epoch == getCurrentEpoch s) updated) := by
       unfold setEpochParticipation
       split <;> exact BlockKept.of_eq
     have raised := flagged.trans (Kept.increase raisedOk).kept
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact raised.trans BlockKept.of_eq
-    · cases final
-      exact raised
+    rw [written]
+    exact raised.trans BlockKept.of_eq
   · obtain ⟨_, _, _, _, _, recorded, _⟩ := processAttestation_records (Nat.lt_of_not_le altair) ok
     have kept := recordPendingAttestation_ok recorded
     split at kept

@@ -351,26 +351,19 @@ private theorem processAttesterSlashing {slashing : AttesterSlashing preset fork
 private theorem processAttestation {attestation : Attestation preset fork} {parentSlot : Slot}
     (ok : Consensus.processAttestation config checks state parentSlot attestation = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.processAttestation at ok
-  split at ok
-  · unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := ok
+  by_cases altair : Fork.altair ≤ fork
+  · rw [processAttestation_of_altair altair] at ok
+    obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes ok
     have last : SameSyncCommittees raised after := by
-      split at final
-      · rw [recordPaymentWeight_eq final]; exact ⟨rfl, rfl, rfl⟩
-      · cases final; exact .refl _
+      rw [written]
+      exact ⟨rfl, rfl, rfl⟩
     have flags : ∀ (current : Bool) (participation : EpochParticipation preset fork),
         SameSyncCommittees state (setEpochParticipation state current participation) := by
       intro current participation
       unfold setEpochParticipation
       split <;> exact ⟨rfl, rfl, rfl⟩
     exact (flags _ _).trans ((increaseBalance raisedOk).trans last)
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := ok
+  obtain ⟨_, _, _, _, _, recorded, _⟩ := processAttestation_records (Nat.lt_of_not_le altair) ok
   have kept := recordPendingAttestation_ok recorded
   split at kept <;>
   · obtain ⟨_, rest⟩ := kept

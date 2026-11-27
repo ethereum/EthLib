@@ -886,11 +886,7 @@ private theorem attestation_balance_not_lowered {f : Fork}
     refine ⟨now, located, UInt64.le_iff_toNat_le.mpr ?_⟩
     rw [value]
     exact Nat.le_add_right _ _
-  · unfold processAttestation at ok
-    simp only [altair, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure,
-      Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := ok
+  · obtain ⟨_, _, _, _, _, recorded, _⟩ := processAttestation_records (Nat.lt_of_not_le altair) ok
     have kept := recordPendingAttestation_ok recorded
     split at kept <;>
     · obtain ⟨_, rest⟩ := kept
@@ -1225,21 +1221,15 @@ private theorem PartialsAt.attestation {f : Fork} {reached : Prop}
     PartialsAt reached t := by
   by_cases altair : .altair ≤ f
   · rw [processAttestation_of_altair altair] at ok
-    unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := ok
+    obtain ⟨_, _, _, _, raisedOk, written⟩ := processAttestationAltair_writes ok
     have flags (participation : EpochParticipation preset f) :
         PartialsAt reached (setEpochParticipation s
           (attestation.data.target.epoch == getCurrentEpoch s) participation) := by
       unfold setEpochParticipation
       split <;> exact held
     have paid := (flags _).increase raisedOk
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact paid
-    · cases final
-      exact paid
+    rw [written]
+    exact paid
   · intro electra
     exact (altair (Nat.le_trans (by decide : Fork.altair ≤ .pectra) electra)).elim
 

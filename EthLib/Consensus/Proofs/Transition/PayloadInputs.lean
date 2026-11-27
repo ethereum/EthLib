@@ -459,28 +459,20 @@ theorem payloadInputs_processAttestation {attestation : Attestation preset fork}
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     PayloadInputs state after := by
-  unfold processAttestation at computed
-  split at computed
-  · unfold processAttestationAltair at computed
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := computed
+  by_cases altair : Fork.altair ≤ fork
+  · rw [processAttestation_of_altair altair] at computed
+    obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes computed
     have last : PayloadInputs raised after := by
-      split at final
-      · rw [recordPaymentWeight_eq final]
-        exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-      · cases final
-        exact PayloadInputs.refl _
+      rw [written]
+      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     have flags : ∀ (current : Bool) (participation : EpochParticipation preset fork),
         PayloadInputs state (setEpochParticipation state current participation) := by
       intro current participation
       unfold setEpochParticipation
       split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     exact (flags _ _).trans ((payloadInputs_increaseBalance raisedOk).trans last)
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, _, _, _, recorded, _⟩ :=
+    processAttestation_records (Nat.lt_of_not_le altair) computed
   have kept := recordPendingAttestation_ok recorded
   split at kept <;>
   · obtain ⟨_, rest⟩ := kept
