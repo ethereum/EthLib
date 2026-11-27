@@ -1,7 +1,7 @@
 module
 
+public import EthLib.Cryptography.Bls.Constants
 public import EthLib.Cryptography.Bls.Errors
-public import EthLib.Cryptography.Inverse
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Word64.Six
@@ -16,16 +16,6 @@ The base field of BLS12-381, the integers mod the prime `p`.
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls
-
-/-- BLS12-381 base field modulus.
-
-In hexadecimal, `p` is the 96 digits of these two lines, joined:
-
-- `1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f624`
-- `1eabfffeb153ffffb9feffffffffaaab`
--/
-def Fp.modulus : Nat :=
-  0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab
 
 protected theorem Fp.modulus_pos : 0 < Fp.modulus := by decide
 
@@ -208,10 +198,10 @@ Proofs use its lemmas, never its unfolding, which runs a Montgomery reduction. -
 /-- Square-and-multiply modular exponentiation. -/
 @[inline] def powNat (base : Fp) (e : Nat) : Fp := Montgomery.pow base e
 
-/-- Multiplicative inverse by the extended Euclidean algorithm, on the integer of the element.
+/-- Multiplicative inverse, by Fermat's little theorem: `a ^ (p - 2)`.
 
 The inverse of `0` is `0`. -/
-@[inline] def inverse (a : Fp) : Fp := ofNat (euclid a.val modulus 1 0 % modulus).toNat
+@[inline] def inverse (a : Fp) : Fp := Montgomery.inv a
 
 /-- Field division `a * b⁻¹`. -/
 instance : Div Fp := ⟨fun a b => a * b.inverse⟩

@@ -9,6 +9,15 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Kzg.everyOther` moves from `Kzg/Fft.lean` to `Kzg/FftHalves.lean`, with an unchanged full name.
+  The definitions on naturals that the kernel checks of the Lagrange setup read move from `Proofs/Kzg/SetupLagrange/{Roots,Points,Glv,Dft,Rounds,Tables}.lean` to `Proofs/Kzg/SetupLagrange/Checker.lean`, with unchanged full names.
+  The four tables of those checks are literal data in `Proofs/Kzg/SetupLagrange/Data/`, which `lake exe gen-setup-tables` writes, in place of elaborators that decoded the setup with the specification while the file was built.
+
+- In Lean, `Bls.Fp.modulus`, `Bls.Fr.modulus` and `Bls.blsX` move from `Bls/Fp.lean` and `Bls/Fr.lean` to `Bls/Constants.lean`, with unchanged full names and values.
+  The definitions of the torsion check of `G1` on naturals move from `Proofs/Bls/G1TorsionCheck.lean` to `Proofs/Bls/G1NatCheck.lean`.
+  The decoding of the embedded setup's strings and the command that states its checks move from `Proofs/Kzg/SetupTorsion/Check.lean` to `Proofs/Kzg/SetupTorsion/Checker.lean`.
+  Their full names are unchanged, and the kernel checks of the monomial points import only these modules and the setup data.
+
 - In Lean, STATICCALL to an account with no code that is no precompile returns no data under the state gas meter of EIP-8037, at every fork from Berlin ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
   `Evm.Logic.staticcall_noCode_meter` and `Evm.Logic.staticcall_noCode_returndatasize_meter` (`Execution/Proofs/Evm/Logic/CallMeter.lean`) hold for code that passes the check of that meter, with the call at an opcode position.
   So a check that the call returned 32 bytes fails closed under that meter too.
@@ -63,16 +72,22 @@ Not yet released.
   `withdrawalsRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the withdrawals root for any plain hash, with `withdrawalsRootM_eq` and `withdrawalsRootM_eq_ok_iff` (`Execution/Proofs/Blocks/TypedRoots.lean`).
   `checkTransactionsM_eq`, `checkWithdrawalsM_eq`, `checkOmmersM_eq`, `checkBodyM_eq`, `checkOmmers_eq` and `checkBody_eq` (`Execution/Proofs/Network/Bodies.lean`) state the checks with a plain hash.
 
-- In Lean, `Execution/Proofs/Evm/Call/StorageInvariant.lean` proves, under an assumption on Keccak-256 (`CodeHyp.hashOnly`), that every message keeps an invariant of the storage of an account that holds a given code ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
+- In Lean, `Execution/Proofs/Evm/Call/StorageInvariant.lean` proves that every message keeps an invariant of the storage of an account that holds a given code, when no frame of its run outputs another code with the Keccak-256 hash of that code (`NoCollision`) ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
   Each frame that runs that code at the account must keep it: `FramesKeepCode`.
   `goodAt_processMessage` and `goodAt_processCreateMessage` then keep the invariant and the code over each call that returns a frame, and each creation at another address.
   A call must start where the account holds the code, and run it if it goes there (`RunsCode`).
-  `CodeHyp` states what the code must meet, including the assumption that no other code has its hash, which SOUNDNESS.md lists.
+  `CodeHyp` states what the code must meet: a hash other than that of the empty code, and no delegate.
   `step_eq_child_callsCode` (`Execution/Proofs/Evm/Call/StepRules.lean`) states that a call to another account runs the code that the state holds there, when that code names no delegate.
 
 - In Lean, `prEvent_indexedWins_le` (`Execution/Proofs/Blocks/RootsRandomOracle.lean`) bounds the probability of finding two different lists with one root, with the hash a random oracle, by `Q^2 / 2^256`.
   `indexedRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the root of a list for any plain hash, with `indexedRootM_eq` and `indexedRootM_eq_ok_iff` ([#4612](https://github.com/ethereum/EthLib/issues/4612)).
   `Execution/Proofs/Trie/RandomOracle.lean` gains `mem_witnesses_of_findCollision`, the proof-node half of the secured-trie lemma.
+
+- In Lean, `VoteAt.slot_le_of_latest_rank` (`Consensus/Proofs/ForkChoice/VoteDelivery.lean`) bounds a receiver's latest vote below by the slot of an honest duty vote.
+  It applies when the latest vote ranks at least as high as the duty vote, to each signed vote that the latest vote records.
+  `VoteAt.latest_signed_at_next_slot` and `Execution.mem_supportersOf_of_duty_interval_core` now apply it, in place of two copies of its proof.
+  `Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` moves to `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean` from `Consensus/Proofs/ForkChoice/HonestEquivocators.lean`, with its name and statement.
+  `HonestEquivocators.lean` no longer imports the fast confirmation proof modules, so neither does `VoteDelivery.lean`.
 
 - In Lean, `applyBody_toBodyOutput` (`Execution/Proofs/Blocks/Transition.lean`) reads a body that runs with any overrides.
   Its output agrees with the output of its transactions on every field of that output but the body state.
@@ -1241,6 +1256,62 @@ Not yet released.
   A step that writes a field adds one obligation to each user of the induction principle.
 
 ### Changes that break callers
+
+- In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).
+  `KeptOrWipedEmpty` and `EmptyAt` (`Execution/Proofs/State/Wiped.lean`) state it, with the fact that an account empty at the end was empty at the start.
+  `RunBurns.keptOrWipedEmpty`, `keptOrWipedEmpty_processMessage_of_away` and `keptOrWipedEmpty_processCreateMessage_of_away` (`Execution/Proofs/Evm/Call/StorageAway.lean`) replace `RunBurns.keptOrWiped`, `keptOrWiped_processMessage_of_away` and `keptOrWiped_processCreateMessage_of_away`.
+  They also show that the run does not mark the account for deletion unless it was marked at its start.
+  They ask `BurnStart.Funded` of the start: `SenderHasNonce` of the first message, and no code address for a creation.
+  `keptOrWipedEmpty_processMessageCall_of_away`, `keptOrWipedEmpty_runTransaction_of_away` and `keptOrWipedEmpty_processTransaction_of_away` (`Execution/Proofs/Transactions/StorageAt.lean`) replace the `keptOrWiped` theorems of the same names, and ask `CodelessAtZero` of the authorizations.
+  `keptOrWipedEmpty_systemCall_of_away` (`Execution/Proofs/Blocks/StorageAt.lean`) replaces `keptOrWiped_systemCall_of_away`, with the same hypotheses.
+  The form over transactions without `CodelessAtZero` is dropped; `KeptOrWipedEmpty.keptOrWiped` gives the old conclusion from the new one.
+  `step_eq_child_caller` (`Execution/Proofs/Evm/Call/StepRules.lean`) shows that a message that a step sends moves value only from the account of the frame.
+  `message_depositCode` moves to `Execution/Proofs/Evm/Call/ToDelete.lean` and `caller_transactionMessage` to `Execution/Proofs/Transactions/Process.lean`, both now public.
+
+- In Lean, the invariant of the storage of a contract no longer assumes that no other code has the Keccak-256 hash of its code ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
+  `CodeHyp.hashOnly` (`Execution/Proofs/Evm/Call/StorageInvariant.lean`), which is believed false for Keccak-256 as a function, is removed.
+  The theorems instead assume that the runs they cover output and set no code that collides with the code: `Collides` and `NoCollision` (`Execution/Proofs/Evm/Call/StorageInvariant.lean`), and `CallApart`, `TransactionApartWith` and `TransactionApart` (`Execution/Proofs/Transactions/StorageInvariant.lean`), `SystemCallApart`, `BodyApart` and `BlockApart` (`Execution/Proofs/Blocks/StorageInvariant.lean`).
+  `keepsAt_setCode`, `keepsAt_applyAuthorization`, `keepsAt_foldlM_applyAuthorization`, `prepareFirstFrame_keepsAt`, `goodAt_runFrame`, `goodAt_processMessage`, `goodAt_processCreateMessage` and the `goodAt` theorems over transactions, system calls, blocks and chains take these hypotheses.
+  `goodAt_processMessageCall` also asks that a creation run the code of no account, and `prepareFirstFrame_keepsAt` also says that a creation keeps the code address of its message.
+  `CallGood` and `CreateGood` also carry a certificate of the run, and `FramesKeepCode` gives the frame `NoCollision` and its runner `CallGood` and `CreateGood`.
+  `BlockChain.Reaches` (`Execution/Proofs/Blocks/Reaches.lean`) takes a predicate on the chain, the fork and the block of each step instead of a set of forks.
+  `HistoryStorage.codeHyp_CODE` takes no hypothesis: the kernel computes that the hash of the code is not that of the empty code.
+  `ReachesAll`, `CallAll` and `TransactionAll` generalize `RunsAway`, `CallAway` and `TransactionAway`, which now unfold to them.
+  `RunBurns.reaches_of_frame`, `RunBurns.reaches_of_call`, `step_eq_child_codeAddress`, `codeAddress_transactionMessage`, `CodeHyp.not_collides_empty`, `goodAt_depositCode`, `runBurns_of_childGood`, `FoldVisits` and `foldlM_ok_invariant_of_visits` are new.
+
+- In Lean, the invariant of the storage of a contract no longer needs the account to have a nonce ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
+  `CreatesFresh` (`Execution/Proofs/Evm/Call/Fresh.lean`) now says that an account that a message creates had nonce 0 and no code at its start.
+  Its new field `kept` says that an account with code keeps code, and `NoNewCode` states that an account has no code after a step exactly when it had none before.
+  `CreatesFresh.trans` asks that an account that the second run allows have nonce 0 and no code in the first state, or be allowed there.
+  A transaction then never creates an account that holds code, so `LiveAt` and `nonceLe_buyGas` are removed, and the theorems take `GoodAt` instead.
+  `liveAt_processMessageCall`, `liveAt_runTransaction`, `liveAt_processTransaction`, `liveAt_incorporate`, `liveAt_join`, `liveAt_onBlock`, `liveAt_systemCall`, `liveAt_applyBody`, `liveAt_stateTransition` and `BlockChain.Reaches.liveAt` are renamed with `goodAt` in place of `liveAt`.
+  `keepsAt_foldlM_createEther`, `keepsAt_payRewards` and `keepsAt_applyDaoFork` no longer give `NonceLe`.
+  So `HistoryStorage.ring_of_reaches` also covers a contract with nonce 0.
+
+- In Lean, the product of the quadratic extension takes three products of its base field instead of four, by the Karatsuba method ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Fp2.mul` (`Cryptography/Fp2.lean`) computes the coefficient of `i` as `(a0 + a1)(b0 + b1) - a0 b0 - a1 b1`, over BLS12-381 and alt_bn128.
+  The generic `Fp2.mul_c1` (`Cryptography/Proofs/Fp2.lean`) states that form, holds by `rfl`, and is no longer a simp lemma.
+  `Fp2.mul_c1_eq` (same file) is new: the form `a0 b1 + a1 b0`, for a base field with an embedding into a field.
+  `Bls.Fp2.mul_c1` and `AltBn128.Fp2.mul_c1` keep their statements and their simp attribute, through `Fp2.mul_c1_eq`.
+
+- In Lean, the line of each Miller step over BLS12-381 takes fewer products of `Fp` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `millerDouble` and `millerAdd` (`Cryptography/Bls/Pairing.lean`) square with `FieldOps.square`, write the products by 2 and 3 as sums, and multiply by the coordinates of `P` with `Fp2.mulFp`, so a proof that unfolds them sees these forms.
+  `Fp2.mulFp` (`Cryptography/Fp2.lean`) is new: the product by an element of the base field, with two products of it.
+  `Fp2.mulFp_eq`, `Fp2.mulFp_c0` and `Fp2.mulFp_c1` (`Cryptography/Proofs/Fp2.lean`) and `Fp2.map_mulFp` (`Cryptography/Proofs/Bls/BaseFieldMap.lean`) are new.
+  Every public statement about the pairing is unchanged.
+
+- In Lean, the field operations have a square, and `Fp2` squares with two products of its base field instead of four ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `FieldOps.square` (`Cryptography/BaseField.lean`) is a new field of the class, which defaults to `a * a`, and `Fp2.square` (`Cryptography/Fp2.lean`) sets it for the extension.
+  `FieldOps.Hom` and `FieldOps.Embedding` (`Cryptography/Proofs/BaseField.lean`) gain the law `map_square`, so a caller that builds one gives that law too.
+  `G1.double`, `G1.addGeneral` and `G1.addMixed` (`Cryptography/Bls/G1.lean`) square with `FieldOps.square`, so they unfold to it, over `Fp` and over `Fp2` for G2.
+  `Fp2.square_eq` (`Cryptography/Proofs/Fp2.lean`) states that the square is `a * a`, for a base field with an embedding into a field.
+  `Fp2.map_square` (`Cryptography/Proofs/Bls/BaseFieldMap.lean`) and the lemmas `Fp2.fieldOps_square`, `Fp2.square_c0` and `Fp2.square_c1` (`Cryptography/Proofs/Fp2.lean`) are new.
+  Every public statement about the curves is unchanged.
+
+- In Lean, the inverse of `Fp` is `a ^ (p - 2)` on the Montgomery form, by Fermat's little theorem, as for `Fr` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Bls.Fp.inverse` (`Cryptography/Bls/Fp.lean`) unfolds to `Montgomery.inv` instead of the extended Euclidean algorithm, so `Bls.Fp.inverse_eq_inv` holds by `rfl`.
+  `Bls.Fp.toZMod_inverse` and every other statement about `Fp` are unchanged.
+  `Bls/Fp.lean` and `Proofs/Bls/FpZMod.lean` no longer import the Euclidean inverse, so a user of `euclid` or `Fin.inverse` imports `Cryptography/Inverse.lean` or its proofs directly.
 
 - In Lean, the rows of the `Fp` product on six 64-bit words keep no word above the six ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `Word64.row6` and `Word64.reduce6` (`Cryptography/Word64/Six.lean`) now take and return `Word64.Words6` instead of `Word64.Acc6`.

@@ -12,6 +12,7 @@ public import EthLib.Cryptography.Proofs.Vrf.UniquenessPermutation
 public import EthLib.Cryptography.Proofs.Vrf.AdaptiveIndex
 public import EthLib.Cryptography.Proofs.Vrf.SeedSecrets
 public import EthLib.Cryptography.Proofs.Vrf.Selection
+public import EthLib.Cryptography.Proofs.Vrf.SelectionRandomOracle
 
 /-!
 # Proofs: the VRF tree

@@ -536,32 +536,8 @@ theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Sy
     (fun earlier hfirst htime => safe earlier hfirst (by omega)) known rootAbove active).imp
       Or.inl id
   intro other signedIn otherTime latestEq seen signedOther otherTimeOk
-  have floor : slot ≤ other.data.slot := by
-    by_cases gloas : .glamsterdam ≤ fork
-    · -- From Gloas the latest vote ranks by its slot, at least the duty slot.
-      rw [latestEq, LatestMessage.ofAttestation_rank_of_gloas gloas,
-        LatestMessage.ofAttestation_rank_of_gloas gloas, dataSlot] at rank
-      exact rank
-    have preGloas : fork < .glamsterdam := Nat.lt_of_not_le gloas
-    rw [LatestMessage.ofAttestation_rank_of_lt preGloas] at rank
-    obtain ⟨origin, originIn, originSeen, originEq, originSigned, originVote⟩ :=
-      e.exists_signed_origin_of_latestMessages anchored start receiver latestOk
-    -- The two signed origins share the target epoch of the latest vote, so they carry one data.
-    have sameData := Execution.data_eq_of_signed_of_target_epoch slots
-      (e.view_subset_sent k w originSeen) (e.view_subset_sent k w seen) originSigned signedOther
-      honest (by
-        have both := originEq.symm.trans latestEq
-        have ranks := congrArg LatestMessage.rank both
-        rw [LatestMessage.ofAttestation_rank_of_lt preGloas,
-          LatestMessage.ofAttestation_rank_of_lt preGloas] at ranks
-        exact ranks)
-    -- The duty vote is a sent message that signs its own data.
-    obtain ⟨dutySent, dutySigned⟩ := vote.signed_sent anchored start honest
-    have floor := Execution.latest_slot_floor_of_signed_rank slots preGloas honest dutySent
-      (e.view_subset_sent k w originSeen) dutySigned originSigned originVote
-      (by rw [dataEpoch, dataSlot]) (by rw [← originEq]; exact rank)
-      (UInt64.le_of_eq dataSlot.symm)
-    rwa [sameData] at floor
+  have floor : slot ≤ other.data.slot := vote.slot_le_of_latest_rank slots anchored start honest
+    receiver dataSlot dataEpoch latestOk rank seen signedOther latestEq
   obtain ⟨beginTime', beginOk', _, timeLe⟩ :=
     exists_timeAtSlotMs_of_le (UInt64.le_trans beginLe floor) otherTimeOk
   have same := Except.ok.inj (beginOk'.symm.trans beginTimeOk)

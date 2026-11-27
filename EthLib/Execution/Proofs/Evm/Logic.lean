@@ -44,6 +44,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
 -- A template lemma proves one shape of block at any offset of any code that holds its bytes.
 public import EthLib.Execution.Proofs.Evm.Logic.Template
+public import EthLib.Execution.Proofs.Evm.Logic.Relocated
 -- A tactic steps through the opcodes of a code.
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.GasMono
@@ -60,6 +61,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.RunsOk
 public import EthLib.Execution.Proofs.Evm.Logic.Marks
 -- A triple over one counter, with messages, carries to the state gas meter of EIP-8037.
 public import EthLib.Execution.Proofs.Evm.Logic.MeterRun
+-- A cost over one counter bounds the execution gas and the reservoir under that meter.
+public import EthLib.Execution.Proofs.Evm.Logic.MeterCost
 -- STATICCALL to no code fails closed under that meter.
 public import EthLib.Execution.Proofs.Evm.Logic.CallMeter
 

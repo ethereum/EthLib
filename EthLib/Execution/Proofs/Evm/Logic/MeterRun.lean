@@ -286,7 +286,7 @@ theorem JointStep.ready {p q : Evm fork Nat × Evm fork StateGasMeter}
   | step hl hh =>
     obtain ⟨-, -, -, lift⟩ := step_meterReady hl ready.1.1
     refine ⟨ready.1.step hl, fun carried => ?_, Nat.le_trans hh.gasHeld_le ready.2.2⟩
-    obtain ⟨_, covers, hh'⟩ := lift carried _ (ready.2.1 (.inl (ready.1.2 hl.running)))
+    obtain ⟨_, covers, hh', -⟩ := lift carried _ (ready.2.1 (.inl (ready.1.2 hl.running)))
     rw [hh.deterministic hh']
     exact covers
   | @child low low' caller high high' caller' message message' resume resume' child running
@@ -543,7 +543,7 @@ theorem tableRunner_lift {Q : Evm fork Nat → Prop} {start : Evm fork Nat × Ev
     cases hs with
     | step hl =>
       obtain ⟨-, -, -, lift⟩ := step_meterReady hl lowReady.1
-      obtain ⟨high', -, hh⟩ := lift carried high (ready.2.1 (.inl (lowReady.2 hl.running)))
+      obtain ⟨high', -, hh, -⟩ := lift carried high (ready.2.1 (.inl (lowReady.2 hl.running)))
       obtain ⟨last', reach, fin⟩ := ih endsIn (reached.tail (.step hl hh))
       exact ⟨last', .step (.step hh) reach, fin⟩
     | @child _ _ message _ _ running sent ltLow ran resumed =>

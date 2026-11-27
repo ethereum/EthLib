@@ -91,6 +91,14 @@ theorem messageCallGas_mono {value : U256} {asked asked' low high memoryCost ext
       omega
   · omega
 
+/-- A call pays the gas it passes on and its extra price, less the stipend it gives. -/
+private theorem messageCallGas_parts (value : U256) (gas gasLeft memoryCost extraGas : Nat) :
+    (messageCallGas fork value gas gasLeft memoryCost extraGas).cost +
+        (if value = 0 then 0 else CALL_STIPEND) =
+      (messageCallGas fork value gas gasLeft memoryCost extraGas).subCall + extraGas := by
+  simp only [messageCallGas]
+  omega
+
 /-! ## Runs of the parts of a step -/
 
 /-- A failure of the step under one counter, other than a revert, lifts. -/
@@ -139,17 +147,60 @@ theorem Lifts.next {start : Evm fork Nat} {next : Nat} {low : Except EvmError (E
     | error e => rw [hl] at hr; exact h.2 (by rw [hl]; cases hr; rfl)
     | ok a => rw [hl] at hr; cases hr
 
+/-- Steps that lift, whose carried frames keep the execution gas and the reservoir. -/
+private def StepKept (start : Evm fork Nat) (meter : StateGasMeter) (next : Nat)
+    (low : Except EvmError (StepResult fork Nat))
+    (high : Except EvmError (StepResult fork StateGasMeter)) : Prop :=
+  StepLifts start next low high ∧ ∀ after b, low = .ok (.next after) → high = .ok (.next b) →
+    Carried after.error → Keeps start meter after b
+
+/-- A failure of the step under one counter, other than a revert, lifts and keeps the gas. -/
+private theorem StepKept.error {start : Evm fork Nat} {meter : StateGasMeter} {next : Nat}
+    {e : EvmError} {high : Except EvmError (StepResult fork StateGasMeter)}
+    (other : e ≠ .revert := by intro h; cases h) : StepKept start meter next (.error e) high :=
+  ⟨StepLifts.error other, fun _ _ h => (nomatch h)⟩
+
+/-- A run with related first results, then rests of the step that lift and keep the gas. -/
+private theorem Sim.bindStepKept {α β : Type} {R : α → β → Prop} {start : Evm fork Nat}
+    {meter : StateGasMeter} {next : Nat} {low : Except EvmError α} {high : Except EvmError β}
+    {f : α → Except EvmError (StepResult fork Nat)}
+    {g : β → Except EvmError (StepResult fork StateGasMeter)}
+    (h : Sim R low high) (rest : ∀ a b, R a b → StepKept start meter next (f a) (g b)) :
+    StepKept start meter next (low >>= f) (high >>= g) := by
+  refine ⟨h.bindStepLifts fun a b r => (rest a b r).1, fun after d ok highOk carried => ?_⟩
+  obtain ⟨a, ha, hf⟩ := EthLib.Base.bind_ok_iff.mp ok
+  obtain ⟨b, hb, hg⟩ := EthLib.Base.bind_ok_iff.mp highOk
+  obtain ⟨b', hb', r⟩ := h.1 a ha
+  rw [hb, Except.ok.injEq] at hb'
+  subst hb'
+  exact (rest a b r).2 after d hf hg carried
+
+/-- Runs of a frame whose successes land give steps that lift and keep the gas. -/
+private theorem Sim.stepKept {start : Evm fork Nat} {meter : StateGasMeter} {next : Nat}
+    {low : Except EvmError (Evm fork Nat)} {high : Except EvmError (Evm fork StateGasMeter)}
+    (h : Sim (Lands start meter next) low high) :
+    StepKept start meter next (StepResult.next <$> low) (StepResult.next <$> high) := by
+  refine ⟨h.lifts.next, fun after b ok highOk _ => ?_⟩
+  obtain ⟨a, ha, ra⟩ := EthLib.Base.map_ok_iff.mp ok
+  obtain ⟨c, hc, rc⟩ := EthLib.Base.map_ok_iff.mp highOk
+  injection ra with ra
+  injection rc with rc
+  subst ra rc
+  obtain ⟨c', hc', -, keeps, -⟩ := h.1 _ ha
+  rw [hc, Except.ok.injEq] at hc'
+  exact hc' ▸ keeps
+
 namespace Tracks
 
-variable {start low : Evm fork Nat} {high : Evm fork StateGasMeter}
+variable {start low : Evm fork Nat} {meter : StateGasMeter} {high : Evm fork StateGasMeter}
 
 /-- The rest of a step that keeps its reads lifts when the rest lifts. -/
-theorem keepReadsStep {next : Nat} (t : Tracks start low high)
+theorem keepReadsStep {next : Nat} (t : Tracks start meter low high)
     {rest : Except EvmError (StepResult fork Nat)}
     {highRest : Except EvmError (StepResult fork StateGasMeter)}
     (h : StepLifts start next rest highRest) :
     StepLifts start next (Evm.keepReads low .next rest) (Evm.keepReads high .next highRest) := by
-  obtain ⟨_, hc, hf, -, -⟩ := t
+  obtain ⟨_, -, hc, hf, -, -⟩ := t
   refine ⟨fun after ok => ?_, fun hk => ?_⟩
   · cases hr : rest with
     | error e =>
@@ -186,16 +237,42 @@ theorem keepReadsStep {next : Nat} (t : Tracks start low high)
       · cases hk
     | ok a => simp [Evm.keepReads, hr] at hk
 
+/-- The rest of a step that keeps its reads lifts and keeps the gas when the rest does. -/
+private theorem keepReadsStepKept {next : Nat} (t : Tracks start meter low high)
+    {rest : Except EvmError (StepResult fork Nat)}
+    {highRest : Except EvmError (StepResult fork StateGasMeter)}
+    (h : StepKept start meter next rest highRest) :
+    StepKept start meter next (Evm.keepReads low .next rest)
+      (Evm.keepReads high .next highRest) := by
+  refine ⟨t.keepReadsStep h.1, fun after b ok highOk carried => ?_⟩
+  cases hr : rest with
+  | error e =>
+    simp only [Evm.keepReads, hr] at ok
+    split at ok
+    · cases ok
+    · cases ok
+      -- The rest fails with no revert, so the halt carries no error.
+      rcases carried with hv | hv <;> simp only [exceptionalHalt, reduceCtorEq,
+        Option.some.injEq] at hv
+      subst hv
+      exact (h.1.2 hr).elim
+  | ok a =>
+    simp only [Evm.keepReads, hr, Except.ok.injEq] at ok
+    subst ok
+    obtain ⟨b', hb', -⟩ := (h.1.1 _ hr).2 carried
+    simp only [Evm.keepReads, hb', Except.ok.injEq, StepResult.next.injEq] at highOk
+    exact h.2 after b hr (highOk ▸ hb') carried
+
 /-- The pops of the operands of a call take the same operands, and keep the relation. -/
-theorem popCallOperands (t : Tracks start low high) (kind : CallKind) :
-    Sim (fun p q => p.1 = q.1 ∧ Tracks start p.2 q.2) (Evm.popCallOperands kind low)
+theorem popCallOperands (t : Tracks start meter low high) (kind : CallKind) :
+    Sim (fun p q => p.1 = q.1 ∧ Tracks start meter p.2 q.2) (Evm.popCallOperands kind low)
       (Evm.popCallOperands kind high) := by
   unfold Evm.popCallOperands
   refine t.popWord.bind ?_
   rintro ⟨g, _⟩ ⟨_, _⟩ ⟨rfl, t⟩
   refine t.popWord.bind ?_
   rintro ⟨a, _⟩ ⟨_, _⟩ ⟨rfl, t⟩
-  refine (show Sim (fun p q => p.1 = q.1 ∧ Tracks start p.2 q.2) (popCallValue kind _)
+  refine (show Sim (fun p q => p.1 = q.1 ∧ Tracks start meter p.2 q.2) (popCallValue kind _)
       (popCallValue kind _) by
     unfold popCallValue
     split
@@ -213,52 +290,55 @@ theorem popCallOperands (t : Tracks start low high) (kind : CallKind) :
   exact Sim.pure ⟨rfl, t⟩
 
 /-- An access to an address gives the same flag, and keeps the relation. -/
-theorem accessAddress (t : Tracks start low high) (address : Base.Address) :
+theorem accessAddress (t : Tracks start meter low high) (address : Base.Address) :
     (Evm.accessAddress high address).1 = (Evm.accessAddress low address).1 ∧
-      Tracks start (Evm.accessAddress low address).2 (Evm.accessAddress high address).2 := by
-  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+      Tracks start meter (Evm.accessAddress low address).2
+        (Evm.accessAddress high address).2 := by
+  obtain ⟨⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩ := t
   unfold Evm.accessAddress
   split
-  · exact ⟨rfl, ⟨meter, below, rfl⟩, hc, hf, hp, he⟩
-  · exact ⟨rfl, ⟨meter, below, rfl⟩, hc, hf, hp, he⟩
+  · exact ⟨rfl, ⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩
+  · exact ⟨rfl, ⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩
 
 /-- A record of a read keeps the relation. -/
-theorem recordAccountRead (t : Tracks start low high) (address : Base.Address) :
-    Tracks start (Evm.recordAccountRead low address) (Evm.recordAccountRead high address) := by
-  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
-  exact ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩
+theorem recordAccountRead (t : Tracks start meter low high) (address : Base.Address) :
+    Tracks start meter (Evm.recordAccountRead low address)
+      (Evm.recordAccountRead high address) := by
+  obtain ⟨⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩ := t
+  exact ⟨⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩
 
 /-- A read of the code of an account gives the same code. -/
-theorem accountCode (t : Tracks start low high) (address : Base.Address) :
+theorem accountCode (t : Tracks start meter low high) (address : Base.Address) :
     Sim (· = ·) (Evm.accountCode low address) (Evm.accountCode high address) := by
-  obtain ⟨⟨meter, below, rfl⟩, -⟩ := t
+  obtain ⟨⟨m, below, rfl⟩, -⟩ := t
   exact Sim.ofState
 
 /-- The access to a delegate gives the same code, and keeps the relation. -/
-theorem accessDelegation (t : Tracks start low high) (address : Base.Address) (known : Nat) :
-    Sim (fun p q => p.1 = q.1 ∧ Tracks start p.2 q.2) (Evm.accessDelegation low address known)
-      (Evm.accessDelegation high address known) := by
+theorem accessDelegation (t : Tracks start meter low high) (address : Base.Address)
+    (known : Nat) :
+    Sim (fun p q => p.1 = q.1 ∧ Tracks start meter p.2 q.2)
+      (Evm.accessDelegation low address known) (Evm.accessDelegation high address known) := by
   unfold Evm.accessDelegation
   refine (t.accountCode address).bind ?_
   rintro code _ rfl
-  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  obtain ⟨⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩ := t
   dsimp only
   split
   · rename_i delegate _
-    have t' := (Tracks.accessAddress ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ delegate)
+    have t' := (Tracks.accessAddress ⟨⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩ delegate)
     obtain ⟨cold, t'⟩ := t'
     rw [cold]
     refine (t'.checkGas _).bind fun _ _ _ => ?_
     refine ((t'.recordAccountRead delegate).accountCode delegate).bind ?_
     rintro code' _ rfl
     exact Sim.pure ⟨rfl, t'.recordAccountRead delegate⟩
-  · exact Sim.pure ⟨rfl, ⟨meter, below, rfl⟩, hc, hf, hp, he⟩
+  · exact Sim.pure ⟨rfl, ⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩
 
 /-- A charge of execution gas keeps the relation, and an excess of execution gas over the counter.
 -/
-theorem chargeGas_ahead {excess : Nat} (t : Tracks start low high)
+theorem chargeGas_ahead {excess : Nat} (t : Tracks start meter low high)
     (ahead : low.gas + excess ≤ high.gas.gasLeft) (amount : Nat) :
-    Sim (fun l h => Tracks start l h ∧ l.gas + excess ≤ h.gas.gasLeft)
+    Sim (fun l h => Tracks start meter l h ∧ l.gas + excess ≤ h.gas.gasLeft)
       (Evm.chargeGas low amount) (Evm.chargeGas high amount) := by
   refine ((t.chargeGas amount).and (fun _ ok => chargeGas_eq_ok_iff.mp ok)
     (fun _ ok => chargeGas_eq_ok_iff_charge.mp ok)).mono ?_
@@ -275,20 +355,20 @@ theorem chargeGas_ahead {excess : Nat} (t : Tracks start low high)
 /-- A charge of state gas keeps the relation, and an excess of execution gas over the counter.
 
 The state gas meter pays at most the same amount from its execution gas. -/
-theorem chargeStateGas_ahead {excess : Nat} (t : Tracks start low high)
+theorem chargeStateGas_ahead {excess : Nat} (t : Tracks start meter low high)
     (ahead : low.gas + excess ≤ high.gas.gasLeft) (amount : Nat) :
-    Sim (fun l h => Tracks start l h ∧ l.gas + excess ≤ h.gas.gasLeft)
+    Sim (fun l h => Tracks start meter l h ∧ l.gas + excess ≤ h.gas.gasLeft)
       (Evm.chargeStateGas low amount) (Evm.chargeStateGas high amount) := by
   refine ((t.chargeStateGas amount).and (fun _ ok => EthLib.Base.bind_ok_iff.mp ok)
     (fun _ ok => EthLib.Base.bind_ok_iff.mp ok)).mono ?_
-  rintro _ _ ⟨t, ⟨gas, paid, hl⟩, ⟨meter, charged, hh⟩⟩
+  rintro _ _ ⟨t, ⟨gas, paid, hl⟩, ⟨m, charged, hh⟩⟩
   simp only [pure, Except.pure, Except.ok.injEq] at hl hh
   subst hl hh
   refine ⟨t, ?_⟩
   change (if low.gas < amount then Except.error EvmError.outOfGas
     else Except.ok (low.gas - amount)) = Except.ok gas
     at paid
-  change StateGasMeter.chargeState high.gas amount = .ok meter at charged
+  change StateGasMeter.chargeState high.gas amount = .ok m at charged
   unfold StateGasMeter.chargeState at charged
   split at paid
   · cases paid
@@ -303,47 +383,71 @@ theorem chargeStateGas_ahead {excess : Nat} (t : Tracks start low high)
         omega
       · cases charged
 
-/-- The charge of a call, priced from the gas left of each frame, keeps the relation.
+/-- The charge of a call, priced from the gas left of each frame, keeps the relation of the frames.
+
+Its bound on the gas starts from no meter, and the last part adds the gas passed on.
 
 The call under the state gas meter may ask for more gas, by at most its excess of execution gas.
 
-It then passes on at least as much gas. -/
-theorem chargeCall (t : Tracks start low high) (value : U256) {asked asked' : Nat}
+It then passes on at least as much gas.
+
+With the gas passed on, the execution gas and the reservoir drop by at most what the counter drops.
+-/
+theorem chargeCall (t : Tracks start meter low high) (value : U256) {asked asked' : Nat}
     (memoryCost extraGas : Nat) (asks : asked ≤ asked')
     (ahead : low.gas + (asked' - asked) ≤ high.gas.gasLeft) :
-    Sim (fun l h => Tracks start l h ∧
+    Sim (fun l h => Tracks start (StateGasMeter.start 0 0) l h ∧
         (messageCallGas fork value asked low.gas memoryCost extraGas).subCall ≤
-          (messageCallGas fork value asked' high.gas.gasLeft memoryCost extraGas).subCall)
+          (messageCallGas fork value asked' high.gas.gasLeft memoryCost extraGas).subCall ∧
+        l.gas + (messageCallGas fork value asked low.gas memoryCost extraGas).subCall +
+            meter.gasLeft + meter.reservoir ≤
+          start.gas + h.gas.gasLeft +
+            (messageCallGas fork value asked' high.gas.gasLeft memoryCost extraGas).subCall +
+            h.gas.reservoir)
       (Evm.chargeGas low ((messageCallGas fork value asked low.gas memoryCost extraGas).cost +
         memoryCost))
       (Evm.chargeGas high
         ((messageCallGas fork value asked' high.gas.gasLeft memoryCost extraGas).cost +
           memoryCost)) := by
-  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
-  have ahead : low.gas + (asked' - asked) ≤ meter.gasLeft := ahead
+  obtain ⟨⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩ := t
+  have ahead : low.gas + (asked' - asked) ≤ m.gasLeft := ahead
   refine ⟨fun after ok => ?_, ?_⟩
   · obtain ⟨paid, rfl⟩ := chargeGas_eq_ok_iff.mp ok
-    obtain ⟨fits, keeps, more⟩ := messageCallGas_mono (fork := fork) (value := value)
+    obtain ⟨fits, kept, more⟩ := messageCallGas_mono (fork := fork) (value := value)
       (memoryCost := memoryCost) (extraGas := extraGas) asks ahead paid
+    have lowParts := messageCallGas_parts (fork := fork) value asked low.gas memoryCost extraGas
+    have highParts :=
+      messageCallGas_parts (fork := fork) value asked' m.gasLeft memoryCost extraGas
     refine ⟨withStateGas { low with gas := low.gas - _ }
-      { meter with gasLeft := meter.gasLeft - _ }, ?_, ⟨⟨_, keeps, rfl⟩, hc, hf, hp, he⟩, more⟩
-    simp only [Evm.chargeGas, gas_withStateGas, GasMeter.charge, StateGasMeter.charge,
-      Nat.not_lt.mpr fits, ↓reduceIte, bind, Except.bind, pure, Except.pure]
-    rfl
+      { m with gasLeft := m.gasLeft - _ }, ?_, ⟨⟨_, kept, rfl⟩, ?_, hc, hf, hp, he⟩, more, ?_⟩
+    · simp only [Evm.chargeGas, gas_withStateGas, GasMeter.charge, StateGasMeter.charge,
+        Nat.not_lt.mpr fits, ↓reduceIte, bind, Except.bind, pure, Except.pure]
+      rfl
+    · simp only [Keeps, gas_withStateGas, StateGasMeter.start]
+      omega
+    · simp only [Keeps, gas_withStateGas] at keeps ⊢
+      omega
   · unfold Evm.chargeGas
     simp only [GasMeter.charge]
     split <;> simp [bind, Except.bind, pure, Except.pure]
 
-/-- The payment of a call keeps the relation.
+/-- The payment of a call keeps the relation of the frames.
+
+Its bound on the gas starts from no meter, and the last part adds the gas passed on.
 
 The call under the state gas meter may ask for more gas, by at most its excess of execution gas.
 
-It then passes on at least as much gas. -/
-theorem payCall (t : Tracks start low high) (kind : CallKind) (call : CallOperands)
+It then passes on at least as much gas.
+
+With the gas passed on, the execution gas and the reservoir drop by at most what the counter drops.
+-/
+theorem payCall (t : Tracks start meter low high) (kind : CallKind) (call : CallOperands)
     {asked : U256} (asks : call.gas.toNat ≤ asked.toNat)
     (ahead : low.gas + (asked.toNat - call.gas.toNat) ≤ high.gas.gasLeft)
     (memoryCost extraGas newAccount : Nat) :
-    Sim (fun p q => p.1 ≤ q.1 ∧ Tracks start p.2 q.2)
+    Sim (fun p q => p.1 ≤ q.1 ∧ Tracks start (StateGasMeter.start 0 0) p.2 q.2 ∧
+        p.2.gas + p.1 + meter.gasLeft + meter.reservoir ≤
+          start.gas + q.2.gas.gasLeft + q.1 + q.2.gas.reservoir)
       (Evm.payCall kind call memoryCost extraGas newAccount low)
       (Evm.payCall kind { call with gas := asked } memoryCost extraGas newAccount high) := by
   unfold Evm.payCall
@@ -352,9 +456,9 @@ theorem payCall (t : Tracks start low high) (kind : CallKind) (call : CallOperan
     refine (t.chargeStateGas_ahead ahead _).bind fun _ _ ⟨t, ahead⟩ => ?_
     have h := t.chargeCall call.value 0 0 asks ahead
     simp only [Nat.add_zero] at h
-    exact h.bind fun _ _ ⟨t, more⟩ => Sim.pure ⟨more, t⟩
+    exact h.bind fun _ _ ⟨t, more, kept⟩ => Sim.pure ⟨more, t, kept⟩
   · exact (t.chargeCall call.value memoryCost extraGas asks ahead).bind
-      fun _ _ ⟨t, more⟩ => Sim.pure ⟨more, t⟩
+      fun _ _ ⟨t, more, kept⟩ => Sim.pure ⟨more, t, kept⟩
 
 end Tracks
 
@@ -378,26 +482,30 @@ theorem resumeCall_message {Meter : Type} [GasMeter Meter] {caller child : Evm f
 /-- A caller that follows resumes alike from two frames that follow each other.
 
 The two frames have the same current target. -/
-theorem resumeCall_lifts {start caller : Evm fork Nat} {caller' : Evm fork StateGasMeter}
-    (t : Tracks start caller caller') (newAccount : Nat) (outputStart outputSize : U256)
-    {child : Evm fork Nat} {child' : Evm fork StateGasMeter}
+theorem resumeCall_lifts {start caller : Evm fork Nat} {meter : StateGasMeter}
+    {caller' : Evm fork StateGasMeter} (t : Tracks start meter caller caller') (newAccount : Nat)
+    (outputStart outputSize : U256) {child : Evm fork Nat} {child' : Evm fork StateGasMeter}
     (ended : FollowsMeter child { child' with message := child.message })
     (target : child'.message.currentTarget = child.message.currentTarget) :
     Lifts start (start.pc + 1) (resumeCall fork caller newAccount outputStart outputSize child)
       (resumeCall fork caller' newAccount outputStart outputSize child') := by
   rw [← resumeCall_message target]
-  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  obtain ⟨⟨meter, below, rfl⟩, -, hc, hf, hp, he⟩ := t
   obtain ⟨m, hm, ended⟩ := ended
   rw [ended]
-  have merged : Tracks start (incorporateChild fork caller child)
+  -- The caller takes the gas of the child, so it keeps the bound of the zero meter only.
+  have covers : (incorporateChild fork caller child).gas ≤
+      (StateGasMeter.absorb meter m child.error.isNone).gasLeft := by
+    have := gasLeft_absorb meter m child.error.isNone
+    unfold incorporateChild
+    split <;> simp only [GasMeter.absorb] at * <;> omega
+  have merged : Tracks start (StateGasMeter.start 0 0) (incorporateChild fork caller child)
       (withStateGas (incorporateChild fork caller child)
         (StateGasMeter.absorb meter m child.error.isNone)) := by
-    refine ⟨⟨_, ?_, rfl⟩, ?_, ?_, ?_, ?_⟩ <;> unfold incorporateChild <;> split <;>
-      simp only [hc, hf, hp, he]
-    all_goals
-      have := gasLeft_absorb meter m child.error.isNone
-      simp only [GasMeter.absorb] at *
+    refine ⟨⟨_, covers, rfl⟩, ?_, ?_, ?_, ?_, ?_⟩
+    · simp only [Keeps, gas_withStateGas, StateGasMeter.start]
       omega
+    all_goals unfold incorporateChild; split <;> simp only [hc, hf, hp, he]
   have same : incorporateChild fork (withStateGas caller meter) (withStateGas child m) =
       withStateGas (incorporateChild fork caller child)
         (StateGasMeter.absorb meter m child.error.isNone) := by
@@ -406,7 +514,7 @@ theorem resumeCall_lifts {start caller : Evm fork Nat} {caller' : Evm fork State
     by_cases e : child.error.isNone = true <;> simp only [e, ↓reduceIte, Bool.false_eq_true] <;> rfl
   unfold resumeCall
   simp only [same, error_withStateGas, output_withStateGas]
-  have refilled : Tracks start
+  have refilled : Tracks start (StateGasMeter.start 0 0)
       (if child.error.isNone = true then incorporateChild fork caller child
         else refillStateGas (incorporateChild fork caller child) newAccount)
       (if child.error.isNone = true then
@@ -420,22 +528,38 @@ theorem resumeCall_lifts {start caller : Evm fork Nat} {caller' : Evm fork State
   generalize (if child.error.isNone = true then incorporateChild fork caller child
     else refillStateGas (incorporateChild fork caller child) newAccount) = l at refilled
   generalize (if child.error.isNone = true then _ else _) = h at refilled
-  obtain ⟨⟨meter', below', rfl⟩, hc', hf', hp', he'⟩ := refilled
-  refine (Sim.bind (Tracks.pushWord (low := { l with returnData := child.output })
-    ⟨⟨meter', below', rfl⟩, hc', hf', hp', he'⟩ _) fun a b t => ?_).lifts
-  obtain ⟨⟨meter'', below'', rfl⟩, hc'', hf'', hp'', he''⟩ := t
+  obtain ⟨⟨meter', below', rfl⟩, keeps', hc', hf', hp', he'⟩ := refilled
+  refine Sim.lifts (meter := StateGasMeter.start 0 0)
+    (Sim.bind (Tracks.pushWord (low := { l with returnData := child.output })
+      ⟨⟨meter', below', rfl⟩, keeps', hc', hf', hp', he'⟩ _) fun a b t => ?_)
+  obtain ⟨⟨meter'', below'', rfl⟩, keeps'', hc'', hf'', hp'', he''⟩ := t
   exact Sim.pure (Tracks.advance (low := { a with
       memory := memoryWrite a.memory outputStart.toNat
         (child.output.extract 0 (min outputSize.toNat child.output.size)) })
-    ⟨⟨meter'', below'', rfl⟩, hc'', hf'', hp'', he''⟩ 1)
+    ⟨⟨meter'', below'', rfl⟩, keeps'', hc'', hf'', hp'', he''⟩ 1)
 
-/-- A call that runs no message gives back what each frame passes on, and keeps the relation. -/
-theorem skipCall_lifts {start low : Evm fork Nat} {high : Evm fork StateGasMeter}
-    (t : Tracks start low high) {gas gas' reservoir reservoir' : Nat} (more : gas ≤ gas') :
-    Lifts start (start.pc + 1) (skipCall low gas reservoir) (skipCall high gas' reservoir') := by
-  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+/-- A frame that follows keeps the bound on the gas of the zero meter. -/
+private theorem Tracks.toZero {start low : Evm fork Nat} {meter : StateGasMeter}
+    {high : Evm fork StateGasMeter} (t : Tracks start meter low high) :
+    Tracks start (StateGasMeter.start 0 0) low high := by
+  obtain ⟨⟨m, below, rfl⟩, -, hc, hf, hp, he⟩ := t
+  refine ⟨⟨m, below, rfl⟩, ?_, hc, hf, hp, he⟩
+  simp only [Keeps, gas_withStateGas, StateGasMeter.start]
+  omega
+
+/-- A call that runs no message gives back what each frame passes on, and lands.
+
+The gas given back keeps the bound on the execution gas and the reservoir. -/
+private theorem skipCall_sim {start low : Evm fork Nat} {meter meter' : StateGasMeter}
+    {high : Evm fork StateGasMeter} (t : Tracks start meter' low high)
+    {gas gas' reservoir reservoir' : Nat} (more : gas ≤ gas')
+    (kept : low.gas + gas + meter.gasLeft + meter.reservoir ≤
+      start.gas + high.gas.gasLeft + gas' + high.gas.reservoir + reservoir') :
+    Sim (Lands start meter (start.pc + 1)) (skipCall low gas reservoir)
+      (skipCall high gas' reservoir') := by
+  obtain ⟨⟨m, below, rfl⟩, -, hc, hf, hp, he⟩ := t
   unfold skipCall
-  have credited : Tracks start
+  have credited : Tracks start meter
       { low with
         gas := GasMeter.credit low.gas gas reservoir
         returnData := .empty }
@@ -443,48 +567,87 @@ theorem skipCall_lifts {start low : Evm fork Nat} {high : Evm fork StateGasMeter
         { low with
           gas := GasMeter.credit low.gas gas reservoir
           returnData := .empty }
-        (GasMeter.credit meter gas' reservoir')) := by
-    refine ⟨⟨_, ?_, rfl⟩, hc, hf, hp, he⟩
-    simp only [GasMeter.credit, StateGasMeter.cancel, StateGasMeter.start]
-    omega
-  refine (Sim.bind (credited.pushWord 0) fun a b t => ?_).lifts
-  exact Sim.pure (t.advance 1)
+        (GasMeter.credit m gas' reservoir')) := by
+    refine ⟨⟨_, ?_, rfl⟩, ?_, hc, hf, hp, he⟩
+    · simp only [GasMeter.credit, StateGasMeter.cancel, StateGasMeter.start]
+      omega
+    · simp only [Keeps, gas_withStateGas, GasMeter.credit, StateGasMeter.cancel,
+        StateGasMeter.start] at kept ⊢
+      omega
+  exact Sim.bind (credited.pushWord 0) fun a b t => Sim.pure (t.advance 1)
 
-/-- The end of a call once it has paid keeps the relation, when it passes on more gas. -/
-theorem finishCall_lifts {start low : Evm fork Nat} {high : Evm fork StateGasMeter}
-    (t : Tracks start low high) {kind : CallKind} {call : CallOperands} {callee : Callee}
-    {subCall subCall' newAccount expandBy : Nat} (more : subCall ≤ subCall') :
-    StepLifts start (start.pc + 1) (finishCall kind call callee subCall newAccount expandBy low)
+/-- A call that runs no message gives back what each frame passes on, and keeps the relation. -/
+theorem skipCall_lifts {start low : Evm fork Nat} {meter : StateGasMeter}
+    {high : Evm fork StateGasMeter} (t : Tracks start meter low high)
+    {gas gas' reservoir reservoir' : Nat} (more : gas ≤ gas') :
+    Lifts start (start.pc + 1) (skipCall low gas reservoir) (skipCall high gas' reservoir') := by
+  obtain ⟨⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩ := t
+  refine (skipCall_sim (meter := StateGasMeter.start 0 0)
+    ⟨⟨m, below, rfl⟩, keeps, hc, hf, hp, he⟩ more ?_).lifts
+  simp only [gas_withStateGas, StateGasMeter.start]
+  omega
+
+/-- The end of a call once it has paid lifts, when it passes on more gas.
+
+A carried frame keeps the bound on the execution gas and the reservoir, with the gas passed on. -/
+private theorem finishCall_kept {start low : Evm fork Nat} {meter : StateGasMeter}
+    {high : Evm fork StateGasMeter} (t : Tracks start (StateGasMeter.start 0 0) low high)
+    {kind : CallKind} {call : CallOperands} {callee : Callee}
+    {subCall subCall' newAccount expandBy : Nat} (more : subCall ≤ subCall')
+    (kept : low.gas + subCall + meter.gasLeft + meter.reservoir ≤
+      start.gas + high.gas.gasLeft + subCall' + high.gas.reservoir) :
+    StepKept start meter (start.pc + 1)
+      (finishCall kind call callee subCall newAccount expandBy low)
       (finishCall kind call callee subCall' newAccount expandBy high) := by
-  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  obtain ⟨⟨m, below, rfl⟩, -, hc, hf, hp, he⟩ := t
+  simp only [gas_withStateGas] at kept
   unfold finishCall
   simp only [message_withStateGas]
   by_cases static : kind = .call ∧ low.message.isStatic = true ∧ call.value ≠ 0
   · simp only [static, ne_eq, not_false_eq_true, and_self, ↓reduceIte]
-    exact StepLifts.error
+    exact StepKept.error
   simp only [static, ↓reduceIte]
-  have caller : Tracks start (callerFrame low expandBy)
-      (callerFrame (withStateGas low meter) expandBy) :=
-    ⟨⟨StateGasMeter.drain meter, below, rfl⟩, hc, hf, hp, he⟩
-  have same : callerFrame (withStateGas low meter) expandBy =
-      withStateGas (callerFrame low expandBy) (StateGasMeter.drain meter) := rfl
+  have caller : Tracks start (StateGasMeter.start 0 0) (callerFrame low expandBy)
+      (callerFrame (withStateGas low m) expandBy) :=
+    ⟨⟨StateGasMeter.drain m, below, rfl⟩, show low.gas + 0 + 0 ≤ start.gas + m.gasLeft + 0 by omega,
+      hc, hf, hp, he⟩
+  have same : callerFrame (withStateGas low m) expandBy =
+      withStateGas (callerFrame low expandBy) (StateGasMeter.drain m) := rfl
   rw [same] at caller ⊢
   simp only [state_withStateGas, message_withStateGas]
+  -- The refill and the reservoir given back keep the bound.
+  have back : (callerFrame low expandBy).gas + subCall + meter.gasLeft + meter.reservoir ≤
+      start.gas + (m.drain.refill newAccount).gasLeft + subCall' +
+        (m.drain.refill newAccount).reservoir + m.reservoir := by
+    simp only [StateGasMeter.refill, StateGasMeter.drain]
+    exact Nat.le_trans kept (by omega)
   by_cases poor : ((callerFrame low expandBy).state.getAccount
       (callerFrame low expandBy).message.currentTarget).balance < call.value
   · simp only [poor, ↓reduceIte]
-    exact (skipCall_lifts (caller.refillStateGas newAccount) more).next
+    exact (skipCall_sim (caller.refillStateGas newAccount) more back).stepKept
   · simp only [poor, ↓reduceIte]
     unfold genericCall
     by_cases deep : (callerFrame low expandBy).message.depth + 1 > STACK_DEPTH_LIMIT
     · simp only [message_withStateGas, deep, ↓reduceIte]
-      exact (skipCall_lifts (caller.refillStateGas newAccount) (by exact more)).next
+      exact (skipCall_sim (caller.refillStateGas newAccount) (by exact more) back).stepKept
     · simp only [message_withStateGas, deep, ↓reduceIte]
-      refine ⟨fun r hr => ?_, nofun⟩
+      refine ⟨⟨fun r hr => ?_, nofun⟩, fun _ _ h => (nomatch h)⟩
       cases hr
-      refine ⟨_, _, _, rfl, ⟨meter.drain, below, rfl⟩, ⟨by exact more, rfl⟩,
+      refine ⟨_, _, _, rfl, ⟨m.drain, below, rfl⟩, ⟨by exact more, rfl⟩,
         fun child child' ended target => ?_⟩
       exact resumeCall_lifts caller newAccount call.outputStart call.outputSize ended target
+
+/-- The end of a call once it has paid keeps the relation, when it passes on more gas. -/
+theorem finishCall_lifts {start low : Evm fork Nat} {meter : StateGasMeter}
+    {high : Evm fork StateGasMeter} (t : Tracks start meter low high) {kind : CallKind}
+    {call : CallOperands} {callee : Callee} {subCall subCall' newAccount expandBy : Nat}
+    (more : subCall ≤ subCall') :
+    StepLifts start (start.pc + 1) (finishCall kind call callee subCall newAccount expandBy low)
+      (finishCall kind call callee subCall' newAccount expandBy high) := by
+  refine (finishCall_kept (meter := StateGasMeter.start 0 0) t.toZero more ?_).1
+  obtain ⟨⟨m, below, rfl⟩, -⟩ := t
+  simp only [gas_withStateGas, StateGasMeter.start]
+  omega
 
 /-! ## The gas that a call asks for -/
 
@@ -527,9 +690,11 @@ theorem popCallOperands_top {Meter : Type} [GasMeter Meter] {kind : CallKind}
 theorem AsksMore.popCallOperands {low : Evm fork Nat} {high : Evm fork StateGasMeter}
     (h : AsksMore low high) (kind : CallKind) :
     Sim (fun p q => ∃ asked, q.1 = { p.1 with gas := asked } ∧ p.1.gas.toNat ≤ asked.toNat ∧
-        Tracks low p.2 q.2 ∧ p.2.gas + (asked.toNat - p.1.gas.toNat) ≤ q.2.gas.gasLeft)
+        Tracks low high.gas p.2 q.2 ∧ p.2.gas + (asked.toNat - p.1.gas.toNat) ≤ q.2.gas.gasLeft)
       (Evm.popCallOperands kind low) (Evm.popCallOperands kind high) := by
   obtain ⟨meter, same, below, asks⟩ := h
+  have gas : high.gas = meter := congrArg Evm.gas same
+  subst gas
   cases hs : low.stack.val with
   | nil =>
     have failed : Evm.popCallOperands kind low = .error .stackUnderflow :=
@@ -577,32 +742,34 @@ theorem gas_accessDelegation {Meter : Type} [GasMeter Meter] {evm after : Evm fo
 
 /-- The step of a call under one counter lifts to a frame that asks for more gas, within its excess.
 
-It holds for every kind of call, at every fork. -/
-theorem callStep_asks (kind : CallKind) {low : Evm fork Nat} {high : Evm fork StateGasMeter}
-    (h : AsksMore low high) :
-    StepLifts low (low.pc + 1) (callStep kind low) (callStep kind high) := by
+A carried frame keeps the bound on the execution gas and the reservoir. -/
+private theorem callStep_kept (kind : CallKind) {low : Evm fork Nat}
+    {high : Evm fork StateGasMeter} (h : AsksMore low high) :
+    StepKept low high.gas (low.pc + 1) (callStep kind low) (callStep kind high) := by
   unfold callStep
-  refine (h.popCallOperands kind).bindStepLifts ?_
+  refine (h.popCallOperands kind).bindStepKept ?_
   rintro ⟨call, l⟩ ⟨_, h⟩ ⟨asked, rfl, asks, t, ahead⟩
-  obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := t
+  obtain ⟨⟨meter, below, rfl⟩, keeps, hc, hf, hp, he⟩ := t
   dsimp only
   simp only [message_withStateGas, memory_withStateGas]
   by_cases static : fork ≥ .glamsterdam ∧ kind = .call ∧ l.message.isStatic = true ∧
       call.value ≠ 0
   · simp only [static, ne_eq, not_false_eq_true, and_self, ↓reduceIte]
-    exact StepLifts.error
+    exact StepKept.error
   simp only [static, ↓reduceIte]
-  have t : Tracks low l (withStateGas l meter) := ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩
+  have t : Tracks low high.gas l (withStateGas l meter) :=
+    ⟨⟨meter, below, rfl⟩, keeps, hc, hf, hp, he⟩
   obtain ⟨cold, ta⟩ := t.accessAddress call.address
   rw [cold]
-  refine (ta.checkGas _).bindStepLifts fun _ _ _ => ?_
-  refine (ta.recordAccountRead call.address).keepReadsStep ?_
+  refine (ta.checkGas _).bindStepKept fun _ _ _ => ?_
+  refine (ta.recordAccountRead call.address).keepReadsStepKept ?_
   refine (((ta.recordAccountRead call.address).accessDelegation call.address _).and
-    (fun _ ok => gas_accessDelegation ok) (fun _ ok => gas_accessDelegation ok)).bindStepLifts ?_
+    (fun _ ok => gas_accessDelegation ok) (fun _ ok => gas_accessDelegation ok)).bindStepKept ?_
   rintro ⟨callee, l2⟩ ⟨_, h2⟩ ⟨⟨rfl, t2⟩, gasLow, gasHigh⟩
-  refine t2.keepReadsStep ?_
-  obtain ⟨⟨meter2, below2, rfl⟩, hc2, hf2, hp2, he2⟩ := t2
-  have t2 : Tracks low l2 (withStateGas l2 meter2) := ⟨⟨meter2, below2, rfl⟩, hc2, hf2, hp2, he2⟩
+  refine t2.keepReadsStepKept ?_
+  obtain ⟨⟨meter2, below2, rfl⟩, keeps2, hc2, hf2, hp2, he2⟩ := t2
+  have t2 : Tracks low high.gas l2 (withStateGas l2 meter2) :=
+    ⟨⟨meter2, below2, rfl⟩, keeps2, hc2, hf2, hp2, he2⟩
   -- The pops and the accesses keep the gas of each frame, so the excess stays.
   have ahead2 : l2.gas + (asked.toNat - call.gas.toNat) ≤ meter2.gasLeft := by
     have lowKept : l2.gas = l.gas := gasLow.trans (accessAddress_of_stack l l.stack _).2
@@ -611,9 +778,26 @@ theorem callStep_asks (kind : CallKind) {low : Evm fork Nat} {high : Evm fork St
     rw [lowKept, highKept]
     exact ahead
   simp only [state_withStateGas]
-  refine (t2.payCall kind call asks ahead2 _ _ _).bindStepLifts ?_
-  rintro ⟨sub, l3⟩ ⟨sub', h3⟩ ⟨more, t3⟩
-  exact finishCall_lifts t3 more
+  refine (t2.payCall kind call asks ahead2 _ _ _).bindStepKept ?_
+  rintro ⟨sub, l3⟩ ⟨sub', h3⟩ ⟨more, t3, kept⟩
+  exact finishCall_kept t3 more kept
+
+/-- The step of a call under one counter lifts to a frame that asks for more gas, within its excess.
+
+It holds for every kind of call, at every fork. -/
+theorem callStep_asks (kind : CallKind) {low : Evm fork Nat} {high : Evm fork StateGasMeter}
+    (h : AsksMore low high) :
+    StepLifts low (low.pc + 1) (callStep kind low) (callStep kind high) :=
+  (callStep_kept kind h).1
+
+/-- In a call that sends no message, the execution gas and reservoir drop as the counter drops.
+
+The call runs from a frame that asks for more gas, within its excess. -/
+theorem callStep_keeps (kind : CallKind) {low after : Evm fork Nat}
+    {high b : Evm fork StateGasMeter} (h : AsksMore low high)
+    (ok : callStep kind low = .ok (.next after)) (highOk : callStep kind high = .ok (.next b))
+    (carried : Carried after.error) : Keeps low high.gas after b :=
+  (callStep_kept kind h).2 after b ok highOk carried
 
 /-- The step of a call under one counter lifts to a state gas meter that covers the counter.
 

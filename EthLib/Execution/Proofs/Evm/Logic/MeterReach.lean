@@ -381,18 +381,41 @@ theorem MeterCovers.step {low after : Evm fork Nat} {high high' : Evm fork State
     MeterCovers after high' :=
   ⟨Nat.lt_of_le_of_lt hs.gasHeld_le h.1, .inl follows⟩
 
+/-- The frame under one counter holds at least `excess` less than the execution gas and reservoir.
+-/
+def Ledger (excess : Nat) (low : Evm fork Nat) (high : Evm fork StateGasMeter) : Prop :=
+  low.gas + excess ≤ high.gas.gasLeft + high.gas.reservoir
+
+/-- A read of the frame pays its price from the meter, and keeps that meter after. -/
+private theorem charge_of_readFrame {Meter : Type} [GasMeter Meter] {cost : Nat}
+    {value : Evm fork Meter → U256} {evm after : Evm fork Meter}
+    (ok : readFrame cost value evm = .ok after) : GasMeter.charge evm.gas cost = .ok after.gas := by
+  unfold readFrame at ok
+  obtain ⟨charged, paid, ok⟩ := EthLib.Base.bind_ok_iff.mp ok
+  obtain ⟨gas, hg, rfl⟩ := chargeGas_eq_ok_iff_charge.mp paid
+  obtain ⟨pushed, hp, ok⟩ := EthLib.Base.bind_ok_iff.mp ok
+  simp only [pure, Except.pure, Except.ok.injEq] at ok
+  subst ok
+  obtain ⟨stack, -, hx⟩ := EthLib.Base.bind_ok_iff.mp hp
+  simp only [pure, Except.pure, Except.ok.injEq] at hx
+  subst hx
+  exact hg
+
 /-- A step of checked code keeps its scan, and a normal result can come only from a normal frame.
 
 A running result keeps the error of the frame.
 
 A result whose error is none or a revert has a step under a state gas meter that covers the counter.
+
+That step keeps every ledger of the execution gas and the reservoir.
 -/
 theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low after)
     (ready : MeterReady low) :
     MeterReady after ∧ (after.error = none → low.error = none) ∧
       (after.running = true → after.error = low.error) ∧
       (Carried after.error → ∀ high, MeterCovers low high → ∃ high',
-        MeterCovers after high' ∧ Step fork high high') := by
+        MeterCovers after high' ∧ Step fork high high' ∧
+          ∀ excess, Ledger excess low high → Ledger excess after high') := by
   obtain ⟨supported, flags, boundary⟩ := ready
   have running := h.running
   -- An exceptional halt stops the frame, and carries an error other than a revert.
@@ -401,7 +424,8 @@ theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low after)
         low.error = none) ∧ ((exceptionalHalt low e).running = true →
         (exceptionalHalt low e).error = low.error) ∧ (Carried (exceptionalHalt low e).error →
         ∀ high, MeterCovers low high → ∃ high',
-          MeterCovers (exceptionalHalt low e) high' ∧ Step fork high high') :=
+          MeterCovers (exceptionalHalt low e) high' ∧ Step fork high high' ∧
+            ∀ excess, Ledger excess low high → Ledger excess (exceptionalHalt low e) high') :=
     fun e other => ⟨⟨supported, flags, fun h => (by cases h)⟩, fun h => (by cases h),
       fun h => (by cases h), fun carried => by
         rcases carried with h | h <;> simp only [exceptionalHalt, reduceCtorEq,
@@ -459,7 +483,11 @@ theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low after)
                 inside decoded kindOf
             have hb : Step fork high b :=
               .next (by rw [same]; exact running) (by rw [highStep]; exact highOk)
-            exact ⟨b, covers.step hb follows, hb⟩
+            -- The call gives back what it passes on, so it keeps every ledger.
+            have keeps := callStep_keeps kind covers.asksMore hn highOk carried
+            refine ⟨b, covers.step hb follows, hb, fun excess ledger => ?_⟩
+            simp only [Ledger, Keeps] at ledger keeps ⊢
+            omega
       | none =>
         have since := since_le_of_ofByte_eq_some decoded
         -- The instruction, the fields its successes keep, and the lift of each success.
@@ -467,23 +495,27 @@ theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low after)
             (∀ after, run low = .ok after → MeterFields low after (low.pc + opWidth op)) ∧
             run low ≠ .error .revert ∧
             ∀ after, run low = .ok after → Carried after.error → ∀ high, MeterCovers low high →
-              ∃ high', MeterCovers after high' ∧ Step fork high high' := by
+              ∃ high', MeterCovers after high' ∧ Step fork high high' ∧
+                ∀ excess, Ledger excess low high → Ledger excess after high' := by
           rcases meterSupported_of_supportedCode supported boundary decodedAt with
             supportedOp | ⟨rfl, nextCall⟩
           · obtain ⟨run, dispatch⟩ := Option.isSome_iff_exists.mp
               (instruction_isSome_of_meterSupported supportedOp kindOf since)
             obtain ⟨highRun, dispatchHigh, bridge⟩ := instruction_bridge supportedOp dispatch
             refine ⟨run, dispatch, fun after ok =>
-              ((bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _)).1 after ok).1,
-              (bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _)).2,
+              ((bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _)).1.1 after ok).1,
+              (bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _)).1.2,
               fun after ok carried high covers => ?_⟩
             obtain ⟨meter, below, rfl⟩ := covers.followsMeter hdecode kindOf
-            obtain ⟨highNext, highOk, follows⟩ := ((bridge low meter below).1 after ok).2 carried
+            obtain ⟨highNext, highOk, follows⟩ := ((bridge low meter below).1.1 after ok).2 carried
+            have keeps := (bridge low meter below).2 after highNext ok highOk carried
             have hs : Step fork (withStateGas low meter) highNext := .next running (by
               rw [step_of_instruction (evm := withStateGas low meter) inside decoded
                 dispatchHigh, highOk]
               rfl)
-            exact ⟨highNext, covers.step hs follows, hs⟩
+            refine ⟨highNext, covers.step hs follows, hs, fun excess ledger => ?_⟩
+            simp only [Ledger, Keeps, gas_withStateGas] at ledger keeps ⊢
+            omega
           · -- GAS pushes the gas left of each frame, and a call comes next.
             obtain ⟨never, gas⟩ := gasStep instruction_gas low
             refine ⟨_, instruction_gas, fun after ok => (gas after ok).1, never,
@@ -499,13 +531,26 @@ theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low after)
             obtain ⟨next, kind, decodedNext, call⟩ := nextCall
             refine ⟨high', ⟨Nat.lt_of_le_of_lt hs.gasHeld_le covers.1,
               .inr ⟨pending, sameRunning.trans running, by omega, ?_, ?_, next, kind, ?_, call⟩⟩,
-              hs⟩
+              hs, fun excess ledger => ?_⟩
             · rw [pc, ((gas after ok).1).1, Nat.add_sub_cancel]
               exact boundary
             · rw [pc, ((gas after ok).1).1, Nat.add_sub_cancel]
               exact hdecode
             · rw [pc, ((gas after ok).1).1]
               exact decodedNext
+            · -- GAS pays the same price under each meter.
+              have lowPaid := charge_of_readFrame ok
+              have highPaid := charge_of_readFrame highOk
+              simp only [GasMeter.charge] at lowPaid
+              change StateGasMeter.charge meter OPCODE_GAS = .ok high'.gas at highPaid
+              unfold StateGasMeter.charge at highPaid
+              split at lowPaid
+              · cases lowPaid
+              split at highPaid
+              · cases highPaid
+              simp only [Except.ok.injEq] at lowPaid highPaid
+              simp only [Ledger, gas_withStateGas, ← lowPaid, ← highPaid] at ledger ⊢
+              omega
         have hs := step_of_instruction inside decoded dispatch
         cases h with
         | halt _ failed _ =>
@@ -548,7 +593,7 @@ theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low after)
       obtain ⟨meter, below, rfl⟩ := covers.followsMeter stop rfl
       have hs : Step fork (withStateGas low meter) _ := .next running
         (step_of_size_le (evm := withStateGas low meter) (by exact Nat.le_of_not_gt inside))
-      exact ⟨_, covers.step hs ⟨meter, below, rfl⟩, hs⟩
+      exact ⟨_, covers.step hs ⟨meter, below, rfl⟩, hs, fun _ ledger => ledger⟩
 
 /-- A step of checked code that sends a message is the step of a call.
 
@@ -640,9 +685,10 @@ private theorem carried_of_meterReady {low after : Evm fork Nat}
     (r : Reaches (Step fork) low after) (ready : MeterReady low)
     (start : low.running = true → low.error = none) (ends : Carried after.error) :
     ∀ high, MeterCovers low high → ∃ high', MeterCovers after high' ∧
-      Reaches (Step fork) high high' := by
+      Reaches (Step fork) high high' ∧
+        ∀ excess, Ledger excess low high → Ledger excess after high' := by
   induction r with
-  | refl => exact fun high covers => ⟨high, covers, .refl _⟩
+  | refl => exact fun high covers => ⟨high, covers, .refl _, fun _ => id⟩
   | @step _ next _ hs rest ih =>
     obtain ⟨nextReady, -, keeps, lift⟩ := step_meterReady hs ready
     have nextStart : next.running = true → next.error = none := fun runs =>
@@ -655,20 +701,24 @@ private theorem carried_of_meterReady {low after : Evm fork Nat}
       | refl => exact ends
       | step further _ => exact .inl (nextStart further.running)
     intro high covers
-    obtain ⟨m, hm, first⟩ := lift nextCarried high covers
-    obtain ⟨last, hl, remaining⟩ := ih nextReady nextStart ends m hm
-    exact ⟨last, hl, .step first remaining⟩
+    obtain ⟨m, hm, first, ledgerFirst⟩ := lift nextCarried high covers
+    obtain ⟨last, hl, remaining, ledgerRest⟩ := ih nextReady nextStart ends m hm
+    exact ⟨last, hl, .step first remaining, fun excess ledger =>
+      ledgerRest excess (ledgerFirst excess ledger)⟩
 
 /-- A reach through checked code to a frame with no error or a revert carries to a covering frame.
 
-It starts from a frame that runs only with no error. -/
+It starts from a frame that runs only with no error.
+
+The execution gas and the reservoir drop by at most what the counter drops. -/
 theorem Reaches.meterCovers {low after : Evm fork Nat} {high : Evm fork StateGasMeter}
     (r : Reaches (Step fork) low after) (supported : SupportedCode low.code = true)
     (flags : low.validJumpDestinations = validJumpDestinations low.code)
     (boundary : low.code.size ≤ low.pc ∨ low.pc ∈ opcodePositions low.code)
     (start : low.running = true → low.error = none) (ends : Carried after.error)
     (covers : MeterCovers low high) :
-    ∃ high', MeterCovers after high' ∧ Reaches (Step fork) high high' :=
+    ∃ high', MeterCovers after high' ∧ Reaches (Step fork) high high' ∧
+      ∀ excess, Ledger excess low high → Ledger excess after high' :=
   carried_of_meterReady r ⟨supported, flags, fun _ => boundary⟩ start ends high covers
 
 /-- A frame that covers a stopped frame follows it. -/
@@ -690,7 +740,7 @@ theorem Reaches.followsMeter {low after : Evm fork Nat} {meter : StateGasMeter}
     (below : low.gas ≤ meter.gasLeft) (fits : GasMeter.gasHeld meter < 2 ^ 256) :
     ∃ m, after.gas ≤ m.gasLeft ∧
       Reaches (Step fork) (withStateGas low meter) (withStateGas after m) := by
-  obtain ⟨_, covers, reached⟩ := r.meterCovers supported flags boundary
+  obtain ⟨_, covers, reached, -⟩ := r.meterCovers supported flags boundary
     (fun _ => normal_of_meterReady r ⟨supported, flags, fun _ => boundary⟩ normal) (.inl normal)
     ⟨fits, .inl ⟨meter, below, rfl⟩⟩
   obtain ⟨m, hm, rfl⟩ := covers.followsMeter_of_stopped stopped
@@ -707,7 +757,7 @@ theorem Reaches.followsMeter_revert {low after : Evm fork Nat} {meter : StateGas
     (below : low.gas ≤ meter.gasLeft) (fits : GasMeter.gasHeld meter < 2 ^ 256) :
     ∃ m, after.gas ≤ m.gasLeft ∧
       Reaches (Step fork) (withStateGas low meter) (withStateGas after m) := by
-  obtain ⟨_, covers, reached⟩ := r.meterCovers supported flags boundary (fun _ => start)
+  obtain ⟨_, covers, reached, -⟩ := r.meterCovers supported flags boundary (fun _ => start)
     (.inr reverted) ⟨fits, .inl ⟨meter, below, rfl⟩⟩
   -- A running frame keeps the error of the first frame, so a frame that reverts has stopped.
   have stopped : after.running = false := by
@@ -759,7 +809,7 @@ theorem Spec.covered {P Q : Evm fork Nat → Prop} (h : Spec fork P Q)
   rintro _ ⟨low, hp, ⟨meter, below, rfl⟩, fits⟩
   obtain ⟨supported, flags, boundary, start⟩ := ready low hp
   obtain ⟨stopped, reached, halted, hq⟩ := h low hp
-  obtain ⟨high, covers, highReached⟩ := reached.meterCovers supported flags boundary
+  obtain ⟨high, covers, highReached, -⟩ := reached.meterCovers supported flags boundary
     (fun _ => start) (ends stopped hq) ⟨fits, .inl ⟨meter, below, rfl⟩⟩
   obtain ⟨m, hm, rfl⟩ := covers.followsMeter_of_stopped halted
   exact ⟨_, highReached, halted, stopped, hq, ⟨m, hm, rfl⟩, covers.1⟩

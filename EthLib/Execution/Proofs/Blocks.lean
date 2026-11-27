@@ -33,12 +33,14 @@ public import EthLib.Execution.Proofs.Blocks.Ommers
 public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Execution.Proofs.Blocks.Replay
 public import EthLib.Execution.Proofs.Blocks.Rewards
+public import EthLib.Execution.Proofs.Blocks.Reaches
 public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots
 public import EthLib.Execution.Proofs.Blocks.RootsRandomOracle
 public import EthLib.Execution.Proofs.Blocks.SimulatedLogs
 public import EthLib.Execution.Proofs.Blocks.StateAborts
 public import EthLib.Execution.Proofs.Blocks.StorageAt
+public import EthLib.Execution.Proofs.Blocks.StorageInvariant
 public import EthLib.Execution.Proofs.Blocks.Supply
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.SystemCall.AddCost
@@ -48,6 +50,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueStart
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
 public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
+public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryRing
 public import EthLib.Execution.Proofs.Blocks.SystemCall.ConsolidationRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryStorage
 public import EthLib.Execution.Proofs.Blocks.SystemCall.LowGas

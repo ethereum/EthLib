@@ -34,6 +34,7 @@ def Fp.embedding : FieldOps.Embedding Fp (ZMod Fp.modulus) where
   map_zero := Fp.toZMod_zero
   map_one := Fp.toZMod_one
   map_inverse := Fp.toZMod_inv
+  map_square a := map_mul Fp.toZMod a a
   beq_iff _ _ := beq_iff_eq.trans Fp.toZMod.injective.eq_iff.symm
   isZero_iff _ := beq_iff_eq.trans (map_eq_zero_iff Fp.toZMod Fp.toZMod.injective).symm
 
@@ -66,7 +67,8 @@ theorem ext {a b : Fp2} (h0 : a.c0 = b.c0) (h1 : a.c1 = b.c1) : a = b := by
 @[simp] theorem neg_c0 (a : Fp2) : (-a).c0 = -a.c0 := rfl
 @[simp] theorem neg_c1 (a : Fp2) : (-a).c1 = -a.c1 := rfl
 @[simp] theorem mul_c0 (a b : Fp2) : (a * b).c0 = a.c0 * b.c0 - a.c1 * b.c1 := rfl
-@[simp] theorem mul_c1 (a b : Fp2) : (a * b).c1 = a.c0 * b.c1 + a.c1 * b.c0 := rfl
+@[simp] theorem mul_c1 (a b : Fp2) : (a * b).c1 = a.c0 * b.c1 + a.c1 * b.c0 :=
+  Cryptography.Fp2.mul_c1_eq Fp.embedding a b
 
 /-! ## The ring
 

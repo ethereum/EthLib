@@ -76,15 +76,15 @@ def double (p : G1 F) : G1 F :=
   -- At infinity `Z3 = 2*Y1*Z1` is 0 anyway, so the point is returned without the work.
   if FieldOps.isZero p.z then p else
     -- dbl-2009-l: `A = X1^2`, `B = Y1^2`, `C = B^2`.
-    let A := p.x * p.x
-    let B := p.y * p.y
-    let C := B * B
+    let A := FieldOps.square p.x
+    let B := FieldOps.square p.y
+    let C := FieldOps.square B
     -- `D = 2*((X1+B)^2-A-C)`.
-    let t := (p.x + B) * (p.x + B) - A - C
+    let t := FieldOps.square (p.x + B) - A - C
     let D := t + t
     -- `E = 3*A`, `F = E^2`.
     let E := A + A + A
-    let F := E * E
+    let F := FieldOps.square E
     -- `X3 = F-2*D`.
     let x' := F - (D + D)
     -- `Y3 = E*(D-X3)-8*C`, with `8*C` as three doublings.
@@ -105,8 +105,8 @@ Each product by 2 is written as an addition.
 Equal points double, and opposite points sum to the point at infinity. -/
 def addGeneral (p q : G1 F) : G1 F :=
   -- add-2007-bl: `Z1Z1 = Z1^2`, `Z2Z2 = Z2^2`, `U1 = X1*Z2Z2`, `U2 = X2*Z1Z1`.
-  let z1z1 := p.z * p.z
-  let z2z2 := q.z * q.z
+  let z1z1 := FieldOps.square p.z
+  let z2z2 := FieldOps.square q.z
   let u1 := p.x * z2z2
   let u2 := q.x * z1z1
   -- `S1 = Y1*Z2*Z2Z2`, `S2 = Y2*Z1*Z1Z1`.
@@ -121,17 +121,17 @@ def addGeneral (p q : G1 F) : G1 F :=
     -- `H = U2-U1`, `I = (2*H)^2`, `J = H*I`.
     let h := u2 - u1
     let h2 := h + h
-    let i := h2 * h2
+    let i := FieldOps.square h2
     let j := h * i
     -- `r = 2*(S2-S1)`, `V = U1*I`.
     let r := (s2 - s1) + (s2 - s1)
     let v := u1 * i
     -- `X3 = r^2-J-2*V`.
-    let x' := r * r - j - (v + v)
+    let x' := FieldOps.square r - j - (v + v)
     -- `Y3 = r*(V-X3)-2*S1*J`.
     let y' := r * (v - x') - (s1 + s1) * j
     -- `Z3 = ((Z1+Z2)^2-Z1Z1-Z2Z2)*H`.
-    let z' := ((p.z + q.z) * (p.z + q.z) - z1z1 - z2z2) * h
+    let z' := (FieldOps.square (p.z + q.z) - z1z1 - z2z2) * h
     ⟨x', y', z'⟩
 
 /-- `p + q` for finite points where `q` has `z = 1`, by the `madd-2007-bl` formulas.
@@ -143,7 +143,7 @@ The last coordinate `((z1 + 1)^2 - z1^2 - 1) * h` simplifies to `2 * z1 * h`.
 They take 11 multiplications instead of 16, and give the same coordinates. -/
 def addMixed (p q : G1 F) : G1 F :=
   -- madd-2007-bl: `Z1Z1 = Z1^2`, `U2 = X2*Z1Z1`, `S2 = Y2*Z1*Z1Z1`.
-  let z1z1 := p.z * p.z
+  let z1z1 := FieldOps.square p.z
   let u2 := q.x * z1z1
   let s2 := q.y * p.z * z1z1
   -- `H = 0` when `U2 = X1`, and the formulas then give the point at infinity even for equal points.
@@ -155,13 +155,13 @@ def addMixed (p q : G1 F) : G1 F :=
     -- `H = U2-X1`, `I = 4*HH` computed as `(2*H)^2` without `HH`, and `J = H*I`.
     let h := u2 - p.x
     let h2 := h + h
-    let i := h2 * h2
+    let i := FieldOps.square h2
     let j := h * i
     -- `r = 2*(S2-Y1)`, `V = X1*I`.
     let r := (s2 - p.y) + (s2 - p.y)
     let v := p.x * i
     -- `X3 = r^2-J-2*V`.
-    let x' := r * r - j - (v + v)
+    let x' := FieldOps.square r - j - (v + v)
     -- `Y3 = r*(V-X3)-2*Y1*J`.
     let y' := r * (v - x') - (p.y + p.y) * j
     -- `Z3 = (Z1+H)^2-Z1Z1-HH`, which is `2*Z1*H`, computed as such.

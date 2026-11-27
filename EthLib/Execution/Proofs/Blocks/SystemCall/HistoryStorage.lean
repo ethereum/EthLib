@@ -88,6 +88,82 @@ theorem mod_sub_eq_slot {number : Nat} (h1 : 1 ≤ number) (h2 : number < 2 ^ 25
 variable {fork : Fork} {message : Message fork} {gas : Nat} {state : TransactionState}
   {substate : Substate} {returnData : ByteArray}
 
+/-- The slot that the code of a call from the system address computes for the block `number`.
+
+The code computes the number less 1, modulo 8191, on words.
+
+So the slot is below 8191 for every number, even 0. -/
+def setKey (number : Nat) : U256 := mod (sub (BitVec.ofNat 256 number) 1#256) 8191#256
+
+/-- The slot that a call from the system address writes is below 8191. -/
+theorem toNat_setKey_lt (number : Nat) : (setKey number).toNat < HISTORY_SERVE_WINDOW := by
+  simp only [setKey, mod, HISTORY_SERVE_WINDOW]
+  split
+  · simp
+  · simp only [BitVec.toNat_ofNat, show (8191#256).toNat = 8191 from rfl]
+    omega
+
+/-- A call from the system address writes the word of its input at the slot of `setKey`.
+
+It holds from Shapella, over the steps that are monotone in gas.
+
+The block number may be 0, but it must fit a word, or NUMBER fails. -/
+theorem specG_set (hfork : .shapella ≤ fork)
+    (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    (hbound : message.blockEnv.number < 2 ^ 256)
+    -- The conservative one-counter budget is 30,000 gas before Glamsterdam and 150,000 from it.
+    (hgas : 30000 * storageGasScale fork ≤ gas) :
+    SpecG fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
+      -- The frame stops with no error and no output.
+      evm.error = none ∧ evm.output = .empty ∧
+      -- The state then holds the word of the input at that slot of the contract.
+      --
+      -- It keeps the storage of every other account, the accounts and the codes.
+      WritesStorage message.currentTarget
+        (fun s => if s = setKey message.blockEnv.number then inputWord message.data
+          else storageOf state message.currentTarget s)
+        state evm.state := by
+  have hscale := one_le_storageGasScale fork
+  evm_stepG [CODE, CODE_NUMBER]
+  rw [hcaller, toU256_SYSTEM_ADDRESS]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  have hberlin : Fork.berlin ≤ fork := Nat.le_trans (by decide) hfork
+  obtain ⟨s1, hs1, ho1, -, ha1, hc1, -, h1⟩ := sstore_of_accountG (code := CODE) (pc := 81)
+    (gas := gas - 43) (rest := []) (key := setKey message.blockEnv.number)
+    (new := loadWord message.data 0 32)
+    hberlin (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) hstatic rfl
+    (by simp only [CALL_STIPEND]; omega)
+    (Nat.le_trans (sstoreTotalCost_le hberlin _ _ _ _)
+      (by omega)) hacc
+  refine Triple.seq h1 ?_
+  refine SpecG.consequence (stopG (by evm_code [CODE, CODE_NUMBER])
+    (by evm_code [CODE, CODE_NUMBER])) (fun _ h => h) ?_
+  rintro evm ⟨-, herr, hout, -, hst, -⟩
+  refine ⟨by simpa using herr, hout, show WritesStorage _ _ _ _ from ⟨fun s => ?_,
+    fun o k h => by rw [hst, ho1 o k (.inl h)], fun o => by rw [hst, ha1],
+    fun c => by rw [hst, hc1]⟩⟩
+  unfold storageOf
+  rw [hst]
+  by_cases h : s = setKey message.blockEnv.number
+  · subst h
+    simp only [eq_self, ite_true]
+    exact hs1
+  · simp only [h, ite_false]
+    exact ho1 _ _ (.inr fun e => h (U256.toBeBytes_inj e))
+
 /-- A call from the system address sets a hash, as EIP-2935 describes.
 
 It holds from Shapella, the fork that adds PUSH0, on a frame that may change the state. -/
@@ -109,45 +185,16 @@ theorem spec_set (hfork : .shapella ≤ fork)
       WritesStorage message.currentTarget
         (setHash message.blockEnv.number message.data (storageOf state message.currentTarget))
         state evm.state := by
-  have hscale := one_le_storageGasScale fork
-  evm_step [CODE, CODE_NUMBER]
-  rw [hcaller, toU256_SYSTEM_ADDRESS]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  evm_step [CODE, CODE_NUMBER]
-  rw [mod_sub_eq_slot hnumber hbound]
-  have hberlin : Fork.berlin ≤ fork := Nat.le_trans (by decide) hfork
-  obtain ⟨s1, hs1, ho1, -, ha1, hc1, -, h1⟩ := sstore_of_account (code := CODE) (pc := 81)
-    (gas := gas - 43) (rest := []) (key := slot (message.blockEnv.number - 1))
-    (new := loadWord message.data 0 32)
-    hberlin (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER]) hstatic rfl
-    (by simp only [CALL_STIPEND]; omega)
-    (Nat.le_trans (sstoreTotalCost_le hberlin _ _ _ _)
-      (by omega)) hacc
-  refine Triple.seq h1 ?_
-  refine Spec.consequence (stop (by evm_code [CODE, CODE_NUMBER])
-    (by evm_code [CODE, CODE_NUMBER])) (fun _ h => h) ?_
-  rintro evm ⟨-, herr, hout, -, hst, -⟩
-  refine ⟨by simpa using herr, hout, show WritesStorage _ _ _ _ from ⟨fun s => ?_,
-    fun o k h => by rw [hst, ho1 o k (.inl h)], fun o => by rw [hst, ha1],
-    fun c => by rw [hst, hc1]⟩⟩
-  unfold storageOf setHash
-  rw [hst]
-  by_cases h : s = slot (message.blockEnv.number - 1)
-  · subst h
-    simp only [eq_self, ite_true]
-    exact hs1
-  · simp only [h, ite_false]
-    exact ho1 _ _ (.inr fun e => h (U256.toBeBytes_inj e))
+  refine Spec.consequence (specG_set hfork hcaller hstatic hacc hbound hgas).toSpec
+    (fun _ h => h) ?_
+  rintro evm ⟨herr, hout, hw⟩
+  -- In those bounds, the slot of the code is the slot of the parent number.
+  have hk : setKey message.blockEnv.number = slot (message.blockEnv.number - 1) :=
+    mod_sub_eq_slot hnumber hbound
+  refine ⟨herr, hout, ?_⟩
+  unfold setHash
+  rw [← hk]
+  exact hw
 
 /-! ## A call that gets a hash -/
 
@@ -164,7 +211,7 @@ theorem mod_eq_slot (n : U256) : mod n 8191#256 = slot n.toNat := by
   simp [mod, slot, HISTORY_SERVE_WINDOW]
 
 /-- JUMPDEST, PUSH0, PUSH0 and REVERT, at byte 66, revert with no output. -/
-private theorem get_revertG {stack : List U256} (hfork : .shapella ≤ fork)
+theorem get_revertG {stack : List U256} (hfork : .shapella ≤ fork)
     (hstack : stack.length ≤ 4) (hgas : 10 ≤ gas) :
     SpecG fork (At CODE message 66 stack .empty gas state substate returnData)
       (Answer state none) := by
@@ -303,6 +350,71 @@ theorem specG_get (hfork : .shapella ≤ fork)
     evm_stepG [CODE, CODE_NUMBER]
     simp only [h, ite_false]
     exact get_revertG hfork (by simp) (by omega)
+
+/-- A call from an address other than the system address changes no state, up to its reads.
+
+It holds from Shapella for every input, over the steps that are monotone in gas.
+
+The block number may be 0, but it must fit a word, or NUMBER fails.
+
+Its state reads as the state it starts from. -/
+theorem specG_reads (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hbound : message.blockEnv.number < 2 ^ 256)
+    (hgas : 5000 ≤ gas) :
+    SpecG fork (At CODE message 0 [] .empty gas state substate returnData)
+      fun evm => ReadsAs evm.state state := by
+  have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
+      message.caller.toU256 = 0 := by
+    rw [equal, ite_eq_right_iff]
+    exact fun e => absurd e.symm (toU256_ne_of_ne_SYSTEM_ADDRESS hcaller)
+  -- Each way out of the code answers, and an answer reads as the state.
+  have load : ∀ {n : U256} {g : Nat}, 2300 ≤ g →
+      SpecG fork (At CODE message 54 [n] .empty g state substate returnData)
+        fun evm => ReadsAs evm.state state := fun hg =>
+    SpecG.consequence (get_loadG hfork hg) (fun _ h => h) fun _ h => h.1
+  have revert : ∀ {stack : List U256} {g : Nat}, stack.length ≤ 4 → 10 ≤ g →
+      SpecG fork (At CODE message 66 stack .empty g state substate returnData)
+        fun evm => ReadsAs evm.state state := fun hl hg =>
+    SpecG.consequence (get_revertG hfork hl hg) (fun _ h => h) fun _ h => h.1
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  evm_stepG [CODE, CODE_NUMBER]
+  by_cases hs : sub (BitVec.ofNat 256 message.data.size) 32#256 = 0
+  · evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    evm_stepG [CODE, CODE_NUMBER]
+    by_cases hc1 : greaterThan (loadWord message.data 0 32)
+        (sub (BitVec.ofNat 256 message.blockEnv.number) 1#256) = 0
+    · evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      by_cases hc2 : greaterThan (sub (BitVec.ofNat 256 message.blockEnv.number)
+          (loadWord message.data 0 32)) 8191#256 = 0
+      · evm_stepG [CODE, CODE_NUMBER]
+        exact load (by omega)
+      · evm_stepG [CODE, CODE_NUMBER]
+        exact revert (by simp) (by omega)
+    · evm_stepG [CODE, CODE_NUMBER]
+      evm_stepG [CODE, CODE_NUMBER]
+      exact revert (by simp) (by omega)
+  · evm_stepG [CODE, CODE_NUMBER]
+    exact revert (by simp) (by omega)
 
 /-- A call from an address other than the system address gets a hash, as EIP-2935 describes.
 

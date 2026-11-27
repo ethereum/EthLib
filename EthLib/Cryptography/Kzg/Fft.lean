@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls
 public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Cryptography.Kzg.BitReversal
+public import EthLib.Cryptography.Kzg.FftHalves
 
 /-!
 # `Fft`
@@ -18,15 +19,6 @@ open EthLib.Cryptography.Bls (Fr)
 
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
-
-/-- Entries `start`, `start + 2`, `start + 4` and so on of `xs`: the even or the odd entries. -/
-def everyOther {α : Type _} {k : Nat} (xs : Vector α (2 ^ (k + 1))) (start : Fin 2) :
-    Vector α (2 ^ k) :=
-  Vector.ofFn fun i => xs[start.val + 2 * i.val]'(by
-    have hi := i.isLt
-    have hs := start.isLt
-    have hpow : 2 ^ (k + 1) = 2 ^ k * 2 := Nat.pow_succ ..
-    omega)
 
 /-! ## Index bounds of the stages -/
 
