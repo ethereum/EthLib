@@ -343,9 +343,9 @@ theorem TargetFlagsVoted.of_processUpgrades_of_lt_altair
 theorem JustifiedEarly.of_initializeBeaconStateFromEth1 {fork : Fork}
     {after : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     JustifiedEarly after := by
   obtain ⟨_, _, activated, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
@@ -360,9 +360,9 @@ It is at the genesis epoch, so the separation asks nothing of it. -/
 theorem JustifiedSeparated.of_initializeBeaconStateFromEth1 {fork : Fork}
     {after : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     JustifiedSeparated after := by
   intro later
@@ -370,14 +370,15 @@ theorem JustifiedSeparated.of_initializeBeaconStateFromEth1 {fork : Fork}
   simp [getCurrentEpoch, slot, GENESIS_SLOT, GENESIS_EPOCH, computeEpochAtSlot,
     UInt64.lt_iff_toNat_lt] at later
 
-/-- Before Altair, the genesis state built from deposits has no pending attestations. -/
+/-- The genesis state built from deposits, at Phase 0, has no pending attestations. -/
 theorem initializeBeaconStateFromEth1_pending {fork : Fork} {after : BeaconState preset fork}
     {eth1BlockHash : Hash32} {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) (current : Bool) :
-    recentPending after before current = #[] := by
+    recentPending after (lt_altair_of_phase0 phase0) current = #[] := by
+  have before := lt_altair_of_phase0 phase0
   obtain ⟨_, _, deposited, activated, _, depositedOk, activatedOk, rfl⟩ :=
     initializeBeaconStateFromEth1_ok computed
   let Empty : BeaconState preset fork → Prop := fun state =>

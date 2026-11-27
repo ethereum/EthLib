@@ -21,8 +21,8 @@ def sync (fork : Fork) (_altair : .altair ≤ fork) (n : Nat) : Nat := n
 /-- From Glamsterdam on. -/
 def payload (fork : Fork) (_gloas : .glamsterdam ≤ fork) : Nat := 0
 
-/-- Phase 0 only. -/
-def early (fork : Fork) (_before : fork < .altair) : Nat := 0
+/-- Phase 0 only, by an equality. -/
+def early (fork : Fork) (_phase0 : fork = .phase0) : Nat := 0
 
 /-- The two forks that its type names, Fusaka and Glamsterdam. -/
 def upgrade (x : Since .fusaka .fusaka Nat) : Since .glamsterdam .glamsterdam Nat :=

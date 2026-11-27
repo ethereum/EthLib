@@ -111,9 +111,9 @@ The genesis block of the model is the block of the zero root, the root of its ch
 theorem initializeBeaconStateFromEth1_slackFinalityInvariant {fork : Fork}
     {state : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     SlackFinalityInvariant V U W (block (Vector.replicate 32 0)) attested block
       ⟨fork, state⟩ := by
@@ -140,10 +140,10 @@ theorem slackFinalized_of_chainSteps (positive : 0 < preset.SLOTS_PER_EPOCH.toNa
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    -- The genesis state built from deposits exists only before Altair.
-    {before : fork < .altair}
+    -- The genesis state built from deposits exists only at Phase 0.
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
@@ -175,10 +175,10 @@ theorem slackFinalized_activeSetAt_of_chainSteps
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    -- The genesis state built from deposits exists only before Altair.
-    {before : fork < .altair}
+    -- The genesis state built from deposits exists only at Phase 0.
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)
@@ -218,10 +218,10 @@ theorem slackFinalized_chainRoot_of_chainSteps
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    -- The genesis state built from deposits exists only before Altair.
-    {before : fork < .altair}
+    -- The genesis state built from deposits exists only at Phase 0.
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)

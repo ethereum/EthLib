@@ -9,7 +9,7 @@ The genesis checkpoint is slack-justified, and each step of a chain keeps both j
 
 So along a chain from the genesis state built from deposits, both are slack-justified in the model.
 
-That genesis state exists only before Altair, so a chain whose genesis is later is out of scope.
+That genesis state exists only at Phase 0, so a chain from another fork is out of scope.
 
 Each step needs hypotheses on the states before and after it.
 
@@ -544,12 +544,13 @@ The genesis block of the model is the block of the zero root, the root of its ch
 theorem initializeBeaconStateFromEth1_slackChainInvariant {fork : Fork}
     {state : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     SlackChainInvariant V U W (block (Vector.replicate 32 0)) attested block
       ⟨fork, state⟩ := by
+  have before := lt_altair_of_phase0 phase0
   have holds := initializeBeaconStateFromEth1_invariant computed
   obtain ⟨-, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
   refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed,
@@ -580,9 +581,9 @@ theorem slackJustifiedCheckpoints_of_chain (positive : 0 < preset.SLOTS_PER_EPOC
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state)
     {last : ForkedBeaconState preset}
     (steps :
@@ -631,9 +632,9 @@ theorem slackJustifiedCheckpoints_of_chainSteps (positive : 0 < preset.SLOTS_PER
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {state : BeaconState preset fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state)
     {last : ForkedBeaconState preset}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, state⟩ last)

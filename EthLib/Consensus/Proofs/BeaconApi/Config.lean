@@ -142,9 +142,9 @@ theorem forkSchedule_version
 /-- The genesis state that deposits build holds the genesis fork version that the API reports. -/
 theorem genesisInfo_version {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {state : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     state.forkVersions.currentVersion = (genesisInfo config state).genesisForkVersion := by
   obtain ⟨genesisTime, bodyRoot, activated, root, frame, rfl⟩ :=
@@ -156,19 +156,19 @@ theorem genesisInfo_version {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
 /-- The genesis state that deposits build holds the version of its fork as its current version. -/
 private theorem initializeBeaconStateFromEth1_currentVersion {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     state.forkVersions.currentVersion = config.forkVersion fork :=
-  (genesisInfo_version computed).trans (forkVersion_of_lt_altair before).symm
+  (genesisInfo_version computed).trans (forkVersion_of_lt_altair (lt_altair_of_phase0 phase0)).symm
 
 /-- The fork versions of the genesis state that deposits build are an entry of the fork schedule. -/
 private theorem initializeBeaconStateFromEth1_mem_forkSchedule {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     state.forkVersions ∈ forkSchedule config := by
   have versions := initializeBeaconStateFromEth1_forkVersions computed
@@ -191,14 +191,14 @@ Consider a chain from the genesis state that deposits build.
 
 Each state of the chain holds the version of its fork as its current version.
 
-That genesis state is before Altair.
+That genesis state is at Phase 0.
 -/
 theorem currentVersion_of_genesis_chainSteps {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {genesis : BeaconState preset fork}
     {last : ForkedBeaconState preset}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (initialized :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok genesis)
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, genesis⟩ last) :
     last.state.forkVersions.currentVersion = config.forkVersion last.fork :=
@@ -209,14 +209,14 @@ Consider a chain from the genesis state that deposits build.
 
 The fork versions of each state of the chain are an entry of the fork schedule.
 
-That genesis state is before Altair.
+That genesis state is at Phase 0.
 -/
 theorem forkVersions_mem_forkSchedule_of_genesis_chainSteps {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {genesis : BeaconState preset fork}
     {last : ForkedBeaconState preset}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (initialized :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok genesis)
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, genesis⟩ last) :
     last.state.forkVersions ∈ forkSchedule config :=

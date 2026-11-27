@@ -38,9 +38,9 @@ def initializeGenesisOf
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let deposits ← deposits.mapM (decodeInput Deposit)
   -- Genesis is defined at Phase 0 only.
-  if before : fork < .altair then
+  if phase0 : fork = .phase0 then
     let state : BeaconState preset fork ← toResult none
-      (initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before)
+      (initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0)
     toResult none ((SszType.serialize state).mapError fun e =>
       UnreadArgument.mk s!"state rejected: {reprStr e}")
   else rejectArgument none s!"no genesis at {fork.name}"

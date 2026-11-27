@@ -99,9 +99,9 @@ theorem chainSteps_forkVersions {property : Fork → ForkVersions → Prop}
 /-- The genesis state that deposits build holds the genesis version twice, from epoch 0. -/
 theorem initializeBeaconStateFromEth1_forkVersions {fork : Fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     state.forkVersions =
       ⟨config.GENESIS_FORK_VERSION, config.GENESIS_FORK_VERSION, GENESIS_EPOCH⟩ := by
@@ -214,14 +214,15 @@ Each upgrade writes the current version before it, the version of its fork, and 
 theorem forkVersions_eq_of_fork {fork0 : Fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {genesis : BeaconState preset fork0}
     {a b : ForkedBeaconState preset}
-    {before : fork0 < .altair}
+    {phase0 : fork0 = .phase0}
     (initialized :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok genesis)
     (toA : Relation.ReflTransGen (ChainStep config checks) ⟨fork0, genesis⟩ a)
     (toB : Relation.ReflTransGen (ChainStep config checks) ⟨fork0, genesis⟩ b)
     (same : a.fork = b.fork) :
     a.state.forkVersions = b.state.forkVersions := by
+  have before := lt_altair_of_phase0 phase0
   have start : ForkEntry config fork0 genesis.forkVersions :=
     .inl ⟨before, initializeBeaconStateFromEth1_forkVersions initialized⟩
   have entryA := chainSteps_forkVersions (property := ForkEntry config)
@@ -261,12 +262,13 @@ An upgrade moves the current version to the previous one, and writes the version
 theorem forkVersions_ofConfig_of_genesis_chainSteps {fork : Fork} {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {genesis : BeaconState preset fork}
     {last : ForkedBeaconState preset}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (initialized :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok genesis)
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, genesis⟩ last) :
     last.state.forkVersions.OfConfig config := by
+  have before := lt_altair_of_phase0 phase0
   refine chainSteps_forkVersions (property := fun _ versions => versions.OfConfig config)
     (fun computed _ holds => ⟨?_, _, (upgradeFrame_upgradeNext computed).currentVersion⟩)
     steps ?_

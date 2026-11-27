@@ -223,14 +223,14 @@ theorem onSchedule_iff_of_phase0 (ordered : config.ForkEpochsOrdered)
               (by decide)) started))
         | simp [Config.activationEpoch] at starts
 
-/-- When the forks start in order, a run from a Phase 0 genesis stays on the schedule.
+/-- When the forks start in order, a run from genesis stays on the schedule.
 
 It needs Altair to start after epoch zero, since a run applies no upgrade at genesis. -/
 theorem Run.onSchedule_of_genesis (ordered : config.ForkEpochsOrdered)
     {g x : ForkedBeaconState preset} (genesis : Genesis config checks g)
-    (phase0 : g.fork = .phase0) (altair : 0 < config.ALTAIR_FORK_EPOCH)
+    (altair : 0 < config.ALTAIR_FORK_EPOCH)
     (run : Run config checks g x) : OnSchedule config x := by
-  obtain ⟨_, _, _, _, initialized⟩ := genesis
+  obtain ⟨_, _, _, phase0, initialized⟩ := genesis
   have zero := (initializeBeaconStateFromEth1_checkpoints initialized).1
   exact run.onSchedule ordered ((onSchedule_iff_of_phase0 ordered phase0 zero).mpr altair)
 
