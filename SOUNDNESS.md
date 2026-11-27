@@ -2791,10 +2791,15 @@ Applied to the plain tries of two lists with these distinct keys, `root_binding`
 Otherwise `findCollision` returns a collision in the proofs of that key.
 The path searches return nothing there, since the trie is not secured.
 `indexedRoot_binding` concludes that the two lists are equal, or `findIndexedCollision` returns a collision in the proofs of one index.
+It is the Keccak-256 case of `indexedRootM_binding`, which states the same for any plain hash.
 Two transactions, or two withdrawals, with the same bytes are equal, so `transactionsRoot_binding` and `withdrawalsRoot_binding` conclude the same for the lists themselves.
 `receiptsRoot_binding` does so for receipts whose types are below `0xc0`, which holds for type 0 and for every type that a fork adds.
-No theorem bounds the probability of the indexed-root search itself.
-The bound below covers two tries that give one key two values.
+`prEvent_indexedWins_le` (`Execution/Proofs/Blocks/RootsRandomOracle.lean`) bounds by `Q^2 / 2^256` the probability that an adversary outputs two different lists with one root, with the hash a random oracle.
+The root of a list takes its hash in any monad, so the experiment runs it with a hash that queries the oracle.
+It then queries the inputs of the binding search at the key of every index below the longer length.
+Such lists then leave a collision of the oracle among the queried proof nodes.
+`Q` counts every hash call of the experiment, and it grows at least as the square of the longer length, since each index rebuilds both proofs.
+The trie bound below covers two tries that give one key two values.
 
 `Execution/Proofs/Trie/RandomOracle.lean` turns this binding into a probability bound, with the hash a random oracle.
 The trie definitions take their hash in any monad, so the experiment runs the root of the specification with a hash that queries the oracle.
@@ -8637,7 +8642,7 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of SHA-256.
   The bound on signing roots runs the same experiment, so it rests on the same oracle.
 - Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
-  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`, and the range search bound `prEvent_rangeWins_le`.
+  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`, the range search bound `prEvent_rangeWins_le` and the list root bound `prEvent_indexedWins_le`.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -8997,6 +9002,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Vrf/`
 - `EthLib/Cryptography/Proofs/Wots/`
 - `EthLib/Cryptography/Proofs/Xmss/`
+- `EthLib/Execution/Proofs/Blocks/`
 - `EthLib/Execution/Proofs/State/`
 - `EthLib/Execution/Proofs/Trie/`
 - `EthLib/Serialization/Proofs/Ssz/`

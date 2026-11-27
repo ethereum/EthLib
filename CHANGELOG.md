@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `prEvent_indexedWins_le` (`Execution/Proofs/Blocks/RootsRandomOracle.lean`) bounds the probability of finding two different lists with one root, with the hash a random oracle, by `Q^2 / 2^256`.
+  `indexedRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the root of a list for any plain hash, with `indexedRootM_eq` and `indexedRootM_eq_ok_iff` ([#4612](https://github.com/ethereum/EthLib/issues/4612)).
+  `Execution/Proofs/Trie/RandomOracle.lean` gains `mem_witnesses_of_findCollision`, the proof-node half of the secured-trie lemma.
+
 - In Lean, `applyBody_toBodyOutput` (`Execution/Proofs/Blocks/Transition.lean`) reads a body that runs with any overrides.
   Its output agrees with the output of its transactions on every field of that output but the body state.
   `applyBody_receipts` and three proofs of the RPC and simulation modules now apply it.
@@ -1169,6 +1173,11 @@ Not yet released.
   A step that writes a field adds one obligation to each user of the induction principle.
 
 ### Changes that break callers
+
+- In Lean, `Execution.Blocks.indexedRoot` is the new `indexedRootM` with Keccak-256, in the identity monad, so that a random oracle experiment can run it.
+  `findIndexedCollision`, `findIndexedCollision_valid`, `findIndexedCollision_self` and `valueAt_of_indexedEntries` take the hash as their first argument.
+  `indexedRoot_binding`, the typed root bindings, `TransactionsBound` and `WithdrawalsBound` pass Keccak-256.
+  Migration: pass `keccak256` to the search and its lemmas, and rewrite an unfolded `indexedRoot` with `indexedRootM_eq`.
 
 - In Lean, the block step of a chain (`Consensus/Proofs/Transition/Totality/ChainBlock.lean`) charges each new validator `MAX_EFFECTIVE_BALANCE` in place of the largest cap, and bounds the sync rewards by the root of the budget.
   `processBlock_effectiveBalanceSum_le` bounds the rise of the effective balances by `MAX_EFFECTIVE_BALANCE` for each new validator, in place of the largest cap, and takes no hypothesis on the caps.
