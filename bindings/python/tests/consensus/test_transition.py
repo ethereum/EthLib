@@ -11,6 +11,7 @@ from ethlib import consensus
 from ethlib.networking import snappy
 from raising import raises
 
+from . import rejections
 from .containers import FORKS
 from .test_data_column import replacements
 
@@ -148,8 +149,9 @@ def run_case(preset: str, fork: str, group: str, case: Path) -> None:
     if post.exists():
         assert advance(state) == snappy.decompress(post.read_bytes())
     else:
-        with pytest.raises(consensus.TransitionError):
+        with pytest.raises(consensus.TransitionError) as rejected:
             advance(state)
+        rejections.check_transition(rejected.value, case)
 
 
 def _cases() -> list:
