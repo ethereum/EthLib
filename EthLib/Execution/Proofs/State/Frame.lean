@@ -471,4 +471,51 @@ theorem sameOutside_restoreTxState {tx snapshot : TransactionState}
       getStorage_restoreTxState hparent address,
       getTransientStorage_restoreTxState tx snapshot address⟩
 
+
+/-! ## A state that reads as another -/
+
+/-- The state `tx` reads as the state `S`.
+
+It has the account, the current storage and the transient storage of `S` at every address.
+
+It has the code of `S` at every code hash. -/
+def ReadsAs (tx S : TransactionState) : Prop :=
+  -- The two may differ in the reads that they record.
+  --
+  -- They may also differ in the block before the transaction.
+  --
+  -- They may differ in the accounts that the transaction created and the storage that it wiped.
+  --
+  -- So the original storage and the account before the transaction may differ.
+  SameOutside [] S tx ∧ ∀ codeHash, tx.getCode codeHash = S.getCode codeHash
+
+/-- A state reads as itself. -/
+theorem ReadsAs.refl (S : TransactionState) : ReadsAs S S :=
+  ⟨SameOutside.refl [] S, fun _ => rfl⟩
+
+/-- A state that reads as one that reads as `S` reads as `S`. -/
+theorem ReadsAs.trans {tx tx' S : TransactionState} (h : ReadsAs tx tx') (h' : ReadsAs tx' S) :
+    ReadsAs tx S :=
+  ⟨h'.1.trans h.1, fun codeHash => (h.2 codeHash).trans (h'.2 codeHash)⟩
+
+/-- A record of an account read keeps a state that reads as `S`. -/
+theorem ReadsAs.recordAccountRead {tx S : TransactionState} (h : ReadsAs tx S)
+    (address : Address) : ReadsAs (tx.recordAccountRead address) S :=
+  (show ReadsAs (tx.recordAccountRead address) tx from
+    ⟨sameOutside_recordAccountRead tx address, fun _ => rfl⟩).trans h
+
+/-- A record of a storage read keeps a state that reads as `S`. -/
+theorem ReadsAs.recordStorageRead {tx S : TransactionState} (h : ReadsAs tx S)
+    (address : Address) (key : Bytes32) :
+    ReadsAs (tx.recordStorageRead address key) S :=
+  (show ReadsAs (tx.recordStorageRead address key) tx from
+    ⟨sameOutside_recordStorageRead tx address key, fun _ => rfl⟩).trans h
+
+/-- A rollback to a snapshot of the same block reads as the snapshot. -/
+theorem readsAs_restoreTxState {tx snapshot : TransactionState}
+    -- A snapshot taken before a run of writes has the block of the state after them.
+    (hparent : tx.parent = snapshot.parent) :
+    ReadsAs (tx.restoreTxState snapshot) snapshot :=
+  ⟨sameOutside_restoreTxState hparent, getCode_restoreTxState hparent⟩
+
 end EthLib.Execution.State.TransactionState

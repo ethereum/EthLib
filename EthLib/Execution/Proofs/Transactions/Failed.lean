@@ -135,14 +135,15 @@ theorem createdAccounts_foldlM_applyAuthorization {chainId : Nat} :
 
 /-- A creation that ends with an error reads as the state it is sent from, at every fork.
 
-That holds for each account, each storage and transient word, and the code at each code hash. -/
+That holds for each account and each word of storage and transient storage.
+
+The code at each code hash reads as before too. -/
 theorem processCreateMessage_reads_of_error [LawfulGasMeter Meter]
     {message : Message fork} {state : State.TransactionState} {substate : Substate}
     {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processCreateMessage fork message state substate meter held = .ok ended)
     (herr : ended.val.error.isSome = true) :
-    SameOutside [] state ended.val.state ∧
-      ∀ codeHash, ended.val.state.getCode codeHash = state.getCode codeHash := by
+    State.TransactionState.ReadsAs ended.val.state state := by
   rw [processCreateMessage_unfold] at h
   obtain ⟨prepared, hp, h⟩ := bind_ok_iff.mp h
   obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
@@ -159,8 +160,7 @@ theorem processCreateMessage_reads_of_error [LawfulGasMeter Meter]
   -- Each way the deposit fails rolls back to the snapshot, code included.
   --
   -- The one way that writes the code ends with no error.
-  have restored := And.intro (State.TransactionState.sameOutside_restoreTxState hparent)
-    (State.TransactionState.getCode_restoreTxState hparent)
+  have restored := State.TransactionState.readsAs_restoreTxState hparent
   split at hdeposit
   · cases hdeposit
     exact restored

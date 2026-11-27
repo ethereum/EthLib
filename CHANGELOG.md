@@ -1276,8 +1276,10 @@ Not yet released.
   A proof that unfolds the body of `Bls.HashToCurve.expandMessageXmd` must change, as `expandMessageXmd_256_ok` (`Cryptography/Proofs/Bls/HashToCurveValidity.lean`) did, since it no longer meets a loop.
 
 - In Lean, `Evm.processMessage_reads_of_error` (`Execution/Proofs/Evm/Call/Parent.lean`) says that a call that ends with an error reads as the state it is sent from.
+  It states this as `State.TransactionState.ReadsAs`.
   That holds for each account, each word of storage and transient storage, and the code at each code hash.
   `Transactions.processCreateMessage_reads_of_error` (`Execution/Proofs/Transactions/Failed.lean`) says the same for a creation that ends with an error.
+  `State.TransactionState.readsAs_restoreTxState` (`Execution/Proofs/State/Frame.lean`) says that a rollback to a snapshot of the same block reads as the snapshot.
 
 - In Lean, three theorems in `Consensus/Proofs/Transition/EpochUpdates.lean` describe a successful run of the registry updates.
   `processRegistryUpdates_ok_of_lt_electra` says that before Electra it is a first pass over the registry, then a read of the activation limit.
@@ -1300,6 +1302,10 @@ Not yet released.
   In an experiment, a step at the end that writes one more field broke 3 proofs outside that file, although none of them reads that field.
 
 ### Changes that break callers
+
+- In Lean, the relation that a state reads as another moves from `Logic.ReadsAs` (`Execution/Proofs/Evm/Logic/Keeps.lean`) to `State.TransactionState.ReadsAs` (`Execution/Proofs/State/Frame.lean`), with its definition unchanged.
+  Its lemmas `refl`, `trans`, `recordAccountRead` and `recordStorageRead` move with it, and `routeState` keeps its file under the new namespace.
+  The theorems on a failed call, in files that `Logic/Keeps.lean` imports, then state it by name.
 
 - In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).
   `KeptOrWipedEmpty` and `EmptyAt` (`Execution/Proofs/State/Wiped.lean`) state it, with the fact that an account empty at the end was empty at the start.

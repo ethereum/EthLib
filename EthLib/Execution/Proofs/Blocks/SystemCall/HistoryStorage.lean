@@ -236,7 +236,7 @@ private theorem get_loadG {n : U256} (hfork : .shapella ≤ fork) (hgas : 2300 �
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (Nat.le_trans (by omega) (Nat.sub_le_sub_left (sloadPrice_le _) _))) (fun _ h => h) ?_
-  exact fun evm h => h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+  exact fun evm h => h.of_readsAs ((TransactionState.ReadsAs.refl _).recordStorageRead _ _)
 
 /-- A call gets no hash for an input that is not 32 bytes, and otherwise checks its number. -/
 theorem getHash_eq (number : Nat) (read : U256 → U256) (input : ByteArray) :
@@ -362,7 +362,7 @@ theorem specG_reads (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hbound : message.blockEnv.number < 2 ^ 256)
     (hgas : 5000 ≤ gas) :
     SpecG fork (At CODE message 0 [] .empty gas state substate returnData)
-      fun evm => ReadsAs evm.state state := by
+      fun evm => TransactionState.ReadsAs evm.state state := by
   have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
       message.caller.toU256 = 0 := by
     rw [equal, ite_eq_right_iff]
@@ -370,11 +370,11 @@ theorem specG_reads (hfork : .shapella ≤ fork)
   -- Each way out of the code answers, and an answer reads as the state.
   have load : ∀ {n : U256} {g : Nat}, 2300 ≤ g →
       SpecG fork (At CODE message 54 [n] .empty g state substate returnData)
-        fun evm => ReadsAs evm.state state := fun hg =>
+        fun evm => TransactionState.ReadsAs evm.state state := fun hg =>
     SpecG.consequence (get_loadG hfork hg) (fun _ h => h) fun _ h => h.1
   have revert : ∀ {stack : List U256} {g : Nat}, stack.length ≤ 4 → 10 ≤ g →
       SpecG fork (At CODE message 66 stack .empty g state substate returnData)
-        fun evm => ReadsAs evm.state state := fun hl hg =>
+        fun evm => TransactionState.ReadsAs evm.state state := fun hl hg =>
     SpecG.consequence (get_revertG hfork hl hg) (fun _ h => h) fun _ h => h.1
   evm_stepG [CODE, CODE_NUMBER]
   evm_stepG [CODE, CODE_NUMBER]

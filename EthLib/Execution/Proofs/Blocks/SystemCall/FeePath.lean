@@ -193,7 +193,8 @@ theorem spec_fee {m : Nat} {Q : Evm fork Nat → Prop} (hfork : .shapella ≤ fo
     refine Spec.consequence (hc.jumpi_revert hfork (hl 68 (by decide))
       (by evm_code [hb, hl, ne_eq, Nat.reduceEqDiff, not_false_eq_true, FEE_PATH_NUMBER]) hz
       (by simp) (by omega)) (fun _ h => h) fun evm h => ?_
-    exact hrev (hx.trans hinh) evm (h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _))
+    exact hrev (hx.trans hinh) evm
+      (h.of_readsAs ((TransactionState.ReadsAs.refl _).recordStorageRead _ _))
   · have hz : equal (BitVec.ofNat 256 (2 ^ 256 - 1)) x = 0 := by
       rw [equal, ite_eq_right_iff, hw]
       exact fun e => absurd e.symm hinh
@@ -251,7 +252,7 @@ theorem spec_getFee {m : Nat} (hc : FeePathCode c.code system c.feeFraction reve
     exact h
   · have hread : ∀ result (evm : Evm fork Nat), Answer (state.recordStorageRead
         message.currentTarget (U256.toBeBytes 0)) result evm → Answer state result evm :=
-      fun _ _ h => h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+      fun _ _ h => h.of_readsAs ((TransactionState.ReadsAs.refl _).recordStorageRead _ _)
     evm_step [hb, hl, hc.push114, hc.push117, ne_eq, Nat.reduceEqDiff, not_false_eq_true,
       FEE_PATH_NUMBER]
     evm_step [hb, hl, hc.push114, hc.push117, ne_eq, Nat.reduceEqDiff, not_false_eq_true,
@@ -378,7 +379,7 @@ theorem spec_pay {m : Nat} {P : Evm fork Nat → Prop}
       refine Spec.consequence (hc.jumpi_revert hfork (hl 142 (by decide))
         (by evm_code [hb, hl, ne_eq, Nat.reduceEqDiff, not_false_eq_true, FEE_PATH_NUMBER]) hlt
         (by simp) (by omega)) (fun _ h => h) fun evm h => ?_
-      exact h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+      exact h.of_readsAs ((TransactionState.ReadsAs.refl _).recordStorageRead _ _)
 
 end RequestContract
 
