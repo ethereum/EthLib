@@ -3815,6 +3815,9 @@ The ancestry needs only the two block reads and that local slot order, not `Reac
 It assumes Assumption 2 on the active members of the empty-slot committees, no honest known equivocator, aligned effective balances, and an increment divisible by 100 Gwei.
 In an execution of the network model, `Execution.equivocatingIndices_honest` gives the assumption on known equivocators for the store of an honest validator.
 These are store-local facts: no theorem here shows that a recorded honest vote is its voter's latest actual vote, or that it remains the recorded vote at a later store.
+`VoteAt.latest_signed_at_next_slot` and `Execution.latest_signed_of_duty` in `Consensus/Proofs/ForkChoice/VoteDelivery.lean` give part of the later-store side ([#2053](https://github.com/ethereum/EthLib/issues/2053)).
+Conditional on delayed block admission, and on the voter's store reading the receiver's held finalized checkpoint as the checkpoint of the vote's block root at that epoch (the vote root's ancestor at the epoch's first slot is the finalized root), an up-to-date honest receiver at the next slot holds a signed vote from the duty slot or later, or bounded honest stores exhibit a block collision.
+The slot floor persists at later events.
 
 `Execution.isAncestor_getHead_of_historical_anchor` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalAnchor.lean` derives later head ancestry from a guarded historical margin.
 It applies `Execution.source_surplus_or_historical_evidence`, which derives the receiver's source-weight surplus from the caller's checked reads, rather than assuming that surplus.

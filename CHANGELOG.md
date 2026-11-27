@@ -20,6 +20,13 @@ Not yet released.
   Each applies `Execution.callRolloverRead_or_evidence` once, so its conclusion adds `HistoricalDirectSafetyEvidence`.
   The two proofs of confirmed-root coverage that split on that read now apply `Execution.rootViableAt_of_checked_or_evidence`.
 
+- In Lean, `VoteAt.latest_signed_at_next_slot` and `Execution.latest_signed_of_duty` (`Consensus/Proofs/ForkChoice/VoteDelivery.lean`) bound the latest vote of an honest duty at the next slot ([#2053](https://github.com/ethereum/EthLib/issues/2053)).
+  An up-to-date honest receiver at the next slot holds a signed vote of the validator from the duty slot or later.
+  Otherwise bounded honest stores exhibit a block collision.
+  Both assume delayed block admission.
+  They also assume that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root.
+  `Execution.data_eq_of_signed_of_target_epoch`, `Execution.latest_slot_floor_of_signed_rank` and `VoteAt.signed_sent` move to `Consensus/Proofs/ForkChoice/VoteDelivery.lean` from `Consensus/Proofs/ForkChoice/FastConfirmation/DutySupport.lean`, with their names and statements.
+
 - In Lean, `Base.pairwise_zip_of_pairwise` (`Base/Proofs/List.lean`) states that a relation that holds pairwise on a list holds pairwise on the first items of its zip.
   `List.takeWhile_eq_take`, `List.dropWhile_eq_drop` and `List.findIdx?_eq_of_nodup` move to `Base/Proofs/List.lean` from `Networking/Proofs/Devp2p/ForkId.lean`.
   `Consensus.mem_array_foldl_insert` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) is public.
