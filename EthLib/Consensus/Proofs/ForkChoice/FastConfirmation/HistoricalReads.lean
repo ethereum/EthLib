@@ -284,11 +284,11 @@ public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset for
 
 /-- A delay on, an honest receiver's justified epoch is at least an honest sender's finalized epoch.
 
-The receiver is up to date at an event by `last`; honest stores agree on blocks, with nonzero roots.
+The receiver is up to date by `last`; honest stores share an initialized anchor and agree on blocks.
 
 By `last`, honest justified roots read honest finalized checkpoints at lower or equal epochs.
 
-It assumes synchrony, delayed admission, an invariant anchor, nonempty epochs and root history. -/
+It assumes synchrony, admission, nonzero held roots, root history and an invariant anchor. -/
 public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
