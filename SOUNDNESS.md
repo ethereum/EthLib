@@ -658,13 +658,31 @@ A selection therefore compares `mixOutput`, the hash of the output with randomne
 The mix is a random oracle, and the tree hash is Keccak-256 itself.
 The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
 The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
-No theorem bounds that last chance.
-The uniqueness bound above takes the tree hash as a random oracle, while this theorem takes it as Keccak-256 itself.
+`Proofs/Vrf/SelectionRandomOracle.lean` bounds the chance that this search finds a pair in an experiment of its own, with the tree hash a random oracle, as in the uniqueness bound above.
+No theorem composes the two bounds, so no theorem bounds that last chance with Keccak-256 itself, which `prEvent_selected_le` takes as the tree hash.
 The theorem says nothing about a holder that registers a root without knowing a tree under it.
 That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
 It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
 The game is EthLib's own.
 `selected_iff_mixOutput` shows that, with `mixOutput` in place of the oracle, its event is exactly the protocol's check.
+
+`prEvent_extractCollision_isSome_le_two_pow` (`Proofs/Vrf/SelectionRandomOracle.lean`) bounds the probability that the search against the honest opening finds a pair, with the tree hash a random oracle.
+An adversary makes classical queries to that oracle, then outputs the secrets of a tree, an index and an opening.
+The experiment builds the honest opening at that index as `opening` does, with a query for each Keccak-256 call.
+It then runs the search on the two openings, again with a query for each Keccak-256 call.
+The search finds a pair with probability at most `Q^2 / 2^256`, where `Q` bounds the oracle queries of the whole experiment.
+`extractCollision_pure` shows that, with any function as the hash, this search is `findHashCollisionWith` on the opening and the honest opening that the function builds.
+`extractCollision_keccak256` shows that, with Keccak-256 in place of the oracle, it is `findHashCollision` on the opening and the honest opening.
+`Selection.Collides` is the event of the last term above.
+`Selection.collides_iff_extractCollision` shows that it holds for a run of the selection game exactly when this search, with Keccak-256, finds a pair.
+`collision_of_extractCollision` shows that every pair found leaves two different cached inputs with one answer.
+For the node inputs it uses `collision_of_replay_findCollision` (`Proofs/Merkle/RandomOracle/Collision.lean`).
+That theorem holds for any node hash whose replay reads the cache at one input that determines its two children.
+`extractCollision_queryBound` shows that the honest opening, the two leaf hashes and the search make at most `2^(h + 1) + 2 h` queries, for a tree of height `h`.
+The honest opening makes at most `2^(h + 1) - 2` of them (`openingWith_queryBound`), the two leaves make two, and the search makes at most two per level.
+`prEvent_extractCollision_isSome_le_of_adversary` states the bound with `Q = q + 2^(h + 1) + 2 h` for an adversary of at most `q` hash queries, which is `q + 2^33 + 64` at height 32.
+The adversary of this experiment outputs the secrets, the index and the opening directly, and no theorem turns a selection holder into such an adversary.
+Carrying this bound over to Keccak-256 is an idealisation of A4, not a theorem.
 
 [EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
 The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
@@ -8754,6 +8772,8 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
 - VRF uniqueness: Keccak-256 is a random oracle on byte strings, shared by the leaves, the nodes and the outputs of the tree.
+  The same assumption carries the bound on the collision search of a selection, `prEvent_extractCollision_isSome_le_two_pow`.
+  There the oracle answers every Keccak-256 call of the honest opening and of the search.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -8764,6 +8784,9 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of Keccak-f[1600].
 - VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
   That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
+  The bound on the collision search of a selection takes the tree hash as a random oracle instead, under the VRF uniqueness assumption above.
+  A composed bound would take the tree hash as a random oracle in the selection theorem too.
+  One oracle on byte strings gives independent oracles on the disjoint input lengths of the mix and the tree, but no theorem states that composition.
   The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.
   No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
   The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.

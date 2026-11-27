@@ -257,7 +257,7 @@ The mixed value of its output lands in `S` with probability at most the sum of t
 - `q / 2^256`: a mix query that already used the randomness.
 - The chance that the search of the uniqueness theorem returns a collision, with both openings.
 
-No theorem bounds the last term: it is the chance that the holder finds a Keccak-256 collision.
+No theorem bounds the last term with Keccak-256 itself, which this theorem takes as the tree hash.
 
 In the model, `q` counts every evaluation of the mix by the holder.
 
