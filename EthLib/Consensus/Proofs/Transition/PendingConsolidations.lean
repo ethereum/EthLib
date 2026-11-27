@@ -784,15 +784,11 @@ private theorem registry_unassigned (electra : .pectra ≤ fork)
     WithdrawalKept state after ∧ WithdrawalExact state after ∧
       WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
         config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state after := by
-  unfold processRegistryUpdates at ok
-  rw [ite_eq_left electra] at ok
-  simp only [bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  have all := foldlM_ok_invariant
+  have all := processRegistryUpdates_invariant_of_electra electra
     (fun s => WithdrawalKept state s ∧ WithdrawalExact state s ∧ RegistryLifecycle state s ∧
       WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
         config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state s ∧ s.slot = state.slot)
-    (fun a _ b prior ok => by
+    (fun _ _ a _ b prior ok => by
       have life : RegistryLifecycle a b := by
         simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
         obtain ⟨v, found, ok⟩ := ok

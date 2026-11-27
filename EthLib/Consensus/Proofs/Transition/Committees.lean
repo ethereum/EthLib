@@ -1000,10 +1000,8 @@ private theorem keeps_foldlM_activateValidator :
 
 private theorem keeps_processRegistryUpdates (before : fork < .pectra)
     (computed : processRegistryUpdates config state = .ok after) : Keeps state after := by
-  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  unfold processRegistryUpdates at computed
-  simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra before computed
   have first := Keeps.foldlM (fun _ _ _ ok => keeps_updateRegistryEntry ok) updatedOk
   refine first.trans (keeps_foldlM_activateValidator (fun index member validator found => ?_)
     activated)

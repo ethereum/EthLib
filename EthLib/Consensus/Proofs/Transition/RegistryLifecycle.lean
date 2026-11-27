@@ -981,11 +981,9 @@ theorem foldActivateValidator_of_queue
 theorem registryLifecycle_processRegistryUpdates
     (computed : processRegistryUpdates config state = .ok after) :
     RegistryLifecycle state after := by
-  unfold processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    refine RegistryLifecycle.foldlM (fun state _ _ ok => ?_) computed
+  by_cases electra : .pectra ≤ fork
+  · refine processRegistryUpdates_invariant_of_electra electra (RegistryLifecycle state)
+      (fun _ _ state _ _ before ok => before.trans ?_) (.refl state) computed
     simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
     obtain ⟨validator, found, ok⟩ := ok
     split at ok
@@ -1003,11 +1001,10 @@ theorem registryLifecycle_processRegistryUpdates
       exact .setValidatorAt found ok ⟨fun set => absurd far set, fun _ => rfl⟩
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ .refl _
-  rename_i notElectra
-  simp only [bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) computed
   -- Before Electra the registry is within its limit, far below `2^64`.
-  have before : fork < .glamsterdam := Nat.lt_trans (Nat.lt_of_not_le notElectra) (by decide)
+  have before : fork < .glamsterdam := Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
   have small : updated.validators.data.size < 2 ^ 64 :=
     Nat.lt_of_le_of_lt (updated.validators.bound before) (UInt64.toNat_lt _)
   refine (RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_updateRegistryEntry ok)

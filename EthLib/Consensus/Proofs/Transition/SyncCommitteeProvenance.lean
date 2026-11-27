@@ -553,13 +553,11 @@ private theorem updateRegistryEntryElectra {activationEpoch : Epoch} {index : Na
 private theorem processRegistryUpdates
     (ok : Consensus.processRegistryUpdates config state = .ok after) :
     SameSyncCommittees state after := by
-  unfold Consensus.processRegistryUpdates at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact foldlM (fun _ _ _ ok => updateRegistryEntryElectra ok) ok
-  simp only [bind_ok_iff] at ok
-  obtain ⟨_, updated, _, _, activated⟩ := ok
+  by_cases electra : .pectra ≤ fork
+  · exact processRegistryUpdates_invariant_of_electra electra (SameSyncCommittees state)
+      (fun _ _ _ _ _ before ok => before.trans (updateRegistryEntryElectra ok)) (.refl state) ok
+  obtain ⟨_, _, updated, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) ok
   exact (foldlM (fun _ _ _ ok => updateRegistryEntry ok) updated).trans
     (foldlM (fun _ _ _ ok => activateValidator ok) activated)
 

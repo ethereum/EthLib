@@ -2551,12 +2551,9 @@ private theorem CapStepR.registry {f : Fork} {s t : BeaconState preset f}
         (one.2.2.2.2.2 activation finite funded held)⟩
   suffices held : R s t from
     ⟨held.1, held.2.1, held.2.2.1, held.2.2.2.1, held.2.2.2.2.2⟩
-  unfold processRegistryUpdates at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact foldlM_ok_invariant (R s)
-      (fun _ _ _ previous edge => trans previous
+  by_cases electra : .pectra ≤ f
+  · exact processRegistryUpdates_invariant_of_electra electra (R s)
+      (fun _ _ _ _ _ previous edge => trans previous
         ⟨(CapStep.registryElectra edge).1, (CapStep.registryElectra edge).2.1,
           (CapStep.registryElectra edge).2.2.1,
           (fun _ _ => (CapStep.registryElectra edge).2.2.2.1),
@@ -2564,18 +2561,17 @@ private theorem CapStepR.registry {f : Fork} {s t : BeaconState preset f}
           fun _ finite funded held => (CapStep.registryElectra edge).2.2.2.2
             (by rw [previous.2.2.2.2.1]; exact finite) funded held⟩)
       (refl s) ok
-  · rename_i notElectra
-    simp only [bind_ok_iff] at ok
-    obtain ⟨middle, updated, _, _, activated⟩ := ok
+  · obtain ⟨middle, _, updated, _, activated⟩ :=
+      processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) ok
     have before : f < .glamsterdam :=
-      Nat.lt_trans (Nat.lt_of_not_le notElectra) (by decide)
+      Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
     have small : middle.validators.data.size < 2 ^ 64 :=
       Nat.lt_of_le_of_lt (middle.validators.bound before) (UInt64.toNat_lt _)
     have first : R s middle := foldlM_ok_invariant (R s)
       (fun _ _ _ previous edge => trans previous
         ⟨(CapStep.registryEntry edge).1, (CapStep.registryEntry edge).2.1,
-          (fun _ _ electra => (notElectra electra).elim),
-          (fun electra => (notElectra electra).elim),
+          (fun _ _ later => (electra later).elim),
+          (fun later => (electra later).elim),
           (frame_updateRegistryEntry edge).finalized,
           fun _ _ _ => (CapStep.registryEntry edge).2.2⟩) (refl s) updated
     refine trans first
@@ -2586,8 +2582,8 @@ private theorem CapStepR.registry {f : Fork} {s t : BeaconState preset f}
     · intro a b i v original member located epoch found far ok
       refine ⟨(CapStep.activate found far ok).1,
         (fun _ => (CapStep.activate (config := config) found far ok).2.1),
-        (fun _ _ electra => (notElectra electra).elim),
-        (fun electra => (notElectra electra).elim),
+        (fun _ _ later => (electra later).elim),
+        (fun later => (electra later).elim),
         (frame_activateValidator ok).finalized, ?_⟩
       intro _ finite funded held
       apply (CapStep.activate (config := config) found far ok).2.2 ?_ funded held

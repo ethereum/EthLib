@@ -1279,6 +1279,15 @@ Not yet released.
   That holds for each account, each word of storage and transient storage, and the code at each code hash.
   `Transactions.processCreateMessage_reads_of_error` (`Execution/Proofs/Transactions/Failed.lean`) says the same for a creation that ends with an error.
 
+- In Lean, three theorems in `Consensus/Proofs/Transition/EpochUpdates.lean` describe a successful run of the registry updates.
+  `processRegistryUpdates_ok_of_lt_electra` says that before Electra it is a first pass over the registry, then a read of the activation limit.
+  The update then activates the head of the queue up to that limit.
+  `processRegistryUpdates_ok_of_electra` says that from Electra and before Gloas it is one pass over the registry, at the computed activation epoch.
+  `processRegistryUpdates_invariant_of_electra` is an invariant principle for that pass.
+  The 18 proofs outside the three proof files of the registry updates no longer read its body ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  A step added at the end of the update that changes no field then breaks only the proof files of the update.
+  A step that writes a field adds one obligation to each user of the invariant principle.
+
 ### Changes that break callers
 
 - In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).
