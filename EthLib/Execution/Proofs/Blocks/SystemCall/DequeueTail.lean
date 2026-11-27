@@ -69,25 +69,14 @@ namespace DequeueTailCode
 /-- The positions of the constants in the end of the system call. -/
 def CONSTANTS : List Nat := [7, 8, 15, 16, 69, 70, 79, 85, 86, 92, 93, 98, 109]
 
-/-- Whether the code stored in `n`, of `len` bytes, holds the end from `o`, except at constants. -/
-def holdsNat (n len o : Nat) : Bool :=
-  (List.range 113).all fun i =>
-    CONSTANTS.contains i ||
-      NatCode.natByte n len (o + i) == NatCode.natByte DEQUEUE_TAIL_NUMBER 113 i
-
 /-- A code stored as a number holds the end, except at the constants, when the check passes. -/
-theorem byte_ofNat {n len o : Nat} (hcheck : holdsNat n len o = true) :
+theorem byte_ofNat {n len o : Nat}
+    (hcheck : holdsExcept n len o DEQUEUE_TAIL_NUMBER 113 CONSTANTS = true) :
     ∀ i (h : o + i < (NatCode.ofNat n len).size), i < 113 → i ≠ 7 → i ≠ 8 → i ≠ 15 →
       i ≠ 16 → i ≠ 69 → i ≠ 70 → i ≠ 79 → i ≠ 85 → i ≠ 86 → i ≠ 92 → i ≠ 93 → i ≠ 98 →
       i ≠ 109 → (NatCode.ofNat n len)[o + i] = NatCode.natByte DEQUEUE_TAIL_NUMBER 113 i := by
   intro i h hi h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13
-  rw [NatCode.getElem_ofNat]
-  simp only [holdsNat, List.all_eq_true, List.mem_range, Bool.or_eq_true, beq_iff_eq,
-    List.contains_iff_mem] at hcheck
-  rcases hcheck i hi with hm | he
-  · simp [CONSTANTS] at hm
-    omega
-  · exact he
+  exact getElem_of_holdsExcept hcheck h hi (by simp [CONSTANTS]; omega)
 
 variable {code : ByteArray} {o target size : Nat} (hc : DequeueTailCode code o target size)
   {fork : Fork} {message : Message fork} {returnData : ByteArray}

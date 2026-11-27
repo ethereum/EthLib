@@ -44,6 +44,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.SystemCall.AddPath
 public import EthLib.Execution.Proofs.Blocks.SystemCall.BeaconRoots
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
+public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueStart
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
 public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
 public import EthLib.Execution.Proofs.Blocks.SystemCall.ConsolidationRequests

@@ -1219,6 +1219,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the byte checks of the request contracts are one function, `holdsExcept` with `getElem_of_holdsExcept` (`Execution/Proofs/Blocks/SystemCall/RequestQueue.lean`) ([#4796](https://github.com/ethereum/EthLib/issues/4796)).
+  `feePathNat` (`FeePath.lean`), `DequeueTailCode.holdsNat` (`DequeueTail.lean`) and `AddPathCode.holdsExcept` (`AddPath.lean`) are removed; `FeePathCode.byte_ofNat` and `DequeueTailCode.byte_ofNat` take the check of `holdsExcept`.
+
 - From Gloas, the aggregate endpoint and the events of the head, of a reorganization and of a finalized checkpoint read the node of the fork choice that they resolve to, not a block root ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
   The aggregate reads the full node when the index of its data is 1, so an aggregate that votes for an optimistic payload gets code 503; other data reads the pending node, EthLib's choice.
   The head and the reorganization read the head node with its payload status, and the finalized checkpoint reads the pending node of its block.
