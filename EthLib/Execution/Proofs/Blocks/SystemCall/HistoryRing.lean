@@ -43,7 +43,7 @@ variable {fork : Fork}
 
 /-- A state that reads as a state where the contract keeps its ring keeps it too. -/
 theorem goodAt_of_readsAs {tx S : TransactionState}
-    (h : GoodAt HISTORY_STORAGE_ADDRESS CODE Ring S) (reads : ReadsAs tx S) :
+    (h : GoodAt HISTORY_STORAGE_ADDRESS CODE Ring S) (reads : TransactionState.ReadsAs tx S) :
     GoodAt HISTORY_STORAGE_ADDRESS CODE Ring tx :=
   h.of_keepsAt (.of_eq (by simp only [TransactionState.getAccount,
       (reads.1 HISTORY_STORAGE_ADDRESS List.not_mem_nil).1])

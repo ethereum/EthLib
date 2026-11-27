@@ -197,14 +197,15 @@ theorem parent_processCreateMessage [LawfulGasMeter Meter] {message : Message fo
 
 /-- A call that ends with an error reads as the state it is sent from, at every fork.
 
-That holds for each account, each storage and transient word, and the code at each code hash. -/
+That holds for each account and each word of storage and transient storage.
+
+It has the code of that state at each code hash. -/
 theorem processMessage_reads_of_error [LawfulGasMeter Meter] {message : Message fork}
     {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processMessage fork message state substate meter held = .ok ended)
     (herr : ended.val.error.isSome = true) :
-    TransactionState.SameOutside [] state ended.val.state ∧
-      ∀ codeHash, ended.val.state.getCode codeHash = state.getCode codeHash := by
+    TransactionState.ReadsAs ended.val.state state := by
   have hp := parent_processMessage h
   obtain ⟨last, hl⟩ := exists_rollbackOnError_processMessage h
   rw [hl] at herr hp ⊢
@@ -212,8 +213,7 @@ theorem processMessage_reads_of_error [LawfulGasMeter Meter] {message : Message 
   split at herr
   · simp only [‹last.error.isSome = true›, ↓reduceIte] at hp ⊢
     -- A rollback to a snapshot of the same block gives back the snapshot, code included.
-    exact ⟨TransactionState.sameOutside_restoreTxState hp,
-      TransactionState.getCode_restoreTxState hp⟩
+    exact TransactionState.readsAs_restoreTxState hp
   · exact absurd herr ‹_›
 
 /-- A call that ends with an error reads as the state it is sent from, at every address.

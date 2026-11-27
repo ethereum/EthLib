@@ -2407,11 +2407,11 @@ A triple says about the state after a message only what its assumption says, so 
 It is the assumption `Logic.MeetsOk` of a triple, for that condition on the frame that ends the message.
 `R` holds from the state of the frame that sends the message to the state of the frame that ends it.
 `Logic.KeepsOn.mono` proves that a smaller set of messages and a weaker relation keep the assumption.
-`Logic.ReadsAs tx S` says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
+`State.TransactionState.ReadsAs tx S` (`State/Frame.lean`) says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
 It leaves free the block before the transaction, the created accounts, the wiped storage and the read records.
-`Logic.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
-`Logic.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
-`Logic.ReadsAs.routeState` proves the same for the state once a call follows a route.
+`State.TransactionState.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
+`State.TransactionState.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
+`State.TransactionState.ReadsAs.routeState` (`Logic/Keeps.lean`) proves the same for the state once a call follows a route.
 `Logic.Routes.of_readsAs` proves that a state that reads as `S` gives each code the route that `S` gives it.
 `Logic.SentVia message S to` names the CALLs with no value from the current account of `message` to `to`, from a frame that reads as `S`.
 Each such call runs the code that `to` holds in `S`, along its route, with any data, any gas and any reservoir.
