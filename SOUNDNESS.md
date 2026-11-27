@@ -497,7 +497,25 @@ A header past genesis whose root is zero bytes would share the leaf of the genes
 Such a header is a preimage of zero bytes under SHA-256.
 
 `isValidLightClientHeader` checks the execution branch of a header, from Capella, which also hashes with SHA-256.
-No theorem composes that check with the branch bound.
+`Consensus/Proofs/LightClient/ExecutionRandomOracle.lean` composes that check with the branch bound, from Capella to Fulu, for slots from Capella, and from Deneb at a fork from Deneb.
+From Capella to Fulu, the branch climbs from the root of the execution payload header, at node 25, to the body root of the beacon header.
+The preset and the fork are fixed before the run, and an adversary outputs a body root and two execution headers with a branch each.
+The extraction roots both headers with the extraction of whole values, then climbs both branches.
+The adversary wins when the headers differ, both branches have 4 nodes, and both climbs reach the body root.
+
+`collision_of_extractExecution` shows that every win leaves two different cached inputs with one answer.
+Two different leaves that climb to one body root give the inputs that `collision_of_extractBranches` finds.
+One leaf for two different headers is a win of the extraction of whole values, whose collision `collision_of_extract` finds.
+`prEvent_experimentWith_le` then gives `prEvent_executionWins_le`, which bounds a win by `Q^2 / N`.
+`extractExecution_queryBound` shows that the extraction makes the calls of the extraction of whole values and at most 8 more, one per climbed node.
+`prEvent_executionWins_le_of_adversary` states the bound with `Q = q + n + 8` and `N = 2^256`, for an adversary of `q` queries.
+There `n` bounds the calls of the extraction of whole values on two execution headers, which no theorem counts, as for the bound on whole values above.
+With SHA-256 as the answer table, `executionWins_sha256_iff` shows that a win is two different headers whose branches `isValidMerkleBranch` accepts, from the roots of the headers to the body root.
+`executionWins_of_isValidLightClientHeader` gives such a win for two valid headers with one body root and different execution headers.
+It needs both slots from Capella, and from Deneb when the fork is Deneb or later, so that the execution root of each header is the root of its execution header.
+A header from Deneb to Fulu at a slot before Deneb climbs from the root of its header cut to the fields of Capella, and no theorem bounds that case.
+Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
+From Gloas the header carries the parent block hash instead, which climbs by a normalized branch, and no theorem composes that check with the branch bound.
 
 ### leanSPHINCS
 
@@ -8605,6 +8623,7 @@ The codeword searches of each scheme share the bullet of that scheme:
   In its bound for sidecars, the adversary picks both sidecars, and the experiment takes the header that each carries.
   The sync committee bound fixes the preset and the index before the run, and its adversary picks the state root, both committees and both branches.
   The finality bound fixes the index before the run, and its adversary picks the state root, both headers and both branches.
+  The execution bound fixes the preset and the fork before the run, and its adversary picks the body root, both execution headers and both branches.
   An adversary that also picks the slot picks one of at most three indices, so its bound at most triples.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
