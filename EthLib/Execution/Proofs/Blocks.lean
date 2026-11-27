@@ -41,6 +41,7 @@ public import EthLib.Execution.Proofs.Blocks.StateAborts
 public import EthLib.Execution.Proofs.Blocks.StorageAt
 public import EthLib.Execution.Proofs.Blocks.Supply
 public import EthLib.Execution.Proofs.Blocks.SystemCall
+public import EthLib.Execution.Proofs.Blocks.SystemCall.AddCost
 public import EthLib.Execution.Proofs.Blocks.SystemCall.AddPath
 public import EthLib.Execution.Proofs.Blocks.SystemCall.BeaconRoots
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
