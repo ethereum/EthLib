@@ -298,7 +298,7 @@ theorem builderMayExit_eq_error_iff {state : BeaconState preset fork}
     | some envelope => simp [latest, pure, Except.pure]
   · simp [latest, pure, Except.pure]
 
-/-- A valid bid finds the parent state, its advance, its builder and the builder's bid limit.
+/-- A valid bid finds the parent state, that state advanced to its slot, its builder and its limit.
 
 The count of its key is below that limit, and the exit check answers no. -/
 private theorem steps_of_validateExecutionPayloadBid
