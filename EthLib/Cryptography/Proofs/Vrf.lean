@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Vrf.Verify
 public import EthLib.Cryptography.Proofs.Vrf.KeyGen
 public import EthLib.Cryptography.Proofs.Vrf.Serialization
 public import EthLib.Cryptography.Proofs.Vrf.Oracle
+public import EthLib.Cryptography.Proofs.Vrf.OutputRandomOracle
 public import EthLib.Cryptography.Proofs.Vrf.Unpredictability
 public import EthLib.Cryptography.Proofs.Vrf.Uniqueness
 public import EthLib.Cryptography.Proofs.Vrf.UniquenessPermutation
