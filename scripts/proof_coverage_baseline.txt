@@ -7091,6 +7091,8 @@ touched glamsterdam EthLib.Consensus.Store.payloadDataAvailability
 touched hegota EthLib.Consensus.Store.payloadDataAvailability
 touched glamsterdam EthLib.Consensus.Store.payloadTimeliness
 touched hegota EthLib.Consensus.Store.payloadTimeliness
+touched glamsterdam EthLib.Consensus.Store.previousPayloadAttestationDueMs
+touched hegota EthLib.Consensus.Store.previousPayloadAttestationDueMs
 touched phase0 EthLib.Consensus.Store.recordBlockPtcVotes
 touched altair EthLib.Consensus.Store.recordBlockPtcVotes
 touched bellatrix EthLib.Consensus.Store.recordBlockPtcVotes

@@ -1369,6 +1369,11 @@ Not yet released.
   `columnsAvailable_ok_iff`, `validateDataAvailability_ok_of_fulu` and `validatePayloadData_ok_iff` (`Consensus/Proofs/ForkChoice/Handlers.lean`) state the new check.
   From Gloas, the proposer decides whether to build on the full head at the slot of its state, not at the current slot of the store.
   `payloadParentGloas_eq_ok` (`Engine/Proofs/PreparePayload.lean`) no longer states a current slot, and its two cases read the decision at the slot of the state.
+  From Gloas, envelope gossip rejects a payload with more transactions than its highest gas limit allows, divided by `MIN_TRANSACTION_GAS`.
+  The chain theorems of the envelope topic (`Consensus/Proofs/Gossip/Payload.lean`) take that limit and the division as hypotheses.
+  From Gloas, bid gossip ignores a bid that arrives before the payload votes of the slot before it are due.
+  It also ignores a bid on the parent of the head unless the bid is for the next slot and the head is late or its proposer equivocated.
+  `isBidCompatibleWithHead_eq_ok_iff` (`Consensus/Proofs/Gossip/Bid.lean`) states these results, and the chain theorems of the bid topic take the deadline as a hypothesis.
 
 - In Lean, the MODEXP output (`Evm.Precompiles.Modexp.compute`) reads the modulus first, and reads the base and the exponent only for a modulus other than 0 ([#4950](https://github.com/ethereum/EthLib/issues/4950)).
   Its value is unchanged, and `compute_data` keeps its statement, but a proof that unfolds the definition sees the new order.

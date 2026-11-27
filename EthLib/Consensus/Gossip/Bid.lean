@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.GasLimit
+public import EthLib.Consensus.ForkChoice.ProposerHead
 public import EthLib.Consensus.Gossip.Payload
 public import EthLib.Consensus.Gossip.ProposerPreferences
 
@@ -38,6 +39,17 @@ def Store.isCurrentOrNextSlot (config : Config) (store : Store preset fork) (slo
   let next ← store.isCurrentSlot config previous currentTimeMs
   return current || next
 
+/-- The time in milliseconds at which the payload votes of the slot before a slot are due.
+
+Slot 0 has no slot before it, and that is an error. -/
+def Store.previousPayloadAttestationDueMs (config : Config) (store : Store preset fork)
+    (slot : Slot) : Except ForkChoiceError UInt64 := do
+  -- The start of the slot `s - 1`, for the slot `s`.
+  let previous ← (subChecked slot 1).mapError .arith
+  let start ← (computeTimeAtSlotMs config store.genesisTimeMs previous).mapError .arith
+  -- Then the share of a slot after which payload votes are due.
+  (do addChecked start (← getPayloadAttestationDueMs config)).mapError .arith
+
 /-- Whether a gas limit is the one that moves from the parent's limit toward a target.
 
 A block may change the gas limit by less than a 1024th of the parent's limit.
@@ -64,8 +76,14 @@ def Store.isBidCompatibleWithHead (config : Config) (store : Store preset fork)
   let headBid := (headBlock.body.signedExecutionPayloadBid gloas).message
   -- The bid builds on the payload that the head block builds on.
   let onParentPayload := bid.parentBlockHash == headBid.parentBlockHash
-  -- A bid on the parent of the head block, and on that payload, is on the branch.
-  if bid.parentBlockRoot == headBlock.parentRoot && onParentPayload then return true
+  -- A bid on the parent of the head block, and on that payload, would reorg the head.
+  if bid.parentBlockRoot == headBlock.parentRoot && onParentPayload then
+    -- A proposer reorgs only a head of the slot before its own.
+    let nextSlot ← (addChecked headBlock.slot 1).mapError .arith
+    -- It does so only for a late head, or for a head whose proposer equivocated.
+    let late ← store.isHeadLate head.root
+    let equivocated ← store.isProposerEquivocation head.root
+    return nextSlot == bid.slot && (late || equivocated)
   -- Otherwise the bid builds on the head block itself.
   if bid.parentBlockRoot != head.root then return false
   -- When a proposer would build on the full head, the bid builds on the payload of the head.
@@ -154,7 +172,13 @@ def validateExecutionPayloadBid (config : Config) (checks : SignatureChecks) (se
     "bid is not the highest value bid seen for this slot and parent").andThenM fun _ => do
   -- IGNORE unless the clock is in its slot or in the slot before it.
   let timely ← store.isCurrentOrNextSlot config bid.slot currentTimeMs
-  (ignoreUnless timely "bid's slot is not the current or next slot").andThenM fun _ =>
+  (ignoreUnless timely "bid's slot is not the current or next slot").andThenM fun _ => do
+  -- IGNORE unless the payload votes of the slot before it were due.
+  --
+  -- The proposer of the slot does not select a bid that arrives earlier.
+  let due ← store.previousPayloadAttestationDueMs config bid.slot
+  (ignoreUnless (due ≤ currentTimeMs)
+    "bid is received before the payload attestation deadline").andThenM fun _ =>
   -- REJECT unless its execution payment is 0.
   --
   -- A bid carries no execution payment, as EIP-7732 specifies.

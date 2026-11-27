@@ -95,8 +95,8 @@ The report itself also prints the number of rules at each fork.
 | dencun | 1364 | 11 |
 | pectra | 1384 | 11 |
 | fusaka | 1391 | 11 |
-| glamsterdam | 1514 | 13 |
-| hegota | 1503 | 13 |
+| glamsterdam | 1515 | 13 |
+| hegota | 1504 | 13 |
 <!-- end generated -->
 
 ### XMSS
