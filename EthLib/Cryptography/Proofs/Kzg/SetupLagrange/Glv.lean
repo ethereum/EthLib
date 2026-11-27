@@ -24,17 +24,8 @@ local notation "F" => ZMod Fp.modulus
 
 /-! ## The endomorphism -/
 
-/-- The cube root of unity `β'` of `Fp`, as a natural. -/
-def cubeRootNat : Nat :=
-  0x1a0111ea397fe699ec02408663d4de85aa0d857d89759ad4897d29650fb85f9b409427eb4f49fffd8bfd00000000aaac
-
 /-- The cube root of unity `β' = β^2`. -/
 def cubeRoot : F := betaZ ^ 2
-
-/-- The scalar `λ = z^2 - 1`, where `z` is the BLS parameter.
-
-Then `λ^2 + λ + 1 = r`, so `λ` is a cube root of unity mod `r`. -/
-def eigenvalue : Nat := blsX ^ 2 - 1
 
 theorem cubeRoot_val : cubeRoot.val = cubeRootNat := by decide +kernel
 
@@ -197,25 +188,6 @@ theorem glvMul_spec {p : G1} (hp : Valid p) (ht : Fr.modulus • toPoint p = 0) 
 /-! ## The same run on naturals -/
 
 open TorsionCheck (Coords coords fmul)
-
-/-- The map `(x, y) ↦ (β' x, y)` on coordinates. -/
-def endoNat (q : Coords) : Coords := (fmul cubeRootNat q.1, q.2.1, q.2.2)
-
-/-- The two products in one run, on coordinates. -/
-def jointNat : Nat → Coords → Coords → Coords → Nat → Nat → Coords
-  | 0, _, _, _, _, _ => TorsionCheck.zero
-  | fuel + 1, p, q, t, a, b =>
-    bif Nat.beq a 0 && Nat.beq b 0 then TorsionCheck.zero
-    else
-      let h := TorsionCheck.double (jointNat fuel p q t (a / 2) (b / 2))
-      bif Nat.beq (a % 2) 1 then
-        (bif Nat.beq (b % 2) 1 then TorsionCheck.add h t else TorsionCheck.add h p)
-      else (bif Nat.beq (b % 2) 1 then TorsionCheck.add h q else h)
-
-/-- The split product, on coordinates. -/
-def glvNat (p : Coords) (s : Nat) : Coords :=
-  let e := endoNat p
-  jointNat 128 p e (TorsionCheck.add p e) (s % eigenvalue) (s / eigenvalue)
 
 private theorem beq_eq (a b : Nat) : Nat.beq a b = (a == b) :=
   Bool.eq_iff_iff.mpr (by simp)
