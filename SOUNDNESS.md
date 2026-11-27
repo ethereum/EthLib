@@ -4492,7 +4492,8 @@ That vote is of an earlier slot, in a message sent by the store's time.
 It takes the run from the genesis to the anchor, the held states before the next fork, and the two stake floors.
 It takes nonzero state roots of held blocks (`roots`) and the anchor's absent parent (`absent`).
 It takes honest store epochs within the horizon (`bounded`) and the preset conditions of `DirectSafety.Parameters`.
-The call sequence starts after the anchor's epoch, with one call per slot from its first slot.
+Honest participants start at the store initialized from the anchor state and block, whose shared slot starts an epoch, and the slot duration is positive.
+The call sequence starts after the anchor's epoch, with a call at the start of each successive slot from its first slot.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.

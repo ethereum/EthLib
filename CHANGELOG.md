@@ -126,6 +126,12 @@ Not yet released.
 - In Lean, `Execution.observedRestart_covers_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`) states that a restart of the fast confirmation rule from the observed justified block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   At a call that replaces its base, that block is on every up-to-date honest head from the call through the limit.
   Otherwise two honest stores collide, or cross-store direct-safety or justified evidence holds.
+  It assumes synchrony, delayed block admission (`BlocksAdmitted`), `JustifiedHonestlySigned`, the premises of the direct safety theorems, and no honest held block with a zero state root (`HeldBlockStateRootsNonzero`).
+  Honest participants start at the store initialized from the anchor state and block, which share a slot at the start of an epoch.
+  The slot duration is positive, and the delays fit.
+  An epoch has more than one slot.
+  The caller's calls start after the anchor epoch, one at the start of each successive slot, and the first reads the anchor's fast confirmation store.
+  At a call by the limit, the caller reads its slot and replaces its base.
 
 - In Lean, `Store.ForwardReachable.finalized_epoch_add_two_le` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`) states the timing of a finalized checkpoint other than the anchor's ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   The store is forward reachable from the store initialized from the anchor state and block, and it reads its current epoch.
