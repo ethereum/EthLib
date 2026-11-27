@@ -57,43 +57,6 @@ Past the last limb, it is `0`. -/
   | 11 => a.w5 >>> 32
   | _ => 0
 
-/-- The low 32 bits of `lo`, then the low 32 bits of `hi` above them, as one word. -/
-@[inline] def pairLimbs (lo hi : UInt64) : UInt64 := (lo &&& (0xFFFFFFFF : UInt64)) ||| (hi <<< 32)
-
-/-- A joined word writes the low halves of its two words. -/
-theorem pairLimbs_toNat (lo hi : UInt64) :
-    (pairLimbs lo hi).toNat = lo.toNat % 2^32 + 2^32 * (hi.toNat % 2^32) := by
-  have hs : (hi <<< 32).toNat = 2^32 * (hi.toNat % 2^32) := by
-    rw [UInt64.toNat_shiftLeft]
-    change hi.toNat <<< 32 % 2^64 = _
-    rw [Nat.shiftLeft_eq]
-    omega
-  -- The two halves have disjoint bits, so their `or` is their sum.
-  rw [pairLimbs, UInt64.toNat_or, low_toNat, hs, Nat.or_comm,
-    ← Nat.two_pow_add_eq_or_of_lt (i := 32) (Nat.mod_lt lo.toNat (by decide)) (hi.toNat % 2^32)]
-  omega
-
-/-- The low limb of a joined word is the low half of its low word. -/
-theorem pairLimbs_low (lo hi : UInt64) :
-    (pairLimbs lo hi &&& 0xFFFFFFFF).toNat = lo.toNat % 2^32 := by
-  rw [low_toNat, pairLimbs_toNat]
-  omega
-
-/-- The high limb of a joined word is the low half of its high word. -/
-theorem pairLimbs_high (lo hi : UInt64) :
-    (pairLimbs lo hi >>> 32).toNat = hi.toNat % 2^32 := by
-  rw [high_toNat, pairLimbs_toNat]
-  omega
-
-/-- A word is fixed by its two halves. -/
-theorem eq_of_halves {x y : UInt64} (h0 : x &&& 0xFFFFFFFF = y &&& 0xFFFFFFFF)
-    (h1 : x >>> 32 = y >>> 32) : x = y := by
-  have e0 := congrArg UInt64.toNat h0
-  have e1 := congrArg UInt64.toNat h1
-  rw [low_toNat, low_toNat] at e0
-  rw [high_toNat, high_toNat] at e1
-  exact UInt64.toNat_inj.mp (by omega)
-
 /-- Each limb is below `2^32`. -/
 theorem Words6.limb_lt (a : Words6) (k : Nat) : (a.limb k).toNat < 2^32 := by
   have := a.w0.toNat_lt
@@ -262,28 +225,6 @@ theorem Words6.val_lt (t : Words6) : t.val < 2^384 := by
   have := t.w5.toNat_lt
   simp only [Words6.val]
   omega
-
-/-- `m = t pinv mod 2^64` clears the low word of `t + m p`. -/
-private theorem low_clear {pv p0 r pinv u : Nat} (hpv : pv = p0 + 2^64 * r)
-    (hpinv : (pv * pinv + 1) % 2^64 = 0) : (u * pinv % 2^64 * p0 + u) % 2^64 = 0 := by
-  -- The low word of `p` alone already gives `p0 pinv = -1 mod 2^64`.
-  have h1 : 2^64 ∣ p0 * pinv + 1 := by
-    have h := Nat.dvd_of_mod_eq_zero hpinv
-    rw [hpv, show (p0 + 2^64 * r) * pinv + 1 = 2^64 * (r * pinv) + (p0 * pinv + 1) by
-      rw [Nat.add_mul, Nat.mul_assoc]; omega] at h
-    exact (Nat.dvd_add_right (Nat.dvd_mul_right _ _)).mp h
-  -- Reducing `u pinv` mod `2^64` drops a multiple of `2^64` from `u (p0 pinv + 1)`.
-  have h2 : 2^64 * (u * pinv / 2^64 * p0) + (u * pinv % 2^64 * p0 + u) =
-      u * (p0 * pinv + 1) := by
-    have hq := Nat.div_add_mod (u * pinv) (2^64)
-    calc _ = (2^64 * (u * pinv / 2^64) + u * pinv % 2^64) * p0 + u := by
-          rw [Nat.add_mul (2^64 * _), Nat.mul_assoc]; omega
-      _ = u * (p0 * pinv + 1) := by
-          rw [hq, Nat.mul_add, Nat.mul_one, Nat.mul_comm p0 pinv, Nat.mul_assoc]
-  apply Nat.mod_eq_zero_of_dvd
-  have h3 := Nat.dvd_mul_left_of_dvd h1 u
-  rw [← h2] at h3
-  exact (Nat.dvd_add_right (Nat.dvd_mul_right _ _)).mp h3
 
 /-- A row adds `a x` and a multiple of `p`, divides by `2^64`, and stays below `2 p`. -/
 theorem row6_spec {p : Words6} {pinv : UInt64} (hpinv : (p.val * pinv.toNat + 1) % 2^64 = 0)

@@ -101,78 +101,33 @@ theorem Raw.bit_eq_testBit (k : Raw) : k.bit = k.val.testBit := by
   apply Bool.eq_iff_iff.mpr
   rw [Raw.bit_iff, Nat.testBit_eq_decide_div_mod_eq, decide_eq_true_eq, Nat.shiftRight_eq_div_pow]
 
-/-! ## Four words and eight limbs -/
+/-! ## Four words and eight limbs
 
-/-- One word from two 32-bit limbs, the low one first. -/
-def join (lo hi : UInt32) : UInt64 :=
-  lo.toUInt64 ||| (hi.toUInt64 <<< 32)
+Eight limbs of 32 bits are stored as the four words, so the two forms convert with no work.
+-/
 
-/-- Four words from eight 32-bit limbs, with a zero carry word. -/
-def wide (a : Cryptography.Montgomery.Limbs8) : Words64 :=
-  ⟨join a.l0 a.l1, join a.l2 a.l3, join a.l4 a.l5, join a.l6 a.l7, 0⟩
+/-- The four words of eight limbs, with a zero carry word. -/
+def wide (a : Cryptography.Montgomery.Limbs.T 8) : Words64 := Raw.words a
 
-/-- Eight 32-bit limbs from the four low words. -/
-def narrow (p : Words64) : Cryptography.Montgomery.Limbs8 :=
-  ⟨p.w0.toUInt32, (p.w0 >>> 32).toUInt32,
-    p.w1.toUInt32, (p.w1 >>> 32).toUInt32,
-    p.w2.toUInt32, (p.w2 >>> 32).toUInt32,
-    p.w3.toUInt32, (p.w3 >>> 32).toUInt32⟩
+/-- The eight limbs of the four low words. -/
+def narrow (p : Words64) : Cryptography.Montgomery.Limbs.T 8 := Raw.fromWords p
 
-/-- A joined word is worth its low limb plus `2^32` times its high limb. -/
-private theorem join_value (lo hi : UInt32) : (join lo hi).toNat = lo.toNat + 2^32*hi.toNat := by
-  have hhi : hi.toNat * 2^32 < 2^64 := Nat.mul_lt_mul_of_pos_right hi.toNat_lt (by decide)
-  unfold join
-  rw [UInt64.toNat_or, UInt64.toNat_shiftLeft, UInt32.toNat_toUInt64, UInt32.toNat_toUInt64]
-  change lo.toNat ||| (hi.toNat <<< 32) % 2^64 = _
-  rw [Nat.shiftLeft_eq, Nat.mod_eq_of_lt hhi, Nat.mul_comm hi.toNat, Nat.or_comm,
-    ← Nat.two_pow_add_eq_or_of_lt lo.toNat_lt, Nat.add_comm]
-
-/-- The two 32-bit halves of a word give back its value. -/
-private theorem split_value (w : UInt64) :
-    w.toUInt32.toNat + 2^32*(w >>> 32).toUInt32.toNat = w.toNat := by
-  rw [UInt64.toNat_toUInt32, UInt64.toNat_toUInt32, UInt64.toNat_shiftRight,
-    Nat.shiftRight_eq_div_pow]
-  change w.toNat % 2^32 + 2^32*(w.toNat / 2^32 % 2^32) = w.toNat
-  have h : w.toNat / 2^32 < 2^32 := Nat.div_lt_of_lt_mul w.toNat_lt
-  rw [Nat.mod_eq_of_lt h, Nat.mod_add_div]
-
-/-- The integer of eight 32-bit limbs, as a sum of powers of `2^32`. -/
-private theorem limbs8_value (a : Cryptography.Montgomery.Limbs8) :
-    Limbs.val (n := 8) a = a.l0.toNat + 2^32*a.l1.toNat + 2^64*a.l2.toNat +
-      2^96*a.l3.toNat + 2^128*a.l4.toNat + 2^160*a.l5.toNat +
-      2^192*a.l6.toNat + 2^224*a.l7.toNat := by
-  change a.l0.toNat + 2^32*(a.l1.toNat + 2^32*(a.l2.toNat + 2^32*(a.l3.toNat +
-    2^32*(a.l4.toNat + 2^32*(a.l5.toNat + 2^32*(a.l6.toNat + 2^32*(a.l7.toNat + 2^32*0))))))) = _
-  omega
-
-/-- Four words joined from eight limbs have the value of the limbs. -/
-theorem value_wide (a : Cryptography.Montgomery.Limbs8) :
+/-- Four words of eight limbs have the value of the limbs. -/
+theorem value_wide (a : Cryptography.Montgomery.Limbs.T 8) :
     value (wide a) = Limbs.val (n := 8) a := by
-  simp only [value, lowValue, wide, join_value, limbs8_value, UInt64.toNat_zero,
-    Nat.mul_zero, Nat.add_zero, wordRadix]
-  omega
+  rw [Cryptography.Montgomery.Limbs.val_raw, Raw.val_eq]
+  rfl
 
-/-- Eight limbs split from four words, with no carry, have the value of the words. -/
+/-- Eight limbs of four words, with no carry, have the value of the words. -/
 theorem val_narrow (w : Words64) (h : w.top = 0) :
     Limbs.val (n := 8) (narrow w) = value w := by
-  have h0 := split_value w.w0
-  have h1 := split_value w.w1
-  have h2 := split_value w.w2
-  have h3 := split_value w.w3
-  simp only [limbs8_value, narrow, value, lowValue, h, UInt64.toNat_zero,
-    Nat.mul_zero, Nat.add_zero, wordRadix]
-  omega
+  rw [Cryptography.Montgomery.Limbs.val_raw]
+  exact Raw.fromWords_val w h
 
-/-- Joining the two halves of a word gives the word. -/
-private theorem join_split (w : UInt64) :
-    join w.toUInt32 (w >>> 32).toUInt32 = w :=
-  UInt64.toNat_inj.mp ((join_value _ _).trans (split_value w))
-
-/-- Splitting four words into limbs and joining them back gives the words. -/
+/-- The limbs of four words, back as words, are the words. -/
 theorem wide_narrow (w : Words64) (h : w.top = 0) : wide (narrow w) = w := by
   cases w
   cases h
-  simp only [wide, narrow, join_split]
   rfl
 
 /-! ## Montgomery fields on four words

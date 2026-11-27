@@ -1235,6 +1235,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the scalar field `Fr` of BLS12-381 multiplies, adds and subtracts on four 64-bit words ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)), through `Word64.mul4`, `Word64.addMod4` and `Word64.subMod4` (`Cryptography/Word64/Four.lean`), with the laws `Word64.mul4_spec`, `Word64.addMod4_spec` and `Word64.subMod4_spec`.
+  `Bls.Fr.mulWords`, `Bls.Fr.addWords` and `Bls.Fr.subWords` set the fields of `Bls.Fr.params`, and `Bls.Fr.mulWords_eq`, `Bls.Fr.addWords_eq` and `Bls.Fr.subWords_eq` state that they agree with the 32-bit limbs, so every statement about `Fr` is unchanged.
+  The eight limbs of `Montgomery.Limbs 8` are stored two to a word in `Word64.Raw`, so the structure `Montgomery.Limbs8` is removed, and the literals of `Fr` and of the secp256k1 and secp256r1 constants on eight limbs are four 64-bit words.
+  `Bls.Fr.pLimbs`, `Bls.Fr.val_pLimbs`, `Bls.Fr.pinv`, `Bls.Fr.pinvWord`, `Montgomery.Limbs.val_raw`, `Word64.Raw.limb`, `Word64.Raw.limb_lt`, `Word64.Raw.val_eq_sum`, `Word64.Raw.val_lt`, `Word64.Raw.mask`, `Word64.Raw.val_mask`, `Word64.row4`, `Word64.row4_spec`, `Word64.reduce4`, `Word64.reduce4_val`, `Word64.addBack4` and `Word64.addBack4_val` are new.
+  `Montgomery.Internal.eq_of_radix_mul_mod` replaces the private lemma of `Fp` that cancels the radix.
+  `Montgomery.mulCore_eq` is removed, since no specification uses it any more: the default product of `Montgomery.Modulus` unfolds `Montgomery.mulCore` directly.
+  `Word64.low_clear`, `Word64.pairLimbs`, `Word64.pairLimbs_toNat`, `Word64.pairLimbs_low`, `Word64.pairLimbs_high` and `Word64.eq_of_halves` move from `Cryptography/Word64/Six.lean` to `Cryptography/Word64.lean`, and `low_clear` becomes public.
+  In `Cryptography/Proofs/Word64.lean`, `wide` and `narrow` are now the conversions `Raw.words` and `Raw.fromWords` on `Limbs.T 8`, and `join` is removed.
+
 - In Lean, the bridge from one counter of gas to the state gas meter of EIP-8037 accepts GAS right before a call ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
   `Evm.Logic.SupportedCode` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) accepts GAS when the next opcode is a call, and `Evm.Logic.meterSupported_of_supportedCode` gives that case.
   Right after GAS, each frame holds its own execution gas left on its stack (`Evm.Logic.GasPending`, `MeterCall.lean`).
