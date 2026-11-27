@@ -40,12 +40,17 @@ def indexedEntries (values : List ByteArray) : Except RlpError (List (ByteArray 
   (List.range values.length).zip values |>.mapM fun (index, value) => do
     return (← Codec.encode index, value)
 
-/-- The root of a list: the root of the plain trie of its indexed entries. -/
-def indexedRoot (values : List ByteArray) : Except TrieError Hash32 := do
+/-- The root of a list: the root of the plain trie of its indexed entries.
+
+The hash may answer inside a monad, as for the root of a trie. -/
+def indexedRootM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32)
+    (values : List ByteArray) : ExceptT TrieError m Hash32 := do
   -- `TRIE` of Appendix D over those pairs, whose keys are not hashed first.
-  --
-  -- Ethereum hashes with Keccak-256.
-  root keccak256 ⟨false, ← (indexedEntries values).mapError .rlp⟩
+  rootM hash ⟨false, ← ((indexedEntries values).mapError .rlp : Except TrieError _)⟩
+
+/-- The root of a list, with the hash of Ethereum: Keccak-256. -/
+def indexedRoot (values : List ByteArray) : Except TrieError Hash32 :=
+  (indexedRootM (m := Id) keccak256 values).run
 
 /-- The transactions root: the root of the list of the bytes of each transaction. -/
 def transactionsRoot (transactions : List Transaction) : Except TrieError Hash32 := do

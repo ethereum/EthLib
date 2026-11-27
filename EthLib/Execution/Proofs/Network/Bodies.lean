@@ -338,7 +338,8 @@ theorem transactionValues_injective {t₁ t₂ : Encoded} {values : List ByteArr
 def TransactionsBound (t₁ t₂ : Encoded) : Prop :=
   t₁.item = t₂.item ∨
     ∃ values₁ values₂ pair, transactionValues t₁ = .ok values₁ ∧
-      transactionValues t₂ = .ok values₂ ∧ findIndexedCollision values₁ values₂ = some pair ∧
+      transactionValues t₂ = .ok values₂ ∧
+      findIndexedCollision Cryptography.Hash.Keccak.keccak256 values₁ values₂ = some pair ∧
       Trie.IsCollision Cryptography.Hash.Keccak.keccak256 pair
 
 /-- Two withdrawals items are equal, or their withdrawals give a Keccak-256 collision. -/
@@ -346,7 +347,8 @@ def WithdrawalsBound (w₁ w₂ : Item) : Prop :=
   w₁ = w₂ ∨
     ∃ ws₁ ws₂ : List Withdrawal, ∃ values₁ values₂ pair, Codec.ofItem w₁ = .ok ws₁ ∧
       Codec.ofItem w₂ = .ok ws₂ ∧ ws₁.mapM Codec.encode = .ok values₁ ∧
-      ws₂.mapM Codec.encode = .ok values₂ ∧ findIndexedCollision values₁ values₂ = some pair ∧
+      ws₂.mapM Codec.encode = .ok values₂ ∧
+      findIndexedCollision Cryptography.Hash.Keccak.keccak256 values₁ values₂ = some pair ∧
       Trie.IsCollision Cryptography.Hash.Keccak.keccak256 pair
 
 /-- Two ommers lists have equal items, or the bytes they keep are a Keccak-256 collision. -/
