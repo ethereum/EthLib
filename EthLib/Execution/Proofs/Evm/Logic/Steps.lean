@@ -503,7 +503,9 @@ macro_rules
 syntax "evm_memGas" : tactic
 
 macro_rules
-  | `(tactic| evm_memGas) => `(tactic| first | evm_gas | (evm_mem <;> evm_gas))
+  -- The growth of memory is priced first: `omega` on an unpriced cost can exhaust the recursion
+  -- depth, which no alternative of `first` catches.
+  | `(tactic| evm_memGas) => `(tactic| first | (evm_mem <;> evm_gas) | evm_gas)
 
 /-- Proves that a fact is in the list of a frame, by the first entry that matches it. -/
 syntax "evm_fact" : tactic
