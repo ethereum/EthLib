@@ -46,6 +46,9 @@ public import EthLib.Execution.Proofs.Evm.Logic.NoAbort
 public import EthLib.Execution.Proofs.Evm.Logic.Fault
 -- By steps monotone in gas, a run with less gas follows the run with more gas, or it fails.
 public import EthLib.Execution.Proofs.Evm.Logic.LessGas
+-- Upper bounds on the gas of a run add along code and loops, and take the larger branch.
+public import EthLib.Execution.Proofs.Evm.Logic.Cost
+public import EthLib.Execution.Proofs.Evm.Logic.CostFrames
 -- A specification to frames with no error gives a run that succeeds.
 public import EthLib.Execution.Proofs.Evm.Logic.RunsOk
 public import EthLib.Execution.Proofs.Evm.Logic.Marks
