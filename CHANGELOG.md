@@ -1242,6 +1242,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the rows of the `Fp` product on six 64-bit words keep no word above the six ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Word64.row6` and `Word64.reduce6` (`Cryptography/Word64/Six.lean`) now take and return `Word64.Words6` instead of `Word64.Acc6`.
+  `Word64.row6_spec` asks for `2 * p.val < 2^384`, and `Word64.reduce6_val` no longer does.
+  `Word64.mul6_spec` and every statement about `Fp` are unchanged.
+
 - In Lean, the scalar field `Fr` of BLS12-381 multiplies, adds and subtracts on four 64-bit words ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)), through `Word64.mul4`, `Word64.addMod4` and `Word64.subMod4` (`Cryptography/Word64/Four.lean`), with the laws `Word64.mul4_spec`, `Word64.addMod4_spec` and `Word64.subMod4_spec`.
   `Bls.Fr.mulWords`, `Bls.Fr.addWords` and `Bls.Fr.subWords` set the fields of `Bls.Fr.params`, and `Bls.Fr.mulWords_eq`, `Bls.Fr.addWords_eq` and `Bls.Fr.subWords_eq` state that they agree with the 32-bit limbs, so every statement about `Fr` is unchanged.
   The eight limbs of `Montgomery.Limbs 8` are stored two to a word in `Word64.Raw`, so the structure `Montgomery.Limbs8` is removed, and the literals of `Fr` and of the secp256k1 and secp256r1 constants on eight limbs are four 64-bit words.

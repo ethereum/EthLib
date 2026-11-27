@@ -68,33 +68,25 @@ theorem Words6.limb_lt (a : Words6) (k : Nat) : (a.limb k).toNat < 2^32 := by
   unfold Words6.limb
   split <;> simp only [low_toNat, high_toNat, UInt64.toNat_zero] <;> omega
 
-/-- The state of a product: six words and the word above them. -/
-structure Acc6 where
-  /-- The six low words. -/
-  low : Words6
-  /-- The word above bit 383. -/
-  top : UInt64
-
-/-- The integer of the state. -/
-def Acc6.val (t : Acc6) : Nat := t.low.val + 2^384 * t.top.toNat
-
 /--
 One row of the CIOS product: `(t + a x + m p) / 2^64`.
 
 The multiple `m` of `p` is the one that clears the low word of the sum.
 
 `pinv` is `-p⁻¹ mod 2^64`.
+
+For `a` below `p` and `t` below `2 p`, the row stays below `2 p < 2^384`.
+
+So it needs no word above the six.
 -/
-@[inline] def row6 (p : Words6) (pinv : UInt64) (a : Words6) (x : UInt64) (t : Acc6) : Acc6 :=
+@[inline] def row6 (p : Words6) (pinv : UInt64) (a : Words6) (x : UInt64) (t : Words6) : Words6 :=
   -- The multiplication loop: `(C, S) := t[j] + a[j] x + C`, for `j` from 0 to 5.
-  let u0 := mac a.w0 x t.low.w0 0
-  let u1 := mac a.w1 x t.low.w1 u0.hi
-  let u2 := mac a.w2 x t.low.w2 u1.hi
-  let u3 := mac a.w3 x t.low.w3 u2.hi
-  let u4 := mac a.w4 x t.low.w4 u3.hi
-  let u5 := mac a.w5 x t.low.w5 u4.hi
-  -- `(C, S) := t[6] + C`, then `t[6] := S` and `t[7] := C`.
-  let u6 := plus t.top u5.hi 0
+  let u0 := mac a.w0 x t.w0 0
+  let u1 := mac a.w1 x t.w1 u0.hi
+  let u2 := mac a.w2 x t.w2 u1.hi
+  let u3 := mac a.w3 x t.w3 u2.hi
+  let u4 := mac a.w4 x t.w4 u3.hi
+  let u5 := mac a.w5 x t.w5 u4.hi
   -- `m := t[0] pinv mod 2^64`.
   let m := u0.lo * pinv
   -- The reduction loop: `(C, S) := t[j] + m p[j] + C`; the low word `S` of `j = 0` is zero.
@@ -104,9 +96,20 @@ The multiple `m` of `p` is the one that clears the low word of the sum.
   let v3 := mac m p.w3 u3.lo v2.hi
   let v4 := mac m p.w4 u4.lo v3.hi
   let v5 := mac m p.w5 u5.lo v4.hi
-  -- The words move down by one: `t[j - 1] := S`, and the top takes both carries.
-  let v6 := plus u6.lo v5.hi 0
-  ⟨⟨v1.lo, v2.lo, v3.lo, v4.lo, v5.lo, v6.lo⟩, u6.hi + v6.hi⟩
+  -- The words move down by one, and the top word is the sum of both carries.
+  --
+  -- The row is below `2^384`, so this sum does not wrap.
+  ⟨v1.lo, v2.lo, v3.lo, v4.lo, v5.lo, u5.hi + v5.hi⟩
+
+/-- The result of a sum or a difference: six words and the carry or borrow above them. -/
+structure Acc6 where
+  /-- The six low words. -/
+  low : Words6
+  /-- The word above bit 383. -/
+  top : UInt64
+
+/-- The integer of the six words, with the top word above bit 383. -/
+def Acc6.val (t : Acc6) : Nat := t.low.val + 2^384 * t.top.toNat
 
 /-- The six words of `a + b mod 2^384`, with the carry as the top word. -/
 @[inline] def sum6 (a b : Words6) : Acc6 :=
@@ -128,17 +131,17 @@ The multiple `m` of `p` is the one that clears the low word of the sum.
   let d5 := minus a.w5 b.w5 d4.hi
   ⟨⟨d0.lo, d1.lo, d2.lo, d3.lo, d4.lo, d5.lo⟩, d5.hi⟩
 
-/-- `t - p` when `t ≥ p`, else `t`, for a state below `2 p`. -/
-@[inline] def reduce6 (p : Words6) (t : Acc6) : Words6 :=
+/-- `t - p` when `t ≥ p`, else `t`. -/
+@[inline] def reduce6 (p t : Words6) : Words6 :=
   -- Step 3 of CIOS: the result is `t - p` when `t ≥ p`, and `t` otherwise.
-  let d := diff6 t.low p
-  -- `t < p` exactly when the subtraction borrows more than the top word holds.
-  if t.top < d.top then t.low else d.low
+  let d := diff6 t p
+  -- `t < p` exactly when the subtraction borrows.
+  if d.top = 0 then d.low else t
 
 /-- The Montgomery product `a b 2^(-384) mod p`, for `a` below `p`. -/
 @[inline] def mul6 (p : Words6) (pinv : UInt64) (a b : Words6) : Words6 :=
   -- One row for each word of `b`, from the lowest, starting from zero.
-  let t : Acc6 := ⟨⟨0, 0, 0, 0, 0, 0⟩, 0⟩
+  let t : Words6 := ⟨0, 0, 0, 0, 0, 0⟩
   let t := row6 p pinv a b.w0 t
   let t := row6 p pinv a b.w1 t
   let t := row6 p pinv a b.w2 t
@@ -227,26 +230,25 @@ theorem Words6.val_lt (t : Words6) : t.val < 2^384 := by
   omega
 
 /-- A row adds `a x` and a multiple of `p`, divides by `2^64`, and stays below `2 p`. -/
-theorem row6_spec {p : Words6} {pinv : UInt64} (hpinv : (p.val * pinv.toNat + 1) % 2^64 = 0)
-    {a : Words6} (ha : a.val < p.val) (x : UInt64) {t : Acc6} (ht : t.val < 2 * p.val) :
+theorem row6_spec {p : Words6} {pinv : UInt64} (hp : 2 * p.val < 2^384)
+    (hpinv : (p.val * pinv.toNat + 1) % 2^64 = 0) {a : Words6} (ha : a.val < p.val) (x : UInt64)
+    {t : Words6} (ht : t.val < 2 * p.val) :
     (row6 p pinv a x t).val < 2 * p.val ∧
       ∃ m : Nat, 2^64 * (row6 p pinv a x t).val = t.val + a.val * x.toNat + m * p.val := by
   simp only [row6]
   -- The multiplication loop.
-  have e0 := mac_spec a.w0 x t.low.w0 0
-  generalize mac a.w0 x t.low.w0 0 = u0 at *
-  have e1 := mac_spec a.w1 x t.low.w1 u0.hi
-  generalize mac a.w1 x t.low.w1 u0.hi = u1 at *
-  have e2 := mac_spec a.w2 x t.low.w2 u1.hi
-  generalize mac a.w2 x t.low.w2 u1.hi = u2 at *
-  have e3 := mac_spec a.w3 x t.low.w3 u2.hi
-  generalize mac a.w3 x t.low.w3 u2.hi = u3 at *
-  have e4 := mac_spec a.w4 x t.low.w4 u3.hi
-  generalize mac a.w4 x t.low.w4 u3.hi = u4 at *
-  have e5 := mac_spec a.w5 x t.low.w5 u4.hi
-  generalize mac a.w5 x t.low.w5 u4.hi = u5 at *
-  have e6 := plus_spec t.top u5.hi 0 (by decide)
-  generalize plus t.top u5.hi 0 = u6 at *
+  have e0 := mac_spec a.w0 x t.w0 0
+  generalize mac a.w0 x t.w0 0 = u0 at *
+  have e1 := mac_spec a.w1 x t.w1 u0.hi
+  generalize mac a.w1 x t.w1 u0.hi = u1 at *
+  have e2 := mac_spec a.w2 x t.w2 u1.hi
+  generalize mac a.w2 x t.w2 u1.hi = u2 at *
+  have e3 := mac_spec a.w3 x t.w3 u2.hi
+  generalize mac a.w3 x t.w3 u2.hi = u3 at *
+  have e4 := mac_spec a.w4 x t.w4 u3.hi
+  generalize mac a.w4 x t.w4 u3.hi = u4 at *
+  have e5 := mac_spec a.w5 x t.w5 u4.hi
+  generalize mac a.w5 x t.w5 u4.hi = u5 at *
   -- The multiple `m` of `p` clears the low word.
   have hclear : ((u0.lo * pinv).toNat * p.w0.toNat + u0.lo.toNat) % 2^64 = 0 := by
     rw [UInt64.toNat_mul]
@@ -268,63 +270,66 @@ theorem row6_spec {p : Words6} {pinv : UInt64} (hpinv : (p.val * pinv.toNat + 1)
   generalize mac m p.w4 u4.lo v3.hi = v4 at *
   have f5 := mac_spec m p.w5 u5.lo v4.hi
   generalize mac m p.w5 u5.lo v4.hi = v5 at *
-  have f6 := plus_spec u6.lo v5.hi 0 (by decide)
-  generalize plus u6.lo v5.hi 0 = v6 at *
   have hv0 : v0.lo.toNat = 0 := by
     have := v0.lo.toNat_lt
     simp only [UInt64.toNat_zero] at f0
     omega
-  -- The two carries into the top word are at most one each, so they add without wrapping.
-  have htop : (u6.hi + v6.hi).toNat = u6.hi.toNat + v6.hi.toNat := by
-    rw [UInt64.toNat_add]
-    exact Nat.mod_eq_of_lt (by simp only [wordRadix] at e6 f6; omega)
-  -- The row as an equation of integers.
-  have key : 2^64 * Acc6.val ⟨⟨v1.lo, v2.lo, v3.lo, v4.lo, v5.lo, v6.lo⟩, u6.hi + v6.hi⟩ =
+  -- The row as an equation of integers, with both carries added as integers at the top.
+  have hax : a.val * x.toNat = a.w0.toNat * x.toNat + 2^64 * (a.w1.toNat * x.toNat) +
+      2^128 * (a.w2.toNat * x.toNat) + 2^192 * (a.w3.toNat * x.toNat) +
+      2^256 * (a.w4.toNat * x.toNat) + 2^320 * (a.w5.toNat * x.toNat) := by
+    simp only [Words6.val, Nat.add_mul, Nat.mul_assoc]
+  have hmp : m.toNat * p.val = m.toNat * p.w0.toNat + 2^64 * (m.toNat * p.w1.toNat) +
+      2^128 * (m.toNat * p.w2.toNat) + 2^192 * (m.toNat * p.w3.toNat) +
+      2^256 * (m.toNat * p.w4.toNat) + 2^320 * (m.toNat * p.w5.toNat) := by
+    simp only [Words6.val, Nat.mul_add, Nat.mul_left_comm m.toNat]
+  have key : 2^64 * (v1.lo.toNat + 2^64 * v2.lo.toNat + 2^128 * v3.lo.toNat +
+      2^192 * v4.lo.toNat + 2^256 * v5.lo.toNat + 2^320 * (u5.hi.toNat + v5.hi.toNat)) =
       t.val + a.val * x.toNat + m.toNat * p.val := by
-    have hax : a.val * x.toNat = a.w0.toNat * x.toNat + 2^64 * (a.w1.toNat * x.toNat) +
-        2^128 * (a.w2.toNat * x.toNat) + 2^192 * (a.w3.toNat * x.toNat) +
-        2^256 * (a.w4.toNat * x.toNat) + 2^320 * (a.w5.toNat * x.toNat) := by
-      simp only [Words6.val, Nat.add_mul, Nat.mul_assoc]
-    have hmp : m.toNat * p.val = m.toNat * p.w0.toNat + 2^64 * (m.toNat * p.w1.toNat) +
-        2^128 * (m.toNat * p.w2.toNat) + 2^192 * (m.toNat * p.w3.toNat) +
-        2^256 * (m.toNat * p.w4.toNat) + 2^320 * (m.toNat * p.w5.toNat) := by
-      simp only [Words6.val, Nat.mul_add, Nat.mul_left_comm m.toNat]
     rw [hax, hmp]
-    simp only [wordRadix, UInt64.toNat_zero] at e0 e6 f0 f6
-    simp only [Acc6.val, Words6.val, htop]
+    simp only [UInt64.toNat_zero] at e0 f0
+    simp only [Words6.val]
     omega
-  refine ⟨?_, m.toNat, key⟩
   -- `2^64 t' = t + a x + m p < 2 p + p (2^64 - 1) + (2^64 - 1) p = 2^65 p`.
-  have hax : a.val * x.toNat ≤ p.val * (2^64 - 1) :=
+  have hax' : a.val * x.toNat ≤ p.val * (2^64 - 1) :=
     Nat.mul_le_mul (by omega) (by have := x.toNat_lt; omega)
-  have hmp : m.toNat * p.val ≤ (2^64 - 1) * p.val :=
+  have hmp' : m.toNat * p.val ≤ (2^64 - 1) * p.val :=
     Nat.mul_le_mul_right _ (by have := m.toNat_lt; omega)
-  omega
+  -- So the row is below `2 p < 2^384`, and the two carries add without wrapping.
+  have htop : (u5.hi + v5.hi).toNat = u5.hi.toNat + v5.hi.toNat := by
+    rw [UInt64.toNat_add]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hv : Words6.val ⟨v1.lo, v2.lo, v3.lo, v4.lo, v5.lo, u5.hi + v5.hi⟩ =
+      v1.lo.toNat + 2^64 * v2.lo.toNat + 2^128 * v3.lo.toNat + 2^192 * v4.lo.toNat +
+        2^256 * v5.lo.toNat + 2^320 * (u5.hi.toNat + v5.hi.toNat) := by
+    simp only [Words6.val, htop]
+  rw [hv]
+  exact ⟨by omega, m.toNat, key⟩
 
-/-- The final subtraction gives the remainder mod `p`, for a state below `2 p` and `2 p < 2^384`. -/
-theorem reduce6_val {p : Words6} (hp : 2 * p.val < 2^384) {t : Acc6} (ht : t.val < 2 * p.val) :
+/-- The final subtraction gives the remainder mod `p`, for `t` below `2 p`. -/
+theorem reduce6_val {p t : Words6} (ht : t.val < 2 * p.val) :
     (reduce6 p t).val = t.val % p.val := by
   -- The six words of the difference, with the final borrow: `d + p = t + 2^384 borrow`.
-  obtain ⟨hd, hb⟩ := diff6_val t.low p
-  have hD := (diff6 t.low p).low.val_lt
-  simp only [reduce6, Acc6.val] at ht ⊢
+  obtain ⟨hd, hb⟩ := diff6_val t p
+  have hD := (diff6 t p).low.val_lt
+  have hT := t.val_lt
+  simp only [reduce6]
   split
   · rename_i hc
-    have hc' : t.top.toNat < (diff6 t.low p).top.toNat := hc
-    generalize (diff6 t.low p).low.val = D at *
-    generalize t.low.val = T at *
-    generalize p.val = P at *
-    -- The subtraction borrows, so `t < p`.
-    rw [Nat.mod_eq_of_lt (by omega)]
-    omega
-  · rename_i hc
-    have hc' : ¬ t.top.toNat < (diff6 t.low p).top.toNat := hc
-    generalize (diff6 t.low p).low.val = D at *
-    generalize t.low.val = T at *
+    have hc' : (diff6 t p).top.toNat = 0 := by rw [hc]; rfl
+    generalize (diff6 t p).low.val = D at *
+    generalize t.val = T at *
     generalize p.val = P at *
     -- No borrow: `p ≤ t < 2 p`, and the words hold `t - p`.
     rw [Nat.mod_eq_sub_mod (by omega), Nat.mod_eq_of_lt (by omega)]
     omega
+  · rename_i hc
+    have hc' : (diff6 t p).top.toNat ≠ 0 := fun h => hc (UInt64.toNat_inj.mp h)
+    generalize (diff6 t p).low.val = D at *
+    generalize t.val = T at *
+    generalize p.val = P at *
+    -- The subtraction borrows, so `t < p`.
+    rw [Nat.mod_eq_of_lt (by omega)]
 
 /-- The product is below `p`, and it is `a b` divided by `2^384` mod `p`. -/
 theorem mul6_spec {p : Words6} {pinv : UInt64} (hp : 2 * p.val < 2^384)
@@ -337,17 +342,16 @@ theorem mul6_spec {p : Words6} {pinv : UInt64} (hp : 2 * p.val < 2^384)
     refine Nat.pos_of_ne_zero fun h => ?_
     rw [h, Nat.zero_mul] at hpinv
     exact absurd hpinv (by decide)
-  have h0 : Acc6.val ⟨⟨0, 0, 0, 0, 0, 0⟩, 0⟩ = 0 := by
-    simp only [Acc6.val, Words6.val, UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero]
-  obtain ⟨b1, m0, e0⟩ := row6_spec hpinv ha b.w0 (t := ⟨⟨0, 0, 0, 0, 0, 0⟩, 0⟩)
-    (by rw [h0]; omega)
-  obtain ⟨b2, m1, e1⟩ := row6_spec hpinv ha b.w1 b1
-  obtain ⟨b3, m2, e2⟩ := row6_spec hpinv ha b.w2 b2
-  obtain ⟨b4, m3, e3⟩ := row6_spec hpinv ha b.w3 b3
-  obtain ⟨b5, m4, e4⟩ := row6_spec hpinv ha b.w4 b4
-  obtain ⟨b6, m5, e5⟩ := row6_spec hpinv ha b.w5 b5
+  have h0 : Words6.val ⟨0, 0, 0, 0, 0, 0⟩ = 0 := by
+    simp only [Words6.val, UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero]
+  obtain ⟨b1, m0, e0⟩ := row6_spec hp hpinv ha b.w0 (t := ⟨0, 0, 0, 0, 0, 0⟩) (by rw [h0]; omega)
+  obtain ⟨b2, m1, e1⟩ := row6_spec hp hpinv ha b.w1 b1
+  obtain ⟨b3, m2, e2⟩ := row6_spec hp hpinv ha b.w2 b2
+  obtain ⟨b4, m3, e3⟩ := row6_spec hp hpinv ha b.w3 b3
+  obtain ⟨b5, m4, e4⟩ := row6_spec hp hpinv ha b.w4 b4
+  obtain ⟨b6, m5, e5⟩ := row6_spec hp hpinv ha b.w5 b5
   simp only [mul6]
-  rw [reduce6_val hp b6]
+  rw [reduce6_val b6]
   refine ⟨Nat.mod_lt _ hp0, ?_⟩
   -- The rows give `2^384 t = a b + M p`.
   have hb : a.val * b.val = a.val * b.w0.toNat + 2^64 * (a.val * b.w1.toNat) +
@@ -364,7 +368,7 @@ theorem mul6_spec {p : Words6} {pinv : UInt64} (hp : 2 * p.val < 2^384)
     simp only [Nat.add_mul, Nat.mul_assoc]
   have key : 2^384 * (row6 p pinv a b.w5 (row6 p pinv a b.w4 (row6 p pinv a b.w3
       (row6 p pinv a b.w2 (row6 p pinv a b.w1
-        (row6 p pinv a b.w0 ⟨⟨0, 0, 0, 0, 0, 0⟩, 0⟩)))))).val =
+        (row6 p pinv a b.w0 ⟨0, 0, 0, 0, 0, 0⟩)))))).val =
       a.val * b.val + (m0 + 2^64 * m1 + 2^128 * m2 + 2^192 * m3 + 2^256 * m4 + 2^320 * m5) *
         p.val := by
     rw [h0] at e0
