@@ -13,6 +13,13 @@ Not yet released.
   `withdrawalsRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the withdrawals root for any plain hash, with `withdrawalsRootM_eq` and `withdrawalsRootM_eq_ok_iff` (`Execution/Proofs/Blocks/TypedRoots.lean`).
   `checkTransactionsM_eq`, `checkWithdrawalsM_eq`, `checkOmmersM_eq`, `checkBodyM_eq`, `checkOmmers_eq` and `checkBody_eq` (`Execution/Proofs/Network/Bodies.lean`) state the checks with a plain hash.
 
+- In Lean, `Execution/Proofs/Evm/Call/StorageInvariant.lean` proves, under an assumption on Keccak-256 (`CodeHyp.hashOnly`), that every message keeps an invariant of the storage of an account that holds a given code ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
+  Each frame that runs that code at the account must keep it: `FramesKeepCode`.
+  `goodAt_processMessage` and `goodAt_processCreateMessage` then keep the invariant and the code over each call that returns a frame, and each creation at another address.
+  A call must start where the account holds the code, and run it if it goes there (`RunsCode`).
+  `CodeHyp` states what the code must meet, including the assumption that no other code has its hash, which SOUNDNESS.md lists.
+  `step_eq_child_callsCode` (`Execution/Proofs/Evm/Call/StepRules.lean`) states that a call to another account runs the code that the state holds there, when that code names no delegate.
+
 - In Lean, `prEvent_indexedWins_le` (`Execution/Proofs/Blocks/RootsRandomOracle.lean`) bounds the probability of finding two different lists with one root, with the hash a random oracle, by `Q^2 / 2^256`.
   `indexedRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the root of a list for any plain hash, with `indexedRootM_eq` and `indexedRootM_eq_ok_iff` ([#4612](https://github.com/ethereum/EthLib/issues/4612)).
   `Execution/Proofs/Trie/RandomOracle.lean` gains `mem_witnesses_of_findCollision`, the proof-node half of the secured-trie lemma.
