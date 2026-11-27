@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
+public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
 
 /-!
 # Proofs: the consolidation request contract of EIP-7251 does what its EIP describes
@@ -187,6 +188,33 @@ theorem feePathCode_CODE :
   revert1 := by evm_code [CODE, CODE_NUMBER_eq]
   revert2 := by evm_code [CODE, CODE_NUMBER_eq]
   revert3 := by evm_code [CODE, CODE_NUMBER_eq]
+
+/-- The code ends its system call from byte 297, for a target of 1 and records of 116 bytes. -/
+theorem dequeueTailCode_CODE : DequeueTailCode CODE 297 1 116 where
+  size_le := by simp [CODE, NatCode.size_ofNat]
+  end_lt := by decide
+  byte := DequeueTailCode.byte_ofNat (by decide +kernel)
+  push11 := by evm_code [CODE, CODE_NUMBER_eq]
+  push22 := by evm_code [CODE, CODE_NUMBER_eq]
+  push26 := by evm_code [CODE, CODE_NUMBER_eq]
+  push33 := by evm_code [CODE, CODE_NUMBER_eq]
+  push75 := by evm_code [CODE, CODE_NUMBER_eq]
+  push105 := by evm_code [CODE, CODE_NUMBER_eq]
+  push6 := by evm_code [CODE, CODE_NUMBER_eq]
+  push14 := by evm_code [CODE, CODE_NUMBER_eq]
+  push68 := by evm_code [CODE, CODE_NUMBER_eq]
+  push84 := by evm_code [CODE, CODE_NUMBER_eq]
+  push91 := by evm_code [CODE, CODE_NUMBER_eq]
+  dest18 := by evm_dest [CODE, CODE_NUMBER_eq]
+  dest29 := by evm_dest [CODE, CODE_NUMBER_eq]
+  dest74 := by evm_dest [CODE, CODE_NUMBER_eq]
+  dest95 := by evm_dest [CODE, CODE_NUMBER_eq]
+  dest101 := by evm_dest [CODE, CODE_NUMBER_eq]
+  push78 := by evm_code [CODE, CODE_NUMBER_eq]
+  push97 := by evm_code [CODE, CODE_NUMBER_eq]
+  push108 := by evm_code [CODE, CODE_NUMBER_eq]
+  target_lt := by decide
+  size_lt := by decide
 
 /-! ## A call that adds no request -/
 
@@ -615,311 +643,6 @@ private theorem deq_loop {read : U256 → U256} {tail : U256} {c : Nat} {Q : Evm
         next M' S' g' ss' hM' hM's (WritesStorage.trans hw₁ hw')
           (Nat.le_trans hg₁ (by rw [← Nat.add_assoc]; exact Nat.add_le_add_right hg' _))
 
-/-- From byte 398, the code writes the excess `v` and resets the count of the block.
-
-It then returns the records, `116` bytes for each request taken. -/
-private theorem deq_end {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {v x : U256} (hfork : .shapella ≤ fork)
-    (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hM : (mul 116#256 x).toNat ≤ M.size) (hg : 50000 * storageGasScale fork ≤ g) :
-    Spec fork (At CODE message 398 [v, x] M g S ss returnData)
-      (Returned message.currentTarget M (mul 116#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0 v) 1 0) S) := by
-  have hscale := one_le_storageGasScale fork
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
-    fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc₁ (by omega)
-    fun S₂ hw₂ _ g₂ ss₂ hg₂ _ => ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have hle : extendMemory M.size [((0 : U256), mul 116#256 x)] = ⟨0, 0⟩ :=
-    extendMemory_of_le (by simpa using hM)
-  refine Spec.consequence («return» (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by rw [hle]; exact Nat.zero_le _)) (fun _ h => h) ?_
-  rintro evm ⟨-, herr, hout, -, hst, -⟩
-  refine ⟨by simpa using herr, ?_, ?_⟩
-  · rw [hout, hle]
-    dsimp only
-    rw [memoryExtend_zero]
-    rfl
-  · rw [hst]
-    have hw := WritesStorage.trans hw₁ hw₂
-    rw [show storageOf S₁ message.currentTarget = _ from funext hw₁.1] at hw
-    exact hw
-
-/-- From byte 371, the code computes the new excess from the previous excess `p` and the count.
-
-The previous excess plus the count is below `2^256`. -/
-private theorem deq_count {S : TransactionState} {ss : Substate} {M : ByteArray} {g p : Nat}
-    {x : U256} (hfork : .shapella ≤ fork)
-    (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hp : p + (storageOf S message.currentTarget 1#256).toNat < 2 ^ 256)
-    (hM : (mul 116#256 x).toNat ≤ M.size) (hg : 60000 * storageGasScale fork ≤ g) :
-    Spec fork (At CODE message 371 [BitVec.ofNat 256 p, x] M g S ss returnData)
-      (Returned message.currentTarget M (mul 116#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0
-          (BitVec.ofNat 256 (if p + (storageOf S message.currentTarget 1#256).toNat > 1 then
-            p + (storageOf S message.currentTarget 1#256).toNat - 1 else 0))) 1 0) S) := by
-  have hscale := one_le_storageGasScale fork
-  generalize hn : (storageOf S message.currentTarget 1#256).toNat = n at hp
-  have hs : add (storageOf S message.currentTarget 1#256) (BitVec.ofNat 256 p) =
-      BitVec.ofNat 256 (p + n) := by
-    apply BitVec.eq_of_toNat_eq
-    simp only [add, BitVec.toNat_add, BitVec.toNat_ofNat, hn]
-    have hp' : p < 2 ^ 256 := Nat.lt_of_le_of_lt (Nat.le_add_right p n) hp
-    rw [Nat.mod_eq_of_lt hp', Nat.add_comm, Nat.mod_eq_of_lt hp]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g₁ ss₁ hg₁ _ => ?_
-  have hacc₁ : ((S.recordStorageRead message.currentTarget (U256.toBeBytes 1#256)
-      ).getAccountOptional message.currentTarget).isSome = true := hacc
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  rw [hs]
-  have hsub : 1 ≤ p + n → sub (BitVec.ofNat 256 (p + n)) 1#256 =
-      BitVec.ofNat 256 (p + n - 1) := by
-    intro h1
-    apply BitVec.eq_of_toNat_eq
-    simp only [sub, BitVec.toNat_sub, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hp]
-    omega
-  have post : ∀ v, ∀ evm : Evm fork Nat, Returned message.currentTarget M (mul 116#256 x).toNat
-      (setSlot (setSlot (storageOf S message.currentTarget) 0 v) 1 0)
-      (S.recordStorageRead message.currentTarget (U256.toBeBytes 1#256)) evm →
-      Returned message.currentTarget M (mul 116#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0 v) 1 0) S evm :=
-    fun _ _ ⟨h1, h2, h3⟩ =>
-      ⟨h1, h2, WritesStorage.trans (WritesStorage.recordStorageRead _ _ _ _) h3⟩
-  by_cases hgt : p + n > 1
-  · have hz : greaterThan (BitVec.ofNat 256 (p + n)) 1#256 ≠ 0 := by
-      simp [greaterThan, Nat.mod_eq_of_lt hp, hgt]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    rw [hs]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    rw [hsub (by omega)]
-    simp only [hgt, ite_true]
-    exact Spec.consequence (deq_end hfork hstatic hacc₁ hM (by omega)) (fun _ h => h)
-      (post _)
-  · have hz : greaterThan (BitVec.ofNat 256 (p + n)) 1#256 = 0 := by
-      simp [greaterThan, Nat.mod_eq_of_lt hp, hgt]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    simp only [hgt, ite_false]
-    exact Spec.consequence (deq_end hfork hstatic hacc₁ hM (by omega)) (fun _ h => h)
-      (post _)
-
-/-- From byte 326, the code updates the excess for a target of 1 per block, and resets the count.
-
-It then returns the records, `116` bytes for each request taken. -/
-private theorem deq_excess {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {x : U256} (hfork : .shapella ≤ fork)
-    (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hb : previousExcess (storageOf S message.currentTarget 0) +
-      (storageOf S message.currentTarget 1#256).toNat < 2 ^ 256)
-    (hM : (mul 116#256 x).toNat ≤ M.size) (hg : 70000 * storageGasScale fork ≤ g) :
-    Spec fork (At CODE message 326 [x] M g S ss returnData)
-      (Returned message.currentTarget M (mul 116#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0
-          (BitVec.ofNat 256 (newExcess 1 (storageOf S message.currentTarget 0)
-            (storageOf S message.currentTarget 1)))) 1 0) S) := by
-  have hscale := one_le_storageGasScale fork
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g₁ ss₁ hg₁ _ => ?_
-  have hacc₁ : ((S.recordStorageRead message.currentTarget (U256.toBeBytes 0)).getAccountOptional
-      message.currentTarget).isSome = true := hacc
-  have post : ∀ evm : Evm fork Nat, Returned message.currentTarget M (mul 116#256 x).toNat
-      (setSlot (setSlot (storageOf S message.currentTarget) 0
-        (BitVec.ofNat 256 (newExcess 1 (storageOf S message.currentTarget 0)
-          (storageOf S message.currentTarget 1)))) 1 0)
-      (S.recordStorageRead message.currentTarget (U256.toBeBytes 0)) evm →
-      Returned message.currentTarget M (mul 116#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0
-          (BitVec.ofNat 256 (newExcess 1 (storageOf S message.currentTarget 0)
-            (storageOf S message.currentTarget 1)))) 1 0) S evm :=
-    fun _ ⟨h1, h2, h3⟩ => ⟨h1, h2, WritesStorage.trans (WritesStorage.recordStorageRead _ _ _ _) h3⟩
-  have hw : BitVec.ofNat 256 (2 ^ 256 - 1) = EXCESS_INHIBITOR := rfl
-  by_cases hinh : storageOf S message.currentTarget 0 = EXCESS_INHIBITOR
-  · have hz : isZero (equal (BitVec.ofNat 256 (2 ^ 256 - 1))
-        (storageOf S message.currentTarget 0)) = 0 := by
-      rw [hinh, ← hw]
-      decide
-    simp only [Nat.reducePow, Nat.reduceSub] at hz
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    have hp : previousExcess (storageOf S message.currentTarget 0) = 0 := by
-      unfold previousExcess
-      rw [ite_eq_left hinh]
-    rw [hp] at hb
-    refine Spec.consequence (deq_count (p := 0) hfork hstatic hacc₁ hb hM (by omega))
-      (fun _ h => h) fun evm h => post evm ?_
-    unfold newExcess
-    rw [hp]
-    exact h
-  · have hz : isZero (equal (BitVec.ofNat 256 (2 ^ 256 - 1))
-        (storageOf S message.currentTarget 0)) ≠ 0 := by
-      have hne : BitVec.ofNat 256 (2 ^ 256 - 1) ≠ storageOf S message.currentTarget 0 :=
-        fun e => hinh (e.symm.trans hw)
-      rw [equal, ite_eq_right hne, isZero, ite_eq_left rfl]
-      decide
-    simp only [Nat.reducePow, Nat.reduceSub] at hz
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    have hp : previousExcess (storageOf S message.currentTarget 0) =
-        (storageOf S message.currentTarget 0).toNat := by
-      unfold previousExcess
-      rw [ite_eq_right hinh]
-    rw [hp] at hb
-    refine Spec.reshape (s' := [BitVec.ofNat 256 (storageOf S message.currentTarget 0).toNat, x])
-      (by simp) rfl rfl ?_
-    refine Spec.consequence (deq_count hfork hstatic hacc₁ hb hM (by omega))
-      (fun _ h => h) fun evm h => post evm ?_
-    unfold newExcess
-    rw [hp]
-    exact h
-
-/-- From byte 297, the code moves the head of the queue, or empties it, then updates the excess.
-
-It returns the records of the requests it took, which memory holds. -/
-private theorem deq_head {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {r : U256 → U256} (hfork : .shapella ≤ fork)
-    (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hr : storageOf S message.currentTarget = r) (hb : Bounded r)
-    (hMs : M.size = 128 * numDequeued 2 r) (hg : 120000 * storageGasScale fork ≤ g) :
-    Spec fork (At CODE message 297 [BitVec.ofNat 256 (numDequeued 2 r),
-        BitVec.ofNat 256 (numDequeued 2 r), r 2, r 3] M g S ss returnData)
-      (Returned message.currentTarget M (116 * numDequeued 2 r) (afterDequeue 2 1 r) S) := by
-  have hscale := one_le_storageGasScale fork
-  obtain ⟨hht, hex⟩ := hb
-  have hc2 : numDequeued 2 r ≤ 2 := Nat.min_le_right _ _
-  have hle : (r 2).toNat + numDequeued 2 r ≤ (r 3).toNat := by
-    unfold numDequeued
-    have h : Nat.min ((r 3).toNat - (r 2).toNat) 2 ≤ (r 3).toNat - (r 2).toNat :=
-      Nat.min_le_left _ _
-    omega
-  have ht := (r 3).isLt
-  generalize hc : numDequeued 2 r = c at hc2 hle hMs ⊢
-  have hnh : add (r 2) (BitVec.ofNat 256 c) = BitVec.ofNat 256 ((r 2).toNat + c) := by
-    apply BitVec.eq_of_toNat_eq
-    simp only [add, BitVec.toNat_add, BitVec.toNat_ofNat]
-    rw [Nat.mod_eq_of_lt (by omega : c < 2 ^ 256), Nat.mod_eq_of_lt (by omega)]
-  have hmul : (mul 116#256 (BitVec.ofNat 256 c)).toNat = 116 * c := by
-    simp only [mul, BitVec.toNat_mul, BitVec.toNat_ofNat]
-    rw [Nat.mod_eq_of_lt (by omega : c < 2 ^ 256)]
-    omega
-  have hM : (mul 116#256 (BitVec.ofNat 256 c)).toNat ≤ M.size := by rw [hmul, hMs]; omega
-  have hr0 : ∀ F : U256 → U256, F 0 = r 0 → F 1#256 = r 1 →
-      previousExcess (F 0) + (F 1#256).toNat < 2 ^ 256 := fun F h0 h1 => by
-    rw [h0, h1]; exact hex
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  rw [hnh]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have heqv : r 3 = BitVec.ofNat 256 ((r 2).toNat + c) ↔ (r 2).toNat + c = (r 3).toNat := by
-    constructor
-    · intro e
-      have := congrArg BitVec.toNat e
-      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)] at this
-      omega
-    · intro e
-      apply BitVec.eq_of_toNat_eq
-      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-      omega
-  by_cases hnt : (r 2).toNat + c = (r 3).toNat
-  · have hz : equal (r 3) (BitVec.ofNat 256 ((r 2).toNat + c)) ≠ 0 := by
-      rw [equal, ite_eq_left (heqv.mpr hnt)]
-      decide
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-      (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
-      fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-      (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc₁ (by omega)
-      fun S₂ hw₂ hacc₂ g₂ ss₂ hg₂ _ => ?_
-    have eF : storageOf S₂ message.currentTarget = setSlot (setSlot r 2 0) 3 0 := by
-      rw [funext hw₂.1, funext hw₁.1, hr]
-      rfl
-    refine Spec.consequence (deq_excess hfork hstatic hacc₂
-      (hr0 _ (by rw [eF]; simp [setSlot]) (by rw [eF]; simp [setSlot])) hM (by omega))
-      (fun _ h => h) fun evm h => ?_
-    obtain ⟨h1, h2, h3⟩ := h
-    refine ⟨h1, by rw [h2, hmul], ?_⟩
-    have hw := WritesStorage.trans (WritesStorage.trans hw₁ hw₂) h3
-    rw [eF, deq_store 2 1 r (setSlot (setSlot r 2 0) 3 0) (by rw [hc, ite_eq_left hnt])] at hw
-    exact hw
-  · have hz : equal (r 3) (BitVec.ofNat 256 ((r 2).toNat + c)) = 0 := by
-      simp only [equal]
-      rw [ite_eq_right_iff]
-      exact fun e => absurd (heqv.mp e) hnt
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork)
-      (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc
-      (by omega) fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    have eF : storageOf S₁ message.currentTarget =
-        setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + c)) := by
-      rw [funext hw₁.1, hr]
-      rfl
-    refine Spec.consequence (deq_excess hfork hstatic hacc₁
-      (hr0 _ (by rw [eF]; simp [setSlot]) (by rw [eF]; simp [setSlot])) hM (by omega))
-      (fun _ h => h) fun evm h => ?_
-    obtain ⟨h1, h2, h3⟩ := h
-    refine ⟨h1, by rw [h2, hmul], ?_⟩
-    have hw := WritesStorage.trans hw₁ h3
-    rw [eF, deq_store 2 1 r (setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + c)))
-      (by rw [hc, ite_eq_right hnt])] at hw
-    exact hw
-
 /-- At most 2 runs of the loop of the system call take at most 18,030 gas. -/
 private theorem deqGas_le {n : Nat} (hn : n ≤ 2) : deqGas n ≤ 18030 := by
   rcases (by omega : n = 0 ∨ n = 1 ∨ n = 2) with h | h | h <;> subst h <;> decide
@@ -944,7 +667,8 @@ private theorem deq_rest {S : TransactionState} {ss : Substate} {g : Nat} {r : U
     (by omega) fun M' S' g' ss' hM' hM's hw' hg' => ?_
   have hacc' : (S'.getAccountOptional message.currentTarget).isSome = true := by
     rw [hw'.2.2.1]; exact hacc
-  refine Spec.consequence (deq_head hfork hstatic hacc' (funext hw'.1) hb hM's
+  refine Spec.consequence (dequeueTailCode_CODE.spec_head hfork hstatic hacc' (funext hw'.1) hb
+    (by decide) (by rw [hM's]; omega)
     (by omega)) (fun _ h => h) fun evm ⟨h1, h2, h3⟩ => ⟨h1, ?_, WritesStorage.trans hw' h3⟩
   rw [h2]
   have := hM'.2
