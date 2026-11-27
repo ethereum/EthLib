@@ -1364,7 +1364,7 @@ theorem Store.ForwardReachable.finalized_add_two_le_or_anchor
   cases Except.ok.inj epochOk
   exact h.1.symm.imp id UInt64.le_iff_toNat_le.mpr
 
-/-- A reachable store past the anchor epoch reads its finalized checkpoint at some root.
+/-- A reachable store finalized past the anchor epoch reads its finalized checkpoint at some root.
 
 The checkpoint comes from a held state or from its pull-up, whose block reads it on its chain.
 
@@ -1395,11 +1395,13 @@ theorem Store.Reachable.finalized_read {store : Store preset fork}
     · exact ⟨root, read⟩
     · exact absurd zero nonzero
 
-/-- A forward-reachable store with a finalized checkpoint other than the anchor's has an old one.
+/-- A finalized checkpoint other than the anchor's is two or more epochs before the current one.
 
-Its root's block epoch is at most its epoch, which is at least two epochs before the current one.
+Its root's block epoch is at most its epoch, in a forward-reachable store.
 
-The anchor state must keep the invariant and must not hash to the zero root. -/
+It assumes the anchor invariant, a nonzero state hash and an anchor block not after its state.
+
+It also needs a positive slot duration, a nonempty epoch and two epochs of root history. -/
 theorem Store.ForwardReachable.finalized_epoch_add_two_le
     {config : Config} {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store anchor : Store preset fork}

@@ -617,7 +617,7 @@ private theorem finalized_recent (ctx : CallsCtx (e := e) anchor u events firstS
   intro be beOk rec
   by_cases same : ((e.world n).state u).finalizedCheckpoint = anchor.finalizedCheckpoint
   swap
-  · -- Another finalized checkpoint is two epochs old, too old to be recent.
+  · -- Another finalized checkpoint is at least two epochs old, too old to be recent.
     exfalso
     obtain ⟨be', read, below, lag⟩ := forward.finalized_epoch_add_two_le ctx.anchored ctx.sound
       (UInt64.le_of_eq ctx.anchorSlot) ctx.slots ctx.positive ctx.window nonzero same epochOk
