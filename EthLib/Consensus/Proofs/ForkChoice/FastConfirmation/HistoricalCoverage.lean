@@ -407,7 +407,9 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
 
 /-- At a time `T`, the confirmed root of a call is viable, given its coverage before `T`.
 
-Otherwise two honest stores collide, or direct-safety, held-state or cross-store evidence holds.
+Otherwise two honest stores collide, or evidence holds.
+
+The evidence is historical direct-safety, held-state or cross-store.
 
 The caller's head read at each rollover is derived, not assumed.
 
@@ -439,7 +441,9 @@ public theorem Execution.rootViableAt_of_checked_or_evidence [DecidablePred (· 
     (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
     (enough : HeldRunStakeFloor (e := e) pre horizon time)
     (included : TargetIncluded (e := e) time)
-    -- The caller's head read rests on the active-stake ceiling and the proposer-score bound.
+    -- The caller's head read rests on the proposer-score bound.
+    --
+    -- Before Gloas it also rests on the active-stake ceiling.
     (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
     (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
     -- From Gloas it also rests on the head-weight bundle and on each weak-head weight.

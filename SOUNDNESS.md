@@ -4042,11 +4042,12 @@ The theorem holds at every fork; from Gloas it also assumes that every honest st
 `HeldBlockStateRootsNonzero` assumes that their blocks have nonzero state roots.
 Block agreement between honest stores is not assumed: `Store.blocks_agree_or_collision` splits it from the collision disjunct.
 `CallerHeadAt` assumes that at the start of the next epoch the caller's up-to-date store has a head.
-The theorem assumes this read, since its conclusion has the collision but no `HistoricalDirectSafetyEvidence` alternative; a companion with that alternative derives it.
+The theorem assumes this read, since its conclusion has the collision but no `HistoricalDirectSafetyEvidence` alternative.
 `Execution.callRolloverRead_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HonestHeads.lean` derives it for the caller of a checked call at every fork, up to a collision of two honest stores or `HistoricalDirectSafetyEvidence` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
 It also takes, gated on Gloas, the anchor registry's room (`AnchorRegistryRoom`), `Config.HeadWeightsFit`, `CheckpointHeadWeightCeiling` and `Config.CommitteeWindowsFit`.
-`Execution.honestTargetVotes_signed_of_checked_or_evidence`, in the same file, is that companion.
-It derives the read from `Execution.callRolloverRead_or_evidence` at the start of the next epoch, and from Gloas the registry bound through `AnchorRegistryRoom`, so it takes neither.
+`Execution.honestTargetVotes_signed_of_checked_or_evidence`, in the same file, adds that alternative and derives the read from `Execution.callRolloverRead_or_evidence` at the start of the next epoch.
+It also derives the lookahead bound from `DirectSafety.Parameters`, and from Gloas the registry bound through `AnchorRegistryRoom`.
+In place of these three premises it takes the premises of that read, among them `CheckpointStakeCeiling`, `Config.ProposerScoreFits`, `HeldRunStakeFloor` and `HeldTerminalStakeFloor`.
 Its conclusion adds `HistoricalDirectSafetyEvidence` to the collision.
 The window of that head over the target's epoch is derived: the theorem takes `Config.CommitteeWindowsFit` and reads it through `Store.getCommitteesBetweenSlots_exists`.
 The head's state is held, and the window ends before the current slot.
@@ -4108,6 +4109,7 @@ An accepted root of an earlier epoch is realized as justified by the head's stat
 `CallRolloverRead` is the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
 `Execution.rootInFilteredTree_of_checked` and `Execution.rootViableAt_of_checked` assume it.
 Their companions `Execution.rootInFilteredTree_of_checked_or_evidence` and `Execution.rootViableAt_of_checked_or_evidence` derive it through `Execution.callRolloverRead_or_evidence`, and their conclusions add `HistoricalDirectSafetyEvidence`.
+In place of the read they take its premises: `CheckpointStakeCeiling`, `Config.ProposerScoreFits` and, from Gloas, `Config.HeadWeightsFit` and `CheckpointHeadWeightCeiling`.
 The headlines and `Execution.confirmedRoot_covers` derive it through `Execution.rootViableAt_of_checked_or_evidence`, so they do not take it.
 `QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
 Its alternative is a collision of two honest stores.

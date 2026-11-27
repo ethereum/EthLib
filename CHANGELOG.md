@@ -13,8 +13,6 @@ Not yet released.
   `prEvent_storageWins_le` and `prEvent_stateWins_le` give the bound `Q^2 / 2^256`, for `Q` hash calls of the experiment.
   `Execution/Proofs/Trie/RandomOracle.lean` gains `queryWitnesses`, the queries of the binding inputs of two tries at one key, which `extract` now runs after the two roots.
 
-- In Lean, three fast confirmation theorems derive the caller's head read at each rollover, `CallRolloverRead`, that their originals assume ([#3352](https://github.com/ethereum/EthLib/issues/3352)).
-
 - In Lean, three fast confirmation theorems derive the caller's head read that their originals assume ([#3352](https://github.com/ethereum/EthLib/issues/3352)).
   Two originals assume that read at each rollover, `CallRolloverRead`; the current-target original assumes it at the start of the next epoch, `CallerHeadAt`.
   `Execution.rootInFilteredTree_of_checked_or_evidence` and `Execution.honestTargetVotes_signed_of_checked_or_evidence` are in `Consensus/Proofs/ForkChoice/FastConfirmation/HonestHeads.lean`.

@@ -969,11 +969,13 @@ theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous 
   intro _ _ _ begin _ _ _ _ beginLe k atTime upToDate
   exact heads u caller k (Nat.zero_le _) (atTime ▸ beginLe) upToDate
 
-/-- At a time T, the confirmed root of a call is in the filtered tree of an honest store.
+/-- At a time `T`, the confirmed root of a call is in the filtered tree of an honest store.
 
 The store is up to date, and the root strictly descends from its justified block.
 
-Otherwise two honest stores collide, or historical, held-state or cross-store evidence holds.
+Otherwise two honest stores collide, or evidence holds.
+
+The evidence is historical direct-safety, held-state or cross-store.
 
 The caller's head read at each rollover is derived, not assumed. -/
 theorem Execution.rootInFilteredTree_of_checked_or_evidence [DecidablePred (· ∈ J)]
@@ -1007,7 +1009,9 @@ theorem Execution.rootInFilteredTree_of_checked_or_evidence [DecidablePred (· �
     (upgrade : HeldStatesBeforeUpgrade (e := e) time)
     (enough : HeldRunStakeFloor (e := e) pre horizon time)
     (included : TargetIncluded (e := e) time)
-    -- The caller's head read rests on the active-stake ceiling and the proposer-score bound.
+    -- The caller's head read rests on the proposer-score bound.
+    --
+    -- Before Gloas it also rests on the active-stake ceiling.
     (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
     (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
     -- From Gloas it also rests on the head-weight bundle and on each weak-head weight.
@@ -1065,7 +1069,7 @@ Each votes for the target before the next epoch.
 
 Otherwise two honest stores collide, or historical direct-safety evidence holds.
 
-The caller's head read at the next epoch's start and, from Gloas, the registry bound are derived. -/
+The caller's head read, the lookahead bound and, from Gloas, the registry bound are derived. -/
 theorem Execution.honestTargetVotes_signed_of_checked_or_evidence {anchor : Store preset fork}
     {Δ time : ℕ} {margin : ℕ} (slots : 0 < config.SLOT_DURATION_MS)
     (fits : DelayFits fork config genesisTimeMs Δ)
