@@ -1,23 +1,26 @@
-"""The opcode report probes each fork's inventory and counts the steps of its state tests."""
+"""The opcode report probes each fork's inventory and the steps, gas and memory of its tests."""
 
 import json
-from collections import Counter
+import sys
+from collections import defaultdict
 from collections.abc import Callable
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import TypeAlias
 
 import pytest
 
+from ethlib.cryptography.secp256k1 import address
 from ethlib.execution import transactions
 from ethlib.serialization import rlp
 from raising import raises
+from transactions.test_check_order import KEY, OTHER, _fee_market, _int
 from transactions.test_eip3155 import ENV, STATE, TX
-from transactions.test_transactions import FORK_OF_NETWORK
+from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK
 
 from . import opcode_coverage
 from .catalogue import Case
-from .opcode_coverage import opcode_inventory, render_fork, select_cases, traced_opcodes
+from .opcode_coverage import OpcodeStats, opcode_inventory, record_trace, render_fork, select_cases
 
 GROUP = PurePosixPath("fixtures/state_tests/group")
 
@@ -101,28 +104,92 @@ def _without(key: str) -> Edit:
     )
 
 
-def test_traced_opcodes() -> None:
-    """Every step counts, faulting or not, and the summary line does not."""
-    trace = [
-        '{"op":96,"opName":"PUSH1"}',
-        '{"op":96,"opName":"PUSH1"}',
-        '{"op":75,"opName":"SLOTNUM","error":"stack overflow"}',
-        '{"op":12,"opName":"INVALID","error":"invalid opcode"}',
-        '{"op":254,"opName":"INVALID","error":"invalid opcode"}',
+def test_record_trace_counts_distinct_costs_and_out_of_gas() -> None:
+    """Faulting steps count without a gas cost, and give a memory snapshot to the step before."""
+    stats: defaultdict[int, OpcodeStats] = defaultdict(OpcodeStats)
+    record_trace(
+        stats,
+        [
+            '{"op":96,"gasCost":"0x3","memSize":0,"depth":1}',
+            '{"op":96,"gasCost":"0x3","memSize":0,"depth":1}',
+            '{"op":83,"gasCost":"0x6","memSize":0,"depth":1}',
+            '{"op":254,"gas":"0x10","gasCost":"0x10","memSize":32,"depth":1,'
+            '"error":"invalid opcode"}',
+            '{"output":"0x","pass":false}',
+        ],
+    )
+    fault = [
+        '{"op":96,"gas":"0x2","gasCost":"0x2","memSize":0,"depth":1,"error":"out of gas"}',
         '{"output":"0x","pass":false}',
     ]
-    assert traced_opcodes(trace) == Counter({0x60: 2, 0x4B: 1, 0x0C: 1, 0xFE: 1})
+    record_trace(stats, fault)
+    record_trace(stats, fault)
+    # A fault other than running out of gas adds neither a cost nor an out-of-gas step.
+    underflow = (
+        '{"op":1,"gas":"0x5","gasCost":"0x5","memSize":0,"depth":1,"error":"stack underflow"}'
+    )
+    record_trace(stats, [underflow, '{"output":"0x","pass":false}'])
+    assert stats == {
+        0x60: OpcodeStats(steps=4, gas_costs={3}, memory_growth={0}, out_of_gas=2),
+        0x01: OpcodeStats(steps=1),
+        0x53: OpcodeStats(steps=1, gas_costs={6}, memory_growth={32}),
+        0xFE: OpcodeStats(steps=1),
+    }
 
 
-def test_traced_opcodes_of_a_summary_only() -> None:
+def test_record_trace_of_a_summary_only() -> None:
     """A trace without steps counts nothing."""
-    assert traced_opcodes(['{"output":"0x","pass":true}']) == Counter()
+    stats: defaultdict[int, OpcodeStats] = defaultdict(OpcodeStats)
+    record_trace(stats, ['{"output":"0x","pass":true}'])
+    assert not stats
+
+
+def test_memory_growth_in_nested_calls() -> None:
+    """Each call has its own memory and the caller's growth is visible when it resumes."""
+    callee = bytes(19) + b"\x30"
+    # Pass 64 input bytes and 256 gas in the first STATICCALL, then 96 bytes and 7 gas.
+    caller_code = bytes.fromhex("60006000604060006030610100fa50 600060006060600060306007fa00")
+    # Write at offset 64 with MSTORE8 and return one byte at offset 96.
+    callee_code = bytes.fromhex("6001604053 60016060f3")
+    state = rlp.encode(
+        [
+            [address(KEY), b"", _int(10**18), b"", []],
+            [OTHER, b"", b"", caller_code, []],
+            [callee, b"", b"", callee_code, []],
+        ]
+    )
+    trace = transactions.trace_eip3155("pectra", 1, TX, state, ENV)
+    assert json.loads(trace[-1])["pass"] is True
+
+    stats: defaultdict[int, OpcodeStats] = defaultdict(OpcodeStats)
+    record_trace(stats, trace)
+    assert stats == {
+        # The caller runs 5 and 6 PUSH1 steps, and the callees 4 and 2.
+        0x60: OpcodeStats(steps=17, gas_costs={3}, memory_growth={0}),
+        0x61: OpcodeStats(steps=1, gas_costs={3}, memory_growth={0}),
+        # Account access costs 2600 and 100 (EIP-2929, Storage read changes).
+        # Memory costs 6 and 3 (Yellow Paper H.1), and the calls pass 256 and 7 gas.
+        0xFA: OpcodeStats(steps=2, gas_costs={2862, 110}, memory_growth={32, 64}),
+        0x50: OpcodeStats(steps=1, gas_costs={2}, memory_growth={0}),
+        # The STOP that ends the caller is the last step of its frame.
+        0x00: OpcodeStats(steps=1, gas_costs={0}),
+        # MSTORE8 costs 3 plus 9 for memory (Yellow Paper H.1).
+        # In the second call two PUSH1s leave 1 of the 7 gas, so MSTORE8 runs out of gas.
+        0x53: OpcodeStats(steps=2, gas_costs={12}, memory_growth={96}, out_of_gas=1),
+        # RETURN pays 3 for the fourth word of memory and ends its frame.
+        0xF3: OpcodeStats(steps=1, gas_costs={3}),
+    }
 
 
 def test_report_lists_missed_and_undefined_bytes_separately() -> None:
     """The report sorts each table by byte and gives each undefined byte its own count."""
-    counts = Counter({0x60: 3, 0xFE: 2, 0x4B: 1, 0x0C: 5})
-    report = render_fork("Amsterdam", OPCODES, counts, traced=3, rejected=1)
+    stats = {
+        0x60: OpcodeStats(steps=3, gas_costs={3, 8}, memory_growth={1, 8}, out_of_gas=1),
+        0xFE: OpcodeStats(steps=2),
+        0x4B: OpcodeStats(steps=1, gas_costs={2}, memory_growth={0}),
+        0x0C: OpcodeStats(steps=5),
+    }
+    report = render_fork("Amsterdam", OPCODES, stats, traced=3, rejected=1)
     assert report == "\n".join(
         [
             "## Amsterdam",
@@ -137,10 +204,10 @@ def test_report_lists_missed_and_undefined_bytes_separately() -> None:
             "",
             "### Observed opcodes (2)",
             "",
-            "| Byte | Opcode | Steps |",
-            "| --- | --- | ---: |",
-            "| `0x4b` | `SLOTNUM` | 1 |",
-            "| `0x60` | `PUSH1` | 3 |",
+            "| Byte | Opcode | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+            "| --- | --- | ---: | ---: | ---: | ---: |",
+            "| `0x4b` | `SLOTNUM` | 1 | 2 | 0 | 0 |",
+            "| `0x60` | `PUSH1` | 3 | 3, 8 | 1, 8 | 1 |",
             "",
             "### Missed opcodes (3)",
             "",
@@ -152,38 +219,86 @@ def test_report_lists_missed_and_undefined_bytes_separately() -> None:
             "",
             "### Undefined bytes reached",
             "",
-            "| Byte | Steps |",
-            "| --- | ---: |",
-            "| `0x0c` | 5 |",
-            "| `0xfe` | 2 |",
+            "| Byte | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+            "| --- | ---: | ---: | ---: | ---: |",
+            "| `0x0c` | 5 | - | - | 0 |",
+            "| `0xfe` | 2 | - | - | 0 |",
         ]
     )
 
 
+def amsterdam_report(observed: list[str], missed: list[str], undefined: list[str]) -> str:
+    """The whole report of one fork of OPCODES with one traced case and one step per row."""
+    lines = [
+        "## Amsterdam",
+        "",
+        f"Observed **{len(observed)} of 5** defined opcodes.",
+        "",
+        "| Measure | Count |",
+        "| --- | ---: |",
+        "| Traced cases | 1 |",
+        "| Cases skipped for expected transaction errors | 0 |",
+        f"| Trace steps | {len(observed) + len(undefined)} |",
+        "",
+        f"### Observed opcodes ({len(observed)})",
+        "",
+        "| Byte | Opcode | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+        *observed,
+        "",
+        f"### Missed opcodes ({len(missed)})",
+        "",
+        "| Byte | Opcode |",
+        "| --- | --- |",
+        *missed,
+    ]
+    if undefined:
+        lines += [
+            "",
+            "### Undefined bytes reached",
+            "",
+            "| Byte | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+            "| --- | ---: | ---: | ---: | ---: |",
+            *undefined,
+        ]
+    return "\n".join(lines)
+
+
 def test_report_sorts_undefined_bytes_by_byte() -> None:
-    """The undefined table follows the byte, not the step count."""
-    counts = Counter({0x60: 3, 0x4B: 1, 0xFE: 5, 0x0C: 2, 0x21: 1})
-    report = render_fork("Amsterdam", OPCODES, counts, traced=1, rejected=0)
-    assert report.endswith(
-        "\n".join(
-            [
-                "### Undefined bytes reached",
-                "",
-                "| Byte | Steps |",
-                "| --- | ---: |",
-                "| `0x0c` | 2 |",
-                "| `0x21` | 1 |",
-                "| `0xfe` | 5 |",
-            ]
-        )
+    """The undefined table follows the byte, not the order in which the trace reached it."""
+    stats = {
+        0x60: OpcodeStats(steps=1, gas_costs={3}),
+        0xFE: OpcodeStats(steps=1),
+        0x0C: OpcodeStats(steps=1),
+        0x21: OpcodeStats(steps=1),
+    }
+    report = render_fork("Amsterdam", OPCODES, stats, traced=1, rejected=0)
+    assert report == amsterdam_report(
+        ["| `0x60` | `PUSH1` | 1 | 3 | - | 0 |"],
+        [
+            "| `0x00` | `STOP` |",
+            "| `0x01` | `ADD` |",
+            "| `0x4b` | `SLOTNUM` |",
+            "| `0x55` | `SSTORE` |",
+        ],
+        ["| `0x0c` | 1 | - | - | 0 |", "| `0x21` | 1 | - | - | 0 |", "| `0xfe` | 1 | - | - | 0 |"],
     )
 
 
 def test_report_without_undefined_bytes_ends_at_the_missed_table() -> None:
     """The undefined section appears only when the trace reaches an undefined byte."""
-    report = render_fork("Amsterdam", OPCODES, Counter({0x60: 2}), traced=1, rejected=0)
-    assert report.endswith("| `0x55` | `SSTORE` |")
-    assert "Undefined" not in report
+    stats = {0x60: OpcodeStats(steps=1, gas_costs={3}, memory_growth={0})}
+    report = render_fork("Amsterdam", OPCODES, stats, traced=1, rejected=0)
+    assert report == amsterdam_report(
+        ["| `0x60` | `PUSH1` | 1 | 3 | 0 | 0 |"],
+        [
+            "| `0x00` | `STOP` |",
+            "| `0x01` | `ADD` |",
+            "| `0x4b` | `SLOTNUM` |",
+            "| `0x55` | `SSTORE` |",
+        ],
+        [],
+    )
 
 
 @pytest.mark.parametrize(
@@ -213,7 +328,11 @@ def test_opcode_inventory_matches_trace_across_forks(fork: str, name: str, slotn
 
     steps = [json.loads(line) for line in trace[:-1]]
     assert [(step["op"], step["opName"]) for step in steps] == expected
-    assert traced_opcodes(trace) == Counter(byte for byte, _ in expected)
+    stats: defaultdict[int, OpcodeStats] = defaultdict(OpcodeStats)
+    record_trace(stats, trace)
+    assert [(byte, opcode.steps) for byte, opcode in stats.items()] == [
+        (byte, 1) for byte, _ in expected
+    ]
 
 
 def test_frontier_inventory_includes_opcodes_that_fault() -> None:
@@ -304,3 +423,170 @@ def test_select_cases_keeps_every_case_of_a_file() -> None:
     first, second = case("state_test", "first"), case("state_test", "second")
     cases = [first, case("state_test_engine", "first"), second]
     assert select_cases(cases, GROUP) == {"Osaka": [first, second]}
+
+
+# Cancun follows Paris, so fork order differs from the order of the names.
+CANCUN = Case("execution-spec-tests", "", "Cancun", "state_test", "ok", f"{GROUP}/test.json")
+PARIS = Case("execution-spec-tests", "", "Paris", "state_test", "fault", f"{GROUP}/test.json")
+REJECTED = (
+    Case("execution-spec-tests", "", "Cancun", "state_test", "reject", f"{GROUP}/test.json"),
+    Case("execution-spec-tests", "", "Cancun", "state_test", "refuse", f"{GROUP}/test.json"),
+)
+
+# A transfer with no data and no access list has intrinsic gas 21000 (Yellow Paper, Appendix G).
+# With two gas left, PUSH1 runs out of gas at Paris before the implicit STOP.
+LOW_GAS = _fee_market(CHAIN_ID, 21_002)
+
+# Small inventories keep the whole report short.
+INVENTORIES = {
+    "paris": {0x00: "STOP", 0x60: "PUSH1", 0x44: "PREVRANDAO"},
+    "dencun": {0x00: "STOP", 0x60: "PUSH1", 0x01: "ADD"},
+}
+
+
+def read_case(
+    root: Path, case: Case
+) -> tuple[tuple[str, int, bytes, bytes, bytes], dict[str, str]]:
+    """The transaction of each case, with an expected error for each case of REJECTED."""
+    fork = FORK_OF_NETWORK[case.fork]
+    # A post entry always holds the hash of the state and the transaction bytes.
+    post = {"hash": "0x" + "00" * 32, "txbytes": "0x"}
+    if case in REJECTED:
+        return (fork, CHAIN_ID, b"", STATE, ENV), {**post, "expectException": "invalid transaction"}
+    return (fork, CHAIN_ID, TX if case == CANCUN else LOW_GAS, STATE, ENV), post
+
+
+@pytest.mark.parametrize("group", [GROUP, None])
+def test_main_reports_only_selected_transactions_by_fork(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    group: PurePosixPath | None,
+) -> None:
+    """The report isolates each fork and excludes rejected transactions and inventory probes."""
+    unpacked: list[tuple[str, list[Case]]] = []
+
+    def unpack_read(name: str, cases: list[Case]) -> Path:
+        unpacked.append((name, cases))
+        return tmp_path
+
+    def read_unpacked(
+        root: Path, case: Case
+    ) -> tuple[tuple[str, int, bytes, bytes, bytes], dict[str, str]]:
+        assert root == tmp_path
+        return read_case(root, case)
+
+    argv = ["opcode_coverage"] if group is None else ["opcode_coverage", str(group)]
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(opcode_coverage.archives, "CACHE", tmp_path)
+    monkeypatch.setattr(
+        opcode_coverage.catalogue,
+        "execution_cases",
+        lambda: [CANCUN, REJECTED[0], PARIS, REJECTED[1]],
+    )
+    monkeypatch.setattr(opcode_coverage.harness, "unpack_read", unpack_read)
+    monkeypatch.setattr(opcode_coverage, "state_test_input", read_unpacked)
+    monkeypatch.setattr(opcode_coverage, "opcode_inventory", INVENTORIES.__getitem__)
+    opcode_coverage.main()
+
+    execution = opcode_coverage.catalogue.EXECUTION
+    assert unpacked == [(execution, [PARIS, CANCUN, *REJECTED])]
+    source = (
+        f"State tests from `{execution}`."
+        if group is None
+        else f"Fixture group `{GROUP}` from `{execution}`."
+    )
+    header = [
+        "# EVM opcode coverage",
+        source,
+        "Each fork's opcode inventory comes from tracing all 256 one-byte programs.",
+        "Counts include faulting steps and the implicit `STOP` at the end of code.",
+        "Gas costs are the distinct `gasCost` values in decimal of the steps without a fault. "
+        "A call or creation that starts a message counts the gas it passes on. "
+        "From Amsterdam, `gasCost` counts only execution gas, "
+        "without the state gas that the reservoir pays (EIP-8037). "
+        "State gas beyond the reservoir comes from execution gas and counts.",
+        "Memory growth lists the distinct changes of `memSize` from a step "
+        "to the next step of the same call frame, so the last step of a frame has none. "
+        "A zero records an observed step with no growth. "
+        "A dash means there was no such measurement for that byte.",
+        "Out-of-gas counts use the `out of gas` error on a trace step.",
+    ]
+    cancun = [
+        "## Cancun",
+        "",
+        "Observed **2 of 3** defined opcodes.",
+        "",
+        "| Measure | Count |",
+        "| --- | ---: |",
+        "| Traced cases | 1 |",
+        "| Cases skipped for expected transaction errors | 2 |",
+        "| Trace steps | 2 |",
+        "",
+        "### Observed opcodes (2)",
+        "",
+        "| Byte | Opcode | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| `0x00` | `STOP` | 1 | 0 | - | 0 |",
+        "| `0x60` | `PUSH1` | 1 | 3 | 0 | 0 |",
+        "",
+        "### Missed opcodes (1)",
+        "",
+        "| Byte | Opcode |",
+        "| --- | --- |",
+        "| `0x01` | `ADD` |",
+    ]
+    paris = [
+        "## Paris",
+        "",
+        "Observed **1 of 3** defined opcodes.",
+        "",
+        "| Measure | Count |",
+        "| --- | ---: |",
+        "| Traced cases | 1 |",
+        "| Cases skipped for expected transaction errors | 0 |",
+        "| Trace steps | 1 |",
+        "",
+        "### Observed opcodes (1)",
+        "",
+        "| Byte | Opcode | Steps | Gas costs | Memory growth (bytes) | Out of gas |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+        "| `0x60` | `PUSH1` | 1 | - | - | 1 |",
+        "",
+        "### Missed opcodes (2)",
+        "",
+        "| Byte | Opcode |",
+        "| --- | --- |",
+        "| `0x00` | `STOP` |",
+        "| `0x44` | `PREVRANDAO` |",
+    ]
+    sections = [*header, "\n".join(paris), "\n".join(cancun)]
+    assert capsys.readouterr().out == "\n\n".join(sections) + "\n"
+
+
+@pytest.mark.parametrize(
+    ("argv", "message"),
+    [
+        ([], "set ETHLIB_ARCHIVES to the fixture archive cache directory"),
+        ([], "no state tests"),
+        ([str(GROUP)], f"no state tests under {GROUP}"),
+    ],
+)
+def test_main_usage_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    argv: list[str],
+    message: str,
+) -> None:
+    """Without an archive cache or a selected state test, the report stops with a usage error."""
+    cache = None if message.startswith("set ") else tmp_path
+    monkeypatch.setattr(sys, "argv", ["opcode_coverage", *argv])
+    monkeypatch.setattr(opcode_coverage.archives, "CACHE", cache)
+    monkeypatch.setattr(opcode_coverage.catalogue, "execution_cases", lambda: [])
+    # The argparse usage error exits with status 2.
+    with raises(SystemExit, "2"):
+        opcode_coverage.main()
+    assert capsys.readouterr().err == (
+        f"usage: opcode_coverage [-h] [group]\nopcode_coverage: error: {message}\n"
+    )
