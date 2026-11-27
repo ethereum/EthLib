@@ -8505,7 +8505,10 @@ So from Electra the runs that meet `DrawsAtCap` are far shorter than the horizon
 In the random oracle model, `prEvent_querySearch_fails_le` bounds the chance that one balance-weighted search fails, for a fixed seed and `n` members, by `n * (1 - 2^-b)^k` with `k` the floor of `(2^64 - 1) / n`.
 That is a bound on a probability, not a fact about SHA-256, so `DrawsEnd` stays a hypothesis.
 No theorem sums the bound over the draws of a run: a draw input may equal the seed input of a slot, and the oracle search caches every draw input of its seed.
-Before Gloas a proposer draw ends whenever a selection of one member ends (`computeProposerIndex_of_computeBalanceWeightedSelection`), so the bound with `n = 1` applies to it, though no theorem states that composition.
+`prEvent_queryProposerSearch_fails_le` (`Proofs/Accessors/ProposerRandomOracle.lean`) bounds the chance that the proposer search fails by `(1 - 2^-b)^(2^64 - 1)`, the bound with `n = 1`, for any order of the candidates.
+On the same draws, the proposer search ends whenever a search of one member ends.
+Before Gloas, the proposer draw of a slot runs that search on the shuffled order.
+`computeProposerIndex_eq_evalWithAnswerFn` shows that the oracle form of the search, on the shuffled order and answered by SHA-256, is the proposer draw, when there are between 1 and `2^40` candidates and each names a validator.
 The bound needs at least one candidate: a draw with none fails for any hash, so `DrawsEnd` also needs an active validator, unslashed from Gloas for the proposers, in each draw.
 `processSlotsAcross_exists_ok_emptyGenesisState` shows that the hypotheses can hold together with an empty registry before Altair.
 `runHypotheses_of_quiet_altair` (`Proofs/Transition/Totality/RunFromAltair.lean`) gives `SignersEarly`, `DrawsAtCap` and `EpochLimitBeforeAltair` for a run from Altair that ends before the Electra fork epoch; `DrawsAtCap.drawsEnd` turns the second into `DrawsEnd`.

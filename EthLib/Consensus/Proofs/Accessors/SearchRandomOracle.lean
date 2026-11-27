@@ -127,7 +127,7 @@ private theorem searchOfVerdicts_congr {verdict other : Nat → Except AccessorE
     · simp only [iLt, ↓reduceIte]
 
 /-- Entry `j` of the mapped range of length `n` is the image of `j`, for `j < n`. -/
-private theorem getD_map_range {α : Type} (f : Nat → α) (d : α) {n j : Nat} (small : j < n) :
+theorem getD_map_range {α : Type} (f : Nat → α) (d : α) {n j : Nat} (small : j < n) :
     ((List.range n).map f).getD j d = f j := by
   simp [List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_range small]
 
