@@ -288,7 +288,9 @@ The receiver is up to date by `last`; honest stores share an initialized anchor 
 
 By `last`, honest justified roots read honest finalized checkpoints at lower or equal epochs.
 
-It assumes synchrony, admission, nonzero held roots and a slot-matched invariant anchor. -/
+It assumes synchrony, admission, nonzero held roots and a slot-matched invariant anchor.
+
+Slot duration is positive, epochs are nonempty and root history spans at least two epochs. -/
 public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
