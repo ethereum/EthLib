@@ -71,15 +71,10 @@ private theorem applyBody_run {fork : Fork} {config : ChainConfig}
   obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
   refine ⟨body, txs, hTxs, ?_⟩
   split at h
-  · obtain ⟨tx, -, h⟩ := bind_ok_iff.mp h
+  -- From Shapella the withdrawal state comes first; the rest is the same in both branches.
+  case' isTrue => obtain ⟨tx, -, h⟩ := bind_ok_iff.mp h
+  all_goals
     obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    exact ⟨rfl, rfl⟩
-  · obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
     obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
     dsimp only at h
     obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
