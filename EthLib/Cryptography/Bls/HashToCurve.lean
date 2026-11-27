@@ -79,6 +79,13 @@ def strxor (a b : ByteArray) : ByteArray :=
   -- XOR the bytes at each position.
   ⟨Array.zipWith (· ^^^ ·) a.data b.data⟩
 
+/-- The block `b_i` of RFC 9380 §5.3.1, step 10, from `b_0`, `DST_prime` and `b_(i-1)`.
+
+It is `b_i` for `i <= 255`, since the index is written in one byte. -/
+def bI (b0 dstPrime prev : ByteArray) (i : Nat) : ByteArray :=
+  -- Step 10: `b_i = H(strxor(b_0, b_(i - 1)) || I2OSP(i, 1) || DST_prime)`.
+  Hash.Sha256.hash (strxor b0 prev ++ i2osp i 1 ++ dstPrime)
+
 /-- The message expansion of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`.
 
 It returns `len_in_bytes` uniform bytes, derived from the message under the tag.
@@ -123,21 +130,14 @@ def expandMessageXmd
   let msgPrime := zPad ++ msg ++ lIbStr ++ i2osp 0 1 ++ dstPrime
   -- Step 7: `b_0 = H(msg_prime)`.
   let b0 := Hash.Sha256.hash msgPrime
-  -- The blocks `b_1` to `b_ell`, in order.
-  let mut bs : Array ByteArray := Array.mkEmpty ell
   -- Step 8: `b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)`.
   let b1 := Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)
-  bs := bs.push b1
-  -- The block `b_(i-1)` that the next step reads.
-  let mut prev := b1
-  -- Step 9: for `i` from 2 to `ell`.
-  for i in [2:ell+1] do
-    -- Step 10: `b_i = H(strxor(b_0, b_(i-1)) || I2OSP(i, 1) || DST_prime)`.
-    let bi := Hash.Sha256.hash (strxor b0 prev ++ i2osp i 1 ++ dstPrime)
-    bs := bs.push bi
-    prev := bi
+  -- Step 9: for `i` from 2 to `ell`, step 10 computes `b_i` from `b_(i-1)`.
+  --
+  -- The list holds `b_1` and each block after it: `b_1` to `b_ell`, or `b_1` alone when `ell = 0`.
+  let bs := (List.range' 2 (ell - 1)).scanl (bI b0 dstPrime) b1
   -- Step 11: `uniform_bytes = b_1 || ... || b_ell`.
-  let mut out := bs.foldl (· ++ ·) ByteArray.empty
+  let out := bs.foldl (· ++ ·) ByteArray.empty
   -- Step 12: the output is the first `len_in_bytes` bytes of `uniform_bytes`.
   return out.extract 0 lenInBytes
 

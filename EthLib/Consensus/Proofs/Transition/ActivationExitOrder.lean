@@ -682,15 +682,12 @@ private theorem foldActivateValidator :
 private theorem processRegistryUpdates
     (ok : Consensus.processRegistryUpdates config state = .ok after) :
     Kept config state after := by
-  unfold Consensus.processRegistryUpdates at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    exact foldlM (fun _ _ _ ok => updateRegistryEntryElectra ok) ok
-  rename_i notElectra
-  simp only [bind_ok_iff] at ok
-  obtain ⟨updated, first, _, _, activated⟩ := ok
-  have before : fork < .glamsterdam := Nat.lt_trans (Nat.lt_of_not_le notElectra) (by decide)
+  by_cases electra : .pectra ≤ fork
+  · exact processRegistryUpdates_invariant_of_electra electra (Kept config state)
+      (fun _ _ _ _ _ before ok => before.trans (updateRegistryEntryElectra ok)) (refl state) ok
+  obtain ⟨updated, _, first, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) ok
+  have before : fork < .glamsterdam := Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
   have small : updated.validators.data.size < 2 ^ 64 :=
     Nat.lt_of_le_of_lt (updated.validators.bound before) (UInt64.toNat_lt _)
   refine (foldlM (fun _ _ _ ok => updateRegistryEntry ok) first).trans

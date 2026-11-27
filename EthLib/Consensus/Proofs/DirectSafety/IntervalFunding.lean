@@ -659,14 +659,13 @@ private theorem attestationCredit_result {fork : Fork} {s t : BeaconState preset
     {att : Attestation preset fork} {parent : Slot}
     (ok : processAttestation config checks s parent att = .ok t) :
     ∃ credit, attestationCredit s att parent = .ok credit := by
-  unfold processAttestation at ok
-  split at ok <;> rename_i altair
-  · simp only [processAttestationAltair, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, earned, earnedOk,
-      _, _, _, _, _, _, total, totalOk, attesters, attestersOk, result, resultOk, _⟩ := ok
+  by_cases altair : Fork.altair ≤ fork
+  · rw [processAttestation_of_altair altair, processAttestationAltair_eq_ok_iff] at ok
+    obtain ⟨-, earned, _, total, attesters, updated, numerator, _, _, earnedOk, -, -, totalOk,
+      attestersOk, resultOk, -⟩ := ok
     simp only [attestationCredit, altair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok]
     exact ⟨_, earned, earnedOk, total, totalOk, attesters, attestersOk,
-      result, resultOk, rfl⟩
+      (updated, numerator), resultOk, rfl⟩
   · simp only [attestationCredit, altair, ↓reduceDIte]
     exact ⟨0, rfl⟩
 

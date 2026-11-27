@@ -214,15 +214,11 @@ theorem attestation_departureQueues {fork : Fork} {s t : BeaconState preset fork
     (ok : processAttestation config checks s parentSlot attestation = .ok t) :
     departureQueues electra t = departureQueues electra s := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-  simp only [processAttestation, altair, ↓reduceDIte] at ok
-  unfold processAttestationAltair at ok
-  simp only [bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, final⟩ := ok
+  rw [processAttestation_of_altair altair] at ok
+  obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes ok
   have last : departureQueues electra t = departureQueues electra raised := by
-    split at final
-    · rw [recordPaymentWeight_eq final]; rfl
-    · cases final; rfl
+    rw [written]
+    rfl
   rw [last, departureQueues_increase electra raisedOk]
   unfold setEpochParticipation
   split <;> rfl

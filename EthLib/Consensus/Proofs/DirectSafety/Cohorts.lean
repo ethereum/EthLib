@@ -372,9 +372,8 @@ private theorem activationCohort_processRegistryUpdates_le (early : fork < .pect
     validatorCohort Validator.activationEpoch after e ≤
       validatorCohort Validator.activationEpoch state e +
         if e.toNat = scheduledActivationEpoch state then cap else 0 := by
-  have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
-  simp only [processRegistryUpdates, noElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨updated, pass, limit, limitOk, activated⟩ := ok
+  obtain ⟨updated, limit, pass, limitOk, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra early ok
   have kept := CohortsKept.foldlM
     (fun _ _ _ ok => (cohorts_updateEntry ok).1) pass
   have slot := foldlM_ok_invariant (fun next : BeaconState preset fork => next.slot = state.slot)

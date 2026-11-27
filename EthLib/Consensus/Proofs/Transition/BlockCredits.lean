@@ -197,18 +197,12 @@ private theorem attestation_credit {attestation : Attestation preset fork}
             PROPOSER_WEIGHT.toNat) + recentFlagSum s altair base count ≤
           recentFlagSum t altair base count := by
   have registry := (processAttestation_registry computed).1
-  simp only [processAttestation, altair, ↓reduceDIte, processAttestationAltair, bind_ok_iff,
-    ensure_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, recent, _, slotEpoch, _, _, _, _, _, _, _, _, earned, earnedOk, _, _, _, _, _, _,
-    total, totalOk, attesters, attestersOk, ⟨updated, numerator⟩, folded, proposer, proposerOk,
-    raised, raisedOk, final⟩ := computed
+  rw [processAttestation_of_altair altair] at computed
+  obtain ⟨⟨recent, slotEpoch, -⟩, earned, _, total, attesters, updated, numerator, proposer,
+    raised, earnedOk, -, -, totalOk, attestersOk, folded, proposerOk, raisedOk, written⟩ :=
+    processAttestationAltair_reads computed
   -- From Gloas the last write records payment weights, which no balance or flag reads.
-  obtain ⟨payments, rfl⟩ : ∃ payments, t = { raised with builderPendingPayments := payments } := by
-    split at final
-    · exact ⟨_, recordPaymentWeight_eq final⟩
-    · cases final
-      exact ⟨_, rfl⟩
-  rw [getBeaconProposerIndex_setEpochParticipation] at proposerOk
+  rw [written] at registry ⊢
   have denominator : ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR /
       PROPOSER_WEIGHT).toNat = 448 := by decide
   have denominatorNat : (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) *

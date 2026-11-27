@@ -287,14 +287,9 @@ private theorem processAttestation_shape {checks : SignatureChecks} {parentSlot 
       balances := balances, previousEpochParticipation := previous,
       currentEpochParticipation := current } := by
   rw [processAttestation_of_altair altair] at computed
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, final⟩ := computed
-  split at final
-  · rename_i gloas
-    exact absurd beforeGloas (Nat.not_lt_of_le gloas)
-  cases final
+  -- Before Gloas the step ends with the proposer reward.
+  obtain ⟨-, _, _, _, _, _, _, _, -, -, -, -, -, -, -, raisedOk⟩ :=
+    processAttestationAltair_reads_of_lt_gloas beforeGloas computed
   obtain ⟨inside, -, rfl⟩ := increaseBalance_eq_ok_iff.mp raisedOk
   unfold setEpochParticipation
   split <;> exact ⟨_, _, _, rfl⟩
