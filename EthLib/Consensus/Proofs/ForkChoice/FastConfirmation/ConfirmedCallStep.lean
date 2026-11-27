@@ -627,26 +627,20 @@ private theorem finalized_invariant {Δ : ℕ} {anchor : Store preset fork}
   refine ⟨?_, ?_, ?_⟩
   · intro slot next following slotOk nextOk followingOk earlier afterNext beforeEnd a honest i
       hd timeEq upToDate headOk
-    -- The call is at its slot start, a delay before the following slot.
+    -- The call is at its slot start, so the finalized fallback covers the receiver's head.
     obtain ⟨index, indexOk⟩ := List.mem_iff_getElem?.mp member
     obtain ⟨slot', begin, slotOk', -, beginOk, atSlot⟩ := ctx.atSlots index n indexOk
     have sameSlot : slot' = slot := Except.ok.inj (slotOk'.symm.trans slotOk)
     subst sameSlot
-    obtain ⟨due, dueOk⟩ := ctx.fits.1
-    have bound := ctx.fits.2 slot' next begin due following nextOk beginOk dueOk followingOk
-    have late : (e.world n).time + Δ ≤ (e.world i).time := by omega
-    have iBound : (e.world i).time ≤ limit := by omega
-    -- The receiver has justified the caller's finalized epoch.
-    have le := Execution.finalized_epoch_le_justified_of_late ctx.sync ctx.slots ctx.positive
-      ctx.window ctx.admitted ctx.anchored ctx.sound ctx.anchorSlot ctx.start ctx.roots good.blocks
-      good.finality ctx.caller honest late iBound upToDate
-    -- The receiver reads that finality below its justified root.
-    have read := good.finality u ctx.caller a honest n i nBound iBound le
-    obtain ⟨-, finalBlock, -, finalFound, -, below⟩ :=
-      Store.isAncestor_of_getCheckpointBlock read
-    have headDescends := Store.isAncestor_getHead headOk
-    obtain ⟨justifiedBlock, justifiedFound⟩ := Store.held_of_isAncestor headDescends
-    exact Store.isAncestor_trans justifiedFound finalFound headDescends below
+    rcases e.finalized_ancestor_of_heads_or_evidence pre ctx.genesis ctx.parameters ctx.sync
+        ctx.admitted ctx.fits ctx.anchored ctx.start ctx.anchorSlot ctx.anchorBoundary ctx.slots
+        ctx.bounded ctx.roots ctx.absent ctx.heldEarly ctx.enough ctx.terminal ctx.caller honest
+        beginOk atSlot nextOk followingOk (by omega) (by omega) upToDate headOk with
+      covered | collision | ⟨a', ha', b', hb', i', j', hi', hj', le, unread, -⟩
+    · exact covered
+    -- The run's agreement and finality reads exclude the two alternatives.
+    · exact absurd collision (e.not_honestCollision_of_agree good.blocks)
+    · exact absurd (good.finality a' ha' b' hb' i' j' hi' hj' le) unread
   · intro epoch rootEpoch epochOk rootOk recent
     obtain ⟨other, otherOk, low, lagged⟩ := old epoch epochOk
     rw [rootOk, Except.ok.injEq] at otherOk

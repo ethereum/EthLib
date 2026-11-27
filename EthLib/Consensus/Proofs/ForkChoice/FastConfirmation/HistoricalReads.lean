@@ -282,9 +282,9 @@ public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset for
   · obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
     exact absurd (agree a ha b hb i j hi hj r left right leftFound rightFound) different
 
-/-- A delay after an event of an honest store, each up-to-date honest store has justified its epoch.
+/-- A delay after a sender's event, an up-to-date receiver's justified epoch is no earlier.
 
-That epoch is the one of the finalized checkpoint of the sender at the event. -/
+It is at least the sender's finalized epoch at the event, for a receiver's event up to `last`. -/
 public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)

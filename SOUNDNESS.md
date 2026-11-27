@@ -4526,7 +4526,7 @@ It also records the bound that the start is at most one epoch behind the current
 It assumes only that the call succeeds.
 `Store.onFastConfirmation_checkpoints` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states how the same call sets the observed justified checkpoints at the epoch boundaries.
 These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
-No theorem here proves conditional or accountable safety of the confirmed block.
+No theorem here proves conditional or accountable safety of the confirmed block; the safety of each start is below.
 
 `Store.ForwardReachable.finalized_epoch_add_two_le` in `Consensus/Proofs/ForkChoice/CheckpointBlocks.lean` states how old a finalized checkpoint other than the anchor's is ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
 The store is forward reachable from the store initialized from the anchor state and block.
@@ -4559,12 +4559,13 @@ It concerns an honest caller at the start of a slot.
 It also concerns an up-to-date honest receiver at an event from the start of the next slot through `last`.
 The caller's finalized root is then an ancestor of the receiver's head.
 Otherwise two honest stores collide by `last`, or `CrossStoreDirectSafetyEvidence` holds.
-It assumes synchrony, delayed block admission (`BlocksAdmitted`) and fitting delays.
+It assumes synchrony, delayed block admission (`BlocksAdmitted`), and a delay that satisfies `DelayFits`.
 It takes the run from the genesis to the anchor, the held states before the next fork, and the two stake floors.
 It takes nonzero state roots of held blocks (`roots`) and the anchor's absent parent (`absent`).
 It takes honest store epochs within the horizon (`bounded`) and the preset conditions of `DirectSafety.Parameters`.
-`Execution.finalized_epoch_le_justified_of_late` gives the step.
-A delay after an event of an honest store, each up-to-date honest store has justified the epoch of that store's finalized checkpoint.
+`Execution.finalized_epoch_le_justified_of_late` gives the step, an order of epochs.
+A delay after a sender's event, an up-to-date honest receiver's justified epoch, at an event up to `last`, is at least the sender's finalized epoch.
+It does not show that this particular epoch is justified.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
