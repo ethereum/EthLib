@@ -37,7 +37,7 @@ instance : LawfulCodec StorageChange where
   toItem_of_ofItem {item c} hDecode := by
     change StorageChange.ofItem item = .ok c at hDecode
     unfold StorageChange.ofItem at hDecode
-    toItem_of_decode hDecode 2
+    decode_fields_toItem hDecode 2
 
 instance : LawfulCodec BalanceChange where
   ofItem_toItem c := by
@@ -48,7 +48,7 @@ instance : LawfulCodec BalanceChange where
   toItem_of_ofItem {item c} hDecode := by
     change BalanceChange.ofItem item = .ok c at hDecode
     unfold BalanceChange.ofItem at hDecode
-    toItem_of_decode hDecode 2
+    decode_fields_toItem hDecode 2
 
 instance : LawfulCodec NonceChange where
   ofItem_toItem c := by
@@ -59,7 +59,7 @@ instance : LawfulCodec NonceChange where
   toItem_of_ofItem {item c} hDecode := by
     change NonceChange.ofItem item = .ok c at hDecode
     unfold NonceChange.ofItem at hDecode
-    toItem_of_decode hDecode 2
+    decode_fields_toItem hDecode 2
 
 instance : LawfulCodec CodeChange where
   ofItem_toItem c := by
@@ -70,7 +70,7 @@ instance : LawfulCodec CodeChange where
   toItem_of_ofItem {item c} hDecode := by
     change CodeChange.ofItem item = .ok c at hDecode
     unfold CodeChange.ofItem at hDecode
-    toItem_of_decode hDecode 2
+    decode_fields_toItem hDecode 2
 
 instance : LawfulCodec SlotChanges where
   ofItem_toItem c := by
@@ -81,7 +81,7 @@ instance : LawfulCodec SlotChanges where
   toItem_of_ofItem {item c} hDecode := by
     change SlotChanges.ofItem item = .ok c at hDecode
     unfold SlotChanges.ofItem at hDecode
-    toItem_of_decode hDecode 2
+    decode_fields_toItem hDecode 2
 
 instance : LawfulCodec AccountChanges where
   ofItem_toItem c := by
@@ -92,7 +92,7 @@ instance : LawfulCodec AccountChanges where
   toItem_of_ofItem {item c} hDecode := by
     change AccountChanges.ofItem item = .ok c at hDecode
     unfold AccountChanges.ofItem at hDecode
-    toItem_of_decode hDecode 6
+    decode_fields_toItem hDecode 6
 
 namespace BlockAccessList
 

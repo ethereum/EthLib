@@ -26,6 +26,6 @@ instance : LawfulCodec Withdrawal where
   toItem_of_ofItem {item w} hDecode := by
     change Withdrawal.ofItem item = .ok w at hDecode
     unfold Withdrawal.ofItem at hDecode
-    toItem_of_decode hDecode 4
+    decode_fields_toItem hDecode 4
 
 end EthLib.Execution.Blocks
