@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `prEvent_bodyWins_le` (`Execution/Proofs/Network/BodiesRandomOracle.lean`) bounds the probability of finding a header and two different bodies that pass for it, with the hash a random oracle, by `Q^2 / 2^256` ([#4612](https://github.com/ethereum/EthLib/issues/4612)).
+  `withdrawalsRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the withdrawals root for any plain hash, with `withdrawalsRootM_eq` and `withdrawalsRootM_eq_ok_iff` (`Execution/Proofs/Blocks/TypedRoots.lean`).
+  `checkTransactionsM_eq`, `checkWithdrawalsM_eq`, `checkOmmersM_eq`, `checkBodyM_eq`, `checkOmmers_eq` and `checkBody_eq` (`Execution/Proofs/Network/Bodies.lean`) state the checks with a plain hash.
+
 - In Lean, `prEvent_indexedWins_le` (`Execution/Proofs/Blocks/RootsRandomOracle.lean`) bounds the probability of finding two different lists with one root, with the hash a random oracle, by `Q^2 / 2^256`.
   `indexedRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the root of a list for any plain hash, with `indexedRootM_eq` and `indexedRootM_eq_ok_iff` ([#4612](https://github.com/ethereum/EthLib/issues/4612)).
   `Execution/Proofs/Trie/RandomOracle.lean` gains `mem_witnesses_of_findCollision`, the proof-node half of the secured-trie lemma.
@@ -1180,6 +1184,16 @@ Not yet released.
   A step that writes a field adds one obligation to each user of the induction principle.
 
 ### Changes that break callers
+
+- In Lean, the checks of a block body take their hash in any monad: `checkTransactions`, `checkWithdrawals`, `checkOmmers` and `checkBody` are the new `checkTransactionsM`, `checkWithdrawalsM`, `checkOmmersM` and `checkBodyM` with Keccak-256, in the identity monad.
+  `Execution.Blocks.withdrawalsRoot` is likewise the new `withdrawalsRootM` with Keccak-256.
+  The checks and the root are unchanged.
+  `TransactionsBound`, `WithdrawalsBound` and `OmmersBound` take the hash as their first argument.
+  `checkTransactions_binding`, `checkWithdrawals_binding`, `checkOmmers_binding` and `checkBody_binding` take the hash, and their hypotheses are the checks with that hash.
+  `checkBody_binding` also gives the parts that each body is read as, and its withdrawals as parts of the bodies.
+  `checkBody_eq_ok` is replaced by `checkBodyM_eq_ok`, which takes the hash and gives the parts of the body in place of the items and the encodings.
+  Migration: pass `keccak256`, whose checks are `checkBody` and the others; read the items of the parts with `Encoded.item_of_parts`, and their encodings with `Encoded.parts_eq_ok_iff`.
+
 
 - From Altair, gossip and the validator choose the sync committee from the slot of a message, not from the slot after the state, as consensus-specs v1.7.0-beta.5 does ([#4625](https://github.com/ethereum/EthLib/issues/4625)).
   The committee that signs in a slot `s` is the one of the period of `s + 1`.

@@ -3458,15 +3458,20 @@ The sum of the gas limits may exceed it, since a transaction only has to fit in 
 So a correct node never rejects it.
 The check reads each body with the bytes it was decoded from, and hashes the legacy transactions and the ommers from their slices of those bytes.
 `checkBody_complete` holds for every encoding of the body.
-`checkBody_binding` proves that two bodies that pass for one header, each read from its own encoding, are equal in each part, or that a Keccak-256 collision is named.
+`checkBody_binding` proves that two bodies that pass for one header, each read from its own encoding, are equal in each part, or that a collision of the hash is named.
+The check takes its hash in any monad, and the theorem holds for any plain hash, Keccak-256 among them.
 For the transactions and the withdrawals, the search of the trie binding returns the collision; for the ommers, the two encodings are the collision.
-It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
+It reuses `indexedRootM_binding` and `withdrawalsRootM_binding` for the roots, and `encode_injective` for the ommers.
 `checkBody_gasLimit_le` proves that each transaction of a body that passes decodes at the fork, with a gas limit at most that of the header.
 The step loses no valid block: `checkBody_complete` covers it.
 The proof of `checkBody_complete` uses `stateTransition_fork_le` and `stateTransition_txGas_le` (`Execution/Proofs/Blocks/BodyGas.lean`).
 They show that each transaction of a block that passes has a type of its fork, and a gas limit at most the block's.
 `checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
-No theorem bounds the probability of finding two bodies that pass for one header and differ.
+`prEvent_bodyWins_le` (`Execution/Proofs/Network/BodiesRandomOracle.lean`) bounds by `Q^2 / 2^256` the probability that an adversary outputs a header and two different bodies that keep their encodings and pass for it, with the hash a random oracle.
+The experiment runs the check of the specification with a hash that queries the oracle.
+It then queries the binding inputs of the tries of the transactions and of the withdrawals, and both encodings of the ommers.
+Two such bodies then leave a collision of the oracle among the queried inputs.
+`Q` counts every hash call of the experiment, and it grows at least as the square of the longer list, since each index rebuilds both proofs.
 The Python suite checks the bodies of the execution-specs block fixtures and of era 0 of mainnet.
 It also checks mainnet block 19426587, the first block of Cancun, whose body holds 37 transactions and 16 withdrawals.
 
@@ -8641,8 +8646,8 @@ The codeword searches of each scheme share the bullet of that scheme:
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of SHA-256.
   The bound on signing roots runs the same experiment, so it rests on the same oracle.
-- Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
-  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`, the range search bound `prEvent_rangeWins_le` and the list root bound `prEvent_indexedWins_le`.
+- Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie, and by the ommers list that the ommers hash reads.
+  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`, the range search bound `prEvent_rangeWins_le`, the list root bound `prEvent_indexedWins_le`, and the body bound `prEvent_bodyWins_le`.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -9003,6 +9008,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Wots/`
 - `EthLib/Cryptography/Proofs/Xmss/`
 - `EthLib/Execution/Proofs/Blocks/`
+- `EthLib/Execution/Proofs/Network/`
 - `EthLib/Execution/Proofs/State/`
 - `EthLib/Execution/Proofs/Trie/`
 - `EthLib/Serialization/Proofs/Ssz/`
