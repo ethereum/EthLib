@@ -4,9 +4,10 @@ public import EthLib.Consensus.Proofs.ForkChoiceNetworkModel
 public import EthLib.Consensus.Proofs.ForkChoice.VoteRecords
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
-public import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
+public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
+import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
 import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 import EthLib.Consensus.Proofs.HonestAggregation
 
@@ -981,11 +982,11 @@ variable {Δ k : ℕ} (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATIO
   (deadline : IsAttestationDeadline fork config genesisTimeMs s d)
 include sync slots admitted anchored anchorSlot anchorBoundary start hv hw nextOk deadline
 
-/-- An up-to-date honest receiver at the next slot holds a signed vote from the duty slot or later.
+/-- A receiver up to date at the next slot, a delay after the deadline, keeps a duty-slot vote.
 
-Otherwise bounded honest stores exhibit a block collision.
+At each later event `k` its latest message for the validator is a signed vote of that slot or later.
 
-The slot floor persists at later events. -/
+That vote need not be the duty vote; otherwise honest stores up to time `T k` collide. -/
 theorem VoteAt.latest_signed_at_next_slot {n j : ℕ} {a : Attestation preset fork}
     {i : IndexedAttestation preset fork}
     (vote : VoteAt e v s c d n a i)
@@ -1051,9 +1052,11 @@ theorem VoteAt.latest_signed_at_next_slot {n j : ℕ} {a : Attestation preset fo
     (e.view_subset_sent k w seen) dutySigned originSigned originVote
     (by rw [dataEpoch, dataSlot]) rank (UInt64.le_of_eq dataSlot.symm)
 
-/-- An up-to-date honest receiver at the next slot boundary holds a signed vote of a duty.
+/-- From an up-to-date next slot boundary on, a receiver keeps a signed vote of an honest duty.
 
-The vote is from the duty slot or later; otherwise bounded honest stores exhibit a collision. -/
+At event `k` the latest message is a vote from the duty slot or later, or stores collide by `T k`.
+
+It assumes delayed block admission up to `T k` (`admitted`) and that delays fit (`fits`). -/
 theorem Execution.latest_signed_of_duty
     (votes : VotesInSlots e s next) (duty : assignment.committee v s = some c)
     (started : e.startTime ≤ d)
