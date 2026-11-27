@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Fp
 public import EthLib.Cryptography.Proofs.BaseField
 public import EthLib.Cryptography.Proofs.Bls.FpZMod
+public import EthLib.Cryptography.Proofs.Inverse
 
 /-!
 # Proofs: the base field that the kernel computes in
