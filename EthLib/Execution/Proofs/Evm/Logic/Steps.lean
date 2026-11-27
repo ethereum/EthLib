@@ -6,6 +6,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Environment
 public import EthLib.Execution.Proofs.Evm.Logic.Known
 public meta import Lean.Meta.Tactic.Simp
 public meta import Lean.Meta.Tactic.Delta
+public meta import Lean.Elab.Tactic.Basic
 
 /-!
 # Proofs: a tactic that steps through the opcodes of a code
@@ -93,6 +94,24 @@ dsimproc_decl evalShl (bitwiseShl _ _) := unfoldOfNumbers
 dsimproc_decl evalShr (bitwiseShr _ _) := unfoldOfNumbers
 
 open Lean.Parser.Tactic
+
+/-- Proves a goal with no free variables by `decide`, and fails at once on any other goal. -/
+syntax "evm_decide" : tactic
+
+open Lean Elab Tactic in
+elab_rules : tactic
+  | `(tactic| evm_decide) => withMainContext do
+    let goal ← instantiateMVars (← getMainTarget)
+    let lctx ← getLCtx
+    -- On a deep goal with free variables, `decide` can exceed the recursion depth.
+    --
+    -- That error escapes `first`, so a step that tries `decide` among its rules would fail.
+    --
+    -- `decide` reduces a variable bound by `let`, so only a variable with no value blocks it.
+    if goal.hasMVar ||
+        (goal.hasFVar && goal.hasAnyFVar fun v => !(lctx.find? v).any (·.isLet)) then
+      throwError "the goal has free variables or metavariables, so it is not decided"
+    evalTactic (← `(tactic| decide))
 
 /-- Proves a fact about the code from the rewrite rules `ls`, by evaluation on numbers.
 
@@ -290,13 +309,13 @@ macro_rules
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case nz => first | assumption | decide
+         case nz => first | assumption | evm_decide
          case dest => evm_dest [$ls,*])
       | (refine' Triple.seq (jumpi_of_eq_zero ?lt ?op ?gas ?zero) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case zero => first | assumption | decide)
+         case zero => first | assumption | evm_decide)
       -- Each opcode that pushes a word fixed by the frame, such as CALLVALUE.
       | (refine' Triple.seq (push_of_readFrame ?lt ?op ?dec ?run ?word ?gas ?room) ?next
          case lt => evm_code [$ls,*]
@@ -416,13 +435,13 @@ macro_rules
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case nz => first | assumption | decide
+         case nz => first | assumption | evm_decide
          case dest => evm_dest [$ls,*])
       | (refine' Triple.seq (jumpi_of_eq_zeroG ?lt ?op ?gas ?zero) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case zero => first | assumption | decide)
+         case zero => first | assumption | evm_decide)
       | (refine' Triple.seq (push_of_readFrameG ?lt ?op ?dec ?run ?word ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -498,10 +517,12 @@ macro_rules
 syntax "evm_tidyK" : tactic
 
 macro_rules
+  -- A read within the bytes of a read of a buffer becomes a read of the buffer at `o + k`.
   | `(tactic| evm_tidyK) => `(tactic| ((try evm_mem) <;> (try simp (config := { decide := true })
       only [keep, outside, List.flatMap_cons, List.flatMap_nil, List.nil_append,
         List.cons_append, List.append_nil, Apart, size_wordBytes, ByteArray.size_append,
-        size_bufferRead, size_memoryReadBytes, memoryReadBytes_of_size, loadWord_wordBytes,
+        size_bufferRead, size_memoryReadBytes, memoryReadBytes_of_size,
+        memoryReadBytes_bufferRead, Nat.add_zero, Nat.add_assoc, loadWord_wordBytes,
         wordBytes_loadWord, BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub, ↓reduceIte]) <;>
       evm_tidy))
 
@@ -516,7 +537,8 @@ macro_rules
       only [List.find?_cons_of_pos, List.find?_cons_of_neg, List.find?_nil, Bool.and_eq_true,
         decide_eq_true_eq, Bool.not_eq_true, Bool.and_eq_false_iff, decide_eq_false_iff_not,
         Nat.not_le, Nat.not_lt, size_wordBytes, ByteArray.size_append, size_bufferRead,
-        size_memoryReadBytes, memoryReadBytes_of_size, Nat.min_def, BitVec.reduceToNat,
+        size_memoryReadBytes, memoryReadBytes_of_size, memoryReadBytes_bufferRead, Nat.add_zero,
+        Nat.add_assoc, Nat.min_def, BitVec.reduceToNat,
         Nat.reduceAdd, Nat.reduceSub, ↓reduceIte, Option.map_some, Option.map_none])) <;>
       try rfl))
 
@@ -564,7 +586,7 @@ macro_rules
       | (refine' Triple.seq (calldatacopy_known ?lt ?op ?nz ?gas) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
-         case nz => decide
+         case nz => evm_decide
          case gas => evm_memGas)
       -- MCOPY of the whole range of a fact, tried first.
       --
@@ -573,7 +595,7 @@ macro_rules
          case fork => evm_fork
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
-         case nz => decide
+         case nz => evm_decide
          case fact => evm_fact
          case len => evm_size
          case gas => evm_memGas)
