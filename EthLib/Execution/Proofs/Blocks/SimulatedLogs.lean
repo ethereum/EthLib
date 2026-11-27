@@ -15,9 +15,8 @@ From Glamsterdam, the result reports the logs of the receipt, and nothing more.
 
 namespace EthLib.Execution.Blocks
 
-open EthLib.Base (ChainConfig Fork bind_ok_iff foldlM_ok_invariant mapError_ok_iff)
+open EthLib.Base (Fork bind_ok_iff foldlM_ok_invariant mapError_ok_iff)
 open EthLib.Execution.Evm (BlockEnvironment)
-open EthLib.Execution.State (BlockState)
 open EthLib.Execution.Transactions (Transaction)
 
 variable {fork : Fork}
@@ -58,35 +57,6 @@ theorem applyTransactions_simulatedLogs {env : BlockEnvironment fork} {body : Bo
   obtain ⟨result, receipt, hResults, hReceipts, hLogs⟩ := applyTransaction_simulatedLogs hfork hStep
   simp [hResults, hReceipts, hBefore, hLogs]
 
-/-- A body gives the results and the receipts of the run of its transactions. -/
-private theorem applyBody_results {config : ChainConfig} {env : BlockEnvironment fork}
-    {block : Block fork Transaction} {start : BlockState} {overrides : BodyOverrides}
-    {output : BlockOutput fork} (h : applyBody config env block start overrides = .ok output) :
-    ∃ body txs, applyTransactions env body block.transactions overrides = .ok txs ∧
-      output.results = txs.results ∧ output.receipts = txs.receipts := by
-  unfold applyBody at h
-  dsimp only at h
-  obtain ⟨state, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
-  refine ⟨body, txs, hTxs, ?_⟩
-  split at h
-  · obtain ⟨tx, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    exact ⟨rfl, rfl⟩
-  · obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    exact ⟨rfl, rfl⟩
-
 /-- From Glamsterdam, each result of a block reports the logs of its receipt. -/
 theorem runBody_simulatedLogs {chain : BlockChain} {block : Block fork Transaction}
     {overrides : BodyOverrides} {blobGasPrice : Option Nat} {result : BodyResult fork}
@@ -97,7 +67,10 @@ theorem runBody_simulatedLogs {chain : BlockChain} {block : Block fork Transacti
   obtain ⟨output, hOutput, h⟩ := bind_ok_iff.mp h
   obtain ⟨roots, -, h⟩ := bind_ok_iff.mp h
   cases h
-  obtain ⟨body, txs, hTxs, hResults, hReceipts⟩ := applyBody_results hOutput
+  obtain ⟨-, body, txs, -, -, hTxs, hOutput⟩ := applyBody_toBodyOutput hOutput
+  have hResults : output.results = txs.results := (congrArg BodyOutput.results hOutput).trans rfl
+  have hReceipts : output.receipts = txs.receipts :=
+    (congrArg BodyOutput.receipts hOutput).trans rfl
   rw [hResults, hReceipts]
   exact applyTransactions_simulatedLogs hfork hTxs
 
