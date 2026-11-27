@@ -1789,6 +1789,8 @@ Of the setup, they assume only that it decodes.
 The point evaluation precompile decodes `G2` point 1 of the embedded setup alone, with `TrustedSetup.g2MonomialOfHex`, and uses it as `[tau]_2`.
 `TrustedSetup.g2MonomialOfHex_eq` (`Proofs/Kzg/TrustedSetup.lean`) states that a point decoded alone is that point of the decoded setup.
 It also assumes only that the setup decodes.
+`pointEvaluation_eq_ok_iff_kzg` (`Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`) states, with that one assumption, that the precompile succeeds exactly when the KZG check of the cryptography layer accepts, once the length, the gas and the versioned hash pass.
+On a well-formed setup (assumption D3), `pointEvaluation_opening` in the same file gives the opening equation `c - y = w (τ - z)` of every successful call.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
 On a well-formed setup (assumption D3), `blobToKzgCommitment_binding` in the same file proves that two blobs whose decoded values differ share a commitment only when the secret is a root of `p - p'`.

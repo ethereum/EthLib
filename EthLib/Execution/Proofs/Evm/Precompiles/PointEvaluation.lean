@@ -1,23 +1,32 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.PointEvaluation
+public import EthLib.Cryptography.Proofs.Kzg.Binding
+public import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 import EthLib.Base.Proofs.Bytes
 import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Evm.Precompiles.PointEvaluation`
 
-- A call succeeds exactly when the call data has 192 bytes, the gas covers 50000, the versioned hash names the commitment and the proof verifies.
+- A call succeeds exactly when four checks pass:
+  - The call data has 192 bytes.
+  - The gas covers 50000.
+  - The versioned hash names the commitment.
+  - The proof verifies.
 - Every successful call returns the same 64 bytes: 4096, then the BLS12-381 group order.
+- On the embedded setup, the check of the call is the KZG check of the cryptography layer.
+- An accepted proof satisfies the opening equation `c - y = w (τ - z)` of a well-formed setup.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
-open EthLib.Cryptography.Bls (Fr)
-open EthLib.Base (readBytes)
-open EthLib.Cryptography.Kzg (VersionedHash kzgCommitmentToVersionedHash)
+open EthLib.Cryptography.Bls (Fr G1)
+open EthLib.Base (Bytes32 readBytes)
+open EthLib.Cryptography.Kzg (VersionedHash kzgCommitmentToVersionedHash TrustedSetup Bytes48
+  validateKzgG1Point bytesToBlsField)
 
 /-- Call data of any other length than 192 bytes fails before the gas is charged. -/
 theorem pointEvaluation_invalidInputLength {data : ByteArray} (hsize : data.size ≠ INPUT_BYTES) (gas : Nat) :
@@ -97,5 +106,95 @@ theorem output_eq :
 theorem PointEvaluationError.code_injective (e₁ e₂ : PointEvaluationError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
   code_injective PointEvaluationError.code
+
+/-! ## The KZG check of the cryptography layer -/
+
+/-- On the embedded setup, the check of the call agrees with the KZG check of the crypto layer.
+
+The check of the call decodes `[tau]_2` alone.
+
+The other one reads it from the decoded setup.
+
+It assumes that the embedded setup decodes, as the other theorems about that setup do. -/
+theorem verifyKzgProof_eq_ok_iff {s : TrustedSetup} (hs : TrustedSetup.ofHex = .ok s)
+    (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) (b : Bool) :
+    verifyKzgProof commitment z y proof = .ok b ↔
+      Cryptography.Kzg.verifyKzgProof s commitment z y proof = .ok b := by
+  unfold verifyKzgProof Cryptography.Kzg.verifyKzgProof
+  -- `[tau]_2` decoded alone is point 1 of the decoded setup.
+  rw [TrustedSetup.g2MonomialOfHex_eq hs 1 (by decide)]
+  -- Both checks decode the commitment, `z`, `y`, then the proof, and fail on the same input.
+  cases hC : validateKzgG1Point commitment with
+  | error e =>
+    rw [Cryptography.Kzg.bytesToKzgCommitment_of_validateKzgG1Point_error hC]
+    simp [Except.mapError, bind, Except.bind]
+  | ok C =>
+    rw [Cryptography.Kzg.bytesToKzgCommitment_of_validateKzgG1Point hC]
+    simp only [Except.mapError, bind, Except.bind, bytesToBlsField]
+    cases hz : Fr.fromBytesBE z with
+    | error e => simp
+    | ok zF =>
+      cases hy : Fr.fromBytesBE y with
+      | error e => simp
+      | ok yF =>
+        cases hP : validateKzgG1Point proof with
+        | error e =>
+          rw [Cryptography.Kzg.bytesToKzgProof_of_validateKzgG1Point_error hP]
+          simp
+        | ok P =>
+          -- Valid bytes decode to the points that validation returned.
+          rw [Cryptography.Kzg.bytesToKzgProof_of_validateKzgG1Point hP]
+          simp only
+          rw [Cryptography.Kzg.uncompressG1_of_validateKzgG1Point hC,
+            Cryptography.Kzg.uncompressG1_of_validateKzgG1Point hP]
+          -- Both run the pairing check with point 1 of the `G2` setup as `[tau]_2`.
+          simp only [pure, Except.pure, Cryptography.Kzg.verifyKzgProofImpl, Except.ok.injEq]
+
+/-- On the embedded setup, a call succeeds exactly when the cryptography layer's KZG check accepts.
+
+The other checks are the length of 192 bytes, the gas of 50000 and the versioned hash.
+
+It assumes that the embedded setup decodes. -/
+theorem pointEvaluation_eq_ok_iff_kzg {s : TrustedSetup} (hs : TrustedSetup.ofHex = .ok s)
+    (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    pointEvaluation data gas = .ok out ↔
+      ∃ fits : data.size = INPUT_BYTES, GAS_POINT_EVALUATION ≤ gas ∧
+        (kzgCommitmentToVersionedHash ⟨readBytes data 96 48 (by simp [fits, INPUT_BYTES])⟩).bytes
+          = readBytes data 0 32 (by simp [fits, INPUT_BYTES]) ∧
+        Cryptography.Kzg.verifyKzgProof s (readBytes data 96 48 (by simp [fits, INPUT_BYTES]))
+          (readBytes data 32 32 (by simp [fits, INPUT_BYTES]))
+          (readBytes data 64 32 (by simp [fits, INPUT_BYTES]))
+          (readBytes data 144 48 (by simp [fits, INPUT_BYTES])) = .ok true ∧
+        out = output := by
+  rw [pointEvaluation_eq_ok_iff]
+  simp only [verifyKzgProof_eq_ok_iff hs]
+
+/-- On the embedded setup, well formed for the secret `τ`, a successful call opens the commitment.
+
+The commitment and the proof decode to points that represent `c` and `w`.
+
+The fields `z` and `y` decode to elements of the scalar field.
+
+Then `c - y = w (τ - z)`, the equation of a KZG opening of `c` at `z` to `y`.
+
+It assumes that the embedded setup decodes, and that it is well formed for `τ` (assumption D3). -/
+theorem pointEvaluation_opening {s : TrustedSetup} {τ : Fr} (hs : TrustedSetup.ofHex = .ok s)
+    (hw : s.WellFormed τ) {data : ByteArray} {gas : Nat} {out : ByteArray}
+    (h : pointEvaluation data gas = .ok out) :
+    ∃ fits : data.size = INPUT_BYTES, ∃ C P c w z y,
+      validateKzgG1Point (readBytes data 96 48 (by simp [fits, INPUT_BYTES])) = .ok C ∧
+      G1.Represents C c ∧
+      validateKzgG1Point (readBytes data 144 48 (by simp [fits, INPUT_BYTES])) = .ok P ∧
+      G1.Represents P w ∧
+      bytesToBlsField (readBytes data 32 32 (by simp [fits, INPUT_BYTES])) = .ok z ∧
+      bytesToBlsField (readBytes data 64 32 (by simp [fits, INPUT_BYTES])) = .ok y ∧
+      c - y = w * (τ - z) := by
+  obtain ⟨fits, -, -, hv, -⟩ := (pointEvaluation_eq_ok_iff_kzg hs data gas out).mp h
+  obtain ⟨C, P, z, y, hC, hP, hz, hy, hacc⟩ := Cryptography.Kzg.verifyKzgProof_eq_ok_true hv
+  -- Points that pass KZG validation lie in the subgroup, so each represents a scalar.
+  obtain ⟨c, hrC⟩ := Cryptography.Kzg.represents_of_validateKzgG1Point hC
+  obtain ⟨w, hrP⟩ := Cryptography.Kzg.represents_of_validateKzgG1Point hP
+  exact ⟨fits, C, P, c, w, z, y, hC, hrC, hP, hrP, hz, hy,
+    (Cryptography.Kzg.verifyKzgProofImpl_iff hw hrC hrP z y).mp hacc⟩
 
 end EthLib.Execution.Evm.Precompiles.PointEvaluation
