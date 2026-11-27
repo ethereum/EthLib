@@ -1226,6 +1226,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the sum and the difference of the BLS12-381 base field run on six 64-bit words, through `Word64.add6` and `Word64.sub6` (`Cryptography/Word64/Six.lean`), with the laws `Word64.add6_spec` and `Word64.sub6_spec`.
+  `Word64.sum6`, `Word64.diff6`, `Word64.Words6.mask` and `Word64.addBack` are the steps they share, with `Word64.sum6_val`, `Word64.diff6_val`, `Word64.Words6.val_lt`, `Word64.Words6.val_mask` and `Word64.addBack_val`.
+  `Word64.reduce6` now reads its difference from `Word64.diff6`.
+  `Montgomery.Modulus` gains the fields `add` and `sub`, whose defaults are the sum and the difference on 32-bit limbs, so the other moduli keep their arithmetic.
+  `add_spec` and `sub_spec` state that a modulus's own choice agrees with them on inputs below `p`.
+  `Bls.Fp.addWords` and `Bls.Fp.subWords` set them for `Fp`: `Bls.Fp.addWords_eq` and `Bls.Fp.subWords_eq` state that they agree with the 32-bit limbs, and `Bls.Fp.addWords_val` and `Bls.Fp.subWords_val` give their values.
+  `Montgomery.addLimbs_spec`, `Montgomery.subLimbs` and `Montgomery.subLimbs_spec` are removed: use `Montgomery.Modulus.add_val` and `Montgomery.Modulus.sub_val`, or the new `Montgomery.addCore_val` and `Montgomery.subCore_val` for the limbs of any modulus.
+
 - In Lean, the bridge from one counter of gas to the state gas meter of EIP-8037 covers the four calls ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `Evm.Logic.callStep_bridge` (`Execution/Proofs/Evm/Logic/MeterCall.lean`) lifts the step of CALL, CALLCODE, DELEGATECALL and STATICCALL, with no hypothesis on the gas they ask for or on the reservoir.
   When the step sends a message, the message under the state gas meter has at least its gas (`Evm.Logic.MessageCovers`), and the two callers resume alike (`Evm.Logic.ResultLifts`, inside `Evm.Logic.StepLifts`).

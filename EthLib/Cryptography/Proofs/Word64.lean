@@ -281,13 +281,10 @@ theorem toMont_add (a b : Montgomery p) : toMont (a + b) = toMont a + toMont b :
   apply mont_ext
   let x := toMont a
   let y := toMont b
-  have h := Cryptography.Montgomery.addLimbs_spec (Laws.params (p := p)) x.limbs y.limbs x.lt y.lt
   change Limbs.val (n := 8) (toMont (a + b)).limbs =
-    Limbs.val (n := 8) (Cryptography.Montgomery.addCore (n := 8) x.limbs y.limbs
-      (Laws.params (p := p)).pLimbs)
-  rw [toMont_val, Laws.add_val]
-  unfold Cryptography.Montgomery.addCore
-  rw [h, toMont_val, toMont_val, Laws.params_p]
+    Limbs.val (n := 8) ((Laws.params (p := p)).add x.limbs y.limbs)
+  rw [toMont_val, Laws.add_val, (Laws.params (p := p)).add_val x.lt y.lt,
+    toMont_val, toMont_val, Laws.params_p]
 
 /-- Subtraction gives the same Montgomery residue in either representation. -/
 theorem toMont_sub (a b : Montgomery p) : toMont (a - b) = toMont a - toMont b := by
@@ -295,8 +292,8 @@ theorem toMont_sub (a b : Montgomery p) : toMont (a - b) = toMont a - toMont b :
   let x := toMont a
   let y := toMont b
   change Limbs.val (n := 8) (toMont (a - b)).limbs =
-    Limbs.val (n := 8) (Cryptography.Montgomery.subLimbs (Laws.params (p := p)) x.limbs y.limbs)
-  rw [Cryptography.Montgomery.subLimbs_spec (Laws.params (p := p)) x.lt y.lt, toMont_val,
+    Limbs.val (n := 8) ((Laws.params (p := p)).sub x.limbs y.limbs)
+  rw [(Laws.params (p := p)).sub_val x.lt y.lt, toMont_val,
     Laws.sub_val, toMont_val, toMont_val, Laws.params_p]
 
 /-- Multiplication gives the same Montgomery residue in either representation. -/

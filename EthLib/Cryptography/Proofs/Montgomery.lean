@@ -94,10 +94,8 @@ theorem toZMod_mul (a b : Montgomery M) : toZMod (a * b) = toZMod a * toZMod b :
 theorem toZMod_add (a b : Montgomery M) : toZMod (a + b) = toZMod a + toZMod b := by
   apply radix_cancel
   have h : (Limbs.val (a + b).limbs : ZMod M.p) = Limbs.val a.limbs + Limbs.val b.limbs := by
-    have e : Limbs.val (a + b).limbs = (Limbs.val a.limbs + Limbs.val b.limbs) % M.p := by
-      change Limbs.val (addCore a.limbs b.limbs M.pLimbs) = _
-      rw [addCore]
-      exact addLimbs_spec M a.limbs b.limbs a.lt b.lt
+    have e : Limbs.val (a + b).limbs = (Limbs.val a.limbs + Limbs.val b.limbs) % M.p :=
+      M.add_val a.lt b.lt
     rw [e, ZMod.natCast_mod, Nat.cast_add]
   rw [limbs_cast, limbs_cast a, limbs_cast b] at h
   rw [h]
@@ -107,9 +105,9 @@ theorem toZMod_add (a b : Montgomery M) : toZMod (a + b) = toZMod a + toZMod b :
 theorem Internal.toZMod_sub' (a b : Montgomery M) : toZMod (sub a b) = toZMod a - toZMod b := by
   apply radix_cancel
   have h : (Limbs.val (sub a b).limbs : ZMod M.p) = Limbs.val a.limbs - Limbs.val b.limbs := by
-    change (Limbs.val (subLimbs M a.limbs b.limbs) : ZMod M.p) = _
+    change (Limbs.val (M.sub a.limbs b.limbs) : ZMod M.p) = _
     have := b.lt
-    rw [subLimbs_spec M a.lt b.lt, ZMod.natCast_mod, Nat.cast_sub (by omega), Nat.cast_add,
+    rw [M.sub_val a.lt b.lt, ZMod.natCast_mod, Nat.cast_sub (by omega), Nat.cast_add,
       ZMod.natCast_self, add_zero]
   rw [limbs_cast, limbs_cast a, limbs_cast b] at h
   rw [h]

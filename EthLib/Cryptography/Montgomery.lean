@@ -43,6 +43,93 @@ The compiler makes one copy for each limb count, with the code unrolled. -/
 theorem mulCore_eq (a b : Limbs.T n) (p : Limbs.T n) (pinv : UInt64) :
     mulCore a b p pinv = mulWords (Limbs.get p) pinv (Limbs.get a) (Limbs.get b) Limbs.pack := rfl
 
+/-- The sum of the limbs `a` and `b`, reduced once by the modulus of limbs `p`.
+
+The compiler makes one copy for each limb count, with the code unrolled. -/
+@[specialize] def addCore (a b : Limbs.T n) (p : @& Limbs.T n) : Limbs.T n :=
+  let s := Words.mac (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 1 0 0
+  reduce (Limbs.get p) s.1 s.2 Limbs.pack
+
+/-- The sum of the limbs `a` and `b`, below the limbs `p`, is `a + b mod p`. -/
+theorem addCore_val {a b p : Limbs.T n} (ha : Limbs.val a < Limbs.val p)
+    (hb : Limbs.val b < Limbs.val p) :
+    Limbs.val (addCore a b p) = (Limbs.val a + Limbs.val b) % Limbs.val p := by
+  have o : (1 : UInt64).toNat < 2 ^ 32 := by decide
+  have z : (0 : UInt64).toNat < 2 ^ 32 := by decide
+  obtain ⟨fl, el⟩ := load_spec (n := n) (Limbs.get a) 0
+  obtain ⟨fs, cs, es⟩ := Words.mac_spec _ (Limbs.get b) 1 0 0 (fl.mpr (Limbs.fits a 0))
+    (Limbs.fits b 0) o z
+  rw [el, UInt64.toNat_one, UInt64.toNat_zero, Nat.mul_one, Nat.add_zero] at es
+  have hv : value (Words.mac (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 1 0 0) <
+      2 * num n (Limbs.get p) 0 := by
+    simp only [value]
+    unfold Limbs.val at ha hb
+    omega
+  obtain ⟨fr, er⟩ := reduce_spec (Limbs.fits p 0)
+    (top := (Words.mac (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 1 0 0).2) fs hv
+  rw [addCore, reduce_out, Limbs.val_pack fr, er]
+  simp only [value]
+  unfold Limbs.val
+  rw [es]
+
+/-- `a - b` when `a ≥ b`, else `a - b + p`, for the limbs `a` and `b` and the limbs `p`.
+
+The compiler makes one copy for each limb count, with the code unrolled. -/
+@[specialize] def subCore (a b : Limbs.T n) (p : @& Limbs.T n) : Limbs.T n :=
+  let d := Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0
+  if d.2 = 0 then Limbs.pack d.1 else Limbs.pack (Words.mac d.1 (Limbs.get p) 1 0 0).1
+
+/-- The difference of the limbs `a` and `b`, below the limbs `p`, is `a - b mod p`. -/
+theorem subCore_val {a b p : Limbs.T n} (ha : Limbs.val a < Limbs.val p)
+    (hb : Limbs.val b < Limbs.val p) :
+    Limbs.val (subCore a b p) = (Limbs.val a + Limbs.val p - Limbs.val b) % Limbs.val p := by
+  have z1 : (0 : UInt64).toNat ≤ 1 := by decide
+  have o : (1 : UInt64).toNat < 2 ^ 32 := by decide
+  have z : (0 : UInt64).toNat < 2 ^ 32 := by decide
+  obtain ⟨fl, el⟩ := load_spec (n := n) (Limbs.get a) 0
+  obtain ⟨fd, bd, ed⟩ := Words.subb_spec _ (Limbs.get b) 0 0 (fl.mpr (Limbs.fits a 0))
+    (Limbs.fits b 0) z1
+  rw [el, UInt64.toNat_zero, Nat.add_zero] at ed
+  have hR := num_lt fd
+  have hpR : Limbs.val p ≤ 2 ^ (32 * n) := Nat.le_of_lt (num_lt (Limbs.fits p 0))
+  unfold Limbs.val at ha hb hpR ⊢
+  unfold subCore
+  dsimp only
+  split
+  · rename_i h
+    have h' : (Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0).2.toNat = 0 :=
+      by rw [h]; rfl
+    rw [← Limbs.val, Limbs.val_pack fd]
+    rw [h', Nat.mul_zero, Nat.add_zero] at ed
+    rw [Nat.mod_eq_sub_mod (by omega), Nat.mod_eq_of_lt (by omega)]
+    omega
+  · rename_i h
+    have h' : (Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0).2.toNat = 1 :=
+      by
+        have : (Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0).2.toNat ≠ 0 :=
+          fun h0 => h (UInt64.toNat_inj.mp h0)
+        omega
+    rw [h', Nat.mul_one] at ed
+    obtain ⟨fs, cs, es⟩ := Words.mac_spec _ (Limbs.get p) 1 0 0 fd (Limbs.fits p 0) o z
+    rw [UInt64.toNat_one, UInt64.toNat_zero, Nat.mul_one, Nat.add_zero] at es
+    rw [← Limbs.val, Limbs.val_pack fs]
+    generalize Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0 = d at *
+    generalize Words.mac d.1 (Limbs.get p) 1 0 0 = s at *
+    have hs := num_lt fs
+    generalize num n (Limbs.get p) 0 = P at *
+    generalize 2 ^ (32 * n) = R at *
+    have hc : s.2.toNat = 1 := by
+      rcases Nat.lt_or_ge s.2.toNat 1 with h1 | h1
+      · rw [show s.2.toNat = 0 by omega, Nat.mul_zero] at es
+        omega
+      · rcases Nat.lt_or_ge s.2.toNat 2 with h2 | h2
+        · omega
+        · have : R * 2 ≤ R * s.2.toNat := Nat.mul_le_mul_left _ h2
+          omega
+    rw [hc, Nat.mul_one] at es
+    rw [Nat.mod_eq_of_lt (by omega)]
+    omega
+
 end Core
 
 /-- An odd modulus `p` below `R = 2 ^ (32 n)`, with the constants of its Montgomery arithmetic.
@@ -80,6 +167,22 @@ structure Modulus (n : Nat) [Words n] [Limbs n] where
       mul a b = mulWords (Limbs.get pLimbs) pinv (Limbs.get a) (Limbs.get b) Limbs.pack := by
     intros
     exact EthLib.Cryptography.Montgomery.mulCore_eq ..
+  /-- The sum of the limbs `a` and `b`, both below `p`, reduced once.
+
+  By default it is the sum on the limbs, unrolled whole. -/
+  add : Limbs.T n → Limbs.T n → Limbs.T n := fun a b => addCore a b pLimbs
+  /-- The sum is the sum on the limbs. -/
+  add_spec : ∀ a b, Limbs.val a < p → Limbs.val b < p → add a b = addCore a b pLimbs := by
+    intros
+    rfl
+  /-- The difference of the limbs `a` and `b`, both below `p`, with `p` added on a borrow.
+
+  By default it is the difference on the limbs, unrolled whole. -/
+  sub : Limbs.T n → Limbs.T n → Limbs.T n := fun a b => subCore a b pLimbs
+  /-- The difference is the difference on the limbs. -/
+  sub_spec : ∀ a b, Limbs.val a < p → Limbs.val b < p → sub a b = subCore a b pLimbs := by
+    intros
+    rfl
 
 end Montgomery
 
@@ -120,6 +223,21 @@ theorem Modulus.r2_lt (M : Modulus n) : Limbs.val M.r2 < M.p := by
   rw [M.r2_spec]
   exact Nat.mod_lt _ M.pos
 
+/-- The sum of the limbs `a` and `b`, below `p`, is `a + b mod p`. -/
+theorem Modulus.add_val (M : Modulus n) {a b : Limbs.T n} (ha : Limbs.val a < M.p)
+    (hb : Limbs.val b < M.p) : Limbs.val (M.add a b) = (Limbs.val a + Limbs.val b) % M.p := by
+  rw [M.add_spec a b ha hb, ← M.pLimbs_spec]
+  rw [← M.pLimbs_spec] at ha hb
+  exact addCore_val ha hb
+
+/-- The difference of the limbs `a` and `b`, below `p`, is `a - b mod p`. -/
+theorem Modulus.sub_val (M : Modulus n) {a b : Limbs.T n} (ha : Limbs.val a < M.p)
+    (hb : Limbs.val b < M.p) :
+    Limbs.val (M.sub a b) = (Limbs.val a + M.p - Limbs.val b) % M.p := by
+  rw [M.sub_spec a b ha hb, ← M.pLimbs_spec]
+  rw [← M.pLimbs_spec] at ha hb
+  exact subCore_val ha hb
+
 /-- The Montgomery product of the limbs `a`, below `p`, and `b`. -/
 theorem mulLimbs_spec (M : Modulus n) (a : Limbs.T n) (ha : Limbs.val a < M.p) (b : Limbs.T n) :
     Limbs.val (n := n)
@@ -148,112 +266,16 @@ theorem mulLimbs_spec (M : Modulus n) (a : Limbs.T n) (ha : Limbs.val a < M.p) (
 @[inline] def one : Montgomery M :=
   ⟨M.r1, M.r1_lt⟩
 
-/-- The sum of the limbs `a` and `b`, below `p`, is `a + b mod p`. -/
-theorem addLimbs_spec (M : Modulus n) (a b : Limbs.T n) (ha : Limbs.val a < M.p)
-    (hb : Limbs.val b < M.p) :
-    Limbs.val (n := n) (reduce (Limbs.get M.pLimbs)
-        (Words.mac (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 1 0 0).1
-        (Words.mac (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 1 0 0).2 Limbs.pack) =
-      (Limbs.val a + Limbs.val b) % M.p := by
-  have o : (1 : UInt64).toNat < 2 ^ 32 := by decide
-  have z : (0 : UInt64).toNat < 2 ^ 32 := by decide
-  obtain ⟨fl, el⟩ := load_spec (n := n) (Limbs.get a) 0
-  obtain ⟨fs, cs, es⟩ := Words.mac_spec _ (Limbs.get b) 1 0 0 (fl.mpr (Limbs.fits a 0))
-    (Limbs.fits b 0) o z
-  rw [el, UInt64.toNat_one, UInt64.toNat_zero, Nat.mul_one, Nat.add_zero] at es
-  have hv : value (Words.mac (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 1 0 0) <
-      2 * num n (Limbs.get M.pLimbs) 0 := by
-    simp only [value, M.num_eq]
-    unfold Limbs.val at ha hb
-    omega
-  obtain ⟨fr, er⟩ := reduce_spec M.fits
-    (top := (Words.mac (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 1 0 0).2) fs hv
-  rw [reduce_out, Limbs.val_pack fr, er, M.num_eq]
-  simp only [value]
-  unfold Limbs.val
-  rw [es]
-
-/-- The sum of the limbs `a` and `b`, reduced once by the modulus of limbs `p`.
-
-The compiler makes one copy for each limb count, with the code unrolled. -/
-@[specialize] def addCore (a b : Limbs.T n) (p : @& Limbs.T n) : Limbs.T n :=
-  let s := Words.mac (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 1 0 0
-  reduce (Limbs.get p) s.1 s.2 Limbs.pack
-
 /-- `a + b mod p`. -/
 @[inline] def add (a b : Montgomery M) : Montgomery M :=
-  ⟨addCore a.limbs b.limbs M.pLimbs, by
-    rw [addCore, addLimbs_spec M a.limbs b.limbs a.lt b.lt]
+  ⟨M.add a.limbs b.limbs, by
+    rw [M.add_val a.lt b.lt]
     exact Nat.mod_lt _ M.pos⟩
-
-/-- `a - b` when `a ≥ b`, else `a - b + p`, for the limbs `a` and `b` and the limbs `p`.
-
-The compiler makes one copy for each limb count, with the code unrolled. -/
-@[specialize] def subCore (a b : Limbs.T n) (p : @& Limbs.T n) : Limbs.T n :=
-  let d := Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0
-  if d.2 = 0 then Limbs.pack d.1 else Limbs.pack (Words.mac d.1 (Limbs.get p) 1 0 0).1
-
-/-- `a - b` when `a ≥ b`, else `a - b + p`, for the limbs `a` and `b`. -/
-@[inline] def subLimbs (M : Modulus n) (a b : Limbs.T n) : Limbs.T n :=
-  subCore a b M.pLimbs
-
-/-- The difference of the limbs `a` and `b` below `p` is `a - b` mod `p`. -/
-theorem subLimbs_spec (M : Modulus n) {a b : Limbs.T n} (ha : Limbs.val a < M.p)
-    (hb : Limbs.val b < M.p) :
-    Limbs.val (subLimbs M a b) = (Limbs.val a + M.p - Limbs.val b) % M.p := by
-  have z1 : (0 : UInt64).toNat ≤ 1 := by decide
-  have o : (1 : UInt64).toNat < 2 ^ 32 := by decide
-  have z : (0 : UInt64).toNat < 2 ^ 32 := by decide
-  obtain ⟨fl, el⟩ := load_spec (n := n) (Limbs.get a) 0
-  obtain ⟨fd, bd, ed⟩ := Words.subb_spec _ (Limbs.get b) 0 0 (fl.mpr (Limbs.fits a 0))
-    (Limbs.fits b 0) z1
-  rw [el, UInt64.toNat_zero, Nat.add_zero] at ed
-  have hR := num_lt fd
-  have hP := M.pos
-  have hpR : M.p ≤ 2 ^ (32 * n) := by
-    rw [← M.num_eq]
-    exact Nat.le_of_lt (num_lt M.fits)
-  unfold Limbs.val at ha hb ⊢
-  unfold subLimbs subCore
-  dsimp only
-  split
-  · rename_i h
-    have h' : (Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0).2.toNat = 0 :=
-      by rw [h]; rfl
-    rw [← Limbs.val, Limbs.val_pack fd]
-    rw [h', Nat.mul_zero, Nat.add_zero] at ed
-    rw [Nat.mod_eq_sub_mod (by omega), Nat.mod_eq_of_lt (by omega)]
-    omega
-  · rename_i h
-    have h' : (Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0).2.toNat = 1 :=
-      by
-        have : (Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0).2.toNat ≠ 0 :=
-          fun h0 => h (UInt64.toNat_inj.mp h0)
-        omega
-    rw [h', Nat.mul_one] at ed
-    obtain ⟨fs, cs, es⟩ := Words.mac_spec _ (Limbs.get M.pLimbs) 1 0 0 fd M.fits o z
-    rw [UInt64.toNat_one, UInt64.toNat_zero, Nat.mul_one, Nat.add_zero, M.num_eq] at es
-    rw [← Limbs.val, Limbs.val_pack fs]
-    generalize Words.subb (Words.load (n := n) (Limbs.get a) 0) (Limbs.get b) 0 0 = d at *
-    generalize Words.mac d.1 (Limbs.get M.pLimbs) 1 0 0 = s at *
-    have hs := num_lt fs
-    generalize 2 ^ (32 * n) = R at *
-    have hc : s.2.toNat = 1 := by
-      rcases Nat.lt_or_ge s.2.toNat 1 with h1 | h1
-      · rw [show s.2.toNat = 0 by omega, Nat.mul_zero] at es
-        omega
-      · rcases Nat.lt_or_ge s.2.toNat 2 with h2 | h2
-        · omega
-        · have : R * 2 ≤ R * s.2.toNat := Nat.mul_le_mul_left _ h2
-          omega
-    rw [hc, Nat.mul_one] at es
-    rw [Nat.mod_eq_of_lt (by omega)]
-    omega
 
 /-- `a - b mod p`. -/
 @[inline] def sub (a b : Montgomery M) : Montgomery M :=
-  ⟨subLimbs M a.limbs b.limbs, by
-    rw [subLimbs_spec M a.lt b.lt]
+  ⟨M.sub a.limbs b.limbs, by
+    rw [M.sub_val a.lt b.lt]
     exact Nat.mod_lt _ M.pos⟩
 
 /-- `-a mod p`. -/
