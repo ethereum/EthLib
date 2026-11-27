@@ -1192,6 +1192,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the fee of the withdrawal and consolidation request contracts is defined once, on the structure of a request contract (`Execution/Proofs/Blocks/SystemCall/RequestQueue.lean`) ([#4796](https://github.com/ethereum/EthLib/issues/4796)).
+  `WithdrawalRequests.fee` and `ConsolidationRequests.fee` are removed: use `WITHDRAWAL_REQUEST.fee` and `CONSOLIDATION_REQUEST.fee`.
+  `getFeeResult` and `pays` of each contract now unfold to the same functions of the structure.
+
 - A churn limit fails with a division by zero when its quotient from the configuration is 0, as the source does ([#4579](https://github.com/ethereum/EthLib/issues/4579), [#4580](https://github.com/ethereum/EthLib/issues/4580)).
   Before, Lean's `x / 0 = 0` gave the least churn, so the transition and the weak subjectivity period went on.
   The quotients are `CHURN_LIMIT_QUOTIENT` (the validator churn before Electra, the balance churn from Electra), and `CHURN_LIMIT_QUOTIENT_GLOAS` and `CONSOLIDATION_CHURN_LIMIT_QUOTIENT` (from Gloas).

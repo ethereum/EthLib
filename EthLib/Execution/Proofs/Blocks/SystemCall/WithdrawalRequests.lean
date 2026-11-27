@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests.Record
+public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
 
 /-!
 # Proofs: the withdrawal request contract of EIP-7002 does what its EIP describes
@@ -79,26 +80,6 @@ theorem supportedCode_CODE : SupportedCode CODE = true := by
 
 /-! ## The operations -/
 
-/-- The fee to add a request with the storage `read`, or none while the inhibitor holds. -/
-def fee (read : U256 → U256) : Option Nat :=
-  getFee MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION (read 0)
-
-/-- What a call with the input `input` and the value `value` gets, when it adds no request.
-
-With no input and no value, it gets the fee as a word, or reverts while the inhibitor holds.
-
-Any input of a size other than 0 or 56 bytes reverts, and so does a value with no input.
-
-The EIP gives only the fee for no input; these reverts come from its code. -/
-def getFeeResult (read : U256 → U256) (input : ByteArray) (value : U256) : Option U256 :=
-  if input.size = 0 ∧ value = 0 then (fee read).map (BitVec.ofNat 256) else none
-
-/-- A call with the value `value` pays the fee: the fee is defined and at most the value. -/
-def pays (read : U256 → U256) (value : U256) : Bool :=
-  match fee read with
-  | some f => decide (f ≤ value.toNat)
-  | none => false
-
 /-- The three words of a request from `caller` with the input `input`, as the queue holds them.
 
 They are the caller, then the two words of the input, read big-endian with zeros past its end.
@@ -135,6 +116,41 @@ def record (read : U256 → U256) (index : U256) : ByteArray :=
     -- So the third slot of a request differs from the pseudocode, but the records are the same.
     ⟨((wordBytes (read (slot + 2))).extract 16 24).data.reverse⟩
 
+/-- The code is not a delegation indicator: it has 504 bytes, not 23. -/
+theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
+  simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
+
+/-- The contract as a request contract, with the code, the constants and the record of EIP-7002. -/
+def WITHDRAWAL_REQUEST : RequestContract where
+  entry := WITHDRAWAL_REQUEST_CONTRACT
+  type := WITHDRAWAL_REQUEST_TYPE
+  code := CODE
+  maxPerBlock := MAX_WITHDRAWAL_REQUESTS_PER_BLOCK
+  targetPerBlock := TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
+  minFee := MIN_WITHDRAWAL_REQUEST_FEE
+  feeFraction := WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
+  inputSize := 56
+  record := record
+  mem := by simp [SYSTEM_CONTRACTS]
+  kind_eq := rfl
+  size_ne_zero := by simp [CODE, NatCode.size_ofNat]
+  supported := supportedCode_CODE
+  delegatedAddress_eq_none := delegatedAddress_CODE
+
+/-- What a call with the input `input` and the value `value` gets, when it adds no request.
+
+With no input and no value, it gets the fee as a word, or reverts while the inhibitor holds.
+
+Any input of a size other than 0 or 56 bytes reverts, and so does a value with no input.
+
+The EIP gives only the fee for no input; these reverts come from its code. -/
+def getFeeResult (read : U256 → U256) (input : ByteArray) (value : U256) : Option U256 :=
+  WITHDRAWAL_REQUEST.getFeeResult read input value
+
+/-- A call with the value `value` pays the fee: the fee is defined and at most the value. -/
+def pays (read : U256 → U256) (value : U256) : Bool :=
+  WITHDRAWAL_REQUEST.pays read value
+
 /-! ## The loop of the fee -/
 
 /-- The number of the code in sixteen runs: 24 bytes, then fifteen runs of 32 bytes.
@@ -164,6 +180,36 @@ theorem feeLoopCode_CODE : FeeLoopCode CODE :=
   FeeLoopCode.of_ofNat (by decide) (by rw [CODE_NUMBER_eq, FEE_LOOP_NUMBER]; decide +kernel)
     (by evm_dest [CODE_NUMBER_eq]) (by evm_dest [CODE_NUMBER_eq])
 
+/-- The code runs the path of a call from another address, with the constants of EIP-7002. -/
+theorem feePathCode_CODE :
+    FeePathCode CODE 0xcb WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION 500 56 where
+  size_le := by simp [CODE, NatCode.size_ofNat]
+  byte := FeePathCode.byte_ofNat (by decide +kernel)
+  push1 := by evm_code [CODE, CODE_NUMBER_eq]
+  push31 := by evm_code [CODE, CODE_NUMBER_eq]
+  push117 := by evm_code [CODE, CODE_NUMBER_eq]
+  push132 := by evm_code [CODE, CODE_NUMBER_eq]
+  push23 := by evm_code [CODE, CODE_NUMBER_eq]
+  push26 := by evm_code [CODE, CODE_NUMBER_eq, WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION]
+  push65 := by evm_code [CODE, CODE_NUMBER_eq]
+  push114 := by evm_code [CODE, CODE_NUMBER_eq]
+  system_lt := by decide
+  fraction_lt := by decide
+  size_lt := by decide
+  dest_system := by evm_dest [CODE, CODE_NUMBER_eq]
+  push121 := by evm_code [CODE, CODE_NUMBER_eq]
+  push126 := by evm_code [CODE, CODE_NUMBER_eq]
+  push139 := by evm_code [CODE, CODE_NUMBER_eq]
+  loop := feeLoopCode_CODE
+  dest136 := by evm_dest [CODE, CODE_NUMBER_eq]
+  revert_lt := by decide
+  revert_end := by simp [CODE, NatCode.size_ofNat]
+  dest_revert := by evm_dest [CODE, CODE_NUMBER_eq]
+  revert0 := by evm_code [CODE, CODE_NUMBER_eq]
+  revert1 := by evm_code [CODE, CODE_NUMBER_eq]
+  revert2 := by evm_code [CODE, CODE_NUMBER_eq]
+  revert3 := by evm_code [CODE, CODE_NUMBER_eq]
+
 /-! The proofs read the code through the equation above, never by unfolding it.
 
 The number of the code is a sum of terms with powers of 256 up to `256^464`.
@@ -177,85 +223,6 @@ attribute [local irreducible] CODE
 
 variable {fork : Fork} {message : Message fork} {gas : Nat} {state : TransactionState}
   {substate : Substate} {returnData : ByteArray}
-
-/-- JUMPDEST, PUSH0, PUSH0 and REVERT, at byte 500, revert with no output. -/
-private theorem revert_500 {stack : List U256} (hfork : .shapella ≤ fork)
-    (hstack : stack.length ≤ 6) (hgas : 10 ≤ gas) :
-    Spec fork (At CODE message 500 stack .empty gas state substate returnData)
-      (Answer state none) := by
-  evm_step [CODE, CODE_NUMBER_eq]
-  exact revertEmpty hfork (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by simp only [STACK_LIMIT]; omega) (by omega)
-
-/-- A call from another address computes the fee, from byte 0 to byte 113.
-
-It reverts with no output while the inhibitor holds.
-
-Otherwise it reaches byte 113 with the fee on the stack, the read of slot 0 recorded. -/
-private theorem user_fee {m : Nat} {Q : Evm fork Nat → Prop} (hfork : .shapella ≤ fork)
-    (hcaller : message.caller ≠ SYSTEM_ADDRESS)
-    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
-      FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
-        (storageOf state message.currentTarget 0).toNat m)
-    (hgas : 2216 + 87 * m ≤ gas)
-    (hrev : storageOf state message.currentTarget 0 = EXCESS_INHIBITOR →
-      ∀ evm, Answer state none evm → Q evm)
-    (hcont : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR → ∀ g ss,
-      gas - (2216 + 87 * m) ≤ g → ss.logs = substate.logs →
-      Spec fork (At CODE message 113
-        [BitVec.ofNat 256 (fakeExponential MIN_WITHDRAWAL_REQUEST_FEE
-          (storageOf state message.currentTarget 0).toNat
-          WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION)]
-        .empty g (state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) ss
-        returnData) Q) :
-    Spec fork (At CODE message 0 [] .empty gas state substate returnData) Q := by
-  have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
-      message.caller.toU256 = 0 := by
-    rw [equal, ite_eq_right_iff]
-    exact fun e => absurd e.symm (toU256_ne_of_ne_SYSTEM_ADDRESS hcaller)
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine Triple.seq (sload (code := CODE) (pc := 29) (gas := gas - 26) (key := 0)
-    (rest := [17#256]) (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) rfl (Nat.le_trans (sloadPrice_le _) (by omega))) ?_
-  have hle := sloadPrice_le (decide (U256.toBeBytes 0 ∉
-    substate.accessedStorageKeys.getD message.currentTarget ∅))
-  generalize (if decide (U256.toBeBytes 0 ∉
-    substate.accessedStorageKeys.getD message.currentTarget ∅) then 2100 else 100) = price at hle ⊢
-  change Spec fork (At CODE message 30 (storageOf state message.currentTarget 0 :: [17#256]) _ _ _
-    _ _) Q
-  generalize hx : storageOf state message.currentTarget 0 = x at hfits hcont
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have hw : BitVec.ofNat 256 (2 ^ 256 - 1) = EXCESS_INHIBITOR := rfl
-  by_cases hinh : x = EXCESS_INHIBITOR
-  · have hz : equal (BitVec.ofNat 256 (2 ^ 256 - 1)) x ≠ 0 := by simp [equal, hinh, hw]
-    simp only [Nat.reducePow, Nat.reduceSub] at hz
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine Spec.consequence (revert_500 hfork ?_ ?_) (fun _ h => h) fun evm h => ?_
-    · simp
-    · omega
-    · exact hrev (hx.trans hinh) evm (h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _))
-  · have hz : equal (BitVec.ofNat 256 (2 ^ 256 - 1)) x = 0 := by
-      rw [equal, ite_eq_right_iff, hw]
-      exact fun e => absurd e.symm hinh
-    simp only [Nat.reducePow, Nat.reduceSub] at hz
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine Triple.seq (feeLoop hfork feeLoopCode_CODE (d := 17) (hfits hinh) ?_) ?_
-    · omega
-    rintro evm ⟨g', hg', hat⟩
-    refine hcont hinh g' _ ?_ ?_ evm hat
-    · omega
-    · rfl
 
 /-- A call from another address, whose input is not 56 bytes, gets the fee or reverts.
 
@@ -277,61 +244,8 @@ theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork)
       --
       -- Its state reads as the state it starts from.
       (Answer state (getFeeResult (storageOf state message.currentTarget) message.data
-        message.value)) := by
-  have hs : equal 56#256 (BitVec.ofNat 256 message.data.size) = 0 := by
-    rw [equal, ite_eq_right_iff]
-    intro e
-    have := congrArg BitVec.toNat e
-    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbound] at this
-    omega
-  refine user_fee hfork hcaller hfits (by omega) (fun hinh evm h => ?_)
-    (fun hinh g ss hg _ => ?_)
-  · simp only [getFeeResult, fee, getFee, hinh, ite_true, Option.map_none, ite_self]
-    exact h
-  · evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    have hread : ∀ result (evm : Evm fork Nat), Answer (state.recordStorageRead
-        message.currentTarget (U256.toBeBytes 0)) result evm → Answer state result evm :=
-      fun _ _ h => h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
-    by_cases h0 : message.data.size = 0
-    · have hz : BitVec.ofNat 256 message.data.size = 0 := by rw [h0]; rfl
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      by_cases hv : message.value = 0
-      · evm_step [CODE, CODE_NUMBER_eq]
-        refine Spec.consequence (returnWord hfork (by evm_code [CODE, CODE_NUMBER_eq])
-          (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq])
-          (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq])
-          (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq]) ?_)
-          (fun _ h => h) fun evm h => ?_
-        · omega
-        · simp only [getFeeResult, fee, getFee, hinh, ite_false, h0, hv, and_self, ite_true,
-            Option.map_some]
-          exact hread _ _ h
-      · evm_step [CODE, CODE_NUMBER_eq]
-        refine Spec.consequence (revert_500 hfork ?_ ?_) (fun _ h => h) fun evm h => ?_
-        · simp
-        · omega
-        · simp only [getFeeResult, hv, and_false, ite_false]
-          exact hread _ _ h
-    · have hnz : BitVec.ofNat 256 message.data.size ≠ 0 := by
-        intro e
-        have := congrArg BitVec.toNat e
-        simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbound] at this
-        exact h0 this
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      refine Spec.consequence (revert_500 hfork ?_ ?_) (fun _ h => h) fun evm h => ?_
-      · simp
-      · omega
-      · simp only [getFeeResult, h0, false_and, ite_false]
-        exact hread _ _ h
+        message.value)) :=
+  WITHDRAWAL_REQUEST.spec_getFee feePathCode_CODE rfl hfork hcaller hsize hbound hfits (by omega)
 
 /-! ## A call that adds a request -/
 
@@ -500,63 +414,12 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamste
           (logData message.caller message.data) state substate evm
       -- Otherwise it reverts with no output, and its state reads as the state it starts from.
       else Answer state none evm := by
-  have hz : equal 56#256 (BitVec.ofNat 256 message.data.size) ≠ 0 := by
-    rw [hsize]
-    decide
-  refine user_fee hfork hcaller hfits (by omega) (fun hinh evm h => ?_)
-    (fun hinh g ss hg hlogs => ?_)
-  · simp only [pays, fee, getFee, hinh, ite_true]
-    exact h
-  · have hF : fakeExponential MIN_WITHDRAWAL_REQUEST_FEE
-        (storageOf state message.currentTarget 0).toNat WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION <
-        2 ^ 256 := by
-      obtain ⟨h1, h2, -, -⟩ := hfits hinh
-      unfold MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION at h1 h2 ⊢
-      rw [Fees.BlobBaseFee.fakeExponential_eq_partialSum h1]
-      exact Nat.lt_of_le_of_lt (Nat.div_le_self _ _) h2
-    have hpays : pays (storageOf state message.currentTarget) message.value =
-        decide (fakeExponential MIN_WITHDRAWAL_REQUEST_FEE
-          (storageOf state message.currentTarget 0).toNat
-          WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION ≤ message.value.toNat) := by
-      simp only [pays, fee, getFee, hinh, ite_false]
-    rw [hpays]
-    generalize fakeExponential MIN_WITHDRAWAL_REQUEST_FEE
-      (storageOf state message.currentTarget 0).toNat
-      WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION = F at hF ⊢
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    by_cases hp : F ≤ message.value.toNat
-    · have hlt : lessThan message.value (BitVec.ofNat 256 F) = 0 := by
-        simp only [lessThan, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hF]
-        rw [ite_eq_right_iff]
-        intro h
-        omega
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      simp only [hp, decide_true, ite_true]
-      refine Spec.consequence (add_tail
-        (S := state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) hfork hglam
-        hstatic hacc hsize ?_) (fun _ h => h) ?_
-      · omega
-      · rintro evm ⟨herr, hout, hw, hlog⟩
-        exact ⟨herr, hout, hw, by rw [hlog, hlogs]⟩
-    · have hlt : lessThan message.value (BitVec.ofNat 256 F) ≠ 0 := by
-        simp only [lessThan, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hF]
-        rw [ite_eq_left (by omega)]
-        decide
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      simp only [hp, decide_false]
-      refine Spec.consequence (revert_500 hfork ?_ ?_) (fun _ h => h) fun evm h => ?_
-      · simp
-      · omega
-      · exact h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+  refine WITHDRAWAL_REQUEST.spec_pay feePathCode_CODE rfl hfork hcaller hsize hfits (by omega)
+    fun _ g ss hg hlogs => Spec.consequence (add_tail
+      (S := state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) hfork hglam
+      hstatic hacc hsize (by omega)) (fun _ h => h) ?_
+  rintro evm ⟨herr, hout, hw, hlog⟩
+  exact ⟨herr, hout, hw, by rw [hlog, hlogs]⟩
 
 /-! ## The system call -/
 
@@ -1272,24 +1135,6 @@ theorem spec_dequeue (hfork : .shapella ≤ fork)
     refine Spec.consequence (deq_rest hfork hstatic hacc' hS ⟨hht, hex⟩ ?_)
       (fun _ h => h) post
     omega
-
-/-- The code is not a delegation indicator: it has 504 bytes, not 23. -/
-theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
-  simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
-
-/-- The contract as a request contract, with the code, the constants and the record of EIP-7002. -/
-def WITHDRAWAL_REQUEST : RequestContract where
-  entry := WITHDRAWAL_REQUEST_CONTRACT
-  type := WITHDRAWAL_REQUEST_TYPE
-  code := CODE
-  maxPerBlock := MAX_WITHDRAWAL_REQUESTS_PER_BLOCK
-  targetPerBlock := TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
-  record := record
-  mem := by simp [SYSTEM_CONTRACTS]
-  kind_eq := rfl
-  size_ne_zero := by simp [CODE, NatCode.size_ofNat]
-  supported := supportedCode_CODE
-  delegatedAddress_eq_none := delegatedAddress_CODE
 
 /-- The withdrawal request address is not a precompile. -/
 theorem addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS :

@@ -738,6 +738,12 @@ structure RequestContract where
   maxPerBlock : Nat
   /-- The requests per block that keep the fee where it is. -/
   targetPerBlock : Nat
+  /-- The fee at an excess of 0, in wei. -/
+  minFee : Nat
+  /-- The divisor of the excess in the exponent of the fee. -/
+  feeFraction : Nat
+  /-- The size of the input of a call that adds a request, in bytes. -/
+  inputSize : Nat
   /-- The record of the request at an index of the queue, from the storage. -/
   record : (U256 → U256) → U256 → ByteArray
   /-- The table of system contracts holds the entry. -/
@@ -762,6 +768,22 @@ theorem requestContract? : c.entry.requestContract? = some (c.type, c.entry.addr
 /-- The address of the contract is not a precompile. -/
 theorem addedAt : Precompiles.addedAt c.entry.address.toU256.toNat = none :=
   SystemContract.addedAt_of_mem_SYSTEM_CONTRACTS c.mem
+
+/-- The fee to add a request with the storage `read`, or none while the inhibitor holds. -/
+def fee (read : U256 → U256) : Option Nat :=
+  getFee c.minFee c.feeFraction (read 0)
+
+/-- What a call with the input `input` and the value `value` gets, when it adds no request.
+
+With no input and no value, it gets the fee as a word, or none while the inhibitor holds. -/
+def getFeeResult (read : U256 → U256) (input : ByteArray) (value : U256) : Option U256 :=
+  if input.size = 0 ∧ value = 0 then (c.fee read).map (BitVec.ofNat 256) else none
+
+/-- A call with the value `value` pays the fee: the fee is defined and at most the value. -/
+def pays (read : U256 → U256) (value : U256) : Bool :=
+  match c.fee read with
+  | some f => decide (f ≤ value.toNat)
+  | none => false
 
 /-- The code takes requests from its queue in each system frame with at least `budget` gas. -/
 def Dequeues (fork : Fork) (budget : Nat) : Prop :=
