@@ -3837,7 +3837,7 @@ private theorem CapStep.effective {f : Fork} {s t : BeaconState preset f}
           preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v) →
         ScheduledFree s ((getCurrentEpoch s).toNat + 1) →
           ScheduledFree t ((getCurrentEpoch s).toNat + 1)) := by
-  have result := processEffectiveBalanceUpdates_invariant (fun t => CapStepR config s t ∧
+  have result := processEffectiveBalanceUpdates_induction (fun t => CapStepR config s t ∧
     (preset.MAX_EFFECTIVE_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0 →
       (∀ {h : Fork} (v : Validator),
         preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v) →

@@ -980,7 +980,7 @@ private theorem ExitsSame.setValidatorAt {state current after : BeaconState pres
 /-- The update of the effective balances writes validators that keep their exit epochs. -/
 private theorem exitsSame_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : ExitsSame state after := by
-  refine processEffectiveBalanceUpdates_invariant (ExitsSame state)
+  refine processEffectiveBalanceUpdates_induction (ExitsSame state)
     (fun current _ next kept step => ?_)
     (fun _ w read => ⟨w, read, rfl⟩) computed
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step

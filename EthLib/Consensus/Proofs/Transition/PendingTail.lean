@@ -88,7 +88,7 @@ private theorem pendingTail_processEffectiveBalanceUpdates {state after : Beacon
     {count : Nat} {epoch : Epoch}
     (run : processEffectiveBalanceUpdates state = .ok after)
     (tail : PendingTail count epoch state) : PendingTail count epoch after := by
-  apply processEffectiveBalanceUpdates_invariant (PendingTail count epoch)
+  apply processEffectiveBalanceUpdates_induction (PendingTail count epoch)
     (fun s i t before ok => ?_) tail run
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, found, _, _, _, _, set⟩ := ok

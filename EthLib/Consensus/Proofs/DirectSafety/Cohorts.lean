@@ -293,7 +293,7 @@ private theorem cohorts_block (early : fork < .pectra) {engine : ExecutionEngine
 
 private theorem cohorts_effective (ok : processEffectiveBalanceUpdates state = .ok after) :
     CohortsKept state after := by
-  refine processEffectiveBalanceUpdates_invariant (CohortsKept state)
+  refine processEffectiveBalanceUpdates_induction (CohortsKept state)
     (fun _ _ _ before ok => before.trans ?_) (.refl state) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, found, _, _, _, _, set⟩ := ok
