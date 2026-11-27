@@ -577,8 +577,11 @@ Four more libraries hold test cases in `scripts/`: `CheckDeclsTest`, `CheckAcces
 They are not default targets.
 Their test scripts, `scripts/test_check_decls.sh`, `scripts/test_check_accessors.sh` and `scripts/test_check_theorems.sh`, build them.
 `CheckTheoremSupport` holds the source attribute inspection used by `check-theorems`.
+It also holds the definition of a specification module, which `proof-coverage` shares.
 `rule-history` writes the value of each fork-indexed rule at each fork.
 Its test cases are in one more library of `scripts/`, `RuleHistoryTest`, which `scripts/test_rule_history.sh` builds.
+`proof-coverage` grades each consensus rule at each beacon fork by the theorems whose statements reach it.
+Its test cases are in the library `ProofCoverageTest`, which `scripts/test_proof_coverage.sh` builds.
 
 The package requires Mathlib and VCVio, a library of probabilistic computations.
 Only the properties and the models may import them, or Batteries.

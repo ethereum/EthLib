@@ -18,15 +18,6 @@ open Lean
 
 namespace CheckTheorems
 
-/-- The defining module, regardless of the declaration's namespace or private prefix. -/
-def moduleOf? (env : Environment) (n : Name) : Option Name := do
-  let idx ← env.getModuleIdxFor? n
-  return (← env.header.modules[idx.toNat]?).module
-
-/-- Specification modules exclude every property and export tree. -/
-def isSpecModule (scope m : Name) : Bool :=
-  scope.isPrefixOf m && !m.components.contains `Proofs && !m.components.contains `Exports
-
 /-- Source positions in their file order. -/
 def positionLE (a b : Position) : Bool :=
   a.line < b.line || (a.line == b.line && a.column ≤ b.column)

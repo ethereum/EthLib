@@ -206,7 +206,9 @@ lean_lib «RuleHistoryTest» where
   srcDir := "scripts"
   roots := #[`RuleHistoryTest]
 
-/-- Source attribute inspection used by the theorem placement check. -/
+/-- Source attribute inspection used by the theorem placement check.
+
+It also defines a specification module, for that check and for the coverage report. -/
 lean_lib «CheckTheoremSupport» where
   srcDir := "scripts"
   roots := #[`CheckTheoremAttributes]
@@ -238,3 +240,22 @@ lean_lib «CheckTheoremsAttributesTest» where
   srcDir := "scripts"
   roots := #[`CheckTheoremsAttributesTest]
   allowNonModules := true
+
+/-- Grades each consensus rule at each beacon fork: executable, touched or characterized.
+
+Run it after `lake build` with `lake exe proof-coverage`.
+
+With `--check`, it fails when the grades differ from `scripts/proof_coverage_baseline.txt`. -/
+lean_exe «proof-coverage» where
+  srcDir := "scripts"
+  root := `ProofCoverage
+  supportInterpreter := true
+  -- The report shares the definition of a specification module with the theorem check.
+  allowNonModules := true
+
+/-- Rules and theorems whose grades the coverage report must compute.
+
+Not a default target: `scripts/test_proof_coverage.sh` builds and checks it. -/
+lean_lib «ProofCoverageTest» where
+  srcDir := "scripts"
+  roots := #[`ProofCoverageTest]

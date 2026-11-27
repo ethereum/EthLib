@@ -77,6 +77,27 @@ The binding of the batch check of blobs reduces to a challenge that is a root of
 That reduction holds for algebraic adversaries, with the challenge hash modelled as a random oracle.
 No theorem covers the code that runs, the C boundary, or timing.
 
+For the consensus layer, `lake exe proof-coverage` measures how far the theorems reach at each fork of the beacon chain.
+A rule is touched at a fork when the statement of a theorem mentions it, and the theorem holds at that fork.
+It is characterized there when `coverage/characterizes.txt` names a theorem that states its main contract.
+A characterized rule is touched too.
+`CONTRIBUTING.md` explains both tiers, and the table below counts them from `scripts/proof_coverage_baseline.txt`.
+The report itself also prints the number of rules at each fork.
+
+<!-- generated: proof-coverage -->
+| Fork | Rules touched | Rules characterized |
+|------|------|------|
+| phase0 | 1314 | 6 |
+| altair | 1332 | 6 |
+| bellatrix | 1333 | 6 |
+| shapella | 1344 | 6 |
+| dencun | 1353 | 6 |
+| pectra | 1373 | 6 |
+| fusaka | 1380 | 6 |
+| glamsterdam | 1499 | 6 |
+| hegota | 1488 | 6 |
+<!-- end generated -->
+
 ### XMSS
 
 The secret key keeps the top tree and the bottom trees it signed in last, and signing returns the updated key.

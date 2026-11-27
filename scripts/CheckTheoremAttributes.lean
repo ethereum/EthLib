@@ -11,11 +11,22 @@ Persistent theorem attributes other than `simp`, `deprecated` and `inherit_doc` 
 Prefix parsers identify the attributes, and elaborator references identify their declarations.
 
 Attributes generated only by custom command macros are outside this source inspection.
+
+The definition of a specification module is here too, so the coverage report shares it.
 -/
 
 open Lean
 
 namespace CheckTheorems
+
+/-- The defining module, regardless of the declaration's namespace or private prefix. -/
+def moduleOf? (env : Environment) (n : Name) : Option Name := do
+  let idx ← env.getModuleIdxFor? n
+  return (← env.header.modules[idx.toNat]?).module
+
+/-- Specification modules exclude every property and export tree. -/
+def isSpecModule (scope m : Name) : Bool :=
+  scope.isPrefixOf m && !m.components.contains `Proofs && !m.components.contains `Exports
 
 /-- The original declaration's source range, without falling back to a parent's range. -/
 def ranges? (env : Environment) (n : Name) : Option DeclarationRanges :=
