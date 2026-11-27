@@ -1045,9 +1045,16 @@ theorem consolidationChurnLimit_le {f : Fork} {s : BeaconState preset f}
     (early : f < .glamsterdam) {total rate : Gwei} (read : getTotalActiveBalance s = .ok total)
     (computed : getConsolidationChurnLimit config s = .ok rate) :
     rate.toNat ≤ consolidationChurn preset config total.toNat := by
+  -- The churn is computed, so its quotient is not 0.
+  have quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0 := by
+    simp only [getConsolidationChurnLimit, show ¬ .glamsterdam ≤ f from Nat.not_le_of_lt early,
+      ↓reduceIte, bind_ok_iff] at computed
+    obtain ⟨_, balanceOk, -⟩ := computed
+    obtain ⟨_, -, quotient, -⟩ := getBalanceChurnLimit_ok_iff.mp balanceOk
+    exact quotient
   have wholeOk : getBalanceChurnLimit config s = .ok (roundToIncrement preset
-      (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA (total / config.CHURN_LIMIT_QUOTIENT))) := by
-    simp [getBalanceChurnLimit, read, bind, Except.bind, pure, Except.pure]
+      (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA (total / config.CHURN_LIMIT_QUOTIENT))) :=
+    getBalanceChurnLimit_ok_iff.mpr ⟨total, read, quotient, rfl⟩
   have exitOk : getActivationExitChurnLimit config s = .ok
       (min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT (roundToIncrement preset
         (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA (total / config.CHURN_LIMIT_QUOTIENT)))) := by

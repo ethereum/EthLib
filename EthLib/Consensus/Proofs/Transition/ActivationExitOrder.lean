@@ -689,7 +689,7 @@ private theorem processRegistryUpdates
     exact foldlM (fun _ _ _ ok => updateRegistryEntryElectra ok) ok
   rename_i notElectra
   simp only [bind_ok_iff] at ok
-  obtain ⟨updated, first, activated⟩ := ok
+  obtain ⟨updated, first, _, _, activated⟩ := ok
   have before : fork < .glamsterdam := Nat.lt_trans (Nat.lt_of_not_le notElectra) (by decide)
   have small : updated.validators.data.size < 2 ^ 64 :=
     Nat.lt_of_le_of_lt (updated.validators.bound before) (UInt64.toNat_lt _)

@@ -399,16 +399,29 @@ theorem le_foldl_maxExitEpoch (validators : List Validator) (start : Epoch) :
     · exact trans _ _ _ leMax.2 startLe
     · exact restLe validator inRest
 
+/-- Before Electra, an exit queue that succeeds reads a churn limit that succeeds. -/
+theorem getValidatorChurnLimit_of_exitQueueEpoch {config : Config}
+    {state : BeaconState preset fork} {epoch : Epoch}
+    (computed : exitQueueEpoch config state = .ok epoch) :
+    ∃ limit, getValidatorChurnLimit config state = .ok limit := by
+  cases limitOk : getValidatorChurnLimit config state with
+  | ok limit => exact ⟨limit, rfl⟩
+  | error error =>
+    simp only [exitQueueEpoch, limitOk, bind, Except.bind] at computed
+    split at computed <;> cases computed
+
 /-- Before Electra, take an exit epoch of the queue other than the far future.
 
 It held fewer exits than the churn limit, or none if the limit is zero.
 
 So after the exit that takes it, it holds at most the churn limit, or one. -/
 theorem exitQueueEpoch_churn {config : Config} {state : BeaconState preset fork} {epoch : Epoch}
-    (computed : exitQueueEpoch config state = .ok epoch) (finite : epoch ≠ FAR_FUTURE_EPOCH) :
+    {limit : UInt64} (computed : exitQueueEpoch config state = .ok epoch)
+    (limitOk : getValidatorChurnLimit config state = .ok limit)
+    (finite : epoch ≠ FAR_FUTURE_EPOCH) :
     (state.validators.data.toList.filter (·.exitEpoch == epoch)).length <
-      max 1 (getValidatorChurnLimit config state).toNat := by
-  simp only [exitQueueEpoch, bind, Except.bind, pure, Except.pure] at computed
+      max 1 limit.toNat := by
+  simp only [exitQueueEpoch, limitOk, bind, Except.bind, pure, Except.pure] at computed
   split at computed
   · cases computed
   rename_i earliest _

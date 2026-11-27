@@ -1192,6 +1192,20 @@ Not yet released.
 
 ### Changes that break callers
 
+- A churn limit fails with a division by zero when its quotient from the configuration is 0, as the source does ([#4579](https://github.com/ethereum/EthLib/issues/4579), [#4580](https://github.com/ethereum/EthLib/issues/4580)).
+  Before, Lean's `x / 0 = 0` gave the least churn, so the transition and the weak subjectivity period went on.
+  The quotients are `CHURN_LIMIT_QUOTIENT` (the validator churn before Electra, the balance churn from Electra), and `CHURN_LIMIT_QUOTIENT_GLOAS` and `CONSOLIDATION_CHURN_LIMIT_QUOTIENT` (from Gloas).
+  The error is `AccessorError.arith .divisionByZero`, inside `TransitionError.accessor` or `WeakSubjectivityError.accessor`.
+  In Lean, `getValidatorChurnLimit` and `getValidatorActivationChurnLimit` return `Except AccessorError UInt64`.
+  The theorems that read the validator churn limit as a number take it from a hypothesis `getValidatorChurnLimit config state = .ok limit`.
+  Those are `exitQueueEpoch_churn`, `computeWeakSubjectivityPeriodPhase0_le`, `accountable_safety_of_weakSubjectivityPeriod_of_lt_electra`, `validatorChurnLimit_le_of_active` and `validatorChurnLimit_le_cohortCap`.
+  `getValidatorActivationChurnLimit_le` takes the activation limit from a hypothesis, and gives the churn limit that it caps.
+  The three `processRegistryUpdates` theorems of `Consensus/Proofs/Transition/EpochUpdates.lean` name the limit of activations.
+  Before Electra, the totality theorems of the registry updates, the exits, the epoch and the upgrade to Electra take `config.CHURN_LIMIT_QUOTIENT ≠ 0`, and `upgradeNext_exists_ok` takes it for a Deneb state.
+  From Electra, those of the registry updates and the exits, `depositChurnLimit_exists_ok`, `processPendingDeposits_total` and `processPendingBalances_total` take the quotient of exits of their fork: `CHURN_LIMIT_QUOTIENT_GLOAS` from Gloas, and `CHURN_LIMIT_QUOTIENT` before.
+  `getValidatorChurnLimit_of_exitQueueEpoch` and `getValidatorChurnLimit_of_computeWeakSubjectivityPeriodPhase0` give the churn limit from a successful exit queue or Phase 0 period.
+  The run-level totality theorems keep their statements, since `RunConditions.configPositive` gives these quotients.
+  Migration: pass the field `churn` of `Config.divisorsPositive_mainnet` or `Config.divisorsPositive_minimal`, or `Config.DivisorsPositive.exitQuotient`.
 - From Gloas, a pending head of the fork choice is optimistic exactly when the payload its block builds on is, like an empty head, as consensus-specs v1.7.0-beta.5 states ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
   It read the payload of its own block first, so a block whose own payload alone was optimistic made the node optimistic.
   A head whose parent payload the store lacks still fails, where the source reads the parent block hash; #4627 tracks that difference.

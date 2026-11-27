@@ -574,22 +574,27 @@ private theorem foldl_latestExit_lt (validators : List Validator) {start : Epoch
 
 /-- The churns of exits and of consolidations are computed under bounds on the registry.
 
-The registry is within its limit, and the effective balances sum below `2^64`. -/
+The registry is within its limit, and the effective balances sum below `2^64`.
+
+The churn quotient is not 0. -/
 private theorem churns_exists_ok {state : BeaconState preset .pectra}
+    (quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0)
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64) :
     (∃ churn, getActivationExitChurnLimit config state = .ok churn) ∧
       ∃ churn, getConsolidationChurnLimit config state = .ok churn := by
   obtain ⟨total, totalOk, -⟩ := getTotalActiveBalance_exists_ok within summed
   refine ⟨?_, ?_⟩ <;>
     simp only [getActivationExitChurnLimit, getConsolidationChurnLimit, getBalanceChurnLimit,
-      totalOk, show ¬Fork.glamsterdam ≤ Fork.pectra from by decide, ↓reduceIte, bind,
-      Except.bind, pure, Except.pure] <;>
+      totalOk, show ¬Fork.glamsterdam ≤ Fork.pectra from by decide, ↓reduceIte, liftArith,
+      Uint64.divChecked, quotient, Except.mapError, bind, Except.bind, pure, Except.pure] <;>
     exact ⟨_, rfl⟩
 
 /-- The upgrade to Electra succeeds under bounds on the registry, the epoch and the deposit queue.
 
 The end of the exit queue needs no bound: a finite exit epoch is below the far future epoch. -/
 theorem upgradeToElectra_exists_ok {pre : BeaconState preset .dencun}
+    -- The churn quotient must not be 0, for the churns.
+    (quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0)
     -- The registry must have one balance for each validator.
     --
     -- The effective balances must sum below `2^64`, for the churns.
@@ -634,12 +639,12 @@ theorem upgradeToElectra_exists_ok {pre : BeaconState preset .dencun}
     (Uint64.addChecked_of_lt (b := 1) (by change _ + 1 < _; omega)))) ?_
   dsimp only
   refine bind_exists_ok_of (P := fun _ => True) ?_ fun _ _ => ?_
-  · refine ((churns_exists_ok (config := config) ?_ ?_).1).imp
+  · refine ((churns_exists_ok (config := config) quotient ?_ ?_).1).imp
       fun _ ok => ⟨mapError_ok_iff.mpr ok, trivial⟩
     · exact pre.validators.bound (by decide)
     · exact summed
   refine bind_exists_ok_of (P := fun _ => True) ?_ fun _ _ => ?_
-  · refine ((churns_exists_ok (config := config) ?_ ?_).2).imp
+  · refine ((churns_exists_ok (config := config) quotient ?_ ?_).2).imp
       fun _ ok => ⟨mapError_ok_iff.mpr ok, trivial⟩
     · exact pre.validators.bound (by decide)
     · exact summed

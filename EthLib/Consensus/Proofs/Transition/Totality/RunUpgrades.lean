@@ -226,9 +226,10 @@ private theorem electraStep_queueCompoundingExcess {fork : Fork}
 private theorem getActivationExitChurnLimit_le {fork : Fork} {state : BeaconState preset fork}
     {churn : Gwei} (computed : getActivationExitChurnLimit config state = .ok churn) :
     churn.toNat ≤ exitChurnCeiling config state := by
-  simp only [getActivationExitChurnLimit, getBalanceChurnLimit, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, ⟨total, totalOk, rfl⟩, rfl⟩ := computed
+  simp only [getActivationExitChurnLimit, bind_ok_iff, pure, Except.pure, Except.ok.injEq]
+    at computed
+  obtain ⟨_, wholeOk, rfl⟩ := computed
+  obtain ⟨total, totalOk, -, rfl⟩ := getBalanceChurnLimit_ok_iff.mp wholeOk
   have totalLe := (getTotalActiveBalance_bounds totalOk).2
   have remainder : ∀ amount : Gwei, amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount :=
     fun amount => Base.Uint64.mod_le _ _

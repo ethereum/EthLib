@@ -280,11 +280,14 @@ theorem depositChurnLimit_le_cap {config : Config} {state : BeaconState preset f
 
 /-- The churn of deposits succeeds when the effective balances sum below `2^64`.
 
-The registry must stay within its limit.
+The registry must stay within its limit, and the churn quotient of deposits must not be 0.
 
 The churn is then at most the cap of its fork. -/
 theorem depositChurnLimit_exists_ok (config : Config) {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64) :
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
+    (within : state.RegistryWithinLimit)
+    (summed : effectiveBalanceSum state < 2 ^ 64) :
     ∃ churn, depositChurnLimit config state = .ok churn ∧
       churn.toNat ≤ depositChurnCap config fork := by
   obtain ⟨total, totalOk, -⟩ := getTotalActiveBalance_exists_ok within summed
@@ -292,11 +295,13 @@ theorem depositChurnLimit_exists_ok (config : Config) {state : BeaconState prese
     obtain ⟨churn, churnOk⟩ := exists_ok
     exact ⟨churn, churnOk, depositChurnLimit_le_cap churnOk⟩
   unfold depositChurnLimit
-  split
-  · exact ⟨_, by simp [getActivationChurnLimit, getExitChurnLimit, totalOk, bind, Except.bind,
-      pure, Except.pure]; rfl⟩
-  · exact ⟨_, by simp [getActivationExitChurnLimit, getBalanceChurnLimit, totalOk, bind,
-      Except.bind, pure, Except.pure]; rfl⟩
+  split <;> rename_i gloas <;> simp only [gloas, ↓reduceIte] at quotient
+  · exact ⟨_, by simp [getActivationChurnLimit, getExitChurnLimit, totalOk, liftArith,
+      divChecked, quotient, Except.mapError, bind, Except.bind, pure,
+      Except.pure]; rfl⟩
+  · exact ⟨_, by simp [getActivationExitChurnLimit, getBalanceChurnLimit, totalOk, liftArith,
+      divChecked, quotient, Except.mapError, bind, Except.bind, pure,
+      Except.pure]; rfl⟩
 
 /-- From Electra, the pending deposits carry at most the churn carried before plus a cap.
 
@@ -428,6 +433,9 @@ There is still one balance for each validator.
 The sum of the balances plus the amounts in the queue does not grow. -/
 theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    -- The churn quotient of deposits must not be 0.
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     -- The validators plus the pending deposits must be within the limit of the registry.
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
     -- The registry has one balance for each validator.
@@ -474,7 +482,8 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
   have sums := funded
   unfold pendingDepositSum at sums
   simp only [electra, ↓reduceDIte] at sums
-  obtain ⟨churn, churnOk, churnLe⟩ := depositChurnLimit_exists_ok config within summed
+  obtain ⟨churn, churnOk, churnLe⟩ := depositChurnLimit_exists_ok config quotient within
+    summed
   have nextOk : liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1)) =
       .ok (getCurrentEpoch state + 1) := by
     have added : addChecked (getCurrentEpoch state) 1 = .ok (getCurrentEpoch state + 1) :=
@@ -555,11 +564,16 @@ The bounds are those of the pending deposits.
 
 Both indices of every queued consolidation must also be in the registry.
 
+From Electra, the churn quotient of deposits must not be 0.
+
 Before Electra the step returns the state unchanged.
 
 The state after it keeps the bounds that the pending deposits keep. -/
 theorem processPendingBalances_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork)
+    -- From Electra, the churn quotient of deposits must not be 0.
+    (quotient : .pectra ≤ fork → (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     (loaded : registryLoad state ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
     (matched : BalancesMatch state) (sized : ParticipationMatches state)
     (scored : InactivityScoresMatch state)
@@ -593,8 +607,8 @@ theorem processPendingBalances_total (config : Config) (checks : SignatureChecks
   · rename_i electra
     obtain ⟨deposited, depositedOk, loaded', matched', sums, grown, consolidations, epoch,
       sized', scored', carried, bounded⟩ :=
-      processPendingDeposits_total config checks state electra loaded matched sized scored capped
-        funded summed (churned electra) fits finalized
+      processPendingDeposits_total config checks state electra (quotient electra) loaded matched
+        sized scored capped funded summed (churned electra) fits finalized
     obtain ⟨after, afterOk⟩ := processPendingConsolidations_total deposited electra matched'
       (by omega) (by
         rw [consolidations]

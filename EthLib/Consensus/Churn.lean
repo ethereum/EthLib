@@ -48,7 +48,9 @@ def roundToIncrement (preset : Preset) (amount : Gwei) : Gwei :=
   -- `x - x mod EFFECTIVE_BALANCE_INCREMENT`.
   amount - amount % preset.EFFECTIVE_BALANCE_INCREMENT
 
-/-- From Electra: the churn of the current epoch, before its split. -/
+/-- From Electra: the churn of the current epoch, before its split.
+
+A quotient of 0 is an error. -/
 def getBalanceChurnLimit (config : Config) (state : BeaconState preset fork) :
     Except AccessorError Gwei := do
   -- For the total active balance `T`, rounded down to an increment:
@@ -56,7 +58,7 @@ def getBalanceChurnLimit (config : Config) (state : BeaconState preset fork) :
   -- `max(MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA, floor(T / CHURN_LIMIT_QUOTIENT))`.
   return roundToIncrement preset
     (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-      ((← getTotalActiveBalance state) / config.CHURN_LIMIT_QUOTIENT))
+      (← liftArith (divChecked (← getTotalActiveBalance state) config.CHURN_LIMIT_QUOTIENT)))
 
 /-- From Electra: the part of the churn that activations and exits share, up to a maximum. -/
 def getActivationExitChurnLimit (config : Config) (state : BeaconState preset fork) :
@@ -65,6 +67,8 @@ def getActivationExitChurnLimit (config : Config) (state : BeaconState preset fo
   return min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT (← getBalanceChurnLimit config state)
 
 /-- From Gloas: the churn of exits, as [EIP-8061] specifies.
+
+A quotient of 0 is an error.
 
 [EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#churn-computations
 -/
@@ -75,7 +79,7 @@ def getExitChurnLimit (config : Config) (state : BeaconState preset fork) :
   -- `max(MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA, floor(T / CHURN_LIMIT_QUOTIENT_GLOAS))`.
   return roundToIncrement preset
     (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-      ((← getTotalActiveBalance state) / config.CHURN_LIMIT_QUOTIENT_GLOAS))
+      (← liftArith (divChecked (← getTotalActiveBalance state) config.CHURN_LIMIT_QUOTIENT_GLOAS)))
 
 /-- From Gloas: the churn of activations, which is the churn of exits up to a maximum. -/
 def getActivationChurnLimit (config : Config) (state : BeaconState preset fork) :
@@ -87,15 +91,15 @@ def getActivationChurnLimit (config : Config) (state : BeaconState preset fork) 
 
 In Electra it is the part of the churn that activations and exits do not take.
 
-From Gloas it is its own share of the total active balance. -/
+From Gloas it is its own share of the total active balance, and a quotient of 0 is an error. -/
 def getConsolidationChurnLimit (config : Config) (state : BeaconState preset fork) :
     Except AccessorError Gwei := do
   -- From Gloas, EIP-8061, for the total active balance `T`, with no minimum and no cap:
   --
   -- `floor(T / CONSOLIDATION_CHURN_LIMIT_QUOTIENT)`, rounded down to an increment.
   if .glamsterdam ≤ fork then
-    return roundToIncrement preset
-      ((← getTotalActiveBalance state) / config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT)
+    return roundToIncrement preset (← liftArith
+      (divChecked (← getTotalActiveBalance state) config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT))
   -- In Electra, the churn of the epoch less the part of activations and exits.
   else
     -- The second churn is the first one up to a maximum, so the difference does not wrap.

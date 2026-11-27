@@ -2033,7 +2033,7 @@ theorem processRegistryUpdates
     obtain ⟨_, _, computed⟩ := computed
     exact laws.foldlM (fun _ _ _ ok => laws.updateRegistryEntryElectra ok) computed
   simp only [bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
+  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
   exact laws.trans (laws.foldlM (fun _ _ _ ok => laws.updateRegistryEntry ok) updatedOk)
     (laws.foldlM (fun _ _ _ ok => laws.activateValidator ok) activated)
 
