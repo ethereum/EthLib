@@ -4182,6 +4182,12 @@ It assumes only that the call succeeds.
 These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
 No theorem here proves conditional or accountable safety of the confirmed block.
 
+`Store.ForwardReachable.finalized_epoch_add_two_le` in `Consensus/Proofs/ForkChoice/CheckpointBlocks.lean` is the timing fact of the finalized fallback ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+It concerns a forward-reachable store whose finalized checkpoint is not the anchor's.
+The block epoch of that checkpoint's root is at most its epoch, and its epoch plus two is at most the current epoch.
+It assumes the anchor invariant and a positive slot duration.
+It also assumes that the anchor state does not hash to the zero root, and a history of at least two epochs of block roots.
+
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
 The block is due from the first slot two epochs after that one.

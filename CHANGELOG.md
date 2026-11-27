@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Store.ForwardReachable.finalized_epoch_add_two_le` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`) states the timing of a finalized checkpoint other than the anchor's ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+  In a forward-reachable store, its root's block epoch is at most its epoch, and its epoch plus two is at most the current epoch.
+
 - In Lean, `Base.pairwise_zip_of_pairwise` (`Base/Proofs/List.lean`) states that a relation that holds pairwise on a list holds pairwise on the first items of its zip.
   `List.takeWhile_eq_take`, `List.dropWhile_eq_drop` and `List.findIdx?_eq_of_nodup` move to `Base/Proofs/List.lean` from `Networking/Proofs/Devp2p/ForkId.lean`.
   `Consensus.mem_array_foldl_insert` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) is public.
@@ -1135,6 +1138,8 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, `ConfirmedCalls.finalized_read` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `Store.Reachable.finalized_read` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`), with the same statement.
 
 - A part of a slot, given in basis points, rounds to the nearest millisecond, a half up, where it rounded down, as consensus-specs v1.7.0-beta.5 does ([#4145](https://github.com/ethereum/EthLib/issues/4145)).
   Before Gloas, on mainnet, an attestation and a sync committee message are due 4000 ms into the slot, up from 3999 ms.
