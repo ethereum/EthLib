@@ -4763,11 +4763,16 @@ A payload that builds on an invalid payload in that way leaves the set.
 A block built on its parent without the payload of the parent does not hold that payload on its payload chain.
 So its own optimistic payload stays when only the payload of the parent is invalid.
 From Gloas the head of the fork choice is a block with or without its payload, so the optimistic store keeps the status of the head.
-A full head reads the payload of its block, and an empty or pending head the payload its block builds on; `isHeadOptimistic_of_full`, `isHeadOptimistic_eq_buildsOnOptimistic` and `isHeadOptimistic_of_not_full_of_named` state it.
+A full head reads the payload of its block, and an empty or pending head the payload its block builds on, each by its block hash; `isHeadOptimistic_of_full` and `isHeadOptimistic_of_not_full` state it.
 A pending head reads as an empty one, as the source states.
-`isHeadOptimistic_of_not_full_of_unnamed` shows that an empty or pending head whose bid names no known payload fails with `payloadNotVerified`.
-That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds.
-The rule fails there rather than call that payload verified, so the head rule and the latest verified ancestor agree; the source reads the parent block hash instead, which #4627 tracks.
+A payload is optimistic when an optimistic root names a block whose bid has its block hash (`isOptimisticPayload_eq_true_iff`).
+That stands for the source's set of optimistic payload hashes under two assumptions: each optimistic root names a block whose payload was imported optimistically, and the hashes are those of payloads of this fork.
+The updates of the set act on roots along payload chains, so when two blocks carry one bid, a payload may stay optimistic after the source has cleared it, the cautious side.
+`isOptimisticPayload_eq_isOptimistic` shows that the read by block hash agrees with the read by root when no other optimistic root names the hash.
+`isHeadOptimistic_of_not_full_of_unknown_payload` shows that an empty or pending head fails with `payloadNotVerified` when no known block names the payload it builds on.
+That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds, and of an empty anchor.
+The rule fails there rather than call that payload verified, a choice of EthLib: the source reads the hash, which may name an optimistic payload of Fulu.
+`isHeadOptimistic_of_unknown` shows that from Gloas the rule fails at a head block that the store does not know.
 From Gloas the latest verified ancestor takes a node, and reads only the payloads that the node holds.
 A full node holds every payload of its payload chain, and an empty or pending node holds all but its own.
 `latestVerifiedAncestor_ne_root` shows that a node without its own payload is never its own verified ancestor.
