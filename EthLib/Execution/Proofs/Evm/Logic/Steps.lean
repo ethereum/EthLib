@@ -4,6 +4,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
 public import EthLib.Execution.Proofs.Evm.Logic.Environment
 public import EthLib.Execution.Proofs.Evm.Logic.Known
+public meta import Lean.Meta.Tactic.Simp
+public meta import Lean.Meta.Tactic.Delta
 
 /-!
 # Proofs: a tactic that steps through the opcodes of a code
@@ -45,6 +47,50 @@ theorem Spec.reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s
     (h : Spec fork (At code message pc s' m' g' st ss rd) Q) :
     Spec fork (At code message pc s m g st ss rd) Q :=
   Spec.seq (Logic.reshape hs hm hg) h
+
+/-! ## Operations on words of numbers -/
+
+open Lean Meta Simp in
+/-- Unfolds an operation on words once each operand is a number, so that simp evaluates it.
+
+An operation with an operand that is not a number stays as it is. -/
+meta def unfoldOfNumbers (e : Expr) : SimpM DStep := do
+  for arg in e.getAppArgs do
+    if (← getBitVecValue? arg).isNone then return .continue
+  match ← delta? e with
+  | some unfolded => return .visit unfolded
+  | none => return .continue
+
+/-- ADD of two numbers. -/
+dsimproc_decl evalAdd (add _ _) := unfoldOfNumbers
+/-- SUB of two numbers. -/
+dsimproc_decl evalSub (sub _ _) := unfoldOfNumbers
+/-- MUL of two numbers. -/
+dsimproc_decl evalMul (mul _ _) := unfoldOfNumbers
+/-- DIV of two numbers. -/
+dsimproc_decl evalDiv (div _ _) := unfoldOfNumbers
+/-- MOD of two numbers. -/
+dsimproc_decl evalMod (mod _ _) := unfoldOfNumbers
+/-- LT of two numbers. -/
+dsimproc_decl evalLessThan (lessThan _ _) := unfoldOfNumbers
+/-- GT of two numbers. -/
+dsimproc_decl evalGreaterThan (greaterThan _ _) := unfoldOfNumbers
+/-- EQ of two numbers. -/
+dsimproc_decl evalEqual (equal _ _) := unfoldOfNumbers
+/-- ISZERO of a number. -/
+dsimproc_decl evalIsZero (isZero _) := unfoldOfNumbers
+/-- AND of two numbers. -/
+dsimproc_decl evalAnd (bitwiseAnd _ _) := unfoldOfNumbers
+/-- OR of two numbers. -/
+dsimproc_decl evalOr (bitwiseOr _ _) := unfoldOfNumbers
+/-- XOR of two numbers. -/
+dsimproc_decl evalXor (bitwiseXor _ _) := unfoldOfNumbers
+/-- NOT of a number. -/
+dsimproc_decl evalNot (bitwiseNot _) := unfoldOfNumbers
+/-- SHL of two numbers. -/
+dsimproc_decl evalShl (bitwiseShl _ _) := unfoldOfNumbers
+/-- SHR of two numbers. -/
+dsimproc_decl evalShr (bitwiseShr _ _) := unfoldOfNumbers
 
 open Lean.Parser.Tactic
 
@@ -120,13 +166,30 @@ macro_rules
   | `(tactic| evm_room) => `(tactic|
       (simp only [List.length_cons, List.length_nil, STACK_LIMIT] <;> omega))
 
-/-- Evaluates the program counter, the pushed word and the gas of the frame after a step. -/
+/-- Evaluates the arithmetic, comparison, bitwise and shift operations on words of numbers.
+
+SDIV, SMOD, ADDMOD, MULMOD, EXP, SIGNEXTEND, BYTE, SAR, SLT and SGT are left as they are. -/
+syntax "evm_words" : tactic
+
+macro_rules
+  | `(tactic| evm_words) => `(tactic| simp only [evalAdd, evalSub,
+      evalMul, evalDiv, evalMod, evalLessThan, evalGreaterThan, evalEqual, evalIsZero, evalAnd,
+      evalOr, evalXor, evalNot, evalShl, evalShr, BitVec.reduceAdd, BitVec.reduceSub,
+      BitVec.reduceMul, BitVec.reduceAnd, BitVec.reduceOr, BitVec.reduceXOr, BitVec.reduceNot,
+      BitVec.reduceHShiftLeft, BitVec.reduceHShiftRight, BitVec.reduceToNat, BitVec.reduceEq,
+      BitVec.reduceOfNat, Nat.reduceLT, Nat.reduceGT, Nat.reduceDiv, Nat.reduceMod, ↓reduceIte])
+
+/-- Evaluates the program counter, the pushed word and the gas of the frame after a step.
+
+It also evaluates each closed operation on words and each closed comparison.
+
+It also reduces each `if` on numbers. -/
 syntax "evm_tidy" : tactic
 
 macro_rules
   | `(tactic| evm_tidy) => `(tactic| ((try evm_prices) <;> (try simp only [UInt8.reduceToNat,
       BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub, Nat.sub_sub, List.set_cons_zero,
-      List.set_cons_succ])))
+      List.set_cons_succ]) <;> (try evm_words)))
 
 /-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
 

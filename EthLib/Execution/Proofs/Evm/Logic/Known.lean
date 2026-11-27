@@ -71,6 +71,16 @@ theorem Known.join {evm : Evm fork Nat} {start : Nat} {first second : ByteArray}
     · exact (h.2.2.2 _ h₁).append (h.2.2.2 _ h₂)
     · exact h.2.2.2 fact hfact⟩
 
+/-- Two facts of adjacent ranges become one fact of the two blocks of bytes, as a step of no opcode.
+
+The second range starts at `mid`, where the first ends. -/
+theorem Known.join_step {start mid : Nat} {first second : ByteArray}
+    (h₁ : (start, first) ∈ facts) (h₂ : (mid, second) ∈ facts) (hmid : start + first.size = mid) :
+    Hoare fork (Known code message pc stack size facts gas state substate returnData)
+      (Known code message pc stack size ((start, first ++ second) :: facts) gas state substate
+        returnData) :=
+  Triple.of_imp fun _ h => h.join h₁ (hmid ▸ h₂)
+
 /-- A frame may forget facts. -/
 theorem Known.mono {evm : Evm fork Nat} {fewer : List (Nat × ByteArray)}
     (h : Known code message pc stack size facts gas state substate returnData evm)
