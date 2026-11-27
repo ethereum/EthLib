@@ -59,20 +59,19 @@ So the product is the one of the twelve limbs. -/
 def Fp.mulWords (a b : Limbs.T 12) : Limbs.T 12 :=
   Word64.mul6 Fp.pLimbs Fp.pinvWord a b
 
-/-- Two integers below `p` with the same product by `2^384` mod `p` are equal. -/
-private theorem Fp.eq_of_mul_mod {x y : Nat} (hx : x < modulus) (hy : y < modulus)
-    (h : 2^384 * x % modulus = 2^384 * y % modulus) : x = y := by
-  -- An inverse `r` of `2^384` mod `p`, written in two halves of 192 bits.
-  obtain ⟨r, hR⟩ : ∃ r, r * 2^384 % modulus = 1 :=
-    ⟨0x14fec701e8fb0ce9ed5e64273c4f538b1797ab1458a88de9 * 2^192 +
-      0x343ea97914956dc87fe11274d898fafbf4d38259380b4820, by decide +kernel⟩
-  -- `2^384` as an atom, so that no step tries to evaluate it.
-  generalize (2:Nat)^384 = R at hR h ⊢
-  -- `z = r (2^384 z mod p) mod p` for `z` below `p`.
-  have key (z : Nat) (hz : z < modulus) : z = r * (R * z % modulus) % modulus := by
-    rw [Nat.mul_mod, Nat.mod_mod, ← Nat.mul_mod, ← Nat.mul_assoc, Nat.mul_mod, hR, Nat.one_mul,
-      Nat.mod_mod, Nat.mod_eq_of_lt hz]
-  rw [key x hx, key y hy, h]
+/-- The six words write the modulus. -/
+private theorem Fp.val_words6_pLimbs : Word64.Words6.val Fp.pLimbs = modulus := by
+  rw [← Montgomery.Limbs.val_words6]
+  exact Fp.val_pLimbs
+
+/-- Twice `p` is below `2^384`, as the products and sums on six words need. -/
+private theorem Fp.two_mul_lt : 2 * Word64.Words6.val Fp.pLimbs < 2^384 := by decide +kernel
+
+/-- An inverse of `2^384` mod `p`, written in two halves of 192 bits. -/
+private theorem Fp.radix_inv :
+    (0x14fec701e8fb0ce9ed5e64273c4f538b1797ab1458a88de9 * 2^192 +
+      0x343ea97914956dc87fe11274d898fafbf4d38259380b4820) * 2^384 % modulus = 1 := by
+  decide +kernel
 
 open Montgomery in
 /-- The product on six words is the product on twelve limbs, for `a` below `p`. -/
@@ -82,8 +81,8 @@ theorem Fp.mulWords_eq (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
         (Limbs.get (n := 12) a)
         (Limbs.get (n := 12) b) Limbs.pack := by
   -- The product on six words, from its spec: below `p`, and `a b 2^(-384)` mod `p`.
-  have hpw : Word64.Words6.val Fp.pLimbs = modulus := by decide +kernel
-  have hp : 2 * Word64.Words6.val Fp.pLimbs < 2^384 := by decide +kernel
+  have hpw := Fp.val_words6_pLimbs
+  have hp := Fp.two_mul_lt
   have hpinv : (Word64.Words6.val Fp.pLimbs * Fp.pinvWord.toNat + 1) % 2^64 = 0 := by
     decide +kernel
   have ha' : Word64.Words6.val a < Word64.Words6.val Fp.pLimbs := by
@@ -103,14 +102,62 @@ theorem Fp.mulWords_eq (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
   rw [Limbs.val_pack hf, Fp.mulWords, Limbs.val_words6]
   -- Both are below `p` and agree after a product by `2^384`, so they are equal.
   rw [show 32 * 12 = 384 from rfl] at he
-  exact Fp.eq_of_mul_mod hl6 hl (he6.trans he.symm)
+  exact Internal.eq_of_radix_mul_mod Fp.radix_inv hl6 hl (he6.trans he.symm)
+
+open Montgomery in
+/-- The sum of the limbs `a` and `b`, reduced once, on six words of 64 bits. -/
+@[irreducible] def Fp.addWords (a b : Limbs.T 12) : Limbs.T 12 := Word64.add6 Fp.pLimbs a b
+
+open Montgomery in
+/-- The sum on six words is `a + b mod p`, for `a` and `b` below `p`. -/
+theorem Fp.addWords_val (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
+    (hb : Limbs.val (n := 12) b < modulus) :
+    Limbs.val (n := 12) (Fp.addWords a b) = (Limbs.val a + Limbs.val b) % modulus := by
+  rw [Fp.addWords]
+  simp only [Limbs.val_words6] at ha hb ⊢
+  rw [← Fp.val_words6_pLimbs] at ha hb ⊢
+  exact Word64.add6_spec Fp.two_mul_lt ha hb
+
+open Montgomery in
+/-- The difference of the limbs `a` and `b`, with `p` added on a borrow, on six words. -/
+@[irreducible] def Fp.subWords (a b : Limbs.T 12) : Limbs.T 12 := Word64.sub6 Fp.pLimbs a b
+
+open Montgomery in
+/-- The difference on six words is `a - b mod p`, for `a` and `b` below `p`. -/
+theorem Fp.subWords_val (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
+    (hb : Limbs.val (n := 12) b < modulus) :
+    Limbs.val (n := 12) (Fp.subWords a b) = (Limbs.val a + modulus - Limbs.val b) % modulus := by
+  rw [Fp.subWords]
+  simp only [Limbs.val_words6] at ha hb ⊢
+  rw [← Fp.val_words6_pLimbs] at ha hb ⊢
+  exact Word64.sub6_spec ha hb
+
+open Montgomery in
+/-- The sum on six words is the sum on twelve limbs, for `a` and `b` below `p`. -/
+theorem Fp.addWords_eq (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
+    (hb : Limbs.val (n := 12) b < modulus) : Fp.addWords a b = addCore (n := 12) a b Fp.pLimbs := by
+  have hp := Fp.val_pLimbs
+  apply Limbs.val_injective (n := 12)
+  rw [Fp.addWords_val a b ha hb]
+  rw [← hp] at ha hb ⊢
+  exact (addCore_val ha hb).symm
+
+open Montgomery in
+/-- The difference on six words is the difference on twelve limbs, for `a` and `b` below `p`. -/
+theorem Fp.subWords_eq (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
+    (hb : Limbs.val (n := 12) b < modulus) : Fp.subWords a b = subCore (n := 12) a b Fp.pLimbs := by
+  have hp := Fp.val_pLimbs
+  apply Limbs.val_injective (n := 12)
+  rw [Fp.subWords_val a b ha hb]
+  rw [← hp] at ha hb ⊢
+  exact (subCore_val ha hb).symm
 
 open Montgomery in
 /-- The modulus `p` with the constants of its Montgomery arithmetic, on twelve limbs.
 
 It is inline, so that the compiler sees its fields as constants at each use.
 
-The product runs on six words of 64 bits. -/
+The product, the sum and the difference run on six words of 64 bits. -/
 @[inline] def Fp.params : Modulus 12 where
   p := modulus
   pLimbs := Fp.pLimbs
@@ -128,6 +175,10 @@ The product runs on six words of 64 bits. -/
   pm2_spec := by decide
   mul := Fp.mulWords
   mul_spec a b ha := Fp.mulWords_eq a b ha
+  add := Fp.addWords
+  add_spec := Fp.addWords_eq
+  sub := Fp.subWords
+  sub_spec := Fp.subWords_eq
 
 /-- An element of the BLS12-381 base field.
 

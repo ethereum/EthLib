@@ -186,6 +186,15 @@ theorem mono {low : Except EvmError α} {high : Except EvmError β} {R' : α →
     let ⟨b, hb, hab⟩ := h.1 a ha
     ⟨b, hb, weaker a b hab⟩, h.2⟩
 
+/-- Related runs, with a fact of each success of each run. -/
+theorem and {α β : Type} {R : α → β → Prop} {low : Except EvmError α}
+    {high : Except EvmError β} {P : α → Prop} {Q : β → Prop} (h : Sim R low high)
+    (left : ∀ a, low = .ok a → P a) (right : ∀ b, high = .ok b → Q b) :
+    Sim (fun a b => R a b ∧ P a ∧ Q b) low high :=
+  ⟨fun a ha =>
+    let ⟨b, hb, r⟩ := h.1 a ha
+    ⟨b, hb, r, left a ha, right b hb⟩, h.2⟩
+
 /-- A run that never fails with the error of a revert, related to itself by equality. -/
 theorem refl {low : Except EvmError α} (other : low ≠ .error .revert) : Sim (· = ·) low low :=
   ⟨fun a ha => ⟨a, ha, rfl⟩, other⟩

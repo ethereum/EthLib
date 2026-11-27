@@ -2193,15 +2193,27 @@ It passes on at most all but one 64th of the gas left, by EIP-150.
 Its postcondition gives the state and substate that the frame that ends the message gives, and nothing more.
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
+`Logic.staticcall_noCode_meter` and `Logic.staticcall_noCode_returndatasize_meter` (`Logic/CallMeter.lean`) give STATICCALL to no code under the meter of EIP-8037, so a check of 32 bytes of return data fails closed there too.
 `Logic.callWith` and `Logic.call` also state that the message is static when the frame is.
 `Logic.callValue` is the rule for CALL with a value that is not 0, at every fork from Berlin, with the one-counter meter.
 The frame must be one that may change the state.
 It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
 From Glamsterdam, it pays 3000 for a cold access and 11300 for the value by EIP-8038, and the state gas of a new account in place of the 25000 by EIP-8037.
 With one counter, that state gas is never refilled, although EIP-8037 refills it when the callee fails or never runs.
-These rules do not yet carry to the meter of EIP-8037 for calls.
 The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
 The message is not static.
+`Logic.HoareUnder.meterCovers` carries a rule for the calls to the meter of EIP-8037 for checked code whose frames end with no error or a revert.
+It needs the assumption under that meter to give the one under one counter, for the frame that ends a covering message, with its gas capped.
+It may use that the gas of the covering message fits a word, which holds since the gas of its caller fits one.
+The rules under a specification of the callee code carry through `Logic.RunsAsUpToGas` (`Logic/Callee.lean`).
+It is the form of `RunsAs` whose specification holds of a covering message, with at least the gas of the message.
+It leaves open the gas of the frame that ends the message, down to the least of the gas of the stopped frame and of the message.
+It also leaves open the message of that frame, all but its current target.
+`Logic.Meets.upToGas` gives it from `RunsAs`, so the runner of one counter meets it.
+`Logic.meets_runsAsMeter` (`Logic/CallMeter.lean`) proves that the runner of the meter of EIP-8037 meets `Logic.RunsAsMeter`.
+It needs a specification under one counter of checked callee code, whose stopped frames end with no error or a revert.
+It also needs the runner of that meter to meet, at every bound, an assumption on the messages of the callee that gives the one of the specification.
+`Logic.RunsAsMeter.lowerMeter` gives `RunsAsUpToGas` from it, when the assumption on the start of the message carries to a covering message.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
 From Glamsterdam, with one counter, it keeps the state gas of a new account paid, which EIP-8037 refills.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
@@ -2407,16 +2419,20 @@ Their `systemCall_set` and `systemCall_dequeue` theorems hold from each contract
 They require the specified bytecode at the contract's address.
 The queue theorems assume bounds on the storage counters, and the history theorem requires a block number from 1 to below `2^256`.
 
-`Logic.Reaches.followsMeter` lifts a normal one-counter run to the state gas meter when its execution gas initially covers that counter.
+`Logic.Reaches.followsMeter` lifts a normal one-counter run to a stopped frame under the state gas meter when its execution gas initially covers that counter.
 `Logic.Reaches.followsMeter_revert` lifts, under the same bound, a run from a normal frame that ends in a revert.
+Both ask that the execution gas held under the state gas meter fit a word.
 The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
 `Logic.SupportedCode` checks each opcode, skipping PUSH data, against a fixed list of instructions.
-The list leaves out GAS and the creations.
+The list leaves out GAS and the creations, and the check accepts GAS when the next opcode is a call.
+After GAS, each frame holds its own gas left, so the call asks the state gas meter for as much more gas as its excess (`Logic.GasPending`, `Logic.callStep_asks`).
 It keeps the calls: a run of steps without a message passes a call only where it sends none, and `Logic.callStep_bridge` lifts that step.
 The lifted run has the same fields outside its meter, including its state and output.
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
 `Logic.Spec.covered` lifts a whole specification of checked code whose runs stop with no error or a revert.
 The rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 (`spec_add_covered`) hold that way under the state gas meter.
+`Logic.HoareUnder.meterCovers` and `Logic.SpecUnder.covered` lift a triple with messages, under an assumption on the frames that end messages under each meter.
+The assumption under the state gas meter must give the one under one counter, for a frame that ends a covering message, seen under one counter with its gas capped by that message.
 
 ### Invariants of the storage of a contract
 
@@ -9058,6 +9074,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/Sponge/`
 - `EthLib/Cryptography/Proofs/SufCma/`
+- `EthLib/Cryptography/Proofs/SufCmaMultiKey.lean`
 - `EthLib/Cryptography/Proofs/SupportBind.lean`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/UniformReads.lean`

@@ -9,6 +9,22 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, STATICCALL to an account with no code that is no precompile returns no data under the state gas meter of EIP-8037, at every fork from Berlin ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  `Evm.Logic.staticcall_noCode_meter` and `Evm.Logic.staticcall_noCode_returndatasize_meter` (`Execution/Proofs/Evm/Logic/CallMeter.lean`) hold for code that passes the check of that meter, with the call at an opcode position.
+  So a check that the call returned 32 bytes fails closed under that meter too.
+  `Evm.Logic.NoCodeSucceeds.lowerMeter` gives the assumption on a call to no code under one counter from the one under the state gas meter.
+  The other rules for the calls (`Logic/Call.lean`) carry to that meter through `Evm.Logic.HoareUnder.meterCovers`, when the assumption under that meter gives the one under one counter for the frame that ends a covering message.
+  The rules under a specification of the callee code (`Evm.Logic.RunsAs`) do not yet carry: no theorem shows that the runner of that meter meets a form of it.
+
+- In Lean, a triple under an assumption on the frames that end messages, over one counter of gas, carries to the state gas meter of EIP-8037 ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  `Evm.Logic.HoareUnder.meterCovers` and `Evm.Logic.SpecUnder.covered` (`Execution/Proofs/Evm/Logic/MeterRun.lean`) hold for checked code whose runs end with no error or a revert.
+  The assumption on the frames that end messages under the state gas meter must give the one under one counter (`compat`).
+  It must do so for a frame that ends a covering message, seen under one counter with its gas capped by the message (`Evm.Logic.lowerMeter`).
+  `Evm.Logic.MeterCovers` now also asks, for a frame right after GAS, that GAS be the opcode before it, and `MeterCovers.followsMeter_of_prev` uses that.
+  The runner under one counter is a table of the messages of the joint run of the two meters (`Evm.Logic.tableRunner`, `Evm.Logic.JointStep`).
+  A caller and its message hold less gas than the frame that sends them (`Evm.Logic.callStep_child_lt`), so no caller sends the same message from two frames of that run.
+  `Evm.Logic.MeterReady` and `Evm.Logic.step_meterReady` (`MeterReach.lean`) are now public, and `Evm.Logic.MeterReady.child` shows that a message of checked code comes from a call.
+
 - In Lean, the rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 hold under the state gas meter of EIP-8037 ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `spec_add_covered` (`Execution/Proofs/Blocks/SystemCall/WithdrawalRequests.lean`, `ConsolidationRequests.lean`) holds for every frame of that meter whose execution gas covers the gas of `spec_add`.
   `Evm.Logic.Spec.covered` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) lifts a specification of checked code whose runs stop with no error or a revert, through `Evm.Logic.Covered`.
@@ -1225,6 +1241,37 @@ Not yet released.
   A step that writes a field adds one obligation to each user of the induction principle.
 
 ### Changes that break callers
+
+- In Lean, the rows of the `Fp` product on six 64-bit words keep no word above the six ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Word64.row6` and `Word64.reduce6` (`Cryptography/Word64/Six.lean`) now take and return `Word64.Words6` instead of `Word64.Acc6`.
+  `Word64.row6_spec` asks for `2 * p.val < 2^384`, and `Word64.reduce6_val` no longer does.
+  `Word64.mul6_spec` and every statement about `Fp` are unchanged.
+
+- In Lean, the scalar field `Fr` of BLS12-381 multiplies, adds and subtracts on four 64-bit words ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)), through `Word64.mul4`, `Word64.addMod4` and `Word64.subMod4` (`Cryptography/Word64/Four.lean`), with the laws `Word64.mul4_spec`, `Word64.addMod4_spec` and `Word64.subMod4_spec`.
+  `Bls.Fr.mulWords`, `Bls.Fr.addWords` and `Bls.Fr.subWords` set the fields of `Bls.Fr.params`, and `Bls.Fr.mulWords_eq`, `Bls.Fr.addWords_eq` and `Bls.Fr.subWords_eq` state that they agree with the 32-bit limbs, so every statement about `Fr` is unchanged.
+  The eight limbs of `Montgomery.Limbs 8` are stored two to a word in `Word64.Raw`, so the structure `Montgomery.Limbs8` is removed, and the literals of `Fr` and of the secp256k1 and secp256r1 constants on eight limbs are four 64-bit words.
+  `Bls.Fr.pLimbs`, `Bls.Fr.val_pLimbs`, `Bls.Fr.pinv`, `Bls.Fr.pinvWord`, `Montgomery.Limbs.val_raw`, `Word64.Raw.limb`, `Word64.Raw.limb_lt`, `Word64.Raw.val_eq_sum`, `Word64.Raw.val_lt`, `Word64.Raw.mask`, `Word64.Raw.val_mask`, `Word64.row4`, `Word64.row4_spec`, `Word64.reduce4`, `Word64.reduce4_val`, `Word64.addBack4` and `Word64.addBack4_val` are new.
+  `Montgomery.Internal.eq_of_radix_mul_mod` replaces the private lemma of `Fp` that cancels the radix.
+  `Montgomery.mulCore_eq` is removed, since no specification uses it any more: the default product of `Montgomery.Modulus` unfolds `Montgomery.mulCore` directly.
+  `Word64.low_clear`, `Word64.pairLimbs`, `Word64.pairLimbs_toNat`, `Word64.pairLimbs_low`, `Word64.pairLimbs_high` and `Word64.eq_of_halves` move from `Cryptography/Word64/Six.lean` to `Cryptography/Word64.lean`, and `low_clear` becomes public.
+  In `Cryptography/Proofs/Word64.lean`, `wide` and `narrow` are now the conversions `Raw.words` and `Raw.fromWords` on `Limbs.T 8`, and `join` is removed.
+
+- In Lean, the bridge from one counter of gas to the state gas meter of EIP-8037 accepts GAS right before a call ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  `Evm.Logic.SupportedCode` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) accepts GAS when the next opcode is a call, and `Evm.Logic.meterSupported_of_supportedCode` gives that case.
+  Right after GAS, each frame holds its own execution gas left on its stack (`Evm.Logic.GasPending`, `MeterCall.lean`).
+  The call then asks the state gas meter for more gas, by exactly its excess of execution gas (`Evm.Logic.AsksMore`), and `Evm.Logic.callStep_asks` lifts that step.
+  `Evm.Logic.messageCallGas_mono`, `Tracks.chargeCall` and `Tracks.payCall` take a request of more gas, within that excess.
+  GAS pushes a word, so the lifts ask that the execution gas held under the state gas meter fit a word.
+  `Evm.Logic.Reaches.followsMeter` and `Reaches.followsMeter_revert` take that bound, and `Reaches.followsMeter` asks for a stopped frame.
+  `Evm.Logic.Covered` adds the bound, and `Evm.Logic.Reaches.meterCovers` lifts a run to a frame that follows or waits for its call (`Evm.Logic.MeterCovers`).
+
+- In Lean, the sum and the difference of the BLS12-381 base field run on six 64-bit words, through `Word64.add6` and `Word64.sub6` (`Cryptography/Word64/Six.lean`), with the laws `Word64.add6_spec` and `Word64.sub6_spec`.
+  `Word64.sum6`, `Word64.diff6`, `Word64.Words6.mask` and `Word64.addBack` are the steps they share, with `Word64.sum6_val`, `Word64.diff6_val`, `Word64.Words6.val_lt`, `Word64.Words6.val_mask` and `Word64.addBack_val`.
+  `Word64.reduce6` now reads its difference from `Word64.diff6`.
+  `Montgomery.Modulus` gains the fields `add` and `sub`, whose defaults are the sum and the difference on 32-bit limbs, so the other moduli keep their arithmetic.
+  `add_spec` and `sub_spec` state that a modulus's own choice agrees with them on inputs below `p`.
+  `Bls.Fp.addWords` and `Bls.Fp.subWords` set them for `Fp`: `Bls.Fp.addWords_eq` and `Bls.Fp.subWords_eq` state that they agree with the 32-bit limbs, and `Bls.Fp.addWords_val` and `Bls.Fp.subWords_val` give their values.
+  `Montgomery.addLimbs_spec`, `Montgomery.subLimbs` and `Montgomery.subLimbs_spec` are removed: use `Montgomery.Modulus.add_val` and `Montgomery.Modulus.sub_val`, or the new `Montgomery.addCore_val` and `Montgomery.subCore_val` for the limbs of any modulus.
 
 - In Lean, the bridge from one counter of gas to the state gas meter of EIP-8037 covers the four calls ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `Evm.Logic.callStep_bridge` (`Execution/Proofs/Evm/Logic/MeterCall.lean`) lifts the step of CALL, CALLCODE, DELEGATECALL and STATICCALL, with no hypothesis on the gas they ask for or on the reservoir.
