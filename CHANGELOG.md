@@ -1185,6 +1185,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, a pending head of the fork choice is optimistic exactly when the payload its block builds on is, like an empty head, as consensus-specs v1.7.0-beta.5 states ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
+  It read the payload of its own block first, so a block whose own payload alone was optimistic made the node optimistic.
+  A head whose parent payload the store lacks still fails, where the source reads the parent block hash; #4627 tracks that difference.
+  `is_optimistic_node` of `ethlib.consensus` changes with it.
+  In Lean, `isHeadOptimistic_eq_buildsOnOptimistic` (`Consensus/Proofs/ForkChoice/OptimisticSync.lean`) states it for any head that is not full, and replaces `isHeadOptimistic_eq_buildsOnOptimistic_of_empty`.
+  `isHeadOptimistic_of_empty`, `isHeadOptimistic_of_empty_of_named` and `isHeadOptimistic_of_empty_of_unnamed` become `isHeadOptimistic_of_not_full`, `isHeadOptimistic_of_not_full_of_named` and `isHeadOptimistic_of_not_full_of_unnamed`, and take `payloadStatus ≠ .full`.
+  `isHeadOptimistic_of_pending_of_optimistic` and `isHeadOptimistic_of_pending_of_not_optimistic` are removed.
+  Migration: pass that the head is not full.
 - In Lean, the checks of a block body take their hash in any monad: `checkTransactions`, `checkWithdrawals`, `checkOmmers` and `checkBody` are the new `checkTransactionsM`, `checkWithdrawalsM`, `checkOmmersM` and `checkBodyM` with Keccak-256, in the identity monad.
   `Execution.Blocks.withdrawalsRoot` is likewise the new `withdrawalsRootM` with Keccak-256.
   The checks and the root are unchanged.

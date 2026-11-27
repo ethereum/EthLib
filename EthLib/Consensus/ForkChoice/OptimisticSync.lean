@@ -254,26 +254,16 @@ Before Gloas it is whether the head block is optimistic.
 
 From Gloas a full head reads the payload of its block.
 
-An empty head reads the payload that its block builds on.
+An empty or pending head reads the payload that its block builds on.
 
-A pending head stands for both: it reads the payload of its block, then the one it builds on.
-
-The search of the head never stops at a pending node, and that reading is a choice of EthLib.
-
-From Gloas an empty head fails as the read of the payload its block builds on does.
-
-A pending head fails that way only when the payload of its block is not optimistic. -/
+It fails as that read does. -/
 def isHeadOptimistic : Except ForkChoiceError Bool :=
   if .glamsterdam ≤ fork then
     match store.head.payloadStatus with
     -- A full head reads the payload of its block.
     | .full => return store.isOptimistic store.head.root
-    -- An empty head reads the payload that its block builds on.
-    | .empty => store.buildsOnOptimistic store.head.root
-    -- A pending head reads the payload of its block, then the one it builds on.
-    | .pending =>
-      if store.isOptimistic store.head.root then return true
-      else store.buildsOnOptimistic store.head.root
+    -- An empty or pending head reads the payload that its block builds on.
+    | .empty | .pending => store.buildsOnOptimistic store.head.root
   -- Before Gloas, whether the head block is optimistic.
   else return store.isOptimistic store.head.root
 
@@ -335,8 +325,6 @@ From Gloas it is the first root not optimistic among the payloads that the node 
 A full node must name a payload that the store holds, which the rule does not check.
 
 A pending node stands for its block whatever its payload, so it reads as empty.
-
-That reading is a choice of EthLib.
 
 From Gloas it fails when every payload that the node holds is optimistic, or when it holds none.
 
