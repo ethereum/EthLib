@@ -92,7 +92,7 @@ theorem collisionSearch_collision_of_outputsWin {π : Equiv.Perm State} {H : Byt
     simulateQ_pure, support_pure, Set.mem_singleton_iff] at hr
   subst hr
   -- The search returns the pair that the win exposes.
-  unfold findHashCollisionWith at hpair
+  rw [findHashCollisionWith_eq] at hpair
   split at hpair
   · next c hc =>
     cases hpair

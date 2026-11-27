@@ -4,17 +4,18 @@ public import EthLib.Execution.Proofs.Evm.Call.Fresh
 public import EthLib.Execution.Proofs.Evm.Call.StorageInvariant
 public import EthLib.Execution.Proofs.Transactions.CodeRules
 public import EthLib.Execution.Proofs.Transactions.Deletion
+public import EthLib.Execution.Proofs.Transactions.StorageAt
 
 /-!
 # Proofs: an invariant of the storage of a contract holds over every transaction
 
-Take an account with a nonce of at least 1 that holds a given code, and an invariant of its storage.
+Take an account that holds a given code, and an invariant of its storage.
 
 From Cancun, if each call that runs that code there keeps the invariant, so does every transaction.
 
 From Hegotá no transaction runs, so the theorems say nothing there.
 
-The proof assumes that no other code has the Keccak-256 hash of the given code.
+No frame and no authorization of the transaction may output or set a code that collides with it.
 -/
 
 @[expose] public section
@@ -32,20 +33,6 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter] {address : Address} {code
 
 /-! ## The account of the contract -/
 
-variable (address code) in
-/-- The storage of `address` meets `Inv`, the account holds `code`, and its nonce is at least 1.
-
-The nonce shows that no creation in a transaction goes to the account.
-
-A contract deployed before Spurious Dragon may hold code with nonce 0, and is left out. -/
-def LiveAt (Inv : (Bytes32 → U256) → Prop) (tx : TransactionState) : Prop :=
-  GoodAt address code Inv tx ∧ 1 ≤ (tx.getAccount address).nonce
-
-/-- A change that keeps the account and lowers no nonce keeps it live. -/
-theorem LiveAt.of_keepsAt {tx tx' : TransactionState} (h : LiveAt address code Inv tx)
-    (k : KeepsAt address code tx tx') (n : NonceLe tx tx') : LiveAt address code Inv tx' :=
-  ⟨h.1.of_keepsAt k, Nat.le_trans h.2 (n address)⟩
-
 /-- A record of a read keeps the account that holds `code`. -/
 theorem keepsAt_recordAccountRead (tx : TransactionState) (other : Address) :
     KeepsAt address code tx (tx.recordAccountRead other) :=
@@ -60,10 +47,13 @@ theorem keepsAt_destroyAccount {tx : TransactionState} {other : Address} (hne : 
 
 /-! ## The steps around the message -/
 
-/-- An authorization keeps the account that holds `code`, which refuses it. -/
+/-- An authorization keeps the account that holds `code`, which refuses it.
+
+The code that the authorization sets must not collide with `code`. -/
 theorem keepsAt_applyAuthorization (hyp : CodeHyp code) {chainId : Nat}
     {done done' : Delegations Meter} {auth : Authorization}
-    (h : applyAuthorization fork chainId done auth = .ok done') :
+    (h : applyAuthorization fork chainId done auth = .ok done')
+    (apart : ¬Collides code (delegationCode auth)) :
     KeepsAt address code done.state done'.state := by
   intro hold
   rcases applyAuthorization_cases h with rfl | ⟨authority, -, -, ⟨-, rfl⟩ |
@@ -82,33 +72,42 @@ theorem keepsAt_applyAuthorization (hyp : CodeHyp code) {chainId : Nat}
     obtain ⟨bumped, hnonce, hdelegate⟩ := bind_ok_iff.mp hdelegate
     cases hdelegate
     exact ((keepsAt_recordAccountRead _ _).trans
-      ((keepsAt_setCode hyp hcode hne).trans (keepsAt_incrementNonce hyp hnonce))) hold
+      ((keepsAt_setCode hyp hcode hne apart).trans (keepsAt_incrementNonce hyp hnonce))) hold
 
-/-- Authorizations that succeed keep the account that holds `code`. -/
+/-- Authorizations that succeed keep the account that holds `code`.
+
+No code that they set may collide with `code`. -/
 theorem keepsAt_foldlM_applyAuthorization (hyp : CodeHyp code) {chainId : Nat} :
     ∀ {auths : List Authorization} {start done : Delegations Meter},
+      (∀ auth ∈ auths, ¬Collides code (delegationCode auth)) →
       auths.foldlM (applyAuthorization fork chainId) start = .ok done →
       KeepsAt address code start.state done.state
-  | [], _, _, h => by
+  | [], _, _, _, h => by
     cases h
     exact .refl _
-  | _ :: _, _, _, h => by
+  | _ :: _, _, _, apart, h => by
     obtain ⟨next, hnext, h⟩ := bind_ok_iff.mp h
-    exact (keepsAt_applyAuthorization hyp hnext).trans (keepsAt_foldlM_applyAuthorization hyp h)
+    exact (keepsAt_applyAuthorization hyp hnext (apart _ List.mem_cons_self)).trans
+      (keepsAt_foldlM_applyAuthorization hyp (fun auth hmem => apart auth (.tail _ hmem)) h)
 
 /-- The first frame of a message keeps the account that holds `code`.
 
 When the account holds `code` before it, the first frame runs `code` if it runs at `address`.
 
-A call must run at its recipient, as the message of a transaction and a system call do. -/
+A creation keeps the code address of its message.
+
+No code that an authorization sets may collide with `code`. -/
 theorem prepareFirstFrame_keepsAt (hyp : CodeHyp code) {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    -- A call runs at its recipient, as the message of a transaction and a system call do.
     (recipient : ∀ target, message.target = some target → target = message.currentTarget)
+    (delegations : ∀ auth ∈ auths, ¬Collides code (delegationCode auth))
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
       .ok first) :
     KeepsAt address code state first.state ∧
-      (HoldsCode address code state → RunsCode address code first.message) := by
+      (HoldsCode address code state → RunsCode address code first.message) ∧
+      (message.target = none → first.message.codeAddress = message.codeAddress) := by
   have hcur := (substate_prepareFirstFrame h).2.2.2
   have htgt := (substate_prepareFirstFrame h).2.2.1
   unfold prepareFirstFrame at h
@@ -117,11 +116,16 @@ theorem prepareFirstFrame_keepsAt (hyp : CodeHyp code) {chainId : Nat} {message 
     rename_i hnone
     dsimp only at h
     split at h
-    · refine ⟨fun hold => ?_, fun hold hat => ?_⟩
+    · refine ⟨fun hold => ?_, fun hold hat => ?_, fun _ => ?_⟩
       · split at h <;>
         · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
           cases h
           exact keepsAt_recordAccountRead _ _ hold
+      rotate_left
+      · split at h <;>
+        · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
+          cases h
+          rfl
       · rename_i hdep
         rw [hcur] at hat
         subst hat
@@ -135,7 +139,10 @@ theorem prepareFirstFrame_keepsAt (hyp : CodeHyp code) {chainId : Nat} {message 
     dsimp only at h
     obtain ⟨done, hdone, h⟩ := bind_ok_iff.mp h
     have hauth : KeepsAt address code state done.state :=
-      keepsAt_foldlM_applyAuthorization hyp hdone
+      keepsAt_foldlM_applyAuthorization hyp delegations hdone
+    -- A call has a target.
+    have hcall : message.target = none → first.message.codeAddress = message.codeAddress :=
+      fun hnone => by rw [htarget] at hnone; cases hnone
     -- After the authorizations, the first frame only records reads.
     generalize hread : (if message.value ≠ 0 then done.state.recordAccountRead target
       else done.state) = read0 at h
@@ -152,7 +159,7 @@ theorem prepareFirstFrame_keepsAt (hyp : CodeHyp code) {chainId : Nat} {message 
       generalize hdel : (if fork ≥ .pectra then delegatedAddress c else none) = delegate at h
       rcases delegate with _ | delegate
       · cases h
-        refine ⟨base', fun hold hat => ?_⟩
+        refine ⟨base', fun hold hat => ?_, hcall⟩
         -- A call to `address` runs the code that the account holds.
         have hat' : target = address := (recipient target htarget).trans (hcur.symm.trans hat)
         subst hat'
@@ -161,7 +168,7 @@ theorem prepareFirstFrame_keepsAt (hyp : CodeHyp code) {chainId : Nat} {message 
         cases Base.mapError_ok_iff.mp hc
         exact ⟨rfl, by simp [FirstFrame.ofMeter, htarget]⟩
       · dsimp only at h
-        refine ⟨fun hold => ?_, fun hold hat => ?_⟩
+        refine ⟨fun hold => ?_, fun hold hat => ?_, hcall⟩
         · split at h <;>
           · obtain ⟨m', -, h⟩ := bind_ok_iff.mp h
             obtain ⟨code', -, h⟩ := bind_ok_iff.mp h
@@ -186,17 +193,6 @@ theorem keepsAt_buyGas (hyp : CodeHyp code) {env : BlockEnvironment fork}
   split at hd
   · cases hd
     rfl
-  · cases hd
-
-/-- The purchase of gas lowers no nonce. -/
-theorem nonceLe_buyGas {env : BlockEnvironment fork} {state bought : TransactionState}
-    {sender : Address} {tx : Transaction} (h : buyGas env state sender tx = .ok bought) :
-    NonceLe state bought := by
-  obtain ⟨mid, h1, h2⟩ := bind_ok_iff.mp h
-  refine (nonceLe_incrementNonce h1).trans (nonceLe_modifyState (fun _ _ hd => ?_) h2)
-  split at hd
-  · cases hd
-    exact Nat.le_refl _
   · cases hd
 
 /-- The settlement of gas keeps the account that holds `code`.
@@ -284,39 +280,69 @@ theorem getCode_deleteAccounts {state state' : TransactionState} {output : CallO
 
 /-! ## The message and the transaction -/
 
+variable (code) in
+/-- The message of a transaction or a system call outputs or sets no code that collides with `code`.
+
+No authorization sets such a code, and no frame of its run outputs one. -/
+def CallApart (chainId : Nat) (message : Message fork) (state : TransactionState)
+    (substate : Substate) (auths : List Authorization) (paid : Std.ExtTreeSet Address) : Prop :=
+  (∀ auth ∈ auths, ¬Collides code (delegationCode auth)) ∧
+    CallAll (Meter := Meter) (fun reached => ¬Collides code reached.output) chainId message state
+      substate auths paid
+
 variable [LawfulGasMeter Meter]
+
+variable (Meter code) in
+/-- A transaction outputs or sets no code that collides with `code`, with the gas meter `Meter`.
+
+No authorization sets such a code, and no frame of its message outputs one. -/
+def TransactionApartWith (env : BlockEnvironment fork) (block : State.BlockState)
+    (included : Included) (tx : Transaction) (out : TransactionOutput) : Prop :=
+  (∀ auth ∈ tx.authorizations, ¬Collides code (delegationCode auth)) ∧
+    TransactionAll Meter (fun reached => ¬Collides code reached.output) env block included tx out
 
 /-- The message of a transaction keeps the invariant and the account at `address`.
 
 Each call that runs `code` at `address` must keep them.
 
-The transaction must not have created the account yet, and then it does not create it.
+The message must output or set no code that collides with `code`.
 
-A call must run at its recipient, as the message of a transaction and a system call do. -/
-theorem liveAt_processMessageCall (hyp : CodeHyp code)
+The transaction must not have created the account yet, and then it does not create it. -/
+theorem goodAt_processMessageCall (hyp : CodeHyp code)
     (frames : FramesKeepCode address code fork Meter Inv) {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}
+    -- A call runs at its recipient, as the message of a transaction and a system call do.
     (recipient : ∀ target, message.target = some target → target = message.currentTarget)
+    -- A creation runs the code of no account.
+    (creates : message.target = none → message.codeAddress = none)
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output)
-    (live : LiveAt address code Inv state) (fresh : address ∉ state.createdAccounts) :
-    LiveAt address code Inv output.state ∧ address ∉ output.state.createdAccounts := by
+    (apart : CallApart (Meter := Meter) code chainId message state substate auths paid)
+    (good : GoodAt address code Inv state) (fresh : address ∉ state.createdAccounts) :
+    GoodAt address code Inv output.state ∧ address ∉ output.state.createdAccounts := by
   rw [processMessageCall_unfold] at h
   split at h
   · -- A halt before the first frame keeps the state, up to its reads.
     split at h
     · cases h
     · cases h
-      exact ⟨live.of_keepsAt (.of_eq rfl (fun _ => rfl) rfl) (NonceLe.refl _), fresh⟩
+      exact ⟨good.of_keepsAt (.of_eq rfl (fun _ => rfl) rfl), fresh⟩
   · rename_i first hfirst
-    obtain ⟨keeps, runs⟩ := prepareFirstFrame_keepsAt hyp recipient hfirst
-    have live1 : LiveAt address code Inv first.state :=
-      live.of_keepsAt keeps (nonceLe_prepareFirstFrame hfirst)
+    obtain ⟨keeps, runs, hcodeAddress⟩ := prepareFirstFrame_keepsAt hyp recipient apart.1 hfirst
+    -- No frame of the run of the first frame outputs a code that collides.
+    have far := apart.2 first hfirst
+    unfold FirstFrame.start at far
+    rw [(substate_prepareFirstFrame hfirst).2.2.1] at far
+    have good1 : GoodAt address code Inv first.state := good.of_keepsAt keeps
+    -- The account holds code, so a message never creates it.
+    have hcode1 : (first.state.getAccount address).codeHash ≠ EMPTY_CODE_HASH := by
+      rw [good1.1.1]
+      exact hyp.hash_ne
     have fresh1 : address ∉ first.state.createdAccounts := by
       rw [createdAccounts_prepareFirstFrame hfirst]
       exact fresh
-    have runs1 := runs live.1.1
+    have runs1 := runs good.1
     split at h
     · -- A creation goes to an address without code.
       rename_i hnone
@@ -325,35 +351,49 @@ theorem liveAt_processMessageCall (hyp : CodeHyp code)
       have hne : first.message.currentTarget ≠ address := fun hat =>
         absurd ((substate_prepareFirstFrame hfirst).2.2.1.trans hnone) (runs1 hat).2
       have fr := createsFresh_processCreateMessage hrun
+      rw [hnone] at far
       rw [state_ofFrame]
-      refine ⟨⟨goodAt_processCreateMessage hyp frames hrun live1.1 hne,
-        Nat.le_trans live1.2 (fr.nonce address)⟩, fun mem => ?_⟩
+      refine ⟨goodAt_processCreateMessage hyp frames hrun far
+        ((hcodeAddress hnone).trans (creates hnone)) good1 hne, fun mem => ?_⟩
       rcases fr.fresh address mem fresh1 with h0 | h0
-      · exact absurd h0 (Nat.pos_iff_ne_zero.mp live1.2)
+      · exact hcode1 h0.2
       · exact hne h0.symm
-    · obtain ⟨⟨evm, _⟩, hrun, h⟩ := bind_ok_iff.mp h
+    · rename_i t hsome
+      obtain ⟨⟨evm, _⟩, hrun, h⟩ := bind_ok_iff.mp h
       cases h
       have fr := createsFresh_processMessage hrun
+      rw [hsome] at far
       rw [state_ofFrame]
-      refine ⟨⟨goodAt_processMessage hyp frames hrun live1.1 runs1,
-        Nat.le_trans live1.2 (fr.nonce address)⟩, fun mem => ?_⟩
+      refine ⟨goodAt_processMessage hyp frames hrun far good1 runs1, fun mem => ?_⟩
       rcases fr.fresh address mem fresh1 with h0 | h0
-      · exact absurd h0 (Nat.pos_iff_ne_zero.mp live1.2)
+      · exact hcode1 h0.2
       · exact h0.elim
 
 /-- From Cancun, a transaction keeps the invariant and the account at `address`.
 
 Each call that runs `code` at `address` must keep them.
 
-It runs with the gas meter `Meter`. -/
-theorem liveAt_runTransaction (hyp : CodeHyp code)
+It runs with the gas meter `Meter`, and outputs or sets no code that collides with `code`. -/
+theorem goodAt_runTransaction (hyp : CodeHyp code)
     (frames : FramesKeepCode address code fork Meter Inv) (hfork : .dencun ≤ fork)
     {env : BlockEnvironment fork} {block : State.BlockState} {included : Included}
     {tx : Transaction} {out : TransactionOutput}
     (h : runTransaction Meter env block included tx = .ok out)
-    (live : LiveAt address code Inv (.ofBlock block)) : LiveAt address code Inv out.state := by
+    (apart : TransactionApartWith Meter code env block included tx out)
+    (good : GoodAt address code Inv (.ofBlock block)) : GoodAt address code Inv out.state := by
   obtain ⟨target, bought, message, output, settled, htarget, hbought, hmessage, houtput, hsettle,
     hdelete, same⟩ := runTransaction_deletes_created hfork h
+  -- The run of the message is the one that the hypothesis names.
+  have far : CallApart (Meter := Meter) code env.chainId.toNat
+      { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
+      (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
+      (paidWrites included.sender target tx) := by
+    refine ⟨apart.1, ?_⟩
+    obtain ⟨target', bought', message', output', settled', run⟩ := runTransaction_eq_ok h
+    obtain rfl : target' = target := Except.ok.inj (run.1.symm.trans htarget)
+    obtain rfl : bought' = bought := Except.ok.inj (run.2.1.symm.trans hbought)
+    obtain rfl : message' = message := Except.ok.inj (run.2.2.1.symm.trans hmessage)
+    exact apart.2 run
   -- The message of a transaction runs at its recipient.
   have recipient : ∀ to, ({ message with
       reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } : Message fork).target =
@@ -368,45 +408,63 @@ theorem liveAt_runTransaction (hyp : CodeHyp code)
     unfold messageTarget at htarget
     rw [hto] at htarget
     exact Except.ok.inj htarget
-  have live1 := live.of_keepsAt (keepsAt_buyGas hyp hbought) (nonceLe_buyGas hbought)
+  have good1 := good.of_keepsAt (keepsAt_buyGas hyp hbought)
   -- A transaction starts with no created account, and the purchase of gas creates none.
   have fresh : address ∉ bought.createdAccounts := by
     obtain ⟨mid, h1, h2⟩ := bind_ok_iff.mp hbought
     rw [createdAccounts_modifyState h2, createdAccounts_modifyState h1]
     simp [TransactionState.ofBlock]
-  obtain ⟨live2, fresh2⟩ := liveAt_processMessageCall hyp frames recipient houtput live1 fresh
-  have live3 : LiveAt address code Inv settled :=
-    live2.of_keepsAt (keepsAt_settleGas hyp hsettle) fun other =>
-      Nat.le_of_eq ((settleGas_accounts hsettle other).2.1).symm
+  -- The message of a transaction that creates runs the code of no account.
+  have creates : ({ message with
+      reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } : Message fork).target =
+        none → ({ message with
+          reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } :
+            Message fork).codeAddress = none :=
+    fun hnone => codeAddress_transactionMessage (message := message) hmessage hnone
+  obtain ⟨good2, fresh2⟩ :=
+    goodAt_processMessageCall hyp frames recipient creates houtput far good1 fresh
+  have good3 : GoodAt address code Inv settled := good2.of_keepsAt (keepsAt_settleGas hyp hsettle)
   -- From Cancun, the deletions change only accounts that the transaction created.
   have hout := same address (by
     rw [Std.ExtTreeSet.mem_toList, createdAccounts_settleGas hsettle]
     exact fresh2)
   have hacc : out.state.getAccount address = settled.getAccount address := by
     simp only [getAccount, hout.1]
-  obtain ⟨⟨⟨hhash, hcode⟩, hinv⟩, hnonce⟩ := live3
-  refine ⟨⟨⟨by rw [hacc]; exact hhash, (getCode_deleteAccounts hdelete _).trans hcode⟩, ?_⟩,
-    by rw [hacc]; exact hnonce⟩
+  obtain ⟨⟨hhash, hcode⟩, hinv⟩ := good3
+  refine ⟨⟨by rw [hacc]; exact hhash, (getCode_deleteAccounts hdelete _).trans hcode⟩, ?_⟩
   rw [show out.state.getStorage address = settled.getStorage address from funext hout.2.1]
   exact hinv
 
+variable (code) in
+/-- A transaction outputs or sets no code that collides with `code`.
+
+It runs with the gas meter of its fork. -/
+def TransactionApart (env : BlockEnvironment fork) (block : State.BlockState)
+    (included : Included) (tx : Transaction) (out : TransactionOutput) : Prop :=
+  (fork < .glamsterdam → TransactionApartWith Nat code env block included tx out) ∧
+    (.glamsterdam ≤ fork → TransactionApartWith StateGasMeter code env block included tx out)
+
 /-- From Cancun, a transaction keeps the invariant and the account at `address`.
 
-Each call that runs `code` at `address` must keep them, with the gas meter of the fork. -/
-theorem liveAt_processTransaction (hyp : CodeHyp code) (hfork : .dencun ≤ fork)
+Each call that runs `code` at `address` must keep them, with the gas meter of the fork.
+
+The transaction must output or set no code that collides with `code`. -/
+theorem goodAt_processTransaction (hyp : CodeHyp code) (hfork : .dencun ≤ fork)
     (frames : fork < .glamsterdam → FramesKeepCode address code fork Nat Inv)
     (framesState : .glamsterdam ≤ fork → FramesKeepCode address code fork StateGasMeter Inv)
     {env : BlockEnvironment fork} {block : State.BlockState} {included : Included}
     {tx : Transaction} {out : TransactionOutput}
     (h : processTransaction env block included tx = .ok out)
-    (live : LiveAt address code Inv (.ofBlock block)) : LiveAt address code Inv out.state := by
+    (apart : TransactionApart code env block included tx out)
+    (good : GoodAt address code Inv (.ofBlock block)) : GoodAt address code Inv out.state := by
   by_cases hhegota : .hegota ≤ fork
   · rw [processTransaction_of_hegota_le hhegota] at h
     cases h
   by_cases hglam : .glamsterdam ≤ fork
   · rw [processTransaction_of_glamsterdam hglam (Nat.lt_of_not_le hhegota)] at h
-    exact liveAt_runTransaction hyp (framesState hglam) hfork h live
+    exact goodAt_runTransaction hyp (framesState hglam) hfork h (apart.2 hglam) good
   · rw [processTransaction_of_lt_glamsterdam (Nat.lt_of_not_le hglam)] at h
-    exact liveAt_runTransaction hyp (frames (Nat.lt_of_not_le hglam)) hfork h live
+    exact goodAt_runTransaction hyp (frames (Nat.lt_of_not_le hglam)) hfork h
+      (apart.1 (Nat.lt_of_not_le hglam)) good
 
 end EthLib.Execution.Transactions

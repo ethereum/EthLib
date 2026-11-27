@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Checker
 public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Check
 
 /-!
@@ -27,33 +28,6 @@ open EthLib.Cryptography.Kzg.SetupTorsion (hexBytes xOf codes)
 open WeierstrassCurve.Jacobian
 
 /-! ## Decoding with the sign -/
-
-/-- The right side `x^3 + 4` of the curve equation, mod `p`. -/
-def rhs (x : Nat) : Nat := fadd (fmul (fmul x x) x) (4 % Fp.modulus)
-
-/-- The sign of `y`, as the encoding defines it: `y` is greater than `p - y`. -/
-def signBit (y : Nat) : Bool := y > Fp.modulus - y
-
-/-- The bytes encode the affine point `(x, y)`.
-
-The infinity flag is clear, `x` is the value of the bytes, and `y` is below `p`.
-
-The pair satisfies the curve equation, and the sign flag is the sign of `y`. -/
-def encodesBytes (x y : Nat) : List Nat → Bool
-  | [] => false
-  | h :: t =>
-    Nat.land (h % 256) 0x40 == 0 && xOf (h :: t) == x && Nat.blt y Fp.modulus &&
-      fmul y y == rhs x && signBit y == (Nat.land (h % 256) 0x20 != 0)
-
-/-- The list of digit codes encodes the affine point `(x, y)`.
-
-A string of 96 hexadecimal digits encodes `(x, y)` under three conditions.
-
-The value is `x`, `y^2 = x^3 + 4`, and the sign flag is the sign of `y`. -/
-def encodes (ns : List Nat) (x y : Nat) : Bool :=
-  match hexBytes ns with
-  | some l => encodesBytes x y l
-  | none => false
 
 /-- The infinity flag reads the same on the byte and on its value mod 256. -/
 private theorem flag40_aux :
@@ -148,10 +122,6 @@ theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
 /-- The point `(x, y, 1)` of `G1`, for naturals `x` and `y`. -/
 def affinePoint (x y : Nat) : G1 := ⟨Fp.ofNat x, Fp.ofNat y, Fp.one⟩
 
-/-- The pair is below `p`, and it satisfies the curve equation. -/
-def onCurve (x y : Nat) : Bool :=
-  Nat.blt x Fp.modulus && Nat.blt y Fp.modulus && fmul y y == rhs x
-
 theorem coords_affinePoint {x y : Nat} (h : onCurve x y = true) :
     coords (affinePoint x y) = (x, y, 1) := by
   simp only [onCurve, Bool.and_eq_true, Nat.blt_eq, beq_iff_eq] at h
@@ -170,11 +140,6 @@ theorem valid_affinePoint {x y : Nat} (h : onCurve x y = true) : Valid (affinePo
   exact h.2
 
 /-! ## Projective comparison -/
-
-/-- `(X, Y, Z)` with `Z ≠ 0`, `X = x Z^2` and `Y = y Z^3`, mod `p`. -/
-def sameAffine (q : Coords) (x y : Nat) : Bool :=
-  let z2 := fmul q.2.2 q.2.2
-  q.2.2 != 0 && q.1 == fmul x z2 && q.2.1 == fmul y (fmul z2 q.2.2)
 
 /-- A point that the comparison matches with `(x, y)` is the point `(x, y, 1)`.
 

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Evm.Call.BurnRun
 public import EthLib.Execution.Proofs.Evm.Call.StorageAt
 
 /-!
@@ -11,7 +12,7 @@ If each call that runs that code there keeps the invariant, so does every messag
 
 The message must start from the invariant, and run that code when it goes to the account.
 
-The proof assumes that no other code has the Keccak-256 hash of the given code.
+No frame of its run may output another code with the Keccak-256 hash of the given code.
 -/
 
 @[expose] public section
@@ -35,20 +36,24 @@ def HoldsCode (address : Address) (code : ByteArray) (tx : TransactionState) : P
 
 /-- What the proofs ask of the code of the contract.
 
-Its hash is not that of the empty code, and it names no delegate.
-
-No other code has its hash: an assumption on Keccak-256, which SOUNDNESS.md lists. -/
+Its hash is not that of the empty code, and it names no delegate. -/
 structure CodeHyp (code : ByteArray) : Prop where
   /-- The hash of the code is not the hash of the empty code. -/
   hash_ne : keccak256 code ≠ EMPTY_CODE_HASH
   /-- The code is no delegation indicator. -/
   noDelegate : delegatedAddress code = none
-  /-- No other code has the hash of the code.
 
-  It is not provable for any code, and is believed false for Keccak-256 as a function.
+/-- `other` is a code other than `code` with the Keccak-256 hash of `code`: a collision. -/
+def Collides (code other : ByteArray) : Prop :=
+  other ≠ code ∧ keccak256 other = keccak256 code
 
-  Until a random-oracle bound replaces it, the theorems that use it say nothing if it is false. -/
-  hashOnly : ∀ other, keccak256 other = keccak256 code → other = code
+/-- No frame that a run from `start` reaches outputs a code that collides with `code`.
+
+Each code that a creation deposits is the output of such a frame.
+
+It fails only if a frame of the run outputs an explicit collision of Keccak-256. -/
+def NoCollision (code : ByteArray) (start : BurnStart fork Meter) : Prop :=
+  ReachesAll (fun reached => ¬Collides code reached.output) start
 
 /-- The code names no delegate at any fork. -/
 theorem CodeHyp.noDelegateAt {code : ByteArray} (hyp : CodeHyp code) :
@@ -70,6 +75,11 @@ theorem CodeHyp.size_ne {code : ByteArray} (hyp : CodeHyp code) : code.size ≠ 
       rfl
   rw [this]
   rfl
+
+/-- The empty code, which an exceptional halt outputs, does not collide with the code. -/
+theorem CodeHyp.not_collides_empty {code : ByteArray} (hyp : CodeHyp code) :
+    ¬Collides code .empty := fun h =>
+  hyp.hash_ne (h.2.symm.trans rfl)
 
 /-- The code is no delegation indicator. -/
 theorem CodeHyp.not_valid {code : ByteArray} (hyp : CodeHyp code) :
@@ -178,17 +188,18 @@ theorem keepsAt_setStorage {other : Address} {key : Bytes32} {value : U256}
   .of_eq (by simp only [getAccount, getAccountOptional_setStorage h]) (getCode_setStorage h)
     (funext fun _ => getStorage_setStorage_of_ne h (.inl hne))
 
-/-- New code at another address keeps the account that holds `code`.
+/-- New code at another address keeps the account that holds `code`, if they do not collide.
 
-A code with the hash of `code` is `code`, by the hypothesis on its hash. -/
+A code with the hash of `code` is then `code`. -/
 theorem keepsAt_setCode (hyp : CodeHyp code) {other : Address} {code' : ByteArray}
-    (h : tx.setCode fork other code' = .ok tx') (hne : address ≠ other) :
-    KeepsAt address code tx tx' := by
+    (h : tx.setCode fork other code' = .ok tx') (hne : address ≠ other)
+    (apart : ¬Collides code code') : KeepsAt address code tx tx' := by
   intro ⟨hhash, hcode⟩
   obtain ⟨-, hother⟩ := getAccount_setCode h
   refine ⟨⟨by simp only [getAccount, hother address hne]; exact hhash, ?_⟩, ?_⟩
   · by_cases hk : keccak256 code = keccak256 code'
-    · rw [hyp.hashOnly code' hk.symm] at h
+    · have hsame : code' = code := Classical.byContradiction fun hc => apart ⟨hc, hk.symm⟩
+      rw [hsame] at h
       exact getCode_setCode_self h hyp.hash_ne
     · rw [getCode_setCode_of_ne h hk]
       exact hcode
@@ -350,44 +361,58 @@ def GoodAt (Inv : (Bytes32 → U256) → Prop) (tx : TransactionState) : Prop :=
 def RunsCode (message : Message fork) : Prop :=
   message.currentTarget = address → message.code = code ∧ message.target ≠ none
 
+/-- What a call keeps: its message, the block, and the invariant when it may run there.
+
+It also has a certificate of its run.
+
+It keeps the invariant only when no frame of its run outputs a code that collides with `code`. -/
+def CallGood (Inv : (Bytes32 → U256) → Prop) (message : Message fork)
+    (state : TransactionState) (substate : Substate) (meter : Meter)
+    (ended : Evm fork Meter) : Prop :=
+  ended.message = message ∧ ended.state.parent = state.parent ∧
+    (∃ log, RunBurns fork Meter (.call message state substate meter) ended log) ∧
+    (NoCollision code (.call message state substate meter) → GoodAt address code Inv state →
+      RunsCode address code message → GoodAt address code Inv ended.state)
+
+/-- What a creation keeps: the block, and the invariant when it goes to another address.
+
+It also has a certificate of its run.
+
+It keeps the invariant only when no frame of its run outputs a code that collides with `code`.
+
+It must run the code of no account, as every creation does. -/
+def CreateGood (Inv : (Bytes32 → U256) → Prop) (message : Message fork)
+    (state : TransactionState) (substate : Substate) (meter : Meter)
+    (ended : Evm fork Meter) : Prop :=
+  ended.state.parent = state.parent ∧
+    (∃ log, RunBurns fork Meter (.create message state substate meter) ended log) ∧
+    (NoCollision code (.create message state substate meter) → message.codeAddress = none →
+      GoodAt address code Inv state → message.currentTarget ≠ address →
+      GoodAt address code Inv ended.state)
+
 /-- Each call that runs `code` at `address` keeps `Inv` of its storage, and the code.
 
-Its frame starts as a call starts it, from a state where the account holds `code`.
-
 It keeps them when it ends with no error, and when its message runs no precompile.
-
-Its runner keeps them over each message that may run at `address`, from a state with them.
 
 A frame that sends DELEGATECALL or CALLCODE to other code gets nothing from its runner. -/
 def FramesKeepCode (fork : Fork) (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
     (Inv : (Bytes32 → U256) → Prop) : Prop :=
   ∀ {bound : Nat} {runChild : MessageRunner fork Meter bound},
-    RunnerEnsures (fun caller message child => GoodAt address code Inv caller.state →
-      RunsCode address code message → GoodAt address code Inv child.state) runChild →
+    RunnerEnsures (ChildRelByKind (CallGood address code Inv) (CreateGood address code Inv))
+      runChild →
     -- The frame is the start frame of a call to `address` that runs `code`.
+    --
+    -- It starts as a call starts it, from a state where the account holds `code`.
+    --
+    -- No frame that its run reaches outputs a code that collides with `code`.
     ∀ {message : Message fork} {state : TransactionState} {substate : Substate} {meter : Meter}
       {after : Evm fork Meter} {within : GasMeter.gasHeld meter ≤ bound},
       message.currentTarget = address → message.code = code → message.target ≠ none →
       precompileAddress fork message = none → GoodAt address code Inv state →
+      NoCollision code (.frame (startFrame message state substate meter)) →
       runFrame (step fork) (step_decreases fork) bound runChild
         (startFrame message state substate meter) within = .ok after →
       after.error = none → GoodAt address code Inv after.state
-
-/-- What a call keeps: its message, the block, and the invariant when it may run there. -/
-def CallGood (Inv : (Bytes32 → U256) → Prop) (message : Message fork)
-    (state : TransactionState) (_substate : Substate) (_meter : Meter)
-    (ended : Evm fork Meter) : Prop :=
-  ended.message = message ∧ ended.state.parent = state.parent ∧
-    (GoodAt address code Inv state → RunsCode address code message →
-      GoodAt address code Inv ended.state)
-
-/-- What a creation keeps: the block, and the invariant when it goes to another address. -/
-def CreateGood (Inv : (Bytes32 → U256) → Prop) (message : Message fork)
-    (state : TransactionState) (_substate : Substate) (_meter : Meter)
-    (ended : Evm fork Meter) : Prop :=
-  ended.state.parent = state.parent ∧
-    (GoodAt address code Inv state → message.currentTarget ≠ address →
-      GoodAt address code Inv ended.state)
 
 variable {address code}
 
@@ -400,71 +425,132 @@ theorem GoodAt.of_keepsAt {Inv : (Bytes32 → U256) → Prop} {tx tx' : Transact
 
 variable [LawfulGasMeter Meter] {Inv : (Bytes32 → U256) → Prop}
 
+omit [LawfulGasMeter Meter] in
+/-- A message that a runner ends as `CallGood` and `CreateGood` say has a certificate. -/
+theorem runBurns_of_childGood {caller child : Evm fork Meter} {message : Message fork}
+    (hc : ChildRelByKind (CallGood address code Inv) (CreateGood address code Inv) caller
+      message child) :
+    ∃ log, RunBurns fork Meter (BurnStart.child caller message) child log := by
+  unfold ChildRelByKind ChildRel at hc
+  unfold BurnStart.child
+  split at hc <;> rename_i htarget <;> simp only [htarget]
+  · exact hc.2.2.1
+  · exact hc.2.1
+
 /-- A run of a frame at another account keeps the invariant and the code of `address`.
 
-Its runner must keep them over each message that it runs. -/
+Its runner must keep them over each message that it runs.
+
+No frame that the run reaches may output a code that collides with `code`. -/
 theorem goodAt_runFrame (hyp : CodeHyp code) {bound : Nat}
     {runChild : MessageRunner fork Meter bound}
     (runs : RunnerEnsures (ChildRelByKind (CallGood address code Inv)
       (CreateGood address code Inv)) runChild)
     {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (hne : evm.message.currentTarget ≠ address) (good : GoodAt address code Inv evm.state)
+    (apart : NoCollision code (.frame evm))
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after) :
     GoodAt address code Inv after.state := by
   let T := stepRules_keepsAt (fork := fork) (Meter := Meter) (address := address) hyp
-  -- A frame at another account with the invariant keeps it.
-  let Q : Evm fork Meter → Prop := fun e =>
-    e.message.currentTarget ≠ address ∧ GoodAt address code Inv e.state
-  let R : Evm fork Meter → Evm fork Meter → Prop := fun a b =>
-    b.message = a.message ∧ (Q a → GoodAt address code Inv b.state)
-  have conv : ∀ {a b : Evm fork Meter}, (b.message = a.message ∧
-      (a.message.currentTarget ≠ address → KeepsAt address code a.state b.state)) → R a b :=
-    fun h => ⟨h.1, fun q => q.2.of_keepsAt (h.2 q.1)⟩
-  have r : R evm after := by
-    refine rel_runFrame (Inv := Q)
-      (C := ChildRelByKind (CallGood address code Inv) (CreateGood address code Inv))
-      (fun e => ⟨rfl, fun q => q.2⟩)
-      (fun {a b c} hab hbc => ⟨hbc.1.trans hab.1, fun q =>
-        hbc.2 ⟨by rw [hab.1]; exact q.1, hab.2 q⟩⟩)
-      (fun {a b} q hab => ⟨by rw [hab.1]; exact q.1, hab.2 q⟩)
-      (fun evm error _ => conv (T.static (staticStep_exceptionalHalt evm error)))
-      (fun {evm result} q _ hstep => ?_) (fun caller message lt ended _ hran =>
-        runs caller message lt ended hran) ⟨hne, good⟩ h
+  revert hne good apart h
+  refine runFrame_induct
+    (motive := fun evm _ r => evm.message.currentTarget ≠ address →
+      GoodAt address code Inv evm.state → NoCollision code (.frame evm) → r = .ok after →
+      GoodAt address code Inv after.state)
+    ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ evm within
+  · intro _ _ _ _ _ _ _ _ _ h
+    cases h
+  · -- An exceptional halt adds only reads.
+    intro e _ _ error _ _ hne good _ h
+    cases h
+    exact good.of_keepsAt ((T.static (staticStep_exceptionalHalt e error)).2 hne)
+  · intro e _ running next hstep _ ih hne good apart h
     have k := T.step hstep
-    cases result with
-    | next after => exact conv k
-    | child caller message resume =>
-      have kc := conv k.1
-      refine ⟨kc, fun child after hres hc => ?_⟩
-      have same := sameContext_of_step_eq_child hstep hres
-      have hstate : after.state = child.state := by rw [same.state, state_incorporateChild]
-      refine ⟨by rw [same.message, message_incorporateChild, kc.1], fun q' => ?_⟩
-      rw [hstate]
-      have gcaller := kc.2 q
-      unfold ChildRelByKind at hc
-      split at hc
-      · -- A call to `address` from another account runs the code that the account holds.
-        rename_i target htarget
-        refine (hc.2.2 gcaller fun hat => ⟨?_, by simp [htarget]⟩)
-        refine step_eq_child_callsCode hstep (by simp [htarget]) (by rw [hat]; exact Ne.symm q.1)
-          code ?_ hyp.noDelegateAt
-        rw [hat, q.2.1.1]
-        exact q.2.1.2
-      · -- A creation never goes to `address`, which holds code.
-        rename_i htarget
-        refine hc.2 gcaller fun hat => ?_
-        have hd := step_eq_child_deployable hstep htarget
-        rw [hat, q.2.1.not_deployable hyp] at hd
-        cases hd
-  exact r.2 ⟨hne, good⟩
+    exact ih (by rw [k.1]; exact hne) (good.of_keepsAt (k.2 hne))
+      (fun r hr => apart r (.next running hstep hr)) h
+  · intro _ _ _ _ _ _ _ _ _ _ _ _ _ h
+    cases h
+  · intro _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ h
+    cases h
+  · -- A resume that halts adds only reads.
+    intro e _ _ _ _ _ _ _ _ _ _ error _ _ hne good _ h
+    cases h
+    exact good.of_keepsAt ((T.static (staticStep_exceptionalHalt e error)).2 hne)
+  · intro e _ running caller message resume hstep _ child _ hran after resumed _ ih hne good apart
+      h
+    have k := (T.step hstep).1
+    have gcaller : GoodAt address code Inv caller.state := good.of_keepsAt (k.2 hne)
+    have hc := runs caller message _ _ hran
+    -- No frame of the run of the message outputs a code that collides.
+    have childApart : NoCollision code (BurnStart.child caller message) :=
+      fun r hr => apart r (.childRun running hstep hr)
+    obtain ⟨middle, run⟩ := runBurns_of_childGood hc
+    have same := sameContext_of_step_eq_child hstep resumed
+    have hstate : after.state = child.state := by rw [same.state, state_incorporateChild]
+    have hmessage : after.message = e.message := by
+      rw [same.message, message_incorporateChild, k.1]
+    refine ih (by rw [hmessage]; exact hne) ?_
+      (fun r hr => apart r (.childTail running hstep run resumed hr)) h
+    rw [hstate]
+    unfold ChildRelByKind ChildRel at hc
+    unfold BurnStart.child at childApart
+    split at hc <;> rename_i htarget <;> simp only [htarget] at childApart
+    · -- A call to `address` from another account runs the code that the account holds.
+      refine hc.2.2.2 childApart gcaller fun hat => ⟨?_, by simp [htarget]⟩
+      refine step_eq_child_callsCode hstep (by simp [htarget]) (by rw [hat]; exact Ne.symm hne)
+        code ?_ hyp.noDelegateAt
+      rw [hat, good.1.1]
+      exact good.1.2
+    · -- A creation never goes to `address`, which holds code.
+      refine hc.2.2 childApart (step_eq_child_codeAddress hstep htarget) gcaller fun hat => ?_
+      have hd := step_eq_child_deployable hstep htarget
+      rw [hat, good.1.not_deployable hyp] at hd
+      cases hd
+  · intro _ _ _ hne good _ h
+    cases h
+    exact good
+
+omit [LawfulGasMeter Meter] in
+/-- A deposit of code at another address keeps the invariant, after an init code that keeps it.
+
+The init code runs the code of no account, and no frame of its run outputs a code that collides.
+
+So the code that it deposits is `code`, or has another hash. -/
+theorem goodAt_depositCode (hyp : CodeHyp code) {message : Message fork}
+    {state prepared : TransactionState} {substate : Substate} {meter : Meter}
+    {evm after : Evm fork Meter} {log : BurnLog}
+    (run : RunBurns fork Meter (.call message prepared substate meter) evm log)
+    (hmessage : evm.message = message) (hparent : evm.state.parent = state.parent)
+    (apart : NoCollision code (.call message prepared substate meter))
+    (hcode : message.codeAddress = none) (hne : message.currentTarget ≠ address)
+    (good : GoodAt address code Inv state) (hgood : GoodAt address code Inv evm.state)
+    (hd : depositCode fork state evm = .ok after) : GoodAt address code Inv after.state := by
+  -- A deposit after an error rolls the state back.
+  by_cases herr : evm.error = none
+  · rcases (depositCode_cases hd).2.2 with hs | hs | hs
+    · rw [hs]
+      exact good.of_keepsAt (keepsAt_restoreTxState hparent)
+    · rw [hs]
+      exact hgood
+    · have selected : precompileAddress fork message = none := by
+        simp [precompileAddress, hcode]
+      have hout := apart evm (run.reaches_of_call selected herr)
+      rw [hmessage] at hs
+      exact hgood.of_keepsAt (keepsAt_setCode hyp hs (Ne.symm hne) hout)
+  · have hs : after.state = evm.state.restoreTxState state := by
+      unfold depositCode at hd
+      have hsome : evm.error.isSome = true := Option.isSome_iff_ne_none.mpr herr
+      simp only [hsome, ↓reduceIte] at hd
+      cases hd
+      rfl
+    rw [hs]
+    exact good.of_keepsAt (keepsAt_restoreTxState hparent)
 
 /-- Every call and creation that returns a frame keeps the invariant and the code of `address`.
 
 Each frame that runs `code` at `address` must keep them.
 
-A call must start where the account holds `code`, and run it if it goes there.
-
-A creation must go to another address. -/
+No frame of the run may output a code that collides with `code`. -/
 theorem goodAt_processMessage_induction (hyp : CodeHyp code)
     (frames : FramesKeepCode address code fork Meter Inv) (n : Nat) :
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
@@ -475,26 +561,31 @@ theorem goodAt_processMessage_induction (hyp : CodeHyp code)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         CreateGood address code Inv message state substate meter ended.val) := by
-  -- A frame keeps its message and the block, and the invariant when it ends with no error.
+  -- A frame keeps its message and the block, has a certificate, and keeps the invariant.
   --
   -- Only start frames of messages need the invariant, since a call starts its frame there.
   let F : Evm fork Meter → Evm fork Meter → Prop := fun evm after =>
     after.message = evm.message ∧ after.state.parent = evm.state.parent ∧
+      (∃ log, RunBurns fork Meter (.body evm) after log) ∧
       ∀ (message : Message fork) (entry : TransactionState) (substate : Substate) (meter : Meter),
         evm = startFrame message entry substate meter →
+        (precompileAddress fork evm.message = none → NoCollision code (.frame evm)) →
         GoodAt address code Inv entry → RunsCode address code message →
         after.error = none → GoodAt address code Inv after.state
-  have kept : ∀ {a b : Evm fork Meter}, StaticStep a b → F a b := fun h =>
-    ⟨h.message, h.parent, fun _ _ _ _ he good _ _ =>
+  have kept : ∀ {a b : Evm fork Meter}, StaticStep a b →
+      (∃ log, RunBurns fork Meter (.body a) b log) → F a b := fun h burns =>
+    ⟨h.message, h.parent, burns, fun _ _ _ _ he _ good _ _ =>
       (he ▸ good : GoodAt address code Inv _).of_keepsAt (keepsAt_staticStep h)⟩
   refine processMessage_frame_byKind (F := F) (Mcall := CallGood address code Inv)
     (Mcreate := CreateGood address code Inv)
     (fun {bound runChild evm after within} runs hpre h => ?_)
-    (fun _ _ _ => kept (.of_sameContext ⟨rfl, rfl, rfl, rfl⟩))
-    (fun _ _ h => kept (staticStep_runPrecompile h))
+    (fun evm selected skipped => kept (.of_sameContext ⟨rfl, rfl, rfl, rfl⟩)
+      ⟨_, .skipPrecompile evm _ selected skipped⟩)
+    (fun selected enabled h => kept (staticStep_runPrecompile h)
+      ⟨_, .precompile selected enabled h⟩)
     (fun {message state entry substate entrySubstate meter ended} hentry hrun => ?_)
     (fun {message state prepared substate meter evm after} hp hm hd => ?_) n
-  · -- Each message keeps the block, and the invariant when it may.
+  · -- Each message keeps the block, has a certificate, and keeps the invariant when it may.
     have parents : KeepsParent runChild := by
       intro caller message lt ended hran
       have hc := runs caller message lt ended hran
@@ -502,63 +593,66 @@ theorem goodAt_processMessage_induction (hyp : CodeHyp code)
       split at hc
       · exact hc.2.1
       · exact hc.1
-    have goods : RunnerEnsures (fun caller message child => GoodAt address code Inv caller.state →
-        RunsCode address code message → GoodAt address code Inv child.state) runChild := by
-      intro caller message lt ended hran good hruns
-      have hc := runs caller message lt ended hran
-      unfold ChildRelByKind ChildRel at hc
-      split at hc
-      · exact hc.2.2 good hruns
-      · rename_i htarget
-        exact hc.2 good fun hat => (hruns hat).2 htarget
-    refine ⟨message_runFrame h, parent_runFrame parents h,
-      fun message entry substate meter he good hruns herr => ?_⟩
+    obtain ⟨log, run⟩ := runBurns_runFrame
+      (fun caller message lt ended hran =>
+        runBurns_of_childGood (runs caller message lt ended hran)) h
+    refine ⟨message_runFrame h, parent_runFrame parents h, ⟨log, .bodyFrame hpre run⟩,
+      fun message entry substate meter he apart good hruns herr => ?_⟩
+    have apart' := apart hpre
     subst he
     by_cases hat : message.currentTarget = address
-    · exact frames goods hat (hruns hat).1 (hruns hat).2 hpre good h herr
-    · exact goodAt_runFrame hyp runs hat good h
+    · exact frames runs hat (hruns hat).1 (hruns hat).2 hpre good apart' h herr
+    · exact goodAt_runFrame hyp runs hat good apart' h
   · -- A call ends in its frame, or in the state it is sent from after a failure.
-    have hparent : ended.state.parent = state.parent := hrun.2.1.trans (parent_entered hentry)
-    refine ⟨(message_rollbackOnError state ended).trans hrun.1,
-      (parent_rollbackOnError state ended).trans hparent, fun good hruns => ?_⟩
+    obtain ⟨hmessage, hp, ⟨log, run⟩, hgood⟩ := hrun
+    have hparent : ended.state.parent = state.parent := hp.trans (parent_entered hentry)
+    refine ⟨(message_rollbackOnError state ended).trans hmessage,
+      (parent_rollbackOnError state ended).trans hparent, ⟨_, .call hentry run hparent⟩,
+      fun apart good hruns => ?_⟩
     unfold rollbackOnError
     split
     · exact good.of_keepsAt (keepsAt_restoreTxState hparent)
     · rename_i hok
-      exact hrun.2.2 message entry entrySubstate meter rfl
+      exact hgood message entry entrySubstate meter rfl
+        (fun hpre r hr => apart r (.call hentry (.body hpre hr)))
         (good.of_keepsAt (keepsAt_entered hyp hentry)) hruns (Option.not_isSome_iff_eq_none.mp hok)
   · -- A creation at another address prepares it, runs its init code, then deposits the code.
-    have hparent : evm.state.parent = state.parent := hm.2.1.trans (parent_prepareCreation hp)
-    refine ⟨(parent_depositCode hd).trans hparent, fun good hne => ?_⟩
-    have hgood : GoodAt address code Inv evm.state :=
-      hm.2.2 (good.of_keepsAt (keepsAt_prepareCreation hyp hp (Ne.symm hne)))
-        fun hat => absurd hat hne
-    rcases (depositCode_cases hd).2.2 with hs | hs | hs
-    · rw [hs]
-      exact good.of_keepsAt (keepsAt_restoreTxState hparent)
-    · rw [hs]
-      exact hgood
-    · rw [hm.1] at hs
-      exact hgood.of_keepsAt (keepsAt_setCode hyp hs (Ne.symm hne))
+    obtain ⟨hmessage, hp', ⟨log, run⟩, hgood⟩ := hm
+    have hparent : evm.state.parent = state.parent := hp'.trans (parent_prepareCreation hp)
+    refine ⟨(parent_depositCode hd).trans hparent, ?_, fun apart hcode good hne => ?_⟩
+    · rcases (depositCode_cases hd).2.2 with rolled | kept | coded
+      · exact ⟨_, .createRollback hp run hd rolled hparent⟩
+      · exact ⟨_, .createKeep hp run hd (.inl kept)⟩
+      · exact ⟨_, .createKeep hp run hd (.inr coded)⟩
+    have runApart : NoCollision code (.call message prepared substate meter) :=
+      fun r hr => apart r (.create hp hr)
+    exact goodAt_depositCode hyp run hmessage hparent runApart hcode hne good
+      (hgood runApart (good.of_keepsAt (keepsAt_prepareCreation hyp hp (Ne.symm hne)))
+        fun hat => absurd hat hne) hd
 
 /-- A call that returns a frame keeps the invariant and the code of `address`.
 
 Each frame that runs `code` at `address` must keep them.
 
-The call must start where the account holds `code`, and run it if it goes there. -/
+The call must start where the account holds `code`, and run it if it goes there.
+
+No frame of its run may output a code that collides with `code`. -/
 theorem goodAt_processMessage (hyp : CodeHyp code)
     (frames : FramesKeepCode address code fork Meter Inv) {message : Message fork}
     {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processMessage fork message state substate meter held = .ok ended)
+    (apart : NoCollision code (.call message state substate meter))
     (good : GoodAt address code Inv state) (runs : RunsCode address code message) :
     GoodAt address code Inv ended.val.state :=
   ((goodAt_processMessage_induction hyp frames message.gas).1 message state substate meter held
-    rfl ended h).2.2 good runs
+    rfl ended h).2.2.2 apart good runs
 
 /-- A creation elsewhere that returns a frame keeps the invariant and the code of `address`.
 
 Each frame that runs `code` at `address` must keep them.
+
+It must run the code of no account, and no frame of its run may output a code that collides.
 
 It holds at every fork, whether or not the frame of the creation halts with an error. -/
 theorem goodAt_processCreateMessage (hyp : CodeHyp code)
@@ -566,9 +660,11 @@ theorem goodAt_processCreateMessage (hyp : CodeHyp code)
     {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processCreateMessage fork message state substate meter held = .ok ended)
+    (apart : NoCollision code (.create message state substate meter))
+    (hcode : message.codeAddress = none)
     (good : GoodAt address code Inv state) (hne : message.currentTarget ≠ address) :
     GoodAt address code Inv ended.val.state :=
   ((goodAt_processMessage_induction hyp frames message.gas).2 message state substate meter held
-    rfl ended h).2 good hne
+    rfl ended h).2.2 apart hcode good hne
 
 end EthLib.Execution.Evm

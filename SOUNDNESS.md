@@ -658,13 +658,31 @@ A selection therefore compares `mixOutput`, the hash of the output with randomne
 The mix is a random oracle, and the tree hash is Keccak-256 itself.
 The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
 The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
-No theorem bounds that last chance.
-The uniqueness bound above takes the tree hash as a random oracle, while this theorem takes it as Keccak-256 itself.
+`Proofs/Vrf/SelectionRandomOracle.lean` bounds the chance that this search finds a pair in an experiment of its own, with the tree hash a random oracle, as in the uniqueness bound above.
+No theorem composes the two bounds, so no theorem bounds that last chance with Keccak-256 itself, which `prEvent_selected_le` takes as the tree hash.
 The theorem says nothing about a holder that registers a root without knowing a tree under it.
 That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
 It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
 The game is EthLib's own.
 `selected_iff_mixOutput` shows that, with `mixOutput` in place of the oracle, its event is exactly the protocol's check.
+
+`prEvent_extractCollision_isSome_le_two_pow` (`Proofs/Vrf/SelectionRandomOracle.lean`) bounds the probability that the search against the honest opening finds a pair, with the tree hash a random oracle.
+An adversary makes classical queries to that oracle, then outputs the secrets of a tree, an index and an opening.
+The experiment builds the honest opening at that index as `opening` does, with a query for each Keccak-256 call.
+It then runs the search on the two openings, again with a query for each Keccak-256 call.
+The search finds a pair with probability at most `Q^2 / 2^256`, where `Q` bounds the oracle queries of the whole experiment.
+`extractCollision_pure` shows that, with any function as the hash, this search is `findHashCollisionWith` on the opening and the honest opening that the function builds.
+`extractCollision_keccak256` shows that, with Keccak-256 in place of the oracle, it is `findHashCollision` on the opening and the honest opening.
+`Selection.Collides` is the event of the last term above.
+`Selection.collides_iff_extractCollision` shows that it holds for a run of the selection game exactly when this search, with Keccak-256, finds a pair.
+`collision_of_extractCollision` shows that every pair found leaves two different cached inputs with one answer.
+For the node inputs it uses `collision_of_replay_findCollision` (`Proofs/Merkle/RandomOracle/Collision.lean`).
+That theorem holds for any node hash whose replay reads the cache at one input that determines its two children.
+`extractCollision_queryBound` shows that the honest opening, the two leaf hashes and the search make at most `2^(h + 1) + 2 h` queries, for a tree of height `h`.
+The honest opening makes at most `2^(h + 1) - 2` of them (`openingWith_queryBound`), the two leaves make two, and the search makes at most two per level.
+`prEvent_extractCollision_isSome_le_of_adversary` states the bound with `Q = q + 2^(h + 1) + 2 h` for an adversary of at most `q` hash queries, which is `q + 2^33 + 64` at height 32.
+The adversary of this experiment outputs the secrets, the index and the opening directly, and no theorem turns a selection holder into such an adversary.
+Carrying this bound over to Keccak-256 is an idealisation of A4, not a theorem.
 
 [EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
 The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
@@ -2452,15 +2470,21 @@ The assumption under the state gas meter must give the one under one counter, fo
 Each call that runs that code at the account must keep the invariant, as a proof about the contract shows.
 The message must start where the account holds the code and its storage meets the invariant, run the code if it goes there, and return a frame.
 `Execution/Proofs/Transactions/StorageInvariant.lean` and `Execution/Proofs/Blocks/StorageInvariant.lean` carry it to transactions, system calls, blocks and chains.
-They need the account to have a nonce of at least 1, which leaves out a contract deployed before Spurious Dragon with nonce 0.
 The theorems over transactions, blocks and chains also need Cancun or later, where SELFDESTRUCT deletes only accounts that the transaction created.
 From Hegotá a transaction and a block fail, so those theorems hold there with nothing to show.
-Each of these theorems assumes that no other code has the Keccak-256 hash of that code (`CodeHyp.hashOnly`).
 The state keeps each code under its hash.
-So a creation that deploys a second preimage would change the code that a later call to the account runs.
-`CodeHyp.hashOnly` is not provable for any code, and is believed false for Keccak-256 as a function.
-Until a random-oracle bound on Keccak-256, like the bounds for the trie and state roots, replaces it, these theorems hold only under the assumption, and say nothing formally if it is false.
-That includes the theorem over chains, `BlockChain.Reaches.liveAt`.
+So a code with the Keccak-256 hash of that code, stored by the run, would change the code that a later call to the account runs.
+Each theorem assumes that the runs it covers output and set no such code.
+A code that a run stores is the output of a frame of a creation, or the delegation code of an authorization.
+`NoCollision` says that no frame that the run reaches outputs a code other than that code with its hash (`Collides`).
+`CallApart`, `TransactionApart`, `SystemCallApart`, `BodyApart` and `BlockApart` add that no authorization sets such a code, for a transaction, a system call, a block and a block on a chain.
+For a block that passes its transition, each of these hypotheses names the runs that it performs, from the states where it performs them, and the authorizations that its transactions list.
+So it fails only if a frame of one of those runs outputs, or an authorization sets, a code other than that code with its hash: an explicit collision.
+When the code is fixed before the chain, as the code of EIP-2935 is, falsifying the hypothesis means finding a second preimage of its hash.
+No theorem bounds the probability of that; the theorems turn each failure into an explicit pair.
+The theorem over chains, `BlockChain.Reaches.goodAt`, takes it for each block through the predicate of `BlockChain.Reaches`.
+`HistoryStorage.ring_of_reaches` (`Execution/Proofs/Blocks/SystemCall/HistoryRing.lean`) applies it to the history storage contract of EIP-2935: from Cancun to BPO5, every slot at or above 8191 reads 0 in every state that a chain reaches from a state where the contract holds its code and that property.
+It covers no fork from Glamsterdam, whose gas meter needs its own proof about the code.
 
 ### SHA-256 precompile
 
@@ -3895,7 +3919,7 @@ It needs slots that last a positive time, and honest stores that start with no h
 A store built from an anchor starts with none, by `Store.getForkchoiceStore_equivocatingIndices`.
 In the model an honest validator signs a vote only after checking it against its own votes in its view.
 Each of its votes in a sent message stays in its view, so no two of them can be slashed together.
-`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
+`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
 
 `Execution.isSlashableAttestationData_honest` (`Consensus/Proofs/ForkChoice/HonestEquivocators.lean`) proves that no two votes of one honest validator in sent messages can be slashed together, when slots last a positive time.
 The check before signing that gives it is the last condition of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`), a rule on the votes in the validator's view.
@@ -8748,6 +8772,8 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
 - VRF uniqueness: Keccak-256 is a random oracle on byte strings, shared by the leaves, the nodes and the outputs of the tree.
+  The same assumption carries the bound on the collision search of a selection, `prEvent_extractCollision_isSome_le_two_pow`.
+  There the oracle answers every Keccak-256 call of the honest opening and of the search.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -8758,6 +8784,9 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of Keccak-f[1600].
 - VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
   That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
+  The bound on the collision search of a selection takes the tree hash as a random oracle instead, under the VRF uniqueness assumption above.
+  A composed bound would take the tree hash as a random oracle in the selection theorem too.
+  One oracle on byte strings gives independent oracles on the disjoint input lengths of the mix and the tree, but no theorem states that composition.
   The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.
   No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
   The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
@@ -8906,8 +8935,9 @@ No caller passes one: EXP reduces modulo `2 ^ 256`, X25519 modulo its prime, and
 
 ### B3. Native code during elaboration
 
-The `EthLib`, `Exports` and `PythonConversions` libraries set `precompileModules := true`.
+The `Exports` and `PythonConversions` libraries set `precompileModules := true`.
 So `#eval`, or a tactic that evaluates, in any module that imports them runs natively compiled code.
+In a module that imports only the specification, it runs the interpreter, unless that module's library or package precompiles its imports.
 A proof is unaffected unless it uses one of the tactics of C2.
 
 ### B4. The C boundary

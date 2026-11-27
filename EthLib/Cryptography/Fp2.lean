@@ -43,15 +43,26 @@ instance : One (Fp2 F) := ⟨one⟩
 @[inline] def sub (a b : Fp2 F) : Fp2 F := ⟨a.c0 - b.c0, a.c1 - b.c1⟩
 @[inline] def neg (a : Fp2 F)   : Fp2 F := ⟨-a.c0, -a.c1⟩
 
+/-- The product, by the Karatsuba method of [Devegili et al.][dev], §3, with `β = -1`.
+
+It takes three products of the base field instead of four.
+
+[dev]: https://eprint.iacr.org/2006/471
+-/
 @[inline] def mul (a b : Fp2 F) : Fp2 F :=
   -- The product follows from `i^2 = -1`.
   --
   -- (a0 + a1·i)(b0 + b1·i) = (a0·b0 − a1·b1) + (a0·b1 + a1·b0)·i
-  ⟨a.c0 * b.c0 - a.c1 * b.c1, a.c0 * b.c1 + a.c1 * b.c0⟩
+  --
+  -- §3: `v0 = a0 b0` and `v1 = a1 b1`.
+  let v0 := a.c0 * b.c0
+  let v1 := a.c1 * b.c1
+  -- §3: `c0 = v0 + β v1` and `c1 = (a0 + a1)(b0 + b1) - v0 - v1`.
+  ⟨v0 - v1, (a.c0 + a.c1) * (b.c0 + b.c1) - v0 - v1⟩
 
 /-- Squaring, by the complex method of [Devegili et al.][dev], §3, with `β = -1`.
 
-It takes two products of the base field, where the product of two elements takes four.
+It takes two products of the base field, where the product of two elements takes three.
 
 [dev]: https://eprint.iacr.org/2006/471
 -/
@@ -62,6 +73,9 @@ It takes two products of the base field, where the product of two elements takes
   --
   -- §3: `c1 = 2 v0`.
   ⟨(a.c0 + a.c1) * (a.c0 - a.c1), t + t⟩
+
+/-- The product by an element of the base field, with two products of the base field. -/
+@[inline] def mulFp (a : Fp2 F) (x : F) : Fp2 F := ⟨a.c0 * x, a.c1 * x⟩
 
 instance : Add (Fp2 F) := ⟨add⟩
 instance : Sub (Fp2 F) := ⟨sub⟩
