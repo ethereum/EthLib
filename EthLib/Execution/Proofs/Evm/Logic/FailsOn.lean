@@ -136,10 +136,16 @@ theorem of_child [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
   | error e =>
     exact ⟨evm, .refl evm, .inr ⟨running, caller, message, resume, sent, hS, lt, e, ran⟩⟩
   | ok child =>
-    rcases hresume child.1 child.2 (meets caller message lt child ran) with
-      ⟨after, resumed, hq⟩ | ⟨e, failed, halts, hq⟩
-    · exact ⟨after, .single (.child running sent lt ran resumed), .inl hq⟩
-    · exact ⟨_, .single (.childHalt running sent lt ran failed halts), .inl hq⟩
+    -- The resume from the frame that ends the message ends in `Q`.
+    have ends : Ends evm Q (resume child.1) := by
+      rcases hresume child.1 child.2 (meets caller message lt child ran) with
+        ⟨after, resumed, hq⟩ | ⟨e, failed, halts, hq⟩
+      · rw [resumed]; exact hq
+      · rw [failed]; exact ⟨halts, hq⟩
+    -- So the frame meets the weakest precondition of its step, and one step reaches `Q`.
+    obtain ⟨after, hstep, hq⟩ :=
+      (wpFrame_iff running).mp (wpFrame_iff_endsBy.mpr (by rw [sent]; exact ⟨lt, child, ran, ends⟩))
+    exact ⟨after, .single hstep, .inl hq⟩
 
 /-- A stronger assumption on the frames that end messages keeps a triple. -/
 theorem assumption {callee' : Evm fork Meter → Message fork → Evm fork Meter → Prop}

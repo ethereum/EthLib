@@ -4,6 +4,8 @@ module
 public import EthLib.Execution.Proofs.Evm.Logic.Reach
 -- This import gives triples over those frames.
 public import EthLib.Execution.Proofs.Evm.Logic.Triple
+-- This import gives the weakest precondition of every opcode, and the theorem that states it.
+public import EthLib.Execution.Proofs.Evm.Logic.Wp
 public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
 -- This import gives rules for loops.
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
@@ -29,6 +31,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Callee
 -- This import gives rules for opcodes.
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
 public import EthLib.Execution.Proofs.Evm.Logic.Environment
+public import EthLib.Execution.Proofs.Evm.Logic.Accounts
 public import EthLib.Execution.Proofs.Evm.Logic.Copy
 public import EthLib.Execution.Proofs.Evm.Logic.Region
 public import EthLib.Execution.Proofs.Evm.Logic.Known

@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `wp` (`Execution/Proofs/Evm/Logic/Wp.lean`) is the weakest precondition of an opcode at a fork, defined by a match on every opcode ([#4789](https://github.com/ethereum/EthLib/issues/4789)).
+  `wp_iff` and `wpFrame_iff` (`Logic/Message.lean`) prove, for every opcode and every fork, that a running frame whose byte decodes to the opcode meets it exactly when one step under a runner of messages reaches a frame of the postcondition.
+  `Hoare.of_wp` turns it into a triple of one step.
+  `At.rule`, `Step.of_instruction`, `HoareUnder.of_child` and `HoareOn.of_child` are proved through these theorems, with their statements unchanged.
+  `Logic/Accounts.lean` gives the rules of BLOCKHASH, BLOBHASH, TLOAD, TSTORE and SELFBALANCE, and of BALANCE and EXTCODEHASH from Berlin, over the one-counter meter.
+
 - In Lean, `prEvent_bodyWins_le` (`Execution/Proofs/Network/BodiesRandomOracle.lean`) bounds the probability of finding a header and two different bodies that pass for it, with the hash a random oracle, by `Q^2 / 2^256` ([#4612](https://github.com/ethereum/EthLib/issues/4612)).
   `withdrawalsRootM_binding` (`Execution/Proofs/Blocks/Roots.lean`) states the binding of the withdrawals root for any plain hash, with `withdrawalsRootM_eq` and `withdrawalsRootM_eq_ok_iff` (`Execution/Proofs/Blocks/TypedRoots.lean`).
   `checkTransactionsM_eq`, `checkWithdrawalsM_eq`, `checkOmmersM_eq`, `checkBodyM_eq`, `checkOmmers_eq` and `checkBody_eq` (`Execution/Proofs/Network/Bodies.lean`) state the checks with a plain hash.
