@@ -1192,6 +1192,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the rules of `Execution/Proofs/Evm/Logic/Known.lean` for MSTORE, MSTORE8, MCOPY, CALLDATACOPY and CODECOPY keep the parts of a fact outside the range they write, as `keep start length facts`.
+  Before, they kept only the facts apart from the range, `facts.filter (Apart start length)`, and dropped a fact that the write overlaps in part.
+  `known_of_write` changes the same way, and `holdsAll_memoryWrite_keep` is the new form of `holdsAll_memoryWrite`, which still holds.
+  `mload_known_read` and `keccak256_known_read` read a range along adjacent facts, or within one, through `readFacts`, and `evm_stepK` applies them, with the tactic `evm_read`.
+  `revert_none` reverts with no output from any memory ([#4789](https://github.com/ethereum/EthLib/issues/4789)).
+
 - In Lean, the fee of the withdrawal and consolidation request contracts is defined once, on the structure of a request contract (`Execution/Proofs/Blocks/SystemCall/RequestQueue.lean`) ([#4796](https://github.com/ethereum/EthLib/issues/4796)).
   `WithdrawalRequests.fee` and `ConsolidationRequests.fee` are removed: use `WITHDRAWAL_REQUEST.fee` and `CONSOLIDATION_REQUEST.fee`.
   `getFeeResult` and `pays` of each contract now unfold to the same functions of the structure.
