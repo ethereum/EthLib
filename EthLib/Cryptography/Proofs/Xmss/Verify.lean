@@ -76,6 +76,26 @@ theorem layerRoot_run {publicParam : PublicParam} {layer : Layer} {e : Nat} {msg
   | none => rfl
   | some leaf => rfl
 
+/-- A layer whose digest is no codeword leads to no root. -/
+theorem layerRoot_run_none {publicParam : PublicParam} {layer : Layer} {e : Nat}
+    {msg : Array UInt64} {sig : LayerSignature}
+    (h : codeword? (messageDigest (pureHash f) publicParam layer (UInt32.ofNat e) msg
+      sig.randomizer).run = none) :
+    (layerRoot (pureHash f) publicParam layer e msg sig).run = none := by
+  simp [layerRoot_run, otsLeaf_run, h]
+
+/-- A layer whose digest is the codeword `x` leads to the root that its leaf's path climbs to. -/
+theorem layerRoot_run_some {publicParam : PublicParam} {layer : Layer} {e : Nat}
+    {msg : Array UInt64} {sig : LayerSignature} {x : Vector (Fin CHAIN_LENGTH) V}
+    (h : codeword? (messageDigest (pureHash f) publicParam layer (UInt32.ofNat e) msg
+      sig.randomizer).run = some x) :
+    (layerRoot (pureHash f) publicParam layer e msg sig).run =
+      some (fold (pureHash f) publicParam layer e (otsLeafHash (pureHash f) publicParam layer
+        (UInt32.ofNat e) (Vector.ofFn fun i : Fin V => (chain (pureHash f) publicParam layer
+          (UInt32.ofNat e) i x[i] (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega)
+            sig.chainValues[i]).run)).run sig.path).run := by
+  simp [layerRoot_run, otsLeaf_run, h]
+
 /-- What the verifier computes.
 
 Whether both layers succeed and the top one reaches the key's root. -/
