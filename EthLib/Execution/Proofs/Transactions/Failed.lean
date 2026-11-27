@@ -137,7 +137,7 @@ theorem createdAccounts_foldlM_applyAuthorization {chainId : Nat} :
 
 That holds for each account and each word of storage and transient storage.
 
-The code at each code hash reads as before too. -/
+It has the code of that state at each code hash. -/
 theorem processCreateMessage_reads_of_error [LawfulGasMeter Meter]
     {message : Message fork} {state : State.TransactionState} {substate : Substate}
     {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas} {ended}

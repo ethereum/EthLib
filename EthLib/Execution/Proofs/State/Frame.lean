@@ -471,7 +471,6 @@ theorem sameOutside_restoreTxState {tx snapshot : TransactionState}
       getStorage_restoreTxState hparent address,
       getTransientStorage_restoreTxState tx snapshot address⟩
 
-
 /-! ## A state that reads as another -/
 
 /-- The state `tx` reads as the state `S`.
