@@ -77,8 +77,10 @@ structure BlockStep.Covers (preset : Preset) (step : BlockStep) (limits : BlockL
 
   It covers the largest cap for each validator that the slashings name. -/
   slashed : limits.slashings * preset.largestEffectiveBalance ≤ step.slashed
-  /-- The effective step covers the new validators, at the largest cap for each deposit. -/
-  effective : limits.joins * preset.largestEffectiveBalance ≤ step.effective
+  /-- The effective step covers the new validators, at `MAX_EFFECTIVE_BALANCE` for each deposit.
+
+  From Electra a deposit of a block adds a validator with no effective balance. -/
+  effective : limits.joins * preset.MAX_EFFECTIVE_BALANCE.toNat ≤ step.effective
   /-- The load step covers twice the load limit, the weight of the load before Electra. -/
   load : 2 * limits.load ≤ step.load
   /-- The supply step covers the deposits, the whistleblower rewards and the sync rewards.
@@ -358,13 +360,12 @@ private theorem RunBounded.of_processBlock {fork : Fork} {engine : ExecutionEngi
       blockRewardCap preset state ≤ budget := by
     have syncLe := coversSupply
     omega
-  -- The effective balances rise by at most the largest cap for each new validator.
+  -- The effective balances rise by at most `MAX_EFFECTIVE_BALANCE` for each new validator.
   have sizeLe := processBlock_validators_size_le computed
   have joinsLe := bounded.joins
-  have effectiveAfter := processBlock_effectiveBalanceSum_le baseRun.caps.compounding capped
-      computed
+  have effectiveAfter := processBlock_effectiveBalanceSum_le computed
   have risen : (after.validators.data.size - state.validators.data.size) *
-      preset.largestEffectiveBalance ≤ step.effective :=
+      preset.MAX_EFFECTIVE_BALANCE.toNat ≤ step.effective :=
     (Nat.mul_le_mul_right _ (by omega)).trans covers.effective
   have effectiveField : effectiveBalanceSum after ≤
         (start.afterChain step (blocks + 1) elapsed).effective ∨
