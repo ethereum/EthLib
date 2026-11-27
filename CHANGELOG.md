@@ -20,7 +20,7 @@ Not yet released.
   - The receiver: the honest `receiver`, up to date (`ready`), with a justified checkpoint of the target epoch (`sameEpoch`); both events are by the limit (`callBound`, `byTime`).
   - The pin `pins` (`JustifiedPinned` at the anchor's justified epoch).
   In `Consensus/Proofs/ForkChoice/FastConfirmation/PinJustified.lean`, `Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setting` derives the pin and the held-state fork bound from the setting from Fulu until Gloas.
-  It takes the same premises without `early` and `pins`, and adds `[DecidablePred (· ∈ J)]`, `bls`, `header`, `zero`, `delay`, `unslashed`, `finality`, `guarded`, `preGloas`, `fusaka`, `forkWindow`, `bands`, `caps`, `exitWindow`, `maxAligned`, `long` and `facts`.
+  It takes the same premises without `early` and `pins`, and adds `[DecidablePred (· ∈ J)]`, `bls`, `header` and `zero` (the anchor header matches the anchor block except for its zero state root), `delay` (a positive inclusion delay), `unslashed` (no honest slashing in counted states), `finality` (an honest justified chain reads an honest finalized checkpoint when its epoch reaches that checkpoint's), `guarded`, `preGloas`, `fusaka`, `forkWindow`, `bands`, `caps`, `exitWindow`, `maxAligned`, `long` and `facts`.
 
 - In Lean, `Execution/Proofs/State/RandomOracle.lean` bounds the probability of finding two storages, or two states, with one root that differ, with the hash a random oracle.
   `prEvent_storageWins_le` and `prEvent_stateWins_le` give the bound `Q^2 / 2^256`, for `Q` hash calls of the experiment.

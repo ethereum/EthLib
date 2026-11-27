@@ -881,8 +881,10 @@ variable {Δ time : ℕ} {anchor : Store preset fork} {horizon : Epoch} {margin 
   -- Slots are nonempty, the delay fits a slot, and honest stores agree on duty windows.
   (slots : 0 < config.SLOT_DURATION_MS) (fits : DelayFits fork config genesisTimeMs Δ)
   (windows : AssignmentWindowAgreement (e := e) time) (params : DirectSafety.Parameters preset)
-  -- Held block states have nonzero roots, and no honest store holds the anchor's parent.
-  (roots : HeldBlockStateRootsNonzero (e := e) time) (absent : AnchorParentAbsent (e := e) time)
+  -- Through the limit, honest stores hold only blocks with nonzero state roots.
+  (roots : HeldBlockStateRootsNonzero (e := e) time)
+  -- Through the limit, no honest store holds the anchor's parent.
+  (absent : AnchorParentAbsent (e := e) time)
   -- The anchor state comes from genesis by a run.
   (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
   -- Honest store epochs are within the horizon, with the run and terminal stake floors.
@@ -908,7 +910,7 @@ variable {Δ time : ℕ} {anchor : Store preset fork} {horizon : Epoch} {margin 
   (originEpochOk : ((e.world n).state u).getBlockEpoch origin = .ok target.epoch)
   (descends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩ ⟨origin, .pending⟩ =
     .ok true)
-  -- Honest heads descend from the origin from the call to the start of the next epoch.
+  -- Up-to-date honest heads descend from the origin from the call through the next epoch's start.
   {nextEpoch : Epoch} {first : Slot} {begin : UInt64}
   (nextOk : addChecked target.epoch 1 = .ok nextEpoch)
   (firstOk : computeStartSlotAtEpoch preset nextEpoch = .ok first)
@@ -927,11 +929,11 @@ include anchored start anchorSlot anchorBoundary slots fits windows params roots
 
 /-- By `time`, an up-to-date honest receiver justified at the target epoch has the caller's target.
 
-Otherwise honest stores collide or give cross-store justified evidence.
+Else honest stores collide or give cross-store justified evidence, under the reserve and the pin.
 
 By `time` the caller passes the no-conflict test at a slot start after the anchor's justified epoch.
 
-It needs the anchor, timing, parameters, held-state and store bounds, reserve, pin and coverage. -/
+It needs the anchor run, timing, parameters, nonzero held roots, other state bounds and coverage. -/
 theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint
     (early : HeldStatesBeforeUpgrade (e := e) time)
     (pins : JustifiedPinned (e := e) anchor.justifiedCheckpoint.epoch margin 0 time) :

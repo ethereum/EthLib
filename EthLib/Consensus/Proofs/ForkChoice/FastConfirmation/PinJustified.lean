@@ -363,8 +363,10 @@ variable {Δ time : ℕ} {anchor : Store preset fork} {horizon : Epoch} {margin 
   -- Slots are nonempty, the delay fits a slot, and honest stores agree on duty windows.
   (slots : 0 < config.SLOT_DURATION_MS) (fits : DelayFits fork config genesisTimeMs Δ)
   (windows : AssignmentWindowAgreement (e := e) time) (params : DirectSafety.Parameters preset)
-  -- Held block states have nonzero roots, and no honest store holds the anchor's parent.
-  (roots : HeldBlockStateRootsNonzero (e := e) time) (absent : AnchorParentAbsent (e := e) time)
+  -- Through the limit, honest stores hold only blocks with nonzero state roots.
+  (roots : HeldBlockStateRootsNonzero (e := e) time)
+  -- Through the limit, no honest store holds the anchor's parent.
+  (absent : AnchorParentAbsent (e := e) time)
   -- The anchor state comes from genesis by a run.
   (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
   -- Honest store epochs are within the horizon, with the run and terminal stake floors.
@@ -390,7 +392,7 @@ variable {Δ time : ℕ} {anchor : Store preset fork} {horizon : Epoch} {margin 
   (originEpochOk : ((e.world n).state u).getBlockEpoch origin = .ok target.epoch)
   (descends : ((e.world n).state u).isAncestor ⟨head.root, .pending⟩ ⟨origin, .pending⟩ =
     .ok true)
-  -- Honest heads descend from the origin from the call to the start of the next epoch.
+  -- Up-to-date honest heads descend from the origin from the call through the next epoch's start.
   {nextEpoch : Epoch} {first : Slot} {begin : UInt64}
   (nextOk : addChecked target.epoch 1 = .ok nextEpoch)
   (firstOk : computeStartSlotAtEpoch preset nextEpoch = .ok first)
@@ -411,13 +413,14 @@ include anchored start anchorSlot anchorBoundary slots fits windows params roots
 
 The conclusion is the main theorem's, under its other premises, including coverage and the reserve.
 
-The setting is BLS checks, the anchor header, a positive delay and unslashed honest validators.
+The setting is BLS checks, anchor-header conditions, positive inclusion delay and the fork window.
 
-It also needs cross-store finality, the pin guard, the fork, the fork window and preset facts. -/
+It adds no honest slashing in counted states, cross-store finality, pin guard and preset facts. -/
 theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setting
     [DecidablePred (· ∈ J)]
-    -- Honest stores check signatures with BLS, and the anchor state's header is the anchor block's.
+    -- Honest stores check signatures with BLS.
     (bls : checks = .bls)
+    -- The anchor header matches the anchor block except for its zero state root.
     (header : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
       anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
       anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
@@ -425,7 +428,7 @@ theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setti
     (zero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
     -- The inclusion delay is positive, and honest validators are unslashed in counted states.
     (delay : preset.InclusionDelayPositive) (unslashed : HonestCountedStatesUnslashed (e := e) time)
-    -- Honest justified chains read each honest store's finalized checkpoint at its epoch.
+    -- Honest justified chains read an honest finalized checkpoint when their epoch reaches its.
     (finality : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
       ((e.world i).state a).finalizedCheckpoint.epoch ≤
         ((e.world j).state b).justifiedCheckpoint.epoch →

@@ -4153,6 +4153,7 @@ Votes for the target of epoch E count until start(E+1) − 1, and the conclusion
 `Execution.justified_eq_currentTarget_of_noConflictingCheckpoint` in the same file addresses Theorem 1 of [#2058](https://github.com/ethereum/EthLib/issues/2058).
 Suppose an honest caller passes the no-conflict test at a slot start for a target of an epoch after the anchor's justified epoch.
 Assume the reserved honest count and the pin on justified checkpoints, and that block states held by honest stores by the time limit have slots before the next scheduled fork.
+It also takes the run from genesis to the anchor state, `DirectSafety.Parameters`, a delay that satisfies `DelayFits`, `AssignmentWindowAgreement`, honest store epochs within the horizon, the run and terminal stake floors, the anchor's absent parent, and no honest held block with a zero state root (`HeldBlockStateRootsNonzero`).
 Up-to-date honest heads must descend from an origin of the target epoch on the caller's head chain, from the call through the start of the next epoch.
 If both events are by the limit, an up-to-date honest receiver's justified checkpoint of that epoch equals the caller's target, or honest stores exhibit a block collision or cross-store justified evidence.
 From Fulu until Gloas the corollary derives the pin under the setting's hypotheses, including cross-store finality and the pin guard, and derives the held-state bound from the fork window; it still assumes origin coverage.
