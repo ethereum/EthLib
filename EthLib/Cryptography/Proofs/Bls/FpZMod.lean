@@ -451,7 +451,8 @@ macro "push_toZMod" loc:(Lean.Parser.Tactic.location)? : tactic =>
 -- Smoke tests: the lemmas of the scoped field apply to the operations of the specification.
 example (a b : Fp) : a * b = b * a := mul_comm a b
 example (a b : Fp) : a - b = a + -b := sub_eq_add_neg a b
-example (a : Fp) (h : a ≠ 0) : a * a⁻¹ = 1 := mul_inv_cancel₀ h
+-- The lemma is elaborated first, so its instance is known before the unifier meets the inverse.
+example (a : Fp) (h : a ≠ 0) : a * a⁻¹ = 1 := (mul_inv_cancel₀ h :)
 
 /-- `Fp` maps into `ZMod p`, injectively and respecting each field operation. -/
 def embedding : FieldOps.Embedding Fp (ZMod modulus) where

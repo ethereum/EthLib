@@ -29,23 +29,6 @@ theorem Internal.fits_snoc {n : Nat} {f : Nat → UInt64} {k : Nat} :
     rw [fits_succ, ih, fits_succ, Nat.add_right_comm k 1 n]
     exact ⟨fun ⟨a, b, c⟩ => ⟨⟨a, b⟩, c⟩, fun ⟨⟨a, b⟩, c⟩ => ⟨a, b, c⟩⟩
 
-/-- Fitting words with the same integer are the same words. -/
-theorem Internal.eq_of_num_eq {n : Nat} {f g : Nat → UInt64} {k : Nat} (hf : Fits n f k)
-    (hg : Fits n g k) (h : num n f k = num n g k) : ∀ i < n, f (k + i) = g (k + i) := by
-  induction n generalizing k with
-  | zero => intro i hi; omega
-  | succ n ih =>
-    rw [num_succ, num_succ] at h
-    have := hf.1
-    have := hg.1
-    have h0 : (f k).toNat = (g k).toNat := by omega
-    have h1 : num n f (k + 1) = num n g (k + 1) := by omega
-    intro i hi
-    rcases i with _ | i
-    · exact UInt64.toNat_inj.mp h0
-    · have e := ih hf.2 hg.2 h1 i (by omega)
-      rwa [Nat.add_right_comm k 1 i, Nat.add_assoc] at e
-
 /-- The words of a fixed count are the words of a pair of a low word and the rest. -/
 theorem Internal.word_succ {n : Nat} [Words n] (t : Words.W (n + 1)) :
     Words.word t = cons (t : UInt64 × Words.W n).1 (Words.word (t : UInt64 × Words.W n).2) := rfl
@@ -72,13 +55,6 @@ variable [Limbs n]
 
 /-- The integer of the limbs is below `2 ^ (32 n)`. -/
 theorem val_lt (a : T n) : val a < 2 ^ (32 * n) := num_lt (fits a 0)
-
-/-- Limbs with the same integer are equal. -/
-theorem val_injective : Function.Injective (val : T n → Nat) := by
-  intro a b h
-  apply ext
-  intro k hk
-  simpa using eq_of_num_eq (fits a 0) (fits b 0) h k hk
 
 /-- A digit is the integer of 32 bits at its place. -/
 theorem Internal.digit_toNat (x i : Nat) : (digit x i).toNat = x / 2 ^ (32 * i) % 2 ^ 32 := by
