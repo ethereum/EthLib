@@ -530,6 +530,78 @@ theorem size_bufferRead (data : ByteArray) (offset length : Nat) :
 /-- Bytes of one byte have size 1, such as the byte that MSTORE8 writes. -/
 theorem size_byte (b : UInt8) : (⟨#[b]⟩ : ByteArray).size = 1 := rfl
 
+/-- A read within some bytes is the read of the same range of them as a buffer. -/
+theorem memoryReadBytes_eq_bufferRead (bytes : ByteArray) {offset length : Nat}
+    (h : offset + length ≤ bytes.size) :
+    memoryReadBytes bytes offset length = ⟨(bufferRead bytes offset length).toArray⟩ := by
+  have hr := memoryReadBytes_bufferRead bytes (start := 0) h
+  rwa [bufferRead_zero_size, Nat.zero_add] at hr
+
+/-- A read within the first bytes of a join is the read of those bytes. -/
+theorem bufferRead_append_left (first second : ByteArray) {start length : Nat}
+    (h : start + length ≤ first.size) :
+    bufferRead (first ++ second) start length = bufferRead first start length := by
+  simp only [bufferRead_eq]
+  refine List.map_congr_left fun i hi => ?_
+  simp only [List.mem_range] at hi
+  simp [EthLib.Base.byteAtOrZero_append, show start + i < first.size by omega]
+
+/-- A frame that knows a read of a buffer knows each part of it, as a read of the buffer. -/
+theorem Known.readAt {evm : Evm fork Nat}
+    (h : Known code message pc stack size facts gas state substate returnData evm)
+    {s t offset n a m : Nat} {data : ByteArray}
+    (hf : (s, ⟨(bufferRead data offset n).toArray⟩) ∈ facts) (ht : s + a = t := by omega)
+    (hm : a + m ≤ n := by omega) :
+    Known code message pc stack size ((t, ⟨(bufferRead data (offset + a) m).toArray⟩) :: facts)
+      gas state substate returnData evm := by
+  have hr := h.read hf (offset := a) (length := m) (by rw [size_bufferRead]; omega)
+  rwa [memoryReadBytes_bufferRead _ hm, ht] at hr
+
+/-- A frame that knows a read of a buffer knows its first bytes, as a read of the buffer. -/
+theorem Known.readPrefix {evm : Evm fork Nat}
+    (h : Known code message pc stack size facts gas state substate returnData evm)
+    {s offset n m : Nat} {data : ByteArray}
+    (hf : (s, ⟨(bufferRead data offset n).toArray⟩) ∈ facts) (hm : m ≤ n := by omega) :
+    Known code message pc stack size ((s, ⟨(bufferRead data offset m).toArray⟩) :: facts) gas
+      state substate returnData evm := by
+  simpa using h.readAt hf (a := 0) (m := m)
+
+/-- A frame that knows some bytes knows each part of them, as a read of them as a buffer. -/
+theorem Known.readBytes {evm : Evm fork Nat}
+    (h : Known code message pc stack size facts gas state substate returnData evm)
+    {s t offset length : Nat} {bytes : ByteArray} (hf : (s, bytes) ∈ facts)
+    (ht : s + offset = t := by omega) (hl : offset + length ≤ bytes.size := by omega) :
+    Known code message pc stack size
+      ((t, ⟨(bufferRead bytes offset length).toArray⟩) :: facts) gas state substate
+      returnData evm := by
+  have hr := h.read hf hl
+  rwa [memoryReadBytes_eq_bufferRead _ hl, ht] at hr
+
+/-- A frame that knows the bytes of a word knows each part of them, as a read. -/
+theorem Known.readWord {evm : Evm fork Nat}
+    (h : Known code message pc stack size facts gas state substate returnData evm)
+    {s t offset length : Nat} {word : U256} (hf : (s, wordBytes word) ∈ facts)
+    (ht : s + offset = t := by omega) (hl : offset + length ≤ 32 := by omega) :
+    Known code message pc stack size
+      ((t, ⟨(bufferRead (wordBytes word) offset length).toArray⟩) :: facts) gas state substate
+      returnData evm :=
+  h.readBytes hf ht (by rw [size_wordBytes]; exact hl)
+
+/-- A frame knows a fact joined with the bytes of memory that follow it, within memory. -/
+theorem Known.append_memory {evm : Evm fork Nat}
+    (h : Known code message pc stack size facts gas state substate returnData evm)
+    {s n : Nat} {bytes : ByteArray} (hf : (s, bytes) ∈ facts) (hn : s + bytes.size + n ≤ size) :
+    Known code message pc stack size
+      ((s, bytes ++ memoryReadBytes evm.memory (s + bytes.size) n) :: facts) gas state
+      substate returnData evm := by
+  have hmore := (holds_self evm.memory).read (offset := s + bytes.size) (length := n)
+    (by rw [h.2.1]; exact hn)
+  rw [Nat.zero_add] at hmore
+  refine ⟨h.1, h.2.1, h.2.2.1, fun fact hfact => ?_⟩
+  rcases List.mem_cons.mp hfact with rfl | hfact
+  · exact (h.2.2.2 _ hf).append hmore
+  · exact h.2.2.2 fact hfact
+
 /-- From Dencun, MCOPY of the range of a fact writes the fact at the destination.
 
 It keeps the parts of the facts outside the destination.
