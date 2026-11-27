@@ -11,6 +11,8 @@ Write `c` for `⌈numerator / denominator⌉`, which is `(numerator + denominato
 
 - From step `⌈2 * numerator / denominator⌉` on, each step at least halves the accumulator.
 - The result is at most `factor * 3^c`, since the Taylor series of `e^x` stays below `3^⌈x⌉`.
+- Every accumulator is at most `factor * denominator * 3^c`.
+- Up to 46 update fractions of at most `2^24`, the accumulators, products and sums fit 128 bits.
 
 The bounds read the integer loop through the real exponential, so this file imports Mathlib.
 -/
@@ -197,5 +199,72 @@ theorem getBaseFeePerBlobGas_lt_of_le (schedule : BlobSchedule) {excessBlobGas :
           schedule.baseFeeUpdateFraction) := fakeExponential_le hF
     _ ≤ 1 * 3 ^ 161 := Nat.mul_le_mul_left _ (Nat.pow_le_pow_right (by norm_num) hc)
     _ < 2 ^ 256 := by decide
+
+/-! ## The values of the loop -/
+
+/-- Every accumulator is at most `factor * denominator * 3^c`, for `c = ⌈numerator / denominator⌉`.
+
+The loop multiplies it by the numerator, so its product is at most that times the numerator. -/
+theorem accum_le (hd : 0 < denominator) (k : Nat) :
+    accum factor numerator denominator k ≤
+      factor * denominator * 3 ^ ((numerator + denominator - 1) / denominator) :=
+  -- The accumulator is one term of the sum of the first `k + 1` accumulators.
+  Nat.le_trans (Nat.le_add_left _ _) (partialSum_le hd (k + 1))
+
+/-- Up to 46 update fractions, the values of the blob fee exponential fit 128 bits.
+
+The update fraction must be at most `2^24`; every mainnet schedule's is.
+
+The values are each accumulator, its product with the excess, each partial sum and the fee.
+
+The accumulators and sums are at most `F * 3^46`, and the fee at most `3^46`.
+
+The products are at most `46 * F^2 * 3^46`. -/
+theorem lt_two_pow_128_of_le (schedule : BlobSchedule) {excessBlobGas : Nat}
+    (fraction : schedule.baseFeeUpdateFraction ≤ 2 ^ 24)
+    (h : excessBlobGas ≤ 46 * schedule.baseFeeUpdateFraction) :
+    (∀ k, accum MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas schedule.baseFeeUpdateFraction k <
+        2 ^ 128) ∧
+      (∀ k, accum MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas schedule.baseFeeUpdateFraction k *
+        excessBlobGas < 2 ^ 128) ∧
+      (∀ k, partialSum MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas schedule.baseFeeUpdateFraction k <
+        2 ^ 128) ∧
+      getBaseFeePerBlobGas schedule excessBlobGas < 2 ^ 128 := by
+  have hF := schedule.baseFeeUpdateFraction_pos
+  unfold getBaseFeePerBlobGas
+  generalize schedule.baseFeeUpdateFraction = F at hF fraction h ⊢
+  -- The ceiling of the excess over the update fraction is at most 46.
+  have hc : (excessBlobGas + F - 1) / F ≤ 46 := by
+    rw [Nat.div_le_iff_le_mul_add_pred hF]
+    omega
+  have h3 : 3 ^ ((excessBlobGas + F - 1) / F) ≤ 3 ^ 46 := Nat.pow_le_pow_right (by norm_num) hc
+  have hsum (k : Nat) : partialSum MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas F k ≤ F * 3 ^ 46 := by
+    have := partialSum_le (factor := MIN_BASE_FEE_PER_BLOB_GAS) (numerator := excessBlobGas) hF k
+    simp only [MIN_BASE_FEE_PER_BLOB_GAS, Nat.one_mul] at this
+    exact Nat.le_trans this (Nat.mul_le_mul_left _ h3)
+  -- The bounds at the largest update fraction, `2^24`, are below `2^128`.
+  have big : 2 ^ 24 * 3 ^ 46 < 2 ^ 128 := by decide
+  have bigger : 46 * 2 ^ 24 * 2 ^ 24 * 3 ^ 46 < 2 ^ 128 := by decide
+  have hF3 : F * 3 ^ 46 ≤ 2 ^ 24 * 3 ^ 46 := Nat.mul_le_mul_right _ fraction
+  -- Each accumulator is at most `F * 3^46`.
+  have hacc (k : Nat) : accum MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas F k ≤ F * 3 ^ 46 := by
+    have := accum_le (factor := MIN_BASE_FEE_PER_BLOB_GAS) (numerator := excessBlobGas) hF k
+    simp only [MIN_BASE_FEE_PER_BLOB_GAS, Nat.one_mul] at this
+    exact Nat.le_trans this (Nat.mul_le_mul_left F h3)
+  refine ⟨fun k => Nat.lt_of_le_of_lt ((hacc k).trans hF3) big, fun k => ?_,
+    fun k => Nat.lt_of_le_of_lt ((hsum k).trans hF3) big, ?_⟩
+  · -- The excess is at most `46 * F`.
+    have hacc' := hacc k
+    calc accum MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas F k * excessBlobGas
+        ≤ (F * 3 ^ 46) * (46 * F) := Nat.mul_le_mul hacc' h
+      _ ≤ (2 ^ 24 * 3 ^ 46) * (46 * 2 ^ 24) :=
+          Nat.mul_le_mul hF3 (Nat.mul_le_mul_left _ fraction)
+      _ = 46 * 2 ^ 24 * 2 ^ 24 * 3 ^ 46 := by ring
+      _ < 2 ^ 128 := bigger
+  · -- The fee is at most `3^46`.
+    calc fakeExponential MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas F
+        ≤ MIN_BASE_FEE_PER_BLOB_GAS * 3 ^ ((excessBlobGas + F - 1) / F) := fakeExponential_le hF
+      _ ≤ 1 * 3 ^ 46 := Nat.mul_le_mul_left _ h3
+      _ < 2 ^ 128 := by decide
 
 end EthLib.Execution.Fees.BlobBaseFee

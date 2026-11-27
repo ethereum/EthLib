@@ -8532,7 +8532,15 @@ A gas limit can grow by a 1024th of the parent's in each block, with no maximum,
 A difficulty can grow by a 2048th in each block before Paris, though mining long before `2^256` is out of reach.
 The blob base fee needs an excess blob gas that a genesis or a fork sets, as the paragraphs below show.
 The gas price is at most a fee field of the transaction, which is a word.
-The base fee rises only above a block's target, and every transaction of that block pays it from a balance below `2^256`, so it stays below the bound on a chain.
+The base fee rises only after a block above its target, and that block burns its base fee for each unit of its gas out of the supply before it.
+So from London to before Glamsterdam, the base fee that a block passes on is at most its own, or the fee after a full block at `S / (t + 1)` (`stateTransition_expectedBaseFee_le`, `Proofs/Blocks/BaseFeeBound.lean`).
+Here `S` is the supply before the block plus the ether it creates, and `t` is its target, its gas limit over 2.
+It stays below `2^64` while `S / (t + 1)` stays below `2^63` (`stateTransition_expectedBaseFee_lt_two_pow_64`).
+The supply is a sum of balances with no bound of its own, so these bounds alone do not keep the base fee below `2^64`.
+A rise needs a block above its target, whose senders pay the base fee from balances below `2^256`, but that bound below `2^256` is not proved here.
+A genesis can also set any base fee, so the hypothesis on the base fee of BASEFEE stays.
+With a mainnet supply near `2^87` wei, `S / (t + 1)` is below `2^63` from a target of about 13 million gas, below the mainnet target.
+From Glamsterdam, the burn counts the gas of the fees rather than the gas used of the header, and no such bound is stated yet.
 The number of a block grows by one per block.
 GAS needs no such rule here: the gas limit of a transaction is a word, so the gas left of a frame stays below `2^256`.
 
@@ -8550,6 +8558,8 @@ Below it, when the block sets no blob price and has the schedule of its fork, th
 From it on, the instruction aborts (`environmentStep_blobbasefee_of_le`).
 A schedule that a chain sets itself has no such evaluation.
 Under any schedule, an excess of at most 161 update fractions gives a fee of at most `3^161`, below `2^256` (`getBaseFeePerBlobGas_lt_of_le`, `Proofs/Fees/BlobBaseFeeBound.lean`).
+Every accumulator of the blob fee loop, whose factor is 1, is at most `F * 3^c` for an update fraction `F` and `c` the ceiling of the excess over it (`accum_le`).
+With `F` at most `2^24`, as at every mainnet schedule, an excess of at most 46 update fractions keeps each accumulator, its product with the excess, each partial sum and the fee below `2^128` (`lt_two_pow_128_of_le`).
 
 A block raises the excess by at most `GAS_PER_BLOB * (max - target)`, and along valid headers whose parents stay within the maximum the rises add up (`excessBlobGas_le_of_checkHeader`, `Proofs/Blocks/ExcessBlobGas.lean`).
 So from an excess of 0, a chain needs at least 1507 full blocks under the Dencun schedule, and 2260 under each later one, to reach these values.
