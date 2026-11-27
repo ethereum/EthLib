@@ -2407,11 +2407,13 @@ Their `systemCall_set` and `systemCall_dequeue` theorems hold from each contract
 They require the specified bytecode at the contract's address.
 The queue theorems assume bounds on the storage counters, and the history theorem requires a block number from 1 to below `2^256`.
 
-`Logic.Reaches.followsMeter` lifts a normal one-counter run to the state gas meter when its execution gas initially covers that counter.
+`Logic.Reaches.followsMeter` lifts a normal one-counter run to a stopped frame under the state gas meter when its execution gas initially covers that counter.
 `Logic.Reaches.followsMeter_revert` lifts, under the same bound, a run from a normal frame that ends in a revert.
+Both ask that the execution gas held under the state gas meter fit a word.
 The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
 `Logic.SupportedCode` checks each opcode, skipping PUSH data, against a fixed list of instructions.
-The list leaves out GAS and the creations.
+The list leaves out GAS and the creations, and the check accepts GAS when the next opcode is a call.
+After GAS, each frame holds its own gas left, so the call asks the state gas meter for as much more gas as its excess (`Logic.GasPending`, `Logic.callStep_asks`).
 It keeps the calls: a run of steps without a message passes a call only where it sends none, and `Logic.callStep_bridge` lifts that step.
 The lifted run has the same fields outside its meter, including its state and output.
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.

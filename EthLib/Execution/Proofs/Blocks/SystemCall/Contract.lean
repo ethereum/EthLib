@@ -348,7 +348,8 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
         change SupportedCode message.code = true
         rw [hcodeM]
         exact supported (Nat.le_of_not_gt hglam))
-      rfl (.inr hbound) herr (Nat.le_of_eq hheld)
+      rfl (.inr hbound) herr halted (Nat.le_of_eq hheld)
+      (Nat.lt_of_le_of_lt held (by rw [hgas]; decide))
     exact ⟨_, runFrame_of_reaches highReached halted held, herr, hq⟩
 
 /-- From Paris, a system call to a contract whose code writes its storage.
