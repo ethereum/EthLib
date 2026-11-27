@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `applyBody_toBodyOutput` (`Execution/Proofs/Blocks/Transition.lean`) reads a body that runs with any overrides.
+  Its output agrees with the output of its transactions on every field of that output but the body state.
+  `applyBody_receipts` and three proofs of the RPC and simulation modules now apply it.
+
 - In Lean, each opcode of one, two or three stack operands has a rule of its own in the EVM program logic, with its byte, its price and its fork (`Execution/Proofs/Evm/Logic/Stack.lean`, `add_rule` to `clz_rule`, each with a form `*_ruleG` over the steps from frames that are monotone in gas) ([#4789](https://github.com/ethereum/EthLib/issues/4789)).
   The opcodes that read the block and the transaction have theirs in `Execution/Proofs/Evm/Logic/Environment.lean`: COINBASE, TIMESTAMP, NUMBER, PREVRANDAO and the difficulty before Paris, GASLIMIT, CHAINID, BASEFEE, BLOBBASEFEE, SLOTNUM and GASPRICE.
   An opcode that reads a number takes the hypothesis that the number fits a word.

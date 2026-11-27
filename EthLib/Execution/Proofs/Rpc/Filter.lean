@@ -58,30 +58,6 @@ private theorem applyTransactions_logs {fork : Fork} {env : Evm.BlockEnvironment
       simp [makeReceipt]) h
   exact hR rfl
 
-/-- A body that runs keeps the receipts and logs of its transactions, which run on some body. -/
-private theorem applyBody_run {fork : Fork} {config : ChainConfig}
-    {env : Evm.BlockEnvironment fork} {block : Block fork Transaction} {start : State.BlockState}
-    {output : BlockOutput fork} (h : applyBody config env block start = .ok output) :
-    ∃ body txs, applyTransactions env body block.transactions = .ok txs ∧
-      output.receipts = txs.receipts ∧ output.logs = txs.logs := by
-  unfold applyBody at h
-  dsimp only at h
-  obtain ⟨state, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
-  refine ⟨body, txs, hTxs, ?_⟩
-  split at h
-  -- From Shapella the withdrawal state comes first; the rest is the same in both branches.
-  case' isTrue => obtain ⟨tx, -, h⟩ := bind_ok_iff.mp h
-  all_goals
-    obtain ⟨withdrawn, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨requested, requests⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨rewarded, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    exact ⟨rfl, rfl⟩
-
 /-- A log with fewer topics than a filter has topic positions does not match it.
 
 This holds whatever each position takes. -/
@@ -290,7 +266,9 @@ theorem Valid.logs_receipts {v : ChainView} {checkSeal : Bool} (hv : v.Valid che
     v.canonical[i + 1].receipts.flatMap (·.2.logs) = v.canonical[i + 1].logs := by
   obtain ⟨-, result, hrun, hrec, hlog, -⟩ := hv.follows i hi
   obtain ⟨hashes, -, happly, -⟩ := Blocks.runBody_eq_ok.mp hrun
-  obtain ⟨body, txs, htxs, hr, hl⟩ := applyBody_run happly
+  obtain ⟨-, body, txs, -, -, htxs, hout⟩ := applyBody_toBodyOutput happly
+  have hr : result.output.receipts = txs.receipts := (congrArg BodyOutput.receipts hout).trans rfl
+  have hl : result.output.logs = txs.logs := (congrArg BodyOutput.logs hout).trans rfl
   rw [← hrec, ← hlog, hr, hl]
   exact applyTransactions_logs htxs
 
