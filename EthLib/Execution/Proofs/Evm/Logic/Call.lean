@@ -7,11 +7,13 @@ public import EthLib.Execution.Proofs.Evm.Logic.Route
 
 CALL sends a message to the account at an address, which runs the code of that account.
 
-The rules hold from Berlin to the fork before Glamsterdam, with one counter of gas.
+The rules of calls that send no value of their own hold at every fork from Berlin.
 
-The steps that they rest on hold at every fork from Berlin.
+The rules of calls with a value hold from Berlin to the fork before Glamsterdam.
 
-Sources: EIP-150, EIP-2929 and EIP-7702.
+All of them count gas with one counter.
+
+Sources: EIP-150, EIP-2929, EIP-7702 and EIP-8038.
 
 Out of scope: CREATE, CALLCODE with value, and a call out of gas.
 -/
@@ -307,7 +309,7 @@ Its cases are CALL and CALLCODE with no value, STATICCALL and DELEGATECALL.
 The callee runs arbitrary code.
 
 So the rule takes an assumption on the frame that ends the message. -/
-theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {kind : CallKind}
+theorem callKindWith (hfork : .berlin ≤ fork) {kind : CallKind}
     {byte : UInt8} {op : Op} {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {cold : Bool} {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = byte)
@@ -321,10 +323,10 @@ theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {k
     -- The depth of the frame must leave room for one more frame.
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    -- The call pays the access to the address: 2600 when cold and 100 when warm, by EIP-2929.
+    -- The access costs 2600 cold and 100 warm by EIP-2929, 3000 cold from Glamsterdam by EIP-8038.
     --
     -- It also pays the growth of memory for both ranges.
-    (hgas : (if cold then 2600 else 100) +
+    (hgas : (callBaseCost fork cold) +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas) :
     HoareUnder fork callee
@@ -346,7 +348,7 @@ theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {k
         -- The gas left is counted after the access and the growth of memory.
         msg.gas = (messageCallGas fork 0 asked.toNat gas
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-          (if cold then 2600 else 100)).subCall ∧
+          (callBaseCost fork cold)).subCall ∧
         -- DELEGATECALL keeps the sender and the value of the current message.
         msg.caller = (if kind = .delegatecall then message.caller else message.currentTarget) ∧
         -- CALL and STATICCALL run the code on `to`.
@@ -380,7 +382,7 @@ theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {k
             outputStart.toNat (child.output.extract 0 (min outputSize.toNat child.output.size)))
           (gas - ((messageCallGas fork 0 asked.toNat gas
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-            (if cold then 2600 else 100)).cost +
+            (callBaseCost fork cold)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
           -- The caller gets back the gas that the callee leaves.
@@ -392,19 +394,18 @@ theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {k
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           child.output after := by
-  have hcost := callBaseCost_of_berlin hfork hglam cold
   subst hcold
   refine (callKindRoute (route := none) hfork hlt hbyte decoded hnone hrun hcode hdel hdepth
-    (by simpa only [routeCost, Nat.add_zero, hcost] using hgas)).toUnder.consequence
+    (by simpa only [routeCost, Nat.add_zero] using hgas)).toUnder.consequence
     (fun _ h => h) ?_
   rintro after ⟨caller, msg, child,
     ⟨s1, s2, m1, -, m2, m3, mt, mca, mc, -, md, m5, -, m6, m7, -, -⟩, hcallee, hchild, hat⟩
-  simp only [routeCost, Nat.add_zero, routeState, routeSub, routeAddr, routeCode,
-    hcost] at s1 s2 m1 mca mc hat
+  simp only [routeCost, Nat.add_zero, routeState, routeSub, routeAddr,
+    routeCode] at s1 s2 m1 mca mc hat
   exact ⟨caller, msg, child, hcallee, hchild, s1, s2, m1, m2, m3, mt, mca, mc, md, m5, m6, m7, hat⟩
 
 /-- CALL with no value, to the address `to`, with a range of input and a range of output. -/
-theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem callWith (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {cold : Bool} {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
@@ -414,7 +415,7 @@ theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    (hgas : (if cold then 2600 else 100) +
+    (hgas : (callBaseCost fork cold) +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas) :
     HoareUnder fork callee
@@ -430,7 +431,7 @@ theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
         msg.gas = (messageCallGas fork 0 asked.toNat gas
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-          (if cold then 2600 else 100)).subCall ∧
+          (callBaseCost fork cold)).subCall ∧
         msg.caller = message.currentTarget ∧ msg.currentTarget = toAddressMasked to ∧
         msg.target = some (toAddressMasked to) ∧ msg.codeAddress = some (toAddressMasked to) ∧
         msg.code = calleeCode ∧
@@ -455,7 +456,7 @@ theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
             outputStart.toNat (child.output.extract 0 (min outputSize.toNat child.output.size)))
           (gas - ((messageCallGas fork 0 asked.toNat gas
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-            (if cold then 2600 else 100)).cost +
+            (callBaseCost fork cold)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
           -- The caller gets back the gas that the callee leaves.
@@ -465,7 +466,7 @@ theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           child.output after :=
-  callKindWith (kind := .call) hfork hglam hlt hbyte
+  callKindWith (kind := .call) hfork hlt hbyte
     (ofByte_of_decode (op := .call) rfl (Fork.frontier_le _)) instruction_call
     messageInstruction_call hcode hdel hdepth hcold hgas
 
@@ -528,7 +529,7 @@ theorem callRoute (hfork : .berlin ≤ fork)
     messageInstruction_call hcode hroute hdepth hgas
 
 /-- CALL with no value and empty ranges of input and output, to the address `to`. -/
-theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem call (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart outputStart : U256} {rest : List U256} {cold : Bool}
     {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xf1)
@@ -538,7 +539,7 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    (hgas : (if cold then 2600 else 100) ≤ gas) :
+    (hgas : (callBaseCost fork cold) ≤ gas) :
     HoareUnder fork callee
       (At code message pc (asked :: to :: 0 :: inputStart :: 0 :: outputStart :: 0 :: rest)
         memory gas state substate returnData)
@@ -549,7 +550,7 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           message.currentTarget ∧
         caller.substate = { substate with
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
-        msg.gas = (messageCallGas fork 0 asked.toNat gas 0 (if cold then 2600 else 100)).subCall ∧
+        msg.gas = (messageCallGas fork 0 asked.toNat gas 0 (callBaseCost fork cold)).subCall ∧
         msg.caller = message.currentTarget ∧ msg.currentTarget = toAddressMasked to ∧
         msg.target = some (toAddressMasked to) ∧ msg.codeAddress = some (toAddressMasked to) ∧
         -- With empty ranges, memory does not grow and the message has no data.
@@ -558,7 +559,7 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         msg.depth = message.depth + 1 ∧ msg.isStatic = message.isStatic ∧
         -- The caller pushes 1 when the callee ends with no error, and 0 otherwise.
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest) memory
-          (gas - (messageCallGas fork 0 asked.toNat gas 0 (if cold then 2600 else 100)).cost +
+          (gas - (messageCallGas fork 0 asked.toNat gas 0 (callBaseCost fork cold)).cost +
             child.gas)
           -- The caller gets back the gas that the callee leaves.
           --
@@ -570,7 +571,7 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   have hext : extendMemory memory.size [(inputStart, 0), (outputStart, 0)] = ⟨0, 0⟩ := by
     simp [extendMemory]
   have h := callWith (callee := callee) (asked := asked) (inputSize := 0) (outputSize := 0)
-    (rest := rest) (returnData := returnData) hfork hglam hlt hbyte hcode hdel hdepth hcold
+    (rest := rest) (returnData := returnData) hfork hlt hbyte hcode hdel hdepth hcold
     (by rw [hext]; exact hgas)
   rw [hext] at h
   refine h.consequence (fun _ hp => hp) ?_
@@ -592,8 +593,8 @@ theorem messageInstruction_staticcall (hfork : .byzantium ≤ fork) :
     messageInstruction (Meter := Nat) fork .staticcall = some (callStep .staticcall) := by
   simp [messageInstruction, callInstruction, HOrElse.hOrElse, OrElse.orElse, Option.orElse, hfork]
 
-/-- From Berlin to before Glamsterdam, STATICCALL to `to`, with ranges of input and output. -/
-theorem staticcallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+/-- From Berlin, STATICCALL to `to`, with ranges of input and output. -/
+theorem staticcallWith (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {cold : Bool} {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xfa)
@@ -603,7 +604,7 @@ theorem staticcallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    (hgas : (if cold then 2600 else 100) +
+    (hgas : (callBaseCost fork cold) +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas) :
     HoareUnder fork callee
@@ -619,7 +620,7 @@ theorem staticcallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
         msg.gas = (messageCallGas fork 0 asked.toNat gas
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-          (if cold then 2600 else 100)).subCall ∧
+          (callBaseCost fork cold)).subCall ∧
         msg.caller = message.currentTarget ∧ msg.currentTarget = toAddressMasked to ∧
         msg.target = some (toAddressMasked to) ∧ msg.codeAddress = some (toAddressMasked to) ∧
         msg.code = calleeCode ∧
@@ -644,7 +645,7 @@ theorem staticcallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
             outputStart.toNat (child.output.extract 0 (min outputSize.toNat child.output.size)))
           (gas - ((messageCallGas fork 0 asked.toNat gas
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-            (if cold then 2600 else 100)).cost +
+            (callBaseCost fork cold)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
           -- The caller gets back the gas that the callee leaves.
@@ -654,12 +655,12 @@ theorem staticcallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           child.output after :=
-  callKindWith (kind := .staticcall) hfork hglam hlt hbyte
+  callKindWith (kind := .staticcall) hfork hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_staticcall
     (messageInstruction_staticcall (Nat.le_trans (by decide) hfork)) hcode hdel hdepth hcold hgas
 
-/-- From Berlin to before Glamsterdam, STATICCALL with empty ranges of input and output, to `to`. -/
-theorem staticcall (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+/-- From Berlin, STATICCALL with empty ranges of input and output, to `to`. -/
+theorem staticcall (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart outputStart : U256} {rest : List U256} {cold : Bool}
     {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xfa)
@@ -669,7 +670,7 @@ theorem staticcall (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    (hgas : (if cold then 2600 else 100) ≤ gas) :
+    (hgas : (callBaseCost fork cold) ≤ gas) :
     HoareUnder fork callee
       (At code message pc (asked :: to :: inputStart :: 0 :: outputStart :: 0 :: rest)
         memory gas state substate returnData)
@@ -680,7 +681,7 @@ theorem staticcall (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           message.currentTarget ∧
         caller.substate = { substate with
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
-        msg.gas = (messageCallGas fork 0 asked.toNat gas 0 (if cold then 2600 else 100)).subCall ∧
+        msg.gas = (messageCallGas fork 0 asked.toNat gas 0 (callBaseCost fork cold)).subCall ∧
         msg.caller = message.currentTarget ∧ msg.currentTarget = toAddressMasked to ∧
         msg.target = some (toAddressMasked to) ∧ msg.codeAddress = some (toAddressMasked to) ∧
         -- The message carries no value, and it is static.
@@ -688,7 +689,7 @@ theorem staticcall (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         msg.depth = message.depth + 1 ∧ msg.isStatic = true ∧
         -- The caller pushes 1 when the callee ends with no error, and 0 otherwise.
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest) memory
-          (gas - (messageCallGas fork 0 asked.toNat gas 0 (if cold then 2600 else 100)).cost +
+          (gas - (messageCallGas fork 0 asked.toNat gas 0 (callBaseCost fork cold)).cost +
             child.gas)
           -- The caller gets back the gas that the callee leaves.
           --
@@ -700,7 +701,7 @@ theorem staticcall (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   have hext : extendMemory memory.size [(inputStart, 0), (outputStart, 0)] = ⟨0, 0⟩ := by
     simp [extendMemory]
   have h := staticcallWith (callee := callee) (asked := asked) (inputSize := 0) (outputSize := 0)
-    (rest := rest) (returnData := returnData) hfork hglam hlt hbyte hcode hdel hdepth hcold
+    (rest := rest) (returnData := returnData) hfork hlt hbyte hcode hdel hdepth hcold
     (by rw [hext]; exact hgas)
   rw [hext] at h
   refine h.consequence (fun _ hp => hp) ?_
@@ -722,8 +723,8 @@ theorem messageInstruction_delegatecall (hfork : .homestead ≤ fork) :
     messageInstruction (Meter := Nat) fork .delegatecall = some (callStep .delegatecall) := by
   simp [messageInstruction, callInstruction, HOrElse.hOrElse, OrElse.orElse, Option.orElse, hfork]
 
-/-- From Berlin to before Glamsterdam, DELEGATECALL to `to`, with ranges of input and output. -/
-theorem delegatecallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+/-- From Berlin, DELEGATECALL to `to`, with ranges of input and output. -/
+theorem delegatecallWith (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {cold : Bool} {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xf4)
@@ -733,7 +734,7 @@ theorem delegatecallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    (hgas : (if cold then 2600 else 100) +
+    (hgas : (callBaseCost fork cold) +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas) :
     HoareUnder fork callee
@@ -749,7 +750,7 @@ theorem delegatecallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
         msg.gas = (messageCallGas fork 0 asked.toNat gas
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-          (if cold then 2600 else 100)).subCall ∧
+          (callBaseCost fork cold)).subCall ∧
         -- The message runs that code on the current account, which stays its current target.
         --
         -- It keeps the sender and the value of the current message.
@@ -778,7 +779,7 @@ theorem delegatecallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
             outputStart.toNat (child.output.extract 0 (min outputSize.toNat child.output.size)))
           (gas - ((messageCallGas fork 0 asked.toNat gas
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-            (if cold then 2600 else 100)).cost +
+            (callBaseCost fork cold)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
           -- The caller gets back the gas that the callee leaves.
@@ -788,7 +789,7 @@ theorem delegatecallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           child.output after :=
-  callKindWith (kind := .delegatecall) hfork hglam hlt hbyte
+  callKindWith (kind := .delegatecall) hfork hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_delegatecall
     (messageInstruction_delegatecall (Nat.le_trans (by decide) hfork)) hcode hdel hdepth hcold hgas
 
@@ -803,8 +804,8 @@ theorem messageInstruction_callcode :
     messageInstruction (Meter := Nat) fork .callcode = some (callStep .callcode) := by
   simp [messageInstruction, callInstruction, HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 
-/-- From Berlin to before Glamsterdam, CALLCODE with no value to `to`, with two ranges. -/
-theorem callcodeWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+/-- From Berlin, CALLCODE with no value to `to`, with two ranges. -/
+theorem callcodeWith (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {cold : Bool} {calleeCode : ByteArray} (hlt : pc < code.size) (hbyte : code[pc] = 0xf2)
@@ -814,7 +815,7 @@ theorem callcodeWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    (hgas : (if cold then 2600 else 100) +
+    (hgas : (callBaseCost fork cold) +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas) :
     HoareUnder fork callee
@@ -830,7 +831,7 @@ theorem callcodeWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
         msg.gas = (messageCallGas fork 0 asked.toNat gas
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-          (if cold then 2600 else 100)).subCall ∧
+          (callBaseCost fork cold)).subCall ∧
         -- The message runs that code on the current account.
         --
         -- That account is both its sender and its current target.
@@ -860,7 +861,7 @@ theorem callcodeWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
             outputStart.toNat (child.output.extract 0 (min outputSize.toNat child.output.size)))
           (gas - ((messageCallGas fork 0 asked.toNat gas
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-            (if cold then 2600 else 100)).cost +
+            (callBaseCost fork cold)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
           -- The caller gets back the gas that the callee leaves.
@@ -870,7 +871,7 @@ theorem callcodeWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           child.output after :=
-  callKindWith (kind := .callcode) hfork hglam hlt hbyte
+  callKindWith (kind := .callcode) hfork hlt hbyte
     (ofByte_of_decode (op := .callcode) rfl (Fork.frontier_le _)) instruction_callcode
     messageInstruction_callcode hcode hdel hdepth hcold hgas
 
@@ -1092,8 +1093,8 @@ theorem meets_process_noCode {Meter : Type} [GasMeter Meter] [LawfulGasMeter Met
   · rename_i hnone
     simp [hnone] at htarget
 
-/-- From Berlin to before Glamsterdam, STATICCALL to no code and no precompile returns no data. -/
-theorem staticcall_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+/-- From Berlin, STATICCALL to no code and no precompile returns no data. -/
+theorem staticcall_noCode (hfork : .berlin ≤ fork)
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {cold : Bool} (hlt : pc < code.size) (hbyte : code[pc] = 0xfa)
     -- The account at `to` holds no code.
@@ -1103,7 +1104,7 @@ theorem staticcall_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
       Precompiles.isPrecompile fork address.toU256.toNat = false)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    (hgas : (if cold then 2600 else 100) +
+    (hgas : (callBaseCost fork cold) +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas) :
     -- Under the assumption that a call to no code ends with no error and no output.
@@ -1123,11 +1124,10 @@ theorem staticcall_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
         (gas - ((messageCallGas fork 0 asked.toNat gas
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-          (if cold then 2600 else 100)).cost +
+          (callBaseCost fork cold)).cost +
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
           childGas)
         state' substate' .empty after := by
-  have hcost := callBaseCost_of_berlin hfork hglam cold
   subst hcold
   have h := callKindRoute (kind := .staticcall) (route := none) (asked := asked)
     (inputStart := inputStart) (inputSize := inputSize) (outputStart := outputStart)
@@ -1136,7 +1136,7 @@ theorem staticcall_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     hfork hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_staticcall
     (messageInstruction_staticcall (Nat.le_trans (by decide) hfork)) hcode
-    (fun _ => rfl) hdepth (by rw [hcost]; simpa only [routeCost, Nat.add_zero] using hgas)
+    (fun _ => rfl) hdepth (by simpa only [routeCost, Nat.add_zero] using hgas)
   refine h.toUnder.consequence (fun _ h => h) ?_
   rintro after ⟨caller, msg, child,
     ⟨-, -, -, -, -, -, mt, mca, mc, -, -, -, -, -, -, -, mtx⟩, hcallee, -, hat⟩
@@ -1151,14 +1151,13 @@ theorem staticcall_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
   obtain ⟨herr, hout⟩ := hcallee (by simpa [routeCode] using mc) (by simp [mt]) hp
   refine ⟨child.gas, (incorporateChild fork caller child).state,
     (incorporateChild fork caller child).substate, ?_⟩
-  rw [hcost] at hat
   simp only [routeCost, Nat.add_zero, herr, hout] at hat
   simpa [memoryWrite] using hat
 
-/-- From Berlin to before Glamsterdam, RETURNDATASIZE after STATICCALL to no code pushes 0.
+/-- From Berlin, RETURNDATASIZE after STATICCALL to no code pushes 0.
 
 The callee is no precompile. -/
-theorem staticcall_noCode_returndatasize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem staticcall_noCode_returndatasize (hfork : .berlin ≤ fork)
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {cold : Bool} (hlt : pc + 1 < code.size) (hbyte : code[pc] = 0xfa)
     (hbyteNext : code[pc + 1] = 0x3d)
@@ -1169,13 +1168,13 @@ theorem staticcall_noCode_returndatasize (hfork : .berlin ≤ fork) (hglam : for
       Precompiles.isPrecompile fork address.toU256.toNat = false)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
-    (hgas : (if cold then 2600 else 100) +
+    (hgas : (callBaseCost fork cold) +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas)
     -- The gas left after the call covers RETURNDATASIZE.
     (hgasNext : 2 ≤ gas - ((messageCallGas fork 0 asked.toNat gas
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-      (if cold then 2600 else 100)).cost +
+      (callBaseCost fork cold)).cost +
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost))
     -- The stack has room for the word of RETURNDATASIZE, as it always has after the call.
     (hstack : rest.length + 1 < STACK_LIMIT) :
@@ -1186,14 +1185,14 @@ theorem staticcall_noCode_returndatasize (hfork : .berlin ≤ fork) (hglam : for
       -- A check that the return data holds 32 bytes then compares 32 with 0, and fails.
       fun after => ∃ memory' gas' state' substate', At code message (pc + 2) (0 :: 1 :: rest)
         memory' gas' state' substate' .empty after := by
-  refine (staticcall_noCode hfork hglam (by omega) hbyte hcode hpre hdepth hcold hgas).seq
+  refine (staticcall_noCode hfork (by omega) hbyte hcode hpre hdepth hcold hgas).seq
     (HoareUnder.of_exists (R := fun (x : Nat × State.TransactionState × Substate) =>
       At code message (pc + 1) (1 :: rest)
         (memoryExtend memory
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
         (gas - ((messageCallGas fork 0 asked.toNat gas
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
-          (if cold then 2600 else 100)).cost +
+          (callBaseCost fork cold)).cost +
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
           x.1)
         x.2.1 x.2.2 .empty)

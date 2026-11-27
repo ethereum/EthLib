@@ -653,10 +653,10 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   have hcall := callKindWith (callee := callee) (asked := asked) (inputStart := inputStart)
     (inputSize := inputSize) (outputStart := outputStart) (outputSize := outputSize)
     (rest := rest) (memory := evm.memory) (gas := gas) (state := evm.state)
-    (substate := evm.substate) (returnData := returnData) hfork hglam hlt hbyte decoded hnone hrun
+    (substate := evm.substate) (returnData := returnData) hfork hlt hbyte decoded hnone hrun
     hcode' hdel hdepth rfl
-    (by rw [hext]; split <;> simp only <;> omega)
-  rw [hext] at hcall
+    (by rw [hext, callBaseCost_of_berlin hfork hglam]; split <;> simp only <;> omega)
+  rw [hext, callBaseCost_of_berlin hfork hglam] at hcall
   obtain ⟨final, hreach, hq | aborted⟩ := hcall bound runChild meets evm hat within
   · refine ⟨final, hreach, .inl ?_⟩
     obtain ⟨caller, msg, child, hc, hle, hcs, hcss, hmg, hmc, hmt, hmtg, hmca, hmcode, hmd, hmv,

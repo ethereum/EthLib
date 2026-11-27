@@ -2010,15 +2010,15 @@ These write rules ask for a range of some bytes.
 `Logic.return_known` proves that RETURN of the range of a fact returns the bytes of the fact.
 `Logic.revert_known` proves the same for REVERT from Byzantium.
 `memoryReadBytes_memoryWrite_eq_append` proves that a read that ends where a write ends gives the bytes before the write, then the value.
-`Logic.staticcallWith` is the rule for STATICCALL from Berlin to before Glamsterdam.
+`Logic.staticcallWith` is the rule for STATICCALL at every fork from Berlin, with the one-counter meter.
 Its message carries no value and is static.
 `Logic.staticcall` is its case with empty ranges of input and output.
 `Logic.callStep_child` gives the step of a call that sends no value of its own, for each kind of call.
-`Logic.callKindWith` is the rule for such a call from Berlin to before Glamsterdam.
+`Logic.callKindWith` is the rule for such a call at every fork from Berlin, with the one-counter meter.
 After the call, the return data is the output of the frame that ends the message.
-`Logic.delegatecallWith` is the rule for DELEGATECALL from Berlin to before Glamsterdam.
+`Logic.delegatecallWith` is the rule for DELEGATECALL at every fork from Berlin, with the one-counter meter.
 Its message runs the code of the address on the current account, with the sender and the value of the current message.
-`Logic.callcodeWith` is the rule for CALLCODE with no value from Berlin to before Glamsterdam.
+`Logic.callcodeWith` is the rule for CALLCODE with no value at every fork from Berlin, with the one-counter meter.
 Its message runs the code of the address on the current account, as its sender.
 `Logic.createStep_child` gives the step of CREATE or CREATE2 that sends its message, from Berlin to before Glamsterdam.
 It needs the new address to hold no code and a nonce of 0, as EIP-684 asks.
@@ -2187,8 +2187,8 @@ So the assumption is all that a triple says about a frame that ends a message, a
 It pays the growth of memory for both ranges, and the message carries the bytes of the input range.
 The caller writes the start of the output of the callee at the start of the output range, as far as both go.
 `Logic.call` is its case with empty ranges.
-It holds from Berlin to before Glamsterdam, with the one-counter meter.
-It pays 2600 or 100 for the access to the address, by EIP-2929.
+It holds at every fork from Berlin, with the one-counter meter.
+It pays the access to the address: 2600 when cold and 100 when warm by EIP-2929, and 3000 when cold from Glamsterdam by EIP-8038.
 It passes on at most all but one 64th of the gas left, by EIP-150.
 Its postcondition gives the state and substate that the frame that ends the message gives, and nothing more.
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
@@ -2246,7 +2246,7 @@ The call pays the access to the address, the access to the delegate, the growth 
 `Logic.callKindRoute` proves the rule for such a call as a `HoareOn` triple.
 Its set holds only the message of the call, so a run may stop because the runner fails only on that message.
 `Logic.callRoute` proves its case for CALL.
-Unlike `Logic.callWith`, neither rule asks that the code be no delegation, or that the fork come before Glamsterdam.
+Unlike `Logic.callWith`, neither rule asks that the code be no delegation.
 `Logic.callStep_child` and `Logic.callKindWith` are their cases with no delegation, so the step has one proof.
 `Logic.callStep_fails_of_routes` (`Logic/CallSteps.lean`) proves that such a call fails, or halts the frame with an error, when its gas is below its price before the gas it passes on.
 That price is the access to the address, the access to the delegate if any, and the growth of memory.
