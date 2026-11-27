@@ -527,6 +527,9 @@ theorem size_bufferRead (data : ByteArray) (offset length : Nat) :
     (⟨(bufferRead data offset length).toArray⟩ : ByteArray).size = length := by
   simp [ByteArray.size, bufferRead_length]
 
+/-- Bytes of one byte have size 1, such as the byte that MSTORE8 writes. -/
+theorem size_byte (b : UInt8) : (⟨#[b]⟩ : ByteArray).size = 1 := rfl
+
 /-- From Dencun, MCOPY of the range of a fact writes the fact at the destination.
 
 It keeps the parts of the facts outside the destination.
