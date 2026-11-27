@@ -237,7 +237,7 @@ public theorem Execution.crossStoreFinality_or_evidence {anchor : Store preset f
 
 The sender reads the receiver's finalized checkpoint at it; the receiver holds it and its state.
 
-It assumes synchrony, delayed admission, block agreement and no held block with a zero state root.
+It assumes synchrony, delayed admission, block agreement and nonzero held roots.
 
 It also needs the invariant anchor, a nonempty epoch and two epochs of root history. -/
 public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset fork} {last : ℕ}
@@ -282,13 +282,13 @@ public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset for
   · obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
     exact absurd (agree a ha b hb i j hi hj r left right leftFound rightFound) different
 
-/-- A delay after an event, a receiver's justified epoch is at least the sender's finalized epoch.
+/-- A delay on, an honest receiver's justified epoch is at least an honest sender's finalized epoch.
 
 The receiver is up to date at an event by `last`; honest stores agree on blocks, with nonzero roots.
 
 Each justified root reads every honest finalized checkpoint of an epoch no later than its own.
 
-It also assumes synchrony, delayed admission, the invariant anchor, slot facts and root history. -/
+It assumes synchrony, delayed admission, an invariant anchor, nonempty epochs and root history. -/
 public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
@@ -380,9 +380,9 @@ public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor
 
 Otherwise two honest stores collide by `last`, or cross-store direct-safety evidence holds.
 
-It assumes synchrony, delayed admission, `DelayFits`, direct-safety premises and nonzero roots.
+It assumes the genesis run, preset parameters, synchrony, delayed admission and fitting delays.
 
-It also needs the anchor at an epoch start, positive slot duration, next-slot reads and the head. -/
+It needs held-store and stake bounds, nonzero held roots and the anchor at an epoch start. -/
 public theorem Execution.finalized_ancestor_of_heads_or_evidence
     {Δ last : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)

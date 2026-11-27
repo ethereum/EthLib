@@ -4564,7 +4564,8 @@ The caller's finalized root is an ancestor of that head, unless honest stores co
 The delivery and epoch-order lemmas assume synchrony, delayed block admission from time zero through the limit, nonempty epochs and at least two epochs of block-root history.
 All honest validators start at the store initialized from an invariant anchor state and block with matching slots.
 Through the limit their stores agree on blocks at common roots and hold only blocks with nonzero state roots.
-Both lemmas take an honest sender and an up-to-date honest receiver, with the receiver at least a delay later and both events by the limit.
+Both lemmas take an honest sender and an up-to-date honest receiver at least a delay later and by the limit.
+The delivery lemma also takes the sender's time bound explicitly; for epoch order it follows from the receiver's bound.
 For `Execution.carrier_delivered`, the sender holds a block and its state and reads the receiver's finalized checkpoint on that block's chain at the checkpoint's epoch.
 The receiver then holds the same block and state at that root.
 `Execution.finalized_epoch_le_justified_of_late` also requires positive slot duration and cross-store finality reads through the limit.
