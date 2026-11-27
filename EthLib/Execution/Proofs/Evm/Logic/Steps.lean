@@ -2,6 +2,8 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
+public import EthLib.Execution.Proofs.Evm.Logic.Environment
+public import EthLib.Execution.Proofs.Evm.Logic.Known
 
 /-!
 # Proofs: a tactic that steps through the opcodes of a code
@@ -13,6 +15,8 @@ Each rule needs facts about the code.
 These are that the program counter lies inside the code, the byte there, and the data of a PUSH.
 
 The tactic here applies the rule of the opcode at the program counter, and proves those facts.
+
+A second tactic does the same over frames that know a few ranges of memory.
 -/
 
 @[expose] public section
@@ -244,6 +248,13 @@ macro_rules
          case op => evm_code [$ls,*]
          case gas => evm_gas
          case room => evm_room)
+      -- CHAINID.
+      | (refine' Triple.seq (chainid_rule ?fork ?lt ?op ?gas ?room) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas
+         case room => evm_room)
       -- The tactic fails on any other opcode.
       --
       -- It also fails on a step whose gas, fork or room on the stack it cannot prove.
@@ -354,6 +365,12 @@ macro_rules
          case fit => first | assumption | omega
          case gas => evm_gas
          case room => evm_room)
+      | (refine' Triple.seq (chainid_ruleG ?fork ?lt ?op ?gas ?room) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas
+         case room => evm_room)
       | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
 
 /-- Closes a specification at STOP, or at a program counter at or past the end of the code.
@@ -369,5 +386,108 @@ macro_rules
       | (refine' stop_of_size_le ?le
          case le => simp only [$ls,*, NatCode.size_ofNat]; decide)
       | fail "the opcode at the program counter is not STOP, and the code does not end there")
+
+/-! ## Steps over frames that know a few ranges of memory -/
+
+/-- Evaluates the growth of memory, and its price, for ranges and a size that are numbers. -/
+syntax "evm_mem" : tactic
+
+macro_rules
+  | `(tactic| evm_mem) => `(tactic| simp (config := { decide := true }) only [extendMemory,
+      ceil32, wordCount, memoryGasCost, keccak256Cost, WORD_BYTES, MEMORY_PER_WORD,
+      OPCODE_KECCAK256_BASE, OPCODE_KECCAK256_PER_WORD, BitVec.reduceToNat, Nat.reduceMod,
+      Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul, Nat.reduceDiv, Nat.reducePow, ↓reduceIte,
+      Nat.add_zero, Nat.zero_add, ByteArray.size_empty])
+
+/-- Proves the gas of a step that may grow memory, by linear arithmetic once its price is known. -/
+syntax "evm_memGas" : tactic
+
+macro_rules
+  | `(tactic| evm_memGas) => `(tactic| first | evm_gas | (evm_mem <;> evm_gas))
+
+/-- Proves that a fact is in the list of a frame, by the first entry that matches it. -/
+syntax "evm_fact" : tactic
+
+macro_rules
+  | `(tactic| evm_fact) => `(tactic| ((try simp only [BitVec.reduceToNat]) <;>
+      (repeat' first | exact List.mem_cons_self | apply List.mem_cons_of_mem)))
+
+/-- Proves a size or a bound of a range of bytes, from the sizes of its parts. -/
+syntax "evm_size" : tactic
+
+macro_rules
+  | `(tactic| evm_size) => `(tactic| ((try simp only [size_wordBytes, ByteArray.size_append,
+      size_bufferRead, BitVec.reduceToNat, Nat.reduceAdd]) <;> first | rfl | decide | omega))
+
+/-- Evaluates the size of memory, the facts that a write keeps, and the gas after a step. -/
+syntax "evm_tidyK" : tactic
+
+macro_rules
+  | `(tactic| evm_tidyK) => `(tactic| ((try evm_mem) <;> (try simp (config := { decide := true })
+      only [List.filter_cons, List.filter_nil, Apart, size_wordBytes, ByteArray.size_append,
+        size_bufferRead, BitVec.reduceToNat, Nat.reduceAdd, ↓reduceIte]) <;> evm_tidy))
+
+/-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
+
+The goal is a triple from a frame that knows a few ranges of memory, at a known program counter.
+
+The rewrite rules `ls` turn the facts about the code into facts about numbers. -/
+syntax "evm_stepK" " [" simpLemma,* "]" : tactic
+
+macro_rules
+  | `(tactic| evm_stepK [$ls,*]) => `(tactic| ((try unfold Spec) <;> (first
+      -- MSTORE, MLOAD, KECCAK256, CALLDATACOPY and MCOPY take their rules on such frames.
+      --
+      -- MLOAD, KECCAK256 and MCOPY read the first fact in the list that starts where they read.
+      | (refine' Triple.seq (mstore_known ?lt ?op ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_memGas)
+      | (refine' Triple.seq (mload_known ?lt ?op ?fact ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case fact => evm_fact
+         case gas => evm_gas)
+      | (refine' Triple.seq (keccak256_known ?lt ?op ?fact ?len ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case fact => evm_fact
+         case len => evm_size
+         case gas => evm_memGas)
+      | (refine' Triple.seq (calldatacopy_known ?lt ?op ?nz ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case nz => decide
+         case gas => evm_memGas)
+      -- MCOPY of the whole range of a fact, tried first.
+      --
+      -- The destination loses the facts it overlaps.
+      | (refine' Triple.seq (mcopy_known ?fork ?lt ?op ?nz ?fact ?len ?gas) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case nz => decide
+         case fact => evm_fact
+         case len => evm_size
+         case gas => evm_memGas)
+      -- MCOPY within the range of a fact.
+      | (refine' Triple.seq (mcopy_known_within ?fork ?lt ?op ?fact ?s ?s' ?d ?d' ?gas) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case fact => evm_fact
+         case s => evm_size
+         case s' => evm_size
+         case d => evm_size
+         case d' => evm_size
+         case gas => evm_memGas)
+      -- Every other opcode whose rule keeps memory, and does not read it, takes that rule.
+      --
+      -- It takes it for every memory.
+      | (refine' Triple.seq (Known.of_at fun _ => ?step) ?next
+         case step => (evm_step [$ls,*]) <;> exact Triple.of_imp fun _ h => h)
+      | fail "no rule of a step applies to the opcode at the program counter")
+      -- The goal that is left starts from the frame after the step.
+      <;> evm_tidyK))
 
 end EthLib.Execution.Evm.Logic
