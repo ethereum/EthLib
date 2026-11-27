@@ -138,7 +138,10 @@ theorem toBE_bytesToFieldElement {raw : List UInt8} (hlength : raw.length = 48) 
   simp only [bytesToFieldElement] at h
   split at h
   next hlt =>
+    -- The decoded element as an atom, so that matching the two results evaluates nothing.
+    generalize hy : Fp.ofNat (ByteOrder.ofBE raw) = y at h
     cases h
+    subst hy
     rw [Fp.val_ofNat_of_lt hlt, ← hlength]
     exact EthLib.Base.ByteOrder.toList_toBE_ofBE raw
   · cases h

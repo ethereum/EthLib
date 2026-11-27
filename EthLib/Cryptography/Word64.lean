@@ -32,16 +32,24 @@ abbrev wordRadix : Nat := 2^64
 /-- The radix of half a word, `2^32`. -/
 private abbrev halfRadix : Nat := 2^32
 
-/-- The low half of a word is its value mod `2^32`. -/
-private theorem low_eq (x : UInt64) : (x &&& 0xffffffff).toNat = x.toNat % halfRadix := by
+/-- The low half of a word is the word mod `2^32`. -/
+theorem low_toNat (x : UInt64) : (x &&& 0xFFFFFFFF).toNat = x.toNat % 2^32 := by
   rw [UInt64.toNat_and]
   change x.toNat &&& (2^32 - 1) = x.toNat % 2^32
   exact Nat.and_two_pow_sub_one_eq_mod _ _
 
-/-- The high half of a word is its value divided by `2^32`. -/
-private theorem high_eq (x : UInt64) : (x >>> 32).toNat = x.toNat / halfRadix := by
+/-- The high half of a word is the word divided by `2^32`. -/
+theorem high_toNat (x : UInt64) : (x >>> 32).toNat = x.toNat / 2^32 := by
   rw [UInt64.toNat_shiftRight, Nat.shiftRight_eq_div_pow]
   rfl
+
+/-- The low half of a word is its value mod a half word. -/
+private theorem low_eq (x : UInt64) : (x &&& 0xffffffff).toNat = x.toNat % halfRadix :=
+  low_toNat x
+
+/-- The high half of a word is its value divided by a half word. -/
+private theorem high_eq (x : UInt64) : (x >>> 32).toNat = x.toNat / halfRadix :=
+  high_toNat x
 
 /-- A product of two half words fits the square of the largest half word. -/
 private theorem prod_le {a b : Nat} (ha : a < halfRadix) (hb : b < halfRadix) :

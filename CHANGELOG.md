@@ -1219,6 +1219,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the product of the BLS12-381 base field runs on six 64-bit words, through `Word64.mul6` (`Cryptography/Word64/Six.lean`), with the law `Word64.mul6_spec`.
+  `Bls.Fp.mulWords` is that product on the constants `Bls.Fp.pLimbs`, now `@[noinline]` so that its words stay in memory, and `Bls.Fp.pinvWord`.
+  `Bls.Fp.mulWords_eq` states that it equals the twelve-limb CIOS product, so the field and every statement above it are unchanged.
+  `Word64.low_toNat`, `Word64.high_toNat` and `Montgomery.Limbs.val_words6` are new.
+  `Bls.Fp.mulLow` and `Bls.Fp.mulHigh` are removed, and so are the generic `Montgomery.mulRows`, `mulLow`, `mulHigh`, `mulHigh_mulLow`, `Internal.load_zero`, `Internal.load_pack` and `Internal.loop_add`, which only they used.
+  The twelve limbs of `Montgomery.Limbs 12` are stored two to a word in `Word64.Words6`, so the structure `Montgomery.Limbs12` is removed, and the literals of `Fp` are six 64-bit words.
+  `Montgomery.Internal.eq_of_num_eq` and `Montgomery.Limbs.val_injective` move from `Cryptography/Proofs/Montgomery/Core.lean` to `Montgomery/Words.lean` and `Montgomery/Limbs.lean`, with their statements unchanged.
+
 - In Lean, the rules of a frame that knows slots for the calls that send no value of their own (`Execution/Proofs/Evm/Logic/Effect.lean`) hold at every fork from Berlin, with one counter of gas ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `callKind_stored`, `call_stored`, `staticcall_stored`, `delegatecall_stored` and `callcode_stored` lose the hypothesis `fork < .glamsterdam`, and ask for `callBaseCost fork true ≤ gas` in place of `2600 ≤ gas`.
   `callCost` and `callGas` state the price of the access as `callBaseCost fork cold`, in place of `if cold then 2600 else 100`.
@@ -1460,13 +1468,13 @@ Not yet released.
     Use `Sec1.fieldToBytes` and `Sec1.fieldOfBytes?` with the parameters of the curve, and the lemmas `Sec1.size_fieldToBytes`, `Sec1.ofBE_fieldToBytes` and `Sec1.fieldOfBytes?_eq_some_iff`; they hold for any length `mlen`, not only 32 bytes.
 - In Lean, 61 technical lemmas of the Montgomery arithmetic on 32-bit limbs move to the namespace `Montgomery.Internal`, and three lemmas on digits to `Montgomery.Limbs.Internal` ([#4685](https://github.com/ethereum/EthLib/issues/4685)).
   Only the Montgomery modules and their proofs use them, and those modules open the namespace.
-  - From `Cryptography/Montgomery/Words.lean`: `mac_spec`, `sbb_spec`, `num_succ`, `fits_succ`, `num_congr`, `fits_congr`, `fits_of_lt`, `num_cons`, `fits_cons`, `num_cons_zero`, `fits_cons_zero`, `radix_succ`, `num_lt`, `num_snoc`, `loop_induct`, `loop_add`, `macS_spec`, `shS_spec`, `redS_spec`, `subbS_spec`, `lt_of_fits`, `load_spec`, `num_mod` and `radix_mod`.
+  - From `Cryptography/Montgomery/Words.lean`: `mac_spec`, `sbb_spec`, `num_succ`, `fits_succ`, `num_congr`, `fits_congr`, `fits_of_lt`, `num_cons`, `fits_cons`, `num_cons_zero`, `fits_cons_zero`, `radix_succ`, `num_lt`, `num_snoc`, `loop_induct`, `macS_spec`, `shS_spec`, `redS_spec`, `subbS_spec`, `lt_of_fits`, `load_spec`, `num_mod` and `radix_mod`.
   - From `Cryptography/Montgomery/Product.lean`: `pos_of_pinv`, `step_spec`, `reduce_out`, `reduce_spec`, `mulWords_out`, `mulWords_spec`, `load_zero` and `load_pack`.
   - From `Cryptography/Montgomery.lean`: `numPairs_eq`, `size_powTableAux`, `topDigit_lt`, `lowDigit_lt` and `size_pushLimbs`.
   - From `Cryptography/Proofs/Montgomery/Core.lean`: `num_zero`, `fits_zero`, `fits_snoc`, `eq_of_num_eq`, `word_succ` and `ltWords_iff`.
     `Limbs.digit_toNat`, `Limbs.num_digit` and `Limbs.fits_digit` move to `Montgomery.Limbs.Internal`.
   - From `Cryptography/Proofs/Montgomery.lean`: `radix_mul_inv`, `radix_inv_mul`, `radix_cancel`, `limbs_cast`, `mulLimbs_cast`, `toZMod_sub'`, `powTableAux_spec`, `powTable_spec`, `toZMod_window`, `toZMod_powWord`, `toZMod_powDigits`, `toList_toBE_four`, `pushLimbs_toList`, `wordBE_toNat` and `num_limbBE`.
-  The lemmas that callers use stay public, such as those of the element and its operations, `mulLimbs_spec`, `addLimbs_spec`, `subLimbs_spec`, `toBytesBE_size`, `toNat_eq_val`, `zero_spec`, `mulHigh_mulLow` and the map to `ZMod p`.
+  The lemmas that callers use stay public, such as those of the element and its operations, `mulLimbs_spec`, `addLimbs_spec`, `subLimbs_spec`, `toBytesBE_size`, `toNat_eq_val`, `zero_spec` and the map to `ZMod p`.
   To reach a moved lemma, write `open EthLib.Cryptography.Montgomery.Internal`, or `Montgomery.Limbs.Internal` for the lemmas on digits.
 
 - In Lean, secp256k1 encodes and decodes its points with the SEC 1 module of every prime-field curve ([#4699](https://github.com/ethereum/EthLib/pull/4699)).
