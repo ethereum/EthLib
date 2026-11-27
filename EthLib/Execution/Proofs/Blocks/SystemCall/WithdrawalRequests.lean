@@ -5,6 +5,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests.Recor
 public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueStart
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
+public import EthLib.Execution.Proofs.Blocks.SystemCall.AddCost
 public import EthLib.Execution.Proofs.Blocks.SystemCall.AddPath
 
 /-!
@@ -351,6 +352,36 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork)
       hstatic hacc hsize (by omega)) (fun _ h => h) ?_
   rintro evm ⟨⟨herr, hout, hw, hlog⟩, -⟩
   exact ⟨herr, hout, hw, by rw [hlog, hlogs]; rfl⟩
+
+/-- From Shapella, a call that pays the fee adds its request, for at most the gas of the bound.
+
+The bound is 2,266 gas and 87 for each step of the loop of the fee, then 150,000 for the storage.
+
+From Glamsterdam, the 150,000 are five times larger, on the one-counter model of the gas. -/
+theorem costs_add {m : Nat} (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the validator, then the amount as 8 bytes, big-endian.
+    (hsize : message.data.size = 56)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
+    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
+      FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
+        (storageOf state message.currentTarget 0).toNat m)
+    -- The value pays the fee, and the frame starts with at least the gas of the bound.
+    (hpays : pays (storageOf state message.currentTarget) message.value = true)
+    (hgas : 2266 + 87 * m + 150000 * storageGasScale fork ≤ gas) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
+    Costs (Step fork) (At CODE message 0 [] .empty gas state substate returnData)
+      (fun evm => evm.running = false ∧
+        -- The frame stops, with the request words at the tail of the queue and the log.
+        Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
+          (logData message.caller message.data) state substate evm)
+      (2266 + 87 * m + 150000 * storageGasScale fork) := by
+  -- The request has two input words: five writes and one budget for the reads and the log.
+  refine ((WITHDRAWAL_REQUEST.costs_add feePathCode_CODE addPathCode_CODE rfl hfork hcaller
+    hstatic hacc hsize hfits hpays (by omega)).mono (by omega)).consequence
+    (fun _ h => h) fun _ h => h
 
 /-! ## The system call -/
 
