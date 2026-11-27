@@ -43,6 +43,8 @@ So it divides nothing.
 --
 -- Here `λ` is the slope on the twist.
 --
+-- The line function of Appendix A of the draft returns the negation of this line.
+--
 -- The loop multiplies each line by `w^3` and by a denominator in `Fp2`.
 --
 -- The line becomes `(λ x - y) - λ xp w^2 + yp w^3`, with three coefficients in `Fp2`.
@@ -68,9 +70,9 @@ def Fp12.mulLine (f : Fp12 F) (c0 c2 c3 : Fp2 F) : Fp12 F :=
 
 /-- Doubling step: `(T, f) ↦ (2T, f^2 l)`, with `l` the tangent at `T`, at `(xp, yp)`.
 
-The line is the draft's line times `c w^3`, as derived above the line value.
+The line is the line derived above the line value, times `c w^3`.
 
-Here `c = -2 Y Z^3` for `T = (X, Y, Z)`. -/
+Here `c = 2 Y Z^3` for `T = (X, Y, Z)`. -/
 def millerDouble (T : G2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
   let xx := FieldOps.square T.x
   let zz := FieldOps.square T.z
@@ -92,9 +94,9 @@ def millerDouble (T : G2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
 
 /-- Addition step: `(T, f) ↦ (T + Q, f l)`, with `l` the line through `T` and `Q = (xq, yq)`.
 
-The line is the draft's line times `c w^3`, as derived above the line value.
+The line is the line derived above the line value, times `c w^3`.
 
-Here `c = -D` for the `D` below.
+Here `c = D` for the `D` below.
 
 The loop never adds `T = ±Q` on points of order `r`, so the draft's other cases never arise. -/
 def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
