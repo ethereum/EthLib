@@ -149,7 +149,8 @@ Not yet released.
   `Execution.carrier_delivered` and `Execution.finalized_epoch_le_justified_of_late`, in the same file, are new public theorems; they were private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
   `Execution.carrier_delivered` concerns a sender that holds a block and its state and reads the receiver's finalized checkpoint at that root.
   The sender and receiver are honest.
-  At least a delay after the sender's event and by `last`, an up-to-date receiver holds that block and state.
+  Both events are by `last`, with the receiver's at least a delay after the sender's.
+  The up-to-date receiver then holds that block and state.
   Both helpers assume synchrony, delayed admission, a nonempty epoch, at least two epochs of block-root history, an initialized invariant anchor with matching block and state slots at which all honest validators start, agreement of bounded honest stores on blocks at common roots, and nonzero roots of their held blocks.
   The epoch-order helper additionally assumes positive slot duration and that whenever one bounded honest store's finalized epoch is no greater than another's justified epoch, the latter's justified root reads the former's finalized checkpoint at that epoch.
 
