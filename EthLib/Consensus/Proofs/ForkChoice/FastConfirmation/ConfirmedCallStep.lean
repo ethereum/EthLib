@@ -857,13 +857,13 @@ private theorem replaces_facts {store : Store preset fork} {after : FastConfirma
     rw [slotEpochNat, eq]
     exact ⟨slot.toNat_lt, rfl⟩
 
-/-- At a call that replaces its base, the observed justified block covers honest heads to the limit.
+/-- At a call that replaces its base, the observed justified block covers up-to-date honest heads.
 
-Otherwise two honest stores collide, or cross-store direct-safety or justified evidence holds.
+It holds to the limit, or stores collide, or cross-store direct-safety or justified evidence holds.
 
-It assumes synchrony, delayed admission, honestly signed justifications and direct-safety premises.
+It assumes synchrony, delayed admission, fitting delays, signed justifications and nonzero roots.
 
-It also assumes that no honest held block has a zero state root. -/
+It also needs direct-safety premises, the anchor at an epoch start, slot reads and the call run. -/
 theorem Execution.observedRestart_covers_or_evidence
     {Δ limit : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)
