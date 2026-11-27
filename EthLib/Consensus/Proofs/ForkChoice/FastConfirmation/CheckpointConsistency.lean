@@ -933,11 +933,15 @@ Else honest stores collide or give cross-store justified evidence; assume covera
 
 By `time` an honest slot-start call passes the no-conflict test after the anchor's justified epoch.
 
-It needs a shared epoch-start anchor, genesis run, timing, duty windows, preset and store bounds.
+It needs a shared epoch-start anchor, a genesis run, duty windows and direct-safety parameters.
 
 The anchor block and state share a slot; a vote Δ past its deadline arrives before the next slot.
 
-The slot duration is positive; honest stores hold only blocks with nonzero state roots by `time`. -/
+The slot duration is positive; honest stores hold only blocks with nonzero state roots by `time`.
+
+By `time`, honest store epochs stay within the horizon and honest stores lack the anchor's parent.
+
+Honest held states precede the next fork, and the run and terminal stake floors hold. -/
 theorem Execution.justified_eq_currentTarget_of_noConflictingCheckpoint
     (early : HeldStatesBeforeUpgrade (e := e) time)
     (pins : JustifiedPinned (e := e) anchor.justifiedCheckpoint.epoch margin 0 time) :
