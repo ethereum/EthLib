@@ -44,6 +44,19 @@ def natByte (n size i : Nat) : UInt8 :=
 A number above `256 ^ size` keeps only its lowest `size` bytes. -/
 def ofNat (n size : Nat) : ByteArray := ⟨Array.ofFn (n := size) fun i => natByte n size i.val⟩
 
+/-- The number of a code given as words of 32 bytes, the first word highest.
+
+A code of tens of kilobytes is written this way, one word per line. -/
+def ofWords (words : List Nat) : Nat :=
+  -- The elaborator reads a list of numbers cheaply, where a sum of powers of 256 runs out of time.
+  --
+  -- Each word is below `2 ^ 256`.
+  --
+  -- When the size is not a multiple of 32, zero bytes in front of the first word fill it.
+  --
+  -- The code is then the lowest `size` bytes of the number.
+  words.foldl (fun acc w => acc * 2 ^ 256 + w) 0
+
 /-! ## The bytes -/
 
 /-- The code stored in a number has the size it is given. -/
@@ -148,6 +161,83 @@ theorem not_valid_of_natByte {n size d : Nat} (hb : natByte n size d ≠ 0x5b) :
   cases h : isValidJumpDest (validJumpDestinations (ofNat n size)) d with
   | false => rfl
   | true => exact absurd (by rw [← byteAtOrZero_ofNat]; exact byteAtOrZero_of_isValidJumpDest h) hb
+
+/-! ## The jump destinations from one walk -/
+
+/-- The JUMPDEST positions that the opcodes from `pc` reach in at most `fuel` opcodes. -/
+def destsFrom (n size : Nat) : (fuel pc : Nat) → List Nat
+  | 0, _ => []
+  | fuel + 1, pc =>
+    -- The walk stops at the end of the code, and lists each JUMPDEST that it meets.
+    if pc < size then
+      if natByte n size pc = 0x5b then pc :: destsFrom n size fuel (nextPc n size pc)
+      else destsFrom n size fuel (nextPc n size pc)
+    else []
+
+/-- The valid jump destinations of the code, from one walk along its opcodes.
+
+A proof evaluates the walk once, then reads each destination in the list. -/
+def jumpDests (n size : Nat) : List Nat := destsFrom n size size 0
+
+/-- A position listed by the walk from `pc` is a JUMPDEST at an opcode boundary from `pc`. -/
+theorem boundaryFrom_of_mem_destsFrom {n size d : Nat} :
+    ∀ {fuel pc : Nat}, d ∈ destsFrom n size fuel pc →
+      BoundaryFrom (ofNat n size) pc d ∧ natByte n size d = 0x5b
+  | 0, _, h => by simp [destsFrom] at h
+  | fuel + 1, pc, h => by
+    have hs : pc < size → pc < (ofNat n size).size := fun h => by rw [size_ofNat]; exact h
+    unfold destsFrom at h
+    split at h
+    · rename_i hpc
+      have step : d ∈ destsFrom n size fuel (nextPc n size pc) →
+          BoundaryFrom (ofNat n size) (nextPc n size pc) d ∧ natByte n size d = 0x5b :=
+        boundaryFrom_of_mem_destsFrom
+      split at h
+      · rename_i hb
+        rcases List.mem_cons.mp h with rfl | h'
+        · exact ⟨.here (hs hpc), hb⟩
+        · obtain ⟨hbd, hbyte⟩ := step h'
+          exact ⟨.step (hs hpc) (by rw [nextOpcode_ofNat]; exact hbd), hbyte⟩
+      · obtain ⟨hbd, hbyte⟩ := step h
+        exact ⟨.step (hs hpc) (by rw [nextOpcode_ofNat]; exact hbd), hbyte⟩
+    · simp at h
+
+/-- A JUMPDEST at an opcode boundary from `pc` is listed by the walk from `pc`.
+
+The walk needs at least one opcode of fuel for each byte from `pc` to the end. -/
+theorem mem_destsFrom_of_boundaryFrom {n size d pc : Nat} (h : BoundaryFrom (ofNat n size) pc d) :
+    ∀ {fuel : Nat}, size - pc ≤ fuel → natByte n size d = 0x5b → d ∈ destsFrom n size fuel pc := by
+  induction h with
+  | here hlt =>
+    intro fuel hf hb
+    rw [size_ofNat] at hlt
+    obtain ⟨fuel, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
+    simp [destsFrom, hlt, hb]
+  | @step start _ hlt _ ih =>
+    intro fuel hf hb
+    rw [size_ofNat] at hlt
+    rw [nextOpcode_ofNat] at ih
+    -- Each opcode moves the walk forward by at least one byte.
+    have hnext : start < nextPc n size start := by
+      unfold nextPc
+      exact Nat.lt_of_lt_of_le (Nat.lt_succ_self _) (Nat.le_add_right _ _)
+    obtain ⟨fuel, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
+    have hmem := ih (fuel := fuel) (by omega) hb
+    simp only [destsFrom, hlt, ↓reduceIte]
+    split
+    · exact List.mem_cons_of_mem _ hmem
+    · exact hmem
+
+/-- A position is a valid jump destination exactly when the walk along the opcodes lists it. -/
+theorem isValidJumpDest_ofNat_iff {n size d : Nat} :
+    isValidJumpDest (validJumpDestinations (ofNat n size)) d = true ↔ d ∈ jumpDests n size := by
+  rw [isValidJumpDest_iff_boundaryFrom, byteAtOrZero_ofNat]
+  constructor
+  · rintro ⟨hbd, hb⟩
+    exact mem_destsFrom_of_boundaryFrom hbd (by omega) hb
+  · intro h
+    obtain ⟨hbd, hb⟩ := boundaryFrom_of_mem_destsFrom h
+    exact ⟨hbd, hb⟩
 
 /-- The `w` bits of a number from bit `s` depend only on its bits below bit `W`.
 
