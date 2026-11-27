@@ -242,7 +242,7 @@ macro_rules
       Relocated.lt_zero $h,
       Relocated.getElem_ite $h, Relocated.pushData_ite $h, Relocated.getElem_ite_zero $h,
       Relocated.pushData_ite_zero $h, NatCode.byteAtOrZero_ofNat, and_self,
-      and_true, true_and, and_false, false_and, eq_self_iff_true])
+      and_true, true_and, and_false, false_and, eq_self_iff_true, Nat.reduceEqDiff])
 
 /-- Proves that a jump destination of a relocated code is valid.
 
@@ -251,11 +251,15 @@ syntax "evm_destR " term:max " [" simpLemma,* "]" : tactic
 
 macro_rules
   | `(tactic| evm_destR $h [$ls,*]) => `(tactic| first
-      | assumption
-      | exact Relocated.valid $h (by first | ((simp only [$ls,*]) <;> decide) | decide)
-          (by first | ((simp only [$ls,*, NatCode.size_ofNat]) <;> decide) | decide)
-      | exact Relocated.valid_zero $h (by first | ((simp only [$ls,*]) <;> decide) | decide)
-          (by first | ((simp only [$ls,*, NatCode.size_ofNat]) <;> decide) | decide))
+      -- At reducible transparency: unfolding `o + k` against a hypothesis recurses `k` times.
+      | with_reducible assumption
+      -- The simprocs evaluate the masks and the sizes: `decide` would shift a mask bit by bit.
+      | exact Relocated.valid $h
+          (by first | (simp only [$ls,*, Nat.reduceShiftRight, Nat.reduceMod]; done) | decide)
+          (by first | (simp only [$ls,*, NatCode.size_ofNat, Nat.reduceLT]; done) | decide)
+      | exact Relocated.valid_zero $h
+          (by first | (simp only [$ls,*, Nat.reduceMod]; done) | decide)
+          (by first | (simp only [$ls,*, NatCode.size_ofNat, Nat.reduceLT]; done) | decide))
 
 /-- Runs the opcode at the program counter `o + k` of a relocated code, by its rule.
 
@@ -270,7 +274,7 @@ macro_rules
       | evm_stepK [$ls,*, Relocated.lt $h, Relocated.lt_zero $h, Relocated.getElem_ite $h,
           Relocated.pushData_ite $h, Relocated.getElem_ite_zero $h, Relocated.pushData_ite_zero $h,
           NatCode.byteAtOrZero_ofNat, and_self, and_true, true_and, and_false, false_and,
-          eq_self_iff_true]
+          eq_self_iff_true, Nat.reduceEqDiff]
       -- JUMP and a taken JUMPI, whose destination the code facts alone do not prove valid.
       | ((refine' Triple.seq (Known.of_at fun _ => ?step) ?next
           case step => (first
