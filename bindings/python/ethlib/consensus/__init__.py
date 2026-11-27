@@ -2217,7 +2217,7 @@ def is_optimistic_node(
 ) -> bool:
     """From Bellatrix, whether a node is optimistic after the steps of a fork choice run."""
     # The status of the payload of the head: 0 empty, 1 full and 2 pending, read from Gloas.
-    # A pending head is optimistic when its own payload or the one it builds on is.
+    # A full head reads its own payload, and an empty or pending head the one it builds on.
     return _native.consensus_is_optimistic_node(
         name,
         fork,

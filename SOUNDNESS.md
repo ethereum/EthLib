@@ -4749,15 +4749,15 @@ A payload that builds on an invalid payload in that way leaves the set.
 A block built on its parent without the payload of the parent does not hold that payload on its payload chain.
 So its own optimistic payload stays when only the payload of the parent is invalid.
 From Gloas the head of the fork choice is a block with or without its payload, so the optimistic store keeps the status of the head.
-A full head reads the payload of its block, an empty head the payload its block builds on, and a pending head both; `isHeadOptimistic_of_full`, `isHeadOptimistic_of_empty_of_named` and `isHeadOptimistic_of_pending_of_optimistic` and `isHeadOptimistic_of_pending_of_not_optimistic` state it.
-The search of the head never stops at a pending node, so reading both for a pending head is a choice of EthLib, the cautious one.
-`isHeadOptimistic_of_empty_of_unnamed` shows that an empty head whose bid names no known payload fails with `payloadNotVerified`.
+A full head reads the payload of its block, and an empty or pending head the payload its block builds on; `isHeadOptimistic_of_full`, `isHeadOptimistic_eq_buildsOnOptimistic` and `isHeadOptimistic_of_not_full_of_named` state it.
+A pending head reads as an empty one, as the source states.
+`isHeadOptimistic_of_not_full_of_unnamed` shows that an empty or pending head whose bid names no known payload fails with `payloadNotVerified`.
 That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds.
-The rule fails there rather than call that payload verified, so the head rule and the latest verified ancestor agree.
+The rule fails there rather than call that payload verified, so the head rule and the latest verified ancestor agree; the source reads the parent block hash instead, which #4627 tracks.
 From Gloas the latest verified ancestor takes a node, and reads only the payloads that the node holds.
 A full node holds every payload of its payload chain, and an empty or pending node holds all but its own.
 `latestVerifiedAncestor_ne_root` shows that a node without its own payload is never its own verified ancestor.
-So a pending node reads as full or empty for the head, and as empty for the ancestor: each reading is the cautious one.
+So a pending node reads as empty both for the head and for the ancestor, as the source states.
 The status of a node is an assumption: a full node must name a payload that the store holds, and the rules do not check it.
 The optimistic store follows the fields of the guide, which do not record the payloads held; the search of the head returns a full node only for a held payload.
 `latestVerifiedAncestor_of_glamsterdam` shows that the answer is the first of those payloads that is not optimistic, with every one before it optimistic.

@@ -479,13 +479,11 @@ def _gloas_optimistic_node(roots: list[bytes], status: int, head: bytes = BLOCK_
     [
         # A full head reads the payload of its block.
         ([BLOCK_2], FULL),
-        # An empty head reads the payload that its block builds on, that of block 1.
+        # An empty or pending head reads the payload that its block builds on, that of block 1.
         ([BLOCK_1], EMPTY),
-        # A pending head reads both.
-        ([BLOCK_2], PENDING),
         ([BLOCK_1], PENDING),
     ],
-    ids=["full", "empty", "pending own", "pending parent"],
+    ids=["full", "empty", "pending"],
 )
 def test_gloas_optimistic_head(roots: list[bytes], status: int):
     assert _gloas_optimistic_node(roots, status) is True
@@ -493,7 +491,7 @@ def test_gloas_optimistic_head(roots: list[bytes], status: int):
 
 @pytest.mark.parametrize(
     ("roots", "status"),
-    [([BLOCK_1], FULL), ([BLOCK_2], EMPTY), ([], PENDING)],
+    [([BLOCK_1], FULL), ([BLOCK_2], EMPTY), ([BLOCK_2], PENDING)],
     ids=["full", "empty", "pending"],
 )
 def test_gloas_head_not_optimistic(roots: list[bytes], status: int):
@@ -595,20 +593,19 @@ def test_gloas_dropped_block_leaves_a_viable_branch():
 GLOAS_ANCHOR_ROOT = gloas_root(_pinned_file("anchor_block"))
 
 
-@pytest.mark.parametrize("status", [EMPTY, PENDING], ids=["empty", "pending"])
-def test_gloas_head_on_a_payload_the_store_lacks(status: int):
-    # Without its own optimistic payload, the head cannot be judged.
+@pytest.mark.parametrize(
+    ("roots", "status"),
+    [([], EMPTY), ([], PENDING), ([GLOAS_ANCHOR_ROOT], PENDING)],
+    ids=["empty", "pending", "pending with its own payload optimistic"],
+)
+def test_gloas_head_on_a_payload_the_store_lacks(roots: list[bytes], status: int):
+    # The head reads the payload that its block builds on, which the store lacks.
     message = (
         f"optimistic sync: the payload of the block 0x{GLOAS_ANCHOR_ROOT.hex()} is not verified"
     )
     with raises(ERROR, message) as info:
-        _gloas_optimistic_node([], status, GLOAS_ANCHOR_ROOT)
+        _gloas_optimistic_node(roots, status, GLOAS_ANCHOR_ROOT)
     assert info.value.code == 39
-
-
-def test_gloas_pending_head_reads_its_own_payload_first():
-    # Its own optimistic payload settles it before the missing one is read.
-    assert _gloas_optimistic_node([GLOAS_ANCHOR_ROOT], PENDING, GLOAS_ANCHOR_ROOT) is True
 
 
 def test_unknown_head_payload_status():
