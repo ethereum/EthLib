@@ -32,7 +32,7 @@ def opcode_inventory(fork: str) -> dict[int, str]:
     tx = rlp.encode(fields + [_int(27 + parity), r.lstrip(b"\0"), s.lstrip(b"\0")])
     sender = [address(KEY), b"", _int(10**18), b"", []]
 
-    opcodes = {}
+    opcodes: dict[int, str] = {}
     for byte in range(256):
         state = rlp.encode([sender, [OTHER, b"", b"", bytes([byte]), []]])
         trace = transactions.trace_eip3155(fork, CHAIN_ID, tx, state, ENV)
@@ -53,8 +53,10 @@ def opcode_inventory(fork: str) -> dict[int, str]:
 
 
 def select_cases(cases: Iterable[Case], group: PurePosixPath | None) -> dict[str, list[Case]]:
-    """Group state tests with a transaction runner by fork, with an optional directory filter."""
-    by_fork: dict[str, list[Case]] = {fork: [] for fork in FORK_OF_NETWORK}
+    """Group the traced state tests by fork in fork order, optionally under one directory."""
+    by_fork: dict[str, list[Case]] = {
+        fork: [] for fork in catalogue.EXECUTION_FORKS if fork in FORK_OF_NETWORK
+    }
     for case in cases:
         if (
             case.group == "state_test"
@@ -73,7 +75,8 @@ def traced_opcodes(trace: Sequence[str]) -> Counter[int]:
 def render_fork(
     network: str,
     opcodes: Mapping[int, str],
-    counts: Counter[int],
+    counts: Mapping[int, int],
+    *,
     traced: int,
     rejected: int,
 ) -> str:
@@ -89,7 +92,7 @@ def render_fork(
         "| --- | ---: |",
         f"| Traced cases | {traced} |",
         f"| Cases skipped for expected transaction errors | {rejected} |",
-        f"| Trace steps | {counts.total()} |",
+        f"| Trace steps | {sum(counts.values())} |",
         "",
         f"### Observed opcodes ({len(observed)})",
         "",
@@ -110,14 +113,14 @@ def render_fork(
 
 
 def main() -> None:
-    """Trace pinned state tests and print one coverage table for each selected fork."""
+    """Trace the pinned state tests and print one coverage section for each selected fork."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("group", nargs="?", type=PurePosixPath, help="directory in the archive")
     args = parser.parse_args()
     if archives.CACHE is None:
         parser.error("set ETHLIB_ARCHIVES to the fixture archive cache directory")
 
-    group = args.group
+    group: PurePosixPath | None = args.group
     by_fork = select_cases(catalogue.execution_cases(), group)
     if not by_fork:
         parser.error(f"no state tests under {group}" if group is not None else "no state tests")
@@ -145,7 +148,9 @@ def main() -> None:
                 rejected += 1
                 continue
             counts.update(traced_opcodes(transactions.trace_eip3155(*transaction_args)))
-        sections.append(render_fork(network, opcodes, counts, len(cases) - rejected, rejected))
+        sections.append(
+            render_fork(network, opcodes, counts, traced=len(cases) - rejected, rejected=rejected)
+        )
     print("\n\n".join(sections))
 
 
