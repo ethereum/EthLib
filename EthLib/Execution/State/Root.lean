@@ -48,31 +48,51 @@ def storageEntries (storage : Std.ExtTreeMap Bytes32 U256) :
   (storage.filter fun _ value => value != 0).toList.mapM fun (key, value) => do
     return (⟨key.toArray⟩, ← Codec.encode value)
 
-/-- The storage root: the root of the secured trie of the storage entries. -/
-def storageRoot (hash : ByteArray → Hash32) (storage : Std.ExtTreeMap Bytes32 U256) :
-    Except TrieError Hash32 := do
+/-- The storage root: the root of the secured trie of the storage entries.
+
+The hash may answer inside a monad, as for the root of a trie. -/
+def storageRootM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32)
+    (storage : Std.ExtTreeMap Bytes32 U256) : ExceptT TrieError m Hash32 := do
   -- Yellow Paper §4.1: `sigma[a]_s = TRIE(L_I*(S))`, for the storage `S` of `a`.
-  root hash ⟨true, ← (storageEntries storage).mapError .rlp⟩
+  rootM hash ⟨true, ← ((storageEntries storage).mapError .rlp : Except TrieError _)⟩
+
+/-- The storage root with a plain hash: Keccak-256 in Ethereum. -/
+def storageRoot (hash : ByteArray → Hash32) (storage : Std.ExtTreeMap Bytes32 U256) :
+    Except TrieError Hash32 :=
+  (storageRootM (m := Id) hash storage).run
 
 /-- The entries of the state trie: each address, and the encoding of its account and storage root.
 
 An address with no storage has the storage root of the empty storage.
 
-They come in the order of the addresses. -/
-def stateEntries (hash : ByteArray → Hash32) (state : State) :
-    Except TrieError (List (ByteArray × ByteArray)) :=
+They come in the order of the addresses, and the hash may answer inside a monad. -/
+def stateEntriesM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) (state : State) :
+    ExceptT TrieError m (List (ByteArray × ByteArray)) :=
   -- `p(a)` for each `a` with `sigma[a] ≠ ∅`.
   state.accounts.toList.mapM fun (address, account) => do
     -- `sigma[a]_s`, which is `TRIE(∅)` for an address without storage.
-    let storageHash ← storageRoot hash (state.storage.getD address ∅)
+    let storageHash ← storageRootM hash (state.storage.getD address ∅)
     -- `p(a) = (KEC(a), RLP((sigma[a]_n, sigma[a]_b, sigma[a]_s, sigma[a]_c)))`.
     --
     -- The secured trie takes `KEC(a)`, so the entry holds `a` itself.
-    return (⟨address.toArray⟩, ← (encodeAccount account storageHash).mapError .rlp)
+    return (⟨address.toArray⟩,
+      ← ((encodeAccount account storageHash).mapError .rlp : Except TrieError _))
 
-/-- The state root: the root of the secured trie of the state entries. -/
-def stateRoot (hash : ByteArray → Hash32) (state : State) : Except TrieError Hash32 := do
+/-- The entries of the state trie with a plain hash: Keccak-256 in Ethereum. -/
+def stateEntries (hash : ByteArray → Hash32) (state : State) :
+    Except TrieError (List (ByteArray × ByteArray)) :=
+  (stateEntriesM (m := Id) hash state).run
+
+/-- The state root: the root of the secured trie of the state entries.
+
+The hash may answer inside a monad, as for the root of a trie. -/
+def stateRootM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) (state : State) :
+    ExceptT TrieError m Hash32 := do
   -- Yellow Paper §4.1: `TRIE(L_S(sigma))`, with `L_S(sigma) = {p(a) : sigma[a] ≠ ∅}`.
-  root hash ⟨true, ← stateEntries hash state⟩
+  rootM hash ⟨true, ← stateEntriesM hash state⟩
+
+/-- The state root with a plain hash: Keccak-256 in Ethereum. -/
+def stateRoot (hash : ByteArray → Hash32) (state : State) : Except TrieError Hash32 :=
+  (stateRootM (m := Id) hash state).run
 
 end EthLib.Execution.State

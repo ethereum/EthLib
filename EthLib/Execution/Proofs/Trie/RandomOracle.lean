@@ -60,17 +60,22 @@ def witnesses (first second : Trie) (key : ByteArray)
   key :: (first.data.map Prod.fst ++ second.data.map Prod.fst ++
     (firstProof.toOption.getD []) ++ (secondProof.toOption.getD []))
 
-/-- The part of the experiment after the adversary, which only calls the hash oracle.
+/-- Queries every input of the binding searches of two tries at one key.
 
-It computes both roots and both proofs, then queries every input of the binding searches.
-
-These are the key, every key of both tries, and every node of both proofs. -/
-def extract (first second : Trie) (key : ByteArray) : OracleComp HashOracle Outcome := do
-  let firstRoot ← (rootM queryHash first).run
-  let secondRoot ← (rootM queryHash second).run
+It computes both proofs, then queries the key, the keys of both tries and the proof nodes. -/
+def queryWitnesses (first second : Trie) (key : ByteArray) : OracleComp HashOracle Unit := do
   let firstProof ← (getProofM queryHash first key).run
   let secondProof ← (getProofM queryHash second key).run
   let _ ← (witnesses first second key firstProof secondProof).mapM queryHash
+  return ()
+
+/-- The part of the experiment after the adversary, which only calls the hash oracle.
+
+It computes both roots, then queries every input of the binding searches at the key. -/
+def extract (first second : Trie) (key : ByteArray) : OracleComp HashOracle Outcome := do
+  let firstRoot ← (rootM queryHash first).run
+  let secondRoot ← (rootM queryHash second).run
+  queryWitnesses first second key
   return ⟨first, second, key, firstRoot, secondRoot⟩
 
 /-- The experiment: the adversary picks two tries and a key, then the extraction runs. -/
@@ -306,15 +311,26 @@ theorem cached_of_mapM_queryHash {cache : HashOracle.QueryCache} :
     · exact ⟨answer, hanswer⟩
     · exact cached_of_mapM_queryHash rest hanswers x hx
 
-/-- A replayed extraction caches every input of the binding searches, with the table's answer. -/
-theorem cached_of_extract {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
-    (hf : cache.AgreesWithFn f) {first second : Trie} {key : ByteArray} {outcome : Outcome}
-    (hrun : simulateQ cache.toPartialImpl (extract first second key) = some outcome) :
+/-- A replayed loop over a list replays each of its steps. -/
+theorem replay_forM {cache : HashOracle.QueryCache} {α : Type}
+    (step : α → OracleComp HashOracle Unit) :
+    (xs : List α) → {u : Unit} → simulateQ cache.toPartialImpl (xs.forM step) = some u →
+      ∀ x ∈ xs, ∃ v, simulateQ cache.toPartialImpl (step x) = some v
+  | [], _, _, _, hx => by cases hx
+  | y :: rest, _, h, x, hx => by
+    simp only [List.forM_eq_forM, List.forM_cons, simulateQ_bind] at h
+    obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact ⟨v, hv⟩
+    · exact replay_forM step rest h x hx
+
+/-- A replayed query of the witnesses caches each of them, with the table's answer. -/
+theorem cached_of_queryWitnesses {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
+    (hf : cache.AgreesWithFn f) {first second : Trie} {key : ByteArray} {u : Unit}
+    (hrun : simulateQ cache.toPartialImpl (queryWitnesses first second key) = some u) :
     ∀ x ∈ witnesses first second key (getProof (fun x => f x) first key)
       (getProof (fun x => f x) second key), cache x = some (f x) := by
-  simp only [extract, simulateQ_bind] at hrun
-  obtain ⟨firstRoot, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
-  obtain ⟨secondRoot, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  simp only [queryWitnesses, simulateQ_bind] at hrun
   obtain ⟨firstProof, hfirst, hrun⟩ := Option.bind_eq_some_iff.mp hrun
   obtain ⟨secondProof, hsecond, hrun⟩ := Option.bind_eq_some_iff.mp hrun
   obtain ⟨answers, hanswers, -⟩ := Option.bind_eq_some_iff.mp hrun
@@ -326,6 +342,46 @@ theorem cached_of_extract {cache : HashOracle.QueryCache} {f : QueryImpl HashOra
   intro x hx
   obtain ⟨answer, hanswer⟩ := cached_of_mapM_queryHash _ hanswers x hx
   rw [hanswer, hf hanswer]
+
+/-- A replayed extraction caches every input of the binding searches, with the table's answer. -/
+theorem cached_of_extract {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
+    (hf : cache.AgreesWithFn f) {first second : Trie} {key : ByteArray} {outcome : Outcome}
+    (hrun : simulateQ cache.toPartialImpl (extract first second key) = some outcome) :
+    ∀ x ∈ witnesses first second key (getProof (fun x => f x) first key)
+      (getProof (fun x => f x) second key), cache x = some (f x) := by
+  simp only [extract, simulateQ_bind] at hrun
+  obtain ⟨_, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  obtain ⟨_, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+  obtain ⟨_, hwitnesses, -⟩ := Option.bind_eq_some_iff.mp hrun
+  exact cached_of_queryWitnesses hf hwitnesses
+
+/-- The secured-trie search returns two witnesses of the two tries at the key. -/
+theorem mem_witnesses_of_findSecuredCollision (hash : ByteArray → Hash32)
+    {entries₁ entries₂ : List (ByteArray × ByteArray)} {key : ByteArray}
+    {pair : ByteArray × ByteArray}
+    (h : findSecuredCollision hash entries₁ entries₂ key = some pair) :
+    pair.1 ∈ witnesses ⟨true, entries₁⟩ ⟨true, entries₂⟩ key
+        (getProof hash ⟨true, entries₁⟩ key) (getProof hash ⟨true, entries₂⟩ key) ∧
+      pair.2 ∈ witnesses ⟨true, entries₁⟩ ⟨true, entries₂⟩ key
+        (getProof hash ⟨true, entries₁⟩ key) (getProof hash ⟨true, entries₂⟩ key) := by
+  unfold findSecuredCollision at h
+  rcases Option.or_eq_some_iff.mp h with hcol | ⟨-, hkeys⟩
+  · -- Two nodes of the proofs of the key.
+    unfold findCollision at hcol
+    split at hcol
+    · rename_i p q hp hq
+      obtain ⟨hmem₁, hmem₂⟩ := mem_of_findProofCollision hash p q hcol
+      exact ⟨by simp [witnesses, hp, hq, Except.toOption, hmem₁],
+        by simp [witnesses, hp, hq, Except.toOption, hmem₂]⟩
+    · cases hcol
+  · -- Two of the key and the keys of both tries.
+    split at hkeys
+    · cases hkeys
+    · obtain ⟨hmem₁, hmem₂⟩ := mem_of_findKeyCollision hash _ hkeys
+      simp only [List.cons_append, List.mem_cons, List.mem_append] at hmem₁ hmem₂
+      constructor
+      · rcases hmem₁ with h | (h | h) <;> simp [witnesses, h]
+      · rcases hmem₂ with h | (h | h) <;> simp [witnesses, h]
 
 /-- A replayed winning extraction exposes a collision of the cache.
 
