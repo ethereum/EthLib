@@ -173,9 +173,8 @@ theorem Handles.checkpointStates_of_found {checks : SignatureChecks}
     rw [same]
     exact found
   | envelope _ step =>
-    obtain ⟨_, _, _, _, _, record, same⟩ := Store.onExecutionPayloadEnvelope_ok step
+    obtain ⟨_, _, same⟩ := Store.onExecutionPayloadEnvelope_changes step
     rw [same]
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
     exact found
   | inclusionList _ step =>
     obtain ⟨_, _, same⟩ := Store.onInclusionList_ok ‹_› step
@@ -299,8 +298,7 @@ private theorem Handles.unrealizedJustified_epoch_le {checks : SignatureChecks}
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
     exact UInt64.le_refl _
   | envelope _ accepted =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact UInt64.le_refl _
   | inclusionList _ accepted =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted

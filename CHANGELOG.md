@@ -1162,6 +1162,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Heze, `Consensus.Store.onExecutionPayloadEnvelope` returns the store unchanged for an envelope of a block whose payload the store already holds, before any other check.
+  So a second delivery of an envelope no longer records its answer on the inclusion lists again.
+  `Store.onExecutionPayloadEnvelope_ok`, `Store.onExecutionPayloadEnvelope_inclusionListSatisfied`, `Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated` and `Store.isPayloadInclusionListSatisfied_of_notValidated` take a hypothesis that the payload is new from Heze.
+  `Store.onExecutionPayloadEnvelope_of_known` gives the unchanged store, and `Store.onExecutionPayloadEnvelope_changes` the fields that an accepted envelope can change.
+  `Store.onExecutionPayloadEnvelope_isPayloadVerified_iff` gives the verified payloads after an envelope, and `Store.onExecutionPayloadEnvelope_isPayloadInclusionListSatisfied_of_known` states that the handler never changes the answer for a payload that the store holds.
+
 - In Lean, a run from genesis stays on the fork schedule at every ordered configuration, Altair at epoch zero included, whenever the upgrades due at genesis succeed ([#4624](https://github.com/ethereum/EthLib/issues/4624)).
   `Run.onSchedule_of_genesis` (`Consensus/Proofs/Transition/Schedule.lean`) takes the run from the state after the upgrades due at the slot of genesis, in place of a run from genesis itself.
   It no longer assumes that Altair starts after epoch zero, nor that the genesis fork is Phase 0, which every genesis now is.

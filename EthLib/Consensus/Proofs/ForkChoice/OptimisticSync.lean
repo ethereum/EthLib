@@ -1136,28 +1136,35 @@ theorem BlockSources.withPayloadStatus_invalidated (sources : BlockSources prese
   simp [BlockSources.withPayloadStatus, PAYLOAD_STATUS_INVALIDATED, PAYLOAD_STATUS_VALID,
     PAYLOAD_STATUS_NOT_VALIDATED]
 
-/-- From Gloas: an envelope whose payload is invalidated is rejected. -/
+/-- From Gloas: an envelope whose payload is invalidated is rejected.
+
+From Heze, an envelope for a block whose payload the store holds is skipped before any check. -/
 theorem Store.onExecutionPayloadEnvelope_ne_ok_of_invalidated {config : Config}
     {store : Store preset fork} {checks : SignatureChecks} {sources : BlockSources preset fork}
     {gloas : .glamsterdam ≤ fork} {signed : SignedExecutionPayloadEnvelope preset fork}
+    -- From Heze, the store holds no payload for this block yet.
+    (fresh : .hegota ≤ fork →
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
     (after : Store preset fork) :
     store.onExecutionPayloadEnvelope config checks
       (sources.withPayloadStatus PAYLOAD_STATUS_INVALIDATED) gloas signed ≠ .ok after := by
   intro accepted
-  obtain ⟨_, _, _, verified, _⟩ := Store.onExecutionPayloadEnvelope_ok accepted
+  obtain ⟨_, _, _, verified, _⟩ := Store.onExecutionPayloadEnvelope_ok fresh accepted
   rw [BlockSources.withPayloadStatus_engine_of_ne sources (by decide)] at verified
   exact verifyExecutionPayloadEnvelope_constant_false verified
 
-/-- From Heze: a payload kept before it is validated counts as satisfying its inclusion lists. -/
+/-- From Heze: a new payload kept before it is validated counts as satisfying its lists. -/
 theorem Store.isPayloadInclusionListSatisfied_of_notValidated {config : Config}
     {store : Store preset fork} {checks : SignatureChecks} {sources : BlockSources preset fork}
     {gloas : .glamsterdam ≤ fork} (heze : .hegota ≤ fork)
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    -- The store holds no payload for this block yet.
+    (fresh : store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
     (accepted : store.onExecutionPayloadEnvelope config checks
       (sources.withPayloadStatus PAYLOAD_STATUS_NOT_VALIDATED) gloas signed = .ok after) :
     after.isPayloadInclusionListSatisfied heze signed.message.beaconBlockRoot = .ok true := by
   obtain ⟨_, _, _, _, _, _, satisfied⟩ :=
-    Store.onExecutionPayloadEnvelope_inclusionListSatisfied heze accepted
+    Store.onExecutionPayloadEnvelope_inclusionListSatisfied heze fresh accepted
   rw [satisfied, BlockSources.withPayloadStatus_inclusionListSatisfied_of_ne sources (by decide)]
   rfl
 
