@@ -830,12 +830,12 @@ def ValueMessage (message : Message fork) (to : Address) (code data : ByteArray)
     msg.value = value ∧ msg.shouldTransferValue = true ∧ msg.depth = message.depth + 1 ∧
     msg.isStatic = false
 
-/-- From Berlin to before Glamsterdam, CALL with a value `v`, not 0, from a frame that knows slots.
+/-- From Berlin, CALL with a value `v`, not 0, from a frame that knows slots.
 
 The callee has an effect on storage and on balances.
 
 The frame then ends as a frame after the call, which pushes 1 on success and 0 on a failure. -/
-theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem callValue_stored (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to v inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
@@ -853,18 +853,18 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
     -- From Pectra, that code is no delegation.
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
-    -- The frame needs 2600 for a cold access and 9000 for the value.
+    -- The frame needs the price of a cold access and of the value.
     --
-    -- It also needs 25000 when the callee is dead in the base state, by EIP-161.
-    (hgas : 2600 + (callNewAccountCost fork base (toAddressMasked to) v + callValueCost fork v) ≤
-      gas)
+    -- It also needs the price of a new account when the callee is dead in the base state.
+    (hgas : callBaseCost fork true +
+      (callNewAccountGas fork base (toAddressMasked to) v + callValueCost fork v) ≤ gas)
     -- Each frame that ends such a message from the frame has the effect.
     --
     -- That is the assumption `callee`.
     (heffect : ∀ caller msg child cold, callee caller msg child →
       ValueMessage message (toAddressMasked to) calleeCode data v
         (callGas fork v asked gas
-          (callNewAccountCost fork base (toAddressMasked to) v + callValueCost fork v) cold) msg →
+          (callNewAccountGas fork base (toAddressMasked to) v + callValueCost fork v) cold) msg →
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
@@ -880,7 +880,7 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
         facts gas slots refund base accessed returnData)
       -- The frame gets back at most the gas that it passed on, with the stipend.
       (AfterCall code message pc rest size facts outputStart outputSize returned failed gas v asked
-        (callNewAccountCost fork base (toAddressMasked to) v + callValueCost fork v) slots refund
+        (callNewAccountGas fork base (toAddressMasked to) v + callValueCost fork v) slots refund
         base accessed change sure) := by
   intro bound runChild meets evm ⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩ within
   have hold := hall _ hinput
@@ -894,18 +894,22 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
   have hbal' : v ≤ (evm.state.getAccount message.currentTarget).balance := by
     rw [TransactionState.getAccount, hacc]
     exact hbal
-  have hnew : callNewAccountCost fork evm.state (toAddressMasked to) v =
-      callNewAccountCost fork base (toAddressMasked to) v := by
-    unfold callNewAccountCost TransactionState.isAccountAlive TransactionState.accountExists
+  have hnew : callNewAccountGas fork evm.state (toAddressMasked to) v =
+      callNewAccountGas fork base (toAddressMasked to) v := by
+    unfold callNewAccountGas callNewAccountCost callNewAccountStateGas
+      TransactionState.isAccountAlive TransactionState.accountExists
     rw [hacc]
-  have hcost := callBaseCost_of_berlin hfork hglam
-    (decide (toAddressMasked to ∉ evm.substate.accessedAddresses))
   have hcall := callValue (callee := callee) (asked := asked) (inputStart := inputStart)
     (inputSize := inputSize) (outputStart := outputStart) (outputSize := outputSize)
     (rest := rest) (memory := evm.memory) (gas := gas) (state := evm.state)
-    (substate := evm.substate) (returnData := returnData) hfork hglam hlt hbyte hv hstatic hbal'
+    (substate := evm.substate) (returnData := returnData) hfork hlt hbyte hv hstatic hbal'
     hcode' hdel hdepth rfl
-    (by rw [hext, hcost, hnew]; split <;> simp only <;> omega)
+    (by
+      rw [hext, hnew]
+      have := callBaseCost_le_cold fork
+        (decide (toAddressMasked to ∉ evm.substate.accessedAddresses))
+      dsimp only
+      omega)
   rw [hext, hnew, Nat.add_assoc] at hcall
   obtain ⟨final, hreach, hq | aborted⟩ := hcall bound runChild meets evm hat within
   · refine ⟨final, hreach, .inl ?_⟩

@@ -2118,9 +2118,9 @@ Its new base agrees with the old one outside the touched slots and the slots of 
 `Logic.delegatecall_stored` proves this for DELEGATECALL.
 `Logic.callcode_stored` proves this for CALLCODE with no value.
 `Logic.ValueMessage` is the message that CALL sends with a value.
-`Logic.callValue_stored` proves that from Berlin to before Glamsterdam, CALL with a value that is not 0 keeps the facts of a `Stored` frame in the same way.
+`Logic.callValue_stored` proves that at every fork from Berlin, with the one-counter meter, CALL with a value that is not 0 keeps the facts of a `Stored` frame in the same way.
 It needs a frame that may change the state, and its account must hold the value in the base state.
-It needs the gas of a cold call, 9000 for the value, and 25000 more when the callee is dead in the base state.
+It needs the gas of a cold call, the price of the value, and the price of a new account when the callee is dead in the base state.
 On success the new base also holds the balances and the facts of accounts of the effect.
 The new base agrees with the old one outside the addresses whose balances the effect moves or whose accounts it remakes, too.
 `Logic.CreateMessage` is the message that a creation sends, to run its init code at the new address.
@@ -2194,12 +2194,16 @@ Its postcondition gives the state and substate that the frame that ends the mess
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
 `Logic.callWith` and `Logic.call` also state that the message is static when the frame is.
-`Logic.callValue` is the rule for CALL with a value that is not 0, from Berlin to before Glamsterdam.
+`Logic.callValue` is the rule for CALL with a value that is not 0, at every fork from Berlin, with the one-counter meter.
 The frame must be one that may change the state.
 It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
+From Glamsterdam, it pays 3000 for a cold access and 11300 for the value by EIP-8038, and the state gas of a new account in place of the 25000 by EIP-8037.
+With one counter, that state gas is never refilled, although EIP-8037 refills it when the callee fails or never runs.
+These rules do not yet carry to the meter of EIP-8037 for calls.
 The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
 The message is not static.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
+From Glamsterdam, with one counter, it keeps the state gas of a new account paid, which EIP-8037 refills.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
 Its return data is then empty.
 `meets_paidNoCode` (`Logic/Callee.lean`) proves that the runner ends a message with value to no code with no error.
