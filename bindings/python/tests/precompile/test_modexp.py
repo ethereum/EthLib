@@ -250,10 +250,10 @@ VECTORS = json.loads(
 def eip_price(data: bytes, eip7883: bool) -> int:
     """The price of a call by the formula of EIP-2565, or of EIP-7883 when `eip7883` is set."""
     base, exponent, modulus = (
-        int.from_bytes(data[i : i + 32].ljust(32, b"\0")) for i in (0, 32, 64)
+        int.from_bytes(data[i : i + 32].ljust(32, b"\0"), "big") for i in (0, 32, 64)
     )
     head_bytes = data[96 + base : 96 + base + min(32, exponent)].ljust(min(32, exponent), b"\0")
-    head = int.from_bytes(head_bytes)
+    head = int.from_bytes(head_bytes, "big")
     # EIP-198: the index of the highest bit of the head, plus 8 per exponent byte past 32.
     # EIP-7883 doubles the 8, raises the complexity and the least price, and drops the divisor.
     per_byte = 16 if eip7883 else 8
