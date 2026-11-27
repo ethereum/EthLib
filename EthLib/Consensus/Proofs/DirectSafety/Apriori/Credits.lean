@@ -198,24 +198,20 @@ private theorem attestation_flagPotential {f : Fork} {u u' : BeaconState preset 
     flagPotential previous current base ⟨f, u⟩ + 448 * credit ≤
       flagPotential previous current base ⟨f, u'⟩ := by
   rw [processAttestation_of_altair altair] at ok
-  simp only [processAttestationAltair, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, recent, _, slotEpoch, _, _, _, _, _, _, _, _, earned, earnedOk, _, _, _, _, _, _,
-    total, totalOk, attesters, attestersOk, pair, flagsOk, proposer, _, raisedState, raised,
-    final⟩ := ok
-  rw [ensure_ok_iff] at recent slotEpoch
-  have notGloas : ¬ .glamsterdam ≤ f := Nat.not_le_of_lt early
-  simp only [notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at final
-  subst final
+  -- Before Gloas the step ends with the proposer reward.
+  obtain ⟨⟨recent, slotEpoch, -⟩, earned, _, total, attesters, updated, numerator, proposer,
+    earnedOk, -, -, totalOk, attestersOk, flagsOk, -, raised⟩ :=
+    processAttestationAltair_reads_of_lt_gloas early ok
   -- The credit is the numerator over `448`, rounding down.
-  have value : attestationCredit u att parent = .ok (pair.2 /
+  have value : attestationCredit u att parent = .ok (numerator /
       ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR / PROPOSER_WEIGHT)).toNat := by
     simp only [attestationCredit, altair, ↓reduceDIte, liftAccessor, earnedOk, totalOk,
       attestersOk, Except.mapError, bind, Except.bind, flagsOk]
     rfl
   obtain rfl := Except.ok.inj (credited.symm.trans value)
-  have scaled : 448 * (pair.2 /
+  have scaled : 448 * (numerator /
       ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR / PROPOSER_WEIGHT)).toNat ≤
-      pair.2.toNat := by
+      numerator.toNat := by
     rw [UInt64.toNat_div, show ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR /
       PROPOSER_WEIGHT : UInt64).toNat = 448 from rfl, Nat.mul_comm]
     exact Nat.div_mul_le_self _ _
@@ -242,6 +238,7 @@ private theorem attestation_flagPotential {f : Fork} {u u' : BeaconState preset 
       currentActive a (target ▸ active a member)
     have gain := participation_gain distinct flagsOk current base inKeys
       (reads current inKeys fun _ member => .inr member)
+    dsimp only at gain
     simp only [setEpochParticipation, chosen, ↓reduceIte]
     omega
   · -- The attestation sets flags of the previous epoch.
@@ -252,6 +249,7 @@ private theorem attestation_flagPotential {f : Fork} {u u' : BeaconState preset 
       previousActive a (target ▸ active a member)
     have gain := participation_gain distinct flagsOk previous base inKeys
       (reads previous inKeys fun _ member => .inl member)
+    dsimp only at gain
     simp only [setEpochParticipation, chosen, Bool.false_eq_true, ↓reduceIte]
     omega
 

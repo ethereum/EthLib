@@ -1270,7 +1270,41 @@ Not yet released.
   `payloadBlock_eq_some_iff` (`Engine/Proofs/ExecutionEngine.lean`) states that a payload of the beacon chain has a block exactly when each step of `payloadBlock` succeeds.
   `Engine.Node.newPayloadStep_valid_of_newPayloadOnChain` (`Engine/Proofs/Node.lean`) states that a payload valid on the chain of the valid head, its parent, is valid on the node, when the node does not know it as invalid.
 
+- In Lean, `Bls.HashToCurve.bI` (`Cryptography/Bls/HashToCurve.lean`) is the block `b_i` of step 10 of RFC 9380 §5.3.1, computed from `b_(i-1)`, for `2 <= i <= 255`.
+  `Bls.HashToCurve.expandMessageXmd` calls it in its loop over `i = 2, ..., ell`, and appends each block to one output buffer, with the same output bytes.
+  The proof of `Bls.HashToCurve.expandMessageXmd_eq_spec` reads that step, in place of a private copy of the loop body, and its statement is unchanged.
+
+- In Lean, `Evm.processMessage_reads_of_error` (`Execution/Proofs/Evm/Call/Parent.lean`) says that a call that ends with an error reads as the state it is sent from.
+  It states this as `State.TransactionState.ReadsAs`.
+  That holds for each account, each word of storage and transient storage, and the code at each code hash.
+  `Transactions.processCreateMessage_reads_of_error` (`Execution/Proofs/Transactions/Failed.lean`) says the same for a creation that ends with an error.
+  `State.TransactionState.readsAs_restoreTxState` (`Execution/Proofs/State/Frame.lean`) says that a rollback to a snapshot of the same block reads as the snapshot.
+
+- In Lean, three theorems in `Consensus/Proofs/Transition/EpochUpdates.lean` describe a successful run of the registry updates.
+  `processRegistryUpdates_ok_of_lt_electra` says that before Electra it is a first pass over the registry, then a read of the activation limit.
+  The update then activates the head of the queue up to that limit.
+  `processRegistryUpdates_ok_of_electra` says that from Electra and before Gloas it is one pass over the registry, at the computed activation epoch.
+  `processRegistryUpdates_invariant_of_electra` is an invariant principle for that pass.
+  The 18 proofs outside the three proof files of the registry updates no longer read its body ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  A step added at the end of the update that changes no field then breaks only the proof files of the update.
+  A step that writes a field adds one obligation to each user of the invariant principle.
+
+- In Lean, `processAttestationAltair_eq_ok_iff` (`Consensus/Proofs/Transition/Operations.lean`) says when an attestation from Altair passes, and what each of its steps returns.
+  Its five checks form one leading conjunct.
+  `processAttestationAltair_reads` states the same checks and reads, and that the steps after the proposer reward write only the pending payments of the builders.
+  `processAttestationAltair_reads_of_lt_gloas` states the same checks and reads before Gloas, where the proposer reward is the last step.
+  `processAttestationAltair_writes` says that the attestation writes the flags of its target epoch and raises one balance.
+  From Gloas it also writes the pending payments of the builders.
+  `processAttestation_of_altair` and `getBeaconProposerIndex_setEpochParticipation` move to the same file from `Transition/BlockRewards.lean`, with the same statements.
+  The 40 proofs outside the proof file of the attestation step no longer read its body ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  A step that a fork adds at the end of the attestation step, and that changes no field, then breaks only its own proof file.
+  In an experiment, a step at the end that writes one more field broke 3 proofs outside that file, although none of them reads that field.
+
 ### Changes that break callers
+
+- In Lean, the relation that a state reads as another moves from `Logic.ReadsAs` (`Execution/Proofs/Evm/Logic/Keeps.lean`) to `State.TransactionState.ReadsAs` (`Execution/Proofs/State/Frame.lean`), with its definition unchanged.
+  Its lemmas `refl`, `trans`, `recordAccountRead` and `recordStorageRead` move with it, and `routeState` keeps its file under the new namespace.
+  The theorems on a failed call, in files that `Logic/Keeps.lean` imports, then state it by name.
 
 - In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).
   `KeptOrWipedEmpty` and `EmptyAt` (`Execution/Proofs/State/Wiped.lean`) state it, with the fact that an account empty at the end was empty at the start.

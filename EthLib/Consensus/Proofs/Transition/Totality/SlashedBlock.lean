@@ -242,22 +242,16 @@ private theorem same_attestation {s t : BeaconState preset fork}
     (ok : processAttestation config checks s parentSlot attestation = .ok t) :
     t.slashings = s.slashings := by
   by_cases altair : Fork.altair ≤ fork
-  · simp only [processAttestation, altair, ↓reduceDIte] at ok
-    unfold processAttestationAltair at ok
-    simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      ⟨updated, _⟩, folded, _, _, _, raisedOk, final⟩ := ok
+  · rw [processAttestation_of_altair altair] at ok
+    obtain ⟨updated, _, _, _, raisedOk, written⟩ := processAttestationAltair_writes ok
     have flagged : (setEpochParticipation s
         (attestation.data.target.epoch == getCurrentEpoch s) updated).slashings =
           s.slashings := by
       unfold setEpochParticipation
       split <;> rfl
     have raised := (same_increase raisedOk).trans flagged
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact raised
-    · cases final
-      exact raised
+    rw [written]
+    exact raised
   · obtain ⟨_, _, _, _, _, recorded, _⟩ := processAttestation_records (Nat.lt_of_not_le altair) ok
     have kept := recordPendingAttestation_ok recorded
     split at kept

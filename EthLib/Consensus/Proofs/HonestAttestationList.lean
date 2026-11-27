@@ -146,16 +146,10 @@ private theorem processAttestation_raise {budget scoreBound : Nat} {checks : Sig
       updated.data.size = state.validators.data.size ∧
       reward.toNat ≤ state.validators.data.size * (64 * preset.baseRewardCeiling) / 448 := by
   rw [processAttestation_of_altair altair] at computed
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, earned, -, indexed, indexedOk, valid, validOk, _,
-    validTrue, total, totalOk, attesters, attestersOk, ⟨updated, numerator⟩, folded, proposer, -,
-    raised, raisedOk, final⟩ := computed
-  split at final
-  · rename_i gloas
-    exact absurd beforeGloas (Nat.not_lt_of_le gloas)
-  cases final
-  obtain rfl : valid = true := ensure_ok_iff.mp validTrue
+  -- Before Gloas the step ends with the proposer reward.
+  obtain ⟨-, earned, indexed, total, attesters, updated, numerator, proposer, -, indexedOk,
+    validOk, totalOk, attestersOk, folded, -, raisedOk⟩ :=
+    processAttestationAltair_reads_of_lt_gloas beforeGloas computed
   obtain ⟨named, namedOk, indices⟩ := getAttestingIndices_of_getIndexedAttestation indexedOk
   rw [attestersOk, Except.ok.injEq] at namedOk
   subst namedOk
@@ -189,7 +183,6 @@ private theorem processAttestation_raise {budget scoreBound : Nat} {checks : Sig
   · -- The reward is the numerator over 448, and the numerator is at most the bound.
     have denominator : ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR /
         PROPOSER_WEIGHT).toNat = 448 := by decide
-    dsimp only
     rw [UInt64.toNat_div, denominator]
     exact Nat.div_le_div_right (by simp only [UInt64.toNat_zero] at numeratorLe; omega)
 

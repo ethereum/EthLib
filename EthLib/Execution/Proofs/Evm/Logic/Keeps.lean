@@ -22,55 +22,19 @@ open State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-! ## A state that reads as another -/
-
-/-- The state `tx` reads as the state `S`.
-
-It has the account, the current storage and the transient storage of `S` at every address.
-
-It has the code of `S` at every code hash. -/
-def ReadsAs (tx S : TransactionState) : Prop :=
-  -- The two may differ in the reads that they record.
-  --
-  -- They may also differ in the block before the transaction.
-  --
-  -- They may differ in the accounts that the transaction created and the storage that it wiped.
-  --
-  -- So the original storage and the account before the transaction may differ.
-  TransactionState.SameOutside [] S tx ∧ ∀ codeHash, tx.getCode codeHash = S.getCode codeHash
-
-/-- A state reads as itself. -/
-theorem ReadsAs.refl (S : TransactionState) : ReadsAs S S :=
-  ⟨TransactionState.SameOutside.refl [] S, fun _ => rfl⟩
-
-/-- A state that reads as one that reads as `S` reads as `S`. -/
-theorem ReadsAs.trans {tx tx' S : TransactionState} (h : ReadsAs tx tx') (h' : ReadsAs tx' S) :
-    ReadsAs tx S :=
-  ⟨h'.1.trans h.1, fun codeHash => (h.2 codeHash).trans (h'.2 codeHash)⟩
-
-/-- A record of an account read keeps a state that reads as `S`. -/
-theorem ReadsAs.recordAccountRead {tx S : TransactionState} (h : ReadsAs tx S)
-    (address : Address) : ReadsAs (tx.recordAccountRead address) S :=
-  (show ReadsAs (tx.recordAccountRead address) tx from
-    ⟨TransactionState.sameOutside_recordAccountRead tx address, fun _ => rfl⟩).trans h
-
-/-- A record of a storage read keeps a state that reads as `S`. -/
-theorem ReadsAs.recordStorageRead {tx S : TransactionState} (h : ReadsAs tx S)
-    (address : Address) (key : EthLib.Base.Bytes32) :
-    ReadsAs (tx.recordStorageRead address key) S :=
-  (show ReadsAs (tx.recordStorageRead address key) tx from
-    ⟨TransactionState.sameOutside_recordStorageRead tx address key, fun _ => rfl⟩).trans h
+/-! ## A state that reads as another, along a route -/
 
 /-- Following a route keeps a state that reads as `S`. -/
-theorem ReadsAs.routeState {tx S : TransactionState} (h : ReadsAs tx S) (route : Route) :
-    ReadsAs (Logic.routeState tx route) S := by
+theorem _root_.EthLib.Execution.State.TransactionState.ReadsAs.routeState
+    {tx S : TransactionState} (h : TransactionState.ReadsAs tx S) (route : Route) :
+    TransactionState.ReadsAs (Logic.routeState tx route) S := by
   rcases route with _ | ⟨d, _⟩
   · exact h
   · exact h.recordAccountRead d
 
 /-- A state that reads as `S` gives each code the route that `S` gives it. -/
 theorem Routes.of_readsAs {tx S : TransactionState} {c : ByteArray} {route : Route}
-    (h : Routes fork S c route) (hreads : ReadsAs tx S) : Routes fork tx c route :=
+    (h : Routes fork S c route) (hreads : TransactionState.ReadsAs tx S) : Routes fork tx c route :=
   h.congr fun a => by
     rw [hreads.2, TransactionState.getAccount, TransactionState.getAccount,
       (hreads.1 a List.not_mem_nil).1]
@@ -87,7 +51,7 @@ def SentVia (message : Message fork) (S : TransactionState) (to : Address)
   -- The message runs the code that `to` holds in `S`, along its route.
   ∃ c route, S.getCode (S.getAccount to).codeHash = .ok c ∧ Routes fork S c route ∧
     -- The frame that sends it has a state that reads as `S`.
-    ReadsAs caller.state S ∧
+    TransactionState.ReadsAs caller.state S ∧
     -- The current account of `message` makes the call.
     msg.caller = message.currentTarget ∧ msg.currentTarget = to ∧ msg.target = some to ∧
     -- So the message runs the real code of the address, or its precompile, and not any code.
@@ -117,7 +81,8 @@ theorem CallSends.sentVia {message : Message fork} {memory : ByteArray} {gas : N
     by simpa using m3, m4, m5, m6, by simpa using m7, by rw [m8]; rfl, m9, by rw [m10]; rfl,
     m11, m12⟩
   rw [hstate]
-  exact (((ReadsAs.refl state).recordAccountRead _).routeState route).recordAccountRead _
+  exact (((TransactionState.ReadsAs.refl state).recordAccountRead _).routeState route)
+    |>.recordAccountRead _
 
 /-! ## What the messages of a set do to the state -/
 

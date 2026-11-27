@@ -1330,13 +1330,10 @@ private theorem rise_attestation (altair : .altair ≤ fork) {first s t : Beacon
       Rise ((potential altair first perIncrement.toNat t -
         potential altair first perIncrement.toNat s) / 448) s t := by
   rw [processAttestation_of_altair altair] at computed
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, earned, _, _, _, _, _, _, _, read, readOk,
-    attesters, _, ⟨updated, numerator⟩, folded, proposer, _, raised, raisedOk, final⟩ := computed
+  obtain ⟨-, earned, _, read, attesters, updated, numerator, proposer, raised, -, -, -, readOk, -,
+    folded, -, raisedOk, written⟩ := processAttestationAltair_reads computed
   rw [totalOk] at readOk
   cases Except.ok.inj readOk
-  dsimp only at folded raisedOk
   have flags := flagSum_foldlM_addAttesterFlags
     (fun _ _ ok => baseAt_of_getBaseReward altair validators perIncrementOk ok) folded
   dsimp only at flags
@@ -1345,11 +1342,8 @@ private theorem rise_attestation (altair : .altair ≤ fork) {first s t : Beacon
   have tail : t.previousEpochParticipation = raised.previousEpochParticipation ∧
       t.currentEpochParticipation = raised.currentEpochParticipation ∧
       t.slashings = raised.slashings ∧ supply t = supply raised := by
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact ⟨rfl, rfl, rfl, rfl⟩
-    · cases final
-      exact ⟨rfl, rfl, rfl, rfl⟩
+    rw [written]
+    exact ⟨rfl, rfl, rfl, rfl⟩
   -- Raising the balance of the proposer keeps the flags.
   have kept : raised.previousEpochParticipation = (setEpochParticipation s
         (attestation.data.target.epoch == getCurrentEpoch s) updated).previousEpochParticipation ∧

@@ -89,17 +89,12 @@ private theorem processAttestationAltair_keepsFlag {attestation : Attestation pr
       kept.val.toUInt64 = true) :
     hasFlag (((recentParticipation after altair current).data[position]?).getD 0)
       kept.val.toUInt64 = true := by
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, ⟨updated, _⟩,
-    fold, _, _, raised, raisedOk, final⟩ := computed
+  obtain ⟨-, _, _, _, _, updated, _, _, raised, -, -, -, -, -, fold, -, raisedOk, written⟩ :=
+    processAttestationAltair_reads computed
   have same :
       recentParticipation after altair current = recentParticipation raised altair current := by
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      rfl
-    · cases final
-      rfl
+    rw [written]
+    rfl
   obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
   obtain ⟨_, rfl⟩ := setBalance_ok set
   simp only [BeaconState.putBalance, recentParticipation] at same
@@ -133,11 +128,8 @@ theorem processAttestation_keepsFlag {attestation : Attestation preset fork}
       kept.val.toUInt64 = true) :
     hasFlag (((recentParticipation after altair current).data[position]?).getD 0)
       kept.val.toUInt64 = true := by
-  unfold processAttestation at computed
-  split at computed
-  · exact processAttestationAltair_keepsFlag computed current position kept flagged
-  · rename_i before
-    exact absurd altair before
+  rw [processAttestation_of_altair altair] at computed
+  exact processAttestationAltair_keepsFlag computed current position kept flagged
 
 /-- The target flag is the flag at position one.
 
