@@ -222,6 +222,15 @@ touched pectra EthLib.Consensus.BeaconApi.BuilderStatus.parse
 touched fusaka EthLib.Consensus.BeaconApi.BuilderStatus.parse
 touched glamsterdam EthLib.Consensus.BeaconApi.BuilderStatus.parse
 touched hegota EthLib.Consensus.BeaconApi.BuilderStatus.parse
+touched phase0 EthLib.Consensus.BeaconApi.ChunkError.code
+touched altair EthLib.Consensus.BeaconApi.ChunkError.code
+touched bellatrix EthLib.Consensus.BeaconApi.ChunkError.code
+touched shapella EthLib.Consensus.BeaconApi.ChunkError.code
+touched dencun EthLib.Consensus.BeaconApi.ChunkError.code
+touched pectra EthLib.Consensus.BeaconApi.ChunkError.code
+touched fusaka EthLib.Consensus.BeaconApi.ChunkError.code
+touched glamsterdam EthLib.Consensus.BeaconApi.ChunkError.code
+touched hegota EthLib.Consensus.BeaconApi.ChunkError.code
 touched phase0 EthLib.Consensus.BeaconApi.CoarseStatus.name
 touched altair EthLib.Consensus.BeaconApi.CoarseStatus.name
 touched bellatrix EthLib.Consensus.BeaconApi.CoarseStatus.name
