@@ -284,7 +284,11 @@ public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset for
 
 /-- A delay after a sender's event, an up-to-date receiver's justified epoch is no earlier.
 
-It is at least the sender's finalized epoch at the event, for a receiver's event up to `last`. -/
+It is at least the sender's finalized epoch at the event, for a receiver's event up to `last`.
+
+It assumes that honest stores agree on blocks and read each other's finality.
+
+It also assumes that no honest held block has a zero state root. -/
 public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
@@ -372,11 +376,13 @@ public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor
     exact UInt64.le_trans finalLe ((forward w receiver k).justified_le_of_pulledUp sound positive
       slots currentWOk blockHeld stateHeld run (UInt64.lt_of_lt_of_le earlier epochLe))
 
-/-- A caller's finalized root at a slot start is on each up-to-date honest head from the next slot.
+/-- From the next slot through `last`, a caller's slot-start finalized root is on each honest head.
 
-The head is of a store at or after the next slot's start, up to `last`.
+Otherwise two honest stores collide by `last`, or cross-store direct-safety evidence holds.
 
-Otherwise two honest stores collide by `last`, or cross-store direct-safety evidence holds. -/
+It assumes synchrony, delayed admission, a delay within `DelayFits` and direct-safety premises.
+
+It also assumes that no honest held block has a zero state root. -/
 public theorem Execution.finalized_ancestor_of_heads_or_evidence
     {Δ last : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)

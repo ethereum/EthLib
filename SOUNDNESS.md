@@ -4560,12 +4560,14 @@ It also concerns an up-to-date honest receiver at an event from the start of the
 The caller's finalized root is then an ancestor of the receiver's head.
 Otherwise two honest stores collide by `last`, or `CrossStoreDirectSafetyEvidence` holds.
 It assumes synchrony, delayed block admission (`BlocksAdmitted`), and a delay that satisfies `DelayFits`.
+Honest participants start at the store initialized from the anchor state and block, whose shared slot starts an epoch, and the slot duration is positive.
 It takes the run from the genesis to the anchor, the held states before the next fork, and the two stake floors.
 It takes nonzero state roots of held blocks (`roots`) and the anchor's absent parent (`absent`).
 It takes honest store epochs within the horizon (`bounded`) and the preset conditions of `DirectSafety.Parameters`.
 `Execution.finalized_epoch_le_justified_of_late` gives the step, an order of epochs.
 A delay after a sender's event, an up-to-date honest receiver's justified epoch, at an event up to `last`, is at least the sender's finalized epoch.
 It does not show that this particular epoch is justified.
+It takes the agreement of honest stores on blocks, their reads of each other's finality, and no honest held block with a zero state root.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.

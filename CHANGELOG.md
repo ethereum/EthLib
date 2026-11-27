@@ -137,9 +137,15 @@ Not yet released.
   `Execution.data_eq_of_signed_of_target_epoch`, `Execution.latest_slot_floor_of_signed_rank` and `VoteAt.signed_sent` move to `Consensus/Proofs/ForkChoice/VoteDelivery.lean` from `Consensus/Proofs/ForkChoice/FastConfirmation/DutySupport.lean`, with their names and statements.
 
 - In Lean, `Execution.finalized_ancestor_of_heads_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalReads.lean`) states that the fallback of the fast confirmation rule to the finalized block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
-  An honest caller's finalized root at the start of a slot is an ancestor of each up-to-date honest head from the next slot through `last`.
-  Otherwise two honest stores collide, or cross-store direct-safety evidence holds.
+  Take an honest caller at the start of a slot.
+  Take an honest receiver up to date at an event from the next slot's start through `last`, which reads its head.
+  Then the caller's finalized root is an ancestor of that head, or two honest stores collide by `last`, or cross-store direct-safety evidence holds.
+  It assumes synchrony, delayed block admission (`BlocksAdmitted`), a delay that satisfies `DelayFits`, the premises of the direct safety theorems, and no honest held block with a zero state root (`HeldBlockStateRootsNonzero`).
+  Honest participants start at the store initialized from the anchor state and block, which share a slot at the start of an epoch.
+  The slot duration is positive.
   `Execution.carrier_delivered` and `Execution.finalized_epoch_le_justified_of_late`, in the same file, are new public theorems; they were private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
+  `Execution.carrier_delivered` concerns a sender that holds a block and its state and reads the receiver's finalized checkpoint at that root.
+  The receiver then holds the block and the state when its event is at least a delay later and by `last`.
 
 - In Lean, `Execution.observedRestart_covers_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`) states that a restart of the fast confirmation rule from the observed justified block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   At a call that replaces its base, that block is on every up-to-date honest head from the call through the limit.
