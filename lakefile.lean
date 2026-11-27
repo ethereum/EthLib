@@ -150,6 +150,15 @@ lean_exe «known-answers» where
   srcDir := "scripts"
   root := `KnownAnswers
 
+/-- The gas rules that the fixture observer can distinguish. -/
+lean_lib «EvmGasCoverage» where
+  srcDir := "scripts"
+
+/-- Replays pinned execution fixtures with an observer of their gas rules. -/
+lean_exe «gas-coverage» where
+  srcDir := "scripts"
+  root := `GasCoverage
+
 /-- Writes the tables of affine points that the kernel checks of the Lagrange setup read.
 
 No default target builds it.
