@@ -1268,6 +1268,11 @@ Not yet released.
   `header_of_payloadBlock` gives that block the parent hash of the payload, and a header that hashes to the block hash of the payload.
   `header_of_checkNewPayload` combines the two.
 
+- In Lean, `Bls.HashToCurve.bI` (`Cryptography/Bls/HashToCurve.lean`) is the block `b_i` of step 10 of RFC 9380 §5.3.1, computed from `b_(i-1)`.
+  `Bls.HashToCurve.expandMessageXmd` computes steps 9 and 10 as a scan of it over `i = 2, ..., ell`, in place of a `for` loop, with the same output bytes.
+  The proof of `Bls.HashToCurve.expandMessageXmd_eq_spec` reads that step, in place of a private copy of the loop body, and its statement is unchanged.
+  A proof that unfolds the body of `Bls.HashToCurve.expandMessageXmd` must change, as `expandMessageXmd_256_ok` (`Cryptography/Proofs/Bls/HashToCurveValidity.lean`) did, since it no longer meets a loop.
+
 ### Changes that break callers
 
 - In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).
