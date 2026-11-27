@@ -3,17 +3,23 @@ module
 public import EthLib.Execution.Proofs.Evm.Logic.MeterRun
 public import EthLib.Execution.Proofs.Evm.Logic.Call
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
+public import EthLib.Execution.Proofs.Evm.Logic.Region
+public import EthLib.Execution.Proofs.Evm.Gas.Memory
 
 /-!
 # Proofs: rules for the calls under the state gas meter
 
 The runner meets the assumption that a call to no code ends with no error and no output.
 
-It also meets the assumption that a call runs as a specification of checked callee code says.
-
 Under it, STATICCALL to no code returns no data under the state gas meter of EIP-8037, from Berlin.
 
 A check that it returned 32 bytes then fails closed at every fork from Berlin.
+
+The runner also meets the assumption that a call runs as the specification of its code says.
+
+Under that one, STATICCALL to a callee that returns a word leaves 32 and 1 on the stack.
+
+The word is then in memory and in the return data.
 -/
 
 @[expose] public section
@@ -150,6 +156,29 @@ theorem meets_runsAsMeter {code : ByteArray}
     rw [ran] at h
     cases h
 
+/-- A triple under the assumption of a callee specification, over checked code, carries further.
+
+It holds under the state gas meter, under the assumption of that specification there.
+
+Its frames of the postcondition must have no error, or a revert.
+
+`G` must carry from a message to a covering one. -/
+theorem HoareUnder.runsAsMeter {code : ByteArray}
+    {G : Message fork → TransactionState → Substate → Prop}
+    {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop}
+    {P R : Evm fork Nat → Prop} (h : HoareUnder fork (RunsAsUpToGas code G Q) P R)
+    -- Each frame of the precondition has checked code, its flags, an opcode position and no error.
+    (ready : ∀ low, P low → SupportedCode low.code = true ∧
+      low.validJumpDestinations = validJumpDestinations low.code ∧
+      (low.code.size ≤ low.pc ∨ low.pc ∈ opcodePositions low.code) ∧ low.error = none)
+    (ends : ∀ low, R low → Carried low.error)
+    (gCovers : ∀ message message' state substate, MessageCovers message message' →
+      G message state substate → G message' state substate) :
+    HoareUnder (Meter := StateGasMeter) fork (RunsAsMeter code G Q) (Covered P)
+      fun high => ∃ low, R low ∧ MeterCovers low high :=
+  HoareUnder.meterCovers h ready ends fun _ _ _ _ _ follows covers fits h =>
+    h.lowerMeter gCovers follows covers fits
+
 variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteArray} {gas : Nat}
   {state : State.TransactionState} {substate : Substate}
   {returnData : ByteArray}
@@ -243,6 +272,237 @@ theorem staticcall_noCode_returndatasize_meter (hfork : .berlin ≤ fork)
     fun _ _ _ _ _ _ covers _ h => h.lowerMeter covers).consequence (fun _ hp => hp) ?_
   rintro high ⟨low, ⟨memory', gas', state', substate', hat⟩, covers⟩
   exact ⟨low, ⟨memory', gas', state', substate', hat⟩,
+    followsMeter_of_byte hlt hbyteNext (by decide) hat covers, covers.1⟩
+
+/-! ## A callee that returns a word -/
+
+/-- From Berlin, STATICCALL then RETURNDATASIZE, to a callee whose specification returns a word.
+
+The callee code has a specification under one counter.
+
+Its stopped frames have no error, and the 32 bytes of `word` as output.
+
+So the call pushes 1 and RETURNDATASIZE pushes 32.
+
+The output range and the return data hold `word`.
+
+The callee is no precompile and, from Pectra, no delegation.
+
+The output range has 32 bytes, and memory has a size that is a multiple of 32. -/
+theorem staticcall_returnsWord (hfork : .berlin ≤ fork) {calleeCode : ByteArray}
+    {G : Message fork → TransactionState → Substate → Prop}
+    {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop} {word : U256}
+    {asked to inputStart inputSize outputStart : U256} {rest : List U256}
+    {cold : Bool} (hlt : pc + 1 < code.size) (hbyte : code[pc] = 0xfa)
+    (hbyteNext : code[pc + 1] = 0x3d)
+    (hcode : state.getCode (state.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
+    (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+    (hpre : ∀ address, message.txEnv.precompiles (toAddressMasked to) = some address →
+      Precompiles.isPrecompile fork address.toU256.toNat = false)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
+    -- The output range has 32 bytes.
+    (hgas : (callBaseCost fork cold) +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost ≤ gas)
+    -- The gas left after the call covers RETURNDATASIZE, before the callee gives any back.
+    (hgasNext : 2 ≤ gas - ((messageCallGas fork 0 asked.toNat gas
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost
+      (callBaseCost fork cold)).cost +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost))
+    (hstack : rest.length + 1 < STACK_LIMIT) (hmod : memory.size % 32 = 0)
+    -- `G` holds of a static message from the current account to `to`, with the input as data.
+    (hG : ∀ msg state' substate', msg.caller = message.currentTarget →
+      msg.currentTarget = toAddressMasked to → msg.isStatic = true →
+      msg.depth = message.depth + 1 →
+      msg.gas = (messageCallGas fork 0 asked.toNat gas
+        (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost
+        (callBaseCost fork cold)).subCall →
+      msg.data = memoryReadBytes (memoryExtend memory
+        (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).expandBy)
+        inputStart.toNat inputSize.toNat →
+      -- The message keeps the block and the transaction, carries no value, and runs that code.
+      msg.blockEnv = message.blockEnv → msg.txEnv = message.txEnv → msg.value = 0 →
+      msg.code = calleeCode →
+      -- The state is the one of the caller, which has read `to` and its own account.
+      state' = (state.recordAccountRead (toAddressMasked to)).recordAccountRead
+        message.currentTarget →
+      -- The substate starts from the one of the caller, which has accessed `to`.
+      substate' = ({ substate with
+        accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } :
+          Substate).child →
+      G msg state' substate')
+    -- Each stopped frame of the specification has no error, and the 32 bytes of `word` as output.
+    (hQ : ∀ msg state' substate' stopped, Q msg state' substate' stopped →
+      stopped.error = none ∧ stopped.output = wordBytes word) :
+    HoareUnder fork (RunsAsUpToGas calleeCode G Q)
+      (At code message pc (asked :: to :: inputStart :: inputSize :: outputStart :: 32 :: rest)
+        memory gas state substate returnData)
+      -- The stack holds 32 and 1, and the output range holds `word`.
+      fun after => ∃ childGas state' substate', At code message (pc + 2)
+        (32 :: 1 :: rest)
+        (memoryWrite (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).expandBy)
+          outputStart.toNat (wordBytes word))
+        -- The frame keeps at least the gas left after the call, and pays 2 for RETURNDATASIZE.
+        (gas - ((messageCallGas fork 0 asked.toNat gas
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost
+          (callBaseCost fork cold)).cost +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost) +
+          childGas - 2)
+        state' substate' (wordBytes word) after ∧
+        Holds (memoryWrite (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).expandBy)
+          outputStart.toNat (wordBytes word)) outputStart.toNat (wordBytes word) := by
+  subst hcold
+  have h := callKindRoute (kind := .staticcall) (route := none) (asked := asked)
+    (inputStart := inputStart) (inputSize := inputSize) (outputStart := outputStart)
+    (outputSize := 32) (memory := memory) (gas := gas) (state := state)
+    (substate := substate) (callee := RunsAsUpToGas calleeCode G Q) (rest := rest)
+    (returnData := returnData) hfork (by omega) hbyte
+    (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_staticcall
+    (messageInstruction_staticcall (Nat.le_trans (by decide) hfork)) hcode
+    hdel hdepth (by simpa only [routeCost, Nat.add_zero] using hgas)
+  -- Memory holds the word in the output range, which memory grows to hold.
+  have fit : outputStart.toNat + (wordBytes word).size ≤ memory.size +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).expandBy := by
+    have h := le_ceil32_add_expandBy memory.size [(inputStart, inputSize), (outputStart, 32)]
+      (outputStart, 32) (by simp) (by simp)
+    rw [ceil32_of_mod hmod] at h
+    rw [size_wordBytes]
+    exact h
+  -- After the call, the frame holds the word in the output range and as return data.
+  have called : HoareUnder fork (RunsAsUpToGas calleeCode G Q)
+      (At code message pc (asked :: to :: inputStart :: inputSize :: outputStart :: 32 :: rest)
+        memory gas state substate returnData)
+      fun after => ∃ x : Nat × TransactionState × Substate, At code message (pc + 1) (1 :: rest)
+        (memoryWrite (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).expandBy)
+          outputStart.toNat (wordBytes word))
+        (gas - ((messageCallGas fork 0 asked.toNat gas
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost
+          (callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)))).cost +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost) +
+          x.1)
+        x.2.1 x.2.2 (wordBytes word) after := by
+    refine h.toUnder.consequence (fun _ h => h) ?_
+    rintro after ⟨caller, msg, child,
+      ⟨s1, s2, m1, -, m2, m3, mt, mca, mc, -, md, m5, -, m6, m7, mb, mtx⟩, hcallee, -, hat⟩
+    -- The message runs the code of `to`, which is no precompile.
+    have hp : precompileAddress fork msg = none := by
+      unfold precompileAddress
+      rw [mca, mtx]
+      simp only [routeAddr, Option.bind_some]
+      cases h : message.txEnv.precompiles (toAddressMasked to) with
+      | none => rfl
+      | some address => simp [hpre address h]
+    obtain ⟨_, stopped, -, hq, hchild, -, -⟩ := hcallee (by simpa [routeCode] using mc)
+      (by simp [mt]) (by simp [m5]) hp
+      (hG _ _ _ (by simpa using m2) (by simpa using m3) (by simpa using m7) m6
+        (by simpa only [routeCost, Nat.add_zero] using m1) md mb mtx (by simpa using m5)
+        (by simpa [routeCode] using mc) (by simpa [routeState] using s1)
+        (by rw [s2]; rfl))
+    obtain ⟨herr, hout⟩ := hQ _ _ _ _ hq
+    -- The callee stops with no error, so the frame that ends the message is its stopped frame.
+    have cerr : child.error = none := by
+      rw [hchild]
+      simp [rollbackOnError, herr]
+    have cout : child.output = wordBytes word := by
+      rw [hchild]
+      simp [rollbackOnError, herr, hout]
+    refine ⟨(child.gas, (incorporateChild fork caller child).state,
+      (incorporateChild fork caller child).substate), ?_⟩
+    simp only [routeCost, Nat.add_zero, cerr, cout, Option.isNone_none, ite_true,
+      size_wordBytes] at hat
+    rw [show (32 : U256).toNat = 32 from rfl, Nat.min_self,
+      show (wordBytes word).extract 0 32 = wordBytes word by
+      rw [← size_wordBytes word]
+      exact ByteArray.extract_zero_size] at hat
+    exact hat
+  -- Then RETURNDATASIZE pushes the 32 bytes of the return data.
+  refine called.seq (HoareUnder.of_exists (fun _ h => h) fun ⟨g, st, ss⟩ => ?_)
+  refine (HoareUnder.of_hoare (returndatasize (Nat.le_trans (by decide) hfork) hlt hbyteNext
+    (by omega) (by simpa using hstack))).consequence (fun _ h => h) ?_
+  intro after h
+  exact ⟨g, st, ss, by simpa [size_wordBytes] using h, holds_extend_write fit⟩
+
+/-- From Berlin, the rule of a callee that returns a word, under the state gas meter.
+
+The code of the frame passes the check of the state gas meter.
+
+The callee runs as its specification says, under that meter (`RunsAsMeter`).
+
+`G` must carry from a message to a covering one. -/
+theorem staticcall_returnsWord_meter (hfork : .berlin ≤ fork) {calleeCode : ByteArray}
+    {G : Message fork → TransactionState → Substate → Prop}
+    {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop} {word : U256}
+    {asked to inputStart inputSize outputStart : U256} {rest : List U256}
+    {cold : Bool} (hlt : pc + 1 < code.size) (hbyte : code[pc] = 0xfa)
+    (hbyteNext : code[pc + 1] = 0x3d)
+    (hcode : state.getCode (state.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
+    (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+    (hpre : ∀ address, message.txEnv.precompiles (toAddressMasked to) = some address →
+      Precompiles.isPrecompile fork address.toU256.toNat = false)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
+    (hgas : (callBaseCost fork cold) +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost ≤ gas)
+    -- The gas left after the call covers RETURNDATASIZE, before the callee gives any back.
+    (hgasNext : 2 ≤ gas - ((messageCallGas fork 0 asked.toNat gas
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost
+      (callBaseCost fork cold)).cost +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost))
+    (hstack : rest.length + 1 < STACK_LIMIT) (hmod : memory.size % 32 = 0)
+    (hG : ∀ msg state' substate', msg.caller = message.currentTarget →
+      msg.currentTarget = toAddressMasked to → msg.isStatic = true →
+      msg.depth = message.depth + 1 →
+      msg.gas = (messageCallGas fork 0 asked.toNat gas
+        (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost
+        (callBaseCost fork cold)).subCall →
+      msg.data = memoryReadBytes (memoryExtend memory
+        (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).expandBy)
+        inputStart.toNat inputSize.toNat →
+      -- The message keeps the block and the transaction, carries no value, and runs that code.
+      msg.blockEnv = message.blockEnv → msg.txEnv = message.txEnv → msg.value = 0 →
+      msg.code = calleeCode →
+      -- The state is the one of the caller, which has read `to` and its own account.
+      state' = (state.recordAccountRead (toAddressMasked to)).recordAccountRead
+        message.currentTarget →
+      -- The substate starts from the one of the caller, which has accessed `to`.
+      substate' = ({ substate with
+        accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } :
+          Substate).child →
+      G msg state' substate')
+    (hQ : ∀ msg state' substate' stopped, Q msg state' substate' stopped →
+      stopped.error = none ∧ stopped.output = wordBytes word)
+    (gCovers : ∀ message message' state substate, MessageCovers message message' →
+      G message state substate → G message' state substate)
+    (supported : SupportedCode code = true) (boundary : pc ∈ opcodePositions code) :
+    HoareUnder (Meter := StateGasMeter) fork (RunsAsMeter calleeCode G Q)
+      (Covered (At code message pc
+        (asked :: to :: inputStart :: inputSize :: outputStart :: 32 :: rest)
+        memory gas state substate returnData))
+      -- Under one counter, the stack holds 32 and 1, and the output range holds `word`.
+      (Covered fun after => ∃ childGas state' substate', At code message (pc + 2)
+        (32 :: 1 :: rest)
+        (memoryWrite (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).expandBy)
+          outputStart.toNat (wordBytes word))
+        -- The frame keeps at least the gas left after the call, and pays 2 for RETURNDATASIZE.
+        (gas - ((messageCallGas fork 0 asked.toNat gas
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost
+          (callBaseCost fork cold)).cost +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).cost) +
+          childGas - 2)
+        state' substate' (wordBytes word) after ∧
+        Holds (memoryWrite (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, 32)]).expandBy)
+          outputStart.toNat (wordBytes word)) outputStart.toNat (wordBytes word)) := by
+  refine ((staticcall_returnsWord hfork hlt hbyte hbyteNext hcode hdel hpre hdepth hcold hgas
+    hgasNext hstack hmod hG hQ).runsAsMeter (fun _ hat => hat.ready supported (.inr boundary))
+    (fun _ ⟨_, _, _, hat, _⟩ => .inl hat.2.2.2.2.2.2.2.2.1) gCovers).consequence
+    (fun _ hp => hp) ?_
+  rintro high ⟨low, ⟨childGas, state', substate', hat, holds⟩, covers⟩
+  exact ⟨low, ⟨childGas, state', substate', hat, holds⟩,
     followsMeter_of_byte hlt hbyteNext (by decide) hat covers, covers.1⟩
 
 end EthLib.Execution.Evm.Logic

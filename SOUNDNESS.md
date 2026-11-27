@@ -2194,6 +2194,12 @@ Its postcondition gives the state and substate that the frame that ends the mess
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
 `Logic.staticcall_noCode_meter` and `Logic.staticcall_noCode_returndatasize_meter` (`Logic/CallMeter.lean`) give STATICCALL to no code under the meter of EIP-8037, so a check of 32 bytes of return data fails closed there too.
+`Logic.staticcall_returnsWord` gives the other branch from Berlin, for a callee whose specification ends with no error and the 32 bytes of a word.
+It assumes `RunsAsUpToGas` for the callee, which `meets_of_specUnder` with `Meets.upToGas` discharges, and a callee that is no precompile and, from Pectra, no delegation.
+The call pushes 1, RETURNDATASIZE pushes 32, and the output range and the return data hold the word, with at least the gas left after the call.
+The first describes the interpreter before Glamsterdam, with one counter.
+`Logic.staticcall_returnsWord_meter` gives the same under the meter of EIP-8037, under `RunsAsMeter`, which `meets_runsAsMeter` discharges for checked callee code.
+The rules compare nothing themselves: the comparisons of the size and of the word follow with the rules of EQ and MLOAD.
 `Logic.callWith` and `Logic.call` also state that the message is static when the frame is.
 `Logic.callValue` is the rule for CALL with a value that is not 0, at every fork from Berlin, with the one-counter meter.
 The frame must be one that may change the state.
@@ -2214,6 +2220,7 @@ It also leaves open the message of that frame, all but its current target.
 It needs a specification under one counter of checked callee code, whose stopped frames end with no error or a revert.
 It also needs the runner of that meter to meet, at every bound, an assumption on the messages of the callee that gives the one of the specification.
 `Logic.RunsAsMeter.lowerMeter` gives `RunsAsUpToGas` from it, when the assumption on the start of the message carries to a covering message.
+`Logic.HoareUnder.runsAsMeter` carries each rule under `RunsAsUpToGas` over checked code, such as `Logic.callWith`, `Logic.staticcallWith` and `Logic.delegatecallWith`, to the meter of EIP-8037 under `RunsAsMeter`, when the frames of its postcondition have no error or a revert.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
 From Glamsterdam, with one counter, it keeps the state gas of a new account paid, which EIP-8037 refills.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
