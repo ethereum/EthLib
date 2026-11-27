@@ -220,7 +220,8 @@ def main() -> None:
         "Gas costs are the distinct `gasCost` values in decimal of the steps without a fault. "
         "A call or creation that starts a message counts the gas it passes on. "
         "From Amsterdam, `gasCost` counts only execution gas, "
-        "without the state gas that the reservoir pays (EIP-8037).",
+        "without the state gas that the reservoir pays (EIP-8037). "
+        "State gas beyond the reservoir comes from execution gas and counts.",
         "Memory growth lists the distinct changes of `memSize` from a step "
         "to the next step of the same call frame, so the last step of a frame has none. "
         "A zero records an observed step with no growth. "
