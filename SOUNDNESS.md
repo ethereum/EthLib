@@ -4481,6 +4481,9 @@ It assumes the anchor invariant, a positive slot duration, and that an epoch has
 It also assumes that the anchor block is not after the anchor state, and that the anchor state does not hash to the zero root.
 It also assumes a history of at least two epochs of block roots, and that the store's current epoch can be read.
 
+`Store.Reachable.finalized_read` in the same file shows that a reachable store whose finalized epoch is after the anchor state's epoch reads its finalized checkpoint at some root.
+It assumes the anchor invariant, an anchor block not after the anchor state, an anchor state that does not hash to the zero root, a nonempty epoch and at least two epochs of block-root history.
+
 `Execution.observedRestart_covers_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` is the safety of the restart from the observed justified block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
 The restart assumes synchrony, delayed block admission from time zero through the limit, and a delay that fits between the attestation deadline and the next slot.
 The anchor state is reached by a run from genesis.
