@@ -50,6 +50,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueStart
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
 public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
+public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryRing
 public import EthLib.Execution.Proofs.Blocks.SystemCall.ConsolidationRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCall.HistoryStorage
 public import EthLib.Execution.Proofs.Blocks.SystemCall.LowGas

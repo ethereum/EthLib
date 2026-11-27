@@ -2461,6 +2461,8 @@ So a creation that deploys a second preimage would change the code that a later 
 `CodeHyp.hashOnly` is not provable for any code, and is believed false for Keccak-256 as a function.
 Until a random-oracle bound on Keccak-256, like the bounds for the trie and state roots, replaces it, these theorems hold only under the assumption, and say nothing formally if it is false.
 That includes the theorem over chains, `BlockChain.Reaches.liveAt`.
+`HistoryStorage.ring_of_reaches` (`Execution/Proofs/Blocks/SystemCall/HistoryRing.lean`) applies it to the history storage contract of EIP-2935: from Cancun to BPO5, every slot at or above 8191 reads 0 in every state that a chain reaches from a state where the contract holds its code, a nonce of at least 1 and that property.
+It takes the assumption on the hash of that code as a named hypothesis, and covers no fork from Glamsterdam, whose gas meter needs its own proof about the code.
 
 ### SHA-256 precompile
 
