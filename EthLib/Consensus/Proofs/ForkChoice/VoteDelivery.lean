@@ -4,8 +4,10 @@ public import EthLib.Consensus.Proofs.ForkChoiceNetworkModel
 public import EthLib.Consensus.Proofs.ForkChoice.VoteRecords
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.ForkChoice.BlockAgreement
+public import EthLib.Consensus.Proofs.ForkChoice.HonestVotes
 import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
+import EthLib.Consensus.Proofs.ForkChoice.HonestEquivocators
 import EthLib.Consensus.Proofs.HonestAggregation
 
 /-!
@@ -875,5 +877,74 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
   swap
   · exact .inr collision
   exact .inl (vote.recorded_of_le sync honest receiver late upToDate accepted reads counted later)
+
+/-- Honest signatures for one target epoch carry the same attestation data. -/
+theorem Execution.data_eq_of_signed_of_target_epoch (slots : 0 < config.SLOT_DURATION_MS)
+    {n k : ℕ} {first second : Message preset fork} (sentFirst : first ∈ (e.world n).sent)
+    (sentSecond : second ∈ (e.world k).sent) {v : ValidatorIndex} {data other : AttestationData}
+    (signedFirst : (v, data) ∈ statements config checks anchorState anchorBlock first)
+    (signedSecond : (v, other) ∈ statements config checks anchorState anchorBlock second)
+    (honest : v ∈ J) (epoch : data.target.epoch = other.target.epoch) : data = other := by
+  have nonslashable := e.isSlashableAttestationData_honest slots (max n k) honest
+    (e.monotone_sent (Nat.le_max_left n k) sentFirst)
+    (e.monotone_sent (Nat.le_max_right n k) sentSecond) signedFirst signedSecond
+  by_contra different
+  simp [isSlashableAttestationData, different, epoch] at nonslashable
+
+/-- A latest vote at or above a signed vote's rank cannot come from an older slot. -/
+theorem Execution.latest_slot_floor_of_signed_rank
+    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
+    {v : ValidatorIndex} (honest : v ∈ J) {n k : ℕ}
+    {message other : Message preset fork}
+    (sent : message ∈ (e.world n).sent) (sentOther : other ∈ (e.world k).sent)
+    {data : AttestationData} {attestation : Attestation preset fork}
+    (signed : (v, data) ∈ statements config checks anchorState anchorBlock message)
+    (signedOther : (v, attestation.data) ∈
+      statements config checks anchorState anchorBlock other)
+    {store : Store preset fork} (origin : store.VoteOrigin config v attestation)
+    (epoch : data.target.epoch = computeEpochAtSlot preset data.slot)
+    (rank : (LatestMessage.ofAttestation (fork := fork) attestation).rank ≥ data.target.epoch)
+    {slot : Slot} (floor : slot ≤ data.slot) : slot ≤ attestation.data.slot := by
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
+  have targetLe : data.target.epoch ≤ attestation.data.target.epoch := by
+    simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
+  by_cases same : data.target.epoch = attestation.data.target.epoch
+  · have dataEq := Execution.data_eq_of_signed_of_target_epoch slots sent sentOther
+      signed signedOther honest same
+    exact dataEq ▸ floor
+  · have targetLt := UInt64.lt_of_le_of_ne targetLe same
+    have slotLe : data.slot ≤ attestation.data.slot := by
+      by_contra h
+      have reversed := Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat)
+        (UInt64.le_iff_toNat_le.mp (UInt64.le_of_lt (UInt64.not_le.mp h)))
+      rw [epoch, origin.targetEpoch] at targetLt
+      have strict := UInt64.lt_iff_toNat_lt.mp targetLt
+      simp only [computeEpochAtSlot, UInt64.toNat_div] at strict
+      omega
+    exact UInt64.le_trans floor slotLe
+
+/-- An honest duty vote is a sent message that signs its own data. -/
+theorem VoteAt.signed_sent {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) {v : ValidatorIndex} (honest : v ∈ J)
+    {slot : Slot} {committee : CommitteeIndex} {deadline n : ℕ}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committee deadline n attestation indexed) :
+    Message.attestation attestation ∈ (e.world (n + 1)).sent ∧
+      (v, attestation.data) ∈
+        statements config checks anchorState anchorBlock (Message.attestation attestation) := by
+  refine ⟨e.view_subset_sent (n + 1) v (by simp [Execution.world_succ, vote.sends, World.apply]),
+    ?_⟩
+  obtain ⟨_, _, _, _, indexedOk, _⟩ := vote.reads
+  obtain ⟨attesters, attestersOk, _⟩ := getAttestingIndices_of_getIndexedAttestation indexedOk
+  obtain ⟨indexed', indexedOk', _, dataEq, _⟩ :=
+    getIndexedAttestation_of_getAttestingIndices attestersOk
+  rw [indexedOk, Except.ok.injEq] at indexedOk'
+  subst indexedOk'
+  have reached := e.reachable
+    (fun u hu => (start u hu) ▸ Store.Reachable.anchor anchored) n v honest
+  refine ⟨(e.world n).state v, indexed, reached, vote.reads, ?_, dataEq.symm⟩
+  have alone := vote.alone
+  simp only [← Array.mem_toList_iff, alone, List.mem_singleton]
 
 end EthLib.Consensus.Models.Network
