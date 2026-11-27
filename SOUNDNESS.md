@@ -2415,6 +2415,8 @@ The list leaves out GAS and the creations.
 It keeps the calls: a run of steps without a message passes a call only where it sends none, and `Logic.callStep_bridge` lifts that step.
 The lifted run has the same fields outside its meter, including its state and output.
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
+`Logic.Spec.covered` lifts a whole specification of checked code whose runs stop with no error or a revert.
+The rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 (`spec_add_covered`) hold that way under the state gas meter.
 
 ### Invariants of the storage of a contract
 

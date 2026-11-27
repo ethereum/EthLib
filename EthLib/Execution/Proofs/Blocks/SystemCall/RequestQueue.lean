@@ -617,6 +617,17 @@ def Added {fork : Fork} (slots : Nat) (target : Address) (words : List U256) (da
     -- The logs gain one log of the contract, with no topic and the data `data`.
     evm.substate.logs = substate.logs.push { address := target, topics := [], data := data }
 
+/-- A call that adds a request, or reverts with an answer, stops with no error or a revert. -/
+theorem carried_of_added {fork : Fork} {b : Bool} {slots : Nat} {target : Address}
+    {words : List U256} {data : ByteArray} {state : TransactionState} {substate : Substate}
+    {evm : Evm fork Nat}
+    (h : if b then Added slots target words data state substate evm
+      else SystemContract.Answer state none evm) :
+    Carried evm.error := by
+  split at h
+  · exact .inl h.1
+  · exact .inr h.2.1
+
 /-- Equal storages, keys and words give equal storages after the write. -/
 theorem setSlot_congr {r r' : U256 → U256} {k k' v v' : U256} (hr : r = r') (hk : k = k')
     (hv : v = v') : setSlot r k v = setSlot r' k' v' := by

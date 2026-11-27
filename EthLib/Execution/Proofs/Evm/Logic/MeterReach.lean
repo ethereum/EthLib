@@ -503,4 +503,48 @@ theorem Reaches.followsMeter_revert {low after : Evm fork Nat} {meter : StateGas
   carried_of_meterReady r ⟨supported, flags, fun _ => boundary⟩ (fun _ => start) (.inr reverted)
     meter below
 
+/-- The start of a code is an opcode position, or past the end of an empty code. -/
+theorem zero_boundary (code : ByteArray) : code.size ≤ 0 ∨ 0 ∈ opcodePositions code := by
+  by_cases empty : code.size = 0
+  · exact .inl (by omega)
+  · exact .inr (mem_opcodePositions_iff.mpr (.here (by omega)))
+
+/-- A frame of checked code at an opcode position is ready for the state gas meter. -/
+theorem At.ready {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U256}
+    {memory : ByteArray} {gas : Nat} {state : State.TransactionState} {substate : Substate}
+    {returnData : ByteArray} {low : Evm fork Nat}
+    (hat : At code message pc stack memory gas state substate returnData low)
+    (supported : SupportedCode code = true)
+    (boundary : code.size ≤ pc ∨ pc ∈ opcodePositions code) :
+    SupportedCode low.code = true ∧ low.validJumpDestinations = validJumpDestinations low.code ∧
+      (low.code.size ≤ low.pc ∨ low.pc ∈ opcodePositions low.code) ∧ low.error = none := by
+  obtain ⟨hc, hf, -, hp, -, -, -, -, he, -⟩ := hat
+  subst hc hp
+  exact ⟨supported, hf, boundary, he⟩
+
+/-- A frame under the state gas meter that follows a frame of `P` under one counter. -/
+def Covered (P : Evm fork Nat → Prop) (high : Evm fork StateGasMeter) : Prop :=
+  ∃ low, P low ∧ FollowsMeter low high
+
+/-- A specification over checked code holds under each state gas meter that covers the counter.
+
+Each frame of the postcondition must stop with no error or with a revert. -/
+theorem Spec.covered {P Q : Evm fork Nat → Prop} (h : Spec fork P Q)
+    -- Each frame of the precondition has checked code, its flags, an opcode position and no error.
+    (ready : ∀ low, P low → SupportedCode low.code = true ∧
+      low.validJumpDestinations = validJumpDestinations low.code ∧
+      (low.code.size ≤ low.pc ∨ low.pc ∈ opcodePositions low.code) ∧ low.error = none)
+    (ends : ∀ low, Q low → Carried low.error) :
+    Spec (Meter := StateGasMeter) fork (Covered P) (Covered Q) := by
+  rintro _ ⟨low, hp, meter, below, rfl⟩
+  obtain ⟨supported, flags, boundary, start⟩ := ready low hp
+  obtain ⟨stopped, reached, halted, hq⟩ := h low hp
+  have lifted : ∃ m, stopped.gas ≤ m.gasLeft ∧
+      Reaches (Step fork) (withStateGas low meter) (withStateGas stopped m) := by
+    rcases ends stopped hq with normal | reverted
+    · exact reached.followsMeter supported flags boundary normal below
+    · exact reached.followsMeter_revert supported flags boundary start reverted below
+  obtain ⟨m, hm, highReached⟩ := lifted
+  exact ⟨_, highReached, halted, stopped, hq, m, hm, rfl⟩
+
 end EthLib.Execution.Evm.Logic
