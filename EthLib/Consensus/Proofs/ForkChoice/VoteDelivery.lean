@@ -984,11 +984,13 @@ include sync slots admitted anchored anchorSlot anchorBoundary start hv hw nextO
 
 /-- Later, a receiver's latest message for a duty's validator is a vote from the duty slot or later.
 
-The receiver is up to date at the next slot, a delay after the deadline.
+The receiver is up to date at the next slot, at least a delay after the deadline.
 
 At each later event `k` this floor holds, or honest stores up to time `T k` collide.
 
-The vote is signed by the validator, and need not be the duty vote. -/
+The vote is signed by the validator, and need not be the duty vote.
+
+It assumes delayed block admission, and no block with a zero state root in the voter's store. -/
 theorem VoteAt.latest_signed_at_next_slot {n j : ℕ} {a : Attestation preset fork}
     {i : IndexedAttestation preset fork}
     (vote : VoteAt e v s c d n a i)
@@ -996,8 +998,6 @@ theorem VoteAt.latest_signed_at_next_slot {n j : ℕ} {a : Attestation preset fo
     {due : UInt64} (dueOk : getAttestationDueMs config fork = .ok due)
     (inSlot : due < config.SLOT_DURATION_MS)
     (nonzero : Nonzero n v) (fixed : Ready j w) (current : (S j w).getCurrentSlot config = .ok next)
-    -- Delayed block admission is assumed, through `admitted`.
-    --
     -- The voter's store reads the receiver's held finalized checkpoint at the vote's block root.
     --
     -- That is, the root's ancestor at the first slot of that epoch is the finalized root.
@@ -1056,11 +1056,13 @@ theorem VoteAt.latest_signed_at_next_slot {n j : ℕ} {a : Attestation preset fo
 
 /-- From the next slot boundary, a receiver's latest message is a vote from the duty slot or later.
 
-The receiver is up to date there; each later event `k` keeps the floor, or stores collide by `T k`.
+The receiver is up to date there.
+
+At each later event `k` the floor holds, or honest stores collide by time `T k`.
 
 That vote is signed by the validator and need not be the duty vote.
 
-It assumes delayed block admission up to `T k` (`admitted`) and that delays fit (`fits`). -/
+It assumes delayed block admission up to `T k`, delays that fit, and nonzero state roots. -/
 theorem Execution.latest_signed_of_duty
     (votes : VotesInSlots e s next) (duty : assignment.committee v s = some c)
     (started : e.startTime ≤ d)

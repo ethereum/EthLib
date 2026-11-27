@@ -20,15 +20,11 @@ Not yet released.
   Each applies `Execution.callRolloverRead_or_evidence` once, so its conclusion adds `HistoricalDirectSafetyEvidence`.
   The two proofs of confirmed-root coverage that split on that read now apply `Execution.rootViableAt_of_checked_or_evidence`.
 
-- In Lean, `VoteAt.latest_signed_at_next_slot` and `Execution.latest_signed_of_duty` (`Consensus/Proofs/ForkChoice/VoteDelivery.lean`) bound the latest vote of an honest duty at the next slot ([#2053](https://github.com/ethereum/EthLib/issues/2053)).
-  An up-to-date honest receiver at the next slot holds a signed vote of the validator from the duty slot or later.
-  Otherwise bounded honest stores exhibit a block collision.
-
 - In Lean, `VoteAt.latest_signed_at_next_slot` and `Execution.latest_signed_of_duty` (`Consensus/Proofs/ForkChoice/VoteDelivery.lean`) bound the latest vote of an honest duty from the next slot on ([#2053](https://github.com/ethereum/EthLib/issues/2053)).
   Take a receiver up to date at the next slot, at least a delay after the duty's deadline.
   At each later event its latest message for the validator is a signed vote from the duty slot or later, not necessarily the duty vote.
   Otherwise honest stores up to the time of that event exhibit a block collision.
-  Both assume delayed block admission.
+  Both assume delayed block admission, and that no block in the voter's store has a zero state root.
   They also assume that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root.
   `Execution.data_eq_of_signed_of_target_epoch`, `Execution.latest_slot_floor_of_signed_rank` and `VoteAt.signed_sent` move to `Consensus/Proofs/ForkChoice/VoteDelivery.lean` from `Consensus/Proofs/ForkChoice/FastConfirmation/DutySupport.lean`, with their names and statements.
 
