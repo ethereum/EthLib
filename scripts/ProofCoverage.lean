@@ -8,8 +8,8 @@ Grades each pair of a consensus rule and a beacon fork in three tiers.
 
 - Executable: the rule exists at that fork, so every pair is in this tier.
 - Touched: the statement of a theorem in a property module mentions the rule at that fork.
-- Characterized: `coverage/characterizes.txt` claims that a theorem states the main contract of
-  the rule, and that theorem holds at that fork.
+- Characterized: a theorem that holds at that fork states the main contract of the rule.
+  `coverage/characterizes.txt` makes this claim.
 
 The report reads statements only, never proofs.
 
@@ -17,8 +17,12 @@ The report reads statements only, never proofs.
 - `lake exe proof-coverage --check` fails when a pair differs from the baseline.
 - `lake exe proof-coverage --update` writes the baseline.
 
-It exits with 1 on a difference or a wrong claim, 2 on a malformed argument or file, 3 when it
-finds no rule or no fork type, and 4 on any other error.
+It exits with one of these codes.
+
+- 1: a pair differs from the baseline, or a claim is wrong.
+- 2: an argument or a file is malformed.
+- 3: it finds no rule or no fork type.
+- 4: any other error.
 -/
 
 open Lean Meta
@@ -35,8 +39,8 @@ def columns : List String :=
 
 /-- What the report reads, and the files it reads or writes.
 
-The source directory and the scope replace the defaults for the fixtures of
-`scripts/test_proof_coverage.sh`. -/
+The fixtures of `scripts/test_proof_coverage.sh` replace the default source directory and scope.
+-/
 structure Config where
   /-- The directory that holds the source tree of the scope. -/
   src : System.FilePath := "."
