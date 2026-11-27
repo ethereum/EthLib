@@ -405,6 +405,22 @@ theorem Item.eq_of_readField {count : Nat} {items rest : List Item} {x : α}
     obtain ⟨rfl, rfl⟩ := h
     rw [hItem]
 
+/-- Close `toItem c = item` from the unfolded decode `h` of `c`, which reads `n` fields. -/
+scoped macro "toItem_of_decode " h:ident n:num : tactic => `(tactic| (
+  obtain ⟨items, hFields, hRest⟩ := bind_ok_iff.mp $h
+  have hItem := Item.fields_eq_ok.mp hFields
+  -- Each read takes the item of one field from the front of the rest.
+  iterate $n
+    obtain ⟨⟨_, _⟩, hRead, hRest⟩ := bind_ok_iff.mp hRest
+    have := Item.eq_of_readField hRead
+  obtain rfl := Except.ok.inj hRest
+  obtain ⟨rfl, hLen⟩ := hItem
+  subst_vars
+  -- The fields fill the count, so no item is left.
+  simp at hLen
+  subst hLen
+  rfl))
+
 omit [LawfulCodec α] in
 /-- A field that appears at a fork has one item from that fork on, and none before. -/
 theorem Item.length_ofSince {f fork : Fork} (x : Since f fork α) :
