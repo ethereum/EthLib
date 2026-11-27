@@ -419,6 +419,19 @@ theorem target_transactionMessage {env : BlockEnvironment fork}
   · cases h
     exact ⟨rfl, rfl⟩
 
+/-- The message of a transaction comes from its sender. -/
+theorem caller_transactionMessage {env : BlockEnvironment fork}
+    {txEnv : TransactionEnvironment fork} {state : State.TransactionState}
+    {sender target : Address} {gas : Nat} {tx : Transaction} {message : Message fork}
+    (h : transactionMessage env txEnv state sender target gas tx = .ok message) :
+    message.caller = sender := by
+  unfold transactionMessage at h
+  split at h
+  · obtain ⟨_, -, h⟩ := map_ok_iff.mp h
+    rw [← h]
+  · cases h
+    rfl
+
 /-- The message of a transaction that creates runs the code of no account. -/
 theorem codeAddress_transactionMessage {env : BlockEnvironment fork}
     {txEnv : TransactionEnvironment fork} {state : State.TransactionState}
