@@ -1943,27 +1943,9 @@ theorem effective_update_input_reads
     (inside : i < middle.validators.data.size) :
     ∃ v amount, middle.validators.data[i]? = some v ∧
       middle.balances.data[i]? = some amount := by
-  have stepBalances : ∀ {s t : BeaconState preset fork} {j : Nat},
-      updateEffectiveBalance s j = .ok t → t.balances = s.balances := by
-    intro s t j step
-    simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
-    obtain ⟨validator, _found, balance, _read, effective, _scalar, set⟩ := step
-    obtain ⟨_valid, rfl⟩ := setValidatorAt_ok set
-    rfl
-  unfold processEffectiveBalanceUpdates at update
-  obtain ⟨atState, next, prefixOk, atIndex, _rest⟩ :=
-    (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial) (fun _ _ => trivial)
-      (fun _ _ _ _ => trivial) update).2 i (by simpa using inside)
-  simp only [List.getElem_range] at atIndex
-  have balances : atState.balances = middle.balances :=
-    foldlM_ok_invariant (fun current : BeaconState preset fork =>
-      current.balances = middle.balances)
-      (fun _ _ _ kept step => (stepBalances step).trans kept) rfl prefixOk
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at atIndex
-  obtain ⟨validator, _found, amount, read, _effective, _scalar, _set⟩ := atIndex
-  refine ⟨middle.validators.data[i], amount, Array.getElem?_eq_getElem inside, ?_⟩
-  rw [getBalanceAt_eq_ok_iff, balances] at read
-  exact read
+  obtain ⟨amount, read⟩ :=
+    processEffectiveBalanceUpdates_owned update (Array.getElem?_eq_getElem inside)
+  exact ⟨middle.validators.data[i], amount, Array.getElem?_eq_getElem inside, read⟩
 private theorem effective_update_decrease_reads
     {fork : Fork} {s middle updated : BeaconState preset fork}
     (kept : EffectiveKept s middle)

@@ -110,23 +110,9 @@ private theorem effectiveUpdates_withdrawable {fork : Fork} {s t : BeaconState p
     (ok : processEffectiveBalanceUpdates s = .ok t) (i : ℕ) (v : Validator)
     (found : s.validators.data[i]? = some v) :
     ∃ w, t.validators.data[i]? = some w ∧ w.withdrawableEpoch = v.withdrawableEpoch := by
-  unfold processEffectiveBalanceUpdates at ok
-  refine foldlM_ok_invariant (fun u : BeaconState preset fork =>
-    ∃ w, u.validators.data[i]? = some w ∧ w.withdrawableEpoch = v.withdrawableEpoch)
-    (fun u j u' previous step => ?_) ⟨v, found, rfl⟩ ok
-  obtain ⟨w, read, equal⟩ := previous
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
-  obtain ⟨validator, validatorOk, balance, _, next, _, set⟩ := step
-  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
-  by_cases same : i = j
-  · subst same
-    rw [getValidatorAt_eq_ok_iff.mp validatorOk, Option.some.injEq] at read
-    subst read
-    exact ⟨{ validator with effectiveBalance := next },
-      by simp [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set], equal⟩
-  · refine ⟨w, ?_, equal⟩
-    simpa [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set, Ne.symm same,
-      same] using read
+  obtain ⟨_, owned⟩ := processEffectiveBalanceUpdates_owned ok found
+  obtain ⟨_, read, -⟩ := processEffectiveBalanceUpdates_effectiveBalance_eq ok found owned
+  exact ⟨_, read, rfl⟩
 
 /-- From Electra, every stage of an epoch keeps the registry. -/
 private theorem kept_stage {fork : Fork} {k : EpochStage} {s t : BeaconState preset fork}

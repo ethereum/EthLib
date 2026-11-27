@@ -604,7 +604,8 @@ private theorem processSlashings (ok : Consensus.processSlashings state = .ok af
 private theorem processEffectiveBalanceUpdates
     (ok : Consensus.processEffectiveBalanceUpdates state = .ok after) :
     SameSyncCommittees state after := by
-  apply foldlM (fun _ _ _ ok => ?_) ok
+  refine Consensus.processEffectiveBalanceUpdates_invariant (SameSyncCommittees state)
+    (fun _ _ _ before ok => before.trans ?_) (.refl state) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, set⟩ := ok
   exact setValidatorAt set
