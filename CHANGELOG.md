@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Execution/Proofs/State/RandomOracle.lean` bounds the probability of finding two storages, or two states, with one root that differ, with the hash a random oracle.
+  `prEvent_storageWins_le` and `prEvent_stateWins_le` give the bound `Q^2 / 2^256`, for `Q` hash calls of the experiment.
+  `Execution/Proofs/Trie/RandomOracle.lean` gains `queryWitnesses`, the queries of the binding inputs of two tries at one key, which `extract` now runs after the two roots.
+
 - In Lean, `Base.pairwise_zip_of_pairwise` (`Base/Proofs/List.lean`) states that a relation that holds pairwise on a list holds pairwise on the first items of its zip.
   `List.takeWhile_eq_take`, `List.dropWhile_eq_drop` and `List.findIdx?_eq_of_nodup` move to `Base/Proofs/List.lean` from `Networking/Proofs/Devp2p/ForkId.lean`.
   `Consensus.mem_array_foldl_insert` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) is public.
@@ -1135,6 +1139,11 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, `Execution.State.storageRoot`, `stateEntries` and `stateRoot` are the new `storageRootM`, `stateEntriesM` and `stateRootM` with a plain hash, in the identity monad.
+  The monadic forms let the random oracle experiments run these roots with a hash that queries the oracle.
+  The roots are unchanged, but the three definitions unfold to the monadic forms.
+  Migration: rewrite with `storageRoot_eq`, `stateEntries_eq` and `stateRoot_eq` (`Execution/Proofs/State/Root.lean`), which state the former bodies.
 
 - A part of a slot, given in basis points, rounds to the nearest millisecond, a half up, where it rounded down, as consensus-specs v1.7.0-beta.5 does ([#4145](https://github.com/ethereum/EthLib/issues/4145)).
   Before Gloas, on mainnet, an attestation and a sync committee message are due 4000 ms into the slot, up from 3999 ms.

@@ -2739,7 +2739,13 @@ Two states with one state root give every address the same account, and at every
 Storage at an address without an account is outside `stateEntries`, and code is committed only through `codeHash`.
 So the state root binds no storage at an address without an account, does not separate a key set to `0` from an unset key, and binds nothing in the code map beyond each account's `codeHash`.
 The storage and state searches are proved to return only collisions, and none for an input compared with itself.
-No theorem bounds the probability of finding two storages or two states with one root that differ.
+`Execution/Proofs/State/RandomOracle.lean` bounds the probability of finding two storages or two states with one root that differ, with the hash a random oracle.
+The storage and state roots take their hash in any monad, so the experiments run the roots of the specification with a hash that queries the oracle.
+`prEvent_storageWins_le` bounds by `Q^2 / 2^256` the probability that an adversary outputs two storages with one root that give a key two words.
+`prEvent_stateWins_le` gives the same bound for two states with one root that differ at an address, in its account or in a word of its storage.
+Each experiment then queries the inputs of the binding search at every key of either storage, or at every address of either state.
+So the pair that `findStorageCollision` or `findStateCollision` returns, run with a table that agrees with the cache, is a collision of the oracle.
+As for the trie bound below, `Q` counts every hash call of the experiment, the extraction's included.
 The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, with the RLP encoding of each index as its key.
 `indexedEntries_nodup` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
 Applied to the plain tries of two lists with these distinct keys, `root_binding` shows that two lists with one root give every key one value.
@@ -8558,6 +8564,7 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of SHA-256.
   The bound on signing roots runs the same experiment, so it rests on the same oracle.
 - Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
+  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -8916,6 +8923,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Vrf/`
 - `EthLib/Cryptography/Proofs/Wots/`
 - `EthLib/Cryptography/Proofs/Xmss/`
+- `EthLib/Execution/Proofs/State/`
 - `EthLib/Execution/Proofs/Trie/`
 - `EthLib/Serialization/Proofs/Ssz/`
 
