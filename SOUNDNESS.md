@@ -2411,7 +2411,8 @@ The queue theorems assume bounds on the storage counters, and the history theore
 `Logic.Reaches.followsMeter_revert` lifts, under the same bound, a run from a normal frame that ends in a revert.
 The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
 `Logic.SupportedCode` checks each opcode, skipping PUSH data, against a fixed list of instructions.
-The list leaves out GAS and every instruction that sends a message.
+The list leaves out GAS and the creations.
+It keeps the calls: a run of steps without a message passes a call only where it sends none, and `Logic.callStep_bridge` lifts that step.
 The lifted run has the same fields outside its meter, including its state and output.
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
 

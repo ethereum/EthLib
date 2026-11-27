@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Logic.MeterStorage
+public import EthLib.Execution.Proofs.Evm.Logic.MeterCall
 public import EthLib.Base.Proofs.Except
 
 /-!
@@ -12,7 +13,9 @@ A run that ends in a revert carries too.
 
 The execution gas of the state gas meter must initially cover the counter.
 
-The supported instructions are all but GAS, the calls and the creations.
+The supported instructions are all but GAS and the creations.
+
+A call that sends a message ends such a run.
 
 The code check reads only opcode positions, skipping the data of PUSH instructions.
 -/
@@ -30,15 +33,40 @@ variable {fork : Fork}
 def meterSupported : Op → Bool
   -- GAS pushes the execution gas left, which the state gas meter can make larger.
   | .gas => false
-  -- The calls and the creations send a message.
-  | .create | .create2 | .call | .callcode | .delegatecall | .staticcall => false
+  -- The creations send a message.
+  --
+  -- A call is supported: in a run of steps without a message, it sends none or halts.
+  | .create | .create2 => false
   | _ => true
+
+/-- The kind of a call opcode, or none for any other opcode. -/
+def callKindOf : Op → Option CallKind
+  | .call => some .call
+  | .callcode => some .callcode
+  | .delegatecall => some .delegatecall
+  | .staticcall => some .staticcall
+  | _ => none
+
+/-- A step on a call opcode that exists at the fork runs the step of that call. -/
+theorem step_of_callKindOf {Meter : Type} [GasMeter Meter] {evm : Evm fork Meter} {op : Op}
+    {kind : CallKind} (inside : evm.pc < evm.code.size)
+    (decoded : Op.ofByte fork evm.code[evm.pc] = some op) (call : callKindOf op = some kind) :
+    step fork evm = callStep kind evm := by
+  have since := since_le_of_ofByte_eq_some decoded
+  cases op <;> simp only [callKindOf, reduceCtorEq, Option.some.injEq] at call <;> subst call <;>
+    simp only [Op.since] at since <;>
+    exact step_of_messageInstruction inside decoded
+      (by simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep,
+        environmentStep, accountStep, storageStep, transientStorageStep, logOpStep,
+        selfdestructOpStep, HOrElse.hOrElse, OrElse.orElse, Option.orElse])
+      (by simp [messageInstruction, callInstruction, HOrElse.hOrElse, OrElse.orElse,
+        Option.orElse, since])
 
 /-- Every opcode position contains a supported instruction, or an invalid opcode. -/
 def SupportedCode (code : ByteArray) : Bool :=
   -- EIP-8024 keeps the jump analysis, so the immediate byte of DUPN, SWAPN or EXCHANGE is read too.
   --
-  -- So a byte of GAS, a call or a creation there fails the check.
+  -- So a byte of GAS or of a creation there fails the check.
   (opcodePositions code).all fun pc => (Op.decode (byteAtOrZero code pc)).all meterSupported
 
 /-- The bytes that an instruction takes: its own, the data of a PUSH, or an immediate byte. -/
@@ -83,11 +111,13 @@ theorem immediateByte_range_of_ok {op : Op} {run : Evm fork Nat → Except EvmEr
   · simp [decodeSingle, depth] at rest
   · simp [decodePair, show 81 < (immediateByte evm.code evm.pc).toNat by omega, depth.2] at rest
 
-/-- A supported opcode that exists at the fork has an instruction without a message. -/
+/-- A supported opcode that exists at the fork, and is no call, has an instruction of the frame. -/
 theorem instruction_isSome_of_meterSupported {op : Op}
-    (supported : meterSupported op = true) (since : op.since ≤ fork) :
+    (supported : meterSupported op = true) (noCall : callKindOf op = none)
+    (since : op.since ≤ fork) :
     (instruction (Meter := Nat) fork op).isSome := by
   cases op <;> simp only [meterSupported] at supported <;> try contradiction
+  all_goals simp only [callKindOf] at noCall
   all_goals
     simp only [Op.since] at since
     simp [instruction, stackOnlyStep, controlFlowStep, memoryDataStep, returnOpStep,
@@ -326,47 +356,83 @@ private theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low af
       have decodedAt : Op.ofByte fork (byteAtOrZero low.code low.pc) = some op := by
         simpa only [byteAtOrZero, dite_eq_left inside] using decoded
       have supportedOp := meterSupported_of_supportedCode supported boundary decodedAt
-      have since := since_le_of_ofByte_eq_some decoded
-      obtain ⟨run, dispatch⟩ := Option.isSome_iff_exists.mp
-        (instruction_isSome_of_meterSupported supportedOp since)
-      obtain ⟨highRun, dispatchHigh, bridge⟩ := instruction_bridge supportedOp dispatch
-      have hs := step_of_instruction inside decoded dispatch
-      -- The run under one counter never fails with a revert.
-      have never := (bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _)).2
-      cases h with
-      | halt _ failed _ =>
-        rw [hs] at failed
-        cases ok : run low with
-        | ok _ => simp only [ok, Functor.map, Except.map] at failed; cases failed
-        | error e =>
-          simp only [ok, Functor.map, Except.map] at failed
-          cases failed
-          exact halted _ fun h => never (h ▸ ok)
-      | next _ hn =>
-        rw [hs] at hn
-        cases ok : run low with
-        | error e => simp only [ok, Functor.map, Except.map] at hn; cases hn
-        | ok next =>
-          simp only [ok, Functor.map, Except.map, Except.ok.injEq,
-            StepResult.next.injEq] at hn
-          subst next
-          obtain ⟨code, sameFlags, pc, normal, keeps⟩ :=
-            ((bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _)).1 after ok).1
+      cases kindOf : callKindOf op with
+      | some kind =>
+        -- A call that sends no message lifts by the bridge of its step.
+        have hs := step_of_callKindOf inside decoded kindOf
+        have never := (callStep_bridge kind (evm := low) (meter := StateGasMeter.start low.gas 0)
+          (Nat.le_refl _)).2
+        have width : nextOpcode low.code low.pc = low.pc + 1 := by
+          have plain : op ≠ .dupn ∧ op ≠ .swapn ∧ op ≠ .exchange := by
+            cases op <;> simp_all [callKindOf]
+          rw [nextOpcode_eq (Option.filter_eq_some_iff.mp decodedAt).1 plain]
+          cases op <;> simp_all [callKindOf, opWidth]
+        cases h with
+        | halt _ failed _ =>
+          rw [hs] at failed
+          exact halted _ fun h => never (h ▸ failed)
+        | next _ hn =>
+          rw [hs] at hn
+          have lifted := (callStep_bridge kind (evm := low) (meter := StateGasMeter.start low.gas 0)
+            (Nat.le_refl _)).1 _ hn
+          obtain ⟨⟨code, sameFlags, pc, normal, keeps⟩, -⟩ := lifted
           refine ⟨⟨by simpa only [code] using supported,
             by simpa only [code, sameFlags] using flags, ?_⟩, normal, keeps, ?_⟩
           · intro runs
             rcases pc runs with hn | hj
-            · rw [code, hn]
-              exact landing boundary (Option.filter_eq_some_iff.mp decodedAt).1 dispatch ok
+            · rw [code, hn, ← width]
+              exact next_boundary boundary
             · rw [flags] at hj
               exact .inr (by rw [code]; exact (isValidJumpDest_iff.mp hj).1)
           · intro carried meter below
-            obtain ⟨highNext, highOk, m, hb, rfl⟩ :=
-              ((bridge low meter below).1 after ok).2 carried
-            refine ⟨m, hb, .next running ?_⟩
-            rw [step_of_instruction (evm := withStateGas low meter) inside decoded dispatchHigh,
-              highOk]
-            rfl
+            obtain ⟨-, highNext⟩ :=
+              (callStep_bridge kind (evm := low) (meter := meter) below).1 _ hn
+            obtain ⟨b, highOk, m, hb, rfl⟩ := highNext carried
+            exact ⟨m, hb, .next running (by
+              rw [step_of_callKindOf (evm := withStateGas low meter) inside decoded kindOf]
+              exact highOk)⟩
+      | none =>
+        have since := since_le_of_ofByte_eq_some decoded
+        obtain ⟨run, dispatch⟩ := Option.isSome_iff_exists.mp
+          (instruction_isSome_of_meterSupported supportedOp kindOf since)
+        obtain ⟨highRun, dispatchHigh, bridge⟩ := instruction_bridge supportedOp dispatch
+        have hs := step_of_instruction inside decoded dispatch
+        -- The run under one counter never fails with a revert.
+        have never := (bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _)).2
+        cases h with
+        | halt _ failed _ =>
+          rw [hs] at failed
+          cases ok : run low with
+          | ok _ => simp only [ok, Functor.map, Except.map] at failed; cases failed
+          | error e =>
+            simp only [ok, Functor.map, Except.map] at failed
+            cases failed
+            exact halted _ fun h => never (h ▸ ok)
+        | next _ hn =>
+          rw [hs] at hn
+          cases ok : run low with
+          | error e => simp only [ok, Functor.map, Except.map] at hn; cases hn
+          | ok next =>
+            simp only [ok, Functor.map, Except.map, Except.ok.injEq,
+              StepResult.next.injEq] at hn
+            subst next
+            obtain ⟨code, sameFlags, pc, normal, keeps⟩ :=
+              ((bridge low (StateGasMeter.start low.gas 0) (Nat.le_refl _)).1 after ok).1
+            refine ⟨⟨by simpa only [code] using supported,
+              by simpa only [code, sameFlags] using flags, ?_⟩, normal, keeps, ?_⟩
+            · intro runs
+              rcases pc runs with hn | hj
+              · rw [code, hn]
+                exact landing boundary (Option.filter_eq_some_iff.mp decodedAt).1 dispatch ok
+              · rw [flags] at hj
+                exact .inr (by rw [code]; exact (isValidJumpDest_iff.mp hj).1)
+            · intro carried meter below
+              obtain ⟨highNext, highOk, m, hb, rfl⟩ :=
+                ((bridge low meter below).1 after ok).2 carried
+              refine ⟨m, hb, .next running ?_⟩
+              rw [step_of_instruction (evm := withStateGas low meter) inside decoded dispatchHigh,
+                highOk]
+              rfl
   · have hs := step_of_size_le (evm := low) (by omega)
     cases h with
     | halt _ failed _ => rw [hs] at failed; cases failed
