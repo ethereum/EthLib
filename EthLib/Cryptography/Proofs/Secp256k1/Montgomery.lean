@@ -30,12 +30,10 @@ open EthLib.Cryptography.Word64
 The four words are proved against the shared Montgomery field on these limbs. -/
 def Fp.params : Cryptography.Montgomery.Modulus 8 where
   p := Fp.modulus
-  pLimbs := ⟨0xfffffc2f, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-    0xffffffff, 0xffffffff⟩
-  r1 := ⟨0x3d1, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0⟩
-  r2 := ⟨0xe90a1, 0x7a2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0⟩
-  pm2 := ⟨0xfffffc2d, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-    0xffffffff, 0xffffffff⟩
+  pLimbs := ⟨0xfffffffefffffc2f, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff⟩
+  r1 := ⟨0x00000001000003d1, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000⟩
+  r2 := ⟨0x000007a2000e90a1, 0x0000000000000001, 0x0000000000000000, 0x0000000000000000⟩
+  pm2 := ⟨0xfffffffefffffc2d, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff⟩
   pinv := 0xd2253531
   pLimbs_spec := by decide
   pinv_spec := by decide

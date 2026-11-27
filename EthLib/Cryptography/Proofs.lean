@@ -69,7 +69,7 @@ public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.SufCma
 public import EthLib.Cryptography.Proofs.SufCma.Permutation
 public import EthLib.Cryptography.Proofs.SufCma.Simulate
-public import EthLib.Cryptography.Proofs.SufCma.MultiKey
+public import EthLib.Cryptography.Proofs.SufCmaMultiKey
 public import EthLib.Cryptography.Proofs.SufCma.Indifferentiability
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.MultiKey

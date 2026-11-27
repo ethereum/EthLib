@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.ByteOrder
+public import EthLib.Base.Proofs.ByteOrder.Bits
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Uniform
 public import Mathlib.Data.BitVec
 
@@ -192,37 +192,6 @@ theorem testBit_msbField (bytes : List UInt8) (offset : Nat) : ∀ width i : Nat
       have hidx : width + 1 - 1 - (i + 1) = width - 1 - i := by omega
       rw [hidx]
       simp
-
-omit [Params] in
-/-- Bit `i` of a big-endian integer is bit `i % 8` of its byte `i / 8` from the end. -/
-theorem testBit_ofBE (l : List UInt8) : ∀ i : Nat, (ByteOrder.ofBE l).testBit i =
-    (decide (i < 8 * l.length) && (l.getD (l.length - 1 - i / 8) 0).toNat.testBit (i % 8)) := by
-  induction l using List.reverseRecOn with
-  | nil => intro i; simp [ByteOrder.ofBE_eq_foldl]
-  | append_singleton l x ih =>
-    intro i
-    rw [ByteOrder.ofBE_append_singleton, show (256 : Nat) = 2 ^ 8 from rfl,
-      Nat.testBit_two_pow_mul_add _ x.toNat_lt, List.length_append,
-      List.length_singleton]
-    split_ifs with hi
-    · have h0 : l.length + 1 - 1 - i / 8 = l.length := by omega
-      have hx : (l ++ [x]).getD l.length 0 = x := by simp [List.getD_eq_getElem?_getD]
-      have : i < 8 * (l.length + 1) := by omega
-      rw [h0, hx, Nat.mod_eq_of_lt hi]
-      simp [this]
-    · rw [ih]
-      by_cases hlt : i - 8 < 8 * l.length
-      · have hi' : i < 8 * (l.length + 1) := by omega
-        have h0 : l.length + 1 - 1 - i / 8 = l.length - 1 - (i - 8) / 8 := by omega
-        have h1 : (i - 8) % 8 = i % 8 := by omega
-        have hx : (l ++ [x]).getD (l.length - 1 - (i - 8) / 8) 0 =
-            l.getD (l.length - 1 - (i - 8) / 8) 0 := by
-          simp [List.getD_eq_getElem?_getD,
-            List.getElem?_append_left (show l.length - 1 - (i - 8) / 8 < l.length by omega)]
-        rw [h0, h1, hx]
-        simp [hlt, hi']
-      · have hi' : ¬ i < 8 * (l.length + 1) := by omega
-        simp [hlt, hi']
 
 omit [Params] in
 theorem getD_take_drop (bytes : List UInt8) (s t j : Nat) (hj : j < t) :
@@ -428,13 +397,13 @@ theorem getLsbD_truncateMessageDigest (outputs : DigestCall → HashOutput) {q :
   by_cases hbq : q < bottomHeight
   · have hh : q < totalHeight := by omega
     rw [ite_eq_left hh, testBit_digestIndexValue, ite_eq_left hbq, digestSource, ite_eq_left hbq,
-      testBit_ofBE, length_take_drop _ _ _ (by omega), getD_take_drop _ _ _ _ (by omega),
+      ByteOrder.testBit_ofBE, length_take_drop _ _ _ (by omega), getD_take_drop _ _ _ _ (by omega),
       testBit_digestOutputByte _ _ _ (by omega), decide_eq_true (by omega), Bool.true_and]
     congr 2
     omega
   · by_cases hh : q < totalHeight
     · rw [ite_eq_left hh, testBit_digestIndexValue, ite_eq_right hbq, digestSource,
-        ite_eq_right hbq, ite_eq_left hh, testBit_ofBE, length_take_drop _ _ _ (by omega),
+        ite_eq_right hbq, ite_eq_left hh, ByteOrder.testBit_ofBE, length_take_drop _ _ _ (by omega),
         getD_take_drop _ _ _ _ (by omega), testBit_digestOutputByte _ _ _ (by omega),
         decide_eq_true (by omega), decide_eq_true (by omega), Bool.true_and, Bool.true_and]
       congr 2

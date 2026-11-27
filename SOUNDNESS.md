@@ -88,15 +88,15 @@ The report itself also prints the number of rules at each fork.
 <!-- generated: proof-coverage -->
 | Fork | Rules touched | Rules characterized |
 |------|------|------|
-| phase0 | 1322 | 11 |
-| altair | 1339 | 11 |
-| bellatrix | 1340 | 11 |
-| shapella | 1351 | 11 |
-| dencun | 1360 | 11 |
-| pectra | 1380 | 11 |
-| fusaka | 1387 | 11 |
-| glamsterdam | 1508 | 12 |
-| hegota | 1497 | 12 |
+| phase0 | 1323 | 11 |
+| altair | 1340 | 11 |
+| bellatrix | 1341 | 11 |
+| shapella | 1352 | 11 |
+| dencun | 1361 | 11 |
+| pectra | 1381 | 11 |
+| fusaka | 1388 | 11 |
+| glamsterdam | 1510 | 13 |
+| hegota | 1499 | 13 |
 <!-- end generated -->
 
 ### XMSS
@@ -2193,15 +2193,27 @@ It passes on at most all but one 64th of the gas left, by EIP-150.
 Its postcondition gives the state and substate that the frame that ends the message gives, and nothing more.
 `meets_process_noCode` proves that the runner of the interpreter meets one more assumption.
 That assumption says that a message with no code, to an account that is no precompile, ends with no error.
+`Logic.staticcall_noCode_meter` and `Logic.staticcall_noCode_returndatasize_meter` (`Logic/CallMeter.lean`) give STATICCALL to no code under the meter of EIP-8037, so a check of 32 bytes of return data fails closed there too.
 `Logic.callWith` and `Logic.call` also state that the message is static when the frame is.
 `Logic.callValue` is the rule for CALL with a value that is not 0, at every fork from Berlin, with the one-counter meter.
 The frame must be one that may change the state.
 It pays the access of EIP-2929, 9000 for the value, 25000 more when the callee is dead by EIP-161, and the growth of memory.
 From Glamsterdam, it pays 3000 for a cold access and 11300 for the value by EIP-8038, and the state gas of a new account in place of the 25000 by EIP-8037.
 With one counter, that state gas is never refilled, although EIP-8037 refills it when the callee fails or never runs.
-These rules do not yet carry to the meter of EIP-8037 for calls.
 The message gets the gas that EIP-150 allows and the stipend of 2300, and carries the value.
 The message is not static.
+`Logic.HoareUnder.meterCovers` carries a rule for the calls to the meter of EIP-8037 for checked code whose frames end with no error or a revert.
+It needs the assumption under that meter to give the one under one counter, for the frame that ends a covering message, with its gas capped.
+It may use that the gas of the covering message fits a word, which holds since the gas of its caller fits one.
+The rules under a specification of the callee code carry through `Logic.RunsAsUpToGas` (`Logic/Callee.lean`).
+It is the form of `RunsAs` whose specification holds of a covering message, with at least the gas of the message.
+It leaves open the gas of the frame that ends the message, down to the least of the gas of the stopped frame and of the message.
+It also leaves open the message of that frame, all but its current target.
+`Logic.Meets.upToGas` gives it from `RunsAs`, so the runner of one counter meets it.
+`Logic.meets_runsAsMeter` (`Logic/CallMeter.lean`) proves that the runner of the meter of EIP-8037 meets `Logic.RunsAsMeter`.
+It needs a specification under one counter of checked callee code, whose stopped frames end with no error or a revert.
+It also needs the runner of that meter to meet, at every bound, an assumption on the messages of the callee that gives the one of the specification.
+`Logic.RunsAsMeter.lowerMeter` gives `RunsAsUpToGas` from it, when the assumption on the start of the message carries to a covering message.
 `Logic.callValueLow` is the rule for such a CALL when the current account holds less than the value.
 From Glamsterdam, with one counter, it keeps the state gas of a new account paid, which EIP-8037 refills.
 It sends no message, pushes 0, and gives back the gas it would pass on with the stipend.
@@ -2407,13 +2419,20 @@ Their `systemCall_set` and `systemCall_dequeue` theorems hold from each contract
 They require the specified bytecode at the contract's address.
 The queue theorems assume bounds on the storage counters, and the history theorem requires a block number from 1 to below `2^256`.
 
-`Logic.Reaches.followsMeter` lifts a normal one-counter run to the state gas meter when its execution gas initially covers that counter.
+`Logic.Reaches.followsMeter` lifts a normal one-counter run to a stopped frame under the state gas meter when its execution gas initially covers that counter.
 `Logic.Reaches.followsMeter_revert` lifts, under the same bound, a run from a normal frame that ends in a revert.
+Both ask that the execution gas held under the state gas meter fit a word.
 The counter pays execution gas and state gas and ignores refills, so it gives a conservative budget.
 `Logic.SupportedCode` checks each opcode, skipping PUSH data, against a fixed list of instructions.
-The list leaves out GAS and every instruction that sends a message.
+The list leaves out GAS and the creations, and the check accepts GAS when the next opcode is a call.
+After GAS, each frame holds its own gas left, so the call asks the state gas meter for as much more gas as its excess (`Logic.GasPending`, `Logic.callStep_asks`).
+It keeps the calls: a run of steps without a message passes a call only where it sends none, and `Logic.callStep_bridge` lifts that step.
 The lifted run has the same fields outside its meter, including its state and output.
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
+`Logic.Spec.covered` lifts a whole specification of checked code whose runs stop with no error or a revert.
+The rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 (`spec_add_covered`) hold that way under the state gas meter.
+`Logic.HoareUnder.meterCovers` and `Logic.SpecUnder.covered` lift a triple with messages, under an assumption on the frames that end messages under each meter.
+The assumption under the state gas meter must give the one under one counter, for a frame that ends a covering message, seen under one counter with its gas capped by that message.
 
 ### Invariants of the storage of a contract
 
@@ -4760,11 +4779,23 @@ The rule approximates the guide, which asks that every viable branch was invalid
 EthLib counts a dropped justified block as no viable branch, a choice of its own.
 `hasNoViableBranch_eq_ok_true_iff` shows that, with the justified block known and the filter successful, no viable branch means that no leaf above it passes the viability filter.
 `filterNodeTree_eq_nil_iff` gives the same fact for the filtered tree of any node.
-The re-run of the merge block checks is not defined, nor the answer to an execution layer that fails to respond.
+The re-run of the merge block checks is not defined.
+`importAction` states what a node does with a block, or from Gloas an envelope, for the answer of the execution layer.
+`importAction_eq_defer_iff` shows that it maps an error, or no answer, to `.defer`: the guide asks that such a unit be neither imported nor applied, and it may be queued.
+`importAction_eq_accept_iff` shows that the answer lets it be imported exactly for a valid or a not validated payload.
+The other conditions of an optimistic import, such as a candidate block and a parent payload that is not invalidated, are checked apart.
+`importAction_eq_invalidate_iff` shows that an invalidated payload with a latest valid hash rejects the unit and passes the hash on.
+The caller then runs `Store.onInvalidPayload` for that hash, which handles the zero hash and a hash that names no known payload.
+`importAction_eq_reject_iff` shows that an invalidated payload without a hash rejects the unit only, and the caller runs no invalidation.
+The Gloas guide says so, and before Gloas the unit itself is then the first invalid block, which the store does not hold.
+A status outside the three of the guide counts as an error, a choice of EthLib, so it never invalidates a payload.
+The caller runs the import, the rejection and the invalidation; no theorem relates the action to the handlers.
+From Gloas a builder of an optimistic node submits no bid; `mayBuilderSubmitBid_eq_ok_iff` shows that its node lets it bid exactly when the node is not optimistic.
+The rule restricts bids, not the builder domain, since a builder also signs its envelope under that domain and the guide forbids only the bid.
 
 From Gloas a block carries a bid, and its payload arrives later in an envelope.
-The optimistic sync guide has no Gloas text, and its tests stop before Gloas.
-EthLib therefore reads the Bellatrix guide at Gloas, a choice of its own.
+The optimistic sync guide has Gloas text, but its tests stop before Gloas.
+EthLib keeps the optimistic set by block root, where that text keeps payload hashes; the lines below state each choice and each difference.
 A root of the optimistic set then names a block whose payload was imported optimistically, as the Gloas gossip rules key a payload status by block root.
 A block carries a payload when its bid names a nonzero block hash; `isExecutionBlock_of_glamsterdam` states it.
 `payloadChain_of_glamsterdam` shows that the payload chain is the chain of the block, filtered by the block hashes that the bids name.
@@ -4797,8 +4828,8 @@ The status of a node is an assumption: a full node must name a payload that the 
 The optimistic store follows the fields of the guide, which do not record the payloads held; the search of the head returns a full node only for a held payload.
 Before Gloas the walk returns an optimistic genesis block, and from Gloas a node of the genesis block, as the source does.
 Away from genesis, the walk fails with `payloadNotVerified` where a node builds on a payload that no known block names, as the head rule does.
-No published source says what an invalid payload removes from the store of the fork choice from Gloas.
-EthLib defines it as follows, a reading of its own that follows the fork choice of Gloas.
+The Gloas guide says that the full node of an invalid payload and every node built on it are not viable and carry no weight.
+EthLib defines the removal from its store as follows, a reading of its own that follows the fork choice of Gloas.
 A block and its payload are two nodes, and the state of a block does not depend on the block's own payload.
 So an invalid payload leaves its block valid, and the node of that block without its payload stays.
 A block whose bid builds on the invalid payload starts from a state that assumes that payload, so it leaves the store with its descendants.
@@ -9043,6 +9074,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/Sponge/`
 - `EthLib/Cryptography/Proofs/SufCma/`
+- `EthLib/Cryptography/Proofs/SufCmaMultiKey.lean`
 - `EthLib/Cryptography/Proofs/SupportBind.lean`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/UniformReads.lean`

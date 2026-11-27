@@ -13,7 +13,9 @@ From Glamsterdam, that counter also pays the state gas of a new account.
 
 From Glamsterdam the protocol counts gas with the meter of EIP-8037.
 
-These rules do not yet carry to that meter.
+For checked code, a rule here carries to that meter when the assumption under that meter gives this one.
+
+The rules under a specification of the callee code carry, with the gas of the callee left open.
 
 Sources: EIP-150, EIP-161, EIP-2929, EIP-7702, EIP-8037 and EIP-8038.
 

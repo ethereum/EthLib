@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
+public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueStart
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
 public import EthLib.Execution.Proofs.Blocks.SystemCall.AddPath
 
@@ -154,7 +155,6 @@ theorem CODE_NUMBER_eq : CODE_NUMBER =
     0x546001828201116101885750505f61018e565b01600190035b5f555f6001556074025ff35b5f5ffd) := by
   decide +kernel
 
-
 /-- The code runs the loop of the fee from byte 69, as the withdrawal request contract does. -/
 theorem feeLoopCode_CODE : FeeLoopCode CODE :=
   FeeLoopCode.of_ofNat (by decide) (by rw [CODE_NUMBER_eq, FEE_LOOP_NUMBER]; decide +kernel)
@@ -189,6 +189,20 @@ theorem feePathCode_CODE :
   revert1 := by evm_code [CODE, CODE_NUMBER_eq]
   revert2 := by evm_code [CODE, CODE_NUMBER_eq]
   revert3 := by evm_code [CODE, CODE_NUMBER_eq]
+
+/-- The code starts its system call from byte 211, for at most 2 requests. -/
+theorem dequeueStartCode_CODE :
+    DequeueStartCode CODE 0xd3 MAX_CONSOLIDATION_REQUESTS_PER_BLOCK where
+  size_le := by simp [CODE, NatCode.size_ofNat]
+  dest_lt := by decide
+  max_lt := by decide
+  byte := DequeueStartCode.byte_ofNat (by decide +kernel)
+  push1 := by evm_code [CODE, CODE_NUMBER_eq]
+  push4 := by evm_code [CODE, CODE_NUMBER_eq]
+  push11 := by evm_code [CODE, CODE_NUMBER_eq, MAX_CONSOLIDATION_REQUESTS_PER_BLOCK]
+  push14 := by evm_code [CODE, CODE_NUMBER_eq]
+  push18 := by evm_code [CODE, CODE_NUMBER_eq, MAX_CONSOLIDATION_REQUESTS_PER_BLOCK]
+  dest20 := by evm_dest [CODE, CODE_NUMBER_eq]
 
 /-- The code ends its system call from byte 297, for a target of 1 and records of 116 bytes. -/
 theorem dequeueTailCode_CODE : DequeueTailCode CODE 297 1 116 where
@@ -225,21 +239,21 @@ theorem addPathCode_CODE : AddPathCode CODE 3 96 where
   head := fun i h h1 h2 h3 => by
     obtain ⟨k, rfl⟩ : ∃ k, i = 143 + k := ⟨i - 143, by omega⟩
     rw [Nat.add_sub_cancel_left]
-    exact AddPathCode.getElem_of_holdsExcept (skip := [14]) (by decide +kernel) h (by omega)
+    exact getElem_of_holdsExcept (skip := [14]) (by decide +kernel) h (by omega)
       (by simp; omega)
   push156 := by evm_code [CODE, CODE_NUMBER_eq]
   word := fun j h1 h2 i h hi h1' => by
     obtain rfl : j = 1 := by omega
-    exact AddPathCode.getElem_of_holdsExcept (skip := [1]) (by decide +kernel) h hi
+    exact getElem_of_holdsExcept (skip := [1]) (by decide +kernel) h hi
       (by simpa using h1')
   pushWord := fun j h1 h2 => by
     obtain rfl : j = 1 := by omega
     evm_code [CODE, CODE_NUMBER_eq]
   last := fun i h hi h1 =>
-    AddPathCode.getElem_of_holdsExcept (skip := [1]) (by decide +kernel) h hi (by simpa using h1)
+    getElem_of_holdsExcept (skip := [1]) (by decide +kernel) h hi (by simpa using h1)
   pushLast := by evm_code [CODE, CODE_NUMBER_eq]
   log := fun i h hi h1 h2 =>
-    AddPathCode.getElem_of_holdsExcept (skip := [7, 13]) (by decide +kernel) h hi
+    getElem_of_holdsExcept (skip := [7, 13]) (by decide +kernel) h hi
       (by simp; omega)
   pushSize := by evm_code [CODE, CODE_NUMBER_eq]
   pushLog := by evm_code [CODE, CODE_NUMBER_eq]
@@ -309,6 +323,35 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork)
       hstatic hacc hsize (by omega)) (fun _ h => h) ?_
   rintro evm ⟨⟨herr, hout, hw, hlog⟩, -⟩
   exact ⟨herr, hout, hw, by rw [hlog, hlogs]; rfl⟩
+
+/-- The rule of a call that adds a request holds under the state gas meter of EIP-8037.
+
+That meter is the one of every fork from Glamsterdam.
+
+Its execution gas alone must cover `gas`, and the reservoir is not used. -/
+theorem spec_add_covered {m : Nat} (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the source validator, then that of the target validator.
+    (hsize : message.data.size = 96)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
+    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
+      FeeFits MIN_CONSOLIDATION_REQUEST_FEE CONSOLIDATION_REQUEST_FEE_UPDATE_FRACTION
+        (storageOf state message.currentTarget 0).toNat m)
+    -- The frame has at least 200,000 gas before Glamsterdam and 1,000,000 from it.
+    --
+    -- It has 100 more for each of these steps.
+    (hgas : 200000 * storageGasScale fork + 100 * m ≤ gas) :
+    Spec (Meter := StateGasMeter) fork
+      (Covered (At CODE message 0 [] .empty gas state substate returnData))
+      (Covered fun evm =>
+        if pays (storageOf state message.currentTarget) message.value then
+          Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
+            (logData message.caller message.data) state substate evm
+        else Answer state none evm) :=
+  (spec_add (returnData := returnData) hfork hcaller hstatic hacc hsize hfits hgas).covered
+    (fun _ hat => hat.ready supportedCode_CODE (zero_boundary CODE)) fun _ => carried_of_added
 
 /-! ## The system call -/
 
@@ -586,98 +629,9 @@ theorem spec_dequeue (hfork : .shapella ≤ fork)
         (afterDequeue MAX_CONSOLIDATION_REQUESTS_PER_BLOCK TARGET_CONSOLIDATION_REQUESTS_PER_BLOCK
           (storageOf state message.currentTarget))
         state evm.state := by
-  have hscale := one_le_storageGasScale fork
-  generalize hr : storageOf state message.currentTarget = r
-  have hb := hbounded
-  rw [hr] at hb
-  obtain ⟨hht, hex⟩ := hb
-  have ht := (r 3).isLt
-  evm_step [CODE, CODE_NUMBER_eq]
-  rw [hcaller, toU256_SYSTEM_ADDRESS]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g₁ ss₁ hg₁ _ => ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g₂ ss₂ hg₂ _ => ?_
-  simp only [storageOf_recordStorageRead, hr]
-  have hS : storageOf ((state.recordStorageRead message.currentTarget (U256.toBeBytes 3#256)
-      ).recordStorageRead message.currentTarget (U256.toBeBytes 2#256)) message.currentTarget =
-      r := hr
-  have hacc' : (((state.recordStorageRead message.currentTarget (U256.toBeBytes 3#256)
-      ).recordStorageRead message.currentTarget (U256.toBeBytes 2#256)).getAccountOptional
-      message.currentTarget).isSome = true := hacc
-  have hsubv : sub (r 3#256) (r 2#256) = BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat) := by
-    show sub (r 3) (r 2) = _
-    apply BitVec.eq_of_toNat_eq
-    simp only [sub, BitVec.toNat_sub, BitVec.toNat_ofNat]
-    have := (r 2).isLt
-    rw [Nat.mod_eq_of_lt (by omega : (r 3).toNat - (r 2).toNat < 2 ^ 256)]
-    rw [show 2 ^ 256 - (r 2).toNat + (r 3).toNat =
-      ((r 3).toNat - (r 2).toNat) + 2 ^ 256 by omega, Nat.add_mod_right,
-      Nat.mod_eq_of_lt (by omega)]
-  have post : ∀ evm : Evm fork Nat,
-      (evm.error = none ∧ evm.output = taken record r (numDequeued 2 r) ∧
-      WritesStorage message.currentTarget (afterDequeue 2 1 r)
-        ((state.recordStorageRead message.currentTarget (U256.toBeBytes 3#256)
-          ).recordStorageRead message.currentTarget (U256.toBeBytes 2#256)) evm.state) →
-      evm.error = none ∧ evm.output = dequeued MAX_CONSOLIDATION_REQUESTS_PER_BLOCK record r ∧
-        WritesStorage message.currentTarget
-          (afterDequeue MAX_CONSOLIDATION_REQUESTS_PER_BLOCK
-            TARGET_CONSOLIDATION_REQUESTS_PER_BLOCK r) state evm.state :=
-    fun _ ⟨h1, h2, h3⟩ => ⟨h1, h2, WritesStorage.trans (WritesStorage.trans
-      (WritesStorage.recordStorageRead message.currentTarget state message.currentTarget
-        (U256.toBeBytes 3#256))
-      (WritesStorage.recordStorageRead message.currentTarget _ message.currentTarget
-        (U256.toBeBytes 2#256))) h3⟩
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  rw [hsubv]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  by_cases hd : (r 3).toNat - (r 2).toNat < 2
-  · have hz : greaterThan 2#256 (BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat)) ≠ 0 := by
-      have hlt : (2#256).toNat > (BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat)).toNat := by
-        simp only [BitVec.toNat_ofNat]
-        rw [Nat.mod_eq_of_lt (by omega : (r 3).toNat - (r 2).toNat < 2 ^ 256)]
-        omega
-      rw [greaterThan, ite_eq_left hlt]
-      decide
-    have hn : numDequeued 2 r = (r 3).toNat - (r 2).toNat := Nat.min_eq_left (by omega)
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    rw [← hn]
-    refine Spec.consequence (deq_rest hfork hstatic hacc' hS ⟨hht, hex⟩ ?_)
-      (fun _ h => h) post
-    omega
-  · have hz : greaterThan 2#256 (BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat)) = 0 := by
-      rw [greaterThan, ite_eq_right_iff]
-      intro h
-      have h' : 2 > (r 3).toNat - (r 2).toNat := by
-        simp only [BitVec.toNat_ofNat] at h
-        rw [Nat.mod_eq_of_lt (by omega : (r 3).toNat - (r 2).toNat < 2 ^ 256)] at h
-        omega
-      exact absurd h' hd
-    have hn : numDequeued 2 r = 2 := Nat.min_eq_right (by omega)
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine Spec.reshape (s' := [BitVec.ofNat 256 0, BitVec.ofNat 256 (numDequeued 2 r), r 2, r 3])
-      (by rw [hn]; rfl) rfl rfl ?_
-    refine Spec.consequence (deq_rest hfork hstatic hacc' hS ⟨hht, hex⟩ ?_)
-      (fun _ h => h) post
-    omega
+  exact CONSOLIDATION_REQUEST.spec_dequeue (rest := 140000) feePathCode_CODE dequeueStartCode_CODE
+    (fun _ _ _ _ hacc' hr hb hg => deq_rest hfork hstatic hacc' hr hb hg) hfork hcaller hacc
+    hbounded (Nat.le_trans (Nat.mul_le_mul_right _ (by decide)) hgas)
 
 /-- The consolidation request address is not a precompile. -/
 theorem addedAt_CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS :

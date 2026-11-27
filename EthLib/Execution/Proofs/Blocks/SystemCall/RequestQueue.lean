@@ -617,6 +617,17 @@ def Added {fork : Fork} (slots : Nat) (target : Address) (words : List U256) (da
     -- The logs gain one log of the contract, with no topic and the data `data`.
     evm.substate.logs = substate.logs.push { address := target, topics := [], data := data }
 
+/-- A call that adds a request, or reverts with an answer, stops with no error or a revert. -/
+theorem carried_of_added {fork : Fork} {b : Bool} {slots : Nat} {target : Address}
+    {words : List U256} {data : ByteArray} {state : TransactionState} {substate : Substate}
+    {evm : Evm fork Nat}
+    (h : if b then Added slots target words data state substate evm
+      else SystemContract.Answer state none evm) :
+    Carried evm.error := by
+  split at h
+  · exact .inl h.1
+  · exact .inr h.2.1
+
 /-- Equal storages, keys and words give equal storages after the write. -/
 theorem setSlot_congr {r r' : U256 → U256} {k k' v v' : U256} (hr : r = r') (hk : k = k')
     (hv : v = v') : setSlot r k v = setSlot r' k' v' := by
@@ -708,6 +719,33 @@ theorem log_memory {c : U256} {data : ByteArray} {n e : Nat}
   simpa using this
 
 end LogBytes
+
+/-! ## Blocks of a code stored as a number -/
+
+section Blocks
+
+open EthLib.Execution.Evm.Logic
+
+/-- Whether the code stored in `n`, of `len` bytes, holds `width` bytes of `number` from `o`.
+
+It skips the positions in `skip`, which hold constants. -/
+def holdsExcept (n len o number width : Nat) (skip : List Nat) : Bool :=
+  (List.range width).all fun i =>
+    skip.contains i || NatCode.natByte n len (o + i) == NatCode.natByte number width i
+
+/-- When the check passes, the code holds the bytes outside the skipped positions. -/
+theorem getElem_of_holdsExcept {n len o number width : Nat} {skip : List Nat}
+    (hcheck : holdsExcept n len o number width skip = true) {i : Nat}
+    (h : o + i < (NatCode.ofNat n len).size) (hi : i < width) (hs : i ∉ skip) :
+    (NatCode.ofNat n len)[o + i] = NatCode.natByte number width i := by
+  rw [NatCode.getElem_ofNat]
+  simp only [holdsExcept, List.all_eq_true, List.mem_range, Bool.or_eq_true, beq_iff_eq,
+    List.contains_iff_mem] at hcheck
+  rcases hcheck i hi with hm | he
+  · exact absurd hm hs
+  · exact he
+
+end Blocks
 
 /-! ## A request contract
 
