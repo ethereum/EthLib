@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, the rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 hold under the state gas meter of EIP-8037 ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  `spec_add_covered` (`Execution/Proofs/Blocks/SystemCall/WithdrawalRequests.lean`, `ConsolidationRequests.lean`) holds for every frame of that meter whose execution gas covers the gas of `spec_add`.
+  `Evm.Logic.Spec.covered` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) lifts a specification of checked code whose runs stop with no error or a revert, through `Evm.Logic.Covered`.
+  `Evm.Logic.At.ready` gives its hypotheses for a frame of checked code at an opcode position, and `Evm.Logic.zero_boundary` shows that the start of a code is one.
+  `RequestQueue.carried_of_added` shows that both outcomes of an add stop with no error or a revert.
+  Only the execution gas covers the counter: the reservoir is not used.
+
 - In Lean, `Evm.Logic.staticcall_noCode` (`Execution/Proofs/Evm/Logic/Call.lean`) proves a rule for STATICCALL to an account with no code that is no precompile, from Berlin to before Glamsterdam ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
   It holds for any input and output ranges, under the assumption that a call to no code ends with no error and no output, which the interpreter meets.
   The caller pushes 1, its return data is empty, and its output range keeps its old bytes.

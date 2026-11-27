@@ -155,7 +155,6 @@ theorem CODE_NUMBER_eq : CODE_NUMBER =
     0x546001828201116101885750505f61018e565b01600190035b5f555f6001556074025ff35b5f5ffd) := by
   decide +kernel
 
-
 /-- The code runs the loop of the fee from byte 69, as the withdrawal request contract does. -/
 theorem feeLoopCode_CODE : FeeLoopCode CODE :=
   FeeLoopCode.of_ofNat (by decide) (by rw [CODE_NUMBER_eq, FEE_LOOP_NUMBER]; decide +kernel)
@@ -324,6 +323,35 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork)
       hstatic hacc hsize (by omega)) (fun _ h => h) ?_
   rintro evm ⟨⟨herr, hout, hw, hlog⟩, -⟩
   exact ⟨herr, hout, hw, by rw [hlog, hlogs]; rfl⟩
+
+/-- The rule of a call that adds a request holds under the state gas meter of EIP-8037.
+
+That meter is the one of every fork from Glamsterdam.
+
+Its execution gas alone must cover `gas`, and the reservoir is not used. -/
+theorem spec_add_covered {m : Nat} (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the source validator, then that of the target validator.
+    (hsize : message.data.size = 96)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
+    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
+      FeeFits MIN_CONSOLIDATION_REQUEST_FEE CONSOLIDATION_REQUEST_FEE_UPDATE_FRACTION
+        (storageOf state message.currentTarget 0).toNat m)
+    -- The frame has at least 200,000 gas before Glamsterdam and 1,000,000 from it.
+    --
+    -- It has 100 more for each of these steps.
+    (hgas : 200000 * storageGasScale fork + 100 * m ≤ gas) :
+    Spec (Meter := StateGasMeter) fork
+      (Covered (At CODE message 0 [] .empty gas state substate returnData))
+      (Covered fun evm =>
+        if pays (storageOf state message.currentTarget) message.value then
+          Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
+            (logData message.caller message.data) state substate evm
+        else Answer state none evm) :=
+  (spec_add (returnData := returnData) hfork hcaller hstatic hacc hsize hfits hgas).covered
+    (fun _ hat => hat.ready supportedCode_CODE (zero_boundary CODE)) fun _ => carried_of_added
 
 /-! ## The system call -/
 

@@ -353,6 +353,35 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork)
   rintro evm ⟨⟨herr, hout, hw, hlog⟩, -⟩
   exact ⟨herr, hout, hw, by rw [hlog, hlogs]; rfl⟩
 
+/-- The rule of a call that adds a request holds under the state gas meter of EIP-8037.
+
+That meter is the one of every fork from Glamsterdam.
+
+Its execution gas alone must cover `gas`, and the reservoir is not used. -/
+theorem spec_add_covered {m : Nat} (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the validator, then the amount as 8 bytes, big-endian.
+    (hsize : message.data.size = 56)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
+    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
+      FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
+        (storageOf state message.currentTarget 0).toNat m)
+    -- The frame has at least 200,000 gas before Glamsterdam and 1,000,000 from it.
+    --
+    -- It has 100 more for each of these steps.
+    (hgas : 200000 * storageGasScale fork + 100 * m ≤ gas) :
+    Spec (Meter := StateGasMeter) fork
+      (Covered (At CODE message 0 [] .empty gas state substate returnData))
+      (Covered fun evm =>
+        if pays (storageOf state message.currentTarget) message.value then
+          Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
+            (logData message.caller message.data) state substate evm
+        else Answer state none evm) :=
+  (spec_add (returnData := returnData) hfork hcaller hstatic hacc hsize hfits hgas).covered
+    (fun _ hat => hat.ready supportedCode_CODE (zero_boundary CODE)) fun _ => carried_of_added
+
 /-- From Shapella, a call that pays the fee adds its request, for at most the gas of the bound.
 
 The bound is 2,266 gas and 87 for each step of the loop of the fee, then 150,000 for the storage.
