@@ -1219,6 +1219,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the rules of the calls that send no value of their own (`Execution/Proofs/Evm/Logic/Call.lean`) hold at every fork from Berlin, with one counter of gas ([#4788](https://github.com/ethereum/EthLib/issues/4788), [#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  `callKindWith`, `callWith`, `call`, `staticcallWith`, `staticcall`, `delegatecallWith`, `callcodeWith`, `staticcall_noCode` and `staticcall_noCode_returndatasize` lose the hypothesis `fork < .glamsterdam`.
+  They state the price of the access as `callBaseCost fork cold`, in place of `if cold then 2600 else 100`, so a cold access costs 3000 from Glamsterdam by EIP-8038.
+  Migration: drop the hypothesis, and rewrite with `callBaseCost_of_berlin` before Glamsterdam.
+
 - From Gloas, the Beacon API reads whether a response is optimistic from the node of the fork choice that the request resolves to, as consensus-specs v1.7.0-beta.5 states ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
   The attestation data reads the head node, with its payload status; a request for a block resolves to the pending node of the block, which reads the payload that the block builds on, EthLib's choice.
   A payload that no known block names counts as verified, and a node of a block that the store does not know reads its root.
