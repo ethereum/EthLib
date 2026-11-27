@@ -63,6 +63,9 @@ It takes two products of the base field, where the product of two elements takes
   -- §3: `c1 = 2 v0`.
   ⟨(a.c0 + a.c1) * (a.c0 - a.c1), t + t⟩
 
+/-- The product by an element of the base field, with two products of the base field. -/
+@[inline] def mulFp (a : Fp2 F) (x : F) : Fp2 F := ⟨a.c0 * x, a.c1 * x⟩
+
 instance : Add (Fp2 F) := ⟨add⟩
 instance : Sub (Fp2 F) := ⟨sub⟩
 instance : Mul (Fp2 F) := ⟨mul⟩

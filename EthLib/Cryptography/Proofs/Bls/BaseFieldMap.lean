@@ -64,6 +64,10 @@ theorem map_square (f : Hom F G) (a : Fp2 F) :
   show map f (Cryptography.Fp2.square a) = Cryptography.Fp2.square (map f a)
   simp only [map, Cryptography.Fp2.square, f.map_add, f.map_sub, f.map_mul]
 
+theorem map_mulFp (f : Hom F G) (a : Fp2 F) (x : F) :
+    map f (a.mulFp x) = (map f a).mulFp (f x) := by
+  simp only [map, Cryptography.Fp2.mulFp, f.map_mul]
+
 theorem map_beq (f : Hom F G) (a b : Fp2 F) : (map f a).beq (map f b) = a.beq b := by
   simp only [map, beq, f.map_beq]
 
