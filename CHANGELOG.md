@@ -1138,7 +1138,8 @@ Not yet released.
   A property holds after the update when it holds before and each successful update of one effective balance keeps it.
   The 25 proofs outside the two proof files of the update no longer read its body ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
   They use this theorem, or the theorems of the update on its frame, its balances and the validator at each index.
-  A fork that adds a step at the end of the update then breaks only its own proof files.
+  A step added at the end of the update that changes no field then breaks only the proof files of the update.
+  A step that writes a field adds one obligation to each user of the invariant principle.
 
 ### Changes that break callers
 
