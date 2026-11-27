@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Call.StorageAt
+public import EthLib.Execution.Proofs.Evm.Call.StorageAway
 public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.NoninterferenceRun
 
@@ -10,6 +11,8 @@ public import EthLib.Execution.Proofs.Transactions.NoninterferenceRun
 Outside its message, each step of a transaction keeps or wipes the storage of every address.
 
 Its message keeps or wipes the storage of an account, unless it reads the account.
+
+It also keeps or wipes it when no frame of the message runs at the account.
 -/
 
 @[expose] public section
@@ -275,5 +278,107 @@ theorem keptOrRead_processTransaction {env : BlockEnvironment fork} {block : Sta
     exact keptOrRead_runTransaction h
   · rw [processTransaction_of_lt_glamsterdam (Nat.lt_of_not_le hglam)] at h
     exact keptOrRead_runTransaction h
+
+/-! ## A message that runs no frame at the address -/
+
+/-- Where the run of a message starts, from its first frame: a call, or a creation. -/
+def FirstFrame.start (first : FirstFrame fork Meter) : BurnStart fork Meter :=
+  match first.message.target with
+  | some _ => .call first.message first.state first.substate first.meter
+  | none => .create first.message first.state first.substate first.meter
+
+/-- No frame of the message that a transaction or a system call runs is at `address`. -/
+def CallAway (address : Address) (chainId : Nat) (message : Message fork)
+    (state : State.TransactionState) (substate : Substate) (auths : List Authorization)
+    (paid : Std.ExtTreeSet Address) : Prop :=
+  ∀ first : FirstFrame fork Meter,
+    prepareFirstFrame chainId message state substate auths paid = .ok first →
+      RunsAway address first.start
+
+/-- The message of a transaction keeps or wipes the storage of `address`, if no frame runs there.
+-/
+theorem keptOrWiped_processMessageCall_of_away {chainId : Nat} {message : Message fork}
+    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {output : CallOutput}
+    (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
+      .ok output)
+    (away : CallAway (Meter := Meter) address chainId message state substate auths paid) :
+    KeptOrWiped address state output.state := by
+  have ofFrame : ∀ (evm : Evm fork Meter) (refund : Nat) (touched : Std.ExtTreeSet Address),
+      (CallOutput.ofFrame evm refund touched).state = evm.state := by
+    intro evm refund touched
+    unfold CallOutput.ofFrame
+    split <;> rfl
+  rw [processMessageCall_unfold] at h
+  split at h
+  · -- A halt before the first frame keeps the state, up to its reads.
+    split at h
+    · cases h
+    · cases h
+      exact .of_eq fun _ => rfl
+  · rename_i first hfirst
+    have hstart : KeptOrWiped address state first.state := keptOrWiped_prepareFirstFrame hfirst
+    have htarget := (substate_prepareFirstFrame hfirst).2.2.1
+    have hfar := away first hfirst
+    unfold FirstFrame.start at hfar
+    rw [htarget] at hfar
+    split at h
+    · rename_i hnone
+      rw [hnone] at hfar
+      obtain ⟨⟨evm, _⟩, hrun, h⟩ := bind_ok_iff.mp h
+      cases h
+      rw [ofFrame]
+      exact hstart.trans (keptOrWiped_processCreateMessage_of_away hrun hfar)
+    · rename_i t hsome
+      rw [hsome] at hfar
+      obtain ⟨⟨evm, _⟩, hrun, h⟩ := bind_ok_iff.mp h
+      cases h
+      rw [ofFrame]
+      exact hstart.trans (keptOrWiped_processMessage_of_away hrun hfar)
+
+variable (Meter) in
+/-- No frame of the message that a transaction runs, with the gas meter `Meter`, is at `address`. -/
+def TransactionAway (address : Address) (env : BlockEnvironment fork) (block : State.BlockState)
+    (included : Included) (tx : Transaction) (out : TransactionOutput) : Prop :=
+  ∀ {target bought message output settled},
+    TransactionRun Meter env block included tx out target bought message output settled →
+    CallAway (Meter := Meter) address env.chainId.toNat
+      { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
+      (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
+      (paidWrites included.sender target tx)
+
+/-- A transaction keeps or wipes the storage of `address`, if no frame of its message runs there.
+
+It runs with the gas meter `Meter`. -/
+theorem keptOrWiped_runTransaction_of_away {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
+    (h : runTransaction Meter env block included tx = .ok out)
+    (away : TransactionAway Meter address env block included tx out) :
+    KeptOrWiped address (.ofBlock block) out.state := by
+  obtain ⟨target, bought, message, output, settled, run⟩ := runTransaction_eq_ok h
+  have far := away run
+  obtain ⟨-, hbought, -, houtput, -, hsettle, hdelete⟩ := run
+  exact (keptOrWiped_buyGas hbought).trans
+    ((keptOrWiped_processMessageCall_of_away houtput far).trans
+      ((keptOrWiped_settleGas hsettle).trans (keptOrWiped_deleteAccounts hdelete)))
+
+/-- A transaction keeps or wipes the storage of `address`, if no frame of its message runs there.
+
+It runs with the gas meter of its fork. -/
+theorem keptOrWiped_processTransaction_of_away {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
+    (h : processTransaction env block included tx = .ok out)
+    (away : fork < .glamsterdam → TransactionAway Nat address env block included tx out)
+    (awayState : .glamsterdam ≤ fork →
+      TransactionAway StateGasMeter address env block included tx out) :
+    KeptOrWiped address (.ofBlock block) out.state := by
+  by_cases hhegota : .hegota ≤ fork
+  · rw [processTransaction_of_hegota_le hhegota] at h
+    cases h
+  by_cases hglam : .glamsterdam ≤ fork
+  · rw [processTransaction_of_glamsterdam hglam (Nat.lt_of_not_le hhegota)] at h
+    exact keptOrWiped_runTransaction_of_away h (awayState hglam)
+  · rw [processTransaction_of_lt_glamsterdam (Nat.lt_of_not_le hglam)] at h
+    exact keptOrWiped_runTransaction_of_away h (away (Nat.lt_of_not_le hglam))
 
 end EthLib.Execution.Transactions
