@@ -229,8 +229,10 @@ private theorem user_fee {m : Nat} {Q : Evm fork Nat → Prop} (hfork : .shapell
 
 /-- A call from another address, whose input is not 96 bytes, gets the fee or reverts.
 
-It holds from Shapella up to BPO5, with the one-counter meter. -/
-theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
+It holds from Shapella, with the one-counter meter.
+
+From Glamsterdam, a run with no error carries to the state gas meter of the protocol. -/
+theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hsize : message.data.size ≠ 96)
     -- It assumes fewer than `2^256` bytes of input, which the size word of the EVM can hold.
     (hbound : message.data.size < 2 ^ 256)
