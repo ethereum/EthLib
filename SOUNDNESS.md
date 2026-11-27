@@ -284,8 +284,7 @@ Two legal progressive containers with one root have one layout, or `findMixinCol
 `hashTreeRootM_progressiveContainer_layouts_separate` states the same for any hash with 32-byte digests.
 It computes the roots of the all-zero subtrees with that hash too.
 
-No theorem bounds the probability of finding a collision in a multiproof.
-Its verifier is the Merkle rebuild, which takes the node hash as an argument, but no experiment runs it against the oracle.
+`prEvent_multiproofWins_le`, below, bounds the probability that two different lists of leaves of one multiproof request rebuild one root, with the node hash a random oracle.
 
 `Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
 The specification hashes with SHA-256.
@@ -334,6 +333,28 @@ The climbs queried every message they hash, so the cache holds both, by `cached_
 `prEvent_branchWins_le_of_adversary` states the bound with `Q = q + 2 * depth`, for an adversary that makes at most `q` queries.
 Beyond the adversary's own queries, `Q` grows with the depth, not with the `2^depth` leaves.
 With SHA-256 in place of the oracle, `branchWins_sha256_iff` shows that a win is two different leaves that `isValidMerkleBranch` accepts at one depth, index and root.
+
+`Proofs/Ssz/MultiproofRandomOracle.lean` bounds the binding of `verifyMerkleMultiproof`, the multiproof check, with the same oracle.
+A bound `size` is fixed before the run.
+An adversary outputs a request, a list of generalized indices, and two multiproofs of it, each with its leaves and its helper nodes.
+The extraction rebuilds the root of each multiproof from the positions of the request, as the check does.
+Every node hash is an oracle call.
+It rebuilds nothing for a request whose indices and helper indices number more than `size`.
+The adversary wins when the two lists of leaves differ, each has one leaf per index, and both rebuilds reach one root.
+A win needs no count of the helper nodes, so it also covers multiproofs that the check refuses for that count.
+`collision_of_extractMultiproofs` shows that every win leaves two different cached inputs with one answer.
+Its proof applies `verify_binding` (`Cryptography/Proofs/Merkle/Multiproof/Binding.lean`) to a table that agrees with the cache, and takes the pairs that `findMultiproofCollision` returns.
+Each pair is one that its own rebuild hashed, by `findMultiproofCollision_recorded`.
+A rebuild replayed from the cache caches every pair it hashes, by `rebuild_go_of_replay` (`Cryptography/Proofs/Merkle/RandomOracle/Multiproof.lean`).
+`prEvent_experimentWith_le` then gives `prEvent_multiproofWins_le`, which bounds a win by `Q^2 / N`.
+A rebuild from `n` given nodes hashes at most `n - 1` times, by `isQueryBoundP_rebuild_go` in the same file.
+So the extraction makes at most `2 * (size - 1)` queries, by `extractMultiproofs_queryBound`.
+`prEvent_multiproofWins_le_of_adversary` states the bound with `Q = q + 2 * (size - 1)` and `N = 2^256`, for an adversary that makes at most `q` queries.
+For `k` indices at one depth `d`, the helper indices number at most `k * d`, by `getHelperIndices_length_le_depth` (`Proofs/Ssz/Merkle/MultiproofSize.lean`), so `size = k * (d + 1)` admits every such request.
+With SHA-256 in place of the oracle, `multiproofWins_sha256_of_verify` shows that two multiproofs with different leaves win.
+It needs `verifyMerkleMultiproof` to accept both for one request and one root, with at most `size` indices and helper indices.
+The converse fails: a win may carry more helper nodes than the check accepts.
+The bound covers two openings of one request; two requests that share an index are bound only by `verifyMerkleMultiproof_overlap_binding`, with no probability bound.
 
 `Consensus/Proofs/DataAvailability/BlobRandomOracle.lean` composes this bound with `verifyBlobSidecarInclusionProof`, the inclusion check of blob sidecars.
 The preset and the fork are fixed before the run, and an adversary outputs two blob sidecars.
@@ -8552,6 +8573,8 @@ The codeword searches of each scheme share the bullet of that scheme:
   The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
   The type is fixed before the run, except in the layout bound, where the adversary picks both types.
   The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
+  The multiproof bound fixes a size before the run, and its adversary picks the request, both lists of leaves and both lists of helper nodes.
+  A request whose indices and helper indices number more than that size is not rebuilt, so it cannot win.
   The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
   The data column bound fixes the preset and the fork before the run, and its adversary picks both partial headers.
