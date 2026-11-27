@@ -157,9 +157,8 @@ theorem Execution.exists_signed_origin_of_latestMessages {anchor : Store preset 
         exact keep ih rfl (fun h => h) (fun h => h)
           (fun slotOk => ⟨_, slotOk, UInt64.le_refl _⟩)
       | envelope _ handled =>
-        obtain ⟨_, _, _, _, _, record, same⟩ := Store.onExecutionPayloadEnvelope_ok handled
+        obtain ⟨_, _, same⟩ := Store.onExecutionPayloadEnvelope_changes handled
         rw [same]
-        obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
         exact keep ih rfl (fun h => h) (fun h => h)
           (fun slotOk => ⟨_, slotOk, UInt64.le_refl _⟩)
       | inclusionList _ handled =>

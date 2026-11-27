@@ -467,8 +467,7 @@ private theorem Store.Reachable.storeBelow {store : Store preset fork}
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact ih
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
@@ -563,8 +562,7 @@ theorem Store.Reachable.justified_epoch_le_unrealized {store : Store preset fork
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact ih
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted

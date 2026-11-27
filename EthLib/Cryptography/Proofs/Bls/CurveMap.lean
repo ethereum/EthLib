@@ -48,7 +48,7 @@ theorem map_double (f : FieldOps.Hom F G) (p : G1 F) :
   unfold double map
   simp only [f.map_isZero]
   cases FieldOps.isZero p.z
-  · simp only [Bool.false_eq_true, ↓reduceIte, f.map_add, f.map_sub, f.map_mul]
+  · simp only [Bool.false_eq_true, ↓reduceIte, f.map_add, f.map_sub, f.map_mul, f.map_square]
   · simp only [↓reduceIte]
 
 theorem map_neg (f : FieldOps.Hom F G) (p : G1 F) : map f (-p) = -map f p := by
@@ -59,13 +59,13 @@ theorem map_addGeneral (f : FieldOps.Hom F G) (p q : G1 F) :
     map f (addGeneral p q) = addGeneral (map f p) (map f q) := by
   unfold addGeneral
   simp only [apply_ite (map f), map_double, map_zero, map_mk, map_x, map_y, map_z,
-    ← f.map_mul, ← f.map_add, ← f.map_sub, f.map_beq]
+    ← f.map_mul, ← f.map_add, ← f.map_sub, ← f.map_square, f.map_beq]
 
 theorem map_addMixed (f : FieldOps.Hom F G) (p q : G1 F) :
     map f (addMixed p q) = addMixed (map f p) (map f q) := by
   unfold addMixed
   simp only [apply_ite (map f), map_double, map_zero, map_mk, map_x, map_y, map_z,
-    ← f.map_mul, ← f.map_add, ← f.map_sub, f.map_beq]
+    ← f.map_mul, ← f.map_add, ← f.map_sub, ← f.map_square, f.map_beq]
 
 theorem map_add (f : FieldOps.Hom F G) (p q : G1 F) : map f (p + q) = map f p + map f q := by
   show map f (add p q) = add (map f p) (map f q)

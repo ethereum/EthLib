@@ -28,10 +28,10 @@ namespace EthLib.Cryptography.Secp256r1
 The four words are proved against the shared Montgomery field on these limbs. -/
 def Fp.params : Cryptography.Montgomery.Modulus 8 where
   p := Fp.modulus
-  pLimbs := ⟨0xffffffff, 0xffffffff, 0xffffffff, 0x0, 0x0, 0x0, 0x1, 0xffffffff⟩
-  r1 := ⟨0x1, 0x0, 0x0, 0xffffffff, 0xffffffff, 0xffffffff, 0xfffffffe, 0x0⟩
-  r2 := ⟨0x3, 0x0, 0xffffffff, 0xfffffffb, 0xfffffffe, 0xffffffff, 0xfffffffd, 0x4⟩
-  pm2 := ⟨0xfffffffd, 0xffffffff, 0xffffffff, 0x0, 0x0, 0x0, 0x1, 0xffffffff⟩
+  pLimbs := ⟨0xffffffffffffffff, 0x00000000ffffffff, 0x0000000000000000, 0xffffffff00000001⟩
+  r1 := ⟨0x0000000000000001, 0xffffffff00000000, 0xffffffffffffffff, 0x00000000fffffffe⟩
+  r2 := ⟨0x0000000000000003, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x00000004fffffffd⟩
+  pm2 := ⟨0xfffffffffffffffd, 0x00000000ffffffff, 0x0000000000000000, 0xffffffff00000001⟩
   pinv := 1
   pLimbs_spec := by decide
   pinv_spec := by decide

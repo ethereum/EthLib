@@ -25,18 +25,18 @@ namespace EthLib.Consensus.Exports
 open Lean Base Serialization.Ssz
 open EthLib.Exports (Result PyValue pyExport toResult)
 
-/-- An optimistic store that knows only which roots are not yet verified. -/
-def optimisticOf {preset : Preset} {fork : Fork} (roots : List Root) :
-    OptimisticStore preset fork :=
-  { optimisticRoots := roots, head := default, blocks := ∅ }
+/-- An optimistic store of the roots not yet verified, beside the blocks of a store, if any. -/
+def optimisticOf {preset : Preset} {fork : Fork} (roots : List Root)
+    (blocks : Std.TreeMap Root (BeaconBlock preset fork) := ∅) : OptimisticStore preset fork :=
+  { optimisticRoots := roots, head := default, blocks }
 
 /-- The JSON response of the attestation data endpoint. -/
 def apiAttestationDataOf (args : StoreCaseArgs (List Root × UInt64 × UInt64)) :
     Result PyValue := do
   let (name, fork, anchorState, anchorBlock, steps, verify, roots, slot, committeeIndex) := args
   let ⟨_, _, config, store⟩ ← storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
-  let envelope ← toResult none (BeaconApi.attestationDataResponse config store (optimisticOf roots)
-    slot committeeIndex)
+  let envelope ← toResult none (BeaconApi.attestationDataResponse config store
+    (optimisticOf roots store.blocks) slot committeeIndex)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the attestation data endpoint, as a `dict`.

@@ -263,6 +263,25 @@ def test_chain_events_optimistic() -> None:
     assert case.events(first, end, [old_head, case.genesis]) == expected
 
 
+def test_chain_events_optimistic_node() -> None:
+    case = _case("gloas", CHAIN_CASES[-1][1])
+    statuses: set[str] = set()
+    for (first, before), (end, after) in pairwise(case.reads()):
+        heads = [e for e in _expected("gloas", case, before, after) if e["event"] == "head_v2"]
+        if not heads:
+            continue
+        head = heads[0]["data"]["data"]
+        events = case.events(first, end, [head["block"]])
+        assert events[0]["event"] == "head_v2"
+        # The head block alone is optimistic: only its full node reads that payload.
+        # Its empty node reads the payload of its parent, which is verified.
+        optimistic = events[0]["data"]["data"]["execution_optimistic"]
+        assert optimistic == (head["payload_status"] == "full")
+        statuses.add(head["payload_status"])
+    assert "full" in statuses
+    assert statuses - {"full"}
+
+
 def test_chain_events_unknown_fork() -> None:
     case = _case(*CHAIN_CASES[0])
     with raises(consensus.ForkChoiceError, "no fork named altairx"):

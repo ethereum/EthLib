@@ -88,7 +88,7 @@ private theorem pendingTail_processEffectiveBalanceUpdates {state after : Beacon
     {count : Nat} {epoch : Epoch}
     (run : processEffectiveBalanceUpdates state = .ok after)
     (tail : PendingTail count epoch state) : PendingTail count epoch after := by
-  apply processEffectiveBalanceUpdates_invariant (PendingTail count epoch)
+  apply processEffectiveBalanceUpdates_induction (PendingTail count epoch)
     (fun s i t before ok => ?_) tail run
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, found, _, _, _, _, set⟩ := ok
@@ -257,7 +257,7 @@ private theorem pendingTail_processRegistryUpdates {config : Config}
   by_cases electra : .pectra ≤ fork
   · exact pendingTail_processRegistryUpdatesElectra electra run boundary finalized tail
   simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff] at run
-  obtain ⟨updated, first, activated⟩ := run
+  obtain ⟨updated, first, _, _, activated⟩ := run
   have updatedFacts := foldlM_ok_invariant
     (fun s => PendingTail count epoch s ∧ s.slot = state.slot ∧
       s.finalizedCheckpoint = state.finalizedCheckpoint)

@@ -261,7 +261,9 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
 
 /-- From Gloas, a verified payload was verified at the start, or came from an accepted envelope.
 
-The envelope was in the holder's view, and the handler accepted it at an earlier event. -/
+The envelope was in the holder's view, and the handler accepted it at an earlier event.
+
+The payload was not yet verified then. -/
 private theorem Execution.exists_envelope_of_verified
     (e : Execution (forkChoice config checks sources signed sends) J)
     (gloas : .glamsterdam ≤ fork) {v : ν} {n : ℕ} {root : Root}
@@ -270,6 +272,7 @@ private theorem Execution.exists_envelope_of_verified
       ∃ i, i < n ∧ ∃ envelope : SignedExecutionPayloadEnvelope preset fork, ∃ after,
         .envelope gloas envelope ∈ (e.world i).view v ∧
         envelope.message.beaconBlockRoot = root ∧
+        ((e.world i).state v).isPayloadVerified gloas root = false ∧
         ((e.world i).state v).onExecutionPayloadEnvelope config checks sources gloas envelope =
           .ok after := by
   induction n with
@@ -305,13 +308,12 @@ private theorem Execution.exists_envelope_of_verified
       exact (kept (by rw [same]) rfl rfl).elim
     | @envelope _ envelope mem h =>
       by_cases same : envelope.message.beaconBlockRoot = root
-      · exact .inr ⟨n, Nat.lt_succ_self n, envelope, _, mem, same, h⟩
+      · exact .inr ⟨n, Nat.lt_succ_self n, envelope, _, mem, same, by simpa using held, h⟩
       -- An envelope for another block leaves this payload as it was.
-      obtain ⟨_, _, _, _, recorded, record, after⟩ := Store.onExecutionPayloadEnvelope_ok h
-      obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
-      rw [after] at verified
-      apply absurd _ held
-      simpa [Store.isPayloadVerified, Std.TreeMap.contains_insert, same] using verified
+      rcases (Store.onExecutionPayloadEnvelope_isPayloadVerified_iff h root).mp verified with
+        old | other
+      · exact absurd old held
+      · exact absurd other.symm same
 
 end ForkChoice
 
@@ -606,7 +608,7 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
   have reachedReceiver := e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored)
   -- The payload came from an envelope that the sender accepted before.
   rcases e.exists_envelope_of_verified gloas verified with
-    initial | ⟨i, before, envelope, _, mem, rfl, handled⟩
+    initial | ⟨i, before, envelope, _, mem, rfl, fresh, handled⟩
   · obtain ⟨_, -, -, -, fields⟩ := getForkchoiceStore_fields anchored
     rw [startSender] at initial
     simp [Store.isPayloadVerified, (fields gloas).2.1] at initial
@@ -621,7 +623,7 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
   -- Synchrony puts the envelope in the receiver's view.
   have memK := sync.2.2 i k ordered v honest u receiver _ mem (by omega)
   obtain ⟨state, stateFound, dataOk, envelopeOk, recorded, record, -⟩ :=
-    Store.onExecutionPayloadEnvelope_ok handled
+    Store.onExecutionPayloadEnvelope_ok (fun _ => fresh) handled
   obtain ⟨other, otherFound⟩ := held
   have sameState : state = other := e.blockStates_eq anchored startSender
     startReceiver (oneBlock v honest u receiver i k iBound bounded) stateFound otherFound
@@ -652,13 +654,12 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
         Store.block_ok_iff.mpr hereFound, slotOk, Store.getShufflingDependentRoot,
         dependentSlotOk, walkHere, bind, Except.bind, pure, Except.pure, Except.mapError]; rfl⟩
     · exact ⟨_, rfl⟩
-  have acceptedHere : ((e.world k).state u).onExecutionPayloadEnvelope config checks sources gloas
-      envelope = .ok { recordedHere with payloads := fun _ => ((recordedHere.payloads gloas).insert
-        envelope.message.beaconBlockRoot envelope.message) } := by
-    unfold Store.onExecutionPayloadEnvelope
-    simp only [Store.blockState_ok_iff.mpr otherFound, bind, Except.bind]
-    rw [dataOk]
-    simp only [Except.mapError, envelopeOk, recordHere, pure, Except.pure]
+  -- From Heze, a receiver that holds the payload already marks it verified.
+  by_cases known : .hegota ≤ fork ∧
+      ((e.world k).state u).isPayloadVerified gloas envelope.message.beaconBlockRoot = true
+  · exact known.2
+  have acceptedHere := Store.onExecutionPayloadEnvelope_of_ok
+    (fun heze => by simpa [heze] using known) otherFound dataOk envelopeOk recordHere
   -- The receiver already marks verified the root of each envelope of its view that it accepts.
   exact closed _ _ memK acceptedHere
 

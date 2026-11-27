@@ -152,7 +152,8 @@ theorem processMessageCall_keeps {Meter : Type} [GasMeter Meter] [LawfulGasMeter
       · have created := marks hd address mem
         rw [state_ofFrame] at created
         rcases fr.fresh address created fresh1 with h0 | h0
-        · omega
+        · have := h0.1
+          omega
         · exact ne h0.symm
       · exact unmarked_processCreateMessage hrun ne (plain (Nat.lt_of_not_le hd)) unmarked0
           (accountsToDelete_ofFrame_subset _ _ _ address mem)
@@ -169,7 +170,8 @@ theorem processMessageCall_keeps {Meter : Type} [GasMeter Meter] [LawfulGasMeter
       · have created := marks hd address mem
         rw [state_ofFrame] at created
         rcases fr.fresh address created fresh1 with h0 | h0
-        · omega
+        · have := h0.1
+          omega
         · exact h0
       -- Before Cancun, SELFDESTRUCT marks the account that runs it.
       --

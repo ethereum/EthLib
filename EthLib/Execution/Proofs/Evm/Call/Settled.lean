@@ -235,7 +235,7 @@ theorem stepRules_settledLe :
   trans := SettledLe.trans
   static h := SettledLe.of_getAccountOptional fun address =>
     (h.state address List.not_mem_nil).1
-  sstore _ _ _ _ _ _ h := settledLe_setStorage h
+  sstore _ _ _ _ _ h := settledLe_setStorage h
   tstore _ _ _ _ := SettledLe.of_getAccountOptional fun _ => rfl
   log _ hs _ _ _ := by rw [hs]; exact SettledLe.refl _
   selfdestruct _ _ h := settledLe_finishSelfdestruct h

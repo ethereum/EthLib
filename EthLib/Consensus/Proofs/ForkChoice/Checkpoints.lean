@@ -255,8 +255,7 @@ theorem onExecutionPayloadEnvelope_ordered {checks : SignatureChecks}
     {signed : SignedExecutionPayloadEnvelope preset fork} (ordered : store.EpochsOrdered)
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     after.EpochsOrdered := by
-  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
   exact ordered
 
 /-- From Heze, an accepted inclusion list keeps the checkpoints. -/
@@ -1157,8 +1156,7 @@ theorem Store.Reachable.checkpointStatesHold (anchor : Invariant anchorState)
     obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
     exact ih
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := onInclusionList_ok ‹_› accepted
@@ -1301,8 +1299,7 @@ private theorem Store.ForwardReachable.adoption (anchor : Invariant anchorState)
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact ih
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
@@ -1502,8 +1499,7 @@ theorem Store.Reachable.checkpointStatesFromBlocks
     obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
     exact ih
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := onInclusionList_ok ‹_› accepted
@@ -1531,8 +1527,7 @@ theorem Store.ForwardReachableWith.checkpointStatesFromBlocks {checks : Signatur
     obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
     exact ih
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := onInclusionList_ok ‹_› accepted

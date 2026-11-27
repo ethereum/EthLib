@@ -971,36 +971,6 @@ private theorem applyTransactions_simulated_gas {fork : Fork} {env : Evm.BlockEn
     exact List.getElem_mem hi
   exact applyTransaction_simulated_gas hSender hp hl (hGas tx hMem) hE hS hStep
 
-/-- A body that runs with overrides has the gas counts of the run of its transactions. -/
-private theorem applyBody_gas {fork : Fork} {config : ChainConfig}
-    {env : Evm.BlockEnvironment fork} {block : Block fork Transaction} {start : State.BlockState}
-    {overrides : BodyOverrides} {output : BlockOutput fork}
-    (h : applyBody config env block start overrides = .ok output) :
-    ∃ body txs, applyTransactions env body block.transactions overrides = .ok txs ∧
-      output.gas = txs.gas := by
-  unfold applyBody at h
-  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
-  obtain ⟨txs, hTxs, h⟩ := bind_ok_iff.mp h
-  refine ⟨body, txs, hTxs, ?_⟩
-  dsimp only at h
-  split at h
-  · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨_, _⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
-  · obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨⟨_, _⟩, -, h⟩ := bind_ok_iff.mp h
-    dsimp only at h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-    cases h
-    rfl
-
 /-- With validation and no overrides, a simulated block runs its calls under its default header.
 
 That header follows the last block of the chain, and the hash of that block is its parent hash. -/
@@ -1096,7 +1066,8 @@ theorem checkBlock_simulateBlock {chain chain' : BlockChain} {base parent : Rece
     obtain ⟨output, hOutput, hRun⟩ := bind_ok_iff.mp hRun
     obtain ⟨roots, -, hRun⟩ := bind_ok_iff.mp hRun
     cases hRun
-    obtain ⟨body, out, hTxs, hGasEq⟩ := applyBody_gas hOutput
+    obtain ⟨-, body, out, -, -, hTxs, hOut⟩ := applyBody_toBodyOutput hOutput
+    have hGasEq : output.gas = out.gas := (congrArg BodyOutput.gas hOut).trans rfl
     have hs : ∀ i < (filled.map (·.1)).length,
         ∃ sender, (filled.map (·.2))[i]? = some sender := fun i hi =>
       ⟨_, List.getElem?_eq_getElem (by simpa using hi)⟩

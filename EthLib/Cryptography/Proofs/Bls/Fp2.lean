@@ -53,7 +53,8 @@ theorem ext {a b : Fp2} (h0 : a.c0 = b.c0) (h1 : a.c1 = b.c1) : a = b := by
 @[simp] theorem neg_c0 (a : Fp2) : (-a).c0 = -a.c0 := rfl
 @[simp] theorem neg_c1 (a : Fp2) : (-a).c1 = -a.c1 := rfl
 @[simp] theorem mul_c0 (a b : Fp2) : (a * b).c0 = a.c0 * b.c0 - a.c1 * b.c1 := rfl
-@[simp] theorem mul_c1 (a b : Fp2) : (a * b).c1 = a.c0 * b.c1 + a.c1 * b.c0 := rfl
+@[simp] theorem mul_c1 (a b : Fp2) : (a * b).c1 = a.c0 * b.c1 + a.c1 * b.c0 :=
+  Cryptography.Fp2.mul_c1_eq Fp.embedding a b
 @[simp] theorem conjugate_c0 (a : Fp2) : a.conjugate.c0 = a.c0 := rfl
 @[simp] theorem conjugate_c1 (a : Fp2) : a.conjugate.c1 = -a.c1 := rfl
 
@@ -269,6 +270,7 @@ def embedding : FieldOps.Embedding Fp2 Fp2 where
   map_zero := rfl
   map_one := rfl
   map_inverse _ := rfl
+  map_square a := Cryptography.Fp2.square_eq Fp.embedding a
   beq_iff _ _ := beq_iff_eq
   isZero_iff _ := isZero_iff
 

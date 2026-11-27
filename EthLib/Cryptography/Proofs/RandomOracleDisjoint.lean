@@ -127,8 +127,8 @@ theorem run'_simulateQ_romImpl_bind_evalDistEq {α β : Type} {P Q : ι → Prop
 
 Every hash query of the first has its input in `P`, and every one of the second in `Q`.
 
-Run one after the other from the empty cache, their pair of outputs has the law of two runs
-that each start from the empty cache. -/
+Run in turn from the empty cache, their pair of outputs has the law of two runs from empty caches.
+-/
 theorem run'_simulateQ_romImpl_prod_evalDistEq {α β : Type} {P Q : ι → Prop}
     (hPQ : ∀ x, P x → ¬Q x) {oa : OracleComp (unifSpec + hs) α}
     {ob : OracleComp (unifSpec + hs) β} (ha : oa.AllQueriesSatisfy (CoinOrHashIn hs P))
@@ -142,8 +142,8 @@ theorem run'_simulateQ_romImpl_prod_evalDistEq {α β : Type} {P Q : ι → Prop
   -- The pairing step makes no query.
   simp only [bind_pure_comp, simulateQ_map, StateT.run'_eq, StateT.run_map, Functor.map_map]
 
-/-- The two outputs are independent: two events of them hold together with the product of
-their probabilities. -/
+/-- The two outputs are independent: two events of them both hold with the product probability.
+-/
 theorem prEvent_run'_simulateQ_romImpl_and {α β : Type} {P Q : ι → Prop}
     (hPQ : ∀ x, P x → ¬Q x) {oa : OracleComp (unifSpec + hs) α}
     {ob : OracleComp (unifSpec + hs) β} (ha : oa.AllQueriesSatisfy (CoinOrHashIn hs P))

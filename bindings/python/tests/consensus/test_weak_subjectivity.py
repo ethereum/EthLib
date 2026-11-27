@@ -248,6 +248,43 @@ def test_no_active_validators():
     assert info.value.code == 3
 
 
+# Each churn limit that the period reads divides by a quotient of the configuration.
+CHURN_QUOTIENTS = [
+    ("phase0", "CHURN_LIMIT_QUOTIENT"),
+    ("pectra", "CHURN_LIMIT_QUOTIENT"),
+    ("glamsterdam", "CHURN_LIMIT_QUOTIENT_GLOAS"),
+    ("glamsterdam", "CONSOLIDATION_CHURN_LIMIT_QUOTIENT"),
+]
+
+
+def _churn_state(fork: str) -> bytes:
+    """A state of 1024 validators of 32 ether, or of 512 of 2048 ether from Electra."""
+    if fork == "phase0":
+        return phase0_state(1024, 32 * GWEI)
+    return state_at(fork, 512, MAX_EFFECTIVE_BALANCE_ELECTRA * GWEI)
+
+
+@pytest.mark.parametrize(("fork", "field"), CHURN_QUOTIENTS)
+def test_zero_churn_quotient(fork: str, field: str):
+    # The source divides by the quotient, so a quotient of 0 raises a division by zero.
+    message = (
+        "a state accessor fails: EthLib.Consensus.AccessorError.arith "
+        "(EthLib.Base.ArithError.divisionByZero)"
+    )
+    with raises(consensus.WeakSubjectivityError, message) as info:
+        consensus.compute_weak_subjectivity_period("mainnet", fork, _churn_state(fork), {field: 0})
+    assert info.value.code == 1
+
+
+@pytest.mark.parametrize(("fork", "field"), CHURN_QUOTIENTS)
+def test_churn_quotient_of_one(fork: str, field: str):
+    # A quotient of 1 gives a churn of the whole active set, or two thirds of it at least.
+    # The churn then takes 0 epochs, so the period is the withdrawal delay of 256 epochs.
+    # At Phase 0 the top-ups take 1024 * 230 // (600 * 512) = 0 epochs too, by hand.
+    state = _churn_state(fork)
+    assert consensus.compute_weak_subjectivity_period("mainnet", fork, state, {field: 1}) == 256
+
+
 # One checkpoint at epoch 10: its state is at the second slot of the epoch.
 # The state holds the root of the checkpoint at the first slot of the epoch.
 EPOCH = 10

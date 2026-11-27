@@ -387,7 +387,7 @@ private theorem registry_atCap (before : fork < .pectra)
     exact Array.getElem?_set_ne inside different
   unfold processRegistryUpdates at computed
   simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
+  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
   -- The first pass neither queues nor ejects the validator, and leaves it as it is.
   have first : updated.validators.data[i]? = some validator := by
     refine foldlM_ok_invariant (fun b : BeaconState preset fork =>

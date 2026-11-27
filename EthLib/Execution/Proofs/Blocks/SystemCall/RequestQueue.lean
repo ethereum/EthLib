@@ -617,6 +617,17 @@ def Added {fork : Fork} (slots : Nat) (target : Address) (words : List U256) (da
     -- The logs gain one log of the contract, with no topic and the data `data`.
     evm.substate.logs = substate.logs.push { address := target, topics := [], data := data }
 
+/-- A call that adds a request, or reverts with an answer, stops with no error or a revert. -/
+theorem carried_of_added {fork : Fork} {b : Bool} {slots : Nat} {target : Address}
+    {words : List U256} {data : ByteArray} {state : TransactionState} {substate : Substate}
+    {evm : Evm fork Nat}
+    (h : if b then Added slots target words data state substate evm
+      else SystemContract.Answer state none evm) :
+    Carried evm.error := by
+  split at h
+  · exact .inl h.1
+  · exact .inr h.2.1
+
 /-- Equal storages, keys and words give equal storages after the write. -/
 theorem setSlot_congr {r r' : U256 → U256} {k k' v v' : U256} (hr : r = r') (hk : k = k')
     (hv : v = v') : setSlot r k v = setSlot r' k' v' := by
@@ -708,5 +719,163 @@ theorem log_memory {c : U256} {data : ByteArray} {n e : Nat}
   simpa using this
 
 end LogBytes
+
+/-! ## Blocks of a code stored as a number -/
+
+section Blocks
+
+open EthLib.Execution.Evm.Logic
+
+/-- Whether the code stored in `n`, of `len` bytes, holds `width` bytes of `number` from `o`.
+
+It skips the positions in `skip`, which hold constants. -/
+def holdsExcept (n len o number width : Nat) (skip : List Nat) : Bool :=
+  (List.range width).all fun i =>
+    skip.contains i || NatCode.natByte n len (o + i) == NatCode.natByte number width i
+
+/-- When the check passes, the code holds the bytes outside the skipped positions. -/
+theorem getElem_of_holdsExcept {n len o number width : Nat} {skip : List Nat}
+    (hcheck : holdsExcept n len o number width skip = true) {i : Nat}
+    (h : o + i < (NatCode.ofNat n len).size) (hi : i < width) (hs : i ∉ skip) :
+    (NatCode.ofNat n len)[o + i] = NatCode.natByte number width i := by
+  rw [NatCode.getElem_ofNat]
+  simp only [holdsExcept, List.all_eq_true, List.mem_range, Bool.or_eq_true, beq_iff_eq,
+    List.contains_iff_mem] at hcheck
+  rcases hcheck i hi with hm | he
+  · exact absurd hm hs
+  · exact he
+
+end Blocks
+
+/-! ## A request contract
+
+Each request contract of EIP-7685 is an instance of one structure.
+
+A result about the system call of a block is proved once for the structure.
+-/
+
+section Contract
+
+open EthLib.Execution.Evm EthLib.Execution.Evm.Logic
+open EthLib.Execution.Blocks.SystemContract (storageOf WritesStorage)
+open EthLib.Execution.State (TransactionState)
+open EthLib.Base (Fork)
+
+/-- A request contract: a queue of requests that the system call of each block takes from. -/
+-- The fields are data.
+--
+-- A result about a block also needs this code at the address, and a proof that it takes requests.
+structure RequestContract where
+  /-- The entry of the contract in the table of system contracts. -/
+  entry : SystemContract
+  /-- The type of the requests of the contract. -/
+  type : UInt8
+  /-- The code at the address of the contract. -/
+  code : ByteArray
+  /-- The most requests that a block takes from the queue. -/
+  maxPerBlock : Nat
+  /-- The requests per block that keep the fee where it is. -/
+  targetPerBlock : Nat
+  /-- The fee at an excess of 0, in wei. -/
+  minFee : Nat
+  /-- The divisor of the excess in the exponent of the fee. -/
+  feeFraction : Nat
+  /-- The size of the input of a call that adds a request, in bytes. -/
+  inputSize : Nat
+  /-- The record of the request at an index of the queue, from the storage. -/
+  record : (U256 → U256) → U256 → ByteArray
+  /-- The table of system contracts holds the entry. -/
+  mem : entry ∈ SYSTEM_CONTRACTS
+  /-- A block calls the contract for its requests of that type. -/
+  kind_eq : entry.kind = .requests type
+  /-- The code is not empty. -/
+  size_ne_zero : code.size ≠ 0
+  /-- The code passes the opcode check of Glamsterdam. -/
+  supported : SupportedCode code = true
+  /-- The code is not a delegation indicator. -/
+  delegatedAddress_eq_none : delegatedAddress code = none
+
+namespace RequestContract
+
+variable (c : RequestContract)
+
+/-- The contract is a request contract, of its type and at its address. -/
+theorem requestContract? : c.entry.requestContract? = some (c.type, c.entry.address) := by
+  simp [SystemContract.requestContract?, c.kind_eq]
+
+/-- The address of the contract is not a precompile. -/
+theorem addedAt : Precompiles.addedAt c.entry.address.toU256.toNat = none :=
+  SystemContract.addedAt_of_mem_SYSTEM_CONTRACTS c.mem
+
+/-- The fee to add a request with the storage `read`, or none while the inhibitor holds. -/
+def fee (read : U256 → U256) : Option Nat :=
+  getFee c.minFee c.feeFraction (read 0)
+
+/-- What a call with the input `input` and the value `value` gets, when it adds no request.
+
+With no input and no value, it gets the fee as a word, or none while the inhibitor holds. -/
+def getFeeResult (read : U256 → U256) (input : ByteArray) (value : U256) : Option U256 :=
+  if input.size = 0 ∧ value = 0 then (c.fee read).map (BitVec.ofNat 256) else none
+
+/-- A call with the value `value` pays the fee: the fee is defined and at most the value. -/
+def pays (read : U256 → U256) (value : U256) : Bool :=
+  match c.fee read with
+  | some f => decide (f ≤ value.toNat)
+  | none => false
+
+/-- The code takes requests from its queue in each system frame with at least `budget` gas. -/
+def Dequeues (fork : Fork) (budget : Nat) : Prop :=
+  ∀ (message : Message fork) (state : TransactionState) (substate : Substate) (gas : Nat),
+    -- The frame comes from the system address, and may change the state.
+    message.caller = SYSTEM_ADDRESS → message.isStatic = false →
+    -- The account of the contract exists, and its counters meet the bounds of the queue.
+    (state.getAccountOptional message.currentTarget).isSome = true →
+    Bounded (storageOf state message.currentTarget) →
+    -- The budget is scaled from Glamsterdam, as for the writes of the storage.
+    --
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
+    budget * storageGasScale fork ≤ gas →
+    Spec fork (At c.code message 0 [] .empty gas state substate .empty) fun evm =>
+      -- The frame stops with no error, and returns the records of the requests it takes.
+      evm.error = none ∧
+      evm.output = dequeued c.maxPerBlock c.record (storageOf state message.currentTarget) ∧
+      -- The state holds the storage after the requests are taken, and keeps the rest.
+      WritesStorage message.currentTarget
+        (afterDequeue c.maxPerBlock c.targetPerBlock (storageOf state message.currentTarget))
+        state evm.state
+
+/-- From Paris, the system call of a block to the contract takes its requests. -/
+theorem systemCall_dequeue {fork : Fork} {env : BlockEnvironment fork}
+    {block : State.BlockState} {data : ByteArray} {budget : Nat} (hfork : .paris ≤ fork)
+    -- The code takes the requests from a frame with the budget.
+    --
+    -- The scaled budget fits in the gas of a system call.
+    (hdeq : c.Dequeues fork budget)
+    (hbudget : budget * storageGasScale fork ≤ SYSTEM_TRANSACTION_GAS)
+    -- The account at the address of the contract holds its code.
+    (hcode : codeAt block c.entry.address = .ok c.code)
+    -- The counters of its storage meet the bounds of the queue.
+    (hbounded : Bounded (storageOf (.ofBlock block) c.entry.address)) :
+    -- The call runs with the gas meter of its fork.
+    --
+    -- It succeeds, whatever its data, and returns the records of the requests it takes.
+    ∃ out, systemCall env block c.entry.address data = .ok out ∧ out.error = none ∧
+      out.output = dequeued c.maxPerBlock c.record (storageOf (.ofBlock block) c.entry.address) ∧
+      -- The storage of the contract is then the storage after the requests are taken.
+      --
+      -- The call keeps the storage of every other account, the accounts and the codes.
+      WritesStorage c.entry.address
+        (afterDequeue c.maxPerBlock c.targetPerBlock (storageOf (.ofBlock block) c.entry.address))
+        (.ofBlock block) out.state :=
+  SystemContract.systemCall_of_writesStorage (P := Bounded) _ _ hfork (fun _ => c.supported)
+    hcode c.size_ne_zero c.addedAt c.delegatedAddress_eq_none hbounded
+    fun message state substate hcaller htarget hstatic _ _ hgas hacc hread => by
+      rw [← htarget]
+      exact hdeq message state substate _ hcaller hstatic (htarget ▸ hacc) (htarget ▸ hread)
+        (hgas ▸ hbudget)
+
+end RequestContract
+
+end Contract
 
 end EthLib.Execution.Blocks.RequestQueue

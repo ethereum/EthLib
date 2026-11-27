@@ -304,6 +304,21 @@ theorem toBE_mod (n x : Nat) : toBE n (x % 256 ^ n) = toBE n x := by
   apply ofBE_inj (by simp)
   simp
 
+/-- Writing little-endian on `n` bytes keeps only the remainder modulo `256 ^ n`. -/
+theorem toLE_mod (n x : Nat) : toLE n (x % 256 ^ n) = toLE n x := by
+  -- The big-endian write is the reverse of the little-endian one.
+  apply Vector.toList_inj.mp
+  rw [← List.reverse_reverse (toLE n _).toList, ← List.reverse_reverse (toLE n x).toList,
+    ← toList_toBE, ← toList_toBE, toBE_mod]
+
+/-- Writing little-endian on `a + b` bytes is `a` bytes of `x`, then `b` bytes of `x / 256 ^ a`. -/
+theorem toList_toLE_add (a b x : Nat) :
+    (toLE (a + b) x).toList = (toLE a x).toList ++ (toLE b (x / 256 ^ a)).toList := by
+  -- Reverse to the big-endian write, which `toList_toBE_add` splits.
+  rw [← List.reverse_reverse (toLE (a + b) x).toList, ← toList_toBE, Nat.add_comm,
+    toList_toBE_add, List.reverse_append, toList_toBE, toList_toBE, List.reverse_reverse,
+    List.reverse_reverse]
+
 /-- Zero on `n` bytes is `n` zero bytes. -/
 theorem toList_toBE_zero_right (n : Nat) : (toBE n 0).toList = List.replicate n 0 := by
   induction n with

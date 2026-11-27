@@ -77,8 +77,10 @@ structure BlockStep.Covers (preset : Preset) (step : BlockStep) (limits : BlockL
 
   It covers the largest cap for each validator that the slashings name. -/
   slashed : limits.slashings * preset.largestEffectiveBalance ≤ step.slashed
-  /-- The effective step covers the new validators, at the largest cap for each deposit. -/
-  effective : limits.joins * preset.largestEffectiveBalance ≤ step.effective
+  /-- The effective step covers the new validators, at `MAX_EFFECTIVE_BALANCE` for each deposit.
+
+  From Electra a deposit of a block adds a validator with no effective balance. -/
+  effective : limits.joins * preset.MAX_EFFECTIVE_BALANCE.toNat ≤ step.effective
   /-- The load step covers twice the load limit, the weight of the load before Electra. -/
   load : 2 * limits.load ≤ step.load
   /-- The supply step covers the deposits, the whistleblower rewards and the sync rewards.
@@ -358,13 +360,12 @@ private theorem RunBounded.of_processBlock {fork : Fork} {engine : ExecutionEngi
       blockRewardCap preset state ≤ budget := by
     have syncLe := coversSupply
     omega
-  -- The effective balances rise by at most the largest cap for each new validator.
+  -- The effective balances rise by at most `MAX_EFFECTIVE_BALANCE` for each new validator.
   have sizeLe := processBlock_validators_size_le computed
   have joinsLe := bounded.joins
-  have effectiveAfter := processBlock_effectiveBalanceSum_le baseRun.caps.compounding capped
-      computed
+  have effectiveAfter := processBlock_effectiveBalanceSum_le computed
   have risen : (after.validators.data.size - state.validators.data.size) *
-      preset.largestEffectiveBalance ≤ step.effective :=
+      preset.MAX_EFFECTIVE_BALANCE.toNat ≤ step.effective :=
     (Nat.mul_le_mul_right _ (by omega)).trans covers.effective
   have effectiveField : effectiveBalanceSum after ≤
         (start.afterChain step (blocks + 1) elapsed).effective ∨
@@ -968,11 +969,14 @@ private theorem slashingTurn_exitRoom {start : RunStart} {step : BlockStep}
             (exitChurnBound preset config budget) :=
         max_le carriedBefore (ceilingChurn.trans (le_max_right _ _))
       omega
-    exact initiateValidatorExit_total_of_electra electra registryLe (by omega) increment
+    exact initiateValidatorExit_total_of_electra electra baseRun.configPositive.exitQuotient
+      registryLe (by omega)
+      increment
       baseRun.minimum baseRun.maximum inside firstReached (queuesReached electra).1
       exitsReached carried (by omega)
   · obtain ⟨exited, ok, -⟩ := initiateValidatorExit_total_of_lt_electra (config := config)
-      (Nat.lt_of_not_le electra) inside firstReached exitsReached (by omega)
+      (Nat.lt_of_not_le electra) baseRun.configPositive.churn inside firstReached exitsReached
+      (by omega)
     exact ⟨exited, ok⟩
 
 /-- At the turn of an attester slashing of a block, slashing any validator in the registry succeeds.

@@ -1034,7 +1034,7 @@ def bindings : List Binding := [
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_compute_subnets_for_sync_committee",
     `EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport,
-    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, " ++
+    "(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int, " ++
       "validator_index: int) -> list[int]",
     [`EthLib.Consensus.ValidatorDutyError], some "ValidatorDutyError"⟩,
   ⟨"consensus_get_ptc_assignment", `EthLib.Consensus.Exports.getPtcAssignmentExport,
@@ -1136,7 +1136,7 @@ def bindings : List Binding := [
   ⟨"consensus_latest_verified_ancestor",
     `EthLib.Consensus.Exports.latestVerifiedAncestorExport,
     "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++
-      "root: bytes, payload_status: int) -> bytes",
+      "root: bytes, payload_status: int) -> tuple[bytes, int]",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
   ⟨"consensus_on_valid_payload", `EthLib.Consensus.Exports.onValidPayloadExport,
     "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], " ++

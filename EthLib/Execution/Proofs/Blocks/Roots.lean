@@ -43,7 +43,7 @@ theorem receiptsRoot_nil {fork : Fork} :
 
 /-- A block with no withdrawal has the root of the empty trie. -/
 theorem withdrawalsRoot_nil : withdrawalsRoot [] = .ok (keccak256 ⟨#[0x80]⟩) :=
-  indexedRoot_nil
+  withdrawalsRoot_eq_ok_iff.mpr ⟨[], rfl, indexedRoot_nil⟩
 
 /-! ## The keys of a list -/
 
@@ -88,31 +88,46 @@ theorem indexedEntries_nodup {values : List ByteArray}
   -- Both indices decode from the one key.
   exact Codec.encode_injective hi' hj'
 
+/-- The root of a list, with a plain hash. -/
+theorem indexedRootM_eq (hash : ByteArray → Hash32) (values : List ByteArray) :
+    (indexedRootM (m := Id) hash values).run =
+      (indexedEntries values).mapError .rlp >>= fun entries => root hash ⟨false, entries⟩ := by
+  simp only [indexedRootM, ExceptT.run, exceptT_id_bind, exceptT_id_monadLift, except_bind_eq]
+  rfl
+
+/-- A list has a root with a plain hash exactly when its entries have it, as a plain trie. -/
+theorem indexedRootM_eq_ok_iff (hash : ByteArray → Hash32) {values : List ByteArray}
+    {root' : Hash32} :
+    (indexedRootM (m := Id) hash values).run = .ok root' ↔
+      ∃ entries, indexedEntries values = .ok entries ∧ root hash ⟨false, entries⟩ = .ok root' := by
+  rw [indexedRootM_eq]
+  cases hentries : indexedEntries values <;>
+    simp [Except.mapError, bind, Except.bind]
+
 /-- A list has a root exactly when its entries have that root, as a plain trie. -/
 theorem indexedRoot_eq_ok_iff {values : List ByteArray} {root' : Hash32} :
     indexedRoot values = .ok root' ↔
       ∃ entries, indexedEntries values = .ok entries ∧
-        root keccak256 ⟨false, entries⟩ = .ok root' := by
-  unfold indexedRoot
-  cases hentries : indexedEntries values <;>
-    simp [Except.mapError, bind, Except.bind]
+        root keccak256 ⟨false, entries⟩ = .ok root' :=
+  indexedRootM_eq_ok_iff keccak256
 
 /-- Binding of a list's root: two lists with one root give every key one value.
 
-Otherwise the search finds a Keccak-256 collision in the proofs of that key. -/
-private theorem indexedRoot_binding_key {values₁ values₂ : List ByteArray}
+Otherwise the search finds a collision of the hash in the proofs of that key. -/
+private theorem indexedRoot_binding_key (hash : ByteArray → Hash32)
+    {values₁ values₂ : List ByteArray}
     {entries₁ entries₂ : List (ByteArray × ByteArray)} {root' : Hash32}
     (hentries₁ : indexedEntries values₁ = .ok entries₁)
     (hentries₂ : indexedEntries values₂ = .ok entries₂)
-    (hroot₁ : root keccak256 ⟨false, entries₁⟩ = .ok root')
-    (hroot₂ : root keccak256 ⟨false, entries₂⟩ = .ok root') (key : ByteArray) :
-    valueAt keccak256 ⟨false, entries₁⟩ key = valueAt keccak256 ⟨false, entries₂⟩ key ∨
+    (hroot₁ : root hash ⟨false, entries₁⟩ = .ok root')
+    (hroot₂ : root hash ⟨false, entries₂⟩ = .ok root') (key : ByteArray) :
+    valueAt hash ⟨false, entries₁⟩ key = valueAt hash ⟨false, entries₂⟩ key ∨
       ∃ pair,
-        findCollision keccak256 ⟨false, entries₁⟩ ⟨false, entries₂⟩ key = some pair ∧
-          IsCollision keccak256 pair := by
+        findCollision hash ⟨false, entries₁⟩ ⟨false, entries₂⟩ key = some pair ∧
+          IsCollision hash pair := by
   have hkeys₁ := indexedEntries_nodup hentries₁
   have hkeys₂ := indexedEntries_nodup hentries₂
-  rcases root_binding keccak256 (trie₁ := ⟨false, entries₁⟩) (trie₂ := ⟨false, entries₂⟩) rfl
+  rcases root_binding hash (trie₁ := ⟨false, entries₁⟩) (trie₂ := ⟨false, entries₂⟩) rfl
       hroot₁ hroot₂ hkeys₁ hkeys₂ key with hvalue | hfound | ⟨_, hpath, _⟩ | ⟨_, hpath, _⟩
   · exact .inl hvalue
   · exact .inr hfound
@@ -125,11 +140,11 @@ private theorem indexedRoot_binding_key {values₁ values₂ : List ByteArray}
 /-- The value of an index's key in a list's trie is the item at that index.
 
 Past the end of the list, the key has no value. -/
-theorem valueAt_of_indexedEntries {values : List ByteArray}
+theorem valueAt_of_indexedEntries (hash : ByteArray → Hash32) {values : List ByteArray}
     {entries : List (ByteArray × ByteArray)} (h : indexedEntries values = .ok entries)
     {i : Nat} {key : ByteArray} (hkey : Codec.encode i = .ok key) :
-    valueAt keccak256 ⟨false, entries⟩ key = values[i]? := by
-  rw [valueAt_plain keccak256 entries key]
+    valueAt hash ⟨false, entries⟩ key = values[i]? := by
+  rw [valueAt_plain hash entries key]
   -- Each entry with the key is the entry at the index, since its own index has the same key.
   have hunique : ∀ entry ∈ entries, entry.1 = key →
       ∃ hi : i < entries.length, entry = entries[i] := by
@@ -164,30 +179,31 @@ theorem valueAt_of_indexedEntries {values : List ByteArray}
       exact hi (hunique entry hmem ((sameBytes_iff _ _).mp hsame)).1
 
 /-- The collision in the proofs of the first index, below the longer length, of two lists. -/
-def findIndexedCollision (values₁ values₂ : List ByteArray) : Option (ByteArray × ByteArray) :=
+def findIndexedCollision (hash : ByteArray → Hash32) (values₁ values₂ : List ByteArray) :
+    Option (ByteArray × ByteArray) :=
   match indexedEntries values₁, indexedEntries values₂ with
   | .ok entries₁, .ok entries₂ =>
     (List.range (max values₁.length values₂.length)).findSome? fun i =>
       match Codec.encode i with
-      | .ok key => findCollision keccak256 ⟨false, entries₁⟩ ⟨false, entries₂⟩ key
+      | .ok key => findCollision hash ⟨false, entries₁⟩ ⟨false, entries₂⟩ key
       | .error _ => none
   | _, _ => none
 
 /-- Every pair that the search returns is a collision. -/
-theorem findIndexedCollision_valid {values₁ values₂ : List ByteArray}
-    {pair : ByteArray × ByteArray} (h : findIndexedCollision values₁ values₂ = some pair) :
-    IsCollision keccak256 pair := by
+theorem findIndexedCollision_valid (hash : ByteArray → Hash32) {values₁ values₂ : List ByteArray}
+    {pair : ByteArray × ByteArray} (h : findIndexedCollision hash values₁ values₂ = some pair) :
+    IsCollision hash pair := by
   unfold findIndexedCollision at h
   split at h
   · obtain ⟨-, i, -, -, hfound, -⟩ := List.findSome?_eq_some_iff.mp h
     split at hfound
-    · exact findCollision_valid keccak256 hfound
+    · exact findCollision_valid hash hfound
     · cases hfound
   · cases h
 
 /-- A list compared with itself has no collision. -/
-theorem findIndexedCollision_self (values : List ByteArray) :
-    findIndexedCollision values values = none := by
+theorem findIndexedCollision_self (hash : ByteArray → Hash32) (values : List ByteArray) :
+    findIndexedCollision hash values values = none := by
   unfold findIndexedCollision
   split
   · rename_i entries₁ entries₂ h₁ h₂
@@ -195,23 +211,25 @@ theorem findIndexedCollision_self (values : List ByteArray) :
     cases h₂
     refine List.findSome?_eq_none_iff.mpr fun i _ => ?_
     split
-    · exact findCollision_self keccak256 _ _
+    · exact findCollision_self hash _ _
     · rfl
   · rfl
 
-/-- Binding of a list's root: two lists with one root are equal.
+/-- Binding of a list's root with a plain hash: two lists with one root are equal.
 
-Otherwise the search over their indices finds a Keccak-256 collision in the proofs of one index. -/
-theorem indexedRoot_binding {values₁ values₂ : List ByteArray} {root' : Hash32}
-    (hroot₁ : indexedRoot values₁ = .ok root') (hroot₂ : indexedRoot values₂ = .ok root') :
+Otherwise the search over their indices finds a collision of the hash in the proofs of one index.
+-/
+theorem indexedRootM_binding (hash : ByteArray → Hash32) {values₁ values₂ : List ByteArray}
+    {root' : Hash32} (hroot₁ : (indexedRootM (m := Id) hash values₁).run = .ok root')
+    (hroot₂ : (indexedRootM (m := Id) hash values₂).run = .ok root') :
     values₁ = values₂ ∨
-      ∃ pair, findIndexedCollision values₁ values₂ = some pair ∧ IsCollision keccak256 pair := by
-  cases hsearch : findIndexedCollision values₁ values₂ with
-  | some pair => exact .inr ⟨pair, rfl, findIndexedCollision_valid hsearch⟩
+      ∃ pair, findIndexedCollision hash values₁ values₂ = some pair ∧ IsCollision hash pair := by
+  cases hsearch : findIndexedCollision hash values₁ values₂ with
+  | some pair => exact .inr ⟨pair, rfl, findIndexedCollision_valid hash hsearch⟩
   | none =>
   refine .inl (List.ext_getElem? fun i => ?_)
-  obtain ⟨entries₁, hentries₁, htrie₁⟩ := indexedRoot_eq_ok_iff.mp hroot₁
-  obtain ⟨entries₂, hentries₂, htrie₂⟩ := indexedRoot_eq_ok_iff.mp hroot₂
+  obtain ⟨entries₁, hentries₁, htrie₁⟩ := (indexedRootM_eq_ok_iff hash).mp hroot₁
+  obtain ⟨entries₂, hentries₂, htrie₂⟩ := (indexedRootM_eq_ok_iff hash).mp hroot₂
   by_cases hi : i < max values₁.length values₂.length
   · -- The index has a key, since one of the lists encodes it.
     obtain ⟨key, hkey⟩ : ∃ key, Codec.encode i = .ok key := by
@@ -220,8 +238,9 @@ theorem indexedRoot_binding {values₁ values₂ : List ByteArray} {root' : Hash
           ⟨i, (length_of_indexedEntries hentries₁).symm ▸ hi₁⟩).1⟩
       · exact ⟨_, (getElem_of_indexedEntries hentries₂
           ⟨i, (length_of_indexedEntries hentries₂).symm ▸ (by omega)⟩).1⟩
-    rw [← valueAt_of_indexedEntries hentries₁ hkey, ← valueAt_of_indexedEntries hentries₂ hkey]
-    rcases indexedRoot_binding_key hentries₁ hentries₂ htrie₁ htrie₂ key with hvalue |
+    rw [← valueAt_of_indexedEntries hash hentries₁ hkey,
+      ← valueAt_of_indexedEntries hash hentries₂ hkey]
+    rcases indexedRoot_binding_key hash hentries₁ hentries₂ htrie₁ htrie₂ key with hvalue |
       ⟨pair, hfound, -⟩
     · exact hvalue
     · -- The search over the indices reaches this one and returns its collision.
@@ -231,6 +250,16 @@ theorem indexedRoot_binding {values₁ values₂ : List ByteArray} {root' : Hash
       simp [hkey, hfound] at this
   · -- Both lists end before the index.
     rw [List.getElem?_eq_none (by omega), List.getElem?_eq_none (by omega)]
+
+/-- Binding of a list's root: two lists with one root are equal.
+
+Otherwise the search over their indices finds a Keccak-256 collision in the proofs of one index. -/
+theorem indexedRoot_binding {values₁ values₂ : List ByteArray} {root' : Hash32}
+    (hroot₁ : indexedRoot values₁ = .ok root') (hroot₂ : indexedRoot values₂ = .ok root') :
+    values₁ = values₂ ∨
+      ∃ pair, findIndexedCollision keccak256 values₁ values₂ = some pair ∧
+        IsCollision keccak256 pair :=
+  indexedRootM_binding keccak256 hroot₁ hroot₂
 
 /-! ## The roots of typed lists -/
 
@@ -243,12 +272,32 @@ theorem transactionsRoot_binding {transactions₁ transactions₂ : List Transac
     transactions₁ = transactions₂ ∨
       ∃ values₁ values₂ pair, transactions₁.mapM encodeTransaction = .ok values₁ ∧
         transactions₂.mapM encodeTransaction = .ok values₂ ∧
-        findIndexedCollision values₁ values₂ = some pair ∧ IsCollision keccak256 pair := by
+        findIndexedCollision keccak256 values₁ values₂ = some pair ∧
+          IsCollision keccak256 pair := by
   obtain ⟨values₁, hvalues₁, hindexed₁⟩ := transactionsRoot_eq_ok_iff.mp hroot₁
   obtain ⟨values₂, hvalues₂, hindexed₂⟩ := transactionsRoot_eq_ok_iff.mp hroot₂
   rcases indexedRoot_binding hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
   · -- Two transactions with the same bytes are equal.
     exact .inl (mapM_ok_injective (fun _ _ _ _ _ hx hy => encodeTransaction_injective hx hy)
+      hvalues₁ hvalues₂)
+  · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
+
+/-- Binding of the withdrawals root with a plain hash: two lists with one root are equal.
+
+Otherwise the search over their bytes finds a collision of the hash in the proofs of one index. -/
+theorem withdrawalsRootM_binding (hash : ByteArray → Hash32)
+    {withdrawals₁ withdrawals₂ : List Withdrawal} {root' : Hash32}
+    (hroot₁ : (withdrawalsRootM (m := Id) hash withdrawals₁).run = .ok root')
+    (hroot₂ : (withdrawalsRootM (m := Id) hash withdrawals₂).run = .ok root') :
+    withdrawals₁ = withdrawals₂ ∨
+      ∃ values₁ values₂ pair, withdrawals₁.mapM Codec.encode = .ok values₁ ∧
+        withdrawals₂.mapM Codec.encode = .ok values₂ ∧
+        findIndexedCollision hash values₁ values₂ = some pair ∧ IsCollision hash pair := by
+  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := (withdrawalsRootM_eq_ok_iff hash).mp hroot₁
+  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := (withdrawalsRootM_eq_ok_iff hash).mp hroot₂
+  rcases indexedRootM_binding hash hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
+  · -- Two withdrawals with the same bytes are equal.
+    exact .inl (mapM_ok_injective (fun _ _ _ _ _ hx hy => Codec.encode_injective hx hy)
       hvalues₁ hvalues₂)
   · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
 
@@ -261,14 +310,9 @@ theorem withdrawalsRoot_binding {withdrawals₁ withdrawals₂ : List Withdrawal
     withdrawals₁ = withdrawals₂ ∨
       ∃ values₁ values₂ pair, withdrawals₁.mapM Codec.encode = .ok values₁ ∧
         withdrawals₂.mapM Codec.encode = .ok values₂ ∧
-        findIndexedCollision values₁ values₂ = some pair ∧ IsCollision keccak256 pair := by
-  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := withdrawalsRoot_eq_ok_iff.mp hroot₁
-  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := withdrawalsRoot_eq_ok_iff.mp hroot₂
-  rcases indexedRoot_binding hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
-  · -- Two withdrawals with the same bytes are equal.
-    exact .inl (mapM_ok_injective (fun _ _ _ _ _ hx hy => Codec.encode_injective hx hy)
-      hvalues₁ hvalues₂)
-  · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
+        findIndexedCollision keccak256 values₁ values₂ = some pair ∧
+          IsCollision keccak256 pair :=
+  withdrawalsRootM_binding keccak256 hroot₁ hroot₂
 
 /-- Binding of the receipts root: two lists of receipts with one root are equal.
 
@@ -286,7 +330,8 @@ theorem receiptsRoot_binding {fork : Fork} {receipts₁ receipts₂ : List (UInt
       ∃ values₁ values₂ pair,
         receipts₁.mapM (fun (type, r) => encodeReceipt (fork := fork) type r) = .ok values₁ ∧
         receipts₂.mapM (fun (type, r) => encodeReceipt (fork := fork) type r) = .ok values₂ ∧
-        findIndexedCollision values₁ values₂ = some pair ∧ IsCollision keccak256 pair := by
+        findIndexedCollision keccak256 values₁ values₂ = some pair ∧
+          IsCollision keccak256 pair := by
   obtain ⟨values₁, hvalues₁, hindexed₁⟩ := receiptsRoot_eq_ok_iff.mp hroot₁
   obtain ⟨values₂, hvalues₂, hindexed₂⟩ := receiptsRoot_eq_ok_iff.mp hroot₂
   rcases indexedRoot_binding hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩

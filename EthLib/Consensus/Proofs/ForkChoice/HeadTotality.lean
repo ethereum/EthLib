@@ -386,8 +386,7 @@ private theorem Reachable.boostHeld {anchorState : BeaconState preset fork}
     obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
     exact ih
   | @inclusionList _ _ _ heze _ _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted

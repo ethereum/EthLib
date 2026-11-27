@@ -309,6 +309,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
   -- The registry updates keep the balances and the effective balances.
   obtain ⟨registered, registeredOk, -, -, -, slot4, balances4, effective4⟩ :=
     processRegistryUpdates_total_of_electra (config := config) rewarded electra
+      configPositive.exitQuotient
       (by unfold BeaconState.RegistryWithinLimit; rw [validators3]; exact within)
       (by rw [effectiveSum3]; exact summedBelow)
       (UInt64.pos_iff_ne_zero.mpr positive.increment) minimum maximum ceiling
@@ -416,6 +417,7 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
     exact load4.registryLoad_eq.trans (by rw [frame3, frame2, frame1]; rfl)
   obtain ⟨deposited, depositedOk, loaded7, matched7, supply7, size7, consolidations7, epoch7,
     -, -, -, capped7⟩ := processPendingDeposits_total config checks reset electra
+    configPositive.exitQuotient
     (by rw [load6]; exact loaded)
     (by rw [frame6]; exact matched5)
     (fun altair => by

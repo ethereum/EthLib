@@ -96,6 +96,14 @@ def tableHash (f : QueryImpl HashOracle Id) (x : ByteArray) : ByteArray :=
 theorem tableHash_size (f : QueryImpl HashOracle Id) (x : ByteArray) : (tableHash f x).size = 32 :=
   (f x).size_toArray
 
+/-- The answers of SHA-256, as a full table of the oracle. -/
+def sha256Answers : QueryImpl HashOracle Id :=
+  fun x => ⟨(Cryptography.Hash.Sha256.hash x).data, Cryptography.Hash.Sha256.hash_size x⟩
+
+/-- The node hash of the SHA-256 table is SHA-256. -/
+theorem tableHash_sha256Answers : tableHash sha256Answers = Cryptography.Hash.Sha256.hash :=
+  funext fun _ => rfl
+
 /-- One query, run against a full answer table, is the table's digest as bytes. -/
 theorem evalWithAnswerFn_queryHash (f : QueryImpl HashOracle Id) (x : ByteArray) :
     evalWithAnswerFn f (queryHash x) = tableHash f x := by
@@ -414,6 +422,17 @@ theorem collision_or_eq_of_queryHash {cache : HashOracle.QueryCache}
   · refine .inl ⟨x, y, firstAnswer, equal, hfirst, ?_⟩
     rw [hsecond]
     exact congrArg some (Vector.toArray_inj.mp same).symm
+
+/-- The extraction, run against a full answer table, reports both values and their roots.
+
+The roots are computed with that table, and the rehash of each computation is dropped. -/
+theorem evalWithAnswerFn_extract (f : QueryImpl HashOracle Id) (shape : Desc)
+    (first second : Value) :
+    evalWithAnswerFn f (extract shape first second) =
+      ⟨first, second, (hashTreeRootM (Hasher.ofHash (m := Id) (tableHash f)) shape first).run,
+        (hashTreeRootM (Hasher.ofHash (m := Id) (tableHash f)) shape second).run⟩ := by
+  simp only [extract, evalWithAnswerFn_bind, evalWithAnswerFn_hashTreeRootM]
+  split <;> simp only [evalWithAnswerFn_bind, evalWithAnswerFn_pure]
 
 /-- A replayed winning extraction exposes a collision of the cache.
 

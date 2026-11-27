@@ -172,6 +172,8 @@ They hold at least `1/3 - SAFETY_DECAY/100` of the trusted stake. -/
 theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Config}
     {state : BeaconState preset fork} (before : fork < .pectra) {period total : UInt64} (periodOk : computeWeakSubjectivityPeriod config state = .ok period)
     (totalOk : getTotalActiveBalance state = .ok total)
+    -- The churn of validators in one epoch is `delta`.
+    {delta : UInt64} (deltaOk : getValidatorChurnLimit config state = .ok delta)
     -- The trusted stake must be at least one increment, so that it is the total active balance.
     (large : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
       stake (fun index => balanceAt state index.toNat)
@@ -218,10 +220,10 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
       Justified V (fun index => balanceAt state index.toNat) genesis votes c →
       (V c \ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset).card ≤
           (period.toNat - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) *
-            (getValidatorChurnLimit config state).toNat ∧
+            delta.toNat ∧
         ((getActiveValidatorIndices state (getCurrentEpoch state)).toFinset \ V c).card ≤
           (period.toNat - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) *
-            (getValidatorChurnLimit config state).toNat) :
+            delta.toNat) :
     -- Then two justified checkpoints `l` and `r` lie in that range.
     --
     -- They have slashable validators of both of their sets.
@@ -244,7 +246,8 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
   have within : state.RegistryWithinLimit :=
     state.validators.bound (Nat.lt_trans before (by decide))
   simp only [computeWeakSubjectivityPeriod, notGloas, notElectra, ↓reduceIte,
-    computeWeakSubjectivityPeriodPhase0, bind_ok_iff, mapError_ok_iff] at periodOk
+    computeWeakSubjectivityPeriodPhase0, bind_ok_iff, mapError_ok_iff, deltaOk,
+    Except.ok.injEq, exists_eq_left'] at periodOk
   obtain ⟨total', totalOk', average, averageOk, _, _, epochs, epochsOk, periodOk⟩ :=
     periodOk
   rw [totalOk, Except.ok.injEq] at totalOk'
@@ -286,7 +289,7 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, bound⟩ :=
     accountable_safety_of_change h₁ h₂ hc
       (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset
-      (3 * (epochs.toNat * (getValidatorChurnLimit config state).toNat *
+      (3 * (epochs.toNat * delta.toNat *
         preset.MAX_EFFECTIVE_BALANCE.toNat))
       fun c lo hi hj => by
         obtain ⟨joined, left⟩ := change c lo hi hj
@@ -301,12 +304,12 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
     exact (Nat.mul_le_mul_left N (Nat.div_mul_le_self _ _)).trans (Nat.mul_div_le _ _)
   have whole : preset.MAX_EFFECTIVE_BALANCE.toNat = T * ETH_TO_GWEI.toNat := by
     rw [hT, Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero wholeEther)]
-  have moved : 20 * (epochs.toNat * (getValidatorChurnLimit config state).toNat *
+  have moved : 20 * (epochs.toNat * delta.toNat *
       preset.MAX_EFFECTIVE_BALANCE.toNat) ≤ total.toNat := by
     rw [whole]
-    calc 20 * (epochs.toNat * (getValidatorChurnLimit config state).toNat *
+    calc 20 * (epochs.toNat * delta.toNat *
           (T * ETH_TO_GWEI.toNat))
-        = 20 * (epochs.toNat * (getValidatorChurnLimit config state).toNat * T) *
+        = 20 * (epochs.toNat * delta.toNat * T) *
           ETH_TO_GWEI.toNat := by ac_rfl
       _ ≤ N * t * ETH_TO_GWEI.toNat := Nat.mul_le_mul_right _ fit
       _ ≤ total.toNat := averageStake

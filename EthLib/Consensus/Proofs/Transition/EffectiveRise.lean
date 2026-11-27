@@ -465,7 +465,7 @@ private theorem effectiveUpdates_others {f : Fork} {s t : BeaconState preset f}
     (ok : processEffectiveBalanceUpdates s = .ok t) (i : ℕ) :
     (t.validators.data[i]?).map withoutEffective =
       (s.validators.data[i]?).map withoutEffective := by
-  refine processEffectiveBalanceUpdates_invariant
+  refine processEffectiveBalanceUpdates_induction
     (fun w : BeaconState preset f =>
       (w.validators.data[i]?).map withoutEffective = (s.validators.data[i]?).map withoutEffective)
     (fun a j b prior step => ?_) rfl ok

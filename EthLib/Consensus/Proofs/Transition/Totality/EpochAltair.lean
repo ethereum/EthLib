@@ -208,7 +208,8 @@ theorem processEpoch_total_of_altair_of_lt_electra {config : Config} {checks : S
     (frame_processRewardsAndPenalties rewardedOk).balancesMatch (by rw [frame2]; exact matched1)
   -- The registry updates change only the epochs of the validators.
   obtain ⟨registered, registeredOk, -⟩ := processRegistryUpdates_total_of_lt_electra
-    (config := config) rewarded before ceiling (by rw [currentEpoch3]; exact first)
+    (config := config) rewarded before configPositive.churn ceiling
+    (by rw [currentEpoch3]; exact first)
     (by rw [validators3]; exact exits) (by rw [validators3]; exact exitRoom)
   obtain ⟨slot4, balances4, slashings4, roots4, summaries4, effective4⟩ :=
     processRegistryUpdates_registryKept before registeredOk

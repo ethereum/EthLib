@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Sec1
 public import EthLib.Cryptography.Proofs.Jacobian
 public import EthLib.Base.Proofs.ByteOrder
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.Except
 public import EthLib.Base.Proofs.Pow
 
@@ -227,9 +228,6 @@ private theorem eq_append_extract {M : ByteArray} (h : 0 < M.size) :
     ByteArray.extract_add_one (i := 0) (by omega)]
   rfl
 
-/-- A single octet makes an array of size one. -/
-private theorem size_singleton (b : UInt8) : (ByteArray.mk #[b]).size = 1 := rfl
-
 /-- Each form of a point of the curve decodes back to that point. -/
 theorem decode_encode [Fact p.Prime] (law : IsSqrt params.sqrt?) (compressed : Bool)
     {Q : Point (Fin p)} (hQ : Q.isOnCurve = true) :
@@ -244,8 +242,8 @@ theorem decode_encode [Fact p.Prime] (law : IsSqrt params.sqrt?) (compressed : B
       rw [dite_eq_right (by omega), dite_eq_right (by omega), dite_eq_left hsize]
       have h0 : (encode params false (.affine x y))[0]'(by omega) = 4 := by
         simp only [encode, Bool.false_eq_true, ↓reduceIte]
-        rw [ByteArray.getElem_append_left (by simp [size_singleton]),
-          ByteArray.getElem_append_left (by simp [size_singleton])]
+        rw [ByteArray.getElem_append_left (by simp),
+          ByteArray.getElem_append_left (by simp)]
         rfl
       have hx : (encode params false (.affine x y)).extract 1 (params.mlen + 1) =
           fieldToBytes params x := by
@@ -258,7 +256,8 @@ theorem decode_encode [Fact p.Prime] (law : IsSqrt params.sqrt?) (compressed : B
         have hsx := size_fieldToBytes params x
         simp only [encode, Bool.false_eq_true, ↓reduceIte]
         exact ByteArray.extract_append_eq_right
-          (by rw [ByteArray.size_append, size_singleton, hsx]; omega) ByteArray.size_append
+          (by rw [ByteArray.size_append, Base.byteArray_size_mk, Array.size_singleton, hsx]; omega)
+          ByteArray.size_append
       simp only [h0, hx, hy, readField_fieldToBytes, Base.ok_bind, hQ, ne_eq, not_true_eq_false,
         ↓reduceIte]
     · have hsize := size_encode_true params x y
@@ -267,7 +266,7 @@ theorem decode_encode [Fact p.Prime] (law : IsSqrt params.sqrt?) (compressed : B
       have h0 : (encode params true (.affine x y))[0]'(by omega) =
           if y.val % 2 = 0 then 2 else 3 := by
         simp only [encode, ↓reduceIte]
-        rw [ByteArray.getElem_append_left (by simp [size_singleton])]
+        rw [ByteArray.getElem_append_left (by simp)]
         rfl
       have hx : (encode params true (.affine x y)).extract 1
           (encode params true (.affine x y)).size = fieldToBytes params x := by
@@ -289,8 +288,8 @@ theorem decode_encode_false_of_isOnCurve_eq_false {x y : Fin p}
   rw [dite_eq_right (by omega), dite_eq_right (by omega), dite_eq_left hsize]
   have h0 : (encode params false (.affine x y))[0]'(by omega) = 4 := by
     simp only [encode, Bool.false_eq_true, ↓reduceIte]
-    rw [ByteArray.getElem_append_left (by simp [size_singleton]),
-      ByteArray.getElem_append_left (by simp [size_singleton])]
+    rw [ByteArray.getElem_append_left (by simp),
+      ByteArray.getElem_append_left (by simp)]
     rfl
   have hx : (encode params false (.affine x y)).extract 1 (params.mlen + 1) =
       fieldToBytes params x := by
@@ -301,7 +300,8 @@ theorem decode_encode_false_of_isOnCurve_eq_false {x y : Fin p}
       (encode params false (.affine x y)).size = fieldToBytes params y := by
     simp only [encode, Bool.false_eq_true, ↓reduceIte]
     exact ByteArray.extract_append_eq_right
-      (by rw [ByteArray.size_append, size_singleton, hsx]; omega) ByteArray.size_append
+      (by rw [ByteArray.size_append, Base.byteArray_size_mk, Array.size_singleton, hsx]; omega)
+      ByteArray.size_append
   simp only [h0, hx, hy, readField_fieldToBytes, Base.ok_bind, h, ne_eq, not_true_eq_false,
     ↓reduceIte, Bool.false_eq_true]
 

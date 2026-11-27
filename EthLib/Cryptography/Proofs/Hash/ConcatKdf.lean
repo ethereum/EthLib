@@ -36,8 +36,8 @@ theorem blocks_add (z fixedInfo : ByteArray) (i a b : Nat) :
   induction a generalizing i with
   | zero => simp [blocks]
   | succ a ih =>
-    rw [Nat.add_right_comm, blocks, ih, blocks, ByteArray.append_assoc, Nat.add_right_comm i 1 a]
-    rfl
+    rw [Nat.add_right_comm, blocks, ih, blocks, ByteArray.append_assoc, Nat.add_right_comm i 1 a,
+      ← ByteArray.append_assoc, Nat.add_assoc]
 
 /-- The blocks of a successful derivation, before the cut to the requested length. -/
 theorem concatKdf_eq_extract {z fixedInfo key : ByteArray} {length : Nat}

@@ -218,7 +218,9 @@ The votes for that block with its payload are dropped, so their weight reaches n
 
 The block itself and its node without the payload stay, as do the blocks built on that node.
 
-No published source defines this rule from Gloas, so it is a choice of EthLib. -/
+From Gloas the guide applies the rule of the latest valid hash to the payload chain.
+
+The walk and the case of the block's own hash are EthLib's reading of it. -/
 def onInvalidPayload (block : BeaconBlock preset fork) (latestValidHash : Option Hash32) :
     Except ForkChoiceError (Store preset fork) := do
   let root ← (SszType.hashTreeRoot block).mapError .ssz

@@ -188,7 +188,7 @@ theorem stepRules_nonceLe :
     StepRules fork (fun a b : Evm fork Meter => NonceLe a.state b.state) where
   trans := NonceLe.trans
   static h := h.nonceLe
-  sstore _ _ _ _ _ _ h := nonceLe_setStorage h
+  sstore _ _ _ _ _ h := nonceLe_setStorage h
   tstore _ _ _ _ := NonceLe.of_getAccountOptional fun _ => rfl
   log _ hs _ _ _ := by rw [hs]; exact NonceLe.refl _
   selfdestruct _ _ h := nonceLe_finishSelfdestruct h

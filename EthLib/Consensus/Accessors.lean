@@ -265,24 +265,29 @@ def getRandaoMix (state : BeaconState preset fork) (epoch : Epoch) :
 
 /-- The most validators that may join, or leave, the active validators in one epoch.
 
+A quotient of 0 is an error.
+
 Electra counts the churn in balance instead, as [EIP-7251] specifies.
 
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#specification
 -/
-def getValidatorChurnLimit (config : Config) (state : BeaconState preset fork) : UInt64 :=
+def getValidatorChurnLimit (config : Config) (state : BeaconState preset fork) :
+    Except AccessorError UInt64 := do
   -- `max(MIN_PER_EPOCH_CHURN_LIMIT, floor(n / CHURN_LIMIT_QUOTIENT))`, for `n` active validators.
-  max config.MIN_PER_EPOCH_CHURN_LIMIT
-    ((getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64 /
-      config.CHURN_LIMIT_QUOTIENT)
+  let n := (getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64
+  return max config.MIN_PER_EPOCH_CHURN_LIMIT
+    (← liftArith (divChecked n config.CHURN_LIMIT_QUOTIENT))
 
 /-- From Deneb: the most validators that an epoch activates, as [EIP-7514] specifies.
+
+A churn quotient of 0 is an error.
 
 [EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
 -/
 def getValidatorActivationChurnLimit (config : Config) (state : BeaconState preset fork) :
-    UInt64 :=
+    Except AccessorError UInt64 := do
   -- The churn limit, capped at `MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT`, as EIP-7514 specifies.
-  min config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT (getValidatorChurnLimit config state)
+  return min config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT (← getValidatorChurnLimit config state)
 
 /-- From Electra: the sum of the amounts of the pending partial withdrawals of a validator.
 

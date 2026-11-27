@@ -56,6 +56,7 @@ public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Checks.RoundC12
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Checks.RoundC13
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Checks.RoundC14
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Checks.RoundC15
+public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Rounds
 
 /-!
 # Proofs: the Lagrange points of the embedded setup come from its monomial points

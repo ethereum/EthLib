@@ -66,6 +66,16 @@ theorem cases {P₁ P₂ Q : Evm fork Meter → Prop} (h₁ : Triple S P₁ Q) (
     Triple S (fun evm => P₁ evm ∨ P₂ evm) Q :=
   fun evm hp => hp.elim (h₁ evm) (h₂ evm)
 
+/-- A precondition that names a value is met when the triple holds for each value. -/
+theorem exists_pre {α : Sort _} {P : α → Evm fork Meter → Prop} {Q : Evm fork Meter → Prop}
+    (h : ∀ a, Triple S (P a) Q) : Triple S (fun evm => ∃ a, P a evm) Q :=
+  fun evm ⟨a, hp⟩ => h a evm hp
+
+/-- A precondition beside a proposition is met when the proposition gives the triple. -/
+theorem pure_pre {p : Prop} {P Q : Evm fork Meter → Prop} (h : p → Triple S P Q) :
+    Triple S (fun evm => p ∧ P evm) Q :=
+  fun evm ⟨hp, hP⟩ => h hp evm hP
+
 /-- A precondition that names a gas that meets `R` and a substate with the logs `logs`.
 
 It is met when each such gas and substate meets it. -/
@@ -73,7 +83,7 @@ theorem of_gas_logs {P : Nat → Substate → Evm fork Meter → Prop} {Q : Evm 
     {R : Nat → Prop} {logs : Array Blocks.Log}
     (h : ∀ g ss, R g → ss.logs = logs → Triple S (P g ss) Q) :
     Triple S (fun evm => ∃ g ss, R g ∧ ss.logs = logs ∧ P g ss evm) Q :=
-  fun evm ⟨g, ss, h1, h2, hp⟩ => h g ss h1 h2 evm hp
+  exists_pre fun g => exists_pre fun ss => pure_pre fun hr => pure_pre fun hl => h g ss hr hl
 
 end Triple
 

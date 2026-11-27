@@ -116,4 +116,31 @@ theorem floor_le_of_lt {B E I : Nat} (hI : 0 < I) (aligned : E % I = 0)
   exact Nat.lt_succ_iff.mp ((Nat.div_lt_iff_lt_mul hI).mpr (by
     simpa [Nat.succ_mul, Nat.mul_comm u I] using lt))
 
+/-- A mask of `m` bits above bit `k` keeps `x` of `2 ^ k * x + y`, if `x < 2 ^ m`, `y < 2 ^ k`. -/
+theorem and_mask_mul {x y k m : Nat} (hx : x < 2 ^ m) (hy : y < 2 ^ k) :
+    (2 ^ k * x + y) &&& 2 ^ k * (2 ^ m - 1) = 2 ^ k * x := by
+  apply Nat.eq_of_testBit_eq
+  intro j
+  rw [Nat.testBit_and, Nat.testBit_two_pow_mul_add _ hy, Nat.testBit_two_pow_mul,
+    Nat.testBit_two_pow_mul, Nat.testBit_two_pow_sub_one]
+  by_cases hj : j < k
+  · simp [hj, show ¬k ≤ j by omega]
+  · by_cases hm : j - k < m
+    · simp [hj, hm, show k ≤ j by omega]
+    · -- Above the mask, the bits of `x` are zero.
+      have hz : x.testBit (j - k) = false :=
+        Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le hx (Nat.pow_le_pow_right (by decide) (by omega)))
+      simp [hj, hm, hz]
+
+/-- A mask of `m` bits above bit `k` keeps `m` bits of a number shifted up by `k` bits. -/
+theorem two_pow_mul_and_mask (x k m : Nat) :
+    2 ^ k * x &&& 2 ^ k * (2 ^ m - 1) = 2 ^ k * (x % 2 ^ m) := by
+  apply Nat.eq_of_testBit_eq
+  intro j
+  rw [Nat.testBit_and, Nat.testBit_two_pow_mul, Nat.testBit_two_pow_mul, Nat.testBit_two_pow_mul,
+    Nat.testBit_two_pow_sub_one, Nat.testBit_mod_two_pow]
+  by_cases hj : k ≤ j
+  · by_cases hm : j - k < m <;> simp [hj, hm]
+  · simp [hj]
+
 end EthLib.Base
