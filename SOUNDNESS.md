@@ -2438,6 +2438,10 @@ The lifted run has the same fields outside its meter, including its state and ou
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
 `Logic.Spec.covered` lifts a whole specification of checked code whose runs stop with no error or a revert.
 The rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 (`spec_add_covered`) hold that way under the state gas meter.
+`Logic.Reaches.meterCovers` also keeps a ledger: the execution gas and the reservoir drop by at most what the counter drops.
+A charge of state gas lowers the reservoir first and then the gas left, and a refill raises them, while the counter ignores refills.
+`Logic.Costs.covered` (`Logic/MeterCost.lean`) turns a cost under one counter into the same bound on the sum of the execution gas and the reservoir.
+`WithdrawalRequests.costs_add_covered` gives that bound for a call that adds a withdrawal request.
 `Logic.HoareUnder.meterCovers` and `Logic.SpecUnder.covered` lift a triple with messages, under an assumption on the frames that end messages under each meter.
 The assumption under the state gas meter must give the one under one counter, for a frame that ends a covering message, seen under one counter with its gas capped by that message.
 
