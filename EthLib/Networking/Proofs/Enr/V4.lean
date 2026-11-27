@@ -347,6 +347,35 @@ theorem get_of_mem {r : Enr} {key : ByteArray} {value : Item}
         exact List.lt_irrefl _ hlt
       simp [hne, ih hk.2 hrest]
 
+/-- A record that the builder makes passes its four steps on the pairs with its own two inserted. -/
+private theorem makeRecordV4_steps {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × Item)}
+    {r : Enr} (h : makeRecordV4 sk seq pairs = .ok r) :
+    ∃ all u bytes, insertPair (KEY_ID, .bytes SCHEME_V4)
+        (insertPair (KEY_SECP256K1, .bytes (Point.mul sk Point.generator).encodeCompressed)
+          pairs) = all ∧ checkKeys all = .ok u ∧ signV4 sk ⟨.empty, seq, all⟩ = .ok r ∧
+      r.encode = .ok bytes ∧ bytes.size ≤ MAX_RECORD_SIZE := by
+  unfold makeRecordV4 at h
+  dsimp only at h
+  generalize insertPair (KEY_ID, .bytes SCHEME_V4)
+    (insertPair (KEY_SECP256K1, .bytes (Point.mul sk Point.generator).encodeCompressed) pairs)
+    = all at h
+  cases hc : checkKeys all with
+  | error e => simp [hc, bind, Except.bind] at h
+  | ok u =>
+    cases hs : signV4 sk ⟨.empty, seq, all⟩ with
+    | error e => simp [hc, hs, bind, Except.bind] at h
+    | ok signed =>
+      cases he : signed.encode with
+      | error e => simp [hc, hs, he, Except.mapError, bind, Except.bind] at h
+      | ok bytes =>
+        by_cases hsize : MAX_RECORD_SIZE < bytes.size
+        · simp [hc, hs, he, hsize, Except.mapError, bind, Except.bind, throw, throwThe,
+            MonadExceptOf.throw] at h
+        simp only [hc, hs, he, hsize, Except.mapError, bind, Except.bind, ↓reduceIte, pure,
+          Except.pure, Except.ok.injEq] at h
+        subst h
+        exact ⟨all, u, bytes, rfl, hc, hs, he, Nat.le_of_not_lt hsize⟩
+
 /-- A record that the builder makes reads back from its bytes and verifies.
 
 It has the sequence number, the pair `id` with `v4`, and the pair `secp256k1` of `sk G`. -/
@@ -355,76 +384,38 @@ theorem makeRecordV4_eq_ok {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × 
     ∃ bytes, r.encode = .ok bytes ∧ decode bytes = .ok r ∧ verifyV4 r = true ∧ r.seq = seq ∧
       r.get KEY_ID = some (.bytes SCHEME_V4) ∧
       r.get KEY_SECP256K1 = some (.bytes (Point.mul sk Point.generator).encodeCompressed) := by
-  unfold makeRecordV4 at h
-  dsimp only at h
-  generalize hall : insertPair (KEY_ID, .bytes SCHEME_V4)
-    (insertPair (KEY_SECP256K1, .bytes (Point.mul sk Point.generator).encodeCompressed) pairs)
-    = all at h
-  cases hc : checkKeys all with
-  | error e => simp [hc, bind, Except.bind] at h
-  | ok u =>
-    cases hs : signV4 sk ⟨.empty, seq, all⟩ with
-    | error e => simp [hc, hs, bind, Except.bind] at h
-    | ok signed =>
-      cases he : signed.encode with
-      | error e => simp [hc, hs, he, Except.mapError, bind, Except.bind] at h
-      | ok bytes =>
-        by_cases hsize : MAX_RECORD_SIZE < bytes.size
-        · simp [hc, hs, he, hsize, Except.mapError, bind, Except.bind, throw, throwThe,
-            MonadExceptOf.throw] at h
-        simp only [hc, hs, he, hsize, Except.mapError, bind, Except.bind, ↓reduceIte, pure,
-          Except.pure, Except.ok.injEq] at h
-        subst h
-        -- The keys strictly increase, and both key pairs are among the pairs.
-        have hk := pairwise_of_checkKeys all hc
-        have hid : (KEY_ID, Item.bytes SCHEME_V4) ∈ all := by
-          rw [← hall, mem_insertPair]
-          exact Or.inl rfl
-        have hkey : (KEY_SECP256K1,
-            Item.bytes (Point.mul sk Point.generator).encodeCompressed) ∈ all := by
-          rw [← hall, mem_insertPair, mem_insertPair]
-          exact Or.inr (Or.inl rfl)
-        have gid : (⟨.empty, seq, all⟩ : Enr).get KEY_ID = some (.bytes SCHEME_V4) :=
-          get_of_mem hk hid
-        have gkey : (⟨.empty, seq, all⟩ : Enr).get KEY_SECP256K1 =
-            some (.bytes (Point.mul sk Point.generator).encodeCompressed) :=
-          get_of_mem hk hkey
-        obtain ⟨hseq, hpairs⟩ := seq_pairs_signV4 hs
-        obtain ⟨hdec, hver⟩ := decode_encode_signV4 hs he (Nat.le_of_not_lt hsize) hk gid gkey
-        refine ⟨bytes, he, hdec, hver, hseq, ?_, ?_⟩
-        · unfold Enr.get at gid ⊢
-          rw [hpairs]
-          exact gid
-        · unfold Enr.get at gkey ⊢
-          rw [hpairs]
-          exact gkey
+  obtain ⟨all, u, bytes, hall, hc, hs, he, hsize⟩ := makeRecordV4_steps h
+  -- The keys strictly increase, and both key pairs are among the pairs.
+  have hk := pairwise_of_checkKeys all hc
+  have hid : (KEY_ID, Item.bytes SCHEME_V4) ∈ all := by
+    rw [← hall, mem_insertPair]
+    exact Or.inl rfl
+  have hkey :
+      (KEY_SECP256K1, Item.bytes (Point.mul sk Point.generator).encodeCompressed) ∈ all := by
+    rw [← hall, mem_insertPair, mem_insertPair]
+    exact Or.inr (Or.inl rfl)
+  have gid : (⟨.empty, seq, all⟩ : Enr).get KEY_ID = some (.bytes SCHEME_V4) :=
+    get_of_mem hk hid
+  have gkey : (⟨.empty, seq, all⟩ : Enr).get KEY_SECP256K1 =
+      some (.bytes (Point.mul sk Point.generator).encodeCompressed) :=
+    get_of_mem hk hkey
+  obtain ⟨hseq, hpairs⟩ := seq_pairs_signV4 hs
+  obtain ⟨hdec, hver⟩ := decode_encode_signV4 hs he hsize hk gid gkey
+  refine ⟨bytes, he, hdec, hver, hseq, ?_, ?_⟩
+  · unfold Enr.get at gid ⊢
+    rw [hpairs]
+    exact gid
+  · unfold Enr.get at gkey ⊢
+    rw [hpairs]
+    exact gkey
 
 /-- A record that the builder makes holds the given value of every key other than its own two. -/
 theorem get_of_makeRecordV4 {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × Item)} {r : Enr}
     {key : ByteArray} (h : makeRecordV4 sk seq pairs = .ok r) (hid : KEY_ID ≠ key)
     (hsk : KEY_SECP256K1 ≠ key) : r.get key = (pairs.find? (·.1 = key)).map (·.2) := by
-  unfold makeRecordV4 at h
-  dsimp only at h
-  generalize hall : insertPair (KEY_ID, .bytes SCHEME_V4)
-    (insertPair (KEY_SECP256K1, .bytes (Point.mul sk Point.generator).encodeCompressed) pairs)
-    = all at h
-  cases hc : checkKeys all with
-  | error e => simp [hc, bind, Except.bind] at h
-  | ok u =>
-    cases hs : signV4 sk ⟨.empty, seq, all⟩ with
-    | error e => simp [hc, hs, bind, Except.bind] at h
-    | ok signed =>
-      cases he : signed.encode with
-      | error e => simp [hc, hs, he, Except.mapError, bind, Except.bind] at h
-      | ok bytes =>
-        by_cases hsize : MAX_RECORD_SIZE < bytes.size
-        · simp [hc, hs, he, hsize, Except.mapError, bind, Except.bind, throw, throwThe,
-            MonadExceptOf.throw] at h
-        simp only [hc, hs, he, hsize, Except.mapError, bind, Except.bind, ↓reduceIte, pure,
-          Except.pure, Except.ok.injEq] at h
-        subst h
-        -- Signing keeps the pairs, and neither inserted pair has the key.
-        unfold Enr.get
-        rw [(seq_pairs_signV4 hs).2, ← hall, find?_insertPair hid, find?_insertPair hsk]
+  obtain ⟨all, -, -, hall, -, hs, -, -⟩ := makeRecordV4_steps h
+  -- Signing keeps the pairs, and neither inserted pair has the key.
+  unfold Enr.get
+  rw [(seq_pairs_signV4 hs).2, ← hall, find?_insertPair hid, find?_insertPair hsk]
 
 end EthLib.Networking.Enr
