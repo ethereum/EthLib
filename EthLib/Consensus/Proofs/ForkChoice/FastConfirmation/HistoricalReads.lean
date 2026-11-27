@@ -286,7 +286,7 @@ public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset for
 
 The receiver is up to date at an event by `last`; honest stores agree on blocks, with nonzero roots.
 
-Each justified root reads every honest finalized checkpoint of an epoch no later than its own.
+By `last`, honest justified roots read honest finalized checkpoints at lower or equal epochs.
 
 It assumes synchrony, delayed admission, an invariant anchor, nonempty epochs and root history. -/
 public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
