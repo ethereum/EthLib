@@ -452,6 +452,8 @@ def getSignedProposerPreferences (config : Config) (store : Store preset fork)
 
 /-- From Heze: the signed inclusion list of a committee member for a slot, on the chain of a head.
 
+The member sends it during that slot, by the deadline of inclusion lists.
+
 The dependent root is the block that fixes the committees of the epoch of the slot, on that chain.
 
 The transactions are those that the execution layer offers from its mempool. -/
