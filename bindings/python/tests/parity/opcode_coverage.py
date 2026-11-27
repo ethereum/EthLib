@@ -1,43 +1,80 @@
 """Report opcode coverage for a group of pinned Amsterdam state tests."""
 
+# Run from bindings/python/tests, with the Lean modules built and ETHLIB_ARCHIVES set:
+#     python -m parity.opcode_coverage fixtures/state_tests/for_amsterdam/amsterdam/eip7843_slotnum
+
 import argparse
 import json
 import subprocess
 from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import PurePosixPath
 
 import archives
 from ethlib.execution import transactions
 
 from . import catalogue, harness
+from .catalogue import Case
 from .runners import state_test_input
+
+# The Lean script that lists the opcodes, and the time it may take to load the specification.
+OPCODES_SCRIPT = "scripts/AmsterdamOpcodes.lean"
+OPCODES_TIMEOUT = 600
+
+
+def parse_opcodes(listing: str) -> dict[int, str]:
+    """Read one decimal byte, a tab and a mnemonic from each line of the Lean listing."""
+    opcodes: dict[int, str] = {}
+    for line in listing.splitlines():
+        byte, tab, name = line.partition("\t")
+        if not (tab and byte.isdecimal() and int(byte) < 256 and name):
+            raise ValueError(f"not an opcode line of {OPCODES_SCRIPT}: {line!r}")
+        opcodes[int(byte)] = name
+    return opcodes
 
 
 def _amsterdam_opcodes() -> dict[int, str]:
     """Read the opcode bytes and trace mnemonics from EthLib's Lean definitions."""
-    listing = subprocess.run(
-        ["lake", "env", "lean", "--run", "scripts/AmsterdamOpcodes.lean"],
-        cwd=archives.REPO,
-        check=True,
-        stdout=subprocess.PIPE,
-        text=True,
-    ).stdout
-    return {int(byte): name for byte, name in (line.split("\t") for line in listing.splitlines())}
+    # Lean writes its diagnostics to standard output, so a failure keeps them for the message.
+    try:
+        listing = subprocess.run(
+            ["lake", "env", "lean", "--run", OPCODES_SCRIPT],
+            cwd=archives.REPO,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=OPCODES_TIMEOUT,
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"{OPCODES_SCRIPT} failed:\n{error.output}") from error
+    return parse_opcodes(listing)
 
 
-def traced_opcodes(trace: list[str]) -> Counter[int]:
+def select_cases(cases: Iterable[Case], group: PurePosixPath) -> list[Case]:
+    """Keep the Amsterdam state tests whose fixture file lies under the group directory."""
+    return [
+        case
+        for case in cases
+        if case.fork == "Amsterdam"
+        and case.group == "state_test"
+        and group in PurePosixPath(case.path).parents
+    ]
+
+
+def traced_opcodes(trace: Sequence[str]) -> Counter[int]:
     """Count opcode bytes in the trace steps before the transaction summary."""
     return Counter(json.loads(line)["op"] for line in trace[:-1])
 
 
 def render_report(
     group: PurePosixPath,
-    opcodes: dict[int, str],
+    opcodes: Mapping[int, str],
     counts: Counter[int],
     traced: int,
     rejected: int,
 ) -> str:
-    """Show observed and missed opcodes and any undefined bytes reached by the trace."""
+    """Render the Markdown report: counts, observed and missed opcodes, and undefined bytes."""
     observed = opcodes.keys() & counts.keys()
     missed = opcodes.keys() - counts.keys()
     lines = [
@@ -53,7 +90,7 @@ def render_report(
         f"| Trace steps | {counts.total()} |",
         "",
         "Counts include faulting steps and the implicit `STOP` at the end of code.",
-        "The opcode table comes from EthLib's `Op.ofByte` at Amsterdam.",
+        "The table lists the opcodes that EthLib defines at Amsterdam, with their trace names.",
         "",
         f"## Observed opcodes ({len(observed)})",
         "",
@@ -82,13 +119,7 @@ def main() -> None:
         parser.error("set ETHLIB_ARCHIVES to the fixture archive cache directory")
 
     group = args.group
-    cases = [
-        case
-        for case in catalogue.execution_cases()
-        if case.fork == "Amsterdam"
-        and case.group == "state_test"
-        and group in PurePosixPath(case.path).parents
-    ]
+    cases = select_cases(catalogue.execution_cases(), group)
     if not cases:
         parser.error(f"no Amsterdam state tests under {group}")
 
