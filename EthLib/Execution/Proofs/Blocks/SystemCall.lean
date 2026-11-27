@@ -359,6 +359,19 @@ theorem readRequests_of_lt_pectra {body : BodyState} (h : fork < .pectra) :
 theorem readRequests_of_pectra {body : BodyState} (_h : .pectra ≤ fork) :
     readRequests env body = (requestContracts fork).foldlM (readRequest env) (body, []) := rfl
 
+/-- Empty code at a request contract rejects the requests of a block. -/
+theorem readRequests_of_empty_after {body : BodyState} {pre post : List (UInt8 × Address)}
+    {contract : UInt8 × Address} {mid : BodyState × List ByteArray}
+    -- The block calls the contracts `pre`, then the contract, then the contracts `post`.
+    (hsplit : requestContracts fork = pre ++ contract :: post)
+    -- The calls to the contracts before it succeed, since an earlier failure takes precedence.
+    (hpre : pre.foldlM (readRequest env) (body, []) = .ok mid)
+    -- The contract has no code in the block after those calls.
+    (hcode : codeAt mid.1.block contract.2 = .ok .empty) :
+    readRequests env body = .error (.systemContractEmpty contract.2) := by
+  rw [readRequests, hsplit, List.foldlM_append, hpre]
+  simp [List.foldlM_cons, readRequest_of_empty hcode, bind, Except.bind]
+
 /-- The requests of a block have data, and come in the order of their types, each at most once.
 
 Withdrawals, of type 1, come before consolidations, of type 2. -/

@@ -1273,15 +1273,33 @@ theorem spec_dequeue (hfork : .shapella ≤ fork)
       (fun _ h => h) post
     omega
 
-/-- The withdrawal request address is not a precompile. -/
-theorem addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS :
-    Precompiles.addedAt WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS.toU256.toNat = none := by
-  rw [WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, EthLib.Base.toNat_toU256_toAddressMasked]
-  rfl
-
 /-- The code is not a delegation indicator: it has 504 bytes, not 23. -/
 theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
   simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
+
+/-- The contract as a request contract, with the code, the constants and the record of EIP-7002. -/
+def WITHDRAWAL_REQUEST : RequestContract where
+  entry := WITHDRAWAL_REQUEST_CONTRACT
+  type := WITHDRAWAL_REQUEST_TYPE
+  code := CODE
+  maxPerBlock := MAX_WITHDRAWAL_REQUESTS_PER_BLOCK
+  targetPerBlock := TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
+  record := record
+  mem := by simp [SYSTEM_CONTRACTS]
+  kind_eq := rfl
+  size_ne_zero := by simp [CODE, NatCode.size_ofNat]
+  supported := supportedCode_CODE
+  delegatedAddress_eq_none := delegatedAddress_CODE
+
+/-- The withdrawal request address is not a precompile. -/
+theorem addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS :
+    Precompiles.addedAt WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS.toU256.toNat = none :=
+  WITHDRAWAL_REQUEST.addedAt
+
+/-- From Shapella, the code takes the requests with 300,000 gas, scaled from Glamsterdam. -/
+theorem dequeues (hfork : .shapella ≤ fork) : WITHDRAWAL_REQUEST.Dequeues fork 300000 :=
+  fun _ _ _ _ hcaller hstatic hacc hread hgas =>
+    spec_dequeue hfork hcaller hstatic hacc hread hgas
 
 /-- From Pectra, the system call of a block to the contract takes its requests.
 
@@ -1304,18 +1322,10 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
         (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
           (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS))
         (.ofBlock block) out.state :=
-  systemCall_of_writesStorage (P := Bounded) _ _ (Nat.le_trans (by decide) hfork)
-    (fun _ => supportedCode_CODE) hcode
-    (by simp [CODE, NatCode.size_ofNat]) addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS
-    delegatedAddress_CODE hbounded
-    fun message _ _ hcaller htarget hstatic _ _ hgas hacc hread => by
-      rw [← htarget]
-      exact spec_dequeue (Nat.le_trans (by decide) hfork) hcaller hstatic (htarget ▸ hacc)
-        (htarget ▸ hread) (by
-          rw [hgas]
-          have := storageGasScale_le fork
-          simp only [SYSTEM_TRANSACTION_GAS]
-          omega)
+  WITHDRAWAL_REQUEST.systemCall_dequeue (Nat.le_trans (by decide) hfork)
+    (dequeues (Nat.le_trans (by decide) hfork))
+    (by have := storageGasScale_le fork; simp only [SYSTEM_TRANSACTION_GAS]; omega)
+    hcode hbounded
 
 /-- Empty withdrawal request code rejects the request phase of a block from Pectra.
 
@@ -1327,11 +1337,8 @@ This is the rejection that [EIP-7002][eip7002] requires.
 theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
     (hfork : .pectra ≤ fork)
     (hcode : codeAt body.block WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS = .ok .empty) :
-    readRequests env body = .error (.systemContractEmpty WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) := by
-  have hread := readRequest_of_empty (env := env) (state := (body, []))
-    (contract := (WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)) hcode
-  rw [readRequests_of_pectra hfork, requestContracts_of_pectra hfork]
-  simp [List.foldlM_cons, hread, bind, Except.bind]
+    readRequests env body = .error (.systemContractEmpty WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) :=
+  readRequests_of_empty_after (pre := []) (requestContracts_of_pectra hfork) rfl hcode
 
 /-- No block request result succeeds when the withdrawal contract has no code.
 
