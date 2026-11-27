@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, each opcode of one, two or three stack operands has a rule of its own in the EVM program logic, with its byte, its price and its fork (`Execution/Proofs/Evm/Logic/Stack.lean`, `add_rule` to `clz_rule`, each with a form `*_ruleG` over the steps from frames that are monotone in gas) ([#4789](https://github.com/ethereum/EthLib/issues/4789)).
+  The opcodes that read the block and the transaction have theirs in `Execution/Proofs/Evm/Logic/Environment.lean`: COINBASE, TIMESTAMP, NUMBER, PREVRANDAO and the difficulty before Paris, GASLIMIT, CHAINID, BASEFEE, BLOBBASEFEE, SLOTNUM and GASPRICE.
+  An opcode that reads a number takes the hypothesis that the number fits a word.
+
 - In Lean, `Execution/Proofs/State/RandomOracle.lean` bounds the probability of finding two storages, or two states, with one root that differ, with the hash a random oracle.
   `prEvent_storageWins_le` and `prEvent_stateWins_le` give the bound `Q^2 / 2^256`, for `Q` hash calls of the experiment.
   `Execution/Proofs/Trie/RandomOracle.lean` gains `queryWitnesses`, the queries of the binding inputs of two tries at one key, which `extract` now runs after the two roots.
