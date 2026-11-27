@@ -34,7 +34,7 @@ theorem isGasLimitTargetCompatible_bounds {parent gasLimit target : UInt64}
     parent.toNat - (parent.toNat / 1024 - 1) ≤ gasLimit.toNat ∧
       gasLimit.toNat ≤ parent.toNat + (parent.toNat / 1024 - 1) := by
   unfold isGasLimitTargetCompatible at compatible
-  cases sum : addChecked parent (saturatingSub (parent / 1024) 1) with
+  cases sum : maxGasLimitAfter parent with
   | error e => simp [sum, bind, Except.bind] at compatible
   | ok high =>
     simp only [sum, bind, Except.bind, pure, Except.pure, Except.ok.injEq, beq_iff_eq] at compatible
