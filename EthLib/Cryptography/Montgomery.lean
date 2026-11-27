@@ -39,10 +39,6 @@ The compiler makes one copy for each limb count, with the code unrolled. -/
 @[specialize] def mulCore (a b : Limbs.T n) (p : @& Limbs.T n) (pinv : UInt64) : Limbs.T n :=
   mulWords (Limbs.get p) pinv (Limbs.get a) (Limbs.get b) Limbs.pack
 
-/-- The product of the limbs is the CIOS product. -/
-theorem mulCore_eq (a b : Limbs.T n) (p : Limbs.T n) (pinv : UInt64) :
-    mulCore a b p pinv = mulWords (Limbs.get p) pinv (Limbs.get a) (Limbs.get b) Limbs.pack := rfl
-
 /-- The sum of the limbs `a` and `b`, reduced once by the modulus of limbs `p`.
 
 The compiler makes one copy for each limb count, with the code unrolled. -/
@@ -132,6 +128,15 @@ theorem subCore_val {a b p : Limbs.T n} (ha : Limbs.val a < Limbs.val p)
 
 end Core
 
+/-- Integers below `p` with equal products by `R` mod `p` are equal, if `R` is invertible. -/
+theorem Internal.eq_of_radix_mul_mod {p R r x y : Nat} (hr : r * R % p = 1) (hx : x < p)
+    (hy : y < p) (h : R * x % p = R * y % p) : x = y := by
+  -- `z = r (R z mod p) mod p` for `z` below `p`.
+  have key (z : Nat) (hz : z < p) : z = r * (R * z % p) % p := by
+    rw [Nat.mul_mod, Nat.mod_mod, ← Nat.mul_mod, ← Nat.mul_assoc, Nat.mul_mod, hr, Nat.one_mul,
+      Nat.mod_mod, Nat.mod_eq_of_lt hz]
+  rw [key x hx, key y hy, h]
+
 /-- An odd modulus `p` below `R = 2 ^ (32 n)`, with the constants of its Montgomery arithmetic.
 
 The limbs of `p` are stored like the limbs of an element, so the code reads each one as a field. -/
@@ -166,7 +171,7 @@ structure Modulus (n : Nat) [Words n] [Limbs n] where
   mul_spec : ∀ a b, Limbs.val a < p →
       mul a b = mulWords (Limbs.get pLimbs) pinv (Limbs.get a) (Limbs.get b) Limbs.pack := by
     intros
-    exact EthLib.Cryptography.Montgomery.mulCore_eq ..
+    rw [EthLib.Cryptography.Montgomery.mulCore]
   /-- The sum of the limbs `a` and `b`, both below `p`, reduced once.
 
   By default it is the sum on the limbs, unrolled whole. -/
