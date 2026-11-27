@@ -24,12 +24,12 @@ variable {fork : Fork}
 set_option hygiene false in
 /-- Close a relation of two frames whose fields agree, from the relation that holds before. -/
 local macro "keep" : tactic =>
-  `(tactic| exact ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩)
+  `(tactic| exact ⟨⟨meter, below, rfl⟩, keeps, hc, hf, hp, he⟩)
 
 set_option hygiene false in
 /-- Take the relation of two frames apart, so the second is the first with a state gas meter. -/
 local macro "split_tracks" t:term : tactic =>
-  `(tactic| obtain ⟨⟨meter, below, rfl⟩, hc, hf, hp, he⟩ := $t)
+  `(tactic| obtain ⟨⟨meter, below, rfl⟩, keeps, hc, hf, hp, he⟩ := $t)
 
 /-! ## The instructions of the stack -/
 
@@ -192,7 +192,7 @@ theorem exchangeStep_bridge : Bridge (fork := fork) 2 exchangeStep exchangeStep 
 /-- STOP runs alike under the state gas meter. -/
 theorem stopStep_bridge : Bridge (fork := fork) 1 stopStep stopStep :=
   .of_sim fun _ _ below =>
-    Sim.ok ⟨⟨_, below, rfl⟩, rfl, rfl, fun h => by simp [advance] at h, id,
+    Sim.ok ⟨⟨_, below, rfl⟩, Nat.le_refl _, rfl, rfl, fun h => by simp [advance] at h, id,
       fun h => by simp [advance] at h⟩
 
 /-- JUMP runs alike under the state gas meter. -/
@@ -204,7 +204,7 @@ theorem jumpStep_bridge : Bridge (fork := fork) 1 jumpStep jumpStep :=
   refine (t.chargeGas _).bind fun l _ t => ?_
   split_tracks t
   simp only [validJumpDestinations_withStateGas]
-  exact Sim.ite (fun valid => Sim.pure ⟨⟨meter, below, rfl⟩, hc, hf,
+  exact Sim.ite (fun valid => Sim.pure ⟨⟨meter, below, rfl⟩, keeps, hc, hf,
     fun _ => .inr (hf ▸ valid), fun h => he ▸ h, fun _ => he⟩) fun _ => Sim.error
 
 /-- JUMPI runs alike under the state gas meter. -/
@@ -219,7 +219,7 @@ theorem jumpiStep_bridge : Bridge (fork := fork) 1 jumpiStep jumpiStep :=
   split_tracks t
   simp only [validJumpDestinations_withStateGas]
   exact Sim.ite (fun _ => Sim.pure (Tracks.advance (by keep) 1)) fun _ =>
-    Sim.ite (fun valid => Sim.pure ⟨⟨meter, below, rfl⟩, hc, hf,
+    Sim.ite (fun valid => Sim.pure ⟨⟨meter, below, rfl⟩, keeps, hc, hf,
       fun _ => .inr (hf ▸ valid), fun h => he ▸ h, fun _ => he⟩) fun _ => Sim.error
 
 /-- JUMPDEST runs alike under the state gas meter. -/
@@ -234,7 +234,7 @@ theorem readFrame_sim {cost : Nat} {value : Evm fork Nat → U256}
     {highValue : Evm fork StateGasMeter → U256}
     (values : ∀ evm meter, highValue (withStateGas evm meter) = value evm)
     {start : Evm fork Nat} {meter : StateGasMeter} (below : start.gas ≤ meter.gasLeft) :
-    Sim (Lands start (start.pc + 1)) (readFrame cost value start)
+    Sim (Lands start meter (start.pc + 1)) (readFrame cost value start)
       (readFrame cost highValue (withStateGas start meter)) := by
   unfold readFrame
   refine ((Tracks.init below).chargeGas _).bind fun l _ t => ?_
@@ -361,7 +361,7 @@ theorem returndatacopyStep_bridge : Bridge (fork := fork) 1 returndatacopyStep r
 
 private theorem haltWithOutput_sim {start : Evm fork Nat} {meter : StateGasMeter} {next : Nat}
     (below : start.gas ≤ meter.gasLeft) :
-    Sim (fun a b => Lands start next a b ∧ a.running = false)
+    Sim (fun a b => Lands start meter next a b ∧ a.running = false)
       (haltWithOutput start) (haltWithOutput (withStateGas start meter)) := by
   unfold haltWithOutput
   refine (Tracks.init below).popWord.bind ?_
@@ -370,7 +370,7 @@ private theorem haltWithOutput_sim {start : Evm fork Nat} {meter : StateGasMeter
   rintro ⟨y, _⟩ ⟨_, _⟩ ⟨rfl, t⟩
   refine (t.chargeGasAndMemory _ _).bind fun _ _ t => ?_
   split_tracks t
-  exact Sim.pure ⟨⟨⟨meter, below, rfl⟩, hc, hf, fun h => by simp at h, fun h => he ▸ h,
+  exact Sim.pure ⟨⟨⟨meter, below, rfl⟩, keeps, hc, hf, fun h => by simp at h, fun h => he ▸ h,
     fun h => by simp at h⟩, rfl⟩
 
 /-- RETURN runs alike under the state gas meter. -/
@@ -382,8 +382,8 @@ theorem revertStep_bridge : Bridge (fork := fork) 1 revertStep revertStep :=
   .of_sim fun start _ below => by
   unfold revertStep
   refine (haltWithOutput_sim (next := start.pc + 1) below).bind ?_
-  rintro a _ ⟨⟨⟨meter, below, rfl⟩, hc, hf, -, -, -⟩, running⟩
-  exact Sim.pure ⟨⟨meter, below, rfl⟩, hc, hf, fun h => by simp_all, fun h => (nomatch h),
+  rintro a _ ⟨⟨⟨meter, below, rfl⟩, keeps, hc, hf, -, -, -⟩, running⟩
+  exact Sim.pure ⟨⟨meter, below, rfl⟩, keeps, hc, hf, fun h => by simp_all, fun h => (nomatch h),
     fun h => by simp_all⟩
 
 /-! ## The instructions of the environment -/

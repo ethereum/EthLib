@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueStart
 public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
 public import EthLib.Execution.Proofs.Blocks.SystemCall.AddCost
 public import EthLib.Execution.Proofs.Blocks.SystemCall.AddPath
+public import EthLib.Execution.Proofs.Evm.Logic.MeterCost
 
 /-!
 # Proofs: the withdrawal request contract of EIP-7002 does what its EIP describes
@@ -411,6 +412,47 @@ theorem costs_add {m : Nat} (hfork : .shapella ≤ fork)
   refine ((WITHDRAWAL_REQUEST.costs_add feePathCode_CODE addPathCode_CODE rfl hfork hcaller
     hstatic hacc hsize hfits hpays (by omega)).mono (by omega)).consequence
     (fun _ h => h) fun _ h => h
+
+/-- From Shapella, a call that pays the fee adds its request under the state gas meter of EIP-8037.
+
+That meter counts gas from Glamsterdam.
+
+The execution gas and the reservoir of state gas drop, in sum, by at most the bound. -/
+theorem costs_add_covered {m : Nat} (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the validator, then the amount as 8 bytes, big-endian.
+    (hsize : message.data.size = 56)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
+    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
+      FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
+        (storageOf state message.currentTarget 0).toNat m)
+    -- The value pays the fee, and the counter starts with at least the gas of the bound.
+    (hpays : pays (storageOf state message.currentTarget) message.value = true)
+    (hgas : 2266 + 87 * m + 150000 * storageGasScale fork ≤ gas)
+    -- The frame under the state gas meter covers a frame of the start, under one counter.
+    --
+    -- The execution gas alone covers that counter, and the execution gas that it holds fits a word.
+    {high : Evm fork StateGasMeter}
+    (covered : Covered (At CODE message 0 [] .empty gas state substate returnData) high) :
+    ∃ after, Reaches (Step fork) high after ∧ after.running = false ∧
+      -- The frame stops, with the request words at the tail of the queue and the log.
+      Covered (Added SLOTS_PER_REQUEST message.currentTarget
+        (requestWords message.caller message.data) (logData message.caller message.data) state
+        substate) after ∧
+      -- The sum of the execution gas and of the reservoir drops by at most the bound.
+      high.gas.gasLeft + high.gas.reservoir ≤
+        after.gas.gasLeft + after.gas.reservoir +
+          (2266 + 87 * m + 150000 * storageGasScale fork) := by
+  obtain ⟨after, reached, ⟨low, ⟨stopped, added⟩, follows, fits⟩, bound⟩ :=
+    (costs_add hfork hcaller hstatic hacc hsize hfits hpays hgas).covered
+      (fun _ hat => hat.ready supportedCode_CODE (zero_boundary CODE))
+      (fun _ h => ⟨h.1, .inl h.2.1⟩) covered
+  refine ⟨after, reached, ?_, ⟨low, added, follows, fits⟩, bound⟩
+  -- The frame under the state gas meter stops as the frame under one counter does.
+  obtain ⟨_, -, rfl⟩ := follows
+  exact stopped
 
 /-! ## The system call -/
 
