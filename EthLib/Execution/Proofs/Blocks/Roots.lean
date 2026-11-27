@@ -43,7 +43,7 @@ theorem receiptsRoot_nil {fork : Fork} :
 
 /-- A block with no withdrawal has the root of the empty trie. -/
 theorem withdrawalsRoot_nil : withdrawalsRoot [] = .ok (keccak256 ⟨#[0x80]⟩) :=
-  indexedRoot_nil
+  withdrawalsRoot_eq_ok_iff.mpr ⟨[], rfl, indexedRoot_nil⟩
 
 /-! ## The keys of a list -/
 
@@ -282,6 +282,25 @@ theorem transactionsRoot_binding {transactions₁ transactions₂ : List Transac
       hvalues₁ hvalues₂)
   · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
 
+/-- Binding of the withdrawals root with a plain hash: two lists with one root are equal.
+
+Otherwise the search over their bytes finds a collision of the hash in the proofs of one index. -/
+theorem withdrawalsRootM_binding (hash : ByteArray → Hash32)
+    {withdrawals₁ withdrawals₂ : List Withdrawal} {root' : Hash32}
+    (hroot₁ : (withdrawalsRootM (m := Id) hash withdrawals₁).run = .ok root')
+    (hroot₂ : (withdrawalsRootM (m := Id) hash withdrawals₂).run = .ok root') :
+    withdrawals₁ = withdrawals₂ ∨
+      ∃ values₁ values₂ pair, withdrawals₁.mapM Codec.encode = .ok values₁ ∧
+        withdrawals₂.mapM Codec.encode = .ok values₂ ∧
+        findIndexedCollision hash values₁ values₂ = some pair ∧ IsCollision hash pair := by
+  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := (withdrawalsRootM_eq_ok_iff hash).mp hroot₁
+  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := (withdrawalsRootM_eq_ok_iff hash).mp hroot₂
+  rcases indexedRootM_binding hash hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
+  · -- Two withdrawals with the same bytes are equal.
+    exact .inl (mapM_ok_injective (fun _ _ _ _ _ hx hy => Codec.encode_injective hx hy)
+      hvalues₁ hvalues₂)
+  · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
+
 /-- Binding of the withdrawals root: two lists of withdrawals with one root are equal.
 
 Otherwise the search over their bytes finds a Keccak-256 collision in the proofs of one index. -/
@@ -292,14 +311,8 @@ theorem withdrawalsRoot_binding {withdrawals₁ withdrawals₂ : List Withdrawal
       ∃ values₁ values₂ pair, withdrawals₁.mapM Codec.encode = .ok values₁ ∧
         withdrawals₂.mapM Codec.encode = .ok values₂ ∧
         findIndexedCollision keccak256 values₁ values₂ = some pair ∧
-          IsCollision keccak256 pair := by
-  obtain ⟨values₁, hvalues₁, hindexed₁⟩ := withdrawalsRoot_eq_ok_iff.mp hroot₁
-  obtain ⟨values₂, hvalues₂, hindexed₂⟩ := withdrawalsRoot_eq_ok_iff.mp hroot₂
-  rcases indexedRoot_binding hindexed₁ hindexed₂ with rfl | ⟨pair, hfound, hvalid⟩
-  · -- Two withdrawals with the same bytes are equal.
-    exact .inl (mapM_ok_injective (fun _ _ _ _ _ hx hy => Codec.encode_injective hx hy)
-      hvalues₁ hvalues₂)
-  · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
+          IsCollision keccak256 pair :=
+  withdrawalsRootM_binding keccak256 hroot₁ hroot₂
 
 /-- Binding of the receipts root: two lists of receipts with one root are equal.
 
