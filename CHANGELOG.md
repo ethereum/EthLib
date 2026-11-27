@@ -1242,6 +1242,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the product of the quadratic extension takes three products of its base field instead of four, by the Karatsuba method ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Fp2.mul` (`Cryptography/Fp2.lean`) computes the coefficient of `i` as `(a0 + a1)(b0 + b1) - a0 b0 - a1 b1`, over BLS12-381 and alt_bn128.
+  The generic `Fp2.mul_c1` (`Cryptography/Proofs/Fp2.lean`) states that form, holds by `rfl`, and is no longer a simp lemma.
+  `Fp2.mul_c1_eq` (same file) is new: the form `a0 b1 + a1 b0`, for a base field with an embedding into a field.
+  `Bls.Fp2.mul_c1` and `AltBn128.Fp2.mul_c1` keep their statements and their simp attribute, through `Fp2.mul_c1_eq`.
+
 - In Lean, the line of each Miller step over BLS12-381 takes fewer products of `Fp` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `millerDouble` and `millerAdd` (`Cryptography/Bls/Pairing.lean`) square with `FieldOps.square`, write the products by 2 and 3 as sums, and multiply by the coordinates of `P` with `Fp2.mulFp`, so a proof that unfolds them sees these forms.
   `Fp2.mulFp` (`Cryptography/Fp2.lean`) is new: the product by an element of the base field, with two products of it.
