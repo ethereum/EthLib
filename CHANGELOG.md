@@ -1219,6 +1219,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the rules of a frame that knows slots for the calls that send no value of their own (`Execution/Proofs/Evm/Logic/Effect.lean`) hold at every fork from Berlin, with one counter of gas ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
+  `callKind_stored`, `call_stored`, `staticcall_stored`, `delegatecall_stored` and `callcode_stored` lose the hypothesis `fork < .glamsterdam`, and ask for `callBaseCost fork true ≤ gas` in place of `2600 ≤ gas`.
+  `callCost` and `callGas` state the price of the access as `callBaseCost fork cold`, in place of `if cold then 2600 else 100`.
+  `callValue_stored` keeps `fork < .glamsterdam`, and its terms change through `callCost` and `callGas`.
+  Migration: drop the hypothesis, and rewrite with `callBaseCost_of_berlin` before Glamsterdam.
+
 - In Lean, the words and the log data of a request of the withdrawal and consolidation request contracts are defined once, as `requestWordsOf` and `requestLog` (`Execution/Proofs/Blocks/SystemCall/AddPath.lean`) ([#4796](https://github.com/ethereum/EthLib/issues/4796)).
   `requestWords` and `logData` of each contract keep their names and values, and now unfold to them.
 

@@ -2101,7 +2101,7 @@ A message that succeeds gives the facts of some slots, some balances and some ac
 It needs the two accounts to exist and the sender to have a nonce or a code.
 `Logic.agrees_modifyState` proves that a change of one account that keeps it alive changes only that account and keeps every code.
 `Logic.CallMessage` is the message that a call sends when it sends no value of its own, by the kind of the call.
-`Logic.callKind_stored` proves that from Berlin to before Glamsterdam, such a call keeps the facts of a `Stored` frame.
+`Logic.callKind_stored` proves that at every fork from Berlin, with the one-counter meter, such a call keeps the facts of a `Stored` frame.
 It keeps each fact of a slot that the effect of the callee does not touch.
 It needs an input range that a fact of memory holds, an output range within memory, and the gas of a cold call.
 It also needs an assumption that gives the effect of each frame that ends the message.
