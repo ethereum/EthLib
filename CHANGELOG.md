@@ -1265,8 +1265,10 @@ Not yet released.
   `newPayloadStep_valid_of_accepts` states the same for any request that this engine accepts, from Bellatrix to Gloas.
   For a payload that the node knows at most as accepted, `newPayloadStep_valid_iff_accepts` states that the node answers valid exactly when the engine accepts.
   In `Engine/Proofs/ConsensusRoute.lean`, `payloadBlock_of_checkNewPayload` states that the checks of the method read the JSON of a request as the block of its payload.
-  `header_of_payloadBlock` gives that block the parent hash of the payload, and a header that hashes to the block hash of the payload.
+  `header_of_payloadBlock` (`Engine/Proofs/ExecutionEngine.lean`) gives that block the parent hash of the payload, and a header that hashes to the block hash of the payload.
   `header_of_checkNewPayload` combines the two.
+  `payloadBlock_eq_some_iff` (`Engine/Proofs/ExecutionEngine.lean`) states that a payload of the beacon chain has a block exactly when each step of `payloadBlock` succeeds.
+  `Engine.Node.newPayloadStep_valid_of_newPayloadOnChain` (`Engine/Proofs/Node.lean`) states that a payload valid on the chain of the valid head, its parent, is valid on the node, when the node does not know it as invalid.
 
 ### Changes that break callers
 

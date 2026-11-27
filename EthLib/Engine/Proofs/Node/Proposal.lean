@@ -446,20 +446,10 @@ theorem newPayloadStep_of_getPayloadStep {builder : Builder} {status : PayloadSt
         rfl
       rw [chainPassesTerminalCheck_of_lookup hTree hPow] at hT
       simp [passesTerminalCheck, htd, hD, hT]
-  by_cases hNew : ∀ c, next.blocks.lookup r.payload.blockHash = some c →
-      c.validity.isAccepted = true
-  · -- A payload not known as valid or invalid runs on the head, its valid parent.
-    rw [newPayloadStep_of_head (post := post) hCheck hHash hNew
-      (by rw [hPar]; exact validState_eq_some_iff.mpr ⟨b, hb, hv⟩) (by rw [hPar, hFc]),
-      hPar, newPayloadOnChain_of_buildPayload hCheck hBuilt rfl hTerm]
-    simp [hHash, Except.toOption, Functor.map, Except.map]
-  · -- A payload known as valid is valid again, and it is not known as invalid.
-    simp only [Classical.not_forall] at hNew
-    obtain ⟨⟨blk, pow, v⟩, hk, hv'⟩ := hNew
-    cases v with
-    | valid p => rw [newPayloadStep_of_known_valid hCheck hHash hk rfl]
-    | invalid => exact absurd rfl (hKnown _ hk)
-    | accepted v' p' => simp [Validity.isAccepted] at hv'
+  -- The node runs the payload on the head, its valid parent, or knows it as valid.
+  exact newPayloadStep_valid_of_newPayloadOnChain hCheck hHash
+    (by rw [hPar]; exact validState_eq_some_iff.mpr ⟨b, hb, hv⟩) (by rw [hPar, hFc]) hKnown
+    (by rw [hPar]; exact newPayloadOnChain_of_buildPayload hCheck hBuilt rfl hTerm)
 
 end Node
 
