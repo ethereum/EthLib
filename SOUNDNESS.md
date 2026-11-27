@@ -88,15 +88,15 @@ The report itself also prints the number of rules at each fork.
 <!-- generated: proof-coverage -->
 | Fork | Rules touched | Rules characterized |
 |------|------|------|
-| phase0 | 1322 | 11 |
-| altair | 1339 | 11 |
-| bellatrix | 1340 | 11 |
-| shapella | 1351 | 11 |
-| dencun | 1360 | 11 |
-| pectra | 1380 | 11 |
-| fusaka | 1387 | 11 |
-| glamsterdam | 1508 | 12 |
-| hegota | 1497 | 12 |
+| phase0 | 1323 | 11 |
+| altair | 1340 | 11 |
+| bellatrix | 1341 | 11 |
+| shapella | 1352 | 11 |
+| dencun | 1361 | 11 |
+| pectra | 1381 | 11 |
+| fusaka | 1388 | 11 |
+| glamsterdam | 1510 | 13 |
+| hegota | 1499 | 13 |
 <!-- end generated -->
 
 ### XMSS
@@ -4760,11 +4760,23 @@ The rule approximates the guide, which asks that every viable branch was invalid
 EthLib counts a dropped justified block as no viable branch, a choice of its own.
 `hasNoViableBranch_eq_ok_true_iff` shows that, with the justified block known and the filter successful, no viable branch means that no leaf above it passes the viability filter.
 `filterNodeTree_eq_nil_iff` gives the same fact for the filtered tree of any node.
-The re-run of the merge block checks is not defined, nor the answer to an execution layer that fails to respond.
+The re-run of the merge block checks is not defined.
+`importAction` states what a node does with a block, or from Gloas an envelope, for the answer of the execution layer.
+`importAction_eq_defer_iff` shows that it maps an error, or no answer, to `.defer`: the guide asks that such a unit be neither imported nor applied, and it may be queued.
+`importAction_eq_accept_iff` shows that the answer lets it be imported exactly for a valid or a not validated payload.
+The other conditions of an optimistic import, such as a candidate block and a parent payload that is not invalidated, are checked apart.
+`importAction_eq_invalidate_iff` shows that an invalidated payload with a latest valid hash rejects the unit and passes the hash on.
+The caller then runs `Store.onInvalidPayload` for that hash, which handles the zero hash and a hash that names no known payload.
+`importAction_eq_reject_iff` shows that an invalidated payload without a hash rejects the unit only, and the caller runs no invalidation.
+The Gloas guide says so, and before Gloas the unit itself is then the first invalid block, which the store does not hold.
+A status outside the three of the guide counts as an error, a choice of EthLib, so it never invalidates a payload.
+The caller runs the import, the rejection and the invalidation; no theorem relates the action to the handlers.
+From Gloas a builder of an optimistic node submits no bid; `mayBuilderSubmitBid_eq_ok_iff` shows that its node lets it bid exactly when the node is not optimistic.
+The rule restricts bids, not the builder domain, since a builder also signs its envelope under that domain and the guide forbids only the bid.
 
 From Gloas a block carries a bid, and its payload arrives later in an envelope.
-The optimistic sync guide has no Gloas text, and its tests stop before Gloas.
-EthLib therefore reads the Bellatrix guide at Gloas, a choice of its own.
+The optimistic sync guide has Gloas text, but its tests stop before Gloas.
+EthLib keeps the optimistic set by block root, where that text keeps payload hashes; the lines below state each choice and each difference.
 A root of the optimistic set then names a block whose payload was imported optimistically, as the Gloas gossip rules key a payload status by block root.
 A block carries a payload when its bid names a nonzero block hash; `isExecutionBlock_of_glamsterdam` states it.
 `payloadChain_of_glamsterdam` shows that the payload chain is the chain of the block, filtered by the block hashes that the bids name.
@@ -4797,8 +4809,8 @@ The status of a node is an assumption: a full node must name a payload that the 
 The optimistic store follows the fields of the guide, which do not record the payloads held; the search of the head returns a full node only for a held payload.
 Before Gloas the walk returns an optimistic genesis block, and from Gloas a node of the genesis block, as the source does.
 Away from genesis, the walk fails with `payloadNotVerified` where a node builds on a payload that no known block names, as the head rule does.
-No published source says what an invalid payload removes from the store of the fork choice from Gloas.
-EthLib defines it as follows, a reading of its own that follows the fork choice of Gloas.
+The Gloas guide says that the full node of an invalid payload and every node built on it are not viable and carry no weight.
+EthLib defines the removal from its store as follows, a reading of its own that follows the fork choice of Gloas.
 A block and its payload are two nodes, and the state of a block does not depend on the block's own payload.
 So an invalid payload leaves its block valid, and the node of that block without its payload stays.
 A block whose bid builds on the invalid payload starts from a state that assumes that payload, so it leaves the store with its descendants.

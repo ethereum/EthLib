@@ -1368,6 +1368,87 @@ theorem OptimisticStore.onValidatedPayload_ok {optimistic : OptimisticStore pres
     exact ⟨held, onValid, record⟩
   · simp [held, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at moved
 
+/-- From Gloas, the optimism of its node lets a builder bid exactly when the node is not optimistic.
+-/
+theorem mayBuilderSubmitBid_eq_ok_iff {config : Config} {optimistic : OptimisticStore preset fork}
+    {store : Store preset fork} {gloas : .glamsterdam ≤ fork} {may : Bool} :
+    mayBuilderSubmitBid config optimistic store gloas = .ok may ↔
+      isOptimisticNode config optimistic store = .ok !may := by
+  unfold mayBuilderSubmitBid
+  cases isOptimisticNode config optimistic store with
+  | error => simp [bind, Except.bind]
+  | ok optimisticNode =>
+    simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq]
+    cases may <;> cases optimisticNode <;> decide
+
+/-- The answer lets the unit be imported exactly for a valid or a not validated payload. -/
+theorem importAction_eq_accept_iff {answer : PayloadAnswer} :
+    importAction answer = .accept ↔ ∃ status latestValidHash,
+      answer = .status status latestValidHash ∧
+        (status = PAYLOAD_STATUS_VALID ∨ status = PAYLOAD_STATUS_NOT_VALIDATED) := by
+  cases answer with
+  | failure => simp [importAction]
+  | status status latestValidHash =>
+    by_cases imported : status = PAYLOAD_STATUS_VALID ∨ status = PAYLOAD_STATUS_NOT_VALIDATED
+    · simp [importAction, imported]
+    · by_cases invalid : status = PAYLOAD_STATUS_INVALIDATED
+      · subst invalid
+        cases latestValidHash <;>
+          simp [importAction, PAYLOAD_STATUS_INVALIDATED, PAYLOAD_STATUS_VALID,
+            PAYLOAD_STATUS_NOT_VALIDATED]
+      · simp [importAction, imported, invalid]
+
+/-- The unit alone is rejected exactly for an invalidated payload without a latest valid hash. -/
+theorem importAction_eq_reject_iff {answer : PayloadAnswer} :
+    importAction answer = .reject ↔ answer = .status PAYLOAD_STATUS_INVALIDATED none := by
+  cases answer with
+  | failure => simp [importAction]
+  | status status hash =>
+    by_cases invalid : status = PAYLOAD_STATUS_INVALIDATED
+    · subst invalid
+      cases hash <;> simp [importAction, PAYLOAD_STATUS_INVALIDATED, PAYLOAD_STATUS_VALID,
+          PAYLOAD_STATUS_NOT_VALIDATED]
+    · by_cases imported : status = PAYLOAD_STATUS_VALID ∨ status = PAYLOAD_STATUS_NOT_VALIDATED
+      · simp [importAction, imported, invalid]
+      · simp [importAction, imported, invalid]
+
+/-- The answer asks to invalidate from a hash exactly for an invalidated payload with that hash. -/
+theorem importAction_eq_invalidate_iff {answer : PayloadAnswer} {latestValidHash : Hash32} :
+    importAction answer = .invalidate latestValidHash ↔
+      answer = .status PAYLOAD_STATUS_INVALIDATED (some latestValidHash) := by
+  cases answer with
+  | failure => simp [importAction]
+  | status status hash =>
+    by_cases invalid : status = PAYLOAD_STATUS_INVALIDATED
+    · subst invalid
+      cases hash <;> simp [importAction, PAYLOAD_STATUS_INVALIDATED, PAYLOAD_STATUS_VALID,
+          PAYLOAD_STATUS_NOT_VALIDATED, eq_comm]
+    · by_cases imported : status = PAYLOAD_STATUS_VALID ∨ status = PAYLOAD_STATUS_NOT_VALIDATED
+      · simp [importAction, imported, invalid]
+      · simp [importAction, imported, invalid]
+
+/-- The unit is deferred exactly for an error, or for a status outside the three of the source. -/
+theorem importAction_eq_defer_iff {answer : PayloadAnswer} :
+    importAction answer = .defer ↔ answer = .failure ∨ ∃ status latestValidHash,
+      answer = .status status latestValidHash ∧ status ≠ PAYLOAD_STATUS_VALID ∧
+        status ≠ PAYLOAD_STATUS_NOT_VALIDATED ∧ status ≠ PAYLOAD_STATUS_INVALIDATED := by
+  cases answer with
+  | failure => simp [importAction]
+  | status status hash =>
+    by_cases invalid : status = PAYLOAD_STATUS_INVALIDATED
+    · subst invalid
+      cases hash <;> simp [importAction, PAYLOAD_STATUS_INVALIDATED, PAYLOAD_STATUS_VALID,
+          PAYLOAD_STATUS_NOT_VALIDATED]
+    · by_cases imported : status = PAYLOAD_STATUS_VALID ∨ status = PAYLOAD_STATUS_NOT_VALIDATED
+      · simp only [importAction, imported, ↓reduceIte, reduceCtorEq, false_iff]
+        rintro (_ | ⟨_, _, same, valid, notValidated, _⟩)
+        · contradiction
+        · cases same
+          exact imported.elim valid notValidated
+      · simp only [importAction, imported, invalid, ↓reduceIte, true_iff]
+        exact .inr ⟨status, hash, rfl, fun same => imported (.inl same),
+          fun same => imported (.inr same), invalid⟩
+
 /-- An optimistic validator may not sign exactly under the seven domain types of the rule.
 
 They are those of a block, an attestation, a selection proof and an aggregate and proof.
