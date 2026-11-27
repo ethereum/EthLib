@@ -45,7 +45,7 @@ structure HeadEvent where
   currentEpochDependentRoot : Root
   /-- The root on which the attester duties of the next epoch depend. -/
   nextEpochDependentRoot : Root
-  /-- Whether the payload of the head block is not yet verified. -/
+  /-- Whether the head node references a payload not yet verified. -/
   executionOptimistic : Bool
   deriving DecidableEq, Repr
 
@@ -79,7 +79,7 @@ The walk to that ancestor stops after as many steps as the slot of the old head.
   newHeadState : Root
   /-- The epoch of the new head. -/
   epoch : Epoch
-  /-- Whether the payload of the new head block is not yet verified. -/
+  /-- Whether the new head node references a payload not yet verified. -/
   executionOptimistic : Bool
   deriving DecidableEq, Repr
 
@@ -176,7 +176,8 @@ def commonAncestorSlot (store : Store preset fork) (node : ForkChoiceNode) :
     else commonAncestorSlot store node steps block.parentRoot
 
 /-- The head event of a head of a store, given the slot of the head before it. -/
-def headEvent (store : Store preset fork) (optimistic : Root → Bool) (genesisRoot : Root)
+def headEvent (store : Store preset fork) (optimistic : OptimisticStore preset fork)
+    (genesisRoot : Root)
     (previousSlot : Slot) (head : ForkChoiceNode) : Except ChainEventError HeadEvent := do
   -- The head block and its post state, which the store holds.
   let block ← (store.block head.root).mapError .forkChoice
@@ -202,8 +203,8 @@ def headEvent (store : Store preset fork) (optimistic : Root → Bool) (genesisR
            -- EthLib reads it as an epoch of the head other than the epoch of the old head.
            epochTransition := computeEpochAtSlot preset previousSlot != epoch,
            currentEpochDependentRoot := current, nextEpochDependentRoot := next,
-           -- Whether the payload of the head block is not yet verified.
-           executionOptimistic := optimistic head.root }
+           -- The source: whether the head node, with its payload status, is optimistic.
+           executionOptimistic := isNodeExecutionOptimistic optimistic head }
 
 /-- Whether a head event follows a change of the head. -/
 def headChanged (before after : ForkChoiceNode) : Bool :=
@@ -217,8 +218,8 @@ def headChanged (before after : ForkChoiceNode) : Bool :=
 
 /-- The events of the fork choice that a change of its store gives, in order.
 
-The optimistic flag of a block tells whether its payload is not yet verified. -/
-def chainEvents (config : Config) (optimistic : Root → Bool) (genesisRoot : Root)
+The optimistic store tells which payloads are not yet verified. -/
+def chainEvents (config : Config) (optimistic : OptimisticStore preset fork) (genesisRoot : Root)
     (before after : Store preset fork) : Except ChainEventError (List ChainEvent) := do
   let lift {α : Type} (x : Except ForkChoiceError α) : Except ChainEventError α :=
     x.mapError .forkChoice
@@ -252,15 +253,18 @@ def chainEvents (config : Config) (optimistic : Root → Bool) (genesisRoot : Ro
         oldHeadState := oldBlock.stateRoot, newHeadState := newBlock.stateRoot,
         -- The epoch of the slot of the new head.
         epoch := computeEpochAtSlot preset newBlock.slot,
-        executionOptimistic := optimistic newHead.root }]
+        -- The source: whether the new head node is optimistic.
+        executionOptimistic := isNodeExecutionOptimistic optimistic newHead }]
   -- The source: an update of the finalized checkpoint gives a finalized checkpoint event.
   if before.finalizedCheckpoint ≠ after.finalizedCheckpoint then
     let checkpoint := after.finalizedCheckpoint
     let block ← lift (after.block checkpoint.root)
     -- The root of the checkpoint block, its state root, the epoch and the optimistic flag.
+    --
+    -- EthLib's choice: a checkpoint resolves to the pending node of its block.
     events := events ++ [.finalizedCheckpoint {
       block := checkpoint.root, state := block.stateRoot, epoch := checkpoint.epoch,
-      executionOptimistic := optimistic checkpoint.root }]
+      executionOptimistic := isExecutionOptimistic optimistic checkpoint.root }]
   return events
 
 /-- The event of one run of the fast confirmation rule, from its store after the run. -/

@@ -65,11 +65,23 @@ def checkNodeVerified (optimistic : OptimisticStore preset fork) (node : ForkCho
   -- The source: code 503 for a block not yet fully verified by an execution engine.
   if isNodeExecutionOptimistic optimistic node then .error (optimisticBlock node.root) else .ok ()
 
-/-- Nothing when a block is verified, or the error with code 503. -/
+/-- The node of the fork choice that the data of an attestation resolves to, a choice of EthLib.
+
+From Gloas an index of 1 votes for the payload of the block, so the data reads the full node.
+
+Any other data reads the pending node, which reads the same payload as the empty node. -/
+def attestationNode (fork : Fork) (data : AttestationData) : ForkChoiceNode :=
+  -- From Gloas the index of the data is the payload vote: 1 for present, as EIP-7732 specifies.
+  if .glamsterdam ≤ fork ∧ data.index = 1 then ⟨data.beaconBlockRoot, .full⟩
+  -- Any other data reads the pending node of its block, which reads the payload it builds on.
+  else ⟨data.beaconBlockRoot, .pending⟩
+
+/-- Nothing when a block is verified, or the error with code 503.
+
+A request for a block resolves to its pending node, as for the other requests. -/
 def checkVerified (optimistic : OptimisticStore preset fork) (root : Root) :
     Except ErrorMessage Unit :=
-  -- The source: code 503 for a block not yet fully verified by an execution engine.
-  if isExecutionOptimistic optimistic root then .error (optimisticBlock root) else .ok ()
+  checkNodeVerified optimistic ⟨root, .pending⟩
 
 /-! ## Attestation data -/
 
@@ -173,10 +185,11 @@ def aggregateAttestation (state : BeaconState preset fork)
     (constructAggregate state before first.data attestations).mapError constructionError
   -- From Electra: the single attestations.
   else do
-    -- As above: the first match, else code 404; then code 503 when its block is optimistic.
+    -- As above: the first match, else code 404; then code 503 when its node is optimistic.
     let some first := singles.find? (singleMatchesRequest · dataRoot slot committeeIndex)
       | .error (noMatch "attestation")
-    checkVerified optimistic first.data.beaconBlockRoot
+    -- From Gloas the check reads the node that the data votes for, full for an index of 1.
+    checkNodeVerified optimistic (attestationNode fork first.data)
     -- The aggregate of the single attestations with that data and of the requested committee.
     (constructAggregateOfSingleAttestations state first.data committeeIndex singles).mapError
       constructionError
