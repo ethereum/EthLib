@@ -331,7 +331,7 @@ private theorem landing {low after : Evm fork Nat} {op : Op}
     exact next_boundary boundary
 
 /-- Checked code with the flags of its scan, at an opcode position when the frame runs. -/
-private def MeterReady (evm : Evm fork Nat) : Prop :=
+def MeterReady (evm : Evm fork Nat) : Prop :=
   SupportedCode evm.code = true ∧
     evm.validJumpDestinations = validJumpDestinations evm.code ∧
     (evm.running = true → evm.code.size ≤ evm.pc ∨ evm.pc ∈ opcodePositions evm.code)
@@ -343,8 +343,11 @@ It follows that frame, or GAS before a call has just pushed the execution gas le
 The execution gas that it holds fits a word. -/
 def MeterCovers (low : Evm fork Nat) (high : Evm fork StateGasMeter) : Prop :=
   GasMeter.gasHeld high.gas < 2 ^ 256 ∧ (FollowsMeter low high ∨
-    GasPending low high ∧ low.running = true ∧ ∃ op kind,
-      Op.decode (byteAtOrZero low.code low.pc) = some op ∧ callKindOf op = some kind)
+    GasPending low high ∧ low.running = true ∧
+      -- GAS is the opcode right before the frame, and a call is its opcode.
+      0 < low.pc ∧ low.pc - 1 ∈ opcodePositions low.code ∧
+      Op.decode (byteAtOrZero low.code (low.pc - 1)) = some .gas ∧ ∃ op kind,
+        Op.decode (byteAtOrZero low.code low.pc) = some op ∧ callKindOf op = some kind)
 
 /-- A covering frame asks for more gas, within its excess. -/
 theorem MeterCovers.asksMore {low : Evm fork Nat} {high : Evm fork StateGasMeter}
@@ -355,12 +358,22 @@ theorem MeterCovers.asksMore {low : Evm fork Nat} {high : Evm fork StateGasMeter
 theorem MeterCovers.followsMeter {low : Evm fork Nat} {high : Evm fork StateGasMeter} {op : Op}
     (h : MeterCovers low high) (decoded : Op.decode (byteAtOrZero low.code low.pc) = some op)
     (noCall : callKindOf op = none) : FollowsMeter low high := by
-  rcases h.2 with follows | ⟨-, -, op', kind, decoded', call⟩
+  rcases h.2 with follows | ⟨-, -, -, -, -, op', kind, decoded', call⟩
   · exact follows
   · rw [decoded] at decoded'
     cases decoded'
     rw [noCall] at call
     cases call
+
+/-- A covering frame follows, when the opcode right before it is no GAS. -/
+theorem MeterCovers.followsMeter_of_prev {low : Evm fork Nat} {high : Evm fork StateGasMeter}
+    (h : MeterCovers low high)
+    (notGas : 0 < low.pc → low.pc - 1 ∈ opcodePositions low.code →
+      Op.decode (byteAtOrZero low.code (low.pc - 1)) ≠ some .gas) :
+    FollowsMeter low high := by
+  rcases h.2 with follows | ⟨-, -, pos, position, prev, -⟩
+  · exact follows
+  · exact absurd prev (notGas pos position)
 
 /-- A step of the state gas meter from a covering frame, to a frame that follows, covers it. -/
 theorem MeterCovers.step {low after : Evm fork Nat} {high high' : Evm fork StateGasMeter}
@@ -374,7 +387,7 @@ A running result keeps the error of the frame.
 
 A result whose error is none or a revert has a step under a state gas meter that covers the counter.
 -/
-private theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low after)
+theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low after)
     (ready : MeterReady low) :
     MeterReady after ∧ (after.error = none → low.error = none) ∧
       (after.running = true → after.error = low.error) ∧
@@ -485,9 +498,14 @@ private theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low af
               rfl)
             obtain ⟨next, kind, decodedNext, call⟩ := nextCall
             refine ⟨high', ⟨Nat.lt_of_le_of_lt hs.gasHeld_le covers.1,
-              .inr ⟨pending, sameRunning.trans running, next, kind, ?_, call⟩⟩, hs⟩
-            rw [pc, ((gas after ok).1).1]
-            exact decodedNext
+              .inr ⟨pending, sameRunning.trans running, by omega, ?_, ?_, next, kind, ?_, call⟩⟩,
+              hs⟩
+            · rw [pc, ((gas after ok).1).1, Nat.add_sub_cancel]
+              exact boundary
+            · rw [pc, ((gas after ok).1).1, Nat.add_sub_cancel]
+              exact hdecode
+            · rw [pc, ((gas after ok).1).1]
+              exact decodedNext
         have hs := step_of_instruction inside decoded dispatch
         cases h with
         | halt _ failed _ =>
@@ -531,6 +549,65 @@ private theorem step_meterReady {low after : Evm fork Nat} (h : Step fork low af
       have hs : Step fork (withStateGas low meter) _ := .next running
         (step_of_size_le (evm := withStateGas low meter) (by exact Nat.le_of_not_gt inside))
       exact ⟨_, covers.step hs ⟨meter, below, rfl⟩, hs⟩
+
+/-- A step of checked code that sends a message is the step of a call.
+
+A frame at the same position of the same code takes the step of that call, under any meter.
+
+A frame that resumes it, at the next opcode, is ready again. -/
+theorem MeterReady.child {low caller : Evm fork Nat} {message : Message fork}
+    {resume : Evm fork Nat → Except EvmError (Evm fork Nat)} (ready : MeterReady low)
+    (running : low.running = true) (sent : step fork low = .ok (.child caller message resume)) :
+    ∃ kind, (∀ {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter), evm.pc = low.pc →
+        evm.code = low.code → step fork evm = callStep kind evm) ∧
+      ∀ after, MeterFields low after (low.pc + 1) → MeterReady after := by
+  obtain ⟨supported, flags, boundary⟩ := ready
+  have inside : low.pc < low.code.size := Nat.lt_of_not_le fun outside => by
+    rw [step_of_size_le outside] at sent
+    cases sent
+  have boundary := (boundary running).resolve_left (by omega)
+  cases decoded : Op.ofByte fork low.code[low.pc] with
+  | none =>
+    rw [step_of_ofByte_eq_none inside decoded] at sent
+    cases sent
+  | some op =>
+    have decodedAt : Op.ofByte fork (byteAtOrZero low.code low.pc) = some op := by
+      simpa only [byteAtOrZero, dite_eq_left inside] using decoded
+    have hdecode := (Option.filter_eq_some_iff.mp decodedAt).1
+    cases kindOf : callKindOf op with
+    | none =>
+      -- Any other supported opcode, GAS included, is an instruction, which sends no message.
+      have since := since_le_of_ofByte_eq_some decoded
+      obtain ⟨run, dispatch⟩ : ∃ run, instruction (Meter := Nat) fork op = some run := by
+        rcases meterSupported_of_supportedCode supported boundary decodedAt with
+          supportedOp | ⟨rfl, -⟩
+        · exact Option.isSome_iff_exists.mp
+            (instruction_isSome_of_meterSupported supportedOp kindOf since)
+        · exact ⟨_, instruction_gas⟩
+      rw [step_of_instruction inside decoded dispatch] at sent
+      cases hr : run low <;> simp [hr, Functor.map, Except.map] at sent
+    | some kind =>
+      refine ⟨kind, fun evm hpc hcode => ?_, fun after fields => ?_⟩
+      · have inside' : evm.pc < evm.code.size := by rw [hpc, hcode]; exact inside
+        have same : evm.code[evm.pc] = low.code[low.pc] := by
+          have e1 : evm.code[evm.pc] = byteAtOrZero evm.code evm.pc := by
+            simp only [byteAtOrZero, dite_eq_left inside']
+          rw [e1, hpc, hcode, byteAtOrZero, dite_eq_left inside]
+        exact step_of_callKindOf inside' (by rw [same]; exact decoded) kindOf
+      · -- A call takes one byte.
+        have width : nextOpcode low.code low.pc = low.pc + 1 := by
+          have plain : op ≠ .dupn ∧ op ≠ .swapn ∧ op ≠ .exchange := by
+            cases op <;> simp_all [callKindOf]
+          rw [nextOpcode_eq hdecode plain]
+          cases op <;> simp_all [callKindOf, opWidth]
+        obtain ⟨code, sameFlags, pc, -, -⟩ := fields
+        refine ⟨by simpa only [code] using supported,
+          by simpa only [code, sameFlags] using flags, fun runs => ?_⟩
+        rcases pc runs with hn | hj
+        · rw [code, hn, ← width]
+          exact next_boundary boundary
+        · rw [flags] at hj
+          exact .inr (by rw [code]; exact (isValidJumpDest_iff.mp hj).1)
 
 /-- A normal end of a reach through checked code comes from a normal frame. -/
 private theorem normal_of_meterReady {low after : Evm fork Nat}

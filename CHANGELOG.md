@@ -9,6 +9,15 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, a triple under an assumption on the frames that end messages, over one counter of gas, carries to the state gas meter of EIP-8037 ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  `Evm.Logic.HoareUnder.meterCovers` and `Evm.Logic.SpecUnder.covered` (`Execution/Proofs/Evm/Logic/MeterRun.lean`) hold for checked code whose runs end with no error or a revert.
+  The assumption on the frames that end messages under the state gas meter must give the one under one counter (`compat`).
+  It must do so for a frame that ends a covering message, seen under one counter with its gas capped by the message (`Evm.Logic.lowerMeter`).
+  `Evm.Logic.MeterCovers` now also asks, for a frame right after GAS, that GAS be the opcode before it, and `MeterCovers.followsMeter_of_prev` uses that.
+  The runner under one counter is a table of the messages of the joint run of the two meters (`Evm.Logic.tableRunner`, `Evm.Logic.JointStep`).
+  A caller and its message hold less gas than the frame that sends them (`Evm.Logic.callStep_child_lt`), so no caller sends the same message from two frames of that run.
+  `Evm.Logic.MeterReady` and `Evm.Logic.step_meterReady` (`MeterReach.lean`) are now public, and `Evm.Logic.MeterReady.child` shows that a message of checked code comes from a call.
+
 - In Lean, the rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 hold under the state gas meter of EIP-8037 ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `spec_add_covered` (`Execution/Proofs/Blocks/SystemCall/WithdrawalRequests.lean`, `ConsolidationRequests.lean`) holds for every frame of that meter whose execution gas covers the gas of `spec_add`.
   `Evm.Logic.Spec.covered` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) lifts a specification of checked code whose runs stop with no error or a revert, through `Evm.Logic.Covered`.
