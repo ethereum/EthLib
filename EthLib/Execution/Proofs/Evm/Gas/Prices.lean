@@ -73,6 +73,17 @@ theorem callBaseCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : B
     callBaseCost fork cold = accountAccessCost fork cold := by
   simp [callBaseCost, h]
 
+/-- A call to a warm account pays at most what it pays to a cold one. -/
+theorem callBaseCost_le_cold (fork : Fork) (cold : Bool) :
+    callBaseCost fork cold ≤ callBaseCost fork true := by
+  cases cold
+  · simp only [callBaseCost, accountAccessCost, gasSchedule, WARM_ACCESS, Bool.false_eq_true,
+      ite_false, ite_true]
+    split
+    · split <;> omega
+    · exact Nat.le_refl _
+  · exact Nat.le_refl _
+
 /-- From Istanbul, a byte of call data costs the standard price of its tokens.
 
 A zero byte is one token, and a nonzero byte is four, so EIP-7623 keeps the price of EIP-2028. -/

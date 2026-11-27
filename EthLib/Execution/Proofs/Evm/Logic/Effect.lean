@@ -398,21 +398,19 @@ theorem SlotFact.Holds.of_agrees {touched : List (Address × U256)} {moved remad
   ⟨by rw [h.original]; exact hold.1, by rw [h.storage _ _ hu]; exact hold.2.1,
     by rw [← hold.2.2]; exact decide_eq_decide.mpr (h.warm _ _ hu)⟩
 
-/-- The price of a call that sends `value` and grows no memory, from Berlin to before Glamsterdam.
+/-- The price of a call that sends `value` and grows no memory, from Berlin.
 
 The value may be 0.
 
 It pays the access to the address, and `extra` for the value. -/
 abbrev callCost (fork : Fork) (value asked : U256) (gas extra : Nat) (cold : Bool) : Nat :=
-  (messageCallGas fork value asked.toNat gas 0 ((if cold then 2600 else 100) + extra)).cost
+  (messageCallGas fork value asked.toNat gas 0 (callBaseCost fork cold + extra)).cost
 
 /-- The gas that a call that sends `value` and grows no memory passes on, from Berlin.
 
-It holds until before Glamsterdam.
-
 It counts the stipend when the value is not 0. -/
 abbrev callGas (fork : Fork) (value asked : U256) (gas extra : Nat) (cold : Bool) : Nat :=
-  (messageCallGas fork value asked.toNat gas 0 ((if cold then 2600 else 100) + extra)).subCall
+  (messageCallGas fork value asked.toNat gas 0 (callBaseCost fork cold + extra)).subCall
 
 /-- The message that a call of the kind `kind`, with no value of its own, sends from a frame. -/
 def CallMessage (kind : CallKind) (message : Message fork) (to : Address) (code data : ByteArray)
@@ -597,12 +595,12 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
       · rw [heff.refund, hok, hcss]
         simp [hrefund]
 
-/-- From Berlin to before Glamsterdam, a call that sends no value of its own from a frame of slots.
+/-- From Berlin, a call that sends no value of its own from a frame of slots.
 
 The callee has an effect on storage.
 
 The frame then ends as a frame after the call, which pushes 1 on success and 0 on a failure. -/
-theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {kind : CallKind}
+theorem callKind_stored (hfork : .berlin ≤ fork) {kind : CallKind}
     {byte : UInt8} {op : Op} {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
@@ -619,8 +617,10 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
     -- From Pectra, that code is no delegation.
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+    -- The depth of the frame must leave room for one more frame.
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     -- The frame needs the gas of a call to a cold address.
-    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : 2600 ≤ gas)
+    (hgas : callBaseCost fork true ≤ gas)
     -- Each frame that ends such a message from the frame has the effect.
     --
     -- That is the assumption `callee`.
@@ -655,8 +655,8 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (rest := rest) (memory := evm.memory) (gas := gas) (state := evm.state)
     (substate := evm.substate) (returnData := returnData) hfork hlt hbyte decoded hnone hrun
     hcode' hdel hdepth rfl
-    (by rw [hext, callBaseCost_of_berlin hfork hglam]; split <;> simp only <;> omega)
-  rw [hext, callBaseCost_of_berlin hfork hglam] at hcall
+    (by rw [hext]; exact Nat.le_trans (callBaseCost_le_cold fork _) hgas)
+  rw [hext] at hcall
   obtain ⟨final, hreach, hq | aborted⟩ := hcall bound runChild meets evm hat within
   · refine ⟨final, hreach, .inl ?_⟩
     obtain ⟨caller, msg, child, hc, hle, hcs, hcss, hmg, hmc, hmt, hmtg, hmca, hmcode, hmd, hmv,
@@ -672,12 +672,12 @@ theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (by rw [hcss]) (le_of_le_of_eq hle hmg) heff hsure hout hfail hat'
   · exact ⟨final, hreach, .inr aborted⟩
 
-/-- From Berlin to before Glamsterdam, CALL with no value from a frame that knows slots.
+/-- From Berlin, CALL with no value from a frame that knows slots.
 
 The callee runs the code of `to` on `to`, from the current account.
 
 The rest is as for every call that sends no value of its own. -/
-theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem call_stored (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
@@ -687,7 +687,7 @@ theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
-    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : 2600 ≤ gas)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : callBaseCost fork true ≤ gas)
     (heffect : ∀ caller msg child cold, callee caller msg child →
       CallMessage .call message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
@@ -703,16 +703,16 @@ theorem call_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         facts gas slots refund base accessed returnData)
       (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
         asked 0 slots refund base accessed change sure) :=
-  callKind_stored (kind := .call) hfork hglam hlt hbyte
+  callKind_stored (kind := .call) hfork hlt hbyte
     (ofByte_of_decode (op := .call) rfl (Fork.frontier_le _)) instruction_call
     messageInstruction_call hinput hlen houtput hcode hdel hdepth hgas heffect
 
-/-- From Berlin to before Glamsterdam, STATICCALL from a frame that knows slots.
+/-- From Berlin, STATICCALL from a frame that knows slots.
 
 The callee runs the code of `to` on `to`, from the current account, and its message is static.
 
 The rest is as for every call that sends no value of its own. -/
-theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem staticcall_stored (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
@@ -722,7 +722,7 @@ theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
-    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : 2600 ≤ gas)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : callBaseCost fork true ≤ gas)
     (heffect : ∀ caller msg child cold, callee caller msg child →
       CallMessage .staticcall message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
@@ -738,19 +738,19 @@ theorem staticcall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
         slots refund base accessed returnData)
       (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
         asked 0 slots refund base accessed change sure) :=
-  callKind_stored (kind := .staticcall) hfork hglam hlt hbyte
+  callKind_stored (kind := .staticcall) hfork hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_staticcall
     (messageInstruction_staticcall (Nat.le_trans (by decide) hfork)) hinput hlen houtput hcode hdel
     hdepth hgas heffect
 
-/-- From Berlin to before Glamsterdam, DELEGATECALL from a frame that knows slots.
+/-- From Berlin, DELEGATECALL from a frame that knows slots.
 
 The callee runs the code of `to` on the current account.
 
 It keeps the sender and the value of the current message.
 
 The rest is as for every call that sends no value of its own. -/
-theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem delegatecall_stored (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
@@ -760,7 +760,7 @@ theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamster
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
-    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : 2600 ≤ gas)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : callBaseCost fork true ≤ gas)
     (heffect : ∀ caller msg child cold, callee caller msg child →
       CallMessage .delegatecall message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
@@ -776,17 +776,17 @@ theorem delegatecall_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamster
         slots refund base accessed returnData)
       (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
         asked 0 slots refund base accessed change sure) :=
-  callKind_stored (kind := .delegatecall) hfork hglam hlt hbyte
+  callKind_stored (kind := .delegatecall) hfork hlt hbyte
     (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_delegatecall
     (messageInstruction_delegatecall (Nat.le_trans (by decide) hfork)) hinput hlen houtput hcode
     hdel hdepth hgas heffect
 
-/-- From Berlin to before Glamsterdam, CALLCODE with no value from a frame that knows slots.
+/-- From Berlin, CALLCODE with no value from a frame that knows slots.
 
 The callee runs the code of `to` on the current account, from the current account.
 
 The rest is as for every call that sends no value of its own. -/
-theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+theorem callcode_stored (hfork : .berlin ≤ fork)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
@@ -796,7 +796,7 @@ theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
-    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : 2600 ≤ gas)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : callBaseCost fork true ≤ gas)
     (heffect : ∀ caller msg child cold, callee caller msg child →
       CallMessage .callcode message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
@@ -812,7 +812,7 @@ theorem callcode_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         facts gas slots refund base accessed returnData)
       (AfterCall code message pc rest size facts outputStart outputSize returned failed gas 0
         asked 0 slots refund base accessed change sure) :=
-  callKind_stored (kind := .callcode) hfork hglam hlt hbyte
+  callKind_stored (kind := .callcode) hfork hlt hbyte
     (ofByte_of_decode (op := .callcode) rfl (Fork.frontier_le _)) instruction_callcode
     messageInstruction_callcode hinput hlen houtput hcode hdel hdepth hgas heffect
 
@@ -906,7 +906,7 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
     (substate := evm.substate) (returnData := returnData) hfork hglam hlt hbyte hv hstatic hbal'
     hcode' hdel hdepth rfl
     (by rw [hext, hcost, hnew]; split <;> simp only <;> omega)
-  rw [hext, hcost, hnew, Nat.add_assoc] at hcall
+  rw [hext, hnew, Nat.add_assoc] at hcall
   obtain ⟨final, hreach, hq | aborted⟩ := hcall bound runChild meets evm hat within
   · refine ⟨final, hreach, .inl ?_⟩
     obtain ⟨caller, msg, child, hc, hle, hcs, hcss, hmg, hmc, hmt, hmtg, hmca, hmcode, hmd, hmv,
