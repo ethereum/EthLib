@@ -1219,6 +1219,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, the aggregate endpoint and the events of the head, of a reorganization and of a finalized checkpoint read the node of the fork choice that they resolve to, not a block root ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
+  The aggregate reads the full node when the index of its data is 1, so an aggregate that votes for an optimistic payload gets code 503; other data reads the pending node, EthLib's choice.
+  The head and the reorganization read the head node with its payload status, and the finalized checkpoint reads the pending node of its block.
+  In Lean, `BeaconApi.attestationNode` (`Consensus/BeaconApi/ValidatorData.lean`) gives the node of attestation data, and `chainEvents` and `headEvent` (`ChainEvents.lean`) take an `OptimisticStore` instead of a function on roots.
+  In `Consensus/Proofs/BeaconApi/ValidatorData.lean`, `aggregateAttestation_matching` states `isNodeExecutionOptimistic optimistic (attestationNode fork aggregate.data) = false`, and the theorems on the aggregate from Electra state it of `first.data`.
+  `checkVerified` now checks the pending node of the block through `checkNodeVerified`, one implementation of the check.
+  The Python `api_chain_events` reads `optimistic_roots` as the blocks whose own payload is not verified, so from Gloas a head event of such a block is optimistic only for its full node.
+  Migration: pass the optimistic store to `chainEvents`, and read the node of the data where the theorems read its block root.
+
 - In Lean, the rules of CALL with a value (`Execution/Proofs/Evm/Logic/Call.lean`, `Effect.lean`) hold at every fork from Berlin, with one counter of gas ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `callStep_value`, `callStep_value_low`, `callValue`, `callValueLow` and `callValue_stored` lose the hypothesis `fork < .glamsterdam`.
   They state the price of a new account as `callNewAccountGas`, which adds the state gas of EIP-8037 from Glamsterdam to `callNewAccountCost`.

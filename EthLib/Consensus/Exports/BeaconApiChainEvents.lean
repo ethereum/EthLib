@@ -45,7 +45,9 @@ def eventRecord (event : BeaconApi.ApiEvent) : String × String :=
 
 After the arguments of the case comes the number of first steps.
 
-Then come the genesis root and the roots not yet verified, and replacements of the configuration. -/
+Then come the genesis root, and the roots of the blocks whose payload is not yet verified.
+
+Last come replacements of the configuration. -/
 def apiChainEventsOf (args : StoreCaseArgs (Nat × ByteArray × List Root × Option PyValue)) :
     Result (List (String × String)) := do
   let (name, fork, anchorState, anchorBlock, steps, verify, first, genesisRoot, roots,
@@ -60,7 +62,7 @@ def apiChainEventsOf (args : StoreCaseArgs (Nat × ByteArray × List Root × Opt
   let (before, _) ← replayForkChoice config checks anchorState anchorBlock (steps.take first)
   let (after, _) ← replayForkChoice config checks anchorState anchorBlock steps
   let events ← toResult none
-    (BeaconApi.chainEvents config roots.contains genesisRoot before after)
+    (BeaconApi.chainEvents config (optimisticWithBlocks after roots) genesisRoot before after)
   return events.map fun e => eventRecord (e.toApiEvent fork)
 
 /-- The events of the fork choice between two stores of a case.
@@ -69,7 +71,7 @@ The first arguments build the store as a fork choice case does.
 
 Next comes the number of first steps that the earlier store takes.
 
-Then come the genesis root and the roots not yet verified.
+Then come the genesis root, and the roots of the blocks whose payload is not yet verified.
 
 Last come replacements of the configuration, or None. -/
 @[export eth_consensus_api_chain_events]

@@ -88,15 +88,15 @@ The report itself also prints the number of rules at each fork.
 <!-- generated: proof-coverage -->
 | Fork | Rules touched | Rules characterized |
 |------|------|------|
-| phase0 | 1319 | 11 |
-| altair | 1336 | 11 |
-| bellatrix | 1337 | 11 |
-| shapella | 1348 | 11 |
-| dencun | 1357 | 11 |
-| pectra | 1377 | 11 |
-| fusaka | 1384 | 11 |
-| glamsterdam | 1505 | 12 |
-| hegota | 1494 | 12 |
+| phase0 | 1322 | 11 |
+| altair | 1339 | 11 |
+| bellatrix | 1340 | 11 |
+| shapella | 1351 | 11 |
+| dencun | 1360 | 11 |
+| pectra | 1380 | 11 |
+| fusaka | 1387 | 11 |
+| glamsterdam | 1508 | 12 |
+| hegota | 1497 | 12 |
 <!-- end generated -->
 
 ### XMSS
@@ -6665,9 +6665,9 @@ That rests on the store, which checks the field of each block that it imports an
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_identifiers.py`) checks the resolvers against a Capella fork choice vector of the minimal preset, not by a proof.
 The `execution_optimistic` flag reads the optimistic store; nothing exports or tests it.
 From Gloas the check with code 503 reads the node of the fork choice that a request resolves to, a choice of EthLib, since the Beacon APIs do not yet say which node that is.
-The attestation data reads the head node, and the aggregate and the sync committee contribution read the pending node of their block.
+The attestation data reads the head node, and the sync committee contribution reads the pending node of its block.
+The aggregate reads the node that its data votes for: the full node for an index of 1 from Gloas, else the pending node, which reads the same payload as the empty node.
 A payload that no known block names counts as verified, as the debug endpoint reads it, and a node of a block that the store does not know reads its root.
-The aggregate does not yet read the payload status that the index of its data signals, and the events of the head and of a reorganization read the root of the head, not its node; #4627 tracks both.
 
 The answers that describe the chain are in `Consensus/BeaconApi/Config.lean`: the spec map, the fork schedule, the deposit contract and the genesis.
 The spec map writes each value of the configuration and of the presets under its name, from one enumeration that the preset and configuration exports also use.
@@ -7368,7 +7368,11 @@ The source leaves these points open, decided here:
 - From Gloas, the `state` of a head event is the state root of the block, also when its payload is full.
 - Emission on other payload transitions is optional, so a head event comes only on the transition from empty to full that the source requires.
 
-The optimistic flag of each event is an input, since it depends on what the node has verified.
+The optimistic flag of each event reads an optimistic store, an input, since it depends on what the node has verified.
+The Beacon APIs do not yet say which node an event resolves to, so EthLib chooses.
+The head and the reorganization read the head node, with its payload status.
+The finalized event reads the pending node of the checkpoint block.
+`chainEvents_head_optimistic`, `chainEvents_reorg_optimistic` and `chainEvents_finalized_optimistic` state the three flags.
 The event of the payload attributes is in `Engine/BeaconApiEvents.lean`, since it needs the types of the Engine API.
 `payloadAttributesEvent_fields` (`Engine/Proofs/BeaconApiEvents.lean`) shows that the Engine API and the event write the fields of the attributes from one list.
 The event writes each name in snake case and each integer as decimal text, where the Engine API keeps the name and writes the integer in hexadecimal.
