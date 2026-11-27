@@ -10069,6 +10069,15 @@ touched pectra EthLib.Consensus.heavier
 touched fusaka EthLib.Consensus.heavier
 touched glamsterdam EthLib.Consensus.heavier
 touched hegota EthLib.Consensus.heavier
+touched phase0 EthLib.Consensus.importAction
+touched altair EthLib.Consensus.importAction
+touched bellatrix EthLib.Consensus.importAction
+touched shapella EthLib.Consensus.importAction
+touched dencun EthLib.Consensus.importAction
+touched pectra EthLib.Consensus.importAction
+touched fusaka EthLib.Consensus.importAction
+touched glamsterdam EthLib.Consensus.importAction
+touched hegota EthLib.Consensus.importAction
 touched phase0 EthLib.Consensus.inclusionAttesterReward
 touched altair EthLib.Consensus.inclusionAttesterReward
 touched bellatrix EthLib.Consensus.inclusionAttesterReward
@@ -10749,6 +10758,8 @@ touched pectra EthLib.Consensus.maxAttesters
 touched fusaka EthLib.Consensus.maxAttesters
 touched glamsterdam EthLib.Consensus.maxAttesters
 touched hegota EthLib.Consensus.maxAttesters
+characterized glamsterdam EthLib.Consensus.mayBuilderSubmitBid
+characterized hegota EthLib.Consensus.mayBuilderSubmitBid
 touched phase0 EthLib.Consensus.mayDisconnect
 touched altair EthLib.Consensus.mayDisconnect
 touched bellatrix EthLib.Consensus.mayDisconnect

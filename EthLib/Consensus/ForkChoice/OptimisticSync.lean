@@ -41,15 +41,19 @@ The validators of an optimistic node sign none of these:
 - An attestation, a selection proof or an aggregate and proof.
 - A sync committee message, a sync selection proof or a contribution and proof.
 
-The re-run of the checks of the merge block, once its payload is valid, is not defined here.
+From Gloas a builder of an optimistic node submits no bid.
 
-Neither is the answer to an execution layer that fails to respond.
+The answer of the execution layer decides whether a block, or from Gloas an envelope, is imported.
+
+The re-run of the checks of the merge block, once its payload is valid, is not defined here.
 
 From Gloas a block carries a bid, and its payload arrives later in an envelope.
 
 The block itself is then checked in full, and only its payload may be optimistic.
 
-For Gloas, EthLib defines optimistic sync by its own choice, as follows.
+From Gloas EthLib keeps the optimistic set by block root, where the guide keeps payload hashes.
+
+The lines below state each choice and each difference.
 
 From Gloas a root of the optimistic set names a block whose payload is not yet judged.
 
@@ -536,6 +540,58 @@ def isOptimisticNode (config : Config) (optimistic : OptimisticStore preset fork
   -- Else a dropped block sits at or above the justified block, and no viable branch is left.
   if !(← optimistic.invalidatedAbove store) then return false
   store.hasNoViableBranch config
+
+/-- From Gloas: whether the optimism of its node lets a builder submit a bid.
+
+It fails as the optimism of the node does. -/
+def mayBuilderSubmitBid (config : Config) (optimistic : OptimisticStore preset fork)
+    (store : Store preset fork) (_gloas : .glamsterdam ≤ fork) : Except ForkChoiceError Bool := do
+  -- The source: an optimistic builder signs no bid under the builder domain.
+  return !(← isOptimisticNode config optimistic store)
+
+/-! ## The answer of the execution layer -/
+
+/-- The answer of the execution layer to a payload that a node imports. -/
+inductive PayloadAnswer where
+  /-- A status, and the latest valid hash that comes with it, if any. -/
+  | status (status : PayloadValidationStatus) (latestValidHash : Option Hash32)
+  /-- An error, or no answer at all. -/
+  | failure
+  deriving DecidableEq, Repr
+
+/-- What a node does with the unit that it imports: a block, or from Gloas an envelope. -/
+inductive ImportAction where
+  /-- The answer lets the unit be imported, as optimistic when its payload is not yet validated.
+
+  The conditions of an optimistic import are checked apart. -/
+  | accept
+  /-- Reject the unit only, and invalidate nothing else. -/
+  | reject
+  /-- Reject the unit, then remove what an invalid payload removes for the latest valid hash. -/
+  | invalidate (latestValidHash : Hash32)
+  /-- Neither import nor reject the unit, nor apply it to the fork choice. -/
+  | defer
+  deriving DecidableEq, Repr
+
+/-- What a node does with the unit that it imports, for an answer of the execution layer. -/
+def importAction : PayloadAnswer → ImportAction
+  -- The source: on an error the unit is neither imported nor applied, and may be queued.
+  | .failure => .defer
+  | .status status latestValidHash =>
+    -- The source: a valid or a not validated payload lets the unit be imported.
+    if status = PAYLOAD_STATUS_VALID ∨ status = PAYLOAD_STATUS_NOT_VALIDATED then .accept
+    -- The source: an invalidated payload rejects it, and invalidates from the latest valid hash.
+    else if status = PAYLOAD_STATUS_INVALIDATED then
+      match latestValidHash with
+      | some hash => .invalidate hash
+      -- Without a latest valid hash only the unit is rejected.
+      --
+      -- From Gloas the source says so, since the verdict may come from the bid of the envelope.
+      --
+      -- Before Gloas the unit is then the first invalid block, which the store does not hold.
+      | none => .reject
+    -- EthLib's choice: a status outside the three is no answer, so it counts as an error.
+    else .defer
 
 /-- Whether an optimistic validator may not sign under a domain type.
 
