@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Evm.Logic.staticcall_noCode` (`Execution/Proofs/Evm/Logic/Call.lean`) proves a rule for STATICCALL to an account with no code that is no precompile, from Berlin to before Glamsterdam ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  It holds for any input and output ranges, under the assumption that a call to no code ends with no error and no output, which the interpreter meets.
+  The caller pushes 1, its return data is empty, and its output range keeps its old bytes.
+  `Evm.Logic.staticcall_noCode_returndatasize` adds RETURNDATASIZE, which then pushes 0, so a check that the call returned 32 bytes fails closed.
+  `Evm.Logic.runFrame_of_code_le` shows that a frame past the end of its code keeps its error and output.
+  `Evm.Logic.processMessage_of_empty` shows that a message with no code, to no precompile, ends with no error and no output.
+
 - In Lean, the bridge to the state gas meter of EIP-8037 carries a run that ends in a revert ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `Evm.Logic.Reaches.followsMeter_revert` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) lifts a run of checked code from a frame with no error to a frame that reverts.
   `Evm.Logic.rollback_followsMeter` (`MeterSimulation.lean`) shows that the rollback of a revert keeps the execution gas at least the counter.
@@ -1211,6 +1218,9 @@ Not yet released.
   A step that writes a field adds one obligation to each user of the induction principle.
 
 ### Changes that break callers
+
+- In Lean, `Evm.Logic.NoCodeSucceeds` (`Execution/Proofs/Evm/Logic/Call.lean`) also asks that a call to no code returns no output ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
+  A runner that meets it, such as the interpreter by `meets_process_noCode`, now gives both facts.
 
 - In Lean, `Evm.Logic.opWidth` (`Execution/Proofs/Evm/Logic/MeterReach.lean`) gives 2 bytes to DUPN, SWAPN and EXCHANGE, in place of 1 ([#4788](https://github.com/ethereum/EthLib/issues/4788)).
   `Evm.Logic.nextOpcode_eq` now takes a proof that the opcode is not DUPN, SWAPN or EXCHANGE.

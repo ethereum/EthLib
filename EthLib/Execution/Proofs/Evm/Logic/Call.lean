@@ -1014,11 +1014,26 @@ theorem callValueLow (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     instruction_call messageInstruction_call]
   exact hstep
 
-/-- The assumption that a call that runs no code, and reaches no precompile, ends with no error. -/
+/-- The assumption that a call to no code and no precompile ends with no error and no output. -/
 def NoCodeSucceeds {Meter : Type} [GasMeter Meter] (_caller : Evm fork Meter)
     (message : Message fork) (child : Evm fork Meter) : Prop :=
   message.code = .empty → message.target.isSome = true → precompileAddress fork message = none →
-    child.error = none
+    child.error = none ∧ child.output = .empty
+
+/-- A running frame past the end of its code stops at once, and keeps its error and output. -/
+theorem runFrame_of_code_le {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    {bound : Nat} {runChild : MessageRunner fork Meter bound} {evm after : Evm fork Meter}
+    {within : GasMeter.gasHeld evm.gas ≤ bound} (hsize : evm.code.size ≤ evm.pc)
+    (running : evm.running = true)
+    (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after) :
+    after.error = evm.error ∧ after.output = evm.output := by
+  have hs : step fork evm = .ok (.next (advance { evm with running := false })) := by
+    unfold step
+    simp only [Nat.not_lt.mpr hsize, dite_false]
+    rfl
+  rw [runFrame_of_step_eq_next running hs, runFrame_of_running_eq_false rfl] at h
+  cases h
+  exact ⟨rfl, rfl⟩
 
 /-- A running frame past the end of its code stops at once, with no error when it had none. -/
 theorem error_runFrame_of_code_le {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
@@ -1026,23 +1041,18 @@ theorem error_runFrame_of_code_le {Meter : Type} [GasMeter Meter] [LawfulGasMete
     {within : GasMeter.gasHeld evm.gas ≤ bound} (hsize : evm.code.size ≤ evm.pc)
     (running : evm.running = true) (herr : evm.error = none)
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after) :
-    after.error = none := by
-  have hs : step fork evm = .ok (.next (advance { evm with running := false })) := by
-    unfold step
-    simp only [Nat.not_lt.mpr hsize, dite_false]
-    rfl
-  rw [runFrame_of_step_eq_next running hs, runFrame_of_running_eq_false rfl] at h
-  cases h
-  simpa [advance] using herr
+    after.error = none :=
+  (runFrame_of_code_le hsize running h).1.trans herr
 
-/-- A message with no code, to an account that is no precompile, ends with no error.
+/-- A message with no code, to an account that is no precompile, ends with no error and no output.
 
 That holds whenever the interpreter returns a frame for it. -/
-theorem error_processMessage_of_empty {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+theorem processMessage_of_empty {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     {message : Message fork} {state : State.TransactionState} {substate : Substate}
     {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
     (hcode : message.code = .empty) (hpre : precompileAddress fork message = none)
-    (h : processMessage fork message state substate = .ok ended) : ended.val.error = none := by
+    (h : processMessage fork message state substate = .ok ended) :
+    ended.val.error = none ∧ ended.val.output = .empty := by
   rw [processMessage_unfold] at h
   unfold startState at h
   obtain ⟨ended0, hdo, rfl⟩ := Base.map_ok_iff.mp h
@@ -1054,10 +1064,21 @@ theorem error_processMessage_of_empty {Meter : Type} [GasMeter Meter] [LawfulGas
     · cases hdo
     · rename_i after hrun
       cases hdo
-      have hnone := error_runFrame_of_code_le (by simp [startFrame, hcode]) rfl rfl hrun
-      simp [rollbackOnError, hnone]
+      obtain ⟨hnone, hout⟩ := runFrame_of_code_le (by simp [startFrame, hcode]) rfl hrun
+      simp [startFrame] at hnone hout
+      simp [rollbackOnError, hnone, hout]
 
-/-- The runner of the interpreter meets the assumption that a call to no code ends with no error.
+/-- A message with no code, to an account that is no precompile, ends with no error.
+
+That holds whenever the interpreter returns a frame for it. -/
+theorem error_processMessage_of_empty {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    {message : Message fork} {state : State.TransactionState} {substate : Substate}
+    {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
+    (hcode : message.code = .empty) (hpre : precompileAddress fork message = none)
+    (h : processMessage fork message state substate = .ok ended) : ended.val.error = none :=
+  (processMessage_of_empty hcode hpre h).1
+
+/-- The interpreter meets the assumption that a call to no code ends with no error and no output.
 
 It runs a call or a creation, as the code of a message runs them, for every bound on their gas. -/
 theorem meets_process_noCode {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] (fork : Fork)
@@ -1067,8 +1088,119 @@ theorem meets_process_noCode {Meter : Type} [GasMeter Meter] [LawfulGasMeter Met
   refine ⟨fun caller message _ child h hcode htarget hpre => ?_, (meets_process fork bound).aborts⟩
   unfold processRunner at h
   split at h
-  · exact error_processMessage_of_empty hcode hpre h
+  · exact processMessage_of_empty hcode hpre h
   · rename_i hnone
     simp [hnone] at htarget
+
+/-- From Berlin to before Glamsterdam, STATICCALL to no code and no precompile returns no data. -/
+theorem staticcall_noCode (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
+    {cold : Bool} (hlt : pc < code.size) (hbyte : code[pc] = 0xfa)
+    -- The account at `to` holds no code.
+    (hcode : state.getCode (state.getAccount (toAddressMasked to)).codeHash = .ok .empty)
+    -- The transaction maps `to` to no precompile of the fork.
+    (hpre : ∀ address, message.txEnv.precompiles (toAddressMasked to) = some address →
+      Precompiles.isPrecompile fork address.toU256.toNat = false)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
+    (hgas : (if cold then 2600 else 100) +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
+        gas) :
+    -- Under the assumption that a call to no code ends with no error and no output.
+    HoareUnder fork NoCodeSucceeds
+      (At code message pc
+        (asked :: to :: inputStart :: inputSize :: outputStart :: outputSize :: rest)
+        memory gas state substate returnData)
+      -- The caller pushes 1, and its return data is empty.
+      --
+      -- Memory grows for both ranges, and the output range keeps its bytes.
+      --
+      -- So only a check of the size of the return data rejects the call.
+      --
+      -- The gas that the callee leaves, and the state and substate after the call, are left open.
+      fun after => ∃ childGas state' substate', At code message (pc + 1) (1 :: rest)
+        (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
+        (gas - ((messageCallGas fork 0 asked.toNat gas
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
+          (if cold then 2600 else 100)).cost +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
+          childGas)
+        state' substate' .empty after := by
+  have hcost := callBaseCost_of_berlin hfork hglam cold
+  subst hcold
+  have h := callKindRoute (kind := .staticcall) (route := none) (asked := asked)
+    (inputStart := inputStart) (inputSize := inputSize) (outputStart := outputStart)
+    (outputSize := outputSize) (memory := memory) (gas := gas) (state := state)
+    (substate := substate) (callee := NoCodeSucceeds) (rest := rest) (returnData := returnData)
+    hfork hlt hbyte
+    (ofByte_of_decode rfl (Nat.le_trans (by decide) hfork)) instruction_staticcall
+    (messageInstruction_staticcall (Nat.le_trans (by decide) hfork)) hcode
+    (fun _ => rfl) hdepth (by rw [hcost]; simpa only [routeCost, Nat.add_zero] using hgas)
+  refine h.toUnder.consequence (fun _ h => h) ?_
+  rintro after ⟨caller, msg, child,
+    ⟨-, -, -, -, -, -, mt, mca, mc, -, -, -, -, -, -, -, mtx⟩, hcallee, -, hat⟩
+  -- The message runs no code, on `to`, which is no precompile.
+  have hp : precompileAddress fork msg = none := by
+    unfold precompileAddress
+    rw [mca, mtx]
+    simp only [routeAddr, Option.bind_some]
+    cases h : message.txEnv.precompiles (toAddressMasked to) with
+    | none => rfl
+    | some address => simp [hpre address h]
+  obtain ⟨herr, hout⟩ := hcallee (by simpa [routeCode] using mc) (by simp [mt]) hp
+  refine ⟨child.gas, (incorporateChild fork caller child).state,
+    (incorporateChild fork caller child).substate, ?_⟩
+  rw [hcost] at hat
+  simp only [routeCost, Nat.add_zero, herr, hout] at hat
+  simpa [memoryWrite] using hat
+
+/-- From Berlin to before Glamsterdam, RETURNDATASIZE after STATICCALL to no code pushes 0.
+
+The callee is no precompile. -/
+theorem staticcall_noCode_returndatasize (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
+    {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
+    {cold : Bool} (hlt : pc + 1 < code.size) (hbyte : code[pc] = 0xfa)
+    (hbyteNext : code[pc + 1] = 0x3d)
+    -- The account at `to` holds no code.
+    (hcode : state.getCode (state.getAccount (toAddressMasked to)).codeHash = .ok .empty)
+    -- The transaction maps `to` to no precompile of the fork.
+    (hpre : ∀ address, message.txEnv.precompiles (toAddressMasked to) = some address →
+      Precompiles.isPrecompile fork address.toU256.toNat = false)
+    (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    (hcold : decide (toAddressMasked to ∉ substate.accessedAddresses) = cold)
+    (hgas : (if cold then 2600 else 100) +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
+        gas)
+    -- The gas left after the call covers RETURNDATASIZE.
+    (hgasNext : 2 ≤ gas - ((messageCallGas fork 0 asked.toNat gas
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
+      (if cold then 2600 else 100)).cost +
+      (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost))
+    -- The stack has room for the word of RETURNDATASIZE, as it always has after the call.
+    (hstack : rest.length + 1 < STACK_LIMIT) :
+    HoareUnder fork NoCodeSucceeds
+      (At code message pc
+        (asked :: to :: inputStart :: inputSize :: outputStart :: outputSize :: rest)
+        memory gas state substate returnData)
+      -- A check that the return data holds 32 bytes then compares 32 with 0, and fails.
+      fun after => ∃ memory' gas' state' substate', At code message (pc + 2) (0 :: 1 :: rest)
+        memory' gas' state' substate' .empty after := by
+  refine (staticcall_noCode hfork hglam (by omega) hbyte hcode hpre hdepth hcold hgas).seq
+    (HoareUnder.of_exists (R := fun (x : Nat × State.TransactionState × Substate) =>
+      At code message (pc + 1) (1 :: rest)
+        (memoryExtend memory
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
+        (gas - ((messageCallGas fork 0 asked.toNat gas
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
+          (if cold then 2600 else 100)).cost +
+          (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
+          x.1)
+        x.2.1 x.2.2 .empty)
+      (fun _ ⟨g, st, ss, h⟩ => ⟨(g, st, ss), h⟩) fun ⟨g, st, ss⟩ => ?_)
+  refine (HoareUnder.of_hoare (returndatasize (Nat.le_trans (by decide) hfork) hlt hbyteNext
+    (by omega) (by simpa using hstack))).consequence (fun _ h => h) ?_
+  intro after h
+  exact ⟨_, _, _, _, by simpa using h⟩
 
 end EthLib.Execution.Evm.Logic
