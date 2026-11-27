@@ -232,7 +232,7 @@ theorem collision_of_findSecondPreimage [DecidableEq R] (g : NodeInput R → R)
     exact hx.trans (congrArg some heq.symm)
 
 omit [DecidableEq D] in
-/-- Replaying a successful collision search of any node hash from a cache exposes a collision in it.
+/-- Replaying a successful search of any node hash from a cache exposes a collision in the cache.
 
 It holds when each replayed node hash returns the cached answer of one input.
 

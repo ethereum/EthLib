@@ -151,7 +151,9 @@ theorem extractCollision_queryBound (claim : SelectionClaim) :
   simp only [VRF_TREE_HEIGHT]
   omega
 
-/-- The experiment makes the adversary's calls and at most `2^(h + 1) + 2 h` more, for height `h`. -/
+/-- The experiment makes the adversary's calls and at most `2^(h + 1) + 2 h` more.
+
+Here `h` is the height of the tree. -/
 theorem experimentWith_extractCollision_queryBound
     {adversary : OracleComp (unifSpec + HashSpec) SelectionClaim} {q : Nat}
     (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :
@@ -166,7 +168,7 @@ theorem experimentWith_extractCollision_queryBound
 Those are the calls of the adversary, of the honest opening and of the search.
 
 The oracle cache starts empty, and the adversary's private sampling is not counted. -/
-theorem prEvent_extractCollision_isSome_le
+theorem prEvent_extractCollision_isSome_le [SampleableType Digest]
     (adversary : OracleComp (unifSpec + HashSpec) SelectionClaim) {Q : Nat}
     (hQ : IsQueryBoundP (experimentWith (extractCollision oracleHash) adversary)
       (fun t => t.isRight = true) Q) :

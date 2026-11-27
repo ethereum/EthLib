@@ -8785,7 +8785,8 @@ The codeword searches of each scheme share the bullet of that scheme:
 - VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
   That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
   The bound on the collision search of a selection takes the tree hash as a random oracle instead, under the VRF uniqueness assumption above.
-  A bound that composes the two would need the mix and the tree hash to be independent random oracles together; the domain separation of their inputs makes that plausible, but does not prove it.
+  A composed bound would take the tree hash as a random oracle in the selection theorem too.
+  One oracle on byte strings gives independent oracles on the disjoint input lengths of the mix and the tree, but no theorem states that composition.
   The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.
   No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
   The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
