@@ -59,6 +59,12 @@ def constructionError : ValidatorDutyError → ErrorMessage
   -- Any other failure is internal.
   | fault => internalError (toString fault.code.toNat)
 
+/-- Nothing when a node of the fork choice is verified, or the error with code 503. -/
+def checkNodeVerified (optimistic : OptimisticStore preset fork) (node : ForkChoiceNode) :
+    Except ErrorMessage Unit :=
+  -- The source: code 503 for a block not yet fully verified by an execution engine.
+  if isNodeExecutionOptimistic optimistic node then .error (optimisticBlock node.root) else .ok ()
+
 /-- Nothing when a block is verified, or the error with code 503. -/
 def checkVerified (optimistic : OptimisticStore preset fork) (root : Root) :
     Except ErrorMessage Unit :=
@@ -84,8 +90,12 @@ def produceAttestationData (config : Config) (store : Store preset fork)
   let head ← (store.getHead config).mapError fun _ => internalError "no head"
   let some block := store.blocks[head.root]? | .error (internalError "unknown head block")
   let some headState := store.blockStates[head.root]? | .error (internalError "unknown head state")
-  -- The source: code 503 when the block of the data is optimistic, here the head block.
-  checkVerified optimistic head.root
+  -- The source: code 503 when the block of the data is optimistic, here the head node.
+  --
+  -- EthLib's choice: an optimistic full head gives code 503 even for data of its own slot.
+  --
+  -- That data votes for its pending node, so the choice errs on the safe side.
+  checkNodeVerified optimistic head
   -- EthLib's choice: a slot after the current slot of the store gives code 400.
   let current ← (store.getCurrentSlot config).mapError fun _ => internalError "no current slot"
   if current < slot then

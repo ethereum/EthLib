@@ -88,15 +88,15 @@ The report itself also prints the number of rules at each fork.
 <!-- generated: proof-coverage -->
 | Fork | Rules touched | Rules characterized |
 |------|------|------|
-| phase0 | 1318 | 11 |
-| altair | 1335 | 11 |
-| bellatrix | 1336 | 11 |
-| shapella | 1347 | 11 |
-| dencun | 1356 | 11 |
-| pectra | 1376 | 11 |
-| fusaka | 1383 | 11 |
-| glamsterdam | 1505 | 12 |
-| hegota | 1494 | 12 |
+| phase0 | 1319 | 11 |
+| altair | 1336 | 11 |
+| bellatrix | 1337 | 11 |
+| shapella | 1348 | 11 |
+| dencun | 1357 | 11 |
+| pectra | 1377 | 11 |
+| fusaka | 1384 | 11 |
+| glamsterdam | 1506 | 12 |
+| hegota | 1495 | 12 |
 <!-- end generated -->
 
 ### XMSS
@@ -6660,6 +6660,10 @@ That rests on the store, which checks the field of each block that it imports an
 `stateRoot_blockStates` and `stateRoot_resolveStateId_root` state it for a store that the handlers reach.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_identifiers.py`) checks the resolvers against a Capella fork choice vector of the minimal preset, not by a proof.
 The `execution_optimistic` flag reads the optimistic store; nothing exports or tests it.
+From Gloas the check with code 503 reads the node of the fork choice that a request resolves to, a choice of EthLib, since the Beacon APIs do not yet say which node that is.
+The attestation data reads the head node, and the aggregate and the sync committee contribution read the pending node of their block.
+A payload that no known block names counts as verified, as the debug endpoint reads it, and a node of a block that the store does not know reads its root.
+The aggregate does not yet read the payload status that the index of its data signals, and the events of the head and of a reorganization read the root of the head, not its node; #4627 tracks both.
 
 The answers that describe the chain are in `Consensus/BeaconApi/Config.lean`: the spec map, the fork schedule, the deposit contract and the genesis.
 The spec map writes each value of the configuration and of the presets under its name, from one enumeration that the preset and configuration exports also use.

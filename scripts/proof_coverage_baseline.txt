@@ -1176,6 +1176,15 @@ touched pectra EthLib.Consensus.BeaconApi.isFinalizedRoot
 touched fusaka EthLib.Consensus.BeaconApi.isFinalizedRoot
 touched glamsterdam EthLib.Consensus.BeaconApi.isFinalizedRoot
 touched hegota EthLib.Consensus.BeaconApi.isFinalizedRoot
+touched phase0 EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
+touched altair EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
+touched bellatrix EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
+touched shapella EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
+touched dencun EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
+touched pectra EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
+touched fusaka EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
+touched glamsterdam EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
+touched hegota EthLib.Consensus.BeaconApi.isNodeExecutionOptimistic
 touched phase0 EthLib.Consensus.BeaconApi.isTreeNode
 touched altair EthLib.Consensus.BeaconApi.isTreeNode
 touched bellatrix EthLib.Consensus.BeaconApi.isTreeNode
