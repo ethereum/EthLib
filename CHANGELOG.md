@@ -140,12 +140,18 @@ Not yet released.
   Take an honest caller at the start of a slot.
   Take an honest receiver up to date at an event from the next slot's start through `last`, which reads its head.
   Then the caller's finalized root is an ancestor of that head, or two honest stores collide by `last`, or cross-store direct-safety evidence holds.
-  It assumes synchrony, delayed block admission (`BlocksAdmitted`), a delay that satisfies `DelayFits`, the premises of the direct safety theorems, and no honest held block with a zero state root (`HeldBlockStateRootsNonzero`).
+  It assumes synchrony, delayed block admission (`BlocksAdmitted`) and a delay that satisfies `DelayFits`.
+  It also assumes a run from genesis to the anchor state, the direct-safety preset parameters, honest store epochs bounded by the horizon, held states before the next upgrade, the run and terminal stake floors, and absence of the anchor parent from honest stores through `last`.
+  It assumes no honest held block with a zero state root (`HeldBlockStateRootsNonzero`).
+  The successor slot and both slot-start times are computed successfully, and the receiver's head read succeeds.
   Honest participants start at the store initialized from the anchor state and block, which share a slot at the start of an epoch.
   The slot duration is positive.
   `Execution.carrier_delivered` and `Execution.finalized_epoch_le_justified_of_late`, in the same file, are new public theorems; they were private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
   `Execution.carrier_delivered` concerns a sender that holds a block and its state and reads the receiver's finalized checkpoint at that root.
-  The receiver then holds the block and the state when its event is at least a delay later and by `last`.
+  The sender and receiver are honest.
+  At least a delay after the sender's event and by `last`, an up-to-date receiver holds that block and state.
+  Both helpers assume synchrony, delayed admission, a nonempty epoch, at least two epochs of block-root history, an initialized invariant anchor with matching block and state slots at which all honest validators start, agreement of bounded honest stores on blocks at common roots, and nonzero roots of their held blocks.
+  The epoch-order helper additionally assumes positive slot duration and that whenever one bounded honest store's finalized epoch is no greater than another's justified epoch, the latter's justified root reads the former's finalized checkpoint at that epoch.
 
 - In Lean, `Execution.observedRestart_covers_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`) states that a restart of the fast confirmation rule from the observed justified block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   At a call that replaces its base, that block is on every up-to-date honest head from the call through the limit.
