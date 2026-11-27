@@ -120,8 +120,7 @@ Its path has one sibling per level. -/
 theorem openingWith_queryBound (secrets : UInt32 → Digest) (i : UInt32) :
     IsQueryBoundP (openingWith oracleHash secrets i) (fun _ => True)
       (2 ^ (VRF_TREE_HEIGHT + 1) - 2) := by
-  -- Counting the leaves as level 0, the sibling at level `k` costs at most `2^(k + 1)` calls.
-  -- It hashes each leaf below it and each node above those leaves, once.
+  -- A sibling hashes each leaf below it and each node above those leaves, once.
   have hpath := Merkle.isQueryBoundP_siblings (hash := nodeWith oracleHash)
     (leaves := leafWith oracleHash secrets) (fun _ => oracleHash_queryBound _)
     (fun _ _ _ => oracleHash_queryBound _) ⟨0, i.toNat⟩ VRF_TREE_HEIGHT
