@@ -1242,6 +1242,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the line of each Miller step over BLS12-381 takes fewer products of `Fp` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `millerDouble` and `millerAdd` (`Cryptography/Bls/Pairing.lean`) square with `FieldOps.square`, write the products by 2 and 3 as sums, and multiply by the coordinates of `P` with `Fp2.mulFp`, so a proof that unfolds them sees these forms.
+  `Fp2.mulFp` (`Cryptography/Fp2.lean`) is new: the product by an element of the base field, with two products of it.
+  `Fp2.mulFp_eq`, `Fp2.mulFp_c0` and `Fp2.mulFp_c1` (`Cryptography/Proofs/Fp2.lean`) and `Fp2.map_mulFp` (`Cryptography/Proofs/Bls/BaseFieldMap.lean`) are new.
+  Every public statement about the pairing is unchanged.
+
 - In Lean, the field operations have a square, and `Fp2` squares with two products of its base field instead of four ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `FieldOps.square` (`Cryptography/BaseField.lean`) is a new field of the class, which defaults to `a * a`, and `Fp2.square` (`Cryptography/Fp2.lean`) sets it for the extension.
   `FieldOps.Hom` and `FieldOps.Embedding` (`Cryptography/Proofs/BaseField.lean`) gain the law `map_square`, so a caller that builds one gives that law too.

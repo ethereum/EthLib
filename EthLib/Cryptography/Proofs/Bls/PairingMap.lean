@@ -30,14 +30,14 @@ theorem map_millerDouble (f : Hom F G) (T : G2 F) (xp yp : F) (g : Fp12 F) :
     Prod.map (G2.map f) (Fp12.map f) (millerDouble T xp yp g)
       = millerDouble (T.map f) (f xp) (f yp) (g.map f) := by
   simp only [millerDouble, Prod.map, G2.map_double, Fp12.map_square, map_mulLine,
-    Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_ofFp, f.map_ofNat]
+    Fp2.map_add, Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_square, Fp2.map_mulFp]
   rfl
 
 theorem map_millerAdd (f : Hom F G) (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (g : Fp12 F) :
     Prod.map (G2.map f) (Fp12.map f) (millerAdd T xq yq xp yp g)
       = millerAdd (T.map f) (xq.map f) (yq.map f) (f xp) (f yp) (g.map f) := by
   simp only [millerAdd, Prod.map, G2.map_add_fn, map_mulLine,
-    Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_ofFp]
+    Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_square, Fp2.map_mulFp]
   simp only [G2.map, G1.map, Fp2.hom, Fp2.map_one]
 
 theorem map_millerSteps (f : Hom F G) (s : Nat) (xq yq : Fp2 F) (xp yp : F) (n : Nat)
