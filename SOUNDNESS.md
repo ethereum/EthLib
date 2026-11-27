@@ -2804,7 +2804,13 @@ The storage theorem assumes whole tries before the last range; every range start
 `verifyAccountRange_complete_nil`, `verifyStorageRanges_complete_nil`, `verifyAccountRange_whole` and `verifyStorageRanges_whole` cover empty last ranges and whole tries; whole tries need no proof and no collision alternative.
 An empty AccountRange with no proof is the empty reply `noState`, rather than a claim about the trie.
 `findCrossCollision_self` shows that the search finds none when the sent proof is the honest one and holds no collision.
-No theorem bounds the probability that `findCrossCollision` finds a collision.
+`prEvent_rangeWins_le` (`Execution/Proofs/Trie/RangeRandomOracle.lean`) bounds the probability that `findCrossCollision` finds a pair, with the hash a random oracle.
+The adversary chooses the trie, the ends of the range and the sent proof.
+The experiment builds the honest proof of each end with a hash that queries the oracle, then queries every honest and every sent node.
+The search, run with the recorded answers, finds a pair with probability at most `Q^2 / 2^256`, where `Q` counts every hash call of the experiment.
+Building a proof hashes the subtrees on its path, so `Q` grows with the size of the trie.
+The adversary chooses the 32-byte keys freely, so the bound covers the hashed keys of a secured trie too.
+Two keys with one hash stay outside it, since the completeness theorems assume increasing hashed keys.
 
 An answer of `eth_getProof` (EIP-1186) is checked against a state root by `AccountProof.verify` (`Execution/State/AccountProof.lean`).
 It checks the account proof, then each slot proof against the storage root of the answer.
@@ -8605,7 +8611,7 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of SHA-256.
   The bound on signing roots runs the same experiment, so it rests on the same oracle.
 - Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
-  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`.
+  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`, and the range search bound `prEvent_rangeWins_le`.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
