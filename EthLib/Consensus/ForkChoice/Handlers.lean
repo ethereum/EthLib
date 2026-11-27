@@ -720,12 +720,18 @@ def recordEnvelope (sources : BlockSources preset fork) (root : Root)
     store.recordPayloadInclusionListSatisfaction sources heze root payload
   else pure store
 
-/-- The store after a signed envelope, from Gloas: the payload of its block is then verified. -/
+/-- The store after a signed envelope, from Gloas: the payload of its block is then verified.
+
+From Heze, an envelope for a block whose payload the store already holds changes nothing. -/
 def onExecutionPayloadEnvelope (checks : SignatureChecks) (sources : BlockSources preset fork)
     (gloas : .glamsterdam ≤ fork) (signed : SignedExecutionPayloadEnvelope preset fork) :
     Except ForkChoiceError (Store preset fork) := do
-  -- The store holds the state after the block that the envelope names.
   let root := signed.message.beaconBlockRoot
+  -- From Heze, a block whose payload is known keeps its first answer on the inclusion lists.
+  --
+  -- A second run would record it against the lists held now, which can be fewer.
+  if .hegota ≤ fork ∧ store.isPayloadVerified gloas root then return store
+  -- The store holds the state after the block that the envelope names.
   let state ← store.blockState root
   -- The node gets the data of the payload, against the bid that this state holds.
   validatePayloadData config sources root (state.latestExecutionPayloadBid gloas)

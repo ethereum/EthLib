@@ -1,0 +1,16 @@
+# Claims that a theorem states the main contract of a consensus rule, for `lake exe proof-coverage`.
+#
+# Each line names a rule, then a theorem of a property module whose statement mentions it.
+# CONTRIBUTING.md says when a theorem states the main contract of a rule.
+# The report fails on a claim whose rule or theorem does not exist, or whose statement does not
+# mention the rule.
+
+EthLib.Consensus.checkAttestationSigning EthLib.Consensus.checkAttestationSigning_eq_ok_iff
+EthLib.Consensus.checkBlockSigning EthLib.Consensus.checkBlockSigning_eq_ok_iff
+EthLib.Consensus.checkBlockSlot EthLib.Consensus.checkBlockSlot_eq_ok_iff
+EthLib.Consensus.checkSourceEpoch EthLib.Consensus.checkSourceEpoch_eq_ok_iff
+EthLib.Consensus.checkTargetEpoch EthLib.Consensus.checkTargetEpoch_eq_ok_iff
+EthLib.Consensus.getBuilderPaymentQuorumThreshold EthLib.Consensus.getBuilderPaymentQuorumThreshold_eq_ok_iff
+EthLib.Consensus.initiateBuilderExit EthLib.Consensus.initiateBuilderExit_eq_ok_iff
+EthLib.Consensus.isEligibleValidator EthLib.Consensus.isEligibleValidator_eq_ok_iff
+EthLib.Consensus.isValidIndexedPayloadAttestation EthLib.Consensus.isValidIndexedPayloadAttestation_eq_ok_true_iff

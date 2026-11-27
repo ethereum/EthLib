@@ -465,8 +465,7 @@ private theorem effectiveUpdates_others {f : Fork} {s t : BeaconState preset f}
     (ok : processEffectiveBalanceUpdates s = .ok t) (i : ℕ) :
     (t.validators.data[i]?).map withoutEffective =
       (s.validators.data[i]?).map withoutEffective := by
-  unfold processEffectiveBalanceUpdates at ok
-  refine foldlM_ok_invariant
+  refine processEffectiveBalanceUpdates_induction
     (fun w : BeaconState preset f =>
       (w.validators.data[i]?).map withoutEffective = (s.validators.data[i]?).map withoutEffective)
     (fun a j b prior step => ?_) rfl ok
@@ -479,23 +478,6 @@ private theorem effectiveUpdates_others {f : Fork} {s t : BeaconState preset f}
     rfl
   · exact prior
 
-/-- Updates of the effective balances at other positions keep a position and every balance. -/
-private theorem updates_untouched {f : Fork} {i : ℕ} :
-    ∀ {L : List ℕ} {s t : BeaconState preset f}, i ∉ L →
-      L.foldlM updateEffectiveBalance s = .ok t →
-      t.balances = s.balances ∧ t.validators.data[i]? = s.validators.data[i]?
-  | [], _, _, _, ok => by cases ok; exact ⟨rfl, rfl⟩
-  | j :: rest, s, t, absent, ok => by
-    rw [List.foldlM_cons, bind_ok_iff] at ok
-    obtain ⟨u, step, ok⟩ := ok
-    obtain ⟨balances, _, _, _, _, _, _, reads⟩ := updateEffectiveBalance_read step
-    have other : i ≠ j := fun same => absent (same ▸ List.mem_cons_self)
-    obtain ⟨later, kept⟩ := updates_untouched (fun member => absent (List.mem_cons_of_mem _ member))
-      ok
-    refine ⟨later.trans balances, kept.trans ?_⟩
-    rw [reads i]
-    simp [other]
-
 private theorem rise_update {f : Fork} {s t : BeaconState preset f}
     (ok : processEffectiveBalanceUpdates s = .ok t) {i : ℕ} {v : Validator}
     (found : s.validators.data[i]? = some v) :
@@ -503,29 +485,13 @@ private theorem rise_update {f : Fork} {s t : BeaconState preset f}
       (v.effectiveBalance.toNat + preset.upwardBand < actualBalanceAt ⟨f, s⟩ i ∧
         effectiveAt ⟨f, t⟩ i ≤ actualBalanceAt ⟨f, s⟩ i ∧
         effectiveAt ⟨f, t⟩ i ≤ (withdrawalMaxEffectiveBalance preset f v).toNat) := by
-  unfold processEffectiveBalanceUpdates at ok
-  have member : i ∈ List.range s.validators.data.size :=
-    List.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1
-  obtain ⟨A, B, split⟩ := List.append_of_mem member
-  have nodup := List.nodup_range (n := s.validators.data.size)
-  rw [split] at nodup ok
-  rw [List.nodup_append] at nodup
-  have notA : i ∉ A := fun inA => nodup.2.2 i inA i List.mem_cons_self rfl
-  have notB : i ∉ B := (List.nodup_cons.mp nodup.2.1).1
-  rw [List.foldlM_append, bind_ok_iff] at ok
-  obtain ⟨u, first, rest⟩ := ok
-  rw [List.foldlM_cons, bind_ok_iff] at rest
-  obtain ⟨u1, step, last⟩ := rest
-  obtain ⟨balances1, read1⟩ := updates_untouched notA first
-  obtain ⟨balances3, read3⟩ := updates_untouched notB last
-  obtain ⟨balances2, validator, balance, next, located, balanceRead, updated, reads⟩ :=
-    updateEffectiveBalance_read step
-  rw [read1, found, Option.some.injEq] at located
-  subst validator
+  obtain ⟨balance, balanceRead⟩ := processEffectiveBalanceUpdates_owned ok found
+  obtain ⟨next, read, updated⟩ :=
+    processEffectiveBalanceUpdates_effectiveBalance_eq ok found balanceRead
   have balanceValue : balance.toNat = actualBalanceAt ⟨f, s⟩ i := by
-    simp [actualBalanceAt, ← balances1, balanceRead]
+    simp [actualBalanceAt, balanceRead]
   have eff : effectiveAt ⟨f, t⟩ i = next.toNat := by
-    simp [effectiveAt, read3, reads i]
+    simp [effectiveAt, read]
   rw [eff, ← balanceValue]
   rcases updatedEffectiveBalance_split updated with ⟨rfl, -, -⟩ | ⟨rfl, crossed⟩
   · exact .inl (Nat.le_refl _)

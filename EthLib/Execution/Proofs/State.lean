@@ -5,6 +5,7 @@ public import EthLib.Execution.Proofs.State.AccountProof
 public import EthLib.Execution.Proofs.State.AccountProofOfState
 public import EthLib.Execution.Proofs.State.Agreement
 public import EthLib.Execution.Proofs.State.CodeAvailability
+public import EthLib.Execution.Proofs.State.RandomOracle
 public import EthLib.Execution.Proofs.State.Root
 public import EthLib.Execution.Proofs.State.Rebuild
 public import EthLib.Execution.Proofs.State.Tracker

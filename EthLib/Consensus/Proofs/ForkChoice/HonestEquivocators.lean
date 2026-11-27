@@ -193,8 +193,7 @@ theorem onExecutionPayloadEnvelope_equivocatingIndices {gloas : .glamsterdam ≤
     {signed : SignedExecutionPayloadEnvelope preset fork}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     after.equivocatingIndices = store.equivocatingIndices := by
-  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
   rfl
 
 /-- From Heze, an inclusion list keeps the equivocators. -/

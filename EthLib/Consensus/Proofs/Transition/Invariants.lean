@@ -2098,8 +2098,9 @@ theorem updateEffectiveBalance {index : Nat}
 
 theorem processEffectiveBalanceUpdates
     (computed : Consensus.processEffectiveBalanceUpdates state = .ok after) : R state after := by
-  unfold Consensus.processEffectiveBalanceUpdates at computed
-  exact laws.foldlM (fun _ _ _ ok => laws.updateEffectiveBalance ok) computed
+  exact Consensus.processEffectiveBalanceUpdates_induction (R state)
+    (fun _ _ _ before ok => laws.trans before (laws.updateEffectiveBalance ok)) (laws.refl state)
+    computed
 
 theorem processSlashingsReset (computed : Consensus.processSlashingsReset state = .ok after) :
     R state after := by

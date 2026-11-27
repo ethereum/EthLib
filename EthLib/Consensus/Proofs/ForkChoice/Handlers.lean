@@ -1718,7 +1718,35 @@ theorem notifyPtcMessages_of_zero {checks : SignatureChecks} {gloas : .glamsterd
     store.notifyPtcMessages config checks gloas state attestations = .ok store := by
   simp [notifyPtcMessages, zero, pure, Except.pure]
 
-/-- An accepted envelope names a block whose state the store holds.
+/-- Recording an envelope changes at most the answers on the inclusion lists. -/
+theorem recordEnvelope_frame {sources : BlockSources preset fork} {root : Root}
+    {payload : ExecutionPayload preset fork} {recorded : Store preset fork}
+    (record : store.recordEnvelope sources root payload = .ok recorded) :
+    ∃ satisfaction, recorded = { store with payloadInclusionListSatisfaction := satisfaction } := by
+  unfold recordEnvelope at record
+  split at record
+  · unfold recordPayloadInclusionListSatisfaction at record
+    simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at record
+    obtain ⟨_, _, _, _, _, _, rfl⟩ := record
+    exact ⟨_, rfl⟩
+  · simp only [pure, Except.pure, Except.ok.injEq] at record
+    exact ⟨_, record.symm⟩
+
+/-- From Heze, an envelope for a block whose payload the store holds leaves the store as is. -/
+theorem onExecutionPayloadEnvelope_of_known {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork} (heze : .hegota ≤ fork)
+    {signed : SignedExecutionPayloadEnvelope preset fork}
+    (known : store.isPayloadVerified gloas signed.message.beaconBlockRoot = true) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok store := by
+  simp [onExecutionPayloadEnvelope, heze, known, pure, Except.pure]
+
+/-- A payload new to the store, or any payload before Heze, is not skipped by the handler. -/
+private theorem not_known_of_fresh {gloas : .glamsterdam ≤ fork} {root : Root}
+    (fresh : .hegota ≤ fork → store.isPayloadVerified gloas root = false) :
+    ¬ (.hegota ≤ fork ∧ store.isPayloadVerified gloas root = true) :=
+  fun ⟨heze, known⟩ => by simp [fresh heze] at known
+
+/-- An accepted envelope for a new payload names a block whose state the store holds.
 
 The store then keeps the envelope at the root of its block.
 
@@ -1728,6 +1756,9 @@ Nothing else in the store changes. -/
 theorem onExecutionPayloadEnvelope_ok {checks : SignatureChecks}
     {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    -- From Heze, the store holds no payload for this block yet.
+    (fresh : .hegota ≤ fork →
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     ∃ state, store.blockStates[signed.message.beaconBlockRoot]? = some state ∧
       -- The data of the payload is available against the bid in that state.
@@ -1741,11 +1772,150 @@ theorem onExecutionPayloadEnvelope_ok {checks : SignatureChecks}
         after = { recorded with payloads := fun _ =>
           (recorded.payloads gloas).insert signed.message.beaconBlockRoot signed.message } := by
   unfold onExecutionPayloadEnvelope at accepted
-  simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at accepted
+  simp only [not_known_of_fresh fresh, ite_false, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at accepted
   obtain ⟨state, found, available, data, checked, verified, recorded, record, rfl⟩ := accepted
   cases available
   cases checked
   exact ⟨state, blockState_ok_iff.mp found, data, verified, recorded, record, rfl⟩
+
+/-- With every check passed, the handler keeps the envelope in the recorded store.
+
+With the theorem above, this makes acceptance an equivalence. -/
+theorem onExecutionPayloadEnvelope_of_ok {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {state : BeaconState preset fork}
+    -- From Heze, the store holds no payload for this block yet.
+    (fresh : .hegota ≤ fork →
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
+    {recorded : Store preset fork}
+    (found : store.blockStates[signed.message.beaconBlockRoot]? = some state)
+    (data : validatePayloadData config sources signed.message.beaconBlockRoot
+      (state.latestExecutionPayloadBid gloas) = .ok ())
+    (verified : verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed =
+      .ok ())
+    (record : store.recordEnvelope sources signed.message.beaconBlockRoot
+      signed.message.payload = .ok recorded) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed =
+      .ok { recorded with payloads := fun _ =>
+        (recorded.payloads gloas).insert signed.message.beaconBlockRoot signed.message } := by
+  simp [onExecutionPayloadEnvelope, not_known_of_fresh fresh, blockState_ok_iff.mpr found, data,
+    verified, record, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- An envelope for a new payload, of a block whose state the store does not hold, is an error. -/
+theorem onExecutionPayloadEnvelope_of_unknown {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork}
+    -- From Heze, the store holds no payload for this block yet.
+    (fresh : .hegota ≤ fork →
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
+    (missing : store.blockStates[signed.message.beaconBlockRoot]? = none) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed =
+      .error (.unknownBlockState signed.message.beaconBlockRoot) := by
+  simp [onExecutionPayloadEnvelope, not_known_of_fresh fresh, blockState, missing, throw, throwThe,
+    MonadExceptOf.throw, bind, Except.bind]
+
+/-- For a new payload with its state held, an error of the data check is the handler's error. -/
+theorem onExecutionPayloadEnvelope_of_data_error {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {state : BeaconState preset fork}
+    -- From Heze, the store holds no payload for this block yet.
+    (fresh : .hegota ≤ fork →
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
+    {e : ForkChoiceError}
+    (found : store.blockStates[signed.message.beaconBlockRoot]? = some state)
+    (data : validatePayloadData config sources signed.message.beaconBlockRoot
+      (state.latestExecutionPayloadBid gloas) = .error e) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed = .error e := by
+  simp [onExecutionPayloadEnvelope, not_known_of_fresh fresh, blockState_ok_iff.mpr found, data,
+    bind, Except.bind]
+
+/-- For a new payload with the state and the data, an envelope that fails is a transition error. -/
+theorem onExecutionPayloadEnvelope_of_invalid {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {state : BeaconState preset fork}
+    -- From Heze, the store holds no payload for this block yet.
+    (fresh : .hegota ≤ fork →
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
+    {e : TransitionError}
+    (found : store.blockStates[signed.message.beaconBlockRoot]? = some state)
+    (data : validatePayloadData config sources signed.message.beaconBlockRoot
+      (state.latestExecutionPayloadBid gloas) = .ok ())
+    (invalid : verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed =
+      .error e) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed =
+      .error (.transition e) := by
+  simp [onExecutionPayloadEnvelope, not_known_of_fresh fresh, blockState_ok_iff.mpr found, data,
+    invalid, Except.mapError, bind, Except.bind]
+
+/-- For a new payload past every check, an error of the record step is the error of the handler. -/
+theorem onExecutionPayloadEnvelope_of_record_error {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {state : BeaconState preset fork}
+    -- From Heze, the store holds no payload for this block yet.
+    (fresh : .hegota ≤ fork →
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
+    {e : ForkChoiceError}
+    (found : store.blockStates[signed.message.beaconBlockRoot]? = some state)
+    (data : validatePayloadData config sources signed.message.beaconBlockRoot
+      (state.latestExecutionPayloadBid gloas) = .ok ())
+    (verified : verifyExecutionPayloadEnvelope config checks sources.engine state gloas signed =
+      .ok ())
+    (failed : store.recordEnvelope sources signed.message.beaconBlockRoot
+      signed.message.payload = .error e) :
+    store.onExecutionPayloadEnvelope config checks sources gloas signed = .error e := by
+  simp [onExecutionPayloadEnvelope, not_known_of_fresh fresh, blockState_ok_iff.mpr found, data,
+    verified, failed, Except.mapError, bind, Except.bind]
+
+/-- From Heze: recording for a block that the store does not hold is an error. -/
+theorem recordPayloadInclusionListSatisfaction_of_unknown {sources : BlockSources preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {payload : ExecutionPayload preset fork}
+    (missing : store.blocks[root]? = none) :
+    store.recordPayloadInclusionListSatisfaction sources heze root payload =
+      .error (.unknownBlock root) := by
+  simp [recordPayloadInclusionListSatisfaction, Store.block, missing, throw, throwThe,
+    MonadExceptOf.throw, bind, Except.bind]
+
+/-- From Heze: a block at slot 0 has no slot before it, so recording underflows. -/
+theorem recordPayloadInclusionListSatisfaction_of_zero {sources : BlockSources preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {payload : ExecutionPayload preset fork}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (zero : block.slot = 0) :
+    store.recordPayloadInclusionListSatisfaction sources heze root payload =
+      .error (.arith (.underflow 0 1)) := by
+  simp [recordPayloadInclusionListSatisfaction, Store.block, found, zero, subChecked,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- From Heze: an error of the walk to the dependent root of the slot before is the error. -/
+theorem recordPayloadInclusionListSatisfaction_of_dependent_error
+    {sources : BlockSources preset fork} {heze : .hegota ≤ fork} {root : Root}
+    {payload : ExecutionPayload preset fork} {block : BeaconBlock preset fork} {slot : Slot}
+    {e : ForkChoiceError} (found : store.blocks[root]? = some block)
+    (previous : subChecked block.slot 1 = .ok slot)
+    (failed : store.getShufflingDependentRoot root (computeEpochAtSlot preset slot) = .error e) :
+    store.recordPayloadInclusionListSatisfaction sources heze root payload = .error e := by
+  simp [recordPayloadInclusionListSatisfaction, Store.block, found, previous, failed,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- From Heze: recording stores the answer of the execution layer for the block.
+
+The answer is on the payload and the timely transactions of the slot before the block.
+
+They are those of the dependent root of that slot, on the chain of the block. -/
+theorem recordPayloadInclusionListSatisfaction_of_ok {sources : BlockSources preset fork}
+    {heze : .hegota ≤ fork} {root : Root} {payload : ExecutionPayload preset fork}
+    {block : BeaconBlock preset fork} {slot : Slot} {dependentRoot : Root}
+    (found : store.blocks[root]? = some block) (previous : subChecked block.slot 1 = .ok slot)
+    (dependent : store.getShufflingDependentRoot root (computeEpochAtSlot preset slot) =
+      .ok dependentRoot) :
+    store.recordPayloadInclusionListSatisfaction sources heze root payload =
+      .ok { store with
+        payloadInclusionListSatisfaction := fun _ =>
+          (store.payloadInclusionListSatisfaction heze).insert root
+            (sources.inclusionListSatisfied payload
+              ((store.inclusionLists heze).transactions slot dependentRoot true)) } := by
+  simp [recordPayloadInclusionListSatisfaction, Store.block, found, previous, dependent,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /-- After an accepted envelope, the payload of its block counts as verified. -/
 theorem onExecutionPayloadEnvelope_verified {checks : SignatureChecks}
@@ -1753,10 +1923,40 @@ theorem onExecutionPayloadEnvelope_verified {checks : SignatureChecks}
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     after.isPayloadVerified gloas signed.message.beaconBlockRoot = true := by
-  obtain ⟨_, _, _, _, _, _, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-  simp [isPayloadVerified]
+  by_cases known : .hegota ≤ fork ∧
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = true
+  · rw [onExecutionPayloadEnvelope_of_known known.1 known.2, Except.ok.injEq] at accepted
+    exact accepted ▸ known.2
+  · obtain ⟨_, _, _, _, _, _, rfl⟩ :=
+      onExecutionPayloadEnvelope_ok (fun heze => by simpa [heze] using known) accepted
+    simp [isPayloadVerified]
 
-/-- From Heze: after an accepted envelope, the store holds the answer of the execution layer.
+/-- After an accepted envelope, the verified payloads are those before and that of its block. -/
+theorem onExecutionPayloadEnvelope_isPayloadVerified_iff {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after)
+    (root : Root) :
+    after.isPayloadVerified gloas root = true ↔
+      store.isPayloadVerified gloas root = true ∨ root = signed.message.beaconBlockRoot := by
+  by_cases known : .hegota ≤ fork ∧
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = true
+  · rw [onExecutionPayloadEnvelope_of_known known.1 known.2, Except.ok.injEq] at accepted
+    subst accepted
+    constructor
+    · exact .inl
+    · rintro (verified | rfl)
+      · exact verified
+      · exact known.2
+  · obtain ⟨_, _, _, _, recorded, record, rfl⟩ :=
+      onExecutionPayloadEnvelope_ok (fun heze => by simpa [heze] using known) accepted
+    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+    by_cases same : root = signed.message.beaconBlockRoot
+    · subst same
+      simp [isPayloadVerified, Std.TreeMap.contains_insert]
+    · simp [isPayloadVerified, Std.TreeMap.contains_insert, same, Ne.symm same]
+
+/-- From Heze: for a new payload, an accepted envelope stores the answer of the execution layer.
 
 The answer is for the payload and the timely transactions of the slot before its block.
 
@@ -1764,6 +1964,8 @@ They are those of the dependent root of that slot, on the chain of the block. -/
 theorem onExecutionPayloadEnvelope_inclusionListSatisfied {checks : SignatureChecks}
     {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork} (heze : .hegota ≤ fork)
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    -- The store holds no payload for this block yet.
+    (fresh : store.isPayloadVerified gloas signed.message.beaconBlockRoot = false)
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     ∃ block slot dependentRoot, store.blocks[signed.message.beaconBlockRoot]? = some block ∧
       subChecked block.slot 1 = .ok slot ∧
@@ -1772,7 +1974,8 @@ theorem onExecutionPayloadEnvelope_inclusionListSatisfied {checks : SignatureChe
       after.isPayloadInclusionListSatisfied heze signed.message.beaconBlockRoot =
         .ok (sources.inclusionListSatisfied signed.message.payload
           ((store.inclusionLists heze).transactions slot dependentRoot true)) := by
-  obtain ⟨_, _, _, _, recorded, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  obtain ⟨_, _, _, _, recorded, record, rfl⟩ :=
+    onExecutionPayloadEnvelope_ok (fun _ => fresh) accepted
   simp only [recordEnvelope, heze, dite_true, recordPayloadInclusionListSatisfaction, Store.block,
     bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at record
   obtain ⟨block, found, slot, sub, dependentRoot, dependent, rfl⟩ := record
@@ -1824,19 +2027,43 @@ theorem onInclusionList_ok {checks : SignatureChecks} (heze : .hegota ≤ fork)
   obtain ⟨timely, checked, rfl⟩ := accepted
   exact ⟨timely, checked, rfl⟩
 
-/-- Recording an envelope changes at most the answers on the inclusion lists. -/
-theorem recordEnvelope_frame {sources : BlockSources preset fork} {root : Root}
-    {payload : ExecutionPayload preset fork} {recorded : Store preset fork}
-    (record : store.recordEnvelope sources root payload = .ok recorded) :
-    ∃ satisfaction, recorded = { store with payloadInclusionListSatisfaction := satisfaction } := by
-  unfold recordEnvelope at record
-  split at record
-  · unfold recordPayloadInclusionListSatisfaction at record
-    simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at record
-    obtain ⟨_, _, _, _, _, _, rfl⟩ := record
-    exact ⟨_, rfl⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at record
-    exact ⟨_, record.symm⟩
+/-- An accepted envelope changes at most the envelopes and the answers on the inclusion lists. -/
+theorem onExecutionPayloadEnvelope_changes {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    ∃ satisfaction payloads, after =
+      { store with payloadInclusionListSatisfaction := satisfaction, payloads := payloads } := by
+  by_cases known : .hegota ≤ fork ∧
+      store.isPayloadVerified gloas signed.message.beaconBlockRoot = true
+  · rw [onExecutionPayloadEnvelope_of_known known.1 known.2, Except.ok.injEq] at accepted
+    exact ⟨_, _, accepted.symm⟩
+  · obtain ⟨_, _, _, _, _, record, rfl⟩ :=
+      onExecutionPayloadEnvelope_ok (fun heze => by simpa [heze] using known) accepted
+    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+    exact ⟨_, _, rfl⟩
+
+/-- From Heze: the handler never changes the answer on the lists for a payload the store holds. -/
+theorem onExecutionPayloadEnvelope_isPayloadInclusionListSatisfied_of_known
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {gloas : .glamsterdam ≤ fork} (heze : .hegota ≤ fork)
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    {root : Root} (known : store.isPayloadVerified gloas root = true)
+    (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    after.isPayloadInclusionListSatisfied heze root =
+      store.isPayloadInclusionListSatisfied heze root := by
+  by_cases held : store.isPayloadVerified gloas signed.message.beaconBlockRoot = true
+  · rw [onExecutionPayloadEnvelope_of_known heze held, Except.ok.injEq] at accepted
+    rw [accepted]
+  -- An envelope for another payload records its answer at another root.
+  have other : signed.message.beaconBlockRoot ≠ root := fun same => held (same ▸ known)
+  obtain ⟨_, _, _, _, recorded, record, rfl⟩ :=
+    onExecutionPayloadEnvelope_ok (fun _ => by simpa using held) accepted
+  simp only [recordEnvelope, heze, dite_true, recordPayloadInclusionListSatisfaction, Store.block,
+    bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at record
+  obtain ⟨_, -, _, -, _, -, rfl⟩ := record
+  simp [isPayloadInclusionListSatisfied, isPayloadVerified, Std.TreeMap.getElem?_insert,
+    Std.TreeMap.contains_insert, other]
 
 /-- An accepted envelope lowers no epoch, and keeps the blocks and their states. -/
 theorem onExecutionPayloadEnvelope_frame {checks : SignatureChecks}
@@ -1845,8 +2072,7 @@ theorem onExecutionPayloadEnvelope_frame {checks : SignatureChecks}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     store.CheckpointsAdvance after ∧ after.blocks = store.blocks ∧
       after.blockStates = store.blockStates := by
-  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
   exact ⟨CheckpointsAdvance.refl _, rfl, rfl⟩
 
 /-- From Heze: an accepted inclusion list lowers no epoch, and keeps the blocks and their states. -/
@@ -1864,8 +2090,7 @@ theorem onExecutionPayloadEnvelope_sameClock {checks : SignatureChecks}
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     SameClock store after := by
-  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
   exact ⟨rfl, rfl⟩
 
 /-- From Heze, an accepted inclusion list keeps the clock. -/

@@ -11,6 +11,7 @@ public import EthLib.Consensus.BuilderApi.Submit
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.Exports.Transition
+public import EthLib.Cryptography.Exports.Bls
 public import EthLib.Serialization.Exports.Ssz
 
 /-!

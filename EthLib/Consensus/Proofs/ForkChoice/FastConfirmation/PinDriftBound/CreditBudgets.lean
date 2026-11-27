@@ -171,7 +171,7 @@ private theorem pending_key_claim (h : Setting config checks g split fin pulled 
     aInside h.window (Internal.Setting.delay h) h.bands h.facts v.toNat pending active priorOk
   -- no queued partial withdrawal names the key at the finalized state, which has no activation
   have genesisPartials : Internal.AssignedPartials g.state := by
-    obtain ⟨_, _, _, before, initialized⟩ := h.genesis
+    have before := h.genesis.before
     intro fork
     exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
   have finPartials : Internal.AssignedPartials fin :=

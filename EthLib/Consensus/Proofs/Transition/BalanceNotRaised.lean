@@ -780,14 +780,7 @@ theorem sameBalancesRegistryScores_tail (altair : .altair ≤ fork)
 private theorem processEffectiveBalanceUpdates_scores
     (computed : processEffectiveBalanceUpdates state = .ok after) :
     after.inactivityScores = state.inactivityScores := by
-  unfold processEffectiveBalanceUpdates at computed
-  refine foldlM_ok_invariant
-    (fun current : BeaconState preset fork => current.inactivityScores = state.inactivityScores)
-    (fun current _ next kept step => ?_) rfl computed
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
-  obtain ⟨_, _, _, _, _, _, set⟩ := step
-  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
-  exact kept
+  rw [processEffectiveBalanceUpdates_frame computed]
 
 /-- From Altair, the pending deposits write a score only as a zero.
 

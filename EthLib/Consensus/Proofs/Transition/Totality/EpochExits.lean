@@ -252,8 +252,7 @@ private theorem ExitsKept.of_edge {config : Config} {checks : SignatureChecks}
       exact .refl _
   case effectiveBalances =>
     simp only [Edge] at edge
-    unfold processEffectiveBalanceUpdates at edge
-    exact foldlM_ok_invariant (ExitEpochsKept s)
+    exact processEffectiveBalanceUpdates_induction (ExitEpochsKept s)
       (fun _ _ _ prior step => prior.trans (.of_updateEffectiveBalance step)) (.refl s) edge
   all_goals exact absurd ⟨nofun, nofun⟩ plain
 

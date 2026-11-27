@@ -180,10 +180,10 @@ def test_update_of_another_fork_than_its_epoch_is_refused() -> None:
     )
     with raises(consensus.ConsensusError, message) as error:
         consensus.api_light_client_updates_ssz("minimal", served.root, known, period, 1, None)
-    assert error.value.code == 0
+    assert error.value.code == 2
     with raises(consensus.ConsensusError, message) as error:
         consensus.api_light_client_updates("minimal", known, period, 1, None)
-    assert error.value.code == 0
+    assert error.value.code == 2
 
 
 def test_decode_refuses_a_truncated_body() -> None:
@@ -196,7 +196,7 @@ def test_decode_refuses_a_truncated_body() -> None:
     )
     with raises(consensus.ConsensusError, message) as error:
         consensus.api_light_client_decode_updates("minimal", served.root, body[:-1], served.config)
-    assert error.value.code == 0
+    assert error.value.code == 5
 
 
 def _chunk(digest: bytes, payload: bytes) -> bytes:
@@ -210,15 +210,13 @@ def test_decode_refuses_an_unknown_digest() -> None:
     # No fork version of the configuration gives this digest.
     digest = bytes(4)
     assert consensus.fork_of_digest("minimal", served.root, digest, served.config) is None
-    message = (
-        "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.bounds "
-        "(EthLib.Consensus.BoundsError.unknownDigest #v[0, 0, 0, 0])"
-    )
+    message = "chunk rejected: no epoch of the chain has the digest 0x00000000"
     with raises(consensus.ConsensusError, message) as error:
         consensus.api_light_client_decode_updates(
             "minimal", served.root, _chunk(digest, data), served.config
         )
-    assert error.value.code == 0
+    # The code of the response chunk and gossip decoders for the same digest.
+    assert error.value.code == 305
 
 
 def test_decode_refuses_a_digest_of_the_far_future_epoch_alone() -> None:
@@ -229,16 +227,53 @@ def test_decode_refuses_a_digest_of_the_far_future_epoch_alone() -> None:
     digest = consensus.compute_fork_digest("minimal", served.root, FAR_FUTURE_EPOCH, served.config)
     found = consensus.fork_of_digest("minimal", served.root, digest, served.config)
     assert found is not None and found[0] == FAR_FUTURE_EPOCH
-    shown = ", ".join(str(byte) for byte in digest)
-    message = (
-        "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.bounds "
-        f"(EthLib.Consensus.BoundsError.unscheduledDigest #v[{shown}])"
-    )
+    message = f"chunk rejected: only the far future epoch has the digest 0x{digest.hex()}"
     with raises(consensus.ConsensusError, message) as error:
         consensus.api_light_client_decode_updates(
             "minimal", served.root, _chunk(digest, data), served.config
         )
-    assert error.value.code == 0
+    # The code of the response chunk and gossip decoders for the same digest.
+    assert error.value.code == 306
+
+
+def test_decode_refuses_a_chunk_shorter_than_its_digest() -> None:
+    served = Served(ALTAIR_CASE)
+    # A chunk of 3 bytes, one fewer than its digest needs.
+    body = (3).to_bytes(8, "little") + bytes(3)
+    message = "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.shortChunk 3"
+    with raises(consensus.ConsensusError, message) as error:
+        consensus.api_light_client_decode_updates("minimal", served.root, body, served.config)
+    assert error.value.code == 6
+
+
+def test_decode_refuses_a_digest_of_phase0() -> None:
+    served = Served(ALTAIR_CASE)
+    data = served.updates[0][3]
+    # Under the named configuration epoch 0 is of Phase 0, which has no update type.
+    digest = consensus.compute_fork_digest("minimal", served.root, 0)
+    message = (
+        "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.forkNotSpecified "
+        "(EthLib.Base.Fork.phase0)"
+    )
+    with raises(consensus.ConsensusError, message) as error:
+        consensus.api_light_client_decode_updates("minimal", served.root, _chunk(digest, data))
+    assert error.value.code == 1
+
+
+def test_decode_refuses_a_payload_that_does_not_decode() -> None:
+    served = Served(ALTAIR_CASE)
+    # The digest of the first update, then one byte where its update should be.
+    _, digest, _, data = served.updates[0]
+    # An Altair update has a fixed size, the size of the served one, so the scope is refused.
+    message = (
+        "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.ssz "
+        f"(EthLib.Serialization.Ssz.Err.scope {len(data)} 1)"
+    )
+    with raises(consensus.ConsensusError, message) as error:
+        consensus.api_light_client_decode_updates(
+            "minimal", served.root, _chunk(digest, bytes(1)), served.config
+        )
+    assert error.value.code == 3
 
 
 def _bootstrap(root: str, **kwargs: Any) -> dict[str, Any]:

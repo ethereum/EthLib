@@ -55,7 +55,7 @@ def listKeys (state : KeyState) : List ListedKey :=
 /-- A listed key as the API writes it. -/
 def listedKeyJson (key : ListedKey) : Json :=
   -- The response schema: the public key, then the derivation path and the flag when set.
-  Json.mkObj ([("validating_pubkey", Interchange.bytesJson key.validatingPubkey)] ++
+  Json.mkObj ([("validating_pubkey", Interchange.bytesJson key.validatingPubkey.bytes)] ++
     optionalFields "derivation_path" stringJson key.derivationPath ++
     optionalFields "readonly" Json.bool key.readonly)
 

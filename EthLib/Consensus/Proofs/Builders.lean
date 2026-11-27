@@ -42,9 +42,9 @@ theorem isBuilderIndex_convertBuilderIndexToValidatorIndex (index : BuilderIndex
   have := congrArg (·.getLsbD 40) zero
   simp at this
 
-/-- A builder index below 2^40 comes back once the flag is set, then cleared. -/
-theorem convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex
-    {index : BuilderIndex} (small : index.toNat < 2 ^ 40) :
+/-- A builder index whose bit 40 is clear comes back once the flag is set, then cleared. -/
+theorem convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex_of_clear
+    {index : BuilderIndex} (clear : index.toBitVec[40] = false) :
     convertValidatorIndexToBuilderIndex (convertBuilderIndexToValidatorIndex index) = index := by
   simp only [convertValidatorIndexToBuilderIndex, convertBuilderIndexToValidatorIndex,
     ← UInt64.toBitVec_inj, UInt64.toBitVec_and, UInt64.toBitVec_or, UInt64.toBitVec_not,
@@ -53,8 +53,15 @@ theorem convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex
   intro i inRange
   by_cases forty : i = 40
   · subst forty
-    simp [getElem_forty_eq_false small]
+    simp [clear]
   · simp [forty, inRange]
+
+/-- A builder index below 2^40 comes back once the flag is set, then cleared. -/
+theorem convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex
+    {index : BuilderIndex} (small : index.toNat < 2 ^ 40) :
+    convertValidatorIndexToBuilderIndex (convertBuilderIndexToValidatorIndex index) = index :=
+  convertValidatorIndexToBuilderIndex_convertBuilderIndexToValidatorIndex_of_clear
+    (getElem_forty_eq_false small)
 
 /-- An index that names a builder comes back once the flag is cleared, then set. -/
 theorem convertBuilderIndexToValidatorIndex_convertValidatorIndexToBuilderIndex
@@ -268,6 +275,31 @@ theorem Preset.PaymentQuorumPositive.slotsPerEpoch_bounds
     have := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat two
     omega
 
+/-- The quorum of a payment is computed exactly when the total active balance `T` and a product are.
+
+The product is the share of one slot `floor(T / SLOTS_PER_EPOCH)` times the numerator.
+
+It must be below `2^64`.
+
+The quorum is then that product over the denominator, rounded down. -/
+theorem getBuilderPaymentQuorumThreshold_eq_ok_iff {state : BeaconState preset fork}
+    {quorum : Gwei} :
+    getBuilderPaymentQuorumThreshold state = .ok quorum ↔
+      ∃ total, getTotalActiveBalance state = .ok total ∧
+        (total / preset.SLOTS_PER_EPOCH).toNat * BUILDER_PAYMENT_THRESHOLD_NUMERATOR.toNat <
+          2 ^ 64 ∧
+        quorum = total / preset.SLOTS_PER_EPOCH * BUILDER_PAYMENT_THRESHOLD_NUMERATOR /
+          BUILDER_PAYMENT_THRESHOLD_DENOMINATOR := by
+  simp only [getBuilderPaymentQuorumThreshold, bind_ok_iff, liftArith, mapError_ok_iff,
+    mulChecked_ok_iff, pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨total, found, product, ⟨fits, is⟩, rfl⟩
+    refine ⟨total, found, fits, ?_⟩
+    rw [show product = total / preset.SLOTS_PER_EPOCH * BUILDER_PAYMENT_THRESHOLD_NUMERATOR from
+      UInt64.toNat_inj.mp (by rw [is, UInt64.toNat_mul, Nat.mod_eq_of_lt fits])]
+  · rintro ⟨total, found, fits, rfl⟩
+    exact ⟨total, found, _, ⟨fits, by rw [UInt64.toNat_mul, Nat.mod_eq_of_lt fits]⟩, rfl⟩
+
 /-- With at least six slots in an epoch, the quorum of a payment never overflows.
 
 It is then six tenths of the active balance of one slot, each division rounded down. -/
@@ -286,8 +318,8 @@ theorem getBuilderPaymentQuorumThreshold_of_total {state : BeaconState preset fo
     have : total.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ total.toNat / 6 :=
       Nat.div_le_div_left slots (by decide)
     omega
-  simp [getBuilderPaymentQuorumThreshold, computed, liftArith, mulChecked, fits, bind,
-    Except.bind, Except.mapError, pure, Except.pure]
+  rw [getBuilderPaymentQuorumThreshold_eq_ok_iff]
+  exact ⟨total, computed, fits, rfl⟩
 
 /-- A builder that is set is set in the registry. -/
 theorem setBuilder_ok {state after : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
@@ -315,6 +347,78 @@ theorem getBuilder_initiateBuilderExit {config : Config} {state after : BeaconSt
   refine ⟨builder, withdrawableEpoch, found, sum, ?_⟩
   obtain ⟨inside, rfl⟩ := setBuilder_ok set
   simp [getBuilder, BeaconState.putBuilder, inside]
+
+/-- A builder exit succeeds exactly when the index names a builder and the epoch fits.
+
+The epoch is the current epoch plus the delay, and must be below `2^64`.
+
+The state then holds that builder with that withdrawable epoch, and nothing else changes. -/
+theorem initiateBuilderExit_eq_ok_iff {config : Config} {state after : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {index : BuilderIndex} :
+    initiateBuilderExit config state gloas index = .ok after ↔
+      ∃ inside : index.toNat < (state.builders gloas).data.size,
+        (getCurrentEpoch state).toNat + config.MIN_BUILDER_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64 ∧
+          after = state.putBuilder gloas index.toNat inside
+            { (state.builders gloas).data[index.toNat] with
+              withdrawableEpoch :=
+                getCurrentEpoch state + config.MIN_BUILDER_WITHDRAWABILITY_DELAY } := by
+  unfold initiateBuilderExit getBuilder BeaconState.setBuilder
+  by_cases inside : index.toNat < (state.builders gloas).data.size
+  · simp only [inside, Array.getElem?_eq_getElem, bind_ok_iff, liftArith, mapError_ok_iff,
+      addChecked, exists_true_left]
+    by_cases fits :
+        (getCurrentEpoch state).toNat + config.MIN_BUILDER_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64
+    · simp [fits, eq_comm]
+    · simp [fits]
+  · simp [inside, bind, Except.bind]
+
+/-- A builder exit at an index past the registry fails with that index. -/
+theorem initiateBuilderExit_eq_error_of_le {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {index : BuilderIndex}
+    (outside : (state.builders gloas).data.size ≤ index.toNat) :
+    initiateBuilderExit config state gloas index = .error (.builderIndexOutOfRange index) := by
+  simp [initiateBuilderExit, getBuilder, Array.getElem?_eq_none outside, bind, Except.bind]
+
+/-- A builder exit whose epoch reaches `2^64` fails with an overflow. -/
+theorem initiateBuilderExit_eq_error_of_overflow {config : Config}
+    {state : BeaconState preset fork} {gloas : .glamsterdam ≤ fork} {index : BuilderIndex}
+    (inside : index.toNat < (state.builders gloas).data.size)
+    (overflows :
+      2 ^ 64 ≤ (getCurrentEpoch state).toNat + config.MIN_BUILDER_WITHDRAWABILITY_DELAY.toNat) :
+    initiateBuilderExit config state gloas index = .error (.arith .overflow) := by
+  simp [initiateBuilderExit, getBuilder, inside, addChecked, Nat.not_lt.mpr overflows, liftArith,
+    bind, Except.bind, Except.mapError]
+
+/-- With at least two slots in an epoch and a delay of at most `2^63`, the epoch of an exit fits.
+
+The current epoch is then below `2^63`. -/
+theorem getCurrentEpoch_add_builderWithdrawabilityDelay_lt {config : Config}
+    {state : BeaconState preset fork}
+    (slots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    (delay : config.MIN_BUILDER_WITHDRAWABILITY_DELAY.toNat ≤ 2 ^ 63) :
+    (getCurrentEpoch state).toNat + config.MIN_BUILDER_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64 := by
+  -- The current epoch is at most the slot over two.
+  have half : (getCurrentEpoch state).toNat ≤ state.slot.toNat / 2 := by
+    rw [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
+    exact Nat.div_le_div_left slots (by decide)
+  have := state.slot.toNat_lt
+  omega
+
+/-- With the mainnet preset and configuration, a builder of the registry can always exit. -/
+theorem initiateBuilderExit_mainnet {state : BeaconState .mainnet fork}
+    {gloas : .glamsterdam ≤ fork} {index : BuilderIndex}
+    (inside : index.toNat < (state.builders gloas).data.size) :
+    ∃ after, initiateBuilderExit .mainnet state gloas index = .ok after :=
+  ⟨_, initiateBuilderExit_eq_ok_iff.mpr
+    ⟨inside, getCurrentEpoch_add_builderWithdrawabilityDelay_lt (by decide) (by decide), rfl⟩⟩
+
+/-- With the minimal preset and configuration, a builder of the registry can always exit. -/
+theorem initiateBuilderExit_minimal {state : BeaconState .minimal fork}
+    {gloas : .glamsterdam ≤ fork} {index : BuilderIndex}
+    (inside : index.toNat < (state.builders gloas).data.size) :
+    ∃ after, initiateBuilderExit .minimal state gloas index = .ok after :=
+  ⟨_, initiateBuilderExit_eq_ok_iff.mpr
+    ⟨inside, getCurrentEpoch_add_builderWithdrawabilityDelay_lt (by decide) (by decide), rfl⟩⟩
 
 /-- Setting a builder keeps the slot. -/
 theorem setBuilder_slot {state after : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}

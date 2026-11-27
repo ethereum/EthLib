@@ -54,13 +54,14 @@ private theorem votes_snoc {g a b : ForkedBeaconState preset} (run : Run config 
 private theorem genesis_participation {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) :
     ParticipationBacked (Run.nil : Run config checks g g) g.state := by
-  obtain ⟨_, _, _, phase0, ok⟩ := genesis
+  have before := genesis.before
+  obtain ⟨_, _, _, _, ok⟩ := genesis
   constructor
   · intro _ current pending member
     rw [initializeBeaconStateFromEth1_pending ok current] at member
     simp at member
   · intro altair
-    exact False.elim (Nat.not_le_of_lt phase0 altair)
+    exact False.elim (Nat.not_le_of_lt before altair)
 
 private theorem run_participation {g a : ForkedBeaconState preset} (run : Run config checks g a)
     (parameters : Parameters preset) (genesis : Genesis config checks g) :

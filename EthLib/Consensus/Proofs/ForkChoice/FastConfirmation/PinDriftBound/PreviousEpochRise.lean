@@ -217,8 +217,7 @@ private theorem hysteresis_at_epoch_start
     cases run with
     | nil =>
       have fulu : .fusaka ≤ g.fork := by rw [hx]; exact h.fulu
-      obtain ⟨_, _, _, phase0, initialized⟩ := h.genesis
-      exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
+      exact absurd (Nat.lt_of_le_of_lt fulu h.genesis.before) (by decide)
     | @snoc middle last pre' st =>
       subst hx
       have crossing := before st (.last pre' st)

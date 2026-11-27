@@ -121,6 +121,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Text
 public import EthLib.Serialization.Proofs.Ssz.RandomOracle
 public import EthLib.Serialization.Proofs.Ssz.LayoutRandomOracle
 public import EthLib.Serialization.Proofs.Ssz.BranchRandomOracle
+public import EthLib.Serialization.Proofs.Ssz.MultiproofRandomOracle
 public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedList
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedValue

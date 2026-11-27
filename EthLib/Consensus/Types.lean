@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Address
 public import EthLib.Base.Bytes
 public import EthLib.Base.Hex
+public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Kzg.Types
 public import EthLib.Serialization.Ssz.Typed.Basic
 
@@ -71,6 +72,10 @@ abbrev PayloadValidationStatus := UInt8
 /-- From Deneb: the index of a blob in a block. -/
 abbrev BlobIndex := UInt64
 
+/-- A BLS public key is a `Bytes48` in SSZ. -/
+instance : Serialization.Ssz.SszType Cryptography.Bls.BLSPubkey :=
+  .wrapper Cryptography.Bls.BLSPubkey.mk Cryptography.Bls.BLSPubkey.bytes
+
 /-- From Deneb: the versioned hash of a KZG commitment, which names a blob.
 
 [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#type-aliases) defines it.
@@ -116,6 +121,10 @@ namespace HexRepr
 An error type opens this namespace where it derives its rendering, for the rest of its file. -/
 scoped instance (priority := high) instReprBytesHex {n : Nat} : Repr (Vector UInt8 n) where
   reprPrec bytes _ := Base.hexString bytes.toList
+
+/-- A public key in an error, as the hex digits of its bytes behind `0x`. -/
+scoped instance (priority := high) instReprPubkeyHex : Repr Cryptography.Bls.BLSPubkey where
+  reprPrec pubkey _ := Base.hexString pubkey.bytes.toList
 
 end HexRepr
 

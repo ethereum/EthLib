@@ -247,7 +247,8 @@ def resolvedBuilderEntryJson (entry : ResolvedBuilderEntry) : Json :=
   Json.mkObj [
     ("url", stringJson entry.url),
     ("auth_data", authDataJson entry.authData),
-    ("builder_pubkeys", .arr (entry.terms.builderPubkeys.map Interchange.bytesJson).toArray),
+    ("builder_pubkeys",
+      .arr (entry.terms.builderPubkeys.map (Interchange.bytesJson ·.bytes)).toArray),
     ("max_execution_payment", Interchange.uint64Json entry.terms.maxExecutionPayment),
     ("min_bid", Interchange.uint64Json entry.terms.minBid),
     ("builder_boost_factor", Interchange.uint64Json entry.terms.builderBoostFactor)]

@@ -37,7 +37,7 @@ def keymanagerJsonOf (args : String × PyValue) : Result PyValue := do
   let (schema, document) := args
   let document := document.toJson
   let written ← match schema with
-    | "Pubkey" => toResult none do return Interchange.bytesJson (← readPubkey "" document)
+    | "Pubkey" => toResult none do return Interchange.bytesJson (← readPubkey "" document).bytes
     | "EthAddress" => toResult none do return Interchange.bytesJson (← readEthAddress "" document)
     | "Uint64" => toResult none do return Interchange.uint64Json (← readUint64 "" document)
     | "Graffiti" | "Url" => toResult none do return stringJson (← readString "" document)
@@ -78,7 +78,7 @@ def keyStateJson (state : KeyState) : Json :=
   Json.mkObj [
     ("slashing_protection", slashingProtectionJson jsonText state.protection),
     ("local_keys", .arr (state.localKeys.map fun key =>
-      Interchange.bytesJson key.pubkey).toArray)]
+      Interchange.bytesJson key.pubkey.bytes).toArray)]
 
 /-- The view of the chain from the names of its preset, configuration and fork, and a state. -/
 def chainViewOf (chain : String × String × String × ByteArray) : Result ChainView := do

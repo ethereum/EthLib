@@ -2758,8 +2758,7 @@ private theorem ExitFarFrom.of_deposits {n : ℕ} {f : Fork} {s t : BeaconState 
 private theorem ExitFarFrom.of_updates {n : ℕ} {f : Fork}
     {s t : BeaconState preset f} (ok : Consensus.processEffectiveBalanceUpdates s = .ok t)
     (holds : ExitFarFrom n s) : ExitFarFrom n t := by
-  unfold Consensus.processEffectiveBalanceUpdates at ok
-  refine foldlM_ok_invariant (fun u : BeaconState preset f => ExitFarFrom n u)
+  refine processEffectiveBalanceUpdates_induction (fun u : BeaconState preset f => ExitFarFrom n u)
     (fun _ _ _ before step => ?_) holds ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
   obtain ⟨validator, found, _, _, _, _, set⟩ := step

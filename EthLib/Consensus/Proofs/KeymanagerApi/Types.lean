@@ -43,8 +43,8 @@ theorem readUint64_uint64Json (path : String) (value : UInt64) :
 
 /-- A public key reads back as itself. -/
 theorem readPubkey_bytesJson (path : String) (pubkey : BLSPubkey) :
-    readPubkey path (Interchange.bytesJson pubkey) = .ok pubkey := by
-  simp [readPubkey, Interchange.readBytes_bytesJson, ofProtection]
+    readPubkey path (Interchange.bytesJson pubkey.bytes) = .ok pubkey := by
+  simp [readPubkey, Interchange.readBytes_bytesJson, ofProtection, Functor.map, Except.map]
 
 /-- An address reads back as itself. -/
 theorem readEthAddress_bytesJson (path : String) (address : ExecutionAddress) :

@@ -71,7 +71,7 @@ private theorem find_sameBytes (data : List (ByteArray × ByteArray)) (key : Byt
 private theorem stateEntries_keys {hash : ByteArray → Hash32} {state : State}
     {entries : List (ByteArray × ByteArray)} (h : stateEntries hash state = .ok entries) :
     entries.map Prod.fst = state.accounts.keys.map fun a => (⟨a.toArray⟩ : ByteArray) := by
-  unfold stateEntries at h
+  rw [stateEntries_eq] at h
   rw [map_of_mapM_ok (q := fun entry => (⟨entry.1.toArray⟩ : ByteArray)) ?_ h,
     ← Std.ExtTreeMap.map_fst_toList_eq_keys, List.map_map]
   · rfl

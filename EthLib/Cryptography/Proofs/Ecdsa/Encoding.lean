@@ -40,13 +40,6 @@ theorem read?_eq (b : ByteArray) :
   have hr := Base.ByteOrder.length_toList_toBE 32 r
   simp [toNats, toBytes, List.take_left' hr, List.drop_left' hr]
 
-/-- A list of `n` bytes is the `n` big-endian bytes of the integer that it reads as. -/
-private theorem toList_toBE_ofBE {n : Nat} {l : List UInt8} (h : l.length = n) :
-    (Base.ByteOrder.toBE n (Base.ByteOrder.ofBE l)).toList = l := by
-  have := congrArg Vector.toList
-    (Base.ByteOrder.toBE_ofBE (⟨l.toArray, by simp [h]⟩ : Vector UInt8 n))
-  simpa using this
-
 /-- Each integer is written modulo `2^256`, so reducing it first changes no byte. -/
 @[simp] theorem toBytes_mod (r s : Nat) :
     toBytes (r % 256 ^ 32) (s % 256 ^ 32) = toBytes r s := by
@@ -59,7 +52,8 @@ private theorem toList_toBE_ofBE {n : Nat} {l : List UInt8} (h : l.length = n) :
   have hl : sig.toList.length = 64 := by rw [Vector.length_toList]; rfl
   -- The first 32 bytes give `r` and the last 32 give `s`, and each is written back as it was.
   simp only [toBytes, toNats, Vector.toList_mk]
-  rw [toList_toBE_ofBE (by simp [hl]), toList_toBE_ofBE (by simp [hl]), List.take_append_drop]
+  rw [Base.ByteOrder.toList_toBE_ofBE_of_length (by simp [hl]),
+    Base.ByteOrder.toList_toBE_ofBE_of_length (by simp [hl]), List.take_append_drop]
 
 /-- Two pairs of integers below `2^256` with the same bytes are the same pair. -/
 theorem toBytes_inj {r s r' s' : Nat} (hr : r < 2 ^ 256) (hs : s < 2 ^ 256)

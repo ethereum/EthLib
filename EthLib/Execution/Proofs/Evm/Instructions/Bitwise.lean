@@ -1,7 +1,8 @@
 module
 
-public import EthLib.Execution.Evm.Instructions.Bitwise
+public import EthLib.Base.Proofs.BitVec.Mask
 public import EthLib.Base.Proofs.U256
+public import EthLib.Execution.Evm.Instructions.Bitwise
 
 /-!
 # Proofs: `Evm.Instructions.Bitwise`
@@ -37,9 +38,8 @@ theorem toNat_bitwiseNot (x : U256) : (bitwiseNot x).toNat = 2 ^ 256 - 1 - x.toN
 /-- BYTE `i` of a word is its digit of weight `256^(31 - i)`. -/
 theorem toNat_getByte (byteIndex word : U256) (h : byteIndex.toNat < 32) :
     (getByte byteIndex word).toNat = word.toNat / 2 ^ ((31 - byteIndex.toNat) * 8) % 256 := by
-  simp only [getByte, show ¬ byteIndex.toNat ≥ 32 by omega, ↓reduceIte, BitVec.toNat_and,
-    BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
-  exact Nat.and_two_pow_sub_one_eq_mod _ 8
+  simp only [getByte, show ¬ byteIndex.toNat ≥ 32 by omega, ↓reduceIte]
+  exact BitVec.toNat_ushiftRight_and_ofNat_two_pow_sub_one word _ 8
 
 /-- SHL is the bit vector shift left, which also gives 0 from 256 bits on. -/
 theorem bitwiseShl_eq (shift value : U256) : bitwiseShl shift value = value <<< shift.toNat := by

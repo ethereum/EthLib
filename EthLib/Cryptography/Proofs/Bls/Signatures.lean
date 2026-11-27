@@ -101,7 +101,7 @@ theorem ethAggregatePubkeys_empty : ethAggregatePubkeys #[] = .error .emptyPubke
 
 /-- Adding one key that fails key validation reports its index. -/
 theorem addPubkeyPoint_invalidPubkey {pk : BLSPubkey} {e : BlsError}
-    (hval : G1.keyValidatePoint pk = .error e) (agg : G1) (i : Nat) :
+    (hval : G1.keyValidatePoint pk.bytes = .error e) (agg : G1) (i : Nat) :
     addPubkeyPoint agg (pk, i) = .error (.invalidPubkey (some i)) := by
   simp [addPubkeyPoint, hval, throw, throwThe, MonadExceptOf.throw]
 

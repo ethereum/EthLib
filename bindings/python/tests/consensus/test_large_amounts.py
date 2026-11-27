@@ -49,7 +49,8 @@ def test_digests():
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
 
-@pytest.mark.parametrize("preset, fork, runner, handler, case", _cases(False) + _cases(True))
+# A rejected case is checked against the overflow itself, in the next test.
+@pytest.mark.parametrize("preset, fork, runner, handler, case", _cases(False))
 def test_case(preset, fork, runner, handler, case):
     if runner == "operations":
         assert test_operations.runs(fork, handler)

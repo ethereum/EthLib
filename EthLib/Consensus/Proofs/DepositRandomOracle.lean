@@ -84,7 +84,7 @@ theorem hashTreeRootM_depositData {m : Type → Type} [Monad m] [LawfulMonad m]
     (hashTreeRootM (Hasher.ofHash hash) (SszType.desc DepositData)
       (SszType.toValue data)).run = (do
       -- The public key takes one hash.
-      let pubkey ← hash ⟨data.pubkey.toArray ++ Array.replicate 16 0⟩
+      let pubkey ← hash ⟨data.pubkey.bytes.toArray ++ Array.replicate 16 0⟩
       -- The signature takes three.
       let low ← hash ⟨data.signature.toArray.extract 0 64⟩
       let high ← hash ⟨data.signature.toArray.extract 64 96 ++ Array.replicate 32 0⟩
@@ -99,9 +99,9 @@ theorem hashTreeRootM_depositData {m : Type → Type} [Monad m] [LawfulMonad m]
       return .ok root) := by
   -- The roots of the four fields, each stated for its SSZ shape.
   have pubkey : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 48)
-      (.bytes ⟨data.pubkey.toArray⟩)).run = (do
-        return .ok (← hash ⟨data.pubkey.toArray ++ Array.replicate 16 0⟩)) :=
-    hashTreeRootM_bytes48 (Hasher.ofHash hash) data.pubkey
+      (.bytes ⟨data.pubkey.bytes.toArray⟩)).run = (do
+        return .ok (← hash ⟨data.pubkey.bytes.toArray ++ Array.replicate 16 0⟩)) :=
+    hashTreeRootM_bytes48 (Hasher.ofHash hash) data.pubkey.bytes
   have credentials : (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 32)
       (.bytes ⟨data.withdrawalCredentials.toArray⟩)).run = _ :=
     hashTreeRootM_bytes32 (Hasher.ofHash hash) data.withdrawalCredentials
@@ -113,7 +113,7 @@ theorem hashTreeRootM_depositData {m : Type → Type} [Monad m] [LawfulMonad m]
     hashTreeRootM_bytes96 hash data.signature
   show (hashTreeRootAtM (Hasher.ofHash hash) 2 (.container ["pubkey", "withdrawal_credentials",
     "amount", "signature"] [.byteVector 48, .byteVector 32, .uint 8, .byteVector 96])
-    (.seq [.bytes ⟨data.pubkey.toArray⟩, .bytes ⟨data.withdrawalCredentials.toArray⟩,
+    (.seq [.bytes ⟨data.pubkey.bytes.toArray⟩, .bytes ⟨data.withdrawalCredentials.toArray⟩,
       .uint data.amount.toNat, .bytes ⟨data.signature.toArray⟩])).run = _
   unfold hashTreeRootAtM
   simp only [merkleLayout, List.length_cons, List.length_nil, bne_self_eq_false,
@@ -191,7 +191,8 @@ private theorem collision_or_eq_of_hashTreeRootM_depositData {cache : HashOracle
   have high : signature₁.toArray.extract 64 96 = signature₂.toArray.extract 64 96 :=
     (Array.append_left_inj _).mp high
   simp only [DepositData.mk.injEq]
-  refine ⟨Vector.toArray_inj.mp ((Array.append_left_inj _).mp key),
+  refine ⟨congrArg Cryptography.Bls.BLSPubkey.mk
+      (Vector.toArray_inj.mp ((Array.append_left_inj _).mp key)),
     Vector.toArray_inj.mp sameCredentials, UInt64.toNat_inj.mp amounts, Vector.toArray_inj.mp ?_⟩
   rw [whole signature₁, whole signature₂, low, high]
 

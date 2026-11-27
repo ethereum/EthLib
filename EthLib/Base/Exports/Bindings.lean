@@ -724,17 +724,18 @@ def bindings : List Binding := [
     `EthLib.Consensus.Exports.apiLightClientUpdatesExport,
     "(name: str, config: dict[str, Any] | None, known: list[tuple[int, str, bytes]], " ++
       "start_period: int, count: int) -> list[dict[str, Any]]",
-    [], some "ConsensusError"⟩,
+    [`EthLib.Consensus.BeaconApi.ChunkError], some "ConsensusError"⟩,
   ⟨"consensus_api_light_client_updates_ssz",
     `EthLib.Consensus.Exports.apiLightClientUpdatesSszExport,
     "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
       "known: list[tuple[int, str, bytes]], start_period: int, count: int) -> bytes",
-    [], some "ConsensusError"⟩,
+    [`EthLib.Consensus.BeaconApi.ChunkError], some "ConsensusError"⟩,
   ⟨"consensus_api_light_client_decode_updates",
     `EthLib.Consensus.Exports.apiLightClientDecodeUpdatesExport,
     "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
       "data: bytes) -> list[tuple[str, bytes]]",
-    [], some "ConsensusError"⟩,
+    [`EthLib.Consensus.BeaconApi.ChunkError, `EthLib.Consensus.BoundsError],
+    some "ConsensusError"⟩,
   ⟨"consensus_api_light_client_latest", `EthLib.Consensus.Exports.apiLightClientLatestExport,
     "(name: str, fork: str, kind: str, update: bytes | None) -> dict[str, Any]",
     [`EthLib.Consensus.LightClientError], some "ConsensusError"⟩,

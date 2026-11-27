@@ -24,8 +24,28 @@ The core verifications of §2.7 and §2.9 take the encodings as bytes, as the dr
 
 namespace EthLib.Cryptography.Bls
 
-/-- A public key: a compressed point of `G1`, 48 bytes. -/
-abbrev BLSPubkey := Vector UInt8 48
+/-- A public key: the 48 bytes of a compressed `G1` point.
+
+The type names the role of the bytes, not their validity as a key. -/
+structure BLSPubkey where
+  /-- The 48 bytes of the compressed point. -/
+  bytes : Vector UInt8 48
+deriving DecidableEq, Repr, Inhabited
+
+/-- Public keys compare as their bytes, so a search tree can hold them. -/
+instance : Ord BLSPubkey where
+  compare a b := compare a.bytes b.bytes
+
+/-- The order of public keys is transitive, as the order of their bytes. -/
+instance : Std.TransCmp (compare : BLSPubkey → BLSPubkey → Ordering) :=
+  inferInstanceAs (Std.TransCmp (compareOn BLSPubkey.bytes))
+
+/-- Two public keys that the order finds equal are equal. -/
+instance : Std.LawfulEqCmp (compare : BLSPubkey → BLSPubkey → Ordering) where
+  eq_of_compare {a b} same := by
+    cases a
+    cases b
+    exact congrArg BLSPubkey.mk (Std.LawfulEqCmp.eq_of_compare (cmp := compare) same)
 
 /-- A signature: a compressed point of `G2`, 96 bytes. -/
 abbrev BLSSignature := Vector UInt8 96
@@ -68,7 +88,7 @@ def SecretKey.fromBytes (bytes : ByteArray) : Except BlsError SecretKey :=
     | .ok sk => if h : sk = 0 then .error .invalidSecretKey else .ok ⟨sk, h⟩
 
 /-- The public key of a point, in the minimal-pubkey-size variant (§2.2). -/
-def pointToPubkey (p : G1) : BLSPubkey := G1.compress p
+def pointToPubkey (p : G1) : BLSPubkey := ⟨G1.compress p⟩
 
 /-- The signature of a point, in the minimal-pubkey-size variant (§2.2). -/
 def pointToSignature (p : G2) : BLSSignature := G2.compress p
@@ -195,14 +215,14 @@ def sign (sk : SecretKey) (msg : ByteArray) : Except BlsError BLSSignature := co
 
 /-- Verify a signature under the message tag. -/
 def verify (pk : BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
-  coreVerify (packBytes pk) msg (packBytes sig) DST
+  coreVerify (packBytes pk.bytes) msg (packBytes sig) DST
 
 /-- Verify an aggregate signature on several messages under the message tag.
 
 The scheme does not require the messages to differ. -/
 def aggregateVerify (pks : Array BLSPubkey) (msgs : Array ByteArray) (sig : BLSSignature) :
     Bool :=
-  coreAggregateVerify (pks.map packBytes) msgs (packBytes sig) DST
+  coreAggregateVerify (pks.map (packBytes ·.bytes)) msgs (packBytes sig) DST
 
 /-- The proof of possession `SK * H'(PK)`, with `H'` the hash under the public key tag (§3.3.2).
 
@@ -217,7 +237,7 @@ def popProve (sk : SecretKey) : Except BlsError BLSSignature :=
   -- The proof is the encoding of `R`.
   --
   -- That is the core signature of `PK` under the public key tag.
-  coreSign sk ⟨(skToPk sk).toArray⟩ POP_DST
+  coreSign sk ⟨(skToPk sk).bytes.toArray⟩ POP_DST
 
 /-- Verify a proof of possession (§3.3.3).
 
@@ -226,7 +246,7 @@ def popVerify (pk : BLSPubkey) (proof : BLSSignature) : Bool :=
   -- Steps 1 to 9 are those of the core verification.
   --
   -- Step 6 hashes under the public key tag.
-  coreVerify (packBytes pk) (packBytes pk) (packBytes proof) POP_DST
+  coreVerify (packBytes pk.bytes) (packBytes pk.bytes) (packBytes proof) POP_DST
 
 /-- Add one validated public key to a running point sum.
 
@@ -234,7 +254,7 @@ It rejects a key that fails key validation (§2.5), and reports its position in 
 def addPubkeyPoint (agg : G1) (entry : BLSPubkey × Nat) : Except BlsError G1 := do
   let (pk, i) := entry
   -- Step 3: `next` is the point that `PK_i` encodes, with key validation added.
-  match G1.keyValidatePoint pk with
+  match G1.keyValidatePoint pk.bytes with
   | .error _ => throw (.invalidPubkey (some i))
   -- Step 4: `aggregate = aggregate + next`.
   | .ok p => return G1.add agg p

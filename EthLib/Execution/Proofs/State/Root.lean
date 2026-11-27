@@ -25,6 +25,36 @@ open EthLib.Base
 open EthLib.Execution.Trie
 open EthLib.Serialization.Rlp
 
+/-! ## The roots with a plain hash -/
+
+/-- The storage root, with a plain hash. -/
+theorem storageRoot_eq (hash : ByteArray → Hash32) (storage : Std.ExtTreeMap Bytes32 U256) :
+    storageRoot hash storage =
+      (storageEntries storage).mapError .rlp >>= fun entries => root hash ⟨true, entries⟩ := by
+  simp only [storageRoot, storageRootM, ExceptT.run, exceptT_id_bind, exceptT_id_monadLift,
+    except_bind_eq]
+  rfl
+
+/-- The entries of the state trie, with a plain hash. -/
+theorem stateEntries_eq (hash : ByteArray → Hash32) (state : State) :
+    stateEntries hash state = state.accounts.toList.mapM fun entry =>
+      storageRoot hash (state.storage.getD entry.1 ∅) >>= fun storageHash =>
+        (encodeAccount entry.2 storageHash).mapError .rlp >>= fun encoded =>
+          pure (⟨entry.1.toArray⟩, encoded) := by
+  unfold stateEntries stateEntriesM
+  rw [ExceptT.run, exceptT_id_mapM]
+  congr 1
+  funext entry
+  simp only [storageRoot, ExceptT.run, exceptT_id_bind, exceptT_id_monadLift, except_bind_eq]
+  rfl
+
+/-- The state root, with a plain hash. -/
+theorem stateRoot_eq (hash : ByteArray → Hash32) (state : State) :
+    stateRoot hash state =
+      stateEntries hash state >>= fun entries => root hash ⟨true, entries⟩ := by
+  simp only [stateRoot, stateRootM, stateEntries, ExceptT.run, exceptT_id_bind, except_bind_eq]
+  rfl
+
 /-! ## Zero words and the empty state -/
 
 /-- Setting a key to the word zero gives the storage root of removing the key. -/
@@ -39,12 +69,12 @@ theorem storageRoot_insert_zero (hash : ByteArray → Hash32)
     simp only [Std.ExtTreeMap.getElem?_filter, Std.ExtTreeMap.getElem?_insert,
       Std.ExtTreeMap.getElem?_erase]
     split <;> simp [Option.filter_some]
-  simp only [storageRoot, storageEntries, hfilter]
+  simp only [storageRoot_eq, storageEntries, hfilter]
 
 /-- The empty storage has the root of the empty trie, the hash of `0x80`. -/
 theorem storageRoot_empty (hash : ByteArray → Hash32) :
     storageRoot hash ∅ = .ok (hash ⟨#[0x80]⟩) := by
-  simp [storageRoot, storageEntries, bind, Except.bind, Except.mapError, pure,
+  simp [storageRoot_eq, storageEntries, bind, Except.bind, Except.mapError, pure,
     Except.pure]
   rfl
 
@@ -53,7 +83,7 @@ theorem stateRoot_empty (hash : ByteArray → Hash32)
     (storage : Std.ExtTreeMap Address (Std.ExtTreeMap Bytes32 U256))
     (code : Std.ExtTreeMap Hash32 ByteArray) :
     stateRoot hash ⟨∅, storage, code⟩ = .ok (hash ⟨#[0x80]⟩) := by
-  simp [stateRoot, stateEntries, bind, Except.bind, pure, Except.pure]
+  simp [stateRoot_eq, stateEntries_eq, bind, Except.bind, pure, Except.pure]
   rfl
 
 /-! ## Any order of the entries
@@ -93,7 +123,7 @@ theorem storageEntries_nodup {storage : Std.ExtTreeMap Bytes32 U256}
 theorem stateEntries_nodup {hash : ByteArray → Hash32} {state : State}
     {entries : List (ByteArray × ByteArray)} (h : stateEntries hash state = .ok entries) :
     (entries.map Prod.fst).Nodup := by
-  unfold stateEntries at h
+  rw [stateEntries_eq] at h
   rw [map_of_mapM_ok (q := fun entry => (⟨entry.1.toArray⟩ : ByteArray)) ?_ h]
   · exact nodup_bytes_keys _
   · -- Each entry keeps the bytes of its address.
@@ -117,7 +147,7 @@ theorem storageRoot_perm (hash : ByteArray → Hash32) {storage : Std.ExtTreeMap
     storageRoot hash storage = root hash ⟨true, data⟩ ∨
       ∃ pair, findKeyCollision hash (entries.map Prod.fst) = some pair ∧ IsCollision hash pair := by
   have hroot : storageRoot hash storage = root hash ⟨true, entries⟩ := by
-    simp [storageRoot, hentries, Except.mapError, bind, Except.bind]
+    simp [storageRoot_eq, hentries, Except.mapError, bind, Except.bind]
   rw [hroot]
   exact root_secured_perm hash hperm (storageEntries_nodup hentries)
 
@@ -130,7 +160,7 @@ theorem stateRoot_perm (hash : ByteArray → Hash32) {state : State}
     stateRoot hash state = root hash ⟨true, data⟩ ∨
       ∃ pair, findKeyCollision hash (entries.map Prod.fst) = some pair ∧ IsCollision hash pair := by
   have hroot : stateRoot hash state = root hash ⟨true, entries⟩ := by
-    simp [stateRoot, hentries, bind, Except.bind]
+    simp [stateRoot_eq, hentries, bind, Except.bind]
   rw [hroot]
   exact root_secured_perm hash hperm (stateEntries_nodup hentries)
 
@@ -158,7 +188,7 @@ theorem storageRoot_eq_ok_iff {hash : ByteArray → Hash32}
     {storage : Std.ExtTreeMap Bytes32 U256} {root' : Hash32} :
     storageRoot hash storage = .ok root' ↔
       ∃ entries, storageEntries storage = .ok entries ∧ root hash ⟨true, entries⟩ = .ok root' := by
-  unfold storageRoot
+  rw [storageRoot_eq]
   cases storageEntries storage <;> simp [Except.mapError, bind, Except.bind]
 
 /-- The storage entry of a key holds the encoding of its word, which is nonzero.
@@ -313,7 +343,7 @@ theorem storageRoot_binding (hash : ByteArray → Hash32)
 theorem stateRoot_eq_ok_iff {hash : ByteArray → Hash32} {state : State} {root' : Hash32} :
     stateRoot hash state = .ok root' ↔
       ∃ entries, stateEntries hash state = .ok entries ∧ root hash ⟨true, entries⟩ = .ok root' := by
-  unfold stateRoot
+  rw [stateRoot_eq]
   cases stateEntries hash state <;> simp [bind, Except.bind]
 
 /-- The state entry of an address holds the encoding of its account and storage root.
@@ -328,7 +358,7 @@ theorem find_stateEntries {hash : ByteArray → Hash32} {state : State}
         storageRoot hash (state.storage.getD address ∅) = .ok storageHash ∧
         encodeAccount account storageHash = .ok bytes
     | none => state.accounts[address]? = none := by
-  unfold stateEntries at h
+  rw [stateEntries_eq] at h
   cases hfind : entries.find? fun entry => entry.1 = ⟨address.toArray⟩ with
   | some entry =>
     simp only [Option.map_some]
@@ -483,9 +513,11 @@ theorem stateRoot_binding (hash : ByteArray → Hash32) {state₁ state₂ : Sta
       simp only [ne_eq, hacc, not_true_eq_false, ↓reduceIte, hmem] at hnone
       obtain ⟨acc, hget₁⟩ := Option.isSome_iff_exists.mp
         (Std.ExtTreeMap.isSome_getElem?_iff_mem.mpr hmem)
-      obtain ⟨_, _, hstep₁⟩ := exists_mem_of_mapM_ok hentries₁
+      obtain ⟨_, _, hstep₁⟩ := exists_mem_of_mapM_ok
+        ((stateEntries_eq hash state₁).symm.trans hentries₁)
         (Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr hget₁)
-      obtain ⟨_, _, hstep₂⟩ := exists_mem_of_mapM_ok hentries₂
+      obtain ⟨_, _, hstep₂⟩ := exists_mem_of_mapM_ok
+        ((stateEntries_eq hash state₂).symm.trans hentries₂)
         (Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr (hacc.symm.trans hget₁))
       cases hsr₁ : storageRoot hash (state₁.storage.getD address ∅) with
       | error e => simp [hsr₁, bind, Except.bind] at hstep₁

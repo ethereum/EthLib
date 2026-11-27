@@ -11,6 +11,7 @@ public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Basic
 public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
 public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.SecondPreimage
 public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Extraction
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Multiproof
 public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Basic
 public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Binding
 public import EthLib.Cryptography.Proofs.Merkle.Multiproof.Trace

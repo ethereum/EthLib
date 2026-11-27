@@ -358,13 +358,14 @@ private theorem genesisDeposits_summary (before : fork < .altair)
 /-- An unassigned validator at genesis is funded and not yet eligible for activation. -/
 theorem initializeBeaconStateFromEth1_unassigned_eligibility {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) (i : Nat) (v : Validator) (found : after.validators.data[i]? = some v)
     (unassigned : v.activationEpoch = FAR_FUTURE_EPOCH) :
     (∃ balance, after.balances.data[i]? = some balance ∧ v.effectiveBalance ≤ balance) ∧
       v.activationEligibilityEpoch = FAR_FUTURE_EPOCH ∧ v.slashed = false := by
+  have before := lt_altair_of_phase0 phase0
   obtain ⟨time, root, deposited, activated, _, depositedOk, activatedOk, stateEq⟩ :=
     initializeBeaconStateFromEth1_ok computed
   rw [stateEq] at found ⊢
@@ -398,12 +399,13 @@ theorem initializeBeaconStateFromEth1_unassigned_eligibility {eth1BlockHash : Ha
 /-- Genesis assigns only the genesis activation epoch; all other keys remain unassigned. -/
 theorem initializeBeaconStateFromEth1_activation_epochs {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     ∀ v ∈ after.validators.data,
       v.activationEpoch = FAR_FUTURE_EPOCH ∨ v.activationEpoch = GENESIS_EPOCH := by
+  have before := lt_altair_of_phase0 phase0
   obtain ⟨time, root, deposited, activated, _, depositedOk, activatedOk, equal⟩ :=
     initializeBeaconStateFromEth1_ok computed
   rw [equal]
@@ -415,11 +417,12 @@ theorem initializeBeaconStateFromEth1_activation_epochs {eth1BlockHash : Hash32}
 /-- Every validator starts unslashed after successful genesis initialization. -/
 theorem initializeBeaconStateFromEth1_unslashed {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     ∀ v ∈ after.validators.data, v.slashed = false := by
+  have before := lt_altair_of_phase0 phase0
   obtain ⟨time, root, deposited, activated, _, depositedOk, activatedOk, equal⟩ :=
     initializeBeaconStateFromEth1_ok computed
   rw [equal]
@@ -434,18 +437,17 @@ theorem initializeBeaconStateFromEth1_unslashed {eth1BlockHash : Hash32}
 
 /-- A candidate genesis state is within every budget that covers the amounts of its deposits.
 
-The bound on the inactivity scores can be any number, as this genesis comes before Altair.
-
-The candidate genesis fails from Altair, so the theorem says something only at Phase 0. -/
+The bound on the inactivity scores can be any number, as this genesis is at Phase 0. -/
 theorem initializeBeaconStateFromEth1_withinBudget {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {after : BeaconState preset fork}
     {budget : Nat} (scoreBound : Nat)
     (funded : (deposits.toList.map (·.data.amount.toNat)).sum ≤ budget)
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     WithinBudget budget scoreBound after := by
+  have before := lt_altair_of_phase0 phase0
   have matched := (initializeBeaconStateFromEth1_invariant computed).balancesMatch
   -- A candidate genesis starts from an empty state, applies each deposit, then activates.
   obtain ⟨genesisTime, bodyRoot, deposited, activated, root, depositedOk, activatedOk,
@@ -478,7 +480,7 @@ theorem initializeBeaconStateFromEth1_withinBudget {eth1BlockHash : Hash32}
     simp only [Option.map_some, Option.some.injEq] at this
     rw [this]
     exact min_sub_mod_le _ _ _
-  -- This candidate genesis comes before Altair, so there are no inactivity scores.
+  -- This candidate genesis is at Phase 0, so there are no inactivity scores.
   --
   -- It comes before Electra, so there are no pending deposits and no balances left to consume.
   refine ⟨activated.validators.bound notGloas, matched, ?_, ?_, ?_,

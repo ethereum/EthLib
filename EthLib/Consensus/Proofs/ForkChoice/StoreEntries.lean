@@ -426,7 +426,12 @@ private theorem onExecutionPayloadEnvelope_keeps {checks : SignatureChecks}
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
     (accepted : a.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     Keeps a after := by
-  obtain ⟨_, _, _, _, recorded, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  by_cases known : .hegota ≤ fork ∧
+      a.isPayloadVerified gloas signed.message.beaconBlockRoot = true
+  · rw [onExecutionPayloadEnvelope_of_known known.1 known.2, Except.ok.injEq] at accepted
+    exact accepted ▸ .refl a
+  obtain ⟨_, _, _, _, recorded, record, rfl⟩ :=
+    onExecutionPayloadEnvelope_ok (fun heze => by simpa [heze] using known) accepted
   have answers := recordEnvelope_answers record
   obtain ⟨_, rfl⟩ := recordEnvelope_frame record
   refine ⟨fun _ h => h, fun _ h => h, fun _ => ⟨fun _ h => h, fun _ h => h, fun _ h => h,
@@ -623,8 +628,7 @@ private theorem Reachable.anchor_untimely {anchorState : BeaconState preset fork
       by rw [(onPayloadAttestationMessage_keeps voted).2.1]; exact ih.2⟩
   | envelope _ accepted ih =>
     obtain ⟨-, blocks, -⟩ := onExecutionPayloadEnvelope_frame accepted
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
     exact ⟨by rw [blocks]; exact ih.1, ih.2⟩
   | @inclusionList _ _ _ heze _ _ accepted ih =>
     obtain ⟨-, blocks, -⟩ := onInclusionList_frame accepted
@@ -752,8 +756,7 @@ theorem onExecutionPayloadEnvelope_blockTimeliness {checks : SignatureChecks}
     {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
     (accepted : store.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
     after.blockTimeliness = store.blockTimeliness := by
-  obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
   rfl
 
 /-- From Heze, an inclusion list keeps the timeliness of every block. -/
@@ -860,11 +863,9 @@ theorem Store.Reachable.fullParentsVerified
       obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
       exact ih
     | envelope _ accepted ih =>
-      obtain ⟨_, _, _, _, recorded, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-      obtain ⟨_, rfl⟩ := recordEnvelope_frame record
-      exact ih.of_kept rfl fun r v => by
-        simp only [Store.isPayloadVerified] at v ⊢
-        simp [Std.TreeMap.contains_insert, v]
+      have kept r v := (onExecutionPayloadEnvelope_isPayloadVerified_iff accepted r).mpr (.inl v)
+      obtain ⟨_, _, rfl⟩ := onExecutionPayloadEnvelope_changes accepted
+      exact ih.of_kept rfl kept
     | @inclusionList _ _ _ heze _ _ accepted ih =>
       obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
       exact ih

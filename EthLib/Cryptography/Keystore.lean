@@ -245,7 +245,7 @@ def readMetadata (value : Json) : Except KeystoreError Metadata := do
   --
   -- A separate check compares it with the public key of the decrypted secret.
   let pubkey ← optionalField value "pubkey" (fixed "pubkey" 48)
-  return ⟨path, uuid, pubkey, description⟩
+  return ⟨path, uuid, pubkey.map Bls.BLSPubkey.mk, description⟩
 
 /-- The function, parameters and message that every ERC-2335 module requires ("Modules"). -/
 def moduleFields (what : String) (value : Json) :
@@ -402,7 +402,7 @@ A missing public key or description is left out.
 -/
 def Metadata.fields (metadata : Metadata) : List (String × Json) :=
   metadata.description.toList.map (fun text => ("description", .str text)) ++
-    metadata.pubkey.toList.map (fun pubkey => ("pubkey", .str (hexText pubkey.toList))) ++
+    metadata.pubkey.toList.map (fun pubkey => ("pubkey", .str (hexText pubkey.bytes.toList))) ++
     [("path", .str (metadata.path.elim "" Bls.KeyPath.Path.toString)),
       ("uuid", .str (uuidText metadata.uuid)), ("version", Lean.toJson (4 : Nat))]
 
@@ -447,7 +447,8 @@ A secret that is not a BLS secret key fails too.
 -/
 def checkPubkey (secret : ByteArray) (metadata : Metadata) : Bool :=
   match metadata.pubkey, Bls.Signatures.SecretKey.fromBytes secret with
-  | some pubkey, .ok key => pubkey == Bls.Signatures.skToPk key
+  -- Comparing the bytes keeps the kernel from evaluating the derived key in the round-trip proof.
+  | some pubkey, .ok key => pubkey.bytes == (Bls.Signatures.skToPk key).bytes
   | _, _ => false
 
 end EthLib.Cryptography.Keystore

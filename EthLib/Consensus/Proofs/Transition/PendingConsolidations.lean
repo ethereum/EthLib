@@ -679,13 +679,14 @@ private theorem slash {i : ValidatorIndex} {whistleblower : Option ValidatorInde
 /-- Effective-balance updates write only effective balances. -/
 private theorem effectiveUpdates
     (ok : processEffectiveBalanceUpdates state = .ok after) : WithdrawalKept state after := by
-  refine fold (fun _ _ _ ok => ?_) (fun _ _ _ ok => ?_) ok
-  · simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, found, _, _, _, _, set⟩ := ok
-    exact setAt found set (kept_of_same rfl rfl)
-  · simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, found, _, _, _, _, set⟩ := ok
-    exact .setValidatorAt found set ⟨fun _ => rfl, fun _ => rfl⟩
+  -- The withdrawals compose only along a registry lifecycle, so the pass carries both.
+  refine (processEffectiveBalanceUpdates_induction
+    (fun s => WithdrawalKept state s ∧ RegistryLifecycle state s)
+    (fun _ _ _ prior ok => ?_) ⟨of_data, RegistryLifecycle.refl _⟩ ok).1
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨_, found, _, _, _, _, set⟩ := ok
+  have life : RegistryLifecycle _ _ := .setValidatorAt found set ⟨fun _ => rfl, fun _ => rfl⟩
+  exact ⟨prior.1.trans (setAt found set (kept_of_same rfl rfl)) prior.2, prior.2.trans life⟩
 
 /-- A switch to compounding credentials writes only the credentials and a balance. -/
 private theorem compounding {electra : .pectra ≤ fork} {index : ValidatorIndex}
@@ -1827,8 +1828,8 @@ private theorem Run.pendingConsolidationsOrdered_apart {g x : ForkedBeaconState 
       PendingApart x.state := by
   induction run with
   | nil =>
-    obtain ⟨_, _, _, before, ok⟩ := genesis
-    have notElectra : ¬ Fork.pectra ≤ _ := Nat.not_le_of_lt (Nat.lt_trans before (by decide))
+    have notElectra : ¬ Fork.pectra ≤ _ :=
+      Nat.not_le_of_lt (Nat.lt_trans genesis.before (by decide))
     exact ⟨⟨fun electra => absurd electra notElectra, fun electra => absurd electra notElectra⟩,
       fun electra => absurd electra notElectra⟩
   | snoc pre step ih =>

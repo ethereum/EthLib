@@ -173,9 +173,9 @@ theorem RootsAbove.le_of_getBlockRoot {fork : Fork} {state : BeaconState preset 
 theorem getBlockRootAtSlot_initializeBeaconStateFromEth1 {fork : Fork}
     {state : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) (slot : Slot) (root : Root) : getBlockRootAtSlot state slot ≠ .ok root :=
   fun read => by
     have before := UInt64.lt_iff_toNat_lt.mp (getBlockRootAtSlot_read read).1
@@ -186,9 +186,9 @@ theorem getBlockRootAtSlot_initializeBeaconStateFromEth1 {fork : Fork}
 theorem RootsAbove.of_initializeBeaconStateFromEth1 {fork : Fork}
     {state : BeaconState preset fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     RootsAbove block state := by
   obtain ⟨-, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
