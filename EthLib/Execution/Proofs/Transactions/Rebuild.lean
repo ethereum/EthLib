@@ -605,19 +605,6 @@ theorem deleteAccounts_rebuildEnd {block : BlockState}
 
 /-! ## The transaction -/
 
-/-- The message of a transaction comes from its sender. -/
-private theorem caller_transactionMessage {env : BlockEnvironment fork}
-    {txEnv : TransactionEnvironment fork} {state : TransactionState} {sender target : Address}
-    {gas : Nat} {tx : Transaction} {message : Message fork}
-    (h : transactionMessage env txEnv state sender target gas tx = .ok message) :
-    message.caller = sender := by
-  unfold transactionMessage at h
-  split at h
-  · obtain ⟨_, -, h⟩ := map_ok_iff.mp h
-    rw [← h]
-  · cases h
-    rfl
-
 /-- From Dencun, a run of a transaction with any gas meter keeps what its end needs. -/
 private theorem runTransaction_rebuildEnd [LawfulGasMeter Meter] (hfork : .dencun ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {included : Included}

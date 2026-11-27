@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Cryptography.Montgomery.Words
+public import EthLib.Cryptography.Word64.Four
+public import EthLib.Cryptography.Word64.Six
 
 /-!
 # Montgomery arithmetic: stored limbs
@@ -54,6 +56,13 @@ def val (a : T n) : Nat := num n (get a) 0
 /-- Stored limbs fit. -/
 theorem fits (a : T n) (k : Nat) : Fits n (get a) k := fits_of_lt fun _ _ => get_lt a _
 
+/-- Limbs with the same integer are equal. -/
+theorem val_injective : Function.Injective (val : T n → Nat) := by
+  intro a b h
+  apply ext
+  intro k hk
+  simpa using eq_of_num_eq (fits a 0) (fits b 0) h k hk
+
 /-- The limbs of fitting words write their integer. -/
 theorem val_pack {t : Words.W n} (h : Fits n (Words.word t) 0) :
     val (pack (n := n) t) = num n (Words.word t) 0 := by
@@ -72,138 +81,96 @@ end Limbs
 
 end Generic
 
-/-! ## Eight limbs -/
+/-! ## Eight limbs
 
-/-- An integer below `2 ^ 256`, as 8 limbs of 32 bits, the lowest first. -/
-structure Limbs8 where
-  l0 : UInt32
-  l1 : UInt32
-  l2 : UInt32
-  l3 : UInt32
-  l4 : UInt32
-  l5 : UInt32
-  l6 : UInt32
-  l7 : UInt32
-deriving DecidableEq, Inhabited
+Eight limbs of 32 bits are held two to a word, in four words of 64 bits.
 
-/-- The limb at an index, and `0` past the last. -/
-@[inline] def Limbs8.get (a : Limbs8) : Nat → UInt64
-  | 0 => a.l0.toUInt64
-  | 1 => a.l1.toUInt64
-  | 2 => a.l2.toUInt64
-  | 3 => a.l3.toUInt64
-  | 4 => a.l4.toUInt64
-  | 5 => a.l5.toUInt64
-  | 6 => a.l6.toUInt64
-  | 7 => a.l7.toUInt64
-  | _ => 0
+A product can then read each word whole. -/
 
-/-- Eight limbs, stored in a structure of eight fields. -/
+/-- Eight limbs, stored as four words of 64 bits, the low limb of each pair in the low half. -/
 instance : Limbs 8 where
-  T := Limbs8
-  get := Limbs8.get
-  pack t := ⟨t.1.toUInt32, t.2.1.toUInt32, t.2.2.1.toUInt32, t.2.2.2.1.toUInt32,
-    t.2.2.2.2.1.toUInt32, t.2.2.2.2.2.1.toUInt32, t.2.2.2.2.2.2.1.toUInt32,
-    t.2.2.2.2.2.2.2.1.toUInt32⟩
-  decEq := inferInstanceAs (DecidableEq Limbs8)
-  get_lt a k := by
-    unfold Limbs8.get
-    split <;> first | exact UInt32.toNat_lt _ | decide
+  T := Word64.Raw
+  get := Word64.Raw.limb
+  pack t := ⟨Word64.pairLimbs t.1 t.2.1, Word64.pairLimbs t.2.2.1 t.2.2.2.1,
+    Word64.pairLimbs t.2.2.2.2.1 t.2.2.2.2.2.1,
+    Word64.pairLimbs t.2.2.2.2.2.2.1 t.2.2.2.2.2.2.2.1⟩
+  decEq := inferInstanceAs (DecidableEq Word64.Raw)
+  get_lt a k := Word64.Raw.limb_lt a k
   get_pack t k hk := by
-    have e (x : UInt64) : x.toUInt32.toUInt64.toNat = x.toNat % 2 ^ 32 := by
-      rw [UInt32.toNat_toUInt64, UInt64.toNat_toUInt32]
     match k, hk with
-    | 0, _ => exact e _
-    | 1, _ => exact e _
-    | 2, _ => exact e _
-    | 3, _ => exact e _
-    | 4, _ => exact e _
-    | 5, _ => exact e _
-    | 6, _ => exact e _
-    | 7, _ => exact e _
+    | 0, _ => exact Word64.pairLimbs_low _ _
+    | 1, _ => exact Word64.pairLimbs_high _ _
+    | 2, _ => exact Word64.pairLimbs_low _ _
+    | 3, _ => exact Word64.pairLimbs_high _ _
+    | 4, _ => exact Word64.pairLimbs_low _ _
+    | 5, _ => exact Word64.pairLimbs_high _ _
+    | 6, _ => exact Word64.pairLimbs_low _ _
+    | 7, _ => exact Word64.pairLimbs_high _ _
   ext a b h := by
     have g (k : Nat) (hk : k < 8) := h k hk
     cases a
     cases b
-    simp only [Limbs8.mk.injEq]
-    exact ⟨UInt32.toUInt64_inj.mp (g 0 (by decide)), UInt32.toUInt64_inj.mp (g 1 (by decide)),
-      UInt32.toUInt64_inj.mp (g 2 (by decide)), UInt32.toUInt64_inj.mp (g 3 (by decide)),
-      UInt32.toUInt64_inj.mp (g 4 (by decide)), UInt32.toUInt64_inj.mp (g 5 (by decide)),
-      UInt32.toUInt64_inj.mp (g 6 (by decide)), UInt32.toUInt64_inj.mp (g 7 (by decide))⟩
+    simp only [Word64.Raw.mk.injEq]
+    exact ⟨Word64.eq_of_halves (g 0 (by decide)) (g 1 (by decide)),
+      Word64.eq_of_halves (g 2 (by decide)) (g 3 (by decide)),
+      Word64.eq_of_halves (g 4 (by decide)) (g 5 (by decide)),
+      Word64.eq_of_halves (g 6 (by decide)) (g 7 (by decide))⟩
 
-/-! ## Twelve limbs -/
+/-- Eight limbs write the integer of their four words. -/
+theorem Limbs.val_raw (a : Limbs.T 8) : Limbs.val (n := 8) a = Word64.Raw.val a := by
+  -- Each word is its low half plus `2^32` times its high half.
+  simp only [Limbs.val, num, Limbs.get, Word64.Raw.limb, Word64.low_toNat, Word64.high_toNat,
+    Word64.Raw.val_eq_sum]
+  omega
 
-/-- An integer below `2 ^ 384`, as 12 limbs of 32 bits, the lowest first. -/
-structure Limbs12 where
-  l0 : UInt32
-  l1 : UInt32
-  l2 : UInt32
-  l3 : UInt32
-  l4 : UInt32
-  l5 : UInt32
-  l6 : UInt32
-  l7 : UInt32
-  l8 : UInt32
-  l9 : UInt32
-  l10 : UInt32
-  l11 : UInt32
-deriving DecidableEq, Inhabited
+/-! ## Twelve limbs
 
-/-- The limb at an index, and `0` past the last. -/
-@[inline] def Limbs12.get (a : Limbs12) : Nat → UInt64
-  | 0 => a.l0.toUInt64
-  | 1 => a.l1.toUInt64
-  | 2 => a.l2.toUInt64
-  | 3 => a.l3.toUInt64
-  | 4 => a.l4.toUInt64
-  | 5 => a.l5.toUInt64
-  | 6 => a.l6.toUInt64
-  | 7 => a.l7.toUInt64
-  | 8 => a.l8.toUInt64
-  | 9 => a.l9.toUInt64
-  | 10 => a.l10.toUInt64
-  | 11 => a.l11.toUInt64
-  | _ => 0
+Twelve limbs of 32 bits are held two to a word, in six words of 64 bits.
 
-/-- Twelve limbs, stored in a structure of twelve fields. -/
+A product can then read each word whole. -/
+
+/-- Twelve limbs, stored as six words of 64 bits, the low limb of each pair in the low half. -/
 instance : Limbs 12 where
-  T := Limbs12
-  get := Limbs12.get
-  pack t := ⟨t.1.toUInt32, t.2.1.toUInt32, t.2.2.1.toUInt32, t.2.2.2.1.toUInt32,
-    t.2.2.2.2.1.toUInt32, t.2.2.2.2.2.1.toUInt32, t.2.2.2.2.2.2.1.toUInt32,
-    t.2.2.2.2.2.2.2.1.toUInt32, t.2.2.2.2.2.2.2.2.1.toUInt32,
-    t.2.2.2.2.2.2.2.2.2.1.toUInt32, t.2.2.2.2.2.2.2.2.2.2.1.toUInt32,
-    t.2.2.2.2.2.2.2.2.2.2.2.1.toUInt32⟩
-  decEq := inferInstanceAs (DecidableEq Limbs12)
-  get_lt a k := by
-    unfold Limbs12.get
-    split <;> first | exact UInt32.toNat_lt _ | decide
+  T := Word64.Words6
+  get := Word64.Words6.limb
+  pack t := ⟨Word64.pairLimbs t.1 t.2.1, Word64.pairLimbs t.2.2.1 t.2.2.2.1,
+    Word64.pairLimbs t.2.2.2.2.1 t.2.2.2.2.2.1,
+    Word64.pairLimbs t.2.2.2.2.2.2.1 t.2.2.2.2.2.2.2.1,
+    Word64.pairLimbs t.2.2.2.2.2.2.2.2.1 t.2.2.2.2.2.2.2.2.2.1,
+    Word64.pairLimbs t.2.2.2.2.2.2.2.2.2.2.1 t.2.2.2.2.2.2.2.2.2.2.2.1⟩
+  decEq := inferInstanceAs (DecidableEq Word64.Words6)
+  get_lt a k := Word64.Words6.limb_lt a k
   get_pack t k hk := by
-    have e (x : UInt64) : x.toUInt32.toUInt64.toNat = x.toNat % 2 ^ 32 := by
-      rw [UInt32.toNat_toUInt64, UInt64.toNat_toUInt32]
     match k, hk with
-    | 0, _ => exact e _
-    | 1, _ => exact e _
-    | 2, _ => exact e _
-    | 3, _ => exact e _
-    | 4, _ => exact e _
-    | 5, _ => exact e _
-    | 6, _ => exact e _
-    | 7, _ => exact e _
-    | 8, _ => exact e _
-    | 9, _ => exact e _
-    | 10, _ => exact e _
-    | 11, _ => exact e _
+    | 0, _ => exact Word64.pairLimbs_low _ _
+    | 1, _ => exact Word64.pairLimbs_high _ _
+    | 2, _ => exact Word64.pairLimbs_low _ _
+    | 3, _ => exact Word64.pairLimbs_high _ _
+    | 4, _ => exact Word64.pairLimbs_low _ _
+    | 5, _ => exact Word64.pairLimbs_high _ _
+    | 6, _ => exact Word64.pairLimbs_low _ _
+    | 7, _ => exact Word64.pairLimbs_high _ _
+    | 8, _ => exact Word64.pairLimbs_low _ _
+    | 9, _ => exact Word64.pairLimbs_high _ _
+    | 10, _ => exact Word64.pairLimbs_low _ _
+    | 11, _ => exact Word64.pairLimbs_high _ _
   ext a b h := by
     have g (k : Nat) (hk : k < 12) := h k hk
     cases a
     cases b
-    simp only [Limbs12.mk.injEq]
-    exact ⟨UInt32.toUInt64_inj.mp (g 0 (by decide)), UInt32.toUInt64_inj.mp (g 1 (by decide)),
-      UInt32.toUInt64_inj.mp (g 2 (by decide)), UInt32.toUInt64_inj.mp (g 3 (by decide)),
-      UInt32.toUInt64_inj.mp (g 4 (by decide)), UInt32.toUInt64_inj.mp (g 5 (by decide)),
-      UInt32.toUInt64_inj.mp (g 6 (by decide)), UInt32.toUInt64_inj.mp (g 7 (by decide)),
-      UInt32.toUInt64_inj.mp (g 8 (by decide)), UInt32.toUInt64_inj.mp (g 9 (by decide)),
-      UInt32.toUInt64_inj.mp (g 10 (by decide)), UInt32.toUInt64_inj.mp (g 11 (by decide))⟩
+    simp only [Word64.Words6.mk.injEq]
+    exact ⟨Word64.eq_of_halves (g 0 (by decide)) (g 1 (by decide)),
+      Word64.eq_of_halves (g 2 (by decide)) (g 3 (by decide)),
+      Word64.eq_of_halves (g 4 (by decide)) (g 5 (by decide)),
+      Word64.eq_of_halves (g 6 (by decide)) (g 7 (by decide)),
+      Word64.eq_of_halves (g 8 (by decide)) (g 9 (by decide)),
+      Word64.eq_of_halves (g 10 (by decide)) (g 11 (by decide))⟩
+
+/-- Twelve limbs write the integer of their six words. -/
+theorem Limbs.val_words6 (a : Limbs.T 12) : Limbs.val (n := 12) a = Word64.Words6.val a := by
+  -- Each word is its low half plus `2^32` times its high half.
+  simp only [Limbs.val, num, Limbs.get, Word64.Words6.limb, Word64.low_toNat, Word64.high_toNat,
+    Word64.Words6.val]
+  omega
 
 end EthLib.Cryptography.Montgomery

@@ -113,6 +113,8 @@ From Deneb the activations have their own limit, as [EIP-7514] specifies.
 
 From Electra they have no limit, as [EIP-7251] specifies.
 
+Before Electra, a churn quotient of 0 is an error.
+
 [EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 -/
@@ -133,8 +135,8 @@ def processRegistryUpdates (config : Config) (state : BeaconState preset fork) :
     -- Then the first validators of the queue are activated, as many as the churn limit allows.
     --
     -- From Deneb the activations have their own limit, as EIP-7514 specifies.
-    let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config state
-      else getValidatorChurnLimit config state
+    let limit ← liftAccessor (if .dencun ≤ fork then getValidatorActivationChurnLimit config state
+      else getValidatorChurnLimit config state)
     let activated := (activationQueue state).take limit.toNat
     activated.foldlM activateValidator state
 

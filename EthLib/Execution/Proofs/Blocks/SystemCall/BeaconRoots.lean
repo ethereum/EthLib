@@ -360,8 +360,10 @@ theorem specG_get (hfork : .shapella ≤ fork)
 
 /-- A call from an address other than the system address gets a root, as EIP-4788 describes.
 
-It holds from Shapella up to BPO5, the forks whose frames count gas as one number. -/
-theorem spec_get (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
+It holds from Shapella, with the one-counter meter.
+
+From Glamsterdam, a run with no error carries to the state gas meter of the protocol. -/
+theorem spec_get (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
     -- It assumes fewer than 2^256 bytes of input, which the size word of the EVM can hold.
     --
@@ -432,8 +434,10 @@ theorem startSystemCalls_of_empty {env : BlockEnvironment fork} {body : BodyStat
         let out ← systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
         (mid.join out.state).mapError EvmError.state
       else pure mid) := by
-  simp only [startSystemCalls, hfork, ↓reduceDIte,
+  simp only [startSystemCalls, BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT, hfork,
+    ↓reduceDIte,
     systemCall_of_empty (Nat.le_trans (by decide) hfork) hcode addedAt_BEACON_ROOTS_ADDRESS,
     bind, Except.bind, BodyState.join_recordAccountRead, Except.mapError, pure, Except.pure]
+  rfl
 
 end EthLib.Execution.Blocks.BeaconRoots

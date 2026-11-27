@@ -883,7 +883,7 @@ private theorem effectiveBalances_coverage {fork : Fork} {s t : BeaconState pres
     (ok : processEffectiveBalanceUpdates s = .ok t) :
     DepartureCoverage (config := config) s t [] := by
   -- The coverage composes only along a registry lifecycle, so the pass carries both.
-  refine (processEffectiveBalanceUpdates_invariant
+  refine (processEffectiveBalanceUpdates_induction
     (fun t => DepartureCoverage (config := config) s t [] ∧ RegistryLifecycle s t)
     (fun a index b before stepped => ?_) ⟨DepartureCoverage.of_data rfl, .refl s⟩ ok).1
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at stepped
@@ -1930,18 +1930,21 @@ private theorem activeCount_le_size {fork : Fork} (s : BeaconState preset fork) 
 
 /-- The validator-count churn is bounded by the churn of any bound on the active count. -/
 theorem validatorChurnLimit_le_of_active {fork : Fork} (s : BeaconState preset fork)
+    {limit : UInt64} (limitOk : getValidatorChurnLimit config s = .ok limit)
     (bound : Nat) (counted : activeCount s ≤ bound) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound := by
+    limit.toNat ≤ cohortCap config bound := by
   have converted : (getActiveValidatorIndices s (getCurrentEpoch s)).length.toUInt64.toNat ≤
       bound := (Nat.mod_le _ _).trans counted
-  simp only [getValidatorChurnLimit, Uint64.toNat_max, UInt64.toNat_div, cohortCap]
+  obtain ⟨-, rfl⟩ := getValidatorChurnLimit_ok_iff.mp limitOk
+  simp only [Uint64.toNat_max, UInt64.toNat_div, cohortCap]
   exact max_le_max_left _ (Nat.div_le_div_right converted)
 
 /-- The validator-count churn is bounded by the registry size, not just active entries. -/
 theorem validatorChurnLimit_le_cohortCap {fork : Fork} (s : BeaconState preset fork)
+    {limit : UInt64} (limitOk : getValidatorChurnLimit config s = .ok limit)
     (bound : Nat) (bounded : s.validators.data.size ≤ bound) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config bound :=
-  validatorChurnLimit_le_of_active s bound ((activeCount_le_size s).trans bounded)
+    limit.toNat ≤ cohortCap config bound :=
+  validatorChurnLimit_le_of_active s limitOk bound ((activeCount_le_size s).trans bounded)
 
 /-- A finite pre-Electra exit is assigned only while its count cohort has room. -/
 private theorem exitQueue_count_room {fork : Fork} {s queued : BeaconState preset fork}
@@ -1955,8 +1958,9 @@ private theorem exitQueue_count_room {fork : Fork} {s queued : BeaconState prese
   simp only [exitQueue, notElectra, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
     Except.ok.injEq, Prod.mk.injEq] at ok
   obtain ⟨placed, scheduled, rfl, rfl⟩ := ok
-  exact ⟨rfl, (exitQueueEpoch_churn scheduled finite).trans_le
-    (max_le_max_left _ (validatorChurnLimit_le_of_active s bound counted))⟩
+  obtain ⟨limit, limitOk⟩ := getValidatorChurnLimit_of_exitQueueEpoch scheduled
+  exact ⟨rfl, (exitQueueEpoch_churn scheduled limitOk finite).trans_le
+    (max_le_max_left _ (validatorChurnLimit_le_of_active s limitOk bound counted))⟩
 
 /-- Voluntary exits retain concrete charge coverage across their entire operation fold. -/
 private theorem voluntaryExits_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
@@ -3933,7 +3937,7 @@ private theorem CountedStep.registry {f : Fork} {s t : BeaconState preset f}
   refine ⟨activeStep_processRegistryUpdates early ok, fun counted => ?_⟩
   have notElectra : ¬ .pectra ≤ f := Nat.not_le_of_lt early
   simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff] at ok
-  obtain ⟨_, updated, activated⟩ := ok
+  obtain ⟨_, updated, _, _, activated⟩ := ok
   exact ((CountedStep.fold (fun _ _ _ => CountedStep.registryEntry early bound) updated).2
     counted).trans (.fold (fun _ _ _ => CountCohortStep.activate bound) activated)
 
@@ -3976,7 +3980,7 @@ private theorem CountCohortStep.blsChange {f : Fork} {s t : BeaconState preset f
 private theorem CountCohortStep.effective {f : Fork} {s t : BeaconState preset f}
     (bound : Nat) (ok : processEffectiveBalanceUpdates s = .ok t) :
     CountCohortStep config bound s t := by
-  refine processEffectiveBalanceUpdates_invariant (CountCohortStep config bound s)
+  refine processEffectiveBalanceUpdates_induction (CountCohortStep config bound s)
     (fun _ _ _ previous computed => previous.trans ?_) (.refl s bound) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, found, _, _, _, _, set⟩ := computed

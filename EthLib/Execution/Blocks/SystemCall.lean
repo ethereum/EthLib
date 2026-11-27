@@ -216,6 +216,80 @@ def BodyState.join (body : BodyState) (tx : TransactionState) :
   let builder ← body.builder.recordTransaction tx
   return ⟨tx.incorporateTxIntoBlock.parent, builder⟩
 
+/-! ## The system contracts -/
+
+/-- How a block calls a system contract. -/
+inductive SystemCallKind where
+  /-- Before the transactions, unchecked: the block ignores a failure of the call. -/
+  | start
+  /-- After the withdrawals, checked and with no data: the call returns requests of the type. -/
+  | requests (type : UInt8)
+  deriving DecidableEq
+
+/-- A system contract: its address, the first fork whose blocks call it, and how they call it.
+
+Its name is the name of its address in its EIP. -/
+structure SystemContract where
+  /-- The name of the address, as its EIP writes it. -/
+  name : String
+  /-- The address of the contract. -/
+  address : Address
+  /-- The first fork whose blocks call the contract. -/
+  since : Fork
+  /-- How a block calls the contract. -/
+  kind : SystemCallKind
+
+/-- The beacon roots contract of EIP-4788, from Dencun. -/
+def BEACON_ROOTS_CONTRACT : SystemContract :=
+  ⟨"BEACON_ROOTS_ADDRESS", BEACON_ROOTS_ADDRESS, .dencun, .start⟩
+
+/-- The history storage contract of EIP-2935, from Pectra. -/
+def HISTORY_STORAGE_CONTRACT : SystemContract :=
+  ⟨"HISTORY_STORAGE_ADDRESS", HISTORY_STORAGE_ADDRESS, .pectra, .start⟩
+
+/-- The withdrawal request contract of EIP-7002, from Pectra. -/
+def WITHDRAWAL_REQUEST_CONTRACT : SystemContract :=
+  ⟨"WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS", WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, .pectra,
+    .requests WITHDRAWAL_REQUEST_TYPE⟩
+
+/-- The consolidation request contract of EIP-7251, from Pectra. -/
+def CONSOLIDATION_REQUEST_CONTRACT : SystemContract :=
+  ⟨"CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS", CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, .pectra,
+    .requests CONSOLIDATION_REQUEST_TYPE⟩
+
+/-- The builder deposit contract of EIP-8282, from Glamsterdam. -/
+def BUILDER_DEPOSIT_CONTRACT : SystemContract :=
+  ⟨"BUILDER_DEPOSIT_CONTRACT_ADDRESS", BUILDER_DEPOSIT_CONTRACT_ADDRESS, .glamsterdam,
+    .requests BUILDER_DEPOSIT_REQUEST_TYPE⟩
+
+/-- The builder exit contract of EIP-8282, from Glamsterdam. -/
+def BUILDER_EXIT_CONTRACT : SystemContract :=
+  ⟨"BUILDER_EXIT_CONTRACT_ADDRESS", BUILDER_EXIT_CONTRACT_ADDRESS, .glamsterdam,
+    .requests BUILDER_EXIT_REQUEST_TYPE⟩
+
+/-- Every system contract, in the order in which a block calls them.
+
+The request contracts come by ascending request type, as [EIP-7685][eip-7685] orders them.
+
+[EIP-7773][eip-7773] schedules the builder contracts of EIP-8282 for Glamsterdam.
+
+[eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#block-header
+[eip-7773]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-7773.md
+-/
+def SYSTEM_CONTRACTS : List SystemContract :=
+  [BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT, WITHDRAWAL_REQUEST_CONTRACT,
+    CONSOLIDATION_REQUEST_CONTRACT, BUILDER_DEPOSIT_CONTRACT, BUILDER_EXIT_CONTRACT]
+
+/-- The system contracts that a block at `fork` calls, in the order of the calls. -/
+def systemContracts (fork : Fork) : List SystemContract :=
+  SYSTEM_CONTRACTS.filter (·.since ≤ fork)
+
+/-- The type of the requests of a contract, with its address, or none for a call at the start. -/
+def SystemContract.requestContract? (contract : SystemContract) : Option (UInt8 × Address) :=
+  match contract.kind with
+  | .start => none
+  | .requests type => some (type, contract.address)
+
 /-! ## The calls of a block -/
 
 /-- The system calls at the start of a block at `fork`, before its transactions.
@@ -234,8 +308,8 @@ def startSystemCalls {fork : Fork} (env : BlockEnvironment fork) (parentHash : H
   -- Its input is the 32 bytes of the root of the parent beacon block.
   --
   -- Without code at `BEACON_ROOTS_ADDRESS`, the call fails silently: no check here.
-  let body ← if h : .dencun ≤ fork then do
-      let out ← systemCall env body.block BEACON_ROOTS_ADDRESS
+  let body ← if h : BEACON_ROOTS_CONTRACT.since ≤ fork then do
+      let out ← systemCall env body.block BEACON_ROOTS_CONTRACT.address
         ⟨(env.parentBeaconBlockRoot h).toArray⟩
       (body.join out.state).mapError .state
     else pure body
@@ -244,27 +318,18 @@ def startSystemCalls {fork : Fork} (env : BlockEnvironment fork) (parentHash : H
   -- Its input is the 32 bytes of the hash of the parent block.
   --
   -- As for the beacon roots, a missing contract makes the call fail silently: no check here.
-  if .pectra ≤ fork then do
-    let out ← systemCall env body.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
+  if HISTORY_STORAGE_CONTRACT.since ≤ fork then do
+    let out ← systemCall env body.block HISTORY_STORAGE_CONTRACT.address ⟨parentHash.toArray⟩
     (body.join out.state).mapError .state
   else pure body
 
-/-- The request contracts of Pectra, each with the type of its requests. -/
-def REQUEST_CONTRACTS : List (UInt8 × Address) :=
-  [(WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS),
-    (CONSOLIDATION_REQUEST_TYPE, CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS)]
+/-- The contracts that a block at `fork` reads requests from, each with the type of its requests.
 
-/-- The contracts of the builder requests, which a block reads from Glamsterdam. -/
-def BUILDER_REQUEST_CONTRACTS : List (UInt8 × Address) :=
-  [(BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_DEPOSIT_CONTRACT_ADDRESS),
-    (BUILDER_EXIT_REQUEST_TYPE, BUILDER_EXIT_CONTRACT_ADDRESS)]
+They come in the order of their types: from Pectra withdrawals and consolidations.
 
-/-- The contracts that a block at `fork` reads requests from, in the order of their types.
-
-From Glamsterdam, the builder contracts come after the consolidation contract. -/
+From Glamsterdam, the builder deposits and exits follow. -/
 def requestContracts (fork : Fork) : List (UInt8 × Address) :=
-  if fork ≥ .glamsterdam then REQUEST_CONTRACTS ++ BUILDER_REQUEST_CONTRACTS
-  else REQUEST_CONTRACTS
+  (systemContracts fork).filterMap SystemContract.requestContract?
 
 /-- The request list of type `type` with the data `data`, or none when the data is empty.
 
@@ -303,16 +368,14 @@ def readRequest {fork : Fork} (env : BlockEnvironment fork)
 
 From Glamsterdam, the builder deposit and exit requests follow them.
 
-Before Pectra, there is no request. -/
+Before Pectra, there is no request contract, so there is no request. -/
 def readRequests {fork : Fork} (env : BlockEnvironment fork) (body : BodyState) :
     Except BlockError (BodyState × List ByteArray) :=
-  if .pectra ≤ fork then
-    -- EIP-7002 and EIP-7251: at the end of each execution block, one call per contract.
-    --
-    -- EIP-7685: the lists come by ascending request type.
-    --
-    -- Each call joins the body at the current position.
-    (requestContracts fork).foldlM (readRequest env) (body, [])
-  else .ok (body, [])
+  -- EIP-7002 and EIP-7251: at the end of each execution block, one call per contract.
+  --
+  -- EIP-7685: the lists come by ascending request type.
+  --
+  -- Each call joins the body at the current position.
+  (requestContracts fork).foldlM (readRequest env) (body, [])
 
 end EthLib.Execution.Blocks

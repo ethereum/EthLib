@@ -121,6 +121,17 @@ theorem Config.divisorsPositive_mainnet : Config.mainnet.DivisorsPositive := by
 theorem Config.divisorsPositive_minimal : Config.minimal.DivisorsPositive := by
   constructor <;> decide
 
+/-- The churn quotient of exits and deposits is positive.
+
+From Gloas it is the quotient of exits, and before it the quotient of the whole churn. -/
+theorem Config.DivisorsPositive.exitQuotient {config : Config} {fork : Base.Fork}
+    (positive : config.DivisorsPositive) :
+    (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0 := by
+  split
+  · exact positive.churnGloas
+  · exact positive.churn
+
 /-- The effective-balance caps of a preset are in order. -/
 structure CapOrder (preset : Preset) : Prop where
   /-- The cap before Electra is at most the least balance to activate. -/

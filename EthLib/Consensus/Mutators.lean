@@ -125,7 +125,9 @@ def decreaseBalance (state : BeaconState preset fork) (index : ValidatorIndex) (
   -- The balance `b` becomes `b - d` if `d ≤ b`, for the amount `d`, and else 0.
   state.setBalance index (saturatingSub (← getBalance state index) delta)
 
-/-- The epoch at which a validator that starts to exit now leaves, before Electra. -/
+/-- The epoch at which a validator that starts to exit now leaves, before Electra.
+
+A churn quotient of 0 is an error. -/
 def exitQueueEpoch (config : Config) (state : BeaconState preset fork) :
     Except AccessorError Epoch := do
   let validators := state.validators.data.toList
@@ -137,7 +139,7 @@ def exitQueueEpoch (config : Config) (state : BeaconState preset fork) :
   -- The number of validators that exit at `q`.
   let churn := (validators.filter (·.exitEpoch == latest)).length
   -- If that number has reached the churn limit, the validator leaves at `q + 1`.
-  if (getValidatorChurnLimit config state).toNat ≤ churn then liftArith (addChecked latest 1)
+  if (← getValidatorChurnLimit config state).toNat ≤ churn then liftArith (addChecked latest 1)
   else return latest
 
 /-- The epoch at which an exit of a balance leaves, and the state with the exit queue updated.

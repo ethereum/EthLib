@@ -30,7 +30,6 @@ theorem decodePublicKey_encodePublicKey {point : Point} (hcurve : point.isOnCurv
   | affine x y =>
     have hsize : (encodePublicKey (.affine x y)).size = 37 := by
       simp [encodePublicKey, ByteArray.size_append, Point.size_encodeCompressed]
-      rfl
     have hext :
         (encodePublicKey (.affine x y)).extract 4 37 = (Point.affine x y).encodeCompressed :=
       ByteArray.extract_append_eq_right (by rfl) (by rw [← hsize]; rfl)
@@ -66,7 +65,7 @@ theorem peerId_of_decodePeerId {id : ByteArray} {point : Point}
     have hk := encodePublicKey_of_decodePublicKey h
     rw [peerId, hk]
     apply ByteArray.ext
-    simp [ByteArray.data_append]
+    simp
     apply Array.ext'
     simp [hl]
   · simp at h

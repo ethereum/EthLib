@@ -1052,8 +1052,8 @@ def consensus_is_assigned_to_sync_committee(name: str, fork: str, state: bytes, 
     """From Altair: whether a validator serves on the sync committee of the period of an epoch."""
     ...
 
-def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: dict[str, Any] | None, validator_index: int) -> list[int]:
-    """From Altair: the sync committee subnets of a validator for the next slot, as a list."""
+def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int, validator_index: int) -> list[int]:
+    """From Altair: the sync committee subnets of a validator for its messages of a slot, as a list."""
     ...
 
 def consensus_get_ptc_assignment(name: str, fork: str, state: bytes, config: dict[str, Any] | None, epoch: int, validator_index: int) -> int | None:
@@ -1152,8 +1152,8 @@ def consensus_is_optimistic_candidate_block(name: str, fork: str, blocks: list[b
     """From Bellatrix: whether a block may be imported optimistically, given the known blocks."""
     ...
 
-def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> bytes:
-    """From Bellatrix: the root of the latest block of a chain that is not optimistic."""
+def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> tuple[bytes, int]:
+    """From Bellatrix: the latest node at or above a node that is verified or of genesis."""
     ...
 
 def consensus_on_valid_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> list[bytes]:

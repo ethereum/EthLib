@@ -67,6 +67,8 @@ def UpgradeReady (forked : ForkedBeaconState preset) : Prop :=
 
 /-- The upgrade to the next fork succeeds under the conditions of that upgrade. -/
 theorem upgradeNext_exists_ok {forked : ForkedBeaconState preset}
+    -- The upgrade to Electra divides by the churn quotient.
+    (quotient : forked.fork = .dencun → config.CHURN_LIMIT_QUOTIENT ≠ 0)
     (ready : UpgradeReady forked) : ∃ next, upgradeNext config checks forked = .ok next := by
   obtain ⟨fork, pre⟩ := forked
   cases fork with
@@ -81,7 +83,8 @@ theorem upgradeNext_exists_ok {forked : ForkedBeaconState preset}
   | shapella => exact ⟨_, rfl⟩
   | dencun =>
     obtain ⟨matched, summed, room, queue⟩ := ready
-    obtain ⟨post, ok⟩ := upgradeToElectra_exists_ok (config := config) matched summed room queue
+    obtain ⟨post, ok⟩ := upgradeToElectra_exists_ok (config := config) (quotient rfl) matched summed
+      room queue
     exact ⟨⟨⟨.pectra, post⟩, (by decide : Fork.dencun < .pectra)⟩, by simp [upgradeNext, ok]⟩
   | pectra =>
     obtain ⟨seedRoom, look, slotRoom, drawable⟩ := ready

@@ -86,9 +86,9 @@ private theorem stepRules_createdRel : StepRules fork (CreatedRel (fork := fork)
   trans hab hbc := ⟨hab.1.trans hbc.1, fun h => hbc.2 (hab.2 h)⟩
   static h :=
     ⟨stepRules_readsLe.static h, CreatedRead.of_readsLe (stepRules_readsLe.static h) h.created⟩
-  sstore evm address key value state gain h :=
-    ⟨stepRules_readsLe.sstore evm address key value state gain h,
-      CreatedRead.of_readsLe (stepRules_readsLe.sstore evm address key value state gain h)
+  sstore evm key value state gain h :=
+    ⟨stepRules_readsLe.sstore evm key value state gain h,
+      CreatedRead.of_readsLe (stepRules_readsLe.sstore evm key value state gain h)
         (TransactionState.createdAccounts_setStorage h)⟩
   tstore evm address key value :=
     ⟨stepRules_readsLe.tstore evm address key value,

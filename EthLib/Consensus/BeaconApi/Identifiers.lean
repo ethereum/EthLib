@@ -229,9 +229,30 @@ def isFinalizedRoot (store : Store preset fork) (root : Root) : Bool :=
     -- A block with no such ancestor is not reported finalized.
     | .error _ => false
 
-/-- Whether a response that references a block references a payload not yet verified. -/
-def isExecutionOptimistic (optimistic : OptimisticStore preset fork) (root : Root) : Bool :=
+/-- Whether a response resolved to a node of the fork choice references a payload not verified. -/
+def isNodeExecutionOptimistic (optimistic : OptimisticStore preset fork) (node : ForkChoiceNode) :
+    Bool :=
   -- The source: true if the response references an unverified execution payload.
-  optimistic.isOptimistic root
+  --
+  -- From Gloas, whether the node is optimistic.
+  if gloas : .glamsterdam ≤ fork then
+    match optimistic.isNodeOptimistic gloas node with
+    | .ok answer => answer
+    -- A payload that no known block names came before the anchor, which is trusted.
+    --
+    -- It is not in the set of optimistic payloads, so the node is not optimistic.
+    | .error (.payloadNotVerified _) => false
+    -- EthLib's choice: a node of a block that the store does not know reads its root.
+    | .error _ => optimistic.isOptimistic node.root
+  -- Before Gloas, whether the block of the node is optimistic.
+  else optimistic.isOptimistic node.root
+
+/-- Whether a response that references a block references a payload not yet verified.
+
+From Gloas a request for a block resolves to its pending node, a choice of EthLib.
+
+That node reads the payload that the block builds on, the one its state holds. -/
+def isExecutionOptimistic (optimistic : OptimisticStore preset fork) (root : Root) : Bool :=
+  isNodeExecutionOptimistic optimistic ⟨root, .pending⟩
 
 end EthLib.Consensus.BeaconApi

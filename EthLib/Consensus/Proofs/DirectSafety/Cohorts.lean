@@ -293,7 +293,7 @@ private theorem cohorts_block (early : fork < .pectra) {engine : ExecutionEngine
 
 private theorem cohorts_effective (ok : processEffectiveBalanceUpdates state = .ok after) :
     CohortsKept state after := by
-  refine processEffectiveBalanceUpdates_invariant (CohortsKept state)
+  refine processEffectiveBalanceUpdates_induction (CohortsKept state)
     (fun _ _ _ before ok => before.trans ?_) (.refl state) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, found, _, _, _, _, set⟩ := ok
@@ -365,15 +365,16 @@ private theorem cohorts_activate_many :
 The churn is read after the first pass of the registry entries, and `cap` bounds it there. -/
 private theorem activationCohort_processRegistryUpdates_le (early : fork < .pectra)
     (ok : processRegistryUpdates config state = .ok after) (cap : Nat)
-    (churn : ∀ updated, (List.range state.validators.data.size).foldlM (updateRegistryEntry config)
-      state = .ok updated → (getValidatorChurnLimit config updated).toNat ≤ cap)
+    (churn : ∀ updated limit, (List.range state.validators.data.size).foldlM
+      (updateRegistryEntry config) state = .ok updated →
+        getValidatorChurnLimit config updated = .ok limit → limit.toNat ≤ cap)
     (e : Epoch) (finite : e ≠ FAR_FUTURE_EPOCH) :
     validatorCohort Validator.activationEpoch after e ≤
       validatorCohort Validator.activationEpoch state e +
         if e.toNat = scheduledActivationEpoch state then cap else 0 := by
   have noElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt early
-  simp only [processRegistryUpdates, noElectra, ↓reduceIte, bind_ok_iff] at ok
-  obtain ⟨updated, pass, activated⟩ := ok
+  simp only [processRegistryUpdates, noElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨updated, pass, limit, limitOk, activated⟩ := ok
   have kept := CohortsKept.foldlM
     (fun _ _ _ ok => (cohorts_updateEntry ok).1) pass
   have slot := foldlM_ok_invariant (fun next : BeaconState preset fork => next.slot = state.slot)
@@ -382,15 +383,12 @@ private theorem activationCohort_processRegistryUpdates_le (early : fork < .pect
     simp only [scheduledActivationEpoch, getCurrentEpoch, slot]
   have bound := cohorts_activate_many activated e
   rw [kept.activations e finite, same] at bound
-  have limit : (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
-      else getValidatorChurnLimit config updated).toNat ≤ cap := by
-    split
-    · exact Nat.le_trans (getValidatorActivationChurnLimit_le).2 (churn updated pass)
-    · exact churn updated pass
-  have taken := List.length_take_le
-    (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
-      else getValidatorChurnLimit config updated).toNat
-    (activationQueue updated)
+  have limitLe : limit.toNat ≤ cap := by
+    split at limitOk
+    · obtain ⟨-, churnLimit, churnOk, below⟩ := getValidatorActivationChurnLimit_le limitOk
+      exact Nat.le_trans (UInt64.le_iff_toNat_le.mp below) (churn updated churnLimit pass churnOk)
+    · exact churn updated limit pass limitOk
+  have taken := List.length_take_le limit.toNat (activationQueue updated)
   split at bound <;> simp_all only [↓reduceIte]
   omega
 
@@ -402,11 +400,13 @@ private theorem activationCohort_processRegistryUpdates (early : fork < .pectra)
       validatorCohort Validator.activationEpoch state e +
         if e.toNat = scheduledActivationEpoch state then
           cohortCap config state.validators.data.size else 0 := by
-  refine activationCohort_processRegistryUpdates_le early ok _ (fun updated pass => ?_) e finite
+  refine activationCohort_processRegistryUpdates_le early ok _
+    (fun updated _ pass limitOk => ?_) e finite
   have sizes := foldlM_ok_invariant (SameSizes state)
     (fun _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntry step))
     (SameSizes.refl state) pass
-  exact validatorChurnLimit_le_cohortCap (config := config) updated _ (Nat.le_of_eq sizes.1)
+  exact validatorChurnLimit_le_cohortCap (config := config) updated limitOk _
+    (Nat.le_of_eq sizes.1)
 
 /-- The activation pass fills an empty future cohort; its count cap needs no positivity. -/
 private theorem activationCohortBound_registry_count (early : fork < .pectra)
@@ -793,8 +793,9 @@ private theorem CohortsKept.assigned {s t : BeaconState preset fork} (kept : Coh
 `cap` bounds the count churn after the first pass over the entries. -/
 private theorem assigned_processRegistryUpdates (early : fork < .pectra)
     (ok : processRegistryUpdates config state = .ok after) (cap : Nat)
-    (churn : ∀ updated, (List.range state.validators.data.size).foldlM (updateRegistryEntry config)
-      state = .ok updated → (getValidatorChurnLimit config updated).toNat ≤ cap) :
+    (churn : ∀ updated limit, (List.range state.validators.data.size).foldlM
+      (updateRegistryEntry config) state = .ok updated →
+        getValidatorChurnLimit config updated = .ok limit → limit.toNat ≤ cap) :
     assignedCount after ≤ assignedCount state + cap := by
   obtain ⟨first, second⟩ := assignedCount_eq_sum state after
   rw [first, second]
@@ -828,7 +829,7 @@ private theorem churn_updateEntries {updated : BeaconState preset fork}
 Then it assigns at most `cap` activation epochs, where `cap` bounds the count churn. -/
 private theorem assigned_advanceSlot (early : fork < .pectra)
     (ok : advanceSlot config checks state = .ok after) (cap : Nat)
-    (churn : (getValidatorChurnLimit config state).toNat ≤ cap) :
+    (churn : ∀ limit, getValidatorChurnLimit config state = .ok limit → limit.toNat ≤ cap) :
     after.validators.data = state.validators.data ∨
       ((getCurrentEpoch state).toNat < (getCurrentEpoch after).toNat ∧
         assignedCount after ≤ assignedCount state + cap) := by
@@ -838,13 +839,14 @@ private theorem assigned_advanceSlot (early : fork < .pectra)
   · right
     obtain ⟨before, registered, head, registeredOk, tail, beforeSlot, -, -, beforeValidators⟩ :=
       cohorts_epoch early epochedOk
-    have registry := assigned_processRegistryUpdates early registeredOk cap fun updated pass => by
-      rw [churn_updateEntries pass]
-      have same : getValidatorChurnLimit config before = getValidatorChurnLimit config state := by
-        unfold getValidatorChurnLimit getActiveValidatorIndices getCurrentEpoch
-        rw [beforeSlot, beforeValidators]
-      rw [same]
-      exact churn
+    have registry := assigned_processRegistryUpdates early registeredOk cap
+      fun updated limit pass limitOk => by
+        rw [churn_updateEntries pass] at limitOk
+        have same : getValidatorChurnLimit config before = getValidatorChurnLimit config state := by
+          unfold getValidatorChurnLimit getActiveValidatorIndices getCurrentEpoch
+          rw [beforeSlot, beforeValidators]
+        rw [same] at limitOk
+        exact churn limit limitOk
     have epochs := nextSlot_epoch_of_boundary nextOk boundary
     refine ⟨?_, ?_⟩
     · simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
@@ -993,7 +995,8 @@ theorem _root_.EthLib.Consensus.Run.windowAssignments_le_initial_add_new
 private theorem churn_le_windowCount {x : ForkedBeaconState preset} {s : BeaconState preset fork}
     (life : RegistryLifecycle x.state s)
     (ordered : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch s).toNat) :
-    (getValidatorChurnLimit config s).toNat ≤ cohortCap config (windowCount x s) := by
+    ∀ limit, getValidatorChurnLimit config s = .ok limit →
+      limit.toNat ≤ cohortCap config (windowCount x s) := by
   have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   -- Each active position is assigned, and was not exited at `x`.
   have active : activeCount s ≤ windowCount x s := by
@@ -1025,7 +1028,7 @@ private theorem churn_le_windowCount {x : ForkedBeaconState preset} {s : BeaconS
           omega
         · rw [← kept.exitEpoch exited]
           omega
-  exact DirectSafety.validatorChurnLimit_le_of_active s _ active
+  exact fun _ limitOk => DirectSafety.validatorChurnLimit_le_of_active s limitOk _ active
 
 /-- One pre-Electra step of a window grows the window count by at most one count churn.
 

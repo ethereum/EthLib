@@ -320,8 +320,7 @@ theorem Store.ForwardReachable.votesHaveOrigins
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih.of_same rfl rfl rfl ⟨rfl, rfl⟩
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact ih.of_same rfl rfl rfl ⟨rfl, rfl⟩
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok ‹_› accepted

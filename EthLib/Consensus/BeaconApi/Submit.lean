@@ -156,7 +156,7 @@ def syncSubnets (context : SubmitContext preset fork) (altair : .altair ≤ fork
   | .error _ => [0]
   | .ok state =>
     -- The source: all applicable subnets, those that hold a seat of the validator, once each.
-    match computeSubnetsForSyncCommittee state altair message.validatorIndex with
+    match computeSubnetsForSyncCommittee state altair message.slot message.validatorIndex with
     | .ok (subnet :: subnets) => subnet :: subnets
     -- Subnet 0 alone when the validator has no seat, or when the subnets cannot be computed.
     | _ => [0]

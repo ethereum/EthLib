@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Triple
+public import EthLib.Execution.Proofs.Evm.Logic.Wp
 public import EthLib.Base.Proofs.Fork
 public import EthLib.Execution.Proofs.Evm.Instructions.StackOnly
 
@@ -32,10 +33,12 @@ theorem Step.of_instruction {evm after : Evm fork Meter} {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} (running : evm.running = true)
     (h : evm.pc < evm.code.size) (decoded : Op.ofByte fork evm.code[evm.pc] = some op)
     (hrun : instruction fork op = some run) (ok : run evm = .ok after) : Step fork evm after :=
-  -- The step reads the byte at the program counter and decodes its opcode at the fork.
+  -- The frame meets the weakest precondition of the opcode for the frame that it gives.
   --
-  -- It then runs the instruction of that opcode.
-  .next running (by rw [step_of_instruction h decoded hrun, ok]; rfl)
+  -- So one step reaches that frame.
+  let ⟨_, step, same⟩ := (wp_iff_step (runChild := noMessage) (Q := (· = after)) running h
+    decoded hrun).mp ((wp_iff_ends h decoded hrun).mpr (by rw [ok]; rfl))
+  same ▸ step
 
 /-- The same step, with the code, the program counter and the byte given apart from the frame.
 
@@ -127,11 +130,13 @@ theorem At.rule {byte : UInt8} {op : Op}
     (h : ∀ evm, At code message pc stack memory gas state substate returnData evm →
       ∃ after, run evm = .ok after ∧ post after) :
     Hoare fork (At code message pc stack memory gas state substate returnData) post := by
-  apply Triple.of_step
-  intro evm hp
+  -- Each frame meets the weakest precondition of the opcode, since its instruction ends in `post`.
+  refine Hoare.of_wp hrun fun evm hp => ?_
   obtain ⟨after, ok, hpost⟩ := h evm hp
-  exact ⟨after,
-    Step.of_code hp.2.2.2.2.2.2.2.1 hp.1 hp.2.2.2.1 hlt hbyte decoded hrun ok, hpost⟩
+  obtain ⟨hcode, -, -, hpc, -, -, -, running, -⟩ := hp
+  subst hcode hpc
+  have hdec : Op.ofByte fork evm.code[evm.pc] = some op := by rw [hbyte]; exact decoded
+  exact ⟨running, hlt, hdec, (wp_iff_ends hlt hdec hrun).mpr (by rw [ok]; exact hpost)⟩
 
 /-- The byte `0x5f + n`, for `n` from 1 to 32, decodes as PUSHn. -/
 theorem decode_push (n : Fin 33) (hn : n.val ≠ 0) :

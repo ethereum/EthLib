@@ -2,6 +2,11 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Stack
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
+public import EthLib.Execution.Proofs.Evm.Logic.Environment
+public import EthLib.Execution.Proofs.Evm.Logic.Known
+public meta import Lean.Meta.Tactic.Simp
+public meta import Lean.Meta.Tactic.Delta
+public meta import Lean.Elab.Tactic.Basic
 
 /-!
 # Proofs: a tactic that steps through the opcodes of a code
@@ -13,6 +18,8 @@ Each rule needs facts about the code.
 These are that the program counter lies inside the code, the byte there, and the data of a PUSH.
 
 The tactic here applies the rule of the opcode at the program counter, and proves those facts.
+
+A second tactic does the same over frames that know a few ranges of memory.
 -/
 
 @[expose] public section
@@ -42,7 +49,79 @@ theorem Spec.reshape {code : ByteArray} {message : Message fork} {pc : Nat} {s s
     Spec fork (At code message pc s m g st ss rd) Q :=
   Spec.seq (Logic.reshape hs hm hg) h
 
+/-! ## Operations on words of numbers -/
+
+open Lean Meta Simp in
+/-- Unfolds an operation on words once each operand is a number, so that simp evaluates it.
+
+An operation with an operand that is not a number stays as it is. -/
+meta def unfoldOfNumbers (e : Expr) : SimpM DStep := do
+  for arg in e.getAppArgs do
+    if (← getBitVecValue? arg).isNone then return .continue
+  match ← delta? e with
+  | some unfolded => return .visit unfolded
+  | none => return .continue
+
+/-- ADD of two numbers. -/
+dsimproc_decl evalAdd (add _ _) := unfoldOfNumbers
+/-- SUB of two numbers. -/
+dsimproc_decl evalSub (sub _ _) := unfoldOfNumbers
+/-- MUL of two numbers. -/
+dsimproc_decl evalMul (mul _ _) := unfoldOfNumbers
+/-- DIV of two numbers. -/
+dsimproc_decl evalDiv (div _ _) := unfoldOfNumbers
+/-- MOD of two numbers. -/
+dsimproc_decl evalMod (mod _ _) := unfoldOfNumbers
+/-- LT of two numbers. -/
+dsimproc_decl evalLessThan (lessThan _ _) := unfoldOfNumbers
+/-- GT of two numbers. -/
+dsimproc_decl evalGreaterThan (greaterThan _ _) := unfoldOfNumbers
+/-- EQ of two numbers. -/
+dsimproc_decl evalEqual (equal _ _) := unfoldOfNumbers
+/-- ISZERO of a number. -/
+dsimproc_decl evalIsZero (isZero _) := unfoldOfNumbers
+/-- AND of two numbers. -/
+dsimproc_decl evalAnd (bitwiseAnd _ _) := unfoldOfNumbers
+/-- OR of two numbers. -/
+dsimproc_decl evalOr (bitwiseOr _ _) := unfoldOfNumbers
+/-- XOR of two numbers. -/
+dsimproc_decl evalXor (bitwiseXor _ _) := unfoldOfNumbers
+/-- NOT of a number. -/
+dsimproc_decl evalNot (bitwiseNot _) := unfoldOfNumbers
+/-- SHL of two numbers. -/
+dsimproc_decl evalShl (bitwiseShl _ _) := unfoldOfNumbers
+/-- SHR of two numbers. -/
+dsimproc_decl evalShr (bitwiseShr _ _) := unfoldOfNumbers
+
 open Lean.Parser.Tactic
+
+/-- Proves a goal with no free variables by `decide`, and fails at once on any other goal. -/
+syntax "evm_decide" : tactic
+
+open Lean Elab Tactic in
+elab_rules : tactic
+  | `(tactic| evm_decide) => withMainContext do
+    let goal ← instantiateMVars (← getMainTarget)
+    let lctx ← getLCtx
+    -- On a deep goal with free variables, `decide` can exceed the recursion depth.
+    --
+    -- That error escapes `first`, so a step that tries `decide` among its rules would fail.
+    --
+    -- `decide` reduces a variable bound by `let`, so only a variable with no value blocks it.
+    if goal.hasMVar ||
+        (goal.hasFVar && goal.hasAnyFVar fun v => !(lctx.find? v).any (·.isLet)) then
+      throwError "the goal has free variables or metavariables, so it is not decided"
+    evalTactic (← `(tactic| decide))
+
+/-- Proves a goal by linear arithmetic, with a recursion limit of 4096.
+
+Over several named constants, its proof can exceed the default limit inside a step.
+
+That error escapes `first`, so a step would fail where the bound holds. -/
+syntax "evm_omega" : tactic
+
+macro_rules
+  | `(tactic| evm_omega) => `(tactic| set_option maxRecDepth 4096 in omega)
 
 /-- Proves a fact about the code from the rewrite rules `ls`, by evaluation on numbers.
 
@@ -105,24 +184,53 @@ syntax "evm_gas" : tactic
 
 macro_rules
   | `(tactic| evm_gas) => `(tactic| first
-      | (apply Nat.le_sub_of_add_le; first | omega | (evm_prices; omega))
-      | omega
-      | (evm_prices; omega))
+      | (apply Nat.le_sub_of_add_le; first | evm_omega | (evm_prices; evm_omega))
+      | evm_omega
+      | (evm_prices; evm_omega))
 
 /-- Proves that the stack has room for one more word. -/
 syntax "evm_room" : tactic
 
 macro_rules
   | `(tactic| evm_room) => `(tactic|
-      (simp only [List.length_cons, List.length_nil, STACK_LIMIT] <;> omega))
+      (simp only [List.length_cons, List.length_nil, STACK_LIMIT] <;> evm_omega))
 
-/-- Evaluates the program counter, the pushed word and the gas of the frame after a step. -/
+/-- Evaluates the arithmetic, comparison, bitwise and shift operations on words of numbers.
+
+SDIV, SMOD, ADDMOD, MULMOD, EXP, SIGNEXTEND, BYTE, SAR, SLT and SGT are left as they are. -/
+syntax "evm_words" : tactic
+
+macro_rules
+  | `(tactic| evm_words) => `(tactic| simp only [evalAdd, evalSub,
+      evalMul, evalDiv, evalMod, evalLessThan, evalGreaterThan, evalEqual, evalIsZero, evalAnd,
+      evalOr, evalXor, evalNot, evalShl, evalShr, BitVec.reduceAdd, BitVec.reduceSub,
+      BitVec.reduceMul, BitVec.reduceAnd, BitVec.reduceOr, BitVec.reduceXOr, BitVec.reduceNot,
+      BitVec.reduceHShiftLeft, BitVec.reduceHShiftRight, BitVec.reduceToNat, BitVec.reduceEq,
+      BitVec.reduceOfNat, Nat.reduceLT, Nat.reduceGT, Nat.reduceDiv, Nat.reduceMod, ↓reduceIte])
+
+/-- A frame at an offset plus two numbers is the frame at the offset plus their sum.
+
+So the program counter of a block at an offset `o` stays `o + k` from step to step. -/
+theorem At.pc_add_add {code : ByteArray} {message : Message fork} {o a b : Nat}
+    {stack : List U256} {memory : ByteArray} {gas : Nat} {state : State.TransactionState}
+    {substate : Substate} {returnData : ByteArray} :
+    At code message (o + a + b) stack memory gas state substate returnData =
+      At code message (o + (a + b)) stack memory gas state substate returnData := by
+  rw [Nat.add_assoc]
+
+/-- Evaluates the program counter, the pushed word and the gas of the frame after a step.
+
+It also evaluates each closed operation on words and each closed comparison.
+
+It also reduces each `if` on numbers.
+
+A program counter at an offset `o` comes back as `o + k`, with `k` a number. -/
 syntax "evm_tidy" : tactic
 
 macro_rules
   | `(tactic| evm_tidy) => `(tactic| ((try evm_prices) <;> (try simp only [UInt8.reduceToNat,
       BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub, Nat.sub_sub, List.set_cons_zero,
-      List.set_cons_succ])))
+      List.set_cons_succ, At.pc_add_add]) <;> (try evm_words)))
 
 /-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
 
@@ -207,17 +315,21 @@ macro_rules
          case gas => evm_gas
          case dest => evm_dest [$ls,*])
       -- JUMPI on a condition that is a number, or that a hypothesis proves zero or nonzero.
+      --
+      -- A closed condition is decided first, and a hypothesis must match at reducible transparency.
+      --
+      -- Otherwise, a hypothesis on a jump destination unfolds the code past the recursion limit.
       | (refine' Triple.seq (jumpi_taken ?lt ?op ?gas ?nz ?dest) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case nz => first | assumption | decide
+         case nz => first | evm_decide | with_reducible assumption
          case dest => evm_dest [$ls,*])
       | (refine' Triple.seq (jumpi_of_eq_zero ?lt ?op ?gas ?zero) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case zero => first | assumption | decide)
+         case zero => first | evm_decide | with_reducible assumption)
       -- Each opcode that pushes a word fixed by the frame, such as CALLVALUE.
       | (refine' Triple.seq (push_of_readFrame ?lt ?op ?dec ?run ?word ?gas ?room) ?next
          case lt => evm_code [$ls,*]
@@ -235,11 +347,18 @@ macro_rules
          case run => rfl
          case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
          -- A hypothesis or linear arithmetic must show that the number is below `2^256`.
-         case fit => first | assumption | omega
+         case fit => first | with_reducible assumption | evm_omega
          case gas => evm_gas
          case room => evm_room)
       -- GAS.
       | (refine' Triple.seq (gas_rule ?lt ?op ?gas ?room) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_gas
+         case room => evm_room)
+      -- CHAINID.
+      | (refine' Triple.seq (chainid_rule ?fork ?lt ?op ?gas ?room) ?next
+         case fork => evm_fork
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
@@ -330,13 +449,13 @@ macro_rules
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case nz => first | assumption | decide
+         case nz => first | evm_decide | with_reducible assumption
          case dest => evm_dest [$ls,*])
       | (refine' Triple.seq (jumpi_of_eq_zeroG ?lt ?op ?gas ?zero) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
          case gas => evm_gas
-         case zero => first | assumption | decide)
+         case zero => first | evm_decide | with_reducible assumption)
       | (refine' Triple.seq (push_of_readFrameG ?lt ?op ?dec ?run ?word ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -351,7 +470,13 @@ macro_rules
          case dec => refine ofByte_of_decode rfl ?_; evm_fork
          case run => rfl
          case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
-         case fit => first | assumption | omega
+         case fit => first | with_reducible assumption | evm_omega
+         case gas => evm_gas
+         case room => evm_room)
+      | (refine' Triple.seq (chainid_ruleG ?fork ?lt ?op ?gas ?room) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
          case gas => evm_gas
          case room => evm_room)
       | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
@@ -369,5 +494,187 @@ macro_rules
       | (refine' stop_of_size_le ?le
          case le => simp only [$ls,*, NatCode.size_ofNat]; decide)
       | fail "the opcode at the program counter is not STOP, and the code does not end there")
+
+/-! ## Steps over frames that know a few ranges of memory
+
+The tactics here evaluate numbers only, by simprocs, and match facts without opening their bytes.
+
+A fact can hold the bytes of a hash, and `decide` or a full unfolding would evaluate the hash.
+-/
+
+/-- Evaluates the growth of memory, and its price, for ranges and a size that are numbers. -/
+syntax "evm_mem" : tactic
+
+macro_rules
+  | `(tactic| evm_mem) => `(tactic| simp only [extendMemory,
+      ceil32, wordCount, memoryGasCost, keccak256Cost, WORD_BYTES, MEMORY_PER_WORD,
+      OPCODE_KECCAK256_BASE, OPCODE_KECCAK256_PER_WORD, BitVec.reduceToNat, Nat.reduceMod,
+      Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul, Nat.reduceDiv, Nat.reducePow, BitVec.reduceEq,
+      Nat.reduceEqDiff, Nat.reduceLeDiff, Nat.reduceLT, ↓reduceIte, Nat.add_zero, Nat.zero_add,
+      ByteArray.size_empty])
+
+/-- Proves the gas of a step that may grow memory, by linear arithmetic once its price is known. -/
+syntax "evm_memGas" : tactic
+
+macro_rules
+  -- The growth of memory is priced first.
+
+  -- On an unpriced cost, `omega` can exhaust the recursion depth, which `first` cannot catch.
+  | `(tactic| evm_memGas) => `(tactic| first | (evm_mem <;> evm_gas) | evm_gas)
+
+/-- Runs a tactic that may unfold definitions, except the hash and the functions of fact bytes.
+
+So it compares the bytes of facts by their form, and never evaluates them. -/
+syntax "evm_keepBytes " tactic : tactic
+
+open Lean Meta Elab Tactic in
+elab_rules : tactic
+  | `(tactic| evm_keepBytes $tac) => do
+    -- The hash, the bytes of a word, a read of a buffer, a read of memory, and a join of bytes.
+    let kept := [``keccak, ``wordBytes, ``bufferRead, ``memoryReadBytes, ``ByteArray.append]
+    let canUnfold (config : Meta.Config) (info : ConstantInfo) : CoreM Bool :=
+      if kept.contains info.name then pure false else canUnfoldDefault config info
+    -- An error of the recursion limit becomes a failure, so that `first` tries the next tactic.
+    --
+    -- A timeout still escapes, since the budget of heartbeats does not start again.
+    tryCatchRuntimeEx (withCanUnfoldPred canUnfold (evalTactic tac)) fun e => do
+      if e.isMaxRecDepth then throwError "the recursion limit was reached" else throw e
+
+/-- Proves that a fact is in the list of a frame, by the first entry that matches it.
+
+An entry matches at reducible transparency, or up to the definitions around its bytes. -/
+syntax "evm_fact" : tactic
+
+macro_rules
+  -- An entry at another offset fails on the offset, before its bytes are compared.
+  | `(tactic| evm_fact) => `(tactic| ((try simp only [BitVec.reduceToNat]) <;>
+      (repeat' first
+        | with_reducible exact List.mem_cons_self
+        | evm_keepBytes exact List.mem_cons_self
+        | apply List.mem_cons_of_mem)))
+
+/-- Proves a size or a bound of a range of bytes, from the sizes of its parts. -/
+syntax "evm_size" : tactic
+
+macro_rules
+  -- A size that the lemmas do not give is left to `omega` as an unknown, never unfolded.
+  | `(tactic| evm_size) => `(tactic| ((try simp only [size_wordBytes, ByteArray.size_append,
+      size_bufferRead, size_byte, size_memoryReadBytes, BitVec.reduceToNat, Nat.reduceAdd,
+      Nat.reduceLeDiff])
+      <;> first | with_reducible rfl | evm_omega))
+
+/-- Evaluates the size of memory, the facts that a write keeps, and the gas after a step. -/
+syntax "evm_tidyK" : tactic
+
+macro_rules
+  -- A read within the bytes of a read of a buffer becomes a read of the buffer at `o + k`.
+  | `(tactic| evm_tidyK) => `(tactic| ((try evm_mem) <;> (try simp
+      only [keep, outside, List.flatMap_cons, List.flatMap_nil, List.nil_append,
+        List.cons_append, List.append_nil, Apart, size_wordBytes, ByteArray.size_append,
+        size_bufferRead, size_byte, size_memoryReadBytes, memoryReadBytes_of_size,
+        memoryReadBytes_bufferRead, Nat.add_zero, Nat.add_assoc, loadWord_wordBytes,
+        wordBytes_loadWord, BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub, Nat.reduceLT,
+        Nat.reduceLeDiff, Bool.or_false, Bool.false_or, Bool.or_true, Bool.true_or, decide_true,
+        decide_false, Bool.false_eq_true, ↓reduceIte]) <;>
+      evm_tidy))
+
+/-- Proves that a read along the facts of a frame gives some bytes, by rewriting.
+
+The bytes are the parts of the facts that cover the range, joined in order. -/
+syntax "evm_read" : tactic
+
+macro_rules
+  -- Each unfolding reads one piece, which is rewritten before the next unfolding.
+  --
+  -- The fact that holds the first byte is found by comparing numbers, never bytes.
+  | `(tactic| evm_read) => `(tactic| ((repeat (rw [readFacts]; simp only [List.find?_cons,
+        List.find?_nil, Bool.false_and, Bool.true_and, Bool.and_false, Bool.and_true, decide_true,
+        decide_false, size_wordBytes, ByteArray.size_append, size_bufferRead, size_byte,
+        size_memoryReadBytes, memoryReadBytes_of_size, memoryReadBytes_bufferRead, Nat.add_zero,
+        Nat.add_assoc, Nat.min_def, BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub,
+        Nat.reduceLT, Nat.reduceLeDiff, Nat.reduceEqDiff, ↓reduceIte, Option.map_some,
+        Option.map_none])) <;>
+      try with_reducible rfl))
+
+/-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
+
+The goal is a triple from a frame that knows a few ranges of memory, at a known program counter.
+
+The rewrite rules `ls` turn the facts about the code into facts about numbers. -/
+syntax "evm_stepK" " [" simpLemma,* "]" : tactic
+
+macro_rules
+  | `(tactic| evm_stepK [$ls,*]) => `(tactic| ((try unfold Spec) <;> (first
+      -- MSTORE, MSTORE8, MLOAD, KECCAK256, CALLDATACOPY and MCOPY have rules on such frames.
+      --
+      -- MLOAD, KECCAK256 and MCOPY read the first fact in the list that starts where they read.
+      --
+      -- Otherwise MLOAD and KECCAK256 read along the facts that cover the range.
+      | (refine' Triple.seq (mstore_known ?lt ?op ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_memGas)
+      | (refine' Triple.seq (mstore8_known ?lt ?op ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case gas => evm_memGas)
+      | (refine' Triple.seq (mload_known ?lt ?op ?fact ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case fact => evm_fact
+         case gas => evm_gas)
+      -- MLOAD of a part of a fact, or of a range along adjacent facts.
+      | (refine' Triple.seq (mload_known_read ?lt ?op ?read ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case read => evm_read
+         case gas => evm_gas)
+      | (refine' Triple.seq (keccak256_known ?lt ?op ?fact ?len ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case fact => evm_fact
+         case len => evm_size
+         case gas => evm_memGas)
+      -- KECCAK256 of a part of a fact, or of a range along adjacent facts.
+      | (refine' Triple.seq (keccak256_known_read ?lt ?op ?read ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case read => evm_read
+         case gas => evm_memGas)
+      | (refine' Triple.seq (calldatacopy_known ?lt ?op ?nz ?gas) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case nz => evm_decide
+         case gas => evm_memGas)
+      -- MCOPY of the whole range of a fact, tried first.
+      --
+      -- The destination keeps only the parts of the facts outside it.
+      | (refine' Triple.seq (mcopy_known ?fork ?lt ?op ?nz ?fact ?len ?gas) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case nz => evm_decide
+         case fact => evm_fact
+         case len => evm_size
+         case gas => evm_memGas)
+      -- MCOPY within the range of a fact.
+      | (refine' Triple.seq (mcopy_known_within ?fork ?lt ?op ?fact ?s ?s' ?d ?d' ?gas) ?next
+         case fork => evm_fork
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case fact => evm_fact
+         case s => evm_size
+         case s' => evm_size
+         case d => evm_size
+         case d' => evm_size
+         case gas => evm_memGas)
+      -- Every other opcode whose rule keeps memory, and does not read it, takes that rule.
+      --
+      -- It takes it for every memory.
+      | (refine' Triple.seq (Known.of_at fun _ => ?step) ?next
+         case step => (evm_step [$ls,*]) <;> exact Triple.of_imp fun _ h => h)
+      | fail "no rule of a step applies to the opcode at the program counter")
+      -- The goal that is left starts from the frame after the step.
+      <;> evm_tidyK))
 
 end EthLib.Execution.Evm.Logic

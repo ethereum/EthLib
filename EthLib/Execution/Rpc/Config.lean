@@ -81,18 +81,12 @@ From Amsterdam they also hold the builder contracts named by [EIP-8282][builders
 [eip-7773]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-7773.md
 -/
 def configSystemContracts (config : ChainConfig) (fork : Fork) : List (String × Address) :=
-  -- EIP-7910, from Cancun: the beacon roots contract of EIP-4788.
-  (if .dencun ≤ fork then [("BEACON_ROOTS_ADDRESS", BEACON_ROOTS_ADDRESS)] else []) ++
-  -- EthLib's choice, as no meta-EIP lists them: the builder contracts of EIP-8282, from Amsterdam.
-  (if .glamsterdam ≤ fork then
-    [("BUILDER_DEPOSIT_CONTRACT_ADDRESS", BUILDER_DEPOSIT_CONTRACT_ADDRESS),
-      ("BUILDER_EXIT_CONTRACT_ADDRESS", BUILDER_EXIT_CONTRACT_ADDRESS)] else []) ++
-  -- EIP-7910, from Prague: four more, with the deposit contract that EIP-6110 sets per chain.
-  (if .pectra ≤ fork then
-    [("CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS", CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS),
-      ("DEPOSIT_CONTRACT_ADDRESS", config.depositContractAddress),
-      ("HISTORY_STORAGE_ADDRESS", HISTORY_STORAGE_ADDRESS),
-      ("WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS", WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)] else [])
+  -- EIP-7910: the system contracts that blocks of the fork call, each with the name of its address.
+  --
+  -- EthLib's choice, as no meta-EIP lists them: from Amsterdam, the builder contracts of EIP-8282.
+  (systemContracts fork).map (fun contract => (contract.name, contract.address)) ++
+  -- EIP-7910, from Prague: the deposit contract, which EIP-6110 sets per chain.
+  if .pectra ≤ fork then [("DEPOSIT_CONTRACT_ADDRESS", config.depositContractAddress)] else []
 
 /-- Every chain blob schedule starts at genesis or at the time of a fork.
 

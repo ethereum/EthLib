@@ -60,7 +60,8 @@ def exitReserve (config : Config) (source : BeaconState preset fork) : Nat :=
         -- From Electra, it also adds a slack of `2 * MAX_EFFECTIVE_BALANCE_ELECTRA`.
         2 * preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
     -- Before Electra, it adds the validator churn limit, at least 1, times `MAX_EFFECTIVE_BALANCE`.
-    else max 1 (getValidatorChurnLimit config source).toNat * preset.MAX_EFFECTIVE_BALANCE.toNat
+    else max 1 ((getValidatorChurnLimit config source).toOption.getD 0).toNat *
+      preset.MAX_EFFECTIVE_BALANCE.toNat
 
 /-- Every block held by the store has a nonzero state root. -/
 def HeldStateRootsNonzero (store : Store preset fork) : Prop :=

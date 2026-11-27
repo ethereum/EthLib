@@ -30,7 +30,7 @@ theorem stepRules_accessesLe :
     StepRules fork (fun a b : Evm fork Meter => a.substate.AccessesLe b.substate) where
   trans hab hbc := hab.trans hbc
   static h := h.accesses
-  sstore _ _ _ _ _ _ _ := ⟨fun _ h => h, fun _ _ h => h⟩
+  sstore _ _ _ _ _ _ := ⟨fun _ h => h, fun _ _ h => h⟩
   tstore _ _ _ _ := .refl _
   log _ _ hsub _ _ := by
     rw [hsub]

@@ -131,7 +131,7 @@ theorem stepRules_deletesCreated (hfork : .dencun ≤ fork) :
     StepRules fork (DeletesCreated (fork := fork) (Meter := Meter)) where
   trans := DeletesCreated.trans
   static := .of_staticStep
-  sstore _ _ _ _ _ _ h := .of_eq (TransactionState.createdAccounts_setStorage h) rfl
+  sstore _ _ _ _ _ h := .of_eq (TransactionState.createdAccounts_setStorage h) rfl
   tstore _ _ _ _ := .of_eq rfl rfl
   log _ hs hsub _ _ := .of_eq (by rw [hs]) (by rw [hsub])
   selfdestruct _ _ h := deletesCreated_finishSelfdestruct hfork h
@@ -185,6 +185,30 @@ theorem createdAccounts_rollbackOnError (snapshot : TransactionState) (evm : Evm
       (rollbackOnError snapshot evm).substate = evm.substate := by
   unfold rollbackOnError
   split <;> exact ⟨rfl, rfl⟩
+
+/-- A deposit of code keeps the message of the frame. -/
+theorem message_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
+    (h : depositCode fork snapshot evm = .ok after) : after.message = evm.message := by
+  unfold depositCode at h
+  dsimp only at h
+  split at h
+  · cases h
+    rfl
+  split at h
+  · cases h
+    rfl
+  split at h
+  · cases h
+    rfl
+  split at h
+  · cases h
+    split <;> rfl
+  split at h
+  · cases h
+    rfl
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  rfl
 
 /-- A successful deposit of code keeps the created accounts and the substate of the frame. -/
 theorem createdAccounts_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}

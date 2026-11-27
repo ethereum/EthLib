@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
+public import EthLib.Execution.Proofs.Evm.Logic.Wp
 public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 public import EthLib.Execution.Proofs.Evm.Call.Parent
 
@@ -29,6 +30,12 @@ namespace EthLib.Execution.Evm.Logic
 open EthLib.Base (Fork)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
+
+/-- A message that differs from `low` at most in its gas, which is no less, and its reservoir.
+
+The state gas meter sends such a message where one counter sends `low`. -/
+def MessageCovers (low high : Message fork) : Prop :=
+  low.gas ≤ high.gas ∧ high = { low with gas := high.gas, reservoir := high.reservoir }
 
 /-! ## Steps under a runner of messages -/
 
@@ -133,6 +140,68 @@ theorem StepBy.deterministic {a b c : Evm fork Meter} (hb : StepBy fork bound ru
       rw [failed] at failed'
       cases failed'
       rfl
+
+/-! ## The weakest precondition under a runner of messages -/
+
+/-- A step of a running frame ends in `Q` exactly when it reaches, in one step, a frame of `Q`.
+
+The step may send a message, which the runner ends. -/
+theorem endsBy_iff {runChild : MessageRunner fork Meter bound} {evm : Evm fork Meter}
+    {Q : Evm fork Meter → Prop} (running : evm.running = true) :
+    EndsBy runChild evm Q (step fork evm) ↔
+      ∃ after, StepBy fork bound runChild evm after ∧ Q after := by
+  constructor
+  · intro h
+    cases hs : step fork evm with
+    | error e =>
+      rw [hs] at h
+      exact ⟨_, .step (.halt running hs h.1), h.2⟩
+    | ok r =>
+      rw [hs] at h
+      cases r with
+      | next after => exact ⟨after, .step (.next running hs), h⟩
+      | child caller message resume =>
+        obtain ⟨lt, child, ran, h⟩ := h
+        cases hr : resume child.1 with
+        | ok after =>
+          rw [hr] at h
+          exact ⟨after, .child running hs lt ran hr, h⟩
+        | error e =>
+          rw [hr] at h
+          exact ⟨_, .childHalt running hs lt ran hr h.1, h.2⟩
+  · rintro ⟨after, h, hq⟩
+    cases h with
+    | step h =>
+      cases h with
+      | next _ hs => rw [hs]; exact hq
+      | halt _ hs ha => rw [hs]; exact ⟨ha, hq⟩
+    | child _ hs lt ran hr =>
+      rw [hs]
+      exact ⟨lt, _, ran, by rw [hr]; exact hq⟩
+    | childHalt _ hs lt ran hr ha =>
+      rw [hs]
+      exact ⟨lt, _, ran, by rw [hr]; exact ⟨ha, hq⟩⟩
+
+/-- The weakest precondition of an opcode, at every fork: the theorem of the program logic.
+
+The frame runs, and its byte at the program counter decodes to `op`.
+
+Then it holds exactly when one step under the runner reaches a frame that `Q` holds of.
+
+That step continues, halts exceptionally, or sends a message that the runner ends. -/
+theorem wp_iff {runChild : MessageRunner fork Meter bound} {evm : Evm fork Meter}
+    {Q : Evm fork Meter → Prop} {op : Op} (running : evm.running = true)
+    (hlt : evm.pc < evm.code.size) (hop : Op.ofByte fork evm.code[evm.pc] = some op) :
+    wp fork runChild op Q evm ↔ ∃ after, StepBy fork bound runChild evm after ∧ Q after :=
+  (wp_iff_endsBy hlt hop).trans (endsBy_iff running)
+
+/-- The weakest precondition of the step of a running frame, at every fork.
+
+It holds exactly when one step under the runner of messages reaches a frame that `Q` holds of. -/
+theorem wpFrame_iff {runChild : MessageRunner fork Meter bound} {evm : Evm fork Meter}
+    {Q : Evm fork Meter → Prop} (running : evm.running = true) :
+    wpFrame fork runChild Q evm ↔ ∃ after, StepBy fork bound runChild evm after ∧ Q after :=
+  wpFrame_iff_endsBy.trans (endsBy_iff running)
 
 /-- The frame sends a message, and the runner fails to run it. -/
 def AbortsBy (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Meter bound)
@@ -298,10 +367,16 @@ theorem of_child [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
   cases ran : runChild caller message lt with
   | error e => exact ⟨evm, .refl evm, .inr ⟨running, caller, message, resume, sent, lt, e, ran⟩⟩
   | ok child =>
-    rcases hresume child.1 child.2 (meets.ok caller message lt child ran) with
-      ⟨after, resumed, hq⟩ | ⟨e, failed, halts, hq⟩
-    · exact ⟨after, .single (.child running sent lt ran resumed), .inl hq⟩
-    · exact ⟨_, .single (.childHalt running sent lt ran failed halts), .inl hq⟩
+    -- The resume from the frame that ends the message ends in `Q`.
+    have ends : Ends evm Q (resume child.1) := by
+      rcases hresume child.1 child.2 (meets.ok caller message lt child ran) with
+        ⟨after, resumed, hq⟩ | ⟨e, failed, halts, hq⟩
+      · rw [resumed]; exact hq
+      · rw [failed]; exact ⟨halts, hq⟩
+    -- So the frame meets the weakest precondition of its step, and one step reaches `Q`.
+    obtain ⟨after, hstep, hq⟩ :=
+      (wpFrame_iff running).mp (wpFrame_iff_endsBy.mpr (by rw [sent]; exact ⟨lt, child, ran, ends⟩))
+    exact ⟨after, .single hstep, .inl hq⟩
 
 /-- A stronger assumption on the frames that end messages keeps a triple. -/
 theorem assumption {callee' : Evm fork Meter → Message fork → Evm fork Meter → Prop}

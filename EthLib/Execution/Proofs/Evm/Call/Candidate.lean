@@ -273,7 +273,7 @@ theorem stepRules_keepsCandidates :
   trans := KeepsCandidates.trans
   static h := ⟨h.parent, fun _ hx => h.tracker.storageClears ▸ hx,
     fun x hn hc => .inr (getAccount_of_staticStep h x ▸ ⟨hn, hc⟩)⟩
-  sstore _ _ _ _ _ _ h := .setStorage h
+  sstore _ _ _ _ _ h := .setStorage h
   tstore _ _ _ _ := ⟨rfl, fun _ hx => hx, fun _ hn hc => .inr ⟨hn, hc⟩⟩
   log _ hs _ _ _ := by rw [hs]; exact .refl _
   selfdestruct _ _ h := keepsCandidates_finishSelfdestruct h

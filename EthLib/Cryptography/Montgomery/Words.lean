@@ -163,6 +163,23 @@ theorem Internal.num_lt {n : Nat} {f : Nat → UInt64} {k : Nat} (h : Fits n f k
     have := h.1
     omega
 
+/-- Fitting words with the same integer are the same words. -/
+theorem Internal.eq_of_num_eq {n : Nat} {f g : Nat → UInt64} {k : Nat} (hf : Fits n f k)
+    (hg : Fits n g k) (h : num n f k = num n g k) : ∀ i < n, f (k + i) = g (k + i) := by
+  induction n generalizing k with
+  | zero => intro i hi; omega
+  | succ n ih =>
+    rw [num_succ, num_succ] at h
+    have := hf.1
+    have := hg.1
+    have h0 : (f k).toNat = (g k).toNat := by omega
+    have h1 : num n f (k + 1) = num n g (k + 1) := by omega
+    intro i hi
+    rcases i with _ | i
+    · exact UInt64.toNat_inj.mp h0
+    · have e := ih hf.2 hg.2 h1 i (by omega)
+      rwa [Nat.add_right_comm k 1 i, Nat.add_assoc] at e
+
 /-- The top word of `n + 1` words weighs `2 ^ (32 n)`. -/
 theorem Internal.num_snoc (n : Nat) (f : Nat → UInt64) (k : Nat) :
     num (n + 1) f k = num n f k + 2 ^ (32 * n) * (f (k + n)).toNat := by
@@ -183,14 +200,6 @@ theorem Internal.loop_induct {σ : Type} (P : Nat → σ → Prop) (f : Nat → 
     rw [loop, show k + (n + 1) = k + 1 + n by omega]
     exact ih (k + 1) (f k s) (hs k s (Nat.le_refl k) (by omega) h0)
       (fun i s hi hi' => hs i s (by omega) (by omega))
-
-/-- `k + m` steps are `k` steps, then `m` steps from the index after them. -/
-theorem Internal.loop_add {σ : Type} (f : Nat → σ → σ) (k m i : Nat) (s : σ) :
-    loop (k + m) f i s = loop m f (i + k) (loop k f i s) := by
-  induction k generalizing i s with
-  | zero => rw [Nat.zero_add, Nat.add_zero]; rfl
-  | succ k ih =>
-    rw [show k + 1 + m = k + m + 1 by omega, loop, ih, loop, show i + 1 + k = i + (k + 1) by omega]
 
 /-! ## Unrolled words
 

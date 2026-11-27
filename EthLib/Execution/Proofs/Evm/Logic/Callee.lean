@@ -11,6 +11,8 @@ A triple under an assumption on the frames that end messages holds under each ru
 The runner of the interpreter runs each message of a call with the code that the message names.
 
 When that code has a specification with no message, the runner meets the assumption it gives.
+
+It also meets a weaker form, which leaves open the gas of the frame that ends the message.
 -/
 
 @[expose] public section
@@ -246,6 +248,48 @@ def RunsAs (code : ByteArray) (G : Message fork → TransactionState → Substat
     ∃ stopped, Q message caller.state caller.substate.child stopped ∧
       -- That frame is the one that the callee stopped in, after the rollback of a failure.
       child = rollbackOnError caller.state stopped
+
+/-- The assumption that a call with code `code` runs as a specification of it says, up to gas.
+
+The specification holds of a covering message, with at least the gas of the message.
+
+The frame that ends the message is a stopped frame of the specification, but for its gas.
+
+It may also carry another message, with the current target of that stopped frame. -/
+def RunsAsUpToGas (code : ByteArray) (G : Message fork → TransactionState → Substate → Prop)
+    (Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop)
+    (caller : Evm fork Nat) (message : Message fork) (child : Evm fork Nat) : Prop :=
+  -- The premises are those of the assumption that fixes the gas of the frame.
+  message.code = code → message.target.isSome →
+    ¬(message.shouldTransferValue = true ∧ message.value ≠ 0) →
+    precompileAddress fork message = none → G message caller.state caller.substate.child →
+    -- The specification holds of a message that differs at most in its gas and its reservoir.
+    ∃ message' stopped, MessageCovers message message' ∧
+      Q message' caller.state caller.substate.child stopped ∧
+      -- After the rollback of a failure, the frame is the stopped one with its own gas and message.
+      child = rollbackOnError caller.state
+        { stopped with gas := child.gas, message := child.message } ∧
+      -- The caller reads the current target of that message.
+      child.message.currentTarget = stopped.message.currentTarget ∧
+      -- The frame holds at least the gas of the stopped frame, up to the gas of the message.
+      min stopped.gas message.gas ≤ child.gas
+
+/-- A frame that ends a message as a specification says ends it so up to gas. -/
+theorem RunsAs.upToGas {code : ByteArray} {G : Message fork → TransactionState → Substate → Prop}
+    {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop}
+    {caller : Evm fork Nat} {message : Message fork} {child : Evm fork Nat}
+    (h : RunsAs code G Q caller message child) : RunsAsUpToGas code G Q caller message child := by
+  intro hcode htarget noValue noPrecompile hg
+  obtain ⟨stopped, hq, rfl⟩ := h hcode htarget noValue noPrecompile hg
+  refine ⟨message, stopped, ⟨Nat.le_refl _, rfl⟩, hq, ?_, ?_, ?_⟩ <;> unfold rollbackOnError <;>
+    split <;> simp only [GasMeter.rollback, ite_self, Nat.min_le_left]
+
+/-- A runner that meets the assumption of a specification meets it up to gas. -/
+theorem Meets.upToGas {code : ByteArray} {G : Message fork → TransactionState → Substate → Prop}
+    {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop} {bound : Nat}
+    {runChild : MessageRunner fork Nat bound} (h : Meets (RunsAs code G Q) runChild) :
+    Meets (RunsAsUpToGas code G Q) runChild :=
+  ⟨fun caller message lt child ran => (h.ok caller message lt child ran).upToGas, h.aborts⟩
 
 /-- The runner of the interpreter meets the assumption of a specification of the code of a callee.
 

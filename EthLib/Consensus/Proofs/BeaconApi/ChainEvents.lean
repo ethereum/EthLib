@@ -26,7 +26,7 @@ namespace EthLib.Consensus.BeaconApi
 
 open Base
 
-variable {preset : Preset} {fork : Fork}
+variable {preset : Preset} {fork : Fork} {optimistic : OptimisticStore preset fork}
 
 /-- The root without a lag for an epoch is the root with a lag of one for the next epoch.
 
@@ -54,7 +54,7 @@ theorem dependentRoot_succ_of_ok {state : BeaconState preset fork} {epoch : Epoc
     exact read
 
 /-- A head event of a change of the fork choice is that of the head of the store after it. -/
-private theorem chainEvents_head_event {config : Config} {optimistic : Root → Bool}
+private theorem chainEvents_head_event {config : Config}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     {event : HeadEvent} (listed : .head event ∈ events) :
@@ -78,7 +78,7 @@ private theorem chainEvents_head_event {config : Config} {optimistic : Root → 
     exact ⟨_, by assumption⟩
 
 /-- A head event reads the head block, its state, and the two dependent roots of that state. -/
-private theorem headEvent_spec {store : Store preset fork} {optimistic : Root → Bool}
+private theorem headEvent_spec {store : Store preset fork}
     {genesisRoot : Root} {previous : Slot} {head : ForkChoiceNode} {event : HeadEvent}
     (made : headEvent store optimistic genesisRoot previous head = .ok event) :
     ∃ state, store.blockState head.root = .ok state ∧ event.block = head.root ∧
@@ -86,7 +86,8 @@ private theorem headEvent_spec {store : Store preset fork} {optimistic : Root �
       dependentRoot state 1 (computeEpochAtSlot preset event.slot) genesisRoot =
         .ok event.currentEpochDependentRoot ∧
       dependentRoot state 0 (computeEpochAtSlot preset event.slot) genesisRoot =
-        .ok event.nextEpochDependentRoot := by
+        .ok event.nextEpochDependentRoot ∧
+      event.executionOptimistic = isNodeExecutionOptimistic optimistic head := by
   unfold headEvent at made
   rcases h1 : store.block head.root with _ | block <;>
     rcases h2 : store.blockState head.root with _ | state <;>
@@ -98,7 +99,7 @@ private theorem headEvent_spec {store : Store preset fork} {optimistic : Root �
       with _ | next <;>
     simp only [h3, h4, reduceCtorEq, Except.ok.injEq] at made
   subst made
-  exact ⟨state, rfl, rfl, rfl, h3, h4⟩
+  exact ⟨state, rfl, rfl, rfl, h3, h4, rfl⟩
 
 
 /-- An answer of the attester duties carries the dependent root of its epoch. -/
@@ -115,7 +116,7 @@ private theorem dutiesResponse_attester {config : Config} {state : BeaconState p
   exact ⟨found, rfl, by rw [← made]⟩
 
 /-- A head event names the head of the store after the change, and the status of its payload. -/
-theorem chainEvents_head {config : Config} {optimistic : Root → Bool} {genesisRoot : Root}
+theorem chainEvents_head {config : Config} {genesisRoot : Root}
     {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     {event : HeadEvent} (listed : .head event ∈ events) :
@@ -125,9 +126,20 @@ theorem chainEvents_head {config : Config} {optimistic : Root → Bool} {genesis
   obtain ⟨-, -, block, status, -⟩ := headEvent_spec made
   exact ⟨head, got, block, status⟩
 
+/-- A head event is optimistic exactly when the head node of the store after the change is. -/
+theorem chainEvents_head_optimistic {config : Config} {genesisRoot : Root}
+    {before after : Store preset fork} {events : List ChainEvent}
+    (made : chainEvents config optimistic genesisRoot before after = .ok events)
+    {event : HeadEvent} (listed : .head event ∈ events) :
+    ∃ head, after.getHead config = .ok head ∧
+      event.executionOptimistic = isNodeExecutionOptimistic optimistic head := by
+  obtain ⟨head, previous, got, made⟩ := chainEvents_head_event made listed
+  obtain ⟨-, -, -, -, -, -, flag⟩ := headEvent_spec made
+  exact ⟨head, got, flag⟩
+
 /-- A head event comes exactly when the head block changes, or its payload moves from empty to full.
 -/
-theorem chainEvents_head_iff {config : Config} {optimistic : Root → Bool} {genesisRoot : Root}
+theorem chainEvents_head_iff {config : Config} {genesisRoot : Root}
     {before after : Store preset fork} {events : List ChainEvent} {old new : ForkChoiceNode}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     (oldHead : before.getHead config = .ok old) (newHead : after.getHead config = .ok new) :
@@ -146,7 +158,7 @@ theorem chainEvents_head_iff {config : Config} {optimistic : Root → Bool} {gen
 /-- A reorganization comes exactly when the head changes and leaves the old head block behind.
 
 The old head block is then not an ancestor of the new head. -/
-theorem chainEvents_reorg_iff {config : Config} {optimistic : Root → Bool} {genesisRoot : Root}
+theorem chainEvents_reorg_iff {config : Config} {genesisRoot : Root}
     {before after : Store preset fork} {events : List ChainEvent} {old new : ForkChoiceNode}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     (oldHead : before.getHead config = .ok old) (newHead : after.getHead config = .ok new) :
@@ -162,6 +174,28 @@ theorem chainEvents_reorg_iff {config : Config} {optimistic : Root → Bool} {ge
     injection made with made
     subst made
     simp_all
+
+/-- A reorganization names the new head block, and is optimistic exactly when the new head is. -/
+theorem chainEvents_reorg_optimistic {config : Config} {genesisRoot : Root}
+    {before after : Store preset fork} {events : List ChainEvent}
+    (made : chainEvents config optimistic genesisRoot before after = .ok events)
+    {event : ChainReorgEvent} (listed : .chainReorg event ∈ events) :
+    ∃ head, after.getHead config = .ok head ∧ event.newHeadBlock = head.root ∧
+      event.executionOptimistic = isNodeExecutionOptimistic optimistic head := by
+  unfold chainEvents at made
+  rcases h1 : before.getHead config with _ | old <;>
+    rcases h2 : after.getHead config with _ | new <;>
+    simp only [h1, h2, Except.mapError, bind, Except.bind, pure, Except.pure,
+      reduceCtorEq] at made
+  refine ⟨new, rfl, ?_⟩
+  repeat' split at made
+  all_goals try (cases made; done)
+  all_goals
+    injection made with made
+    subst made
+    simp only [List.mem_append, List.mem_cons, List.mem_nil_iff, reduceCtorEq, or_false,
+      false_or, ChainEvent.chainReorg.injEq] at listed
+  all_goals (subst listed; exact ⟨rfl, rfl⟩)
 
 
 /-- With at least two slots in an epoch, the epoch after that of any slot fits in 64 bits. -/
@@ -180,7 +214,7 @@ The first is that of the duties of the epoch of the head, and the second that of
 
 The second needs the next epoch to fit in 64 bits, as it does with at least two slots in an epoch.
 -/
-theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root → Bool}
+theorem chainEvents_dependent_roots_duties {config : Config}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     {event : HeadEvent} (listed : .head event ∈ events) :
@@ -193,7 +227,7 @@ theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root 
           (computeEpochAtSlot preset event.slot + 1) indices genesisRoot = .ok envelope →
         envelope.dependentRoot = some event.nextEpochDependentRoot) := by
   obtain ⟨head, previous, -, made⟩ := chainEvents_head_event made listed
-  obtain ⟨state, got, block, -, current, next⟩ := headEvent_spec made
+  obtain ⟨state, got, block, -, current, next, -⟩ := headEvent_spec made
   refine ⟨state, by rw [block]; exact got, ?_, ?_⟩
   · intro indices envelope answer
     obtain ⟨root, read, carried⟩ := dutiesResponse_attester answer
@@ -205,7 +239,7 @@ theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root 
 /-- At the Gloas fork epoch, the root of the PTC duties is the next-epoch root of a head event.
 
 The head must lie in that epoch, and the duties must come from the head state. -/
-theorem chainEvents_ptc_root_at_fork {config : Config} {optimistic : Root → Bool}
+theorem chainEvents_ptc_root_at_fork {config : Config}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     {event : HeadEvent} (listed : .head event ∈ events)
@@ -215,14 +249,14 @@ theorem chainEvents_ptc_root_at_fork {config : Config} {optimistic : Root → Bo
           genesisRoot = .ok envelope →
         envelope.dependentRoot = some event.nextEpochDependentRoot := by
   obtain ⟨head, previous, -, made⟩ := chainEvents_head_event made listed
-  obtain ⟨state, got, block, -, -, next⟩ := headEvent_spec made
+  obtain ⟨state, got, block, -, -, next, -⟩ := headEvent_spec made
   refine ⟨state, by rw [block]; exact got, fun indices envelope answer => ?_⟩
   obtain ⟨root, read, carried⟩ := dutiesResponse_ptc_root answer
   rw [ite_eq_left rfl, ← atFork] at read
   rw [carried, Except.ok.inj (read.symm.trans next)]
 
 /-- A finalized event comes exactly when the finalized checkpoint changes. -/
-theorem chainEvents_finalized_iff {config : Config} {optimistic : Root → Bool}
+theorem chainEvents_finalized_iff {config : Config}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events) :
     (∃ event, .finalizedCheckpoint event ∈ events) ↔
@@ -240,7 +274,7 @@ theorem chainEvents_finalized_iff {config : Config} {optimistic : Root → Bool}
     simp_all
 
 /-- A finalized event names the finalized checkpoint of the store after the change. -/
-theorem chainEvents_finalized {config : Config} {optimistic : Root → Bool}
+theorem chainEvents_finalized {config : Config}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     {event : FinalizedCheckpointEvent} (listed : .finalizedCheckpoint event ∈ events) :
@@ -260,13 +294,34 @@ theorem chainEvents_finalized {config : Config} {optimistic : Root → Bool}
       false_or, ChainEvent.finalizedCheckpoint.injEq] at listed
   all_goals (subst listed; exact ⟨rfl, rfl⟩)
 
+/-- A finalized event is optimistic exactly when the pending node of the checkpoint block is. -/
+theorem chainEvents_finalized_optimistic {config : Config}
+    {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
+    (made : chainEvents config optimistic genesisRoot before after = .ok events)
+    {event : FinalizedCheckpointEvent} (listed : .finalizedCheckpoint event ∈ events) :
+    event.executionOptimistic =
+      isExecutionOptimistic optimistic after.finalizedCheckpoint.root := by
+  unfold chainEvents at made
+  rcases h1 : before.getHead config with _ | old <;>
+    rcases h2 : after.getHead config with _ | new <;>
+    simp only [h1, h2, Except.mapError, bind, Except.bind, pure, Except.pure,
+      reduceCtorEq] at made
+  repeat' split at made
+  all_goals try (cases made; done)
+  all_goals
+    injection made with made
+    subst made
+    simp only [List.mem_append, List.mem_cons, List.mem_nil_iff, reduceCtorEq, or_false,
+      false_or, ChainEvent.finalizedCheckpoint.injEq] at listed
+  all_goals (subst listed; rfl)
+
 /-- A finalized event has an epoch above the finalized epoch before the change.
 
 That holds when the finalized checkpoint advances from one store to the other.
 
 Each handler of the fork choice makes it advance.
 -/
-theorem chainEvents_finalized_epoch {config : Config} {optimistic : Root → Bool}
+theorem chainEvents_finalized_epoch {config : Config}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
     (made : chainEvents config optimistic genesisRoot before after = .ok events)
     (advance : CheckpointAdvances before.finalizedCheckpoint after.finalizedCheckpoint)
@@ -276,7 +331,7 @@ theorem chainEvents_finalized_epoch {config : Config} {optimistic : Root → Boo
   exact advance.epoch_lt ((chainEvents_finalized_iff made).mp ⟨event, listed⟩)
 
 /-- After one move of a store of the fork choice, a finalized event has a greater epoch. -/
-theorem chainEvents_finalized_epoch_of_handles {config : Config} {optimistic : Root → Bool}
+theorem chainEvents_finalized_epoch_of_handles {config : Config}
     {genesisRoot : Root} {checks : SignatureChecks} {sources : BlockSources preset fork}
     {time : ℕ} {view : Set (Models.Network.Message preset fork)}
     {before after : Store preset fork} {events : List ChainEvent}

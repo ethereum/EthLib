@@ -2566,7 +2566,7 @@ private theorem CapStepR.registry {f : Fork} {s t : BeaconState preset f}
       (refl s) ok
   · rename_i notElectra
     simp only [bind_ok_iff] at ok
-    obtain ⟨middle, updated, activated⟩ := ok
+    obtain ⟨middle, updated, _, _, activated⟩ := ok
     have before : f < .glamsterdam :=
       Nat.lt_trans (Nat.lt_of_not_le notElectra) (by decide)
     have small : middle.validators.data.size < 2 ^ 64 :=
@@ -3837,7 +3837,7 @@ private theorem CapStep.effective {f : Fork} {s t : BeaconState preset f}
           preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v) →
         ScheduledFree s ((getCurrentEpoch s).toNat + 1) →
           ScheduledFree t ((getCurrentEpoch s).toNat + 1)) := by
-  have result := processEffectiveBalanceUpdates_invariant (fun t => CapStepR config s t ∧
+  have result := processEffectiveBalanceUpdates_induction (fun t => CapStepR config s t ∧
     (preset.MAX_EFFECTIVE_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0 →
       (∀ {h : Fork} (v : Validator),
         preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v) →
