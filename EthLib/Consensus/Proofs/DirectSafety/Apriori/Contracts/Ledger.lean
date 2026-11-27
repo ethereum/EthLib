@@ -544,7 +544,7 @@ private theorem run_partials_le_paid (x : ForkedBeaconState preset) (high : Nat)
     exact partials.trans (Nat.add_le_add_left (selected.trans bound) _)
   · rw [ite_eq_right due]
     by_cases short : config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤ horizonEnd x high
-    · -- The queue starts after the last epoch that the delay leaves, so no call is paid.
+    · -- The queue starts after the last epoch that the delay leaves, so no call is withdrawable.
       rw [ite_eq_right (by omega)] at bound
       exact partials.trans (Nat.add_le_add_left (selected.trans bound) _)
     · -- The delay is longer than the window, so no call is withdrawable within it.

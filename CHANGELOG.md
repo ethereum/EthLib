@@ -1188,25 +1188,26 @@ Not yet released.
   Migration: rewrite with `storageRoot_eq`, `stateEntries_eq` and `stateRoot_eq` (`Execution/Proofs/State/Root.lean`), which state the former bodies.
 
 - In Lean, `DirectSafety.Apriori.withdrawalBudget` counts the exit capacity of a window only up to a withdrawal delay before its end (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
-  A call paid later than `horizonEnd x high - MIN_VALIDATOR_WITHDRAWABILITY_DELAY` is not withdrawable within the window, so it moves no balance there.
-  The exit carry counts only if the queue's start plus the delay is in the window.
+  A call scheduled after `horizonEnd x high - MIN_VALIDATOR_WITHDRAWABILITY_DELAY` is not withdrawable within the window, so it moves no balance there.
+  The capacity now starts at the epoch after the queue's start, where it started at the queue's start; the carry covers that epoch.
+  The exit carry and the capacity both count only if the queue's start plus the delay is in the window.
   The due partial withdrawals and the gate before Electra are unchanged.
   `withdrawalBudget`, `roundingBudget`, `gainBudget` and `drift` are each at most their former value, so `accountable_safety_apriori` keeps its statement and implies the former one.
   Eleven declarations of `DirectSafety.Apriori.Internal` bound a quantity by the budget, or by `roundingBudget`, `gainBudget` or `drift`, in a premise or a field.
-  A caller that builds or proves one needs the stronger bound.
-  The theorems that take these as premises also conclude the stronger bound.
-  Migration: a caller that builds one shows its bound at the new budget, as `run_partials_le_paid_of_endpoint_floor` (`Apriori/Contracts/Ledger.lean`) now states it for the partials.
-  In this repository the builders need no change; a caller that only reads one gets the stronger bound.
+  A caller outside this repository that builds or proves one must show the stronger bound; the builders in this repository needed no change.
+  The theorems that take these as premises also conclude the stronger bound, so a caller that only reads one gains.
+  Migration: show the bound at the new budget, as `run_partials_le_paid_of_endpoint_floor` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Ledger.lean`) now states it for the partials.
   `DirectSafety.Apriori.dueExitCarry` is removed, since the new budget tests the carry itself and nothing else read it.
   Migration: use `if exitQueueStart x ≤ horizonEnd x high then exitBalanceCarry x else 0`.
   The eleven declarations:
-  - `LedgerCuts.roundLedger_regime`, `LedgerCuts.roundLedger_electra` and the structure `RoundLedger` (`Apriori/Contracts/Cohorts.lean` and `Apriori/Contracts/Ledger.lean`), by `withdrawalBudget`.
-  - The structure `NewCohortAllocation` (`Apriori/Contracts/Cohorts.lean`), by `roundingBudget` in its field `debitBudget`.
-  - `StateProducer`, `DerivedProducer` and `CommonLedger` (`Apriori/Contracts/Producers.lean`), by `drift`.
-  - `SelectedReleaseProducer` (`Apriori/Contracts/Producers.lean`), by `gainBudget` and `roundingBudget`.
-  - `CumulativeFunding` (`Apriori/Ownership.lean`), by `roundingBudget`.
-  - `nonreference_boundary_le` (`Apriori/Common.lean`), by `gainBudget` in its premise `funded`.
-  - `composition_conditional_of_call_ledger` (`Apriori/Common.lean`), by `drift` in its premise `callLedger`.
+  - `LedgerCuts.roundLedger_regime` and `LedgerCuts.roundLedger_electra` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Cohorts.lean`), by `withdrawalBudget` in a premise.
+  - The structure `RoundLedger` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Ledger.lean`), by `withdrawalBudget` in its fields `pBound` and `sourcePBound`, and by `roundingBudget` in its rounding fields.
+  - The structure `NewCohortAllocation` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Cohorts.lean`), by `roundingBudget` in its field `debitBudget`.
+  - `StateProducer`, `DerivedProducer` and `CommonLedger` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Producers.lean`), by `drift`.
+  - `SelectedReleaseProducer` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Producers.lean`), by `gainBudget` and `roundingBudget`.
+  - `CumulativeFunding` (`Consensus/Proofs/DirectSafety/Apriori/Ownership.lean`), by `roundingBudget`.
+  - `nonreference_boundary_le` (`Consensus/Proofs/DirectSafety/Apriori/Common.lean`), by `gainBudget` in its premise `funded`.
+  - `composition_conditional_of_call_ledger` (`Consensus/Proofs/DirectSafety/Apriori/Common.lean`), by `drift` in its premise `callLedger`.
 
 - A part of a slot, given in basis points, rounds to the nearest millisecond, a half up, where it rounded down, as consensus-specs v1.7.0-beta.5 does ([#4145](https://github.com/ethereum/EthLib/issues/4145)).
   Before Gloas, on mainnet, an attestation and a sync committee message are due 4000 ms into the slot, up from 3999 ms.

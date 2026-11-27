@@ -695,7 +695,7 @@ def creditBudget (x : ForkedBeaconState preset) (high : Nat) :=
 
 It is the due partials, then the exit carry and the exit capacity that opens after the queue start.
 
-An exit counts only once withdrawable, so the capacity stops one withdrawal delay before the end. -/
+A call on the exit churn counts once withdrawable, so the capacity ends a withdrawal delay early. -/
 def withdrawalBudget (x : ForkedBeaconState preset) (high : Nat) :=
   duePartialWithdrawals x (driftHorizon x high) +
     -- The carry and the capacity count only if the queue's start plus the delay is in the window.
