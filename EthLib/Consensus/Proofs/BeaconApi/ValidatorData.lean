@@ -111,7 +111,7 @@ private theorem produceAttestationData_spec {config : Config} {store : Store pre
     (produced : produceAttestationData config store optimistic slot committeeIndex = .ok data) :
     ∃ (head : ForkChoiceNode) (blockSlot : Slot) (state : BeaconState preset fork),
       store.getHead config = .ok head ∧
-      isExecutionOptimistic optimistic head.root = false ∧
+      isNodeExecutionOptimistic optimistic head = false ∧
       getAttestationData state head.root blockSlot committeeIndex head.payloadStatus =
         .ok data ∧ state.slot = slot := by
   unfold produceAttestationData at produced
@@ -123,7 +123,7 @@ private theorem produceAttestationData_spec {config : Config} {store : Store pre
     cases hs : store.blockStates[head.root]? with
     | none => simp [hb, hs] at produced
     | some headState =>
-      simp only [hb, hs, bind_ok_iff, checkVerified] at produced
+      simp only [hb, hs, bind_ok_iff, checkNodeVerified] at produced
       obtain ⟨_, checked, current, _, produced⟩ := produced
       by_cases late : current < slot
       · simp [late, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at produced
@@ -131,7 +131,7 @@ private theorem produceAttestationData_spec {config : Config} {store : Store pre
       obtain ⟨state, atSlot, built⟩ := produced
       refine ⟨head, block.slot, state, mapError_ok_iff.mp got, ?_, mapError_ok_iff.mp built,
         stateAtSlot_slot atSlot⟩
-      cases h : isExecutionOptimistic optimistic head.root <;> simp [h] at checked ⊢
+      cases h : isNodeExecutionOptimistic optimistic head <;> simp [h] at checked ⊢
 
 /-- The attestation data names the head of the store, at the requested slot.
 
@@ -141,7 +141,7 @@ theorem produceAttestationData_head {config : Config} {store : Store preset fork
     {data : AttestationData}
     (produced : produceAttestationData config store optimistic slot committeeIndex = .ok data) :
     ∃ head, store.getHead config = .ok head ∧ data.beaconBlockRoot = head.root ∧
-      isExecutionOptimistic optimistic head.root = false ∧ data.slot = slot := by
+      isNodeExecutionOptimistic optimistic head = false ∧ data.slot = slot := by
   obtain ⟨head, blockSlot, state, got, verified, made, same⟩ := produceAttestationData_spec produced
   obtain ⟨-, -, slotOf, rootOf, -⟩ := getAttestationData_eq_ok_iff.mp made
   exact ⟨head, got, rootOf, verified, by rw [slotOf, same]⟩
@@ -252,7 +252,7 @@ theorem produceAttestationData_internal_iff {config : Config} {store : Store pre
           ∃ block headState, store.blocks[head.root]? = some block ∧
             store.blockStates[head.root]? = some headState ∧
             -- The next step reads the current slot of the store, and needs a verified head block.
-            isExecutionOptimistic optimistic head.root = false ∧
+            isNodeExecutionOptimistic optimistic head = false ∧
             ((∃ fault, store.getCurrentSlot config = .error fault) ∨
               -- The later steps also need a requested slot not after the current slot.
               ∃ current, store.getCurrentSlot config = .ok current ∧ slot ≤ current ∧
@@ -279,8 +279,8 @@ theorem produceAttestationData_internal_iff {config : Config} {store : Store pre
       | none => simp [internalError]
       | some headState =>
         simp only [reduceCtorEq, false_or, Option.some.injEq, exists_and_left, exists_eq_left']
-        unfold checkVerified
-        cases isExecutionOptimistic optimistic head.root with
+        unfold checkNodeVerified
+        cases isNodeExecutionOptimistic optimistic head with
         | true => simp [optimisticBlock]
         | false =>
           simp only [Bool.false_eq_true, ite_false, true_and]

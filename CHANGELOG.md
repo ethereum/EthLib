@@ -1219,6 +1219,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, the Beacon API reads whether a response is optimistic from the node of the fork choice that the request resolves to, as consensus-specs v1.7.0-beta.5 states ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
+  The attestation data reads the head node, with its payload status; a request for a block resolves to the pending node of the block, which reads the payload that the block builds on, EthLib's choice.
+  A payload that no known block names counts as verified, and a node of a block that the store does not know reads its root.
+  In Lean, `BeaconApi.isNodeExecutionOptimistic` and `checkNodeVerified` (`Consensus/BeaconApi/Identifiers.lean`, `ValidatorData.lean`) read a node, and `isExecutionOptimistic` reads the pending node of a block.
+  The theorems on the attestation data of `Consensus/Proofs/BeaconApi/ValidatorData.lean` state `isNodeExecutionOptimistic optimistic head`.
+  Migration: read the head node where the theorems read its root.
+
 - In Lean, `Evm.Logic.NoCodeSucceeds` (`Execution/Proofs/Evm/Logic/Call.lean`) also asks that a call to no code returns no output ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
   A runner that meets it, such as the interpreter by `meets_process_noCode`, now gives both facts.
 
