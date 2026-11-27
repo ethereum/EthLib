@@ -398,7 +398,8 @@ def lanes2Equiv : Lanes2 ≃ UInt64 × UInt64 where
   right_inv _ := rfl
 
 /-- The values of two lanes are finitely many. -/
-instance : Fintype Lanes2 := Fintype.ofEquiv _ lanes2Equiv.symm
+-- Noncomputable: compiled, it would list all `2^128` values when a program starts.
+noncomputable instance : Fintype Lanes2 := Fintype.ofEquiv _ lanes2Equiv.symm
 
 /-- There are `2^128` values of two lanes. -/
 theorem card_lanes2 : Fintype.card Lanes2 = 2 ^ 128 := by
