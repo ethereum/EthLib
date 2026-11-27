@@ -2419,6 +2419,8 @@ The lifted run has the same fields outside its meter, including its state and ou
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
 `Logic.Spec.covered` lifts a whole specification of checked code whose runs stop with no error or a revert.
 The rules of a call that adds a request to the contracts of EIP-7002 and EIP-7251 (`spec_add_covered`) hold that way under the state gas meter.
+`Logic.HoareUnder.meterCovers` and `Logic.SpecUnder.covered` lift a triple with messages, under an assumption on the frames that end messages under each meter.
+The assumption under the state gas meter must give the one under one counter, for a frame that ends a covering message, seen under one counter with its gas capped by that message.
 
 ### Invariants of the storage of a contract
 
