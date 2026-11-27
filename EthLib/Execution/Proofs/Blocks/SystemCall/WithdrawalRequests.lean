@@ -1330,9 +1330,8 @@ theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
     readRequests env body = .error (.systemContractEmpty WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) := by
   have hread := readRequest_of_empty (env := env) (state := (body, []))
     (contract := (WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)) hcode
-  rw [readRequests_of_pectra hfork]
-  unfold requestContracts
-  split <;> simp [REQUEST_CONTRACTS, List.foldlM_cons, hread, bind, Except.bind]
+  rw [readRequests_of_pectra hfork, requestContracts_of_pectra hfork]
+  simp [List.foldlM_cons, hread, bind, Except.bind]
 
 /-- No block request result succeeds when the withdrawal contract has no code.
 

@@ -392,6 +392,59 @@ theorem systemCall_of_writesStorage {env : BlockEnvironment fork} {block : State
       hspec message state substate hcaller htarget hstatic henv hdata hgas hacc
         (by subst hstate; exact hread)
 
+/-! ## The system contracts of a fork -/
+
+/-- A block calls a system contract from Dencun at the earliest, so from Paris. -/
+theorem paris_le_of_mem_systemContracts {contract : SystemContract}
+    (h : contract ∈ systemContracts fork) : .paris ≤ fork := by
+  simp only [systemContracts, List.mem_filter, decide_eq_true_eq] at h
+  obtain ⟨hmem, hsince⟩ := h
+  simp only [SYSTEM_CONTRACTS, List.mem_cons, List.not_mem_nil, or_false] at hmem
+  refine Nat.le_trans ?_ hsince
+  rcases hmem with rfl | rfl | rfl | rfl | rfl | rfl <;> decide
+
+/-- No system contract sits at the address of a precompile. -/
+theorem addedAt_of_mem_SYSTEM_CONTRACTS {contract : SystemContract}
+    (h : contract ∈ SYSTEM_CONTRACTS) :
+    Precompiles.addedAt contract.address.toU256.toNat = none := by
+  simp only [SYSTEM_CONTRACTS, List.mem_cons, List.not_mem_nil, or_false] at h
+  rcases h with rfl | rfl | rfl | rfl | rfl | rfl <;>
+    simp only [BEACON_ROOTS_CONTRACT, HISTORY_STORAGE_CONTRACT, WITHDRAWAL_REQUEST_CONTRACT,
+      CONSOLIDATION_REQUEST_CONTRACT, BUILDER_DEPOSIT_CONTRACT, BUILDER_EXIT_CONTRACT,
+      BEACON_ROOTS_ADDRESS, HISTORY_STORAGE_ADDRESS, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+      CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS, BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+      BUILDER_EXIT_CONTRACT_ADDRESS, EthLib.Base.toNat_toU256_toAddressMasked] <;> rfl
+
+/-- A system call to a system contract of the fork runs the code at its address to its end.
+
+The call meets `Q` when every frame that a system call starts on that code meets `Q`. -/
+theorem systemCall_of_mem_systemContracts {env : BlockEnvironment fork}
+    {block : State.BlockState} {contract : SystemContract} {data : ByteArray}
+    {Q : TransactionState → TransactionState → ByteArray → Prop}
+    (hmem : contract ∈ systemContracts fork)
+    -- The account at the address of the contract holds `code`, which is not empty.
+    (hcode : codeAt block contract.address = .ok code) (hsize : code.size ≠ 0)
+    -- From Glamsterdam, the code passes the opcode check.
+    --
+    -- The code is not a delegation indicator.
+    (supported : .glamsterdam ≤ fork → SupportedCode code = true)
+    (hdelegate : delegatedAddress code = none)
+    -- The code must stop with no error, from every frame that a system call starts.
+    (hspec : ∀ (message : Message fork) (state : TransactionState) (substate : Substate),
+      message.caller = SYSTEM_ADDRESS → message.currentTarget = contract.address →
+      message.isStatic = false → message.blockEnv = env → message.data = data →
+      message.gas = SYSTEM_TRANSACTION_GAS →
+      (state.getAccountOptional contract.address).isSome = true →
+      state = (TransactionState.ofBlock block).recordAccountRead contract.address →
+      Spec fork (At code message 0 [] .empty message.gas state substate .empty)
+        fun evm => evm.error = none ∧ Q state evm.state evm.output) :
+    -- The system call then succeeds, and its state and output meet `Q`.
+    ∃ out, systemCall env block contract.address data = .ok out ∧ out.error = none ∧
+      Q ((TransactionState.ofBlock block).recordAccountRead contract.address) out.state
+        out.output :=
+  systemCall_of_spec (paris_le_of_mem_systemContracts hmem) supported hcode hsize
+    (addedAt_of_mem_SYSTEM_CONTRACTS (List.mem_filter.mp hmem).1) hdelegate hspec
+
 /-! ## A system call to no code -/
 
 private theorem processSystemMessage_empty (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]

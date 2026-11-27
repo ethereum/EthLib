@@ -326,14 +326,11 @@ private theorem errorsMeet_readRequests (leaves : BodyLeaves config env block P 
     {body : BodyState} (inv : Inv' body.block) :
     ErrorsMeet P (readRequests env body) ∧
       ∀ result, readRequests env body = .ok result → Inv' result.1.block := by
-  unfold readRequests
-  split
-  · exact ⟨fun _ h => foldlM_error_of_step (fun st : BodyState × List ByteArray => Inv' st.1.block)
-      P (fun _ _ _ hb hstep => leaves.readRequest_inv hb hstep)
-      (fun _ c e hb h => leaves.errorsMeet_readRequest c hb e h) inv h,
-      fun _ h => foldlM_ok_invariant (fun st : BodyState × List ByteArray => Inv' st.1.block)
-        (fun _ _ _ hb hstep => leaves.readRequest_inv hb hstep) inv h⟩
-  · exact ⟨ErrorsMeet.ok _, fun _ h => by cases h; exact inv⟩
+  exact ⟨fun _ h => foldlM_error_of_step (fun st : BodyState × List ByteArray => Inv' st.1.block)
+    P (fun _ _ _ hb hstep => leaves.readRequest_inv hb hstep)
+    (fun _ c e hb h => leaves.errorsMeet_readRequest c hb e h) inv h,
+    fun _ h => foldlM_ok_invariant (fun st : BodyState × List ByteArray => Inv' st.1.block)
+      (fun _ _ _ hb hstep => leaves.readRequest_inv hb hstep) inv h⟩
 
 /-- The requests of the body meet the property, and keep the second invariant. -/
 private theorem errorsMeet_blockRequests (leaves : BodyLeaves config env block P Inv Inv' Out)
