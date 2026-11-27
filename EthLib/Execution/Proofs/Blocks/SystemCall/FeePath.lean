@@ -79,25 +79,16 @@ namespace FeePathCode
 /-- The positions of the constants in the path. -/
 def FEE_PATH_CONSTANTS : List Nat := [24, 27, 66, 67, 115, 122, 123, 127, 128, 140, 141]
 
-/-- Whether the code stored in `n` holds the bytes of the path, except at the constants. -/
-def feePathNat (n size : Nat) : Bool :=
-  (List.range 143).all fun i =>
-    FEE_PATH_CONSTANTS.contains i ||
-      NatCode.natByte n size i == NatCode.natByte FEE_PATH_NUMBER 143 i
-
 /-- A code stored as a number holds the bytes of the path, except at the constants, by a check. -/
-theorem byte_ofNat {n size : Nat} (hcheck : feePathNat n size = true) :
+theorem byte_ofNat {n size : Nat}
+    (hcheck : holdsExcept n size 0 FEE_PATH_NUMBER 143 FEE_PATH_CONSTANTS = true) :
     ∀ i (h : i < (NatCode.ofNat n size).size), i < 143 → i ≠ 24 → i ≠ 27 → i ≠ 66 → i ≠ 67 →
       i ≠ 115 → i ≠ 122 → i ≠ 123 → i ≠ 127 → i ≠ 128 → i ≠ 140 → i ≠ 141 →
       (NatCode.ofNat n size)[i] = NatCode.natByte FEE_PATH_NUMBER 143 i := by
   intro i h hi h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11
-  rw [NatCode.getElem_ofNat]
-  simp only [feePathNat, List.all_eq_true, List.mem_range, Bool.or_eq_true, beq_iff_eq,
-    List.contains_iff_mem] at hcheck
-  rcases hcheck i hi with hm | he
-  · simp [FEE_PATH_CONSTANTS] at hm
-    omega
-  · exact he
+  have := getElem_of_holdsExcept hcheck (i := i) (by simpa using h) hi
+    (by simp [FEE_PATH_CONSTANTS]; omega)
+  simpa using this
 
 variable {code : ByteArray} {system fraction revert size : Nat}
   (hc : FeePathCode code system fraction revert size)

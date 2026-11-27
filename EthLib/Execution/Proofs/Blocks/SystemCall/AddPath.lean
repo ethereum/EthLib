@@ -79,25 +79,6 @@ structure AddPathCode (code : ByteArray) (n size : Nat) : Prop where
 
 namespace AddPathCode
 
-/-- Whether the code stored in `n`, of `len` bytes, holds `width` bytes of `number` from `o`.
-
-It skips the positions in `skip`, which hold constants. -/
-def holdsExcept (n len o number width : Nat) (skip : List Nat) : Bool :=
-  (List.range width).all fun i =>
-    skip.contains i || NatCode.natByte n len (o + i) == NatCode.natByte number width i
-
-/-- When the check passes, the code holds the bytes outside the skipped positions. -/
-theorem getElem_of_holdsExcept {n len o number width : Nat} {skip : List Nat}
-    (hcheck : holdsExcept n len o number width skip = true) {i : Nat}
-    (h : o + i < (NatCode.ofNat n len).size) (hi : i < width) (hs : i ∉ skip) :
-    (NatCode.ofNat n len)[o + i] = NatCode.natByte number width i := by
-  rw [NatCode.getElem_ofNat]
-  simp only [holdsExcept, List.all_eq_true, List.mem_range, Bool.or_eq_true, beq_iff_eq,
-    List.contains_iff_mem] at hcheck
-  rcases hcheck i hi with hm | he
-  · exact absurd hm hs
-  · exact he
-
 variable {code : ByteArray} {n size : Nat} {fork : Fork} {message : Message fork}
   {returnData : ByteArray}
 
