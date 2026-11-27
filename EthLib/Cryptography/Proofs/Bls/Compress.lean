@@ -39,11 +39,14 @@ set_option maxRecDepth 4000
 theorem sqrt_ok {a c : Fp} (h : Fp.sqrt a = .ok c) : c * c = a := by
   -- Soundness is the final check of the square root.
   rw [Fp.sqrt] at h
-  split at h
-  · rename_i hbeq
+  -- The candidate as an atom, so that no step evaluates its power by the fixed exponent.
+  generalize Fp.sqrtCandidate a = cand at h
+  by_cases hbeq : (cand * cand).beq a = true
+  · rw [ite_eq_left_of_eq_true _ _ (eq_true hbeq)] at h
     cases h
     exact Fp.beq_iff.mp hbeq
-  · cases h
+  · rw [ite_eq_right_of_eq_false _ _ (eq_false hbeq)] at h
+    cases h
 
 /-- The core Euler-criterion computation, phrased over `ZMod`. -/
 private theorem pow_sqrt_exponent {x y : ZMod Fp.modulus} (h : y * y = x) :
@@ -198,8 +201,12 @@ theorem toBytesBE_fromBytesBE {b : ByteArray} {x : Fp}
     rw [Montgomery.ofBytesBE_eq, hl] at h
     by_cases hlt : Base.ByteOrder.ofBE b.data.toList < params.p
     -- An in-range value is the decoded element itself, and it writes the same bytes.
-    · simp only [hlt, ↓reduceIte] at h
+    --
+    -- Rewriting the test alone keeps the decoded element unevaluated.
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true hlt)] at h
+      generalize hy : Montgomery.ofNat (M := params) (Base.ByteOrder.ofBE b.data.toList) = y at h
       cases h
+      subst hy
       have hv :
           Montgomery.toNat (Montgomery.ofNat (M := params) (Base.ByteOrder.ofBE b.data.toList)) =
           Base.ByteOrder.ofBE b.data.toList := by
@@ -212,7 +219,7 @@ theorem toBytesBE_fromBytesBE {b : ByteArray} {x : Fp}
       show (Montgomery.toBytesBE _).data.toList = _
       rw [Montgomery.toBytesBE_eq, hv, ← hlen, Base.ByteOrder.toList_toBE_ofBE]
     -- A value at or above p is rejected.
-    · simp only [hlt, ↓reduceIte] at h
+    · rw [ite_eq_right_of_eq_false _ _ (eq_false hlt)] at h
       cases h
 
 /-- A decoded field element has the integer of the input bytes. -/

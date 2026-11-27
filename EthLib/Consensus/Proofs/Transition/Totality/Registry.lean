@@ -73,7 +73,7 @@ private theorem foldl_maxExitEpoch_le {validators : List Validator} {start : Epo
 
 /-- A pre-Electra exit queue adds at most one to the ceiling of its existing exit epochs. -/
 private theorem exitQueueEpoch_exists_ok {config : Config} {state : BeaconState preset fork}
-    {ceiling : Nat}
+    {ceiling : Nat} (quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0)
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
     (exits : ExitsBelow state ceiling) (room : ceiling + 1 < 2 ^ 64) :
     ∃ epoch, exitQueueEpoch config state = .ok epoch ∧ epoch.toNat ≤ ceiling + 1 := by
@@ -87,14 +87,16 @@ private theorem exitQueueEpoch_exists_ok {config : Config} {state : BeaconState 
     intro validator member
     obtain ⟨member, finite⟩ := List.mem_filter.mp member
     exact exits validator (by simpa [validators] using member) (by simpa using finite)
+  -- The churn limit succeeds, since its quotient is not 0.
+  obtain ⟨limit, limitOk⟩ : ∃ limit, getValidatorChurnLimit config state = .ok limit :=
+    ⟨_, getValidatorChurnLimit_ok_iff.mpr ⟨quotient, rfl⟩⟩
   have form : exitQueueEpoch config state =
-      (if (getValidatorChurnLimit config state).toNat ≤
-          (validators.filter (·.exitEpoch == latest)).length then
+      (if limit.toNat ≤ (validators.filter (·.exitEpoch == latest)).length then
         liftArith (addChecked latest 1) else .ok latest) := by
-    simp only [exitQueueEpoch, earliestOk, liftArith, Except.mapError, bind, Except.bind]; rfl
+    simp only [exitQueueEpoch, earliestOk, limitOk, liftArith, Except.mapError, bind,
+      Except.bind]; rfl
   rw [form]
-  by_cases full : (getValidatorChurnLimit config state).toNat ≤
-      (validators.filter (·.exitEpoch == latest)).length
+  by_cases full : limit.toNat ≤ (validators.filter (·.exitEpoch == latest)).length
   · have fits : latest.toNat + (1 : UInt64).toNat < 2 ^ 64 := by simp; omega
     refine ⟨latest + 1, ?_, ?_⟩
     · simp only [full, ↓reduceIte, liftArith, addChecked_of_lt fits, Except.mapError]
@@ -112,6 +114,8 @@ Each exit epoch that is set after it is at most the ceiling plus one. -/
 theorem initiateValidatorExit_total_of_lt_electra {config : Config}
     {state : BeaconState preset fork}
     {index : ValidatorIndex} {ceiling : Nat} (before : fork < .pectra)
+    -- The churn quotient is not 0, which a new exit needs.
+    (quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0)
     (inside : index.toNat < state.validators.data.size)
     -- The ceiling covers the first epoch of a new exit.
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
@@ -130,7 +134,7 @@ theorem initiateValidatorExit_total_of_lt_electra {config : Config}
       pure, Except.pure], rfl, rfl,
       exits.mono (by omega)⟩
   · obtain ⟨epoch, epochOk, epochLe⟩ :=
-      exitQueueEpoch_exists_ok (config := config) first exits (by omega)
+      exitQueueEpoch_exists_ok quotient first exits (by omega)
     have delayFits : epoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64 :=
       by omega
     let changed : Validator :=
@@ -152,7 +156,7 @@ theorem initiateValidatorExit_total_of_lt_electra {config : Config}
 
 private theorem updateRegistryEntry_exists_ok {config : Config} {state : BeaconState preset fork}
     {index : Nat} {ceiling : Nat} (before : fork < .pectra)
-    (inside : index < state.validators.data.size)
+    (quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0) (inside : index < state.validators.data.size)
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
     (exits : ExitsBelow state ceiling)
     (room : ceiling + 1 + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64) :
@@ -188,7 +192,7 @@ private theorem updateRegistryEntry_exists_ok {config : Config} {state : BeaconS
     have indexValue : index.toUInt64.toNat = index := by
       simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt indexFits]
     obtain ⟨after, exited, slot, size, bounds⟩ :=
-      initiateValidatorExit_total_of_lt_electra (config := config) before
+      initiateValidatorExit_total_of_lt_electra (config := config) before quotient
         (state := updated) (index := index.toUInt64)
         (by simpa [updated, BeaconState.putValidator, indexValue] using inside)
         first updatedExits room
@@ -204,7 +208,8 @@ private theorem updateRegistryEntry_exists_ok {config : Config} {state : BeaconS
     simp only [eject]; rfl
 
 private theorem foldlM_updateRegistryEntry_exists_ok {config : Config} {ceiling : Nat}
-    (before : fork < .pectra) (indices : List Nat) (state : BeaconState preset fork)
+    (before : fork < .pectra) (quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0) (indices : List Nat)
+    (state : BeaconState preset fork)
     (inside : ∀ index ∈ indices, index < state.validators.data.size)
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
     (exits : ExitsBelow state ceiling)
@@ -216,7 +221,7 @@ private theorem foldlM_updateRegistryEntry_exists_ok {config : Config} {ceiling 
   | nil => exact ⟨state, rfl, rfl, rfl, by simpa using exits⟩
   | cons index rest ih =>
     obtain ⟨middle, step, slot, size, bounds⟩ :=
-      updateRegistryEntry_exists_ok (config := config) before
+      updateRegistryEntry_exists_ok (config := config) before quotient
         (inside index List.mem_cons_self) first exits
         (by simp only [List.length_cons] at room; omega)
     have current : getCurrentEpoch middle = getCurrentEpoch state := by simp [getCurrentEpoch, slot]
@@ -277,7 +282,8 @@ A finite exit epoch means a value other than `FAR_FUTURE_EPOCH`.
 
 The step keeps each finite exit epoch at most the ceiling plus the registry size. -/
 theorem processRegistryUpdates_total_of_lt_electra {config : Config}
-    (state : BeaconState preset fork) (before : fork < .pectra) (ceiling : Nat)
+    (state : BeaconState preset fork) (before : fork < .pectra)
+    (quotient : config.CHURN_LIMIT_QUOTIENT ≠ 0) (ceiling : Nat)
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
@@ -291,7 +297,7 @@ theorem processRegistryUpdates_total_of_lt_electra {config : Config}
   -- Each ejection increases that ceiling by at most one.
   obtain ⟨registered, registeredOk, slot, -, bounds⟩ :=
     foldlM_updateRegistryEntry_exists_ok (config := config)
-      before (List.range state.validators.data.size) state
+      before quotient (List.range state.validators.data.size) state
       (fun _ member => List.mem_range.mp member) first exits (by simpa using room)
   have within := BeaconState.registryWithinLimit_of_lt
     (Nat.lt_trans before (by decide)) registered
@@ -303,8 +309,16 @@ theorem processRegistryUpdates_total_of_lt_electra {config : Config}
     cases read : getValidator registered index with
     | error error => simp [read, Except.map] at queued
     | ok validator => exact (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp read)).1
-  let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config registered
-    else getValidatorChurnLimit config registered
+  -- The limit of activations succeeds, since the churn quotient is not 0.
+  have churnOk : getValidatorChurnLimit config registered = .ok _ :=
+    getValidatorChurnLimit_ok_iff.mpr ⟨quotient, rfl⟩
+  obtain ⟨limit, limitOk⟩ : ∃ limit, (if .dencun ≤ fork then
+      getValidatorActivationChurnLimit config registered
+    else getValidatorChurnLimit config registered) = .ok limit := by
+    split
+    · exact ⟨_, by simp only [getValidatorActivationChurnLimit, churnOk, bind, Except.bind,
+        pure, Except.pure]; rfl⟩
+    · exact ⟨_, churnOk⟩
   obtain ⟨after, activated, lastBounds⟩ := foldlM_activateValidator_exists_ok
     ((activationQueue registered).take limit.toNat) registered
     (fun index member => queuedInside index (List.mem_of_mem_take member))
@@ -316,7 +330,8 @@ theorem processRegistryUpdates_total_of_lt_electra {config : Config}
     (by simpa using bounds) (by omega)
   refine ⟨after, ?_, lastBounds⟩
   have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  simp only [processRegistryUpdates, notElectra, ↓reduceIte, registeredOk, bind, Except.bind]
+  simp only [processRegistryUpdates, notElectra, ↓reduceIte, registeredOk, liftAccessor, limitOk,
+    Except.mapError, bind, Except.bind]
   exact activated
 
 end EthLib.Consensus

@@ -559,7 +559,7 @@ private theorem processRegistryUpdates
     obtain ⟨_, _, ok⟩ := ok
     exact foldlM (fun _ _ _ ok => updateRegistryEntryElectra ok) ok
   simp only [bind_ok_iff] at ok
-  obtain ⟨_, updated, activated⟩ := ok
+  obtain ⟨_, updated, _, _, activated⟩ := ok
   exact (foldlM (fun _ _ _ ok => updateRegistryEntry ok) updated).trans
     (foldlM (fun _ _ _ ok => activateValidator ok) activated)
 
@@ -604,7 +604,7 @@ private theorem processSlashings (ok : Consensus.processSlashings state = .ok af
 private theorem processEffectiveBalanceUpdates
     (ok : Consensus.processEffectiveBalanceUpdates state = .ok after) :
     SameSyncCommittees state after := by
-  refine Consensus.processEffectiveBalanceUpdates_invariant (SameSyncCommittees state)
+  refine Consensus.processEffectiveBalanceUpdates_induction (SameSyncCommittees state)
     (fun _ _ _ before ok => before.trans ?_) (.refl state) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, set⟩ := ok

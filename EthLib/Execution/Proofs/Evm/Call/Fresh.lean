@@ -127,7 +127,7 @@ theorem stepRules_noNewCode :
     StepRules fork (fun a b : Evm fork Meter => NoNewCode a.state b.state) where
   trans := NoNewCode.trans
   static h := .of_getAccount h.created (getAccount_of_staticStep h)
-  sstore _ _ _ _ _ _ h := noNewCode_setStorage h
+  sstore _ _ _ _ _ h := noNewCode_setStorage h
   tstore _ _ _ _ := ⟨rfl, fun _ h => h⟩
   log _ hs _ _ _ := by rw [hs]; exact NoNewCode.refl _
   selfdestruct _ _ h := noNewCode_finishSelfdestruct h
@@ -203,8 +203,8 @@ theorem stepRules_createsFresh :
     fun h => .of_noNewCode h.1.1 h.1.2 h.2
   { trans := fun hab hbc => hab.trans hbc fun _ h => h.elim
     static := fun h => conv (T.static h)
-    sstore := fun evm address key value state gain h =>
-      conv (T.sstore evm address key value state gain h)
+    sstore := fun evm key value state gain h =>
+      conv (T.sstore evm key value state gain h)
     tstore := fun evm address key value => conv (T.tstore evm address key value)
     log := fun log hs hsub hm hc => conv (T.log log hs hsub hm hc)
     selfdestruct := fun beneficiary refund h => conv (T.selfdestruct beneficiary refund h)

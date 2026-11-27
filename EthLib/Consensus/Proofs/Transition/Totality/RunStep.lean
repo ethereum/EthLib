@@ -471,7 +471,8 @@ theorem processEpoch_exists_ok_of_run [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR
     have product := holds.product conditions shaped (Nat.lt_trans before (by decide)) le
     exact processEpoch_total_of_lt_altair (epochBound := preset.epochLimitBeforeAltair)
       (ceiling := start.ceilingAt preset budget elapsed) before conditions.positive
-      conditions.roots conditions.bands conditions.fitBefore conditions.halfBefore last room
+      conditions.configPositive.churn conditions.roots conditions.bands conditions.fitBefore
+      conditions.halfBefore last room
       (limit before) within shaped.balancesMatch shaped.le_largest summedLe tripled funded
       invariant.ordered invariant.settled resolved wellFormed first holds.exits (by omega)
       slashedFits slashedProduct halfway product (by omega)

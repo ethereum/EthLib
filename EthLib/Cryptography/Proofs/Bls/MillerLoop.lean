@@ -44,10 +44,6 @@ theorem mulLine_eq (f : Fp12) (c0 c2 c3 : Fp2) : f.mulLine c0 c2 c3 = f * lineVa
     simp only [Fp12.mulLine, lineValue, Fp12.mul_c0, Fp12.mul_c1, Fp6.mulBy01_eq,
       Fp6.mulBy1_eq, Fp6.mulByV_eq, Fp2.zero_eq_zero, halves]
 
-private theorem two_eq : Fp2.ofFp (BaseField.ofNat 2 : Fp) = 2 := by decide_eq_at_model []
-
-private theorem three_eq : Fp2.ofFp (BaseField.ofNat 3 : Fp) = 3 := by decide_eq_at_model []
-
 /-- The inclusion of `ZMod p` into `Fp12` at the image of `a` goes through `Fp2`. -/
 private theorem fpToFp12_eq (a : Fp) : fpToFp12 (Fp.toZMod a) = fp2ToFp12 (Fp2.ofFp a) := by
   rw [← fpToFp2_apply]
@@ -73,8 +69,10 @@ theorem millerDouble_snd {T : G2} (hz : T.z ≠ 0) (hy : T.y ≠ 0) (xp yp : Fp)
   have hz' := fp2ToFp12_ne_zero hz
   have hy' := fp2ToFp12_ne_zero hy
   have h2 := two_ne_zero'
-  simp only [X, Y, millerDouble, mulLine_eq, Fp12.square_eq, lineValue_eq, untwist, lineAt, two_eq,
-    three_eq, map_mul, map_sub, map_neg, map_div₀, map_pow, map_ofNat]
+  simp only [X, Y, millerDouble, mulLine_eq, Fp12.square_eq, lineValue_eq, untwist, lineAt,
+    Cryptography.Fp2.fieldOps_square, Cryptography.Fp2.square_eq Fp.embedding,
+    Cryptography.Fp2.mulFp_eq Fp.embedding, map_mul, map_add, map_sub, map_neg, map_div₀, map_pow,
+    map_ofNat]
   rw [fpToFp12_eq xp, fpToFp12_eq yp]
   field_simp
   ring
@@ -105,8 +103,9 @@ theorem millerAdd_snd {T : G2} {xq yq : Fp2} (hz : T.z ≠ 0) (hx : xq * T.z ^ 2
     apply hx
     rw [sub_eq_zero] at h ⊢
     rw [h, div_mul_cancel₀ _ (pow_ne_zero _ hz)]
-  simp only [X, Y, X', Y', millerAdd, mulLine_eq, lineValue_eq, untwist, lineAt, map_mul, map_sub,
-    map_neg, map_div₀, map_pow] at hd ⊢
+  simp only [X, Y, X', Y', millerAdd, mulLine_eq, lineValue_eq, untwist, lineAt,
+    Cryptography.Fp2.fieldOps_square, Cryptography.Fp2.square_eq Fp.embedding,
+    Cryptography.Fp2.mulFp_eq Fp.embedding, map_mul, map_sub, map_neg, map_div₀, map_pow] at hd ⊢
   rw [fpToFp12_eq xp, fpToFp12_eq yp]
   field_simp
   ring

@@ -2068,7 +2068,7 @@ py_consensus_compute_subnets_for_sync_committee(
   PyObject* args
 ) {
   return call_pyvalue_export(
-    eth_consensus_compute_subnets_for_sync_committee, args, 5, VALIDATOR_DUTY_ERROR);
+    eth_consensus_compute_subnets_for_sync_committee, args, 6, VALIDATOR_DUTY_ERROR);
 }
 
 PyObject*

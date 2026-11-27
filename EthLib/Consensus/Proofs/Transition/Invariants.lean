@@ -2033,7 +2033,7 @@ theorem processRegistryUpdates
     obtain ⟨_, _, computed⟩ := computed
     exact laws.foldlM (fun _ _ _ ok => laws.updateRegistryEntryElectra ok) computed
   simp only [bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, activated⟩ := computed
+  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
   exact laws.trans (laws.foldlM (fun _ _ _ ok => laws.updateRegistryEntry ok) updatedOk)
     (laws.foldlM (fun _ _ _ ok => laws.activateValidator ok) activated)
 
@@ -2098,7 +2098,7 @@ theorem updateEffectiveBalance {index : Nat}
 
 theorem processEffectiveBalanceUpdates
     (computed : Consensus.processEffectiveBalanceUpdates state = .ok after) : R state after := by
-  exact Consensus.processEffectiveBalanceUpdates_invariant (R state)
+  exact Consensus.processEffectiveBalanceUpdates_induction (R state)
     (fun _ _ _ before ok => laws.trans before (laws.updateEffectiveBalance ok)) (laws.refl state)
     computed
 

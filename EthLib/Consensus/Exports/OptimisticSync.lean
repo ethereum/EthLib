@@ -79,23 +79,26 @@ def isOptimisticCandidateBlockExport (name fork : ByteArray) (blocks : Array Byt
   let block ← decodeInput (BeaconBlock preset fork) block
   toResult "optimistic sync" (store.isOptimisticCandidateBlock currentSlot block safeSlots)
 
-/-- From Bellatrix: the root of the latest block of a chain that is not optimistic.
+/-- From Bellatrix: the latest node at or above a node that is verified or of genesis.
 
-From Gloas it reads only the payloads that the node holds, by the code of its status. -/
+From Gloas the walk reads the nodes of the fork choice, by the code of their status. -/
 def latestVerifiedAncestorOf
-    (args : String × String × Array ByteArray × List Root × Root × UInt8) : Result Root := do
+    (args : String × String × Array ByteArray × List Root × Root × UInt8) :
+    Result (Root × UInt8) := do
   let (name, fork, blocks, optimisticRoots, root, code) := args
   let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
   let status ← payloadStatusOf code.toUInt64
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
-  toResult "optimistic sync" (store.latestVerifiedAncestor ⟨root, status⟩)
+  let node ← toResult "optimistic sync" (store.latestVerifiedAncestor ⟨root, status⟩)
+  return (node.root, node.payloadStatus.code)
 
-/-- From Bellatrix: the root of the latest block of a chain that is not optimistic.
+/-- From Bellatrix: the latest node at or above a node that is verified or of genesis.
 
 The arguments are the names of the preset and the fork, the blocks and the optimistic roots.
 
 Then come the root of a block and the code of the status of its payload in the node.
--/
+
+It returns the root of the answer and the code of its status. -/
 @[export eth_consensus_latest_verified_ancestor]
 def latestVerifiedAncestorExport (args : PyValue) : Result PyValue :=
   pyExport latestVerifiedAncestorOf args

@@ -128,51 +128,77 @@ def checkGasLimits {fork : Fork} (header : Header fork) (transactions : Item) :
 
 /-- The transactions of a body match the transactions root of the header.
 
-Each of them is then one of the fork, with a gas limit at most that of the header. -/
-def checkTransactions {fork : Fork} (header : Header fork) (transactions : Encoded) :
-    Except BodyError Unit := do
-  let values ← transactionValues transactions
-  -- The `txs-root` of the header is the trie root of the transactions, by index.
-  let root ← (indexedRoot values).mapError .trie
-  ensure (root == header.transactionsRoot) (.wrongTransactionsRoot header.transactionsRoot root)
-  checkGasLimits header transactions.item
+Each of them is then one of the fork, with a gas limit at most that of the header.
 
-/-- The withdrawals of a body, from Shapella, match the withdrawals root of the header. -/
-def checkWithdrawals {fork : Fork} (header : Header fork) (h : .shapella ≤ fork)
-    (withdrawals : Item) : Except BodyError Unit := do
-  let ws : List Withdrawal ← (Codec.ofItem withdrawals).mapError .decoding
+The hash may answer inside a monad, as for the root of a list. -/
+def checkTransactionsM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) {fork : Fork}
+    (header : Header fork) (transactions : Encoded) : ExceptT BodyError m Unit := do
+  let values ← (transactionValues transactions : Except BodyError _)
+  -- The `txs-root` of the header is the trie root of the transactions, by index.
+  let root ← (indexedRootM hash values).adapt .trie
+  liftM (ensure (root == header.transactionsRoot)
+    (.wrongTransactionsRoot header.transactionsRoot root) : Except BodyError Unit)
+  liftM (checkGasLimits header transactions.item)
+
+/-- The check of the transactions, with the hash of Ethereum: Keccak-256. -/
+def checkTransactions {fork : Fork} (header : Header fork) (transactions : Encoded) :
+    Except BodyError Unit :=
+  (checkTransactionsM (m := Id) keccak256 header transactions).run
+
+/-- The withdrawals of a body, from Shapella, match the withdrawals root of the header.
+
+The hash may answer inside a monad, as for the root of a list. -/
+def checkWithdrawalsM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) {fork : Fork}
+    (header : Header fork) (h : .shapella ≤ fork) (withdrawals : Item) :
+    ExceptT BodyError m Unit := do
+  let ws : List Withdrawal ←
+    ((Codec.ofItem withdrawals).mapError .decoding : Except BodyError _)
   -- The `withdrawals-root` of the header is the trie root of the withdrawals, by EIP-4895.
-  let root ← (withdrawalsRoot ws).mapError .trie
-  ensure (root == header.withdrawalsRoot h) (.wrongWithdrawalsRoot (header.withdrawalsRoot h) root)
+  let root ← (withdrawalsRootM hash ws).adapt .trie
+  liftM (ensure (root == header.withdrawalsRoot h)
+    (.wrongWithdrawalsRoot (header.withdrawalsRoot h) root) : Except BodyError Unit)
+
+/-- The check of the withdrawals, with the hash of Ethereum: Keccak-256. -/
+def checkWithdrawals {fork : Fork} (header : Header fork) (h : .shapella ≤ fork)
+    (withdrawals : Item) : Except BodyError Unit :=
+  (checkWithdrawalsM (m := Id) keccak256 header h withdrawals).run
 
 /-- The ommers of a body match the ommers hash of the header, and stay within its limits.
 
-The hash reads the bytes that the ommers list was read from.
+The hash reads the bytes that the ommers list was read from, and may answer inside a monad.
 
 The decoder keeps those bytes as its RLP encoding. -/
-def checkOmmers {fork : Fork} (header : Header fork) (ommers : Encoded) :
-    Except BodyError Unit := do
-  let items ← ommers.item.toItems.mapError .decoding
+def checkOmmersM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) {fork : Fork}
+    (header : Header fork) (ommers : Encoded) : ExceptT BodyError m Unit := do
+  let items ← (ommers.item.toItems.mapError .decoding : Except BodyError _)
   -- At most two ommers.
-  ensure (items.length ≤ MAX_OMMERS) (.tooManyOmmers items.length)
+  liftM (ensure (items.length ≤ MAX_OMMERS) (.tooManyOmmers items.length) : Except BodyError Unit)
   -- `keccak256(ommers)` is the `ommers-hash` of the header, over the bytes the list was read from.
-  ensure (keccak256 ommers.bytes == header.ommersHash)
-    (.wrongOmmersHash header.ommersHash (keccak256 ommers.bytes))
+  let digest ← ExceptT.lift (hash ommers.bytes)
+  liftM (ensure (digest == header.ommersHash) (.wrongOmmersHash header.ommersHash digest) :
+    Except BodyError Unit)
   -- Each ommer is a header list whose number, its ninth field, is at most that of the block.
-  (List.range items.length).zip items |>.forM fun (i, ommer) => do
+  liftM ((List.range items.length).zip items |>.forM fun (i, ommer) => do
     let n ← (headerNumber ommer).mapError .decoding
-    ensure (n ≤ header.number) (.ommerAfterBlock i n)
+    ensure (n ≤ header.number) (.ommerAfterBlock i n) : Except BodyError Unit)
+
+/-- The check of the ommers, with the hash of Ethereum: Keccak-256. -/
+def checkOmmers {fork : Fork} (header : Header fork) (ommers : Encoded) :
+    Except BodyError Unit :=
+  (checkOmmersM (m := Id) keccak256 header ommers).run
 
 /--
 Check a body against the header that it was requested for.
 
 The caller pairs each body with the header of the hash that it requested.
 
+The hash may answer inside a monad, and Ethereum passes Keccak-256.
+
 The check fails with the first rule that does not hold, in the order of the lines below.
 
 The rules that the check marks come from the data validity rules of Block Encoding and Validity.
 
-The check reads only the body and the header.
+The check reads only the body, the header and the hash.
 
 The check does not decode the ommers further, since their validity is left to the chain.
 
@@ -186,13 +212,14 @@ It leaves out three rules of that section, each for a reason.
 - The ommer headers must be valid, and must be recent ancestors not included before.
   That needs the chain.
 -/
-def checkBody {fork : Fork} (header : Header fork) (body : Encoded) : Except BodyError Unit := do
+def checkBodyM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) {fork : Fork}
+    (header : Header fork) (body : Encoded) : ExceptT BodyError m Unit := do
   -- The body keeps the bytes it was read from.
   --
   -- Each legacy transaction and the ommers list are hashed from their slices of those bytes.
   --
   -- So the check never encodes an item that a peer chose.
-  let items ← body.parts.mapError .decoding
+  let items ← (body.parts.mapError .decoding : Except BodyError _)
   -- A body is the RLP list of the transactions and the ommers, then the withdrawals from Shapella.
   --
   -- From Shapella, `[transactions, ommers, withdrawals]`, by EIP-4895.
@@ -200,21 +227,25 @@ def checkBody {fork : Fork} (header : Header fork) (body : Encoded) : Except Bod
     match items with
     | [transactions, ommers, withdrawals] =>
       -- The transactions: types, the transactions root, then decoding and gas limits.
-      checkTransactions header transactions
+      checkTransactionsM hash header transactions
       -- The withdrawals root.
-      checkWithdrawals header h withdrawals.item
+      checkWithdrawalsM hash header h withdrawals.item
       -- The ommers: their count, the ommers hash and their numbers.
-      checkOmmers header ommers
+      checkOmmersM hash header ommers
     | [_, _] => throw .missingWithdrawals
     | _ => throw (.decoding (.wrongFieldCount 3 items.length))
   -- Before Shapella, `[transactions, ommers]`.
   else
     match items with
     | [transactions, ommers] =>
-      checkTransactions header transactions
-      checkOmmers header ommers
+      checkTransactionsM hash header transactions
+      checkOmmersM hash header ommers
     | [_, _, _] => throw .unexpectedWithdrawals
     | _ => throw (.decoding (.wrongFieldCount 2 items.length))
+
+/-- The check of a body, with the hash of Ethereum: Keccak-256. -/
+def checkBody {fork : Fork} (header : Header fork) (body : Encoded) : Except BodyError Unit :=
+  (checkBodyM (m := Id) keccak256 header body).run
 
 /-- The body of a block as it crosses the wire.
 

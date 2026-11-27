@@ -2,6 +2,12 @@ module
 
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests.Record
+public import EthLib.Execution.Proofs.Blocks.SystemCall.FeePath
+public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueStart
+public import EthLib.Execution.Proofs.Blocks.SystemCall.DequeueTail
+public import EthLib.Execution.Proofs.Blocks.SystemCall.AddCost
+public import EthLib.Execution.Proofs.Blocks.SystemCall.AddPath
+public import EthLib.Execution.Proofs.Evm.Logic.MeterCost
 
 /-!
 # Proofs: the withdrawal request contract of EIP-7002 does what its EIP describes
@@ -79,37 +85,17 @@ theorem supportedCode_CODE : SupportedCode CODE = true := by
 
 /-! ## The operations -/
 
-/-- The fee to add a request with the storage `read`, or none while the inhibitor holds. -/
-def fee (read : U256 → U256) : Option Nat :=
-  getFee MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION (read 0)
-
-/-- What a call with the input `input` and the value `value` gets, when it adds no request.
-
-With no input and no value, it gets the fee as a word, or reverts while the inhibitor holds.
-
-Any input of a size other than 0 or 56 bytes reverts, and so does a value with no input.
-
-The EIP gives only the fee for no input; these reverts come from its code. -/
-def getFeeResult (read : U256 → U256) (input : ByteArray) (value : U256) : Option U256 :=
-  if input.size = 0 ∧ value = 0 then (fee read).map (BitVec.ofNat 256) else none
-
-/-- A call with the value `value` pays the fee: the fee is defined and at most the value. -/
-def pays (read : U256 → U256) (value : U256) : Bool :=
-  match fee read with
-  | some f => decide (f ≤ value.toNat)
-  | none => false
-
 /-- The three words of a request from `caller` with the input `input`, as the queue holds them.
 
 They are the caller, then the two words of the input, read big-endian with zeros past its end.
 
 The last word holds the end of the public key, the amount big-endian, then 8 zero bytes. -/
 def requestWords (caller : Address) (input : ByteArray) : List U256 :=
-  [caller.toU256, loadWord input 0 32, loadWord input 32 32]
+  requestWordsOf 2 caller input
 
 /-- The data of the log of a request: the 20 bytes of the caller, then the input. -/
 def logData (caller : Address) (input : ByteArray) : ByteArray :=
-  (wordBytes caller.toU256).extract 12 32 ++ input
+  requestLog caller input
 
 /-- The record of 76 bytes of the request at the index `index`, counted from the start of the queue.
 
@@ -134,6 +120,41 @@ def record (read : U256 → U256) (index : U256) : ByteArray :=
     --
     -- So the third slot of a request differs from the pseudocode, but the records are the same.
     ⟨((wordBytes (read (slot + 2))).extract 16 24).data.reverse⟩
+
+/-- The code is not a delegation indicator: it has 504 bytes, not 23. -/
+theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
+  simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
+
+/-- The contract as a request contract, with the code, the constants and the record of EIP-7002. -/
+def WITHDRAWAL_REQUEST : RequestContract where
+  entry := WITHDRAWAL_REQUEST_CONTRACT
+  type := WITHDRAWAL_REQUEST_TYPE
+  code := CODE
+  maxPerBlock := MAX_WITHDRAWAL_REQUESTS_PER_BLOCK
+  targetPerBlock := TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
+  minFee := MIN_WITHDRAWAL_REQUEST_FEE
+  feeFraction := WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
+  inputSize := 56
+  record := record
+  mem := by simp [SYSTEM_CONTRACTS]
+  kind_eq := rfl
+  size_ne_zero := by simp [CODE, NatCode.size_ofNat]
+  supported := supportedCode_CODE
+  delegatedAddress_eq_none := delegatedAddress_CODE
+
+/-- What a call with the input `input` and the value `value` gets, when it adds no request.
+
+With no input and no value, it gets the fee as a word, or reverts while the inhibitor holds.
+
+Any input of a size other than 0 or 56 bytes reverts, and so does a value with no input.
+
+The EIP gives only the fee for no input; these reverts come from its code. -/
+def getFeeResult (read : U256 → U256) (input : ByteArray) (value : U256) : Option U256 :=
+  WITHDRAWAL_REQUEST.getFeeResult read input value
+
+/-- A call with the value `value` pays the fee: the fee is defined and at most the value. -/
+def pays (read : U256 → U256) (value : U256) : Bool :=
+  WITHDRAWAL_REQUEST.pays read value
 
 /-! ## The loop of the fee -/
 
@@ -164,6 +185,98 @@ theorem feeLoopCode_CODE : FeeLoopCode CODE :=
   FeeLoopCode.of_ofNat (by decide) (by rw [CODE_NUMBER_eq, FEE_LOOP_NUMBER]; decide +kernel)
     (by evm_dest [CODE_NUMBER_eq]) (by evm_dest [CODE_NUMBER_eq])
 
+/-- The code runs the path of a call from another address, with the constants of EIP-7002. -/
+theorem feePathCode_CODE :
+    FeePathCode CODE 0xcb WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION 500 56 where
+  size_le := by simp [CODE, NatCode.size_ofNat]
+  byte := FeePathCode.byte_ofNat (by decide +kernel)
+  push1 := by evm_code [CODE, CODE_NUMBER_eq]
+  push31 := by evm_code [CODE, CODE_NUMBER_eq]
+  push117 := by evm_code [CODE, CODE_NUMBER_eq]
+  push132 := by evm_code [CODE, CODE_NUMBER_eq]
+  push23 := by evm_code [CODE, CODE_NUMBER_eq]
+  push26 := by evm_code [CODE, CODE_NUMBER_eq, WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION]
+  push65 := by evm_code [CODE, CODE_NUMBER_eq]
+  push114 := by evm_code [CODE, CODE_NUMBER_eq]
+  system_lt := by decide
+  fraction_lt := by decide
+  size_lt := by decide
+  dest_system := by evm_dest [CODE, CODE_NUMBER_eq]
+  push121 := by evm_code [CODE, CODE_NUMBER_eq]
+  push126 := by evm_code [CODE, CODE_NUMBER_eq]
+  push139 := by evm_code [CODE, CODE_NUMBER_eq]
+  loop := feeLoopCode_CODE
+  dest136 := by evm_dest [CODE, CODE_NUMBER_eq]
+  revert_lt := by decide
+  revert_end := by simp [CODE, NatCode.size_ofNat]
+  dest_revert := by evm_dest [CODE, CODE_NUMBER_eq]
+  revert0 := by evm_code [CODE, CODE_NUMBER_eq]
+  revert1 := by evm_code [CODE, CODE_NUMBER_eq]
+  revert2 := by evm_code [CODE, CODE_NUMBER_eq]
+  revert3 := by evm_code [CODE, CODE_NUMBER_eq]
+
+/-- The code starts its system call from byte 203, for at most 16 requests. -/
+theorem dequeueStartCode_CODE : DequeueStartCode CODE 0xcb MAX_WITHDRAWAL_REQUESTS_PER_BLOCK where
+  size_le := by simp [CODE, NatCode.size_ofNat]
+  dest_lt := by decide
+  max_lt := by decide
+  byte := DequeueStartCode.byte_ofNat (by decide +kernel)
+  push1 := by evm_code [CODE, CODE_NUMBER_eq]
+  push4 := by evm_code [CODE, CODE_NUMBER_eq]
+  push11 := by evm_code [CODE, CODE_NUMBER_eq, MAX_WITHDRAWAL_REQUESTS_PER_BLOCK]
+  push14 := by evm_code [CODE, CODE_NUMBER_eq]
+  push18 := by evm_code [CODE, CODE_NUMBER_eq, MAX_WITHDRAWAL_REQUESTS_PER_BLOCK]
+  dest20 := by evm_dest [CODE, CODE_NUMBER_eq]
+
+/-- The code ends its system call from byte 387, for a target of 2 and records of 76 bytes. -/
+theorem dequeueTailCode_CODE : DequeueTailCode CODE 387 2 76 where
+  size_le := by simp [CODE, NatCode.size_ofNat]
+  end_lt := by decide
+  byte := DequeueTailCode.byte_ofNat (by decide +kernel)
+  push11 := by evm_code [CODE, CODE_NUMBER_eq]
+  push22 := by evm_code [CODE, CODE_NUMBER_eq]
+  push26 := by evm_code [CODE, CODE_NUMBER_eq]
+  push33 := by evm_code [CODE, CODE_NUMBER_eq]
+  push75 := by evm_code [CODE, CODE_NUMBER_eq]
+  push105 := by evm_code [CODE, CODE_NUMBER_eq]
+  push6 := by evm_code [CODE, CODE_NUMBER_eq]
+  push14 := by evm_code [CODE, CODE_NUMBER_eq]
+  push68 := by evm_code [CODE, CODE_NUMBER_eq]
+  push84 := by evm_code [CODE, CODE_NUMBER_eq]
+  push91 := by evm_code [CODE, CODE_NUMBER_eq]
+  dest18 := by evm_dest [CODE, CODE_NUMBER_eq]
+  dest29 := by evm_dest [CODE, CODE_NUMBER_eq]
+  dest74 := by evm_dest [CODE, CODE_NUMBER_eq]
+  dest95 := by evm_dest [CODE, CODE_NUMBER_eq]
+  dest101 := by evm_dest [CODE, CODE_NUMBER_eq]
+  push78 := by evm_code [CODE, CODE_NUMBER_eq]
+  push97 := by evm_code [CODE, CODE_NUMBER_eq]
+  push108 := by evm_code [CODE, CODE_NUMBER_eq]
+  target_lt := by decide
+  size_lt := by decide
+
+/-- From byte 143, the code adds a request of 2 input words, 56 bytes long. -/
+theorem addPathCode_CODE : AddPathCode CODE 2 56 where
+  two_le := by decide
+  log_lt := by decide
+  size_le := by simp [CODE, NatCode.size_ofNat]
+  head := fun i h h1 h2 h3 => by
+    obtain ⟨k, rfl⟩ : ∃ k, i = 143 + k := ⟨i - 143, by omega⟩
+    rw [Nat.add_sub_cancel_left]
+    exact getElem_of_holdsExcept (skip := [14]) (by decide +kernel) h (by omega)
+      (by simp; omega)
+  push156 := by evm_code [CODE, CODE_NUMBER_eq]
+  word := fun j h1 h2 => absurd h2 (by omega)
+  pushWord := fun j h1 h2 => absurd h2 (by omega)
+  last := fun i h hi h1 =>
+    getElem_of_holdsExcept (skip := [1]) (by decide +kernel) h hi (by simpa using h1)
+  pushLast := by evm_code [CODE, CODE_NUMBER_eq]
+  log := fun i h hi h1 h2 =>
+    getElem_of_holdsExcept (skip := [7, 13]) (by decide +kernel) h hi
+      (by simp; omega)
+  pushSize := by evm_code [CODE, CODE_NUMBER_eq]
+  pushLog := by evm_code [CODE, CODE_NUMBER_eq]
+
 /-! The proofs read the code through the equation above, never by unfolding it.
 
 The number of the code is a sum of terms with powers of 256 up to `256^464`.
@@ -178,89 +291,12 @@ attribute [local irreducible] CODE
 variable {fork : Fork} {message : Message fork} {gas : Nat} {state : TransactionState}
   {substate : Substate} {returnData : ByteArray}
 
-/-- JUMPDEST, PUSH0, PUSH0 and REVERT, at byte 500, revert with no output. -/
-private theorem revert_500 {stack : List U256} (hfork : .shapella ≤ fork)
-    (hstack : stack.length ≤ 6) (hgas : 10 ≤ gas) :
-    Spec fork (At CODE message 500 stack .empty gas state substate returnData)
-      (Answer state none) := by
-  evm_step [CODE, CODE_NUMBER_eq]
-  exact revertEmpty hfork (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by simp only [STACK_LIMIT]; omega) (by omega)
-
-/-- A call from another address computes the fee, from byte 0 to byte 113.
-
-It reverts with no output while the inhibitor holds.
-
-Otherwise it reaches byte 113 with the fee on the stack, the read of slot 0 recorded. -/
-private theorem user_fee {m : Nat} {Q : Evm fork Nat → Prop} (hfork : .shapella ≤ fork)
-    (hcaller : message.caller ≠ SYSTEM_ADDRESS)
-    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
-      FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
-        (storageOf state message.currentTarget 0).toNat m)
-    (hgas : 2216 + 87 * m ≤ gas)
-    (hrev : storageOf state message.currentTarget 0 = EXCESS_INHIBITOR →
-      ∀ evm, Answer state none evm → Q evm)
-    (hcont : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR → ∀ g ss,
-      gas - (2216 + 87 * m) ≤ g → ss.logs = substate.logs →
-      Spec fork (At CODE message 113
-        [BitVec.ofNat 256 (fakeExponential MIN_WITHDRAWAL_REQUEST_FEE
-          (storageOf state message.currentTarget 0).toNat
-          WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION)]
-        .empty g (state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) ss
-        returnData) Q) :
-    Spec fork (At CODE message 0 [] .empty gas state substate returnData) Q := by
-  have hc : equal (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
-      message.caller.toU256 = 0 := by
-    rw [equal, ite_eq_right_iff]
-    exact fun e => absurd e.symm (toU256_ne_of_ne_SYSTEM_ADDRESS hcaller)
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine Triple.seq (sload (code := CODE) (pc := 29) (gas := gas - 26) (key := 0)
-    (rest := [17#256]) (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) rfl (Nat.le_trans (sloadPrice_le _) (by omega))) ?_
-  have hle := sloadPrice_le (decide (U256.toBeBytes 0 ∉
-    substate.accessedStorageKeys.getD message.currentTarget ∅))
-  generalize (if decide (U256.toBeBytes 0 ∉
-    substate.accessedStorageKeys.getD message.currentTarget ∅) then 2100 else 100) = price at hle ⊢
-  change Spec fork (At CODE message 30 (storageOf state message.currentTarget 0 :: [17#256]) _ _ _
-    _ _) Q
-  generalize hx : storageOf state message.currentTarget 0 = x at hfits hcont
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have hw : BitVec.ofNat 256 (2 ^ 256 - 1) = EXCESS_INHIBITOR := rfl
-  by_cases hinh : x = EXCESS_INHIBITOR
-  · have hz : equal (BitVec.ofNat 256 (2 ^ 256 - 1)) x ≠ 0 := by simp [equal, hinh, hw]
-    simp only [Nat.reducePow, Nat.reduceSub] at hz
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine Spec.consequence (revert_500 hfork ?_ ?_) (fun _ h => h) fun evm h => ?_
-    · simp
-    · omega
-    · exact hrev (hx.trans hinh) evm (h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _))
-  · have hz : equal (BitVec.ofNat 256 (2 ^ 256 - 1)) x = 0 := by
-      rw [equal, ite_eq_right_iff, hw]
-      exact fun e => absurd e.symm hinh
-    simp only [Nat.reducePow, Nat.reduceSub] at hz
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine Triple.seq (feeLoop hfork feeLoopCode_CODE (d := 17) (hfits hinh) ?_) ?_
-    · omega
-    rintro evm ⟨g', hg', hat⟩
-    refine hcont hinh g' _ ?_ ?_ evm hat
-    · omega
-    · rfl
-
 /-- A call from another address, whose input is not 56 bytes, gets the fee or reverts.
 
-It holds from Shapella up to BPO5, with the one-counter meter. -/
-theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
+It holds from Shapella, with the one-counter meter.
+
+From Glamsterdam, a run with no error carries to the state gas meter of the protocol. -/
+theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hsize : message.data.size ≠ 56)
     -- It assumes fewer than `2^256` bytes of input, which the size word of the EVM can hold.
     (hbound : message.data.size < 2 ^ 256)
@@ -275,210 +311,17 @@ theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork) (_hglam : fork < .gla
       --
       -- Its state reads as the state it starts from.
       (Answer state (getFeeResult (storageOf state message.currentTarget) message.data
-        message.value)) := by
-  have hs : equal 56#256 (BitVec.ofNat 256 message.data.size) = 0 := by
-    rw [equal, ite_eq_right_iff]
-    intro e
-    have := congrArg BitVec.toNat e
-    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbound] at this
-    omega
-  refine user_fee hfork hcaller hfits (by omega) (fun hinh evm h => ?_)
-    (fun hinh g ss hg _ => ?_)
-  · simp only [getFeeResult, fee, getFee, hinh, ite_true, Option.map_none, ite_self]
-    exact h
-  · evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    have hread : ∀ result (evm : Evm fork Nat), Answer (state.recordStorageRead
-        message.currentTarget (U256.toBeBytes 0)) result evm → Answer state result evm :=
-      fun _ _ h => h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
-    by_cases h0 : message.data.size = 0
-    · have hz : BitVec.ofNat 256 message.data.size = 0 := by rw [h0]; rfl
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      by_cases hv : message.value = 0
-      · evm_step [CODE, CODE_NUMBER_eq]
-        refine Spec.consequence (returnWord hfork (by evm_code [CODE, CODE_NUMBER_eq])
-          (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq])
-          (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq])
-          (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq]) ?_)
-          (fun _ h => h) fun evm h => ?_
-        · omega
-        · simp only [getFeeResult, fee, getFee, hinh, ite_false, h0, hv, and_self, ite_true,
-            Option.map_some]
-          exact hread _ _ h
-      · evm_step [CODE, CODE_NUMBER_eq]
-        refine Spec.consequence (revert_500 hfork ?_ ?_) (fun _ h => h) fun evm h => ?_
-        · simp
-        · omega
-        · simp only [getFeeResult, hv, and_false, ite_false]
-          exact hread _ _ h
-    · have hnz : BitVec.ofNat 256 message.data.size ≠ 0 := by
-        intro e
-        have := congrArg BitVec.toNat e
-        simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbound] at this
-        exact h0 this
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      refine Spec.consequence (revert_500 hfork ?_ ?_) (fun _ h => h) fun evm h => ?_
-      · simp
-      · omega
-      · simp only [getFeeResult, h0, false_and, ite_false]
-        exact hread _ _ h
+        message.value)) :=
+  WITHDRAWAL_REQUEST.spec_getFee feePathCode_CODE rfl hfork hcaller hsize hbound hfits (by omega)
 
 /-! ## A call that adds a request -/
-
-/-- From byte 143, the code adds the request of the caller and the input, and logs it. -/
-private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
-    (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam) (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hsize : message.data.size = 56) (hgas : 150000 ≤ g) :
-    Spec fork (At CODE message 143 [] .empty g S ss returnData)
-      (Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
-        (logData message.caller message.data) S ss) := by
-  have hscale := storageGasScale_of_lt hglam
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g0 ss0 hg0 hl0 => ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
-    fun S1 hw1 hacc1 g1 ss1 hg1 hl1 => ?_
-  have hw1 := WritesStorage.trans (WritesStorage.recordStorageRead _ _ _ _) hw1
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g2 ss2 hg2 hl2 => ?_
-  have h3 : storageOf S1 message.currentTarget 3#256 = storageOf S message.currentTarget 3#256 := by
-    rw [hw1.1]
-    simp only [setSlot]
-    rfl
-  rw [h3]
-  have hw2 := WritesStorage.trans hw1
-    (WritesStorage.recordStorageRead _ S1 message.currentTarget (U256.toBeBytes 3#256))
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  generalize ht : storageOf S message.currentTarget 3#256 = t at hw2 ⊢
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc1 (by omega)
-    fun S3 hw3 hacc3 g3 ss3 hg3 hl3 => ?_
-  have hw3 := WritesStorage.trans hw2 hw3
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc3 (by omega)
-    fun S4 hw4 hacc4 g4 ss4 hg4 hl4 => ?_
-  have hw4 := WritesStorage.trans hw3 hw4
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc4 (by omega)
-    fun S5 hw5 hacc5 g5 ss5 hg5 hl5 => ?_
-  have hw5 := WritesStorage.trans hw4 hw5
-  have hg5' : 35000 ≤ g5 := by omega
-  clear hg0 hg1 hg2 hg3 hg4 hg5 hgas
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine Triple.seq (mstore (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq])
-    (by simp only [ByteArray.size_empty, extendMemory_word]; omega)) ?_
-  rw [ByteArray.size_empty, extendMemory_word]
-  dsimp only
-  rw [show BitVec.toNat (0 : U256) = 0 from rfl,
-    memoryWrite_whole (by rw [size_memoryExtend, size_wordBytes]; rfl)]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have hext : extendMemory 32 [(20#256, 56#256)] = ⟨6, 64⟩ := by decide
-  have hwc : wordCount (56#256).toNat = 2 := by decide
-  refine Triple.seq (calldatacopy (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by rw [size_wordBytes, hext, hwc]; dsimp only; omega)) ?_
-  rw [size_wordBytes, hext]
-  dsimp only
-  simp only [BitVec.reduceToNat, show BitVec.toNat (0 : U256) = 0 from rfl,
-    show wordCount 56 = 2 by decide]
-  have hM := log_memory (c := message.caller.toU256) hsize (e := 64) (by omega)
-  have hMs : (memoryWrite (memoryExtend (wordBytes (bitwiseShl 96#256 message.caller.toU256)) 64)
-      20 ⟨(bufferRead message.data 0 56).toArray⟩).size = 96 := by
-    have hb : (⟨(bufferRead message.data 0 56).toArray⟩ : ByteArray).size = 56 := by
-      show (bufferRead _ _ _).toArray.size = 56
-      rw [List.size_toArray, bufferRead_length]
-    rw [size_memoryWrite (by rw [hb, size_memoryExtend, size_wordBytes]; omega), size_memoryExtend,
-      size_wordBytes]
-  generalize memoryWrite (memoryExtend (wordBytes (bitwiseShl 96#256 message.caller.toU256)) 64)
-    20 ⟨(bufferRead message.data 0 56).toArray⟩ = M at hM hMs ⊢
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have hle : extendMemory M.size [((0 : U256), 76#256)] = ⟨0, 0⟩ :=
-    extendMemory_of_le (by rw [hMs]; decide)
-  refine Triple.seq (log (n := 0) (words := []) (rest := [t]) rfl
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq]) (by decide)
-    hstatic (by rw [hle]; simp only [logCost, OPCODE_LOG_BASE, OPCODE_LOG_DATA_PER_BYTE,
-      OPCODE_LOG_TOPIC, BitVec.reduceToNat]; omega)) ?_
-  rw [hle]
-  dsimp only
-  rw [memoryExtend_zero]
-  have hM' : memoryReadBytes M 0 76 = logData message.caller message.data := hM
-  simp only [BitVec.reduceToNat, show BitVec.toNat (0 : U256) = 0 from rfl, List.map_nil, hM',
-    logCost, OPCODE_LOG_BASE, OPCODE_LOG_DATA_PER_BYTE, OPCODE_LOG_TOPIC, Nat.add_zero,
-    Fin.val_zero, Nat.mul_zero, Nat.reduceMul, Nat.reduceAdd, Nat.sub_sub]
-  clear hM hM' hle hMs hext hwc
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine Triple.seq (binary (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (ofByte_of_decode rfl (Fork.frontier_le _))
-    (instruction_of_stackOnlyStep rfl) (by simp only [OPCODE_ADD, VERY_LOW]; omega)) ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc5 (by omega)
-    fun S6 hw6 _ g6 ss6 _ hl6 => ?_
-  have hw6 := WritesStorage.trans hw5 hw6
-  refine Spec.consequence (stop (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq])) (fun _ h => h) ?_
-  rintro evm ⟨-, herr, hout, -, hst, hss⟩
-  refine ⟨by simpa using herr, hout, ?_, ?_⟩
-  · rw [hst]
-    refine ⟨fun slot => ?_, hw6.2.1, hw6.2.2.1, hw6.2.2.2⟩
-    have e1 := funext hw1.1
-    have e3 := funext hw3.1
-    have e4 := funext hw4.1
-    have e5 := funext hw5.1
-    rw [hw6.1, e5, e4, e3]
-    change setSlot (setSlot (setSlot (setSlot (storageOf S1 message.currentTarget) _ _)
-      _ _) _ _) _ _ slot = _
-    rw [e1, ← ht]
-    simp only [afterAdd, requestWords, SLOTS_PER_REQUEST, List.zipIdx_cons, List.zipIdx_nil,
-      List.foldl_cons, List.foldl_nil]
-    refine congrFun (setSlot_congr (setSlot_congr (setSlot_congr (setSlot_congr
-      (setSlot_congr rfl rfl ?_) ?_ rfl) ?_ rfl) ?_ rfl) rfl ?_) slot <;>
-      simp only [add, mul] <;> bv_omega
-  · rw [hss, hl6]
-    simp only [hl5, hl4, hl3, hl2, hl1, hl0]
 
 /-- A call from another address with 56 bytes of input adds a request, as the code of EIP-7002 does.
 
 It stores the amount big-endian, where the pseudocode of the EIP stores it little-endian.
 
-It holds from Shapella up to BPO5, on a frame that may change the state. -/
-theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
+It holds from Shapella, with the one-counter meter, on a frame that may change the state. -/
+theorem spec_add {m : Nat} (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
     -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
@@ -488,8 +331,13 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamste
     (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
       FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
         (storageOf state message.currentTarget 0).toNat m)
-    -- The frame has at least 200,000 gas, and 100 more for each of these steps.
-    (hgas : 200000 + 100 * m ≤ gas) :
+    -- The frame has at least 200,000 gas before Glamsterdam and 1,000,000 from it.
+    --
+    -- It has 100 more for each of these steps.
+    (hgas : 200000 * storageGasScale fork + 100 * m ≤ gas) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
+    --
+    -- A run that reverts or stops with no error carries to a state gas meter with this gas left.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
       -- When the value pays the fee, the frame adds the request of the caller and the input.
       if pays (storageOf state message.currentTarget) message.value then
@@ -498,63 +346,113 @@ theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamste
           (logData message.caller message.data) state substate evm
       -- Otherwise it reverts with no output, and its state reads as the state it starts from.
       else Answer state none evm := by
-  have hz : equal 56#256 (BitVec.ofNat 256 message.data.size) ≠ 0 := by
-    rw [hsize]
-    decide
-  refine user_fee hfork hcaller hfits (by omega) (fun hinh evm h => ?_)
-    (fun hinh g ss hg hlogs => ?_)
-  · simp only [pays, fee, getFee, hinh, ite_true]
-    exact h
-  · have hF : fakeExponential MIN_WITHDRAWAL_REQUEST_FEE
-        (storageOf state message.currentTarget 0).toNat WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION <
-        2 ^ 256 := by
-      obtain ⟨h1, h2, -, -⟩ := hfits hinh
-      unfold MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION at h1 h2 ⊢
-      rw [Fees.BlobBaseFee.fakeExponential_eq_partialSum h1]
-      exact Nat.lt_of_le_of_lt (Nat.div_le_self _ _) h2
-    have hpays : pays (storageOf state message.currentTarget) message.value =
-        decide (fakeExponential MIN_WITHDRAWAL_REQUEST_FEE
-          (storageOf state message.currentTarget 0).toNat
-          WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION ≤ message.value.toNat) := by
-      simp only [pays, fee, getFee, hinh, ite_false]
-    rw [hpays]
-    generalize fakeExponential MIN_WITHDRAWAL_REQUEST_FEE
-      (storageOf state message.currentTarget 0).toNat
-      WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION = F at hF ⊢
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    by_cases hp : F ≤ message.value.toNat
-    · have hlt : lessThan message.value (BitVec.ofNat 256 F) = 0 := by
-        simp only [lessThan, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hF]
-        rw [ite_eq_right_iff]
-        intro h
-        omega
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      simp only [hp, decide_true, ite_true]
-      refine Spec.consequence (add_tail
-        (S := state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) hfork hglam
-        hstatic hacc hsize ?_) (fun _ h => h) ?_
-      · omega
-      · rintro evm ⟨herr, hout, hw, hlog⟩
-        exact ⟨herr, hout, hw, by rw [hlog, hlogs]⟩
-    · have hlt : lessThan message.value (BitVec.ofNat 256 F) ≠ 0 := by
-        simp only [lessThan, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hF]
-        rw [ite_eq_left (by omega)]
-        decide
-      evm_step [CODE, CODE_NUMBER_eq]
-      evm_step [CODE, CODE_NUMBER_eq]
-      simp only [hp, decide_false]
-      refine Spec.consequence (revert_500 hfork ?_ ?_) (fun _ h => h) fun evm h => ?_
-      · simp
-      · omega
-      · exact h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+  have hscale := one_le_storageGasScale fork
+  refine WITHDRAWAL_REQUEST.spec_pay feePathCode_CODE rfl hfork hcaller hsize hfits (by omega)
+    fun _ g ss hg hlogs => Spec.consequence (addPathCode_CODE.spec_add
+      (S := state.recordStorageRead message.currentTarget (U256.toBeBytes 0)) hfork
+      hstatic hacc hsize (by omega)) (fun _ h => h) ?_
+  rintro evm ⟨⟨herr, hout, hw, hlog⟩, -⟩
+  exact ⟨herr, hout, hw, by rw [hlog, hlogs]; rfl⟩
+
+/-- The rule of a call that adds a request holds under the state gas meter of EIP-8037.
+
+That meter is the one of every fork from Glamsterdam.
+
+Its execution gas alone must cover `gas`, and the reservoir is not used. -/
+theorem spec_add_covered {m : Nat} (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the validator, then the amount as 8 bytes, big-endian.
+    (hsize : message.data.size = 56)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
+    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
+      FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
+        (storageOf state message.currentTarget 0).toNat m)
+    -- The frame has at least 200,000 gas before Glamsterdam and 1,000,000 from it.
+    --
+    -- It has 100 more for each of these steps.
+    (hgas : 200000 * storageGasScale fork + 100 * m ≤ gas) :
+    Spec (Meter := StateGasMeter) fork
+      (Covered (At CODE message 0 [] .empty gas state substate returnData))
+      (Covered fun evm =>
+        if pays (storageOf state message.currentTarget) message.value then
+          Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
+            (logData message.caller message.data) state substate evm
+        else Answer state none evm) :=
+  (spec_add (returnData := returnData) hfork hcaller hstatic hacc hsize hfits hgas).covered
+    (fun _ hat => hat.ready supportedCode_CODE (zero_boundary CODE)) fun _ => carried_of_added
+
+/-- From Shapella, a call that pays the fee adds its request, for at most the gas of the bound.
+
+The bound is 2,266 gas and 87 for each step of the loop of the fee, then 150,000 for the storage.
+
+From Glamsterdam, the 150,000 are five times larger, on the one-counter model of the gas. -/
+theorem costs_add {m : Nat} (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the validator, then the amount as 8 bytes, big-endian.
+    (hsize : message.data.size = 56)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
+    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
+      FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
+        (storageOf state message.currentTarget 0).toNat m)
+    -- The value pays the fee, and the frame starts with at least the gas of the bound.
+    (hpays : pays (storageOf state message.currentTarget) message.value = true)
+    (hgas : 2266 + 87 * m + 150000 * storageGasScale fork ≤ gas) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
+    Costs (Step fork) (At CODE message 0 [] .empty gas state substate returnData)
+      (fun evm => evm.running = false ∧
+        -- The frame stops, with the request words at the tail of the queue and the log.
+        Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
+          (logData message.caller message.data) state substate evm)
+      (2266 + 87 * m + 150000 * storageGasScale fork) := by
+  -- The request has two input words: five writes and one budget for the reads and the log.
+  refine ((WITHDRAWAL_REQUEST.costs_add feePathCode_CODE addPathCode_CODE rfl hfork hcaller
+    hstatic hacc hsize hfits hpays (by omega)).mono (by omega)).consequence
+    (fun _ h => h) fun _ h => h
+
+/-- From Shapella, a call that pays the fee adds its request under the state gas meter of EIP-8037.
+
+That meter counts gas from Glamsterdam.
+
+The execution gas and the reservoir of state gas drop, in sum, by at most the bound. -/
+theorem costs_add_covered {m : Nat} (hfork : .shapella ≤ fork)
+    (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
+    (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the validator, then the amount as 8 bytes, big-endian.
+    (hsize : message.data.size = 56)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
+    (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
+      FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
+        (storageOf state message.currentTarget 0).toNat m)
+    -- The value pays the fee, and the counter starts with at least the gas of the bound.
+    (hpays : pays (storageOf state message.currentTarget) message.value = true)
+    (hgas : 2266 + 87 * m + 150000 * storageGasScale fork ≤ gas)
+    -- The frame under the state gas meter covers a frame of the start, under one counter.
+    --
+    -- The execution gas alone covers that counter, and the execution gas that it holds fits a word.
+    {high : Evm fork StateGasMeter}
+    (covered : Covered (At CODE message 0 [] .empty gas state substate returnData) high) :
+    ∃ after, Reaches (Step fork) high after ∧ after.running = false ∧
+      -- The frame stops, with the request words at the tail of the queue and the log.
+      Covered (Added SLOTS_PER_REQUEST message.currentTarget
+        (requestWords message.caller message.data) (logData message.caller message.data) state
+        substate) after ∧
+      -- The sum of the execution gas and of the reservoir drops by at most the bound.
+      high.gas.gasLeft + high.gas.reservoir ≤
+        after.gas.gasLeft + after.gas.reservoir +
+          (2266 + 87 * m + 150000 * storageGasScale fork) := by
+  obtain ⟨after, reached, ⟨low, ⟨stopped, added⟩, follows, fits⟩, bound⟩ :=
+    (costs_add hfork hcaller hstatic hacc hsize hfits hpays hgas).covered
+      (fun _ hat => hat.ready supportedCode_CODE (zero_boundary CODE))
+      (fun _ h => ⟨h.1, .inl h.2.1⟩) covered
+  refine ⟨after, reached, ?_, ⟨low, added, follows, fits⟩, bound⟩
+  -- The frame under the state gas meter stops as the frame under one counter does.
+  obtain ⟨_, -, rfl⟩ := follows
+  exact stopped
 
 /-! ## The system call -/
 
@@ -808,311 +706,6 @@ private theorem deq_loop {read : U256 → U256} {tail : U256} {c : Nat} {Q : Evm
         next M' S' g' ss' hM' (WritesStorage.trans hw₁ hw')
           (Nat.le_trans hg₁ (by rw [← Nat.add_assoc]; exact Nat.add_le_add_right hg' _))
 
-/-- From byte 488, the code writes the excess `v` and resets the count of the block.
-
-It then returns the records, `76` bytes for each request taken. -/
-private theorem deq_end {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {v x : U256} (hfork : .shapella ≤ fork)
-    (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 50000 * storageGasScale fork ≤ g) :
-    Spec fork (At CODE message 488 [v, x] M g S ss returnData)
-      (Returned message.currentTarget M (mul 76#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0 v) 1 0) S) := by
-  have hscale := one_le_storageGasScale fork
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
-    fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc₁ (by omega)
-    fun S₂ hw₂ _ g₂ ss₂ hg₂ _ => ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have hle : extendMemory M.size [((0 : U256), mul 76#256 x)] = ⟨0, 0⟩ :=
-    extendMemory_of_le (by simpa using hM)
-  refine Spec.consequence («return» (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by rw [hle]; exact Nat.zero_le _)) (fun _ h => h) ?_
-  rintro evm ⟨-, herr, hout, -, hst, -⟩
-  refine ⟨by simpa using herr, ?_, ?_⟩
-  · rw [hout, hle]
-    dsimp only
-    rw [memoryExtend_zero]
-    rfl
-  · rw [hst]
-    have hw := WritesStorage.trans hw₁ hw₂
-    rw [show storageOf S₁ message.currentTarget = _ from funext hw₁.1] at hw
-    exact hw
-
-/-- From byte 461, the code computes the new excess from the previous excess `p` and the count.
-
-The previous excess plus the count is below `2^256`. -/
-private theorem deq_count {S : TransactionState} {ss : Substate} {M : ByteArray} {g p : Nat}
-    {x : U256} (hfork : .shapella ≤ fork)
-    (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hp : p + (storageOf S message.currentTarget 1#256).toNat < 2 ^ 256)
-    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 60000 * storageGasScale fork ≤ g) :
-    Spec fork (At CODE message 461 [BitVec.ofNat 256 p, x] M g S ss returnData)
-      (Returned message.currentTarget M (mul 76#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0
-          (BitVec.ofNat 256 (if p + (storageOf S message.currentTarget 1#256).toNat > 2 then
-            p + (storageOf S message.currentTarget 1#256).toNat - 2 else 0))) 1 0) S) := by
-  have hscale := one_le_storageGasScale fork
-  generalize hn : (storageOf S message.currentTarget 1#256).toNat = n at hp
-  have hs : add (storageOf S message.currentTarget 1#256) (BitVec.ofNat 256 p) =
-      BitVec.ofNat 256 (p + n) := by
-    apply BitVec.eq_of_toNat_eq
-    simp only [add, BitVec.toNat_add, BitVec.toNat_ofNat, hn]
-    have hp' : p < 2 ^ 256 := Nat.lt_of_le_of_lt (Nat.le_add_right p n) hp
-    rw [Nat.mod_eq_of_lt hp', Nat.add_comm, Nat.mod_eq_of_lt hp]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g₁ ss₁ hg₁ _ => ?_
-  have hacc₁ : ((S.recordStorageRead message.currentTarget (U256.toBeBytes 1#256)
-      ).getAccountOptional message.currentTarget).isSome = true := hacc
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  rw [hs]
-  have hsub : 2 ≤ p + n → sub (BitVec.ofNat 256 (p + n)) 2#256 =
-      BitVec.ofNat 256 (p + n - 2) := by
-    intro h2
-    apply BitVec.eq_of_toNat_eq
-    simp only [sub, BitVec.toNat_sub, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hp]
-    omega
-  have post : ∀ v, ∀ evm : Evm fork Nat, Returned message.currentTarget M (mul 76#256 x).toNat
-      (setSlot (setSlot (storageOf S message.currentTarget) 0 v) 1 0)
-      (S.recordStorageRead message.currentTarget (U256.toBeBytes 1#256)) evm →
-      Returned message.currentTarget M (mul 76#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0 v) 1 0) S evm :=
-    fun _ _ ⟨h1, h2, h3⟩ =>
-      ⟨h1, h2, WritesStorage.trans (WritesStorage.recordStorageRead _ _ _ _) h3⟩
-  by_cases hgt : p + n > 2
-  · have hz : greaterThan (BitVec.ofNat 256 (p + n)) 2#256 ≠ 0 := by
-      simp [greaterThan, Nat.mod_eq_of_lt hp, hgt]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    rw [hs]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    rw [hsub (by omega)]
-    simp only [hgt, ite_true]
-    exact Spec.consequence (deq_end hfork hstatic hacc₁ hM (by omega)) (fun _ h => h)
-      (post _)
-  · have hz : greaterThan (BitVec.ofNat 256 (p + n)) 2#256 = 0 := by
-      simp [greaterThan, Nat.mod_eq_of_lt hp, hgt]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    simp only [hgt, ite_false]
-    exact Spec.consequence (deq_end hfork hstatic hacc₁ hM (by omega)) (fun _ h => h)
-      (post _)
-
-/-- From byte 416, the code updates the excess for a target of 2 per block, and resets the count.
-
-It then returns the records, `76` bytes for each request taken. -/
-private theorem deq_excess {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {x : U256} (hfork : .shapella ≤ fork)
-    (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hb : previousExcess (storageOf S message.currentTarget 0) +
-      (storageOf S message.currentTarget 1#256).toNat < 2 ^ 256)
-    (hM : (mul 76#256 x).toNat ≤ M.size) (hg : 70000 * storageGasScale fork ≤ g) :
-    Spec fork (At CODE message 416 [x] M g S ss returnData)
-      (Returned message.currentTarget M (mul 76#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0
-          (BitVec.ofNat 256 (newExcess 2 (storageOf S message.currentTarget 0)
-            (storageOf S message.currentTarget 1)))) 1 0) S) := by
-  have hscale := one_le_storageGasScale fork
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g₁ ss₁ hg₁ _ => ?_
-  have hacc₁ : ((S.recordStorageRead message.currentTarget (U256.toBeBytes 0)).getAccountOptional
-      message.currentTarget).isSome = true := hacc
-  have post : ∀ evm : Evm fork Nat, Returned message.currentTarget M (mul 76#256 x).toNat
-      (setSlot (setSlot (storageOf S message.currentTarget) 0
-        (BitVec.ofNat 256 (newExcess 2 (storageOf S message.currentTarget 0)
-          (storageOf S message.currentTarget 1)))) 1 0)
-      (S.recordStorageRead message.currentTarget (U256.toBeBytes 0)) evm →
-      Returned message.currentTarget M (mul 76#256 x).toNat
-        (setSlot (setSlot (storageOf S message.currentTarget) 0
-          (BitVec.ofNat 256 (newExcess 2 (storageOf S message.currentTarget 0)
-            (storageOf S message.currentTarget 1)))) 1 0) S evm :=
-    fun _ ⟨h1, h2, h3⟩ => ⟨h1, h2, WritesStorage.trans (WritesStorage.recordStorageRead _ _ _ _) h3⟩
-  have hw : BitVec.ofNat 256 (2 ^ 256 - 1) = EXCESS_INHIBITOR := rfl
-  by_cases hinh : storageOf S message.currentTarget 0 = EXCESS_INHIBITOR
-  · have hz : isZero (equal (BitVec.ofNat 256 (2 ^ 256 - 1))
-        (storageOf S message.currentTarget 0)) = 0 := by
-      rw [hinh, ← hw]
-      decide
-    simp only [Nat.reducePow, Nat.reduceSub] at hz
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    have hp : previousExcess (storageOf S message.currentTarget 0) = 0 := by
-      unfold previousExcess
-      rw [ite_eq_left hinh]
-    rw [hp] at hb
-    refine Spec.consequence (deq_count (p := 0) hfork hstatic hacc₁ hb hM (by omega))
-      (fun _ h => h) fun evm h => post evm ?_
-    unfold newExcess
-    rw [hp]
-    exact h
-  · have hz : isZero (equal (BitVec.ofNat 256 (2 ^ 256 - 1))
-        (storageOf S message.currentTarget 0)) ≠ 0 := by
-      have hne : BitVec.ofNat 256 (2 ^ 256 - 1) ≠ storageOf S message.currentTarget 0 :=
-        fun e => hinh (e.symm.trans hw)
-      rw [equal, ite_eq_right hne, isZero, ite_eq_left rfl]
-      decide
-    simp only [Nat.reducePow, Nat.reduceSub] at hz
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    have hp : previousExcess (storageOf S message.currentTarget 0) =
-        (storageOf S message.currentTarget 0).toNat := by
-      unfold previousExcess
-      rw [ite_eq_right hinh]
-    rw [hp] at hb
-    refine Spec.reshape (s' := [BitVec.ofNat 256 (storageOf S message.currentTarget 0).toNat, x])
-      (by simp) rfl rfl ?_
-    refine Spec.consequence (deq_count hfork hstatic hacc₁ hb hM (by omega))
-      (fun _ h => h) fun evm h => post evm ?_
-    unfold newExcess
-    rw [hp]
-    exact h
-
-/-- From byte 387, the code moves the head of the queue, or empties it, then updates the excess.
-
-It returns the records of the requests it took, which memory holds. -/
-private theorem deq_head {S : TransactionState} {ss : Substate} {M : ByteArray} {g : Nat}
-    {r : U256 → U256} (hfork : .shapella ≤ fork)
-    (hstatic : message.isStatic = false)
-    (hacc : (S.getAccountOptional message.currentTarget).isSome = true)
-    (hr : storageOf S message.currentTarget = r) (hb : Bounded r)
-    (hMs : 76 * numDequeued 16 r ≤ M.size) (hg : 120000 * storageGasScale fork ≤ g) :
-    Spec fork (At CODE message 387 [BitVec.ofNat 256 (numDequeued 16 r),
-        BitVec.ofNat 256 (numDequeued 16 r), r 2, r 3] M g S ss returnData)
-      (Returned message.currentTarget M (76 * numDequeued 16 r) (afterDequeue 16 2 r) S) := by
-  have hscale := one_le_storageGasScale fork
-  obtain ⟨hht, hex⟩ := hb
-  have hc2 : numDequeued 16 r ≤ 16 := Nat.min_le_right _ _
-  have hle : (r 2).toNat + numDequeued 16 r ≤ (r 3).toNat := by
-    unfold numDequeued
-    have h : Nat.min ((r 3).toNat - (r 2).toNat) 16 ≤ (r 3).toNat - (r 2).toNat :=
-      Nat.min_le_left _ _
-    omega
-  have ht := (r 3).isLt
-  generalize hc : numDequeued 16 r = c at hc2 hle hMs ⊢
-  have hnh : add (r 2) (BitVec.ofNat 256 c) = BitVec.ofNat 256 ((r 2).toNat + c) := by
-    apply BitVec.eq_of_toNat_eq
-    simp only [add, BitVec.toNat_add, BitVec.toNat_ofNat]
-    rw [Nat.mod_eq_of_lt (by omega : c < 2 ^ 256), Nat.mod_eq_of_lt (by omega)]
-  have hmul : (mul 76#256 (BitVec.ofNat 256 c)).toNat = 76 * c := by
-    simp only [mul, BitVec.toNat_mul, BitVec.toNat_ofNat]
-    rw [Nat.mod_eq_of_lt (by omega : c < 2 ^ 256)]
-    omega
-  have hM : (mul 76#256 (BitVec.ofNat 256 c)).toNat ≤ M.size := by rw [hmul]; exact hMs
-  have hr0 : ∀ F : U256 → U256, F 0 = r 0 → F 1#256 = r 1 →
-      previousExcess (F 0) + (F 1#256).toNat < 2 ^ 256 := fun F h0 h1 => by
-    rw [h0, h1]; exact hex
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  rw [hnh]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  have heqv : r 3 = BitVec.ofNat 256 ((r 2).toNat + c) ↔ (r 2).toNat + c = (r 3).toNat := by
-    constructor
-    · intro e
-      have := congrArg BitVec.toNat e
-      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)] at this
-      omega
-    · intro e
-      apply BitVec.eq_of_toNat_eq
-      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-      omega
-  by_cases hnt : (r 2).toNat + c = (r 3).toNat
-  · have hz : equal (r 3) (BitVec.ofNat 256 ((r 2).toNat + c)) ≠ 0 := by
-      rw [equal, ite_eq_left (heqv.mpr hnt)]
-      decide
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-      (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc (by omega)
-      fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-      (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc₁ (by omega)
-      fun S₂ hw₂ hacc₂ g₂ ss₂ hg₂ _ => ?_
-    have eF : storageOf S₂ message.currentTarget = setSlot (setSlot r 2 0) 3 0 := by
-      rw [funext hw₂.1, funext hw₁.1, hr]
-      rfl
-    refine Spec.consequence (deq_excess hfork hstatic hacc₂
-      (hr0 _ (by rw [eF]; simp [setSlot]) (by rw [eF]; simp [setSlot])) hM (by omega))
-      (fun _ h => h) fun evm h => ?_
-    obtain ⟨h1, h2, h3⟩ := h
-    refine ⟨h1, by rw [h2, hmul], ?_⟩
-    have hw := WritesStorage.trans (WritesStorage.trans hw₁ hw₂) h3
-    rw [eF, deq_store 16 2 r (setSlot (setSlot r 2 0) 3 0) (by rw [hc, ite_eq_left hnt])] at hw
-    exact hw
-  · have hz : equal (r 3) (BitVec.ofNat 256 ((r 2).toNat + c)) = 0 := by
-      simp only [equal]
-      rw [ite_eq_right_iff]
-      exact fun e => absurd (heqv.mp e) hnt
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine sstore_then (Nat.le_trans (by decide) hfork)
-      (by evm_code [CODE, CODE_NUMBER_eq]) (by evm_code [CODE, CODE_NUMBER_eq]) hstatic hacc
-      (by omega) fun S₁ hw₁ hacc₁ g₁ ss₁ hg₁ _ => ?_
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    have eF : storageOf S₁ message.currentTarget =
-        setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + c)) := by
-      rw [funext hw₁.1, hr]
-      rfl
-    refine Spec.consequence (deq_excess hfork hstatic hacc₁
-      (hr0 _ (by rw [eF]; simp [setSlot]) (by rw [eF]; simp [setSlot])) hM (by omega))
-      (fun _ h => h) fun evm h => ?_
-    obtain ⟨h1, h2, h3⟩ := h
-    refine ⟨h1, by rw [h2, hmul], ?_⟩
-    have hw := WritesStorage.trans hw₁ h3
-    rw [eF, deq_store 16 2 r (setSlot r 2 (BitVec.ofNat 256 ((r 2).toNat + c)))
-      (by rw [hc, ite_eq_right hnt])] at hw
-    exact hw
-
 /-- At most 16 runs of the loop of the system call take at most 144,030 gas. -/
 private theorem deqGas_le {n : Nat} (hn : n ≤ 16) : deqGas n ≤ 144030 := by
   have h : ∀ n, deqGas n = 30 + 9000 * n := fun n => by
@@ -1144,7 +737,8 @@ private theorem deq_rest {S : TransactionState} {ss : Substate} {g : Nat} {r : U
     rw [hw'.2.2.1]; exact hacc
   have hMs := hM'.1
   rw [Nat.zero_add, size_taken size_record] at hMs
-  refine Spec.consequence (deq_head hfork hstatic hacc' (funext hw'.1) hb hMs
+  refine Spec.consequence (dequeueTailCode_CODE.spec_head hfork hstatic hacc' (funext hw'.1) hb
+    (by decide) hMs
     (by omega)) (fun _ h => h) fun evm ⟨h1, h2, h3⟩ => ⟨h1, ?_, WritesStorage.trans hw' h3⟩
   rw [h2]
   have := hM'.2
@@ -1178,108 +772,19 @@ theorem spec_dequeue (hfork : .shapella ≤ fork)
         (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
           (storageOf state message.currentTarget))
         state evm.state := by
-  have hscale := one_le_storageGasScale fork
-  generalize hr : storageOf state message.currentTarget = r
-  have hb := hbounded
-  rw [hr] at hb
-  obtain ⟨hht, hex⟩ := hb
-  have ht := (r 3).isLt
-  evm_step [CODE, CODE_NUMBER_eq]
-  rw [hcaller, toU256_SYSTEM_ADDRESS]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g₁ ss₁ hg₁ _ => ?_
-  evm_step [CODE, CODE_NUMBER_eq]
-  refine sload_then (Nat.le_trans (by decide) hfork) (by evm_code [CODE, CODE_NUMBER_eq])
-    (by evm_code [CODE, CODE_NUMBER_eq]) (by omega) fun g₂ ss₂ hg₂ _ => ?_
-  simp only [storageOf_recordStorageRead, hr]
-  have hS : storageOf ((state.recordStorageRead message.currentTarget (U256.toBeBytes 3#256)
-      ).recordStorageRead message.currentTarget (U256.toBeBytes 2#256)) message.currentTarget =
-      r := hr
-  have hacc' : (((state.recordStorageRead message.currentTarget (U256.toBeBytes 3#256)
-      ).recordStorageRead message.currentTarget (U256.toBeBytes 2#256)).getAccountOptional
-      message.currentTarget).isSome = true := hacc
-  have hsubv : sub (r 3#256) (r 2#256) = BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat) := by
-    show sub (r 3) (r 2) = _
-    apply BitVec.eq_of_toNat_eq
-    simp only [sub, BitVec.toNat_sub, BitVec.toNat_ofNat]
-    have := (r 2).isLt
-    rw [Nat.mod_eq_of_lt (by omega : (r 3).toNat - (r 2).toNat < 2 ^ 256)]
-    rw [show 2 ^ 256 - (r 2).toNat + (r 3).toNat =
-      ((r 3).toNat - (r 2).toNat) + 2 ^ 256 by omega, Nat.add_mod_right,
-      Nat.mod_eq_of_lt (by omega)]
-  have post : ∀ evm : Evm fork Nat,
-      (evm.error = none ∧ evm.output = taken record r (numDequeued 16 r) ∧
-      WritesStorage message.currentTarget (afterDequeue 16 2 r)
-        ((state.recordStorageRead message.currentTarget (U256.toBeBytes 3#256)
-          ).recordStorageRead message.currentTarget (U256.toBeBytes 2#256)) evm.state) →
-      evm.error = none ∧ evm.output = dequeued MAX_WITHDRAWAL_REQUESTS_PER_BLOCK record r ∧
-        WritesStorage message.currentTarget
-          (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK
-            TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK r) state evm.state :=
-    fun _ ⟨h1, h2, h3⟩ => ⟨h1, h2, WritesStorage.trans (WritesStorage.trans
-      (WritesStorage.recordStorageRead message.currentTarget state message.currentTarget
-        (U256.toBeBytes 3#256))
-      (WritesStorage.recordStorageRead message.currentTarget _ message.currentTarget
-        (U256.toBeBytes 2#256))) h3⟩
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  rw [hsubv]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  evm_step [CODE, CODE_NUMBER_eq]
-  by_cases hd : (r 3).toNat - (r 2).toNat < 16
-  · have hz : greaterThan 16#256 (BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat)) ≠ 0 := by
-      have hlt : (16#256).toNat > (BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat)).toNat := by
-        simp only [BitVec.toNat_ofNat]
-        rw [Nat.mod_eq_of_lt (by omega : (r 3).toNat - (r 2).toNat < 2 ^ 256)]
-        omega
-      rw [greaterThan, ite_eq_left hlt]
-      decide
-    have hn : numDequeued 16 r = (r 3).toNat - (r 2).toNat := Nat.min_eq_left (by omega)
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    rw [← hn]
-    refine Spec.consequence (deq_rest hfork hstatic hacc' hS ⟨hht, hex⟩ ?_)
-      (fun _ h => h) post
-    omega
-  · have hz : greaterThan 16#256 (BitVec.ofNat 256 ((r 3).toNat - (r 2).toNat)) = 0 := by
-      rw [greaterThan, ite_eq_right_iff]
-      intro h
-      have h' : 16 > (r 3).toNat - (r 2).toNat := by
-        simp only [BitVec.toNat_ofNat] at h
-        rw [Nat.mod_eq_of_lt (by omega : (r 3).toNat - (r 2).toNat < 2 ^ 256)] at h
-        omega
-      exact absurd h' hd
-    have hn : numDequeued 16 r = 16 := Nat.min_eq_right (by omega)
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    evm_step [CODE, CODE_NUMBER_eq]
-    refine Spec.reshape (s' := [BitVec.ofNat 256 0, BitVec.ofNat 256 (numDequeued 16 r), r 2, r 3])
-      (by rw [hn]; rfl) rfl rfl ?_
-    refine Spec.consequence (deq_rest hfork hstatic hacc' hS ⟨hht, hex⟩ ?_)
-      (fun _ h => h) post
-    omega
+  exact WITHDRAWAL_REQUEST.spec_dequeue (rest := 265000) feePathCode_CODE dequeueStartCode_CODE
+    (fun _ _ _ _ hacc' hr hb hg => deq_rest hfork hstatic hacc' hr hb hg) hfork hcaller hacc
+    hbounded (Nat.le_trans (Nat.mul_le_mul_right _ (by decide)) hgas)
 
 /-- The withdrawal request address is not a precompile. -/
 theorem addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS :
-    Precompiles.addedAt WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS.toU256.toNat = none := by
-  rw [WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, EthLib.Base.toNat_toU256_toAddressMasked]
-  rfl
+    Precompiles.addedAt WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS.toU256.toNat = none :=
+  WITHDRAWAL_REQUEST.addedAt
 
-/-- The code is not a delegation indicator: it has 504 bytes, not 23. -/
-theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
-  simp [delegatedAddress, isValidDelegation, CODE, NatCode.size_ofNat, DELEGATION_SIZE]
+/-- From Shapella, the code takes the requests with 300,000 gas, scaled from Glamsterdam. -/
+theorem dequeues (hfork : .shapella ≤ fork) : WITHDRAWAL_REQUEST.Dequeues fork 300000 :=
+  fun _ _ _ _ hcaller hstatic hacc hread hgas =>
+    spec_dequeue hfork hcaller hstatic hacc hread hgas
 
 /-- From Pectra, the system call of a block to the contract takes its requests.
 
@@ -1302,18 +807,10 @@ theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockSta
         (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
           (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS))
         (.ofBlock block) out.state :=
-  systemCall_of_writesStorage (P := Bounded) _ _ (Nat.le_trans (by decide) hfork)
-    (fun _ => supportedCode_CODE) hcode
-    (by simp [CODE, NatCode.size_ofNat]) addedAt_WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS
-    delegatedAddress_CODE hbounded
-    fun message _ _ hcaller htarget hstatic _ _ hgas hacc hread => by
-      rw [← htarget]
-      exact spec_dequeue (Nat.le_trans (by decide) hfork) hcaller hstatic (htarget ▸ hacc)
-        (htarget ▸ hread) (by
-          rw [hgas]
-          have := storageGasScale_le fork
-          simp only [SYSTEM_TRANSACTION_GAS]
-          omega)
+  WITHDRAWAL_REQUEST.systemCall_dequeue (Nat.le_trans (by decide) hfork)
+    (dequeues (Nat.le_trans (by decide) hfork))
+    (by have := storageGasScale_le fork; simp only [SYSTEM_TRANSACTION_GAS]; omega)
+    hcode hbounded
 
 /-- Empty withdrawal request code rejects the request phase of a block from Pectra.
 
@@ -1325,12 +822,8 @@ This is the rejection that [EIP-7002][eip7002] requires.
 theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
     (hfork : .pectra ≤ fork)
     (hcode : codeAt body.block WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS = .ok .empty) :
-    readRequests env body = .error (.systemContractEmpty WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) := by
-  have hread := readRequest_of_empty (env := env) (state := (body, []))
-    (contract := (WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)) hcode
-  rw [readRequests_of_pectra hfork]
-  unfold requestContracts
-  split <;> simp [REQUEST_CONTRACTS, List.foldlM_cons, hread, bind, Except.bind]
+    readRequests env body = .error (.systemContractEmpty WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) :=
+  readRequests_of_empty_after (pre := []) (requestContracts_of_pectra hfork) rfl hcode
 
 /-- No block request result succeeds when the withdrawal contract has no code.
 

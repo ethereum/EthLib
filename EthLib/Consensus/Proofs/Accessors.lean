@@ -554,6 +554,27 @@ theorem getPendingBalanceToWithdraw_eq_ok_zero_iff {state : BeaconState preset f
     rw [List.sum_eq_zero_iff_forall_eq_nat.mpr (by simpa using each)]
     omega
 
+/-- The validator churn limit succeeds exactly when the churn quotient is not 0.
+
+It is then the larger of the least churn and the active validators over the quotient. -/
+theorem getValidatorChurnLimit_ok_iff {config : Config} {state : BeaconState preset fork}
+    {limit : UInt64} :
+    getValidatorChurnLimit config state = .ok limit ↔ config.CHURN_LIMIT_QUOTIENT ≠ 0 ∧
+      limit = max config.MIN_PER_EPOCH_CHURN_LIMIT
+        ((getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64 /
+          config.CHURN_LIMIT_QUOTIENT) := by
+  unfold getValidatorChurnLimit liftArith divChecked
+  by_cases zero : config.CHURN_LIMIT_QUOTIENT = 0 <;>
+    simp [zero, bind, Except.bind, Except.mapError, pure, Except.pure, eq_comm]
+
+/-- The validator churn limit fails with a division by zero exactly when its quotient is 0. -/
+theorem getValidatorChurnLimit_eq_error_iff {config : Config} {state : BeaconState preset fork} :
+    getValidatorChurnLimit config state = .error (.arith .divisionByZero) ↔
+      config.CHURN_LIMIT_QUOTIENT = 0 := by
+  unfold getValidatorChurnLimit liftArith divChecked
+  by_cases zero : config.CHURN_LIMIT_QUOTIENT = 0 <;>
+    simp [zero, bind, Except.bind, Except.mapError, pure, Except.pure]
+
 
 /--
 The previous epoch on natural numbers is the current epoch less one, and zero in the genesis epoch.

@@ -108,6 +108,9 @@ private theorem churnQueue_exists_ok
 
 It is at least one increment, and at most the bound of the exit churn. -/
 private theorem exitChurnLimit_exists_ok {config : Config} {state : BeaconState preset fork}
+    -- The churn quotient of exits is not 0.
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
@@ -121,14 +124,16 @@ private theorem exitChurnLimit_exists_ok {config : Config} {state : BeaconState 
       total.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state := by
     rcases totalLe with rfl | le <;> omega
   unfold exitChurnLimit exitChurnCeiling
-  split
+  split <;> rename_i gloas <;> simp only [gloas, ↓reduceIte] at quotient
   · obtain ⟨lower, upper⟩ := roundToIncrement_share_bounds (config := config) total
       config.CHURN_LIMIT_QUOTIENT_GLOAS increment minimum
-    refine ⟨_, by simp only [getExitChurnLimit, totalOk, bind, Except.bind, pure, Except.pure],
-      lower, by omega⟩
+    refine ⟨_, by simp only [getExitChurnLimit, totalOk, liftArith, divChecked,
+      quotient, ↓reduceIte, Except.mapError, bind, Except.bind, pure,
+      Except.pure], lower, by omega⟩
   · obtain ⟨lower, upper⟩ := roundToIncrement_share_bounds (config := config) total
       config.CHURN_LIMIT_QUOTIENT increment minimum
-    refine ⟨_, by simp only [getActivationExitChurnLimit, getBalanceChurnLimit, totalOk, bind,
+    refine ⟨_, by simp only [getActivationExitChurnLimit, getBalanceChurnLimit, totalOk,
+      liftArith, divChecked, quotient, ↓reduceIte, Except.mapError, bind,
       Except.bind, pure, Except.pure]; rfl, ?_⟩
     rw [toNat_min]
     have maximum := UInt64.le_iff_toNat_le.mp maximum
@@ -183,6 +188,9 @@ The new end of the queue is at most the ceiling plus the amount in increments, p
 The churn left over stays within its bound. -/
 private theorem computeExitEpochAndUpdateChurn_kept {config : Config} {electra : .pectra ≤ fork}
     {start state : BeaconState preset fork} {bound : Nat} {amount : Gwei}
+    -- The churn quotient of exits is not 0.
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     (within : start.RegistryWithinLimit) (summed : effectiveBalanceSum start < 2 ^ 64)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
@@ -206,7 +214,7 @@ private theorem computeExitEpochAndUpdateChurn_kept {config : Config} {electra :
     rw [kept.size]
     exact within
   obtain ⟨churn, churnOk, churnLower, churnUpper⟩ := exitChurnLimit_exists_ok (config := config)
-    stateWithin (kept.sum ▸ summed) increment minimum maximum
+    quotient stateWithin (kept.sum ▸ summed) increment minimum maximum
   have ceilingSame : exitChurnCeiling config state = exitChurnCeiling config start := by
     simp only [exitChurnCeiling, kept.sum]
   rw [ceilingSame] at churnUpper
@@ -339,6 +347,9 @@ The validator stops owing its cost, and the bound grows by at most that cost.
 It changes no other validator. -/
 private theorem initiateValidatorExit_kept {config : Config} {electra : .pectra ≤ fork}
     {start state : BeaconState preset fork} {bound : Nat} {index : ValidatorIndex}
+    -- The churn quotient of exits is not 0.
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     (within : start.RegistryWithinLimit) (summed : effectiveBalanceSum start < 2 ^ 64)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
@@ -371,7 +382,7 @@ private theorem initiateValidatorExit_kept {config : Config} {electra : .pectra 
     change bound + exitCostOf preset validator + _ < _ at room
     rw [cost] at room
     obtain ⟨epoch, left, queueOk, epochLe, leftLe⟩ := computeExitEpochAndUpdateChurn_kept
-      within summed increment minimum maximum first carried kept amountLe (by omega)
+      quotient within summed increment minimum maximum first carried kept amountLe (by omega)
     have delayFits :
         epoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64 := by omega
     have started : epoch ≠ FAR_FUTURE_EPOCH := by
@@ -413,6 +424,9 @@ Only a validator that starts to exit raises the bound, by the cost it stops owin
 It changes no other validator. -/
 private theorem updateRegistryEntryElectra_kept {config : Config} {electra : .pectra ≤ fork}
     {start state : BeaconState preset fork} {bound index : Nat} {activationEpoch : Epoch}
+    -- The churn quotient of exits is not 0.
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     (within : start.RegistryWithinLimit) (summed : effectiveBalanceSum start < 2 ^ 64)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
@@ -463,7 +477,8 @@ private theorem updateRegistryEntryElectra_kept {config : Config} {electra : .pe
     have indexValue : index.toUInt64.toNat = index := by
       simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt indexFits]
     obtain ⟨after, exited, later, grown, afterKept, potential, others⟩ :=
-      initiateValidatorExit_kept (index := index.toUInt64) within summed increment minimum
+      initiateValidatorExit_kept (index := index.toUInt64) quotient within summed increment
+        minimum
         maximum first carried kept (by rw [indexValue]; exact inside)
         (by simpa only [indexValue] using room)
     simp only [indexValue] at potential others
@@ -548,6 +563,9 @@ The cost is counted over a fixed list of distinct positions that holds the posit
 private theorem foldlM_updateRegistryEntryElectra_kept {config : Config}
     {electra : .pectra ≤ fork} {start : BeaconState preset fork} {activationEpoch : Epoch}
     {positions : List Nat} (distinct : positions.Nodup)
+    -- The churn quotient of exits is not 0.
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     (within : start.RegistryWithinLimit) (summed : effectiveBalanceSum start < 2 ^ 64)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
@@ -570,12 +588,13 @@ private theorem foldlM_updateRegistryEntryElectra_kept {config : Config}
     have single := exitCostAt_single_le (state := state) member
     rw [exitCostAt_single inside'] at single
     obtain ⟨middle, step, middleBound, grown, middleKept, potential, others⟩ :=
-      updateRegistryEntryElectra_kept (activationEpoch := activationEpoch) within summed
+      updateRegistryEntryElectra_kept (activationEpoch := activationEpoch) quotient within
+        summed
         increment minimum maximum first carried kept inside' (by omega)
     have moved := exitCostAt_update others distinct member
     obtain ⟨after, folded, later, afterKept, afterPotential⟩ :=
       foldlM_updateRegistryEntryElectra_kept distinct (activationEpoch := activationEpoch)
-        within summed increment minimum maximum carried rest middle middleBound
+        quotient within summed increment minimum maximum carried rest middle middleBound
         (fun other inRest => by
           obtain ⟨below, inPositions⟩ := inside other (List.mem_cons_of_mem _ inRest)
           exact ⟨by rw [middleKept.size, ← kept.size]; exact below, inPositions⟩)
@@ -592,6 +611,9 @@ The churn left over stays at most the larger of its old value and one churn boun
 The step keeps the slot, the balances and every effective balance. -/
 theorem processRegistryUpdates_total_of_electra {config : Config}
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    -- The churn quotient of exits is not 0.
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     -- The registry must be within its limit, and the sum of its effective balances below `2^64`.
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state < 2 ^ 64)
     -- The increment must be positive.
@@ -648,7 +670,7 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
   -- So the end of the queue plus the cost still owed does not grow, nor does each exit epoch.
   obtain ⟨after, folded, later, afterKept, potential⟩ :=
     foldlM_updateRegistryEntryElectra_kept (activationEpoch := activationEpoch)
-      List.nodup_range within summed increment minimum maximum carried
+      List.nodup_range quotient within summed increment minimum maximum carried
       (List.range state.validators.data.size) state ceiling
       (fun _ member => ⟨List.mem_range.mp member, member⟩) first kept room
   have size := afterKept.size
@@ -672,8 +694,12 @@ A bound covers the first epoch of a new exit, the end of the exit queue and each
 The bound plus the cost still owed plus the withdrawal delay is below `2^64 - 1`. -/
 theorem initiateValidatorExit_total_of_electra {config : Config}
     {state : BeaconState preset fork} {index : ValidatorIndex} {bound : Nat}
+    (electra : .pectra ≤ fork)
+    -- The churn quotient of exits is not 0, which a new exit needs.
+    (quotient : (if .glamsterdam ≤ fork then config.CHURN_LIMIT_QUOTIENT_GLOAS
+      else config.CHURN_LIMIT_QUOTIENT) ≠ 0)
     -- The registry is within its limit, and its effective balances sum below `2^64`.
-    (electra : .pectra ≤ fork) (within : state.RegistryWithinLimit)
+    (within : state.RegistryWithinLimit)
     (summed : effectiveBalanceSum state < 2 ^ 64)
     -- The increment is positive, and at most the least churn and the largest churn.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
@@ -694,7 +720,8 @@ theorem initiateValidatorExit_total_of_electra {config : Config}
   have cost : exitCostOf preset state.validators.data[index.toNat] ≤ exitCost preset state := by
     rw [← exitCostAt_single inside, exitCost_eq_exitCostAt]
     exact exitCostAt_single_le (List.mem_range.mpr inside)
-  obtain ⟨after, ok, -⟩ := initiateValidatorExit_kept (start := state) within summed increment
+  obtain ⟨after, ok, -⟩ := initiateValidatorExit_kept (start := state) quotient within summed
+    increment
     minimum maximum first carried ⟨rfl, rfl, rfl, queue, exits, Nat.le_max_left _ _⟩ inside
     (by omega)
   exact ⟨after, ok⟩

@@ -1,9 +1,9 @@
 module
 
 public import EthLib.Cryptography.Bls.Errors
-public import EthLib.Cryptography.Inverse
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Montgomery
+public import EthLib.Cryptography.Word64.Six
 public import EthLib.Base.ByteOrder
 
 /-!
@@ -31,12 +31,14 @@ protected theorem Fp.modulus_pos : 0 < Fp.modulus := by decide
 -- Named explicitly, since the anonymous instances of `Fp` and `Fr` would get the same name.
 instance Fp.instNeZeroModulus : NeZero Fp.modulus := ⟨by decide⟩
 
-/-- The modulus `p` as twelve limbs of 32 bits, the lowest first.
+/-- The modulus `p` as twelve limbs of 32 bits, two to a word, the lowest first.
 
-It is inline, so that the compiler sees each limb as a constant. -/
-@[inline] def Fp.pLimbs : Montgomery.Limbs12 :=
-  ⟨4294945451, 3120496639, 2975072255, 514588670, 4138792484, 1731252896, 4085584575, 1685539716,
-    1129032919, 1260103606, 964683418, 436277738⟩
+It is not inline, so a product reads its words from memory.
+
+The C compiler then keeps each product by a word of `p` as one wide multiplication. -/
+@[noinline] def Fp.pLimbs : Montgomery.Limbs.T 12 :=
+  ⟨0xb9feffffffffaaab, 0x1eabfffeb153ffff, 0x6730d2a0f6b0f624, 0x64774b84f38512bf,
+    0x4b1ba7b6434bacd7, 0x1a0111ea397fe69a⟩
 
 /-- `-p⁻¹ mod 2 ^ 32`. -/
 @[inline] def Fp.pinv : UInt64 := 4294770685
@@ -44,54 +46,142 @@ It is inline, so that the compiler sees each limb as a constant. -/
 /-- The limbs write the modulus. -/
 theorem Fp.val_pLimbs : Montgomery.Limbs.val (n := 12) Fp.pLimbs = modulus := by decide
 
-open Montgomery in
-/-- Rows `0` to `5` of the Montgomery product of the limbs `a` and `b`, as limbs.
-
-The product is compiled in two halves: unrolled whole, it exceeds the default compile budget. -/
-def Fp.mulLow (a b : Limbs12) : Limbs12 :=
-  Montgomery.mulLow (n := 12) 6 (Limbs.get (n := 12) Fp.pLimbs) Fp.pinv (Limbs.get (n := 12) a)
-    (Limbs.get (n := 12) b)
+/-- `-p⁻¹ mod 2 ^ 64`. -/
+@[inline] def Fp.pinvWord : UInt64 := 0x89f3fffcfffcfffd
 
 open Montgomery in
-/-- Rows `6` to `11` of the Montgomery product of `a` and `b`, then the final reduction.
+/-- The Montgomery product of the limbs `a` and `b`, computed on six words of 64 bits.
 
-The limbs `lo` hold rows `0` to `5`. -/
-def Fp.mulHigh (a b lo : Limbs12) : Limbs12 :=
-  Montgomery.mulHigh (n := 12) 6 (Limbs.get (n := 12) Fp.pLimbs) Fp.pinv (Limbs.get (n := 12) a)
-    (Limbs.get (n := 12) b) 6 lo Limbs.pack
+The limbs are stored as those words, and both widths have `R = 2 ^ 384`.
+
+So the product is the one of the twelve limbs. -/
+def Fp.mulWords (a b : Limbs.T 12) : Limbs.T 12 :=
+  Word64.mul6 Fp.pLimbs Fp.pinvWord a b
+
+/-- The six words write the modulus. -/
+private theorem Fp.val_words6_pLimbs : Word64.Words6.val Fp.pLimbs = modulus := by
+  rw [← Montgomery.Limbs.val_words6]
+  exact Fp.val_pLimbs
+
+/-- Twice `p` is below `2^384`, as the products and sums on six words need. -/
+private theorem Fp.two_mul_lt : 2 * Word64.Words6.val Fp.pLimbs < 2^384 := by decide +kernel
+
+/-- An inverse of `2^384` mod `p`, written in two halves of 192 bits. -/
+private theorem Fp.radix_inv :
+    (0x14fec701e8fb0ce9ed5e64273c4f538b1797ab1458a88de9 * 2^192 +
+      0x343ea97914956dc87fe11274d898fafbf4d38259380b4820) * 2^384 % modulus = 1 := by
+  decide +kernel
+
+open Montgomery in
+/-- The product on six words is the product on twelve limbs, for `a` below `p`. -/
+theorem Fp.mulWords_eq (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus) :
+    Fp.mulWords a b =
+      Montgomery.mulWords (n := 12) (Limbs.get (n := 12) Fp.pLimbs) Fp.pinv
+        (Limbs.get (n := 12) a)
+        (Limbs.get (n := 12) b) Limbs.pack := by
+  -- The product on six words, from its spec: below `p`, and `a b 2^(-384)` mod `p`.
+  have hpw := Fp.val_words6_pLimbs
+  have hp := Fp.two_mul_lt
+  have hpinv : (Word64.Words6.val Fp.pLimbs * Fp.pinvWord.toNat + 1) % 2^64 = 0 := by
+    decide +kernel
+  have ha' : Word64.Words6.val a < Word64.Words6.val Fp.pLimbs := by
+    rw [hpw, ← Limbs.val_words6]; exact ha
+  obtain ⟨hl6, he6⟩ := Word64.mul6_spec hp hpinv ha' b
+  rw [hpw, ← Limbs.val_words6 a, ← Limbs.val_words6 b] at he6
+  rw [hpw] at hl6
+  -- The product on twelve limbs, from its spec.
+  have hn : num 12 (Limbs.get (n := 12) Fp.pLimbs) 0 = modulus := Fp.val_pLimbs
+  obtain ⟨hf, hl, he⟩ := Internal.mulWords_spec (n := 12) (pinv := Fp.pinv)
+    (Limbs.fits (n := 12) Fp.pLimbs 0)
+    (by rw [hn]; decide) (Limbs.fits (n := 12) a 0) (by rw [hn]; exact ha)
+    (Limbs.fits (n := 12) b 0)
+  rw [hn] at hl he
+  rw [Internal.mulWords_out]
+  apply Limbs.val_injective (n := 12)
+  rw [Limbs.val_pack hf, Fp.mulWords, Limbs.val_words6]
+  -- Both are below `p` and agree after a product by `2^384`, so they are equal.
+  rw [show 32 * 12 = 384 from rfl] at he
+  exact Internal.eq_of_radix_mul_mod Fp.radix_inv hl6 hl (he6.trans he.symm)
+
+open Montgomery in
+/-- The sum of the limbs `a` and `b`, reduced once, on six words of 64 bits. -/
+@[irreducible] def Fp.addWords (a b : Limbs.T 12) : Limbs.T 12 := Word64.add6 Fp.pLimbs a b
+
+open Montgomery in
+/-- The sum on six words is `a + b mod p`, for `a` and `b` below `p`. -/
+theorem Fp.addWords_val (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
+    (hb : Limbs.val (n := 12) b < modulus) :
+    Limbs.val (n := 12) (Fp.addWords a b) = (Limbs.val a + Limbs.val b) % modulus := by
+  rw [Fp.addWords]
+  simp only [Limbs.val_words6] at ha hb ⊢
+  rw [← Fp.val_words6_pLimbs] at ha hb ⊢
+  exact Word64.add6_spec Fp.two_mul_lt ha hb
+
+open Montgomery in
+/-- The difference of the limbs `a` and `b`, with `p` added on a borrow, on six words. -/
+@[irreducible] def Fp.subWords (a b : Limbs.T 12) : Limbs.T 12 := Word64.sub6 Fp.pLimbs a b
+
+open Montgomery in
+/-- The difference on six words is `a - b mod p`, for `a` and `b` below `p`. -/
+theorem Fp.subWords_val (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
+    (hb : Limbs.val (n := 12) b < modulus) :
+    Limbs.val (n := 12) (Fp.subWords a b) = (Limbs.val a + modulus - Limbs.val b) % modulus := by
+  rw [Fp.subWords]
+  simp only [Limbs.val_words6] at ha hb ⊢
+  rw [← Fp.val_words6_pLimbs] at ha hb ⊢
+  exact Word64.sub6_spec ha hb
+
+open Montgomery in
+/-- The sum on six words is the sum on twelve limbs, for `a` and `b` below `p`. -/
+theorem Fp.addWords_eq (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
+    (hb : Limbs.val (n := 12) b < modulus) : Fp.addWords a b = addCore (n := 12) a b Fp.pLimbs := by
+  have hp := Fp.val_pLimbs
+  apply Limbs.val_injective (n := 12)
+  rw [Fp.addWords_val a b ha hb]
+  rw [← hp] at ha hb ⊢
+  exact (addCore_val ha hb).symm
+
+open Montgomery in
+/-- The difference on six words is the difference on twelve limbs, for `a` and `b` below `p`. -/
+theorem Fp.subWords_eq (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
+    (hb : Limbs.val (n := 12) b < modulus) : Fp.subWords a b = subCore (n := 12) a b Fp.pLimbs := by
+  have hp := Fp.val_pLimbs
+  apply Limbs.val_injective (n := 12)
+  rw [Fp.subWords_val a b ha hb]
+  rw [← hp] at ha hb ⊢
+  exact (subCore_val ha hb).symm
 
 open Montgomery in
 /-- The modulus `p` with the constants of its Montgomery arithmetic, on twelve limbs.
 
 It is inline, so that the compiler sees its fields as constants at each use.
 
-The product runs in two halves, joined by twelve limbs alone.
-
-That holds because `2 p < 2 ^ 384`: the rows keep the state below `2 p`, so no word lies above. -/
+The product, the sum and the difference run on six words of 64 bits. -/
 @[inline] def Fp.params : Modulus 12 where
   p := modulus
   pLimbs := Fp.pLimbs
   pinv := Fp.pinv
-  r1 := ⟨196605, 1980301312, 3289120770, 3958636555, 1405573306, 1598593111, 1884444485,
-    2010011731, 2723605613, 1543969431, 4202751123, 368467651⟩
-  r2 := ⟨473175878, 4108263220, 164693233, 175564454, 1284880085, 2380613484, 2476573632,
-    1743489193, 3038352685, 2591637125, 2462770090, 295210981⟩
-  pm2 := ⟨4294945449, 3120496639, 2975072255, 514588670, 4138792484, 1731252896, 4085584575,
-    1685539716, 1129032919, 1260103606, 964683418, 436277738⟩
+  r1 := ⟨0x760900000002fffd, 0xebf4000bc40c0002, 0x5f48985753c758ba, 0x77ce585370525745,
+    0x5c071a97a256ec6d, 0x15f65ec3fa80e493⟩
+  r2 := ⟨0xf4df1f341c341746, 0x0a76e6a609d104f1, 0x8de5476c4c95b6d5, 0x67eb88a9939d83c0,
+    0x9a793e85b519952d, 0x11988fe592cae3aa⟩
+  pm2 := ⟨0xb9feffffffffaaa9, 0x1eabfffeb153ffff, 0x6730d2a0f6b0f624, 0x64774b84f38512bf,
+    0x4b1ba7b6434bacd7, 0x1a0111ea397fe69a⟩
   pLimbs_spec := Fp.val_pLimbs
   pinv_spec := by decide
   r1_spec := by decide +kernel
   r2_spec := by decide +kernel
   pm2_spec := by decide
-  mul a b := Fp.mulHigh a b (Fp.mulLow a b)
-  mul_spec a b ha := by
-    unfold Fp.mulHigh Fp.mulLow
-    exact mulHigh_mulLow (n := 12) (k := 6) (m := 6) rfl (Limbs.fits _ 0) (by decide)
-      (by decide +kernel) (Limbs.fits a 0) (Fp.val_pLimbs.symm ▸ ha :) (Limbs.fits b 0) _
+  mul := Fp.mulWords
+  mul_spec a b ha := Fp.mulWords_eq a b ha
+  add := Fp.addWords
+  add_spec := Fp.addWords_eq
+  sub := Fp.subWords
+  sub_spec := Fp.subWords_eq
 
 /-- An element of the BLS12-381 base field.
 
-An element is held in Montgomery form, as twelve limbs of 32 bits.
+An element is held in Montgomery form, as twelve limbs of 32 bits, two to a word.
 
 The limbs hold `a R mod p` for the element `a`, with `R = 2 ^ 384`.
 
@@ -117,19 +207,19 @@ Proofs use its lemmas, never its unfolding, which runs a Montgomery reduction. -
 /-- Square-and-multiply modular exponentiation. -/
 @[inline] def powNat (base : Fp) (e : Nat) : Fp := Montgomery.pow base e
 
-/-- Multiplicative inverse by the extended Euclidean algorithm, on the integer of the element.
+/-- Multiplicative inverse, by Fermat's little theorem: `a ^ (p - 2)`.
 
 The inverse of `0` is `0`. -/
-@[inline] def inverse (a : Fp) : Fp := ofNat (euclid a.val modulus 1 0 % modulus).toNat
+@[inline] def inverse (a : Fp) : Fp := Montgomery.inv a
 
 /-- Field division `a * b⁻¹`. -/
 instance : Div Fp := ⟨fun a b => a * b.inverse⟩
 
 open Montgomery in
-/-- The exponent `(p + 1) / 4` of the square root, as twelve 32-bit limbs, the lowest first. -/
+/-- The exponent `(p + 1) / 4` of the square root, as twelve 32-bit limbs, two to a word. -/
 @[inline] def sqrtExponent : Limbs.T 12 :=
-  ⟨4294961835, 4001349631, 2891251711, 128647167, 1034698121, 3654038696, 1021396143,
-    3642610401, 2429741877, 2462509549, 2388654502, 109069434⟩
+  ⟨0xee7fbfffffffeaab, 0x07aaffffac54ffff, 0xd9cc34a83dac3d89, 0xd91dd2e13ce144af,
+    0x92c6e9ed90d2eb35, 0x0680447a8e5ff9a6⟩
 
 open Montgomery in
 /-- The limbs of the exponent write `(p + 1) / 4`. -/

@@ -4,6 +4,8 @@ module
 public import EthLib.Execution.Proofs.Evm.Logic.Reach
 -- This import gives triples over those frames.
 public import EthLib.Execution.Proofs.Evm.Logic.Triple
+-- This import gives the weakest precondition of every opcode, and the theorem that states it.
+public import EthLib.Execution.Proofs.Evm.Logic.Wp
 public import EthLib.Execution.Proofs.Evm.Logic.Symbolic
 -- This import gives rules for loops.
 public import EthLib.Execution.Proofs.Evm.Logic.Loop
@@ -28,6 +30,8 @@ public import EthLib.Execution.Proofs.Evm.Logic.Deposit
 public import EthLib.Execution.Proofs.Evm.Logic.Callee
 -- This import gives rules for opcodes.
 public import EthLib.Execution.Proofs.Evm.Logic.Rules
+public import EthLib.Execution.Proofs.Evm.Logic.Environment
+public import EthLib.Execution.Proofs.Evm.Logic.Accounts
 public import EthLib.Execution.Proofs.Evm.Logic.Copy
 public import EthLib.Execution.Proofs.Evm.Logic.Region
 public import EthLib.Execution.Proofs.Evm.Logic.Known
@@ -38,6 +42,9 @@ public import EthLib.Execution.Proofs.Evm.Logic.Branch
 public import EthLib.Execution.Proofs.Evm.Logic.Stack
 -- A code can be stored as one number.
 public import EthLib.Execution.Proofs.Evm.Logic.NatCode
+-- A template lemma proves one shape of block at any offset of any code that holds its bytes.
+public import EthLib.Execution.Proofs.Evm.Logic.Template
+public import EthLib.Execution.Proofs.Evm.Logic.Relocated
 -- A tactic steps through the opcodes of a code.
 public import EthLib.Execution.Proofs.Evm.Logic.Steps
 public import EthLib.Execution.Proofs.Evm.Logic.GasMono
@@ -46,9 +53,18 @@ public import EthLib.Execution.Proofs.Evm.Logic.NoAbort
 public import EthLib.Execution.Proofs.Evm.Logic.Fault
 -- By steps monotone in gas, a run with less gas follows the run with more gas, or it fails.
 public import EthLib.Execution.Proofs.Evm.Logic.LessGas
+-- Upper bounds on the gas of a run add along code and loops, and take the larger branch.
+public import EthLib.Execution.Proofs.Evm.Logic.Cost
+public import EthLib.Execution.Proofs.Evm.Logic.CostFrames
 -- A specification to frames with no error gives a run that succeeds.
 public import EthLib.Execution.Proofs.Evm.Logic.RunsOk
 public import EthLib.Execution.Proofs.Evm.Logic.Marks
+-- A triple over one counter, with messages, carries to the state gas meter of EIP-8037.
+public import EthLib.Execution.Proofs.Evm.Logic.MeterRun
+-- A cost over one counter bounds the execution gas and the reservoir under that meter.
+public import EthLib.Execution.Proofs.Evm.Logic.MeterCost
+-- STATICCALL to no code fails closed under that meter.
+public import EthLib.Execution.Proofs.Evm.Logic.CallMeter
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Logic`

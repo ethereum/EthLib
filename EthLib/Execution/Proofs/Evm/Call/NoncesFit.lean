@@ -164,7 +164,7 @@ theorem stepRules_noncesFit :
   trans hab hbc h := hbc (hab h)
   static h := NoncesFit.of_nonceLe
     (NonceLe.of_getAccountOptional fun address => (h.state address List.not_mem_nil).1.symm)
-  sstore _ _ _ _ _ _ h := NoncesFit.of_nonceLe
+  sstore _ _ _ _ _ h := NoncesFit.of_nonceLe
     (NonceLe.of_getAccountOptional fun _ => (TransactionState.getAccountOptional_setStorage h).symm)
   tstore _ _ _ _ := NoncesFit.of_nonceLe (NonceLe.of_getAccountOptional fun _ => rfl)
   log _ hs _ _ _ h := hs ▸ h

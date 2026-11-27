@@ -303,6 +303,16 @@ theorem phase0PeriodEpochs_le {N t T delta Delta epochs : UInt64}
         _ ≤ n * (230 * (T' - t')) := Nat.mul_le_mul_left n hbal
         _ = 230 * n * (T' - t') := by ac_rfl
 
+/-- Phase 0: a period that succeeds reads a churn limit of validators that succeeds. -/
+theorem getValidatorChurnLimit_of_computeWeakSubjectivityPeriodPhase0 {config : Config}
+    {state : BeaconState preset fork} {period : Epoch}
+    (h : computeWeakSubjectivityPeriodPhase0 config state = .ok period) :
+    ∃ delta, getValidatorChurnLimit config state = .ok delta := by
+  unfold computeWeakSubjectivityPeriodPhase0 at h
+  simp only [bind_ok_iff, mapError_ok_iff] at h
+  obtain ⟨_, _, _, _, delta, deltaOk, -⟩ := h
+  exact ⟨delta, deltaOk⟩
+
 /-- Phase 0: the period is at most the withdrawal delay plus the longer of two bounds.
 
 The first is `160 N / (600 delta)` and the second is `230 N / (600 Delta)`.
@@ -311,17 +321,18 @@ Here `N` is the number of active validators.
 
 The churn of validators in one epoch is `delta`, and `Delta` is the deposits that fit in one epoch.
 
-The bound needs no condition beyond success of the computation. -/
+The bound needs no condition beyond success of the computation, which computes `delta`. -/
 theorem computeWeakSubjectivityPeriodPhase0_le {config : Config}
-    {state : BeaconState preset fork} {period : Epoch}
-    (h : computeWeakSubjectivityPeriodPhase0 config state = .ok period) :
+    {state : BeaconState preset fork} {period : Epoch} {delta : UInt64}
+    (h : computeWeakSubjectivityPeriodPhase0 config state = .ok period)
+    (deltaOk : getValidatorChurnLimit config state = .ok delta) :
     period.toNat ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat +
       max (160 * (getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64.toNat /
-          (600 * (getValidatorChurnLimit config state).toNat))
+          (600 * delta.toNat))
         (230 * (getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64.toNat /
           (600 * (preset.MAX_DEPOSITS.toNat * preset.SLOTS_PER_EPOCH.toNat))) := by
   unfold computeWeakSubjectivityPeriodPhase0 at h
-  simp only [bind_ok_iff, mapError_ok_iff] at h
+  simp only [bind_ok_iff, mapError_ok_iff, deltaOk, Except.ok.injEq, exists_eq_left'] at h
   obtain ⟨_, _, _, _, Delta, hDelta, epochs, hepochs, hadd⟩ := h
   have hsum := (addChecked_ok_iff.mp hadd).2
   have hbound := phase0PeriodEpochs_le hepochs
@@ -394,7 +405,7 @@ theorem min_le_computeWeakSubjectivityPeriod {config : Config}
   -- Phase 0 adds its epochs to the delay last.
   unfold computeWeakSubjectivityPeriodPhase0 at h
   simp only [bind_ok_iff, mapError_ok_iff] at h
-  obtain ⟨_, _, _, _, _, _, _, _, hadd⟩ := h
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, hadd⟩ := h
   have hsum := (addChecked_ok_iff.mp hadd).2
   exact UInt64.le_iff_toNat_le.mpr (hsum ▸ Nat.le_add_right _ _)
 
@@ -439,8 +450,8 @@ theorem computeWeakSubjectivityPeriodElectra_le {config : Config}
     computeWeakSubjectivityPeriodElectra_eq_ok_iff.mp h
   obtain ⟨-, -, hpos, -, hvalue⟩ := balanceChurnPeriod_eq_ok_iff.mp hperiod
   -- The churn is the rounded maximum of the minimum and the share of the total.
-  simp only [getBalanceChurnLimit, htotal, bind, Except.bind, pure, Except.pure,
-    Except.ok.injEq] at hchurn
+  obtain ⟨_, htotal', -, hchurn⟩ := getBalanceChurnLimit_ok_iff.mp hchurn
+  cases htotal.symm.trans htotal'
   subst hchurn
   generalize hQ : config.CHURN_LIMIT_QUOTIENT.toNat = Q at *
   generalize hm : config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat = m at *
@@ -520,10 +531,12 @@ private theorem gloasWeightedChurn_bounds {config : Config} {state : BeaconState
   obtain ⟨exit, act, cons, hex, hac, hco, -, -, hch⟩ := gloasWeightedChurn_eq_ok_iff.mp hchurn
   simp only [getActivationChurnLimit, hex, bind, Except.bind, pure, Except.pure,
     Except.ok.injEq] at hac
-  simp only [getExitChurnLimit, htotal, bind, Except.bind, pure, Except.pure,
-    Except.ok.injEq] at hex
-  simp only [getConsolidationChurnLimit, gloas, ↓reduceIte, htotal, bind, Except.bind, pure,
-    Except.pure, Except.ok.injEq] at hco
+  obtain ⟨_, htotalExit, -, hex⟩ := getExitChurnLimit_ok_iff.mp hex
+  cases htotal.symm.trans htotalExit
+  have hconsQ' : config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT ≠ 0 := fun zero => by
+    simp [zero] at hconsQ
+  simp only [getConsolidationChurnLimit, gloas, ↓reduceIte, htotal, liftArith, divChecked,
+    hconsQ', Except.mapError, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at hco
   subst hac hex hco
   generalize hQe : config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat = Qe at *
   generalize hQc : config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat = Qc at *

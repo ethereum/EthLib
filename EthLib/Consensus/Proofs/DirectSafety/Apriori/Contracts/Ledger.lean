@@ -505,8 +505,12 @@ theorem exit_rate_le_churn {fork : Fork} {s : BeaconState preset fork}
   have value : rate = min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT
       (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
         (total / config.CHURN_LIMIT_QUOTIENT))) := by
-    simpa [exitChurnLimit, notGloas, getActivationExitChurnLimit,
-      getBalanceChurnLimit, read, bind, Except.bind, pure, Except.pure] using computed.symm
+    simp only [exitChurnLimit, notGloas, ↓reduceIte, getActivationExitChurnLimit, bind_ok_iff,
+      pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, balanceOk, rfl⟩ := computed
+    obtain ⟨_, again, -, rfl⟩ := getBalanceChurnLimit_ok_iff.mp balanceOk
+    cases read.symm.trans again
+    rfl
   rw [value, Uint64.toNat_min, toNat_roundToIncrement, Uint64.toNat_max, UInt64.toNat_div]
   have share := Nat.div_add_mod (total.toNat / config.CHURN_LIMIT_QUOTIENT.toNat)
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat

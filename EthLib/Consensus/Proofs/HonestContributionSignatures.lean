@@ -276,9 +276,7 @@ theorem validateContributionAndProof_eq_accept_of_construct
       .ok current)
     (head : store.headState config = .ok state)
     (found : state.validators.data[signed.message.aggregatorIndex.toNat]? = some aggregator)
-    (members : getSyncSubcommitteePubkeys state altair
-      signed.message.contribution.subcommitteeIndex =
-        .ok (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))
+    (seats : syncCommitteeAtSlot state altair signed.message.contribution.slot = some committee)
     (selection : isValidSignatureAtSlot config .bls state DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF
       signed.message.contribution.slot
       (SyncAggregatorSelectionData.mk signed.message.contribution.slot
@@ -305,7 +303,11 @@ theorem validateContributionAndProof_eq_accept_of_construct
   have bitsSet := any_of_nonzero_selected
     (syncSubcommitteePubkeys committee subcommitteeIndex.toNat)
     signed.message.contribution.aggregationBits.bits.toList secret nonzero
-  rw [validateContributionAndProof_eq_accept clock head found members selection bySigner
+  have members : getSyncSubcommitteePubkeys committee
+      signed.message.contribution.subcommitteeIndex =
+        .ok (syncSubcommitteePubkeys committee subcommitteeIndex.toNat) := by
+    rw [getSyncSubcommitteePubkeys_eq inside, sameIndex]
+  rw [validateContributionAndProof_eq_accept clock head found seats members selection bySigner
     participants]
   simp only [inside, bitsSet, and_true, true_and]
 
@@ -346,9 +348,7 @@ theorem validateContributionAndProof_eq_accept_of_getContributionAndProof
     (head : store.headState config = .ok state)
     (found : state.validators.data[signed.message.aggregatorIndex.toNat]? = some aggregator)
     (owned : aggregator.pubkey = Signatures.skToPk key)
-    (members : getSyncSubcommitteePubkeys state altair
-      signed.message.contribution.subcommitteeIndex =
-        .ok (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))
+    (seats : syncCommitteeAtSlot state altair signed.message.contribution.slot = some committee)
     (made : getContributionAndProof config state signed.message.aggregatorIndex
       signed.message.contribution key = .ok signed.message)
     (signedBy : getContributionAndProofSignature config state signed.message key =
@@ -366,7 +366,7 @@ theorem validateContributionAndProof_eq_accept_of_getContributionAndProof
   have bySigner := isValidSignatureAtSlot_getContributionAndProofSignature signedBy
   rw [← owned] at selection bySigner
   rw [validateContributionAndProof_eq_accept_of_construct secret built domained rooted honest
-    nonzero clock head found members selection bySigner]
+    nonzero clock head found seats selection bySigner]
   simp only [and_true]
 
 end EthLib.Consensus

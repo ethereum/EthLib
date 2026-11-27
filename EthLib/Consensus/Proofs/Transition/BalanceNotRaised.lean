@@ -283,7 +283,7 @@ private theorem kept_processRegistryUpdates {config : Config}
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       exact ok ▸ Kept.refl _
   simp only [bind_ok_iff] at computed
-  obtain ⟨_, updatedOk, activated⟩ := computed
+  obtain ⟨_, updatedOk, _, _, activated⟩ := computed
   refine (Kept.foldlM (fun _ _ _ ok => ?_) updatedOk).trans
     (Kept.foldlM (fun _ _ _ ok => ?_) activated)
   · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok

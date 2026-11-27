@@ -281,8 +281,7 @@ theorem Handles.proposerBoostRoot_of_ne_zero
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes step
     rfl
   | envelope _ step =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok step
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes step
     rfl
   | inclusionList _ step =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok ‹_› step

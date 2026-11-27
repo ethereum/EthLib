@@ -18,7 +18,7 @@ Contributions go to every node, so that the next proposer can include them.
 
 Each topic runs its checks in a fixed order, and the first check that fails gives the outcome.
 
-The members come from the sync committee of the slot after the head state.
+The members come from the sync committee that signs in the slot of the message.
 
 A valid message records its keys among the messages seen.
 -/
@@ -33,21 +33,33 @@ variable {preset : Preset} {fork : Fork}
 
 /-! ## Subcommittees -/
 
-/-- From Altair: the sync committee that signs in the slot after a state.
+/-- From Altair: the sync committee of a period, when the state holds it.
 
-Members sign in a slot for the block of the slot before.
+A state holds the committee of the period of its epoch, and the committee of the next period. -/
+def syncCommitteeOfPeriod (state : BeaconState preset fork) (altair : .altair ≤ fork)
+    (period : UInt64) : Option (SyncCommittee preset) :=
+  -- Let `q` be the period of the current epoch.
+  let currentPeriod := computeSyncCommitteePeriod preset (getCurrentEpoch state)
+  -- The current committee in period `q`.
+  if period = currentPeriod then some (state.currentSyncCommittee altair).value
+  -- The next committee in period `q + 1`.
+  else if period.toNat = currentPeriod.toNat + 1 then some (state.nextSyncCommittee altair).value
+  -- The state holds no committee of any other period.
+  else none
 
-So when that slot starts a new period, the next committee of the state signs. -/
-def syncCommitteeAtNextSlot (state : BeaconState preset fork) (altair : .altair ≤ fork) :
-    Except ArithError (SyncCommittee preset) := do
-  -- The slot after the state, which must be below `2^64`.
-  let nextSlot ← addChecked state.slot 1
-  -- The current committee when that slot is in the sync committee period of the current epoch.
-  --
-  -- Else the next committee.
-  return if computeSyncCommitteePeriod preset (getCurrentEpoch state) ==
-      computeSyncCommitteePeriodAtSlot preset nextSlot
-    then (state.currentSyncCommittee altair).value else (state.nextSyncCommittee altair).value
+/-- From Altair: the sync committee that signs in a slot, when the state holds it.
+
+Members sign in a slot for the block of that slot.
+
+The committee assigned to the slot after it signs, so at the end of a period the next one does.
+
+The state may be behind the slot, as a head state is after a missed slot. -/
+def syncCommitteeAtSlot (state : BeaconState preset fork) (altair : .altair ≤ fork)
+    (slot : Slot) : Option (SyncCommittee preset) := do
+  -- The slot `s + 1` after the slot `s`, which must be below `2^64`.
+  let nextSlot ← (addChecked slot 1).toOption
+  -- The committee of the period of `s + 1`.
+  syncCommitteeOfPeriod state altair (computeSyncCommitteePeriodAtSlot preset nextSlot)
 
 /-- From Altair: the keys of the members of a subcommittee of a sync committee, in committee order.
 -/
@@ -63,13 +75,11 @@ def syncSubcommitteePubkeys (committee : SyncCommittee preset) (subcommitteeInde
 /-- From Altair: the keys of the members of a subcommittee, in committee order.
 
 It fails when the position of the first member does not fit in 64 bits. -/
-def getSyncSubcommitteePubkeys (state : BeaconState preset fork) (altair : .altair ≤ fork)
-    (subcommitteeIndex : UInt64) : Except ArithError (List BLSPubkey) := do
-  -- The sync committee that signs in the slot after the state.
-  let committee ← syncCommitteeAtNextSlot state altair
+def getSyncSubcommitteePubkeys (committee : SyncCommittee preset) (subcommitteeIndex : UInt64) :
+    Except ArithError (List BLSPubkey) := do
   -- For the index `i` and the size `k` of a subcommittee, `i * k` must be below `2^64`.
   let _ ← mulChecked subcommitteeIndex (syncSubcommitteeSize preset).toUInt64
-  -- The slice of the subcommittee in that committee.
+  -- The slice of the subcommittee in the committee.
   return syncSubcommitteePubkeys committee subcommitteeIndex.toNat
 
 /-- From Altair: the subnets of the subcommittees that hold a key, each once.
@@ -142,8 +152,9 @@ def validateSyncCommitteeMessage (config : Config) (checks : SignatureChecks) (s
   match state.validators.data[message.validatorIndex.toNat]? with
   | none => return .reject "validator index out of range"
   | some validator => do
-  -- The sync committee that signs in the slot after that state.
-  let committee ← (syncCommitteeAtNextSlot state altair).mapError .arith
+  -- EthLib's choice: IGNORE unless that state holds the sync committee that signs in the slot.
+  let some committee := syncCommitteeAtSlot state altair message.slot
+    | return .ignore "sync committee of the message slot is not known"
   -- REJECT unless a seat of the key of the validator in that committee is on the subnet.
   (rejectUnless ((syncSubnetsOfPubkey committee validator.pubkey).contains subnetId)
     "subnet_id is not valid for the validator").andThenM fun _ => do
@@ -198,8 +209,11 @@ def validateContributionAndProof (config : Config) (checks : SignatureChecks) (s
   match state.validators.data[proof.aggregatorIndex.toNat]? with
   | none => return .reject "aggregator index out of range"
   | some aggregator => do
+  -- EthLib's choice: IGNORE unless that state holds the sync committee that signs in the slot.
+  let some committee := syncCommitteeAtSlot state altair contribution.slot
+    | return .ignore "sync committee of the contribution slot is not known"
   -- REJECT unless the key of the aggregator is a key of the subcommittee.
-  let pubkeys ← (getSyncSubcommitteePubkeys state altair contribution.subcommitteeIndex).mapError
+  let pubkeys ← (getSyncSubcommitteePubkeys committee contribution.subcommitteeIndex).mapError
     .arith
   (rejectUnless (pubkeys.contains aggregator.pubkey)
     "aggregator is not a member of the committee").andThenM fun _ => do

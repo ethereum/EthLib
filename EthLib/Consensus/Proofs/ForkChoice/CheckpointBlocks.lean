@@ -684,8 +684,7 @@ private theorem Store.Reachable.tracked
     obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih.of_eq rfl rfl rfl rfl rfl rfl
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact ih.of_eq rfl rfl rfl rfl rfl rfl
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
@@ -1333,8 +1332,7 @@ private theorem resetAge_forward {store : Store preset fork}
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact ih
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
@@ -1695,8 +1693,7 @@ private theorem origins_forward {store : Store preset fork}
     obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
     exact ih
   | envelope _ accepted ih =>
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    obtain ⟨_, _, rfl⟩ := Store.onExecutionPayloadEnvelope_changes accepted
     exact ih
   | inclusionList _ accepted ih =>
     obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted

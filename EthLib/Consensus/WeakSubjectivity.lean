@@ -128,7 +128,7 @@ def phase0PeriodEpochs (N t T delta Delta : UInt64) : Except ArithError Epoch :=
 
 The average balance divides the total active balance by the number of active validators.
 
-So a state without active validators has no period. -/
+So a state without active validators has no period, nor has a churn quotient of 0. -/
 def computeWeakSubjectivityPeriodPhase0 (config : Config) (state : BeaconState preset fork) :
     Except WeakSubjectivityError Epoch := do
   -- `N` is the number of validators active in the current epoch.
@@ -139,7 +139,7 @@ def computeWeakSubjectivityPeriodPhase0 (config : Config) (state : BeaconState p
   -- `T = floor(MAX_EFFECTIVE_BALANCE / ETH_TO_GWEI)`.
   let T := preset.MAX_EFFECTIVE_BALANCE / ETH_TO_GWEI
   -- `delta` is the churn limit of validators.
-  let delta := getValidatorChurnLimit config state
+  let delta ← (getValidatorChurnLimit config state).mapError .accessor
   -- `Delta = MAX_DEPOSITS * SLOTS_PER_EPOCH`.
   let Delta ← (mulChecked preset.MAX_DEPOSITS preset.SLOTS_PER_EPOCH).mapError .arith
   -- The period is `MIN_VALIDATOR_WITHDRAWABILITY_DELAY` plus the epochs of the analysis.

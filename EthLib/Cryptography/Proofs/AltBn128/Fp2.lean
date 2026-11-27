@@ -34,6 +34,7 @@ def Fp.embedding : FieldOps.Embedding Fp (ZMod Fp.modulus) where
   map_zero := Fp.toZMod_zero
   map_one := Fp.toZMod_one
   map_inverse := Fp.toZMod_inv
+  map_square a := map_mul Fp.toZMod a a
   beq_iff _ _ := beq_iff_eq.trans Fp.toZMod.injective.eq_iff.symm
   isZero_iff _ := beq_iff_eq.trans (map_eq_zero_iff Fp.toZMod Fp.toZMod.injective).symm
 
