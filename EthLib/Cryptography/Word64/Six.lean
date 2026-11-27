@@ -3,11 +3,13 @@ module
 public import EthLib.Cryptography.Word64
 
 /-!
-# The Montgomery product on six 64-bit words
+# Arithmetic mod `p` on six 64-bit words
 
-The Montgomery product `a b R⁻¹ mod p` for an odd modulus below `2^383`, with `R = 2^384`.
+The sum, the difference and the Montgomery product `a b R⁻¹ mod p`, with `R = 2^384`.
 
-It is the CIOS method of [Koç, Acar and Kaliski][cios], with words of 64 bits.
+The modulus is odd and below `2^383`.
+
+The product is the CIOS method of [Koç, Acar and Kaliski][cios], with words of 64 bits.
 
 [cios]: https://doi.org/10.1109/40.502403
 -/
@@ -143,17 +145,32 @@ The multiple `m` of `p` is the one that clears the low word of the sum.
   let v6 := plus u6.lo v5.hi 0
   ⟨⟨v1.lo, v2.lo, v3.lo, v4.lo, v5.lo, v6.lo⟩, u6.hi + v6.hi⟩
 
+/-- The six words of `a + b mod 2^384`, with the carry as the top word. -/
+@[inline] def sum6 (a b : Words6) : Acc6 :=
+  let s0 := plus a.w0 b.w0 0
+  let s1 := plus a.w1 b.w1 s0.hi
+  let s2 := plus a.w2 b.w2 s1.hi
+  let s3 := plus a.w3 b.w3 s2.hi
+  let s4 := plus a.w4 b.w4 s3.hi
+  let s5 := plus a.w5 b.w5 s4.hi
+  ⟨⟨s0.lo, s1.lo, s2.lo, s3.lo, s4.lo, s5.lo⟩, s5.hi⟩
+
+/-- The six words of `a - b mod 2^384`, with the borrow as the top word. -/
+@[inline] def diff6 (a b : Words6) : Acc6 :=
+  let d0 := minus a.w0 b.w0 0
+  let d1 := minus a.w1 b.w1 d0.hi
+  let d2 := minus a.w2 b.w2 d1.hi
+  let d3 := minus a.w3 b.w3 d2.hi
+  let d4 := minus a.w4 b.w4 d3.hi
+  let d5 := minus a.w5 b.w5 d4.hi
+  ⟨⟨d0.lo, d1.lo, d2.lo, d3.lo, d4.lo, d5.lo⟩, d5.hi⟩
+
 /-- `t - p` when `t ≥ p`, else `t`, for a state below `2 p`. -/
 @[inline] def reduce6 (p : Words6) (t : Acc6) : Words6 :=
   -- Step 3 of CIOS: the result is `t - p` when `t ≥ p`, and `t` otherwise.
-  let d0 := minus t.low.w0 p.w0 0
-  let d1 := minus t.low.w1 p.w1 d0.hi
-  let d2 := minus t.low.w2 p.w2 d1.hi
-  let d3 := minus t.low.w3 p.w3 d2.hi
-  let d4 := minus t.low.w4 p.w4 d3.hi
-  let d5 := minus t.low.w5 p.w5 d4.hi
+  let d := diff6 t.low p
   -- `t < p` exactly when the subtraction borrows more than the top word holds.
-  if t.top < d5.hi then t.low else ⟨d0.lo, d1.lo, d2.lo, d3.lo, d4.lo, d5.lo⟩
+  if t.top < d.top then t.low else d.low
 
 /-- The Montgomery product `a b 2^(-384) mod p`, for `a` below `p`. -/
 @[inline] def mul6 (p : Words6) (pinv : UInt64) (a b : Words6) : Words6 :=
@@ -167,7 +184,84 @@ The multiple `m` of `p` is the one that clears the low word of the sum.
   let t := row6 p pinv a b.w5 t
   reduce6 p t
 
+/-- The words of `t` where the mask `m` is set. -/
+@[inline] def Words6.mask (t : Words6) (m : UInt64) : Words6 :=
+  ⟨t.w0 &&& m, t.w1 &&& m, t.w2 &&& m, t.w3 &&& m, t.w4 &&& m, t.w5 &&& m⟩
+
+/-- The low words of `d`, plus `p` mod `2^384` when the top word of `d` is a borrow of one.
+
+The sum takes `p` through a mask of the borrow, with no branch. -/
+@[inline] def addBack (p : Words6) (d : Acc6) : Words6 :=
+  -- All ones on a borrow, and zero otherwise.
+  let m := 0 - d.top
+  -- The carry of this sum cancels the borrow.
+  (sum6 d.low (p.mask m)).low
+
+/-- `a + b mod p`, for `a` and `b` below `p` and `2 p < 2^384`. -/
+@[inline] def add6 (p a b : Words6) : Words6 :=
+  -- The sum is below `2^384`, so it has no carry.
+  let s := (sum6 a b).low
+  -- `s - p`, with `p` added back when `s < p`.
+  addBack p (diff6 s p)
+
+/-- `a - b mod p`, for `a` and `b` below `p`. -/
+@[inline] def sub6 (p a b : Words6) : Words6 :=
+  addBack p (diff6 a b)
+
 /-! ## Proofs -/
+
+/-- The sum and its carry write `a + b`, and the carry is at most one. -/
+theorem sum6_val (a b : Words6) : (sum6 a b).val = a.val + b.val ∧ (sum6 a b).top.toNat ≤ 1 := by
+  simp only [sum6]
+  have e0 := plus_spec a.w0 b.w0 0 (by decide)
+  generalize plus a.w0 b.w0 0 = s0 at *
+  have e1 := plus_spec a.w1 b.w1 s0.hi e0.2
+  generalize plus a.w1 b.w1 s0.hi = s1 at *
+  have e2 := plus_spec a.w2 b.w2 s1.hi e1.2
+  generalize plus a.w2 b.w2 s1.hi = s2 at *
+  have e3 := plus_spec a.w3 b.w3 s2.hi e2.2
+  generalize plus a.w3 b.w3 s2.hi = s3 at *
+  have e4 := plus_spec a.w4 b.w4 s3.hi e3.2
+  generalize plus a.w4 b.w4 s3.hi = s4 at *
+  have e5 := plus_spec a.w5 b.w5 s4.hi e4.2
+  generalize plus a.w5 b.w5 s4.hi = s5 at *
+  refine ⟨?_, e5.2⟩
+  simp only [wordRadix, UInt64.toNat_zero] at e0 e1 e2 e3 e4 e5
+  simp only [Acc6.val, Words6.val]
+  omega
+
+/-- The difference and `b` write `a`, plus `2^384` on a borrow, which is at most one. -/
+theorem diff6_val (a b : Words6) :
+    (diff6 a b).low.val + b.val = a.val + 2^384 * (diff6 a b).top.toNat ∧
+      (diff6 a b).top.toNat ≤ 1 := by
+  simp only [diff6]
+  have g0 := minus_spec a.w0 b.w0 0 (by decide)
+  generalize minus a.w0 b.w0 0 = d0 at *
+  have g1 := minus_spec a.w1 b.w1 d0.hi g0.2
+  generalize minus a.w1 b.w1 d0.hi = d1 at *
+  have g2 := minus_spec a.w2 b.w2 d1.hi g1.2
+  generalize minus a.w2 b.w2 d1.hi = d2 at *
+  have g3 := minus_spec a.w3 b.w3 d2.hi g2.2
+  generalize minus a.w3 b.w3 d2.hi = d3 at *
+  have g4 := minus_spec a.w4 b.w4 d3.hi g3.2
+  generalize minus a.w4 b.w4 d3.hi = d4 at *
+  have g5 := minus_spec a.w5 b.w5 d4.hi g4.2
+  generalize minus a.w5 b.w5 d4.hi = d5 at *
+  refine ⟨?_, g5.2⟩
+  simp only [wordRadix, UInt64.toNat_zero] at g0 g1 g2 g3 g4 g5
+  simp only [Words6.val]
+  omega
+
+/-- Six words are below `2^384`. -/
+theorem Words6.val_lt (t : Words6) : t.val < 2^384 := by
+  have := t.w0.toNat_lt
+  have := t.w1.toNat_lt
+  have := t.w2.toNat_lt
+  have := t.w3.toNat_lt
+  have := t.w4.toNat_lt
+  have := t.w5.toNat_lt
+  simp only [Words6.val]
+  omega
 
 /-- `m = t pinv mod 2^64` clears the low word of `t + m p`. -/
 private theorem low_clear {pv p0 r pinv u : Nat} (hpv : pv = p0 + 2^64 * r)
@@ -269,49 +363,22 @@ theorem row6_spec {p : Words6} {pinv : UInt64} (hpinv : (p.val * pinv.toNat + 1)
 /-- The final subtraction gives the remainder mod `p`, for a state below `2 p` and `2 p < 2^384`. -/
 theorem reduce6_val {p : Words6} (hp : 2 * p.val < 2^384) {t : Acc6} (ht : t.val < 2 * p.val) :
     (reduce6 p t).val = t.val % p.val := by
-  simp only [reduce6]
-  have g0 := minus_spec t.low.w0 p.w0 0 (by decide)
-  generalize minus t.low.w0 p.w0 0 = d0 at *
-  have g1 := minus_spec t.low.w1 p.w1 d0.hi g0.2
-  generalize minus t.low.w1 p.w1 d0.hi = d1 at *
-  have g2 := minus_spec t.low.w2 p.w2 d1.hi g1.2
-  generalize minus t.low.w2 p.w2 d1.hi = d2 at *
-  have g3 := minus_spec t.low.w3 p.w3 d2.hi g2.2
-  generalize minus t.low.w3 p.w3 d2.hi = d3 at *
-  have g4 := minus_spec t.low.w4 p.w4 d3.hi g3.2
-  generalize minus t.low.w4 p.w4 d3.hi = d4 at *
-  have g5 := minus_spec t.low.w5 p.w5 d4.hi g4.2
-  generalize minus t.low.w5 p.w5 d4.hi = d5 at *
-  have l0 := d0.lo.toNat_lt
-  have l1 := d1.lo.toNat_lt
-  have l2 := d2.lo.toNat_lt
-  have l3 := d3.lo.toNat_lt
-  have l4 := d4.lo.toNat_lt
-  have l5 := d5.lo.toNat_lt
-  simp only [wordRadix, UInt64.toNat_zero] at g0 g1 g2 g3 g4 g5
   -- The six words of the difference, with the final borrow: `d + p = t + 2^384 borrow`.
-  have hsum : Words6.val ⟨d0.lo, d1.lo, d2.lo, d3.lo, d4.lo, d5.lo⟩ + p.val =
-      t.low.val + 2^384 * d5.hi.toNat := by
-    simp only [Words6.val]
-    omega
-  have hd : Words6.val ⟨d0.lo, d1.lo, d2.lo, d3.lo, d4.lo, d5.lo⟩ < 2^384 := by
-    simp only [Words6.val]
-    omega
-  have htv : t.val = t.low.val + 2^384 * t.top.toNat := by simp only [Acc6.val]
-  have hb := g5.2
-  rw [htv] at ht ⊢
+  obtain ⟨hd, hb⟩ := diff6_val t.low p
+  have hD := (diff6 t.low p).low.val_lt
+  simp only [reduce6, Acc6.val] at ht ⊢
   split
   · rename_i hc
-    have hc' : t.top.toNat < d5.hi.toNat := hc
-    generalize Words6.val ⟨d0.lo, d1.lo, d2.lo, d3.lo, d4.lo, d5.lo⟩ = D at *
+    have hc' : t.top.toNat < (diff6 t.low p).top.toNat := hc
+    generalize (diff6 t.low p).low.val = D at *
     generalize t.low.val = T at *
     generalize p.val = P at *
     -- The subtraction borrows, so `t < p`.
     rw [Nat.mod_eq_of_lt (by omega)]
     omega
   · rename_i hc
-    have hc' : ¬ t.top.toNat < d5.hi.toNat := hc
-    generalize Words6.val ⟨d0.lo, d1.lo, d2.lo, d3.lo, d4.lo, d5.lo⟩ = D at *
+    have hc' : ¬ t.top.toNat < (diff6 t.low p).top.toNat := hc
+    generalize (diff6 t.low p).low.val = D at *
     generalize t.low.val = T at *
     generalize p.val = P at *
     -- No borrow: `p ≤ t < 2 p`, and the words hold `t - p`.
@@ -364,5 +431,77 @@ theorem mul6_spec {p : Words6} {pinv : UInt64} (hp : 2 * p.val < 2^384)
   -- `2^384` as an atom, so that no step tries to evaluate it.
   generalize (2:Nat)^384 = R at key ⊢
   rw [Nat.mul_mod_mod, key, Nat.add_mul_mod_self_right]
+
+/-- The mask of a borrow keeps `t` on a borrow and clears it otherwise. -/
+theorem Words6.val_mask (t : Words6) {c : UInt64} (hc : c.toNat ≤ 1) :
+    (t.mask (0 - c)).val = t.val * c.toNat := by
+  have h : c = 0 ∨ c = 1 := by
+    rcases Nat.le_one_iff_eq_zero_or_eq_one.mp hc with h | h
+    · exact Or.inl (UInt64.toNat_inj.mp h)
+    · exact Or.inr (UInt64.toNat_inj.mp h)
+  rcases h with rfl | rfl
+  · have e (x : UInt64) : x &&& (0 - 0) = 0 := by rw [UInt64.sub_self, UInt64.and_zero]
+    simp only [Words6.mask, Words6.val, e, UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero]
+  · -- `0 - 1` is the word of all ones.
+    have hm : ((0 : UInt64) - 1).toNat = 2^64 - 1 := by decide
+    have e (x : UInt64) : x &&& (0 - 1) = x := UInt64.toNat_inj.mp (by
+      rw [UInt64.toNat_and, hm, Nat.and_two_pow_sub_one_eq_mod, Nat.mod_eq_of_lt x.toNat_lt])
+    simp only [Words6.mask, e, UInt64.toNat_one, Nat.mul_one]
+
+/-- Adding back gives `d + p` on a borrow and `d` otherwise, mod `2^384`. -/
+theorem addBack_val (p : Words6) {d : Acc6} (hc : d.top.toNat ≤ 1) :
+    (addBack p d).val = (d.low.val + p.val * d.top.toNat) % 2^384 := by
+  obtain ⟨hs, -⟩ := sum6_val d.low (p.mask (0 - d.top))
+  rw [Words6.val_mask p hc, Acc6.val] at hs
+  have hl := (sum6 d.low (p.mask (0 - d.top))).low.val_lt
+  simp only [addBack]
+  generalize sum6 d.low (p.mask (0 - d.top)) = s at *
+  generalize (2:Nat)^384 = K at *
+  rw [← hs, Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt hl]
+
+/-- The sum is `a + b` mod `p`. -/
+theorem add6_spec {p : Words6} (hp : 2 * p.val < 2^384) {a b : Words6} (ha : a.val < p.val)
+    (hb : b.val < p.val) : (add6 p a b).val = (a.val + b.val) % p.val := by
+  -- The sum is below `2 p < 2^384`, so it has no carry.
+  obtain ⟨hs, -⟩ := sum6_val a b
+  rw [Acc6.val] at hs
+  have hS : (sum6 a b).low.val = a.val + b.val := by
+    have hl := (sum6 a b).low.val_lt
+    have hab : a.val + b.val < 2^384 := by omega
+    generalize sum6 a b = s at *
+    generalize (2:Nat)^384 = K at *
+    rw [← Nat.mod_eq_of_lt hl, ← Nat.add_mul_mod_self_left, hs, Nat.mod_eq_of_lt hab]
+  obtain ⟨hd, hbor⟩ := diff6_val (sum6 a b).low p
+  have hD := (diff6 (sum6 a b).low p).low.val_lt
+  rw [add6, addBack_val p hbor]
+  rw [hS] at hd
+  generalize (diff6 (sum6 a b).low p).low.val = D at *
+  generalize (2:Nat)^384 = K at *
+  -- With no borrow, `p ≤ a + b` and the result is `a + b - p`; with one, it is `a + b`.
+  rcases Nat.le_one_iff_eq_zero_or_eq_one.mp hbor with h | h <;> rw [h] at hd ⊢
+  · rw [Nat.mul_zero, Nat.add_zero, Nat.mod_eq_of_lt hD, Nat.mod_eq_sub_mod (by omega),
+      Nat.mod_eq_of_lt (by omega)]
+    omega
+  · rw [Nat.mul_one, Nat.mod_eq_sub_mod (by omega), Nat.mod_eq_of_lt (by omega),
+      Nat.mod_eq_of_lt (a := a.val + b.val) (by omega)]
+    omega
+
+/-- The difference is `a - b` mod `p`. -/
+theorem sub6_spec {p a b : Words6} (ha : a.val < p.val) (hb : b.val < p.val) :
+    (sub6 p a b).val = (a.val + p.val - b.val) % p.val := by
+  obtain ⟨hd, hbor⟩ := diff6_val a b
+  have hD := (diff6 a b).low.val_lt
+  have hP := p.val_lt
+  rw [sub6, addBack_val p hbor]
+  generalize (diff6 a b).low.val = D at *
+  generalize (2:Nat)^384 = K at *
+  -- With no borrow, `b ≤ a` and the result is `a - b`; with one, it is `a + p - b`.
+  rcases Nat.le_one_iff_eq_zero_or_eq_one.mp hbor with h | h <;> rw [h] at hd ⊢
+  · rw [Nat.mul_zero, Nat.add_zero, Nat.mod_eq_of_lt hD, Nat.mod_eq_sub_mod (by omega),
+      Nat.mod_eq_of_lt (by omega)]
+    omega
+  · rw [Nat.mul_one, Nat.mod_eq_sub_mod (by omega), Nat.mod_eq_of_lt (by omega),
+      Nat.mod_eq_of_lt (a := a.val + p.val - b.val) (by omega)]
+    omega
 
 end EthLib.Cryptography.Word64
