@@ -637,8 +637,10 @@ def run_blockchain(root: Path, case: Case) -> None:
             header, ommers = item[0], item[2]
             number, parent = _number(header), chains.get(bytes(header[0]))
         except (IndexError, TypeError, ValueError):
+            # A block whose header, number or parent cannot be read is invalid.
             assert expected is not None, entry
-            # Use the head fork when the block has no readable number.
+            # The block runs on the head of the chain, at the fork of the head.
+            # That fork sets how many parts the decoder expects, and so the error it reports.
             state, recent_blocks, _ = chains[head]
             with pytest.raises(BlockError) as error:
                 blocks.state_transition(
@@ -647,7 +649,10 @@ def run_blockchain(root: Path, case: Case) -> None:
             assert names(expected, str(error.value)), (expected, str(error.value))
             continue
         if parent is None:
-            assert expected is not None and UNKNOWN_PARENT.intersection(expected.split("|")), entry
+            # The parent is missing or was rejected, so the test must name an unknown parent.
+            assert expected is not None and not UNKNOWN_PARENT.isdisjoint(expected.split("|")), (
+                entry
+            )
             continue
         state, recent_blocks, difficulty = parent
         fork = fork_at(network, number)
