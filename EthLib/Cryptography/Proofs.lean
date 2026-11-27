@@ -17,6 +17,7 @@ public import EthLib.Cryptography.Proofs.UniformReads
 public import EthLib.Cryptography.Proofs.RandomOracleTable
 public import EthLib.Cryptography.Proofs.RandomOracleFromCache
 public import EthLib.Cryptography.Proofs.RandomOracleWithCoins
+public import EthLib.Cryptography.Proofs.RandomOracleDisjoint
 public import EthLib.Cryptography.Proofs.ProjectionInLaw
 public import EthLib.Cryptography.Proofs.ExceptTAnswers
 public import EthLib.Cryptography.Proofs.HashSig
@@ -30,6 +31,7 @@ public import EthLib.Cryptography.Proofs.HashSig.FailedSearch
 public import EthLib.Cryptography.Proofs.HashSig.ProgrammedTable
 public import EthLib.Cryptography.Proofs.HashSig.Counted
 public import EthLib.Cryptography.Proofs.HashSig.Permutation
+public import EthLib.Cryptography.Proofs.HashSig.DomainSeparation
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
