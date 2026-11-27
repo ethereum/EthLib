@@ -1368,7 +1368,9 @@ theorem Store.ForwardReachable.finalized_add_two_le_or_anchor
 
 The checkpoint comes from a held state or from its pull-up, whose block reads it on its chain.
 
-The anchor state must not hash to the zero root. -/
+It assumes the anchor invariant, a nonzero state hash and an anchor block not after its state.
+
+It also needs a nonempty epoch, two epochs of root history and finality past the anchor epoch. -/
 theorem Store.Reachable.finalized_read {store : Store preset fork}
     (reached : Store.Reachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)

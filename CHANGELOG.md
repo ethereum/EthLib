@@ -10,7 +10,10 @@ Not yet released.
 ### Proof additions
 
 - In Lean, `Store.ForwardReachable.finalized_epoch_add_two_le` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`) states the timing of a finalized checkpoint other than the anchor's ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
-  In a forward-reachable store, its root's block epoch is at most its epoch, and its epoch plus two is at most the current epoch.
+  The store is forward reachable from the store initialized from the anchor state and block, and it reads its current epoch.
+  Suppose its finalized checkpoint differs from the anchor's.
+  Then that checkpoint's root has a block epoch at most its epoch, and its epoch plus two is at most the current epoch.
+  It assumes the anchor invariant, that the anchor block is not after the anchor state and that the anchor state does not hash to the zero root, a positive slot duration and epoch length, and a history of at least two epochs of block roots.
 
 - In Lean, `Base.pairwise_zip_of_pairwise` (`Base/Proofs/List.lean`) states that a relation that holds pairwise on a list holds pairwise on the first items of its zip.
   `List.takeWhile_eq_take`, `List.dropWhile_eq_drop` and `List.findIdx?_eq_of_nodup` move to `Base/Proofs/List.lean` from `Networking/Proofs/Devp2p/ForkId.lean`.
