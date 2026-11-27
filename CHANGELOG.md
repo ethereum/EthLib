@@ -1198,6 +1198,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Gloas, the latest verified ancestor walks the nodes of the fork choice and returns a node, as consensus-specs v1.7.0-beta.5 does ([#4627](https://github.com/ethereum/EthLib/issues/4627)).
+  An optimistic node reads as the pending node of its block, and an optimistic pending node climbs to the node of its parent.
+  The walk stops at a node that is not optimistic, or at a node of the genesis block, where it failed before.
+  `latest_verified_ancestor` of `ethlib.consensus` returns the root and the status code of the node; before Gloas the status is the one given.
+  In Lean, `OptimisticStore.latestVerifiedAncestor` (`Consensus/ForkChoice/OptimisticSync.lean`) returns a `ForkChoiceNode`, through the new `latestVerifiedNode` from Gloas.
+  `OptimisticStore.isNodeOptimistic` gives the optimism of any node, and the head rule reads it.
+  `ForkChoiceNode.heldPayloads`, `latestVerifiedAncestor_eq_error_of_optimistic`, `latestVerifiedAncestor_eq_error_of_payloadChain` and `latestVerifiedAncestor_ne_root` are removed.
+  `latestVerifiedAncestor_of_lt_glamsterdam`, `latestVerifiedAncestor_spec` and `latestVerifiedAncestor_of_glamsterdam` (`Consensus/Proofs/ForkChoice/OptimisticSync.lean`) state the node; `latestVerifiedNode_spec`, `latestVerifiedNode_of_not_optimistic`, `latestVerifiedNode_of_full_optimistic` and `latestVerifiedNode_climb` are new.
+  Migration: read the root of the returned node.
+
 - In Lean, the rules of `Execution/Proofs/Evm/Logic/Known.lean` for MSTORE, MSTORE8, MCOPY, CALLDATACOPY and CODECOPY keep the parts of a fact outside the range they write, as `keep start length facts`.
   Before, they kept only the facts apart from the range, `facts.filter (Apart start length)`, and dropped a fact that the write overlaps in part.
   `known_of_write` changes the same way, and `holdsAll_memoryWrite_keep` is the new form of `holdsAll_memoryWrite`, which still holds.

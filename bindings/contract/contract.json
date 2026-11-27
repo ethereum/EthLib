@@ -8690,9 +8690,9 @@
    "docstring":
    "From Bellatrix: whether a block may be imported optimistically, given the known blocks.\n\nThe clock is at a slot, and the user sets the number of slots to wait."},
   {"summary":
-   "From Bellatrix: the root of the latest block of a chain that is not optimistic.",
+   "From Bellatrix: the latest node at or above a node that is verified or of genesis.",
    "signature":
-   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> bytes",
+   "(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> tuple[bytes, int]",
    "operation": "EthLib.Consensus.Exports.latestVerifiedAncestorExport",
    "method": "consensus_latest_verified_ancestor",
    "errors":
@@ -8753,7 +8753,7 @@
       {"constructor": "supportDiscountAboveMaximum", "code": 53}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "From Bellatrix: the root of the latest block of a chain that is not optimistic.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen come the root of a block and the code of the status of its payload in the node."},
+   "From Bellatrix: the latest node at or above a node that is verified or of genesis.\n\nThe arguments are the names of the preset and the fork, the blocks and the optimistic roots.\n\nThen come the root of a block and the code of the status of its payload in the node.\n\nIt returns the root of the answer and the code of its status."},
   {"summary":
    "From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.",
    "signature":

@@ -95,8 +95,8 @@ The report itself also prints the number of rules at each fork.
 | dencun | 1356 | 11 |
 | pectra | 1376 | 11 |
 | fusaka | 1383 | 11 |
-| glamsterdam | 1503 | 12 |
-| hegota | 1492 | 12 |
+| glamsterdam | 1505 | 12 |
+| hegota | 1494 | 12 |
 <!-- end generated -->
 
 ### XMSS
@@ -4783,15 +4783,15 @@ The updates of the set act on roots along payload chains, so when two blocks car
 That is the case of an empty first block of Gloas, whose bid builds on a payload of Fulu, which a store of one fork never holds, and of an empty anchor.
 The rule fails there rather than call that payload verified, a choice of EthLib: the source reads the hash, which may name an optimistic payload of Fulu.
 `isHeadOptimistic_of_unknown` shows that from Gloas the rule fails at a head block that the store does not know.
-From Gloas the latest verified ancestor takes a node, and reads only the payloads that the node holds.
-A full node holds every payload of its payload chain, and an empty or pending node holds all but its own.
-`latestVerifiedAncestor_ne_root` shows that a node without its own payload is never its own verified ancestor.
-So a pending node reads as empty both for the head and for the ancestor, as the source states.
+From Gloas the latest verified ancestor walks the nodes of the fork choice, as the source does, and returns a node.
+An optimistic node reads as the pending node of its block, and an optimistic pending node climbs to its parent: full when it builds on the payload of the parent, else empty.
+`latestVerifiedNode_of_not_optimistic`, `latestVerifiedNode_of_full_optimistic` and `latestVerifiedNode_climb` state each step.
+`latestVerifiedAncestor_of_glamsterdam` and `latestVerifiedNode_spec` show that the answer has a known block, and is not optimistic or is a node of the genesis block, pending or on a payload that is not optimistic.
+So a pending node reads as an empty one for the head, and the walk reads an optimistic empty node as pending, as the source does.
 The status of a node is an assumption: a full node must name a payload that the store holds, and the rules do not check it.
 The optimistic store follows the fields of the guide, which do not record the payloads held; the search of the head returns a full node only for a held payload.
-`latestVerifiedAncestor_of_glamsterdam` shows that the answer is the first of those payloads that is not optimistic, with every one before it optimistic.
-`latestVerifiedAncestor_eq_error_of_optimistic` shows that it fails with `payloadNotVerified` when all of them are optimistic, or when there is none.
-Before Gloas the walk returns an optimistic genesis block; from Gloas it never returns an optimistic payload, a choice of EthLib.
+Before Gloas the walk returns an optimistic genesis block, and from Gloas a node of the genesis block, as the source does.
+Away from genesis, the walk fails with `payloadNotVerified` where a node builds on a payload that no known block names, as the head rule does.
 No published source says what an invalid payload removes from the store of the fork choice from Gloas.
 EthLib defines it as follows, a reading of its own that follows the fork choice of Gloas.
 A block and its payload are two nodes, and the state of a block does not depend on the block's own payload.

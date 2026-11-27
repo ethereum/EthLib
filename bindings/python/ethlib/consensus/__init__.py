@@ -2175,10 +2175,10 @@ def latest_verified_ancestor(
     optimistic_roots: Sequence[bytes],
     root: bytes,
     payload_status: int = 2,
-) -> bytes:
-    """From Bellatrix, the root of the latest block of a chain that is not optimistic."""
-    # The status of the payload of the block in the node: 0 empty, 1 full and 2 pending.
-    # From Gloas the status matters: a pending node holds only the payloads its block builds on.
+) -> tuple[bytes, int]:
+    """From Bellatrix, the latest node at or above a node that is verified, or of genesis."""
+    # A node is a block root and the status of its payload: 0 empty, 1 full and 2 pending.
+    # Before Gloas the walk keeps the status; from Gloas it walks the nodes of the fork choice.
     return _native.consensus_latest_verified_ancestor(
         name, fork, list(blocks), list(optimistic_roots), root, payload_status
     )

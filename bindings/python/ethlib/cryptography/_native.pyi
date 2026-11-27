@@ -1152,8 +1152,8 @@ def consensus_is_optimistic_candidate_block(name: str, fork: str, blocks: list[b
     """From Bellatrix: whether a block may be imported optimistically, given the known blocks."""
     ...
 
-def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> bytes:
-    """From Bellatrix: the root of the latest block of a chain that is not optimistic."""
+def consensus_latest_verified_ancestor(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes, payload_status: int) -> tuple[bytes, int]:
+    """From Bellatrix: the latest node at or above a node that is verified or of genesis."""
     ...
 
 def consensus_on_valid_payload(name: str, fork: str, blocks: list[bytes], optimistic_roots: list[bytes], root: bytes) -> list[bytes]:

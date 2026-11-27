@@ -4926,6 +4926,8 @@ touched pectra EthLib.Consensus.OptimisticStore.isHeadOptimistic
 touched fusaka EthLib.Consensus.OptimisticStore.isHeadOptimistic
 touched glamsterdam EthLib.Consensus.OptimisticStore.isHeadOptimistic
 touched hegota EthLib.Consensus.OptimisticStore.isHeadOptimistic
+touched glamsterdam EthLib.Consensus.OptimisticStore.isNodeOptimistic
+touched hegota EthLib.Consensus.OptimisticStore.isNodeOptimistic
 touched phase0 EthLib.Consensus.OptimisticStore.isOptimistic
 touched altair EthLib.Consensus.OptimisticStore.isOptimistic
 touched bellatrix EthLib.Consensus.OptimisticStore.isOptimistic
@@ -4966,6 +4968,8 @@ touched pectra EthLib.Consensus.OptimisticStore.latestVerifiedBlock
 touched fusaka EthLib.Consensus.OptimisticStore.latestVerifiedBlock
 touched glamsterdam EthLib.Consensus.OptimisticStore.latestVerifiedBlock
 touched hegota EthLib.Consensus.OptimisticStore.latestVerifiedBlock
+touched glamsterdam EthLib.Consensus.OptimisticStore.latestVerifiedNode
+touched hegota EthLib.Consensus.OptimisticStore.latestVerifiedNode
 touched glamsterdam EthLib.Consensus.OptimisticStore.namesBlockHash
 touched hegota EthLib.Consensus.OptimisticStore.namesBlockHash
 touched phase0 EthLib.Consensus.OptimisticStore.onInvalidatedPayload
