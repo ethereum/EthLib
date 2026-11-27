@@ -175,6 +175,9 @@ def run_case(preset: str, fork: str, handler: str, case) -> None:
         got = consensus.process_epoch(preset, FORKS[fork], handler, pre, config)
         assert got == snappy.decompress(post.read_bytes())
     else:
+        # One test of the source catches `ValueError` on purpose, and it is the only invalid case.
+        # Its own handler expects the overflow of a withdrawable epoch, so the rejection is pinned.
+        assert (handler, case.name) == ("registry_updates", "invalid_large_withdrawable_epoch")
         with raises(
             consensus.TransitionError,
             (
