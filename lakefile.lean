@@ -42,7 +42,10 @@ lean_lib «EthLib» where
   --
   -- Ordinary importers load public definitions without private proof bodies.
   requiresModuleSystem := true
-  precompileModules := true
+  -- Off, so that a proof waits only for the `.olean` files of its imports.
+  --
+  -- The exports precompile their imports, which builds the objects that `setup.py` links.
+  precompileModules := false
 
 /-- Proofs about the specification.
 

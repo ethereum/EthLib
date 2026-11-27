@@ -8912,8 +8912,9 @@ No caller passes one: EXP reduces modulo `2 ^ 256`, X25519 modulo its prime, and
 
 ### B3. Native code during elaboration
 
-The `EthLib`, `Exports` and `PythonConversions` libraries set `precompileModules := true`.
+The `Exports` and `PythonConversions` libraries set `precompileModules := true`.
 So `#eval`, or a tactic that evaluates, in any module that imports them runs natively compiled code.
+In a module that imports only the specification, it runs the interpreter, unless that module's library or package precompiles its imports.
 A proof is unaffected unless it uses one of the tactics of C2.
 
 ### B4. The C boundary
