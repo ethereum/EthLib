@@ -4554,6 +4554,18 @@ Through the limit, when an up-to-date honest store reads its slot and its justif
 The vote is from an earlier slot and appears in a message sent by the store's event time.
 The observed block is on every up-to-date honest head from the call through the limit, unless honest stores collide or give cross-store direct-safety or justified evidence.
 
+`Execution.finalized_ancestor_of_heads_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalReads.lean` is the safety of the fallback to the finalized block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+It concerns an honest caller at the start of a slot.
+It also concerns an up-to-date honest receiver at an event from the start of the next slot through `last`.
+The caller's finalized root is then an ancestor of the receiver's head.
+Otherwise two honest stores collide by `last`, or `CrossStoreDirectSafetyEvidence` holds.
+It assumes synchrony, delayed block admission (`BlocksAdmitted`) and fitting delays.
+It takes the run from the genesis to the anchor, the held states before the next fork, and the two stake floors.
+It takes nonzero state roots of held blocks (`roots`) and the anchor's absent parent (`absent`).
+It takes honest store epochs within the horizon (`bounded`) and the preset conditions of `DirectSafety.Parameters`.
+`Execution.finalized_epoch_le_justified_of_late` gives the step.
+A delay after an event of an honest store, each up-to-date honest store has justified the epoch of that store's finalized checkpoint.
+
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
 The block is due from the first slot two epochs after that one.

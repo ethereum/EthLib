@@ -136,6 +136,11 @@ Not yet released.
   They also assume that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root.
   `Execution.data_eq_of_signed_of_target_epoch`, `Execution.latest_slot_floor_of_signed_rank` and `VoteAt.signed_sent` move to `Consensus/Proofs/ForkChoice/VoteDelivery.lean` from `Consensus/Proofs/ForkChoice/FastConfirmation/DutySupport.lean`, with their names and statements.
 
+- In Lean, `Execution.finalized_ancestor_of_heads_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalReads.lean`) states that the fallback of the fast confirmation rule to the finalized block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+  An honest caller's finalized root at the start of a slot is an ancestor of each up-to-date honest head from the next slot through `last`.
+  Otherwise two honest stores collide, or cross-store direct-safety evidence holds.
+  `Execution.carrier_delivered` and `Execution.finalized_epoch_le_justified_of_late`, in the same file, are new public theorems; they were private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
+
 - In Lean, `Execution.observedRestart_covers_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`) states that a restart of the fast confirmation rule from the observed justified block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   At a call that replaces its base, that block is on every up-to-date honest head from the call through the limit.
   Otherwise two honest stores collide, or cross-store direct-safety or justified evidence holds.
@@ -1628,6 +1633,8 @@ Not yet released.
   The monadic forms let the random oracle experiments run these roots with a hash that queries the oracle.
   The roots are unchanged, but the three definitions unfold to the monadic forms.
   Migration: rewrite with `storageRoot_eq`, `stateEntries_eq` and `stateRoot_eq` (`Execution/Proofs/State/Root.lean`), which state the former bodies.
+
+- In Lean, `ConfirmedCalls.anchorState_hash_nonzero` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `anchorState_hash_nonzero` in the namespace `EthLib.Consensus.Models.Network` (`Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalStatements.lean`), with the same statement.
 
 - In Lean, `ConfirmedCalls.finalized_read` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `Store.Reachable.finalized_read` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`), with the same statement.
 
