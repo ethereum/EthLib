@@ -141,6 +141,8 @@ An opening verifies if and only if its path leads from its leaf to the root, and
 The output binds its index (`Verify.lean`).
 Two outputs are equal only for one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision (`outputHash_binding`).
 So two openings that verify at two different indices, under any roots and even with one secret, give two different outputs, or their output inputs collide (`verify_index_binding`).
+In the random oracle model, the outputs of one secret at distinct indices are also independent uniform values (`run_outputs_evalDistEq`, `OutputRandomOracle.lean`).
+That holds for a secret and indices fixed before the oracle answers any of their output inputs.
 
 The same guarantees hold for a tree built from a seed (`KeyGen.lean`).
 That tree verifies at every index, with the output of that index's secret (`verify_prove`).

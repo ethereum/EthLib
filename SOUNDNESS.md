@@ -650,7 +650,13 @@ The output hashes its index with its secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) 
 `outputHash_binding` (`Proofs/Vrf/Verify.lean`) says that two equal outputs come from one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision.
 `verify_index_binding` applies it to two openings that verify at two different indices, under any roots.
 So one secret gives different outputs at different indices, unless Keccak-256 collides.
-That two such outputs behave as independent values is a random-oracle heuristic, which no theorem states.
+In the random oracle model, `run_outputs_evalDistEq` (`Proofs/Vrf/OutputRandomOracle.lean`) shows that the outputs of one secret at distinct indices are independent uniform 32-byte values.
+It fixes the secret and the indices, and assumes that the starting cache holds no answer for any of their output inputs.
+`prEvent_outputs_pair_of_fresh` states the case of two different indices.
+Two events, one on each output, both hold with the product of their probabilities for two uniform values.
+`evalWithAnswerFn_outputs` shows that Keccak-256, answering in place of the oracle, gives the outputs of the specification.
+Carrying the independence over to Keccak-256 is an idealisation of A4, not a theorem.
+These theorems say nothing about a holder that chooses its secret after the oracle answered one of those inputs.
 A holder can still grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
 
 A selection therefore compares `mixOutput`, the hash of the output with randomness revealed after the root is registered.
@@ -8753,6 +8759,12 @@ The codeword searches of each scheme share the bullet of that scheme:
   No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
   The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
   The bound counts classical mix queries only, and says nothing about an attack that uses the structure of Keccak.
+- VRF output independence: Keccak-256 is a random oracle on byte strings, as for VRF uniqueness.
+  The secret and the indices are fixed, and the initial cache holds no answer for any of their output inputs.
+  That cache may hold answers for other inputs.
+  Each of those output inputs then receives 32 independent uniform bytes.
+  The statement says nothing about a secret chosen after the oracle answered one of those inputs.
+  It says nothing either about an attack that uses the structure of Keccak.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
