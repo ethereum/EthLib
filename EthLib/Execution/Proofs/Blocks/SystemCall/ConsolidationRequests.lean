@@ -1269,9 +1269,8 @@ theorem readRequests_of_empty {env : BlockEnvironment fork} {body : BodyState}
       .error (.systemContractEmpty CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS) := by
   have hread := readRequest_of_empty (env := env)
     (contract := (CONSOLIDATION_REQUEST_TYPE, CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS)) hcode
-  rw [readRequests_of_pectra hfork]
-  unfold requestContracts
-  split <;> simp [REQUEST_CONTRACTS, List.foldlM_cons, hwithdrawal, hread, bind, Except.bind]
+  rw [readRequests_of_pectra hfork, requestContracts_of_pectra hfork]
+  simp [List.foldlM_cons, hwithdrawal, hread, bind, Except.bind]
 
 /-- No block request result succeeds when consolidation code is empty after withdrawals.
 
