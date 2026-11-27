@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.SufCma.MultiKey
+public import EthLib.Cryptography.Proofs.SufCmaMultiKey
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.AdversaryBudget
 
 /-!
