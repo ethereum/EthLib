@@ -566,10 +566,6 @@ def dueConsolidationCarry (x : ForkedBeaconState preset) (high : Nat) : Nat :=
       horizonEnd x high
   then consolidationBalanceCarry x else 0
 
-/-- The exit balance carry if the exit queue's start falls within the window, and zero otherwise. -/
-def dueExitCarry (x : ForkedBeaconState preset) (high : Nat) : Nat :=
-  if exitQueueStart x ≤ horizonEnd x high then exitBalanceCarry x else 0
-
 /-- The excess of some pending consolidation sources at `x`, and zero before Electra.
 
 A source counts when it is inactive at `x` and withdrawable within the window.

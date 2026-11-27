@@ -1146,7 +1146,9 @@ Not yet released.
   The theorems that take these as premises also conclude the stronger bound.
   Migration: a caller that builds one shows its bound at the new budget, as `run_partials_le_paid_of_endpoint_floor` (`Apriori/Contracts/Ledger.lean`) now states it for the partials.
   In this repository the builders need no change; a caller that only reads one gets the stronger bound.
-  The eleven:
+  `DirectSafety.Apriori.dueExitCarry` is removed, since the new budget tests the carry itself and nothing else read it.
+  Migration: use `if exitQueueStart x ≤ horizonEnd x high then exitBalanceCarry x else 0`.
+  The eleven declarations:
   - `LedgerCuts.roundLedger_regime`, `LedgerCuts.roundLedger_electra` and the structure `RoundLedger` (`Apriori/Contracts/Cohorts.lean` and `Apriori/Contracts/Ledger.lean`), by `withdrawalBudget`.
   - The structure `NewCohortAllocation` (`Apriori/Contracts/Cohorts.lean`), by `roundingBudget` in its field `debitBudget`.
   - `StateProducer`, `DerivedProducer` and `CommonLedger` (`Apriori/Contracts/Producers.lean`), by `drift`.
