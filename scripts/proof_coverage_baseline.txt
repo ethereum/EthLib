@@ -4899,8 +4899,6 @@ touched glamsterdam EthLib.Consensus.NewPayloadRequest.requestsList
 touched hegota EthLib.Consensus.NewPayloadRequest.requestsList
 touched glamsterdam EthLib.Consensus.OptimisticStore.PayloadLink
 touched hegota EthLib.Consensus.OptimisticStore.PayloadLink
-touched glamsterdam EthLib.Consensus.OptimisticStore.buildsOnOptimistic
-touched hegota EthLib.Consensus.OptimisticStore.buildsOnOptimistic
 touched phase0 EthLib.Consensus.OptimisticStore.chain
 touched altair EthLib.Consensus.OptimisticStore.chain
 touched bellatrix EthLib.Consensus.OptimisticStore.chain
@@ -4946,6 +4944,10 @@ touched pectra EthLib.Consensus.OptimisticStore.isOptimisticCandidateBlock
 touched fusaka EthLib.Consensus.OptimisticStore.isOptimisticCandidateBlock
 touched glamsterdam EthLib.Consensus.OptimisticStore.isOptimisticCandidateBlock
 touched hegota EthLib.Consensus.OptimisticStore.isOptimisticCandidateBlock
+touched glamsterdam EthLib.Consensus.OptimisticStore.isOptimisticPayload
+touched hegota EthLib.Consensus.OptimisticStore.isOptimisticPayload
+touched glamsterdam EthLib.Consensus.OptimisticStore.knowsPayload
+touched hegota EthLib.Consensus.OptimisticStore.knowsPayload
 touched phase0 EthLib.Consensus.OptimisticStore.latestVerifiedAncestor
 touched altair EthLib.Consensus.OptimisticStore.latestVerifiedAncestor
 touched bellatrix EthLib.Consensus.OptimisticStore.latestVerifiedAncestor
