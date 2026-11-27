@@ -4804,7 +4804,8 @@ No theorem covers the payload that the execution layer builds, or the safe and f
 The Python suite checks each case of the terminal block search, the configured terminal block hash, the withdrawals and the parent root against values worked out in the test from the guides.
 
 From Gloas, `prepareExecutionPayloadGloas` reads the fork choice store and a head node.
-The proposer builds on the full node of the head when the fork choice says so at the current slot.
+The proposer builds on the full node of the head when the fork choice says so at the slot of the proposal, the slot of the state.
+The caller gives the state of the slot of the proposal, before its block, and EthLib does not check it.
 It then applies the payload that the store holds for the head to a copy of the state, and reads the withdrawals of that copy.
 Otherwise it keeps the state and the withdrawals that the state records.
 From Heze it also reads the transactions of the inclusion lists of the slot before, and the payload attributes carry them, each as its bytes.
