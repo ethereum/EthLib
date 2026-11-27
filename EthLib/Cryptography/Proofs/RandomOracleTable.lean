@@ -154,7 +154,7 @@ theorem prEvent_mapM_forall₂ {α γ : Type} (m : α → ProbComp γ) (P : α �
     rw [List.mapM_cons, List.map_cons, List.prod_cons, ← ih]
     simp [List.forall₂_cons]
 
-/-- Two distinct inputs with no cached answer meet two events with the product chance.
+/-- Two events, one on each answer at two distinct uncached inputs, hold with the product chance.
 
 The factors are the chances of the two events for two uniform answers. -/
 theorem prEvent_run'_query_pair_of_fresh {D R : Type} [DecidableEq D] [SampleableType R]

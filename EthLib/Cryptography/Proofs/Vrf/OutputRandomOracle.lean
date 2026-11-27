@@ -68,7 +68,7 @@ theorem run_outputs_evalDistEq (secret : Digest) (indices : List UInt32)
   refine List.map_congr_left fun i hi => ?_
   simp only [fresh i hi, Option.getD_none]
 
-/-- Two events, one on each output of one secret at two indices, hold with the product chance.
+/-- Two events, one on each output of one secret at distinct indices, hold with the product chance.
 
 A random oracle answers their hash calls, from a cache with no answer for either input.
 

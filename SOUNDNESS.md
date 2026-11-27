@@ -8801,7 +8801,7 @@ The codeword searches of each scheme share the bullet of that scheme:
   Each new input receives 32 independent uniform bytes, and repeated inputs receive the same answer.
   The secret and the indices are fixed, and the initial cache holds no answer for any of their output inputs.
   The theorems say nothing about a secret chosen after the oracle answered one of those inputs.
-  Only classical queries are counted, so they say nothing about a holder that evaluates Keccak-256 in superposition.
+  The oracle answers classical queries only, so the theorems say nothing about a holder that evaluates Keccak-256 in superposition.
   They say nothing either about an attack that uses the structure of Keccak.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.
