@@ -155,47 +155,43 @@ private theorem foldl_append_toList (bs : List ByteArray) (acc : ByteArray) :
   | nil => simp
   | cons b bs ih => simp [ih, ByteArray.data_append, List.append_assoc]
 
-/-- One step of the loop of the code, from the block `b_(i - 1)` to the block `b_i`. -/
-private def nextBlock (b0 dstPrime : ByteArray) (i : Nat) (s : Array ByteArray × ByteArray) :
-    Array ByteArray × ByteArray :=
-  (s.1.push (Hash.Sha256.hash (strxor b0 s.2 ++ i2osp i 1 ++ dstPrime)),
-    Hash.Sha256.hash (strxor b0 s.2 ++ i2osp i 1 ++ dstPrime))
+/-- The first block of the code, `b_1`, is the model's. -/
+private theorem b1_toList (b0 dstPrime : ByteArray) (hb0 : b0.size = 32)
+    (hdp : dstPrime.size < 2 ^ 60) :
+    (Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)).data.toList
+      = Spec.block b0.data.toList dstPrime.data.toList 1 := by
+  rw [hash_toList (by simp only [ByteArray.size_append, i2osp_size]; omega), Spec.block,
+    ByteArray.data_append, ByteArray.data_append, Array.toList_append, Array.toList_append,
+    i2osp_toList]
 
-/-- The loop of the code computes the blocks `b_1` to `b_(n + 1)` of the model. -/
-private theorem foldl_nextBlock (b0 dstPrime : ByteArray) (hb0 : b0.size = 32)
-    (hdp : dstPrime.size < 2 ^ 60) (n : Nat) :
-    (((List.range' 2 n).foldl (fun s i => nextBlock b0 dstPrime i s)
-        (#[Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)],
-          Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime))).1.toList.map (·.data.toList)
-        = (List.range (n + 1)).map fun i => Spec.block b0.data.toList dstPrime.data.toList (i + 1))
-      ∧ ((List.range' 2 n).foldl (fun s i => nextBlock b0 dstPrime i s)
-          (#[Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)],
-            Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime))).2.data.toList
-        = Spec.block b0.data.toList dstPrime.data.toList (n + 1)
-      ∧ ((List.range' 2 n).foldl (fun s i => nextBlock b0 dstPrime i s)
-          (#[Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)],
-            Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime))).2.size = 32 := by
-  induction n with
-  | zero =>
-    have h1 : (Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)).data.toList
-        = Spec.block b0.data.toList dstPrime.data.toList 1 := by
-      rw [hash_toList (by simp only [ByteArray.size_append, i2osp_size]; omega), Spec.block,
-        ByteArray.data_append, ByteArray.data_append, Array.toList_append, Array.toList_append,
-        i2osp_toList]
-    simp [h1]
+/-- Step 10 of the code computes the block `b_(k + 2)` of the model from `b_(k + 1)`. -/
+private theorem bI_toList (b0 dstPrime prev : ByteArray) (hb0 : b0.size = 32)
+    (hdp : dstPrime.size < 2 ^ 60) (k : Nat)
+    (hp : prev.data.toList = Spec.block b0.data.toList dstPrime.data.toList (k + 1)) :
+    (bI b0 dstPrime prev (k + 2)).data.toList
+      = Spec.block b0.data.toList dstPrime.data.toList (k + 2) := by
+  rw [bI, hash_toList (by simp only [ByteArray.size_append, i2osp_size, strxor_size]; omega),
+    Spec.block, ByteArray.data_append, ByteArray.data_append, Array.toList_append,
+    Array.toList_append, i2osp_toList, strxor_toList, hp]
+
+/-- The scan of the code from `b_(k + 1)` computes the blocks `b_(k + 1)` to `b_(k + n + 1)`. -/
+private theorem scanl_bI (b0 dstPrime : ByteArray) (hb0 : b0.size = 32)
+    (hdp : dstPrime.size < 2 ^ 60) (n k : Nat) (prev : ByteArray)
+    (hp : prev.data.toList = Spec.block b0.data.toList dstPrime.data.toList (k + 1)) :
+    ((List.range' (k + 2) n).scanl (bI b0 dstPrime) prev).map (·.data.toList)
+      = (List.range (n + 1)).map fun i =>
+          Spec.block b0.data.toList dstPrime.data.toList (k + i + 1) := by
+  induction n generalizing k prev with
+  | zero => simp [hp]
   | succ n ih =>
-    obtain ⟨hl, hp, hs⟩ := ih
-    rw [List.range'_concat, List.foldl_append, List.foldl_cons, List.foldl_nil]
-    generalize (List.range' 2 n).foldl _ _ = r at hl hp hs
-    have hb : (Hash.Sha256.hash (strxor b0 r.2 ++ i2osp (2 + 1 * n) 1 ++ dstPrime)).data.toList
-        = Spec.block b0.data.toList dstPrime.data.toList (n + 1 + 1) := by
-      rw [hash_toList (by simp only [ByteArray.size_append, i2osp_size, strxor_size]; omega),
-        Spec.block, ByteArray.data_append, ByteArray.data_append, Array.toList_append,
-        Array.toList_append, i2osp_toList, strxor_toList, hp, show 2 + 1 * n = n + 2 by omega]
-    refine ⟨?_, hb, Hash.Sha256.hash_size _⟩
-    rw [nextBlock, Array.toList_push, List.map_append, hl, List.range_succ (n := n + 1),
-      List.map_append]
-    simp only [List.map_cons, List.map_nil, hb]
+    -- Both sides start with `b_(k + 1)`, then go on from the next index.
+    rw [List.range'_succ, List.scanl_cons, List.map_cons, List.range_succ_eq_map, List.map_cons,
+      List.map_map]
+    -- The rest of the scan starts at `b_(k + 2)`, so the induction hypothesis holds at `k + 1`.
+    rw [show k + 2 + 1 = k + 1 + 2 by omega,
+      ih (k + 1) (bI b0 dstPrime prev (k + 2)) (bI_toList b0 dstPrime prev hb0 hdp k hp)]
+    -- What is left is the head and an index shift, `k + (i + 1) + 1 = k + 1 + i + 1`.
+    simp only [hp, Nat.add_zero, Function.comp_def, Nat.add_assoc, Nat.add_comm 1]
 
 /-! ## The message expansion -/
 
@@ -274,20 +270,17 @@ theorem expandMessageXmd_eq_spec (msg dst : ByteArray) (lenInBytes : Nat)
   generalize Hash.Sha256.hash mp = b0 at hb0 ⊢
   have hdps' : dp.size < 2 ^ 60 := by omega
   clear_value dp mp
-  rw [Std.Legacy.Range.forIn_eq_forIn_range']
-  simp only [List.forIn_pure_yield_eq_foldl, pure_bind, Std.Legacy.Range.size, Array.mkEmpty_eq]
   have hout : ∀ x : ByteArray, Option.map (fun x => x.data.toList)
       (pure x : Except BlsError ByteArray).toOption = some x.data.toList := fun _ => rfl
   rw [hout, ByteArray.data_extract, Array.toList_extract, List.extract_eq_take_drop,
-    List.drop_zero, Nat.sub_zero, ← Array.foldl_toList, foldl_append_toList]
+    List.drop_zero, Nat.sub_zero, foldl_append_toList]
   have hzero : (lenInBytes + 32 - 1) / 32 = 0 → lenInBytes = 0 := by omega
   generalize (lenInBytes + 32 - 1) / 32 = ell at hzero ⊢
   cases ell with
   | zero => simp [hzero rfl]
   | succ n =>
-    rw [show (n + 1 + 1 - 2 + 1 - 1) / 1 = n by omega]
-    obtain ⟨hl, -, -⟩ := foldl_nextBlock b0 dp hb0 hdps' n
-    simp only [nextBlock] at hl
+    rw [Nat.add_sub_cancel]
+    have hl := scanl_bI b0 dp hb0 hdps' n 0 _ (b1_toList b0 dp hb0 hdps')
     simpa [List.flatMap_def] using congrArg (fun l => some (List.take lenInBytes l.flatten)) hl
 
 /-! ## The hash to the field -/
