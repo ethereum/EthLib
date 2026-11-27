@@ -2400,6 +2400,18 @@ The list leaves out GAS and every instruction that sends a message.
 The lifted run has the same fields outside its meter, including its state and output.
 `SystemContract.systemCall_of_writesStorage` applies this result to the actual system-call runner and its initial reservoir.
 
+### Invariants of the storage of a contract
+
+`Execution/Proofs/Evm/Call/StorageAt.lean` proves that a message, a transaction and a system call keep or wipe the storage of an account that they do not read.
+`Execution/Proofs/Evm/Call/StorageInvariant.lean` proves that a message keeps an invariant of the storage of an account that holds a given code.
+Each call that runs that code at the account must keep the invariant, as a proof about the contract shows.
+The message must start where the account holds the code and its storage meets the invariant, run the code if it goes there, and return a frame.
+The theorem assumes that no other code has the Keccak-256 hash of that code (`CodeHyp.hashOnly`).
+The state keeps each code under its hash.
+So a creation that deploys a second preimage would change the code that a later call to the account runs.
+`CodeHyp.hashOnly` is not provable for any code, and is believed false for Keccak-256 as a function.
+Until a random-oracle bound on Keccak-256, like the bounds for the trie and state roots, replaces it, these theorems hold only under the assumption, and say nothing formally if it is false.
+
 ### SHA-256 precompile
 
 The precompile reuses the SHA-256 of the cryptography layer, so its theorems are about the gas and the failure.
