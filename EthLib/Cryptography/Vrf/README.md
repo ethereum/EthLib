@@ -194,11 +194,21 @@ It is selected when the opening verifies and the mixed value of its output is in
 That happens with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
 The first term is one fresh uniform value per allowed index, and the second is a mix query that already used `r`.
 Here `q` counts every evaluation of the mix by the holder, including its own Keccak-256 calls on mix inputs, as the random oracle assumption requires.
-No theorem bounds the third term.
-The bound on two outputs takes the tree hash as a random oracle, while this theorem takes it as Keccak-256 itself.
+No theorem bounds the third term with Keccak-256 itself, which this theorem takes as the tree hash.
 With one index, `|S| = 2^200` (a selection of one in `2^56`) and `q = 2^64`, the first two terms are below `2^-55`.
 The theorem does not cover a holder that registers a root without knowing a tree under it.
 Nor does it cover randomness that the holder knows at registration or can bias.
+
+A separate theorem bounds the search of the third term, with the tree hash a random oracle (`prEvent_extractCollision_isSome_le_of_adversary`, `SelectionRandomOracle.lean`).
+There Keccak-256 is a random oracle on byte strings, for the leaves and the nodes.
+An adversary makes at most `q_H` classical queries to it, then outputs the secrets of a tree, an index and an opening.
+The experiment builds the honest opening at that index, then runs the search on the two openings, with a query for each Keccak-256 call.
+The search finds a pair with probability at most `(q_H + 2^33 + 64)^2 / 2^256`.
+The `2^33 + 64` counts the queries of the experiment: at most `2^33 - 2` for the honest opening, 2 for the leaves and 64 for the search.
+With `q_H = 2^64`, that is below `2^-127`.
+With Keccak-256 in place of the oracle, the search of the experiment is exactly `findHashCollision` on the opening and the honest opening (`extractCollision_keccak256`).
+That bound and the bound on two outputs take the tree hash as a random oracle, while `prEvent_selected_le` takes it as Keccak-256 itself.
+No theorem composes them.
 
 ## Test vectors
 
@@ -216,6 +226,7 @@ It could hold only for a tree whose secrets the holder did not choose.
 
 No bound on the cost of a collision of Keccak-256 itself is proved either.
 Uniqueness turns a second output into a collision, but how hard a collision is to find depends on the hash.
+The third term of a mixed selection is the chance that its search finds a pair, and no theorem bounds it with Keccak-256 itself.
 The generic cost of `2^128` hashes for a collision holds against a classical adversary.
 The bound in the random oracle model reaches 1 near `2^128` queries, with an oracle in place of Keccak-256.
 The bound over a uniform permutation reaches 1 near `2^128.5` queries, with that permutation in place of Keccak-f[1600].
