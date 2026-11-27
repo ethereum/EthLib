@@ -1242,6 +1242,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the field operations have a square, and `Fp2` squares with two products of its base field instead of four ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `FieldOps.square` (`Cryptography/BaseField.lean`) is a new field of the class, which defaults to `a * a`, and `Fp2.square` (`Cryptography/Fp2.lean`) sets it for the extension.
+  `FieldOps.Hom` and `FieldOps.Embedding` (`Cryptography/Proofs/BaseField.lean`) gain the law `map_square`, so a caller that builds one gives that law too.
+  `G1.double`, `G1.addGeneral` and `G1.addMixed` (`Cryptography/Bls/G1.lean`) square with `FieldOps.square`, so they unfold to it, over `Fp` and over `Fp2` for G2.
+  `Fp2.square_eq` (`Cryptography/Proofs/Fp2.lean`) states that the square is `a * a`, for a base field with an embedding into a field.
+  `Fp2.map_square` (`Cryptography/Proofs/Bls/BaseFieldMap.lean`) and the lemmas `Fp2.fieldOps_square`, `Fp2.square_c0` and `Fp2.square_c1` (`Cryptography/Proofs/Fp2.lean`) are new.
+  Every public statement about the curves is unchanged.
+
 - In Lean, the inverse of `Fp` is `a ^ (p - 2)` on the Montgomery form, by Fermat's little theorem, as for `Fr` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `Bls.Fp.inverse` (`Cryptography/Bls/Fp.lean`) unfolds to `Montgomery.inv` instead of the extended Euclidean algorithm, so `Bls.Fp.inverse_eq_inv` holds by `rfl`.
   `Bls.Fp.toZMod_inverse` and every other statement about `Fp` are unchanged.

@@ -72,6 +72,7 @@ protected theorem ext {a b : Fp2 F} (h0 : a.c0 = b.c0) (h1 : a.c1 = b.c1) : a = 
 @[simp] theorem fieldOps_beq (a b : Fp2 F) : FieldOps.beq a b = a.beq b := rfl
 @[simp] theorem fieldOps_isZero (a : Fp2 F) : FieldOps.isZero a = a.isZero := rfl
 @[simp] theorem fieldOps_inverse (a : Fp2 F) : FieldOps.inverse a = a.inverse := rfl
+@[simp] theorem fieldOps_square (a : Fp2 F) : FieldOps.square a = a.square := rfl
 
 @[simp] theorem zero_c0 : (0 : Fp2 F).c0 = FieldOps.zero := rfl
 @[simp] theorem zero_c1 : (0 : Fp2 F).c1 = FieldOps.zero := rfl
@@ -85,6 +86,8 @@ protected theorem ext {a b : Fp2 F} (h0 : a.c0 = b.c0) (h1 : a.c1 = b.c1) : a = 
 @[simp] theorem neg_c1 (a : Fp2 F) : (-a).c1 = -a.c1 := rfl
 @[simp] theorem mul_c0 (a b : Fp2 F) : (a * b).c0 = a.c0 * b.c0 - a.c1 * b.c1 := rfl
 @[simp] theorem mul_c1 (a b : Fp2 F) : (a * b).c1 = a.c0 * b.c1 + a.c1 * b.c0 := rfl
+@[simp] theorem square_c0 (a : Fp2 F) : a.square.c0 = (a.c0 + a.c1) * (a.c0 - a.c1) := rfl
+@[simp] theorem square_c1 (a : Fp2 F) : a.square.c1 = a.c0 * a.c1 + a.c0 * a.c1 := rfl
 
 theorem inverse_c0 (a : Fp2 F) :
     a.inverse.c0 = a.c0 * FieldOps.inverse (a.c0 * a.c0 + a.c1 * a.c1) := rfl
@@ -160,6 +163,10 @@ protected theorem left_distrib (a b c : Fp2 F) : a * (b + c) = a * b + a * c := 
 
 protected theorem right_distrib (a b c : Fp2 F) : (a + b) * c = a * c + b * c := by
   apply Fp2.ext <;> apply e.injective <;> push_map <;> ring
+
+/-- The square is the product of the element by itself. -/
+theorem square_eq (a : Fp2 F) : a.square = a * a := by
+  apply Fp2.ext <;> apply e.injective <;> simp only [square_c0, square_c1] <;> push_map <;> ring
 
 protected theorem zero_ne_one : (0 : Fp2 F) ≠ 1 := fun h => by
   have h0 := congrArg (fun a : Fp2 F => e.toFun a.c0) h

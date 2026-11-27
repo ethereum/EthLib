@@ -167,12 +167,12 @@ private theorem modelCoords_addMixed (p q : G1 Fp.Model) :
   simp only [beq_eq, Bool.cond_eq_ite]
   rw [show ((modelCoords p).1 == fmul (modelCoords q).1
       (fmul (modelCoords p).2.2 (modelCoords p).2.2)) =
-      BaseField.beq p.x (q.x * (p.z * p.z)) from rfl,
+      BaseField.beq p.x (q.x * FieldOps.square p.z) from rfl,
     show ((modelCoords p).2.1 == fmul (fmul (modelCoords q).2.1 (modelCoords p).2.2)
       (fmul (modelCoords p).2.2 (modelCoords p).2.2)) =
-      BaseField.beq p.y (q.y * p.z * (p.z * p.z)) from rfl]
-  by_cases h₁ : BaseField.beq p.x (q.x * (p.z * p.z)) = true
-  · by_cases h₂ : BaseField.beq p.y (q.y * p.z * (p.z * p.z)) = true
+      BaseField.beq p.y (q.y * p.z * FieldOps.square p.z) from rfl]
+  by_cases h₁ : BaseField.beq p.x (q.x * FieldOps.square p.z) = true
+  · by_cases h₂ : BaseField.beq p.y (q.y * p.z * FieldOps.square p.z) = true
     · simp only [h₁, h₂, ↓reduceIte, modelCoords_double]
     · simp only [h₁, h₂, ↓reduceIte, Bool.false_eq_true]
       rfl
@@ -185,14 +185,15 @@ private theorem modelCoords_addGeneral (p q : G1 Fp.Model) :
   simp only [beq_eq, Bool.cond_eq_ite]
   rw [show (fmul (modelCoords p).1 (fmul (modelCoords q).2.2 (modelCoords q).2.2) ==
       fmul (modelCoords q).1 (fmul (modelCoords p).2.2 (modelCoords p).2.2)) =
-      BaseField.beq (p.x * (q.z * q.z)) (q.x * (p.z * p.z)) from rfl,
+      BaseField.beq (p.x * FieldOps.square q.z) (q.x * FieldOps.square p.z) from rfl,
     show (fmul (fmul (modelCoords p).2.1 (modelCoords q).2.2)
       (fmul (modelCoords q).2.2 (modelCoords q).2.2) ==
       fmul (fmul (modelCoords q).2.1 (modelCoords p).2.2)
         (fmul (modelCoords p).2.2 (modelCoords p).2.2)) =
-      BaseField.beq (p.y * q.z * (q.z * q.z)) (q.y * p.z * (p.z * p.z)) from rfl]
-  by_cases h₁ : BaseField.beq (p.x * (q.z * q.z)) (q.x * (p.z * p.z)) = true
-  · by_cases h₂ : BaseField.beq (p.y * q.z * (q.z * q.z)) (q.y * p.z * (p.z * p.z)) = true
+      BaseField.beq (p.y * q.z * FieldOps.square q.z) (q.y * p.z * FieldOps.square p.z) from rfl]
+  by_cases h₁ : BaseField.beq (p.x * FieldOps.square q.z) (q.x * FieldOps.square p.z) = true
+  · by_cases h₂ :
+      BaseField.beq (p.y * q.z * FieldOps.square q.z) (q.y * p.z * FieldOps.square p.z) = true
     · simp only [h₁, h₂, ↓reduceIte, modelCoords_double]
     · simp only [h₁, h₂, ↓reduceIte, Bool.false_eq_true]
       rfl

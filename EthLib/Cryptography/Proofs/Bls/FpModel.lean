@@ -127,6 +127,7 @@ def Fp.toModel : BaseField.Hom Fp Fp.Model where
     change _ = ((a.val : ZMod Fp.modulus)⁻¹).val
     rw [Fp.val_eq, ZMod.natCast_zmod_val]
   map_powNat a n := (Fp.powNat_toModelFun a n).symm
+  map_square a := Fin.ext (Fp.val_mul a a)
   map_sqrt a := by
     change Fp.Model.sqrt (Fp.toModelFun a) = (Fp.sqrt a).toOption.map Fp.toModelFun
     rw [Fp.Model.sqrt, Fp.sqrt, Fp.sqrtCandidate, Fp.powLimbs_sqrtExponent,

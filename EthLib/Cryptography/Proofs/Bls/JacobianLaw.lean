@@ -77,7 +77,8 @@ private theorem a₆_eq : (curveOf b).a₆ = b := rfl
 
 /-- Pushes the map through each field operation. -/
 local macro "push_map" : tactic =>
-  `(tactic| simp only [e.map_add, e.map_sub, e.map_mul, e.map_neg, e.map_zero, e.map_one])
+  `(tactic| simp only [e.map_add, e.map_sub, e.map_mul, e.map_square, e.map_neg, e.map_zero,
+    e.map_one])
 
 /-- Reads the entries of a vector `![x, y, z]` and the coefficients of the curve. -/
 local macro "read_vec" : tactic =>
@@ -296,33 +297,33 @@ private theorem add_components
 
 /-- The general formulas, in their last branch, as a weighted `addXYZ`. -/
 private theorem repOf_addGeneral {P Q : G1 F} (hP : Valid e b P) (hQ : Valid e b Q)
-    (hu : ¬FieldOps.beq (P.x * (Q.z * Q.z)) (Q.x * (P.z * P.z)) = true) :
+    (hu : ¬FieldOps.beq (P.x * FieldOps.square Q.z) (Q.x * FieldOps.square P.z) = true) :
     repOf e (addGeneral P Q)
       = (-(2 * (repOf e P 2 * repOf e Q 2))) • (curveOf b).addXYZ (repOf e P) (repOf e Q) := by
-  let z1z1 := P.z * P.z
-  let z2z2 := Q.z * Q.z
+  let z1z1 := FieldOps.square P.z
+  let z2z2 := FieldOps.square Q.z
   let u1 := P.x * z2z2
   let u2 := Q.x * z1z1
   let s1 := P.y * Q.z * z2z2
   let s2 := Q.y * P.z * z1z1
   let h := u2 - u1
-  let i := (h + h) * (h + h)
+  let i := FieldOps.square (h + h)
   let j := h * i
   let r := s2 - s1 + (s2 - s1)
   let v := u1 * i
-  let x3 := r * r - j - (v + v)
+  let x3 := FieldOps.square r - j - (v + v)
   obtain ⟨hX, hY, hZ⟩ := add_components b (e.toFun P.x) (e.toFun P.y) (e.toFun P.z)
     (e.toFun Q.x) (e.toFun Q.y) (e.toFun Q.z) (e.toFun z1z1) (e.toFun z2z2) (e.toFun u1)
     (e.toFun u2) (e.toFun s1) (e.toFun s2) (e.toFun h) (e.toFun i) (e.toFun j) (e.toFun r)
     (e.toFun v) (e.toFun x3)
-    (e.map_mul _ _) (e.map_mul _ _) (e.map_mul _ _) (e.map_mul _ _)
+    (e.map_square _) (e.map_square _) (e.map_mul _ _) (e.map_mul _ _)
     (by simp only [s1, e.map_mul]) (by simp only [s2, e.map_mul])
-    (e.map_sub _ _) (by simp only [i, e.map_mul, e.map_add]) (e.map_mul _ _)
+    (e.map_sub _ _) (by simp only [i, e.map_square, e.map_add]) (e.map_mul _ _)
     (by simp only [r, e.map_add, e.map_sub]) (e.map_mul _ _)
-    (by simp only [x3, e.map_sub, e.map_mul, e.map_add])
+    (by simp only [x3, e.map_sub, e.map_square, e.map_add])
     (valid_equation e b hP) (valid_equation e b hQ)
   have hbranch : addGeneral P Q = ⟨x3, r * (v - x3) - (s1 + s1) * j,
-      ((P.z + Q.z) * (P.z + Q.z) - z1z1 - z2z2) * h⟩ := by
+      (FieldOps.square (P.z + Q.z) - z1z1 - z2z2) * h⟩ := by
     rw [addGeneral]
     exact ite_eq_right hu
   have hs := smul_fin3_ext ((curveOf b).addXYZ (repOf e P) (repOf e Q))
@@ -336,22 +337,22 @@ private theorem repOf_addGeneral {P Q : G1 F} (hP : Valid e b P) (hQ : Valid e b
       = (_ • (curveOf b).addXYZ (repOf e P) (repOf e Q)) 1
     refine Eq.trans ?_ (hY.trans (hs.2.1).symm)
     simp only [e.map_sub, e.map_mul, e.map_add]
-  · show e.toFun (((P.z + Q.z) * (P.z + Q.z) - z1z1 - z2z2) * h)
+  · show e.toFun ((FieldOps.square (P.z + Q.z) - z1z1 - z2z2) * h)
       = (_ • (curveOf b).addXYZ (repOf e P) (repOf e Q)) 2
     refine Eq.trans ?_ (hZ.trans (hs.2.2).symm)
-    simp only [e.map_sub, e.map_mul, e.map_add]
+    simp only [e.map_sub, e.map_mul, e.map_square, e.map_add]
 
 /-- The mixed formulas give the image of the general formulas when the second `z` maps to 1. -/
 private theorem repOf_addMixed {P Q : G1 F} (hq : e.toFun Q.z = 1) :
     repOf e (addMixed P Q) = repOf e (addGeneral P Q) := by
   -- The two branch tests agree, since `u1 = x1` and `s1 = y1` when `z2 = 1`.
-  have cx : FieldOps.beq P.x (Q.x * (P.z * P.z))
-      = FieldOps.beq (P.x * (Q.z * Q.z)) (Q.x * (P.z * P.z)) := by
+  have cx : FieldOps.beq P.x (Q.x * FieldOps.square P.z)
+      = FieldOps.beq (P.x * FieldOps.square Q.z) (Q.x * FieldOps.square P.z) := by
     rw [Bool.eq_iff_iff, e.beq_iff, e.beq_iff]
     push_map
     rw [hq, mul_one, mul_one]
-  have cy : FieldOps.beq P.y (Q.y * P.z * (P.z * P.z))
-      = FieldOps.beq (P.y * Q.z * (Q.z * Q.z)) (Q.y * P.z * (P.z * P.z)) := by
+  have cy : FieldOps.beq P.y (Q.y * P.z * FieldOps.square P.z)
+      = FieldOps.beq (P.y * Q.z * FieldOps.square Q.z) (Q.y * P.z * FieldOps.square P.z) := by
     rw [Bool.eq_iff_iff, e.beq_iff, e.beq_iff]
     push_map
     rw [hq, mul_one, mul_one, mul_one]
@@ -390,29 +391,30 @@ private theorem add_of_right_zero {P Q : G1 F} (hz1 : ¬FieldOps.isZero P.z = tr
   exact ite_eq_left hz2
 
 private theorem addGeneral_of_dbl {P Q : G1 F}
-    (hu : FieldOps.beq (P.x * (Q.z * Q.z)) (Q.x * (P.z * P.z)) = true)
-    (hs : FieldOps.beq (P.y * Q.z * (Q.z * Q.z)) (Q.y * P.z * (P.z * P.z)) = true) :
+    (hu : FieldOps.beq (P.x * FieldOps.square Q.z) (Q.x * FieldOps.square P.z) = true)
+    (hs : FieldOps.beq (P.y * Q.z * FieldOps.square Q.z) (Q.y * P.z * FieldOps.square P.z) = true) :
     addGeneral P Q = double P := by
   rw [addGeneral]
   exact (ite_eq_left hu).trans (ite_eq_left hs)
 
 private theorem addGeneral_of_opp {P Q : G1 F}
-    (hu : FieldOps.beq (P.x * (Q.z * Q.z)) (Q.x * (P.z * P.z)) = true)
-    (hs : ¬FieldOps.beq (P.y * Q.z * (Q.z * Q.z)) (Q.y * P.z * (P.z * P.z)) = true) :
+    (hu : FieldOps.beq (P.x * FieldOps.square Q.z) (Q.x * FieldOps.square P.z) = true)
+    (hs :
+      ¬FieldOps.beq (P.y * Q.z * FieldOps.square Q.z) (Q.y * P.z * FieldOps.square P.z) = true) :
     addGeneral P Q = zero := by
   rw [addGeneral]
   exact (ite_eq_left hu).trans (ite_eq_right hs)
 
 /-- The first branch test of the general formulas, on the images. -/
 private theorem beq_x_iff {P Q : G1 F} :
-    FieldOps.beq (P.x * (Q.z * Q.z)) (Q.x * (P.z * P.z)) = true
+    FieldOps.beq (P.x * FieldOps.square Q.z) (Q.x * FieldOps.square P.z) = true
       ↔ repOf e P 0 * repOf e Q 2 ^ 2 = repOf e Q 0 * repOf e P 2 ^ 2 := by
-  rw [e.beq_iff, e.map_mul, e.map_mul, e.map_mul, e.map_mul]
+  rw [e.beq_iff, e.map_mul, e.map_mul, e.map_square, e.map_square]
   simp only [repOf_x, repOf_z, sq]
 
 /-- The second branch test of the general formulas, on the images. -/
 private theorem beq_y_iff {P Q : G1 F} :
-    FieldOps.beq (P.y * Q.z * (Q.z * Q.z)) (Q.y * P.z * (P.z * P.z)) = true
+    FieldOps.beq (P.y * Q.z * FieldOps.square Q.z) (Q.y * P.z * FieldOps.square P.z) = true
       ↔ repOf e P 1 * repOf e Q 2 ^ 3 = repOf e Q 1 * repOf e P 2 ^ 3 := by
   rw [e.beq_iff]
   push_map
@@ -428,8 +430,9 @@ private theorem isUnit_scale (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hz1 : ¬FieldOps
 private theorem valid_addGeneral (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Valid e b P)
     (hQ : Valid e b Q) (hz1 : ¬FieldOps.isZero P.z = true) (hz2 : ¬FieldOps.isZero Q.z = true) :
     Valid e b (addGeneral P Q) := by
-  by_cases hu : FieldOps.beq (P.x * (Q.z * Q.z)) (Q.x * (P.z * P.z)) = true
-  · by_cases hs : FieldOps.beq (P.y * Q.z * (Q.z * Q.z)) (Q.y * P.z * (P.z * P.z)) = true
+  by_cases hu : FieldOps.beq (P.x * FieldOps.square Q.z) (Q.x * FieldOps.square P.z) = true
+  · by_cases hs :
+      FieldOps.beq (P.y * Q.z * FieldOps.square Q.z) (Q.y * P.z * FieldOps.square P.z) = true
     · rw [addGeneral_of_dbl hu hs]
       exact valid_double e b hP
     · rw [addGeneral_of_opp hu hs]
@@ -457,9 +460,10 @@ theorem toPoint_add [DecidableEq K] (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Vali
   by_cases hz2 : FieldOps.isZero Q.z = true
   · rw [add_of_right_zero hz1 hz2, toPoint_of_isZero e b hz2, add_zero]
   rw [toPoint, repOf_add e hz1 hz2, ← toPoint]
-  by_cases hu : FieldOps.beq (P.x * (Q.z * Q.z)) (Q.x * (P.z * P.z)) = true
+  by_cases hu : FieldOps.beq (P.x * FieldOps.square Q.z) (Q.x * FieldOps.square P.z) = true
   · have hx := (beq_x_iff e).mp hu
-    by_cases hs : FieldOps.beq (P.y * Q.z * (Q.z * Q.z)) (Q.y * P.z * (P.z * P.z)) = true
+    by_cases hs :
+        FieldOps.beq (P.y * Q.z * FieldOps.square Q.z) (Q.y * P.z * FieldOps.square P.z) = true
     · -- The same point: the formulas double it.
       have hequiv : repOf e P ≈ repOf e Q :=
         equiv_of_X_eq_of_Y_eq (z_ne_zero e hz1) (z_ne_zero e hz2) hx ((beq_y_iff e).mp hs)
