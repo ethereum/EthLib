@@ -75,7 +75,29 @@ That reduction holds in a model of the target group of the pairing.
 
 The binding of the batch check of blobs reduces to a challenge that is a root of a nonzero polynomial, or to recovery of the setup secret.
 That reduction holds for algebraic adversaries, with the challenge hash modelled as a random oracle.
+The secret-recovery term is in turn at most the advantage of one reduction against the bilinear strong Diffie–Hellman problem, in a model of the target group of the pairing.
 No theorem covers the code that runs, the C boundary, or timing.
+
+For the consensus layer, `lake exe proof-coverage` measures how far the theorems reach at each fork of the beacon chain.
+A rule is touched at a fork when the statement of a theorem mentions it, and the theorem holds at that fork.
+It is characterized there when `coverage/characterizes.txt` names a theorem that states its main contract.
+A characterized rule is touched too.
+`CONTRIBUTING.md` explains both tiers, and the table below counts them from `scripts/proof_coverage_baseline.txt`.
+The report itself also prints the number of rules at each fork.
+
+<!-- generated: proof-coverage -->
+| Fork | Rules touched | Rules characterized |
+|------|------|------|
+| phase0 | 1315 | 8 |
+| altair | 1333 | 8 |
+| bellatrix | 1334 | 8 |
+| shapella | 1345 | 8 |
+| dencun | 1354 | 8 |
+| pectra | 1374 | 8 |
+| fusaka | 1381 | 8 |
+| glamsterdam | 1500 | 9 |
+| hegota | 1489 | 9 |
+<!-- end generated -->
 
 ### XMSS
 
@@ -262,8 +284,7 @@ Two legal progressive containers with one root have one layout, or `findMixinCol
 `hashTreeRootM_progressiveContainer_layouts_separate` states the same for any hash with 32-byte digests.
 It computes the roots of the all-zero subtrees with that hash too.
 
-No theorem bounds the probability of finding a collision in a multiproof.
-Its verifier is the Merkle rebuild, which takes the node hash as an argument, but no experiment runs it against the oracle.
+`prEvent_multiproofWins_le`, below, bounds the probability that two different lists of leaves of one multiproof request rebuild one root, with the node hash a random oracle.
 
 `Proofs/Ssz/RandomOracle.lean` bounds whole-value binding, with the node hash a random oracle.
 The specification hashes with SHA-256.
@@ -312,6 +333,28 @@ The climbs queried every message they hash, so the cache holds both, by `cached_
 `prEvent_branchWins_le_of_adversary` states the bound with `Q = q + 2 * depth`, for an adversary that makes at most `q` queries.
 Beyond the adversary's own queries, `Q` grows with the depth, not with the `2^depth` leaves.
 With SHA-256 in place of the oracle, `branchWins_sha256_iff` shows that a win is two different leaves that `isValidMerkleBranch` accepts at one depth, index and root.
+
+`Proofs/Ssz/MultiproofRandomOracle.lean` bounds the binding of `verifyMerkleMultiproof`, the multiproof check, with the same oracle.
+A bound `size` is fixed before the run.
+An adversary outputs a request, a list of generalized indices, and two multiproofs of it, each with its leaves and its helper nodes.
+The extraction rebuilds the root of each multiproof from the positions of the request, as the check does.
+Every node hash is an oracle call.
+It rebuilds nothing for a request whose indices and helper indices number more than `size`.
+The adversary wins when the two lists of leaves differ, each has one leaf per index, and both rebuilds reach one root.
+A win needs no count of the helper nodes, so it also covers multiproofs that the check refuses for that count.
+`collision_of_extractMultiproofs` shows that every win leaves two different cached inputs with one answer.
+Its proof applies `verify_binding` (`Cryptography/Proofs/Merkle/Multiproof/Binding.lean`) to a table that agrees with the cache, and takes the pairs that `findMultiproofCollision` returns.
+Each pair is one that its own rebuild hashed, by `findMultiproofCollision_recorded`.
+A rebuild replayed from the cache caches every pair it hashes, by `rebuild_go_of_replay` (`Cryptography/Proofs/Merkle/RandomOracle/Multiproof.lean`).
+`prEvent_experimentWith_le` then gives `prEvent_multiproofWins_le`, which bounds a win by `Q^2 / N`.
+A rebuild from `n` given nodes hashes at most `n - 1` times, by `isQueryBoundP_rebuild_go` in the same file.
+So the extraction makes at most `2 * (size - 1)` queries, by `extractMultiproofs_queryBound`.
+`prEvent_multiproofWins_le_of_adversary` states the bound with `Q = q + 2 * (size - 1)` and `N = 2^256`, for an adversary that makes at most `q` queries.
+For `k` indices at one depth `d`, the helper indices number at most `k * d`, by `getHelperIndices_length_le_depth` (`Proofs/Ssz/Merkle/MultiproofSize.lean`), so `size = k * (d + 1)` admits every such request.
+With SHA-256 in place of the oracle, `multiproofWins_sha256_of_verify` shows that two multiproofs with different leaves win.
+It needs `verifyMerkleMultiproof` to accept both for one request and one root, with at most `size` indices and helper indices.
+The converse fails: a win may carry more helper nodes than the check accepts.
+The bound covers two openings of one request; two requests that share an index are bound only by `verifyMerkleMultiproof_overlap_binding`, with no probability bound.
 
 `Consensus/Proofs/DataAvailability/BlobRandomOracle.lean` composes this bound with `verifyBlobSidecarInclusionProof`, the inclusion check of blob sidecars.
 The preset and the fork are fixed before the run, and an adversary outputs two blob sidecars.
@@ -1646,7 +1689,11 @@ The reduction runs the same experiment once and recovers `τ` from roots of repr
 The secret-recovery term is defined on the full setup powers.
 Root search is noncomputable in the model; no theorem proves the reduction's running time.
 `length_setupSecretCandidates_le_points` (`Proofs/Kzg/BlobBindingReduction.lean`) bounds the roots that the search tests by 4096 for each annotated point, plus 4096 for the final batch error.
-No theorem relates the secret-recovery term to the discrete logarithm or the strong Diffie–Hellman problem.
+`blobBindingAdvantage_le_bsdh` (`Proofs/Kzg/BlobBindingBsdh.lean`) replaces the secret-recovery term by the advantage of one reduction against BSDH, Definition 1 of Wagner and Zapico, ePrint 2025/1683.
+A reduction that knows `τ` answers `c = τ - 1` and the generator of the target group, which represents `1 / (τ - c) = 1` (`setupSecretAdvantage_le_bsdhAdvantage`).
+That bound holds in a model of the target group of the pairing.
+The secret-recovery term is itself the advantage against the `(4095, 64)` discrete logarithm problem on the full setup powers.
+That problem is weaker than BSDH, so the bound with BSDH rests on a stronger assumption, the one of the PeerDAS games.
 `verifyBlobKzgProofBatch_ok_iff_symbolic` (`Proofs/Kzg/BlobBindingVerifier.lean`) connects the game's scalar acceptance equation to the concrete verifier at its concrete challenges.
 `verifyBlobKzgProofBatch_ok_iff_game` specializes it to openings that match the submission, as every successful challenge loop gives: when each blob challenge is the concrete hash of its blob and commitment, those openings are the concrete batch.
 
@@ -2713,7 +2760,13 @@ Two states with one state root give every address the same account, and at every
 Storage at an address without an account is outside `stateEntries`, and code is committed only through `codeHash`.
 So the state root binds no storage at an address without an account, does not separate a key set to `0` from an unset key, and binds nothing in the code map beyond each account's `codeHash`.
 The storage and state searches are proved to return only collisions, and none for an input compared with itself.
-No theorem bounds the probability of finding two storages or two states with one root that differ.
+`Execution/Proofs/State/RandomOracle.lean` bounds the probability of finding two storages or two states with one root that differ, with the hash a random oracle.
+The storage and state roots take their hash in any monad, so the experiments run the roots of the specification with a hash that queries the oracle.
+`prEvent_storageWins_le` bounds by `Q^2 / 2^256` the probability that an adversary outputs two storages with one root that give a key two words.
+`prEvent_stateWins_le` gives the same bound for two states with one root that differ at an address, in its account or in a word of its storage.
+Each experiment then queries the inputs of the binding search at every key of either storage, or at every address of either state.
+So the pair that `findStorageCollision` or `findStateCollision` returns, run with a table that agrees with the cache, is a collision of the oracle.
+As for the trie bound below, `Q` counts every hash call of the experiment, the extraction's included.
 The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, with the RLP encoding of each index as its key.
 `indexedEntries_nodup` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
 Applied to the plain tries of two lists with these distinct keys, `root_binding` shows that two lists with one root give every key one value.
@@ -3989,9 +4042,13 @@ The theorem holds at every fork; from Gloas it also assumes that every honest st
 `HeldBlockStateRootsNonzero` assumes that their blocks have nonzero state roots.
 Block agreement between honest stores is not assumed: `Store.blocks_agree_or_collision` splits it from the collision disjunct.
 `CallerHeadAt` assumes that at the start of the next epoch the caller's up-to-date store has a head.
-The theorem assumes this read, since its conclusion has no evidence alternative.
+The theorem assumes this read, since its conclusion has the collision but no `HistoricalDirectSafetyEvidence` alternative.
 `Execution.callRolloverRead_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HonestHeads.lean` derives it for the caller of a checked call at every fork, up to a collision of two honest stores or `HistoricalDirectSafetyEvidence` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
 It also takes, gated on Gloas, the anchor registry's room (`AnchorRegistryRoom`), `Config.HeadWeightsFit`, `CheckpointHeadWeightCeiling` and `Config.CommitteeWindowsFit`.
+`Execution.honestTargetVotes_signed_of_checked_or_evidence`, in the same file, adds that alternative and derives the read from `Execution.callRolloverRead_or_evidence` at the start of the next epoch.
+It also derives the lookahead bound from `DirectSafety.Parameters`, and from Gloas the registry bound through `AnchorRegistryRoom`.
+In place of these three premises it takes the premises of that read, among them `CheckpointStakeCeiling`, `Config.ProposerScoreFits`, `HeldRunStakeFloor` and `HeldTerminalStakeFloor`.
+Its conclusion adds `HistoricalDirectSafetyEvidence` to the collision.
 The window of that head over the target's epoch is derived: the theorem takes `Config.CommitteeWindowsFit` and reads it through `Store.getCommitteesBetweenSlots_exists`.
 The head's state is held, and the window ends before the current slot.
 The theorem also assumes `AssignmentWindowAgreement`, `ValidatedDutyVotes`, `Prompt` and `DelayFits`.
@@ -4051,7 +4108,9 @@ Each accepted root has a realized justification at most one epoch before its own
 An accepted root of an earlier epoch is realized as justified by the head's state.
 `CallRolloverRead` is the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
 `Execution.rootInFilteredTree_of_checked` and `Execution.rootViableAt_of_checked` assume it.
-The headlines and `Execution.confirmedRoot_covers` derive it through `Execution.callRolloverRead_or_evidence`, so they do not take it.
+Their companions `Execution.rootInFilteredTree_of_checked_or_evidence` and `Execution.rootViableAt_of_checked_or_evidence` derive it through `Execution.callRolloverRead_or_evidence`, and their conclusions add `HistoricalDirectSafetyEvidence`.
+In place of the read they take its premises: `CheckpointStakeCeiling`, `Config.ProposerScoreFits` and, from Gloas, `Config.HeadWeightsFit` and `CheckpointHeadWeightCeiling`.
+The headlines and `Execution.confirmedRoot_covers` derive it through `Execution.rootViableAt_of_checked_or_evidence`, so they do not take it.
 `QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
 Its alternative is a collision of two honest stores.
 `Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, from Fulu.
@@ -8527,6 +8586,8 @@ The codeword searches of each scheme share the bullet of that scheme:
   The roots of the all-zero subtrees, constants of the specification, are oracle answers in the model.
   The type is fixed before the run, except in the layout bound, where the adversary picks both types.
   The branch bound fixes the depth before the run, and its adversary picks the index, the leaves and the branches.
+  The multiproof bound fixes a size before the run, and its adversary picks the request, both lists of leaves and both lists of helper nodes.
+  A request whose indices and helper indices number more than that size is not rebuilt, so it cannot win.
   The blob sidecar bound fixes the preset and the fork before the run, and its adversary picks both sidecars.
   The deposit bound reads no preset or fork, and its adversary picks the index, the deposit root and both deposits.
   The data column bound fixes the preset and the fork before the run, and its adversary picks both partial headers.
@@ -8539,6 +8600,7 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of SHA-256.
   The bound on signing roots runs the same experiment, so it rests on the same oracle.
 - Trie root bound: Keccak-256 is a random oracle on byte strings, shared by the keys and the nodes of the trie.
+  The same assumption carries the storage and state root bounds, `prEvent_storageWins_le` and `prEvent_stateWins_le`.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -8884,6 +8946,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/ProjectionInLaw.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
+- `EthLib/Cryptography/Proofs/RandomOracleDisjoint.lean`
 - `EthLib/Cryptography/Proofs/RandomOracleFromCache.lean`
 - `EthLib/Cryptography/Proofs/RandomOracleTable.lean`
 - `EthLib/Cryptography/Proofs/RandomOracleWithCoins.lean`
@@ -8897,6 +8960,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Vrf/`
 - `EthLib/Cryptography/Proofs/Wots/`
 - `EthLib/Cryptography/Proofs/Xmss/`
+- `EthLib/Execution/Proofs/State/`
 - `EthLib/Execution/Proofs/Trie/`
 - `EthLib/Serialization/Proofs/Ssz/`
 

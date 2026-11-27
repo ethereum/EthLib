@@ -220,6 +220,17 @@ jobs:
         if: ${{ !cancelled() }}
         run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_theorems_baseline.py
 
+      # Each pair of a consensus rule and a beacon fork keeps the tier that
+      # scripts/proof_coverage_baseline.txt records, so a change of coverage is a reviewed line.
+      - name: proof coverage
+        if: ${{ !cancelled() }}
+        run: lake exe proof-coverage --check
+
+      # The report must grade exactly the pairs that its fixtures plant.
+      - name: proof coverage fixtures
+        if: ${{ !cancelled() }}
+        run: scripts/test_proof_coverage.sh
+
       - name: module system regression
         if: ${{ !cancelled() }}
         run: bash scripts/test_module_system.sh

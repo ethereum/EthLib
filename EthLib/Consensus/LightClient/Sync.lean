@@ -186,10 +186,11 @@ instance : ToString LightClientError where
         s!"does not reach state root {hexString stateRoot.toList}"
     | .unexpectedNextSyncCommittee key =>
       s!"expected the zero next sync committee, got another with aggregate key " ++
-        hexString key.toList
+        hexString key.bytes.toList
     | .conflictingNextSyncCommittee store update =>
       s!"the next sync committee differs from the store's: aggregate keys " ++
-        s!"{hexString store.toList} in the store and {hexString update.toList} in the update"
+        s!"{hexString store.bytes.toList} in the store and " ++
+        s!"{hexString update.bytes.toList} in the update"
     | .invalidNextSyncCommitteeBranch gindex stateRoot =>
       s!"the next sync committee branch at generalized index {gindex} " ++
         s!"does not reach state root {hexString stateRoot.toList}"

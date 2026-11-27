@@ -687,4 +687,16 @@ theorem updatesJson_exists_ok [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     simp [apiJsonOr500, written, Except.mapError, pure, Except.pure] at refused
   · exact ⟨_, rfl⟩
 
+/-! ## Error codes -/
+
+/-- Two errors of chunks with one code come from one constructor. -/
+theorem ChunkError.code_injective (e₁ e₂ : ChunkError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- An error of bounds has a code above 300, and every other error a code from 1 to 7.
+  cases e₁ <;> cases e₂ <;> simp only [ChunkError.code] at h <;> try rfl
+  all_goals first
+    | (have := BoundsError.code_gt ‹_›; rw [h] at this; exact absurd this (by decide))
+    | (have := BoundsError.code_gt ‹_›; rw [← h] at this; exact absurd this (by decide))
+    | exact absurd h (by decide)
+
 end EthLib.Consensus.BeaconApi

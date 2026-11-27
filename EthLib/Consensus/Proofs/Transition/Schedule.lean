@@ -15,9 +15,9 @@ When the forks of the configuration start in order, it still reaches the fork of
 
 So a run that starts on the schedule stays on it.
 
-A Phase 0 genesis state is on it unless Altair starts at once.
+When the forks start in order, a genesis state reaches it through the upgrades due at its slot.
 
-Then a run from genesis stays on it.
+A run from genesis, after those upgrades, then stays on it.
 -/
 
 @[expose] public section
@@ -223,15 +223,15 @@ theorem onSchedule_iff_of_phase0 (ordered : config.ForkEpochsOrdered)
               (by decide)) started))
         | simp [Config.activationEpoch] at starts
 
-/-- When the forks start in order, a run from a Phase 0 genesis stays on the schedule.
+/-- When the forks start in order, a run from genesis stays on the schedule.
 
-It needs Altair to start after epoch zero, since a run applies no upgrade at genesis. -/
+The run starts after the upgrades due at the slot of genesis. -/
 theorem Run.onSchedule_of_genesis (ordered : config.ForkEpochsOrdered)
-    {g x : ForkedBeaconState preset} (genesis : Genesis config checks g)
-    (phase0 : g.fork = .phase0) (altair : 0 < config.ALTAIR_FORK_EPOCH)
-    (run : Run config checks g x) : OnSchedule config x := by
-  obtain ⟨_, _, _, _, initialized⟩ := genesis
+    {g launched x : ForkedBeaconState preset} (genesis : Genesis config checks g)
+    (upgraded : processUpgrades config checks g = .ok launched)
+    (run : Run config checks launched x) : OnSchedule config x := by
+  obtain ⟨_, _, _, phase0, initialized⟩ := genesis
   have zero := (initializeBeaconStateFromEth1_checkpoints initialized).1
-  exact run.onSchedule ordered ((onSchedule_iff_of_phase0 ordered phase0 zero).mpr altair)
+  exact run.onSchedule ordered (processUpgrades_onSchedule_of_phase0 ordered phase0 zero upgraded)
 
 end EthLib.Consensus

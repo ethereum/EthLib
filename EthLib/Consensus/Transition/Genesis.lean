@@ -36,6 +36,10 @@ open Base Uint64 Serialization.Ssz Serialization.Ssz.SszType Cryptography.Bls
 
 variable {preset : Preset} {fork : Base.Fork}
 
+/-- Phase 0 is before Altair. -/
+theorem lt_altair_of_phase0 (phase0 : fork = .phase0) : fork < .altair :=
+  phase0 ▸ (by decide : Fork.phase0 < .altair)
+
 /-- A field that Altair or a later fork adds has no value before Altair. -/
 theorem not_since_of_before_altair {added : Base.Fork} (before : fork < .altair)
     (later : .altair ≤ added) (since : added ≤ fork) : False :=
@@ -188,14 +192,18 @@ def activateAtGenesis (state : BeaconState preset fork) (index : Nat) :
     else validator
   liftAccessor (state.setValidatorAt index validator)
 
-/-- The candidate genesis state of a block of the proof-of-work chain, before Altair.
+/-- The candidate genesis state of a block of the proof-of-work chain, at Phase 0.
 
 It takes the hash and the time of the block, and every deposit up to and including the block.
 
 The genesis time and the deposit count must fit in 64 bits, and every deposit must be valid. -/
 def initializeBeaconStateFromEth1 (config : Config) (checks : SignatureChecks)
     (eth1BlockHash : Hash32) (eth1Timestamp : UInt64) (deposits : Array Deposit)
-    (before : fork < .altair) : Except TransitionError (BeaconState preset fork) := do
+    (phase0 : fork = .phase0) : Except TransitionError (BeaconState preset fork) := do
+  -- Genesis is defined at Phase 0 only, the first consensus fork.
+  --
+  -- The forks of the timeline before Altair also hold execution forks, with no beacon genesis.
+  have before := lt_altair_of_phase0 phase0
   have beforeHeze : fork < .hegota := Nat.lt_trans before (by decide)
   -- The genesis time is `t + GENESIS_DELAY`, for the time `t` of the block.
   let genesisTime ← liftAccessor (liftArith (addChecked eth1Timestamp config.GENESIS_DELAY))

@@ -146,6 +146,149 @@ theorem getIndexedPayloadAttestation_sorted {config : Config} {state : BeaconSta
   rw [indices, List.mem_mergeSort] at member
   exact mem_of_ptcAttesters member
 
+/-- A list of indices equals its sort exactly when each index is at most the next. -/
+theorem eq_mergeSort_iff_pairwise {indices : List ValidatorIndex} :
+    indices = indices.mergeSort (· ≤ ·) ↔ indices.Pairwise (· ≤ ·) := by
+  constructor
+  · intro sorted
+    rw [sorted]
+    exact mergeSort_sorted indices
+  · intro sorted
+    exact (List.mergeSort_of_pairwise (by simpa using sorted)).symm
+
+/-- An indexed vote with no signers, or with signers out of order, is invalid in every state. -/
+theorem isValidIndexedPayloadAttestation_eq_false {config : Config} {checks : SignatureChecks}
+    {state : BeaconState preset fork} {attestation : IndexedPayloadAttestation preset}
+    (malformed : attestation.attestingIndices.data.toList = [] ∨
+      ¬attestation.attestingIndices.data.toList.Pairwise (· ≤ ·)) :
+    isValidIndexedPayloadAttestation config checks state attestation = .ok false := by
+  have guard := malformed.imp id fun unsorted same => unsorted (eq_mergeSort_iff_pairwise.mp same)
+  simp only [isValidIndexedPayloadAttestation, ite_eq_left guard]
+  rfl
+
+/-- An indexed vote fails with the first of its indices past the registry.
+
+The indices must be sorted, so the check reaches the lookup of the keys. -/
+theorem isValidIndexedPayloadAttestation_eq_error {config : Config} {checks : SignatureChecks}
+    {state : BeaconState preset fork} {attestation : IndexedPayloadAttestation preset}
+    {before after : List ValidatorIndex} {index : ValidatorIndex}
+    (sorted : attestation.attestingIndices.data.toList.Pairwise (· ≤ ·))
+    (split : attestation.attestingIndices.data.toList = before ++ index :: after)
+    (named : ∀ earlier ∈ before, earlier.toNat < state.validators.data.size)
+    (outside : state.validators.data.size ≤ index.toNat) :
+    isValidIndexedPayloadAttestation config checks state attestation =
+      .error (.accessor (.indexOutOfRange index)) := by
+  have guard : ¬(attestation.attestingIndices.data.toList = [] ∨
+      attestation.attestingIndices.data.toList ≠
+        attestation.attestingIndices.data.toList.mergeSort (· ≤ ·)) := by
+    rintro (empty | unsorted)
+    · simp [split] at empty
+    · exact unsorted (eq_mergeSort_iff_pairwise.mpr sorted)
+  simp only [isValidIndexedPayloadAttestation, ite_eq_right guard]
+  rw [Array.mapM_eq_mapM_toList, List.toList_toArray, split, List.mapM_append]
+  -- The keys of the indices before the first one past the registry are read.
+  obtain ⟨keys, read⟩ := mapM_exists_ok (xs := before) (f := fun index =>
+      liftAccessor (getValidator state index) >>= fun validator => pure validator.pubkey)
+    fun earlier member => by
+      simp [getValidator, Array.getElem?_eq_getElem (named earlier member), liftAccessor,
+        Except.mapError, bind, Except.bind, pure, Except.pure]
+  rw [read]
+  simp [List.mapM_cons, getValidator, Array.getElem?_eq_none outside, liftAccessor,
+    Except.mapError, bind, Except.bind, Functor.map, Except.map]
+
+/-- The keys of a list of indices are read exactly when each index names a validator.
+
+They are then the keys of those validators, in order. -/
+theorem mapM_getValidator_pubkey_eq_ok_iff {state : BeaconState preset fork}
+    {indices : List ValidatorIndex} {keys : List Cryptography.Bls.BLSPubkey} :
+    indices.mapM (fun index =>
+        liftAccessor (getValidator state index) >>= fun validator => pure validator.pubkey) =
+        .ok keys ↔
+      (∀ index ∈ indices, index.toNat < state.validators.data.size) ∧
+        keys = indices.filterMap fun index =>
+          (state.validators.data[index.toNat]?).map (·.pubkey) := by
+  induction indices generalizing keys with
+  | nil => simp [pure, Except.pure, eq_comm]
+  | cons first rest ih =>
+    rw [mapM_cons_ok]
+    by_cases inside : first.toNat < state.validators.data.size
+    · -- The first key is read, so the rest decides.
+      have head : (liftAccessor (getValidator state first) >>= fun validator =>
+          pure validator.pubkey : Except TransitionError _) =
+          .ok state.validators.data[first.toNat].pubkey := by
+        simp [getValidator, inside, liftAccessor, Except.mapError, bind, Except.bind, pure,
+          Except.pure]
+      simp only [head, Except.ok.injEq, ih, List.forall_mem_cons, inside, true_and,
+        List.filterMap_cons, Array.getElem?_eq_getElem inside, Option.map_some]
+      constructor
+      · rintro ⟨_, _, rfl, ⟨all, rfl⟩, rfl⟩
+        exact ⟨all, rfl⟩
+      · rintro ⟨all, rfl⟩
+        exact ⟨_, _, rfl, ⟨all, rfl⟩, rfl⟩
+    · -- The first key is missing, so the read fails.
+      have head : (liftAccessor (getValidator state first) >>= fun validator =>
+          pure validator.pubkey : Except TransitionError _) =
+          .error (.accessor (.indexOutOfRange first)) := by
+        simp [getValidator, Array.getElem?_eq_none (Nat.le_of_not_lt inside), liftAccessor,
+          Except.mapError, bind, Except.bind]
+      simp [head, inside]
+
+/-- An indexed vote is valid exactly when its sorted signers have keys that verify its signature.
+
+The indices are nonempty and sorted, and each names a validator of the registry.
+
+The domain of the committee at the epoch of the vote and the signing root are computed.
+
+The aggregate check accepts the keys of the indices, in order, on that root and the signature. -/
+theorem isValidIndexedPayloadAttestation_eq_ok_true_iff {config : Config}
+    {checks : SignatureChecks} {state : BeaconState preset fork}
+    {attestation : IndexedPayloadAttestation preset} :
+    isValidIndexedPayloadAttestation config checks state attestation = .ok true ↔
+      attestation.attestingIndices.data.toList ≠ [] ∧
+        attestation.attestingIndices.data.toList.Pairwise (· ≤ ·) ∧
+        (∀ index ∈ attestation.attestingIndices.data.toList,
+          index.toNat < state.validators.data.size) ∧
+        ∃ domain root, getDomain config state DOMAIN_PTC_ATTESTER
+            (some (computeEpochAtSlot preset attestation.data.slot)) = .ok domain ∧
+          computeSigningRoot attestation.data domain = .ok root ∧
+          checks.fastAggregateVerify
+            (attestation.attestingIndices.data.toList.filterMap fun index =>
+              (state.validators.data[index.toNat]?).map (·.pubkey)).toArray
+            (packBytes root) attestation.signature = true := by
+  by_cases guard : attestation.attestingIndices.data.toList = [] ∨
+      attestation.attestingIndices.data.toList ≠
+        attestation.attestingIndices.data.toList.mergeSort (· ≤ ·)
+  · -- Indices that are empty or out of order give `false`.
+    have malformed := guard.imp id fun unsorted sorted =>
+      unsorted (eq_mergeSort_iff_pairwise.mpr sorted)
+    rw [isValidIndexedPayloadAttestation_eq_false malformed]
+    simp only [Except.ok.injEq, Bool.false_eq_true, false_iff]
+    rintro ⟨nonempty, sorted, -⟩
+    exact malformed.elim nonempty (· sorted)
+  · have nonempty : attestation.attestingIndices.data.toList ≠ [] := fun empty =>
+      guard (.inl empty)
+    have sorted := eq_mergeSort_iff_pairwise.mp (Classical.not_not.mp fun unsorted =>
+      guard (.inr unsorted))
+    simp only [isValidIndexedPayloadAttestation, ite_eq_right guard]
+    simp only [Array.mapM_eq_mapM_toList, ne_eq, nonempty, not_false_eq_true, sorted, true_and]
+    cases read : attestation.attestingIndices.data.toList.mapM (fun index =>
+        liftAccessor (getValidator state index) >>= fun validator => pure validator.pubkey) with
+    | error error =>
+      -- An index past the registry fails the read of the keys.
+      simp only [Functor.map, Except.map, bind, Except.bind, reduceCtorEq, false_iff]
+      rintro ⟨all, -⟩
+      rw [(mapM_getValidator_pubkey_eq_ok_iff.mpr ⟨all, rfl⟩)] at read
+      cases read
+    | ok keys =>
+      -- With every key read, the domain, the root and the aggregate check decide.
+      obtain ⟨all, rfl⟩ := mapM_getValidator_pubkey_eq_ok_iff.mp read
+      simp only [Functor.map, Except.map, bind_ok_iff, liftAccessor, liftSsz, mapError_ok_iff,
+        pure, Except.pure, Except.ok.injEq]
+      simp only [exists_eq_left']
+      exact ⟨fun ⟨domain, found, root, rooted, verified⟩ =>
+          ⟨all, domain, root, found, rooted, verified⟩,
+        fun ⟨_, domain, root, found, rooted, verified⟩ => ⟨domain, found, root, rooted, verified⟩⟩
+
 /-- A payload attestation changes nothing in the state. -/
 theorem processPayloadAttestation_eq {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}

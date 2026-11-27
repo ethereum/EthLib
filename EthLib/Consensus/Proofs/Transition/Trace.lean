@@ -32,14 +32,19 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 It need not be valid for launch. -/
 def Genesis (config : Config) (checks : SignatureChecks) (g : ForkedBeaconState preset) : Prop :=
-  ∃ hash time deposits before,
-    initializeBeaconStateFromEth1 config checks hash time deposits before = .ok g.state
+  ∃ hash time deposits phase0,
+    initializeBeaconStateFromEth1 config checks hash time deposits phase0 = .ok g.state
+
+/-- A genesis state built from deposits is at Phase 0. -/
+theorem Genesis.phase0 {g : ForkedBeaconState preset} (genesis : Genesis config checks g) :
+    g.fork = .phase0 :=
+  let ⟨_, _, _, phase0, _⟩ := genesis
+  phase0
 
 /-- A genesis state built from deposits is before Altair. -/
 theorem Genesis.before {g : ForkedBeaconState preset} (genesis : Genesis config checks g) :
     g.fork < .altair :=
-  let ⟨_, _, _, before, _⟩ := genesis
-  before
+  lt_altair_of_phase0 genesis.phase0
 
 private theorem header_deposit {fork : Fork} {before after : BeaconState preset fork}
     {early : fork < .hegota} {deposit : Deposit}
@@ -55,13 +60,15 @@ theorem genesis_header {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) :
     g.state.latestBlockHeader.slot = 0 ∧
       g.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 := by
-  obtain ⟨hash, time, deposits, before, initialized⟩ := genesis
+  obtain ⟨hash, time, deposits, phase0, initialized⟩ := genesis
   obtain ⟨time, root, deposited, activated, finalRoot, dep, act, stateEq⟩ :=
     initializeBeaconStateFromEth1_ok initialized
   have depositedHeader : deposited.latestBlockHeader =
-      (emptyGenesisState config before time hash deposits.size.toUInt64 root).latestBlockHeader :=
+      (emptyGenesisState config (lt_altair_of_phase0 phase0) time hash deposits.size.toUInt64
+        root).latestBlockHeader :=
     foldlM_ok_invariant (fun s => s.latestBlockHeader =
-      (emptyGenesisState config before time hash deposits.size.toUInt64 root).latestBlockHeader)
+      (emptyGenesisState config (lt_altair_of_phase0 phase0) time hash deposits.size.toUInt64
+        root).latestBlockHeader)
       (fun _ _ _ same ok => by
         simp only [genesisDeposit, bind_ok_iff] at ok
         obtain ⟨_, _, ok⟩ := ok

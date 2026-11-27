@@ -12,6 +12,7 @@ from ethlib.cryptography.kzg import BYTES_PER_BLOB
 from ethlib.networking import snappy
 from raising import raises
 
+from . import rejections
 from .containers import FORKS
 from .test_data_column import replacements
 
@@ -262,6 +263,17 @@ def run_case(preset: str, fork: str, case: Path, compliance: bool = False) -> No
             assert len(reads) == 1, (index, reads)
             outcome = reads[0]
             assert (outcome is None) == step.get("valid", True), (index, step, outcome)
+            # The source rejects an invalid step where the helper of its step catches the failure.
+            if outcome is not None:
+                assert isinstance(outcome, consensus.ForkChoiceError), (index, outcome)
+                if compliance:
+                    caught = rejections.CAUGHT_BY_COMPLIANCE
+                elif "block" in step:
+                    caught = rejections.CAUGHT_BY_BLOCK_STEP
+                else:
+                    caught = rejections.CAUGHT
+                kind = rejections.kind_of_fork_choice(outcome.code, str(outcome))
+                rejections.check(kind, caught, (case, index), str(outcome))
             # The helper's valid block cases require every carried handler to succeed too.
             if outcome is None and not compliance:
                 assert all(result is None for group in groups for result in group[1:]), (

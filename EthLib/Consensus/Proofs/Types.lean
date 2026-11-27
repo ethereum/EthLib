@@ -6,9 +6,11 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 /-!
 # `Consensus.Proofs.Types`
 
-The SSZ forms of a KZG commitment, a KZG proof and a versioned hash keep the laws of their bytes.
+The SSZ forms of four structures around bytes keep the laws of those bytes.
 
-Each is a structure around its bytes, so it encodes, decodes and roots as those bytes.
+They are a BLS public key, a KZG commitment, a KZG proof and a versioned hash.
+
+Each encodes, decodes and roots as its bytes.
 -/
 
 @[expose] public section
@@ -16,6 +18,10 @@ Each is a structure around its bytes, so it encodes, decodes and roots as those 
 namespace EthLib.Consensus
 
 open Serialization.Ssz
+
+instance : LawfulSszType Cryptography.Bls.BLSPubkey :=
+  .wrapper Cryptography.Bls.BLSPubkey.mk Cryptography.Bls.BLSPubkey.bytes
+    (fun _ => rfl) (fun _ => rfl)
 
 instance : LawfulSszType Cryptography.Kzg.VersionedHash :=
   .wrapper Cryptography.Kzg.VersionedHash.mk Cryptography.Kzg.VersionedHash.bytes
@@ -28,6 +34,12 @@ instance : LawfulSszType Cryptography.Kzg.KZGCommitment :=
 instance : LawfulSszType Cryptography.Kzg.KZGProof :=
   .wrapper Cryptography.Kzg.KZGProof.mk Cryptography.Kzg.KZGProof.bytes
     (fun _ => rfl) (fun _ => rfl)
+
+/-- The SSZ values of public keys are the values of their bytes. -/
+theorem map_toValue_blsPubkey (pubkeys : List Cryptography.Bls.BLSPubkey) :
+    pubkeys.map SszType.toValue = (pubkeys.map (·.bytes)).map SszType.toValue := by
+  rw [List.map_map]
+  rfl
 
 /-- The SSZ values of commitments are the values of their bytes. -/
 theorem map_toValue_kzgCommitment (commitments : List Cryptography.Kzg.KZGCommitment) :

@@ -299,6 +299,16 @@ theorem sameSizes_processEffectiveBalanceUpdates
     (fun _ _ _ sizes step => sizes.trans (sameSizes_updateEffectiveBalance step))
     (SameSizes.refl state) computed
 
+/-- A property that each successful update of one effective balance keeps holds after the pass.
+
+The step must keep it for every index, not only for the indices of the registry. -/
+theorem processEffectiveBalanceUpdates_invariant (P : BeaconState preset fork → Prop)
+    (step : ∀ current index next, P current →
+      updateEffectiveBalance current index = .ok next → P next)
+    (holds : P state) (computed : processEffectiveBalanceUpdates state = .ok after) : P after := by
+  unfold processEffectiveBalanceUpdates at computed
+  exact foldlM_ok_invariant P step holds computed
+
 /-! ## Registry updates and slashings -/
 
 theorem sameSizes_updateRegistryEntry {config : Config} {index : Nat}

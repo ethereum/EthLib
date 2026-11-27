@@ -63,10 +63,10 @@ def TwoRunsForgery.Wins (f : TwoRunsForgery preset) (pks : Fin n → ByteArray)
   -- The call is a header call of one of the two runs.
   f.call ∈ verifyCalls (f.shared.append f.left) ∪ verifyCalls (f.shared.append f.right) ∧
     -- It names an honest key, and no honest key with those bytes signed its message.
-    (∃ j, pks j = packBytes f.call.1) ∧
-    (∀ j, pks j = packBytes f.call.1 → (j, f.call.2.1) ∉ signed) ∧
+    (∃ j, pks j = packBytes f.call.1.bytes) ∧
+    (∀ j, pks j = packBytes f.call.1.bytes → (j, f.call.2.1) ∉ signed) ∧
     -- The check on bytes accepts it with the oracle's hash of the message.
-    byteVerify (packBytes f.call.1) (packBytes f.call.2.2) h = true
+    byteVerify (packBytes f.call.1.bytes) (packBytes f.call.2.2) h = true
 
 /-- The game for the secret scalars `a`: the forger's run, then the hash of the call's message. -/
 noncomputable def twoRunsExperimentAt (adversary : TwoRunsAdversary preset n)
@@ -101,8 +101,9 @@ A key that names no honest key gives index `0`.
 The game of two runs loses there, so the reading wins at least as often. -/
 noncomputable def TwoRunsAdversary.toMulti [NeZero n] (adversary : TwoRunsAdversary preset n) :
     MultiByteAdversary n where
-  main pks := (fun f => (if h : ∃ j, pks j = packBytes f.call.1 then Classical.choose h else 0,
-    f.call.2.1, packBytes f.call.2.2)) <$> adversary.main pks
+  main pks := (fun f =>
+    (if h : ∃ j, pks j = packBytes f.call.1.bytes then Classical.choose h else 0,
+      f.call.2.1, packBytes f.call.2.2)) <$> adversary.main pks
 
 /-! ## The assumption on the calls of two runs -/
 
@@ -110,7 +111,7 @@ noncomputable def TwoRunsAdversary.toMulti [NeZero n] (adversary : TwoRunsAdvers
 
 Only their single check is used here, and they accept no aggregate. -/
 noncomputable def hashChecks (H : ByteArray → G2Sub) : SignatureChecks where
-  verify key message signature := byteVerify (packBytes key) (packBytes signature) (H message)
+  verify key message signature := byteVerify (packBytes key.bytes) (packBytes signature) (H message)
   fastAggregateVerify _ _ _ := false
 
 /-- With the hash to `G2`, the single check is EthLib's. -/
@@ -122,7 +123,7 @@ theorem hashChecks_hashPoint_verify :
 /-- A key signed a message: it is no honest key, or an honest key with its bytes signed it. -/
 def HonestSigned (pks : Fin n → ByteArray) (signed : List (Fin n × ByteArray))
     (key : BLSPubkey) (message : ByteArray) : Prop :=
-  (∀ j, pks j ≠ packBytes key) ∨ ∃ j, pks j = packBytes key ∧ (j, message) ∈ signed
+  (∀ j, pks j ≠ packBytes key.bytes) ∨ ∃ j, pks j = packBytes key.bytes ∧ (j, message) ∈ signed
 
 /-- When the assumption on the header calls of two runs fails, one of their calls wins.
 
@@ -161,9 +162,9 @@ theorem exists_wins_of_not_bls_verifySoundOn (f : TwoRunsForgery preset)
 /-- A winning call is a winning byte forgery for the same hash and signing requests. -/
 theorem multiWins_of_wins [NeZero n] {f : TwoRunsForgery preset} {pks : Fin n → ByteArray}
     {signed : List (Fin n × ByteArray)} {h : G2Sub} (hw : f.Wins pks signed h) :
-    (if hj : ∃ j, pks j = packBytes f.call.1 then Classical.choose hj else 0,
+    (if hj : ∃ j, pks j = packBytes f.call.1.bytes then Classical.choose hj else 0,
       f.call.2.1) ∉ signed ∧
-    byteVerify (pks (if hj : ∃ j, pks j = packBytes f.call.1 then Classical.choose hj else 0))
+    byteVerify (pks (if hj : ∃ j, pks j = packBytes f.call.1.bytes then Classical.choose hj else 0))
       (packBytes f.call.2.2) h = true := by
   obtain ⟨-, hhonest, hfresh, hverify⟩ := hw
   rw [dite_eq_left hhonest]

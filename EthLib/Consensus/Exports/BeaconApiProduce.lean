@@ -4,6 +4,7 @@ public import EthLib.Base.Exports.PyDerive
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Consensus.BeaconApi.Produce
 public import EthLib.Consensus.Exports.Transition
+public import EthLib.Cryptography.Exports.Bls
 public import EthLib.Serialization.Exports.Ssz
 
 /-!

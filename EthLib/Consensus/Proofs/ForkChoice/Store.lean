@@ -1051,4 +1051,31 @@ theorem getCurrentSlot_getForkchoiceStore {config : Config}
           simp [Store.getCurrentSlot, computeSlotAtTimeMs_computeTimeAtSlotMs positive time,
             Except.mapError]
 
+/-- The clock reads a slot exactly when the store time is not before genesis.
+
+The slot duration must also be positive, and the slot is the elapsed time divided by it. -/
+theorem Store.getCurrentSlot_ok_iff {config : Config} {store : Store preset fork} {slot : Slot} :
+    store.getCurrentSlot config = .ok slot ↔
+      store.genesisTimeMs ≤ store.timeMs ∧ 0 < config.SLOT_DURATION_MS ∧
+        slot = (store.timeMs - store.genesisTimeMs) / config.SLOT_DURATION_MS := by
+  simp only [Store.getCurrentSlot, computeSlotAtTimeMs, Uint64.subChecked, Uint64.divChecked]
+  by_cases started : store.genesisTimeMs ≤ store.timeMs <;>
+    by_cases zero : config.SLOT_DURATION_MS = 0 <;>
+    simp [started, zero, UInt64.pos_iff_ne_zero, Except.mapError, bind, Except.bind, eq_comm]
+
+/-- A store time before genesis is an underflow of the clock. -/
+theorem Store.getCurrentSlot_of_before_genesis {config : Config} {store : Store preset fork}
+    (before : store.timeMs < store.genesisTimeMs) :
+    store.getCurrentSlot config =
+      .error (.arith (.underflow store.timeMs store.genesisTimeMs)) := by
+  simp [Store.getCurrentSlot, computeSlotAtTimeMs, Uint64.subChecked, UInt64.not_le.mpr before,
+    Except.mapError, bind, Except.bind]
+
+/-- From genesis on, a zero slot duration is a division by zero of the clock. -/
+theorem Store.getCurrentSlot_of_zero_duration {config : Config} {store : Store preset fork}
+    (started : store.genesisTimeMs ≤ store.timeMs) (zero : config.SLOT_DURATION_MS = 0) :
+    store.getCurrentSlot config = .error (.arith .divisionByZero) := by
+  simp [Store.getCurrentSlot, computeSlotAtTimeMs, Uint64.subChecked, Uint64.divChecked, started,
+    zero, Except.mapError, bind, Except.bind]
+
 end EthLib.Consensus

@@ -6,7 +6,7 @@ public import EthLib.Consensus.Transition.Genesis
 /-!
 # Proofs: the genesis of the beacon chain
 
-A candidate genesis state exists only before Altair.
+A candidate genesis state exists only at Phase 0.
 
 It satisfies the invariant that each valid block keeps:
 
@@ -97,17 +97,18 @@ It adds each deposit, then activates the validators.
 
 The result then takes some genesis validators root. -/
 theorem initializeBeaconStateFromEth1_ok {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
-    {deposits : Array Deposit} {before : fork < .altair} {after : BeaconState preset fork}
+    {deposits : Array Deposit} {phase0 : fork = .phase0} {after : BeaconState preset fork}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     ∃ (genesisTime : UInt64) (bodyRoot : Root)
       (deposited activated : BeaconState preset fork) (root : Root),
       -- It adds each deposit, then activates the validators.
       deposits.toList.zipIdx.foldlM
-          (genesisDeposit config checks (Nat.lt_trans before (by decide)) (deposits.map (·.data)))
-          (emptyGenesisState config before genesisTime eth1BlockHash deposits.size.toUInt64
-            bodyRoot) = .ok deposited ∧
+          (genesisDeposit config checks (Nat.lt_trans (lt_altair_of_phase0 phase0) (by decide))
+            (deposits.map (·.data)))
+          (emptyGenesisState config (lt_altair_of_phase0 phase0) genesisTime eth1BlockHash
+            deposits.size.toUInt64 bodyRoot) = .ok deposited ∧
         (List.range deposited.validators.data.size).foldlM activateAtGenesis deposited =
           .ok activated ∧
         -- The result then takes some genesis validators root.
@@ -127,15 +128,15 @@ The deposits and the activations keep the frame.
 
 The result then takes some genesis validators root. -/
 theorem initializeBeaconStateFromEth1_frame {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
-    {deposits : Array Deposit} {before : fork < .altair} {after : BeaconState preset fork}
+    {deposits : Array Deposit} {phase0 : fork = .phase0} {after : BeaconState preset fork}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     ∃ (genesisTime : UInt64) (bodyRoot : Root)
       (activated : BeaconState preset fork) (root : Root),
       -- The deposits and the activations keep the frame.
-      Frame (emptyGenesisState config before genesisTime eth1BlockHash deposits.size.toUInt64
-          bodyRoot) activated ∧
+      Frame (emptyGenesisState config (lt_altair_of_phase0 phase0) genesisTime eth1BlockHash
+          deposits.size.toUInt64 bodyRoot) activated ∧
         -- The result then takes some genesis validators root.
         after = { activated with genesisValidatorsRoot := root } := by
   obtain ⟨genesisTime, bodyRoot, _, activated, root, depositedOk, activatedOk, rfl⟩ :=
@@ -148,10 +149,10 @@ theorem initializeBeaconStateFromEth1_frame {eth1BlockHash : Hash32} {eth1Timest
 
 Its two justified checkpoints are the genesis epoch with the zero root. -/
 theorem initializeBeaconStateFromEth1_checkpoints {eth1BlockHash : Hash32}
-    {eth1Timestamp : UInt64} {deposits : Array Deposit} {before : fork < .altair}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit} {phase0 : fork = .phase0}
     {after : BeaconState preset fork}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     after.slot = GENESIS_SLOT ∧
       after.previousJustifiedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ ∧
@@ -163,10 +164,10 @@ theorem initializeBeaconStateFromEth1_checkpoints {eth1BlockHash : Hash32}
 
 Its finalized checkpoint is the genesis epoch with the zero root. -/
 theorem initializeBeaconStateFromEth1_finality {eth1BlockHash : Hash32}
-    {eth1Timestamp : UInt64} {deposits : Array Deposit} {before : fork < .altair}
+    {eth1Timestamp : UInt64} {deposits : Array Deposit} {phase0 : fork = .phase0}
     {after : BeaconState preset fork}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     after.justificationBits.bits = Vector.replicate _ false ∧
       after.finalizedCheckpoint = ⟨GENESIS_EPOCH, Vector.replicate 32 0⟩ := by
@@ -177,9 +178,9 @@ theorem initializeBeaconStateFromEth1_finality {eth1BlockHash : Hash32}
 
 The theorems on the state transition then apply to its chain, up to the first upgrade. -/
 theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
-    {deposits : Array Deposit} {before : fork < .altair}
+    {deposits : Array Deposit} {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok after) :
     Invariant after := by
   obtain ⟨_, _, _, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
@@ -188,7 +189,8 @@ theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Ti
   -- Each of its validators may withdraw no earlier than it exits.
   --
   -- Its checkpoints all have the genesis epoch, so they are in order and settled.
-  exact (frame.invariant (emptyGenesisState_invariant before _ _ _ _)).withGenesisValidatorsRoot
+  exact (frame.invariant (emptyGenesisState_invariant (lt_altair_of_phase0 phase0) _ _ _ _)
+    ).withGenesisValidatorsRoot
 
 /-- A candidate state launches the chain exactly when it is late enough.
 

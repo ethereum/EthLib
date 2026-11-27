@@ -604,7 +604,8 @@ private theorem processSlashings (ok : Consensus.processSlashings state = .ok af
 private theorem processEffectiveBalanceUpdates
     (ok : Consensus.processEffectiveBalanceUpdates state = .ok after) :
     SameSyncCommittees state after := by
-  apply foldlM (fun _ _ _ ok => ?_) ok
+  refine Consensus.processEffectiveBalanceUpdates_invariant (SameSyncCommittees state)
+    (fun _ _ _ before ok => before.trans ?_) (.refl state) ok
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, set⟩ := ok
   exact setValidatorAt set
@@ -798,12 +799,11 @@ private theorem CommitteeStep.trans {a b c : BeaconState preset fork}
 
 namespace SyncCommitteeKeys
 
-/-- Genesis initialization returns only a pre-Altair state, which has no sync committees. -/
+/-- Genesis initialization returns only a Phase 0 state, which has no sync committees. -/
 private theorem genesis {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) : SyncCommitteeKeys g.state := by
-  obtain ⟨_, _, _, before, -⟩ := genesis
   intro altair
-  exact (Nat.not_le_of_lt before altair).elim
+  exact (Nat.not_le_of_lt genesis.before altair).elim
 
 /-- Altair initializes both committees by a successful draw from the resulting registry. -/
 private theorem upgradeToAltair {pre : BeaconState preset .phase0}

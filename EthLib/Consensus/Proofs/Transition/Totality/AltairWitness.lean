@@ -108,7 +108,7 @@ def altairWitnessState : BeaconState Preset.mainnet .altair where
 
 /-- The key of the witness passes validation. -/
 theorem witnessKey_valid :
-    ∃ point, G1.keyValidatePoint witnessKey = .ok point := by
+    ∃ point, G1.keyValidatePoint witnessKey.bytes = .ok point := by
   open scoped Fr in
   obtain ⟨point, valid, -⟩ := G1.keyValidatePoint_compress_mul (a := 1) one_ne_zero
   exact ⟨point, by rw [witnessKey, Signatures.pointToPubkey_eq]; exact valid⟩
@@ -242,7 +242,7 @@ theorem processSlotsAcross_exists_ok_altairWitnessState {checks : SignatureCheck
   have epochs : slot.toNat / 32 - 74240 ≤ 289791 := by omega
   -- The one key of the registry passes validation.
   have keys : ∀ validator ∈ altairWitnessState.validators.data,
-      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey = .ok point := by
+      ∃ point, Cryptography.Bls.G1.keyValidatePoint validator.pubkey.bytes = .ok point := by
     intro validator member
     rw [witness_validators, Array.mem_singleton] at member
     subst member

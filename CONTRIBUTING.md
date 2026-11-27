@@ -574,6 +574,40 @@ scripts/test_check_theorems.sh
 uv run --no-project --python 3.12 python -m unittest scripts/test_check_theorems_baseline.py
 ```
 
+Then check which consensus rules the theorems reach, fork by fork:
+
+```bash
+lake exe proof-coverage --check
+```
+
+A rule is a definition that a person wrote in a specification module under `EthLib/Consensus/`, other than an instance or a field of a structure.
+The report grades each pair of a rule and a fork of the beacon chain in three tiers.
+Every pair is executable, because the rule runs at that fork.
+A pair is touched when the statement of a theorem in a property module mentions the rule, and the theorem holds at that fork.
+A pair is characterized when `coverage/characterizes.txt` claims that such a theorem states the main contract of the rule.
+The report reads statements only, never proofs, so a proof that unfolds a rule does not touch it.
+
+The forks at which a rule or a theorem holds come from its type.
+A binder such as `.altair ≤ fork`, `fork < .pectra` or `fork = .phase0` keeps the forks that the bound allows.
+A type with no fork variable holds at the forks that it names, such as `.glamsterdam`, or at every fork if it names none.
+Any other hypothesis on the fork alone, such as `fork ≠ .altair`, leaves the forks unread.
+Such a declaration counts at no fork, and `lake exe proof-coverage` lists it.
+
+Add a claim, a line with the rule and then the theorem, when the theorem states the whole result of the rule.
+A theorem of the form `rule … = .ok r ↔ …` usually does.
+A theorem that states one property of the result, such as the fields that a step leaves unchanged, stays touched.
+The report fails on a wrong claim:
+
+- the rule is no rule;
+- the theorem is no theorem of a property module;
+- the statement of the theorem does not mention the rule.
+
+`scripts/proof_coverage_baseline.txt` is the exact list of the pairs above executable, each with its tier.
+The check fails when a pair drops a tier, and also when one rises, so each change of coverage is a line that a reviewer reads.
+When the change is intended, run `lake exe proof-coverage --update`, then regenerate `SOUNDNESS.md` as below.
+
+When you change the report, also run `scripts/test_proof_coverage.sh`.
+
 Then check that `SOUNDNESS.md` still holds:
 
 ```bash

@@ -3837,8 +3837,7 @@ private theorem CapStep.effective {f : Fork} {s t : BeaconState preset f}
           preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v) →
         ScheduledFree s ((getCurrentEpoch s).toNat + 1) →
           ScheduledFree t ((getCurrentEpoch s).toNat + 1)) := by
-  unfold processEffectiveBalanceUpdates at ok
-  have result := foldlM_ok_invariant (fun t => CapStepR config s t ∧
+  have result := processEffectiveBalanceUpdates_invariant (fun t => CapStepR config s t ∧
     (preset.MAX_EFFECTIVE_BALANCE % preset.EFFECTIVE_BALANCE_INCREMENT = 0 →
       (∀ {h : Fork} (v : Validator),
         preset.MAX_EFFECTIVE_BALANCE ≤ withdrawalMaxEffectiveBalance preset h v) →
@@ -4858,14 +4857,14 @@ theorem minimum_cap
 private theorem genesis_assigned_queues {g : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) :
     AssignedPartials g.state ∧ AssignedTargets g.state ∧ AssignedProposers g.state := by
-  obtain ⟨_, _, _, before, initialized⟩ := genesis
+  have before := genesis.before
   refine ⟨?_, ?_, ?_⟩ <;> intro fork
   all_goals exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
 
 private theorem genesis_reached_queues {g : ForkedBeaconState preset} (reached : Prop)
     (genesis : Genesis (config := config) (checks := checks) g) :
     PartialsAt reached g.state ∧ TargetsAt reached g.state := by
-  obtain ⟨_, _, _, before, initialized⟩ := genesis
+  have before := genesis.before
   refine ⟨?_, ?_⟩ <;> intro fork
   all_goals exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
 

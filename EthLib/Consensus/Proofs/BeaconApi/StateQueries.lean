@@ -99,9 +99,9 @@ theorem stateRoot_resolveStateId_root
 Only Phase 0 has a genesis state from deposits. -/
 theorem finalityCheckpoints_genesis {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {state : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     finalityCheckpoints state =
       { previousJustified := ⟨0, Vector.replicate 32 0⟩
@@ -224,9 +224,9 @@ theorem GenesisCheckpointsZero.of_chainSteps {first last : ForkedBeaconState pre
 /-- In the genesis state from deposits, each checkpoint at epoch 0 has the zero root. -/
 theorem GenesisCheckpointsZero.of_initializeBeaconStateFromEth1 {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok state) :
     GenesisCheckpointsZero state := by
   have reported := finalityCheckpoints_genesis computed
@@ -249,9 +249,9 @@ A justified checkpoint at epoch 0 is reported with the zero root too. -/
 theorem finalityCheckpoints_of_genesis_chainSteps {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {genesis : BeaconState preset fork}
     {last : ForkedBeaconState preset}
-    {before : fork < .altair}
+    {phase0 : fork = .phase0}
     (computed :
-      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits before =
+      initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits phase0 =
         .ok genesis)
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, genesis⟩ last) :
     (last.state.finalizedCheckpoint.epoch = 0 →

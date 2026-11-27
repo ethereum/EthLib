@@ -807,8 +807,7 @@ theorem processEffectiveBalanceUpdates_max_le {fork : Fork} {s t : BeaconState p
     (ok : processEffectiveBalanceUpdates s = .ok t) (i : Nat) :
     max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
       max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i) := by
-  unfold processEffectiveBalanceUpdates at ok
-  exact foldlM_ok_invariant
+  exact processEffectiveBalanceUpdates_invariant
     (fun t => max (effectiveAt ⟨fork, t⟩ i) (actualBalanceAt ⟨fork, t⟩ i) ≤
       max (effectiveAt ⟨fork, s⟩ i) (actualBalanceAt ⟨fork, s⟩ i))
     (fun _ _ _ previous step => Nat.le_trans (updateEffectiveBalance_funding step i) previous)
@@ -926,7 +925,7 @@ theorem balanceDrift_epoch {f : Fork} {s t : BeaconState preset f}
 private theorem balanceDrift_update_upper {f : Fork} {s t : BeaconState preset f}
     (ok : processEffectiveBalanceUpdates s = .ok t) (i : Nat) :
     effectiveAt ⟨f, t⟩ i ≤ max (effectiveAt ⟨f, s⟩ i) (actualBalanceAt ⟨f, s⟩ i) := by
-  have result := foldlM_ok_invariant
+  have result := processEffectiveBalanceUpdates_invariant
     (fun t => t.balances = s.balances ∧
       effectiveAt ⟨f, t⟩ i ≤ max (effectiveAt ⟨f, s⟩ i) (actualBalanceAt ⟨f, s⟩ i))
     (fun a index b previous step => ?_)
@@ -1191,77 +1190,25 @@ private theorem balanceDrift_reference_update {f : Fork} {s t : BeaconState pres
     (cap : ∀ v, t.validators.data[i]? = some v →
       reference ≤ withdrawalMaxEffectiveBalance preset f v) :
     reference.toNat ≤ effectiveAt ⟨f, t⟩ i := by
-  have one {a b : BeaconState preset f} {j : Nat}
-      (step : updateEffectiveBalance a j = .ok b) :
-      b.balances = a.balances ∧
-      (∀ v, b.validators.data[i]? = some v →
-        reference ≤ withdrawalMaxEffectiveBalance preset f v) →
-      (∀ v, a.validators.data[i]? = some v →
-        reference ≤ withdrawalMaxEffectiveBalance preset f v) ∧
-      (reference.toNat ≤ actualBalanceAt ⟨f, a⟩ i →
-        reference.toNat ≤ effectiveAt ⟨f, a⟩ i →
-        reference.toNat ≤ effectiveAt ⟨f, b⟩ i) := by
-    simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
-    obtain ⟨v, found, balance, read, next, changed, set⟩ := step
-    obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
-    intro premise
-    have located := getValidatorAt_eq_ok_iff.mp found
-    by_cases eq : i = j
-    · subst i
-      have nextRead :
-          (a.putValidator j inside { v with effectiveBalance := next }).validators.data[j]? =
-          some { v with effectiveBalance := next } := by
-        simp [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set]
-      have capped := premise.2 _ nextRead
-      change reference ≤ withdrawalMaxEffectiveBalance preset f v at capped
-      constructor
-      · intro w wRead
-        rw [located, Option.some.injEq] at wRead
-        subst w
-        exact capped
-      · intro funded previous
-        simp only [actualBalanceAt, getBalanceAt_eq_ok_iff.mp read, effectiveAt, located,
-          Option.map_some, Option.getD_some] at funded previous
-        simp only [effectiveAt, nextRead, Option.map_some, Option.getD_some]
-        rcases updatedEffectiveBalance_cases changed with rfl | rfl
-        · exact previous
-        · rw [Base.Uint64.toNat_min, Base.Uint64.toNat_sub_mod]
-          refine Nat.le_min.mpr ⟨?_, UInt64.le_iff_toNat_le.mp capped⟩
-          simpa only [aligned, Nat.sub_zero] using
-            Base.rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat funded
-    · have same :
-          (a.putValidator j inside { v with effectiveBalance := next }).validators.data[i]? =
-          a.validators.data[i]? := by
-        simp [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set, Ne.symm eq]
-      constructor
-      · simpa only [same] using premise.2
-      · intro _ previous
-        simpa only [effectiveAt, same] using previous
-  have fold : ∀ (xs : List Nat) {a b : BeaconState preset f},
-      xs.foldlM updateEffectiveBalance a = .ok b →
-      (∀ v, b.validators.data[i]? = some v →
-        reference ≤ withdrawalMaxEffectiveBalance preset f v) →
-      (∀ v, a.validators.data[i]? = some v →
-        reference ≤ withdrawalMaxEffectiveBalance preset f v) ∧
-      (reference.toNat ≤ actualBalanceAt ⟨f, a⟩ i →
-        reference.toNat ≤ effectiveAt ⟨f, a⟩ i →
-        reference.toNat ≤ effectiveAt ⟨f, b⟩ i) := by
-    intro xs
-    induction xs with
-    | nil => intro a b ok cap; cases ok; exact ⟨cap, fun _ previous => previous⟩
-    | cons j xs ih =>
-      intro a b ok cap
-      obtain ⟨middle, updated, rest⟩ := bind_ok_iff.mp ok
-      have tail := ih rest cap
-      have balances : middle.balances = a.balances := by
-        simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at updated
-        obtain ⟨_, _, _, _, _, _, set⟩ := updated
-        obtain ⟨_, rfl⟩ := setValidatorAt_ok set
-        rfl
-      have head := one updated ⟨balances, tail.1⟩
-      exact ⟨head.1, fun funded previous => tail.2
-        (by simpa only [actualBalanceAt, balances] using funded) (head.2 funded previous)⟩
-  exact (fold _ ok cap).2 funded previous
+  rcases found : s.validators.data[i]? with _ | v
+  -- Without a validator, the old effective balance reads as zero, and so does the reference.
+  · simp only [effectiveAt, found, Option.map_none, Option.getD_none] at previous
+    omega
+  · obtain ⟨balance, owned⟩ := processEffectiveBalanceUpdates_owned ok found
+    obtain ⟨next, read, changed⟩ :=
+      processEffectiveBalanceUpdates_effectiveBalance_eq ok found owned
+    -- The update keeps the credentials, so the cap after is the cap of the old validator.
+    have capped := cap _ read
+    change reference ≤ withdrawalMaxEffectiveBalance preset f v at capped
+    simp only [actualBalanceAt, owned, effectiveAt, found, Option.map_some, Option.getD_some]
+      at funded previous
+    simp only [effectiveAt, read, Option.map_some, Option.getD_some]
+    rcases updatedEffectiveBalance_cases changed with rfl | rfl
+    · exact previous
+    · rw [Base.Uint64.toNat_min, Base.Uint64.toNat_sub_mod]
+      refine Nat.le_min.mpr ⟨?_, UInt64.le_iff_toNat_le.mp capped⟩
+      simpa only [aligned, Nat.sub_zero] using
+        Base.rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat funded
 
 private theorem balanceDrift_reference_epoch {f : Fork} {s t : BeaconState preset f}
     (ok : processEpoch config checks s = .ok t)

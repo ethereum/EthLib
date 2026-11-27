@@ -66,6 +66,9 @@ class SoundnessFacts(unittest.TestCase):
         (root / "scripts" / "check_decls_baseline.txt").write_text(
             "# comment\nnative Foo.known_answer\npartial Foo.spin\n"
         )
+        (root / "scripts" / "proof_coverage_baseline.txt").write_text(
+            "# comment\ntouched phase0 Foo.step\ncharacterized altair Foo.step\n"
+        )
         self.write_manifest("5e932f97dd25535344f80f9dd8da3aab83df0fe6")
         (root / "lean-toolchain").write_text("leanprover/lean4:v4.29.1\n")
         (root / "pyproject.toml").write_text('[project]\nname = "foo"\nversion = "1.0.0"\n')
@@ -248,6 +251,20 @@ class SoundnessFacts(unittest.TestCase):
             text,
         )
         self.assertNotIn("batteries", text)
+
+    def test_coverage_counts_each_tier_at_each_fork(self):
+        text = (self.root / "SOUNDNESS.md").read_text()
+        self.assertIn("| phase0 | 1 | 0 |\n| altair | 1 | 1 |\n| bellatrix | 0 | 0 |\n", text)
+
+    def test_changed_coverage_fails(self):
+        (self.root / "scripts" / "proof_coverage_baseline.txt").write_text(
+            "touched phase0 Foo.step\n"
+        )
+        self.assertIn(
+            "generated blocks are out of date: run "
+            "uv run --no-project --python 3.12 python scripts/soundness_facts.py",
+            self.check(),
+        )
 
     def test_changed_baseline_fails(self):
         (self.root / "scripts" / "check_decls_baseline.txt").write_text("partial Foo.spin\n")

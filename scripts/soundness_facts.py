@@ -69,6 +69,38 @@ def unfoldable(root: Path) -> str:
     return "".join(f"- {readable(d)}, `{k}`\n" for d, k in found)
 
 
+# The columns of `lake exe proof-coverage`: the forks at which the beacon chain changes.
+BEACON_FORKS = (
+    "phase0",
+    "altair",
+    "bellatrix",
+    "shapella",
+    "dencun",
+    "pectra",
+    "fusaka",
+    "glamsterdam",
+    "hegota",
+)
+
+
+def coverage(root: Path) -> str:
+    """The consensus rules touched and characterized at each beacon fork, as a Markdown table."""
+    touched = dict.fromkeys(BEACON_FORKS, 0)
+    characterized = dict.fromkeys(BEACON_FORKS, 0)
+    for line in (root / "scripts" / "proof_coverage_baseline.txt").read_text().splitlines():
+        fields = line.split("#", 1)[0].split()
+        if not fields:
+            continue
+        tier, fork, _ = fields
+        # A characterized pair is touched too.
+        touched[fork] += 1
+        if tier == "characterized":
+            characterized[fork] += 1
+    header = "| Fork | Rules touched | Rules characterized |\n|------|------|------|\n"
+    rows = (f"| {f} | {touched[f]} | {characterized[f]} |\n" for f in BEACON_FORKS)
+    return header + "".join(rows)
+
+
 def blank(text: str) -> str:
     """`text` with each character but newlines replaced by a space, so each line keeps its place."""
     return re.sub(r"[^\n]", " ", text)
@@ -324,6 +356,7 @@ GENERATORS = {
     "c-lines": c_lines,
     "pins": pins,
     "vcvio-users": vcvio_users,
+    "proof-coverage": coverage,
 }
 
 

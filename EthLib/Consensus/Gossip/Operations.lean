@@ -237,7 +237,7 @@ def blsCredentialsPrefixed (credentials : Bytes32) : Bool :=
 /-- Whether the last 31 bytes of withdrawal credentials are those of the SHA-256 hash of a key. -/
 def blsCredentialsMatch (credentials : Bytes32) (pubkey : BLSPubkey) : Bool :=
   -- Let `h` be the SHA-256 hash of the 48 bytes of the key.
-  let keyHash := Cryptography.Hash.Sha256.hash32 ⟨pubkey.toArray⟩
+  let keyHash := Cryptography.Hash.Sha256.hash32 ⟨pubkey.bytes.toArray⟩
   -- Byte `i` of the credentials is byte `i` of `h`, for `1 ≤ i ≤ 31`.
   decide (∀ i : Fin 31, credentials[i.val + 1] = keyHash[i.val + 1])
 

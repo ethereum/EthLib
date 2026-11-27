@@ -453,6 +453,14 @@ INTERCHANGE = (
             lambda: consensus.upgrade_state("mainnet", "phase0", STATE),
             id="transition-upgrade",
         ),
+        # Genesis is defined at Phase 0 only, so not at London, between Phase 0 and Altair.
+        pytest.param(
+            TransitionError,
+            0,
+            "no genesis at london",
+            lambda: consensus.initialize_genesis("mainnet", "london", bytes(32), 0, []),
+            id="transition-genesis-fork",
+        ),
         # One fork is named for no block.
         pytest.param(
             TransitionError,
@@ -711,7 +719,7 @@ INTERCHANGE = (
         # A chunk starts with 8 bytes, and the input has 1.
         pytest.param(
             ConsensusError,
-            0,
+            5,
             "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.truncated 0 8 1",
             lambda: consensus.api_light_client_decode_updates("minimal", bytes(32), b"\x00"),
             id="api-light-client-chunk",

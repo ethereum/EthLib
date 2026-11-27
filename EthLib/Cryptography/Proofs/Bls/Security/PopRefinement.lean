@@ -24,9 +24,9 @@ open EthLib.Base EthLib.Cryptography.Bls EthLib.Cryptography.Bls.Signatures
 
 /-- With the hash of the key under the key tag, the check is EthLib's proof verification, §3.3.3. -/
 theorem byteVerify_eq_popVerify (pk : BLSPubkey) (proof : BLSSignature) :
-    byteVerify (packBytes pk) (packBytes proof) (hashPointWith POP_DST (packBytes pk)) =
+    byteVerify (packBytes pk.bytes) (packBytes proof) (hashPointWith POP_DST (packBytes pk.bytes)) =
       popVerify pk proof :=
-  byteVerify_hashPointWith POP_DST (packBytes pk) (packBytes pk) (packBytes proof)
+  byteVerify_hashPointWith POP_DST (packBytes pk.bytes) (packBytes pk.bytes) (packBytes proof)
 
 /-- EthLib's proof of possession compresses a point of `sk • H'(pk)`.
 
@@ -69,14 +69,14 @@ noncomputable def byteFastAggregateVerify
 
 /-- The sum on bytes succeeds exactly when the key sum succeeds, and with the same point. -/
 private theorem foldlM_byteAddKey (l : List BLSPubkey) (idx : Nat) (acc R : G1) :
-    (l.map packBytes).foldlM byteAddKey acc = .ok R ↔
+    (l.map (packBytes ·.bytes)).foldlM byteAddKey acc = .ok R ↔
       (l.zipIdx idx).foldlM addPubkeyPoint acc = .ok R := by
   induction l generalizing idx acc with
   | nil => rfl
   | cons pk l ih =>
     simp only [List.map_cons, List.zipIdx_cons, List.foldlM_cons, byteAddKey, addPubkeyPoint,
       exactBytes?_packBytes]
-    cases G1.keyValidatePoint pk with
+    cases G1.keyValidatePoint pk.bytes with
     | error _ => simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, Functor.map,
         Except.map]
     | ok P => exact ih (idx + 1) (G1.add acc P)
@@ -86,7 +86,7 @@ private theorem foldlM_byteAddKey (l : List BLSPubkey) (idx : Nat) (acc R : G1) 
 The hash of the message is the hash to `G2` under the message tag. -/
 theorem byteFastAggregateVerify_hashPoint (pubkeys : Array BLSPubkey) (msg : ByteArray)
     (sig : BLSSignature) :
-    byteFastAggregateVerify (pubkeys.map packBytes) (packBytes sig) (hashPoint msg) =
+    byteFastAggregateVerify (pubkeys.map (packBytes ·.bytes)) (packBytes sig) (hashPoint msg) =
       fastAggregateVerify pubkeys msg sig := by
   obtain ⟨l, rfl⟩ : ∃ l, pubkeys = l.toArray := ⟨pubkeys.toList, by simp⟩
   by_cases he : l.toArray.isEmpty = true
@@ -94,10 +94,10 @@ theorem byteFastAggregateVerify_hashPoint (pubkeys : Array BLSPubkey) (msg : Byt
     rw [fastAggregateVerify_empty]
     simp [byteFastAggregateVerify]
   · unfold byteFastAggregateVerify fastAggregateVerify aggregatePubkeyPoint
-    have he' : (l.map packBytes).toArray.isEmpty = false := by simpa using he
+    have he' : (l.map (packBytes ·.bytes)).toArray.isEmpty = false := by simpa using he
     simp only [List.map_toArray, he', he, Bool.false_eq_true, ↓reduceIte, Array.zipIdx_toArray,
       List.foldlM_toArray, List.map_toArray]
-    cases hb : (l.map packBytes).foldlM byteAddKey G1.zero with
+    cases hb : (l.map (packBytes ·.bytes)).foldlM byteAddKey G1.zero with
     | error _ =>
       cases ha : (l.zipIdx 0).foldlM addPubkeyPoint G1.zero with
       | error _ => rfl

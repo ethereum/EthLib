@@ -221,7 +221,7 @@ def readEntry (path : String) (document : Json) :
   --
   -- The key is the BLS public key of the validator, in `0x`-prefixed hex.
   return {
-    pubkey := ← readBytes s!"{path}.pubkey" 48 (← field path "pubkey" document)
+    pubkey := ⟨← readBytes s!"{path}.pubkey" 48 (← field path "pubkey" document)⟩
     signedBlocks := ← readArray s!"{path}.signed_blocks" readBlock
       (← field path "signed_blocks" document)
     signedAttestations := ← readArray s!"{path}.signed_attestations" readAttestation
@@ -275,7 +275,7 @@ def attestationJson (attestation : SignedAttestationRecord) : Json :=
 
 /-- The records of one key, as the file writes it. -/
 def entryJson (entry : InterchangeEntry) : Json :=
-  Json.mkObj [("pubkey", bytesJson entry.pubkey),
+  Json.mkObj [("pubkey", bytesJson entry.pubkey.bytes),
     ("signed_blocks", .arr (entry.signedBlocks.map blockJson).toArray),
     ("signed_attestations", .arr (entry.signedAttestations.map attestationJson).toArray)]
 

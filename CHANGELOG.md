@@ -9,6 +9,17 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Execution/Proofs/State/RandomOracle.lean` bounds the probability of finding two storages, or two states, with one root that differ, with the hash a random oracle.
+  `prEvent_storageWins_le` and `prEvent_stateWins_le` give the bound `Q^2 / 2^256`, for `Q` hash calls of the experiment.
+  `Execution/Proofs/Trie/RandomOracle.lean` gains `queryWitnesses`, the queries of the binding inputs of two tries at one key, which `extract` now runs after the two roots.
+
+- In Lean, three fast confirmation theorems derive the caller's head read that their originals assume ([#3352](https://github.com/ethereum/EthLib/issues/3352)).
+  Two originals assume that read at each rollover, `CallRolloverRead`; the current-target original assumes it at the start of the next epoch, `CallerHeadAt`.
+  `Execution.rootInFilteredTree_of_checked_or_evidence` and `Execution.honestTargetVotes_signed_of_checked_or_evidence` are in `Consensus/Proofs/ForkChoice/FastConfirmation/HonestHeads.lean`.
+  `Execution.rootViableAt_of_checked_or_evidence` is in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalCoverage.lean`.
+  Each applies `Execution.callRolloverRead_or_evidence` once, so its conclusion adds `HistoricalDirectSafetyEvidence`.
+  The two proofs of confirmed-root coverage that split on that read now apply `Execution.rootViableAt_of_checked_or_evidence`.
+
 - In Lean, `Store.ForwardReachable.finalized_epoch_add_two_le` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`) states the timing of a finalized checkpoint other than the anchor's ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   The store is forward reachable from the store initialized from the anchor state and block, and it reads its current epoch.
   Suppose its finalized checkpoint differs from the anchor's.
@@ -1140,7 +1151,33 @@ Not yet released.
 - `Internal.assigned_of_active` is moved to `Transition.ActiveKept` and says that an active validator has an assigned activation epoch.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
+- In Lean, `processEffectiveBalanceUpdates_invariant` (`Consensus/Proofs/Transition/EpochUpdates.lean`) is an invariant principle for the update of the effective balances.
+  A property holds after the update when it holds before and each successful update of one effective balance keeps it.
+  The 25 proofs outside the two proof files of the update no longer read its body ([#4594](https://github.com/ethereum/EthLib/issues/4594)).
+  They use this theorem, or the theorems of the update on its frame, its balances and the validator at each index.
+  A step added at the end of the update that changes no field then breaks only the proof files of the update.
+  A step that writes a field adds one obligation to each user of the invariant principle.
+
 ### Changes that break callers
+
+- In Lean, a run from genesis stays on the fork schedule at every ordered configuration, Altair at epoch zero included, whenever the upgrades due at genesis succeed ([#4624](https://github.com/ethereum/EthLib/issues/4624)).
+  `Run.onSchedule_of_genesis` (`Consensus/Proofs/Transition/Schedule.lean`) takes the run from the state after the upgrades due at the slot of genesis, in place of a run from genesis itself.
+  It no longer assumes that Altair starts after epoch zero, nor that the genesis fork is Phase 0, which every genesis now is.
+  Migration: pass `processUpgrades config checks g = .ok launched` and a run from `launched`; when Altair starts after epoch zero, `launched` is `g`.
+
+- In Lean, the genesis rule is defined at Phase 0 only ([#4623](https://github.com/ethereum/EthLib/issues/4623)).
+  - `initializeBeaconStateFromEth1` (`Consensus/Transition/Genesis.lean`) takes a last argument `phase0 : fork = .phase0` in place of `before : fork < .altair`.
+    Its value at Phase 0 is the same.
+  - `lt_altair_of_phase0` (`Consensus/Transition/Genesis.lean`) states that Phase 0 comes before Altair.
+  - `Genesis` (`Consensus/Proofs/Transition/Trace.lean`) holds the new proof, `Genesis.phase0` reads it, and `Genesis.before` still gives the fact that the fork comes before Altair.
+  - Each theorem about the genesis rule takes the new proof as an implicit argument.
+  - In Python, `initialize_genesis` at Berlin or London now raises an error of code 0, `no genesis at <fork>`, in place of returning a state.
+  Migration: pass a proof of `fork = .phase0` to the genesis rule, and use `lt_altair_of_phase0` where the old proof was used.
+
+- In Lean, `Execution.State.storageRoot`, `stateEntries` and `stateRoot` are the new `storageRootM`, `stateEntriesM` and `stateRootM` with a plain hash, in the identity monad.
+  The monadic forms let the random oracle experiments run these roots with a hash that queries the oracle.
+  The roots are unchanged, but the three definitions unfold to the monadic forms.
+  Migration: rewrite with `storageRoot_eq`, `stateEntries_eq` and `stateRoot_eq` (`Execution/Proofs/State/Root.lean`), which state the former bodies.
 
 - In Lean, `ConfirmedCalls.finalized_read` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `Store.Reachable.finalized_read` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`), with the same statement.
 
@@ -1151,6 +1188,15 @@ Not yet released.
   `getSlotComponentDurationMs_lt` and `gloas_deadlines_ordered` assume `5000 < (10000 - b) * SLOT_DURATION_MS` for the last part `b`, where they assumed `b < 10000` and a nonempty slot.
   A part just below the whole of a short slot can otherwise round up to the whole slot.
   Migration: pass that bound, which `decide` proves for the mainnet and minimal configurations.
+
+- The light client exports `api_light_client_updates`, `api_light_client_updates_ssz` and `api_light_client_decode_updates` of `ethlib.consensus` give each chunk error a code, from `BeaconApi.ChunkError.code` (`Consensus/BeaconApi/LightClient.lean`).
+  Before, every chunk error had code 0.
+  `api_light_client_updates` raises codes 1 and 2, `api_light_client_updates_ssz` codes 1 to 4, and `api_light_client_decode_updates` codes 1, 3, 5, 6 and 7, and the contract lists them.
+  A digest that names no fork, which only `api_light_client_decode_updates` refuses, now has the code of the response chunk and gossip decoders.
+  The code is 305 when no epoch has the digest, and 306 when only the far future epoch has it.
+  The message of a refused digest is the message of `Consensus.BoundsError`, after `chunk rejected: `.
+  An update of the decoded body that does not serialize again now has code 0, like an input that does not decode.
+  Migration: read the code of the `ConsensusError` instead of its message.
 
 - The decoder of the SSZ updates answer of the light client takes the fork of each chunk's digest from `Consensus.forkOfScheduledDigest`.
   The response chunk and gossip decoders already do so.
@@ -3966,6 +4012,16 @@ Not yet released.
   The search for the epoch of a digest finds one at or before every epoch with that digest (`forkOfDigest_le`).
   The fork of a decoded chunk is at or after `ReqRespProtocol.firstChunkFork`, the first fork at which the payload of the protocol has a type.
   `responseDesc_isSome` states that each protocol version of a fork has a response type at the fork of every chunk.
+
+- In Lean, `Cryptography.Bls.BLSPubkey` is now a structure over its 48 bytes, as `KZGCommitment` and `KZGProof` are.
+  `EthLib.Cryptography.Bls.Signatures` defines it, so Lean rejects a KZG commitment, a KZG proof or other 48 bytes where a public key is expected.
+  Keys compare as their bytes, and the order has the laws that a search tree needs.
+  `pointToPubkey`, `skToPk` and `ethAggregatePubkeys` return the structure, and the scheme operations take it.
+  Key validation and the core verifications still take bytes, as the BLS signature draft writes them.
+  A theorem about a key changes its statement only where the type forces it, with `.bytes` or `BLSPubkey.mk`.
+  `Consensus.map_toValue_blsPubkey` (`Consensus/Proofs/Types.lean`) states that the SSZ values of keys are the values of their bytes.
+  The SSZ, JSON and Python forms are those of the bytes, so no encoding and no C or Python signature changes.
+  Migration: build a key with `BLSPubkey.mk`, and read its bytes with `.bytes`.
 
 ## 0.3.0
 
