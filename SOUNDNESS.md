@@ -2452,7 +2452,6 @@ The assumption under the state gas meter must give the one under one counter, fo
 Each call that runs that code at the account must keep the invariant, as a proof about the contract shows.
 The message must start where the account holds the code and its storage meets the invariant, run the code if it goes there, and return a frame.
 `Execution/Proofs/Transactions/StorageInvariant.lean` and `Execution/Proofs/Blocks/StorageInvariant.lean` carry it to transactions, system calls, blocks and chains.
-They need the account to have a nonce of at least 1, which leaves out a contract deployed before Spurious Dragon with nonce 0.
 The theorems over transactions, blocks and chains also need Cancun or later, where SELFDESTRUCT deletes only accounts that the transaction created.
 From Hegotá a transaction and a block fail, so those theorems hold there with nothing to show.
 Each of these theorems assumes that no other code has the Keccak-256 hash of that code (`CodeHyp.hashOnly`).
@@ -2460,8 +2459,8 @@ The state keeps each code under its hash.
 So a creation that deploys a second preimage would change the code that a later call to the account runs.
 `CodeHyp.hashOnly` is not provable for any code, and is believed false for Keccak-256 as a function.
 Until a random-oracle bound on Keccak-256, like the bounds for the trie and state roots, replaces it, these theorems hold only under the assumption, and say nothing formally if it is false.
-That includes the theorem over chains, `BlockChain.Reaches.liveAt`.
-`HistoryStorage.ring_of_reaches` (`Execution/Proofs/Blocks/SystemCall/HistoryRing.lean`) applies it to the history storage contract of EIP-2935: from Cancun to BPO5, every slot at or above 8191 reads 0 in every state that a chain reaches from a state where the contract holds its code, a nonce of at least 1 and that property.
+That includes the theorem over chains, `BlockChain.Reaches.goodAt`.
+`HistoryStorage.ring_of_reaches` (`Execution/Proofs/Blocks/SystemCall/HistoryRing.lean`) applies it to the history storage contract of EIP-2935: from Cancun to BPO5, every slot at or above 8191 reads 0 in every state that a chain reaches from a state where the contract holds its code and that property.
 It takes the assumption on the hash of that code as a named hypothesis, and covers no fork from Glamsterdam, whose gas meter needs its own proof about the code.
 
 ### SHA-256 precompile
