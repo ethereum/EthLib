@@ -15,6 +15,7 @@ public import EthLib.Engine.Proofs.Jwt
 public import EthLib.Engine.Proofs.NewPayload
 public import EthLib.Engine.Proofs.Node
 public import EthLib.Engine.Proofs.Node.Ancestry
+public import EthLib.Engine.Proofs.Node.ConsensusStep
 public import EthLib.Engine.Proofs.Node.Grounded
 public import EthLib.Engine.Proofs.Node.LatestValid
 public import EthLib.Engine.Proofs.Node.Proposal
