@@ -1,12 +1,13 @@
-"""Report opcode coverage by fork for the pinned execution state tests."""
+"""Report opcode coverage and gas observations by fork for pinned execution state tests."""
 
 # Run from bindings/python/tests with the Python bindings built and ETHLIB_ARCHIVES set.
 #     python -m parity.opcode_coverage [group]
 
 import argparse
 import json
-from collections import Counter
+from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
 import archives
@@ -21,6 +22,16 @@ from transactions.test_typed import ENV
 from . import catalogue, harness
 from .catalogue import Case
 from .runners import state_test_input
+
+
+@dataclass
+class OpcodeStats:
+    """Observations for one opcode byte at one fork."""
+
+    steps: int = 0
+    gas_costs: set[int] = field(default_factory=set)
+    memory_growth: set[int] = field(default_factory=set)
+    out_of_gas: int = 0
 
 
 def opcode_inventory(fork: str) -> dict[int, str]:
@@ -67,22 +78,51 @@ def select_cases(cases: Iterable[Case], group: PurePosixPath | None) -> dict[str
     return {fork: matches for fork, matches in by_fork.items() if matches}
 
 
-def traced_opcodes(trace: Sequence[str]) -> Counter[int]:
-    """Count opcode bytes in the trace steps before the transaction summary."""
-    return Counter(json.loads(line)["op"] for line in trace[:-1])
+def record_trace(stats: defaultdict[int, OpcodeStats], trace: Sequence[str]) -> None:
+    """Record the steps before the summary of one EIP-3155 transaction trace."""
+    previous_steps: list[tuple[int, OpcodeStats, int]] = []
+    for line in trace[:-1]:
+        step = json.loads(line)
+        depth = step["depth"]
+        size = step["memSize"]
+        # Discard finished child frames before a later call can reuse their depth.
+        while previous_steps and previous_steps[-1][0] > depth:
+            previous_steps.pop()
+        if previous_steps and previous_steps[-1][0] == depth:
+            _, previous, previous_size = previous_steps.pop()
+            # The snapshot is taken before the step (EIP-3155, Output).
+            previous.memory_growth.add(size - previous_size)
+
+        opcode = stats[step["op"]]
+        opcode.steps += 1
+        opcode.gas_costs.add(int(step["gasCost"], 16))
+        if step.get("error") == "out of gas":
+            opcode.out_of_gas += 1
+        previous_steps.append((depth, opcode, size))
+
+
+STATS_COLUMNS = "Steps | Gas costs | Memory growth (bytes) | Out of gas |"
+STATS_ALIGNMENT = "---: | ---: | ---: | ---: |"
+
+
+def render_stats(opcode: OpcodeStats) -> str:
+    """Render the observations for a byte that the trace reached."""
+    gas = ", ".join(map(str, sorted(opcode.gas_costs)))
+    growth = ", ".join(map(str, sorted(opcode.memory_growth))) or "-"
+    return f"{opcode.steps} | {gas} | {growth} | {opcode.out_of_gas} |"
 
 
 def render_fork(
     network: str,
     opcodes: Mapping[int, str],
-    counts: Mapping[int, int],
+    stats: Mapping[int, OpcodeStats],
     *,
     traced: int,
     rejected: int,
 ) -> str:
-    """Render the counts and the observed, missed, and undefined bytes for one fork."""
-    observed = opcodes.keys() & counts.keys()
-    missed = opcodes.keys() - counts.keys()
+    """Render the observations and the missed and undefined bytes for one fork."""
+    observed = opcodes.keys() & stats.keys()
+    missed = opcodes.keys() - stats.keys()
     lines = [
         f"## {network}",
         "",
@@ -92,13 +132,16 @@ def render_fork(
         "| --- | ---: |",
         f"| Traced cases | {traced} |",
         f"| Cases skipped for expected transaction errors | {rejected} |",
-        f"| Trace steps | {sum(counts.values())} |",
+        f"| Trace steps | {sum(opcode.steps for opcode in stats.values())} |",
         "",
         f"### Observed opcodes ({len(observed)})",
         "",
-        "| Byte | Opcode | Steps |",
-        "| --- | --- | ---: |",
-        *(f"| `0x{byte:02x}` | `{opcodes[byte]}` | {counts[byte]} |" for byte in sorted(observed)),
+        f"| Byte | Opcode | {STATS_COLUMNS}",
+        f"| --- | --- | {STATS_ALIGNMENT}",
+        *(
+            f"| `0x{byte:02x}` | `{opcodes[byte]}` | {render_stats(stats[byte])}"
+            for byte in sorted(observed)
+        ),
         "",
         f"### Missed opcodes ({len(missed)})",
         "",
@@ -106,9 +149,19 @@ def render_fork(
         "| --- | --- |",
         *(f"| `0x{byte:02x}` | `{opcodes[byte]}` |" for byte in sorted(missed)),
     ]
-    if undefined := counts.keys() - opcodes.keys():
-        lines.extend(("", "### Undefined bytes reached", "", "| Byte | Steps |", "| --- | ---: |"))
-        lines.extend(f"| `0x{byte:02x}` | {counts[byte]} |" for byte in sorted(undefined))
+    if undefined := stats.keys() - opcodes.keys():
+        lines.extend(
+            (
+                "",
+                "### Undefined bytes reached",
+                "",
+                f"| Byte | {STATS_COLUMNS}",
+                f"| --- | {STATS_ALIGNMENT}",
+            )
+        )
+        lines.extend(
+            f"| `0x{byte:02x}` | {render_stats(stats[byte])}" for byte in sorted(undefined)
+        )
     return "\n".join(lines)
 
 
@@ -137,19 +190,26 @@ def main() -> None:
         source,
         "Each fork's opcode inventory comes from tracing all 256 one-byte programs.",
         "Counts include faulting steps and the implicit `STOP` at the end of code.",
+        "Gas costs are distinct trace `gasCost` values in decimal. "
+        "Calls can include gas passed to the callee, and faults can include all remaining gas. "
+        "At Amsterdam the trace measures execution gas.",
+        "Memory growth lists distinct changes in bytes at the next step in the same call frame. "
+        "A zero records an observed step with no growth. "
+        "A dash means there was no such measurement for that byte.",
+        "Out-of-gas counts use the `out of gas` error on a trace step.",
     ]
     for network, cases in by_fork.items():
         opcodes = opcode_inventory(FORK_OF_NETWORK[network])
-        counts: Counter[int] = Counter()
+        stats: defaultdict[int, OpcodeStats] = defaultdict(OpcodeStats)
         rejected = 0
         for case in cases:
             transaction_args, post = state_test_input(root, case)
             if "expectException" in post:
                 rejected += 1
                 continue
-            counts.update(traced_opcodes(transactions.trace_eip3155(*transaction_args)))
+            record_trace(stats, transactions.trace_eip3155(*transaction_args))
         sections.append(
-            render_fork(network, opcodes, counts, traced=len(cases) - rejected, rejected=rejected)
+            render_fork(network, opcodes, stats, traced=len(cases) - rejected, rejected=rejected)
         )
     print("\n\n".join(sections))
 
