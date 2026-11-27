@@ -232,7 +232,7 @@ theorem collision_of_findSecondPreimage [DecidableEq R] (g : NodeInput R → R)
     exact hx.trans (congrArg some heq.symm)
 
 omit [DecidableEq D] in
-/-- Replaying a successful collision search from a cache exposes a collision in that cache.
+/-- Replaying a successful collision search of any node hash from a cache exposes a collision in it.
 
 It holds when each replayed node hash returns the cached answer of one input.
 
@@ -244,7 +244,7 @@ theorem collision_of_replay_findCollision [DecidableEq R]
     (hstep : ∀ p a b v, simulateQ c.toPartialImpl (hash p a b) = some v →
       c (input p a b) = some v)
     -- At one position, an input determines its two children.
-    (hinput : ∀ p a b a' b', input p a b = input p a' b' → a = a' ∧ b = b') :
+    (hinput : ∀ p, Function.Injective2 (input p)) :
     ∀ (s t : List R) (p : Position) (a b : R) (w : Merkle.Collision R),
       simulateQ c.toPartialImpl (findCollision hash p a b s t) = some (some w) →
         Collision c := by
@@ -266,13 +266,13 @@ theorem collision_of_replay_findCollision [DecidableEq R]
         refine ⟨input p.parent (ordered p a u).1 (ordered p a u).2,
           input p.parent (ordered p b v).1 (ordered p b v).2, x, fun heq => h.1 ?_,
           hstep _ _ _ _ hx, ?_⟩
-        · exact Prod.ext (hinput _ _ _ _ _ heq).1 (hinput _ _ _ _ _ heq).2
+        · exact Prod.ext (hinput _ heq).1 (hinput _ heq).2
         · rw [h.2]
           exact hstep _ _ _ _ hy
       · -- The search went on, so the collision is in the replay of the rest.
         exact ih t _ x y w hw
 
-/-- Replaying a successful collision search from a cache exposes a collision in that cache.
+/-- With the node oracle, replaying a successful collision search from a cache exposes a collision.
 
 The replay answers each call from the cache, and fails on an input the cache lacks.
 

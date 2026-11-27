@@ -178,7 +178,7 @@ theorem collision_of_extractOutputs {cache : HashSpec.QueryCache} {claim : Openi
   -- With the table as the hash, the win makes the search find a collision of the table.
   obtain ⟨pair, hpair, hdistinct, hequal⟩ :=
     findHashCollisionWith_of_outputsWin (H := fun x => f x) (claim := claim) hwins
-  unfold findHashCollisionWith at hpair
+  rw [findHashCollisionWith_eq] at hpair
   split at hpair
   · -- Two node inputs, each of a pair that its own climb hashes.
     next c hc =>

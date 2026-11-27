@@ -1,6 +1,9 @@
 module
 
+public import EthLib.Cryptography.Proofs.Vrf.Oracle
+public import EthLib.Cryptography.Proofs.Vrf.Verify
 public import EthLib.Cryptography.Proofs.Vrf.Selection
+public import EthLib.Cryptography.Proofs.Merkle.QueryBound
 public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
 
 /-!
@@ -8,7 +11,7 @@ public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
 
 One term of the selection bound is the chance that its collision search finds a pair.
 
-This module bounds that search, with the tree hash one random oracle on byte strings.
+This module bounds that chance in an experiment of its own, with the tree hash one random oracle.
 
 The selection bound takes the tree hash as Keccak-256 itself, and no theorem composes the two.
 
@@ -29,7 +32,7 @@ open EthLib.Cryptography.Merkle.RandomOracle (Collision collision_of_replay_find
 /-! ## The experiment -/
 
 /-- What the adversary outputs: the secrets of a tree, an index, and an opening at that index. -/
-structure HolderClaim where
+structure SelectionClaim where
   /-- The secrets of the tree. -/
   secrets : UInt32 → Digest
   /-- The index of the opening. -/
@@ -37,31 +40,18 @@ structure HolderClaim where
   /-- The opening that the adversary returns at that index. -/
   revealed : Opening
 
-/-- The search of an opening against the honest one, with `H` in place of Keccak-256.
-
-It builds the honest opening of the tree at the index, then searches the two openings.
-
-It returns the node inputs of the lowest collision of the two climbs.
-
-With none, it returns the two leaf inputs, if the secrets differ but their leaves are equal. -/
+/-- The search of an opening against the honest one, with `H` in place of Keccak-256. -/
 def extractCollision {m : Type → Type} [Monad m] (H : ByteArray → m Digest)
-    (claim : HolderClaim) : m (Option (ByteArray × ByteArray)) := do
+    (claim : SelectionClaim) : m (Option (ByteArray × ByteArray)) := do
+  -- The honest opening of the tree at the index.
   let honest ← openingWith H claim.secrets claim.index
-  let leaf ← H (leafInput claim.revealed.secret)
-  let leaf' ← H (leafInput honest.secret)
-  let found ← Merkle.findCollision (nodeWith H) ⟨0, claim.index.toNat⟩ leaf leaf'
-    claim.revealed.path.toList honest.path.toList
-  return match found with
-    | some c => some (nodeInput c.x.1 c.x.2, nodeInput c.y.1 c.y.2)
-    | none =>
-      if claim.revealed.secret ≠ honest.secret ∧ leaf = leaf' then
-        some (leafInput claim.revealed.secret, leafInput honest.secret)
-      else none
+  -- The collision search of the two openings, with each hash a call to `H`.
+  searchHashCollisionWith H claim.index claim.revealed honest
 
 /-- With any function as the hash, the extraction is the collision search with that function.
 
 That search compares the opening with the honest opening that the function builds, at the index. -/
-theorem extractCollision_pure (H : ByteArray → Digest) (claim : HolderClaim) :
+theorem extractCollision_pure (H : ByteArray → Digest) (claim : SelectionClaim) :
     (extractCollision (m := Id) (fun x => pure (H x)) claim).run =
       findHashCollisionWith H claim.index claim.revealed
         (openingWith (m := Id) (fun x => pure (H x)) claim.secrets claim.index).run :=
@@ -70,10 +60,8 @@ theorem extractCollision_pure (H : ByteArray → Digest) (claim : HolderClaim) :
 
 /-- With Keccak-256 as the hash, the extraction is the search of the selection bound.
 
-That search compares the opening with the honest opening of the specification, at the index.
-
-The step from Keccak-256 to the oracle is the idealisation of the model, not a theorem. -/
-theorem extractCollision_keccak256 (claim : HolderClaim) :
+That search compares the opening with the honest opening of the specification, at the index. -/
+theorem extractCollision_keccak256 (claim : SelectionClaim) :
     (extractCollision (m := Id) (fun x => pure (hash x)) claim).run =
       findHashCollision claim.index claim.revealed (opening claim.secrets claim.index) :=
   extractCollision_pure hash claim
@@ -92,12 +80,12 @@ theorem Selection.collides_iff_extractCollision (z : Selection) :
 /-- A replayed extraction that finds a pair exposes a collision of the cache.
 
 The pair is two node inputs of one level of the search, or else the two leaf inputs. -/
-theorem collision_of_extractCollision {cache : HashSpec.QueryCache} {claim : HolderClaim}
+theorem collision_of_extractCollision {cache : HashSpec.QueryCache} {claim : SelectionClaim}
     {found : Option (ByteArray × ByteArray)}
     (hrun : simulateQ cache.toPartialImpl (extractCollision oracleHash claim) = some found)
     (hfound : found.isSome) : Collision cache := by
   -- The replay ran the honest opening, the two leaf hashes, then the search, each from the cache.
-  simp only [extractCollision, simulateQ_bind] at hrun
+  simp only [extractCollision, searchHashCollisionWith, simulateQ_bind] at hrun
   obtain ⟨honest, -, hrun⟩ := Option.bind_eq_some_iff.mp hrun
   obtain ⟨leaf, hleaf, hrun⟩ := Option.bind_eq_some_iff.mp hrun
   obtain ⟨leaf', hleaf', hrun⟩ := Option.bind_eq_some_iff.mp hrun
@@ -128,11 +116,12 @@ theorem collision_of_extractCollision {cache : HashSpec.QueryCache} {claim : Hol
 
 /-- The honest opening makes at most `2^(h + 1) - 2` oracle calls, for a tree of height `h`.
 
-Its path has one sibling per level, and the sibling at level `k` costs at most `2^(k + 1)` calls. -/
+Its path has one sibling per level. -/
 theorem openingWith_queryBound (secrets : UInt32 → Digest) (i : UInt32) :
     IsQueryBoundP (openingWith oracleHash secrets i) (fun _ => True)
       (2 ^ (VRF_TREE_HEIGHT + 1) - 2) := by
-  -- A sibling hashes each leaf below it and each node above those leaves, once.
+  -- Counting the leaves as level 0, the sibling at level `k` costs at most `2^(k + 1)` calls.
+  -- It hashes each leaf below it and each node above those leaves, once.
   have hpath := Merkle.isQueryBoundP_siblings (hash := nodeWith oracleHash)
     (leaves := leafWith oracleHash secrets) (fun _ => oracleHash_queryBound _)
     (fun _ _ _ => oracleHash_queryBound _) ⟨0, i.toNat⟩ VRF_TREE_HEIGHT
@@ -143,17 +132,17 @@ theorem openingWith_queryBound (secrets : UInt32 → Digest) (i : UInt32) :
 /-- The extraction makes at most `2^(h + 1) + 2 h` oracle calls, for a tree of height `h`.
 
 It builds the honest opening, hashes the two leaves, then at most two nodes per level. -/
-theorem extractCollision_queryBound (claim : HolderClaim) :
+theorem extractCollision_queryBound (claim : SelectionClaim) :
     IsQueryBoundP (extractCollision oracleHash claim) (fun _ => True)
       (2 ^ (VRF_TREE_HEIGHT + 1) + 2 * VRF_TREE_HEIGHT) := by
-  -- The search makes two calls per level, and each path has one sibling per level.
+  -- The search makes at most two calls per level, and each path has one sibling per level.
   have hsearch : ∀ (honest : Opening) (leaf leaf' : Digest),
       IsQueryBoundP (Merkle.findCollision (nodeWith oracleHash) ⟨0, claim.index.toNat⟩ leaf leaf'
         claim.revealed.path.toList honest.path.toList) (fun _ => True) (2 * VRF_TREE_HEIGHT) :=
     fun honest leaf leaf' => (Merkle.isQueryBoundP_findCollision (hash := nodeWith oracleHash)
       (fun _ _ _ => oracleHash_queryBound _) claim.revealed.path.toList honest.path.toList
       ⟨0, claim.index.toNat⟩ leaf leaf').mono (by simp)
-  unfold extractCollision
+  unfold extractCollision searchHashCollisionWith
   refine (isQueryBoundP_bind (openingWith_queryBound _ _) fun honest _ =>
     isQueryBoundP_bind (oracleHash_queryBound _) fun leaf _ =>
       isQueryBoundP_bind (oracleHash_queryBound _) fun leaf' _ =>
@@ -162,11 +151,9 @@ theorem extractCollision_queryBound (claim : HolderClaim) :
   simp only [VRF_TREE_HEIGHT]
   omega
 
-/-- The experiment makes the adversary's oracle calls and at most `2^(h + 1) + 2 h` more.
-
-Here `h` is the height of the tree. -/
+/-- The experiment makes the adversary's calls and at most `2^(h + 1) + 2 h` more, for height `h`. -/
 theorem experimentWith_extractCollision_queryBound
-    {adversary : OracleComp (unifSpec + HashSpec) HolderClaim} {q : Nat}
+    {adversary : OracleComp (unifSpec + HashSpec) SelectionClaim} {q : Nat}
     (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :
     IsQueryBoundP (experimentWith (extractCollision oracleHash) adversary)
       (fun t => t.isRight = true) (q + (2 ^ (VRF_TREE_HEIGHT + 1) + 2 * VRF_TREE_HEIGHT)) :=
@@ -179,8 +166,8 @@ theorem experimentWith_extractCollision_queryBound
 Those are the calls of the adversary, of the honest opening and of the search.
 
 The oracle cache starts empty, and the adversary's private sampling is not counted. -/
-theorem prEvent_extractCollision_isSome_le [SampleableType Digest]
-    (adversary : OracleComp (unifSpec + HashSpec) HolderClaim) {Q : Nat}
+theorem prEvent_extractCollision_isSome_le
+    (adversary : OracleComp (unifSpec + HashSpec) SelectionClaim) {Q : Nat}
     (hQ : IsQueryBoundP (experimentWith (extractCollision oracleHash) adversary)
       (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashSpec.romImpl
@@ -192,7 +179,7 @@ theorem prEvent_extractCollision_isSome_le [SampleableType Digest]
 
 /-- The same bound for 32 uniform bytes per answer: probability at most `Q^2 / 2^256`. -/
 theorem prEvent_extractCollision_isSome_le_two_pow
-    (adversary : OracleComp (unifSpec + HashSpec) HolderClaim) {Q : Nat}
+    (adversary : OracleComp (unifSpec + HashSpec) SelectionClaim) {Q : Nat}
     (hQ : IsQueryBoundP (experimentWith (extractCollision oracleHash) adversary)
       (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashSpec.romImpl
@@ -208,7 +195,7 @@ The search finds a pair with probability at most `(q + 2^(h + 1) + 2 h)^2 / 2^25
 
 Here `h = 32` is the height of the tree, so the experiment adds at most `2^33 + 64` calls. -/
 theorem prEvent_extractCollision_isSome_le_of_adversary
-    (adversary : OracleComp (unifSpec + HashSpec) HolderClaim) {q : Nat}
+    (adversary : OracleComp (unifSpec + HashSpec) SelectionClaim) {q : Nat}
     (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :
     Pr{let z ← (simulateQ HashSpec.romImpl
       (experimentWith (extractCollision oracleHash) adversary)).run ∅}[z.1.isSome] ≤
