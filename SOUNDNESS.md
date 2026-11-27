@@ -4493,7 +4493,9 @@ It takes the run from the genesis to the anchor, the held states before the next
 It takes nonzero state roots of held blocks (`roots`) and the anchor's absent parent (`absent`).
 It takes honest store epochs within the horizon (`bounded`) and the preset conditions of `DirectSafety.Parameters`.
 Honest participants start at the store initialized from the anchor state and block, whose shared slot starts an epoch, and the slot duration is positive.
-The call sequence starts after the anchor's epoch, with a call at the start of each successive slot from its first slot.
+An epoch has more than one slot.
+The honest caller starts from the anchor's fast-confirmation store after the anchor epoch and calls at the start of each successive slot.
+At the call by the limit it reads its slot and replaces its base.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
