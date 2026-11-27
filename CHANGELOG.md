@@ -1247,6 +1247,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the invariant of the storage of a contract no longer needs the account to have a nonce ([#4794](https://github.com/ethereum/EthLib/issues/4794)).
+  `CreatesFresh` (`Execution/Proofs/Evm/Call/Fresh.lean`) now says that an account that a message creates had nonce 0 and no code at its start.
+  Its new field `kept` says that an account with code keeps code, and `NoNewCode` states that an account has no code after a step exactly when it had none before.
+  `CreatesFresh.trans` asks that an account that the second run allows have nonce 0 and no code in the first state, or be allowed there.
+  A transaction then never creates an account that holds code, so `LiveAt` and `nonceLe_buyGas` are removed, and the theorems take `GoodAt` instead.
+  `liveAt_processMessageCall`, `liveAt_runTransaction`, `liveAt_processTransaction`, `liveAt_incorporate`, `liveAt_join`, `liveAt_onBlock`, `liveAt_systemCall`, `liveAt_applyBody`, `liveAt_stateTransition` and `BlockChain.Reaches.liveAt` are renamed with `goodAt` in place of `liveAt`.
+  `keepsAt_foldlM_createEther`, `keepsAt_payRewards` and `keepsAt_applyDaoFork` no longer give `NonceLe`.
+  So `HistoryStorage.ring_of_reaches` also covers a contract with nonce 0.
+
 - In Lean, the product of the quadratic extension takes three products of its base field instead of four, by the Karatsuba method ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
   `Fp2.mul` (`Cryptography/Fp2.lean`) computes the coefficient of `i` as `(a0 + a1)(b0 + b1) - a0 b0 - a1 b1`, over BLS12-381 and alt_bn128.
   The generic `Fp2.mul_c1` (`Cryptography/Proofs/Fp2.lean`) states that form, holds by `rfl`, and is no longer a simp lemma.

@@ -38,7 +38,7 @@ theorem PlainAccount.of_createsFresh {allowed : Address → Prop} {address : Add
     (hallowed : ¬allowed address) : PlainAccount address tx' := by
   obtain ⟨hn, hc, hcode⟩ := plain
   have hc' : address ∉ tx'.createdAccounts := fun hx =>
-    (h.fresh address hx hc).elim (fun h0 => by omega) hallowed
+    (h.fresh address hx hc).elim (fun h0 => by have := h0.1; omega) hallowed
   -- A message never creates the account, so it keeps no code.
   exact ⟨Nat.le_trans hn (h.nonce address), hc', h.code address hc' hcode⟩
 

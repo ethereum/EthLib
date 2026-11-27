@@ -13,7 +13,7 @@ Each call that runs its code keeps that, whoever calls it and whatever its gas.
 
 So every state that a chain reaches from Cancun to BPO5 keeps it.
 
-The chain must start where the contract holds its code and a nonce of at least 1, and keeps it.
+The chain must start where the contract holds its code and its storage meets the ring.
 
 The proof assumes that no other code has the Keccak-256 hash of the code, which SOUNDNESS.md lists.
 
@@ -30,7 +30,6 @@ open EthLib.Base (Address Bytes32 Fork U256)
 open EthLib.Execution.Evm
 open EthLib.Execution.Evm.Logic
 open EthLib.Execution.State (BlockState State TransactionState)
-open EthLib.Execution.Transactions (LiveAt)
 open EthLib.Execution.Blocks.SystemContract
 
 /-- Every slot of the storage at or above 8191 reads 0. -/
@@ -193,7 +192,7 @@ theorem framesKeepCode (hyp : CodeHyp CODE) (hfork : .shapella ≤ fork) :
 
 /-- From Cancun to BPO5, the ring holds in every state that a chain reaches.
 
-The contract must hold its code and a nonce of at least 1, and keep the ring, where they start.
+The chain must start where the contract holds its code and its storage meets the ring.
 
 It assumes that no other code has the Keccak-256 hash of the code.
 
@@ -203,9 +202,9 @@ theorem ring_of_reaches
       Cryptography.Hash.Keccak.keccak256 CODE → other = CODE)
     {chain chain' : BlockChain}
     (reaches : chain.Reaches (fun fork => .dencun ≤ fork ∧ fork < .glamsterdam) chain')
-    (start : LiveAt HISTORY_STORAGE_ADDRESS CODE Ring (.ofBlock ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
-    LiveAt HISTORY_STORAGE_ADDRESS CODE Ring (.ofBlock ⟨chain'.state, ∅, ∅, ∅, ∅⟩) :=
-  reaches.liveAt (codeHyp_CODE hashOnly) (fun _ h => h.1)
+    (start : GoodAt HISTORY_STORAGE_ADDRESS CODE Ring (.ofBlock ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
+    GoodAt HISTORY_STORAGE_ADDRESS CODE Ring (.ofBlock ⟨chain'.state, ∅, ∅, ∅, ∅⟩) :=
+  reaches.goodAt (codeHyp_CODE hashOnly) (fun _ h => h.1)
     (fun _ h _ => framesKeepCode (codeHyp_CODE hashOnly) (Nat.le_trans (by decide) h.1))
     (fun _ h hg => absurd h.2 (Nat.not_lt.mpr hg)) start
 
