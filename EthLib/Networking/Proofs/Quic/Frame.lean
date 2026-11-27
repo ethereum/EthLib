@@ -38,10 +38,10 @@ theorem ranges_encode (values : List AckRange) (rest : List UInt8) :
       List.append_assoc, bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure,
       varint_encode, ih]
 
-/-- A forbidden frame cannot be accepted, regardless of its field bytes. -/
-theorem allowed_of_decodeList {packet : Packet.PacketType} {input rest : List UInt8}
+/-- A decoded frame passes validation and is allowed in the packet type. -/
+private theorem checks_of_decodeList {packet : Packet.PacketType} {input rest : List UInt8}
     {frame : Frame} (h : decodeList packet input = .ok (frame, rest)) :
-    frame.allowed packet = true := by
+    validate frame = .ok () ∧ frame.allowed packet = true := by
   simp only [decodeList, bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure] at h
   cases hb : byte input with
   | error e => simp [hb] at h
@@ -64,9 +64,15 @@ theorem allowed_of_decodeList {packet : Packet.PacketType} {input rest : List UI
         · simp only [require, Encoding.ByteReader.require, allowed, ↓reduceIte, Except.ok.injEq,
             Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
-          exact allowed
+          exact ⟨hv, allowed⟩
         · simp only [require, Encoding.ByteReader.require, allowed] at h
           contradiction
+
+/-- A forbidden frame cannot be accepted, regardless of its field bytes. -/
+theorem allowed_of_decodeList {packet : Packet.PacketType} {input rest : List UInt8}
+    {frame : Frame} (h : decodeList packet input = .ok (frame, rest)) :
+    frame.allowed packet = true :=
+  (checks_of_decodeList h).2
 
 /-- A type that Table 3 forbids cannot be decoded as that frame. -/
 theorem decodeList_ne_ok_of_not_allowed (packet : Packet.PacketType) (frame : Frame)
@@ -145,34 +151,8 @@ theorem valid_of_validate {frame : Frame} (accepted : validate frame = .ok ()) :
 
 /-- A decoded frame meets every format constraint, RFC 9000 §19. -/
 theorem valid_of_decodeList {packet : Packet.PacketType} {input rest : List UInt8}
-    {frame : Frame} (h : decodeList packet input = .ok (frame, rest)) : frame.Valid := by
-  simp only [decodeList, bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure] at h
-  cases hb : byte input with
-  | error e => simp [hb] at h
-  | ok first =>
-    rcases first with ⟨kind, tail⟩
-    simp only [hb] at h
-    cases hd : decodeBody kind.toNat tail with
-    | error e =>
-      simp only [hd, Except.mapError] at h
-      simp at h
-    | ok decoded =>
-      rcases decoded with ⟨f, tail'⟩
-      simp only [hd, Except.mapError] at h
-      cases hv : validate f with
-      | error e =>
-        simp only [StateT.lift, bind, hv, Except.bind] at h
-        contradiction
-      | ok u =>
-        cases u
-        simp only [StateT.lift, bind, pure, hv, Except.bind, Except.pure] at h
-        by_cases allowed : f.allowed packet = true
-        · simp only [require, Encoding.ByteReader.require, allowed, ↓reduceIte, Except.ok.injEq,
-            Prod.mk.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          exact valid_of_validate hv
-        · simp only [require, Encoding.ByteReader.require, allowed] at h
-          contradiction
+    {frame : Frame} (h : decodeList packet input = .ok (frame, rest)) : frame.Valid :=
+  valid_of_validate (checks_of_decodeList h).1
 
 /-- The ACK ranges after the first one, each as its largest and smallest packet number.
 
