@@ -1275,6 +1275,10 @@ Not yet released.
   The proof of `Bls.HashToCurve.expandMessageXmd_eq_spec` reads that step, in place of a private copy of the loop body, and its statement is unchanged.
   A proof that unfolds the body of `Bls.HashToCurve.expandMessageXmd` must change, as `expandMessageXmd_256_ok` (`Cryptography/Proofs/Bls/HashToCurveValidity.lean`) did, since it no longer meets a loop.
 
+- In Lean, `Evm.processMessage_reads_of_error` (`Execution/Proofs/Evm/Call/Parent.lean`) says that a call that ends with an error reads as the state it is sent from.
+  That holds for each account, each word of storage and transient storage, and the code at each code hash.
+  `Transactions.processCreateMessage_reads_of_error` (`Execution/Proofs/Transactions/Failed.lean`) says the same for a creation that ends with an error.
+
 ### Changes that break callers
 
 - In Lean, a run with no frame at an account keeps its storage, or wipes it only from an account that was empty at its start ([#4793](https://github.com/ethereum/EthLib/issues/4793)).
