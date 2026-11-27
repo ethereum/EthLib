@@ -481,17 +481,23 @@ macro_rules
          case le => simp only [$ls,*, NatCode.size_ofNat]; decide)
       | fail "the opcode at the program counter is not STOP, and the code does not end there")
 
-/-! ## Steps over frames that know a few ranges of memory -/
+/-! ## Steps over frames that know a few ranges of memory
+
+The tactics here evaluate numbers only, by simprocs, and match facts at reducible transparency.
+
+A fact can hold the bytes of a hash, and `decide` or a full unfolding would evaluate the hash.
+-/
 
 /-- Evaluates the growth of memory, and its price, for ranges and a size that are numbers. -/
 syntax "evm_mem" : tactic
 
 macro_rules
-  | `(tactic| evm_mem) => `(tactic| simp (config := { decide := true }) only [extendMemory,
+  | `(tactic| evm_mem) => `(tactic| simp only [extendMemory,
       ceil32, wordCount, memoryGasCost, keccak256Cost, WORD_BYTES, MEMORY_PER_WORD,
       OPCODE_KECCAK256_BASE, OPCODE_KECCAK256_PER_WORD, BitVec.reduceToNat, Nat.reduceMod,
-      Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul, Nat.reduceDiv, Nat.reducePow, ↓reduceIte,
-      Nat.add_zero, Nat.zero_add, ByteArray.size_empty])
+      Nat.reduceAdd, Nat.reduceSub, Nat.reduceMul, Nat.reduceDiv, Nat.reducePow, BitVec.reduceEq,
+      Nat.reduceEqDiff, Nat.reduceLeDiff, Nat.reduceLT, ↓reduceIte, Nat.add_zero, Nat.zero_add,
+      ByteArray.size_empty])
 
 /-- Proves the gas of a step that may grow memory, by linear arithmetic once its price is known. -/
 syntax "evm_memGas" : tactic
@@ -503,44 +509,51 @@ macro_rules
 syntax "evm_fact" : tactic
 
 macro_rules
+  -- An entry that does not match syntactically is skipped, so no bytes are unfolded.
   | `(tactic| evm_fact) => `(tactic| ((try simp only [BitVec.reduceToNat]) <;>
-      (repeat' first | exact List.mem_cons_self | apply List.mem_cons_of_mem)))
+      (repeat' first | with_reducible exact List.mem_cons_self | apply List.mem_cons_of_mem)))
 
 /-- Proves a size or a bound of a range of bytes, from the sizes of its parts. -/
 syntax "evm_size" : tactic
 
 macro_rules
+  -- A size that the lemmas do not give is left to `omega` as an unknown, never unfolded.
   | `(tactic| evm_size) => `(tactic| ((try simp only [size_wordBytes, ByteArray.size_append,
-      size_bufferRead, BitVec.reduceToNat, Nat.reduceAdd]) <;> first | rfl | decide | omega))
+      size_bufferRead, size_memoryReadBytes, BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceLeDiff])
+      <;> first | with_reducible rfl | omega))
 
 /-- Evaluates the size of memory, the facts that a write keeps, and the gas after a step. -/
 syntax "evm_tidyK" : tactic
 
 macro_rules
   -- A read within the bytes of a read of a buffer becomes a read of the buffer at `o + k`.
-  | `(tactic| evm_tidyK) => `(tactic| ((try evm_mem) <;> (try simp (config := { decide := true })
+  | `(tactic| evm_tidyK) => `(tactic| ((try evm_mem) <;> (try simp
       only [keep, outside, List.flatMap_cons, List.flatMap_nil, List.nil_append,
         List.cons_append, List.append_nil, Apart, size_wordBytes, ByteArray.size_append,
         size_bufferRead, size_memoryReadBytes, memoryReadBytes_of_size,
         memoryReadBytes_bufferRead, Nat.add_zero, Nat.add_assoc, loadWord_wordBytes,
-        wordBytes_loadWord, BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub, ↓reduceIte]) <;>
+        wordBytes_loadWord, BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub, Nat.reduceLT,
+        Nat.reduceLeDiff, Bool.or_false, Bool.false_or, Bool.or_true, Bool.true_or, decide_true,
+        decide_false, Bool.false_eq_true, ↓reduceIte]) <;>
       evm_tidy))
 
-/-- Proves that a read along the facts of a frame gives some bytes, by evaluation.
+/-- Proves that a read along the facts of a frame gives some bytes, by rewriting.
 
 The bytes are the parts of the facts that cover the range, joined in order. -/
 syntax "evm_read" : tactic
 
 macro_rules
-  -- Each unfolding reads one piece, which is evaluated before the next unfolding.
-  | `(tactic| evm_read) => `(tactic| ((repeat (rw [readFacts]; simp (config := { decide := true })
-      only [List.find?_cons_of_pos, List.find?_cons_of_neg, List.find?_nil, Bool.and_eq_true,
-        decide_eq_true_eq, Bool.not_eq_true, Bool.and_eq_false_iff, decide_eq_false_iff_not,
-        Nat.not_le, Nat.not_lt, size_wordBytes, ByteArray.size_append, size_bufferRead,
+  -- Each unfolding reads one piece, which is rewritten before the next unfolding.
+  --
+  -- The fact that holds the first byte is found by comparing numbers, never bytes.
+  | `(tactic| evm_read) => `(tactic| ((repeat (rw [readFacts]; simp only [List.find?_cons,
+        List.find?_nil, Bool.false_and, Bool.true_and, Bool.and_false, Bool.and_true, decide_true,
+        decide_false, size_wordBytes, ByteArray.size_append, size_bufferRead,
         size_memoryReadBytes, memoryReadBytes_of_size, memoryReadBytes_bufferRead, Nat.add_zero,
-        Nat.add_assoc, Nat.min_def, BitVec.reduceToNat,
-        Nat.reduceAdd, Nat.reduceSub, ↓reduceIte, Option.map_some, Option.map_none])) <;>
-      try rfl))
+        Nat.add_assoc, Nat.min_def, BitVec.reduceToNat, Nat.reduceAdd, Nat.reduceSub,
+        Nat.reduceLT, Nat.reduceLeDiff, Nat.reduceEqDiff, ↓reduceIte, Option.map_some,
+        Option.map_none])) <;>
+      try with_reducible rfl))
 
 /-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
 
