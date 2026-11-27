@@ -134,7 +134,7 @@ def expandMessageXmd
   let b0 := Hash.Sha256.hash msgPrime
   -- Step 8: `b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)`.
   let b1 := Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)
-  -- Step 11: `uniform_bytes = b_1 || ... || b_ell`, in a buffer of `ell` blocks.
+  -- Step 11: `uniform_bytes = b_1 || ... || b_ell`, in a buffer sized for `ell` blocks.
   --
   -- It holds `b_1` alone when `ell <= 1`.
   let mut out := ByteArray.emptyWithCapacity (Hash.Sha256.DIGEST_SIZE_BYTES * ell) ++ b1

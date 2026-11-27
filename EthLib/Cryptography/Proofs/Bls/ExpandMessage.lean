@@ -169,7 +169,7 @@ private theorem bI_toList (b0 dstPrime prev : ByteArray) (hb0 : b0.size = 32)
 
 /-- The loop of the code computes the blocks `b_1` to `b_(n + 1)` of the model.
 
-The buffer holds their bytes and the block `b_(i - 1)` is the one that step 10 reads.
+The buffer holds their bytes, and the second component is `b_(n + 1)`, which the next step reads.
 -/
 private theorem foldl_bI (b0 dstPrime : ByteArray) (hb0 : b0.size = 32)
     (hdp : dstPrime.size < 2 ^ 60) (n : Nat) (out prev : ByteArray)
