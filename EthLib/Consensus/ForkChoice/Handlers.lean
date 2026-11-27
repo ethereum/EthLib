@@ -120,9 +120,10 @@ def columnsAvailable (config : Config) (sources : BlockSources preset fork) (roo
     Except ForkChoiceError Bool := do
   -- The source returns the sampled columns of the block.
   let some sidecars := sources.columns root | throw (.columnsUnavailable root)
-  -- Each column has a valid shape, and the proofs of its cells match the commitments.
+  -- Each column belongs to the block, has a valid shape, and its proofs match the commitments.
   sidecars.allM fun sidecar =>
-    if verifyDataColumnSidecar preset config sidecar bidCommitments then
+    if isDataColumnSidecarOfBlock preset sidecar root &&
+        verifyDataColumnSidecar preset config sidecar bidCommitments then
       (verifyDataColumnSidecarKzgProofs sources.setup sidecar bidCommitments).mapError .kzg
     else pure false
 
@@ -133,6 +134,8 @@ At Deneb and Electra the node must hold the blobs of the block and a proof for e
 Each proof must show that its blob matches the commitment at its position, as [EIP-4844] asks.
 
 From Fulu the node must get every column that it samples, as [EIP-7594] asks.
+
+At Fulu a column must carry the header of the block, and a branch from its commitments to the body.
 
 Each column must have a valid shape, and the proofs of its cells must match its commitments.
 

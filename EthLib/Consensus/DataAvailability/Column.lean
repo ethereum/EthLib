@@ -240,6 +240,24 @@ def verifyDataColumnSidecarInclusionProof (preset : Preset) {fork : Fork}
     (sidecar.kzgCommitmentsInclusionProof beforeGloas)
     (sidecar.signedBlockHeader beforeGloas).message.bodyRoot
 
+/-- Whether a sidecar belongs to the block of a root.
+
+Before Gloas its header must be that of the block, with a branch to the body root of that header.
+
+From Gloas a sidecar has no header, and the commitments of its bid bind it, so it passes. -/
+def isDataColumnSidecarOfBlock (preset : Preset) {fork : Fork}
+    (sidecar : DataColumnSidecar preset fork) (root : Root) : Bool :=
+  if beforeGloas : fork < .glamsterdam then
+    -- The root of the header is the block root.
+    --
+    -- A header has a fixed size, so its root is always computed and the error branch is unused.
+    (match SszType.hashTreeRoot (sidecar.signedBlockHeader beforeGloas).message with
+      | .ok headerRoot => headerRoot == root
+      | .error _ => false) &&
+      -- The commitments sit in the body of that header.
+      verifyDataColumnSidecarInclusionProof preset beforeGloas sidecar
+  else true
+
 /-- The largest number of column sidecars in one request: every column of the most blocks. -/
 def computeMaxRequestDataColumnSidecars (preset : Preset) (config : Config) : UInt64 :=
   -- `MAX_REQUEST_BLOCKS_DENEB * NUMBER_OF_COLUMNS`.

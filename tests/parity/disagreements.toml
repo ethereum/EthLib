@@ -430,45 +430,6 @@ class = "ethlib-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_on_head_parent_timely_head]"'
 upstream = "As of 2026-11-27, none is needed: the source states the rule, and EthLib applies it under #1368"
 
-# The Fulu fork choice cases of v1.7.0-beta.5 whose columns belong to another block.
-# EthLib applies that rule in its own pull request, which removes these entries.
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/fulu/fork_choice/on_block/pyspec_tests/on_block_peerdas__invalid_wrong_block"
-reason = "EthLib does not yet check at Fulu that each column sidecar carries the header of the block and a valid inclusion proof"
-source = "consensus-specs v1.7.0-beta.5, specs/fulu/fork-choice.md, is_data_available (pull request 5765)"
-class = "ethlib-defect"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/fulu/fork_choice/on_block/pyspec_tests/on_block_peerdas__invalid_wrong_block]"'
-upstream = "As of 2026-11-27, none is needed: the source states the rule, and EthLib applies it under #1368"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/fulu/fork_choice/on_block/pyspec_tests/on_block_peerdas__invalid_wrong_commitments_with_proofs"
-reason = "EthLib does not yet check at Fulu that each column sidecar carries the header of the block and a valid inclusion proof"
-source = "consensus-specs v1.7.0-beta.5, specs/fulu/fork-choice.md, is_data_available (pull request 5765)"
-class = "ethlib-defect"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/fulu/fork_choice/on_block/pyspec_tests/on_block_peerdas__invalid_wrong_commitments_with_proofs]"'
-upstream = "As of 2026-11-27, none is needed: the source states the rule, and EthLib applies it under #1368"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/fulu/fork_choice/on_block/pyspec_tests/on_block_peerdas__invalid_wrong_block"
-reason = "EthLib does not yet check at Fulu that each column sidecar carries the header of the block and a valid inclusion proof"
-source = "consensus-specs v1.7.0-beta.5, specs/fulu/fork-choice.md, is_data_available (pull request 5765)"
-class = "ethlib-defect"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fork_choice/on_block/pyspec_tests/on_block_peerdas__invalid_wrong_block]"'
-upstream = "As of 2026-11-27, none is needed: the source states the rule, and EthLib applies it under #1368"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/fulu/fork_choice/on_block/pyspec_tests/on_block_peerdas__invalid_wrong_commitments_with_proofs"
-reason = "EthLib does not yet check at Fulu that each column sidecar carries the header of the block and a valid inclusion proof"
-source = "consensus-specs v1.7.0-beta.5, specs/fulu/fork-choice.md, is_data_available (pull request 5765)"
-class = "ethlib-defect"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fork_choice/on_block/pyspec_tests/on_block_peerdas__invalid_wrong_commitments_with_proofs]"'
-upstream = "As of 2026-11-27, none is needed: the source states the rule, and EthLib applies it under #1368"
-
 # A fork choice compliance case of v1.7.0-beta.5 that the runner of the same release fails.
 # Its expected proposer boost differs from what the specification of the release computes.
 
