@@ -1352,6 +1352,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the rebuild of the state from the block access list can assume a property of the wipes of storage in the block ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
+  `Blocks.KeepsFollowable` (`Execution/Proofs/Blocks/AccessListRebuild.lean`) takes a predicate `W` on addresses.
+  The builder must follow a call only if `W` holds at each address whose storage the call wiped (`Blocks.KeepsIf`).
+  `Blocks.applyBody_tracks`, `Blocks.stateTransition_rebuild` and `Blocks.stateTransition_rebuild_nonce` take the hypothesis that `W` holds at each address whose storage the body wiped.
+  `Blocks.keepsFollowable_rebuildableBlock` (`Execution/Proofs/Blocks/BodyFollow.lean`) gives `KeepsFollowable` with `W` true everywhere, and each of its fields gives a `Blocks.KeepsIf` in place of a pair.
+  `Blocks.stateTransition_rebuild_of_rebuildableBlock` and `Blocks.stateTransition_rebuild_nonce_of_rebuildableBlock` keep their statements, with `W` true everywhere.
+
 - In Lean, every short Weierstrass curve computes `k P` with one scalar product, left to right on the non-adjacent form of `k` ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
   `ScalarProduct.naf` (`Cryptography/ScalarProduct.lean`) takes the doubling, the addition, the point at infinity, the point and its negation of a curve.
   `ScalarProduct.nafSteps` runs its steps, and `ScalarProduct.naf_spec`, `ScalarProduct.valid_nafSteps`, `ScalarProduct.map_naf` and `ScalarProduct.map_nafSteps` (`Cryptography/Proofs/ScalarProduct.lean`) prove it once, from the group law of a curve or a change of representation.
