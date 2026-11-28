@@ -439,6 +439,15 @@ scoped macro "simp_record_roundtrip " dec:ident enc:ident : tactic => `(tactic| 
     ↓reduceIte, Item.readField_cons, bind, Except.bind, pure, Except.pure]
   done))
 
+/-- Close `dec (enc c) = .ok c` for a decoder that matches a fixed list of items.
+
+Each item decodes with its lawful codec. -/
+scoped macro "simp_fixed_list_roundtrip " dec:ident enc:ident : tactic => `(tactic| (
+  -- Unfold the decoder and the encoder, then decode each field from its own item.
+  simp only [$dec:ident, $enc:ident, Item.fields, Item.toItems, List.length_cons, List.length_nil,
+    ↓reduceIte, Item.field_toItem, LawfulCodec.ofItem_toItem, bind, Except.bind, pure, Except.pure]
+  done))
+
 omit [LawfulCodec α] in
 /-- A field that appears at a fork has one item from that fork on, and none before. -/
 theorem Item.length_ofSince {f fork : Fork} (x : Since f fork α) :

@@ -30,9 +30,7 @@ variable {fork : Fork}
 instance : LawfulCodec (WireReceipt fork) where
   ofItem_toItem r := by
     show WireReceipt.ofItem (WireReceipt.toItem r) = _
-    simp only [WireReceipt.ofItem, WireReceipt.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.field_toItem, bind, Except.bind, pure,
-      Except.pure]
+    simp_fixed_list_roundtrip WireReceipt.ofItem WireReceipt.toItem
   toItem_of_ofItem {item r} h := by
     change WireReceipt.ofItem item = .ok r at h
     unfold WireReceipt.ofItem at h
