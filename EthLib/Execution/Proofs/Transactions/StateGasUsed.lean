@@ -128,7 +128,7 @@ private theorem prepareFirstFrame_slots {Meter : Type} [GasMeter Meter] {chainId
     split at h
     · rename_i hdep
       -- A creation reads its address, which has no nonce and no code.
-      obtain ⟨hn, hc, -⟩ := TransactionState.accountDeployable_eq_true_iff.mp hdep
+      obtain ⟨hn, hc⟩ := TransactionState.accountDeployable_eq_true_iff.mp hdep
       split at h <;>
       · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
         cases h

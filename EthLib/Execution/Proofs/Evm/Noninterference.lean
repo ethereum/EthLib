@@ -86,17 +86,17 @@ theorem extcodehashStep_congr_state {evm : Evm fork Meter} {word : U256} {rest :
 
 /-! ## Frames whose states agree -/
 
-/-- Two frames that differ only in their states, which agree on four sets.
+/-- Two frames that differ only in their states, which agree on three sets.
 
-The sets name addresses, whole storages, slots and code hashes, as for two transaction states. -/
-structure FrameAgrees (account allStorage : Address → Prop) (slot : Address → Bytes32 → Prop)
+The sets name addresses, slots and code hashes, as for two transaction states. -/
+structure FrameAgrees (account : Address → Prop) (slot : Address → Bytes32 → Prop)
     (code : Hash32 → Prop) (a b : Evm fork Meter) : Prop where
   /-- Apart from the state, the two frames are equal.
 
   Their stack, gas meter and substate, including the warm access sets, are the same. -/
   rest : b = { a with state := b.state }
-  /-- The two states agree on the four sets. -/
-  state : AgreesOn account allStorage slot code a.state b.state
+  /-- The two states agree on the three sets. -/
+  state : AgreesOn account slot code a.state b.state
 
 /-- Every read that a state records is in the sets.
 
@@ -457,20 +457,20 @@ The code of the first set and the current account must agree.
 A failure that does not abort the run is the same in both frames.
 
 A success with its reads in the sets gives agreeing frames. -/
-private def KeepsAgreement (account allStorage : Address → Prop) (slot : Address → Bytes32 → Prop)
+private def KeepsAgreement (account : Address → Prop) (slot : Address → Bytes32 → Prop)
     (code : Hash32 → Prop) (run : Evm fork Meter → Except EvmError (Evm fork Meter)) : Prop :=
-  ∀ e1 e2, FrameAgrees account allStorage slot code e1 e2 → CodesIn account code e1.state →
+  ∀ e1 e2, FrameAgrees account slot code e1 e2 → CodesIn account code e1.state →
     account e1.message.currentTarget →
     (∀ err, run e1 = .error err → err.aborts = false → run e2 = .error err) ∧
       ∀ a1, run e1 = .ok a1 → ReadsIn account slot a1.state →
-        ∃ a2, run e2 = .ok a2 ∧ FrameAgrees account allStorage slot code a1 a2
+        ∃ a2, run e2 = .ok a2 ∧ FrameAgrees account slot code a1 a2
 
 omit [GasMeter Meter] in
-private theorem keepsAgreement_of_stateFree {account allStorage : Address → Prop}
+private theorem keepsAgreement_of_stateFree {account : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} (hfree : StateFree run)
     (hstate : ∀ {evm after}, run evm = .ok after → after.state = evm.state) :
-    KeepsAgreement account allStorage slot code run := by
+    KeepsAgreement account slot code run := by
   intro e1 e2 hrel _ _
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   rw [hfree e1 s]
@@ -484,11 +484,11 @@ private theorem popWord_of_nil {evm : Evm fork Meter} (h : evm.stack.val = []) :
   have hstack : evm.stack = ⟨[], h ▸ evm.stack.property⟩ := Subtype.ext h
   simp [popWord, hstack, Stack.pop, bind, Except.bind]
 
-variable {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+variable {account : Address → Prop} {slot : Address → Bytes32 → Prop}
   {code : Hash32 → Prop}
 
 private theorem balanceStep_keeps :
-    KeepsAgreement account allStorage slot code (balanceStep (fork := fork) (Meter := Meter)) := by
+    KeepsAgreement account slot code (balanceStep (fork := fork) (Meter := Meter)) := by
   intro e1 e2 hrel _ _
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   rcases hs : e1.stack.val with _ | ⟨word, rest⟩
@@ -511,7 +511,7 @@ private theorem balanceStep_keeps :
     exact hrel.state.recordAccountRead _
 
 private theorem extcodehashStep_keeps :
-    KeepsAgreement account allStorage slot code
+    KeepsAgreement account slot code
       (extcodehashStep (fork := fork) (Meter := Meter)) := by
   intro e1 e2 hrel _ _
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
@@ -538,7 +538,7 @@ private theorem extcodehashStep_keeps :
     exact hrel.state.recordAccountRead _
 
 private theorem sloadStep_keeps :
-    KeepsAgreement account allStorage slot code (sloadStep (fork := fork) (Meter := Meter)) := by
+    KeepsAgreement account slot code (sloadStep (fork := fork) (Meter := Meter)) := by
   intro e1 e2 hrel _ _
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   rcases hs : e1.stack.val with _ | ⟨word, rest⟩
@@ -553,7 +553,7 @@ private theorem sloadStep_keeps :
   · have hslot := reads.slot e1.message.currentTarget (U256.toBeBytes word) (by
       rw [(reads_sloadStep hs h).2, Std.ExtTreeMap.getD_insert_self]
       exact Std.ExtTreeSet.mem_insert_self)
-    have hread := hrel.state.getStorage_eq (.inr (.inr (.inr hslot)))
+    have hread := hrel.state.getStorage_eq (.inr (.inr hslot))
     have self := sloadStep_congr_state hs e1.state rfl
     rw [h] at self
     have hst : a1.state =
@@ -569,18 +569,18 @@ private theorem keepsAgreement_of_eq_map {run : Evm fork Meter → Except EvmErr
     {e1 : Evm fork Meter} {other after : State.TransactionState}
     (heq : run { e1 with state := other } = (fun a => { a with state := after }) <$> run e1)
     (hstate : ∀ a1, run e1 = .ok a1 → ReadsIn account slot a1.state →
-      AgreesOn account allStorage slot code a1.state after) :
+      AgreesOn account slot code a1.state after) :
     (∀ err, run e1 = .error err → err.aborts = false →
         run { e1 with state := other } = .error err) ∧
       ∀ a1, run e1 = .ok a1 → ReadsIn account slot a1.state →
         ∃ a2, run { e1 with state := other } = .ok a2 ∧
-          FrameAgrees account allStorage slot code a1 a2 := by
+          FrameAgrees account slot code a1 a2 := by
   rw [heq]
   exact ⟨fun err h _ => by rw [h]; rfl,
     fun a1 h reads => ⟨_, by rw [h]; rfl, rfl, hstate a1 h reads⟩⟩
 
 private theorem tloadStep_keeps :
-    KeepsAgreement account allStorage slot code (tloadStep (fork := fork) (Meter := Meter)) := by
+    KeepsAgreement account slot code (tloadStep (fork := fork) (Meter := Meter)) := by
   intro e1 e2 hrel _ _
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   rcases hs : e1.stack.val with _ | ⟨word, rest⟩
@@ -594,7 +594,7 @@ private theorem tloadStep_keeps :
     exact hrel.state
 
 private theorem tstoreStep_keeps :
-    KeepsAgreement account allStorage slot code (tstoreStep (fork := fork) (Meter := Meter)) := by
+    KeepsAgreement account slot code (tstoreStep (fork := fork) (Meter := Meter)) := by
   intro e1 e2 hrel _ _
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   rcases hs : e1.stack.val with _ | ⟨word, _ | ⟨value, rest⟩⟩
@@ -623,7 +623,7 @@ private theorem tstoreStep_keeps :
     exact hrel.state.setTransientStorage _ _ _
 
 private theorem selfbalance_keeps :
-    KeepsAgreement account allStorage slot code (fun evm : Evm fork Meter =>
+    KeepsAgreement account slot code (fun evm : Evm fork Meter =>
       readFrame GasCosts.OPCODE_SELFBALANCE
         (fun evm => (evm.state.getAccount evm.message.currentTarget).balance)
         (recordAccountRead evm evm.message.currentTarget)) := by
@@ -656,7 +656,7 @@ private theorem selfbalance_keeps :
   exact hrel.state.recordAccountRead _
 
 private theorem extcodesizeStep_keeps :
-    KeepsAgreement account allStorage slot code
+    KeepsAgreement account slot code
       (extcodesizeStep (fork := fork) (Meter := Meter)) := by
   intro e1 e2 hrel hcodes _
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
@@ -712,13 +712,13 @@ private theorem keeps_of_error {run : Evm fork Meter → Except EvmError (Evm fo
         run { e1 with state := other } = .error err) ∧
       ∀ a1, run e1 = .ok a1 → ReadsIn account slot a1.state →
         ∃ a2, run { e1 with state := other } = .ok a2 ∧
-          FrameAgrees account allStorage slot code a1 a2 := by
+          FrameAgrees account slot code a1 a2 := by
   have h1 : run e1 = .error error := h e1.state
   rw [h1, h other]
   exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
 
 private theorem extcodecopyStep_keeps :
-    KeepsAgreement account allStorage slot code
+    KeepsAgreement account slot code
       (extcodecopyStep (fork := fork) (Meter := Meter)) := by
   intro e1 e2 hrel hcodes _
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
@@ -810,7 +810,7 @@ theorem chargeStateGas_withState (evm : Evm fork Meter) (other : State.Transacti
 
 private theorem sstoreWrite_keeps {address : Address} {key : Bytes32} {original current new : U256}
     {cold : Bool} {evm : Evm fork Meter} {other : State.TransactionState}
-    (hag : AgreesOn account allStorage slot code evm.state other)
+    (hag : AgreesOn account slot code evm.state other)
     (ha : address ∈ evm.state.accountWrites ∨ account address) :
     (∀ err, sstoreWrite address key original current new cold evm = .error err →
         err.aborts = false →
@@ -818,7 +818,7 @@ private theorem sstoreWrite_keeps {address : Address} {key : Bytes32} {original 
           .error err) ∧
       ∀ a1, sstoreWrite address key original current new cold evm = .ok a1 →
         ∃ a2, sstoreWrite address key original current new cold { evm with state := other } =
-          .ok a2 ∧ FrameAgrees account allStorage slot code a1 a2 := by
+          .ok a2 ∧ FrameAgrees account slot code a1 a2 := by
   have hrefill : refillStateGas { evm with state := other }
       (sstoreStateRefill fork original current new) =
       { refillStateGas evm (sstoreStateRefill fork original current new) with state := other } :=
@@ -863,12 +863,12 @@ private theorem sstoreRest_error {word new : U256} {evm : Evm fork Meter} {err :
 
 private theorem keepReads_keeps {evm a1 : Evm fork Meter} {other : State.TransactionState}
     {x y : Except EvmError (Evm fork Meter)}
-    (hag : AgreesOn account allStorage slot code evm.state other)
+    (hag : AgreesOn account slot code evm.state other)
     (herr : ∀ err, x = .error err → err.aborts = false → y = .error err)
-    (hok : ∀ a1, x = .ok a1 → ∃ a2, y = .ok a2 ∧ FrameAgrees account allStorage slot code a1 a2)
+    (hok : ∀ a1, x = .ok a1 → ∃ a2, y = .ok a2 ∧ FrameAgrees account slot code a1 a2)
     (h : keepReads evm id x = .ok a1) :
     ∃ a2, keepReads { evm with state := other } id y = .ok a2 ∧
-      FrameAgrees account allStorage slot code a1 a2 := by
+      FrameAgrees account slot code a1 a2 := by
   unfold keepReads at h ⊢
   rcases hx : x with e | r
   · rw [hx] at h
@@ -886,14 +886,14 @@ private theorem keepReads_keeps {evm a1 : Evm fork Meter} {other : State.Transac
 
 private theorem sstoreRest_ok {word new : U256} {evm a1 : Evm fork Meter}
     {other : State.TransactionState}
-    (hag : AgreesOn account allStorage slot code evm.state other)
+    (hag : AgreesOn account slot code evm.state other)
     (hcurrent : account evm.message.currentTarget)
     (hslot : slot evm.message.currentTarget (U256.toBeBytes word))
     (h : sstoreRest word new evm = .ok a1) :
     ∃ a2, sstoreRest word new { evm with state := other } = .ok a2 ∧
-      FrameAgrees account allStorage slot code a1 a2 := by
-  have horig := hag.getStorageOriginal_eq (.inr (.inr hslot))
-  have hcur := hag.getStorage_eq (.inr (.inr (.inr hslot)))
+      FrameAgrees account slot code a1 a2 := by
+  have horig := hag.getStorageOriginal_eq (.inr hslot)
+  have hcur := hag.getStorage_eq (.inr (.inr hslot))
   simp only [sstoreRest] at h ⊢
   simp only [horig, hcur, accessStorageKey_withState]
   rcases hacc : accessStorageKey evm evm.message.currentTarget (U256.toBeBytes word) with
@@ -902,7 +902,7 @@ private theorem sstoreRest_ok {word new : U256} {evm a1 : Evm fork Meter}
   have sg : g.state = evm.state := by
     have := state_accessStorageKey evm evm.message.currentTarget (U256.toBeBytes word)
     rwa [hacc] at this
-  have hagE : AgreesOn account allStorage slot code
+  have hagE : AgreesOn account slot code
       (recordStorageRead g evm.message.currentTarget (U256.toBeBytes word)).state
       (other.recordStorageRead evm.message.currentTarget (U256.toBeBytes word)) := by
     simp only [recordStorageRead, sg]
@@ -927,7 +927,7 @@ private theorem sstoreStep_eq (evm : Evm fork Meter) : sstoreStep evm = (do
     else sstoreRest word new evm) := rfl
 
 private theorem sstoreStep_keeps :
-    KeepsAgreement account allStorage slot code (sstoreStep (fork := fork) (Meter := Meter)) := by
+    KeepsAgreement account slot code (sstoreStep (fork := fork) (Meter := Meter)) := by
   intro e1 e2 hrel _ hcurrent
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   by_cases static : fork ≥ .glamsterdam ∧ e1.message.isStatic = true
@@ -967,9 +967,9 @@ private theorem sstoreStep_keeps :
       exact hslot
 
 private theorem selfdestructTransfer_agrees {tx other : State.TransactionState}
-    (hag : AgreesOn account allStorage slot code tx other) {originator beneficiary : Address}
+    (hag : AgreesOn account slot code tx other) {originator beneficiary : Address}
     (ho : account originator) (hb : account beneficiary) :
-    State.TransactionState.AgreesOnExcept account allStorage slot code
+    State.TransactionState.AgreesOnExcept account slot code
       (selfdestructTransfer fork tx originator beneficiary)
       (selfdestructTransfer fork other originator beneficiary) := by
   unfold selfdestructTransfer
@@ -986,13 +986,13 @@ private theorem selfdestructTransfer_agrees {tx other : State.TransactionState}
 omit [GasMeter Meter] in
 private theorem finishSelfdestruct_keeps {beneficiary : Address} {refund : Nat}
     {evm : Evm fork Meter} {other : State.TransactionState}
-    (hag : AgreesOn account allStorage slot code evm.state other)
+    (hag : AgreesOn account slot code evm.state other)
     (ho : account evm.message.currentTarget) (hb : account beneficiary) :
     (∀ err, finishSelfdestruct fork beneficiary refund evm = .error err →
         finishSelfdestruct fork beneficiary refund { evm with state := other } = .error err) ∧
       ∀ a1, finishSelfdestruct fork beneficiary refund evm = .ok a1 →
         ∃ a2, finishSelfdestruct fork beneficiary refund { evm with state := other } = .ok a2 ∧
-          FrameAgrees account allStorage slot code a1 a2 := by
+          FrameAgrees account slot code a1 a2 := by
   unfold finishSelfdestruct
   by_cases static : evm.message.isStatic = true
   · simp only [static, ↓reduceIte]
@@ -1034,13 +1034,13 @@ private theorem selfdestructStep_eq (evm : Evm fork Meter) : selfdestructStep fo
 
 private theorem selfdestructWrite_keeps {beneficiary : Address} {cold : Bool}
     {evm : Evm fork Meter} {other : State.TransactionState}
-    (hag : AgreesOn account allStorage slot code evm.state other)
+    (hag : AgreesOn account slot code evm.state other)
     (ho : account evm.message.currentTarget) (hb : account beneficiary) :
     (∀ err, selfdestructWrite beneficiary cold evm = .error err →
         selfdestructWrite beneficiary cold { evm with state := other } = .error err) ∧
       ∀ a1, selfdestructWrite beneficiary cold evm = .ok a1 →
         ∃ a2, selfdestructWrite beneficiary cold { evm with state := other } = .ok a2 ∧
-          FrameAgrees account allStorage slot code a1 a2 := by
+          FrameAgrees account slot code a1 a2 := by
   have hcreates : selfdestructCreatesAccount fork other evm.message.currentTarget beneficiary =
       selfdestructCreatesAccount fork evm.state evm.message.currentTarget beneficiary := by
     unfold selfdestructCreatesAccount
@@ -1071,7 +1071,7 @@ theorem accessAddress_withState (evm : Evm fork Meter)
   split <;> rfl
 
 private theorem selfdestructStep_keeps :
-    KeepsAgreement account allStorage slot code (selfdestructStep (Meter := Meter) fork) := by
+    KeepsAgreement account slot code (selfdestructStep (Meter := Meter) fork) := by
   intro e1 e2 hrel _ hcurrent
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   by_cases static : fork ≥ .glamsterdam ∧ e1.message.isStatic = true
@@ -1127,7 +1127,7 @@ private theorem selfdestructStep_keeps :
         simp [Std.ExtTreeSet.mem_insert]
     rw [k1] at h
     rw [k2]
-    have hag : AgreesOn account allStorage slot code
+    have hag : AgreesOn account slot code
         (recordAccountRead g (toAddressMasked word)).state
         (s.recordAccountRead (toAddressMasked word)) := by
       simp only [recordAccountRead, sg.1]
@@ -1138,7 +1138,7 @@ private theorem selfdestructStep_keeps :
 
 private theorem accountStep_keeps {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : accountStep fork op = some run) : KeepsAgreement account allStorage slot code run := by
+    (hstep : accountStep fork op = some run) : KeepsAgreement account slot code run := by
   cases op <;> simp only [accountStep, Option.some.injEq, reduceCtorEq] at hstep
   all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep) <;>
     (try subst hstep)
@@ -1152,7 +1152,7 @@ private theorem accountStep_keeps {op : Op}
 
 private theorem storageStep_keeps {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : storageStep op = some run) : KeepsAgreement account allStorage slot code run := by
+    (hstep : storageStep op = some run) : KeepsAgreement account slot code run := by
   cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hstep <;> subst hstep
   · exact sloadStep_keeps
   · exact sstoreStep_keeps
@@ -1160,7 +1160,7 @@ private theorem storageStep_keeps {op : Op}
 private theorem transientStorageStep_keeps {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : transientStorageStep fork op = some run) :
-    KeepsAgreement account allStorage slot code run := by
+    KeepsAgreement account slot code run := by
   cases op <;> simp only [transientStorageStep, reduceCtorEq] at hstep <;> split at hstep <;>
     simp only [Option.some.injEq, reduceCtorEq] at hstep <;> subst hstep
   · exact tloadStep_keeps
@@ -1169,14 +1169,14 @@ private theorem transientStorageStep_keeps {op : Op}
 private theorem selfdestructOpStep_keeps {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : selfdestructOpStep fork op = some run) :
-    KeepsAgreement account allStorage slot code run := by
+    KeepsAgreement account slot code run := by
   cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hstep
   subst hstep
   exact selfdestructStep_keeps
 
 private theorem instruction_keeps {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hrun : instruction fork op = some run) : KeepsAgreement account allStorage slot code run := by
+    (hrun : instruction fork op = some run) : KeepsAgreement account slot code run := by
   unfold instruction at hrun
   rcases orElse_eq_some hrun with hf | hrun
   · exact keepsAgreement_of_stateFree (stackOnlyStep_stateFree hf)
@@ -1214,11 +1214,11 @@ private theorem instruction_keeps {op : Op}
   · exact selfdestructOpStep_keeps hf
 
 /-- Each instruction of the dispatch gives agreeing frames when it starts from agreeing frames. -/
-theorem instruction_agrees {account allStorage : Address → Prop}
+theorem instruction_agrees {account : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop} {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hrun : instruction fork op = some run) {e1 e2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code e1 e2)
+    (hrel : FrameAgrees account slot code e1 e2)
     -- Each account of the first set needs its code hash empty, written, or in the code set.
     --
     -- The current account must be in the first set.
@@ -1229,7 +1229,7 @@ theorem instruction_agrees {account allStorage : Address → Prop}
     (∀ err, run e1 = .error err → err.aborts = false → run e2 = .error err) ∧
       -- A success needs the reads of the frame it gives in the sets.
       ∀ a1, run e1 = .ok a1 → ReadsIn account slot a1.state →
-        ∃ a2, run e2 = .ok a2 ∧ FrameAgrees account allStorage slot code a1 a2 :=
+        ∃ a2, run e2 = .ok a2 ∧ FrameAgrees account slot code a1 a2 :=
   instruction_keeps hrun e1 e2 hrel hcodes hcurrent
 
 end EthLib.Execution.Evm

@@ -235,14 +235,12 @@ def FirstFrame.ofMeter {fork : Fork} (message : Message fork) (state : Transacti
 Its sources:
 
 - [EIP-684][eip684], no creation at an address with code or a nonce;
-- [EIP-7610][eip7610], no creation at an address with storage;
 - [EIP-7702][eip7702], the authorizations and the delegated recipient;
 - [EIP-2780][eip2780], the gas that the frame pays before its code, from Glamsterdam.
 
 An error comes with the state so far, whose reads stay, by EIP-7928.
 
 [eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
 [eip2780]: https://eips.ethereum.org/EIPS/eip-2780#runtime-gas-costs -/
 def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
@@ -267,11 +265,9 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
     let address := message.currentTarget
     -- The read of the created address, for EIP-7928.
     let state := state.recordAccountRead address
-    -- A creation fails when the created address has code, a nonce or storage.
+    -- A creation fails when the created address has code or a nonce, by EIP-684.
     --
     -- That failure leaves no execution gas, at every fork.
-    --
-    -- EIP-684 forbids the code and the nonce, and EIP-7610 the storage.
     unless state.accountDeployable address do throw (.addressCollision address, state)
     -- From Glamsterdam, it pays the state gas of a new account.
     --

@@ -607,7 +607,6 @@ private theorem Sends.lift {evm evm' : Evm fork Meter} {result : StepResult fork
     have hd : ∀ a, evm'.state.accountDeployable a = evm.state.accountDeployable a := by
       intro a
       exact State.TransactionState.accountDeployable_congr (getAccount_of_staticStep h a)
-        (h.state a List.not_mem_nil).2.1
     refine ⟨r1, fun c => ?_, fun c => ?_, r4, fun c hne => (r7 c (h.message ▸ hne)).of_staticStep h,
       h.message ▸ r5, h.message ▸ r6, r8, fun t => h.message ▸ r9 t⟩
     · rw [← hd]
@@ -762,8 +761,7 @@ private theorem sends_launchCreate {evm : Evm fork Meter} {value : U256}
       -- A creation message copies the block and the transaction of its caller.
       · exact (congrArg Message.blockEnv c2.message :)
       · exact (congrArg Message.txEnv c2.message :)
-      rw [← State.TransactionState.accountDeployable_congr (getAccount_of_staticStep c2 _)
-        (c2.state _ List.not_mem_nil).2.1]
+      rw [← State.TransactionState.accountDeployable_congr (getAccount_of_staticStep c2 _)]
       exact hd
     · obtain ⟨e3, -, hr⟩ := Base.bind_ok_iff.mp hr
       cases hr

@@ -10,9 +10,9 @@ public import EthLib.Execution.Proofs.Transactions.Noninterference
 /-!
 # Proofs: a transaction depends only on what it records
 
-Run the same transaction on two block states that agree on four sets.
+Run the same transaction on two block states that agree on three sets.
 
-The sets name accounts, whole storages, slots and code hashes.
+The sets name accounts, slots and code hashes.
 
 When the first run ends with its reads in the sets, the second gives the same gas, logs and error.
 
@@ -30,8 +30,7 @@ namespace EthLib.Execution.Transactions
 open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State
-open EthLib.Execution.State.TransactionState (AgreesOn accessedAccount accessedCode accessedSlot
-  candidateStorage)
+open EthLib.Execution.State.TransactionState (AgreesOn accessedAccount accessedCode accessedSlot)
 
 variable {fork : Fork}
 
@@ -142,7 +141,7 @@ end Reads
 
 section Steps
 
-variable {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+variable {account : Address → Prop} {slot : Address → Bytes32 → Prop}
   {code : Hash32 → Prop}
 
 /-- A success related to a result makes that result a success, with a related value. -/
@@ -156,10 +155,10 @@ private theorem exists_ok_of_exceptRel {ε α β : Type} {r : α → β → Prop
 
 /-- Buying gas for an agreed sender succeeds alike on an agreeing state. -/
 private theorem buyGas_agrees {env : BlockEnvironment fork} {tx other bought : TransactionState}
-    {sender : Address} {t : Transaction} (hagree : AgreesOn account allStorage slot code tx other)
+    {sender : Address} {t : Transaction} (hagree : AgreesOn account slot code tx other)
     (hs : account sender) (h : buyGas env tx sender t = .ok bought) :
     ∃ bought', buyGas env other sender t = .ok bought' ∧
-      AgreesOn account allStorage slot code bought bought' := by
+      AgreesOn account slot code bought bought' := by
   unfold buyGas at h ⊢
   rw [paidBaseFee_empty] at h ⊢
   obtain ⟨mid, hmid, h⟩ := bind_ok_iff.mp h
@@ -171,10 +170,10 @@ private theorem buyGas_agrees {env : BlockEnvironment fork} {tx other bought : T
 
 /-- A credit of ether to an agreed account succeeds alike on an agreeing state. -/
 private theorem creditEther_agrees {tx other tx' : TransactionState} {address : Address}
-    {amount : Nat} (hagree : AgreesOn account allStorage slot code tx other)
+    {amount : Nat} (hagree : AgreesOn account slot code tx other)
     (ha : account address) (h : creditEther fork tx address amount = .ok tx') :
     ∃ other', creditEther fork other address amount = .ok other' ∧
-      AgreesOn account allStorage slot code tx' other' := by
+      AgreesOn account slot code tx' other' := by
   unfold creditEther at h ⊢
   split at h
   · rename_i hlt
@@ -187,11 +186,11 @@ private theorem creditEther_agrees {tx other tx' : TransactionState} {address : 
 The sender and the beneficiary must be agreed. -/
 private theorem settleGas_agrees (hfork : .paris ≤ fork) {env : BlockEnvironment fork}
     {tx other tx' : TransactionState} {sender : Address} {t : Transaction}
-    {gasLeft refund used : Nat} (hagree : AgreesOn account allStorage slot code tx other)
+    {gasLeft refund used : Nat} (hagree : AgreesOn account slot code tx other)
     (hs : account sender) (hc : account env.coinbase)
     (h : settleGas env tx sender t gasLeft refund = .ok (tx', used)) :
     ∃ other', settleGas env other sender t gasLeft refund = .ok (other', used) ∧
-      AgreesOn account allStorage slot code tx' other' := by
+      AgreesOn account slot code tx' other' := by
   unfold settleGas at h ⊢
   rw [paidBaseFee_empty] at h ⊢
   obtain ⟨refunded, hrefund, h⟩ := bind_ok_iff.mp h
@@ -211,20 +210,20 @@ private theorem settleGas_agrees (hfork : .paris ≤ fork) {env : BlockEnvironme
 
 Each account to delete and each touched account must be agreed. -/
 private theorem deleteAccounts_agrees {tx other tx' : TransactionState} {output : CallOutput}
-    (hagree : AgreesOn account allStorage slot code tx other)
+    (hagree : AgreesOn account slot code tx other)
     (hdel : fork ≥ .glamsterdam → ∀ address ∈ output.accountsToDelete, account address)
     (htouched : ∀ address ∈ output.touchedAccounts, account address)
     (h : deleteAccounts fork tx output = .ok tx') :
     ∃ other', deleteAccounts fork other output = .ok other' ∧
-      AgreesOn account allStorage slot code tx' other' := by
+      AgreesOn account slot code tx' other' := by
   have step : ∀ (init init' mid : TransactionState) (address : Address),
       (fork ≥ .glamsterdam → account address) →
-      AgreesOn account allStorage slot code init init' →
+      AgreesOn account slot code init init' →
       (if fork ≥ .glamsterdam then init.clearAccountPreservingBalance fork address
         else pure (init.destroyAccount address)) = .ok mid →
       ∃ mid', (if fork ≥ .glamsterdam then init'.clearAccountPreservingBalance fork address
         else pure (init'.destroyAccount address)) = .ok mid' ∧
-        AgreesOn account allStorage slot code mid mid' := by
+        AgreesOn account slot code mid mid' := by
     intro init init' mid address ha hinit hmid
     split at hmid
     · rename_i hglam
@@ -236,14 +235,14 @@ private theorem deleteAccounts_agrees {tx other tx' : TransactionState} {output 
       exact ⟨_, rfl, hinit.destroyAccount address⟩
   have fold : ∀ (l : List Address) (init init' final : TransactionState),
       (fork ≥ .glamsterdam → ∀ address ∈ l, account address) →
-      AgreesOn account allStorage slot code init init' →
+      AgreesOn account slot code init init' →
       l.foldlM (fun state address =>
         if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
         else pure (state.destroyAccount address)) init = .ok final →
       ∃ final', l.foldlM (fun state address =>
         if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
         else pure (state.destroyAccount address)) init' = .ok final' ∧
-        AgreesOn account allStorage slot code final final' := by
+        AgreesOn account slot code final final' := by
     intro l
     induction l with
     | nil =>
@@ -393,16 +392,16 @@ The sets must cover the first block, and the second block must hold the code of 
 It holds from Paris, for any lawful gas meter. -/
 theorem runTransaction_agrees {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     (hfork : .paris ≤ fork) {env : BlockEnvironment fork} {block other : BlockState}
-    {included : Included} {tx : Transaction} {account allStorage : Address → Prop}
+    {included : Included} {tx : Transaction} {account : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop}
-    (covers : CoversBlock block account allStorage code)
-    (hagree : BlockState.AgreesOn account allStorage slot code block other)
+    (covers : CoversBlock block account code)
+    (hagree : BlockState.AgreesOn account slot code block other)
     (hcodes : HasCodes (TransactionState.ofBlock other)) {output : TransactionOutput}
     (h : runTransaction Meter env block included tx = .ok output)
     (hreads : ReadsIn account slot output.state) :
     ∃ output', runTransaction Meter env other included tx = .ok output' ∧
       output' = { output with state := output'.state } ∧
-      AgreesOn account allStorage slot code output.state output'.state := by
+      AgreesOn account slot code output.state output'.state := by
   rw [runTransaction_unfold] at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
@@ -448,7 +447,7 @@ theorem runTransaction_agrees {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
   have ⟨hparent, hcreated⟩ := parent_buyGas hbought
   obtain ⟨out', hout', hsame, hagreeO⟩ := processMessageCall_agrees covers hagreeB
     (by rw [hparent]; rfl) ((CodeOrigin.ofBlock block).of_keepsCodeOrigin
-      (keepsCodeOrigin_buyGas hbought)) (noNewCandidate_buyGas (.ofBlock block) hbought)
+      (keepsCodeOrigin_buyGas hbought))
     hrecipient hout hreadsOut
   generalize out'.state = s' at hsame hagreeO
   subst hsame
@@ -491,16 +490,16 @@ The sets must cover the first block, and the second block must hold the code of 
 It holds from Paris, with the gas meter that each fork uses. -/
 theorem processTransaction_agrees (hfork : .paris ≤ fork) {env : BlockEnvironment fork}
     {block other : BlockState} {included : Included} {tx : Transaction}
-    {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
-    {code : Hash32 → Prop} (covers : CoversBlock block account allStorage code)
-    (hagree : BlockState.AgreesOn account allStorage slot code block other)
+    {account : Address → Prop} {slot : Address → Bytes32 → Prop}
+    {code : Hash32 → Prop} (covers : CoversBlock block account code)
+    (hagree : BlockState.AgreesOn account slot code block other)
     (hcodes : HasCodes (TransactionState.ofBlock other)) {output : TransactionOutput}
     (h : processTransaction env block included tx = .ok output)
     (hreads : ReadsIn account slot output.state) :
     ∃ output', processTransaction env other included tx = .ok output' ∧
       output' = { output with state := output'.state } ∧
       -- The state that the second run leaves agrees with the first on the sets.
-      AgreesOn account allStorage slot code output.state output'.state := by
+      AgreesOn account slot code output.state output'.state := by
   rw [processTransaction_unfold] at h ⊢
   split at h
   · cases h
@@ -554,8 +553,8 @@ theorem processTransaction_agrees_of_tracker (hfork : .paris ≤ fork)
     (hagree : BlockState.AgreesOnTracker output.state block other) :
     ∃ output', processTransaction env other included tx = .ok output' ∧
       output' = { output with state := output'.state } ∧
-      AgreesOn (accessedAccount output.state) (candidateStorage block output.state)
-        (accessedSlot output.state) (accessedCode block output.state)
+      AgreesOn (accessedAccount output.state) (accessedSlot output.state)
+        (accessedCode block output.state)
         output.state output'.state :=
   -- The tracker sets of the first run cover the first block.
   processTransaction_agrees hfork (CoversBlock.ofTracker block output.state) hagree hcodes h

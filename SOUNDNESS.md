@@ -8714,6 +8714,23 @@ At the fork to Gloas, a pending deposit with builder credentials and a valid sig
 EthLib follows the later rule of the consensus layer, which keeps the two registries apart, as [EIP-8282](https://eips.ethereum.org/EIPS/eip-8282#motivation) describes.
 [EIPs#12627](https://github.com/ethereum/EIPs/pull/12627), still open, brings that rule to EIP-7732.
 
+A creation at an address that holds storage but no code and nonce 0 has two readings.
+[EIP-7610](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/EIPS/eip-7610.md#specification), in Last Call, makes it fail at every fork, but no fork activates it: Glamsterdam declined it ([EIP-7773 at `f9976e6`](https://github.com/ethereum/EIPs/blob/f9976e6848a26919b98369d5ed21dc2d5fd7aca1/EIPS/eip-7773.md#declined-for-inclusion)).
+EthLib follows [EIP-684](https://eips.ethereum.org/EIPS/eip-684#specification) alone, as execution-specs does: such a creation succeeds (`accountDeployable`, `Execution/State/Tracker.lean`).
+It wipes the old storage, since section 7 of the [Yellow Paper](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), Shanghai version, gives a new account the empty trie as its storage.
+Implementations differ on this case, and execution-specs skips its tests as undefined until EIP-8253.
+Mainnet holds 28 such accounts, all from before EIP-161.
+A creation reaches one only through a spent nonce of its deployer, or a preimage of a Keccak-256 hash cut to 160 bits ([EIP-8253, Security Considerations](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/EIPS/eip-8253.md#security-considerations)).
+[EIP-8253](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/EIPS/eip-8253.md#specification), which [EIP-8081](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/EIPS/eip-8081.md#considered-for-inclusion) considers for Hegotá, would give each of them nonce 1, after which no creation lands on one.
+A chain whose genesis allocates such an account still reaches the case.
+[EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts) still describes the storage collision of EIP-7610, and [EIPs#12732](https://github.com/ethereum/EIPs/pull/12732), still open, removes it.
+
+Empty accounts in the state before a block are a case that no source after Paris defines.
+[EIP-7523](https://eips.ethereum.org/EIPS/eip-7523#specification) states that none exists on a chain past Paris.
+From Paris, EthLib keeps an empty account that a call of no value touches, as execution-specs does.
+The touch rule of [EIP-161](https://eips.ethereum.org/EIPS/eip-161#specification) deletes it, and implementations apply that rule, so a state test with such an account before the block gets other states from them.
+No theorem of EthLib assumes that the state before a block holds no empty account, so on such a state the theorems describe EthLib's reading.
+
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.
@@ -8886,6 +8903,13 @@ Three roots of the kinds that Gloas adds hold under a hypothesis, which the Remo
 The root of an envelope (`getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot`) assumes that the epoch of the slot of its payload and the current epoch of the state take the same fork version; the source names the domain type of an envelope, not its epoch.
 The root of proposer preferences (`proposerPreferencesSigningRoot_eq_of_requestSigningRoot`) assumes that the fork info gives, at the proposal epoch, the version that the configuration gives; when that epoch is in the next fork, the two differ, and the source does not say which the signer uses.
 The root of a bid (`getExecutionPayloadBidSignature_eq_of_requestSigningRoot`) assumes the same at the epoch of the slot of the bid; a builder that sends the fork of its head state before a fork gets the version of the old fork ([remote-signing-api#37](https://github.com/ethereum/remote-signing-api/issues/37)).
+
+From Glamsterdam, the list that a block commits to rebuilds the state after the block (`stateTransition_rebuild_of_rebuildableBlock`, `Execution/Proofs/Blocks/BodyFollow.lean`).
+The theorem assumes that, in the state before the block, no account with nonce 0 and no code holds storage (`Rebuildable`, `Execution/Proofs/State/Rebuild.lean`).
+A creation at such an account wipes its storage, and the list records no slot that the block does not touch, so the list cannot rebuild that state.
+Each transaction keeps the property (`RebuildEnd.rebuildableBlock`, `Execution/Proofs/Blocks/BodyFollow.lean`).
+The 28 mainnet accounts of that shape break it, so the theorem covers no mainnet block until a fork applies EIP-8253, which EthLib does not specify yet.
+A creation reaches none of them on mainnet without a spent nonce or a Keccak-256 preimage, as the paragraph on EIP-7610 under A1 explains, so a form of the theorem with an assumption on the creations of the run would cover mainnet.
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 

@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Call.Noninterference
-public import EthLib.Execution.Proofs.Evm.Call.Candidate
 public import EthLib.Execution.Proofs.Evm.Call.CodeOrigin
 public import EthLib.Execution.Proofs.Evm.Call.ReadsGrow
 public import EthLib.Execution.Proofs.Evm.Call.ToDelete
@@ -9,7 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Call.ToDelete
 /-!
 # Proofs: a message depends only on what it records
 
-Run the same message on two states that agree on four sets of accounts, slots and code hashes.
+Run the same message on two states that agree on three sets of accounts, slots and code hashes.
 
 When the first run ends with every read in the sets, the second ends in an agreeing frame.
 
@@ -25,33 +24,25 @@ The sets play the part of a block access list in [EIP-7928, Scope and Inclusion]
 namespace EthLib.Execution.Evm
 
 open EthLib.Base (Address Bytes32 Hash32)
-open EthLib.Execution.State (BlockState EMPTY_CODE_HASH TransactionState)
-open EthLib.Execution.State.TransactionState (AgreesOn NoNewCandidate)
+open EthLib.Execution.State (BlockState TransactionState)
+open EthLib.Execution.State.TransactionState (AgreesOn)
 
 variable {fork : Base.Fork} {Meter : Type} [GasMeter Meter]
 
 /-- Sets that hold, for each account in the account set, what the block says of it.
 
-The code set holds its code hash in the block.
-
-The whole-storage set holds it when it has nonce 0 and no code in the block. -/
-structure CoversBlock (block : BlockState) (account allStorage : Address → Prop)
+The code set holds its code hash in the block. -/
+structure CoversBlock (block : BlockState) (account : Address → Prop)
     (code : Hash32 → Prop) : Prop where
   /-- The code hash in the block of each account in the account set is in the code set. -/
   code : ∀ address, account address →
     code ((TransactionState.ofBlock block).getAccount address).codeHash
-  /-- Each such account with nonce 0 and no code in the block is in the whole-storage set. -/
-  allStorage : ∀ address, account address →
-    ((TransactionState.ofBlock block).getAccount address).nonce = 0 →
-    ((TransactionState.ofBlock block).getAccount address).codeHash = EMPTY_CODE_HASH →
-    allStorage address
 
 /-- The read and written accounts, slots and code hashes of a transaction cover its block. -/
 theorem CoversBlock.ofTracker (block : BlockState) (endState : TransactionState) :
     CoversBlock block (TransactionState.accessedAccount endState)
-      (TransactionState.candidateStorage block endState)
       (TransactionState.accessedCode block endState) :=
-  ⟨fun address h => ⟨address, h, rfl⟩, fun _ h hnonce hcode => ⟨h, hnonce, hcode⟩⟩
+  ⟨fun address h => ⟨address, h, rfl⟩⟩
 
 /-! ## A caller always has room to resume -/
 
@@ -347,15 +338,15 @@ end Room
 
 section Kept
 
-/-- The second frame keeps the reads, the origin of the code hashes and the candidates. -/
+/-- The second frame keeps the reads and the origin of the code hashes. -/
 private def Kept (a b : Evm fork Meter) : Prop :=
-  a.state.ReadsLe b.state ∧ KeepsCodeOrigin a.state b.state ∧ KeepsCandidates a.state b.state
+  a.state.ReadsLe b.state ∧ KeepsCodeOrigin a.state b.state
 
-/-- Each write of a step keeps the reads, the origin of the code hashes and the candidates. -/
+/-- Each write of a step keeps the reads and the origin of the code hashes. -/
 private theorem stepRules_kept : StepRules fork (Kept (fork := fork) (Meter := Meter)) :=
-  stepRules_readsLe.and (stepRules_keepsCodeOrigin.and stepRules_keepsCandidates)
+  stepRules_readsLe.and stepRules_keepsCodeOrigin
 
-/-- A step keeps the reads, the origin of the code hashes, the candidates and the message. -/
+/-- A step keeps the reads, the origin of the code hashes and the message. -/
 private def KeptStep (a b : Evm fork Meter) : Prop :=
   Kept a b ∧ b.message = a.message
 
@@ -415,7 +406,7 @@ section Parts
 open EthLib.Base (ExceptRel)
 open EthLib.Execution.State.TransactionState (SameTracker)
 
-variable {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+variable {account : Address → Prop} {slot : Address → Bytes32 → Prop}
   {code : Hash32 → Prop}
 
 /-- A state with fewer reads than one whose reads are in the sets has its reads in the sets. -/
@@ -426,21 +417,15 @@ theorem ReadsIn.of_readsLe {tx tx' : TransactionState} (h : tx.ReadsLe tx')
 
 /-- With code hashes from the block or writes, each covered account has its hash in the sets. -/
 private theorem codesIn_of_codeOrigin {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {tx : TransactionState}
+    (covers : CoversBlock block account code) {tx : TransactionState}
     (h : CodeOrigin block tx) : CodesIn account code tx := fun a ha =>
   (h a).imp_right (Or.imp_right fun heq => by rw [heq]; exact covers.code a ha)
-
-/-- With no new candidate, each candidate of the first set was wiped or is in the second set. -/
-private theorem candidatesIn_of_noNewCandidate {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {tx : TransactionState}
-    (h : NoNewCandidate block tx) : CandidatesIn account allStorage tx := fun a ha hn hc =>
-  (h a hn hc).imp_right fun ⟨hn', hc'⟩ => covers.allStorage a ha hn' hc'
 
 /-- Rollbacks to snapshots with the same tracker keep agreeing frames. -/
 private theorem rollbackOnError_agrees {state other : TransactionState}
     (hs : SameTracker state other) {a b : Evm fork Meter}
-    (h : FrameAgrees account allStorage slot code a b) :
-    FrameAgrees account allStorage slot code (rollbackOnError state a)
+    (h : FrameAgrees account slot code a b) :
+    FrameAgrees account slot code (rollbackOnError state a)
       (rollbackOnError other b) := by
   obtain ⟨s, rfl⟩ : ∃ s, b = { a with state := s } := ⟨_, h.rest⟩
   unfold rollbackOnError
@@ -460,9 +445,9 @@ private theorem runPrecompile_withState (address : Nat) (evm : Evm fork Meter)
 
 /-- The start states of a message agree on agreeing states, when its account is in the sets. -/
 private theorem startState_agrees {message : Message fork} {state other : TransactionState}
-    (h : AgreesOn account allStorage slot code state other)
+    (h : AgreesOn account slot code state other)
     (hacc : account message.currentTarget) :
-    AgreesOn account allStorage slot code (startState fork message state)
+    AgreesOn account slot code (startState fork message state)
       (startState fork message other) := by
   unfold startState
   split
@@ -481,9 +466,9 @@ private theorem mem_reads_moveEther {tx tx' : TransactionState} {sender recipien
 
 /-- The preparations of a creation agree on agreeing states, when its address is in the sets. -/
 private theorem prepareCreation_agrees {state other : TransactionState}
-    (h : AgreesOn account allStorage slot code state other) {address : Address}
+    (h : AgreesOn account slot code state other) {address : Address}
     (ha : account address) :
-    ExceptRel (AgreesOn account allStorage slot code) (prepareCreation fork state address)
+    ExceptRel (AgreesOn account slot code) (prepareCreation fork state address)
       (prepareCreation fork other address) := by
   unfold prepareCreation
   dsimp only
@@ -495,12 +480,12 @@ private theorem prepareCreation_agrees {state other : TransactionState}
 /-- The deposits of code from agreeing frames agree, when the new address is in the sets. -/
 private theorem depositCode_agrees {state other : TransactionState}
     (hs : SameTracker state other) {a b after : Evm fork Meter}
-    (h : FrameAgrees account allStorage slot code a b) (ha : account a.message.currentTarget)
+    (h : FrameAgrees account slot code a b) (ha : account a.message.currentTarget)
     (hd : depositCode fork state a = .ok after) :
     ∃ after', depositCode fork other b = .ok after' ∧
-      FrameAgrees account allStorage slot code after after' := by
+      FrameAgrees account slot code after after' := by
   obtain ⟨s, rfl⟩ : ∃ s, b = { a with state := s } := ⟨_, h.rest⟩
-  have hst : AgreesOn account allStorage slot code a.state s := h.state
+  have hst : AgreesOn account slot code a.state s := h.state
   unfold depositCode at hd ⊢
   dsimp only at hd ⊢
   split at hd
@@ -543,17 +528,15 @@ private theorem depositCode_agrees {state other : TransactionState}
 
 /-! ## Two runs of a frame -/
 
-/-- A frame with code hashes from the block or writes, no new candidate, and its account read. -/
+/-- A frame with code hashes from the block or writes, and its account read. -/
 private def Fit (block : BlockState) (evm : Evm fork Meter) : Prop :=
-  CodeOrigin block evm.state ∧ NoNewCandidate block evm.state ∧
-    evm.message.currentTarget ∈ evm.state.accountReads
+  CodeOrigin block evm.state ∧ evm.message.currentTarget ∈ evm.state.accountReads
 
 omit [GasMeter Meter] in
 /-- A step that keeps what a run keeps, and the message, keeps a fit frame fit. -/
 private theorem Fit.of_keptStep {block : BlockState} {a b : Evm fork Meter} (h : Fit block a)
     (k : KeptStep a b) : Fit block b :=
-  ⟨h.1.of_keepsCodeOrigin k.1.2.1, h.2.1.of_keepsCandidates k.1.2.2,
-    by rw [k.2]; exact k.1.1.accountReads _ h.2.2⟩
+  ⟨h.1.of_keepsCodeOrigin k.1.2, by rw [k.2]; exact k.1.1.accountReads _ h.2⟩
 
 section Unfold
 
@@ -627,23 +610,23 @@ end Unfold
 
 /-- Runs of a frame from agreeing fit frames agree when the first ends with reads in the sets. -/
 private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {bound : Nat}
+    (covers : CoversBlock block account code) {bound : Nat}
     {runChild : MessageRunner fork Meter bound}
     (ens : RunnerEnsures (fun caller message child => Kept caller child ∧ child.message = message)
       runChild)
-    (sim : ∀ c1 c2 message lt ended, FrameAgrees account allStorage slot code c1 c2 →
-      CodeOrigin block c1.state → NoNewCandidate block c1.state →
-      message.currentTarget ∈ c1.state.accountReads → runChild c1 message lt = .ok ended →
+    (sim : ∀ c1 c2 message lt ended, FrameAgrees account slot code c1 c2 →
+      CodeOrigin block c1.state → message.currentTarget ∈ c1.state.accountReads →
+      runChild c1 message lt = .ok ended →
       ReadsIn account slot ended.val.state →
       ∃ ended', runChild c2 message lt = .ok ended' ∧
-        FrameAgrees account allStorage slot code ended.val ended'.val)
+        FrameAgrees account slot code ended.val ended'.val)
     {e1 after : Evm fork Meter} {within : GasMeter.gasHeld e1.gas ≤ bound}
     (h : runFrame (step fork) (step_decreases fork) bound runChild e1 within = .ok after) :
     ∀ e2 (within' : GasMeter.gasHeld e2.gas ≤ bound),
-      FrameAgrees account allStorage slot code e1 e2 → Fit block e1 →
+      FrameAgrees account slot code e1 e2 → Fit block e1 →
       ReadsIn account slot after.state →
       ∃ after', runFrame (step fork) (step_decreases fork) bound runChild e2 within' = .ok after' ∧
-        FrameAgrees account allStorage slot code after after' := by
+        FrameAgrees account slot code after after' := by
   -- Each step of the first run reads only what it records, and a run never drops a read.
   --
   -- So every step of the first run has its reads in the sets, and the two runs move together.
@@ -653,10 +636,10 @@ private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
   revert h
   refine runFrame_induct (motive := fun e1 _ r => r = .ok after →
     ∀ e2 (within' : GasMeter.gasHeld e2.gas ≤ bound),
-      FrameAgrees account allStorage slot code e1 e2 → Fit block e1 →
+      FrameAgrees account slot code e1 e2 → Fit block e1 →
       ReadsIn account slot after.state →
       ∃ after', runFrame (step fork) (step_decreases fork) bound runChild e2 within' = .ok after' ∧
-        FrameAgrees account allStorage slot code after after')
+        FrameAgrees account slot code after after')
     ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 e1 within
   all_goals (intros; rename_i h e2 w hagree hfit hreads; revert e2 w hagree hfit hreads)
   case case1 => cases h
@@ -675,7 +658,7 @@ private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
     obtain ⟨s, rfl⟩ : ∃ s, e2 = { evm with state := s } := ⟨_, hagree.rest⟩
     have aborts' : e.aborts = false := Bool.eq_false_iff.mpr aborts
     obtain ⟨herr, -⟩ := step_agrees hagree (codesIn_of_codeOrigin covers hfit.1)
-      (candidatesIn_of_noNewCandidate covers hfit.2.1) (hreads.account _ hfit.2.2)
+      (hreads.account _ hfit.2)
     exact ⟨_, runFrame_of_halt (by exact running) (herr _ hstep aborts') aborts', rfl,
       hagree.state⟩
   case case3 evm _ running a1 hstep lower ih =>
@@ -684,9 +667,8 @@ private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
     have ks : KeptStep evm a1 := step_keptStep hstep
     have kr : Kept a1 after := kept h
     have hcur : account evm.message.currentTarget :=
-      hreads.account _ (kr.1.accountReads _ (ks.1.1.accountReads _ hfit.2.2))
-    obtain ⟨-, hok⟩ := step_agrees hagree (codesIn_of_codeOrigin covers hfit.1)
-      (candidatesIn_of_noNewCandidate covers hfit.2.1) hcur
+      hreads.account _ (kr.1.accountReads _ (ks.1.1.accountReads _ hfit.2))
+    obtain ⟨-, hok⟩ := step_agrees hagree (codesIn_of_codeOrigin covers hfit.1) hcur
     obtain ⟨r2, hr2, hsa⟩ := hok _ hstep (ReadsIn.of_readsLe kr.1 hreads)
     cases r2 with
     | child => exact hsa.elim
@@ -713,9 +695,8 @@ private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
       exact hreadsA
     have hreadsC1 : ReadsIn account slot c1.state := .of_readsLe hens.1.1 hreadsChild
     have hcur : account evm.message.currentTarget :=
-      hreads.account _ (kr.1.accountReads _ (ka1.1.1.accountReads _ hfit.2.2))
-    obtain ⟨-, hok⟩ := step_agrees hagree (codesIn_of_codeOrigin covers hfit.1)
-      (candidatesIn_of_noNewCandidate covers hfit.2.1) hcur
+      hreads.account _ (kr.1.accountReads _ (ka1.1.1.accountReads _ hfit.2))
+    obtain ⟨-, hok⟩ := step_agrees hagree (codesIn_of_codeOrigin covers hfit.1) hcur
     obtain ⟨r2, hr2, hsa⟩ := hok _ hstep hreadsC1
     cases r2 with
     | next => exact hsa.elim
@@ -725,7 +706,7 @@ private theorem runFrame_agrees [LawfulGasMeter Meter] {block : BlockState}
       have fitC1 := hfit.of_keptStep ks.1
       have hmcur : m.currentTarget ∈ c1.state.accountReads := step_eq_child_currentRead hstep
       obtain ⟨ended2, hran2, hfe⟩ :=
-        sim c1 c2 m _ ⟨child1, used⟩ hfc fitC1.1 fitC1.2.1 hmcur hran hreadsChild
+        sim c1 c2 m _ ⟨child1, used⟩ hfc fitC1.1 hmcur hran hreadsChild
       have haccChild : account child1.message.currentTarget := by
         rw [hens.2]
         exact hreadsC1.account _ hmcur
@@ -754,10 +735,10 @@ private theorem runner_ensures [LawfulGasMeter Meter] (bound : Nat) :
   intro caller message lt ended h
   unfold runner at h
   split at h
-  · exact ⟨⟨readsLe_processMessage h, keepsCodeOrigin_processMessage h,
-      keepsCandidates_processMessage h⟩, (processMessage_message _).1 _ _ _ _ _ rfl _ h⟩
-  · exact ⟨⟨readsLe_processCreateMessage h, keepsCodeOrigin_processCreateMessage h,
-      keepsCandidates_processCreateMessage h⟩, (processMessage_message _).2 _ _ _ _ _ rfl _ h⟩
+  · exact ⟨⟨readsLe_processMessage h, keepsCodeOrigin_processMessage h⟩,
+      (processMessage_message _).1 _ _ _ _ _ rfl _ h⟩
+  · exact ⟨⟨readsLe_processCreateMessage h, keepsCodeOrigin_processCreateMessage h⟩,
+      (processMessage_message _).2 _ _ _ _ _ rfl _ h⟩
 
 /-- The state that a message enters, before or after the move of its value. -/
 private def enterState (fork : Base.Fork) (message : Message fork) (state : TransactionState) :
@@ -845,11 +826,11 @@ private theorem entered_of_enterState {message : Message fork} {state entry : Tr
 
 /-- Agreeing states enter agreeing states, when the accounts the move reads are in the sets. -/
 private theorem enterState_agrees {message : Message fork} {state other entry : TransactionState}
-    (h : AgreesOn account allStorage slot code state other) (hacc : account message.currentTarget)
+    (h : AgreesOn account slot code state other) (hacc : account message.currentTarget)
     (hreads : ∀ address, address ∈ entry.accountReads → account address)
     (hent : enterState fork message state = .ok entry) :
     ∃ entry', enterState fork message other = .ok entry' ∧
-      AgreesOn account allStorage slot code entry entry' := by
+      AgreesOn account slot code entry entry' := by
   have hstart := startState_agrees (fork := fork) (message := message) h hacc
   unfold enterState at hent ⊢
   split at hent
@@ -906,21 +887,20 @@ private theorem readsLe_runBody [LawfulGasMeter Meter] {message : Message fork}
 
 /-- A message body from agreeing fit states agrees when the first ends with reads in the sets. -/
 private theorem runBody_agrees [LawfulGasMeter Meter] {block : BlockState}
-    (covers : CoversBlock block account allStorage code) {message : Message fork}
+    (covers : CoversBlock block account code) {message : Message fork}
     {substate : Substate} {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
-    (sim : ∀ c1 c2 m lt ended, FrameAgrees account allStorage slot code c1 c2 →
-      CodeOrigin block c1.state → NoNewCandidate block c1.state →
-      m.currentTarget ∈ c1.state.accountReads →
+    (sim : ∀ c1 c2 m lt ended, FrameAgrees account slot code c1 c2 →
+      CodeOrigin block c1.state → m.currentTarget ∈ c1.state.accountReads →
       runner (Meter := Meter) fork message.gas c1 m lt = .ok ended →
       ReadsIn account slot ended.val.state →
       ∃ ended', runner (Meter := Meter) fork message.gas c2 m lt = .ok ended' ∧
-        FrameAgrees account allStorage slot code ended.val ended'.val)
-    {state other : TransactionState} (hagree : AgreesOn account allStorage slot code state other)
+        FrameAgrees account slot code ended.val ended'.val)
+    {state other : TransactionState} (hagree : AgreesOn account slot code state other)
     (hfit : Fit block (startFrame message state (enterSubstate fork message substate) meter))
     {ended} (h : runBody fork message substate meter held state = .ok ended)
     (hreads : ReadsIn account slot ended.val.state) :
     ∃ ended', runBody fork message substate meter held other = .ok ended' ∧
-      FrameAgrees account allStorage slot code ended.val ended'.val := by
+      FrameAgrees account slot code ended.val ended'.val := by
   unfold runBody at h ⊢
   dsimp only at h ⊢
   split at h
@@ -974,7 +954,7 @@ private theorem runBody_agrees [LawfulGasMeter Meter] {block : BlockState}
         exact ⟨_, rfl, hfa⟩
 
 /-- Runs of a message from agreeing fit states agree when the first ends with reads in the sets. -/
-private def MessageAgrees (block : BlockState) (account allStorage : Address → Prop)
+private def MessageAgrees (block : BlockState) (account : Address → Prop)
     (slot : Address → Bytes32 → Prop) (code : Hash32 → Prop)
     (run : (message : Message fork) → TransactionState → Substate → (meter : Meter) →
       GasMeter.gasHeld meter ≤ message.gas →
@@ -982,27 +962,27 @@ private def MessageAgrees (block : BlockState) (account allStorage : Address →
     (n : Nat) : Prop :=
   ∀ (message : Message fork) (state other : TransactionState) (substate : Substate)
     (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
-    AgreesOn account allStorage slot code state other → CodeOrigin block state →
-    NoNewCandidate block state → message.currentTarget ∈ state.accountReads →
+    AgreesOn account slot code state other → CodeOrigin block state →
+    message.currentTarget ∈ state.accountReads →
     ∀ ended, run message state substate meter held = .ok ended →
     ReadsIn account slot ended.val.state →
     ∃ ended', run message other substate meter held = .ok ended' ∧
-      FrameAgrees account allStorage slot code ended.val ended'.val
+      FrameAgrees account slot code ended.val ended'.val
 
 /-- By induction on gas, a call or a creation from agreeing fit states agrees.
 
 The first run must end with its reads in the sets. -/
 private theorem agrees_induction [LawfulGasMeter Meter] {block : BlockState}
-    (covers : CoversBlock block account allStorage code) (n : Nat) :
-    MessageAgrees (Meter := Meter) block account allStorage slot code
+    (covers : CoversBlock block account code) (n : Nat) :
+    MessageAgrees (Meter := Meter) block account slot code
         (fun m s sub meter held => processMessage fork m s sub meter held) n ∧
-      MessageAgrees (Meter := Meter) block account allStorage slot code
+      MessageAgrees (Meter := Meter) block account slot code
         (fun m s sub meter held => processCreateMessage fork m s sub meter held) n := by
   induction n using Nat.strongRecOn with
   | _ n ih =>
-    have callCase : MessageAgrees (Meter := Meter) block account allStorage slot code
+    have callCase : MessageAgrees (Meter := Meter) block account slot code
         (fun m s sub meter held => processMessage fork m s sub meter held) n := by
-      intro message state other substate meter held hn hagree horigin hcand hcurrent ended h
+      intro message state other substate meter held hn hagree horigin hcurrent ended h
         hreads
       dsimp only at h ⊢
       have hacc : account message.currentTarget :=
@@ -1015,24 +995,22 @@ private theorem agrees_induction [LawfulGasMeter Meter] {block : BlockState}
       have hreadsEntry : ReadsIn account slot entry := .of_readsLe (readsLe_runBody hbody) hreads0
       obtain ⟨entry', hent', hagree'⟩ := enterState_agrees hagree hacc hreadsEntry.account hent
       have hentered := entered_of_enterState substate hent
-      have sim : ∀ c1 c2 m lt ended, FrameAgrees account allStorage slot code c1 c2 →
-          CodeOrigin block c1.state → NoNewCandidate block c1.state →
-          m.currentTarget ∈ c1.state.accountReads →
+      have sim : ∀ c1 c2 m lt ended, FrameAgrees account slot code c1 c2 →
+          CodeOrigin block c1.state → m.currentTarget ∈ c1.state.accountReads →
       runner (Meter := Meter) fork message.gas c1 m lt = .ok ended →
           ReadsIn account slot ended.val.state →
           ∃ ended', runner (Meter := Meter) fork message.gas c2 m lt = .ok ended' ∧
-            FrameAgrees account allStorage slot code ended.val ended'.val := by
-        intro c1 c2 m lt ended1 hfc ho hc hm hr hri
+            FrameAgrees account slot code ended.val ended'.val := by
+        intro c1 c2 m lt ended1 hfc ho hm hr hri
         obtain ⟨s, rfl⟩ : ∃ s, c2 = { c1 with state := s } := ⟨_, hfc.rest⟩
         unfold runner at hr ⊢
         split at hr
-        · exact (ih m.gas (hn ▸ lt)).1 m c1.state s c1.substate.child _ _ rfl hfc.state ho hc hm
+        · exact (ih m.gas (hn ▸ lt)).1 m c1.state s c1.substate.child _ _ rfl hfc.state ho hm
             ended1 hr hri
-        · exact (ih m.gas (hn ▸ lt)).2 m c1.state s c1.substate.child _ _ rfl hfc.state ho hc hm
+        · exact (ih m.gas (hn ▸ lt)).2 m c1.state s c1.substate.child _ _ rfl hfc.state ho hm
             ended1 hr hri
       obtain ⟨ended0', hbody', hfa⟩ := runBody_agrees covers sim hagree'
         ⟨horigin.of_keepsCodeOrigin (keepsCodeOrigin_entered hentered),
-          hcand.of_keepsCandidates (keepsCandidates_entered hentered),
           (readsLe_entered hentered).accountReads _ hcurrent⟩ hbody hreads0
       have hdo' : (enterState fork message other >>= runBody fork message substate meter held) =
           .ok ended0' := by
@@ -1041,7 +1019,7 @@ private theorem agrees_induction [LawfulGasMeter Meter] {block : BlockState}
       rw [hdo']
       exact ⟨_, rfl, rollbackOnError_agrees hagree.tracker hfa⟩
     refine ⟨callCase, ?_⟩
-    intro message state other substate meter held hn hagree horigin hcand hcurrent ended h hreads
+    intro message state other substate meter held hn hagree horigin hcurrent ended h hreads
     dsimp only at h ⊢
     have hacc : account message.currentTarget :=
       hreads.account _ ((readsLe_processCreateMessage h).accountReads _ hcurrent)
@@ -1065,7 +1043,6 @@ private theorem agrees_induction [LawfulGasMeter Meter] {block : BlockState}
         (processMessage_message _).1 _ _ _ _ _ rfl ⟨evm, used⟩ hrun
       obtain ⟨⟨evm', used'⟩, hrun', hfa⟩ := callCase message prepared prepared' substate meter held
         hn rel (horigin.of_keepsCodeOrigin (keepsCodeOrigin_prepareCreation hp))
-        (hcand.of_keepsCandidates (keepsCandidates_prepareCreation hp).1)
         ((readsLe_prepareCreation hp).accountReads _ hcurrent) ⟨evm, used⟩ hrun
         (.of_readsLe (readsLe_depositCode hd) hreads)
       obtain ⟨after', hd', hfa'⟩ := depositCode_agrees hagree.tracker hfa
@@ -1089,23 +1066,23 @@ The sets must cover the block.
 
 The first state must have read the account that the message runs at.
 
-Its code hashes must come from the block or from writes, with no new deployment candidate. -/
+Its code hashes must come from the block or from writes. -/
 theorem processMessage_agrees [LawfulGasMeter Meter] {block : BlockState}
-    {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop}
-    (covers : CoversBlock block account allStorage code) {message : Message fork}
+    {account : Address → Prop} {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop}
+    (covers : CoversBlock block account code) {message : Message fork}
     {state other : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas}
-    (hagree : AgreesOn account allStorage slot code state other)
-    (horigin : CodeOrigin block state) (hcandidates : NoNewCandidate block state)
+    (hagree : AgreesOn account slot code state other)
+    (horigin : CodeOrigin block state)
     (hcurrent : message.currentTarget ∈ state.accountReads)
     {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
     -- A first run that fails with an error that aborts the execution is not covered.
     (h : processMessage fork message state substate meter held = .ok ended)
     (hreads : ReadsIn account slot ended.val.state) :
     ∃ ended', processMessage fork message other substate meter held = .ok ended' ∧
-      FrameAgrees account allStorage slot code ended.val ended'.val :=
+      FrameAgrees account slot code ended.val ended'.val :=
   (agrees_induction covers message.gas).1 message state other substate meter held rfl hagree horigin
-    hcandidates hcurrent ended h hreads
+    hcurrent ended h hreads
 
 /-- A creation that ends with its reads in the sets gives agreeing frames on agreeing states.
 
@@ -1113,22 +1090,22 @@ The sets must cover the block.
 
 The first state must have read the address of the creation.
 
-Its code hashes must come from the block or from writes, with no new deployment candidate. -/
+Its code hashes must come from the block or from writes. -/
 theorem processCreateMessage_agrees [LawfulGasMeter Meter] {block : BlockState}
-    {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop}
-    (covers : CoversBlock block account allStorage code) {message : Message fork}
+    {account : Address → Prop} {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop}
+    (covers : CoversBlock block account code) {message : Message fork}
     {state other : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas}
-    (hagree : AgreesOn account allStorage slot code state other)
-    (horigin : CodeOrigin block state) (hcandidates : NoNewCandidate block state)
+    (hagree : AgreesOn account slot code state other)
+    (horigin : CodeOrigin block state)
     (hcurrent : message.currentTarget ∈ state.accountReads)
     {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
     -- A first run that fails with an error that aborts the execution is not covered.
     (h : processCreateMessage fork message state substate meter held = .ok ended)
     (hreads : ReadsIn account slot ended.val.state) :
     ∃ ended', processCreateMessage fork message other substate meter held = .ok ended' ∧
-      FrameAgrees account allStorage slot code ended.val ended'.val :=
+      FrameAgrees account slot code ended.val ended'.val :=
   (agrees_induction covers message.gas).2 message state other substate meter held rfl hagree horigin
-    hcandidates hcurrent ended h hreads
+    hcurrent ended h hreads
 
 end EthLib.Execution.Evm
