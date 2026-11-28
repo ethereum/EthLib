@@ -511,6 +511,28 @@ theorem toPoint_mulNat [DecidableEq K] (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Vali
     toPoint e b (mulNat P k) = k • toPoint e b P :=
   (mulNat_spec e b h2 h k).2
 
+/-- Two products with shared doublings keep validity, and they give `k P + l Q`. -/
+private theorem mulAdd_spec [DecidableEq K] (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Valid e b P)
+    (hQ : Valid e b Q) (k l : Fr) :
+    Valid e b (mulAdd P k Q l) ∧
+      toPoint e b (mulAdd P k Q l) = k.val • toPoint e b P + l.val • toPoint e b Q :=
+  ScalarProduct.joint_spec (Valid e b) (toPoint e b)
+    (fun _ hR => ⟨valid_double e b hR, toPoint_double e b hR⟩)
+    (fun _ _ hR hS => ⟨valid_add e b h2 hR hS, toPoint_add e b h2 hR hS⟩)
+    (valid_zero e b) (toPoint_zero e b) hP (valid_neg e b hP) (toPoint_neg e b hP) hQ
+    (valid_neg e b hQ) (toPoint_neg e b hQ) k.val l.val
+
+theorem valid_mulAdd (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Valid e b P) (hQ : Valid e b Q)
+    (k l : Fr) : Valid e b (mulAdd P k Q l) := by
+  classical
+  exact (mulAdd_spec e b h2 hP hQ k l).1
+
+/-- Two products with shared doublings give `k P + l Q` in the group. -/
+theorem toPoint_mulAdd [DecidableEq K] (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Valid e b P)
+    (hQ : Valid e b Q) (k l : Fr) :
+    toPoint e b (mulAdd P k Q l) = k.val • toPoint e b P + l.val • toPoint e b Q :=
+  (mulAdd_spec e b h2 hP hQ k l).2
+
 /-! ## Special values -/
 
 include e in
@@ -533,15 +555,19 @@ theorem add_zero {P : G1 F} (hP : P.isInfinity = false) : add P zero = P := by
 
 /-- The product by zero is the point at infinity. -/
 theorem mulNat_zero (P : G1 F) : mulNat P 0 = zero := by
-  rw [mulNat, ScalarProduct.naf, show Nat.log2 (3 * 0) = 0 by decide, ScalarProduct.nafSteps]
+  rw [mulNat, ScalarProduct.naf, ScalarProduct.joint,
+    show max (Nat.log2 (3 * 0)) (Nat.log2 (3 * 0)) = 0 by decide, ScalarProduct.jointSteps]
 
 include e in
 /-- The product of a triple by one is the triple. -/
 theorem mulNat_one (P : G1 F) : mulNat P 1 = P := by
   have hd : double (zero : G1 F) = zero := ite_eq_left ((e.isZero_iff _).mpr e.map_zero)
-  rw [mulNat, ScalarProduct.naf, show Nat.log2 (3 * 1) = 1 by decide, ScalarProduct.nafSteps,
-    ScalarProduct.nafSteps, hd,
-    show Nat.testBit (3 * 1) (0 + 1) = true by decide, show Nat.testBit 1 (0 + 1) = false by decide]
+  rw [mulNat, ScalarProduct.naf, ScalarProduct.joint,
+    show max (Nat.log2 (3 * 1)) (Nat.log2 (3 * 0)) = 0 + 1 by decide, ScalarProduct.jointSteps,
+    ScalarProduct.jointSteps, hd]
+  simp only [ScalarProduct.addDigit, ScalarProduct.bit_limbs,
+    show Nat.testBit (3 * 1) (0 + 1) = true by decide, show Nat.testBit 1 (0 + 1) = false by decide,
+    show Nat.testBit (3 * 0) (0 + 1) = false by decide]
   exact zero_add e P
 
 include e in

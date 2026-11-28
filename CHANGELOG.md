@@ -1385,6 +1385,19 @@ Not yet released.
   `Evm.PlainKept`, `Evm.RebuildReady`, `Evm.WipeAllowed`, `State.Rebuildable.wipeAllowed`, `Evm.RebuildReady.start`, `Evm.RebuildEnd.wipes_zero`, `Evm.RebuildEnd.rebuildReady`, `Blocks.keepsFollowable_rebuildReady`, `Blocks.withdrawalState_rebuildState` and `Blocks.exists_rebuildReady_systemCall` are new.
   `Evm.RebuildEnd.toRebuildInvariant`, `Evm.RebuildState.blockStorage_of_not_hasNonceOrCode`, `Evm.RebuildEnd.rebuildableBlock`, `Blocks.keepsFollowable_rebuildableBlock`, `Blocks.exists_rebuildable_systemCall`, `Blocks.systemCall_followable`, `Blocks.systemCall_rebuildable`, `Blocks.systemCall_delegationsHaveNonce`, `Blocks.getStorage_withdrawalState`, `Blocks.withdrawalState_followable`, `Blocks.withdrawalState_rebuildable`, `Blocks.withdrawalState_delegationsHaveNonce`, `State.RebuildInvariant.getStorage_createEther`, `State.RebuildInvariant.createEther` and `State.RebuildInvariant.ofBlock_incorporateTxIntoBlock` are removed.
 
+- In Lean, the general case of `k P + l Q` runs one chain of doublings on the non-adjacent forms of both scalars, with no fuel, on every short Weierstrass curve ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `ScalarProduct.joint` (`Cryptography/ScalarProduct.lean`) runs `ScalarProduct.jointSteps`, and `ScalarProduct.naf` is now its case `l = 0`, with an unchanged signature.
+  The steps read the bits of the scalars from their limbs below `2^62` (`ScalarProduct.limbs`, `ScalarProduct.bit`, `ScalarProduct.addDigit`), with the same value on every input.
+  `ScalarProduct.joint_spec`, `ScalarProduct.map_joint`, `ScalarProduct.map_jointSteps`, `ScalarProduct.map_addDigit` and `ScalarProduct.bit_limbs` (`Cryptography/Proofs/ScalarProduct.lean`) are new; `ScalarProduct.naf_spec` and `ScalarProduct.map_naf` keep their statements.
+  `ScalarProduct.nafSteps`, `ScalarProduct.valid_nafSteps` and `ScalarProduct.map_nafSteps` are removed.
+  `Jacobian.Coords.mulAdd` and `Jacobian.mulAdd` (`Cryptography/Jacobian.lean`) take no fuel argument: `mulAdd a k p l q` in place of `mulAdd a fuel k p l q`.
+  `Jacobian.Coords.map_mulAdd`, `Jacobian.Coords.onCurve_mulAdd`, `Jacobian.Coords.toPoint_mulAdd`, `Jacobian.onCurve_mulAdd` and `Jacobian.toPoint_mulAdd` (`Cryptography/Proofs/Jacobian.lean`) take no fuel and no hypothesis `k, l < 2 ^ fuel`.
+  `Jacobian.Coords.mulAdd_spec` is new, and `Jacobian.map_mulAdd` is new in place of `Jacobian.map_mulAddAux`.
+  `Jacobian.Coords.mulAddBits`, `Jacobian.Coords.mulAddAux`, `Jacobian.mulAddAux`, `Jacobian.Coords.mulAddBits_succ_start`, `Jacobian.Coords.mulAddAux_succ`, `Jacobian.Coords.map_mulAddAux`, `Jacobian.Coords.onCurve_mulAddAux`, `Jacobian.Coords.toPoint_mulAddAux`, `Jacobian.mulAddAux_zero`, `Jacobian.mulAddAux_succ`, `Jacobian.map_mulAddAux`, `Jacobian.onCurve_mulAddAux`, `Jacobian.toPoint_mulAddAux` and `Jacobian.mulAdd_eq` are removed.
+  `Secp256k1.Point.mulAdd_eq_jacobian` and `Secp256r1.Point.mulAdd_eq_jacobian` state the chain without the fuel `256`.
+  `Word64.Raw.bit`, `Word64.Raw.bit_iff` and `Word64.Raw.bit_eq_testBit`, which only P-256 used, are removed.
+  `Bls.G1.mulAdd` (`Cryptography/Bls/G1.lean`) is new, with `G1.Law.valid_mulAdd`, `G1.Law.toPoint_mulAdd`, `G1.valid_mulAdd`, `G1.toPoint_mulAdd` and `G1.Represents.mulAdd`; `Kzg.verifyKzgProofWith` computes `[-y] g1 + [z] proof` with it.
+
 - In Lean, the rebuild of the state from the block access list can assume a property of the wipes of storage in the block ([#4989](https://github.com/ethereum/EthLib/issues/4989)).
   `Blocks.KeepsFollowable` (`Execution/Proofs/Blocks/AccessListRebuild.lean`) takes a predicate `W` on addresses.
   The builder must follow a call only if `W` holds at each address whose storage the call wiped (`Blocks.KeepsIf`).
