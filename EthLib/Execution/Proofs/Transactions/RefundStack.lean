@@ -333,6 +333,7 @@ namespace EthLib.Execution.Transactions
 open EthLib.Base (Address Fork)
 open EthLib.Execution.State (Rebuildable TransactionState)
 open EthLib.Execution.Evm
+open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
@@ -424,5 +425,35 @@ theorem runStack_refundCounter_nonneg [LawfulGasMeter Meter] {block : State.Bloc
     0 ≤ counterSum callers + reached.substate.refundCounter :=
   runStack_refundCounter_nonneg_of_wipesHideZeros valid hw hcaller htarget hsub h
     ((prepareFirstFrame_rebuildState valid hcaller htarget h).1.wipesHideZeros empty) reach
+
+/-- The counters of the live frames sum to at least zero, after each step of a run's message.
+
+The block state must hold no storage at an empty account, which mainnet meets. -/
+theorem TransactionRun.runStack_refundCounter_nonneg [LawfulGasMeter Meter]
+    {env : BlockEnvironment fork} {block : State.BlockState} {included : Included}
+    {tx : Transaction} {out : TransactionOutput} {target : Address} {bought : TransactionState}
+    {message : Message fork} {output : CallOutput} {settled : TransactionState}
+    {first : FirstFrame fork Meter} {callers : List (Evm fork Meter)} {reached : Evm fork Meter}
+    -- Each code read in its block state has its hash.
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    -- That state holds no delegation indicator at an account with nonce 0.
+    (delegations : DelegationsHaveNonce (.ofBlock block))
+    -- No account with nonce 0, no code and balance 0 holds storage there.
+    (empty : EmptyAccountsHoldNoStorage block)
+    (h : TransactionRun Meter env block included tx out target bought message output settled)
+    (hfirst : prepareFirstFrame (Meter := Meter) env.chainId.toNat
+      { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
+      (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
+      (paidWrites included.sender target tx) = .ok first)
+    (reach : RunStack fork Meter
+      (if message.target = none then .create first.message first.state first.substate first.meter
+      else .call first.message first.state first.substate first.meter) callers reached) :
+    0 ≤ counterSum callers + reached.substate.refundCounter := by
+  obtain ⟨vb, hw, hcaller, htarget, hsub⟩ := h.refundReady code delegations
+  exact runStack_refundCounter_nonneg_of_wipesHideZeros
+    (message := { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir })
+    vb hw hcaller htarget (Int.le_of_eq hsub.symm) hfirst
+    (h.wipesHideZeros code delegations empty hfirst) reach
 
 end EthLib.Execution.Transactions
