@@ -26,9 +26,7 @@ open EthLib.Serialization.Rlp
 instance : LawfulCodec Endpoint where
   ofItem_toItem e := by
     show Endpoint.ofItem (Endpoint.toItem e) = _
-    simp only [Endpoint.ofItem, Endpoint.toItem, Item.fields, Item.toItems, List.length_cons,
-      List.length_nil, ↓reduceIte, LawfulCodec.ofItem_toItem, bind, Except.bind, pure,
-      Except.pure]
+    simp_fixed_list_roundtrip Endpoint.ofItem Endpoint.toItem
   toItem_of_ofItem {item e} h := by
     change Endpoint.ofItem item = .ok e at h
     unfold Endpoint.ofItem at h
@@ -47,9 +45,7 @@ instance : LawfulCodec Endpoint where
 instance : LawfulCodec Node where
   ofItem_toItem n := by
     show Node.ofItem (Node.toItem n) = _
-    simp only [Node.ofItem, Node.toItem, Item.fields, Item.toItems, List.length_cons,
-      List.length_nil, ↓reduceIte, LawfulCodec.ofItem_toItem, bind, Except.bind, pure,
-      Except.pure]
+    simp_fixed_list_roundtrip Node.ofItem Node.toItem
   toItem_of_ofItem {item n} h := by
     change Node.ofItem item = .ok n at h
     unfold Node.ofItem at h
