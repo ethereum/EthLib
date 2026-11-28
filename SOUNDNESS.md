@@ -1810,17 +1810,18 @@ They take two hypotheses on the setup.
 - `setup.Valid`: every point of the setup is on its curve.
   For the embedded setup, `TrustedSetup.ofHex_valid` proves it if the setup decodes.
 - `hsetup_tor`: the first 4032 monomial points of `G1` have an order that divides `r`.
-  No theorem proves that the embedded setup decodes or that its points have order dividing `r`, so both stay assumptions for the embedded setup.
-  Compiled code checks both.
+  No theorem proves that the embedded setup decodes, or that its points have an order that divides `r`.
+  So both stay assumptions for the embedded setup, and compiled code checks both.
   Each KZG vector runs an operation that first decodes the embedded setup.
   `bindings/python/tests/kzg/test_trusted_setup.py` decodes each point of the setup, in `G1` and `G2`, and checks that it is in the subgroup.
-  `lake exe known-answers` decodes `TrustedSetup.ofHex` directly and checks subgroup membership for all 4096 monomial `G1` points, all 4096 Lagrange `G1` points and all 65 `G2` points.
+  `lake exe known-answers`, which CI runs, decodes `TrustedSetup.ofHex` directly.
+  It checks subgroup membership for all 4096 monomial `G1` points, all 4096 Lagrange `G1` points and all 65 `G2` points.
 
 `TrustedSetup.WellFormed.valid` and `TrustedSetup.WellFormed.torsion` derive both from a well-formed setup.
 
 The point evaluation precompile decodes `G2` point 1 of the embedded setup alone, with `TrustedSetup.g2MonomialOfHex`, and uses it as `[tau]_2`.
 `TrustedSetup.g2MonomialOfHex_eq` (`Proofs/Kzg/TrustedSetup.lean`) states that a point decoded alone is that point of the decoded setup.
-It also assumes only that the setup decodes.
+It assumes only that the setup decodes.
 `pointEvaluation_eq_ok_iff_kzg` (`Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`) states, with that one assumption, that the precompile succeeds exactly when the KZG check of the cryptography layer accepts, once the length, the gas and the versioned hash pass.
 On a well-formed setup (assumption D3), `pointEvaluation_opening` in the same file gives the opening equation `c - y = w (τ - z)` of every successful call.
 
@@ -9406,14 +9407,17 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
   `bindings/python/tests/kzg/test_trusted_setup.py` checks that the file holds exactly three lists.
   It also checks that each embedded array holds the points of the matching list, in order.
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
-  For the embedded bytes, only curve validity is proved conditionally (`TrustedSetup.ofHex_valid`, `Proofs/Kzg/TrustedSetup.lean`), if the bytes decode.
+  For the embedded bytes, `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves only that each point is on its curve, if the bytes decode.
   No theorem proves that the bytes decode, or that the points lie in the prime-order subgroup.
   No theorem proves that the Lagrange points equal the inverse transform of the monomial points, or that the monomial points are powers of one secret.
-  Compiled code checks decoding, subgroup membership and algebraic consistency instead.
+  Compiled code checks decoding, subgroup membership, and that the Lagrange points match the monomial points.
+  It checks the powers of one secret only by sampled pairings.
   `bindings/python/tests/kzg/test_trusted_setup.py` checks that every point of `G1` and `G2` decodes and lies in the subgroup.
-  It also verifies Lagrange-to-monomial basis identities and consecutive `G1` and `G2` powers by pairing.
-  `lake exe known-answers` decodes `TrustedSetup.ofHex` directly on the compiled specification and checks subgroup membership of every `G1` and `G2` point.
-  It also verifies that all 4096 Lagrange points equal the inverse 4096-point DFT of the monomial points.
+  It also checks that the Lagrange points commit to the matching monomial point, for 9 sampled degrees.
+  By pairing, it checks each step between consecutive `G2` powers, and 8 sampled steps between `G1` powers.
+  `lake exe known-answers`, which CI runs, decodes `TrustedSetup.ofHex` directly on the compiled specification.
+  It checks subgroup membership of every `G1` and `G2` point.
+  It also checks that the 4096 Lagrange points are the inverse 4096-point DFT of the monomial points.
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
   `TrustedSetup.WellFormed s τ` (`Proofs/Kzg/Commitment.lean`) states the consistency of a setup `s` with a secret `τ`.
   `TrustedSetup.WellFormed.of_lagrangeOfMonomial` (`Proofs/Kzg/LagrangeCoefficients.lean`) reduces `WellFormed` to `Valid`, `LagrangeOfMonomial` and monomial powers of `τ`.

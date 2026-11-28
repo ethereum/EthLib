@@ -141,7 +141,7 @@ lean_exe «check-decls» where
   -- The checker loads private proof bodies to inspect their dependencies.
   allowNonModules := true
 
-/-- Runs pinned test vectors through the compiled specification, with no export in between.
+/-- Runs pinned test vectors and checks the embedded setup, through the compiled specification.
 
 No default target builds it.
 

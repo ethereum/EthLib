@@ -3,7 +3,6 @@ module
 import EthLib.Base.Hex
 import EthLib.Consensus.Shuffle
 import EthLib.Cryptography.Hash.Sha256
-import EthLib.Cryptography.Kzg.Fft
 import EthLib.Cryptography.Kzg.Polynomials
 import EthLib.Cryptography.Kzg.TrustedSetup
 
@@ -18,7 +17,11 @@ This program calls the definitions that the theorems are about, compiled.
 
 So a disagreement lies in the specification, in the compiler or in how this program reads files.
 
-Each family reads its vectors from `tests/`, whose pinned origins `tests/sources.toml` records.
+The shuffling and SHA-256 families read their vectors from `tests/`.
+
+`tests/sources.toml` records their pinned origins.
+
+The trusted-setup family checks the embedded setup itself, so it reads no file.
 -/
 
 open EthLib
@@ -124,11 +127,13 @@ def sha256 (root : System.FilePath) : IO Tally := do
     tally := tally.add case.toString ok
   return tally
 
-/-- The embedded KZG trusted setup decodes, lies in the prime-order subgroup and matches its IDFT.
+/-- The embedded KZG setup decodes, lies in the subgroup, and its two bases of `G1` agree.
 
 Every monomial `G1` point, Lagrange `G1` point and `G2` point is checked in the subgroup.
 
-All 4096 Lagrange points are checked equal to the inverse 4096-point DFT of the monomial points. -/
+The Lagrange points are checked equal to the inverse 4096-point DFT of the monomial points.
+
+Both sides are in bit-reversed order. -/
 def kzgTrustedSetup : IO Tally := do
   let mut tally : Tally := {}
   match Cryptography.Kzg.TrustedSetup.ofHex with
@@ -174,7 +179,7 @@ end KnownAnswers
 public def main (args : List String) : IO UInt32 := do
   -- Run it as `lake exe known-answers`, optionally followed by the repository root.
   let root : System.FilePath := args.headD "."
-  -- All three families also have checks in the Python suite.
+  -- The Python suite also covers each family, through the bindings.
   --
   -- Here they check the specification without the bindings.
   let a ← KnownAnswers.report "shuffling" (KnownAnswers.shuffling root)

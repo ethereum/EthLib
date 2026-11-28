@@ -248,9 +248,11 @@ The KZG proofs use the proved pairing law of BLS12-381 (`pairingLaws`, `Proofs/B
   No theorem says that its Lagrange points are the inverse transform of its monomial points, or that its points are powers of one secret.
   Each KZG vector of the Python suite runs an operation that first decodes the setup.
   `bindings/python/tests/kzg/test_trusted_setup.py` checks that each point decodes and lies in the subgroup.
-  It also checks Lagrange-to-monomial basis identities and consecutive `G1` and `G2` pairing powers.
-  `lake exe known-answers` checks `TrustedSetup.ofHex` directly on compiled code.
-  It verifies subgroup membership for every `G1` and `G2` point, and checks that all 4096 Lagrange points equal the inverse 4096-point DFT of the monomial points.
+  It also checks that the Lagrange points commit to the matching monomial point, for 9 sampled degrees.
+  By pairing, it checks each step between consecutive `G2` powers, and 8 sampled steps between `G1` powers.
+  `lake exe known-answers`, which CI runs, checks `TrustedSetup.ofHex` directly on compiled code.
+  It checks that every `G1` and `G2` point lies in the subgroup.
+  It also checks that the 4096 Lagrange points are the inverse 4096-point DFT of the monomial points.
 
 ## What the kernel cannot evaluate
 

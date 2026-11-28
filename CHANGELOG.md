@@ -16,13 +16,8 @@ Not yet released.
   `Evm.CreatesPlain`, `Evm.KeepsPlain`, `Evm.CodeAtNonceOrCode` and `Evm.childRelByKind_of_step` (`Execution/Proofs/Evm/Call/CreatesPlain.lean`) are now public, and `Evm.createdAccounts_finishSelfdestruct` moves to `ToDelete.lean`.
 
 - In Lean, `Kzg.everyOther` moves from `Kzg/Fft.lean` to `Kzg/FftHalves.lean`, with an unchanged full name.
-  The definitions on naturals that the kernel checks of the Lagrange setup read move from `Proofs/Kzg/SetupLagrange/{Roots,Points,Glv,Dft,Rounds,Tables}.lean` to `Proofs/Kzg/SetupLagrange/Checker.lean`, with unchanged full names.
-  The four tables of those checks are literal data in `Proofs/Kzg/SetupLagrange/Data/`, which `lake exe gen-setup-tables` writes, in place of elaborators that decoded the setup with the specification while the file was built.
 
 - In Lean, `Bls.Fp.modulus`, `Bls.Fr.modulus` and `Bls.blsX` move from `Bls/Fp.lean` and `Bls/Fr.lean` to `Bls/Constants.lean`, with unchanged full names and values.
-  The definitions of the torsion check of `G1` on naturals move from `Proofs/Bls/G1TorsionCheck.lean` to `Proofs/Bls/G1NatCheck.lean`.
-  The decoding of the embedded setup's strings and the command that states its checks move from `Proofs/Kzg/SetupTorsion/Check.lean` to `Proofs/Kzg/SetupTorsion/Checker.lean`.
-  Their full names are unchanged, and the kernel checks of the monomial points import only these modules and the setup data.
 
 - In Lean, STATICCALL to an account with no code that is no precompile returns no data under the state gas meter of EIP-8037, at every fork from Berlin ([#4790](https://github.com/ethereum/EthLib/issues/4790)).
   `Evm.Logic.staticcall_noCode_meter` and `Evm.Logic.staticcall_noCode_returndatasize_meter` (`Execution/Proofs/Evm/Logic/CallMeter.lean`) hold for code that passes the check of that meter, with the call at an opcode position.
@@ -1351,6 +1346,11 @@ Not yet released.
   No statement changes.
 
 ### Changes that break callers
+
+- In Lean, the kernel checks of the embedded trusted setup are gone, with `Proofs/Kzg/SetupTorsion/`, `Proofs/Kzg/SetupLagrange/`, `Proofs/Bls/G1TorsionCheck.lean`, `Proofs/Bls/G1NatCheck.lean` and the executable `gen-setup-tables`.
+  `TrustedSetup.ofHex_torsion`, `TrustedSetup.ofHex_lagrangeTorsion`, `TrustedSetup.ofHex_lagrangeOfMonomial`, `TrustedSetup.ofHex_wellFormed`, `computeCellsAndKzgProofs_blob_spec_ofHex` and `recoverCellsAndKzgProofs_spec_ofHex` no longer exist.
+  A caller that needs them states the subgroup membership of the embedded setup, or `TrustedSetup.LagrangeOfMonomial` of it, as a hypothesis, as the theorems on any setup do.
+  `lake exe known-answers` checks both on compiled code, and CI runs it.
 
 - In Lean, the square root in `Fp2` from a root of the norm no longer inverts an element of the base field that depends on its input ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
   The base-field operation `BaseField.sqrtCandidate` (`Cryptography/BaseField.lean`) becomes `BaseField.invSqrtCandidate`, the power `r = a^((q - 3) / 4)`, from which `a r` is a candidate root and `a r r^2` its inverse.
