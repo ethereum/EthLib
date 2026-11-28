@@ -2,6 +2,9 @@ module
 
 public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsPermutation
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Lanes
+import Mathlib.Data.Fintype.Basic
+import Mathlib.Tactic.FinCases
+import Mathlib.Tactic.IntervalCases
 
 /-!
 # Proofs: the Keccak sponge on bytes and on bits

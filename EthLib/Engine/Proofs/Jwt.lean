@@ -4,7 +4,9 @@ public import EthLib.Engine.Jwt
 public import EthLib.Base.Proofs.Base64
 public import EthLib.Base.Proofs.Json.Number
 public import EthLib.Base.Proofs.Json.Text
-public import Mathlib.Tactic
+import Mathlib.Tactic.ByContra
+import Mathlib.Tactic.Linarith
+import Mathlib.Tactic.Positivity
 
 /-!
 # Engine JWT construction, refusal and acceptance

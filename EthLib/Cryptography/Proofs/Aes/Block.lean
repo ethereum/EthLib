@@ -33,27 +33,315 @@ theorem forall_of_all {p : UInt8 → Bool} (h : (List.range 256).all fun b => p 
   have hb : b.toNat ∈ List.range 256 := List.mem_range.mpr b.toNat_lt
   simpa using List.all_eq_true.mp h _ hb
 
+/-! ## Fast natural-number mirrors for kernel checks
+
+Running the byte-level checks on plain `Nat` avoids `UInt8`/`BitVec` wrapper overhead in the kernel.
+-/
+
+private def xtimesNat (b : Nat) : Nat :=
+  if Nat.beq (Nat.land b 0x80) 0 then Nat.mod (Nat.mul b 2) 256
+  else Nat.xor (Nat.mod (Nat.mul b 2) 256) 0x1b
+
+private def mulAuxNat : Nat → Nat → Nat → Nat
+  | 0, _, _ => 0
+  | n + 1, b, c =>
+    Nat.xor (if Nat.beq (Nat.land c 1) 0 then 0 else b)
+      (mulAuxNat n (xtimesNat b) (Nat.div c 2))
+
+private def mulNat (b c : Nat) : Nat :=
+  mulAuxNat 8 b c
+
+private def invNat (b : Nat) : Nat :=
+  [true, true, true, true, true, true, true, false].foldl
+    (fun acc bit => if bit then mulNat (mulNat acc acc) b else mulNat acc acc) 1
+
+private def bitNat (b i : Nat) : Nat :=
+  Nat.land (Nat.shiftRight b (Nat.mod i 8)) 1
+
+private def affineNat (b : Nat) : Nat :=
+  (List.range 8).foldl
+    (fun acc i =>
+      Nat.lor acc (Nat.shiftLeft
+        (Nat.xor (Nat.xor (Nat.xor (Nat.xor (Nat.xor (bitNat b i) (bitNat b (i + 4)))
+          (bitNat b (i + 5))) (bitNat b (i + 6))) (bitNat b (i + 7))) (bitNat 0x63 i)) i))
+    0
+
+private def sboxNat (b : Nat) : Nat :=
+  affineNat (if Nat.beq b 0 then 0 else invNat b)
+
+private theorem xtimesNat_eq (b : UInt8) : (xtimes b).toNat = xtimesNat b.toNat := by
+  have hsh : (b <<< 1).toNat = Nat.mod (Nat.mul b.toNat 2) 256 := by
+    rw [UInt8.toNat_shiftLeft]
+    change (b.toNat <<< 1) % 256 = (b.toNat * 2) % 256
+    rw [Nat.shiftLeft_eq]
+  unfold xtimes xtimesNat
+  have hcond : (b &&& 0x80 = 0) ↔ Nat.beq (Nat.land b.toNat 0x80) 0 = true := by
+    rw [Nat.beq_eq, ← UInt8.toNat_inj]
+    change (b &&& 0x80).toNat = 0 ↔ Nat.land b.toNat 0x80 = 0
+    rw [UInt8.toNat_and]
+    rfl
+  by_cases h : b &&& 0x80 = 0
+  · simp only [h, hcond.mp h, ↓reduceIte, hsh]
+  · simp only [h, mt hcond.mpr h, ↓reduceIte, UInt8.toNat_xor, hsh]
+    rfl
+
+private theorem mulAuxNat_eq :
+    ∀ (n : Nat) (b c : UInt8), (mulAux n b c).toNat = mulAuxNat n b.toNat c.toNat
+  | 0, _, _ => rfl
+  | n + 1, b, c => by
+    unfold mulAux mulAuxNat
+    rw [UInt8.toNat_xor, mulAuxNat_eq n, xtimesNat_eq]
+    have hdiv : (c >>> 1).toNat = Nat.div c.toNat 2 := by
+      rw [UInt8.toNat_shiftRight]
+      change c.toNat >>> 1 = c.toNat / 2
+      rw [Nat.shiftRight_eq_div_pow]
+    rw [hdiv]
+    have hcond : (c &&& 1 = 0) ↔ Nat.beq (Nat.land c.toNat 1) 0 = true := by
+      rw [Nat.beq_eq, ← UInt8.toNat_inj]
+      change (c &&& 1).toNat = 0 ↔ Nat.land c.toNat 1 = 0
+      rw [UInt8.toNat_and]
+      rfl
+    by_cases h : c &&& 1 = 0
+    · simp only [h, hcond.mp h, ↓reduceIte]; rfl
+    · simp only [h, mt hcond.mpr h, ↓reduceIte]; rfl
+
+private theorem mulNat_eq (b c : UInt8) : (mul b c).toNat = mulNat b.toNat c.toNat :=
+  mulAuxNat_eq 8 b c
+
+private theorem invNat_eq (b : UInt8) : (Internal.inv b).toNat = invNat b.toNat := by
+  have go : ∀ (bits : List Bool) (acc : UInt8),
+      (bits.foldl (fun acc bit => if bit then mul (mul acc acc) b else mul acc acc) acc).toNat =
+        bits.foldl (fun acc bit => if bit then mulNat (mulNat acc acc) b.toNat else mulNat acc acc)
+          acc.toNat := by
+    intro bits
+    induction bits with
+    | nil => intro acc; rfl
+    | cons bit rest ih =>
+      intro acc
+      cases bit <;> simp only [List.foldl_cons, ↓reduceIte, Bool.false_eq_true, ih, mulNat_eq]
+  exact go _ 1
+
+private theorem bitNat_eq (b : UInt8) (i : Nat) : (Internal.bit b i).toNat = bitNat b.toNat i := by
+  unfold Internal.bit bitNat
+  have hmod : i % 8 < 256 := Nat.lt_trans (Nat.mod_lt i (by decide)) (by decide)
+  have hshift : (b >>> (i % 8).toUInt8).toNat = Nat.shiftRight b.toNat (Nat.mod i 8) := by
+    rw [UInt8.toNat_shiftRight, Nat.toUInt8_eq, UInt8.toNat_ofNat', Nat.mod_eq_of_lt hmod,
+      Nat.mod_eq_of_lt (Nat.mod_lt i (by decide))]
+    rfl
+  rw [UInt8.toNat_and, hshift]
+  rfl
+
+private theorem affineNat_eq (b : UInt8) : (Internal.affine b).toNat = affineNat b.toNat := by
+  have hbit_lt : ∀ x i, bitNat x i < 2 := fun x i => by
+    unfold bitNat
+    change (x >>> (i % 8)) &&& 1 < 2
+    rw [Nat.and_one_is_mod]
+    exact Nat.mod_lt _ (by decide)
+  have go : ∀ (l : List Nat) (acc : UInt8), (∀ i ∈ l, i < 8) →
+      (l.foldl
+        (fun acc i =>
+          acc ||| ((Internal.bit b i ^^^ Internal.bit b (i + 4) ^^^ Internal.bit b (i + 5) ^^^
+            Internal.bit b (i + 6) ^^^ Internal.bit b (i + 7) ^^^ Internal.bit 0x63 i) <<<
+            i.toUInt8))
+        acc).toNat =
+      l.foldl
+        (fun acc i =>
+          Nat.lor acc (Nat.shiftLeft
+            (Nat.xor (Nat.xor (Nat.xor (Nat.xor (Nat.xor (bitNat b.toNat i)
+              (bitNat b.toNat (i + 4))) (bitNat b.toNat (i + 5))) (bitNat b.toNat (i + 6)))
+              (bitNat b.toNat (i + 7))) (bitNat 0x63 i)) i))
+        acc.toNat := by
+    intro l
+    induction l with
+    | nil => intro acc _; rfl
+    | cons i rest ih =>
+      intro acc hlt
+      have hi : i < 8 := hlt i (List.mem_cons_self)
+      simp only [List.foldl_cons]
+      rw [ih _ (fun j hj => hlt j (List.mem_cons_of_mem _ hj))]
+      congr 1
+      rw [UInt8.toNat_or, UInt8.toNat_shiftLeft, Nat.toUInt8_eq, UInt8.toNat_ofNat',
+        Nat.mod_eq_of_lt (Nat.lt_trans hi (by decide)), Nat.mod_eq_of_lt hi]
+      simp only [UInt8.toNat_xor, bitNat_eq]
+      have h0 : bitNat b.toNat i < 2 := hbit_lt _ _
+      have h4 : bitNat b.toNat (i + 4) < 2 := hbit_lt _ _
+      have h5 : bitNat b.toNat (i + 5) < 2 := hbit_lt _ _
+      have h6 : bitNat b.toNat (i + 6) < 2 := hbit_lt _ _
+      have h7 : bitNat b.toNat (i + 7) < 2 := hbit_lt _ _
+      have hc : bitNat 0x63 i < 2 := hbit_lt _ _
+      have xor_lt_two : ∀ {a c : Nat}, a < 2 → c < 2 → (a ^^^ c) < 2 := by
+        intro a c ha hc
+        have ha' : a = 0 ∨ a = 1 := by omega
+        have hc' : c = 0 ∨ c = 1 := by omega
+        rcases ha' with rfl | rfl <;> rcases hc' with rfl | rfl <;> decide
+      have hxor_lt :
+          (bitNat b.toNat i ^^^ bitNat b.toNat (i + 4) ^^^ bitNat b.toNat (i + 5) ^^^
+            bitNat b.toNat (i + 6) ^^^ bitNat b.toNat (i + 7) ^^^ bitNat 0x63 i) < 2 :=
+        xor_lt_two (xor_lt_two (xor_lt_two (xor_lt_two (xor_lt_two h0 h4) h5) h6) h7) hc
+      have hsh_lt :
+          ((bitNat b.toNat i ^^^ bitNat b.toNat (i + 4) ^^^ bitNat b.toNat (i + 5) ^^^
+            bitNat b.toNat (i + 6) ^^^ bitNat b.toNat (i + 7) ^^^ bitNat 0x63 i) <<< i) < 256 := by
+        rw [Nat.shiftLeft_eq]
+        have hp : 2 ^ i ≤ 128 := by
+          have : 2 ^ i ≤ 2 ^ 7 := Nat.pow_le_pow_right (by decide) (by omega)
+          simpa using this
+        have hmul := Nat.mul_le_mul (Nat.le_of_lt_succ hxor_lt) hp
+        omega
+      change acc.toNat |||
+        ((bitNat b.toNat i ^^^ bitNat b.toNat (i + 4) ^^^ bitNat b.toNat (i + 5) ^^^
+          bitNat b.toNat (i + 6) ^^^ bitNat b.toNat (i + 7) ^^^ bitNat 0x63 i) <<< i) % 256 = _
+      rw [Nat.mod_eq_of_lt hsh_lt]
+      rfl
+  exact go (List.range 8) 0 (fun i hi => List.mem_range.mp hi)
+
+private theorem sboxNat_eq (b : UInt8) : (Internal.sbox b).toNat = sboxNat b.toNat := by
+  unfold Internal.sbox sboxNat
+  have hcond : (b = 0) ↔ Nat.beq b.toNat 0 = true := by
+    rw [Nat.beq_eq, ← UInt8.toNat_inj]
+    rfl
+  by_cases h : b = 0
+  · simp only [h, ↓reduceIte, affineNat_eq]; rfl
+  · simp only [h, mt hcond.mpr h, Bool.false_eq_true, ↓reduceIte, affineNat_eq, invNat_eq]
+
+private theorem all_nat_256 {p : Nat → Bool} (h : (List.range 256).all p = true) (b : UInt8) :
+    p b.toNat = true :=
+  List.all_eq_true.mp h b.toNat (List.mem_range.mpr b.toNat_lt)
+
+/-- Checking a predicate on `(v[i], i)` over a 256-entry vector in one linear pass. -/
+private theorem all_vector_256 (v : Vector UInt8 256) (p : Nat → Nat → Bool)
+    (h : (v.toList.zipIdx).all (fun pair => p pair.1.toNat pair.2) = true) (b : UInt8) :
+    p (v[b.toNat]'b.toNat_lt).toNat b.toNat = true := by
+  have hlt : b.toNat < v.toList.length := by simp [b.toNat_lt]
+  have hmem : (v.toList[b.toNat]'hlt, b.toNat) ∈ v.toList.zipIdx := by
+    have hidx : b.toNat < v.toList.zipIdx.length := by simp [b.toNat_lt]
+    have heq : v.toList.zipIdx[b.toNat]'hidx = (v.toList[b.toNat]'hlt, b.toNat) := by
+      simp [List.getElem_zipIdx]
+    rw [← heq]
+    exact List.getElem_mem hidx
+  have hres := List.all_eq_true.mp h _ hmem
+  simpa using hres
+
+/-- A 16-way split of a 256-entry list, cutting kernel table lookup depth from 256 to 32. -/
+private def take16 : Nat → List Nat → List (List Nat)
+  | 0, _ => []
+  | n + 1, l => l.take 16 :: take16 n (l.drop 16)
+
+private theorem getD_take16 :
+    ∀ (n : Nat) (l : List Nat) (i : Nat), i < 16 * n →
+      ((take16 n l).getD (Nat.div i 16) []).getD (Nat.mod i 16) 0 = l.getD i 0
+  | 0, _, _, hi => by omega
+  | n + 1, l, i, hi => by
+    unfold take16
+    by_cases h16 : i < 16
+    · have hq : Nat.div i 16 = 0 := Nat.div_eq_of_lt h16
+      have hr : Nat.mod i 16 = i := Nat.mod_eq_of_lt h16
+      rw [hq, hr]
+      simp only [List.getD_eq_getElem?_getD, List.getElem?_cons_zero, Option.getD_some,
+        List.getElem?_take_of_lt h16]
+    · have hq : Nat.div i 16 = Nat.div (i - 16) 16 + 1 := by
+        change i / 16 = (i - 16) / 16 + 1; omega
+      have hr : Nat.mod i 16 = Nat.mod (i - 16) 16 := by
+        change i % 16 = (i - 16) % 16; omega
+      rw [hq, hr, List.getD_cons_succ, getD_take16 n (l.drop 16) (i - 16) (by omega)]
+      simp only [List.getD_eq_getElem?_getD, List.getElem?_drop]
+      congr 2
+      omega
+
+private def sboxNatList : List Nat := SBOX.toList.map UInt8.toNat
+
+private def invSboxNatList : List Nat := INV_SBOX.toList.map UInt8.toNat
+
+private def sboxChunks : List (List Nat) := take16 16 sboxNatList
+
+private def invSboxChunks : List (List Nat) := take16 16 invSboxNatList
+
+private theorem sbox_toNat_eq (b : UInt8) :
+    (sbox b).toNat = sboxNatList[b.toNat]'(by simp [sboxNatList, b.toNat_lt]) := by
+  simp [sbox, sboxNatList]
+
+private theorem invSbox_toNat_eq (b : UInt8) :
+    (invSbox b).toNat = invSboxNatList[b.toNat]'(by simp [invSboxNatList, b.toNat_lt]) := by
+  simp [invSbox, invSboxNatList]
+
+/-- One 256-byte kernel check verifies both `mul_inv` and `sbox_eq`, computing `invNat` once. -/
+private theorem inv_and_sbox_ok :
+    (SBOX.toList.zipIdx).all (fun p =>
+      let n := p.2
+      let inv := invNat n
+      (Nat.beq n 0 || Nat.beq (mulNat n inv) 1) &&
+      Nat.beq p.1.toNat (affineNat (if Nat.beq n 0 then 0 else inv))) = true := by
+  decide +kernel
+
 /-! ## The S-box -/
 
 /-- The power `b^254` of FIPS 197 §4.4 is an inverse: `b • b^-1 = {01}` for `b ≠ {00}`. -/
 theorem mul_inv (b : UInt8) (h : b ≠ 0) : mul b (Internal.inv b) = 1 := by
-  -- 256 products, run by the kernel.
-  have all := forall_of_all (p := fun b => b == 0 || mul b (Internal.inv b) == 1)
-    (by decide +kernel) b
-  simpa [h] using all
+  have hb := all_vector_256 SBOX (fun x n =>
+    let inv := invNat n
+    (Nat.beq n 0 || Nat.beq (mulNat n inv) 1) &&
+    Nat.beq x (affineNat (if Nat.beq n 0 then 0 else inv))) inv_and_sbox_ok b
+  have h1 := (Bool.and_eq_true _ _).mp hb |>.1
+  have hne : b.toNat ≠ 0 := fun hz => h (UInt8.toNat_inj.mp hz)
+  simp only [Bool.or_eq_true, Nat.beq_eq, hne, false_or] at h1
+  apply UInt8.toNat_inj.mp
+  rw [mulNat_eq, invNat_eq]
+  exact h1
 
 /-- Table 4 is the S-box that FIPS 197 §5.1.1 defines, entry by entry. -/
 theorem sbox_eq (b : UInt8) : sbox b = Internal.sbox b := by
-  -- 256 inverses and affine maps, run by the kernel.
-  simpa using forall_of_all (p := fun b => sbox b == Internal.sbox b) (by decide +kernel) b
+  have hb := all_vector_256 SBOX (fun x n =>
+    let inv := invNat n
+    (Nat.beq n 0 || Nat.beq (mulNat n inv) 1) &&
+    Nat.beq x (affineNat (if Nat.beq n 0 then 0 else inv))) inv_and_sbox_ok b
+  have h2 := (Bool.and_eq_true _ _).mp hb |>.2
+  rw [Nat.beq_eq] at h2
+  apply UInt8.toNat_inj.mp
+  rw [sboxNat_eq]
+  exact h2
 
 /-- Table 6 undoes Table 4: `INVSBOX[SBOX[b]] = b` for every byte. -/
 @[simp] theorem invSbox_sbox (b : UInt8) : invSbox (sbox b) = b := by
-  simpa using forall_of_all (p := fun b => invSbox (sbox b) == b) (by decide +kernel) b
+  have hall : (sboxNatList.zipIdx).all (fun p =>
+      Nat.beq ((invSboxChunks.getD (Nat.div p.1 16) []).getD (Nat.mod p.1 16) 0) p.2) = true := by
+    decide +kernel
+  have hlt : b.toNat < sboxNatList.length := by simp [sboxNatList, b.toNat_lt]
+  have hidx : b.toNat < sboxNatList.zipIdx.length := by simp [hlt]
+  have hmem : (sboxNatList[b.toNat]'hlt, b.toNat) ∈ sboxNatList.zipIdx := by
+    have heq : sboxNatList.zipIdx[b.toNat]'hidx = (sboxNatList[b.toNat]'hlt, b.toNat) := by
+      simp [List.getElem_zipIdx]
+    rw [← heq]
+    exact List.getElem_mem hidx
+  have hb := List.all_eq_true.mp hall _ hmem
+  rw [Nat.beq_eq] at hb
+  apply UInt8.toNat_inj.mp
+  rw [invSbox_toNat_eq]
+  have hget : invSboxNatList.getD (sbox b).toNat 0 =
+      invSboxNatList[(sbox b).toNat]'(by simp [invSboxNatList, (sbox b).toNat_lt]) := by
+    simp [List.getD_eq_getElem?_getD, invSboxNatList, (sbox b).toNat_lt]
+  rw [← hget, ← getD_take16 16 invSboxNatList (sbox b).toNat (sbox b).toNat_lt, sbox_toNat_eq]
+  exact hb
 
 /-- Table 4 undoes Table 6: `SBOX[INVSBOX[b]] = b` for every byte. -/
 @[simp] theorem sbox_invSbox (b : UInt8) : sbox (invSbox b) = b := by
-  simpa using forall_of_all (p := fun b => sbox (invSbox b) == b) (by decide +kernel) b
+  have hall : (invSboxNatList.zipIdx).all (fun p =>
+      Nat.beq ((sboxChunks.getD (Nat.div p.1 16) []).getD (Nat.mod p.1 16) 0) p.2) = true := by
+    decide +kernel
+  have hlt : b.toNat < invSboxNatList.length := by simp [invSboxNatList, b.toNat_lt]
+  have hidx : b.toNat < invSboxNatList.zipIdx.length := by simp [hlt]
+  have hmem : (invSboxNatList[b.toNat]'hlt, b.toNat) ∈ invSboxNatList.zipIdx := by
+    have heq : invSboxNatList.zipIdx[b.toNat]'hidx = (invSboxNatList[b.toNat]'hlt, b.toNat) := by
+      simp [List.getElem_zipIdx]
+    rw [← heq]
+    exact List.getElem_mem hidx
+  have hb := List.all_eq_true.mp hall _ hmem
+  rw [Nat.beq_eq] at hb
+  apply UInt8.toNat_inj.mp
+  rw [sbox_toNat_eq]
+  have hget : sboxNatList.getD (invSbox b).toNat 0 =
+      sboxNatList[(invSbox b).toNat]'(by simp [sboxNatList, (invSbox b).toNat_lt]) := by
+    simp [List.getD_eq_getElem?_getD, sboxNatList, (invSbox b).toNat_lt]
+  rw [← hget, ← getD_take16 16 sboxNatList (invSbox b).toNat (invSbox b).toNat_lt, invSbox_toNat_eq]
+  exact hb
 
 /-! ## The round constants -/
 
@@ -92,8 +380,21 @@ theorem xor_shiftRight (a b : UInt8) : (a ^^^ b) >>> 1 = (a >>> 1) ^^^ (b >>> 1)
 theorem xtimes_xor (a b : UInt8) : xtimes (a ^^^ b) = xtimes a ^^^ xtimes b := by
   -- The top bit of a byte is clear or set.
   have top (a : UInt8) : a &&& 0x80 = 0 ∨ a &&& 0x80 = 0x80 := by
-    simpa using forall_of_all (p := fun a => a &&& 0x80 == 0 || a &&& 0x80 == 0x80)
-      (by decide +kernel) a
+    cases hb : a.toBitVec[7]
+    · left
+      apply UInt8.eq_of_toBitVec_eq; apply BitVec.eq_of_getElem_eq; intro i hi
+      simp only [UInt8.toBitVec_and, BitVec.getElem_and]
+      by_cases h7 : i = 7
+      · subst h7; simp [hb]
+      · have : i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 ∨ i = 4 ∨ i = 5 ∨ i = 6 := by omega
+        rcases this with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp
+    · right
+      apply UInt8.eq_of_toBitVec_eq; apply BitVec.eq_of_getElem_eq; intro i hi
+      simp only [UInt8.toBitVec_and, BitVec.getElem_and]
+      by_cases h7 : i = 7
+      · subst h7; simp [hb]
+      · have : i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 ∨ i = 4 ∨ i = 5 ∨ i = 6 := by omega
+        rcases this with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp
   unfold xtimes
   rw [xor_and, xor_shiftLeft]
   rcases top a with ha | ha <;> rcases top b with hb | hb <;>
@@ -103,7 +404,12 @@ theorem mulAux_xor (n : Nat) (b c c' : UInt8) :
     mulAux n b (c ^^^ c') = mulAux n b c ^^^ mulAux n b c' := by
   -- The low bit of a byte is clear or set.
   have low (a : UInt8) : a &&& 1 = 0 ∨ a &&& 1 = 1 := by
-    simpa using forall_of_all (p := fun a => a &&& 1 == 0 || a &&& 1 == 1) (by decide +kernel) a
+    have h : (a &&& 1).toNat = a.toNat % 2 := by
+      rw [UInt8.toNat_and, UInt8.toNat_ofNat, Nat.and_one_is_mod]
+    have hmod : a.toNat % 2 = 0 ∨ a.toNat % 2 = 1 := by omega
+    rcases hmod with h0 | h1
+    · left; apply UInt8.toNat_inj.mp; change (a &&& 1).toNat = 0; omega
+    · right; apply UInt8.toNat_inj.mp; change (a &&& 1).toNat = 1; omega
   induction n generalizing b c c' with
   | zero => simp [mulAux]
   | succ n ih =>
@@ -150,16 +456,40 @@ def bits : List UInt8 := [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80]
 theorem eq_xor_bits (x : UInt8) :
     x = (x &&& 0x01) ^^^ (x &&& 0x02) ^^^ (x &&& 0x04) ^^^ (x &&& 0x08) ^^^
       (x &&& 0x10) ^^^ (x &&& 0x20) ^^^ (x &&& 0x40) ^^^ (x &&& 0x80) := by
-  have := forall_of_all (p := fun x => x == (x &&& 0x01) ^^^ (x &&& 0x02) ^^^ (x &&& 0x04) ^^^
-    (x &&& 0x08) ^^^ (x &&& 0x10) ^^^ (x &&& 0x20) ^^^ (x &&& 0x40) ^^^ (x &&& 0x80))
-    (by decide +kernel) x
-  simpa using this
+  apply UInt8.eq_of_toBitVec_eq
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp only [UInt8.toBitVec_xor, UInt8.toBitVec_and, BitVec.getLsbD_xor, BitVec.getLsbD_and]
+  have : i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 ∨ i = 4 ∨ i = 5 ∨ i = 6 ∨ i = 7 := by omega
+  rcases this with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp
 
 /-- Each bit of a byte is clear or set. -/
 theorem and_bit (x : UInt8) {m : UInt8} (hm : m ∈ bits) : x &&& m = 0 ∨ x &&& m = m := by
-  have := forall_of_all (p := fun x => bits.all fun m => x &&& m == 0 || x &&& m == m)
-    (by decide +kernel) x
-  simpa using List.all_eq_true.mp this m hm
+  have singleBit (k : Nat) (hk : k < 8) (m : UInt8)
+      (hmask : ∀ i < 8, m.toBitVec.getLsbD i = decide (i = k)) : x &&& m = 0 ∨ x &&& m = m := by
+    cases hx : x.toBitVec.getLsbD k
+    · left
+      apply UInt8.eq_of_toBitVec_eq; apply BitVec.eq_of_getLsbD_eq; intro i hi
+      simp only [UInt8.toBitVec_and, BitVec.getLsbD_and, hmask i hi]
+      by_cases hik : i = k
+      · subst hik; simp [hx]
+      · simp [hik]
+    · right
+      apply UInt8.eq_of_toBitVec_eq; apply BitVec.eq_of_getLsbD_eq; intro i hi
+      simp only [UInt8.toBitVec_and, BitVec.getLsbD_and, hmask i hi]
+      by_cases hik : i = k
+      · subst hik; simp [hx]
+      · simp [hik]
+  simp only [bits, List.mem_cons, List.not_mem_nil, or_false] at hm
+  rcases hm with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  · exact singleBit 0 (by decide) 0x01 (by decide)
+  · exact singleBit 1 (by decide) 0x02 (by decide)
+  · exact singleBit 2 (by decide) 0x04 (by decide)
+  · exact singleBit 3 (by decide) 0x08 (by decide)
+  · exact singleBit 4 (by decide) 0x10 (by decide)
+  · exact singleBit 5 (by decide) 0x20 (by decide)
+  · exact singleBit 6 (by decide) 0x40 (by decide)
+  · exact singleBit 7 (by decide) 0x80 (by decide)
 
 /-- Two additive maps from bytes to words that agree on zero and on the bits agree everywhere. -/
 theorem eq_of_additive {f g : UInt8 → Word}
@@ -181,6 +511,34 @@ theorem eq_of_additive {f g : UInt8 → Word}
 /-- The INVMIXCOLUMNS matrix undoes the MIXCOLUMNS matrix on every column.
 
 Both are additive, so the kernel checks zero and the 32 one-bit columns. -/
+private def mulWordNat (a b : Nat × Nat × Nat × Nat) : Nat × Nat × Nat × Nat :=
+  let (a0, a1, a2, a3) := a
+  let (b0, b1, b2, b3) := b
+  (Nat.xor (Nat.xor (Nat.xor (mulNat a0 b0) (mulNat a3 b1)) (mulNat a2 b2)) (mulNat a1 b3),
+   Nat.xor (Nat.xor (Nat.xor (mulNat a1 b0) (mulNat a0 b1)) (mulNat a3 b2)) (mulNat a2 b3),
+   Nat.xor (Nat.xor (Nat.xor (mulNat a2 b0) (mulNat a1 b1)) (mulNat a0 b2)) (mulNat a3 b3),
+   Nat.xor (Nat.xor (Nat.xor (mulNat a3 b0) (mulNat a2 b1)) (mulNat a1 b2)) (mulNat a0 b3))
+
+private theorem mulWordNat_eq (a b : Word) :
+    let w := mulWord a b
+    ((w[0].toNat, w[1].toNat, w[2].toNat, w[3].toNat) : Nat × Nat × Nat × Nat) =
+      mulWordNat (a[0].toNat, a[1].toNat, a[2].toNat, a[3].toNat)
+        (b[0].toNat, b[1].toNat, b[2].toNat, b[3].toNat) := by
+  simp only [mulWord, mulWordNat, Vector.getElem_mk, List.getElem_toArray,
+    List.getElem_cons_zero, List.getElem_cons_succ, UInt8.toNat_xor, mulNat_eq]
+  rfl
+
+private def singleNat (j x : Nat) : Nat × Nat × Nat × Nat :=
+  (if Nat.beq 0 j then x else 0, if Nat.beq 1 j then x else 0,
+   if Nat.beq 2 j then x else 0, if Nat.beq 3 j then x else 0)
+
+private theorem singleNat_eq (j : Fin 4) (x : UInt8) :
+    let w := single j x
+    ((w[0].toNat, w[1].toNat, w[2].toNat, w[3].toNat) : Nat × Nat × Nat × Nat) =
+      singleNat j.val x.toNat := by
+  match j with
+  | ⟨0, _⟩ | ⟨1, _⟩ | ⟨2, _⟩ | ⟨3, _⟩ => simp [single, singleNat]
+
 theorem mulWord_inverse (b : Word) :
     mulWord #v[0x0e, 0x09, 0x0d, 0x0b] (mulWord #v[0x02, 0x01, 0x01, 0x03] b) = b := by
   -- The composite is additive, as each matrix is.
@@ -191,6 +549,44 @@ theorem mulWord_inverse (b : Word) :
           (mulWord #v[0x0e, 0x09, 0x0d, 0x0b] (mulWord #v[0x02, 0x01, 0x01, 0x03] (single j y))) :=
     by
     rw [single_xor, mulWord_xor, mulWord_xor]
+  have checkBasis :
+      ([0, 1, 2, 3].all fun j =>
+        ([0, 1, 2, 4, 8, 16, 32, 64, 128].all fun x =>
+          let res := mulWordNat (14, 9, 13, 11) (mulWordNat (2, 1, 1, 3) (singleNat j x))
+          let exp := singleNat j x
+          Nat.beq res.1 exp.1 && Nat.beq res.2.1 exp.2.1 &&
+            Nat.beq res.2.2.1 exp.2.2.1 && Nat.beq res.2.2.2 exp.2.2.2)) = true := by
+    decide +kernel
+  have onBasis (j : Fin 4) (x : UInt8) (hx : x.toNat ∈ [0, 1, 2, 4, 8, 16, 32, 64, 128]) :
+      mulWord #v[0x0e, 0x09, 0x0d, 0x0b] (mulWord #v[0x02, 0x01, 0x01, 0x03] (single j x)) =
+        single j x := by
+    have hj : j.val ∈ [0, 1, 2, 3] := by
+      have := j.isLt
+      simp only [List.mem_cons, List.not_mem_nil, or_false]
+      omega
+    have hres := List.all_eq_true.mp (List.all_eq_true.mp checkBasis _ hj) _ hx
+    simp only [Bool.and_eq_true, Nat.beq_eq] at hres
+    obtain ⟨⟨⟨h0, h1⟩, h2⟩, h3⟩ := hres
+    have heq :
+        mulWordNat (14, 9, 13, 11) (mulWordNat (2, 1, 1, 3) (singleNat j.val x.toNat)) =
+          singleNat j.val x.toNat :=
+      Prod.ext h0 (Prod.ext h1 (Prod.ext h2 h3))
+    have hw := mulWordNat_eq #v[0x0e, 0x09, 0x0d, 0x0b]
+      (mulWord #v[0x02, 0x01, 0x01, 0x03] (single j x))
+    rw [mulWordNat_eq, singleNat_eq] at hw
+    simp only [Vector.getElem_mk, List.getElem_toArray, List.getElem_cons_zero,
+      List.getElem_cons_succ, UInt8.reduceToNat] at hw
+    rw [heq, ← singleNat_eq j x] at hw
+    have h0' := congrArg Prod.fst hw
+    have h1' := congrArg (fun p => p.2.1) hw
+    have h2' := congrArg (fun p => p.2.2.1) hw
+    have h3' := congrArg (fun p => p.2.2.2) hw
+    ext r hr
+    match r, hr with
+    | 0, _ => exact UInt8.toNat_inj.mp h0'
+    | 1, _ => exact UInt8.toNat_inj.mp h1'
+    | 2, _ => exact UInt8.toNat_inj.mp h2'
+    | 3, _ => exact UInt8.toNat_inj.mp h3'
   -- On each row, the composite fixes zero and the eight bits.
   have row (j : Fin 4) (x : UInt8) :
       mulWord #v[0x0e, 0x09, 0x0d, 0x0b] (mulWord #v[0x02, 0x01, 0x01, 0x03] (single j x)) =
@@ -198,8 +594,11 @@ theorem mulWord_inverse (b : Word) :
     eq_of_additive
       (f := fun x =>
         mulWord #v[0x0e, 0x09, 0x0d, 0x0b] (mulWord #v[0x02, 0x01, 0x01, 0x03] (single j x)))
-      (g := single j) (add j) (single_xor j) (by revert j; decide +kernel)
-      (by revert j; decide +kernel) x
+      (g := single j) (add j) (single_xor j)
+      (onBasis j 0 (by simp))
+      (fun m hm => onBasis j m (by
+        simp only [bits, List.mem_cons, List.not_mem_nil, or_false] at hm
+        rcases hm with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)) x
   -- A column is the sum of its four rows.
   rw [eq_xor_singles b]
   simp only [mulWord_xor, row]
@@ -521,31 +920,232 @@ The kernel checks the byte functions on all 256 bytes.
 
 The state, the words and the rounds then follow by rewriting, one step of the code at a time. -/
 
+private theorem eq_of_additive_byte {f g : UInt8 → UInt8}
+    (hf : ∀ x y, f (x ^^^ y) = f x ^^^ f y) (hg : ∀ x y, g (x ^^^ y) = g x ^^^ g y)
+    (h0 : f 0 = g 0) (hbits : ∀ m ∈ bits, f m = g m) (x : UInt8) : f x = g x := by
+  have piece (m : UInt8) (hm : m ∈ bits) : f (x &&& m) = g (x &&& m) := by
+    rcases and_bit x hm with h | h <;> rw [h]
+    · exact h0
+    · exact hbits m hm
+  rw [eq_xor_bits x]
+  simp only [hf, hg]
+  simp only [bits, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq] at piece
+  obtain ⟨p1, p2, p4, p8, p16, p32, p64, p128⟩ := piece
+  rw [p1, p2, p4, p8, p16, p32, p64, p128]
+
+private theorem mulAux_xor_left (n : Nat) (a a' c : UInt8) :
+    mulAux n (a ^^^ a') c = mulAux n a c ^^^ mulAux n a' c := by
+  induction n generalizing a a' c with
+  | zero => simp [mulAux]
+  | succ n ih =>
+    simp only [mulAux, xtimes_xor, ih]
+    by_cases h : c &&& 1 = 0
+    · simp only [h, ↓reduceIte, UInt8.zero_xor]
+    · simp only [h, ↓reduceIte]
+      ac_rfl
+
+private theorem mul_xor_left (a a' c : UInt8) : mul (a ^^^ a') c = mul a c ^^^ mul a' c :=
+  mulAux_xor_left 8 a a' c
+
+private theorem nat_two_mul_xor (a b : Nat) : 2 * (a ^^^ b) = (2 * a) ^^^ (2 * b) := by
+  have h2 (x : Nat) : 2 * x = x <<< 1 := by rw [Nat.shiftLeft_eq, Nat.pow_one, Nat.mul_comm]
+  apply Nat.eq_of_testBit_eq
+  intro i
+  rw [Nat.testBit_xor, h2, h2, h2]
+  simp only [Nat.testBit_shiftLeft, Nat.testBit_xor]
+  cases decide (i ≥ 1) <;> simp
+
+private theorem nat_mul_bit_xor_left (a b c : Nat) (hc : c < 2) :
+    (a ^^^ b) * c = (a * c) ^^^ (b * c) := by
+  have h : c = 0 ∨ c = 1 := by omega
+  rcases h with rfl | rfl <;> simp
+
+private theorem nat_mul_bit_xor_right (a b c : Nat) (hb : b < 2) (hc : c < 2) :
+    a * (b ^^^ c) = (a * b) ^^^ (a * c) := by
+  have hb' : b = 0 ∨ b = 1 := by omega
+  have hc' : c = 0 ∨ c = 1 := by omega
+  rcases hb' with rfl | rfl <;> rcases hc' with rfl | rfl <;> simp
+
+private theorem nat_div_two_pow_mod_two (p m : Nat) :
+    p / 2 ^ m % 2 = if p.testBit m then 1 else 0 := by
+  rw [Nat.testBit_eq_decide_div_mod_eq]
+  cases h : decide (p / 2 ^ m % 2 = 1)
+  · simp only [Bool.false_eq_true, ↓reduceIte]
+    have hne : p / 2 ^ m % 2 ≠ 1 := of_decide_eq_false h
+    omega
+  · simp only [↓reduceIte]
+    exact of_decide_eq_true h
+
+private theorem nat_div_two_pow_mod_two_xor (p1 p2 m : Nat) :
+    (p1 ^^^ p2) / 2 ^ m % 2 = (p1 / 2 ^ m % 2) ^^^ (p2 / 2 ^ m % 2) := by
+  rw [nat_div_two_pow_mod_two, nat_div_two_pow_mod_two, nat_div_two_pow_mod_two, Nat.testBit_xor]
+  cases p1.testBit m <;> cases p2.testBit m <;> decide
+
+private theorem polyMul_xor_left :
+    ∀ (n a1 a2 b : Nat), Spec.polyMul n (a1 ^^^ a2) b = Spec.polyMul n a1 b ^^^ Spec.polyMul n a2 b
+  | 0, _, _, _ => by simp [Spec.polyMul]
+  | n + 1, a1, a2, b => by
+    simp only [Spec.polyMul, nat_mul_bit_xor_left _ _ _ (Nat.mod_lt _ (by decide)),
+      nat_two_mul_xor, polyMul_xor_left n]
+    ac_rfl
+
+private theorem polyMul_xor_right :
+    ∀ (n a b1 b2 : Nat), Spec.polyMul n a (b1 ^^^ b2) = Spec.polyMul n a b1 ^^^ Spec.polyMul n a b2
+  | 0, _, _, _ => by simp [Spec.polyMul]
+  | n + 1, a, b1, b2 => by
+    have hmod : (b1 ^^^ b2) % 2 = (b1 % 2) ^^^ (b2 % 2) := by
+      simpa using nat_div_two_pow_mod_two_xor b1 b2 0
+    have hdiv : (b1 ^^^ b2) / 2 = (b1 / 2) ^^^ (b2 / 2) := by
+      have hd (x : Nat) : x / 2 = x >>> 1 := by rw [Nat.shiftRight_eq_div_pow, Nat.pow_one]
+      rw [hd, hd, hd]
+      apply Nat.eq_of_testBit_eq
+      intro i
+      simp [Nat.testBit_shiftRight, Nat.testBit_xor]
+    simp only [Spec.polyMul, hmod, hdiv,
+      nat_mul_bit_xor_right _ _ _ (Nat.mod_lt _ (by decide)) (Nat.mod_lt _ (by decide)),
+      polyMul_xor_right n]
+    ac_rfl
+
+private theorem polyMod_xor :
+    ∀ (k p1 p2 : Nat), Spec.polyMod k (p1 ^^^ p2) = Spec.polyMod k p1 ^^^ Spec.polyMod k p2
+  | 0, _, _ => rfl
+  | k + 1, p1, p2 => by
+    simp only [Spec.polyMod, nat_div_two_pow_mod_two_xor,
+      nat_mul_bit_xor_right _ _ _ (Nat.mod_lt _ (by decide)) (Nat.mod_lt _ (by decide))]
+    have hrearr :
+        (p1 ^^^ p2) ^^^
+            (0x11b * 2 ^ k * (p1 / 2 ^ (k + 8) % 2) ^^^ 0x11b * 2 ^ k * (p2 / 2 ^ (k + 8) % 2)) =
+          (p1 ^^^ 0x11b * 2 ^ k * (p1 / 2 ^ (k + 8) % 2)) ^^^
+            (p2 ^^^ 0x11b * 2 ^ k * (p2 / 2 ^ (k + 8) % 2)) := by
+      ac_rfl
+    rw [hrearr, polyMod_xor k]
+
+private theorem nat_toUInt8_xor (x y : Nat) : (x ^^^ y).toUInt8 = x.toUInt8 ^^^ y.toUInt8 := by
+  apply UInt8.toNat_inj.mp
+  simp only [UInt8.toNat_xor, Nat.toUInt8_eq, UInt8.toNat_ofNat']
+  apply Nat.eq_of_testBit_eq
+  intro i
+  simp only [Nat.testBit_xor, Nat.testBit_mod_two_pow]
+  cases decide (i < 8) <;> simp
+
+private theorem specMul_xor_left (a a' c : UInt8) :
+    Spec.mul (a ^^^ a') c = Spec.mul a c ^^^ Spec.mul a' c := by
+  simp only [Spec.mul, UInt8.toNat_xor, polyMul_xor_left, polyMod_xor, nat_toUInt8_xor]
+
+private theorem specMul_xor_right (a c c' : UInt8) :
+    Spec.mul a (c ^^^ c') = Spec.mul a c ^^^ Spec.mul a c' := by
+  simp only [Spec.mul, UInt8.toNat_xor, polyMul_xor_right, polyMod_xor, nat_toUInt8_xor]
+
+private def specMulNat (b c : Nat) : Nat :=
+  Nat.mod (Spec.polyMod 7 (Spec.polyMul 8 b c)) 256
+
+private def specAffineNat (b : Nat) : Nat :=
+  Nat.mod ((List.range 8).foldl (fun acc i =>
+    if b.testBit (i % 8) ^^ b.testBit ((i + 4) % 8) ^^ b.testBit ((i + 5) % 8) ^^
+        b.testBit ((i + 6) % 8) ^^ b.testBit ((i + 7) % 8) ^^ (0x63 : Nat).testBit i then
+      acc + 2 ^ i
+    else acc) 0) 256
+
+private theorem specMulNat_eq (b c : UInt8) :
+    (Spec.mul b c).toNat = specMulNat b.toNat c.toNat := by
+  unfold Spec.mul specMulNat
+  rw [Nat.toUInt8_eq, UInt8.toNat_ofNat']
+  rfl
+
+private theorem specAffineNat_eq (b : UInt8) : (Spec.affine b).toNat = specAffineNat b.toNat := by
+  unfold Spec.affine specAffineNat
+  rw [Nat.toUInt8_eq, UInt8.toNat_ofNat']
+  rfl
+
+private theorem mul_eq_spec (b c : UInt8) : mul b c = Spec.mul b c := by
+  have hbasis :
+      ([0, 1, 2, 4, 8, 16, 32, 64, 128].all fun x =>
+        ([0, 1, 2, 4, 8, 16, 32, 64, 128].all fun y =>
+          Nat.beq (mulNat x y) (specMulNat x y))) = true := by
+    decide +kernel
+  have hpair (x y : UInt8) (hx : x.toNat ∈ [0, 1, 2, 4, 8, 16, 32, 64, 128])
+      (hy : y.toNat ∈ [0, 1, 2, 4, 8, 16, 32, 64, 128]) : mul x y = Spec.mul x y := by
+    have hxy := List.all_eq_true.mp (List.all_eq_true.mp hbasis _ hx) _ hy
+    rw [Nat.beq_eq] at hxy
+    apply UInt8.toNat_inj.mp
+    rw [mulNat_eq, specMulNat_eq]
+    exact hxy
+  have hmem_bits (m : UInt8) (hm : m ∈ bits) : m.toNat ∈ [0, 1, 2, 4, 8, 16, 32, 64, 128] := by
+    simp only [bits, List.mem_cons, List.not_mem_nil, or_false] at hm
+    rcases hm with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide
+  have fixLeft (x : UInt8) (hx : x.toNat ∈ [0, 1, 2, 4, 8, 16, 32, 64, 128]) (y : UInt8) :
+      mul x y = Spec.mul x y :=
+    eq_of_additive_byte (mul_xor x) (specMul_xor_right x) (hpair x 0 hx (by simp))
+      (fun m hm => hpair x m hx (hmem_bits m hm)) y
+  exact eq_of_additive_byte (fun x y => mul_xor_left x y c) (fun x y => specMul_xor_left x y c)
+    (fixLeft 0 (by simp) c) (fun m hm => fixLeft m (hmem_bits m hm) c) b
+
+private theorem inv_eq_spec (b : UInt8) : Internal.inv b = Spec.inv b := by
+  have go : ∀ (l : List Bool) (acc : UInt8),
+      l.foldl (fun acc bit => if bit then mul (mul acc acc) b else mul acc acc) acc =
+        l.foldl (fun acc bit => if bit then Spec.mul (Spec.mul acc acc) b else Spec.mul acc acc)
+          acc := by
+    intro l
+    induction l with
+    | nil => intro acc; rfl
+    | cons bit rest ih =>
+      intro acc
+      cases bit <;> simp only [List.foldl_cons, ↓reduceIte, Bool.false_eq_true, mul_eq_spec] <;>
+        exact ih _
+  exact go _ 1
+
+private theorem affine_eq_spec (b : UInt8) : Internal.affine b = Spec.affine b := by
+  have hall : (List.range 256).all (fun n => Nat.beq (affineNat n) (specAffineNat n)) = true := by
+    decide +kernel
+  have hb := all_nat_256 hall b
+  rw [Nat.beq_eq] at hb
+  apply UInt8.toNat_inj.mp
+  rw [affineNat_eq, specAffineNat_eq]
+  exact hb
+
 /-- Table 4 is the S-box of the model, entry by entry. -/
 theorem sbox_eq_spec (b : UInt8) : sbox b = Spec.sbox b := by
-  simpa using forall_of_all (p := fun b => sbox b == Spec.sbox b) (by decide +kernel) b
+  rw [sbox_eq, Internal.sbox, Spec.sbox, inv_eq_spec, affine_eq_spec]
 
 /-- Multiplication by `{01}` leaves a byte unchanged. -/
 theorem one_mul (c : UInt8) : mul 0x01 c = c := by
-  simpa using forall_of_all (p := fun c => mul 0x01 c == c) (by decide +kernel) c
+  have hall : (List.range 256).all (fun n => Nat.beq (mulNat 1 n) n) = true := by decide +kernel
+  have hc := all_nat_256 hall c
+  rw [Nat.beq_eq] at hc
+  apply UInt8.toNat_inj.mp
+  rw [mulNat_eq]
+  exact hc
 
 /-- Multiplication by `{02}` is the model's. -/
-theorem two_mul_eq_spec (c : UInt8) : mul 0x02 c = Spec.mul 0x02 c := by
-  simpa using forall_of_all (p := fun c => mul 0x02 c == Spec.mul 0x02 c) (by decide +kernel) c
+theorem two_mul_eq_spec (c : UInt8) : mul 0x02 c = Spec.mul 0x02 c :=
+  mul_eq_spec 0x02 c
 
 /-- Multiplication by `{03}` is the model's. -/
-theorem three_mul_eq_spec (c : UInt8) : mul 0x03 c = Spec.mul 0x03 c := by
-  simpa using forall_of_all (p := fun c => mul 0x03 c == Spec.mul 0x03 c) (by decide +kernel) c
+theorem three_mul_eq_spec (c : UInt8) : mul 0x03 c = Spec.mul 0x03 c :=
+  mul_eq_spec 0x03 c
 
 /-- XTIMES is the model's multiplication by `{02}`, as (4.5) states. -/
 theorem xtimes_eq_spec (b : UInt8) : xtimes b = Spec.mul b 0x02 := by
-  simpa using forall_of_all (p := fun b => xtimes b == Spec.mul b 0x02) (by decide +kernel) b
+  have hbasis :
+      ([0, 1, 2, 4, 8, 16, 32, 64, 128].all fun n => Nat.beq (xtimesNat n) (specMulNat n 2)) =
+        true := by
+    decide +kernel
+  have hmem (n : UInt8) (hn : n.toNat ∈ [0, 1, 2, 4, 8, 16, 32, 64, 128]) :
+      xtimes n = Spec.mul n 0x02 := by
+    have h := List.all_eq_true.mp hbasis _ hn
+    rw [Nat.beq_eq] at h
+    apply UInt8.toNat_inj.mp
+    rw [xtimesNat_eq, specMulNat_eq]
+    exact h
+  exact eq_of_additive_byte xtimes_xor (fun x y => specMul_xor_left x y 0x02) (hmem 0 (by simp))
+    (fun m hm => hmem m (by
+      simp only [bits, List.mem_cons, List.not_mem_nil, or_false] at hm
+      rcases hm with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)) b
 
 /-- The model's `b^254` is the inverse of (4.10): `b • b^-1 = {01}` for `b ≠ {00}`. -/
 theorem Spec.mul_inv (b : UInt8) (h : b ≠ 0) : Spec.mul b (Spec.inv b) = 1 := by
-  have all := forall_of_all (p := fun b => b == 0 || Spec.mul b (Spec.inv b) == 1)
-    (by decide +kernel) b
-  simpa [h] using all
+  rw [← mul_eq_spec, ← inv_eq_spec]
+  exact Aes.mul_inv b h
 
 /-- The state of a block: byte `s[r, c]` at index `r + 4c`. -/
 def toState (s : Block) : Spec.State :=

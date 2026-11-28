@@ -1,8 +1,9 @@
 module
 
 public import EthLib.Base.Proofs.ByteOrder
-public import Mathlib.Tactic
 public import VCVio.OracleComp.Constructions.SampleableType.Basic
+import Mathlib.Tactic.Ring
+import Mathlib.Tactic.NormNum
 
 /-!
 # Proofs: target-sum codes of digit vectors
