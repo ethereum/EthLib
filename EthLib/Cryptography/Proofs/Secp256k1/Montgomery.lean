@@ -33,13 +33,11 @@ def Fp.params : Cryptography.Montgomery.Modulus 8 where
   pLimbs := ⟨0xfffffffefffffc2f, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff⟩
   r1 := ⟨0x00000001000003d1, 0x0000000000000000, 0x0000000000000000, 0x0000000000000000⟩
   r2 := ⟨0x000007a2000e90a1, 0x0000000000000001, 0x0000000000000000, 0x0000000000000000⟩
-  pm2 := ⟨0xfffffffefffffc2d, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff⟩
   pinv := 0xd2253531
   pLimbs_spec := by decide
   pinv_spec := by decide
   r1_spec := by decide
   r2_spec := by decide
-  pm2_spec := by decide
 
 end EthLib.Cryptography.Secp256k1
 

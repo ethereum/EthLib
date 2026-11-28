@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Montgomery
+public import EthLib.Cryptography.Proofs.Inverse
 public import EthLib.Cryptography.Proofs.Montgomery.Core
 public import EthLib.Base.Proofs.ByteOrder
 public import Mathlib.Data.ZMod.Basic
@@ -317,17 +318,24 @@ theorem toZMod_powLimbs (a : Montgomery M) (e : Limbs.T n) :
 
 /-- For a prime modulus, the inverse is the inverse of `ZMod p`. -/
 theorem toZMod_inv [Fact M.p.Prime] (a : Montgomery M) : toZMod a⁻¹ = (toZMod a)⁻¹ := by
-  change toZMod (powLimbs a M.pm2) = _
-  rw [toZMod_powLimbs, M.pm2_spec]
-  have h3 : 2 < M.p := by
-    have := M.odd
-    have := (Fact.out : M.p.Prime).two_le
-    omega
-  by_cases ha : toZMod a = 0
-  · rw [ha, inv_zero, zero_pow (by omega)]
-  · refine eq_inv_of_mul_eq_one_left ?_
-    rw [← pow_succ, show M.p - 2 + 1 = M.p - 1 by omega]
-    exact ZMod.pow_card_sub_one_eq_one ha
+  -- The Euclidean inverse of the integer of `a` stands for the inverse of `a`.
+  have he : toZMod (ofNat (Fin.inverse (Fin.ofNat M.p a.toNat)).val : Montgomery M) =
+      (toZMod a)⁻¹ := by
+    rw [toZMod_ofNat, Fin.inverse_val, Fin.val_ofNat, ZMod.natCast_mod, toNat_eq,
+      ZMod.natCast_zmod_val]
+  change toZMod (inv a) = _
+  unfold inv
+  split
+  · exact he
+  · dsimp only
+    split
+    · -- A candidate `c` with `c a = 1` is the inverse of `a`.
+      rename_i h
+      have hc := congrArg toZMod h
+      rw [show ∀ x y : Montgomery M, mul x y = x * y from fun _ _ => rfl, toZMod_mul,
+        show (one : Montgomery M) = 1 from rfl, toZMod_one] at hc
+      exact eq_inv_of_mul_eq_one_left hc
+    · exact he
 
 /-! ## Bytes -/
 

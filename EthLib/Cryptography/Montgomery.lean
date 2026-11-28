@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Inverse
 public import EthLib.Cryptography.Montgomery.Product
 
 /-!
@@ -151,8 +152,6 @@ structure Modulus (n : Nat) [Words n] [Limbs n] where
   r1 : Limbs.T n
   /-- `R ^ 2 mod p`, which puts an integer into Montgomery form. -/
   r2 : Limbs.T n
-  /-- `p - 2`, the exponent of the inverse. -/
-  pm2 : Limbs.T n
   /-- The limbs write the modulus. -/
   pLimbs_spec : Limbs.val pLimbs = p
   /-- `p pinv = -1` mod `2 ^ 32`. -/
@@ -161,8 +160,6 @@ structure Modulus (n : Nat) [Words n] [Limbs n] where
   r1_spec : Limbs.val r1 = 2 ^ (32 * n) % p
   /-- The constant that puts an integer into Montgomery form. -/
   r2_spec : Limbs.val r2 = 2 ^ (32 * n) * 2 ^ (32 * n) % p
-  /-- The exponent of the inverse. -/
-  pm2_spec : Limbs.val pm2 = p - 2
   /-- The Montgomery product of the limbs `a`, below `p`, and `b`.
 
   By default it is the CIOS product, unrolled whole. -/
@@ -188,6 +185,9 @@ structure Modulus (n : Nat) [Words n] [Limbs n] where
   sub_spec : ∀ a b, Limbs.val a < p → Limbs.val b < p → sub a b = subCore a b pLimbs := by
     intros
     rfl
+  -- The inverse checks each candidate, so a wrong one costs time and nothing else.
+  /-- A candidate for the inverse mod `p` of the integer that the limbs write, or none. -/
+  invCandidate : Limbs.T n → Option (Limbs.T n) := fun _ => none
 
 end Montgomery
 
@@ -420,11 +420,25 @@ The compiler makes one copy for each modulus, so each product is a direct call. 
 @[inline] def powLimbs (a : Montgomery M) (e : Limbs.T n) : Montgomery M :=
   powDigits (powTable a) e n one
 
-/-- The inverse of `a`, and `0` for `0`, by Fermat's little theorem: `a ^ (p - 2)`.
+/-- The modulus is not zero, so `Fin p` has its literals. -/
+instance Modulus.neZero (M : Modulus n) : NeZero M.p := ⟨Nat.pos_iff_ne_zero.mp M.pos⟩
 
-It is the inverse only when `p` is prime. -/
-@[inline] def inv (a : Montgomery M) : Montgomery M :=
-  powLimbs a M.pm2
+/-- The inverse of `a`, and `0` for `0`, when `p` is prime. -/
+@[noinline, specialize M] def inv (a : Montgomery M) : Montgomery M :=
+  -- The extended Euclidean algorithm on the integer of `a`.
+  let euclid := fun () => ofNat (Fin.inverse (Fin.ofNat M.p a.toNat)).val
+  -- The candidate inverts the stored limbs `a R`, which gives `a^(-1) R^(-1)`.
+  --
+  -- The candidate of the modulus is kept when its product with `a` is one.
+  match M.invCandidate a.limbs with
+  | none => euclid ()
+  | some y =>
+    -- `R^3 mod p`, the Montgomery product of `R^2` by itself.
+    let r3 := mulLimbs M M.r2 M.r2_lt M.r2
+    -- The Montgomery product by `R^3` turns `a^(-1) R^(-1)` into `a^(-1) R`, the form of `a^(-1)`.
+    let c := mulLimbs M r3.limbs r3.lt y
+    -- A candidate whose product with `a` is not one gives way to the Euclidean inverse.
+    if mul c a = one then c else euclid ()
 
 /-- The four bytes of `b` from `i`, read big-endian.
 

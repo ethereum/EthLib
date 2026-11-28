@@ -1394,6 +1394,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the inverses of the BLS12-381 fields `Fp` and `Fr` take the divsteps of Bernstein and Yang in place of the power `a ^ (p - 2)` ([#2478](https://github.com/ethereum/EthLib/issues/2478), [#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Montgomery.inv` (`Cryptography/Montgomery.lean`) keeps the candidate of `Montgomery.Modulus.invCandidate` when its product with the input is one, and otherwise takes the extended Euclidean algorithm; `Montgomery.toZMod_inv` keeps its statement.
+  `Montgomery.Modulus` loses `pm2` and `pm2_spec`, and gains `invCandidate`, which defaults to no candidate.
+  A modulus with no candidate, such as the proof models of the secp256k1 and secp256r1 fields, now inverts by the extended Euclidean algorithm.
+  The divsteps of `Secp256k1.Inverse` move to `SafeGcd` (`Cryptography/SafeGcd.lean`), with the class `SafeGcd.Signed` of the signed integers of five and seven words (`SafeGcd.Words7`); `Bls.Fp.invCandidate` and `Bls.Fr.invCandidate` are new.
+  `Montgomery.Modulus.neZero` moves from `Montgomery/Fin.lean` to `Montgomery.lean`, with an unchanged full name.
+
 - In Lean, the lemmas under the refund theorems assume only what they use of the block state ([#5017](https://github.com/ethereum/EthLib/issues/5017)).
   `Transactions.clearedSlots_eq_empty` and `Transactions.nonceOrCodeClearedSlots_eq_empty` (`Execution/Proofs/Transactions/Refund.lean`) take `Transactions.WipesHideZeros` of the state in place of `Rebuildable` of the block state; `Evm.RebuildEnd.wipesHideZeros` gives it from `Rebuildable`.
   `Transactions.buyGas_refundReady` and `Transactions.TransactionRun.refundReady` take the codes of the block state in place of `Rebuildable`; pass `valid.code` for a `valid : Rebuildable block`.
