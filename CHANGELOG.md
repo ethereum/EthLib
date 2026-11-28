@@ -146,13 +146,12 @@ Not yet released.
   The successor slot and both slot-start times are computed successfully, and the receiver's head read succeeds.
   Honest participants start at the store initialized from the anchor state and block, which share a slot at the start of an epoch.
   The slot duration is positive.
-  `Execution.carrier_delivered` and `Execution.finalized_epoch_le_justified_of_late`, in the same file, are new public theorems; they were private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
+  `Execution.carrier_delivered`, in the same file, is a new public theorem; it was private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
   `Execution.carrier_delivered` concerns a sender that holds a block and its state and reads the receiver's finalized checkpoint at that root.
   The sender and receiver are honest.
   Both events are by `last`, with the receiver's at least a delay after the sender's.
   The up-to-date receiver then holds that block and state.
-  Both helpers assume synchrony, delayed admission, a nonempty epoch, at least two epochs of block-root history, an initialized invariant anchor with matching block and state slots at which all honest validators start, agreement of bounded honest stores on blocks at common roots, and nonzero roots of their held blocks.
-  The epoch-order helper additionally assumes positive slot duration and that whenever one bounded honest store's finalized epoch is no greater than another's justified epoch, the latter's justified root reads the former's finalized checkpoint at that epoch.
+  It assumes synchrony, delayed admission, a nonempty epoch, at least two epochs of block-root history, an initialized invariant anchor with matching block and state slots at which all honest validators start, agreement of bounded honest stores on blocks at common roots, and nonzero roots of their held blocks.
 
 - In Lean, `Execution.observedRestart_covers_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`) states that a restart of the fast confirmation rule from the observed justified block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   At a call that replaces its base, that block is on every up-to-date honest head from the call through the limit.

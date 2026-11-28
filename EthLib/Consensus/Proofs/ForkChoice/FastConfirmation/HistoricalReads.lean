@@ -291,7 +291,7 @@ By `last`, honest justified roots read honest finalized checkpoints at lower or 
 It assumes synchrony, admission, nonzero held roots and a slot-matched invariant anchor.
 
 Slot duration is positive, epochs are nonempty and root history spans at least two epochs. -/
-public theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
+private theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -384,7 +384,11 @@ It takes a genesis run, a slot-matched epoch-start anchor, synchrony, admission 
 
 It assumes preset parameters, positive slot duration, store/stake bounds and nonzero held roots.
 
-It needs successful slot, start and head reads, with the head read from the next start to `last`. -/
+It needs successful slot, start and head reads, with the head read from the next start to `last`.
+
+Honest stores start at the anchor; by `last` they lack its parent, with store epochs in the horizon.
+
+By `last` their held states precede the next fork and meet the run and terminal stake floors. -/
 public theorem Execution.finalized_ancestor_of_heads_or_evidence
     {Δ last : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)
