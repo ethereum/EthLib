@@ -168,26 +168,31 @@ structure BodyOverrides where
 
 /-- Run the transaction `tx`, the `index`-th of its block, after the transactions before it.
 
+It runs in the monad `N`, with the runs of the observer, which then sees its output.
+
 It fails when the transaction cannot enter the block. -/
-def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
+def applyTransactionWith {fork : Fork} {M N : Type → Type} [Monad N] [MonadExceptOf BlockError N]
+    (obs : BodyObserver M N fork) (env : BlockEnvironment fork) (index : Nat)
     (before : BodyOutput fork) (tx : Transaction) (overrides : BodyOverrides := {}) :
-    Except BlockError (BodyOutput fork) := do
+    N (BodyOutput fork) := do
   -- The transaction must be able to enter the block.
-  let included ← (checkInclusion env.chainId env before.gas
+  let included ← liftExcept ((checkInclusion env.chainId env before.gas
     (.ofBlock before.block) tx (overrides.senders index) overrides.lifted).mapError
-    (.invalidTransaction index)
-  let out ← (processTransaction env before.block included tx overrides.precompiles
-    overrides.lifted).mapError .aborted
+    (BlockError.invalidTransaction index))
+  let out ← obs.abort (obs.runTransaction env before.block included tx overrides.precompiles
+    overrides.lifted)
+  obs.onTransaction index included tx out
   -- The transaction runs at position `index + 1` of the block access list.
-  let body ← ((before.body.beginIndex (index + 1)).join out.state).mapError .state
+  let body ←
+    liftExcept (((before.body.beginIndex (index + 1)).join out.state).mapError BlockError.state)
   -- The block counts the gas of the transaction by its counts of gas.
   let gas := before.gas.add out.blockGas
   -- The receipts add up the gas used after the refunds, as EIP-8037 keeps it.
   let cumulativeGasUsed := before.cumulativeGasUsed + out.gasUsed
   -- Before Byzantium, the receipt holds the state root after the transaction.
   let outcome : Outcome fork ← if h : .byzantium ≤ fork then pure (.status h out.error.isNone)
-    else .postState (Nat.lt_of_not_le h) <$>
-      (stateRoot keccak256 body.block.applyChanges).mapError .trie
+    else liftExcept (.postState (Nat.lt_of_not_le h) <$>
+      (stateRoot keccak256 body.block.applyChanges).mapError BlockError.trie)
   return { body, gas, cumulativeGasUsed
            receipts :=
              before.receipts ++ [(tx.type, makeReceipt outcome cumulativeGasUsed out.logs.toList)]
@@ -196,13 +201,33 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
            results := before.results ++
              [⟨out.messageOutput, out.gasBeforeRefund, out.error, out.simulatedLogs.toList⟩] }
 
-/-- Run the transactions of a block in order, from the body so far. -/
+/-- Run the transaction `tx`, the `index`-th of its block, after the transactions before it.
+
+It is the run with no observer, in the monad of errors.
+
+It fails when the transaction cannot enter the block. -/
+def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
+    (before : BodyOutput fork) (tx : Transaction) (overrides : BodyOverrides := {}) :
+    Except BlockError (BodyOutput fork) :=
+  applyTransactionWith .none env index before tx overrides
+
+/-- Run the transactions of a block in order, from the body so far.
+
+It runs in the monad `N`, with the runs of the observer, which then sees each output. -/
+def applyTransactionsWith {fork : Fork} {M N : Type → Type} [Monad N] [MonadExceptOf BlockError N]
+    (obs : BodyObserver M N fork) (env : BlockEnvironment fork) (body : BodyState)
+    (transactions : List Transaction) (overrides : BodyOverrides := {}) : N (BodyOutput fork) :=
+  transactions.zipIdx.foldlM
+    (fun before (tx, index) => applyTransactionWith obs env index before tx overrides)
+    ⟨body, .zero, 0, [], [], []⟩
+
+/-- Run the transactions of a block in order, from the body so far.
+
+It is the run with no observer, in the monad of errors. -/
 def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
     (transactions : List Transaction) (overrides : BodyOverrides := {}) :
     Except BlockError (BodyOutput fork) :=
-  transactions.zipIdx.foldlM
-    (fun before (tx, index) => applyTransaction env index before tx overrides)
-    ⟨body, .zero, 0, [], [], []⟩
+  applyTransactionsWith .none env body transactions overrides
 
 /-- Run a writing step on a block state, as a transaction of its own. -/
 def onBlock (block : BlockState)
@@ -234,21 +259,32 @@ def daoTransfer (config : ChainConfig) (fork : Fork) (number : Nat) (start : Blo
 
 /-- The requests of a block at `fork`, after its transactions and withdrawals.
 
+It runs in the monad `N`, with the runs of the observer.
+
 The deposits come from the logs of the deposit contract at `depositContract`.
 
 The other requests come from their contracts. -/
-def blockRequests {fork : Fork} (depositContract : Address) (env : BlockEnvironment fork)
-    (body : BodyState) (logs : List Log) : Except BlockError (BodyState × List ByteArray) := do
+def blockRequestsWith {fork : Fork} {M N : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    [Monad N] [MonadExceptOf BlockError N] (obs : BodyObserver M N fork)
+    (depositContract : Address) (env : BlockEnvironment fork) (body : BodyState)
+    (logs : List Log) : N (BodyState × List ByteArray) := do
   if .pectra ≤ fork then
     -- The deposit requests, from the logs of the deposit contract.
-    let deposits ← (depositRequests depositContract logs).mapError .deposit
+    let deposits ← liftExcept ((depositRequests depositContract logs).mapError BlockError.deposit)
     -- A checked system call to the withdrawal contract, then to the consolidation contract.
     --
     -- From Glamsterdam, then to the builder deposit and exit contracts.
-    let (body, requests) ← readRequests env body
+    let (body, requests) ← readRequestsWith obs env body
     -- EIP-7685: the requests are in ascending order of request type, so the deposits come first.
     return (body, requestList DEPOSIT_REQUEST_TYPE deposits ++ requests)
   else return (body, [])
+
+/-- The requests of a block at `fork`, after its transactions and withdrawals.
+
+They are the requests with no observer, in the monad of errors. -/
+def blockRequests {fork : Fork} (depositContract : Address) (env : BlockEnvironment fork)
+    (body : BodyState) (logs : List Log) : Except BlockError (BodyState × List ByteArray) :=
+  blockRequestsWith .none depositContract env body logs
 
 /-- What the whole body of a block gives: the output of its transactions, and its requests. -/
 structure BlockOutput (fork : Fork) extends BodyOutput fork where
@@ -279,24 +315,27 @@ def accessListHashOf (fork : Fork) (body : BodyState) (gasLimit : Nat) (itemCap 
 
 /-- Run the body of the block `block` on the block state `start`, at `fork`.
 
+It runs in the monad `N`, with the runs of the observer, which also sees each transaction.
+
 The body runs the system calls, the transactions, the withdrawals and the requests, in that order.
 
 A simulation runs the transactions with its overrides. -/
-def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
-    (block : Block fork Transaction) (start : BlockState) (overrides : BodyOverrides := {}) :
-    Except BlockError (BlockOutput fork) := do
+def applyBodyWith {fork : Fork} {M N : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    [Monad N] [MonadExceptOf BlockError N] (obs : BodyObserver M N fork) (config : ChainConfig)
+    (env : BlockEnvironment fork) (block : Block fork Transaction) (start : BlockState)
+    (overrides : BodyOverrides := {}) : N (BlockOutput fork) := do
   -- Before Paris, at the first block of the DAO Fork of the chain, the DAO ether moves first.
-  let state ← daoTransfer config fork block.header.number start
+  let state ← liftExcept (daoTransfer config fork block.header.number start)
   -- EIP-4788, from Dencun, then EIP-2935, from Pectra: a system call each.
   --
   -- Each runs at the start of the block, before any transaction.
   --
   -- The system calls at the start run at position 0 of the block access list.
-  let body ← (startSystemCalls env block.header.parentHash (.init state)).mapError .aborted
+  let body ← obs.abort (startSystemCallsWith obs env block.header.parentHash (.init state))
   -- Each transaction in order, with its index `i` in the block.
   --
   -- Transaction `i` runs at position `i + 1` of the block access list.
-  let output ← applyTransactions env body block.transactions overrides
+  let output ← applyTransactionsWith obs env body block.transactions overrides
   -- EIP-7928: the operations after the `N` transactions use index `N + 1`.
   --
   -- The index is kept at every fork, and only a body from Glamsterdam builds the list.
@@ -305,20 +344,32 @@ def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
   --
   -- The root of the withdrawals is computed with the other roots.
   let body ← if h : .shapella ≤ fork then do
-      let tx ← (withdrawalState fork body.block (block.withdrawals h)).mapError .state
-      (body.join tx).mapError .state
+      let tx ← liftExcept ((withdrawalState fork body.block (block.withdrawals h)).mapError
+        BlockError.state)
+      liftExcept ((body.join tx).mapError BlockError.state)
     else pure body
   -- The requests of EIP-7685, from Pectra; the builder requests join at Glamsterdam.
-  let (body, requests) ← blockRequests config.depositContractAddress env body output.logs
+  let (body, requests) ← blockRequestsWith obs config.depositContractAddress env body output.logs
   -- Before Paris, the Berlin paper's stage that applies the rewards, after the transactions.
   --
   -- The beneficiary and the ommers get their rewards here.
   let ommers := block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)
-  let state ← onBlock body.block fun tx =>
-    payRewards fork tx block.header.coinbase block.header.number ommers
+  let state ← liftExcept (onBlock body.block fun tx =>
+    payRewards fork tx block.header.coinbase block.header.number ommers)
   -- From Glamsterdam: the block access list, its gas limit check, then its hash.
-  let accessListHash ← accessListHashOf fork body block.header.gasLimit overrides.itemCap
+  let accessListHash ←
+    liftExcept (accessListHashOf fork body block.header.gasLimit overrides.itemCap)
   return { output with body := { body with block := state }, requests, accessListHash }
+
+/-- Run the body of the block `block` on the block state `start`, at `fork`.
+
+It is the run with no observer, in the monad of errors.
+
+A simulation runs the transactions with its overrides. -/
+def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
+    (block : Block fork Transaction) (start : BlockState) (overrides : BodyOverrides := {}) :
+    Except BlockError (BlockOutput fork) :=
+  applyBodyWith .none config env block start overrides
 
 /-! ## The checks -/
 

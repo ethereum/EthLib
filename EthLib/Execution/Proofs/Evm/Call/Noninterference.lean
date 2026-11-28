@@ -8,9 +8,9 @@ public import EthLib.Base.Proofs.Except
 /-!
 # Proofs: calls and creations keep agreeing frames
 
-The two frames differ only in their states, which agree on four sets.
+The two frames differ only in their states, which agree on three sets.
 
-The sets name addresses, whole storages, slots and code hashes.
+The sets name addresses, slots and code hashes.
 
 These are local steps toward the coverage of [EIP-7928, Scope and Inclusion][bal].
 
@@ -22,19 +22,9 @@ These are local steps toward the coverage of [EIP-7928, Scope and Inclusion][bal
 namespace EthLib.Execution.Evm
 
 open EthLib.Base (Address Bytes32 Hash32)
-open EthLib.Execution.State (EMPTY_CODE_HASH TransactionState)
+open EthLib.Execution.State (TransactionState)
 
 variable {fork : Base.Fork} {Meter : Type} [GasMeter Meter]
-
-/-- Take an address of the first set with nonce 0 and no code.
-
-Its storage was wiped, or it is in the second set.
-
-A creation reads the whole storage of such an address. -/
-def CandidatesIn (account allStorage : Address → Prop) (tx : TransactionState) : Prop :=
-  ∀ address, account address → (tx.getAccount address).nonce = 0 →
-    (tx.getAccount address).codeHash = EMPTY_CODE_HASH →
-    address ∈ tx.storageClears ∨ allStorage address
 
 /-- Two ways for a caller to resume that agree on agreeing frames that end the message.
 
@@ -43,24 +33,24 @@ The account that the message runs at must be in the first set.
 A failure that does not abort the run is the same in both.
 
 A success with its reads in the sets gives agreeing frames. -/
-def ResumeAgrees (account allStorage : Address → Prop) (slot : Address → Bytes32 → Prop)
+def ResumeAgrees (account : Address → Prop) (slot : Address → Bytes32 → Prop)
     (code : Hash32 → Prop) (k1 k2 : Evm fork Meter → Except EvmError (Evm fork Meter)) : Prop :=
-  ∀ c1 c2, FrameAgrees account allStorage slot code c1 c2 → account c1.message.currentTarget →
+  ∀ c1 c2, FrameAgrees account slot code c1 c2 → account c1.message.currentTarget →
     (∀ err, k1 c1 = .error err → err.aborts = false → k2 c2 = .error err) ∧
       ∀ a1, k1 c1 = .ok a1 → ReadsIn account slot a1.state →
-        ∃ a2, k2 c2 = .ok a2 ∧ FrameAgrees account allStorage slot code a1 a2
+        ∃ a2, k2 c2 = .ok a2 ∧ FrameAgrees account slot code a1 a2
 
 /-- Two results of a step that agree.
 
 Both give agreeing frames, or both send the same message from agreeing frames.
 
 The callers then resume in ways that agree. -/
-def StepAgrees (account allStorage : Address → Prop) (slot : Address → Bytes32 → Prop)
+def StepAgrees (account : Address → Prop) (slot : Address → Bytes32 → Prop)
     (code : Hash32 → Prop) : StepResult fork Meter → StepResult fork Meter → Prop
-  | .next a1, .next a2 => FrameAgrees account allStorage slot code a1 a2
+  | .next a1, .next a2 => FrameAgrees account slot code a1 a2
   | .child c1 m1 k1, .child c2 m2 k2 =>
-    FrameAgrees account allStorage slot code c1 c2 ∧ m2 = m1 ∧
-      ResumeAgrees account allStorage slot code k1 k2
+    FrameAgrees account slot code c1 c2 ∧ m2 = m1 ∧
+      ResumeAgrees account slot code k1 k2
   | _, _ => False
 
 /-- The state of the frame that a result of a step gives, or of the frame that sends a message. -/
@@ -72,7 +62,7 @@ def StepResult.state : StepResult fork Meter → TransactionState
 
 open EthLib.Execution.State.TransactionState (AgreesOn)
 
-variable {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+variable {account : Address → Prop} {slot : Address → Bytes32 → Prop}
   {code : Hash32 → Prop}
 
 omit [GasMeter Meter] in
@@ -156,8 +146,8 @@ private theorem resumeAgrees_of_withState
         child.state.accountExistsAndIsEmpty child.message.currentTarget →
       k { caller with state := s } { child with state := s' } =
         (fun a => { a with state := s' }) <$> k caller child)
-    {c1 c2 : Evm fork Meter} (hrel : FrameAgrees account allStorage slot code c1 c2) :
-    ResumeAgrees account allStorage slot code (k c1) (k c2) := by
+    {c1 c2 : Evm fork Meter} (hrel : FrameAgrees account slot code c1 c2) :
+    ResumeAgrees account slot code (k c1) (k c2) := by
   intro ch1 ch2 hch hcur
   obtain ⟨s, rfl⟩ : ∃ s, c2 = { c1 with state := s } := ⟨_, hrel.rest⟩
   obtain ⟨s', rfl⟩ : ∃ s', ch2 = { ch1 with state := s' } := ⟨_, hch.rest⟩
@@ -176,9 +166,9 @@ private theorem resumeAgrees_of_withState
 
 /-- A call resumes alike from two agreeing callers. -/
 private theorem resumeCall_agrees {c1 c2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code c1 c2) (newAccount : Nat)
+    (hrel : FrameAgrees account slot code c1 c2) (newAccount : Nat)
     (outputStart outputSize : Base.U256) :
-    ResumeAgrees account allStorage slot code
+    ResumeAgrees account slot code
       (resumeCall fork c1 newAccount outputStart outputSize)
       (resumeCall fork c2 newAccount outputStart outputSize) :=
   resumeAgrees_of_withState (k := fun c => resumeCall fork c newAccount outputStart outputSize)
@@ -186,9 +176,9 @@ private theorem resumeCall_agrees {c1 c2 : Evm fork Meter}
 
 /-- A creation resumes alike from two agreeing callers. -/
 private theorem resumeCreate_agrees {c1 c2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code c1 c2) (newAccount : Nat)
+    (hrel : FrameAgrees account slot code c1 c2) (newAccount : Nat)
     (address : Address) :
-    ResumeAgrees account allStorage slot code (resumeCreate fork c1 newAccount address)
+    ResumeAgrees account slot code (resumeCreate fork c1 newAccount address)
       (resumeCreate fork c2 newAccount address) :=
   resumeAgrees_of_withState (k := fun c => resumeCreate fork c newAccount address)
     (fun c ch s s' h => resumeCreate_withState c ch s s' h newAccount address) hrel
@@ -200,17 +190,17 @@ private theorem resumeCreate_agrees {c1 c2 : Evm fork Meter}
 A failure that does not abort the run is the same in both.
 
 A success whose reads lie in the sets gives agreeing results. -/
-private def Sim (account allStorage : Address → Prop) (slot : Address → Bytes32 → Prop)
+private def Sim (account : Address → Prop) (slot : Address → Bytes32 → Prop)
     (code : Hash32 → Prop) (x y : Except EvmError (StepResult fork Meter)) : Prop :=
   (∀ err, x = .error err → err.aborts = false → y = .error err) ∧
     ∀ r1, x = .ok r1 → ReadsIn account slot r1.state →
-      ∃ r2, y = .ok r2 ∧ StepAgrees account allStorage slot code r1 r2
+      ∃ r2, y = .ok r2 ∧ StepAgrees account slot code r1 r2
 
 omit [GasMeter Meter] in
 /-- Results that fail alike or agree are runs that agree. -/
 private theorem Sim.of_rel {x y : Except EvmError (StepResult fork Meter)}
-    (h : Base.ExceptRel (StepAgrees account allStorage slot code) x y) :
-    Sim account allStorage slot code x y := by
+    (h : Base.ExceptRel (StepAgrees account slot code) x y) :
+    Sim account slot code x y := by
   refine ⟨fun err hx _ => ?_, fun r1 hx _ => ?_⟩
   · subst hx
     cases y with
@@ -224,15 +214,15 @@ private theorem Sim.of_rel {x y : Except EvmError (StepResult fork Meter)}
 omit [GasMeter Meter] in
 /-- Agreeing frames give agreeing results of a step. -/
 private theorem next_rel {x y : Except EvmError (Evm fork Meter)}
-    (h : Base.ExceptRel (FrameAgrees account allStorage slot code) x y) :
-    Base.ExceptRel (StepAgrees account allStorage slot code) (StepResult.next <$> x)
+    (h : Base.ExceptRel (FrameAgrees account slot code) x y) :
+    Base.ExceptRel (StepAgrees account slot code) (StepResult.next <$> x)
       (StepResult.next <$> y) :=
   h.map fun hab => hab
 
 /-- A call that runs no message gives agreeing results from agreeing frames. -/
 private theorem skipCall_rel {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2) (gas reservoir : Nat) :
-    Base.ExceptRel (StepAgrees account allStorage slot code)
+    (hrel : FrameAgrees account slot code g1 g2) (gas reservoir : Nat) :
+    Base.ExceptRel (StepAgrees account slot code)
       (StepResult.next <$> skipCall g1 gas reservoir)
       (StepResult.next <$> skipCall g2 gas reservoir) := by
   refine next_rel ?_
@@ -244,9 +234,9 @@ private theorem skipCall_rel {g1 g2 : Evm fork Meter}
 
 /-- A call that has paid gives agreeing results from agreeing frames. -/
 private theorem genericCall_rel {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2) (message : Message fork)
+    (hrel : FrameAgrees account slot code g1 g2) (message : Message fork)
     (newAccount : Nat) (outputStart outputSize : Base.U256) :
-    Base.ExceptRel (StepAgrees account allStorage slot code)
+    Base.ExceptRel (StepAgrees account slot code)
       (genericCall g1 message newAccount outputStart outputSize)
       (genericCall g2 message newAccount outputStart outputSize) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
@@ -262,10 +252,10 @@ private theorem genericCall_rel {g1 g2 : Evm fork Meter}
 
 /-- The end of a call gives agreeing results from agreeing frames. -/
 private theorem finishCall_rel {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2)
+    (hrel : FrameAgrees account slot code g1 g2)
     (hcurrent : account g1.message.currentTarget) (kind : CallKind) (call : CallOperands)
     (callee : Callee) (subCall newAccount expandBy : Nat) :
-    Base.ExceptRel (StepAgrees account allStorage slot code)
+    Base.ExceptRel (StepAgrees account slot code)
       (finishCall kind call callee subCall newAccount expandBy g1)
       (finishCall kind call callee subCall newAccount expandBy g2) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
@@ -287,9 +277,9 @@ private theorem finishCall_rel {g1 g2 : Evm fork Meter}
 
 /-- The payment of a call fails alike or gives the same message gas and agreeing frames. -/
 private theorem payCall_rel {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2) (kind : CallKind)
+    (hrel : FrameAgrees account slot code g1 g2) (kind : CallKind)
     (call : CallOperands) (memoryCost extraGas newAccount : Nat) :
-    Base.ExceptRel (fun p q => p.1 = q.1 ∧ FrameAgrees account allStorage slot code p.2 q.2)
+    Base.ExceptRel (fun p q => p.1 = q.1 ∧ FrameAgrees account slot code p.2 q.2)
       (payCall kind call memoryCost extraGas newAccount g1)
       (payCall kind call memoryCost extraGas newAccount g2) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
@@ -344,10 +334,10 @@ private theorem callStep_eq (kind : CallKind) (evm : Evm fork Meter) : callStep 
 
 /-- A call that has resolved its callee gives agreeing results from agreeing frames. -/
 private theorem callPay_rel {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2) {call : CallOperands}
+    (hrel : FrameAgrees account slot code g1 g2) {call : CallOperands}
     (haddress : account call.address) (hcurrent : account g1.message.currentTarget)
     (kind : CallKind) (cold : Bool) (memoryCost expandBy : Nat) (callee : Callee) :
-    Base.ExceptRel (StepAgrees account allStorage slot code)
+    Base.ExceptRel (StepAgrees account slot code)
       (callPay kind call cold memoryCost expandBy callee g1)
       (callPay kind call cold memoryCost expandBy callee g2) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
@@ -369,10 +359,10 @@ private theorem callPay_rel {g1 g2 : Evm fork Meter}
 
 /-- Keeping the reads of agreeing frames keeps results that fail alike or agree. -/
 private theorem keepReads_rel {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2)
+    (hrel : FrameAgrees account slot code g1 g2)
     {x y : Except EvmError (StepResult fork Meter)}
-    (h : Base.ExceptRel (StepAgrees account allStorage slot code) x y) :
-    Base.ExceptRel (StepAgrees account allStorage slot code) (keepReads g1 .next x)
+    (h : Base.ExceptRel (StepAgrees account slot code) x y) :
+    Base.ExceptRel (StepAgrees account slot code) (keepReads g1 .next x)
       (keepReads g2 .next y) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
   cases x with
@@ -394,7 +384,7 @@ private theorem keepReads_rel {g1 g2 : Evm fork Meter}
 omit [GasMeter Meter] in
 /-- The code of an agreed account is the same in agreeing frames. -/
 private theorem accountCode_eq {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2) {address : Address}
+    (hrel : FrameAgrees account slot code g1 g2) {address : Address}
     (ha : account address) (hcodes : CodesIn account code g1.state) :
     accountCode g2 address = accountCode g1 address := by
   unfold accountCode
@@ -402,14 +392,14 @@ private theorem accountCode_eq {g1 g2 : Evm fork Meter}
 
 /-- The access to a delegate fails alike, or agrees when the sets hold the delegate. -/
 private theorem accessDelegation_rel {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2) {address : Address}
+    (hrel : FrameAgrees account slot code g1 g2) {address : Address}
     (ha : account address) (hcodes : CodesIn account code g1.state) (known : Nat) :
     (∀ err, accessDelegation g1 address known = .error err → err.aborts = false →
         accessDelegation g2 address known = .error err) ∧
       ∀ callee g1', accessDelegation g1 address known = .ok (callee, g1') →
         (∀ a, a ∈ g1'.state.accountReads → account a) →
         ∃ g2', accessDelegation g2 address known = .ok (callee, g2') ∧
-          FrameAgrees account allStorage slot code g1' g2' := by
+          FrameAgrees account slot code g1' g2' := by
   have hcode := accountCode_eq hrel ha hcodes
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
   unfold accessDelegation
@@ -446,11 +436,11 @@ private theorem accessDelegation_rel {g1 g2 : Evm fork Meter}
         · cases h
       | ok u =>
         dsimp only
-        have hagree : AgreesOn account allStorage slot code
+        have hagree : AgreesOn account slot code
             (recordAccountRead (accessAddress g1 d).2 d).state (s.recordAccountRead d) := by
           simp only [recordAccountRead, hst]
           exact hrel.state.recordAccountRead d
-        have hframe : FrameAgrees account allStorage slot code
+        have hframe : FrameAgrees account slot code
             (recordAccountRead (accessAddress g1 d).2 d)
             (recordAccountRead { (accessAddress g1 d).2 with state := s } d) := ⟨rfl, hagree⟩
         refine ⟨fun err h nab => ?_, fun callee g1' h hreads => ?_⟩
@@ -515,11 +505,11 @@ private theorem callPay_reads {kind : CallKind} {call : CallOperands} {cold : Bo
 
 /-- A call that has read its address gives agreeing runs from agreeing frames. -/
 private theorem callResolve_sim {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2) {call : CallOperands}
+    (hrel : FrameAgrees account slot code g1 g2) {call : CallOperands}
     (haddress : account call.address) (hcodes : CodesIn account code g1.state)
     (hcurrent : account g1.message.currentTarget) (kind : CallKind) (cold : Bool)
     (known memoryCost expandBy : Nat) :
-    Sim account allStorage slot code (callResolve kind call cold known memoryCost expandBy g1)
+    Sim account slot code (callResolve kind call cold known memoryCost expandBy g1)
       (callResolve kind call cold known memoryCost expandBy g2) := by
   obtain ⟨herr, hok⟩ := accessDelegation_rel hrel haddress hcodes known
   unfold callResolve
@@ -580,10 +570,10 @@ private theorem callStep_reads_address {kind : CallKind} {evm popped : Evm fork 
 
 /-- Keeping the reads of agreeing frames keeps runs that agree. -/
 private theorem keepReads_sim {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2)
+    (hrel : FrameAgrees account slot code g1 g2)
     {x y : Except EvmError (StepResult fork Meter)}
-    (h : Sim account allStorage slot code x y) :
-    Sim account allStorage slot code (keepReads g1 .next x) (keepReads g2 .next y) := by
+    (h : Sim account slot code x y) :
+    Sim account slot code (keepReads g1 .next x) (keepReads g2 .next y) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
   refine ⟨fun err hx nab => ?_, fun r1 hx reads => ?_⟩
   · rw [(keepReads_eq_error.mp hx).2] at nab
@@ -611,10 +601,10 @@ private theorem keepReads_sim {g1 g2 : Evm fork Meter}
 
 /-- A call gives agreeing runs from agreeing frames. -/
 private theorem callStep_sim {e1 e2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code e1 e2)
+    (hrel : FrameAgrees account slot code e1 e2)
     (hcodes : CodesIn account code e1.state) (hcurrent : account e1.message.currentTarget)
     (kind : CallKind) :
-    Sim account allStorage slot code (callStep kind e1) (callStep kind e2) := by
+    Sim account slot code (callStep kind e1) (callStep kind e2) := by
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   rcases hp : popCallOperands kind e1 with e | ⟨call, p1⟩
   · have h1 : callStep kind e1 = .error e := by
@@ -659,7 +649,7 @@ private theorem callStep_sim {e1 e2 : Evm fork Meter}
     exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
   | ok u =>
     rw [hc, Base.ok_bind] at k1 k2
-    have hframe : FrameAgrees account allStorage slot code
+    have hframe : FrameAgrees account slot code
         (recordAccountRead (accessAddress p1 call.address).2 call.address)
         (recordAccountRead { (accessAddress p1 call.address).2 with state := s } call.address) :=
       ⟨rfl, by simp only [recordAccountRead, hqs]; exact hrel.state.recordAccountRead _⟩
@@ -740,22 +730,19 @@ private theorem launchCreate_eq (evm : Evm fork Meter) (value : Base.U256)
 
 /-- The rest of a creation gives agreeing results when the sets hold the new address. -/
 private theorem createRest_rel {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2) {current address : Address}
-    (hcurrent : account current) (haddress : account address)
-    (hcandidates : CandidatesIn account allStorage g1.state) (value : Base.U256)
+    (hrel : FrameAgrees account slot code g1 g2) {current address : Address}
+    (hcurrent : account current) (haddress : account address) (value : Base.U256)
     (initCode : ByteArray) :
-    Base.ExceptRel (StepAgrees account allStorage slot code)
+    Base.ExceptRel (StepAgrees account slot code)
       (createRest value initCode current address g1)
       (createRest value initCode current address g2) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
   have hnew : createNewAccountStateGas fork s address =
       createNewAccountStateGas fork g1.state address := by
     simp only [createNewAccountStateGas, hrel.state.isAccountAlive_eq (.inr haddress)]
-  -- A creation checks that a contract may be deployed at the new address.
-  --
-  -- That reads whether the address has any storage, which the block access list does not record.
+  -- A creation checks that a contract may be deployed at the new address, from its account.
   have hdep : s.accountDeployable address = g1.state.accountDeployable address :=
-    hrel.state.accountDeployable_eq (.inr haddress) (hcandidates address haddress)
+    hrel.state.accountDeployable_eq (.inr haddress)
   have hinc := hrel.state.incrementNonce fork (.inr hcurrent)
   unfold createRest
   dsimp only
@@ -813,11 +800,10 @@ private theorem createRest_reads {value : Base.U256} {initCode : ByteArray}
 
 /-- A creation that has read its sender gives agreeing runs from agreeing frames. -/
 private theorem launchFrom_sim {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2)
+    (hrel : FrameAgrees account slot code g1 g2)
     (hcurrent : account g1.message.currentTarget)
-    (hcandidates : CandidatesIn account allStorage g1.state) (value : Base.U256)
-    (initCode : ByteArray) (salt : Option Base.U256) :
-    Sim account allStorage slot code (launchFrom value initCode salt g1)
+    (value : Base.U256) (initCode : ByteArray) (salt : Option Base.U256) :
+    Sim account slot code (launchFrom value initCode salt g1)
       (launchFrom value initCode salt g2) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
   have hsender : s.getAccount g1.message.currentTarget =
@@ -839,14 +825,10 @@ private theorem launchFrom_sim {g1 g2 : Evm fork Meter}
     dsimp only
     have hqs : (accessAddress g1 address).2.state = g1.state := state_accessAddress _ _
     have hqm : (accessAddress g1 address).2.message = g1.message := accessAddress_message _ _
-    have hframe : FrameAgrees account allStorage slot code
+    have hframe : FrameAgrees account slot code
         (recordAccountRead (accessAddress g1 address).2 address)
         (recordAccountRead { (accessAddress g1 address).2 with state := s } address) :=
       ⟨rfl, by simp only [recordAccountRead, hqs]; exact hrel.state.recordAccountRead _⟩
-    have hcand' : CandidatesIn account allStorage
-        (recordAccountRead (accessAddress g1 address).2 address).state := by
-      simp only [recordAccountRead, hqs]
-      exact hcandidates
     refine ⟨fun err h nab => ?_, fun r1 h reads => ?_⟩
     · rw [(keepReads_eq_error.mp h).2] at nab
       cases nab
@@ -859,15 +841,14 @@ private theorem launchFrom_sim {g1 g2 : Evm fork Meter}
         · exact createRest_reads h' _ hself
         · exact hself
       exact (keepReads_sim hframe (Sim.of_rel (createRest_rel hframe hcurrent
-        (reads.account _ hmem) hcand' value initCode))).2 r1 h reads
+        (reads.account _ hmem) value initCode))).2 r1 h reads
 
 /-- A creation that has passed its checks gives agreeing runs from agreeing frames. -/
 private theorem launchCreate_sim {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2)
+    (hrel : FrameAgrees account slot code g1 g2)
     (hcurrent : account g1.message.currentTarget)
-    (hcandidates : CandidatesIn account allStorage g1.state) (value : Base.U256)
-    (initCode : ByteArray) (salt : Option Base.U256) :
-    Sim account allStorage slot code (launchCreate g1 value initCode salt)
+    (value : Base.U256) (initCode : ByteArray) (salt : Option Base.U256) :
+    Sim account slot code (launchCreate g1 value initCode salt)
       (launchCreate g2 value initCode salt) := by
   obtain ⟨s, rfl⟩ : ∃ s, g2 = { g1 with state := s } := ⟨_, hrel.rest⟩
   rw [launchCreate_eq, launchCreate_eq]
@@ -875,15 +856,14 @@ private theorem launchCreate_sim {g1 g2 : Evm fork Meter}
       g1.message.currentTarget)
     (g2 := recordAccountRead { g1 with state := s, returnData := .empty }
       g1.message.currentTarget)
-    ⟨rfl, hrel.state.recordAccountRead _⟩ hcurrent hcandidates value initCode salt
+    ⟨rfl, hrel.state.recordAccountRead _⟩ hcurrent value initCode salt
 
 /-- A creation that has paid checks its frame, then gives agreeing runs. -/
 private theorem genericCreate_sim {g1 g2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code g1 g2)
+    (hrel : FrameAgrees account slot code g1 g2)
     (hcurrent : account g1.message.currentTarget)
-    (hcandidates : CandidatesIn account allStorage g1.state) (value : Base.U256)
-    (initCode : ByteArray) (salt : Option Base.U256) :
-    Sim account allStorage slot code (genericCreate g1 value initCode salt)
+    (value : Base.U256) (initCode : ByteArray) (salt : Option Base.U256) :
+    Sim account slot code (genericCreate g1 value initCode salt)
       (genericCreate g2 value initCode salt) := by
   have hm : g2.message = g1.message := by rw [hrel.rest]
   unfold genericCreate
@@ -892,7 +872,7 @@ private theorem genericCreate_sim {g1 g2 : Evm fork Meter}
   · exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
   split
   · exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
-  exact launchCreate_sim hrel hcurrent hcandidates value initCode salt
+  exact launchCreate_sim hrel hcurrent value initCode salt
 
 /-- The part of a creation before its checks.
 
@@ -962,43 +942,38 @@ private theorem createPay_sameContext {create2 : Bool} {evm : Evm fork Meter}
 
 /-- A creation gives agreeing runs from agreeing frames. -/
 private theorem createStep_sim {e1 e2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code e1 e2)
+    (hrel : FrameAgrees account slot code e1 e2)
     (hcurrent : account e1.message.currentTarget)
-    (hcandidates : CandidatesIn account allStorage e1.state) (create2 : Bool) :
-    Sim account allStorage slot code (createStep create2 e1) (createStep create2 e2) := by
+    (create2 : Bool) :
+    Sim account slot code (createStep create2 e1) (createStep create2 e2) := by
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   rw [createStep_eq, createStep_eq, createPay_withState create2 e1 s]
   cases hp : createPay create2 e1 with
   | error e => exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
   | ok x =>
     have sc := createPay_sameContext hp
-    have hframe : FrameAgrees account allStorage slot code x.2 { x.2 with state := s } :=
+    have hframe : FrameAgrees account slot code x.2 { x.2 with state := s } :=
       ⟨rfl, by rw [sc.state]; exact hrel.state⟩
     have hcur' : account x.2.message.currentTarget := by
       rw [sc.message]
       exact hcurrent
-    have hcand' : CandidatesIn account allStorage x.2.state := by
-      rw [sc.state]
-      exact hcandidates
-    exact genericCreate_sim hframe hcur' hcand' _ _ _
+    exact genericCreate_sim hframe hcur' _ _ _
 
 /-- Each call and creation gives agreeing results when it starts from agreeing frames. -/
-theorem messageInstruction_agrees {account allStorage : Address → Prop}
+theorem messageInstruction_agrees {account : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop} {op : Op}
     {run : Evm fork Meter → Except EvmError (StepResult fork Meter)}
     (hrun : messageInstruction fork op = some run) {e1 e2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code e1 e2)
+    (hrel : FrameAgrees account slot code e1 e2)
     -- Each account of the first set needs its code hash empty, written, or in the code set.
     (hcodes : CodesIn account code e1.state)
-    -- Each such account with nonce 0 and no code needs its storage wiped or in the second set.
-    (hcandidates : CandidatesIn account allStorage e1.state)
     -- The current account must be in the first set.
     (hcurrent : account e1.message.currentTarget) :
     -- A failure that does not abort the run is the same in both frames.
     (∀ err, run e1 = .error err → err.aborts = false → run e2 = .error err) ∧
       -- A success needs the reads of the frame it gives in the sets.
       ∀ r1, run e1 = .ok r1 → ReadsIn account slot r1.state →
-        ∃ r2, run e2 = .ok r2 ∧ StepAgrees account allStorage slot code r1 r2 := by
+        ∃ r2, run e2 = .ok r2 ∧ StepAgrees account slot code r1 r2 := by
   unfold messageInstruction at hrun
   cases hc : callInstruction (Meter := Meter) fork op with
   | some call =>
@@ -1016,27 +991,24 @@ theorem messageInstruction_agrees {account allStorage : Address → Prop}
     simp only [hc, HOrElse.hOrElse, OrElse.orElse, Option.orElse] at hrun
     cases op <;> simp only [createInstruction, Option.some.injEq, reduceCtorEq] at hrun
     all_goals first
-      | (subst hrun; exact createStep_sim hrel hcurrent hcandidates _)
+      | (subst hrun; exact createStep_sim hrel hcurrent _)
       | (split at hrun
          · simp only [Option.some.injEq] at hrun
            subst hrun
-           exact createStep_sim hrel hcurrent hcandidates _
+           exact createStep_sim hrel hcurrent _
          · cases hrun)
 
 /-- Each step gives agreeing results when it starts from agreeing frames.
 
-It covers every opcode: those of the instruction table, the calls and the creations.
-
-It adds the condition on accounts with nonce 0 and no code to those of an instruction. -/
-theorem step_agrees {account allStorage : Address → Prop}
+It covers every opcode: those of the instruction table, the calls and the creations. -/
+theorem step_agrees {account : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop} {e1 e2 : Evm fork Meter}
-    (hrel : FrameAgrees account allStorage slot code e1 e2)
+    (hrel : FrameAgrees account slot code e1 e2)
     (hcodes : CodesIn account code e1.state)
-    (hcandidates : CandidatesIn account allStorage e1.state)
     (hcurrent : account e1.message.currentTarget) :
     (∀ err, step fork e1 = .error err → err.aborts = false → step fork e2 = .error err) ∧
       ∀ r1, step fork e1 = .ok r1 → ReadsIn account slot r1.state →
-        ∃ r2, step fork e2 = .ok r2 ∧ StepAgrees account allStorage slot code r1 r2 := by
+        ∃ r2, step fork e2 = .ok r2 ∧ StepAgrees account slot code r1 r2 := by
   obtain ⟨s, rfl⟩ : ∃ s, e2 = { e1 with state := s } := ⟨_, hrel.rest⟩
   unfold step
   dsimp only
@@ -1067,7 +1039,7 @@ theorem step_agrees {account allStorage : Address → Prop}
       | none =>
         dsimp only
         cases hm : messageInstruction (Meter := Meter) fork op with
-        | some run => exact messageInstruction_agrees hm hrel hcodes hcandidates hcurrent
+        | some run => exact messageInstruction_agrees hm hrel hcodes hcurrent
         | none => exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
   · simp only [hpc, dite_false]
     constructor

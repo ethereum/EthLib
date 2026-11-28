@@ -4,9 +4,11 @@ public import EthLib.Execution.Proofs.State.Tracker
 public import Mathlib.Data.Finset.Card
 
 /-!
-# Proofs: the fresh slots of a transaction
+# Proofs: the fresh slots and the cleared slots of a transaction
 
 A slot is fresh when its word was zero before the transaction and is not zero now.
+
+A slot is cleared when its word was not zero before the transaction and is zero now.
 
 From Glamsterdam, a write that makes a slot fresh pays the state gas of a new slot.
 
@@ -34,6 +36,14 @@ def freshSlots (tx : TransactionState) : Finset (Address × Bytes32) :=
   (StorageMap.entries tx.storageWrites ∪ StorageMap.entries tx.parent.storageWrites ∪
       StorageMap.entries tx.parent.preState.storage).filter
     fun slot => tx.getStorageOriginal slot.1 slot.2 = 0 ∧ tx.getStorage slot.1 slot.2 ≠ 0
+
+/-- The slots whose word was not zero before the transaction and is zero now.
+
+The keys of the layers below the transaction hold every slot with a word before it. -/
+def clearedSlots (tx : TransactionState) : Finset (Address × Bytes32) :=
+  (StorageMap.entries tx.storageWrites ∪ StorageMap.entries tx.parent.storageWrites ∪
+      StorageMap.entries tx.parent.preState.storage).filter
+    fun slot => tx.getStorageOriginal slot.1 slot.2 ≠ 0 ∧ tx.getStorage slot.1 slot.2 = 0
 
 end TransactionState
 
@@ -137,6 +147,79 @@ theorem card_freshSlots_setStorage {tx tx' : TransactionState} {address : Addres
     have hpos : 1 ≤ tx.freshSlots.card := Finset.card_pos.mpr ⟨_, hin⟩
     split_ifs <;> simp_all [Finset.insert_eq_of_mem, Finset.card_erase_of_mem, Int.ofNat_sub hpos]
   · -- The slot was not fresh: the write makes it fresh, or leaves it out.
+    split_ifs <;> simp_all [Finset.card_insert_of_notMem, Finset.erase_eq_of_notMem]
+
+/-- A slot is cleared exactly when its word was not zero before the transaction and is zero now.
+-/
+theorem mem_clearedSlots {tx : TransactionState} {address : Address} {key : Bytes32} :
+    (address, key) ∈ tx.clearedSlots ↔
+      tx.getStorageOriginal address key ≠ 0 ∧ tx.getStorage address key = 0 := by
+  simp only [clearedSlots, Finset.mem_filter, Finset.mem_union, StorageMap.mem_entries]
+  refine ⟨fun h => h.2, fun h => ⟨?_, h⟩⟩
+  -- A word before the transaction that is not zero comes from a layer below it.
+  have h1 := h.1
+  unfold getStorageOriginal at h1
+  cases hp : tx.parent.storageWrites.slot address key with
+  | some _ => exact Or.inl (Or.inr (by simp))
+  | none =>
+    cases hs : StorageMap.slot tx.parent.preState.storage address key with
+    | some _ => exact Or.inr (by simp)
+    | none =>
+      simp only [hp] at h1
+      split_ifs at h1 <;> simp_all [State.getStorage]
+
+/-- A transaction with no write has no cleared slot. -/
+theorem clearedSlots_ofBlock (block : BlockState) : (ofBlock block).clearedSlots = ∅ := by
+  ext ⟨address, key⟩
+  simp only [mem_clearedSlots, Finset.notMem_empty, iff_false, not_and]
+  -- With no write, no wipe and no creation, every word is the word before the transaction.
+  have h : (ofBlock block).getStorage address key =
+      (ofBlock block).getStorageOriginal address key := by
+    simp [getStorage, getStorageOriginal, ofBlock, StorageMap.slot]
+  rw [h]
+  exact id
+
+/-- A storage write adds one cleared slot, removes one, or keeps their number.
+
+It adds one when a slot not zero before the transaction, and not zero now, gets the word zero.
+
+It removes one when such a slot, zero now, gets a word that is not zero. -/
+theorem card_clearedSlots_setStorage {tx tx' : TransactionState} {address : Address}
+    {key : Bytes32} {value : U256} (h : tx.setStorage address key value = .ok tx') :
+    (tx'.clearedSlots.card : Int) =
+      tx.clearedSlots.card +
+        (if tx.getStorageOriginal address key ≠ 0 ∧ tx.getStorage address key ≠ 0 ∧ value = 0
+          then 1 else 0) -
+        (if tx.getStorageOriginal address key ≠ 0 ∧ tx.getStorage address key = 0 ∧ value ≠ 0
+          then 1 else 0) := by
+  -- The write keeps every word before the transaction, and every other slot.
+  have hset : tx'.clearedSlots =
+      if tx.getStorageOriginal address key ≠ 0 ∧ value = 0 then
+        insert (address, key) tx.clearedSlots
+      else tx.clearedSlots.erase (address, key) := by
+    ext ⟨other, otherKey⟩
+    rw [mem_clearedSlots, getStorageOriginal_setStorage h]
+    by_cases hs : other = address ∧ otherKey = key
+    · obtain ⟨rfl, rfl⟩ := hs
+      rw [getStorage_setStorage_self h]
+      split_ifs with hc
+      · simpa using hc
+      · simp only [Finset.mem_erase, ne_eq, not_true_eq_false, false_and, iff_false]
+        exact hc
+    · have hne : other ≠ address ∨ otherKey ≠ key := by tauto
+      have hp : (other, otherKey) ≠ (address, key) := by
+        simp only [ne_eq, Prod.mk.injEq]
+        tauto
+      rw [getStorage_setStorage_of_ne h hne]
+      split_ifs <;> simp [Finset.mem_insert, Finset.mem_erase, hp, mem_clearedSlots]
+  rw [hset]
+  have hmem : (address, key) ∈ tx.clearedSlots ↔
+      tx.getStorageOriginal address key ≠ 0 ∧ tx.getStorage address key = 0 := mem_clearedSlots
+  by_cases hin : (address, key) ∈ tx.clearedSlots
+  · -- The slot was cleared: the write keeps it cleared, or gives it a word.
+    have hpos : 1 ≤ tx.clearedSlots.card := Finset.card_pos.mpr ⟨_, hin⟩
+    split_ifs <;> simp_all [Finset.insert_eq_of_mem, Finset.card_erase_of_mem, Int.ofNat_sub hpos]
+  · -- The slot was not cleared: the write clears it, or leaves it out.
     split_ifs <;> simp_all [Finset.card_insert_of_notMem, Finset.erase_eq_of_notMem]
 
 /-- A change of an account adds no fresh slot: it keeps every word, or deletes the account. -/

@@ -85,6 +85,18 @@ theorem createdAccounts_selfdestructTransfer {tx tx' : TransactionState}
     exact (TransactionState.createdAccounts_modifyState h).trans
       (TransactionState.createdAccounts_modifyState h1)
 
+omit [GasMeter Meter] in
+/-- The end of a successful SELFDESTRUCT keeps the created accounts. -/
+theorem createdAccounts_finishSelfdestruct {beneficiary : Address} {refund : Nat}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
+    after.state.createdAccounts = evm.state.createdAccounts := by
+  unfold finishSelfdestruct at h
+  split at h
+  · cases h
+  · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    exact createdAccounts_selfdestructTransfer (Base.mapError_ok_iff.mp hst)
+
 /-! ## The frames that keep the relation -/
 
 /-- Taking in a child that is related to the caller keeps the relation from the caller.
@@ -131,11 +143,11 @@ theorem stepRules_deletesCreated (hfork : .dencun ≤ fork) :
     StepRules fork (DeletesCreated (fork := fork) (Meter := Meter)) where
   trans := DeletesCreated.trans
   static := .of_staticStep
-  sstore _ _ _ _ _ h := .of_eq (TransactionState.createdAccounts_setStorage h) rfl
+  sstore _ _ _ _ h := .of_eq (TransactionState.createdAccounts_setStorage h) rfl
   tstore _ _ _ _ := .of_eq rfl rfl
   log _ hs hsub _ _ := .of_eq (by rw [hs]) (by rw [hsub])
   selfdestruct _ _ h := deletesCreated_finishSelfdestruct hfork h
-  incrementNonce _ _ _ _ h := .of_eq (TransactionState.createdAccounts_modifyState h) rfl
+  incrementNonce _ _ _ h := .of_eq (TransactionState.createdAccounts_modifyState h) rfl
   incorporate h := deletesCreated_incorporateChild h
 
 /-- From Cancun, every successful step of every frame keeps the relation.

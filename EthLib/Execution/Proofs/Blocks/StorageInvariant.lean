@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.Reaches
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Transactions.StorageInvariant
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: an invariant of the storage of a contract holds in every state that a chain reaches
@@ -132,7 +133,7 @@ theorem goodAt_systemCall (hyp : CodeHyp code)
   -- A system call starts from the block, where no account is created yet.
   have fresh : address ∉ (TransactionState.ofBlock block).createdAccounts := by
     simp [TransactionState.ofBlock]
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   dsimp only at h
   split at h
   · rename_i hglam
@@ -244,7 +245,7 @@ theorem goodAt_applyBody {config : ChainConfig} {env : BlockEnvironment fork}
   -- The transactions.
   have h₂ : P txs.body.block := by
     have hTxs' := hTxs
-    unfold applyTransactions at hTxs'
+    rw [applyTransactions_unfold] at hTxs'
     refine foldlM_ok_invariant_of_visits (fun before : BodyOutput fork => P before.body.block)
       (fun before item after visits hb hstep => ?_) h₁ hTxs'
     obtain ⟨tx, index⟩ := item

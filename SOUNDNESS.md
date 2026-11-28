@@ -88,15 +88,15 @@ The report itself also prints the number of rules at each fork.
 <!-- generated: proof-coverage -->
 | Fork | Rules touched | Rules characterized |
 |------|------|------|
-| phase0 | 1325 | 11 |
-| altair | 1342 | 11 |
-| bellatrix | 1343 | 11 |
-| shapella | 1354 | 11 |
-| dencun | 1363 | 11 |
-| pectra | 1383 | 11 |
-| fusaka | 1390 | 11 |
-| glamsterdam | 1511 | 13 |
-| hegota | 1500 | 13 |
+| phase0 | 1328 | 11 |
+| altair | 1345 | 11 |
+| bellatrix | 1346 | 11 |
+| shapella | 1357 | 11 |
+| dencun | 1366 | 11 |
+| pectra | 1386 | 11 |
+| fusaka | 1393 | 11 |
+| glamsterdam | 1517 | 13 |
+| hegota | 1506 | 13 |
 <!-- end generated -->
 
 ### XMSS
@@ -746,6 +746,7 @@ In the random oracle model, `run_outputs_evalDistEq` (`Proofs/Vrf/OutputRandomOr
 It fixes the secret and the indices, and assumes that the initial cache holds no answer for any of their output inputs.
 `prEvent_outputs_pair_of_fresh` states the case of two different indices.
 Two events, one on each output, both hold with the product of their probabilities for two uniform values.
+Its proof applies `run_outputs_evalDistEq` at the two indices.
 `evalWithAnswerFn_outputs` shows that Keccak-256, answering in place of the oracle, gives the outputs of the specification.
 `prEvent_outputs_pair_keccak256With_le_add` (`Proofs/Vrf/OutputPermutation.lean`) states the case of two different indices with Keccak-256 over a uniform permutation of the `2^1600` states, in place of Keccak-f[1600].
 The permutation is drawn after the secret, the indices and the events are fixed.
@@ -754,9 +755,17 @@ Over the permutation, the chance that both events hold is within `spongeIndiffBo
 That bound is `2^-1600 + 6 / 2^512`, below `2^-509`.
 It is the bound of `keccak256_indifferentiable` (`Proofs/Hash/Keccak/Sponge.lean`) at a cost of 2.
 An output input has 49 bytes (`size_outputInput`, `Proofs/Vrf/Hash.lean`), below the 136 bytes of one block, so each hash costs one block.
-The proof applies `Indifferentiable.prEvent_le_add` (`Proofs/Indifferentiability.lean`) to the two hash calls, then `prEvent_outputs_pair_of_fresh` with the empty cache.
-Over the permutation, no theorem covers more than two indices, or the two outputs together with other hashes, such as those of the tree.
-Carrying the permutation bound over to Keccak-f[1600] is an idealisation of A4, not a theorem.
+`prEvent_outputs_keccak256With_le_add` states the case of any list of distinct indices, with one event on the list of their outputs.
+With `n` indices, the chance of the event over the permutation is within `spongeIndiffBound (2 ^ 1600) (2 ^ 512) n` of its probability for `n` independent uniform values.
+That bound is `n (n - 1) / 2^1601 + (n^2 + n) / 2^512`, the bound of `keccak256_indifferentiable` at a cost of `n`.
+A list of distinct indices has at most `2^32` entries, since there are `2^32` indices.
+The bound grows with `n`, and at `n = 2^32` it is about `2^-448`, so it is below `2^-447` for every list.
+That figure is computed from the bound, and no theorem states it.
+The proof of `prEvent_outputs_keccak256With_le_add` applies `Indifferentiable.prEvent_le_add` (`Proofs/Indifferentiability.lean`) to the hash calls of the outputs, then `run_outputs_evalDistEq` with the empty cache.
+`isQueryBound_mapM_oracleHash` (`Proofs/Vrf/Oracle.lean`) bounds the cost of hash calls on a list of inputs by the sum of their costs, here `n` blocks.
+`prEvent_outputs_pair_keccak256With_le_add` follows from `prEvent_outputs_keccak256With_le_add` at the two indices, where two independent uniform values give the product of the two probabilities.
+Over the permutation, no theorem covers the outputs together with other hashes, such as those of the tree.
+Carrying these permutation bounds over to Keccak-f[1600] is an idealisation of A4, not a theorem.
 These theorems say nothing about a holder that chooses its secret after the oracle answered one of those inputs, or after the permutation was drawn.
 Such a holder can grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
 
@@ -881,7 +890,10 @@ Every output of the maps to G1 and G2 is a valid point of that subgroup (`Proofs
 It covers the shortened DST of §5.3.3.
 It assumes a message shorter than 2^61 - 323 bytes and a DST shorter than 2^61 - 17 bytes.
 `hashToFieldFp2_eq_spec` proves that the hash to `Fp2` is `hash_to_field` of §5.2 under the same bounds, with each coordinate read in `ZMod p`.
-No theorem yet compares the SSWU map or the isogeny with a model of RFC 9380.
+`hashToG2_eq_affine` and `mapToG2_eq_affine` (`Proofs/Bls/HashToCurveAffine.lean`) prove that the maps to the curve in Jacobian coordinates give the points of the SSWU map of §6.6.2 and the isogeny of Appendix E.3 as written.
+`hashToG2_toAffine_eq_affine` and `mapToG2_toAffine_eq_affine` give the same affine coordinates, so the same encodings.
+Those references (`HashToCurve.Affine`, `MapToCurve.Affine`) are transcriptions of the RFC in the proof modules.
+No theorem yet compares them with a model of RFC 9380 in Mathlib.
 
 `sign_ok` and `popProve_ok` (`Proofs/Bls/Signatures.lean`) prove that BLS signing never fails.
 `exists_aggregate_eq_error_iff` proves that aggregation fails exactly on an empty list, or on a signature that does not decode.
@@ -4822,7 +4834,8 @@ No theorem covers the payload that the execution layer builds, or the safe and f
 The Python suite checks each case of the terminal block search, the configured terminal block hash, the withdrawals and the parent root against values worked out in the test from the guides.
 
 From Gloas, `prepareExecutionPayloadGloas` reads the fork choice store and a head node.
-The proposer builds on the full node of the head when the fork choice says so at the current slot.
+The proposer builds on the full node of the head when the fork choice says so at the slot of the proposal, the slot of the state.
+The caller gives the state of the slot of the proposal, before its block, and EthLib does not check it.
 It then applies the payload that the store holds for the head to a copy of the state, and reads the withdrawals of that copy.
 Otherwise it keeps the state and the withdrawals that the state records.
 From Heze it also reads the transactions of the inclusion lists of the slot before, and the payload attributes carry them, each as its bytes.
@@ -8732,6 +8745,23 @@ At the fork to Gloas, a pending deposit with builder credentials and a valid sig
 EthLib follows the later rule of the consensus layer, which keeps the two registries apart, as [EIP-8282](https://eips.ethereum.org/EIPS/eip-8282#motivation) describes.
 [EIPs#12627](https://github.com/ethereum/EIPs/pull/12627), still open, brings that rule to EIP-7732.
 
+A creation at an address that holds storage but no code and nonce 0 has two readings.
+[EIP-7610](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/EIPS/eip-7610.md#specification), in Last Call, makes it fail at every fork, but no fork activates it: Glamsterdam declined it ([EIP-7773 at `f9976e6`](https://github.com/ethereum/EIPs/blob/f9976e6848a26919b98369d5ed21dc2d5fd7aca1/EIPS/eip-7773.md#declined-for-inclusion)).
+EthLib follows [EIP-684](https://eips.ethereum.org/EIPS/eip-684#specification) alone, as execution-specs does: such a creation succeeds (`accountDeployable`, `Execution/State/Tracker.lean`).
+It wipes the old storage, since section 7 of the [Yellow Paper](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), Shanghai version, gives a new account the empty trie as its storage.
+Implementations differ on this case, and execution-specs skips its tests as undefined until EIP-8253.
+Mainnet holds 28 such accounts, all from before EIP-161.
+A creation reaches one only through a spent nonce of its deployer, or a preimage of a Keccak-256 hash cut to 160 bits ([EIP-8253, Security Considerations](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/EIPS/eip-8253.md#security-considerations)).
+[EIP-8253](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/EIPS/eip-8253.md#specification), which [EIP-8081](https://github.com/ethereum/EIPs/blob/d2be3735b2f894e1e35f54de408159b5c7e14a94/EIPS/eip-8081.md#considered-for-inclusion) considers for Hegotá, would give each of them nonce 1, after which no creation lands on one.
+A chain whose genesis allocates such an account still reaches the case.
+[EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts) still describes the storage collision of EIP-7610, and [EIPs#12732](https://github.com/ethereum/EIPs/pull/12732), still open, removes it.
+
+Empty accounts in the state before a block are a case that no source after Paris defines.
+[EIP-7523](https://eips.ethereum.org/EIPS/eip-7523#specification) states that none exists on a chain past Paris.
+From Paris, EthLib keeps an empty account that a call of no value touches, as execution-specs does.
+The touch rule of [EIP-161](https://eips.ethereum.org/EIPS/eip-161#specification) deletes it, and implementations apply that rule, so a state test with such an account before the block gets other states from them.
+No theorem of EthLib assumes that the state before a block holds no empty account, so on such a state the theorems describe EthLib's reading.
+
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.
@@ -8905,6 +8935,13 @@ The root of an envelope (`getExecutionPayloadEnvelopeSignature_eq_of_requestSign
 The root of proposer preferences (`proposerPreferencesSigningRoot_eq_of_requestSigningRoot`) assumes that the fork info gives, at the proposal epoch, the version that the configuration gives; when that epoch is in the next fork, the two differ, and the source does not say which the signer uses.
 The root of a bid (`getExecutionPayloadBidSignature_eq_of_requestSigningRoot`) assumes the same at the epoch of the slot of the bid; a builder that sends the fork of its head state before a fork gets the version of the old fork ([remote-signing-api#37](https://github.com/ethereum/remote-signing-api/issues/37)).
 
+From Glamsterdam, the list that a block commits to rebuilds the state after the block (`stateTransition_rebuild_of_rebuildableBlock`, `Execution/Proofs/Blocks/BodyFollow.lean`).
+The theorem assumes that, in the state before the block, no account with nonce 0 and no code holds storage (`Rebuildable`, `Execution/Proofs/State/Rebuild.lean`).
+A creation at such an account wipes its storage, and the list records no slot that the block does not touch, so the list cannot rebuild that state.
+Each transaction keeps the property (`RebuildEnd.rebuildableBlock`, `Execution/Proofs/Blocks/BodyFollow.lean`).
+The 28 mainnet accounts of that shape break it, so the theorem covers no mainnet block until a fork applies EIP-8253, which EthLib does not specify yet.
+A creation reaches none of them on mainnet without a spent nonce or a Keccak-256 preimage, as the paragraph on EIP-7610 under A1 explains, so a form of the theorem with an assumption on the creations of the run would cover mainnet.
+
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
@@ -9024,12 +9061,12 @@ The codeword searches of each scheme share the bullet of that scheme:
   The oracle answers classical queries only, so the theorems say nothing about a holder that evaluates Keccak-256 in superposition.
   They say nothing either about an attack that uses the structure of Keccak.
 - VRF output independence over a permutation: Keccak-f[1600] is a uniform permutation of the `2^1600` states, drawn once.
-  The Keccak-256 calls of both outputs use that permutation in place of Keccak-f[1600].
-  The secret, two different indices and an event on each output are fixed before the permutation is drawn.
-  No party evaluates the permutation beyond those two calls, and the events cannot depend on its other values, such as the root of the tree.
-  The theorem says nothing about a secret that depends on the permutation.
+  The Keccak-256 calls of the outputs use that permutation in place of Keccak-f[1600].
+  The secret, a list of distinct indices and an event on their outputs are fixed before the permutation is drawn.
+  No party evaluates the permutation beyond those calls, and the event cannot depend on its other values, such as the root of the tree.
+  The theorems say nothing about a secret that depends on the permutation.
   A secret chosen after the permutation was drawn, or hashed from a seed, is such a secret.
-  It says nothing either about an attack that uses the structure of Keccak-f[1600].
+  They say nothing either about an attack that uses the structure of Keccak-f[1600].
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
@@ -9106,6 +9143,17 @@ The codeword searches of each scheme share the bullet of that scheme:
   Its typed keys erase polynomial annotations and stand for the two domain-separated byte encodings; no theorem proves those encodings jointly injective.
   That theorem also assumes correct representations from the adversary, a reading of the algebraic group model.
   The theorems say nothing about an attack that uses the structure of SHA-256.
+
+When the message of a transaction succeeds, the refund counter that it settles is at least zero, so taking its natural number never changes it (`processMessageCall_refundCounter_nonneg`, `Execution/Proofs/Transactions/Refund.lean`).
+The theorem assumes that the message starts from a state with the rebuild property and no write of storage, which `TransactionRun.refundReady` gives for a run of a transaction.
+That holds when, in the block state, each code matches its hash and empty or missing accounts hold no storage (`Rebuildable`), and every delegation indicator comes with a nonce (`DelegationsHaveNonce`).
+[EIP-7523](https://eips.ethereum.org/EIPS/eip-7523#specification) states that mainnet and the public testnets hold no empty account after the merge, and setting a delegation always raises the nonce of its account.
+A chain whose genesis allocates an empty account with storage, or a delegation at nonce 0, is outside the theorem.
+There the counter can end below zero from Prague.
+An authorization that clears the code of an account with nonce 0 and balance 0 deletes its storage.
+A later write to a slot of that account then takes back a refund that no clear paid.
+EthLib then passes on nothing of the counter, while execution-specs raises an error ([execution-specs#4095](https://github.com/ethereum/execution-specs/issues/4095)).
+The second hypothesis excludes the account that holds a delegation at nonce 0, the case of [execution-specs#4093](https://github.com/ethereum/execution-specs/issues/4093).
 
 ## Gap B: does the code that runs match the definitions?
 

@@ -42,22 +42,14 @@ theorem mapToG1_inSubgroup {u : Fp} {P : G1} (h : mapToG1 u = .ok P) :
 
 /-- The map to `G2` succeeds on every input. -/
 theorem mapToG2_ok (u : Fp2) : ∃ P, mapToG2 u = .ok P := by
-  obtain ⟨p, hp⟩ := simpleSwu_ok u
-  exact ⟨_, by rw [mapToG2, hp]; rfl⟩
+  exact ⟨_, rfl⟩
 
 /-- Every output of the map to `G2` is valid and lies in the subgroup of order `r`. -/
 theorem mapToG2_inSubgroup {u : Fp2} {P : G2} (h : mapToG2 u = .ok P) :
     G2.Valid P ∧ G2.inSubgroup P = true := by
-  unfold mapToG2 at h
-  cases hp : simpleSwu u with
-  | error e =>
-    rw [hp] at h
-    cases h
-  | ok p =>
-    rw [hp] at h
-    -- Injectivity avoids unfolding the field arithmetic of the output.
-    obtain rfl : clearCofactor (isoMapG2 p.1 p.2) = P := Except.ok.inj h
-    have hv := simpleSwu_isoMapG2_valid hp
-    exact ⟨clearCofactor_valid hv, clearCofactor_inSubgroup hv⟩
+  -- Injectivity avoids unfolding the field arithmetic of the output.
+  obtain rfl : clearCofactor (isoMapG2 (simpleSwu u)) = P := Except.ok.inj h
+  have hv := simpleSwu_isoMapG2_valid u
+  exact ⟨clearCofactor_valid hv, clearCofactor_inSubgroup hv⟩
 
 end EthLib.Cryptography.Bls.MapToCurve

@@ -35,7 +35,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 /-! ## Helpers for one delegation -/
 
 /-- A change of an account keeps the storage writes and wipes, or deletes the empty account. -/
-private theorem storage_modifyState {tx tx' : TransactionState} {address : Address}
+theorem storage_modifyState {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     (tx'.storageWrites = tx.storageWrites ∧ tx'.storageClears = tx.storageClears) ∨
       (f (tx.getAccount address) = .ok EMPTY_ACCOUNT ∧
@@ -54,7 +54,7 @@ private theorem storage_modifyState {tx tx' : TransactionState} {address : Addre
   · exact .inl ⟨rfl, rfl⟩
 
 /-- Setting a code keeps the storage writes and wipes, or deletes the account left empty. -/
-private theorem storage_setCode {tx tx' : TransactionState} {address : Address}
+theorem storage_setCode {tx tx' : TransactionState} {address : Address}
     {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
     (tx'.storageWrites = tx.storageWrites ∧ tx'.storageClears = tx.storageClears) ∨
       ({ tx.getAccount address with codeHash := keccak256 code } = EMPTY_ACCOUNT ∧
@@ -183,9 +183,10 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
     rw [TransactionState.getCode_modifyState hnonce] at hread
     exact code_setCode valid.code hcode hash bytes hread
   · intro other hempty key
-    have hne : other ≠ authority := fun heq => hnc_self.ne_empty (heq ▸ hempty)
+    have hne : other ≠ authority := fun heq => hempty (heq ▸ hnc_self)
     rw [(storage_of_ne hp hne hstore' key).2]
-    exact valid.emptyStorage other ((hacc other hne).symm.trans hempty) key
+    exact valid.emptyStorage other
+      (fun hc => hempty ((HasNonceOrCode.congr (hacc other hne)).mpr hc)) key
   · intro other hmem key
     rcases hstore with ⟨-, hc⟩ | ⟨hempty, -, hc⟩
     · exact valid.clears other (hc ▸ hmem) key
@@ -194,7 +195,7 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
       -- An empty account holds no storage.
       --
       -- So setting the code wipes no nonzero word.
-      · exact valid.blockStorage_of_empty hempty key
+      · exact valid.blockStorage_of_not_hasNonceOrCode (fun hc => hc.ne_empty hempty) key
       · exact valid.clears other hmem key
   · intro other code hn hc hv
     have hne : other ≠ authority := by
@@ -307,7 +308,7 @@ theorem applyAuthorizations_rebuildState {block : BlockState} {chainId : Nat}
 /-- Preparing the first frame of a message keeps the rebuild property and a caller's nonce or code.
 
 A call that runs code runs it at a target with a nonce or code. -/
-private theorem prepareFirstFrame_rebuildState {block : BlockState} {chainId : Nat}
+theorem prepareFirstFrame_rebuildState {block : BlockState} {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     (valid : RebuildState block state) (hcaller : HasNonceOrCode state message.caller)
@@ -471,7 +472,8 @@ private theorem _root_.EthLib.Execution.Evm.RebuildEnd.of_wipe
     · subst hne
       exact hzero key
     · rw [hstore other hne key]
-      exact valid.emptyStorage other ((hacc other hne).symm.trans hempty) key
+      exact valid.emptyStorage other
+        (fun hc => hempty ((HasNonceOrCode.congr (hacc other hne)).mpr hc)) key
   · rcases hclears other hmem with rfl | hmem
     · exact hblock key
     · exact valid.clears other hmem key

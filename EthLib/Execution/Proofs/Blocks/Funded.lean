@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Transactions.Funded
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: no block fails with the state error for a balance below an amount
@@ -49,7 +50,7 @@ private theorem systemCall_ne_insufficientBalance (env : BlockEnvironment fork)
   have funded : Funded (systemMessage env target data) (.ofBlock block) := fun t => by
     simp [systemMessage] at t
   intro h
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
     · exact Transactions.processMessageCall_ne_insufficientBalance funded other h

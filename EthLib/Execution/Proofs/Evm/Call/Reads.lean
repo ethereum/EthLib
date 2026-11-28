@@ -161,7 +161,8 @@ theorem state_finishCall {kind : CallKind} {call : CallOperands} {callee : Calle
     exact same
   · exact state_genericCall h
 
-private theorem keepReads_eq_ok_halt {α : Type} {evm : Evm fork Meter}
+/-- The rest of an instruction that keeps its reads succeeds, or halts without an abort. -/
+theorem keepReads_eq_ok_halt {α : Type} {evm : Evm fork Meter}
     {halted : Evm fork Meter → α} {rest : Except EvmError α} {result : α}
     (h : keepReads evm halted rest = .ok result) :
     rest = .ok result ∨

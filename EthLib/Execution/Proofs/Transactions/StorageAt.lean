@@ -27,45 +27,68 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter] {address : Address}
 
 /-! ## The steps outside the message -/
 
-/-- An authorization keeps or wipes every storage: it only sets a code and raises a nonce. -/
-theorem keptOrWiped_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
-    {auth : Authorization} (h : applyAuthorization fork chainId done auth = .ok done') :
-    KeptOrWiped address done.state done'.state := by
+section Rel
+
+variable {R : State.TransactionState → State.TransactionState → Prop}
+
+/-- An authorization keeps a relation of states that holds of each change of an account.
+
+The relation must be reflexive and transitive, and hold of each record of a read.
+
+It must hold of each change of an account and each new code. -/
+theorem rel_applyAuthorization (refl : ∀ s, R s s) (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (read : ∀ s a, R s (s.recordAccountRead a))
+    (modify : ∀ {s s' a f}, s.modifyState fork a f = .ok s' → R s s')
+    (code : ∀ {s s' a c}, s.setCode fork a c = .ok s' → R s s') {chainId : Nat}
+    {done done' : Delegations Meter} {auth : Authorization}
+    (h : applyAuthorization fork chainId done auth = .ok done') : R done.state done'.state := by
   rcases applyAuthorization_cases h with rfl | ⟨authority, -, -, ⟨-, rfl⟩ |
     ⟨-, paid, state, refund, hpay, hdelegate, rfl⟩⟩
-  · exact .refl _ _
-  · exact .of_eq fun _ => rfl
+  · exact refl _
+  · exact read _ _
   · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
     rw [hstate] at hdelegate
     obtain ⟨coded, hcode, hdelegate⟩ := bind_ok_iff.mp hdelegate
     obtain ⟨bumped, hnonce, hdelegate⟩ := bind_ok_iff.mp hdelegate
     cases hdelegate
-    exact (KeptOrWiped.of_eq fun _ => rfl).trans
-      ((keptOrWiped_setCode hcode).trans (keptOrWiped_incrementNonce hnonce))
+    exact trans (read _ _) (trans (code hcode) (modify hnonce))
 
-/-- Authorizations that succeed keep or wipe every storage. -/
-theorem keptOrWiped_foldlM_applyAuthorization {chainId : Nat} :
+/-- Authorizations that succeed keep a relation of states that holds of each write they make.
+
+The relation must be reflexive and transitive, and hold of each record of a read.
+
+It must hold of each change of an account and each new code. -/
+theorem rel_foldlM_applyAuthorization (refl : ∀ s, R s s)
+    (trans : ∀ {a b c}, R a b → R b c → R a c) (read : ∀ s a, R s (s.recordAccountRead a))
+    (modify : ∀ {s s' a f}, s.modifyState fork a f = .ok s' → R s s')
+    (code : ∀ {s s' a c}, s.setCode fork a c = .ok s' → R s s') {chainId : Nat} :
     ∀ {auths : List Authorization} {start done : Delegations Meter},
       auths.foldlM (applyAuthorization fork chainId) start = .ok done →
-      KeptOrWiped address start.state done.state
+      R start.state done.state
   | [], _, _, h => by
     cases h
-    exact .refl _ _
+    exact refl _
   | _ :: _, _, _, h => by
     obtain ⟨next, hnext, h⟩ := bind_ok_iff.mp h
-    exact (keptOrWiped_applyAuthorization hnext).trans (keptOrWiped_foldlM_applyAuthorization h)
+    exact trans (rel_applyAuthorization refl trans read modify code hnext)
+      (rel_foldlM_applyAuthorization refl trans read modify code h)
 
-/-- The first frame of a message keeps or wipes every storage of the state before it.
+/-- The first frame of a message keeps a relation of states that holds of each write it makes.
 
-Only its authorizations write; the rest records reads. -/
-theorem keptOrWiped_prepareFirstFrame {chainId : Nat} {message : Message fork}
-    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
-    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+The relation must be reflexive and transitive, and hold of each record of a read.
+
+It must hold of each change of an account and each new code.
+
+Only the authorizations write; the rest records reads. -/
+theorem rel_prepareFirstFrame (refl : ∀ s, R s s) (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (read : ∀ s a, R s (s.recordAccountRead a))
+    (modify : ∀ {s s' a f}, s.modifyState fork a f = .ok s' → R s s')
+    (code : ∀ {s s' a c}, s.setCode fork a c = .ok s' → R s s') {chainId : Nat}
+    {message : Message fork} {state : State.TransactionState} {substate : Substate}
+    {auths : List Authorization} {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
       .ok first) :
-    KeptOrWiped address state first.state := by
-  have read : ∀ (s : State.TransactionState) (other : Address),
-      KeptOrWiped address s (s.recordAccountRead other) := fun _ _ => .of_eq fun _ => rfl
+    R state first.state := by
   unfold prepareFirstFrame at h
   split at h
   · dsimp only at h
@@ -82,14 +105,15 @@ theorem keptOrWiped_prepareFirstFrame {chainId : Nat} {message : Message fork}
   · rename_i target _
     dsimp only at h
     obtain ⟨done, hdone, h⟩ := bind_ok_iff.mp h
-    have hauth : KeptOrWiped address state done.state := keptOrWiped_foldlM_applyAuthorization hdone
+    have hauth : R state done.state :=
+      rel_foldlM_applyAuthorization refl trans read modify code hdone
     -- After the authorizations, the first frame only records reads.
     generalize hread : (if message.value ≠ 0 then done.state.recordAccountRead target
       else done.state) = read0 at h
-    have base : KeptOrWiped address state read0 := by
+    have base : R state read0 := by
       subst hread
       split
-      · exact hauth.trans (read _ _)
+      · exact trans hauth (read _ _)
       · exact hauth
     split at h <;>
     · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
@@ -97,13 +121,27 @@ theorem keptOrWiped_prepareFirstFrame {chainId : Nat} {message : Message fork}
       generalize (if fork ≥ .pectra then delegatedAddress code else none) = delegate at h
       rcases delegate with _ | delegate
       · cases h
-        exact base.trans (read _ _)
+        exact trans base (read _ _)
       · dsimp only at h
         split at h <;>
         · obtain ⟨m', -, h⟩ := bind_ok_iff.mp h
           obtain ⟨code', -, h⟩ := bind_ok_iff.mp h
           cases h
-          exact (base.trans (read _ _)).trans (read _ _)
+          exact trans (trans base (read _ _)) (read _ _)
+
+end Rel
+
+/-- The first frame of a message keeps or wipes every storage of the state before it.
+
+Only its authorizations write; the rest records reads. -/
+theorem keptOrWiped_prepareFirstFrame {chainId : Nat} {message : Message fork}
+    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
+      .ok first) :
+    KeptOrWiped address state first.state :=
+  rel_prepareFirstFrame (KeptOrWiped.refl address) KeptOrWiped.trans
+    (fun _ _ => .of_eq fun _ => rfl) keptOrWiped_modifyState keptOrWiped_setCode h
 
 /-- The purchase of gas keeps or wipes every storage: it raises a nonce and takes a fee. -/
 theorem keptOrWiped_buyGas {env : BlockEnvironment fork} {state bought : State.TransactionState}

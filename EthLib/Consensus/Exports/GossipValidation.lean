@@ -29,6 +29,8 @@ From Gloas a block may come with the signed envelope of its payload, as a fourth
 
 The store then keeps the envelope, and none or empty bytes mean no envelope.
 
+A fifth item marks a block that arrived after the attestation deadline of its slot.
+
 An optional checkpoint, an epoch and a root, replaces the finalized checkpoint.
 
 It replaces it in the store and in the state after each block, wherever the rules read it.
@@ -97,17 +99,25 @@ structure GossipBlockInput where
   data : ByteArray
   /-- The SSZ bytes of the signed envelope of its payload, or none when empty. -/
   envelope : ByteArray
+  /-- Whether the block arrived after the attestation deadline of its slot. -/
+  late : Bool
 
 /-- A block is a tuple of its kind, the status of its payload or none, and its bytes.
 
-The bytes of the envelope of its payload may follow, and none or empty bytes mean no envelope. -/
+The bytes of the envelope of its payload may follow, and none or empty bytes mean no envelope.
+
+Whether the block arrived late may follow them, and a block is timely by default. -/
 instance : FromPy GossipBlockInput := ⟨fun v => do
   match (← v.sequence).toList with
-  | [kind, status, data] => return ⟨← fromPy kind, ← fromPy status, ← fromPy data, .empty⟩
+  | [kind, status, data] => return ⟨← fromPy kind, ← fromPy status, ← fromPy data, .empty, false⟩
   | [kind, status, data, envelope] =>
     return ⟨← fromPy kind, ← fromPy status, ← fromPy data,
-      (← fromPy (α := Option ByteArray) envelope).getD .empty⟩
-  | _ => throw "a block is (kind, status, bytes) or (kind, status, bytes, envelope)"⟩
+      (← fromPy (α := Option ByteArray) envelope).getD .empty, false⟩
+  | [kind, status, data, envelope, late] =>
+    return ⟨← fromPy kind, ← fromPy status, ← fromPy data,
+      (← fromPy (α := Option ByteArray) envelope).getD .empty, ← fromPy late⟩
+  | _ => throw ("a block is (kind, status, bytes), (kind, status, bytes, envelope) or " ++
+      "(kind, status, bytes, envelope, late)")⟩
 
 /-- The store with the envelope of the payload of a block, from Gloas, when there is one.
 
@@ -133,6 +143,8 @@ A failed or a pending block joins the known blocks only, and a block already hel
 
 Another block also gets its state, by the state transition of the state of its parent.
 
+It is timely unless the case marks it late, for the deadline of the committee too from Gloas.
+
 From Gloas the store also keeps the envelope of its payload, when there is one.
 
 From Gloas a block with a state starts with no vote of the payload committee. -/
@@ -145,6 +157,16 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
     | none => statuses
     | some status => statuses.insert root status
   let store := { store with blocks := store.blocks.insert root signed.message }
+  -- The anchor has its timeliness from the store already.
+  --
+  -- Another block is timely unless the case marks it late, for both deadlines from Gloas.
+  let store := if input.kind = 3 then store
+    else
+      let store := { store with blockTimeliness := store.blockTimeliness.insert root !input.late }
+      if gloas : .glamsterdam ≤ fork then
+        let ptc := (store.ptcTimeliness gloas).insert root !input.late
+        { store with ptcTimeliness := fun _ => ptc }
+      else store
   let store ← importGossipEnvelope store root input.envelope
   if input.kind ≠ 0 then return (store, statuses)
   let parentState ← toResult "fork choice" (store.blockState signed.message.parentRoot)
@@ -247,12 +269,14 @@ def decodeGossipInput {preset : Preset} {fork : Fork} (topic : String) (input : 
 
 The keys change only when the message is valid. -/
 def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
-    (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
+    (checks : SignatureChecks) (blockHashOf : BlockHashOf preset fork) (store : Store preset fork)
+    (statuses : PayloadStatuses)
     (topic : String) (seen : Seen) (input : GossipInput) : Result (ValidationResult × Seen) := do
   let message ← decodeGossipInput topic input
   let setup ← toResult "fork choice" ((embeddedSetup ()).mapError ForkChoiceError.kzg)
   toResult "fork choice"
-    (validateGossipMessage config checks setup seen store statuses input.currentTimeMs message)
+    (validateGossipMessage config checks setup blockHashOf seen store statuses input.currentTimeMs
+      message)
 
 /-- From Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
 
@@ -335,8 +359,11 @@ def gossipCaseStore {preset : Preset} {fork : Fork} (config : Config) (checks : 
 
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
+The caller gives the block hash of the payload of an envelope.
+
 Every topic is specified here up to Heze. -/
-def gossipValidationOf (args : String × String × ByteArray × ByteArray × List GossipBlockInput ×
+def gossipValidationOf (blockHashOf : {preset : Preset} → {fork : Fork} → BlockHashOf preset fork)
+    (args : String × String × ByteArray × ByteArray × List GossipBlockInput ×
     Option (UInt64 × Root) × String × List GossipInput × Option PyValue × Bool) :
     Result (List (String × Option String)) := do
   let (name, fork, anchorState, anchorBlock, blocks, finalized, topic, inputs, replacements,
@@ -361,22 +388,10 @@ def gossipValidationOf (args : String × String × ByteArray × ByteArray × Lis
       rejectArgument none s!"gossip validation of the topic {messageTopic} at {fork.name} is not \
         yet specified"
     let (outcome, next) ←
-      validateGossipInput config checks store statuses messageTopic seen input
+      validateGossipInput config checks blockHashOf store statuses messageTopic seen input
     seen := next
     out := out.push (outcomeRecord outcome)
     store ← recordGossipInclusionList store messageTopic outcome input
   return out.toList
-
-/-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
-
-The arguments are the names of the preset and the fork, the anchor state and the anchor block.
-
-Then come the later blocks, the finalized checkpoint or none, the topic and the messages.
-
-Then come replacements of values of the configuration, and whether the signature checks run.
-
-Every topic is specified here up to Heze. -/
-@[export eth_consensus_gossip_validation]
-def gossipValidationExport (args : PyValue) : Result PyValue := pyExport gossipValidationOf args
 
 end EthLib.Consensus.Exports

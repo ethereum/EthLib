@@ -192,7 +192,7 @@ def test_equivocation_level_refuses_a_rival(level: str, answer: tuple) -> None:
     offset = 4 + 96 + 8 + 8
     rival = block[:offset] + b"\xff" * 32 + block[offset + 32 :]
     store = case_store("minimal", "capella", case, meta) | {"verify": False}
-    store["blocks"] = [*store["blocks"], (1, None, rival, b"")]
+    store["blocks"] = [*store["blocks"], (1, None, rival, b"", False)]
     answers = consensus.api_post(
         name="minimal", fork=FORKS["capella"], requests=[(time, "blocks", [block], level)], **store
     )

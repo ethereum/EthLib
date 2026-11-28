@@ -239,31 +239,19 @@ def accountExists (tx : TransactionState) (address : Address) : Bool :=
   -- `sigma[a] ≠ ∅`.
   (tx.getAccountOptional address).isSome
 
-/-- Whether the storage of the address holds a word other than zero.
-
-It reads every key that the transaction, the block or the state before the block holds. -/
-def accountHasStorage (tx : TransactionState) (address : Address) : Bool :=
-  -- Every key that some layer holds, since a key in none of them reads 0.
-  let keys := (tx.storageWrites.getD address ∅).keys ++
-    (tx.parent.storageWrites.getD address ∅).keys ++
-    (tx.parent.preState.storage.getD address ∅).keys
-  -- A key may hold 0 at the top layer, after a write of 0 or a wipe, so each key is read again.
-  keys.any fun key => tx.getStorage address key != 0
-
 /-- Whether a contract may be deployed at the address.
 
-Its account must have nonce 0 and no code, by [EIP-684][eip684].
+Its account must have nonce 0 and no code, by [EIP-684][eip684], at every fork.
 
-Its storage must be empty, by [EIP-7610][eip7610], at every fork.
-
-[eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
+[eip684]: https://eips.ethereum.org/EIPS/eip-684#specification -/
 def accountDeployable (tx : TransactionState) (address : Address) : Bool :=
   let account := tx.getAccount address
   -- EIP-684: a zero nonce and an empty code.
   --
-  -- EIP-7610 adds an empty storage.
-  account.nonce = 0 && account.codeHash = EMPTY_CODE_HASH && !tx.accountHasStorage address
+  -- Storage does not count, since no fork activates EIP-7610, which asks for empty storage too.
+  --
+  -- The creation wipes it instead: a new account has empty storage, by the Yellow Paper (§7).
+  account.nonce = 0 && account.codeHash = EMPTY_CODE_HASH
 
 /-- Whether the address has an account with nonce 0, no code and balance 0. -/
 def accountExistsAndIsEmpty (tx : TransactionState) (address : Address) : Bool :=

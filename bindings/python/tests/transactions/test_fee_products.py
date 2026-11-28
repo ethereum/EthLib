@@ -8,6 +8,8 @@
 #
 # The official fixtures hold such a product only for the gas price of a legacy transaction.
 
+from contextlib import AbstractContextManager
+
 import pytest
 
 from ethlib.cryptography.secp256k1 import address
@@ -53,7 +55,9 @@ def _run(fork: str, tx: bytes) -> transactions.Run:
     return transactions.run(fork, 1, tx, STATE, ENV)
 
 
-def _refused(cost: int) -> pytest.RaisesExc[transactions.TransactionError]:
+def _refused(
+    cost: int,
+) -> AbstractContextManager[pytest.ExceptionInfo[transactions.TransactionError]]:
     return raises(
         transactions.TransactionError,
         f"insufficientBalance (balance := {BALANCE}) (cost := {cost})",

@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Rpc.Methods
 public import EthLib.Execution.Proofs.Rpc.Receipt
 public import EthLib.Execution.Proofs.Blocks.Bloom
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the log filters
@@ -35,7 +36,7 @@ private theorem applyTransaction_logs {fork : Fork} {env : Evm.BlockEnvironment 
     ∃ outcome logs, after.receipts =
       before.receipts ++ [(tx.type, makeReceipt outcome after.cumulativeGasUsed logs)] ∧
       after.logs = before.logs ++ logs := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, -, h⟩ := bind_ok_iff.mp h

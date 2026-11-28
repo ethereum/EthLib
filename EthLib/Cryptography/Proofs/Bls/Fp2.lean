@@ -274,6 +274,32 @@ def embedding : FieldOps.Embedding Fp2 Fp2 where
   beq_iff _ _ := beq_iff_eq
   isZero_iff _ := isZero_iff
 
+/-- Conjugation fixes zero. -/
+@[simp] theorem conjugate_zero : (0 : Fp2).conjugate = 0 := by
+  apply ext <;> apply Fp.toZMod.injective <;> simp
+
+/-- Conjugation fixes one. -/
+@[simp] theorem conjugate_one : (1 : Fp2).conjugate = 1 := by
+  apply ext <;> apply Fp.toZMod.injective <;> simp
+
+/-- Conjugation commutes with inversion. -/
+theorem conjugate_inv (a : Fp2) : a⁻¹.conjugate = a.conjugate⁻¹ := by
+  by_cases h : a = 0
+  · rw [h, inv_zero, conjugate_zero, inv_zero]
+  · have h1 : a⁻¹.conjugate * a.conjugate = 1 := by
+      rw [← conjugate_mul, inv_mul_cancel₀ h, conjugate_one]
+    exact eq_inv_of_mul_eq_one_left h1
+
+/-- Conjugation preserves the zero test. -/
+theorem conjugate_isZero (a : Fp2) : a.conjugate.isZero = a.isZero := by
+  apply Bool.eq_iff_iff.mpr
+  rw [isZero_iff, isZero_iff]
+  constructor
+  · intro h
+    rw [← conjugate_conjugate a, h, conjugate_zero]
+  · intro h
+    rw [h, conjugate_zero]
+
 /-! ## Exponentiation (`powNat`) -/
 
 theorem powNat_eq_pow (a : Fp2) (e : Nat) : powNat a e = a ^ e :=
@@ -435,28 +461,38 @@ private theorem sqrt_branch_neg_aux {a0 a1 s r t : Fp}
   · exact hout.1
   · exact hout.2
 
-/-- A root returned by the square root in `Fp2` squares to its input. -/
-theorem sqrt_mul_self {a c : Fp2} (h : Fp2.sqrt a = some c) : c * c = a := by
-  rcases Cryptography.Fp2.sqrt_eq_some_cases h with ⟨hz, hcases⟩ | ⟨hz, s, hs, hcases⟩ <;>
-    simp only [Fp.baseField_sqrtCandidate] at hcases
-  · have ha1 : a.c1 = 0 := Fp.isZero_iff.mp hz
-    rcases hcases with ⟨hr, rfl⟩ | ⟨hr, rfl⟩
+/-- Given a square root of the norm of `a`, the complex method returns a square root of `a`. -/
+theorem sqrtOfNormRoot_mul_self {a : Fp2} {s : Fp} (hs : s * s = norm a) :
+    Fp2.sqrtOfNormRoot a s * Fp2.sqrtOfNormRoot a s = a := by
+  -- The root of the base field is `x r`, and its inverse is `x r r^2`, for `r` the candidate.
+  have hinv (x : Fp) : Fp.sqrtCandidate x * (Fp.invSqrtCandidate x * Fp.invSqrtCandidate x) *
+      BaseField.inverse (BaseField.ofNat 2 : Fp) =
+      BaseField.inverse (BaseField.ofNat 2 * Fp.sqrtCandidate x) :=
+    (Fp.inverse_two_mul_sqrtCandidate x).symm
+  simp only [Cryptography.Fp2.sqrtOfNormRoot, Fp.baseField_invSqrtCandidate,
+    Fp.mul_invSqrtCandidate, hinv]
+  by_cases hz : BaseField.isZero a.c1 = true
+  · -- The case `a1 = 0`: the candidate root of `a0` squares to `a0` or to `-a0`.
+    have ha1 : a.c1 = 0 := Fp.isZero_iff.mp hz
+    simp only [hz, ↓reduceIte]
+    split_ifs with hr
     · have hs := Fp.beq_iff.mp hr
       apply ext <;> apply Fp.toZMod.injective <;> simp only [mul_c0, mul_c1] <;>
         push_toZMod <;> simp_all [← Fp.toZMod_mul]
     · have hs : Fp.sqrtCandidate a.c0 * Fp.sqrtCandidate a.c0 = -a.c0 := by
         rcases Fp.sqrtCandidate_sq_or_neg a.c0 with hpos | hneg
         · rw [Fp.baseField_beq, Fp.beq_iff.mpr hpos] at hr
-          cases hr
+          exact absurd rfl hr
         · exact hneg
       apply ext <;> apply Fp.toZMod.injective <;> simp only [mul_c0, mul_c1] <;>
         push_toZMod <;> simp_all [← Fp.toZMod_mul]
-  · have ha1 : a.c1 ≠ 0 := fun h0 => by
+  · -- The case `a1 ≠ 0`: the candidate root of `(a0 + s) / 2` squares to it or to its negation.
+    have ha1 : a.c1 ≠ 0 := fun h0 => by
       rw [Fp.baseField_isZero, Fp.isZero_iff.mpr h0] at hz
-      cases hz
-    have hn := Fp.baseField_sqrt_mul_self hs
-    rcases hcases with ⟨hr, rfl⟩ | ⟨hr, rfl⟩
-    · exact sqrt_branch_gen_aux (fun _ hx => fp_mul_inverse hx) ha1 hn two_mul_inverse
+      exact hz rfl
+    simp only [hz, Bool.false_eq_true, ↓reduceIte]
+    split_ifs with hr
+    · exact sqrt_branch_gen_aux (fun _ hx => fp_mul_inverse hx) ha1 hs two_mul_inverse
         (Fp.beq_iff.mp hr)
     · have hr' :
           Fp.sqrtCandidate ((a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : Fp)) *
@@ -464,9 +500,28 @@ theorem sqrt_mul_self {a c : Fp2} (h : Fp2.sqrt a = some c) : c * c = a := by
             -((a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : Fp)) := by
         rcases Fp.sqrtCandidate_sq_or_neg _ with hpos | hneg
         · rw [Fp.baseField_beq, Fp.beq_iff.mpr hpos] at hr
-          cases hr
+          exact absurd rfl hr
         · exact hneg
-      exact sqrt_branch_neg_aux ha1 hn two_mul_inverse hr'
+      exact sqrt_branch_neg_aux ha1 hs two_mul_inverse hr'
+
+/-- A root returned by the square root in `Fp2` squares to its input. -/
+theorem sqrt_mul_self {a c : Fp2} (h : Fp2.sqrt a = some c) : c * c = a := by
+  by_cases hz : BaseField.isZero a.c1 = true
+  · -- A real input: the root does not read the root of the norm, so `a0` serves as one.
+    simp only [Cryptography.Fp2.sqrt, hz, ↓reduceIte, Option.some.injEq] at h
+    subst h
+    have he : Fp2.sqrtOfNormRoot a BaseField.zero = Fp2.sqrtOfNormRoot a a.c0 := by
+      simp only [Cryptography.Fp2.sqrtOfNormRoot, hz, ↓reduceIte]
+    rw [he]
+    apply sqrtOfNormRoot_mul_self
+    apply Fp.toZMod.injective
+    simp only [norm, Fp.isZero_iff.mp hz]
+    push_toZMod
+    ring
+  · simp only [Cryptography.Fp2.sqrt, hz, Bool.false_eq_true, ↓reduceIte,
+      Option.map_eq_some_iff] at h
+    obtain ⟨s, hs, rfl⟩ := h
+    exact sqrtOfNormRoot_mul_self (Fp.baseField_sqrt_mul_self hs)
 
 /-- The square root in `Fp2` succeeds on every square. -/
 theorem sqrt_complete {a b : Fp2} (hb : b * b = a) :

@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.ErrorsMeet
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the errors with which a block fails
@@ -256,7 +257,7 @@ private theorem errorsMeet_join (leaves : BodyLeaves config env block P Inv Inv'
 private theorem errorsMeet_applyTransaction (leaves : BodyLeaves config env block P Inv Inv' Out)
     {index : Nat} {before : BodyOutput fork} (tx : Transaction) (inv : Inv before.block) :
     ErrorsMeet P (applyTransaction env index before tx) := by
-  unfold applyTransaction
+  rw [applyTransaction_unfold]
   refine ErrorsMeet.bind (ErrorsMeet.mapError (leaves.inclusion before index tx inv))
     fun included hincl => ?_
   refine ErrorsMeet.bind (ErrorsMeet.aborted
@@ -285,7 +286,7 @@ private theorem errorsMeet_checkedSystemCall
     (leaves : BodyLeaves config env block P Inv Inv' Out) {s : BlockState} (target : Address)
     (data : ByteArray) (inv : Inv' s) :
     ErrorsMeet P (checkedSystemCall env s target data) := by
-  unfold checkedSystemCall
+  rw [checkedSystemCall_unfold]
   refine ErrorsMeet.bind (ErrorsMeet.aborted (leaves.code s target inv)) fun _ _ => ?_
   have rest : ErrorsMeet P (do
       let out ← (systemCall env s target data).mapError BlockError.aborted
@@ -316,7 +317,7 @@ private theorem readRequest_inv (leaves : BodyLeaves config env block P Inv Inv'
 private theorem errorsMeet_readRequest (leaves : BodyLeaves config env block P Inv Inv' Out)
     {state : BodyState × List ByteArray} (contract : UInt8 × Address) (inv : Inv' state.1.block) :
     ErrorsMeet P (readRequest env state contract) := by
-  unfold readRequest
+  rw [readRequest_unfold]
   refine ErrorsMeet.bind (leaves.errorsMeet_checkedSystemCall _ _ inv) fun out hout => ?_
   exact ErrorsMeet.bind (leaves.errorsMeet_join _
     (leaves.call_out _ _ _ out inv (checkedSystemCall_ok hout).2.1)) fun _ _ => ErrorsMeet.pure _
@@ -339,7 +340,7 @@ private theorem errorsMeet_blockRequests (leaves : BodyLeaves config env block P
       ∀ result, blockRequests depositContract env body logs = .ok result →
         Inv' result.1.block := by
   have reads := leaves.errorsMeet_readRequests (env := env) inv
-  unfold blockRequests
+  rw [blockRequests_unfold]
   split
   · refine ⟨ErrorsMeet.bind (leaves.plain_mapError fun _ => ⟨nofun, nofun, nofun, nofun⟩)
       fun _ _ => ErrorsMeet.bind reads.1 fun _ _ => ErrorsMeet.pure _, fun result h => ?_⟩
@@ -362,7 +363,7 @@ private theorem errorsMeet_accessListHashOf (leaves : BodyLeaves config env bloc
 /-- The body of a block fails only in the property, from a block state of the first invariant. -/
 theorem errorsMeet_applyBody (leaves : BodyLeaves config env block P Inv Inv' Out)
     {start : BlockState} (inv : Inv start) : ErrorsMeet P (applyBody config env block start) := by
-  unfold applyBody
+  rw [applyBody_unfold]
   refine ErrorsMeet.bind ?_ fun state hstate => ?_
   · unfold daoTransfer
     split
@@ -610,7 +611,7 @@ theorem startSystemCalls_ne_error {env : BlockEnvironment fork} {parentHash : Ha
         exact join _ _ _ _ hm hout h
     · cases h
   intro h
-  unfold startSystemCalls at h
+  rw [startSystemCalls_unfold] at h
   dsimp only at h
   split at h
   · rcases Base.bind_eq_error h with h | ⟨out, hout, h⟩

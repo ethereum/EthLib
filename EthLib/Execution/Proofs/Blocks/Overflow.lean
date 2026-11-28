@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Blocks.Supply
 public import EthLib.Execution.Proofs.Transactions.Overflow
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: no block overflows a balance when the supply leaves room
@@ -107,7 +108,7 @@ private theorem systemCall_ne_balanceOverflow {env : BlockEnvironment fork} {blo
     (room : SupplyRoom fork (TransactionState.ofBlock block).supply) (other : Address) :
     systemCall env block target data ≠ .error (.state (.balanceOverflow other)) := by
   intro h
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
     · exact Transactions.processMessageCall_ne_balanceOverflow room other h

@@ -64,18 +64,6 @@ private theorem CreatedRead.prepareCreation {tx tx' : TransactionState} {address
     exact hr.accountReads _ hread
   · exact hr.accountReads x (h x hx)
 
-omit [GasMeter Meter] in
-/-- The end of a successful SELFDESTRUCT keeps the created accounts. -/
-private theorem createdAccounts_finishSelfdestruct {beneficiary : Address} {refund : Nat}
-    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
-    after.state.createdAccounts = evm.state.createdAccounts := by
-  unfold finishSelfdestruct at h
-  split at h
-  · cases h
-  · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact createdAccounts_selfdestructTransfer (Base.mapError_ok_iff.mp hst)
-
 /-- The second frame holds the reads of the first, and keeps the invariant if the first has it. -/
 private def CreatedRel (a b : Evm fork Meter) : Prop :=
   a.state.ReadsLe b.state ∧ (CreatedRead a.state → CreatedRead b.state)
@@ -86,9 +74,9 @@ private theorem stepRules_createdRel : StepRules fork (CreatedRel (fork := fork)
   trans hab hbc := ⟨hab.1.trans hbc.1, fun h => hbc.2 (hab.2 h)⟩
   static h :=
     ⟨stepRules_readsLe.static h, CreatedRead.of_readsLe (stepRules_readsLe.static h) h.created⟩
-  sstore evm key value state gain h :=
-    ⟨stepRules_readsLe.sstore evm key value state gain h,
-      CreatedRead.of_readsLe (stepRules_readsLe.sstore evm key value state gain h)
+  sstore evm key value state h :=
+    ⟨stepRules_readsLe.sstore evm key value state h,
+      CreatedRead.of_readsLe (stepRules_readsLe.sstore evm key value state h)
         (TransactionState.createdAccounts_setStorage h)⟩
   tstore evm address key value :=
     ⟨stepRules_readsLe.tstore evm address key value,
@@ -101,9 +89,9 @@ private theorem stepRules_createdRel : StepRules fork (CreatedRel (fork := fork)
     ⟨stepRules_readsLe.selfdestruct beneficiary refund h,
       CreatedRead.of_readsLe (stepRules_readsLe.selfdestruct beneficiary refund h)
         (createdAccounts_finishSelfdestruct h)⟩
-  incrementNonce evm address state hn h :=
-    ⟨stepRules_readsLe.incrementNonce evm address state hn h,
-      CreatedRead.of_readsLe (stepRules_readsLe.incrementNonce evm address state hn h)
+  incrementNonce evm state hn h :=
+    ⟨stepRules_readsLe.incrementNonce evm state hn h,
+      CreatedRead.of_readsLe (stepRules_readsLe.incrementNonce evm state hn h)
         (TransactionState.createdAccounts_modifyState h)⟩
   incorporate h := by
     unfold CreatedRel

@@ -30,7 +30,7 @@ theorem stepRules_accessesLe :
     StepRules fork (fun a b : Evm fork Meter => a.substate.AccessesLe b.substate) where
   trans hab hbc := hab.trans hbc
   static h := h.accesses
-  sstore _ _ _ _ _ _ := ⟨fun _ h => h, fun _ _ h => h⟩
+  sstore _ _ _ _ _ := ⟨fun _ h => h, fun _ _ h => h⟩
   tstore _ _ _ _ := .refl _
   log _ _ hsub _ _ := by
     rw [hsub]
@@ -43,7 +43,7 @@ theorem stepRules_accessesLe :
     · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
       cases h
       exact ⟨fun _ h => h, fun _ _ h => h⟩
-  incrementNonce _ _ _ _ _ := .refl _
+  incrementNonce _ _ _ _ := .refl _
   -- A child that succeeds passes on its accesses, and one that fails passes on none.
   incorporate h := by
     unfold incorporateChild

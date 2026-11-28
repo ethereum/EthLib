@@ -22,7 +22,8 @@ namespace EthLib.Consensus
 open Base Uint64 Networking.Gossip Networking.Gossip.ValidationResult Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {seen : Seen} {store : Store preset fork} {gloas : .glamsterdam ≤ fork}
+  {blockHashOf : BlockHashOf preset fork} {seen : Seen} {store : Store preset fork}
+  {gloas : .glamsterdam ≤ fork}
 
 /-- The limits of the requests accept exactly when each count is within its limit. -/
 theorem checkExecutionRequestsLimits_eq_accept {requests : ExecutionRequests preset fork} :
@@ -48,13 +49,13 @@ section Envelope
 
 variable {signed : SignedExecutionPayloadEnvelope preset fork} {block : BeaconBlock preset fork}
   {state : BeaconState preset fork} {finalizedSlot : Slot} {requestsRoot : Root} {time : UInt64}
-  {withdrawalsRoot expectedRoot : Root} {valid : Bool}
+  {withdrawalsRoot expectedRoot : Root} {maxGasLimit maxTransactions : UInt64} {valid : Bool}
 
 /-- An envelope whose block and builder have a valid envelope already is ignored. -/
 theorem validateExecutionPayloadEnvelope_of_seen
     (known : (signed.message.beaconBlockRoot, signed.message.builderIndex) ∈
       seen.executionPayloadEnvelopes) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
       .ok (.ignore "already seen envelope for this block root from this builder") := by
   simp [validateExecutionPayloadEnvelope, known, pure, Except.pure]
 
@@ -63,8 +64,8 @@ theorem validateExecutionPayloadEnvelope_recordExecutionPayloadEnvelope
     {other : SignedExecutionPayloadEnvelope preset fork}
     (sameRoot : other.message.beaconBlockRoot = signed.message.beaconBlockRoot)
     (sameBuilder : other.message.builderIndex = signed.message.builderIndex) :
-    validateExecutionPayloadEnvelope config checks (seen.recordExecutionPayloadEnvelope signed)
-        store gloas other =
+    validateExecutionPayloadEnvelope config checks blockHashOf
+        (seen.recordExecutionPayloadEnvelope signed) store gloas other =
       .ok (.ignore "already seen envelope for this block root from this builder") :=
   validateExecutionPayloadEnvelope_of_seen (by
     simp [Seen.recordExecutionPayloadEnvelope, sameRoot, sameBuilder])
@@ -72,6 +73,8 @@ theorem validateExecutionPayloadEnvelope_recordExecutionPayloadEnvelope
 /-- The outcome of an envelope is its chain of checks, in order.
 
 It holds once its block, state, finalized slot, slot time, roots and signature are computed.
+
+It also needs the highest gas limit of the payload and the most transactions it allows.
 -/
 theorem validateExecutionPayloadEnvelope_eq
     (known : store.blocks[signed.message.beaconBlockRoot]? = some block)
@@ -81,10 +84,12 @@ theorem validateExecutionPayloadEnvelope_eq
     (timed : computeTimeAtSlot config state.genesisTime block.slot = .ok time)
     (withdrawn : SszType.hashTreeRoot
       (signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)) = .ok withdrawalsRoot)
+    (bounded : store.getMaxPayloadGasLimit gloas block = .ok maxGasLimit)
+    (counted : divChecked maxGasLimit config.MIN_TRANSACTION_GAS = .ok maxTransactions)
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
       .ok ((ignoreUnless (!seen.executionPayloadEnvelopes.contains
             (signed.message.beaconBlockRoot, signed.message.builderIndex))
           "already seen envelope for this block root from this builder").andThen fun _ =>
@@ -113,6 +118,8 @@ theorem validateExecutionPayloadEnvelope_eq
         (rejectUnless
             ((signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)).data.size ≤
               preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat) "too many withdrawals").andThen fun _ =>
+        (rejectUnless (signed.message.payload.transactions.data.size ≤ maxTransactions.toNat)
+          "too many transactions").andThen fun _ =>
         (rejectUnless (signed.message.payload.parentHash == state.latestBlockHash gloas)
           "payload's parent hash does not match the latest block hash").andThen fun _ =>
         (rejectUnless (signed.message.payload.timestamp == time)
@@ -121,11 +128,14 @@ theorem validateExecutionPayloadEnvelope_eq
           "payload contains an empty transaction").andThen fun _ =>
         (rejectUnless (withdrawalsRoot == expectedRoot)
           "payload's withdrawals do not match the expected withdrawals").andThen fun _ =>
+        (rejectUnless (blockHashOf signed.message == some signed.message.payload.blockHash)
+          "payload's block hash is not computed correctly").andThen fun _ =>
         rejectUnless valid "invalid envelope signature") := by
   unfold validateExecutionPayloadEnvelope
-  simp only [known, held, finalized, rooted, timed, withdrawn, expected, signature, bind,
-    Except.bind, pure, Except.pure, Except.mapError, ignoreUnless_andThenM, ignoreUnless_andThen,
-    rejectUnless_andThenM, rejectUnless_andThen, apply_ite (Except.ok (ε := ForkChoiceError))]
+  simp only [known, held, finalized, rooted, timed, withdrawn, bounded, counted, expected,
+    signature, bind, Except.bind, pure, Except.pure, Except.mapError, ignoreUnless_andThenM,
+    ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
+    apply_ite (Except.ok (ε := ForkChoiceError))]
   cases checkExecutionRequestsLimits gloas signed.message.executionRequests <;>
     simp [andThenM, andThen, pure, Except.pure, apply_ite (Except.ok (ε := ForkChoiceError))]
 
@@ -141,16 +151,18 @@ theorem validateExecutionPayloadEnvelope_ignored
     (timed : computeTimeAtSlot config state.genesisTime block.slot = .ok time)
     (withdrawn : SszType.hashTreeRoot
       (signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)) = .ok withdrawalsRoot)
+    (bounded : store.getMaxPayloadGasLimit gloas block = .ok maxGasLimit)
+    (counted : divChecked maxGasLimit config.MIN_TRANSACTION_GAS = .ok maxTransactions)
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
-    (∃ reason, validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    (∃ reason, validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
         .ok (.ignore reason)) ↔
       (signed.message.beaconBlockRoot, signed.message.builderIndex) ∈
           seen.executionPayloadEnvelopes ∨
         signed.message.payload.slotNumber gloas < finalizedSlot := by
-  rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn expected
-    signature]
+  rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn bounded
+    counted expected signature]
   simp only [Except.ok.injEq, andThen_eq_ignore, rejectUnless_ne_ignore,
     checkExecutionRequestsLimits_ne_ignore, ignoreUnless_eq_ignore, ignoreUnless_eq_accept,
     and_false, or_false, exists_or, exists_and_left, exists_eq', and_true, Bool.not_eq_eq_eq_not,
@@ -168,10 +180,13 @@ theorem validateExecutionPayloadEnvelope_eq_accept
     (timed : computeTimeAtSlot config state.genesisTime block.slot = .ok time)
     (withdrawn : SszType.hashTreeRoot
       (signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)) = .ok withdrawalsRoot)
+    (bounded : store.getMaxPayloadGasLimit gloas block = .ok maxGasLimit)
+    (counted : divChecked maxGasLimit config.MIN_TRANSACTION_GAS = .ok maxTransactions)
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed = .ok accept ↔
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed = .ok accept
+        ↔
       (signed.message.beaconBlockRoot, signed.message.builderIndex) ∉
           seen.executionPayloadEnvelopes ∧
         finalizedSlot ≤ signed.message.payload.slotNumber gloas ∧
@@ -189,13 +204,15 @@ theorem validateExecutionPayloadEnvelope_eq_accept
         checkExecutionRequestsLimits gloas signed.message.executionRequests = .accept ∧
         (signed.message.payload.withdrawals (Nat.le_trans (by decide) gloas)).data.size ≤
           preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat ∧
+        signed.message.payload.transactions.data.size ≤ maxTransactions.toNat ∧
         signed.message.payload.parentHash = state.latestBlockHash gloas ∧
         signed.message.payload.timestamp = time ∧
         signed.message.payload.hasEmptyTransaction = false ∧
         withdrawalsRoot = expectedRoot ∧
+        blockHashOf signed.message = some signed.message.payload.blockHash ∧
         valid = true := by
-  rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn expected
-    signature]
+  rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn bounded
+    counted expected signature]
   simp only [Except.ok.injEq, andThen_eq_accept, ignoreUnless_eq_accept, rejectUnless_eq_accept,
     Bool.not_eq_eq_eq_not, Bool.not_true, decide_eq_false_iff_not, decide_eq_true_eq,
     List.elem_eq_mem, beq_iff_eq]
@@ -205,7 +222,7 @@ theorem validateExecutionPayloadEnvelope_of_unknown
     (fresh : (signed.message.beaconBlockRoot, signed.message.builderIndex) ∉
       seen.executionPayloadEnvelopes)
     (unknown : store.blocks[signed.message.beaconBlockRoot]? = none) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
       .ok (.ignore "envelope's block has not been seen") := by
   simp [validateExecutionPayloadEnvelope, fresh, unknown, pure, Except.pure]
 
@@ -215,7 +232,7 @@ theorem validateExecutionPayloadEnvelope_of_failed
       seen.executionPayloadEnvelopes)
     (known : store.blocks[signed.message.beaconBlockRoot]? = some block)
     (failed : store.blockStates[signed.message.beaconBlockRoot]? = none) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
       .ok (.reject "envelope's block failed validation") := by
   simp [validateExecutionPayloadEnvelope, fresh, known, failed, pure, Except.pure]
 

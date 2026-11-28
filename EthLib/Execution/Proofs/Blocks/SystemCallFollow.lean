@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Blocks.AccessListFollow
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the access-list builder follows the system calls
@@ -14,11 +15,9 @@ The block state after the call can still be rebuilt.
 
 This needs the block state before the call to be rebuildable.
 
-Its code matches its hash, and no empty account holds storage.
+Its code matches its hash, and no account with nonce 0 and no code holds storage.
 
-By [EIP-7610][eip7610], any creation inside the call fails at an address that already holds storage.
-
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
+So a creation inside the call wipes no storage word.
 -/
 
 @[expose] public section
@@ -145,7 +144,7 @@ theorem systemCall_rebuildState {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : systemCall env block target data = .ok out) :
     RebuildState block out.state := by
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨call, hcall, hpure⟩ := bind_ok_iff.mp h
     cases hpure
@@ -189,7 +188,7 @@ theorem exists_rebuildable_systemCall {fork : Fork} (hfork : .paris ≤ fork)
       Rebuildable out.block := by
   let block : BlockState := ⟨⟨∅, ∅, ∅⟩, ∅, ∅, ∅, ∅⟩
   have hvalid : Rebuildable block := by
-    refine ⟨fun hash code hread => ?_, fun _ _ _ => rfl⟩
+    refine ⟨fun hash code hread => ?_, fun _ _ _ _ => rfl⟩
     unfold TransactionState.getCode TransactionState.ofBlock State.getCode at hread
     dsimp only [block] at hread
     have hnone : (∅ : Std.ExtTreeMap Hash32 ByteArray)[hash]? = none :=
