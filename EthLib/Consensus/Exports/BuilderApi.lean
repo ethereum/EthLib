@@ -285,6 +285,7 @@ def ValidateBidError.reason : BuilderApi.ValidateBidError → String
   | .wrongSlot .. => "wrong_slot"
   | .wrongFeeRecipient .. => "wrong_fee_recipient"
   | .wrongParentHash .. => "wrong_parent_hash"
+  | .repeatsParentHash _ => "repeats_parent_hash"
   | .wrongParentRoot .. => "wrong_parent_root"
   | .wrongPrevRandao .. => "wrong_prev_randao"
   | .incompatibleGasLimit .. => "incompatible_gas_limit"
@@ -433,9 +434,9 @@ From Deneb to Fulu, it carries the payload with its blobs bundle.
 
 At Gloas, the response to a request for a [bid] carries a signed bid of the execution payload.
 
-[header]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/header.yaml
-[blinded block]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/blinded_blocks.yaml
-[bid]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/execution_payload_bid.yaml
+[header]: https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/apis/builder/header.yaml
+[blinded block]: https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/apis/builder/blinded_blocks.yaml
+[bid]: https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/apis/builder/execution_payload_bid.yaml
 -/
 def isVersionedBody (fork : Fork) : String → Bool
   | "SignedBuilderBid" => .bellatrix ≤ fork && fork < .glamsterdam

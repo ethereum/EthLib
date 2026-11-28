@@ -13,7 +13,7 @@ From Gloas, a proposer asks a builder for a bid with a request that names the pa
 
 The builder serves the request only when six rules hold.
 
-The proposer checks a bid it fetched with eight rules, then with the signature of the builder.
+The proposer checks a bid it fetched with nine rules, then with the signature of the builder.
 
 These are not the rules of gossip: the proposer reads its own state and its own fee recipient.
 
@@ -23,8 +23,8 @@ It is not a rule of validity.
 
 The [builder specification] gives the builder's rules, and its [validator document] the proposer's.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/builder.md#bidding
-[validator document]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/validator.md#validating-a-signedexecutionpayloadbid
+[builder specification]: https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/specs/gloas/builder.md#bidding
+[validator document]: https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/specs/gloas/validator.md#validating-a-signedexecutionpayloadbid
 -/
 
 @[expose] public section
@@ -92,6 +92,8 @@ inductive ValidateBidError where
 
   It also gives the block hash of the latest bid of the state, then its latest block hash. -/
   | wrongParentHash (parentHash withPayload withoutPayload : Hash32)
+  /-- The block hash of the bid, which the error gives, is its parent hash. -/
+  | repeatsParentHash (blockHash : Hash32)
   /-- The parent root of the bid is not the root of the latest block header.
 
   The error gives the root of that header, then the parent root of the bid. -/
@@ -138,6 +140,8 @@ def validateBid (config : Config) (checks : SignatureChecks) (state : BeaconStat
   unless isParentBlockHash state gloas bid.parentBlockHash do
     throw (.wrongParentHash bid.parentBlockHash (state.latestExecutionPayloadBid gloas).blockHash
       (state.latestBlockHash gloas))
+  -- The block hash of the bid differs from its parent hash, as the bid's processing requires.
+  if bid.blockHash = bid.parentBlockHash then throw (.repeatsParentHash bid.blockHash)
   -- The parent root of the bid is the root of the latest block header of the state.
   let parentRoot ← lift (liftSsz (SszType.hashTreeRoot state.latestBlockHeader))
   unless bid.parentBlockRoot = parentRoot do

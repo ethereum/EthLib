@@ -29,8 +29,7 @@ open EthLib.Serialization.Rlp
 instance : LawfulCodec BlockRange where
   ofItem_toItem r := by
     show (Codec.ofItem (.list r.items) : Except RlpError BlockRange) = _
-    simp [Codec.ofItem, BlockRange.items, Item.fields, Item.toItems, Item.field_toItem, bind,
-      Except.bind, pure, Except.pure]
+    simp_fixed_list_roundtrip Codec.ofItem BlockRange.items
   toItem_of_ofItem {item r} h := by
     obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
     rcases items with _ | ⟨a, _ | ⟨b, _ | ⟨c, _ | ⟨_, _⟩⟩⟩⟩ <;> simp at hlen

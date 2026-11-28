@@ -472,4 +472,38 @@ theorem representable_iff_serializes {shape : Desc} {value : Value} (fitted : Fi
   exact ⟨fun ⟨_, represented⟩ => (represented.serialize fitted).imp fun _ => And.left,
     fun ⟨bytes, wrote⟩ => ⟨bytes.size, representable_of_serialize shape value bytes wrote⟩⟩
 
+/-! ## The parts of a value that has a size -/
+
+/-- A progressive list that has a size has elements that have sizes, below `2^32` bytes in all. -/
+theorem progressiveList_of_representable {e : Desc} {l : Option Nat} {values : List Value}
+    {size : Nat} (h : Representable (.progressiveList e l) (.seq values) size) :
+    ∃ sizes : Value → Nat, (∀ v ∈ values, Representable e v (sizes v)) ∧
+      (values.map fun v => fieldSize e (sizes v)).sum < 2 ^ 32 := by
+  cases h with
+  | progressiveList each bounded => exact ⟨_, each, bounded⟩
+
+/-- A container that has a size has fields that have sizes. -/
+theorem container_of_representable {names : List String} {fields : List Desc}
+    {values : List Value} {size : Nat}
+    (h : Representable (.container names fields) (.seq values) size) :
+    ∃ sizes : Desc → Value → Nat,
+      ∀ pair ∈ fields.zip values, Representable pair.1 pair.2 (sizes pair.1 pair.2) := by
+  cases h with
+  | container each _ => exact ⟨_, each⟩
+
+/-- A progressive container that has a size has fields that have sizes. -/
+theorem progressiveContainer_of_representable {active : List Bool} {names : List String}
+    {fields : List Desc} {values : List Value} {size : Nat}
+    (h : Representable (.progressiveContainer active names fields) (.seq values) size) :
+    ∃ sizes : Desc → Value → Nat,
+      ∀ pair ∈ fields.zip values, Representable pair.1 pair.2 (sizes pair.1 pair.2) := by
+  cases h with
+  | progressiveContainer each _ => exact ⟨_, each⟩
+
+/-- An integer that has a size has its declared width. -/
+theorem size_of_representable_uint {width : Nat} {value : Value} {size : Nat}
+    (h : Representable (.uint width) value size) : size = width := by
+  cases h
+  rfl
+
 end EthLib.Serialization.Ssz

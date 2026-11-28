@@ -48,6 +48,8 @@ WITHDRAWABLE_AFTER_KEY = 48 + 1 + 20 + 8 + 8
 EXIT_AFTER_KEY = 48 + 32 + 8 + 1 + 8 + 8
 # The block hash of the latest bid, written into the state: the parent with its payload.
 FULL_PARENT_HASH = b"\xbb" * 32
+# The block hash of a bid, which differs from both parent hashes.
+BLOCK_HASH = b"\xdd" * 32
 CURRENT_MIX = b"\x11" * 32
 
 
@@ -112,6 +114,7 @@ def _signed_bid(
     later_slots: int = 0,
     parent_hash: bytes | None = None,
     parent_root: bytes | None = None,
+    block_hash: bytes = BLOCK_HASH,
     prev_randao: bytes = CURRENT_MIX,
     fee_recipient: bytes = FEE_RECIPIENT,
     gas_limit: int = GAS_LIMIT,
@@ -123,7 +126,7 @@ def _signed_bid(
     message = (
         (_empty_parent_hash(state) if parent_hash is None else parent_hash)
         + (_parent_root(state) if parent_root is None else parent_root)
-        + bytes(32)
+        + block_hash
         + prev_randao
         + fee_recipient
         + struct.pack("<QQQQQ", gas_limit, builder_index, _slot(state) + later_slots, value, 0)
@@ -174,6 +177,7 @@ def _previous_mix(state: bytes) -> bytes:
         ({"later_slots": 1}, "wrong_slot"),
         ({"fee_recipient": bytes(20)}, "wrong_fee_recipient"),
         ({"parent_hash": b"\xcc" * 32}, "wrong_parent_hash"),
+        ({"parent_hash": FULL_PARENT_HASH, "block_hash": FULL_PARENT_HASH}, "repeats_parent_hash"),
         ({"parent_root": b"\xcc" * 32}, "wrong_parent_root"),
         ({"prev_randao": b"\xcc" * 32}, "wrong_prev_randao"),
         ({"gas_limit": PARENT_GAS_LIMIT}, "incompatible_gas_limit"),
@@ -186,6 +190,14 @@ def _previous_mix(state: bytes) -> bytes:
 def test_validate_bid_refused(change: dict[str, Any], expected: str):
     state = _state()
     assert _validate(state, _signed_bid(state, **change)) == expected
+
+
+def test_validate_bid_repeating_the_empty_parent_hash():
+    # The rule holds for the parent without its payload too.
+    state = _state()
+    parent_hash = _empty_parent_hash(state)
+    signed = _signed_bid(state, block_hash=parent_hash)
+    assert _validate(state, signed) == "repeats_parent_hash"
 
 
 def test_validate_bid_mix_of_the_previous_epoch():
@@ -217,7 +229,12 @@ def test_validate_bid_of_an_inactive_builder():
         ("inactive", {"later_slots": 1}, "inactive_builder"),
         ({"later_slots": 1}, {"fee_recipient": bytes(20)}, "wrong_slot"),
         ({"fee_recipient": bytes(20)}, {"parent_hash": b"\xcc" * 32}, "wrong_fee_recipient"),
-        ({"parent_hash": b"\xcc" * 32}, {"parent_root": b"\xcc" * 32}, "wrong_parent_hash"),
+        ({"parent_hash": b"\xcc" * 32}, {"block_hash": b"\xcc" * 32}, "wrong_parent_hash"),
+        (
+            {"parent_hash": FULL_PARENT_HASH, "block_hash": FULL_PARENT_HASH},
+            {"parent_root": b"\xcc" * 32},
+            "repeats_parent_hash",
+        ),
         ({"parent_root": b"\xcc" * 32}, {"prev_randao": b"\xcc" * 32}, "wrong_parent_root"),
         ({"prev_randao": b"\xcc" * 32}, {"gas_limit": PARENT_GAS_LIMIT}, "wrong_prev_randao"),
         ({"gas_limit": PARENT_GAS_LIMIT}, {"value": 2**63}, "incompatible_gas_limit"),

@@ -1,9 +1,15 @@
 module
 
+public import EthLib.Consensus.Proofs.Containers.Bid
+public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Transition.Execution
+public import EthLib.Consensus.Transition.Payload
 public import EthLib.Engine.ExecutionEngine
 public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.Json
+public import EthLib.Execution.Proofs.Blocks.Header
+public import EthLib.Execution.Proofs.Blocks.Roots
+public import EthLib.Serialization.Proofs.Ssz.Typed.Bounds
 
 /-!
 # Proofs: the execution layer of the beacon chain
@@ -239,7 +245,6 @@ theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork) :
   cases fork <;> first
     | exact absurd h (by decide)
     | exact ⟨.paris, by decide⟩
-    | exact ⟨.shapella, by decide⟩
     | exact ⟨.dencun, by decide⟩
     | exact ⟨.pectra, by decide⟩
     | exact ⟨.glamsterdam, by decide⟩
@@ -577,5 +582,302 @@ theorem envelopeBlockHash_eq_of_toBlock
     revert hashed
     cases unchecked.header.hash <;> simp_all [Except.mapError, Except.toOption]
   · cases equal
+
+/-! ## The envelopes that have a block hash -/
+
+/-- A payload at a fork keeps the extra data of the structure that it comes from. -/
+private theorem atFork_extraData {any : Json.AnyPayload} {f : Fork} {q : ExecutionPayload f}
+    (h : any.atFork f = .ok q) : q.extraData = any.common.extraData := by
+  simp only [Json.AnyPayload.atFork, bind_ok_iff] at h
+  obtain ⟨_, _, _, _, _, _, result⟩ := h
+  cases result
+  rfl
+
+/-- A payload has no empty transaction exactly when each of its transactions has a byte. -/
+private theorem hasEmptyTransaction_eq_false_iff {p : Consensus.ExecutionPayload preset fork} :
+    p.hasEmptyTransaction = false ↔ ∀ value ∈ beaconTransactions p, value.size ≠ 0 := by
+  unfold Consensus.ExecutionPayload.hasEmptyTransaction beaconTransactions
+  constructor
+  · intro h value hv hz
+    obtain ⟨tx, htx, rfl⟩ := List.mem_map.1 hv
+    apply Bool.false_ne_true
+    rw [← h, ← Array.any_toList, List.any_eq_true]
+    exact ⟨tx, htx, Array.isEmpty_iff_size_eq_zero.2 hz⟩
+  · intro h
+    rw [Bool.eq_false_iff]
+    intro ht
+    rw [← Array.any_toList, List.any_eq_true] at ht
+    obtain ⟨tx, htx, he⟩ := ht
+    exact h ⟨tx.data⟩ (List.mem_map_of_mem htx) (Array.isEmpty_iff_size_eq_zero.1 he)
+
+/-- From Gloas, an envelope has a block hash exactly when its requests and transactions allow it.
+
+Its requests must make a list, and no transaction may be empty.
+
+The preset gives the logs Bloom filter 256 bytes, and limits extra data to fewer than `2^32` bytes.
+
+The payload has fewer than `2^32` transactions and withdrawals, and bytes in each transaction. -/
+theorem envelopeBlockHash_isSome_iff
+    {envelope : Consensus.ExecutionPayloadEnvelope preset fork} (gloas : .glamsterdam ≤ fork)
+    (bloom : preset.BYTES_PER_LOGS_BLOOM.toNat = 256)
+    (extra : preset.MAX_EXTRA_DATA_BYTES.toNat < 2 ^ 32)
+    (fewTransactions : envelope.payload.transactions.data.size < 2 ^ 32)
+    (shortTransactions : ∀ tx ∈ envelope.payload.transactions.data, tx.data.size < 2 ^ 32)
+    (fewWithdrawals :
+      (envelope.payload.withdrawals (Nat.le_trans (by decide) gloas)).data.size < 2 ^ 32) :
+    (envelopeBlockHash envelope).isSome ↔
+      (∃ requests, Consensus.getExecutionRequestsList envelope.executionRequests = .ok requests) ∧
+        envelope.payload.hasEmptyTransaction = false := by
+  -- SSZ encodes no list of `2^32` bytes or more, since its offsets have four bytes.
+  --
+  -- So the bounds on the lists hold for every payload that encodes, as the corollary shows.
+  have shapella : Fork.shapella ≤ fork := Nat.le_trans (by decide) gloas
+  -- The payload has a structure, since its Bloom filter has 256 bytes.
+  obtain ⟨any, hany⟩ : ∃ any, anyPayloadOf envelope.payload = some any :=
+    ⟨_, by unfold anyPayloadOf; exact dite_eq_left bloom⟩
+  have hw : any.withdrawals = (sinceValue envelope.payload.withdrawals).map
+      fun ws => ws.data.toList.map executionWithdrawal := by
+    unfold anyPayloadOf at hany
+    rw [dite_eq_left bloom] at hany
+    cases hany
+    rfl
+  have hx : any.common.extraData = ⟨envelope.payload.extraData.data⟩ := by
+    unfold anyPayloadOf at hany
+    rw [dite_eq_left bloom] at hany
+    cases hany
+    rfl
+  obtain ⟨payload, hpayload⟩ := exists_atFork_of_anyPayloadOf hany
+  have hpw : payload.withdrawals shapella =
+      (envelope.payload.withdrawals shapella).data.toList.map executionWithdrawal := by
+    have := (sinceValue_of_atFork hpayload).1
+    rw [hw] at this
+    simp only [sinceValue, dite_eq_left shapella, Option.map_some, Option.some.injEq] at this
+    exact this
+  obtain ⟨wroot, hwroot⟩ := Execution.Blocks.withdrawalsRoot_exists_ok
+    (withdrawals := payload.withdrawals shapella) (by rw [hpw]; simpa using fewWithdrawals)
+  -- Every header of the payload has a hash, whatever its roots and fields from later forks.
+  have hheader : ∀ (r : Hash32) beacon reqs bal slot, ∃ header,
+      payload.toHeader r beacon reqs bal slot = .ok header ∧
+        ∃ digest, header.hash = .ok digest := by
+    intro r beacon reqs bal slot
+    have hseq : Since.sequence (fun h => (Execution.Blocks.withdrawalsRoot
+        (payload.withdrawals h)).mapError fun _ => PayloadError.noEncoding) =
+        .ok (fun _ => wroot) := by
+      simp only [Since.sequence, dite_eq_left shapella, hwroot, Except.mapError, Functor.map,
+        Except.map]
+    refine ⟨_, by simp only [ExecutionPayload.toHeader, hseq, bind, Except.bind, pure,
+      Except.pure]; rfl, ?_⟩
+    apply Execution.Blocks.Header.hash_exists_ok
+    · intro n hn
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      have := payload.blockNumber.toNat_lt
+      have := payload.gasLimit.toNat_lt
+      have := payload.gasUsed.toNat_lt
+      rcases hn with rfl | rfl | rfl | rfl <;> omega
+    · intro _
+      exact payload.baseFeePerGas.isLt
+    · show payload.extraData.size < 2 ^ 32
+      rw [atFork_extraData hpayload, hx]
+      exact Nat.lt_of_le_of_lt envelope.payload.extraData.bound extra
+  have htx : payload.transactions = beaconTransactions envelope.payload :=
+    (atFork_transactions hpayload).trans (common_transactions hany)
+  have hroot := Execution.Blocks.indexedRoot_exists_ok_iff (values := payload.transactions)
+    (by rw [htx]; simpa [beaconTransactions] using fewTransactions)
+    (by
+      rw [htx]
+      intro value hv
+      obtain ⟨tx, hmem, rfl⟩ := List.mem_map.1 hv
+      exact shortTransactions tx (Array.mem_toList_iff.1 hmem))
+  -- The transactions have a root exactly when none of them is empty.
+  rw [htx, ← hasEmptyTransaction_eq_false_iff] at hroot
+  unfold envelopeBlockHash
+  simp only [hany, hpayload, sinceValue, dite_eq_left gloas, Except.toOption, bind, Option.bind]
+  rw [htx, ← hroot]
+  cases hreq : Consensus.getExecutionRequestsList envelope.executionRequests with
+  | error e => simp
+  | ok requests =>
+    cases hr : Execution.Blocks.indexedRoot (beaconTransactions envelope.payload) with
+    | error e => simp
+    | ok r =>
+      obtain ⟨header, hh, digest, hd⟩ := hheader r (fun _ => envelope.parentBeaconBlockRoot)
+        (fun _ => requests)
+        (fun _ =>
+          Cryptography.Hash.Keccak.keccak256 ⟨(envelope.payload.blockAccessList gloas).data⟩)
+        (fun _ => envelope.payload.slotNumber gloas)
+      simp [hh, hd]
+
+/-- A sum of terms each at least `k` is at least `k` times their count. -/
+private theorem mul_length_le_sum {α : Type} (f : α → Nat) (k : Nat) :
+    (l : List α) → (∀ x ∈ l, k ≤ f x) → k * l.length ≤ (l.map f).sum
+  | [], _ => by simp
+  | x :: xs, h => by
+    have := h x List.mem_cons_self
+    have := mul_length_le_sum f k xs fun y hy => h y (List.mem_cons_of_mem _ hy)
+    simp only [List.length_cons, List.map_cons, List.sum_cons, Nat.mul_succ]
+    omega
+
+open Serialization.Ssz in
+/-- From Gloas, a payload that encodes has fewer than `2^32` transactions and withdrawals.
+
+Each of its transactions has fewer than `2^32` bytes. -/
+private theorem bounds_of_serialize [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    {p : Consensus.ExecutionPayload preset fork} (gloas : .glamsterdam ≤ fork)
+    (encoded : ∃ bytes, SszType.serialize p = .ok bytes) :
+    p.transactions.data.size < 2 ^ 32 ∧ (∀ tx ∈ p.transactions.data, tx.data.size < 2 ^ 32) ∧
+      (p.withdrawals (Nat.le_trans (by decide) gloas)).data.size < 2 ^ 32 := by
+  have shapella : Fork.shapella ≤ fork := Nat.le_trans (by decide) gloas
+  have dencun : Fork.dencun ≤ fork := Nat.le_trans (by decide) gloas
+  obtain ⟨bytes, h⟩ := encoded
+  rw [SszType.serialize_ok_iff, Consensus.ExecutionPayload.desc_eq,
+    Consensus.ExecutionPayload.toValue_eq] at h
+  have rep := representable_of_serialize _ _ _ h
+  unfold Consensus.ExecutionPayload.fieldsDesc at rep
+  rw [ite_eq_left gloas] at rep
+  obtain ⟨sizes, each⟩ := progressiveContainer_of_representable rep
+  simp only [Consensus.ExecutionPayload.fieldDescs, Consensus.ExecutionPayload.fieldValues,
+    gloas, shapella, dencun, ↓reduceIte, ↓reduceDIte, List.cons_append, List.nil_append,
+    List.zip_cons_cons, List.zip_nil_left, List.forall_mem_cons] at each
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, -, htx, hw, -⟩ := each
+  -- The transactions: each one is a list behind an offset of 4 bytes.
+  obtain ⟨txSizes, txEach, txBounded⟩ := progressiveList_of_representable
+    (e := .progressiveList (.uint 1) none) (l := none)
+    (values := p.transactions.data.toList.map SszType.toValue) htx
+  have txCount := mul_length_le_sum
+    (fun v => fieldSize (.progressiveList (.uint 1) none) (txSizes v)) 4 _
+    fun v (_ : v ∈ p.transactions.data.toList.map SszType.toValue) =>
+      show 4 ≤ txSizes v + 4 by omega
+  -- The withdrawals: each one is a container of 44 bytes.
+  obtain ⟨wSizes, wEach, wBounded⟩ := progressiveList_of_representable
+    (e := SszType.desc Consensus.Withdrawal) (l := none)
+    (values := (p.withdrawals shapella).data.toList.map SszType.toValue) hw
+  have wCount := mul_length_le_sum
+    (fun v => fieldSize (SszType.desc Consensus.Withdrawal) (wSizes v)) 1 _
+    fun v (hv : v ∈ (p.withdrawals shapella).data.toList.map SszType.toValue) => by
+    obtain ⟨w, -, rfl⟩ := List.mem_map.1 hv
+    have := (withinBounds_of_representable (wEach _ hv) (LawfulSszType.fits w)).1
+    have : (SszType.desc Consensus.Withdrawal).minSize = 44 := by decide
+    show 1 ≤ wSizes _ + offsetWidth _
+    omega
+  simp only [List.length_map, Array.length_toList] at txCount wCount
+  refine ⟨by omega, fun tx hmem => ?_, by omega⟩
+  -- A transaction: each of its bytes takes 1 byte.
+  have hv : SszType.toValue tx ∈ p.transactions.data.toList.map SszType.toValue :=
+    List.mem_map_of_mem (Array.mem_toList_iff.2 hmem)
+  have rep := txEach _ hv
+  have value : SszType.toValue tx = .seq (tx.data.toList.map SszType.toValue) := by
+    show (if Fork.glamsterdam ≤ fork then Value.seq (tx.data.toList.map SszType.toValue)
+      else Value.bytes ⟨tx.data⟩) = _
+    rw [ite_eq_left gloas]
+  rw [value] at rep
+  obtain ⟨bSizes, bEach, bBounded⟩ := progressiveList_of_representable rep
+  have bCount := mul_length_le_sum (fun v => fieldSize (.uint 1) (bSizes v)) 1 _
+      fun v (hv : v ∈ tx.data.toList.map SszType.toValue) => by
+    have one := size_of_representable_uint (bEach v hv)
+    show 1 ≤ bSizes v + offsetWidth _
+    omega
+  simp only [List.length_map, Array.length_toList] at bCount
+  omega
+
+/-- From Gloas, on mainnet and minimal, the block hash of an envelope whose payload encodes.
+
+It exists exactly when its requests make a list and no transaction is empty.
+
+The presets fix the Bloom filter and the extra data, and the SSZ encoding bounds the lists. -/
+theorem envelopeBlockHash_isSome_iff_of_presets
+    (presets : preset = .mainnet ∨ preset = .minimal)
+    {envelope : Consensus.ExecutionPayloadEnvelope preset fork} (gloas : .glamsterdam ≤ fork)
+    (encoded : ∃ bytes, Serialization.Ssz.SszType.serialize envelope.payload = .ok bytes) :
+    (envelopeBlockHash envelope).isSome ↔
+      (∃ requests, Consensus.getExecutionRequestsList envelope.executionRequests = .ok requests) ∧
+        envelope.payload.hasEmptyTransaction = false := by
+  have bloom : preset.BYTES_PER_LOGS_BLOOM.toNat = 256 := by
+    rcases presets with rfl | rfl <;> decide
+  have extra : preset.MAX_EXTRA_DATA_BYTES.toNat < 2 ^ 32 := by
+    rcases presets with rfl | rfl <;> decide
+  have : NeZero preset.BYTES_PER_LOGS_BLOOM.toNat := ⟨by rw [bloom]; decide⟩
+  -- The SSZ encoding bounds the lists of the payload.
+  obtain ⟨fewTransactions, shortTransactions, fewWithdrawals⟩ := bounds_of_serialize gloas encoded
+  exact envelopeBlockHash_isSome_iff gloas bloom extra fewTransactions shortTransactions
+    fewWithdrawals
+
+open Serialization.Ssz in
+/-- From Gloas, on mainnet and minimal, the block hash of an envelope that encodes.
+
+It exists exactly when no transaction is empty, since the requests of the envelope encode too. -/
+theorem envelopeBlockHash_isSome_iff_of_serialize
+    (presets : preset = .mainnet ∨ preset = .minimal)
+    {envelope : Consensus.ExecutionPayloadEnvelope preset fork} (gloas : .glamsterdam ≤ fork)
+    (encoded : ∃ bytes, SszType.serialize envelope = .ok bytes) :
+    (envelopeBlockHash envelope).isSome ↔ envelope.payload.hasEmptyTransaction = false := by
+  have bloom : preset.BYTES_PER_LOGS_BLOOM.toNat = 256 := by
+    rcases presets with rfl | rfl <;> decide
+  have : NeZero preset.BYTES_PER_LOGS_BLOOM.toNat := ⟨by rw [bloom]; decide⟩
+  obtain ⟨bytes, wrote⟩ := encoded
+  rw [SszType.serialize_ok_iff] at wrote
+  have sized := representable_of_serialize _ _ _ wrote
+  simp only [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at sized
+  -- The payload and the requests are fields of the envelope, so they encode too.
+  obtain ⟨sizes, each⟩ := progressiveContainer_of_representable sized
+  simp only [List.zip_cons_cons, List.forall_mem_cons] at each
+  obtain ⟨payload, requests, -⟩ := each
+  rw [envelopeBlockHash_isSome_iff_of_presets presets gloas
+    (SszType.serialize_exists_ok_of_representable payload)]
+  simp [Consensus.getExecutionRequestsList_exists_ok
+    (SszType.serialize_exists_ok_of_representable requests)]
+
+open Serialization.Ssz in
+/-- From Gloas, on mainnet and minimal, the block hash of a signed envelope read from bytes.
+
+It exists exactly when no transaction is empty, a check that gossip makes before the hash. -/
+theorem envelopeBlockHash_isSome_iff_of_deserialize
+    (presets : preset = .mainnet ∨ preset = .minimal)
+    {signed : Consensus.SignedExecutionPayloadEnvelope preset fork} {data : ByteArray}
+    (gloas : .glamsterdam ≤ fork)
+    (read : SszType.deserialize (Consensus.SignedExecutionPayloadEnvelope preset fork) data =
+      .ok signed) :
+    (envelopeBlockHash signed.message).isSome ↔
+      signed.message.payload.hasEmptyTransaction = false := by
+  have bloom : preset.BYTES_PER_LOGS_BLOOM.toNat = 256 := by
+    rcases presets with rfl | rfl <;> decide
+  have : NeZero preset.BYTES_PER_LOGS_BLOOM.toNat := ⟨by rw [bloom]; decide⟩
+  -- Bytes that decode are the bytes of the signed envelope.
+  have wrote := SszType.serialize_ok_iff.mp (SszType.serialize_deserialize read)
+  have sized := representable_of_serialize _ _ _ wrote
+  simp only [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at sized
+  -- The envelope is a field of the signed envelope, so it encodes too.
+  obtain ⟨sizes, each⟩ := container_of_representable sized
+  simp only [List.zip_cons_cons, List.forall_mem_cons] at each
+  obtain ⟨message, -⟩ := each
+  exact envelopeBlockHash_isSome_iff_of_serialize presets gloas
+    (SszType.serialize_exists_ok_of_representable message)
+
+/-- From Gloas, on mainnet and minimal, the execution layer accepts no payload without a block hash.
+
+It does not accept the request that the envelope makes, for any blob commitments. -/
+theorem verifyAndNotifyNewPayload_ne_of_envelopeBlockHash_eq_none
+    (presets : preset = .mainnet ∨ preset = .minimal)
+    {envelope : Consensus.ExecutionPayloadEnvelope preset fork} (gloas : .glamsterdam ≤ fork)
+    (encoded : ∃ bytes, Serialization.Ssz.SszType.serialize envelope.payload = .ok bytes)
+    (noHash : envelopeBlockHash envelope = none) {chain : Execution.Blocks.BlockChain}
+    (commitments : Array Cryptography.Kzg.KZGCommitment)
+    (bound : commitments.size ≤ preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat) :
+    (executionEngine chain).verifyAndNotifyNewPayload
+      (envelope.newPayloadRequest commitments bound) ≠ .ok true := by
+  intro accepted
+  -- An accepted request has its requests and a block, so no transaction is empty.
+  obtain ⟨requests, hreq, f, b, hb, -⟩ := executionEngine_accepts_iff.1 accepted
+  have hempty := hasEmptyTransaction_of_payloadBlock hb
+  have hsome := (envelopeBlockHash_isSome_iff_of_presets presets gloas encoded).2
+  rw [noHash] at hsome
+  have electra : Fork.pectra ≤ fork := Nat.le_trans (by decide) gloas
+  simp only [Consensus.NewPayloadRequest.requestsList, bind, Except.bind] at hreq
+  revert hsome hreq
+  -- The requests of the envelope make a list, so the block hash would exist.
+  cases h : Consensus.getExecutionRequestsList envelope.executionRequests with
+  | error e =>
+    intro hr _
+    simp only [Consensus.ExecutionPayloadEnvelope.newPayloadRequest, dite_eq_left electra, h] at hr
+    cases hr
+  | ok r => intro _ hsome; exact absurd (hsome ⟨⟨r, rfl⟩, hempty⟩) (by simp)
 
 end EthLib.Engine

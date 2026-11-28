@@ -28,8 +28,7 @@ open EthLib.Serialization.Rlp
 instance : LawfulCodec ForkId where
   ofItem_toItem id := by
     show ForkId.ofItem (ForkId.toItem id) = _
-    simp [ForkId.ofItem, ForkId.toItem, Item.fields, Item.toItems, Item.field_toItem, bind,
-      Except.bind, pure, Except.pure]
+    simp_fixed_list_roundtrip ForkId.ofItem ForkId.toItem
   toItem_of_ofItem {item id} h := by
     change ForkId.ofItem item = .ok id at h
     unfold ForkId.ofItem at h
