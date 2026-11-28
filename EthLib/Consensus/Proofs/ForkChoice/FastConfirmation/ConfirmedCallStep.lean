@@ -632,15 +632,9 @@ private theorem finalized_invariant {Δ : ℕ} {anchor : Store preset fork}
     obtain ⟨slot', begin, slotOk', -, beginOk, atSlot⟩ := ctx.atSlots index n indexOk
     have sameSlot : slot' = slot := Except.ok.inj (slotOk'.symm.trans slotOk)
     subst sameSlot
-    rcases e.finalized_ancestor_of_heads_or_evidence pre ctx.genesis ctx.parameters ctx.sync
-        ctx.admitted ctx.fits ctx.anchored ctx.start ctx.anchorSlot ctx.anchorBoundary ctx.slots
-        ctx.bounded ctx.roots ctx.absent ctx.heldEarly ctx.enough ctx.terminal ctx.caller honest
-        beginOk atSlot nextOk followingOk (by omega) (by omega) upToDate headOk with
-      covered | collision | ⟨a', ha', b', hb', i', j', hi', hj', le, unread, -⟩
-    · exact covered
-    -- The run's agreement and finality reads exclude the two alternatives.
-    · exact absurd collision (e.not_honestCollision_of_agree good.blocks)
-    · exact absurd (good.finality a' ha' b' hb' i' j' hi' hj' le) unread
+    exact e.finalized_ancestor_of_heads ctx.sync ctx.slots ctx.positive ctx.window ctx.admitted
+      ctx.fits ctx.anchored ctx.sound ctx.anchorSlot ctx.start ctx.roots good.blocks good.finality
+      ctx.caller honest beginOk atSlot nextOk followingOk (by omega) (by omega) upToDate headOk
   · intro epoch rootEpoch epochOk rootOk recent
     obtain ⟨other, otherOk, low, lagged⟩ := old epoch epochOk
     rw [rootOk, Except.ok.injEq] at otherOk

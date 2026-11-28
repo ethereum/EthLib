@@ -10,6 +10,8 @@ The finality companion supplies the finalized-prefix family or explicit evidence
 Source surplus reads the family only within one store.
 
 It needs each receiver's own finalized checkpoint on the chain of its own justified checkpoint.
+
+It also proves that the fallback to the finalized block stays on up-to-date honest heads.
 -/
 
 namespace EthLib.Consensus.Models.Network
@@ -235,11 +237,7 @@ public theorem Execution.crossStoreFinality_or_evidence {anchor : Store preset f
 
 /-- A block and state an honest sender holds reach each up-to-date honest receiver a delay later.
 
-The sender reads the receiver's finalized checkpoint at the block; both events are by `last`.
-
-It takes synchrony, admission, agreed blocks, nonzero held roots, nonempty epochs and root history.
-
-All honest stores start at one initialized invariant anchor with matching slots. -/
+The sender reads the receiver's finalized checkpoint at the block; both events are by `last`. -/
 public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset fork} {last : ℕ}
     (sync : e.Synchronous Δ) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
@@ -282,15 +280,7 @@ public theorem Execution.carrier_delivered {Δ : ℕ} {anchor : Store preset for
   · obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
     exact absurd (agree a ha b hb i j hi hj r left right leftFound rightFound) different
 
-/-- A delay on, an honest receiver's justified epoch is at least an honest sender's finalized epoch.
-
-The receiver is up to date by `last`; honest stores share an initialized anchor and agree on blocks.
-
-By `last`, honest justified roots read honest finalized checkpoints at lower or equal epochs.
-
-It assumes synchrony, admission, nonzero held roots and a slot-matched invariant anchor.
-
-Slot duration is positive, epochs are nonempty and root history spans at least two epochs. -/
+/-- A delay later, each up-to-date honest receiver has justified a sender's finalized epoch. -/
 private theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {anchor : Store preset fork}
     {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
@@ -304,7 +294,7 @@ private theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {ancho
       ∀ (r : Root) (left right : BeaconBlock preset fork),
       ((e.world i).state a).blocks[r]? = some left →
       ((e.world j).state b).blocks[r]? = some right → left = right)
-    -- The finalized checkpoint of each receiver must be read at the justified root of each sender.
+    -- Through `last`, a justified root reads each honest finalized checkpoint of no later epoch.
     (crossFinal : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
       ((e.world i).state a).finalizedCheckpoint.epoch ≤
         ((e.world j).state b).justifiedCheckpoint.epoch →
@@ -378,58 +368,40 @@ private theorem Execution.finalized_epoch_le_justified_of_late {Δ : ℕ} {ancho
     exact UInt64.le_trans finalLe ((forward w receiver k).justified_le_of_pulledUp sound positive
       slots currentWOk blockHeld stateHeld run (UInt64.lt_of_lt_of_le earlier epochLe))
 
-/-- An honest caller's slot-start finalized root is on up-to-date honest heads, barring evidence.
-
-It takes a genesis run, a slot-matched epoch-start anchor, synchrony, admission and fitting delays.
-
-It assumes preset parameters, positive slot duration, store/stake bounds and nonzero held roots.
-
-It needs successful slot, start and head reads, with the head read from the next start to `last`.
-
-Honest stores start at the common anchor and, by `last`, hold only states before the next fork.
-
-Through `last` they lack the anchor's parent, and each store epoch they read is at most the horizon.
-
-Runs from genesis via the anchor to their held states by `last` meet the horizon's run stake floor.
-
-Such held states of epochs from genesis plus two to the horizon plus one meet the terminal floor. -/
-public theorem Execution.finalized_ancestor_of_heads_or_evidence
-    {Δ last : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
-    (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)
-    (parameters : DirectSafety.Parameters preset) (sync : e.Synchronous Δ)
+/-- Given agreement and finality reads, a caller's finalized root is on later up-to-date heads. -/
+public theorem Execution.finalized_ancestor_of_heads {Δ last : ℕ} {anchor : Store preset fork}
+    (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (admitted : BlocksAdmitted e 0 Δ last) (fits : DelayFits fork config genesisTimeMs Δ)
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
-    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (slots : 0 < config.SLOT_DURATION_MS) (bounded : HonestStoreEpochsBounded (e := e) horizon last)
-    (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
-    (early : HeldStatesBeforeUpgrade (e := e) last)
-    (enough : HeldRunStakeFloor (e := e) pre horizon last)
-    (terminal : HeldTerminalStakeFloor (e := e) horizon last)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (start : ∀ w ∈ J, e.start w = anchor) (roots : HeldBlockStateRootsNonzero (e := e) last)
+    -- Through `last`, honest stores agree on the block at each common root.
+    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
+      ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state a).blocks[r]? = some left →
+      ((e.world j).state b).blocks[r]? = some right → left = right)
+    -- Through `last`, a justified root reads each honest finalized checkpoint of no later epoch.
+    (crossFinal : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
+      ((e.world i).state a).finalizedCheckpoint.epoch ≤
+        ((e.world j).state b).justifiedCheckpoint.epoch →
+      ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state a).finalizedCheckpoint.root)
     {u w : ValidatorIndex} (caller : u ∈ J) (receiver : w ∈ J) {n k : ℕ}
     {s next : Slot} {begin following : UInt64}
+    -- The caller's event is at the computed start of slot `s`.
     (beginOk : computeTimeAtSlotMs config genesisTimeMs s = .ok begin)
     (atStart : (e.world n).time = begin.toNat) (nextOk : addChecked s 1 = .ok next)
+    -- The receiver's event is from the start of the next slot through `last`.
     (followingOk : computeTimeAtSlotMs config genesisTimeMs next = .ok following)
     (afterNext : following.toNat ≤ (e.world k).time) (byLast : (e.world k).time ≤ last)
     (ready : UpToDate config checks sources (e.world k).time ((e.world k).view w)
       ((e.world k).state w))
     {head : ForkChoiceNode} (headOk : ((e.world k).state w).getHead config = .ok head) :
     ((e.world k).state w).isAncestor head
-        ⟨((e.world n).state u).finalizedCheckpoint.root, .pending⟩ = .ok true ∨
-      HonestCollision (e := e) last ∨ CrossStoreDirectSafetyEvidence (e := e) pre last := by
-  have sound := (DirectSafety.run_justified_separated pre genesis).1
-  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
-  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
-    have := parameters.roots
-    omega
-  rcases e.blocksAgree_or_collision last with agree | collision
-  swap
-  · exact .inr (.inl collision)
-  rcases e.crossStoreFinality_or_evidence anchored start anchorSlot boundary slots bounded roots
-      absent parameters genesis pre early enough terminal with crossFinal | direct
-  swap
-  · exact .inr (.inr direct)
+        ⟨((e.world n).state u).finalizedCheckpoint.root, .pending⟩ = .ok true := by
   -- The caller is at its slot start, a delay before the next slot's start.
   obtain ⟨due, dueOk⟩ := fits.1
   have fit := fits.2 s next begin due following nextOk beginOk dueOk followingOk
@@ -443,6 +415,61 @@ public theorem Execution.finalized_ancestor_of_heads_or_evidence
   obtain ⟨-, finalBlock, -, finalFound, -, below⟩ := Store.isAncestor_of_getCheckpointBlock read
   have headDescends := Store.isAncestor_getHead headOk
   obtain ⟨justifiedBlock, justifiedFound⟩ := Store.held_of_isAncestor headDescends
-  exact .inl (Store.isAncestor_trans justifiedFound finalFound headDescends below)
+  exact Store.isAncestor_trans justifiedFound finalFound headDescends below
+
+/-- From the next slot, up-to-date honest heads descend from an honest caller's finalized root.
+
+Otherwise two honest stores collide, or cross-store direct-safety evidence holds.
+
+That evidence counts drift from the anchor, so enough churn since then makes it hold. -/
+public theorem Execution.finalized_ancestor_of_heads_or_evidence
+    {Δ last : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
+    -- The anchor state is reached by a run from genesis.
+    (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)
+    (parameters : DirectSafety.Parameters preset) (sync : e.Synchronous Δ)
+    (admitted : BlocksAdmitted e 0 Δ last) (fits : DelayFits fork config genesisTimeMs Δ)
+    -- Honest stores start from the anchor, whose block and state share a slot that starts an epoch.
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (slots : 0 < config.SLOT_DURATION_MS)
+    -- Through `last`, honest stores read epochs within the horizon and hold nonzero state roots.
+    --
+    -- They lack the anchor's parent, hold states before the next fork and meet both stake floors.
+    (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
+    (early : HeldStatesBeforeUpgrade (e := e) last)
+    (enough : HeldRunStakeFloor (e := e) pre horizon last)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon last)
+    {u w : ValidatorIndex} (caller : u ∈ J) (receiver : w ∈ J) {n k : ℕ}
+    {s next : Slot} {begin following : UInt64}
+    -- The caller's event is at the computed start of slot `s`.
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs s = .ok begin)
+    (atStart : (e.world n).time = begin.toNat) (nextOk : addChecked s 1 = .ok next)
+    -- The receiver's event is from the start of the next slot through `last`.
+    (followingOk : computeTimeAtSlotMs config genesisTimeMs next = .ok following)
+    (afterNext : following.toNat ≤ (e.world k).time) (byLast : (e.world k).time ≤ last)
+    (ready : UpToDate config checks sources (e.world k).time ((e.world k).view w)
+      ((e.world k).state w))
+    {head : ForkChoiceNode} (headOk : ((e.world k).state w).getHead config = .ok head) :
+    ((e.world k).state w).isAncestor head
+        ⟨((e.world n).state u).finalizedCheckpoint.root, .pending⟩ = .ok true ∨
+      HonestCollision (e := e) last ∨ CrossStoreDirectSafetyEvidence (e := e) pre last := by
+  have sound := (DirectSafety.run_justified_separated pre genesis).1
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
+  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+    have := parameters.roots
+    omega
+  -- Honest stores agree on blocks and read finality across stores, unless evidence holds.
+  rcases e.blocksAgree_or_collision last with agree | collision
+  swap
+  · exact .inr (.inl collision)
+  rcases e.crossStoreFinality_or_evidence anchored start anchorSlot boundary slots bounded roots
+      absent parameters genesis pre early enough terminal with crossFinal | direct
+  swap
+  · exact .inr (.inr direct)
+  exact .inl (e.finalized_ancestor_of_heads sync slots positive window admitted fits anchored sound
+    anchorSlot start roots agree crossFinal caller receiver beginOk atStart nextOk followingOk
+    afterNext byLast ready headOk)
 
 end EthLib.Consensus.Models.Network
