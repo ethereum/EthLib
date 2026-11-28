@@ -1352,6 +1352,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the KZG opening check multiplies the proof by `z` in `G1`, in place of the generator of `G2` ([#2479](https://github.com/ethereum/EthLib/issues/2479)).
+  `Kzg.verifyKzgProofWith` (`Cryptography/Kzg/Core.lean`) checks `e(P - [y] + [z] proof, -[1]) * e(proof, [s]) = 1`, which is the former check by bilinearity.
+  `Kzg.verifyKzgProofWith_iff` keeps its statement; a proof that unfolds the definition sees the new pairs.
+
 - In Lean, the scalar product of `G1` and `G2` runs left to right on the non-adjacent form of the scalar, so it adds about a third as often as the bits, and with the mixed formulas on a point with `Z = 1` ([#2478](https://github.com/ethereum/EthLib/issues/2478)).
   `G1.mulNat` (`Cryptography/Bls/G1.lean`) runs the new `G1.mulNatSteps` by structural recursion, so the kernel evaluates it, and it gives the same points as before with other Jacobian coordinates.
   `G1.mulNat_def`, `G1.mulNatAux`, `G1.mulNatAux_eq` and `G1.map_mulNatAux` (`Cryptography/Proofs/Bls/CurveMap.lean`), and their `G2` names, are removed; `G1.map_mulNatSteps` is new.
