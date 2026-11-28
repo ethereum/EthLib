@@ -566,10 +566,6 @@ def dueConsolidationCarry (x : ForkedBeaconState preset) (high : Nat) : Nat :=
       horizonEnd x high
   then consolidationBalanceCarry x else 0
 
-/-- The exit balance carry if the exit queue's start falls within the window, and zero otherwise. -/
-def dueExitCarry (x : ForkedBeaconState preset) (high : Nat) : Nat :=
-  if exitQueueStart x ≤ horizonEnd x high then exitBalanceCarry x else 0
-
 /-- The excess of some pending consolidation sources at `x`, and zero before Electra.
 
 A source counts when it is inactive at `x` and withdrawable within the window.
@@ -697,12 +693,19 @@ def creditBudget (x : ForkedBeaconState preset) (high : Nat) :=
 
 /-- The stake paid out in the window.
 
-It is the due partials, the exit carry and the exits after the queue start. -/
+It is the due partials, then the exit carry and the exit capacity that opens after the queue start.
+
+A call on the exit churn counts once withdrawable, so the capacity ends a withdrawal delay early. -/
 def withdrawalBudget (x : ForkedBeaconState preset) (high : Nat) :=
-  duePartialWithdrawals x (driftHorizon x high) + dueExitCarry x high +
-    (((List.range (driftHorizon x high + 2)).filter
-      (max (exitQueueStart x - (getCurrentEpoch x.state).toNat)
-        (preElectraEpochs config x high) ≤ ·)).map (exitFlowAt (config := config) x high)).sum
+  duePartialWithdrawals x (driftHorizon x high) +
+    -- The carry and the capacity count only if the queue's start plus the delay is in the window.
+    if exitQueueStart x + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤ horizonEnd x high then
+      exitBalanceCarry x +
+        ∑ n ∈ Finset.Ico (max ((getCurrentEpoch x.state).toNat + preElectraEpochs config x high)
+            (exitQueueStart x + 1))
+          (horizonEnd x high - config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat + 1),
+          exitFlowAt (config := config) x high (n - (getCurrentEpoch x.state).toNat)
+    else 0
 
 /-- The effective-balance rounding of downward hysteresis over the window, in Gwei.
 
