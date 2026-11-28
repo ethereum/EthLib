@@ -23,7 +23,6 @@ The EIPs that add or change an instruction define it:
 - [EIP-2681][eip2681], the greatest nonce
 - [EIP-2929][eip2929], the access to the new address
 - [EIP-3860][eip3860], the price and the limit of init code
-- [EIP-7610][eip7610], no creation at an address with storage, in Last Call
 - [EIP-8037][eip8037], the state gas of a new account, in Last Call
 - [EIP-8038][eip8038], the price of a creation, in Last Call
 
@@ -36,7 +35,6 @@ The EIPs that add or change an instruction define it:
 [eip2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
 [eip3860]: https://eips.ethereum.org/EIPS/eip-3860#specification
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts
 [eip8038]: https://eips.ethereum.org/EIPS/eip-8038#createcreate2
 -/
@@ -158,9 +156,7 @@ def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
       --
       -- The nonce of the sender grows by one in that case too.
       --
-      -- An address with storage gets no message either, by EIP-7610.
-      --
-      -- EIP-7610 applies at every fork back to Frontier.
+      -- Storage alone causes no collision, and the message wipes it.
       --
       -- The nonce grows on both branches, so it grows once here, before the branch.
       let deployable := evm.state.accountDeployable address
@@ -192,10 +188,6 @@ def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
         -- A collision keeps the grant used and pushes 0.
         --
         -- EIP-8037: on an address collision, the state gas of the new account is refilled.
-        --
-        -- EIP-8037 says that storage alone causes no collision.
-        --
-        -- With storage alone a target is a collision here, by EIP-7610, and it was charged.
         let evm ← pushWord (refillStateGas evm newAccount) 0
         return .next (advance evm)
 

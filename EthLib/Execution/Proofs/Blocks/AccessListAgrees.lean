@@ -13,7 +13,7 @@ Run one of its transactions, or one of its other calls, on another block state i
 
 When that state agrees with the one the call ran on, at what the list names, the call runs alike.
 
-A transaction also needs both states to agree on code, and on each named empty account's storage.
+A transaction also needs both states to agree on code.
 
 The other state must also hold the code of every account.
 
@@ -28,20 +28,8 @@ namespace EthLib.Execution.Blocks
 
 open EthLib.Base
 open EthLib.Execution.Evm
-open EthLib.Execution.State (BlockState EMPTY_CODE_HASH TransactionState)
+open EthLib.Execution.State (BlockState TransactionState)
 open EthLib.Execution.Transactions
-
-/-- The named accounts that have nonce 0 and no code in the block state.
-
-A creation at such an account reads its whole storage, by [EIP-7610][eip7610].
-
-The list names no key of that storage.
-
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
-def BlockAccessList.NamesCandidate (bal : BlockAccessList) (block : BlockState)
-    (address : Address) : Prop :=
-  bal.NamesAccount address ∧ ((TransactionState.ofBlock block).getAccount address).nonce = 0 ∧
-    ((TransactionState.ofBlock block).getAccount address).codeHash = EMPTY_CODE_HASH
 
 /-- The code hashes in the block state of the accounts that the list names. -/
 def BlockAccessList.NamesCode (bal : BlockAccessList) (block : BlockState)
@@ -53,28 +41,20 @@ def BlockAccessList.NamesCode (bal : BlockAccessList) (block : BlockState)
 
 They agree on each named account and named storage key.
 
-They agree on the whole storage of each named account with nonce 0 and no code in the first.
-
 They agree on the code under the code hash, in the first block state, of each named account. -/
 abbrev _root_.EthLib.Execution.State.BlockState.AgreesOnList (bal : BlockAccessList)
     (block other : BlockState) : Prop :=
   -- The list names no code.
-  --
-  -- It names no storage key of an account with nonce 0 and no code.
-  BlockState.AgreesOn bal.NamesAccount (bal.NamesCandidate block) bal.NamesKey
-    (bal.NamesCode block) block other
+  BlockState.AgreesOn bal.NamesAccount bal.NamesKey (bal.NamesCode block) block other
 
 /-- Two transaction states agree on what a list names, for runs from the block state `block`.
 
 They agree on each named account and named storage key, with the same tracker.
 
-They agree on the whole storage of each named account with nonce 0 and no code in `block`.
-
 They agree on the code under the code hash, in `block`, of each named account. -/
 abbrev _root_.EthLib.Execution.State.TransactionState.AgreesOnList (bal : BlockAccessList)
     (block : BlockState) (tx other : TransactionState) : Prop :=
-  TransactionState.AgreesOn bal.NamesAccount (bal.NamesCandidate block) bal.NamesKey
-    (bal.NamesCode block) tx other
+  TransactionState.AgreesOn bal.NamesAccount bal.NamesKey (bal.NamesCode block) tx other
 
 /-- A list that covers a transaction state names everything that the state read. -/
 private theorem BlockAccessList.Covers.readsIn {bal : BlockAccessList} {tx : TransactionState}
@@ -181,9 +161,8 @@ theorem stateTransition_transaction_agrees {fork : Fork} {chain : BlockChain}
   have hFresh := TransactionState.AgreesOn.ofBlock hagree
   refine ⟨checkInclusion_of_sender hIncluded (hFresh.getAccount_eq (.inr hSender))
     (hFresh.getCode_eq (.inr (.inr ⟨_, hSender, rfl⟩))), ?_⟩
-  exact processTransaction_agrees hParis
-    ⟨fun address h => ⟨address, h, rfl⟩, fun _ h hnonce hcode => ⟨h, hnonce, hcode⟩⟩
-    hagree hcodes hRun hCovers.readsIn
+  exact processTransaction_agrees hParis ⟨fun address h => ⟨address, h, rfl⟩⟩ hagree hcodes hRun
+    hCovers.readsIn
 
 /-- From Glamsterdam, the calls of a block that passes depend only on what its list names.
 
@@ -251,8 +230,8 @@ theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
     ⟨out, mid, out', hOut, hMid, hOut', hCovers, hCovers'⟩, hStart, hTx, -,
     ⟨tx, hWithdrawn, hJoin, hCoversTx⟩, hRequests⟩ := stateTransition_accessList_covers hFork h
   have covers (b : BlockState) : CoversBlock b output.body.builder.build.NamesAccount
-      (output.body.builder.build.NamesCandidate b) (output.body.builder.build.NamesCode b) :=
-    ⟨fun address h => ⟨address, h, rfl⟩, fun _ h hnonce hcode => ⟨h, hnonce, hcode⟩⟩
+      (output.body.builder.build.NamesCode b) :=
+    ⟨fun address h => ⟨address, h, rfl⟩⟩
   refine ⟨hashes, env, output, body, txOutput, withdrawn, hHashes, hEnv, hOutput, hBal,
     ⟨out, mid, out', hOut, hMid, hOut',
       fun _ hagree => systemCall_agrees (covers _) hagree hOut hCovers.readsIn,

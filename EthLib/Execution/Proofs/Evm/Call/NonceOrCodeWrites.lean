@@ -32,6 +32,13 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 def HasNonceOrCode (tx : TransactionState) (address : Address) : Prop :=
   1 ≤ (tx.getAccount address).nonce ∨ (tx.getAccount address).codeHash ≠ EMPTY_CODE_HASH
 
+/-- An account has no nonce or code exactly when its nonce is 0 and its code is empty. -/
+theorem not_hasNonceOrCode_iff {tx : TransactionState} {address : Address} :
+    ¬HasNonceOrCode tx address ↔
+      (tx.getAccount address).nonce = 0 ∧ (tx.getAccount address).codeHash = EMPTY_CODE_HASH := by
+  unfold HasNonceOrCode
+  rw [not_or, Nat.not_le, Nat.lt_one_iff, Classical.not_not]
+
 /-- An account with a nonce or code is not the empty account. -/
 theorem HasNonceOrCode.ne_empty {tx : TransactionState} {address : Address}
     (h : HasNonceOrCode tx address) : tx.getAccount address ≠ EMPTY_ACCOUNT := by

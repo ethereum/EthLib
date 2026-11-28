@@ -145,9 +145,7 @@ def prepareCreation (fork : Fork) (state : TransactionState) (address : Address)
     Except EvmError TransactionState :=
   -- The storage of the new account is wiped, and the account is recorded as created.
   --
-  -- Its callers create only at an address whose storage reads zero, by EIP-7610.
-  --
-  -- So the wipe changes no word.
+  -- A new account has empty storage, by the Yellow Paper (§7), even where the address held some.
   let state := (state.destroyStorage address).markAccountCreated address
   -- From Spurious Dragon, by EIP-161, its nonce grows by one.
   if fork ≥ .spuriousDragon then (state.incrementNonce fork address).mapError .state

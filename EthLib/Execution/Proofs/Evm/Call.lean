@@ -4,7 +4,6 @@ public import EthLib.Execution.Proofs.Evm.Call.AccessesGrow
 public import EthLib.Execution.Proofs.Evm.Call.AccessesRun
 public import EthLib.Execution.Proofs.Evm.Call.Burn
 public import EthLib.Execution.Proofs.Evm.Call.BurnRun
-public import EthLib.Execution.Proofs.Evm.Call.Candidate
 public import EthLib.Execution.Proofs.Evm.Call.ChildGas
 public import EthLib.Execution.Proofs.Evm.Call.CodeOrigin
 public import EthLib.Execution.Proofs.Evm.Call.CodeRules

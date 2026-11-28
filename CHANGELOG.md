@@ -1357,6 +1357,15 @@ Not yet released.
   Before Fusaka, such a call costs the least price, whatever the exponent length.
   The definition no longer relies on the compiler to skip reading the exponent.
 
+- A creation at an address with storage but no code and nonce 0 now succeeds and wipes that storage, at every fork ([#4960](https://github.com/ethereum/EthLib/issues/4960)).
+  `State.TransactionState.accountDeployable` reads only the nonce and the code, by EIP-684, since no fork activates EIP-7610.
+  `accountHasStorage`, `accountHasStorage_eq_true_iff`, `accountHasStorage_congr`, `AgreesOn.accountHasStorage_eq` and `AgreesOn.accountDeployable_eq_of_tracker` are removed, `accountDeployable_eq_true_iff` loses its storage conjunct, and `accountDeployable_congr` and `AgreesOn.accountDeployable_eq` lose their storage hypothesis.
+  The rebuild property of a block access list (`State.RebuildInvariant`, `Evm.RebuildEnd`) now asks that no account with nonce 0 and no code hold storage, not only no empty account, since a creation wipes such storage and the list does not record it.
+  `RebuildState.blockStorage_of_empty` becomes `RebuildState.blockStorage_of_not_hasNonceOrCode`, and `Evm.not_hasNonceOrCode_iff` is new.
+  The noninterference proofs lose the sets that a creation read under EIP-7610: `CandidatesIn`, `TransactionState.candidateStorage`, `TransactionState.NoNewCandidate` and its lemmas, `BlockAccessList.NamesCandidate`, the files `Proofs/Evm/Call/Candidate.lean` and `Proofs/Transactions/Candidate.lean`, and the `allStorage` set of `AgreesOn`, `FrameAgrees`, `StepAgrees` and `CoversBlock`.
+  `step_agrees`, `messageInstruction_agrees`, `processMessage_agrees`, `processCreateMessage_agrees`, `prepareFirstFrame_agrees`, `prepareFirstFrame_agrees_error` and `processMessageCall_agrees` lose their hypothesis on those sets.
+  `Logic.createKind_stored`, `Logic.create_stored` and `Logic.create2_stored` lose their hypothesis that no slot fact gives the new address a word.
+
 - In Lean, the relation that a state reads as another moves from `Logic.ReadsAs` (`Execution/Proofs/Evm/Logic/Keeps.lean`) to `State.TransactionState.ReadsAs` (`Execution/Proofs/State/Frame.lean`), with its definition unchanged.
   Its lemmas `refl`, `trans`, `recordAccountRead` and `recordStorageRead` move with it, and `routeState` keeps its file under the new namespace.
   The theorems on a failed call, in files that `Logic/Keeps.lean` imports, then state it by name.

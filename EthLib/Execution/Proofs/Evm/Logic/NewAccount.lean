@@ -227,11 +227,7 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     (haddr : creationAddress message.currentTarget (base.getAccount message.currentTarget).nonce
       (if create2 then some salt else none) init = .ok address)
     -- The new address holds no code and a nonce of 0 in the base state, as EIP-684 asks.
-    --
-    -- Its storage is empty there, as EIP-7610 asks.
     (hdeploy : base.accountDeployable address = true)
-    -- No fact of a slot gives it a word other than zero.
-    (hempty : ∀ fact ∈ slots, fact.address = address → fact.current = 0)
     -- The frame needs the price of the creation, whose base is 32000 before Glamsterdam.
     (hgas : createBaseCost fork +
         -- CREATE2 also pays 6 gas per word to hash the init code, by EIP-1014.
@@ -286,17 +282,7 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     fun a => hagree.getAccount List.not_mem_nil List.not_mem_nil
   have hdeploy' : evm.state.accountDeployable address = true := by
     rw [TransactionState.accountDeployable_eq_true_iff] at hdeploy ⊢
-    refine ⟨hget address ▸ hdeploy.1, hget address ▸ hdeploy.2.1, fun key => ?_⟩
-    by_cases hex : ∃ fact ∈ slots, fact.address = address ∧ U256.toBeBytes fact.key = key
-    · obtain ⟨fact, hmem, haddress, hkey⟩ := hex
-      rw [← hkey, ← haddress, (hslots fact hmem).2.1]
-      exact hempty fact hmem haddress
-    · rw [hagree.storage address key fun slot hslot => ?_]
-      · exact hdeploy.2.2 key
-      obtain ⟨fact, hmem, rfl⟩ := List.mem_map.mp hslot
-      by_cases haddress : fact.address = address
-      · exact .inr fun hkey => hex ⟨fact, hmem, haddress, hkey⟩
-      · exact .inl haddress
+    exact ⟨hget address ▸ hdeploy.1, hget address ▸ hdeploy.2⟩
   have hcreate := createKindWith (callee := callee) (create2 := create2) (value := value)
     (start := start) (size := len) (salt := salt) (rest := rest) (address := address)
     (memory := evm.memory) (gas := gas) (state := evm.state) (substate := evm.substate)
@@ -347,7 +333,6 @@ theorem create_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (haddr : creationAddress message.currentTarget (base.getAccount message.currentTarget).nonce
       none init = .ok address)
     (hdeploy : base.accountDeployable address = true)
-    (hempty : ∀ fact ∈ slots, fact.address = address → fact.current = 0)
     (hgas : createBaseCost fork + (if fork ≥ .shapella then initCodeCost len.toNat else 0) ≤ gas)
     (heffect : ∀ caller msg child, callee caller msg child →
       CreateMessage message address init value (createMessageGas fork (gas -
@@ -369,7 +354,7 @@ theorem create_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         change sure) :=
   createKind_stored (create2 := false) (salt := 0) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .create) rfl (Fork.frontier_le _)) instruction_create
-    messageInstruction_create hstatic hinput hlen hinit hbal hnonce hdepth haddr hdeploy hempty hgas
+    messageInstruction_create hstatic hinput hlen hinit hbal hnonce hdepth haddr hdeploy hgas
     heffect
 
 /-- From Berlin to before Glamsterdam, CREATE2 with the salt `salt`, from a frame of slots.
@@ -393,7 +378,6 @@ theorem create2_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     (haddr : creationAddress message.currentTarget (base.getAccount message.currentTarget).nonce
       (some salt) init = .ok address)
     (hdeploy : base.accountDeployable address = true)
-    (hempty : ∀ fact ∈ slots, fact.address = address → fact.current = 0)
     (hgas : createBaseCost fork + OPCODE_KECCAK256_PER_WORD * wordCount len.toNat +
         (if fork ≥ .shapella then initCodeCost len.toNat else 0) ≤ gas)
     (heffect : ∀ caller msg child, callee caller msg child →
@@ -419,6 +403,6 @@ theorem create2_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
   createKind_stored (create2 := true) hfork hglam hlt hbyte
     (ofByte_of_decode (op := .create2) rfl (Nat.le_trans (by decide) hfork)) instruction_create2
     (messageInstruction_create2 (Nat.le_trans (by decide) hfork)) hstatic hinput hlen hinit hbal
-    hnonce hdepth haddr hdeploy hempty hgas heffect
+    hnonce hdepth haddr hdeploy hgas heffect
 
 end EthLib.Execution.Evm.Logic

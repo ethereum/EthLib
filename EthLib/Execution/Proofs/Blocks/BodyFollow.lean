@@ -33,7 +33,7 @@ open EthLib.Execution.Transactions
 
 /-- A block state that can be rebuilt, where no account with nonce 0 has a delegation's code hash.
 
-Each code read has its hash, and no empty or missing account holds a nonzero storage word. -/
+Each code read has its hash, and no account with nonce 0 and no code holds storage. -/
 def RebuildableBlock (block : BlockState) : Prop :=
   Rebuildable block ∧ DelegationsHaveNonce (.ofBlock block)
 
@@ -79,7 +79,9 @@ theorem keepsFollowable_rebuildableBlock {fork : Fork} (hfork : .dencun ≤ fork
 
 /-- From Glamsterdam, the list that the header commits to rebuilds the state after the block.
 
-From Hegota the transition is not yet specified, so this holds from Glamsterdam up to Hegota. -/
+From Hegota the transition is not yet specified, so this holds from Glamsterdam up to Hegota.
+
+Mainnet breaks its hypothesis with 28 accounts of nonce 0 and no code that hold storage. -/
 theorem stateTransition_rebuild_of_rebuildableBlock {fork : Fork} {chain : BlockChain}
     {block : Block fork Transaction} {checkSeal : Bool} {post : State}
     -- The state before the block must be rebuildable.

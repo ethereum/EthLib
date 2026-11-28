@@ -245,13 +245,9 @@ theorem stateTransition_rebuild {chain : BlockChain} {block : Block fork Transac
     {checkSeal : Bool} {post : State} {P : BlockState → Prop} (hFork : .glamsterdam ≤ fork)
     -- The calls of the body keep a property of block states.
     --
-    -- That excludes storage at an account that is empty or missing.
+    -- That excludes storage at an account with nonce 0 and no code, or a missing one.
     --
-    -- Deleting such an account wipes its storage.
-    --
-    -- Storage at an account with a balance alone needs no exclusion.
-    --
-    -- A creation there fails, by EIP-7610.
+    -- A creation at such an account wipes its storage, and so does deleting an empty one.
     (hkeep : ∀ hashes, recentHashes chain.recent = .ok hashes →
       KeepsFollowable (blockEnvironment chain.config hashes block.header) P)
     -- The state before the block has that property.

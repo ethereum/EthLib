@@ -388,8 +388,7 @@ theorem createsFresh_resume {evm caller child after : Evm fork Meter} {message :
     refine hcaller.trans hchild fun address heq => .inl ?_
     subst heq
     -- The step that sends a creation checks first that its address has nonce 0 and no code.
-    have hd := TransactionState.accountDeployable_eq_true_iff.mp (step_eq_child_deployable h ht)
-    exact ⟨hd.1, hd.2.1⟩
+    exact TransactionState.accountDeployable_eq_true_iff.mp (step_eq_child_deployable h ht)
   · simp only [ht] at hchild
     exact hcaller.trans hchild fun _ h => h.elim
 

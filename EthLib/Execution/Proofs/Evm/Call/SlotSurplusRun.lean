@@ -238,7 +238,7 @@ private theorem child_pays {evm caller child : Evm fork StateGasMeter} {message 
   rcases ht : message.target with _ | target
   · -- A creation goes to an address with no nonce or code in the state of its caller.
     simp only [ht] at hchild ⊢
-    obtain ⟨hn0, hc0, -⟩ := TransactionState.accountDeployable_eq_true_iff.mp
+    obtain ⟨hn0, hc0⟩ := TransactionState.accountDeployable_eq_true_iff.mp
       (accountDeployable_of_create_step hcur h ht).1
     obtain ⟨⟨hk, hc⟩, hp⟩ := hchild fun hnc => hnc.elim (fun hn => by omega) (fun hc => hc hc0)
     exact ⟨hk, hc, hp⟩
