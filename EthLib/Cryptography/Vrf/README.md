@@ -144,8 +144,9 @@ So two openings that verify at two different indices, under any roots and even w
 In the random oracle model, the outputs of one secret at distinct indices are also independent uniform values (`run_outputs_evalDistEq`, `OutputRandomOracle.lean`).
 That holds for a secret and indices fixed before the oracle answers any of their output inputs.
 Over a uniform permutation in place of Keccak-f[1600], events on two such outputs hold with the product chance, up to `2^-1600 + 6 / 2^512`, below `2^-509` (`prEvent_outputs_pair_keccak256With_le_add`, `OutputPermutation.lean`).
-That holds for a secret, two different indices and an event on each output, fixed before the permutation is drawn.
-A secret hashed from a seed depends on the permutation, so that bound does not cover it.
+Over that permutation, an event on `n` such outputs holds with its chance for independent uniform values, up to `n (n - 1) / 2^1601 + (n^2 + n) / 2^512`, below `2^-447` (`prEvent_outputs_keccak256With_le_add`).
+Both bounds hold for a secret, the indices and the events, fixed before the permutation is drawn.
+A secret hashed from a seed depends on the permutation, so neither bound covers it.
 
 The same guarantees hold for a tree built from a seed (`KeyGen.lean`).
 That tree verifies at every index, with the output of that index's secret (`verify_prove`).
