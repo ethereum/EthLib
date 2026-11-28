@@ -106,7 +106,7 @@ theorem toFin_powLimbs (a : Montgomery M) (e : Limbs.T n) :
   change cast _ = cast _ ^ _
   rw [cast_toFin, cast_toFin, toZMod_powLimbs]
 
-/-- For a prime modulus, the Fermat inverse of a form is the Euclidean inverse, also at `0`. -/
+/-- For a prime modulus, the inverse of a form is the Euclidean inverse, also at `0`. -/
 theorem toFin_inv [Fact M.p.Prime] (a : Montgomery M) :
     toFin a⁻¹ = Fin.inverse (toFin a) := by
   apply cast_injective

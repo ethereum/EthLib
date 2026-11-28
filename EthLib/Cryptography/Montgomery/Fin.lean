@@ -18,9 +18,6 @@ namespace EthLib.Cryptography.Montgomery
 
 variable {n : Nat} [Words n] [Limbs n] {M : Modulus n}
 
-/-- The modulus is not zero, so `Fin p` has its literals. -/
-instance Modulus.neZero (M : Modulus n) : NeZero M.p := ⟨Nat.pos_iff_ne_zero.mp M.pos⟩
-
 /-- The Montgomery form of an element of `Fin p`. -/
 @[no_expose, inline] def ofFin (a : Fin M.p) : Montgomery M := ofNat a.val
 
