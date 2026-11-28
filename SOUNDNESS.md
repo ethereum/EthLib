@@ -4540,6 +4540,24 @@ It assumes the anchor invariant, a positive slot duration, and that an epoch has
 It also assumes that the anchor block is not after the anchor state, and that the anchor state does not hash to the zero root.
 It also assumes a history of at least two epochs of block roots, and that the store's current epoch can be read.
 
+`Store.Reachable.finalized_read` in the same file shows that a reachable store whose finalized epoch is after the anchor state's epoch reads its finalized checkpoint at some root.
+It assumes the anchor invariant, an anchor block not after the anchor state, an anchor state that does not hash to the zero root, a nonempty epoch and at least two epochs of block-root history.
+
+`Execution.observedRestart_covers_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` is the safety of the restart from the observed justified block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+The restart assumes synchrony, delayed block admission from time zero through the limit, and a delay that fits between the attestation deadline and the next slot.
+The anchor state is reached by a run from genesis.
+All honest validators start at the store initialized from the anchor state and block, whose shared slot starts an epoch.
+The slot duration is positive and the preset meets the direct-safety parameters.
+Through the limit, honest stores hold only blocks with nonzero state roots, lack the anchor's parent, and read store epochs no greater than the horizon.
+Their held states precede the next scheduled fork, and the run and terminal stake floors hold.
+
+`Execution.observedRestart_covers_or_evidence` concerns an honest validator's run from the anchor's fast-confirmation store, with the first call after the anchor state's epoch.
+The caller reads each successive slot and calls at its computed start; an epoch has more than one slot.
+At the selected call by the limit it reads its slot and replaces its base with the observed justified block.
+Through the limit, when an up-to-date honest store reads its slot and its justified epoch exceeds the anchor's justified epoch, an honest validator has signed a vote targeting that checkpoint.
+The vote is from an earlier slot and appears in a message sent by the store's event time.
+The observed block is on every up-to-date honest head from the call through the limit, unless honest stores collide or give cross-store direct-safety or justified evidence.
+
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
 The block is due from the first slot two epochs after that one.
