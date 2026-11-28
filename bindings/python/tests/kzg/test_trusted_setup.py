@@ -8,7 +8,7 @@ import pytest
 from ruamel.yaml import YAML
 
 import archives
-from ethlib.cryptography import bls
+from ethlib.cryptography import bls, kzg
 from raising import raises
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -83,9 +83,59 @@ def test_in_subgroup(name: str) -> None:
         assert decode(point) == point, f"{name}[{i}]"
 
 
+# The scalar field modulus r and primitive root of unity of BLS12-381.
+BLS_MODULUS = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+PRIMITIVE_ROOT_OF_UNITY = 7
+WIDTH = 4096
+
+
+def _bit_reverse(index: int, bits: int) -> int:
+    """Bit-reversal of `index` within `bits` bits."""
+    out = 0
+    for _ in range(bits):
+        out = (out << 1) | (index & 1)
+        index >>= 1
+    return out
+
+
+def _roots_of_unity_brp() -> list[int]:
+    """The 4096-th roots of unity in bit-reversed order."""
+    omega = pow(PRIMITIVE_ROOT_OF_UNITY, (BLS_MODULUS - 1) // WIDTH, BLS_MODULUS)
+    roots = [pow(omega, i, BLS_MODULUS) for i in range(WIDTH)]
+    return [roots[_bit_reverse(i, 12)] for i in range(WIDTH)]
+
+
 def test_not_in_subgroup_rejected() -> None:
     # A point on the curve outside the subgroup fails, so the check above is not empty.
     pubkey = YAML(typ="safe", pure=True).load(NOT_IN_G1.read_text())["input"]["pubkey"]
     with raises(bls.BlsError, "point not in subgroup") as error:
         bls.decode_g1(bytes.fromhex(pubkey))
     assert error.value.code == 7
+
+
+def test_lagrange_sum_is_monomial_zero() -> None:
+    # The Lagrange basis polynomials sum to 1, so the 4096 Lagrange points sum to [1]_1.
+    lagrange = points("g1LagrangeHex")
+    monomial = points("g1MonomialHex")
+    total = lagrange[0]
+    for point in lagrange[1:]:
+        total = bls.g1_add(total, point)
+    assert total == monomial[0]
+
+
+@pytest.mark.parametrize("degree", (0, 1, 2, 3, 7, 64, 512, 2048, 4095))
+def test_lagrange_matches_monomial_basis(degree: int) -> None:
+    # Committing to the evaluations of X^degree in Lagrange form reproduces [tau^degree]_1.
+    domain = _roots_of_unity_brp()
+    blob = b"".join(pow(w, degree, BLS_MODULUS).to_bytes(32, "big") for w in domain)
+    assert kzg.blob_to_kzg_commitment(blob) == points("g1MonomialHex")[degree]
+
+
+def test_monomial_pairing_powers() -> None:
+    # Every G2 monomial step and sampled G1 monomial steps share the same secret tau.
+    g1 = points("g1MonomialHex")
+    g2 = points("g2MonomialHex")
+    for i in range(len(g2) - 1):
+        assert bls.pairing(g1[0], g2[i + 1]) == bls.pairing(g1[1], g2[i]), f"g2[{i}]"
+    for i in (0, 1, 2, 63, 64, 511, 2047, 4094):
+        assert bls.pairing(g1[i], g2[1]) == bls.pairing(g1[i + 1], g2[0]), f"g1[{i}]"

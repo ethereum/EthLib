@@ -244,16 +244,13 @@ The KZG proofs use the proved pairing law of BLS12-381 (`pairingLaws`, `Proofs/B
   Its bytes match the pinned file that `TrustedSetupData.lean` names.
   `TrustedSetup.ofHex_valid` proves that each point of the embedded setup is on its curve,
   if the setup decodes.
-  `TrustedSetup.ofHex_torsion` proves that each monomial point of `G1` has an order that divides `r`,
-  if the setup decodes.
-  The kernel checks each of the 4096 points from its `x` coordinate.
-  No theorem says that the setup decodes, or that its points are powers of one secret.
-  `TrustedSetup.ofHex_lagrangeTorsion` proves that each Lagrange point of `G1` has an order that divides `r`,
-  if the setup decodes.
-  No theorem says that its points of `G2` lie in the subgroup.
+  No theorem says that the setup decodes, or that its points lie in the subgroup.
+  No theorem says that its Lagrange points are the inverse transform of its monomial points, or that its points are powers of one secret.
   Each KZG vector of the Python suite runs an operation that first decodes the setup.
-  The Python suite also checks that each point decodes and lies in the subgroup,
-  in `bindings/python/tests/kzg/test_trusted_setup.py`.
+  `bindings/python/tests/kzg/test_trusted_setup.py` checks that each point decodes and lies in the subgroup.
+  It also checks Lagrange-to-monomial basis identities and consecutive `G1` and `G2` pairing powers.
+  `lake exe known-answers` checks `TrustedSetup.ofHex` directly on compiled code.
+  It verifies subgroup membership for every `G1` and `G2` point, and checks that all 4096 Lagrange points equal the inverse 4096-point DFT of the monomial points.
 
 ## What the kernel cannot evaluate
 

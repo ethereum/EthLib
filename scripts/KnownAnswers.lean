@@ -3,6 +3,9 @@ module
 import EthLib.Base.Hex
 import EthLib.Consensus.Shuffle
 import EthLib.Cryptography.Hash.Sha256
+import EthLib.Cryptography.Kzg.Fft
+import EthLib.Cryptography.Kzg.Polynomials
+import EthLib.Cryptography.Kzg.TrustedSetup
 
 /-!
 # Known answers through the compiled specification
@@ -121,6 +124,39 @@ def sha256 (root : System.FilePath) : IO Tally := do
     tally := tally.add case.toString ok
   return tally
 
+/-- The embedded KZG trusted setup decodes, lies in the prime-order subgroup and matches its IDFT.
+
+Every monomial `G1` point, Lagrange `G1` point and `G2` point is checked in the subgroup.
+
+All 4096 Lagrange points are checked equal to the inverse 4096-point DFT of the monomial points. -/
+def kzgTrustedSetup : IO Tally := do
+  let mut tally : Tally := {}
+  match Cryptography.Kzg.TrustedSetup.ofHex with
+  | .error _ => return tally.add "TrustedSetup.ofHex" false
+  | .ok setup =>
+    tally := tally.add "TrustedSetup.ofHex" true
+    let n := Cryptography.Kzg.Constants.FIELD_ELEMENTS_PER_BLOB
+    for i in [:n] do
+      let p := setup.g1Monomial.toArray[i]!
+      tally := tally.add s!"g1Monomial[{i}].inSubgroup" (Cryptography.Bls.G1.inSubgroup p)
+    for i in [:n] do
+      let p := setup.g1LagrangeBrp.toArray[i]!
+      tally := tally.add s!"g1LagrangeBrp[{i}].inSubgroup" (Cryptography.Bls.G1.inSubgroup p)
+    for i in [:Cryptography.Kzg.Constants.KZG_SETUP_G2_LENGTH] do
+      let p := setup.g2Monomial.toArray[i]!
+      tally := tally.add s!"g2Monomial[{i}].inSubgroup" (Cryptography.Bls.G2.inSubgroup p)
+    let roots := Cryptography.Kzg.computeRootsOfUnity n
+    let invRoots := Array.ofFn (n := n) fun i => roots[(n - i.val) % n]!
+    let invN := (Cryptography.Bls.Fr.ofNat n).inverse
+    let raw := Cryptography.Kzg.fftG1 setup.g1Monomial.toArray invRoots
+    let scaled := raw.map fun p => Cryptography.Bls.G1.mul p invN
+    let expectedBrp := Cryptography.Kzg.BitReversal.bitReversalPermutation scaled
+    for i in [:n] do
+      let actual := Cryptography.Bls.G1.compress setup.g1LagrangeBrp.toArray[i]!
+      let expected := Cryptography.Bls.G1.compress expectedBrp[i]!
+      tally := tally.add s!"g1LagrangeBrp[{i}].idft" (actual == expected)
+    return tally
+
 /-- Run one family, print its counts and its time, and say whether it ran a case and all agreed. -/
 def report (name : String) (family : IO Tally) : IO Bool := do
   let start ← IO.monoNanosNow
@@ -138,9 +174,10 @@ end KnownAnswers
 public def main (args : List String) : IO UInt32 := do
   -- Run it as `lake exe known-answers`, optionally followed by the repository root.
   let root : System.FilePath := args.headD "."
-  -- Both families also run in the Python suite.
+  -- All three families also have checks in the Python suite.
   --
   -- Here they check the specification without the bindings.
   let a ← KnownAnswers.report "shuffling" (KnownAnswers.shuffling root)
   let b ← KnownAnswers.report "sha256" (KnownAnswers.sha256 root)
-  return if a && b then 0 else 1
+  let c ← KnownAnswers.report "kzg-trusted-setup" KnownAnswers.kzgTrustedSetup
+  return if a && b && c then 0 else 1

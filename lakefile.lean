@@ -150,15 +150,6 @@ lean_exe «known-answers» where
   srcDir := "scripts"
   root := `KnownAnswers
 
-/-- Writes the tables of affine points that the kernel checks of the Lagrange setup read.
-
-No default target builds it.
-
-`lake exe gen-setup-tables` writes them, and with `--check` it fails when one is stale. -/
-lean_exe «gen-setup-tables» where
-  srcDir := "scripts"
-  root := `GenSetupTables
-
 /-- A library of known answers that the kernel checks.
 
 Each file stays within the budget that `CONTRIBUTING.md` sets.
