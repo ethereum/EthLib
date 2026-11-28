@@ -8651,6 +8651,16 @@ So from an excess of 0, a chain needs at least 1507 full blocks under the Dencun
 On the way the fee passes the supply of ether, so no blob transaction could pay it.
 A chain configuration or a test can still start from any excess.
 
+Fast implementations keep gas, memory offsets and the call depth in machine integers, and their shortcuts hold only under bounds on the gas of a frame.
+From Fusaka, a valid transaction gives its message at most `2^24` execution gas, unless a simulation lifts the cap from Glamsterdam (`allocateGas_execution_le_txMax`, `Proofs/Transactions/Depth.lean`).
+From Berlin, a call or a creation pays at least 100 gas and passes on at most all but one 64th of the rest (`gas_le_of_step_eq_child`, `Proofs/Evm/Call/ChildGas.lean`).
+So from Fusaka every frame of a transaction that runs code holds at most `2^24` execution gas and is at depth 501 or less, so the depth check of a call or a creation never fires (`processTransactionWith_inv_of_fusaka`).
+A range of memory that is not empty halts its frame out of gas past 2,941,344 bytes, when the frame holds at most `2^24` gas with the price of its memory (`chargeGasAndMemory_eq_error_of_txMax`, `Proofs/Evm/Gas/MemoryBound.lean`).
+That the gas a frame holds plus the price of its memory stays within the gas of its message is not yet proved, so the two bounds are not joined.
+From Berlin, the same frame bound holds with the gas of the transaction in place of `2^24` (`processTransactionWith_inv_of_gasAtDepth`), so the depth bound grows with that gas.
+Before Fusaka no rule caps the gas of a transaction, only the gas limit of its block, which EthLib accepts up to any value.
+Before Berlin no theorem bounds the gas or the depth of a frame beyond the limit of 1024.
+
 A run of slots of the consensus state transition divides by constants of the preset and of the configuration, such as the slots of an epoch, the increment of an effective balance and the quotient of the churn limit.
 Python's integer division and remainder raise an error on a zero divisor, so the specification fails there.
 In Lean a division of 64-bit integers by zero returns zero and a remainder returns the dividend, so with such constants a step can succeed in EthLib where the specification fails.
