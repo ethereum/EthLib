@@ -274,6 +274,32 @@ def embedding : FieldOps.Embedding Fp2 Fp2 where
   beq_iff _ _ := beq_iff_eq
   isZero_iff _ := isZero_iff
 
+/-- Conjugation fixes zero. -/
+@[simp] theorem conjugate_zero : (0 : Fp2).conjugate = 0 := by
+  apply ext <;> apply Fp.toZMod.injective <;> simp
+
+/-- Conjugation fixes one. -/
+@[simp] theorem conjugate_one : (1 : Fp2).conjugate = 1 := by
+  apply ext <;> apply Fp.toZMod.injective <;> simp
+
+/-- Conjugation commutes with inversion. -/
+theorem conjugate_inv (a : Fp2) : a⁻¹.conjugate = a.conjugate⁻¹ := by
+  by_cases h : a = 0
+  · rw [h, inv_zero, conjugate_zero, inv_zero]
+  · have h1 : a⁻¹.conjugate * a.conjugate = 1 := by
+      rw [← conjugate_mul, inv_mul_cancel₀ h, conjugate_one]
+    exact eq_inv_of_mul_eq_one_left h1
+
+/-- Conjugation preserves the zero test. -/
+theorem conjugate_isZero (a : Fp2) : a.conjugate.isZero = a.isZero := by
+  apply Bool.eq_iff_iff.mpr
+  rw [isZero_iff, isZero_iff]
+  constructor
+  · intro h
+    rw [← conjugate_conjugate a, h, conjugate_zero]
+  · intro h
+    rw [h, conjugate_zero]
+
 /-! ## Exponentiation (`powNat`) -/
 
 theorem powNat_eq_pow (a : Fp2) (e : Nat) : powNat a e = a ^ e :=

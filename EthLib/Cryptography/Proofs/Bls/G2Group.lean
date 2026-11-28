@@ -70,6 +70,32 @@ theorem toPoint_zero : toPoint zero = 0 := G1.Law.toPoint_zero Fp2.embedding bTw
 theorem rep_neg (P : G2) : rep (neg P) = curve.neg (rep P) :=
   G1.Law.repOf_neg Fp2.embedding bTwist P
 
+open WeierstrassCurve.Jacobian in
+/-- A triple `(Z^2 a, Z^3 b, Z)` is the affine point `(a, b)` scaled by `Z`. -/
+theorem rep_eq_smul (X Y Z a b : Fp2) (hX : X = Z ^ 2 * a) (hY : Y = Z ^ 3 * b) :
+    rep ⟨X, Y, Z⟩ = Z • rep ⟨a, b, Fp2.one⟩ := by
+  subst hX hY
+  rw [smul_fin3]
+  simp only [rep_x, rep_y, rep_z, Fp2.one_eq_one, mul_one]
+  rfl
+
+/-- The affine coordinates of a finite point are `X Z^-2` and `Y Z^-3`. -/
+theorem toAffine_eq_mul_inv (P : G2) (hz : P.z.isZero = false) :
+    P.toAffine = (P.x * (P.z⁻¹ * P.z⁻¹), P.y * (P.z⁻¹ * P.z⁻¹ * P.z⁻¹)) := by
+  simp only [G1.toAffine, Fp2.fieldOps_isZero, hz, Bool.false_eq_true, ↓reduceIte]
+  rfl
+
+open WeierstrassCurve.Jacobian in
+/-- A finite point is its affine form scaled by `Z`. -/
+theorem rep_eq_smul_toAffine (P : G2) (hz : P.z.isZero = false) :
+    rep P = P.z • rep ⟨P.toAffine.1, P.toAffine.2, Fp2.one⟩ := by
+  have hz0 : P.z ≠ 0 := fun h0 => by rw [Fp2.isZero_iff.mpr h0] at hz; cases hz
+  have hc := mul_inv_cancel₀ hz0
+  rw [toAffine_eq_mul_inv P hz]
+  apply rep_eq_smul
+  · linear_combination (-P.x * (P.z * P.z⁻¹ + 1)) * hc
+  · linear_combination (-P.y * ((P.z * P.z⁻¹) ^ 2 + P.z * P.z⁻¹ + 1)) * hc
+
 theorem valid_neg {P : G2} (h : Valid P) : Valid (neg P) := G1.Law.valid_neg Fp2.embedding bTwist h
 
 theorem toPoint_neg {P : G2} (h : Valid P) : toPoint (neg P) = -toPoint P :=
