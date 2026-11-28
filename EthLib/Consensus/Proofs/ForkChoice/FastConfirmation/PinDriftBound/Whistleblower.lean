@@ -1449,6 +1449,38 @@ private theorem credit_band_bounds (h : Setting config checks g split fin pulled
     · exact .inr (band_of_consolidation h fromFin replayedF tailC highC endEpochC h.near replayedC
         small (by omega))
 
+private theorem newlySlashed_key_round_arith
+    (Q pC dC wC sC cC dF dR bC bXC bR uK ind sW eS eC eX eU eT dT pP wP sP wP' bP SB : ℕ)
+    (hQ : 30 ≤ Q) (hSW : sW ≤ uK)
+    (hSB : SB = bC + bXC + (uK + ind + bR + eU) + eX + bP)
+    (hE : (eT = (11 * (eS + eC) + 9) / 10 + eX + eU) ∨ (eS = 0 ∧ eC = 0 ∧ eX = 0 ∧ eU = 0 ∧ eT = 0))
+    (hD : (dT = pP + wP + sP ∧ wP' = wP) ∨ dT = 0)
+    (hbig : (11 * (pC + dC + wC + sC + cC + dF + dR) + 9) / 10 + bC + bXC + bR + uK + ind + eT +
+      sW + dT = 0 ∨ 4 ≤ SB) :
+    10 * Q * (3 * (((11 * (pC + dC + wC + sC + cC + dF + dR) + 9) / 10 + bC + bXC + bR + uK +
+      ind + eT + sW + dT + Q - 1) / Q)) ≤
+      33 * pC + 33 * dC + 33 * sC + 33 * cC + 33 * dF + 33 * dR +
+      30 * (Q * wC) + 10 * (Q * bC) + 10 * (Q * bXC) + 33 * eS + 33 * eC + 10 * (Q * eX) +
+      10 * (Q * (uK + ind + bR + eU)) + 33 * pP + 10 * (Q * sP) + 30 * (Q * wP') +
+      10 * (Q * bP) := by
+  have hc := ceil_round ((11 * (pC + dC + wC + sC + cC + dF + dR) + 9) / 10 + bC + bXC + bR +
+    uK + ind + eT + sW + dT) Q (by omega)
+  have pWT : 2 * wC ≤ Q * wC := Nat.mul_le_mul_right wC (by omega)
+  have pSP : 3 * sP ≤ Q * sP := Nat.mul_le_mul_right sP (by omega)
+  have pWP : 3 * wP' ≤ Q * wP' := Nat.mul_le_mul_right wP' (by omega)
+  have pSB : 30 * SB ≤ Q * SB := Nat.mul_le_mul_right SB hQ
+  have hQSB : Q * bC + Q * bXC + Q * (uK + ind + bR + eU) + Q * eX + Q * bP = Q * SB := by
+    rw [hSB]; ring
+  rcases hbig with zero | four
+  · rw [zero]
+    have : (0 + Q - 1) / Q = 0 := Nat.div_eq_of_lt (by omega)
+    rw [this]
+    omega
+  · have pFour : 4 * Q ≤ Q * SB := by
+      rw [Nat.mul_comm Q SB]
+      exact Nat.mul_le_mul_right Q four
+    rcases hE with hE1 | ⟨_, _, _, _, hE5⟩ <;> rcases hD with ⟨hD1, hD2⟩ | hD0 <;> omega
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The rounding of one newly slashed key is within its shares and bands, at ten quotients.
 
@@ -1661,12 +1693,6 @@ private theorem newlySlashed_key_round (h : Setting config checks g split fin pu
     · have charged := newlySlashed_inactive_charged h fromFin tail tailC member d.1 d.2.1 d.2.2
       exact .inl ⟨ite_eq_left d, ite_eq_left charged, ite_eq_left charged⟩
     · exact .inr (ite_eq_right d)
-  -- the products by the quotient
-  have pWT := Nat.mul_le_mul_right (Internal.whistC tailC highC i) (show 2 ≤ Q by omega)
-  have pSP := Nat.mul_le_mul_right (Internal.syncCr eventsP i) (show 3 ≤ Q by omega)
-  have pWP := Nat.mul_le_mul_right
-    (if ∃ c ∈ tailC.departureCharges, c.index = i then Internal.whistC pre highC i else 0)
-    (show 3 ≤ Q by omega)
   obtain ⟨SB, hSB⟩ : ∃ SB, SB = Internal.bandC tailC highC i + Internal.bandX fin highC i +
       (Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i +
         Internal.inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
@@ -1679,31 +1705,7 @@ private theorem newlySlashed_key_round (h : Setting config checks g split fin pu
         (if 0 < Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i
           then
           preset.upwardBand else 0) else 0) := ⟨_, rfl⟩
-  have hQSB : Q * Internal.bandC tailC highC i + Q * Internal.bandX fin highC i +
-      Q * (Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i +
-        Internal.inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
-        Internal.bandR (eventsF ++ events) i +
-        if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-          (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) +
-      Q * (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
-        Internal.bandX fin high i else 0) +
-      Q * (if ∃ c ∈ tailC.departureCharges, c.index = i then
-        (if 0 < Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i
-          then
-          preset.upwardBand else 0) else 0) = Q * SB := by
-    rw [hSB]
-    ring
-  have pSB := Nat.mul_le_mul_right SB quotient
-  -- the slack is zero, or it has a band of at least four
-  have hc := ceil_round (Internal.whistleSlack (pinTerms config pulled anc fin) tailC
-    (fromFin.append tail)
-    highC high eventsC eventsF events fin i +
-    (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
-        ¬ PinTerms.exitedSlashable anc pulled i = true ∧
-        ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
-      Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i else 0))
-        Q (by omega)
-  unfold Internal.whistleSlack Internal.whistleSlackBase at hc ⊢
+  unfold Internal.whistleSlack Internal.whistleSlackBase
   have big : (11 * (Internal.propN tailC highC i + Internal.depPre eventsC i + Internal.whistC tailC
     highC i +
         Internal.syncCr eventsC i + Internal.consAmt eventsC i + Internal.syncD eventsF i +
@@ -1712,22 +1714,124 @@ private theorem newlySlashed_key_round (h : Setting config checks g split fin pu
         i +
       Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i +
       Internal.inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
-      (if 0 < Internal.slashW (pinTerms config pulled anc fin) i then
-        (pinTerms config pulled anc fin).unitGain else 0) +
       (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
         (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX
           fin high i +
           (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) +
+      (if 0 < Internal.slashW (pinTerms config pulled anc fin) i then
+        (pinTerms config pulled anc fin).unitGain else 0) +
       (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
           ¬ PinTerms.exitedSlashable anc pulled i = true ∧
           ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
         Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i else 0)
           = 0 ∨ 4 ≤ SB := by
-    omega
-  rcases big with zero | four
-  · omega
-  · have pFour := Nat.mul_le_mul_left Q four
-    omega
+    by_cases h4 : 4 ≤ SB
+    · exact .inr h4
+    · left
+      have hup4 : 4 ≤ preset.upwardBand := by
+        have := h.bands.1
+        omega
+      have hbC0 := hbC.resolve_left (fun h1 => by omega)
+      have hsync0 : Internal.syncCr eventsC i = 0 := grossS.resolve_right (fun h1 => by omega)
+      have hbX0 := hbX.resolve_right (fun h1 => by omega)
+      have hbR0 := hbR.resolve_right (fun h1 => by omega)
+      have huK0 := huK.resolve_right (fun h1 => by omega)
+      have hE0 : (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX
+            fin high i +
+            (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) = 0 := by
+        rcases hE with ⟨hE1, hE2, hE3, hE4, hE5⟩ | ⟨_, _, _, _, hE5⟩
+        · have hbXh0 := hbXh.resolve_right (fun h1 => by omega)
+          have huSF0 := huSF.resolve_right (fun h1 => by omega)
+          omega
+        · exact hE5
+      have hD0 : (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+            ¬ PinTerms.exitedSlashable anc pulled i = true ∧
+            ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+          Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i
+            else 0) = 0 := by
+        rcases hD with ⟨hD1, _, hD3⟩ | hD0
+        · have hb50 := hb5.resolve_right (fun h1 => by omega)
+          omega
+        · exact hD0
+      have hp0 : Internal.propN tailC highC i = 0 := by omega
+      have hw0 : Internal.whistC tailC highC i = 0 := by omega
+      have hd0 : Internal.depPre eventsC i = 0 := by omega
+      rw [hp0, hd0, hw0, hsync0, hbX0.2, hbC0.2, hbX0.1, hbR0.2.1, huK0.1, hbR0.2.2, huK0.2, hE0,
+        hD0]
+      have hds0 : Internal.syncD eventsF i + Internal.syncD events i = 0 := hbR0.1
+      omega
+  have hE' : ((if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+        (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX
+          fin high i +
+          (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) =
+      (11 * ((if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          Internal.syncCr eventsF i else 0) +
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          Internal.consAmt eventsF i else 0)) + 9) / 10 +
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          Internal.bandX fin high i else 0) +
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0)) ∨
+      ((if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          Internal.syncCr eventsF i else 0) = 0 ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          Internal.consAmt eventsF i else 0) = 0 ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          Internal.bandX fin high i else 0) = 0 ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) = 0 ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX
+            fin high i +
+            (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0) = 0) := by
+    rcases hE with ⟨h1, h2, h3, h4, h5⟩ | h0
+    · exact .inl (by rw [h1, h2, h3, h4, h5])
+    · exact .inr h0
+  have hD' : ((if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ PinTerms.exitedSlashable anc pulled i = true ∧
+          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+        Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i else 0)
+          = Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i ∧
+        (if ∃ c ∈ tailC.departureCharges, c.index = i then Internal.whistC pre highC i else 0) =
+          Internal.whistC pre highC i) ∨
+      (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ PinTerms.exitedSlashable anc pulled i = true ∧
+          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+        Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i else 0)
+          = 0 :=
+    hD.imp (fun ⟨h1, h2, _⟩ => ⟨h1, h2⟩) id
+  exact newlySlashed_key_round_arith Q
+    (Internal.propN tailC highC i) (Internal.depPre eventsC i) (Internal.whistC tailC highC i)
+    (Internal.syncCr eventsC i) (Internal.consAmt eventsC i) (Internal.syncD eventsF i)
+    (Internal.syncD events i) (Internal.bandC tailC highC i) (Internal.bandX fin highC i)
+    (Internal.bandR (eventsF ++ events) i)
+    (Internal.unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i)
+    (Internal.inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i)
+    (if 0 < Internal.slashW (pinTerms config pulled anc fin) i then
+      (pinTerms config pulled anc fin).unitGain else 0)
+    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+      Internal.syncCr eventsF i else 0)
+    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+      Internal.consAmt eventsF i else 0)
+    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+      Internal.bandX fin high i else 0)
+    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+      (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0)
+    (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+      (11 * (Internal.syncCr eventsF i + Internal.consAmt eventsF i) + 9) / 10 + Internal.bandX
+        fin high i +
+        (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0) else 0)
+    (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+        ¬ PinTerms.exitedSlashable anc pulled i = true ∧
+        ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+      Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i else 0)
+    (Internal.propN pre highC i) (Internal.whistC pre highC i) (Internal.syncCr eventsP i)
+    (if ∃ c ∈ tailC.departureCharges, c.index = i then Internal.whistC pre highC i else 0)
+    (if ∃ c ∈ tailC.departureCharges, c.index = i then
+      (if 0 < Internal.propN pre highC i + Internal.whistC pre highC i + Internal.syncCr eventsP i
+        then preset.upwardBand else 0) else 0)
+    SB quotient hSW hSB hE' hD' big
 
 /-- The newly slashed keys' shares pay the slack and the rounding of their rewards. -/
 private theorem whistle_slack_newlySlashed
@@ -3653,13 +3757,15 @@ theorem flow_close (I WD FP D D2 m OC Wr Wc Wo Ws n df L : ℕ)
       33 * D * n * (f + 1)) := by
     calc 10 * (I * WD) * L ≤ 11 * D * FP * (Wr + Wc + Wo + Ws) := lin
       _ = 11 * D * FP * Wr + 11 * D * FP * Wc + 11 * D * FP * Wo + 11 * D * FP * Ws := by ring
-      _ ≤ _ := by nlinarith [rate, consB, otherB, slashB]
+      _ ≤ _ := by linarith only [rate, consB, otherB, slashB]
   have cancel : 10 * L ≤ Wr + 33 * D * (cg + 1) + 11 * D * (og + f + 2) + 33 * D * n * (f + 1) := by
     have hq : 0 < I * WD := Nat.mul_pos hI hWD
     have : I * WD * (10 * L) ≤ I * WD * (Wr + 33 * D * (cg + 1) + 11 * D * (og + f + 2) +
-      33 * D * n * (f + 1)) := by linarith
+      33 * D * n * (f + 1)) := by linarith only [total]
     exact Nat.le_of_mul_le_mul_left this hq
-  have t1 : 25 * D ≤ 19 * (D * f) := by nlinarith
+  have t1 : 25 * D ≤ 19 * (D * f) := by
+    have := Nat.mul_le_mul_left D f2
+    linarith only [this]
   have t2 : 33 * D * n * (f + 1) ≤ 60 * (n * (df * f)) := by
     have a : D * n * f ≤ n * (df * f) := by
       calc D * n * f = n * (D * f) := by ring
@@ -3729,7 +3835,7 @@ theorem flow_lin (t : PinTerms preset) {x y : ForkedBeaconState preset}
   have a := sum A cA
   have b := sum B cB
   have c := sum C cC
-  nlinarith [a, b, c]
+  linarith only [a, b, c]
 
 /-- On R's branch the budget counts one balance increment per slashing for initial penalties. -/
 theorem flow_slash (h : Setting config checks g split fin pulled anc counted V)
@@ -3780,7 +3886,7 @@ theorem flow_sync (h : Setting config checks g split fin pulled anc counted V)
     (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
       PinTerms.syncEnvelope preset pulledTotal.toNat) (le_of_eq epochs)
   rw [totalEq] at credits
-  nlinarith [credits, shared, own, scaled]
+  linarith only [credits, shared, own, scaled]
 
 /-- Some counted key has a positive flow gain when the weighted gains are positive. -/
 theorem flow_pos (t : PinTerms preset) {x y : ForkedBeaconState preset}
@@ -3865,7 +3971,9 @@ private theorem inc_le_ebUp (h : Setting config checks g split fin pulled anc co
         (Nat.le_div_iff_mul_le incPos).2 (by omega)
       have whole : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-            (T / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by nlinarith
+            (T / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+        simpa only [Nat.mul_one] using
+          Nat.mul_le_mul_left preset.EFFECTIVE_BALANCE_INCREMENT.toNat one
       omega
   have leak : 2 * (PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i /
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat * (pinTerms config pulled anc fin).perIncrement) ≤
@@ -3981,7 +4089,7 @@ private theorem sync_flows_le (h : Setting config checks g split fin pulled anc 
   generalize (pinTerms config pulled anc fin).depth = depth at *
   generalize (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat = n2 at *
   generalize (getCurrentEpoch split).toNat + 1 - (getCurrentEpoch fin).toNat = n1 at *
-  nlinarith [credits, pair, own, Nat.zero_le (n2 * (preset.SLOTS_PER_EPOCH.toNat *
+  linarith only [credits, pair, own, Nat.zero_le (n2 * (preset.SLOTS_PER_EPOCH.toNat *
     preset.SYNC_COMMITTEE_SIZE.toNat * share))]
 
 /-- The consolidation credits and bands of any keys, on C's run and the shared segment, fit caps.
@@ -4191,7 +4299,7 @@ theorem slack_le (h : Setting config checks g split fin pulled anc counted V)
               ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
         ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           (pinTerms config pulled anc fin).syncProposer := by
-    nlinarith [prop, sync]
+    linarith only [prop, sync]
   omega
 
 /-- The keys of a set that hold a deposit scan on C's run are at most the deposit recipients.
