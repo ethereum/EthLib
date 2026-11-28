@@ -2,11 +2,12 @@
 
 import json
 import os
+import shlex
+import signal
 import subprocess
 import sys
 from collections import Counter
 from copy import deepcopy
-from io import StringIO
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -20,6 +21,10 @@ from .catalogue import Case
 # The fixtures come from the execution release pinned in tests/sources.toml.
 SLOAD = (
     "fixtures/state_tests/for_amsterdam/amsterdam/eip8038_state_access_gas_cost_increase/sload_gas"
+)
+SSTORE_RESTORATION = (
+    "fixtures/state_tests/for_amsterdam/amsterdam/eip8037_state_creation_gas_cost_increase/"
+    "state_gas_sstore/sstore_restoration_refund.json"
 )
 TRANSITION = (
     "fixtures/blockchain_tests/for_bpo2toamsterdamattime15k/amsterdam/"
@@ -62,8 +67,22 @@ def test_cli_requires_assertions(tmp_path) -> None:
     assert result.stderr.endswith("error: fixture validation requires Python assertions\n")
 
 
+@pytest.mark.parametrize("jobs", [0, gas_coverage.MAX_JOBS + 1])
+def test_cli_limits_workers(jobs, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        sys, "argv", ["gas_coverage", "--executable", sys.executable, "--jobs", str(jobs)]
+    )
+    with raises(SystemExit, "2"):
+        gas_coverage.main()
+    assert capsys.readouterr().err.splitlines()[-1] == (
+        f"gas_coverage: error: --jobs must be from 1 to {gas_coverage.MAX_JOBS}"
+    )
+
+
 def test_report_lists_each_named_branch() -> None:
-    inventory = {"gasRules": ["opcode.sload.warm", "opcode.sload.cold", "opcode.memory.expand"]}
+    inventory = gas_coverage.InventoryReply(
+        0, frozenset({"opcode.sload.warm", "opcode.sload.cold", "opcode.memory.expand"})
+    )
     counts = gas_coverage.Counts(
         gas_rules=Counter({"opcode.sload.cold": 3, "opcode.sload.warm": 1}), state_transactions=2
     )
@@ -120,37 +139,229 @@ def test_selection_and_partition_keep_every_variant() -> None:
     assert gas_coverage.partition_cases(selected, 3) == [[cold, warm], [other]]
 
 
+def test_skip_reason_follows_parity_plans_and_exclusions(monkeypatch) -> None:
+    monkeypatch.setitem(runners.NOT_YET, "planned_test", "the runner that brings it")
+    monkeypatch.setitem(catalogue.EXCLUDED_FORMATS, "excluded_test", "outside parity's scope")
+
+    def reason(fork: str, group: str) -> str:
+        case = Case("execution-spec-tests", "", fork, group, "case", "case.json")
+        return gas_coverage.skip_reason(case, {})
+
+    assert reason("Berlin", "state_test") == ""
+    assert reason("Berlin", "planned_test") == "the runner that brings it"
+    assert reason("Berlin", "excluded_test") == "outside parity's scope"
+    assert reason("Berlin", "blockchain_test_engine") == (
+        "the coverage runner does not replay this fixture format"
+    )
+    assert reason("BPO2ToBPO3AtTime15k", "state_test") == (
+        "no parity runner for this fixture at this network"
+    )
+    assert reason("UnknownNetwork", "blockchain_test") == (
+        "fixture network is outside the implemented execution forks"
+    )
+
+
+@pytest.mark.parametrize("group", [None, "state_test"])
+def test_skip_reason_uses_listed_disagreements(group) -> None:
+    case = Case("execution-spec-tests", "", "Berlin", "state_test", "case", "case.json")
+    disagreements = {("case", group): {"reason": "fixture disagrees"}}
+    assert gas_coverage.skip_reason(case, disagreements) == "listed parity disagreement"
+
+
 @pytest.mark.parametrize(
     ("reply", "error"),
     [
-        ("", "gas-coverage stopped before replying to the inventory request for berlin"),
         ("!\n", "gas-coverage returned invalid JSON for the inventory request for berlin"),
+        (
+            "[" * (sys.getrecursionlimit() + 1),
+            "gas-coverage returned invalid JSON for the inventory request for berlin",
+        ),
         ("[]\n", "gas-coverage returned a non-object reply to the inventory request for berlin"),
         (
             '{"error":0}\n',
             "gas-coverage returned an invalid error for the inventory request for berlin",
         ),
+        (
+            '{"error":{"code":true,"message":"invalid fork"}}\n',
+            "gas-coverage returned an invalid error for the inventory request for berlin",
+        ),
+        (
+            '{"error":{"code":0,"message":"invalid fork"}}\n',
+            "gas-coverage rejected the inventory request for berlin: invalid fork",
+        ),
     ],
 )
 def test_bridge_diagnostics(reply, error) -> None:
-    bridge = gas_coverage.Bridge(StringIO(), StringIO(reply))
     with raises(RuntimeError, error):
+        gas_coverage.decode_reply(reply.encode(), "inventory", "inventory request for berlin")
+
+
+def test_bridge_distinguishes_fixture_error_from_invalid_reply() -> None:
+    request = "state request for berlin"
+    with raises(gas_coverage.FixtureError, "nonceTooHigh"):
+        gas_coverage.decode_reply(
+            b'{"error":{"code":0,"message":"nonceTooHigh"}}', "state", request
+        )
+    with raises(RuntimeError, f"gas-coverage returned an invalid error for the {request}"):
+        gas_coverage.decode_reply(b'{"error":{"message":"nonceTooHigh"}}', "state", request)
+
+
+@pytest.fixture
+def bridge_child(tmp_path, monkeypatch):
+    """Start a test program through the same pipes as the fixture runner."""
+    start = subprocess.Popen
+    processes = []
+
+    def record(*args, **kwargs):
+        process = start(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    def program(source):
+        script = tmp_path / "child.py"
+        script.write_text(source)
+        executable = tmp_path / "child"
+        executable.write_text(f"#!/bin/sh\nexec {shlex.join([sys.executable, str(script)])}\n")
+        executable.chmod(0o700)
+        return executable, processes
+
+    monkeypatch.setattr(gas_coverage.subprocess, "Popen", record)
+    return program
+
+
+def test_bridge_transfers_multiple_large_messages(bridge_child) -> None:
+    executable, processes = bridge_child(
+        "import json, sys\n"
+        "for line in sys.stdin:\n"
+        "    request = json.loads(line)\n"
+        "    print(json.dumps({'echo': request['data']}), flush=True)\n"
+    )
+    with gas_coverage.open_bridge(executable) as bridge:
+        for data in ("a" * 250_000, "b" * 130_000):
+            assert bridge.request({"kind": "state", "fork": "berlin", "data": data}) == {
+                "echo": data
+            }
+    assert processes[0].returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("source", "payload_size", "action"),
+    [
+        ("import time\ntime.sleep(30)\n", 1_000_000, "sending"),
+        (
+            "import sys, time\nsys.stdin.readline()\n"
+            "print('{', end='', flush=True)\ntime.sleep(30)\n",
+            0,
+            "waiting for",
+        ),
+    ],
+    ids=["full input pipe", "partial output line"],
+)
+def test_bridge_times_out_and_reaps_child(bridge_child, source, payload_size, action) -> None:
+    executable, processes = bridge_child(source)
+    with (
+        raises(RuntimeError, f"gas-coverage timed out while {action} the state request for berlin"),
+        gas_coverage.open_bridge(executable, timeout=0.5) as bridge,
+    ):
+        bridge.request({"kind": "state", "fork": "berlin", "data": "x" * payload_size})
+    assert processes[0].returncode == -signal.SIGKILL
+
+
+def test_bridge_reaps_child_after_early_eof(bridge_child) -> None:
+    executable, processes = bridge_child("import sys\nsys.stdin.readline()\n")
+    with (
+        raises(
+            RuntimeError, "gas-coverage stopped before replying to the inventory request for berlin"
+        ),
+        gas_coverage.open_bridge(executable) as bridge,
+    ):
         bridge.request({"kind": "inventory", "fork": "berlin"})
+    assert processes[0].returncode is not None
+
+
+def test_bridge_reaps_a_child_that_ignores_eof(bridge_child) -> None:
+    executable, processes = bridge_child("import sys, time\nsys.stdin.read()\ntime.sleep(30)\n")
+    with (
+        raises(RuntimeError, "gas-coverage did not exit after closing its input"),
+        gas_coverage.open_bridge(executable, exit_timeout=0.5),
+    ):
+        pass
+    assert processes[0].returncode == -signal.SIGKILL
+
+
+def test_bridge_reaps_child_on_replay_failure(bridge_child) -> None:
+    executable, processes = bridge_child("import time\ntime.sleep(30)\n")
+    with raises(ValueError, "caller failed"), gas_coverage.open_bridge(executable):
+        raise ValueError("caller failed")
+    assert processes[0].returncode == -signal.SIGKILL
 
 
 def test_reject_duplicate_inventory_and_invalid_event_counts() -> None:
     with raises(RuntimeError, "duplicate gas rules in the berlin inventory"):
-        gas_coverage.render_fork("berlin", {"gasRules": ["warm", "warm"]}, gas_coverage.Counts())
-    for invalid in (["warm"], {"warm": -1}, {"warm": 0}, {"warm": True}):
+        gas_coverage.parse_inventory_reply({"forkIndex": 0, "gasRules": ["warm", "warm"]}, "berlin")
+    for invalid in (["warm"], {"warm": -1}, {"warm": 0}, {"warm": True}, {"": 1}):
         with raises(RuntimeError, "gas-coverage returned invalid gas event counts"):
             gas_coverage.gas_events({"gasRules": invalid})
+
+
+@pytest.mark.parametrize("response", [{"gasRules": []}, {"forkIndex": True, "gasRules": []}])
+def test_inventory_reply_requires_a_valid_index(response) -> None:
+    with raises(RuntimeError, "invalid fork index in the berlin inventory"):
+        gas_coverage.parse_inventory_reply(response, "berlin")
+
+
+@pytest.mark.parametrize("rules", [None, "warm", [""], [0]])
+def test_inventory_reply_requires_valid_rules(rules) -> None:
+    with raises(RuntimeError, "invalid gas rule inventory for berlin"):
+        gas_coverage.parse_inventory_reply({"forkIndex": 0, "gasRules": rules}, "berlin")
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("stateRoot", "01"),
+        ("logsHash", "z1" * 32),
+        ("gasUsed", True),
+        ("succeeded", 1),
+        ("receipt", "00 01"),
+    ],
+)
+def test_state_reply_rejects_missing_or_malformed_fields(field, invalid) -> None:
+    reply = {
+        "stateRoot": "01" * 32,
+        "logsHash": "02" * 32,
+        "gasUsed": 21_000,
+        "succeeded": True,
+        "receipt": "03",
+        "gasRules": {},
+    }
+    with raises(RuntimeError, f"gas-coverage returned invalid {field}"):
+        gas_coverage.parse_state_reply({**reply, field: invalid})
+    del reply[field]
+    with raises(RuntimeError, f"gas-coverage returned invalid {field}"):
+        gas_coverage.parse_state_reply(reply)
+
+
+@pytest.mark.parametrize(
+    ("response", "field"),
+    [
+        ({"receipts": []}, "state"),
+        ({"state": "g0", "receipts": []}, "state"),
+        ({"state": "01"}, "receipts"),
+        ({"state": "01", "receipts": {"0": "02"}}, "receipts"),
+        ({"state": "01", "receipts": ["02", "0"]}, "receipt 1"),
+    ],
+)
+def test_block_reply_rejects_missing_or_malformed_fields(response, field) -> None:
+    with raises(RuntimeError, f"gas-coverage returned invalid {field}"):
+        gas_coverage.parse_block_reply({**response, "gasRules": {}})
 
 
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("stateRoot", "ff", "state root differs"),
-        ("logsHash", "ff", "logs hash differs"),
+        ("stateRoot", "ff" * 32, "state root differs"),
+        ("logsHash", "ff" * 32, "logs hash differs"),
         ("gasUsed", 21_001, "gas used differs"),
         ("succeeded", False, "transaction status differs"),
         ("receipt", "ff", "receipt bytes differ"),
@@ -159,16 +370,16 @@ def test_reject_duplicate_inventory_and_invalid_event_counts() -> None:
 def test_state_output_mismatch_discards_events(monkeypatch, field, value, message) -> None:
     case = Case("execution-spec-tests", "", "Amsterdam", "state_test", "case", "case.json")
     post = {
-        "hash": "0x01",
-        "logs": "0x02",
+        "hash": "0x" + "01" * 32,
+        "logs": "0x" + "02" * 32,
         "receipt": {"cumulativeGasUsed": "0x5208", "status": True, "rlp": "0x03"},
     }
     monkeypatch.setattr(
         runners, "state_test_input", lambda *_: (("glamsterdam", 1, b"tx", b"pre", b"env"), post)
     )
     response = {
-        "stateRoot": "01",
-        "logsHash": "02",
+        "stateRoot": "01" * 32,
+        "logsHash": "02" * 32,
         "gasUsed": 21_000,
         "succeeded": True,
         "receipt": "03",
@@ -192,7 +403,9 @@ def test_expected_admission_error_supplies_no_coverage(monkeypatch) -> None:
     report = gas_coverage.replay_cases(Path(), [case], reject)
     assert report.counts == {"glamsterdam": gas_coverage.Counts()}
     lines = gas_coverage.render_fork(
-        "glamsterdam", {"gasRules": ["opcode.sload.warm"]}, report.counts["glamsterdam"]
+        "glamsterdam",
+        gas_coverage.InventoryReply(0, frozenset({"opcode.sload.warm"})),
+        report.counts["glamsterdam"],
     )
     assert "Observed **0 of 1** instrumented gas rules." in lines
     assert "- `opcode.sload.warm`" in lines
@@ -217,7 +430,7 @@ def test_later_block_failure_discards_earlier_events(monkeypatch) -> None:
         pytest.fail("the next block failed its parity check")
 
     monkeypatch.setattr(runners, "check_blockchain_test", check_fixture)
-    response = {"state": "01", "gasRules": {"opcode.sload.cold": 1}}
+    response = {"state": "01", "receipts": [], "gasRules": {"opcode.sload.cold": 1}}
     report = gas_coverage.replay_cases(Path(), [case], lambda _: response)
     assert report.counts == {}
     assert report.failures == [(case, "the next block failed its parity check")]
@@ -360,6 +573,26 @@ def test_pinned_sstore_transition(archive, observer) -> None:
     assert after["opcode.sstore.set-execution-charge"] == 0
     assert after["opcode.sstore.clean-write-execution-charge"] == 3
     assert after["opcode.sstore.new-slot-state-charge"] == 3
+
+
+@pytest.mark.archive(catalogue.EXECUTION, SSTORE_RESTORATION)
+def test_pinned_sstore_restores_a_new_slot(archive, observer) -> None:
+    (name,) = json.loads((archive / SSTORE_RESTORATION).read_text())
+    case = Case("execution-spec-tests", "", "Amsterdam", "state_test", name, SSTORE_RESTORATION)
+    counts = gas_coverage.replay_state(archive, case, observer)["glamsterdam"]
+    # The two writes move the same slot from 0 to 1 and back to 0.
+    assert {
+        rule: count for rule, count in counts.gas_rules.items() if rule.startswith("opcode.sstore.")
+    } == {
+        "opcode.sstore.sentry-passed": 2,
+        "opcode.sstore.cold": 1,
+        "opcode.sstore.warm": 1,
+        "opcode.sstore.clean-write-execution-charge": 1,
+        "opcode.sstore.dirty-write": 1,
+        "opcode.sstore.new-slot-state-charge": 1,
+        "opcode.sstore.clear-new-slot-state-refill": 1,
+        "opcode.sstore.restore-original-refund": 1,
+    }
 
 
 @pytest.mark.archive(

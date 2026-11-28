@@ -180,25 +180,20 @@ private def usesFixedPrice (fork : Fork) (op : Op) : Bool :=
   | .balance | .extcodehash | .extcodesize => fork < .berlin
   | _ => true
 
-private def storageWriteRules (original current new : U256) : Array GasRule := Id.run do
-  let mut rules : Array GasRule := #[]
-  if fork ≥ .istanbul then
-    rules := rules.push .sstoreSentry
-    let write :=
-      if current = new then GasRule.sstoreUnchanged
-      else if original ≠ current then .sstoreDirty
-      else if fork ≥ .glamsterdam then .sstoreCleanWrite
-      else if original = 0 then .sstoreSet else .sstoreReset
-    rules := rules.push write
-    if current ≠ new then
-      rules := rules ++ whenRule (original ≠ 0 && current ≠ 0 && new = 0) .sstoreClearRefund
-      rules := rules ++ whenRule (original ≠ 0 && current = 0) .sstoreRemoveClearRefund
-      rules := rules ++ whenRule (original = new) .sstoreRestoreRefund
-  else
-    rules := rules.push (if new ≠ 0 ∧ current = 0 then .sstoreSet else .sstoreReset)
-    rules := rules ++ whenRule (new = 0 && current ≠ 0) .sstoreClearRefund
-  rules := rules ++ whenRule (sstoreStateGas fork original current new > 0) .sstoreStateCharge
-  return rules ++ whenRule (sstoreStateRefill fork original current new > 0) .sstoreStateRefill
+private def storageWriteRules (original current new : U256) : Array GasRule :=
+  let branch := sstoreCase fork original current new
+  let write : GasRule := match branch.write with
+    | .unchanged => .sstoreUnchanged
+    | .dirty => .sstoreDirty
+    | .set => .sstoreSet
+    | .reset => .sstoreReset
+    | .clean => .sstoreCleanWrite
+  whenRule (fork ≥ .istanbul) .sstoreSentry ++ #[write] ++
+    whenRule branch.clears .sstoreClearRefund ++
+    whenRule branch.unclears .sstoreRemoveClearRefund ++
+    whenRule branch.restores .sstoreRestoreRefund ++
+    whenRule branch.fills .sstoreStateCharge ++
+    whenRule branch.refills .sstoreStateRefill
 
 private def storageRules (evm : Evm fork Meter) (write : Bool) : Array GasRule := Id.run do
   let some word := evm.stack.val[0]? | return #[]

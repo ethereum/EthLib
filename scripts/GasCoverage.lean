@@ -8,7 +8,7 @@ import EthLib.Execution.Exports.Transition
 
 The runner accepts one JSON request per line and counts gas rules during replay.
 
-A block must pass the state transition and reproduce its roots in the observed run.
+A block must pass the state transition before the runner observes its body.
 -/
 
 namespace EthLib.Coverage
@@ -24,8 +24,10 @@ open EthLib.Execution.Transactions
 open EthLib.Serialization.Rlp
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
+/-- The number of recorded occurrences of each gas rule. -/
 abbrev Counts := Std.HashMap String Nat
 
+/-- Add one occurrence for each label in the list. -/
 def addRules (counts : Counts) (rules : Array String) : Counts :=
   rules.foldl (fun counts rule => counts.insert rule (counts.getD rule 0 + 1)) counts
 
@@ -83,116 +85,47 @@ def transactionGasRules (fork : Fork) (included : Included) (tx : Transaction)
       "transaction.refund.at-cap"
     else "transaction.refund.below-cap"
 
+/-- Record the gas rules of a completed opcode step. -/
 def observeStep {fork : Fork} {Meter : Type} [GasMeter Meter] :
     StepObserver (StateT Counts (Except EvmError)) fork Meter :=
   fun evm result => do
     if let .ok step := result then
       unless evm.code.isEmpty do modify (addRules · (stepGasRules evm step))
 
-/-- Run a transaction with a counter as its step observer. -/
+/-- Run a transaction and count the gas rules that it uses. -/
 def observeTransaction {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
-    (included : Included) (tx : Transaction) (counts : Counts := {}) :
+    (included : Included) (tx : Transaction) :
     Except EvmError (TransactionOutput × Counts) := do
-  let (output, counts) ← (processTransactionWith observeStep env block included tx).run counts
+  let (output, counts) ← (processTransactionWith observeStep env block included tx).run {}
   return (output, addRules counts (transactionGasRules fork included tx output))
 
-/-- Count an accepted block's system call and join its writes into the body. -/
-def observeSystemCall {fork : Fork} (env : BlockEnvironment fork) (target : Address)
-    (data : ByteArray) (before : BodyState × Counts) :
-    Except BlockError (BodyState × Counts) := do
-  let (body, counts) := before
-  let message := systemMessage env target data
-  let state := Execution.State.TransactionState.ofBlock body.block
-  let substate := systemSubstate env target
-  let run := if fork ≥ .glamsterdam then
-      processMessageCallWith (Meter := StateGasMeter) observeStep env.chainId.toNat
-        message state substate
-    else processMessageCallWith (Meter := Nat) observeStep env.chainId.toNat message state substate
-  let (output, counts) ← (run.run counts).mapError .aborted
-  let body ← (body.join output.state).mapError .state
-  return (body, counts)
-
-structure BodyReplay where
-  body : BodyState
-  counts : Counts
-  blockGas : BlockGas := .zero
-  cumulativeGasUsed : Nat := 0
-  receiptsRev : List ByteArray := []
-
-def observeBodyTransaction {fork : Fork} (env : BlockEnvironment fork) (before : BodyReplay)
-    (entry : Transaction × Nat) : Except BlockError BodyReplay := do
-  let (tx, index) := entry
-  let included ← (checkInclusion env.chainId env before.blockGas (.ofBlock before.body.block)
-    tx).mapError (.invalidTransaction index)
-  let (output, counts) ←
-    (observeTransaction env before.body.block included tx before.counts).mapError .aborted
-  let body ← ((before.body.beginIndex (index + 1)).join output.state).mapError .state
-  let cumulativeGasUsed := before.cumulativeGasUsed + output.gasUsed
-  let outcome : Outcome fork ← if h : .byzantium ≤ fork then pure (.status h output.error.isNone)
-    else .postState (Nat.lt_of_not_le h) <$>
-      (stateRoot keccak256 body.block.applyChanges).mapError .trie
-  let receipt ← (encodeReceipt tx.type (makeReceipt outcome cumulativeGasUsed output.logs.toList))
-    |>.mapError (.trie ∘ .rlp)
-  return {
-    body
-    counts
-    blockGas := before.blockGas.add output.blockGas
-    cumulativeGasUsed
-    receiptsRev := receipt :: before.receiptsRev }
-
-/-- Observe an accepted block and check the state and receipt roots of the replay. -/
-def observeBlock {fork : Fork} (chain : BlockChain) (block : Block fork Transaction) :
-    Except BlockError (Counts × List ByteArray) := do
-  let hashes ← recentHashes chain.recent
-  let env := blockEnvironment chain.config hashes block.header
-  let start ← daoTransfer chain.config fork block.header.number ⟨chain.state, ∅, ∅, ∅, ∅⟩
-  let start := (BodyState.init start, ({} : Counts))
-  let start ← if h : BEACON_ROOTS_CONTRACT.since ≤ fork then
-      observeSystemCall env BEACON_ROOTS_CONTRACT.address
-        ⟨(env.parentBeaconBlockRoot h).toArray⟩ start
-    else pure start
-  let (body, counts) ← if HISTORY_STORAGE_CONTRACT.since ≤ fork then
-      observeSystemCall env HISTORY_STORAGE_CONTRACT.address ⟨block.header.parentHash.toArray⟩ start
-    else pure start
-  let replay ← block.transactions.zipIdx.foldlM (observeBodyTransaction env) { body, counts }
-  let body := replay.body.beginIndex (block.transactions.length + 1)
-  let body ← if h : .shapella ≤ fork then do
-      let state ← (withdrawalState fork body.block (block.withdrawals h)).mapError .state
-      (body.join state).mapError .state
-    else pure body
-  let (body, counts) ← (requestContracts fork).foldlM
-    (fun before (_, target) => observeSystemCall env target .empty before) (body, replay.counts)
-  let ommers := block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)
-  let state ← onBlock body.block fun tx =>
-    payRewards fork tx block.header.coinbase block.header.number ommers
-  let root ← (stateRoot keccak256 state.applyChanges).mapError .trie
-  unless root = block.header.stateRoot do throw (.wrongStateRoot block.header.stateRoot root)
-  let receipts := replay.receiptsRev.reverse
-  let receiptRoot ← (indexedRoot receipts).mapError .trie
-  unless receiptRoot = block.header.receiptRoot do
-    throw (.wrongReceiptRoot block.header.receiptRoot receiptRoot)
-  return (counts, receipts)
-
+/-- Encode the counts as a JSON object keyed by gas-rule label. -/
 def countsJson (counts : Counts) : Json :=
   Json.mkObj (counts.toList.map fun (rule, n) => (rule, toJson n))
 
+/-- Give a request error code 0. -/
 def asResult {α : Type} (value : Except String α) : Result α :=
   value.mapError (0, ·)
 
+/-- Read a typed field from a JSON request. -/
 def field {α : Type} [FromJson α] (request : Json) (name : String) : Result α :=
   asResult ((request.getObjValAs? α name).mapError fun error => s!"{name}: {error}")
 
+/-- Read bytes from pairs of hexadecimal digits. -/
 def decodeHex (value : String) : Result ByteArray :=
   match hexBytes? value.toList with
   | some bytes => pure bytes
   | none => throw (0, "expected an even number of hex digits")
 
+/-- Read a request field that holds hexadecimal bytes. -/
 def fromHexField (request : Json) (name : String) : Result ByteArray :=
   field request name >>= decodeHex
 
+/-- Write bytes as a JSON string of hexadecimal digits. -/
 def encodeHex (bytes : ByteArray) : Json :=
   toJson ((hexString bytes.data.toList).drop 2).toString
 
+/-- Replay a state test and give its gas counts, state root and receipt data. -/
 def stateRequest (request : Json) (forkName : String) : Result Json := do
   let chainId : Nat ← field request "chainId"
   let some chainId := Uint64.ofNat? chainId | throw (0, "chain ID is not below 2^64")
@@ -215,6 +148,7 @@ def stateRequest (request : Json) (forkName : String) : Result Json := do
     ("logsHash", encodeHex ⟨(keccak256 logs).toArray⟩), ("gasUsed", toJson output.gasUsed),
     ("succeeded", toJson succeeded), ("receipt", encodeHex receipt)]
 
+/-- Read a recent block from its fork name, encoded header and encoded ommers. -/
 def recentBlock (config : ChainConfig) (entry : Array Json) : Result RecentBlock := do
   let #[fork, header, ommers] := entry | throw (0, "expected a recent block with three entries")
   let fork ← asResult fork.getStr?
@@ -222,20 +156,34 @@ def recentBlock (config : ChainConfig) (entry : Array Json) : Result RecentBlock
   let ommers : List String ← asResult (Lean.fromJson? ommers)
   Blocks.Exports.recentOf config (fork, header, ← ommers.mapM decodeHex)
 
+/-- Check a block and give its post-state, gas counts and encoded receipts. -/
 def blockRequest (request : Json) (forkName : String) : Result Json := do
   let config ← ChainConfig.Exports.configOfJson (← asResult (request.getObjVal? "config"))
   let pre ← toResult none (Execution.State.Exports.ofInput (← fromHexField request "state"))
   let recent : List (Array Json) ← field request "recent"
   let chain : BlockChain := ⟨config, pre, ← recent.mapM (recentBlock config)⟩
-  let ⟨_, block⟩ ← Blocks.Exports.blockOf config forkName (← fromHexField request "block")
+  let ⟨fork, block⟩ ← Blocks.Exports.blockOf config forkName (← fromHexField request "block")
   let checkSeal : Bool ← field request "checkSeal"
+  -- The state transition checks the active fork and the roots before the observed run.
   let post ← toResult none (stateTransition chain block checkSeal)
-  let (counts, receipts) ← toResult "observed block" (observeBlock chain block)
+  let hashes ← toResult none (recentHashes chain.recent)
+  let env := blockEnvironment chain.config hashes block.header
+  let observer : BodyObserver (StateT Counts (Except EvmError))
+      (StateT Counts (Except BlockError)) fork :=
+    BodyObserver.ofSteps observeStep
+      (fun run counts => (run.run counts).mapError .aborted)
+      (fun _ included tx output =>
+        modify (addRules · (transactionGasRules fork included tx output)))
+  let (output, counts) ← toResult "observed block"
+    ((applyBodyWith observer chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩).run {})
+  let receipts ← toResult "receipts" (output.receipts.mapM fun (type, receipt) =>
+    encodeReceipt type receipt)
   let accounts ← toResult none (Blocks.Exports.accountsItem post)
   let state ← toResult "accounts" (encode accounts)
   return Json.mkObj [("gasRules", countsJson counts), ("state", encodeHex state),
     ("receipts", Json.arr (receipts.toArray.map encodeHex))]
 
+/-- Serve one request for a gas inventory or a fixture replay. -/
 def request (value : Json) : Result Json := do
   let name : String ← field value "fork"
   match ← field value "kind" with
@@ -247,6 +195,7 @@ def request (value : Json) : Result Json := do
   | "block" => blockRequest value name
   | _ => throw (0, "unknown coverage request")
 
+/-- Encode the result of one JSON request on one line. -/
 def response (line : String) : String :=
   let value := match asResult (Json.parse line) >>= request with
     | .ok result => result
@@ -256,6 +205,7 @@ def response (line : String) : String :=
 
 end EthLib.Coverage
 
+/-- Read requests from standard input and write responses to standard output. -/
 public def main : IO Unit := do
   let stdin ← IO.getStdin
   let stdout ← IO.getStdout

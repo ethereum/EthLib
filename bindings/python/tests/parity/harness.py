@@ -5,7 +5,8 @@ import json
 import os
 import re
 from collections import defaultdict
-from pathlib import Path
+from collections.abc import Iterable, Iterator, Mapping, Set
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import pytest
@@ -45,6 +46,23 @@ def runnable(cases: list[Case]) -> list[Case]:
     return [case for case in cases if runner(case) is not None]
 
 
+def select_cases(
+    cases: Iterable[Case],
+    group: PurePosixPath | None,
+    *,
+    networks: Set[str] | None = None,
+    formats: Set[str] | None = None,
+) -> Iterator[Case]:
+    """Select cases by network, format and archive directory, in input order."""
+    return (
+        case
+        for case in cases
+        if (networks is None or case.fork in networks)
+        and (formats is None or case.group in formats)
+        and (group is None or group in PurePosixPath(case.path).parents)
+    )
+
+
 def shard() -> tuple[int, int]:
     """The shard of this run and the number of shards, from `ETHLIB_PARITY_SHARD`."""
     value = os.environ.get(SHARD, "1/1")
@@ -82,12 +100,15 @@ def unpack_read(name: str, cases: list[Case]) -> Path:
     return archives.unpack(name, *paths)
 
 
+def disagreement(case: Case, entries: Mapping[tuple[str, str | None], dict]) -> dict | None:
+    """Look up a fixture disagreement, preferring one for the case's group."""
+    return entries.get((case.id, case.group)) or entries.get((case.id, None))
+
+
 def run(root: Path, case: Case, suite_disagreements: dict, request, record_property) -> None:
     """Run one case, which must fail with the listed reason if it is a disagreement."""
     record_property("parity row", case.row)
-    entry = suite_disagreements.get((case.id, case.group)) or suite_disagreements.get(
-        (case.id, None)
-    )
+    entry = disagreement(case, suite_disagreements)
     if entry is not None:
         request.applymarker(pytest.mark.xfail(strict=True, reason=entry["reason"]))
     runner(case)(root, case)

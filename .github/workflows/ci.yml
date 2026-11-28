@@ -79,6 +79,20 @@ jobs:
       - name: exports
         run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
 
+      - name: build the gas coverage runner
+        run: |
+          lake build --wfail gas-coverage
+          cp .lake/build/bin/gas-coverage "$RUNNER_TEMP/gas-coverage"
+
+      - name: upload the gas coverage runner
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ethlib-gas-coverage
+          path: ${{ runner.temp }}/gas-coverage
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 1
+
       - name: stage spec and export artifacts
         run: >-
           uv run --no-project --python 3.12 python scripts/proof_shards.py stage spec-exports
@@ -628,16 +642,21 @@ jobs:
           path: ${{ runner.temp }}/archives/${{ steps.legacy-pin.outputs.sha256 }}.tar.gz
           key: ethlib-legacy-archive-${{ steps.legacy-pin.outputs.sha256 }}
 
-      - name: build the gas coverage runner
+      - name: download the gas coverage runner
         if: matrix.python == '3.12'
-        run: lake build --wfail gas-coverage
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ethlib-gas-coverage
+          path: .lake/build/bin
 
       - name: gas coverage fixtures
         if: matrix.python == '3.12'
         env:
           ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
           ETHLIB_REQUIRE_GAS_COVERAGE: '1'
-        run: uv run --no-sync pytest bindings/python/tests/parity/test_gas_coverage.py
+        run: |
+          chmod +x .lake/build/bin/gas-coverage
+          uv run --no-sync pytest bindings/python/tests/parity/test_gas_coverage.py
 
       - name: save the legacy archive
         if: >-
