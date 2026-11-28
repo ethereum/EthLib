@@ -515,4 +515,67 @@ theorem exists_atFork_of_anyPayloadOf {p : Consensus.ExecutionPayload preset for
   obtain ⟨-, hw, hb, he⟩ := facts_of_anyPayloadOf h
   exact exists_atFork_iff.mpr ⟨hw, hb, he⟩
 
+/-- From Gloas, the block hash that gossip computes for an envelope is the hash of its block header.
+
+The block is the one that the execution layer builds from the payload, before its hash check. -/
+theorem envelopeBlockHash_eq_of_toBlockUnchecked
+    {envelope : Consensus.ExecutionPayloadEnvelope preset fork} {any : Json.AnyPayload}
+    {payload : ExecutionPayload fork} {requests : List ByteArray} {block : Block fork Transaction}
+    (gloas : .glamsterdam ≤ fork) (converted : anyPayloadOf envelope.payload = some any)
+    (shaped : any.atFork fork = .ok payload)
+    (listed : Consensus.getExecutionRequestsList envelope.executionRequests = .ok requests)
+    (built : payload.toBlockUnchecked (fun _ => envelope.parentBeaconBlockRoot) (fun _ => requests)
+      (fun _ => ⟨(envelope.payload.blockAccessList gloas).data⟩)
+      (fun _ => envelope.payload.slotNumber gloas) = .ok block) :
+    envelopeBlockHash envelope = block.header.hash.toOption := by
+  simp only [ExecutionPayload.toBlockUnchecked, bind_ok_iff] at built
+  obtain ⟨_, _, root, rooted, hashes, hashed, header, headed, result⟩ := built
+  cases result
+  simp only [Since.sequence, gloas, ↓reduceDIte] at hashed
+  unfold ExecutionPayload.blockAccessListHashOf at hashed
+  split at hashed <;>
+    simp only [Functor.map, Except.map, reduceCtorEq] at hashed
+  cases hashed
+  have hr : Execution.Blocks.indexedRoot payload.transactions = .ok root := by
+    revert rooted
+    cases Execution.Blocks.indexedRoot payload.transactions <;> simp [Except.mapError]
+  unfold envelopeBlockHash
+  simp only [converted, shaped, listed, hr, sinceValue, gloas, ↓reduceDIte, Except.toOption,
+    bind, Option.bind, headed]
+
+/-- From Gloas, a payload that passes the block hash check of the execution layer passes gossip's.
+
+The block hash that gossip computes for its envelope is then the block hash of the payload. -/
+theorem envelopeBlockHash_eq_of_toBlock
+    {envelope : Consensus.ExecutionPayloadEnvelope preset fork} {any : Json.AnyPayload}
+    {payload : ExecutionPayload fork} {requests : List ByteArray} {block : Block fork Transaction}
+    (gloas : .glamsterdam ≤ fork) (converted : anyPayloadOf envelope.payload = some any)
+    (shaped : any.atFork fork = .ok payload)
+    (listed : Consensus.getExecutionRequestsList envelope.executionRequests = .ok requests)
+    (built : payload.toBlock (fun _ => envelope.parentBeaconBlockRoot) (fun _ => requests)
+      (fun _ => ⟨(envelope.payload.blockAccessList gloas).data⟩)
+      (fun _ => envelope.payload.slotNumber gloas) = .ok block) :
+    envelopeBlockHash envelope = some envelope.payload.blockHash := by
+  simp only [ExecutionPayload.toBlock, bind_ok_iff] at built
+  obtain ⟨unchecked, unbuilt, _, checked, -⟩ := built
+  rw [envelopeBlockHash_eq_of_toBlockUnchecked gloas converted shaped listed unbuilt]
+  -- The structure of the payload, and the payload at the fork, keep the block hash.
+  have same : payload.blockHash = envelope.payload.blockHash := by
+    unfold anyPayloadOf at converted
+    split at converted
+    · cases converted
+      simp only [Json.AnyPayload.atFork, bind_ok_iff] at shaped
+      obtain ⟨_, _, _, _, _, _, result⟩ := shaped
+      cases result
+      rfl
+    · cases converted
+  -- The block hash check makes the hash of the header the block hash of the payload.
+  simp only [ExecutionPayload.checkBlockHash, bind_ok_iff] at checked
+  obtain ⟨computed, hashed, equal⟩ := checked
+  split at equal
+  · rename_i h
+    revert hashed
+    cases unchecked.header.hash <;> simp_all [Except.mapError, Except.toOption]
+  · cases equal
+
 end EthLib.Engine

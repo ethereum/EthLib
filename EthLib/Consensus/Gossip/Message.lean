@@ -80,9 +80,12 @@ variable {preset : Preset} {fork : Fork}
 
 The KZG setup checks the proofs of a blob or column sidecar.
 
-The statuses of payloads check the blocks and the votes that name a payload. -/
-def validate (config : Config) (checks : SignatureChecks) (setup : TrustedSetup) (seen : Seen)
-    (store : Store preset fork) (statuses : PayloadStatuses) (currentTimeMs : UInt64) :
+The statuses of payloads check the blocks and the votes that name a payload.
+
+The block hash of the payload of an envelope comes from the caller. -/
+def validate (config : Config) (checks : SignatureChecks) (setup : TrustedSetup)
+    (blockHashOf : BlockHashOf preset fork) (seen : Seen) (store : Store preset fork) (statuses :
+        PayloadStatuses) (currentTimeMs : UInt64) :
     GossipMessage preset fork → Except ForkChoiceError ValidationResult
   | .attesterSlashing slashing => validateAttesterSlashing config checks seen store slashing
   | .proposerSlashing slashing => validateProposerSlashing config checks seen store slashing
@@ -116,7 +119,7 @@ def validate (config : Config) (checks : SignatureChecks) (setup : TrustedSetup)
   | .proposerPreferences gloas signed =>
     validateProposerPreferences config checks seen store gloas signed currentTimeMs
   | .executionPayloadEnvelope gloas signed =>
-    validateExecutionPayloadEnvelope config checks seen store gloas signed
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed
   | .payloadAttestationMessage gloas message =>
     validatePayloadAttestationMessage config checks seen store gloas message currentTimeMs
   | .executionPayloadBid gloas signed =>
@@ -168,11 +171,12 @@ end GossipMessage
 
 Only a valid message adds its keys to the messages seen. -/
 def validateGossipMessage {preset : Preset} {fork : Fork} (config : Config)
-    (checks : SignatureChecks) (setup : TrustedSetup) (seen : Seen) (store : Store preset fork)
-    (statuses : PayloadStatuses) (currentTimeMs : UInt64) (message : GossipMessage preset fork) :
+    (checks : SignatureChecks) (setup : TrustedSetup) (blockHashOf : BlockHashOf preset fork)
+    (seen : Seen) (store : Store preset fork) (statuses : PayloadStatuses) (currentTimeMs : UInt64)
+    (message : GossipMessage preset fork) :
     Except ForkChoiceError (ValidationResult × Seen) := do
   -- The outcome by the rules of the topic of the message.
-  let outcome ← message.validate config checks setup seen store statuses currentTimeMs
+  let outcome ← message.validate config checks setup blockHashOf seen store statuses currentTimeMs
   -- An accepted message adds its keys, and an ignored or rejected one leaves the keys as they are.
   if outcome.isAccept then return (outcome, ← message.record config store seen)
   else return (outcome, seen)

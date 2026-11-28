@@ -22,7 +22,8 @@ namespace EthLib.Consensus
 open Base Uint64 Networking.Gossip Networking.Gossip.ValidationResult Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-  {seen : Seen} {store : Store preset fork} {gloas : .glamsterdam ≤ fork}
+  {blockHashOf : BlockHashOf preset fork} {seen : Seen} {store : Store preset fork}
+  {gloas : .glamsterdam ≤ fork}
 
 /-- The limits of the requests accept exactly when each count is within its limit. -/
 theorem checkExecutionRequestsLimits_eq_accept {requests : ExecutionRequests preset fork} :
@@ -54,7 +55,7 @@ variable {signed : SignedExecutionPayloadEnvelope preset fork} {block : BeaconBl
 theorem validateExecutionPayloadEnvelope_of_seen
     (known : (signed.message.beaconBlockRoot, signed.message.builderIndex) ∈
       seen.executionPayloadEnvelopes) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
       .ok (.ignore "already seen envelope for this block root from this builder") := by
   simp [validateExecutionPayloadEnvelope, known, pure, Except.pure]
 
@@ -63,8 +64,8 @@ theorem validateExecutionPayloadEnvelope_recordExecutionPayloadEnvelope
     {other : SignedExecutionPayloadEnvelope preset fork}
     (sameRoot : other.message.beaconBlockRoot = signed.message.beaconBlockRoot)
     (sameBuilder : other.message.builderIndex = signed.message.builderIndex) :
-    validateExecutionPayloadEnvelope config checks (seen.recordExecutionPayloadEnvelope signed)
-        store gloas other =
+    validateExecutionPayloadEnvelope config checks blockHashOf
+        (seen.recordExecutionPayloadEnvelope signed) store gloas other =
       .ok (.ignore "already seen envelope for this block root from this builder") :=
   validateExecutionPayloadEnvelope_of_seen (by
     simp [Seen.recordExecutionPayloadEnvelope, sameRoot, sameBuilder])
@@ -88,7 +89,7 @@ theorem validateExecutionPayloadEnvelope_eq
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
       .ok ((ignoreUnless (!seen.executionPayloadEnvelopes.contains
             (signed.message.beaconBlockRoot, signed.message.builderIndex))
           "already seen envelope for this block root from this builder").andThen fun _ =>
@@ -127,6 +128,8 @@ theorem validateExecutionPayloadEnvelope_eq
           "payload contains an empty transaction").andThen fun _ =>
         (rejectUnless (withdrawalsRoot == expectedRoot)
           "payload's withdrawals do not match the expected withdrawals").andThen fun _ =>
+        (rejectUnless (blockHashOf signed.message == some signed.message.payload.blockHash)
+          "payload's block hash is not computed correctly").andThen fun _ =>
         rejectUnless valid "invalid envelope signature") := by
   unfold validateExecutionPayloadEnvelope
   simp only [known, held, finalized, rooted, timed, withdrawn, bounded, counted, expected,
@@ -153,7 +156,7 @@ theorem validateExecutionPayloadEnvelope_ignored
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
-    (∃ reason, validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    (∃ reason, validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
         .ok (.ignore reason)) ↔
       (signed.message.beaconBlockRoot, signed.message.builderIndex) ∈
           seen.executionPayloadEnvelopes ∨
@@ -182,7 +185,8 @@ theorem validateExecutionPayloadEnvelope_eq_accept
     (expected : SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) = .ok expectedRoot)
     (signature : verifyExecutionPayloadEnvelopeSignature config checks state gloas signed =
       .ok valid) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed = .ok accept ↔
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed = .ok accept
+        ↔
       (signed.message.beaconBlockRoot, signed.message.builderIndex) ∉
           seen.executionPayloadEnvelopes ∧
         finalizedSlot ≤ signed.message.payload.slotNumber gloas ∧
@@ -205,6 +209,7 @@ theorem validateExecutionPayloadEnvelope_eq_accept
         signed.message.payload.timestamp = time ∧
         signed.message.payload.hasEmptyTransaction = false ∧
         withdrawalsRoot = expectedRoot ∧
+        blockHashOf signed.message = some signed.message.payload.blockHash ∧
         valid = true := by
   rw [validateExecutionPayloadEnvelope_eq known held finalized rooted timed withdrawn bounded
     counted expected signature]
@@ -217,7 +222,7 @@ theorem validateExecutionPayloadEnvelope_of_unknown
     (fresh : (signed.message.beaconBlockRoot, signed.message.builderIndex) ∉
       seen.executionPayloadEnvelopes)
     (unknown : store.blocks[signed.message.beaconBlockRoot]? = none) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
       .ok (.ignore "envelope's block has not been seen") := by
   simp [validateExecutionPayloadEnvelope, fresh, unknown, pure, Except.pure]
 
@@ -227,7 +232,7 @@ theorem validateExecutionPayloadEnvelope_of_failed
       seen.executionPayloadEnvelopes)
     (known : store.blocks[signed.message.beaconBlockRoot]? = some block)
     (failed : store.blockStates[signed.message.beaconBlockRoot]? = none) :
-    validateExecutionPayloadEnvelope config checks seen store gloas signed =
+    validateExecutionPayloadEnvelope config checks blockHashOf seen store gloas signed =
       .ok (.reject "envelope's block failed validation") := by
   simp [validateExecutionPayloadEnvelope, fresh, known, failed, pure, Except.pure]
 

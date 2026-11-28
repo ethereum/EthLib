@@ -60,7 +60,9 @@ abbrev SubmitItem (preset : Preset) (fork : Fork) := List (GossipMessage preset 
 
 /-- What a node reads to validate an item: the configuration, the checks and the store.
 
-It also reads the KZG setup, the statuses of payloads and the time of the request. -/
+It also reads the KZG setup, the statuses of payloads and the time of the request.
+
+From Gloas it reads the block hash of the payload of an envelope, which the caller computes. -/
 structure SubmitContext (preset : Preset) (fork : Fork) where
   /-- The configuration of the chain. -/
   config : Config
@@ -68,6 +70,8 @@ structure SubmitContext (preset : Preset) (fork : Fork) where
   checks : SignatureChecks
   /-- The KZG setup, for the proofs of a sidecar. -/
   setup : TrustedSetup
+  /-- From Gloas: the hash of the execution header of the payload of an envelope. -/
+  blockHashOf : BlockHashOf preset fork
   /-- The fork choice store of the node. -/
   store : Store preset fork
   /-- The statuses of the payloads that the execution layer judged. -/
@@ -85,7 +89,8 @@ def failureReason : ValidationResult → Option String
 def messageFailure (context : SubmitContext preset fork) (seen : Seen)
     (message : GossipMessage preset fork) : Option String × Seen :=
   -- The gossip validation of the topic of the message, as for a message from a peer.
-  match validateGossipMessage context.config context.checks context.setup seen context.store
+  match validateGossipMessage context.config context.checks context.setup context.blockHashOf seen
+      context.store
       context.statuses context.currentTimeMs message with
   | .ok (outcome, after) => (failureReason outcome, after)
   -- An error of the fork choice fails the message, with the keys seen before it.

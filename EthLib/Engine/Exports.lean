@@ -10,6 +10,7 @@ public import EthLib.Engine.Exports.GetBlobs
 public import EthLib.Engine.Exports.GetInclusionList
 public import EthLib.Engine.Exports.GetPayload
 public import EthLib.Engine.Exports.GetProof
+public import EthLib.Engine.Exports.Gossip
 public import EthLib.Engine.Exports.Jwt
 public import EthLib.Engine.Exports.NewPayload
 public import EthLib.Engine.Exports.Node
@@ -22,6 +23,8 @@ public import EthLib.Engine.Exports.TransitionConfiguration
 # `EthLib.Engine.Exports`
 
 The C exports of the Engine API, for the Python bindings.
+
+They also hold the consensus exports that need the block hash of an execution header.
 
 They are compiled by the `Exports` Lake library.
 

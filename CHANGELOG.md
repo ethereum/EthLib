@@ -1386,6 +1386,11 @@ Not yet released.
   From Gloas, bid gossip ignores a bid that arrives before the payload votes of the slot before it are due.
   It also ignores a bid on the parent of the head unless the bid is for the next slot and the head is late or its proposer equivocated.
   `isBidCompatibleWithHead_eq_ok_iff` (`Consensus/Proofs/Gossip/Bid.lean`) states these results, and the chain theorems of the bid topic take the deadline as a hypothesis.
+  From Gloas, envelope gossip rejects a payload whose block hash is not the hash of its execution header.
+  The consensus rule takes that hash as a parameter (`BlockHashOf`), and the Engine layer computes it with `envelopeBlockHash`.
+  `envelopeBlockHash_eq_of_toBlock` (`Engine/Proofs/ExecutionEngine.lean`) shows that it is the block hash of a payload whose block, built by `ExecutionPayload.toBlock` at the fork of the envelope, passes the block hash check.
+  `validateExecutionPayloadEnvelope`, `GossipMessage.validate`, `validateGossipMessage`, `validateGossipInput`, `gossipValidationOf` and `apiPostOf` take a new `blockHashOf` argument, and `SubmitContext` has a new field `blockHashOf`.
+  `gossipValidationExport` and `apiPostExport` move from `EthLib.Consensus.Exports` to `EthLib.Engine.Exports` (`Engine/Exports/Gossip.lean`), with the same C symbols.
 
 - In Lean, the MODEXP output (`Evm.Precompiles.Modexp.compute`) reads the modulus first, and reads the base and the exponent only for a modulus other than 0 ([#4950](https://github.com/ethereum/EthLib/issues/4950)).
   Its value is unchanged, and `compute_data` keeps its statement, but a proof that unfolds the definition sees the new order.
