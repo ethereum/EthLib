@@ -1186,7 +1186,9 @@ The alternatives are a collision of two honest stores and four kinds of accounta
 
 The evidence is historical, cross-store direct-safety, cross-store justified or held-state finality.
 
-Before Electra it also assumes that each honest call's voters keep their stake up to its reserve.
+Before Electra it assumes each honest call's voters keep their stake up to its reserve.
+
+That assumption allows a collision of two honest stores in place of the bound.
 -/
 theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
     {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
