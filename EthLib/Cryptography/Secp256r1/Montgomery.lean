@@ -325,10 +325,10 @@ abbrev ofFin (a : Fp) : Montgomery := Word64.Montgomery.ofFin a
 /-- Leave the Montgomery form with a product by the integer one. -/
 abbrev toFin (a : Montgomery) : Fp := Word64.Montgomery.toFin a
 
-/-- The inverse, through the extended Euclidean algorithm on `Fp`, and 0 for 0.
+/-- The inverse, through the inverse of `Fp`, and 0 for 0.
 
 It goes through `Fp`, since it runs once for each scalar multiplication. -/
-def inv (a : Montgomery) : Montgomery := ofFin (Fin.inverse (toFin a))
+def inv (a : Montgomery) : Montgomery := ofFin (Fp.inv (toFin a))
 
 end Montgomery
 

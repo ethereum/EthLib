@@ -8,6 +8,7 @@ public import EthLib.Cryptography.Proofs.Montgomery.Core
 public import EthLib.Cryptography.Proofs.Montgomery.Fin
 public import EthLib.Cryptography.Proofs.Word64
 public import EthLib.Cryptography.Proofs.Jacobian
+public import EthLib.Cryptography.Proofs.Secp256r1.Field
 
 /-!
 # Proofs: the Montgomery form of the secp256r1 base field
@@ -16,7 +17,7 @@ The four words hold the same residue as the shared Montgomery field on eight 32-
 
 So reading back into `Fp` keeps zero, one, sums, differences and products, and it is injective.
 
-It undoes the encoding, and the inverse reads back as the inverse of `Fp`.
+It undoes the encoding, and the inverse reads back as the Euclidean inverse.
 -/
 
 @[expose] public section
@@ -126,9 +127,9 @@ theorem toFin_injective : Function.Injective toFin := Word64.Montgomery.toFin_in
 /-- Entering the Montgomery form and reading back gives the element itself. -/
 theorem toFin_ofFin (a : Fp) : toFin (ofFin a) = a := Word64.Montgomery.toFin_ofFin a
 
-/-- The inverse reads back as the inverse of `Fp`. -/
-theorem toFin_inv (a : Montgomery) : toFin (inv a) = Fin.inverse (toFin a) :=
-  toFin_ofFin _
+/-- The inverse reads back as the Euclidean inverse of its value in `Fp`. -/
+theorem toFin_inv (a : Montgomery) : toFin (inv a) = Fin.inverse (toFin a) := by
+  rw [inv, toFin_ofFin, Fp.inv_eq_inverse]
 
 /-- Reading the Montgomery form back is a change of field representation. -/
 theorem toFin_embedding : Jacobian.Coords.Embedding toFin :=

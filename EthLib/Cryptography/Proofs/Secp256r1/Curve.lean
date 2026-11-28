@@ -104,17 +104,21 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus}
       toPoint (ofJacobian p) = Jacobian.toPoint (Fp.toZMod a) (Fp.toZMod b) p :=
   ShortWeierstrass.Point.ofJacobian_spec embedding toZ_eq hp
 
+/-- `Fp` with its inverse is a representation of itself for the scalar product. -/
+private theorem representation : ShortWeierstrass.Point.Representation id Fp.inv id :=
+  ⟨Jacobian.Coords.Embedding.id, Fp.inv_eq_inverse, fun _ => rfl⟩
+
 theorem isOnCurve_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
     (mulNat k p).isOnCurve = true :=
   ShortWeierstrass.Point.isOnCurve_mulNat embedding toZ_eq
-    ShortWeierstrass.Point.Representation.fin
+    representation
     toZ_a two_ne_zero' k hp
 
 /-- The scalar product computes `k P`. -/
 theorem toPoint_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mulNat k p) = k • toPoint p :=
   ShortWeierstrass.Point.toPoint_mulNat embedding toZ_eq
-    ShortWeierstrass.Point.Representation.fin
+    representation
     toZ_a two_ne_zero' k hp
 
 theorem isOnCurve_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) : (mul k p).isOnCurve = true :=

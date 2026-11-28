@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Inverse
+public import EthLib.Cryptography.SafeGcd
 public import Mathlib.FieldTheory.Finite.Basic
 
 /-!
@@ -13,6 +14,8 @@ So at the end, the result times `a` is the gcd of `a` and `m`.
 For a prime `m` and a nonzero `a` the gcd is `1`, so the result is the inverse in `ZMod m`.
 
 For `a = 0` the result is `0`, as for the inverse of `ZMod m`.
+
+For a prime modulus, the inverse by divsteps checks its candidate, so it is the Euclidean inverse.
 -/
 
 @[expose] public section
@@ -85,5 +88,29 @@ theorem Fin.inverse_val {m : Nat} [NeZero m] [Fact m.Prime] (a : Fin m) :
 theorem Fin.inverse_map {m : Nat} [NeZero m] [Fact m.Prime] (f : Fin m → ZMod m)
     (hf : ∀ x, f x = (x.val : ZMod m)) (a : Fin m) : f (Fin.inverse a) = (f a)⁻¹ := by
   rw [hf, hf, Fin.inverse_val]
+
+/-- The checked candidate is the Euclidean inverse, whatever the candidate. -/
+theorem SafeGcd.check_eq {m : Nat} [NeZero m] [Fact m.Prime] (c : Option Nat) (a : Fin m) :
+    SafeGcd.check c a = Fin.inverse a := by
+  cases c with
+  | none => rfl
+  | some c =>
+    simp only [SafeGcd.check]
+    split
+    · rename_i h
+      -- `c a = 1` in the field, so `c` is the inverse of `a`.
+      have hmul : (c : ZMod m) * (a.val : ZMod m) = 1 := by
+        rw [← Nat.cast_mul, ← ZMod.natCast_mod (c * a.val) m, h.2, Nat.cast_one]
+      have he : (c : ZMod m) = (a.val : ZMod m)⁻¹ := eq_inv_of_mul_eq_one_left hmul
+      apply Fin.ext
+      have hv := congrArg ZMod.val (he.trans (Fin.inverse_val a).symm)
+      simpa only [ZMod.val_natCast, Nat.mod_eq_of_lt h.1,
+        Nat.mod_eq_of_lt (Fin.inverse a).isLt] using hv
+    · rfl
+
+/-- For a prime `m`, the inverse by divsteps is the Euclidean inverse, for every input. -/
+theorem SafeGcd.inverseFin_eq {m : Nat} [NeZero m] [Fact m.Prime] (a : Fin m) :
+    SafeGcd.inverseFin a = Fin.inverse a :=
+  SafeGcd.check_eq _ a
 
 end EthLib.Cryptography

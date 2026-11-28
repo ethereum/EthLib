@@ -57,7 +57,7 @@ def generator : Point :=
 
 The steps run in Jacobian coordinates, so only the conversion back takes an inverse. -/
 def mulNat (k : Nat) (p : Point) : Point :=
-  ShortWeierstrass.Point.mulNat id Fin.inverse id a k p
+  ShortWeierstrass.Point.mulNat id Fp.inv id a k p
 
 /-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`. -/
 def mul (k : Fn) (p : Point) : Point := mulNat k.val p
