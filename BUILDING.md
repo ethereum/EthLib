@@ -124,7 +124,7 @@ The EthLib cache key includes the operating system, the architecture, the toolch
 Pull requests read the cache but never publish one.
 
 The library and the exports import no module of Mathlib, VCVio or their dependencies.
-So the jobs that need only the library and the exports do not fetch the Mathlib cache: the `suites` job and the workflow `vectors-slow`.
+So the jobs that build only the library and the exports do not fetch the Mathlib cache: the `spec-exports` job and the workflow `vectors-slow`.
 They run `lake env true`, which clones the packages that Lake needs to load the workspace.
 
 A new push to a pull request cancels the run still in progress on that pull request.
@@ -152,15 +152,23 @@ This is safe because no export runs compiled code of the specification while it 
 `scripts/check_lean_commands.py` fails on a `#` command, such as `#eval`, in any module under `EthLib`.
 Review must still reject a `run_cmd`, an `initialize` or a `meta import` of a specification module in an export.
 
-Before saving, CI deletes the generated `*.setup.json` files from the build directory.
-These files contain absolute runner paths, and Lake regenerates them.
-The cache uses version `v2`, so that it cannot restore entries saved before this cleanup.
+Before saving, CI deletes `*.setup.json`, `*.irsetup.json` and `bin/` from the build directory.
+Setup files contain absolute runner paths, and Lake regenerates them.
+Checker binaries in `bin/` are not default targets, so dropping them removes over 1 GiB from the cache.
+The spec and full caches use version `v3`, so they do not restore older entries.
 
 Native objects are platform-specific.
 The build therefore does not claim the platform independence that CompPoly's library-only release archive relies on.
 
-The vector suites need only the library, so they run in the `suites` job, beside the proofs in the `build` job.
-Each job builds the library and the exports from the restored cache, and only the `build` job saves a cache.
+CI builds `EthLib` and `Exports` once in the `spec-exports` job and uploads their artifacts.
+The six Python `suites` jobs and `parity-sample` download those artifacts and set `ETHLIB_SKIP_LAKE=1`.
+`setup.py` then compiles the C wrappers in parallel without running Lake again.
+In parallel, six `proofs` shards build their proof targets.
+Each proof module has one owning shard, which uploads its build files to the `build` job.
+A module that several shards import is built in each of them, but only its owner uploads it.
+The `build` job merges those shards, finishes `EthLib.Engine.Proofs` and the umbrella modules, runs every verification check (including `lake exe known-answers`), and saves `ethlib-build-v3` on `master`.
+Its full `lake build --wfail` builds any module that no shard uploaded, and replays the warnings of the others, so no module escapes the check.
+It runs even when a shard fails, so every check still reports, and it then fails too.
 
 The job summary reports the wall time and the CPU work of each build and test stage.
 The exports are measured before the bindings are installed, to keep their timing separate from the uv package build.
