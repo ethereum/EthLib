@@ -8010,7 +8010,7 @@ Points that remain open:
 ### Builder API
 
 The Builder API connects a proposer to the builders that bid for its payload, as `ethereum/builder-specs` defines it.
-EthLib cites commit `0911550` of that repository.
+EthLib cites commit `bbd815e` of that repository.
 For Bellatrix to Fulu, its specification text matches release `v0.6.1`, except for formatting, `deprecated` flags, notes that point to the Gloas replacements and links pinned to consensus-specs releases.
 Its pseudocode also corrects that of the release, so that it states the rules that EthLib follows.
 EthLib specifies the messages, their signatures, their SSZ encodings and the version names of their JSON bodies; it leaves out the transport.
@@ -8037,7 +8037,7 @@ That payload then names the fee recipient that the proposer checked, which the c
 The theorem shows that the payload names the fee recipient, not that the fee recipient receives the value of the bid, which is a fact of the execution layer.
 
 A builder answers a signed blinded block with a success, 200 at the first endpoint and 202 at the second, exactly when the block is valid for it, and with 400 otherwise (`submitBlindedBlockStatus_eq_success_iff`, `submitBlindedBlockStatus_eq_400_iff`, `Consensus/Proofs/BuilderApi/Submit.lean`).
-A block is valid when it unblinds with the builder's payload and the full block passes the state transition from the builder's state, under signature checks that the export sets to BLS, as the [Bellatrix builder document](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/builder.md#blinded-block-processing) asks.
+A block is valid when it unblinds with the builder's payload and the full block passes the state transition from the builder's state, under signature checks that the export sets to BLS, as the [Bellatrix builder document](https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/specs/bellatrix/builder.md#blinded-block-processing) asks.
 A block that names the proposer of its slot, and whose signature fails on the state of that slot, gets 400 (`submitBlindedBlockStatus_of_signature`), so the separate signature check of the source adds nothing to the transition.
 That theorem assumes a logs bloom of positive size, as every preset of the source has.
 The source does not say what a builder answers for a block whose header is not that of its payload; EthLib reads it as invalid, with 400.
@@ -8088,7 +8088,7 @@ EthLib answers 500, the internal error of the source, when the proposer of the s
 The source gives the bid of a builder for Bellatrix only.
 From Deneb the commitments to the blobs, and from Electra the requests, are inputs, since the source gives no function that fills them.
 
-From Gloas, a builder checks a request for a bid with six rules, and a proposer checks a bid it fetched with eight rules and the signature.
+From Gloas, a builder checks a request for a bid with six rules, and a proposer checks a bid it fetched with nine rules and the signature.
 `isEligibleForBidGloas_ok_true_iff` (`Consensus/Proofs/BuilderApi/GloasBid.lean`) states the builder's rules.
 The slot is that of the state, and the key is that of the proposer of the slot, which is active.
 That proposer sent preferences on gossip, the parent hash is that of the parent with or without its payload, and the parent root is the root of the latest header.
@@ -8096,9 +8096,10 @@ That proposer sent preferences on gossip, the parent hash is that of the parent 
 The source asserts each rule, and EthLib answers false where an assertion fails.
 
 `validateBid_ok_true_iff` states the proposer's rules, in the order of the source.
-The builder is active, and the slot, the fee recipient, the parent hash, the parent root and the RANDAO mix match.
+The builder is active, and the slot, the fee recipient and the parent hash match.
+The block hash differs from the parent hash, and the parent root and the RANDAO mix match.
 The gas limit moves toward the proposer's target, the builder can pay a bid of positive value, and the signature verifies.
-The source asserts the eight rules and returns the signature check, so EthLib names the first failed rule as an error and returns the signature check as the result.
+The source asserts the nine rules and returns the signature check, so EthLib names the first failed rule as an error and returns the signature check as the result.
 `validateBid_zero_value` shows that a bid of value zero is never refused for the funds of its builder.
 `validateBid_not_selfBuild` shows that a bid naming the index of a self-built payload is never accepted, while the registry of builders is shorter than that index.
 The cap that a proposer sets on the execution payment limits how much of it counts when a bid is valued; it is not a rule of validity.
@@ -8169,7 +8170,7 @@ The signature covers the data and the slot, not the preferences of the request; 
 The store keeps the first preferences for a key and slot, so such a copy, replayed after the original, cannot replace them.
 A copy with another cap that reaches the builder first is kept, and the original is then ignored.
 A maintainer of the source keeps the preferences out of the signature ([ethereum/builder-specs#183](https://github.com/ethereum/builder-specs/issues/183), closed as not planned on 2026-11-25).
-One signed authentication serves both the bid request and the preferences of a slot, since its data is not tied to an endpoint ([Gloas `validator.md`](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/gloas/validator.md#constructing-the-builderrequestauth)).
+One signed authentication serves both the bid request and the preferences of a slot, since its data is not tied to an endpoint ([Gloas `validator.md`](https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/specs/gloas/validator.md#constructing-the-builderrequestauth)).
 A proposer and a builder who want signed preferences can put them in the agreed data.
 EthLib follows the source, so a copy that arrives first still wins.
 
@@ -8219,11 +8220,11 @@ The rule names no slot, so EthLib keeps the submissions of one slot in a store, 
 From Bellatrix to Fulu, a relay serves a submission to proposers as a bid of the Builder API.
 `SubmitBlockRequest.bid_total` shows that the bid always computes, and `SubmitBlockRequest.bid_header` that it holds the header of the payload.
 `SubmitBlockRequest.bid_value_pubkey` shows that it holds the value of the bid trace and the key it is served under.
-`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#bidding) require.
+`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/specs/deneb/builder.md#bidding) require.
 `SubmitBlockRequest.bid_requests` shows that from Electra it holds the requests of the submission.
 `SubmitBlockRequest.bid_unblind` shows that a blinded body that carries the header of the bid unblinds to a body that holds the payload of the submission.
 The source does not fix the key that signs the served bid, so it is an input.
-From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
+From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
 That check needs the balance change of the fee recipient from a simulation of the payload.
 It subtracts the amounts of the withdrawals to the fee recipient, each converted from Gwei to Wei, from that change in Wei.
 `verifyBidValue` (`Consensus/RelayApi.lean`) states the check, and a subtraction below zero fails it, as the source's `uint256` subtraction raises.

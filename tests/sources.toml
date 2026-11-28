@@ -47,7 +47,7 @@ commit = "09256e18f0a575e0aef546e06ec773a35fc52938"
 directories = ["tests/consensus/beacon_api"]
 
 [repositories."ethereum/builder-specs"]
-commit = "0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7"
+commit = "bbd815eb08587ad382c0effb87705030b87854da"
 directories = ["tests/consensus/builder_api"]
 
 [repositories."flashbots/relay-specs"]
