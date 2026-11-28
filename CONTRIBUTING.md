@@ -733,7 +733,7 @@ Set `ETHLIB_PARITY_REPORT` to a file name to get the report of these outcomes fo
 
 A gas rule is a named case in the calculation of a gas charge or refund.
 At each fork, the gas coverage report lists the instrumented rules that fixtures exercise or miss.
-For example, it counts warm and cold `SLOAD` separately.
+From Berlin, for example, it counts warm and cold `SLOAD` separately.
 Build the fixture runner and run the report from the repository root.
 
 ```bash

@@ -276,7 +276,9 @@ private def variableRules (op : Op) (evm after : Evm fork Meter)
   | .keccak256 => #[.hash (nonzero 1)]
   | .calldatacopy | .codecopy | .returndatacopy | .mcopy => #[.copy (nonzero 2)]
   | .extcodecopy =>
-    -- EIP-150, Specification: before Berlin, the copy pays a fixed base price at each fork.
+    -- Before Berlin, the base price of the copy does not depend on access.
+    --
+    -- Its memory charge keeps it out of the fixed prices, so it is recorded here.
     #[.copy (nonzero 3)] ++ externalCodeRules ++
       whenRule (fork < .berlin) (.fixedPrice (externalBaseCost fork false))
   | .extcodesize => externalCodeRules
@@ -301,7 +303,9 @@ public def stepGasRules (evm : Evm fork Meter) (step : StepResult fork Meter) :
   let (after, child) := match step with
     | .next after => (after, none)
     | .child caller message _ => (caller, some message)
-  -- A step that preserves reads can return a halted frame with an exceptional error.
+  -- A step can return a frame that halted with an exceptional error.
+  --
+  -- Its gas change is not the price of a rule, so the step records nothing.
   if after.error.any (· != .revert) then return #[]
   let op := if h : evm.pc < evm.code.size then Op.ofByte fork evm.code[evm.pc] else some .stop
   let some op := op | return #[]
