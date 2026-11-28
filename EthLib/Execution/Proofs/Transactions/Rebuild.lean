@@ -570,6 +570,35 @@ theorem deleteAccounts_rebuildEnd {block : BlockState}
 
 /-! ## The transaction -/
 
+/-- A run of a transaction meets the hypotheses on the start of its message.
+
+After the purchase of gas, the state has the rebuild property and the caller has a nonce.
+
+A call of the run goes to its recipient. -/
+theorem TransactionRun.messageReady [LawfulGasMeter Meter] {env : BlockEnvironment fork}
+    {block : BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
+    {target : Address} {bought : TransactionState} {message : Message fork}
+    {output : CallOutput} {settled : TransactionState}
+    -- Each code read in its block state has its hash.
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    -- That state holds no delegation indicator at an account with nonce 0.
+    (delegations : DelegationsHaveNonce (.ofBlock block))
+    (h : TransactionRun Meter env block included tx out target bought message output settled) :
+    RebuildState block bought ∧ HasNonceOrCode bought message.caller ∧
+      (∀ t, message.target = some t → message.currentTarget = t) := by
+  obtain ⟨hTarget, hBought, hMessage, -⟩ := h
+  -- Buying the gas keeps the rebuild property, and raises the nonce of the sender.
+  obtain ⟨vb, -, hnonce⟩ := buyGas_rebuildState (RebuildState.ofBlock code delegations) hBought
+  refine ⟨vb, caller_transactionMessage hMessage ▸ .inl hnonce, fun t ht => ?_⟩
+  -- A call of a transaction runs at its recipient.
+  obtain ⟨hto, hcur⟩ := target_transactionMessage hMessage
+  rw [hcur]
+  rw [hto] at ht
+  unfold messageTarget at hTarget
+  rw [ht] at hTarget
+  exact (Except.ok.inj hTarget).symm
+
 /-- From Dencun, a run of a transaction with any gas meter keeps what its end needs. -/
 private theorem runTransaction_rebuildEnd [LawfulGasMeter Meter] (hfork : .dencun ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {included : Included}
@@ -579,21 +608,10 @@ private theorem runTransaction_rebuildEnd [LawfulGasMeter Meter] (hfork : .dencu
     (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : runTransaction Meter env block included tx = .ok output) :
     RebuildEnd block output.state := by
-  obtain ⟨target, bought, message, out, settled, hTarget, hBought, hMessage, hOutput, -,
-    hSettle, hDeleted⟩ := runTransaction_eq_ok h
+  obtain ⟨target, bought, message, out, settled, hrun⟩ := runTransaction_eq_ok h
   -- Buying the gas keeps the rebuild property of the state on its block.
-  obtain ⟨vb, -, hnonce⟩ := buyGas_rebuildState (RebuildState.ofBlock code delegations) hBought
-  have hcaller : HasNonceOrCode bought message.caller := by
-    rw [caller_transactionMessage hMessage]
-    exact .inl hnonce
-  have htarget : ∀ t, message.target = some t → message.currentTarget = t := by
-    intro t ht
-    obtain ⟨hto, hcur⟩ := target_transactionMessage hMessage
-    rw [hcur]
-    rw [hto] at ht
-    unfold messageTarget at hTarget
-    rw [ht] at hTarget
-    exact (Except.ok.inj hTarget).symm
+  obtain ⟨vb, hcaller, htarget⟩ := hrun.messageReady code delegations
+  obtain ⟨-, -, -, hOutput, -, hSettle, hDeleted⟩ := hrun
   -- So do its authorizations and its message.
   have vout := processMessageCall_rebuildState (Nat.le_trans (by decide) hfork)
     (message := { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir })

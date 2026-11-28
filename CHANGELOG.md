@@ -14,6 +14,15 @@ Not yet released.
   They assume that the body wipes no storage of an account that had nonce 0, no code and storage before the block (`Evm.WipeAllowed`, `Execution/Proofs/Evm/Call/Rebuild.lean`), which on mainnet excludes only a creation at one of the 28 accounts of EIP-8253.
   The theorems from a rebuildable block keep their statements and follow from these.
 
+- In Lean, the refund counter of a run of a transaction is at least zero when the block state has three properties ([#5021](https://github.com/ethereum/EthLib/issues/5021)).
+  Each code matches its hash, every delegation indicator comes with a nonce, and no empty account holds storage (`Transactions.EmptyAccountsHoldNoStorage`, `Execution/Proofs/Transactions/Refund.lean`).
+  An empty account has nonce 0, no code and balance 0 (`State.TransactionState.EmptyAt`).
+  The 28 accounts of EIP-8253 hold ether, so mainnet meets the third property.
+  `Transactions.TransactionRun.wipes` proves that each storage that the first frame of a run wipes held only zeros in the block state, or is at an empty account there.
+  `Transactions.TransactionRun.wipesHideZeros` and `Transactions.TransactionRun.refundCounter_nonneg` (`Execution/Proofs/Transactions/Refund.lean`) follow.
+  So does `Transactions.TransactionRun.runStack_refundCounter_nonneg` (`Execution/Proofs/Transactions/RefundStack.lean`).
+  `Transactions.TransactionRun.messageReady` (`Execution/Proofs/Transactions/Rebuild.lean`) gives the start of the message of a run, for both the rebuild and the refund proofs.
+
 - In Lean, the refund counter that a transaction settles is at least zero on mainnet too, when the first frame of its message wipes no storage that holds a nonzero word ([#5017](https://github.com/ethereum/EthLib/issues/5017)).
   `Transactions.prepareFirstFrame_refundCounter_nonneg_of_wipesHideZeros`, `Transactions.processMessageCall_refundCounter_nonneg_of_wipesHideZeros` (`Execution/Proofs/Transactions/Refund.lean`) and `Transactions.runStack_refundCounter_nonneg_of_wipesHideZeros` (`Execution/Proofs/Transactions/RefundStack.lean`) are new forms that do not assume that no account with nonce 0 and no code holds storage.
   They assume that each wipe in the state of the first frame hid only zero words of the block state (`Transactions.WipesHideZeros`).

@@ -13,6 +13,8 @@ That needs that each wipe of storage before its first frame runs hid only zero w
 
 It also needs every delegation indicator to come with a nonce.
 
+For a run of a transaction, the wipes hide zeros when no empty account holds storage.
+
 Source: [EIP-2200][eip2200], the refunds of net gas metering, and [EIP-7523][eip7523].
 
 [eip2200]: https://eips.ethereum.org/EIPS/eip-2200#specification
@@ -361,15 +363,116 @@ theorem TransactionRun.refundReady [LawfulGasMeter Meter] {env : BlockEnvironmen
     RebuildState block bought ∧ NoStorageWrite bought ∧ HasNonceOrCode bought message.caller ∧
       (∀ t, message.target = some t → message.currentTarget = t) ∧
       (startSubstate fork env.coinbase included.sender target tx).refundCounter = 0 := by
-  obtain ⟨hTarget, hBought, hMessage, -⟩ := h
-  obtain ⟨vb, hw, hsender⟩ := buyGas_refundReady code delegations hBought
-  refine ⟨vb, hw, caller_transactionMessage hMessage ▸ hsender, fun t ht => ?_, rfl⟩
-  -- A call of a transaction runs at its recipient.
-  obtain ⟨hto, hcur⟩ := target_transactionMessage hMessage
-  rw [hcur]
-  rw [hto] at ht
-  unfold messageTarget at hTarget
-  rw [ht] at hTarget
-  exact (Except.ok.inj hTarget).symm
+  obtain ⟨vb, hcaller, htarget⟩ := h.messageReady code delegations
+  exact ⟨vb, (noStorageWrite_ofBlock block).buyGas h.2.1, hcaller, htarget, rfl⟩
+
+/-! ## The wipes of a transaction -/
+
+/-- No account that is empty in the block state holds a nonzero word of storage.
+
+An empty account has nonce 0, no code and balance 0. -/
+def EmptyAccountsHoldNoStorage (block : BlockState) : Prop :=
+  ∀ address, TransactionState.EmptyAt address (.ofBlock block) →
+    ∀ key, (TransactionState.ofBlock block).getStorage address key = 0
+
+/-- A rebuildable block state holds no storage at an empty account. -/
+theorem _root_.EthLib.Execution.State.Rebuildable.emptyAccountsHoldNoStorage {block : BlockState}
+    (empty : Rebuildable block) : EmptyAccountsHoldNoStorage block :=
+  fun address hempty => empty.storage address hempty.1 hempty.2.1
+
+/-- Each storage that a first frame of a run wipes held only zeros, or is at an empty account.
+
+Any first frame from the state after the purchase of gas counts.
+
+The zeros and the empty account are those of the block state. -/
+theorem TransactionRun.wipes [LawfulGasMeter Meter] {env : BlockEnvironment fork}
+    {block : BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
+    {target : Address} {bought : TransactionState} {message : Message fork}
+    {output : CallOutput} {settled : TransactionState} {chainId reservoir : Nat}
+    {substate : Substate} {auths : List Authorization} {paid : Std.ExtTreeSet Address}
+    {first : FirstFrame fork Meter}
+    -- Each code read in its block state has its hash.
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    -- That state holds no delegation indicator at an account with nonce 0.
+    (delegations : DelegationsHaveNonce (.ofBlock block))
+    (h : TransactionRun Meter env block included tx out target bought message output settled)
+    (hfirst : prepareFirstFrame (Meter := Meter) chainId { message with reservoir } bought
+      substate auths paid = .ok first)
+    {address : Address} (hmem : address ∈ first.state.storageClears) :
+    (∀ key, (TransactionState.ofBlock block).getStorage address key = 0) ∨
+      TransactionState.EmptyAt address (.ofBlock block) := by
+  obtain ⟨vb, hcaller, htarget⟩ := h.messageReady code delegations
+  -- The account has no code in the block state, since the state of the frame wipes it.
+  have hnc := (prepareFirstFrame_rebuildState (message := { message with reservoir }) vb hcaller
+    htarget hfirst).1.clears address hmem
+  obtain ⟨kb, -, hcode⟩ := keptOrWipedEmpty_buyGas (address := address) h.2.1
+  have codeless : CodelessAtZero address bought auths := fun _ _ _ _ =>
+    hcode.trans (not_hasNonceOrCode_iff.mp hnc).2
+  obtain ⟨hkept | ⟨-, hempty⟩, -⟩ :=
+    kb.trans (keptOrWipedEmpty_prepareFirstFrame hfirst codeless).1
+  · -- The storage is as in the block state, and the frame reads 0 there, with no write.
+    refine .inl fun key => ?_
+    have hw := ((noStorageWrite_ofBlock block).buyGas h.2.1).prepareFirstFrame hfirst
+      address key
+    rw [← congrFun hkept key]
+    simp [TransactionState.getStorage, hw, hmem]
+  · exact .inr hempty
+
+/-- The first frame of a run wipes only storages of zeros when no empty account holds storage. -/
+theorem TransactionRun.wipesHideZeros [LawfulGasMeter Meter] {env : BlockEnvironment fork}
+    {block : BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
+    {target : Address} {bought : TransactionState} {message : Message fork}
+    {output : CallOutput} {settled : TransactionState} {chainId reservoir : Nat}
+    {substate : Substate} {auths : List Authorization} {paid : Std.ExtTreeSet Address}
+    {first : FirstFrame fork Meter}
+    -- Each code read in its block state has its hash.
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    -- That state holds no delegation indicator at an account with nonce 0.
+    (delegations : DelegationsHaveNonce (.ofBlock block))
+    -- No account with nonce 0, no code and balance 0 holds storage there.
+    (empty : EmptyAccountsHoldNoStorage block)
+    (h : TransactionRun Meter env block included tx out target bought message output settled)
+    (hfirst : prepareFirstFrame (Meter := Meter) chainId { message with reservoir } bought
+      substate auths paid = .ok first) :
+    WipesHideZeros block first.state :=
+  fun _ hmem => (h.wipes code delegations hfirst hmem).elim id (empty _)
+
+/-- The message of a run that succeeds settles the counter of the frame that ends it, at least 0.
+
+The block state must hold no storage at an empty account, which mainnet meets. -/
+theorem TransactionRun.refundCounter_nonneg [LawfulGasMeter Meter] {env : BlockEnvironment fork}
+    {block : BlockState} {included : Included} {tx : Transaction} {out : TransactionOutput}
+    {target : Address} {bought : TransactionState} {message : Message fork}
+    {output : CallOutput} {settled : TransactionState}
+    -- Each code read in its block state has its hash.
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    -- That state holds no delegation indicator at an account with nonce 0.
+    (delegations : DelegationsHaveNonce (.ofBlock block))
+    -- No account with nonce 0, no code and balance 0 holds storage there.
+    (empty : EmptyAccountsHoldNoStorage block)
+    (h : TransactionRun Meter env block included tx out target bought message output settled)
+    (hok : output.error = none) :
+    ∃ (first : FirstFrame fork Meter) (ended : {evm : Evm fork Meter //
+        GasMeter.gasHeld evm.gas ≤ first.message.gas}),
+      prepareFirstFrame (Meter := Meter) env.chainId.toNat
+          { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir }
+          bought (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
+          (paidWrites included.sender target tx) = .ok first ∧
+      (if message.target = none then
+        processCreateMessage fork first.message first.state first.substate first.meter
+          first.held = .ok ended
+      else
+        processMessage fork first.message first.state first.substate first.meter first.held =
+          .ok ended) ∧
+      (output.refund : Int) =
+        (if message.target = none then 0 else first.refund) + ended.val.substate.refundCounter ∧
+      0 ≤ ended.val.substate.refundCounter := by
+  obtain ⟨vb, hw, hcaller, htarget, hsub⟩ := h.refundReady code delegations
+  exact processMessageCall_refundCounter_nonneg_of_wipesHideZeros vb hw hcaller htarget
+    (Int.le_of_eq hsub.symm) (fun _ hfirst => h.wipesHideZeros code delegations empty hfirst)
+    h.2.2.2.1 hok
 
 end EthLib.Execution.Transactions
