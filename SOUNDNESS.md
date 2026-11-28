@@ -4454,7 +4454,8 @@ That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreDirectSafetyEviden
 Each evidence alternative is relative to the anchor, so with enough churn since the anchor it holds with no accountable key.
 The theorem covers executions whose honest stores verify signatures with BLS (`checks = .bls`).
 The specification's pulled-up head state processes slots with BLS checks, and a run under other checks can differ from it.
-The theorem holds at every fork under its other hypotheses, with quorum drift assumed before Electra.
+From Electra it derives `QuorumDriftWithin`; before Electra it takes it as an assumption that no theorem discharges.
+At Electra `JustifiedPinned` stays a premise without a proof: `justifiedPinned_of_setting` covers Fulu up to Gloas.
 From Gloas it takes three premises, each saying nothing before Gloas.
 `room` says that the anchor's registry leaves room up to the horizon.
 `weights` says that the head reads of the configuration fit 64 bits for an active stake up to 2·10^17 Gwei.

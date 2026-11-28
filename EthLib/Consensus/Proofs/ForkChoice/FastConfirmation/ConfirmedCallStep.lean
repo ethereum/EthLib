@@ -1073,7 +1073,7 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
   · exact .inr (.inl collision)
   -- The stake of each call's voters drifts by at most the call's reserve.
   have quorum : QuorumDriftWithin (e := e) horizon limit := by
-    -- Before Electra the run supplies the bound.
+    -- Before Electra the premise supplies the bound.
     by_cases electra : .pectra ≤ fork
     swap
     · exact beforeElectra (Nat.lt_of_not_le electra)
@@ -1186,9 +1186,7 @@ The alternatives are a collision of two honest stores and four kinds of accounta
 
 The evidence is historical, cross-store direct-safety, cross-store justified or held-state finality.
 
-Before Electra it assumes each honest call's voters keep their stake up to its reserve.
-
-That assumption allows a collision of two honest stores in place of the bound.
+Before Electra it assumes the quorum drift bound, which also accepts a collision of honest stores.
 -/
 theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
     {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
@@ -1252,7 +1250,7 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     --
     -- It buys the honest signer of each later justification.
     (byzantine : ByzantineCountedStake (e := e) anchorEpoch 0 limit)
-    -- Before Electra the run must supply the quorum drift bound.
+    -- An assumption on the run: before Electra its quorum drift is within each call's reserve.
     (beforeElectra : fork < .pectra → QuorumDriftWithin (e := e) horizon limit)
     (band : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)

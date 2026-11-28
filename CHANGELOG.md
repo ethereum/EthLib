@@ -1424,7 +1424,7 @@ Not yet released.
   They are `block_balances` and `processOperations_floor` (`Consensus/Proofs/Transition/BlockCredits.lean`), and `Run.withdrawableKept_of_same_epoch` and `Run.balanceCorrections_of_same_epoch` (`BranchLedger.lean`).
   They are also `effectiveFall_le` (`EffectiveFall.lean`), `effectiveRise_le` (`EffectiveRise.lean`), `quorumDrift_le_quorumReserve` (`Consensus/Proofs/ForkChoice/FastConfirmation/QuorumDriftBound.lean`) and `Execution.quorumDriftWithin` (`QuorumDrift.lean`).
   `Execution.confirmedRoot_covers` (`ConfirmedCallStep.lean`) takes `(beforeElectra : fork < .pectra → QuorumDriftWithin (e := e) horizon limit)` in place of `(fusaka : .fusaka ≤ fork)`.
-  It derives quorum drift from Electra and takes it as that condition before Electra, so it holds at every fork under its other hypotheses.
+  It derives quorum drift from Electra, and before Electra takes it as an assumption that no theorem discharges.
   `ConfirmedCalls.StepCtx` drops its field `fusaka`.
   `BlockCredits.compoundingKept_beforeConsolidations` (`BlockCredits.lean`) drops its unused binder `(fulu : .fusaka ≤ fork)` and holds from Electra and before Gloas.
   Migration: with `fulu` the former proof of `.fusaka ≤ _`, pass `Nat.le_trans (by decide : Fork.pectra ≤ .fusaka) fulu` to each of the eight.
@@ -2622,7 +2622,7 @@ Not yet released.
 - In Lean, `Execution.blocks_of_partiallySynchronous` is removed; its one reader, the confirmed-root step, now reads `Execution.blocks_of_partiallySynchronous_of_anchorSlot`.
   Migration: use `Execution.blocks_of_partiallySynchronous_of_anchorSlot` (added earlier in 0.4.0), passing `fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)` for `anchorSlot` and `start v honest` and `start u receiver` for the two starts.
 
-- In Lean, the confirmed root of consecutive fast-confirmation calls covers honest heads under the theorem's hypotheses at every fork, with quorum drift assumed before Electra.
+- In Lean, the confirmed root of a run of fast-confirmation calls covers honest heads from Gloas too.
   `Execution.confirmedRoot_covers` takes `room`, `weights` and `supply`, gated on Gloas, instead of `preGloas`.
   They are the anchor's registry room, the head-weight bundle, and the head-weight ceiling of honest justified states.
   `CallsCtx` drops its field `preGloas`, and `StepCtx` carries `room`, `weights` and `supply`.
@@ -2630,13 +2630,13 @@ Not yet released.
   `Execution.receiverWindowExitsNear_of_sourceOnParentChain` takes `within`, the registry of the source within the limit, instead of `preGloas`.
   Migration: pass `room`, `weights` and `supply` each as `fun g => absurd g (Nat.not_le_of_lt preGloas)`, delete the other arguments, and pass `within := source.validators.bound preGloas`.
 
-- In Lean, the quorum drift of a call is bounded from Electra, including from Gloas under the registry-room condition.
+- In Lean, the quorum drift of a call is bounded from Gloas too.
   `quorumDrift_le_quorumReserve` takes `within` at the counting state instead of `early`.
   `Execution.quorumDriftWithin` takes `room`, the anchor's registry room from Gloas, instead of `early`.
   `setting_runs_of_call` drops `early`.
   Migration: pass `within := BeaconState.registryWithinLimit_of_lt early state` and `room := fun g => absurd g (Nat.not_le_of_lt early)`, and delete the argument of `setting_runs_of_call`.
 
-- In Lean, `effectiveRise_le` and `effectiveFall_le` bound the rise and fall from Electra at `P`, including from Gloas under the registry bound.
+- In Lean, `effectiveRise_le` and `effectiveFall_le` bound the effective-balance rise and fall from Gloas too.
   They take `within`, the registry of the counting state within the limit, instead of `early`.
   From Gloas the type of the registry does not give it.
   Migration: pass `within := y.state.validators.bound early`.
