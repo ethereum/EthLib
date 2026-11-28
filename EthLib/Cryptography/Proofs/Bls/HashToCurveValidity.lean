@@ -53,34 +53,64 @@ private theorem toAffine_equation {P : G2} (hP : G2.Valid P)
   field_simp
   linear_combination heq
 
+open WeierstrassCurve.Jacobian in
+/-- On a finite point, `psi` rescales the image of the affine form by the conjugate of `Z`. -/
+theorem rep_psi (P : G2) (hz : P.z.isZero = false) :
+    G2.rep (psi P) = P.z.conjugate •
+      G2.rep ⟨c1Psi * P.toAffine.1.conjugate, c2Psi * P.toAffine.2.conjugate, Fp2.one⟩ := by
+  have hc : P.z.conjugate ≠ 0 := fun h0 => by
+    rw [← Fp2.conjugate_isZero, Fp2.isZero_iff.mpr h0] at hz
+    cases hz
+  have hi := mul_inv_cancel₀ hc
+  unfold psi
+  simp only [hz, Bool.false_eq_true, ↓reduceIte]
+  rw [G2.toAffine_eq_mul_inv P hz]
+  apply G2.rep_eq_smul <;> simp only [Fp2.conjugate_mul, Fp2.conjugate_inv]
+  · linear_combination
+      (-(c1Psi * P.x.conjugate) * (P.z.conjugate * P.z.conjugate⁻¹ + 1)) * hi
+  · linear_combination (-(c2Psi * P.y.conjugate) *
+      ((P.z.conjugate * P.z.conjugate⁻¹) ^ 2 + P.z.conjugate * P.z.conjugate⁻¹ + 1)) * hi
+
+open WeierstrassCurve.Jacobian in
+private theorem rep_psi2 (P : G2) (hz : P.z.isZero = false) :
+    G2.rep (psi2 P) = P.z • G2.rep ⟨c1Psi2 * P.toAffine.1, -P.toAffine.2, Fp2.one⟩ := by
+  have hz0 : P.z ≠ 0 := fun h0 => by rw [Fp2.isZero_iff.mpr h0] at hz; cases hz
+  have hi := mul_inv_cancel₀ hz0
+  unfold psi2
+  simp only [hz, Bool.false_eq_true, ↓reduceIte]
+  rw [G2.toAffine_eq_mul_inv P hz]
+  apply G2.rep_eq_smul
+  · linear_combination (-(c1Psi2 * P.x) * (P.z * P.z⁻¹ + 1)) * hi
+  · linear_combination (P.y * ((P.z * P.z⁻¹) ^ 2 + P.z * P.z⁻¹ + 1)) * hi
+
 /-- `psi` preserves `G2.Valid` (`RFC 9380 Appendix G.3`). -/
 theorem psi_valid {P : G2} (hP : G2.Valid P) : G2.Valid (psi P) := by
-  unfold psi
-  by_cases hz : P.z.isZero = true
-  · simpa [hz] using hP
-  · have hz' : P.z.isZero = false := Bool.eq_false_iff.mpr hz
-    rw [hz']
-    dsimp only
-    change G2.Valid ⟨c1Psi * P.toAffine.1.conjugate, c2Psi * P.toAffine.2.conjugate, Fp2.one⟩
+  cases hz : P.z.isZero
+  · have hu : IsUnit P.z.conjugate := by
+      refine IsUnit.mk0 _ (G1.Law.z_ne_zero Fp2.embedding fun h => ?_)
+      have h' : P.z.conjugate.isZero = true := h
+      rw [Fp2.conjugate_isZero, hz] at h'
+      cases h'
+    show G2.curve.Nonsingular (G2.rep (psi P))
+    rw [rep_psi P hz, WeierstrassCurve.Jacobian.nonsingular_smul _ hu]
     apply G2.valid_of_affine_equation
-    have heq := congrArg Fp2.conjugate (toAffine_equation hP hz')
+    have heq := congrArg Fp2.conjugate (toAffine_equation hP hz)
     simp only [Fp2.conjugate_mul, Fp2.conjugate_add] at heq
     have hc := c1Psi_cube
     have hb := c2Psi_twist
     linear_combination c2Psi ^ 2 * heq - P.toAffine.1.conjugate ^ 3 * hc + hb
+  · simpa [psi, hz] using hP
 
 /-- `psi2` preserves `G2.Valid` (`RFC 9380 Appendix G.3`). -/
 theorem psi2_valid {P : G2} (hP : G2.Valid P) : G2.Valid (psi2 P) := by
-  unfold psi2
-  by_cases hz : P.z.isZero = true
-  · simpa [hz] using hP
-  · have hz' : P.z.isZero = false := Bool.eq_false_iff.mpr hz
-    rw [hz']
-    dsimp only
-    change G2.Valid ⟨c1Psi2 * P.toAffine.1, -P.toAffine.2, Fp2.one⟩
+  cases hz : P.z.isZero
+  · have hu : IsUnit P.z := IsUnit.mk0 _ (G1.Law.z_ne_zero Fp2.embedding (by simp [Fp2.fieldOps_isZero, hz]))
+    show G2.curve.Nonsingular (G2.rep (psi2 P))
+    rw [rep_psi2 P hz, WeierstrassCurve.Jacobian.nonsingular_smul _ hu]
     apply G2.valid_of_affine_equation
-    have heq := toAffine_equation hP hz'
+    have heq := toAffine_equation hP hz
     linear_combination heq - P.toAffine.1 ^ 3 * c1Psi2_cube
+  · simpa [psi2, hz] using hP
 
 /-- Multiplication by the negative BLS parameter preserves `G2.Valid`. -/
 theorem mulNegX_valid {P : G2} (hP : G2.Valid P) : G2.Valid (mulNegX P) :=
@@ -113,19 +143,19 @@ theorem psi2_zero : psi2 (G2.zero : G2) = G2.zero := by
   have hz : (G2.zero : G2).z.isZero = true := Fp2.isZero_iff.mpr rfl
   simp [hz]
 
-/-- On finite points, `psi2` negates the affine `y` coordinate. -/
+/-- On finite points, `psi2` negates the Jacobian `y` coordinate. -/
 theorem psi2_neg_y (P : G2) (hp : P.z.isZero = false) :
-    (psi2 P).y = -(P.toAffine).2 := by
+    (psi2 P).y = -P.y := by
   unfold psi2
   simp [hp]
 
 /-- `psi2` commutes with curve negation. -/
 theorem psi2_neg (P : G2) : psi2 (G2.neg P) = G2.neg (psi2 P) := by
-  unfold psi2 G1.toAffine G2.neg
+  unfold psi2 G2.neg
   dsimp only
   by_cases hp : P.z.isZero = true
   · simp [hp]
-  · simp [hp, neg_mul]
+  · simp [hp]
 
 /-- Every successful `hashToG2` output clears the cofactor of a nonsingular point on the twist. -/
 theorem hashToG2_eq_clearCofactor {msg dst : ByteArray} {P : G2}
