@@ -4538,7 +4538,8 @@ It also records the bound that the start is at most one epoch behind the current
 It assumes only that the call succeeds.
 `Store.onFastConfirmation_checkpoints` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states how the same call sets the observed justified checkpoints at the epoch boundaries.
 These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
-No theorem here proves conditional or accountable safety of the confirmed block.
+These call characterizations do not prove conditional or accountable safety of the confirmed block.
+The restart and fallback theorems below prove that a start stays on up-to-date honest heads, under further hypotheses or unless evidence holds.
 
 `Store.ForwardReachable.finalized_epoch_add_two_le` in `Consensus/Proofs/ForkChoice/CheckpointBlocks.lean` states how old a finalized checkpoint other than the anchor's is ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
 The store is forward reachable from the store initialized from the anchor state and block.
@@ -4552,7 +4553,7 @@ It also assumes a history of at least two epochs of block roots, and that the st
 It assumes the anchor invariant, an anchor block not after the anchor state, an anchor state that does not hash to the zero root, a nonempty epoch and at least two epochs of block-root history.
 
 `Execution.observedRestart_covers_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` is the safety of the restart from the observed justified block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
-The restart assumes synchrony, delayed block admission from time zero through the limit, and a delay that fits between the attestation deadline and the next slot.
+The restart and the fallback below both assume synchrony, delayed block admission from time zero through the limit, and a delay that fits between the attestation deadline and the next slot.
 The anchor state is reached by a run from genesis.
 All honest validators start at the store initialized from the anchor state and block, whose shared slot starts an epoch.
 The slot duration is positive and the preset meets the direct-safety parameters.
@@ -4565,6 +4566,32 @@ At the selected call by the limit it reads its slot and replaces its base with t
 Through the limit, when an up-to-date honest store reads its slot and its justified epoch exceeds the anchor's justified epoch, an honest validator has signed a vote targeting that checkpoint.
 The vote is from an earlier slot and appears in a message sent by the store's event time.
 The observed block is on every up-to-date honest head from the call through the limit, unless honest stores collide or give cross-store direct-safety or justified evidence.
+
+`Execution.finalized_ancestor_of_heads_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalReads.lean` is the safety of the fallback to the finalized block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+It takes an honest caller at a slot's computed start.
+The successor slot and its start time are read successfully.
+An up-to-date honest receiver reads its head at an event from that next start through the limit.
+The caller's finalized root is an ancestor of that head, unless honest stores collide or give cross-store direct-safety evidence by the limit.
+`Execution.finalized_ancestor_of_heads` in the same file proves the ancestry alone.
+In place of the run, the direct-safety parameters, the horizon, anchor-boundary, anchor-parent, pre-upgrade and stake hypotheses, it assumes an invariant anchor state, nonempty epochs and two epochs of block-root history.
+It also assumes that honest stores agree on blocks and read each other's finality through the limit.
+
+For `Execution.observedRestart_covers_or_evidence` and `Execution.finalized_ancestor_of_heads_or_evidence`, the evidence counts drift from the anchor, so on a long execution with enough churn since the anchor it holds with no accountable key.
+Neither theorem shows that the evidence is one third of slashable stake, and neither covers honest stores that hold states past the next scheduled fork.
+The fact-form core has no evidence alternative and no fork-boundary hypothesis.
+
+`Execution.carrier_delivered` in the same file delivers a held block and its state; a private lemma orders the epochs for the fallback.
+Both assume synchrony, delayed block admission from time zero through the limit, nonempty epochs and at least two epochs of block-root history.
+All honest validators start at the store initialized from an invariant anchor state and block with matching slots.
+Through the limit their stores agree on blocks at common roots and hold only blocks with nonzero state roots.
+Both take an honest sender and an up-to-date honest receiver at least a delay later and by the limit.
+For delivery, the sender holds a block and its state and reads the receiver's finalized checkpoint on that block's chain at the checkpoint's epoch.
+The receiver then holds the same block and state at that root.
+The epoch order also requires positive slot duration and cross-store finality reads through the limit.
+It gives that the receiver's justified epoch is at least the sender's finalized epoch; this does not say that the sender's epoch itself is justified.
+
+For `anchorState_hash_nonzero`, all honest validators start at the store initialized from the anchor state and block, and their held blocks have nonzero state roots through the limit.
+Given some event by that limit with an honest validator, hashing the anchor state cannot return the zero root.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.

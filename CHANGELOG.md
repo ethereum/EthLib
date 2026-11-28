@@ -142,6 +142,27 @@ Not yet released.
   They also assume that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root.
   `Execution.data_eq_of_signed_of_target_epoch`, `Execution.latest_slot_floor_of_signed_rank` and `VoteAt.signed_sent` move to `Consensus/Proofs/ForkChoice/VoteDelivery.lean` from `Consensus/Proofs/ForkChoice/FastConfirmation/DutySupport.lean`, with their names and statements.
 
+- In Lean, `Execution.finalized_ancestor_of_heads_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalReads.lean`) states the ancestry-or-evidence form of the safety of the fallback of the fast confirmation rule to the finalized block ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+  Take an honest caller at the start of a slot, and an up-to-date honest receiver that reads its head at an event from the next slot's start through the limit.
+  Then the caller's finalized root is an ancestor of that head, or two honest stores collide by the limit, or cross-store direct-safety evidence holds.
+  It assumes synchrony, delayed block admission (`BlocksAdmitted`) and a delay that satisfies `DelayFits`.
+  It also assumes a run from genesis to the anchor state, the direct-safety preset parameters, honest store epochs bounded by the horizon, held states before the next upgrade, the run and terminal stake floors, and absence of the anchor parent from honest stores through the limit.
+  It assumes no honest held block with a zero state root (`HeldBlockStateRootsNonzero`).
+  The successor slot and both slot-start times are computed successfully, and the receiver's head read succeeds.
+  Honest participants start at the store initialized from the anchor state and block, which share a slot at the start of an epoch.
+  The slot duration is positive.
+  The result does not cover executions whose honest stores hold states past the next scheduled fork.
+  The evidence counts drift from the anchor, so with enough churn since the anchor it holds with no accountable key; it is not shown to be one third of slashable stake.
+  `Execution.finalized_ancestor_of_heads`, in the same file, proves the ancestry alone, with no evidence alternative and none of the run, direct-safety parameter, horizon, anchor-boundary, anchor-parent, pre-upgrade and stake hypotheses.
+  It assumes instead an invariant anchor state, nonempty epochs, two epochs of block-root history, block agreement and cross-store finality reads through the limit.
+  `Execution.carrier_delivered`, in the same file, is a new public theorem; it was private in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`.
+  It concerns a sender that holds a block and its state and reads the receiver's finalized checkpoint at that root.
+  The sender and receiver are honest.
+  Both events are by the limit, with the receiver's at least a delay after the sender's.
+  The up-to-date receiver then holds that block and state.
+  It assumes synchrony, delayed admission, a nonempty epoch and at least two epochs of block-root history.
+  It also assumes an initialized invariant anchor with matching block and state slots at which all honest validators start, agreement of bounded honest stores on blocks at common roots, and nonzero state roots of their held blocks.
+
 - In Lean, `Execution.observedRestart_covers_or_evidence` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean`) states that a restart of the fast confirmation rule from the observed justified block is safe ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
   At a call that replaces its base, that block is on every up-to-date honest head from the call through the limit.
   Otherwise two honest stores collide, or cross-store direct-safety or justified evidence holds.
@@ -1744,6 +1765,8 @@ Not yet released.
   The monadic forms let the random oracle experiments run these roots with a hash that queries the oracle.
   The roots are unchanged, but the three definitions unfold to the monadic forms.
   Migration: rewrite with `storageRoot_eq`, `stateEntries_eq` and `stateRoot_eq` (`Execution/Proofs/State/Root.lean`), which state the former bodies.
+
+- In Lean, `ConfirmedCalls.anchorState_hash_nonzero` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `anchorState_hash_nonzero` in the namespace `EthLib.Consensus.Models.Network` (`Consensus/Proofs/ForkChoice/FastConfirmation/HistoricalStatements.lean`), with the same statement.
 
 - In Lean, `ConfirmedCalls.finalized_read` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `Store.Reachable.finalized_read` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`), with the same statement.
 

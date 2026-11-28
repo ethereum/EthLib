@@ -315,6 +315,25 @@ theorem Execution.anchor_stateRoot_nonzero {anchor : Store preset fork}
       honest).reachable.anchor_known
   exact roots u honest n inTime root anchorBlock anchorFound
 
+omit [DecidablePred (· ∈ J)] in
+open Serialization.Ssz SszType in
+/-- The anchor state does not hash to the zero root, as no honest store holds a zero state root.
+
+It assumes honest stores start at the store initialized from the anchor state and block.
+
+Held blocks have nonzero state roots through `last`; an honest validator has an event by then. -/
+theorem anchorState_hash_nonzero {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) {last : ℕ}
+    (nonzero : HeldBlockStateRootsNonzero (e := e) last)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : ℕ} (inTime : (e.world n).time ≤ last) :
+    hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0) := by
+  intro zero
+  have reached := e.reachable (fun x hx => (start x hx).symm ▸ Store.Reachable.anchor anchored)
+    n u honest
+  rw [reached.anchorState_root, Except.ok.injEq] at zero
+  exact e.anchor_stateRoot_nonzero anchored start nonzero honest inTime zero
+
 /-- No honest validator has a true slashed flag in a counted state through the horizon. -/
 def HonestCountedStatesUnslashed (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k state, (e.world k).time ≤ last →
