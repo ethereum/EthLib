@@ -16,7 +16,7 @@ A later state that counts the same voters can hold a different total and differe
 
 The reserves use only the call's states to account for changes in the quorum.
 
-The quorum reserve covers a later state on the call's own chain, from Fulu to before Gloas.
+The quorum reserve covers a later state on the call's own chain, from Electra.
 
 The pin reserve also covers a counting state on another branch, from Fulu to before Gloas.
 -/
@@ -41,7 +41,7 @@ def joiningStake (state : BeaconState preset fork) : ℕ :=
 
 /-- The stake by which the quorum of a call can drift from its state to a later state of its chain.
 
-It bounds the drift, before Gloas from Fulu. -/
+It bounds the drift from Electra. -/
 def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) : ℕ :=
   -- The state is the call's pulled-up head state.
   --

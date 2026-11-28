@@ -29,7 +29,7 @@ import EthLib.Consensus.Proofs.Participation
 /-!
 # The balances along a branch inside one epoch
 
-A tally follows the blocks of a run inside one epoch, from Fulu.
+A tally follows the blocks of a run inside one epoch, from Electra.
 
 It reads every balance change of the run from its last state.
 
@@ -220,7 +220,7 @@ private theorem syncAt_le {s t : BeaconState preset fork} (frame : Frame s t)
     exact Nat.mul_le_mul_right _ (syncSeats_le frame altair (committee altair) v)
   · rw [dite_eq_right altair, dite_eq_right altair]
 
-/-- What the blocks of one epoch so far did to the balances, from Fulu.
+/-- What the blocks of one epoch so far did to the balances, from Electra.
 
 It is read from the start `a` of the epoch at a later state `s` after `n` blocks. -/
 private structure Tally (a s : BeaconState preset fork) (n : ℕ)
@@ -308,19 +308,19 @@ private theorem Tally.slot {a s cached : BeaconState preset fork} {next : Slot} 
     life := tally.life.trans (.of_data rfl)
     persists := tally.persists.trans (.of_data rfl) }
 
-/-- A block from Fulu extends the tally by one block. -/
+/-- A block from Electra extends the tally by one block. -/
 private theorem Tally.block {a s t : BeaconState preset fork} {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork} {n : ℕ} {deb conv props sl : Finset ValidatorIndex}
     {pc : ValidatorIndex → ℕ} {credits shares : ℕ}
     (tally : Tally a s n deb conv props sl pc credits shares)
-    (fulu : .fusaka ≤ fork)
+    (electra : .pectra ≤ fork)
     (computed : processBlock config checks engine s block = .ok t) :
     ∃ (deb' conv' props' sl' : Finset ValidatorIndex) (pc' : ValidatorIndex → ℕ)
       (credits' shares' : ℕ), Tally a t (n + 1) deb' conv' props' sl' pc' credits' shares' := by
   obtain ⟨paid, cv, slashed, sync, other, slash, proposer, credit, share, ledger,
     paidCard, convCard, credited, penalized, newly, rewards, syncRead, potential, livesB, lifeB,
-    eligibleB⟩ := block_balances fulu tally.matched computed
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
+    eligibleB⟩ := block_balances electra tally.matched computed
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
   have frame := frame_processBlock computed
   have steady : Steady s t := ⟨stepKeeps_processBlock computed, effectiveKept_processBlock computed⟩
   have within := tally.within.steady steady
@@ -536,24 +536,24 @@ private theorem recentFlagSum_le (s : BeaconState preset fork) (altair : .altair
 
 end Epoch
 
-/-- The tally of a run inside one epoch, from Fulu, read at its last state. -/
+/-- The tally of a run inside one epoch, from Electra, read at its last state. -/
 private theorem Run.tally {F : Fork} {a : BeaconState preset F} {y : ForkedBeaconState preset}
     (tail : Run config checks ⟨F, a⟩ y)
     (same : getCurrentEpoch y.state = getCurrentEpoch a) (matched : BalancesMatch a) :
     ∃ b : BeaconState preset F, y = ⟨F, b⟩ ∧
-      (.fusaka ≤ F → ∃ (deb conv props sl : Finset ValidatorIndex) (pc : ValidatorIndex → ℕ)
+      (.pectra ≤ F → ∃ (deb conv props sl : Finset ValidatorIndex) (pc : ValidatorIndex → ℕ)
         (credits shares : ℕ), Tally a b tail.blockCount deb conv props sl pc credits shares) :=
     Run.induction_of_same_epoch (fun z pre => ∃ s : BeaconState preset F, z = ⟨F, s⟩ ∧
-      (.fusaka ≤ F → ∃ (deb conv props sl : Finset ValidatorIndex) (pc : ValidatorIndex → ℕ)
+      (.pectra ≤ F → ∃ (deb conv props sl : Finset ValidatorIndex) (pc : ValidatorIndex → ℕ)
         (credits shares : ℕ), Tally a s pre.blockCount deb conv props sl pc credits shares))
       ⟨a, rfl, fun _ => ⟨_, _, _, _, _, _, _,
         by simpa [Run.blockCount] using Tally.start a matched⟩⟩
       (fun engine signed due ok pre prior => by
         obtain ⟨_, eq, prior⟩ := prior
         cases eq
-        refine ⟨_, rfl, fun fulu => ?_⟩
-        obtain ⟨_, _, _, _, _, _, _, tally⟩ := prior fulu
-        exact tally.block fulu (applySignedBlock_ok ok).2.1)
+        refine ⟨_, rfl, fun electra => ?_⟩
+        obtain ⟨_, _, _, _, _, _, _, tally⟩ := prior electra
+        exact tally.block electra (applySignedBlock_ok ok).2.1)
       (fun pre ok last computed epoch prior => by
         have count : (pre.snoc (.slot ok)).blockCount = pre.blockCount := rfl
         generalize pre.snoc (.slot ok) = run at count ⊢
@@ -561,26 +561,26 @@ private theorem Run.tally {F : Fork} {a : BeaconState preset F} {y : ForkedBeaco
         obtain ⟨_, rfl, prior⟩ := prior
         subst last
         rw [count]
-        exact ⟨_, rfl, fun fulu => by
-          obtain ⟨_, _, _, _, _, _, _, tally⟩ := prior fulu
+        exact ⟨_, rfl, fun electra => by
+          obtain ⟨_, _, _, _, _, _, _, tally⟩ := prior electra
           exact ⟨_, _, _, _, _, _, _, tally.slot computed epoch⟩⟩)
       tail same
 
-/-- Inside one epoch, from Fulu, take each validator with an exit set.
+/-- Inside one epoch, from Electra, take each validator with an exit set.
 
 Its withdrawable epoch only rises, and moves only for a slashed validator. -/
 theorem Run.withdrawableKept_of_same_epoch {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (fulu : .fusaka ≤ y.fork)
+    (tail : Run config checks x y) (electra : .pectra ≤ y.fork)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state) (matched : BalancesMatch x.state) :
     WithdrawableKept x.state y.state := by
   obtain ⟨F, a⟩ := x
   obtain ⟨b, rfl, tallied⟩ := Run.tally tail same matched
-  obtain ⟨_, _, _, _, _, _, _, tally⟩ := tallied fulu
+  obtain ⟨_, _, _, _, _, _, _, tally⟩ := tallied electra
   exact tally.lives.withdrawableKept
 
 /-! ## The branch corrections -/
 
-/-- Along a run inside one epoch, from Fulu, balances move by bounded amounts.
+/-- Along a run inside one epoch, from Electra, balances move by bounded amounts.
 
 Read at the last state of the run:
 
@@ -600,7 +600,7 @@ Read at the last state of the run:
 - Effective balances stay. -/
 theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
     (tail : Run config checks x y)
-    (fulu : .fusaka ≤ y.fork)
+    (electra : .pectra ≤ y.fork)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
     -- The exits of the first state must be ordered.
     (matched : BalancesMatch x.state) (exits : ExitsOrdered x.state) :
@@ -694,13 +694,12 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
       x.fork = y.fork ∧ EffectiveKept x.state y.state := by
   obtain ⟨F, a⟩ := x
   obtain ⟨b, rfl, tallied⟩ := Run.tally tail same matched
-  obtain ⟨deb, conv, props, sl, pc, credits, shares, tally⟩ := tallied fulu
+  obtain ⟨deb, conv, props, sl, pc, credits, shares, tally⟩ := tallied electra
   intro state slots p positions validator effective current before recent slashed totalGwei
     base seatReward seats sync syncProposer proposerCredit whistleblowerP slashBack
     blocks debited blockDeposits creditedP
-  have altair : .altair ≤ F := Nat.le_trans (by decide) fulu
-  have capella : .shapella ≤ F := Nat.le_trans (by decide) fulu
-  have electra : .pectra ≤ F := Nat.le_trans (by decide) fulu
+  have altair : .altair ≤ F := Nat.le_trans (by decide) electra
+  have capella : .shapella ≤ F := Nat.le_trans (by decide) electra
   -- With a block, the sync step read the participant reward, its total and its proposer share.
   --
   -- So the last state reads them too.

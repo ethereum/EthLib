@@ -43,7 +43,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset) :
-    ∀ {x : ForkedBeaconState preset}, Run config checks g x → .fusaka ≤ x.fork →
+    ∀ {x : ForkedBeaconState preset}, Run config checks g x → .pectra ≤ x.fork →
       -- The boundary state is after the epoch transition of the first slot of that epoch.
       --
       -- It is also after the upgrades of that slot.
@@ -56,13 +56,13 @@ private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
         -- Only blocks at that slot lead from the boundary state to the last state.
         Nonempty (Run config checks ⟨x.fork, boundary⟩ x) := by
   intro x run
-  -- Genesis is before Altair and the last state is at Fulu or later, so the run has a slot step.
+  -- Genesis is before Altair and the last state is at Electra or later, so the run has a slot step.
   induction run with
   | nil =>
-    intro fulu
-    exact absurd (Nat.lt_of_le_of_lt fulu genesis.before) (by decide)
+    intro electra
+    exact absurd (Nat.lt_of_le_of_lt electra genesis.before) (by decide)
   | @snoc middle last pre step ih =>
-    intro fulu
+    intro electra
     cases step with
     | slot ok =>
       by_cases first : last.state.slot % preset.SLOTS_PER_EPOCH = 0
@@ -84,7 +84,7 @@ private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
           simp [notFirst]
         obtain ⟨_, _, -, kept⟩ := advanceSlotAcross_of_same_epoch ok same
         have keptFork : last.fork = middle.fork := by rw [kept]
-        obtain ⟨boundary, -, epoch, banded, toBoundary, ⟨rest⟩⟩ := ih (keptFork ▸ fulu)
+        obtain ⟨boundary, -, epoch, banded, toBoundary, ⟨rest⟩⟩ := ih (keptFork ▸ electra)
         have extended := rest.snoc (.slot ok)
         have epochLast := epoch.trans same.symm
         subst kept
@@ -92,7 +92,7 @@ private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
           ⟨extended⟩⟩
     | block engine signed due ok =>
       have kept := processBlock_slot (applySignedBlock_ok ok).2.1
-      obtain ⟨boundary, atSlot, epoch, banded, first, ⟨rest⟩⟩ := ih fulu
+      obtain ⟨boundary, atSlot, epoch, banded, first, ⟨rest⟩⟩ := ih electra
       exact ⟨boundary, fun atStart => (atSlot (kept ▸ atStart)).trans kept.symm,
         epoch.trans (by simp only [getCurrentEpoch, kept]), banded, first,
         ⟨rest.snoc (.block engine signed due ok)⟩⟩
@@ -101,7 +101,7 @@ private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
 private theorem run_boundaryState {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset) :
-    ∀ {x : ForkedBeaconState preset}, Run config checks g x → .fusaka ≤ x.fork →
+    ∀ {x : ForkedBeaconState preset}, Run config checks g x → .pectra ≤ x.fork →
       x.state.slot % preset.SLOTS_PER_EPOCH = 0 →
       -- The boundary state is at the same slot.
       --
@@ -111,14 +111,14 @@ private theorem run_boundaryState {g : ForkedBeaconState preset}
         Hysteresis boundary ∧ Nonempty (Run config checks g ⟨x.fork, boundary⟩) ∧
         -- Only blocks at that slot lead from the boundary state to the last state.
         Nonempty (Run config checks ⟨x.fork, boundary⟩ x) := by
-  intro x run fulu atStart
-  -- Genesis is before Altair and the last state is at Fulu or later, so the run has a slot step.
+  intro x run electra atStart
+  -- Genesis is before Altair and the last state is at Electra or later, so the run has a slot step.
   --
   -- The epoch transition of that step sets the bands.
   --
   -- An upgrade keeps them, since every effective balance is at most its cap.
   obtain ⟨boundary, atSlot, -, banded, toBoundary, fromBoundary⟩ :=
-    run_boundaryEpoch genesis bands caps activation run fulu
+    run_boundaryEpoch genesis bands caps activation run electra
   exact ⟨boundary, atSlot atStart, banded, toBoundary, fromBoundary⟩
 
 /-! ## Runs along the chains of a store -/
@@ -334,7 +334,7 @@ private theorem lookahead_runsTo (anchorSlot : anchorBlock.slot = anchorState.sl
 /-- The lookahead of a held state to the start of an epoch follows a boundary state there. -/
 private theorem boundary_of_lookahead {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (history : Run config checks g ⟨fork, anchorState⟩)
-    (fulu : .fusaka ≤ fork)
+    (electra : .pectra ≤ fork)
     (bands : preset.IncrementWithinUpwardBand)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     {start : Slot} {base middle : BeaconState preset fork}
@@ -363,12 +363,12 @@ private theorem boundary_of_lookahead {g : ForkedBeaconState preset}
     exact ⟨atSlot, middle, atSlot, hysteresis_of_processSlots bands processed atStart,
       ⟨(history.append baseRun).append slotRun⟩, .nil, Nat.zero_le _,
       processSlots_pendingPartialWithdrawals
-        (Nat.le_trans (show Fork.altair ≤ Fork.fusaka by decide) fulu) processed⟩
+        (Nat.le_trans (show Fork.altair ≤ Fork.pectra by decide) electra) processed⟩
   · -- The held state is at the start, after its own block; the boundary state is before it.
     obtain rfl : base = middle := by
       simpa [lookaheadState, same, UInt64.lt_irrefl, pure, Except.pure] using lookOk
     obtain ⟨boundary, atSlot, banded, first, ⟨edge⟩⟩ :=
-      run_boundaryState genesis bands caps activation (history.append baseRun) fulu
+      run_boundaryState genesis bands caps activation (history.append baseRun) electra
         (show base.slot % preset.SLOTS_PER_EPOCH = 0 from same ▸ atStart)
     have counted := edge.blocks_le_slots (a := start.toNat) (b := start.toNat)
       (by rw [atSlot, same]) (by rw [same])
@@ -398,7 +398,8 @@ private theorem call_runs
     (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     {g : ForkedBeaconState preset} (genesis : Genesis config .bls g)
     (history : Run config .bls g ⟨fork, anchorState⟩)
-    (fulu : .fusaka ≤ fork) (window : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
+    (electra : .pectra ≤ fork)
+    (window : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
     (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
     (bands : preset.IncrementWithinUpwardBand)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
@@ -494,7 +495,7 @@ private theorem call_runs
   have boundaryBefore :=
     epochBoundaryOk boundary (by rw [boundaryNat, Nat.mul_div_cancel _ positive])
   obtain ⟨middleBoundary, start, startSlot, banded, first, edge, single, queue⟩ :=
-    boundary_of_lookahead genesis history fulu bands caps activation atStart
+    boundary_of_lookahead genesis history electra bands caps activation atStart
       boundaryBefore ancRun ancLe lookOk
   have counted := (edge.append tail).blocks_le_slots (a := boundary.toNat)
     (b := pulled.slot.toNat) (by rw [startSlot]) (Nat.le_refl _)
@@ -513,7 +514,8 @@ private theorem runs_of_call
     (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     {g : ForkedBeaconState preset} (genesis : Genesis config .bls g)
     (history : Run config .bls g ⟨fork, anchorState⟩)
-    (fulu : .fusaka ≤ fork) (window : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
+    (electra : .pectra ≤ fork)
+    (window : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
     (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
     (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ limit → (e.world j).time ≤ limit →
       ∀ (r : Root) (left right : BeaconBlock preset fork),
@@ -563,7 +565,7 @@ private theorem runs_of_call
           Nonempty (Run config .bls ⟨fork, anchorState⟩ ⟨fork, middle⟩) := by
   obtain ⟨pulledEpoch, epochBefore, start', startOk, -, boundary, middle, lookOk, middleSlot,
     boundarySlot, banded, first, queue, edge, tail, single, counted⟩ :=
-    call_runs anchored start anchorSlot slots positive genesis history fulu window bounded
+    call_runs anchored start anchorSlot slots positive genesis history electra window bounded
       bands caps activation caller callTime pulledOk targetOk held
   have startNat := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
   have epochAt {s : BeaconState preset fork} (atSlot : s.slot = start') :
@@ -667,8 +669,9 @@ theorem setting_runs_of_call
   -- A tail runs from the middle state to the pulled-up state.
   obtain ⟨pulledEpoch, epochBefore, startE, startEOk, ancLe, _, middleE, lookE, middleSlot, -, -,
     -, -, _, tailM, -⟩ :=
-    call_runs anchored start anchorSlot slots positive genesis history fulu window bounded
-      bands caps activation caller callTime pulledOk targetOk held
+    call_runs anchored start anchorSlot slots positive genesis history
+      (Nat.le_trans (by decide) fulu) window bounded bands caps activation caller callTime pulledOk
+      targetOk held
   have startENat := (computeStartSlotAtEpoch_ok_iff.mp startEOk).2
   have epochAt {s : BeaconState preset fork} {epoch : Epoch} {slot : Slot}
       (startOk : computeStartSlotAtEpoch preset epoch = .ok slot) (atSlot : s.slot = slot) :
@@ -747,8 +750,8 @@ theorem setting_runs_of_call
       epochBefore startF (by rw [startFNat, Nat.mul_div_cancel _ positive]; omega)
     obtain ⟨finRun⟩ := run_of_held (forward u caller n) heldBefore finStored
     obtain ⟨splitSlot, -⟩ :=
-      boundary_of_lookahead genesis history fulu bands caps activation atStartF
-        startFBefore finRun (finSlot ▸ fLe) lookF
+      boundary_of_lookahead genesis history (Nat.le_trans (by decide) fulu) bands caps activation
+        atStartF startFBefore finRun (finSlot ▸ fLe) lookF
     obtain ⟨fromFin⟩ := (RunsTo.ofReach (checks := .bls) (reach_of_lookahead lookF)).2
       (splitSlot ▸ startFBefore)
     obtain ⟨toMiddle⟩ := toMiddleE.2 middleBefore
@@ -790,10 +793,10 @@ theorem Execution.quorumDriftWithin
     --
     -- Before Gloas it says nothing.
     (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon)
-    -- An assumption on the run: its fork is Fulu or later.
+    -- An assumption on the run: its fork is Electra or later.
     --
-    -- The bounds read the epoch transition from Fulu on.
-    (fulu : .fusaka ≤ fork)
+    -- The bounds read the epoch transition from Electra on.
+    (electra : .pectra ≤ fork)
     -- An assumption on the run: the stores stay before the next fork through the horizon.
     --
     -- It keeps every run inside one fork, and says nothing about a run that crosses a fork.
@@ -822,13 +825,13 @@ theorem Execution.quorumDriftWithin
   left
   obtain ⟨pulledEpoch, boundary, middle, boundaryEpoch, middleEpoch, banded, ⟨toBoundary⟩,
     queue, edge, tail, single, counted, ⟨toState⟩, ⟨toMiddle⟩⟩ :=
-    runs_of_call anchored start anchorSlot slots positive genesis history fulu
+    runs_of_call anchored start anchorSlot slots positive genesis history electra
       forkWindow bounded agree bands caps activation caller callTime pulledOk targetOk held
       receiver receiveTime stored read reach later inside
   -- The counting state ends a run from the anchor within the horizon, so its registry fits.
   have within := Run.registryWithinLimit_of_room (toMiddle.append toState) inside room
   rw [← pulledEpoch] at counted later near
-  exact quorumDrift_le_quorumReserve genesis toBoundary edge tail toState within fulu bands
+  exact quorumDrift_le_quorumReserve genesis toBoundary edge tail toState within electra bands
     withdrawDelay caps maxLookahead banded single counted queue
     (middleEpoch.trans boundaryEpoch.symm) (pulledEpoch.trans boundaryEpoch.symm) later near
     voting totalOk pulledTotalOk

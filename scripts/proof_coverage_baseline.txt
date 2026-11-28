@@ -8816,6 +8816,7 @@ touched pectra EthLib.Consensus.credentialAddress
 touched fusaka EthLib.Consensus.credentialAddress
 touched glamsterdam EthLib.Consensus.credentialAddress
 touched hegota EthLib.Consensus.credentialAddress
+touched pectra EthLib.Consensus.currentEpochStart
 touched fusaka EthLib.Consensus.currentEpochStart
 touched glamsterdam EthLib.Consensus.currentEpochStart
 touched hegota EthLib.Consensus.currentEpochStart

@@ -966,8 +966,8 @@ theorem effectiveRise_le
     --
     -- The registry at `y` is within its limit.
     (hysteresis : Hysteresis R.state) (within : y.state.RegistryWithinLimit)
-    -- The fork at `P` is Fulu or later.
-    (fulu : .fusaka ≤ P.fork)
+    -- The fork at `P` is Electra or later.
+    (electra : .pectra ≤ P.fork)
     (callEpoch : getCurrentEpoch P.state = getCurrentEpoch R.state)
     (next : (getCurrentEpoch y.state).toNat = (getCurrentEpoch R.state).toNat + 1)
     -- The premises read a block count `n` through the debited set and the sync amounts.
@@ -1040,7 +1040,7 @@ theorem effectiveRise_le
     let transfers := depositCredit + dueStake + proposerCredit + whistleblower
     -- From Electra a block deposit only queues.
     --
-    -- The fork at `P` is Fulu or later, so no block deposit credits a balance inside the epoch.
+    -- The fork at `P` is Electra or later, so no block deposit credits a balance inside the epoch.
     let depositGain := if .pectra ≤ P.fork then 0 else depositRecipients * capMax
     let slashBack (i : ℕ) :=
       if slashed i then effective i / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat else 0
@@ -1082,8 +1082,7 @@ theorem effectiveRise_le
     depositChurn credit syncProposer proposerCredit whistleblower depositCredit due dueStake
     proposers depositRecipients recipients debited transfers depositGain slashBack syncP creditMax
     crossing headroom debitedCard offDebited capsKept
-  have altair : .altair ≤ F := Nat.le_trans (by decide) fulu
-  have electraF : .pectra ≤ F := Nat.le_trans (by decide) fulu
+  have altair : .altair ≤ F := Nat.le_trans (by decide) electra
   -- The branch of `y` leaves the epoch at one slot, from its last state `z` in the epoch.
   obtain ⟨z, z', toZ, edge, fromZ', zEpoch, z'Epoch⟩ := Run.split_next tailS next
   have zFork : z.fork = F := Run.fork_eq_of_same_epoch toZ zEpoch
@@ -1141,8 +1140,8 @@ theorem effectiveRise_le
       (history.append pre).pendingConsolidation_invariant genesis electra withdrawDelay
   have queueP := run_queueFrom tailP altair callEpoch withdrawDelay reachable
   have queueZ := run_queueFrom toZ altair zEpoch withdrawDelay reachable
-  have wdP := Run.withdrawableKept_of_same_epoch tailP fulu callEpoch invR.balancesMatch
-  have wdZ := Run.withdrawableKept_of_same_epoch toZ fulu zEpoch invR.balancesMatch
+  have wdP := Run.withdrawableKept_of_same_epoch tailP electra callEpoch invR.balancesMatch
+  have wdZ := Run.withdrawableKept_of_same_epoch toZ electra zEpoch invR.balancesMatch
   -- The slot that ends the epoch.
   have nextZ : (getCurrentEpoch z'.state).toNat = (getCurrentEpoch zs).toNat + 1 := by
     rw [z'Epoch, epochZ]; exact nextR
@@ -1150,7 +1149,7 @@ theorem effectiveRise_le
     scoredOk, rewardedOk, lower, pendingOk, resetSlot, resetSize, resetActive, resetKept,
     resetLife, resetWd, resetSlashed, resetExits, resetMatch, resetHolds, resetQueue, resetCarry,
     updateBound⟩ :=
-    rise_edge edge altair electraF nextZ
+    rise_edge edge altair electra nextZ
   -- The sums of effective balances active in an epoch up to the fixed one read the same.
   have sumPR : ∀ ep ≤ activityFixedEpoch r,
       ∑ i ∈ (Finset.range q.validators.data.size).filter (fun i => isActiveAt q ep i = true),
@@ -1186,7 +1185,7 @@ theorem effectiveRise_le
   obtain ⟨T, totalOk⟩ : ∃ T, getTotalActiveBalance q = .ok T := by
     have pending := pendingOk
     unfold processPendingBalances at pending
-    simp only [electraF, ↓reduceDIte] at pending
+    simp only [electra, ↓reduceDIte] at pending
     obtain ⟨deposited, depositedOk, -⟩ := bind_ok_iff.mp pending
     obtain ⟨churn, -, -, -, -, -, -, churned, -⟩ := pendingDeposits_pass depositedOk
     rw [totalPR, ← totalZR, ← totalResetZ]
@@ -1344,7 +1343,6 @@ theorem effectiveRise_le
         (∀ i ∉ pdKeys, pd i = 0) ∧ csKeys.card ≤ due.length ∧ (∀ i ∉ csKeys, cs i = 0) ∧
         ∑ i ∈ positions with upcoming i, pd i ≤ depositCredit ∧
         ∑ i ∈ positions with upcoming i, cs i ≤ dueStake := by
-    have electra := electraF
     unfold processPendingBalances at pendingOk
     simp only [electra, ↓reduceDIte] at pendingOk
     obtain ⟨deposited, depositedOk, consolidatedOk⟩ := bind_ok_iff.mp pendingOk
@@ -1513,7 +1511,7 @@ theorem effectiveRise_le
       refine (swap _).trans (gainSum.trans (le_of_eq ?_))
       rfl
   -- The corrections of the branch of `y` inside the epoch.
-  have bc := Run.balanceCorrections_of_same_epoch toZ fulu zEpoch invR.balancesMatch
+  have bc := Run.balanceCorrections_of_same_epoch toZ electra zEpoch invR.balancesMatch
     invR.exitsOrdered
   extract_lets stateZ pZ positionsZ validatorZ effectiveZ currentZ beforeZ recentZ
     slashedZ totalZ baseZ seatRewardZ seatsZ syncZ syncProposerZ
@@ -1521,7 +1519,7 @@ theorem effectiveRise_le
   obtain ⟨debS, creditedKeys, pc, dep, -, -, -, upS, -, electraDep, -,
     ⟨slashedNow, slashedFacts, pcSlashed⟩, converted,
     ⟨proposerKeys, depositKeys, credSplit, propCard, -, pcOff, -⟩, -, -, -⟩ := bc
-  have depZero : ∀ v, dep v = 0 := electraDep electraF
+  have depZero : ∀ v, dep v = 0 := electraDep electra
   -- The reads of the branch of `y` are those of `P`.
   have totalZeq : totalZ = totalGwei := by
     simp only [totalZ, stateZ, totalGwei, state, totalZR, totalPR]
@@ -1601,7 +1599,7 @@ theorem effectiveRise_le
   -- The largest effective balances are at most the largest of the fork.
   have capLe : ∀ v : Validator, (withdrawalMaxEffectiveBalance preset F v).toNat ≤ capMax := by
     intro v
-    simp only [capMax, electraF, ↓reduceIte, withdrawalMaxEffectiveBalance, getMaxEffectiveBalance]
+    simp only [capMax, electra, ↓reduceIte, withdrawalMaxEffectiveBalance, getMaxEffectiveBalance]
     split
     · exact Nat.le_refl _
     · exact UInt64.le_iff_toNat_le.mp caps.compounding
@@ -1668,7 +1666,7 @@ theorem effectiveRise_le
       intro le _
       have low : preset.MIN_ACTIVATION_BALANCE.toNat ≤
           (withdrawalMaxEffectiveBalance preset F vR).toNat := by
-        simp only [withdrawalMaxEffectiveBalance, electraF, ↓reduceIte, getMaxEffectiveBalance]
+        simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance]
         split
         · exact UInt64.le_iff_toNat_le.mp caps.compounding
         · exact Nat.le_refl _
@@ -1864,7 +1862,7 @@ theorem effectiveRise_le
     refine (Finset.card_le_card sub).trans ?_
     have union := Finset.card_union_le (proposerKeys.image UInt64.toNat ∪ pdKeys) csKeys
     have union' := Finset.card_union_le (proposerKeys.image UInt64.toNat) pdKeys
-    simp only [recipients, depositRecipients, electraF, ↓reduceIte]
+    simp only [recipients, depositRecipients, electra, ↓reduceIte]
     omega
   have cardD : (positions.filter (fun i => upcoming i = true) ∩
       debitedKeys.image UInt64.toNat).card ≤ debited :=

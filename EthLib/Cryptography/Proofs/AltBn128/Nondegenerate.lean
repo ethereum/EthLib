@@ -22,6 +22,14 @@ The kernel compares coefficients, so the statement writes 0 and 1 by their coeff
 private theorem pairing_generators_ne_ofFp_zero_and_ne_one :
     pairing Point.generator Point2.generator ≠ Fp12.ofFp 0 ∧
       pairing Point.generator Point2.generator ≠ Fp12.one := by
+  -- The kernel runs the divsteps slowly, so every inverse is first replaced by the Euclidean one.
+  --
+  -- The twist's additions appear once the Miller loop unfolds.
+  unfold pairing finalExponentiation millerLoop
+  rw [instTwistParams_eq_euclidTwist]
+  -- The inverses of `Fp2` and `Fp12` appear once the lines and the inverse of `Fp12` unfold.
+  unfold linefunc Fp12.inverse Fp2.inv
+  rw [instFieldOps_eq_euclidOps, Fp.inv_eq_fin_inverse]
   decide +kernel
 
 /-- The pairing of `P1` and `P2` is not 0. -/

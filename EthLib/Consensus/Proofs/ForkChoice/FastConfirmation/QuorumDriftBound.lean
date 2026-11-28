@@ -84,10 +84,10 @@ theorem quorumDrift_le_quorumReserve
     --
     -- From Gloas the type of the registry does not give it.
     --
-    -- An assumption on the run: its fork is Fulu or later.
+    -- An assumption on the run: its fork is Electra or later.
     --
-    -- The bounds read the epoch transition from Fulu on.
-    (within : state.RegistryWithinLimit) (fulu : .fusaka ≤ fork)
+    -- The bounds read the epoch transition from Electra on.
+    (within : state.RegistryWithinLimit) (electra : .pectra ≤ fork)
     (bands : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     -- The seed lookahead covers at least one epoch.
@@ -187,10 +187,10 @@ theorem quorumDrift_le_quorumReserve
   --
   -- The branch corrections from the boundary state, and from the middle state.
   obtain ⟨debitedKeys, -, -, -, debitedCard, -, gainSide, -, -, -, -, -, -, -, capsKept, -, -⟩ :=
-    (edge.append tailP).balanceCorrections_of_same_epoch fulu callEpoch invR.balancesMatch
+    (edge.append tailP).balanceCorrections_of_same_epoch electra callEpoch invR.balancesMatch
       invR.exitsOrdered
   obtain ⟨-, creditedKeys, pc, deposit, -, creditedCard, -, lossSide, zeroOff, electraZero, budget,
-    -, -, -, -, -, -⟩ := tailP.balanceCorrections_of_same_epoch fulu
+    -, -, -, -, -, -⟩ := tailP.balanceCorrections_of_same_epoch electra
       (callEpoch.trans middleEpoch.symm) invM.balancesMatch invM.exitsOrdered
   have blocksLe : (edge.append tailP).blockCount ≤
       pulled.slot.toNat - currentEpochStart pulled + 1 := by
@@ -237,7 +237,7 @@ theorem quorumDrift_le_quorumReserve
       min headroom (crossing + (recipients + debited) * preset.upwardBand + debited * creditMax +
         transfers + depositGain) :=
     effectiveRise_le genesis history (edge.append tailP) (edge.append tailS) caps withdrawDelay
-      bands maxLookahead hysteresis within fulu callEpoch next
+      bands maxLookahead hysteresis within electra callEpoch next
       (n := nP) debitedKeys
       (debitedCard.trans (Nat.mul_le_mul_left _ blocksLe))
       (fun v off => (gainSide v off).trans
@@ -272,7 +272,7 @@ theorem quorumDrift_le_quorumReserve
            else inc + 2 * preset.downwardBand + syncP v.toNat +
              min (pc v + deposit v) (below v)) :=
     effectiveFall_le genesis history edge tailP tailS caps bands withdrawDelay hysteresis within
-      fulu
+      electra
       middleEpoch callEpoch next single counted (fun v => pc v + deposit v)
       (fun v => (lossSide v).trans (by rw [Nat.add_assoc]; exact Nat.le_refl _))
   -- Each voter loses at most its computed fall, and a band and its share if it was credited.

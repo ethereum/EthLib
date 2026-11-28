@@ -65,8 +65,9 @@ theorem pairingCheck_eq_true_iff (l : List (Point × Point2)) :
 
 /-- The check of `[(P1, P2)]` fails. -/
 theorem pairingCheck_generators : pairingCheck [(Point.generator, Point2.generator)] = false := by
-  rw [Bool.eq_false_iff, ne_eq, pairingCheck_eq_true_iff]
-  simpa using pairing_generators_ne_one
+  rw [Bool.eq_false_iff, ne_eq, pairingCheck_eq_true_iff, List.map_singleton,
+    List.prod_singleton]
+  exact pairing_generators_ne_one
 
 /-- Under bilinearity, the product of the pairings is a power of `e(P1, P2)`. -/
 private theorem prod_pairing (h : PairingBilinear) :

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Field
+public import EthLib.Cryptography.SafeGcd
 public import EthLib.Cryptography.ShortWeierstrass
 public import EthLib.Cryptography.BaseField
 
@@ -34,8 +35,8 @@ instance Fr.instNeZeroModulus : NeZero Fr.modulus := ⟨by decide⟩
 /-- An element of the base field. -/
 abbrev Fp := Fin Fp.modulus
 
-/-- The inverse in `Fp`, by the extended Euclidean algorithm, and 0 for 0. -/
-def Fp.inv (a : Fp) : Fp := Fin.inverse a
+/-- The inverse in `Fp`, by divsteps whose candidate is checked, and 0 for 0. -/
+def Fp.inv (a : Fp) : Fp := SafeGcd.inverseFin a
 
 /-- The field operations of `Fp` that its quadratic extension reads. -/
 instance instFieldOps : FieldOps Fp where
@@ -80,7 +81,7 @@ def generator : Point := affine 1 2
 
 The steps run in Jacobian coordinates, so only the conversion back takes an inverse. -/
 def mulNat (k : Nat) (p : Point) : Point :=
-  ShortWeierstrass.Point.mulNat id Fin.inverse id 0 k p
+  ShortWeierstrass.Point.mulNat id Fp.inv id 0 k p
 
 end Point
 

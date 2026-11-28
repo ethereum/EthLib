@@ -35,6 +35,9 @@ set_option maxRecDepth 8000 in
 theorem frobenius_generator :
     AltBn128.frobenius Point2.generator =
       Point2.mulNat (Fp.modulus % Fr.modulus) Point2.generator := by
+  -- The inverse that ends the scalar product is taken by the Euclidean algorithm.
+  unfold Point2.mulNat Fp2.inv
+  rw [instFieldOps_eq_euclidOps]
   decide +kernel
 
 /-- The `p`-th power map fixes the coefficients of `y^2 = x^3 + 3` over `Fp12`. -/
