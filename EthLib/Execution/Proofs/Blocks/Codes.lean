@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Transactions.Codes
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: a block never aborts for a missing code
@@ -108,7 +109,7 @@ theorem BodyState.hasCodes_join {body body' : BodyState} {tx : TransactionState}
 theorem systemCall_hasCodes {env : BlockEnvironment fork} {block : BlockState} {target : Address}
     {data : ByteArray} {out : SystemCallOutput} (available : HasCodes (.ofBlock block))
     (h : systemCall env block target data = .ok out) : HasCodes out.state := by
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨call, hcall, h⟩ := bind_ok_iff.mp h
     cases h
@@ -120,7 +121,7 @@ theorem systemCall_ne_missingCode (env : BlockEnvironment fork) {block : BlockSt
     (codeHash : Hash32) :
     systemCall env block target data ≠ .error (.state (.missingCode codeHash)) := by
   intro h
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
     · exact Transactions.processMessageCall_ne_missingCode available codeHash h

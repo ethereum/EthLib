@@ -9645,7 +9645,7 @@
    "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None] | tuple[int, int | None, bytes, bytes | None, bool]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]",
-   "operation": "EthLib.Consensus.Exports.gossipValidationExport",
+   "operation": "EthLib.Engine.Exports.gossipValidationExport",
    "method": "consensus_gossip_validation",
    "errors":
    [{"type": "EthLib.Consensus.ForkChoiceError",
@@ -9709,7 +9709,7 @@
   {"summary": "Answer the requests to pool and publish endpoints in turn.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None] | tuple[int, int | None, bytes, bytes | None, bool]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]] | tuple[int, str, list[bytes], str | None]], config: dict[str, Any] | None, verify: bool) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]]",
-   "operation": "EthLib.Consensus.Exports.apiPostExport",
+   "operation": "EthLib.Engine.Exports.apiPostExport",
    "method": "consensus_api_post",
    "errors":
    [{"type": "EthLib.Consensus.ForkChoiceError",

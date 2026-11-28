@@ -60,6 +60,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests
 public import EthLib.Execution.Proofs.Blocks.SystemCallFollow
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.TypedRoots
+public import EthLib.Execution.Proofs.Blocks.Unfold
 public import EthLib.Execution.Proofs.Blocks.Validate
 public import EthLib.Execution.Proofs.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Blocks.WithdrawalCodec

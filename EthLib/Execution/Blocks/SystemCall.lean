@@ -34,7 +34,9 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State (BlockState TransactionState)
-open EthLib.Execution.Transactions (processMessageCall startAccessedAddressesOf)
+open EthLib.Execution.Transactions
+  (Included LiftedRules Transaction TransactionObserver TransactionOutput processMessageCallWith
+    processTransaction processTransactionWith startAccessedAddressesOf)
 
 /-! ## Addresses and gas -/
 
@@ -145,13 +147,13 @@ def systemSubstate {fork : Fork} (env : BlockEnvironment fork) (target : Address
 
 /-- Make a system call to `target` with the data `data`, on the block state `block` at `fork`.
 
-A call that fails leaves the block state as it was.
+It runs in the monad `M`, and the observer sees each step of its frames.
 
-It fails only with an error that aborts the whole execution, such as missing code.
-
-It has no receipt, so its logs enter no receipt. -/
-def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
-    (target : Address) (data : ByteArray) : Except EvmError SystemCallOutput := do
+A call that fails leaves the block state as it was, and its logs enter no receipt. -/
+@[specialize]
+def systemCallWith {fork : Fork} {M : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    (observe : TransactionObserver M fork) (env : BlockEnvironment fork) (block : BlockState)
+    (target : Address) (data : ByteArray) : M SystemCallOutput := do
   let message := systemMessage env target data
   let state := TransactionState.ofBlock block
   -- The call runs as the message of a transaction, from the accesses of its start.
@@ -160,36 +162,107 @@ def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
   --
   -- The accesses of the call end with it, since its output keeps no substate.
   let substate := systemSubstate env target
+  -- If the observer never fails, the call fails only with an error that aborts the execution.
+  --
+  -- Missing code is such an error.
+  --
   -- Up to BPO5, the gas meter is one counter of the gas left.
   --
   -- From Glamsterdam, the meter of EIP-8037 also meters state gas.
   let out ← if fork ≥ .glamsterdam then
-      processMessageCall (Meter := StateGasMeter) env.chainId.toNat message state substate
-    else processMessageCall (Meter := Nat) env.chainId.toNat message state substate
+      processMessageCallWith (Meter := StateGasMeter) observe env.chainId.toNat message state
+        substate
+    else processMessageCallWith (Meter := Nat) observe env.chainId.toNat message state substate
   return ⟨out.state, out.output, out.error⟩
+
+/-- Make a system call to `target` with the data `data`, on the block state `block` at `fork`.
+
+It is the call with no observer, in the monad of errors.
+
+A call that fails leaves the block state as it was.
+
+It fails only with an error that aborts the whole execution, such as missing code. -/
+def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
+    (target : Address) (data : ByteArray) : Except EvmError SystemCallOutput :=
+  systemCallWith (fun _ _ => pure ()) env block target data
 
 /-- The code of the account at `target`, in the block state `block`. -/
 def codeAt (block : BlockState) (target : Address) : Except EvmError ByteArray :=
   let state := TransactionState.ofBlock block
   (state.getCode (state.getAccount target).codeHash).mapError .state
 
+/-- An observer of a block body: how it runs the frames, and what it does with each transaction.
+
+The frames run in the monad `M`, and the body runs in the monad `N`.
+
+Nothing checks that its runs are those of this specification: `ofSteps` and `none` give them. -/
+structure BodyObserver (M N : Type → Type) (fork : Fork) where
+  /-- Make a system call to a target with some data, on a block state. -/
+  systemCall : BlockEnvironment fork → BlockState → Address → ByteArray → M SystemCallOutput
+  /-- Run a transaction that may enter the block, on a block state. -/
+  runTransaction : BlockEnvironment fork → BlockState → Included → Transaction →
+    (Address → Option Address) → LiftedRules → M TransactionOutput
+  /-- Run something of the frame monad in the body, where an error aborts the body. -/
+  abort : {α : Type} → M α → N α
+  /-- What the body does with each transaction once it has run, before its writes join the block.
+
+  It receives the position of the transaction, its checks, the transaction and its output. -/
+  onTransaction : Nat → Included → Transaction → TransactionOutput → N Unit
+
+/-- The observer whose runs give each step of each frame to `observe`.
+
+Its errors are those of this specification when `abort` maps an error `e` to `.aborted e`. -/
+@[inline]
+def BodyObserver.ofSteps {fork : Fork} {M N : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    (observe : TransactionObserver M fork) (abort : {α : Type} → M α → N α)
+    (onTransaction : Nat → Included → Transaction → TransactionOutput → N Unit) :
+    BodyObserver M N fork where
+  -- The runs of this specification, which give each step to `observe`.
+  systemCall := systemCallWith observe
+  runTransaction := fun env block included tx precompiles lifted =>
+    processTransactionWith observe env block included tx precompiles lifted
+  abort := abort
+  onTransaction := onTransaction
+
+/-- The observer that observes nothing: the body runs in the monad of errors. -/
+def BodyObserver.none {fork : Fork} : BodyObserver (Except EvmError) (Except BlockError) fork where
+  -- The runs with no observer, which are the runs with a step observer that does nothing.
+  systemCall := Blocks.systemCall
+  runTransaction := fun env block included tx precompiles lifted =>
+    processTransaction env block included tx precompiles lifted
+  abort := fun run => run.mapError .aborted
+  onTransaction := fun _ _ _ _ => pure ()
+
 /-- Make a system call that must succeed, to `target` with the data `data`.
 
+It runs in the monad `N`, with the runs of the observer.
+
 The block is invalid when the contract has no code or the call fails. -/
-def checkedSystemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
-    (target : Address) (data : ByteArray) : Except BlockError SystemCallOutput := do
-  let code ← (codeAt block target).mapError .aborted
+def checkedSystemCallWith {fork : Fork} {M N : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    [Monad N] [MonadExceptOf BlockError N] (obs : BodyObserver M N fork)
+    (env : BlockEnvironment fork) (block : BlockState) (target : Address) (data : ByteArray) :
+    N SystemCallOutput := do
+  let code ← obs.abort (liftExcept (codeAt block target))
   -- EIP-7002: a block whose request contract has no code is invalid.
   --
   -- EIP-7251 says the same; EIP-8282 says it of either of its contracts.
   if code.size = 0 then throw (.systemContractEmpty target)
-  let out ← (systemCall env block target data).mapError .aborted
+  let out ← obs.abort (obs.systemCall env block target data)
   -- EIP-7002 and EIP-7251: a call that fails or returns an error makes the block invalid.
   --
   -- EIP-8282: a failed system call to either of its contracts makes the block invalid.
   match out.error with
   | some error => throw (.systemCallFailed target error)
   | none => return out
+
+/-- Make a system call that must succeed, to `target` with the data `data`.
+
+It is the call with no observer, in the monad of errors.
+
+The block is invalid when the contract has no code or the call fails. -/
+def checkedSystemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
+    (target : Address) (data : ByteArray) : Except BlockError SystemCallOutput :=
+  checkedSystemCallWith .none env block target data
 
 /-! ## The body of a block -/
 
@@ -294,34 +367,41 @@ def SystemContract.requestContract? (contract : SystemContract) : Option (UInt8 
 
 /-- The system calls at the start of a block at `fork`, before its transactions.
 
-From Dencun, the beacon roots contract stores the root of the parent beacon block.
+It runs in the monad `M`, with the runs of the observer.
 
-From Pectra, the history storage contract then stores `parentHash`, the hash of the parent.
-
-These two calls are unchecked: the block goes on when the contract has no code or the call fails. -/
-def startSystemCalls {fork : Fork} (env : BlockEnvironment fork) (parentHash : Hash32)
-    (body : BodyState) : Except EvmError BodyState := do
+These calls are unchecked: the block goes on when the contract has no code or the call fails. -/
+def startSystemCallsWith {fork : Fork} {M N : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    (obs : BodyObserver M N fork) (env : BlockEnvironment fork) (parentHash : Hash32)
+    (body : BodyState) : M BodyState := do
   -- Each call joins the body at the current position.
   --
   -- EIP-4788, from Dencun: a call to `BEACON_ROOTS_ADDRESS` as `SYSTEM_ADDRESS`.
   --
-  -- Its input is the 32 bytes of the root of the parent beacon block.
+  -- It stores the root of the parent beacon block: its input is the 32 bytes of that root.
   --
   -- Without code at `BEACON_ROOTS_ADDRESS`, the call fails silently: no check here.
   let body ← if h : BEACON_ROOTS_CONTRACT.since ≤ fork then do
-      let out ← systemCall env body.block BEACON_ROOTS_CONTRACT.address
+      let out ← obs.systemCall env body.block BEACON_ROOTS_CONTRACT.address
         ⟨(env.parentBeaconBlockRoot h).toArray⟩
-      (body.join out.state).mapError .state
+      liftExcept ((body.join out.state).mapError EvmError.state)
     else pure body
   -- EIP-2935, from Pectra: a call to `HISTORY_STORAGE_ADDRESS` as `SYSTEM_ADDRESS`.
   --
-  -- Its input is the 32 bytes of the hash of the parent block.
+  -- It stores `parentHash`: its input is the 32 bytes of the hash of the parent block.
   --
   -- As for the beacon roots, a missing contract makes the call fail silently: no check here.
   if HISTORY_STORAGE_CONTRACT.since ≤ fork then do
-    let out ← systemCall env body.block HISTORY_STORAGE_CONTRACT.address ⟨parentHash.toArray⟩
-    (body.join out.state).mapError .state
+    let out ← obs.systemCall env body.block HISTORY_STORAGE_CONTRACT.address
+      ⟨parentHash.toArray⟩
+    liftExcept ((body.join out.state).mapError EvmError.state)
   else pure body
+
+/-- The system calls at the start of a block at `fork`, before its transactions.
+
+They are the calls with no observer, in the monad of errors. -/
+def startSystemCalls {fork : Fork} (env : BlockEnvironment fork) (parentHash : Hash32)
+    (body : BodyState) : Except EvmError BodyState :=
+  startSystemCallsWith .none env parentHash body
 
 /-- The contracts that a block at `fork` reads requests from, each with the type of its requests.
 
@@ -346,17 +426,20 @@ def requestList (type : UInt8) (data : ByteArray) : List ByteArray :=
 
 /-- Call a request contract after the body and the requests so far, and add its requests.
 
+It runs in the monad `N`, with the runs of the observer.
+
 The contract comes with the type of its requests, which starts each of them.
 
 The call joins the body at the current position, and its requests follow those read so far. -/
-def readRequest {fork : Fork} (env : BlockEnvironment fork)
-    (state : BodyState × List ByteArray) (contract : UInt8 × Address) :
-    Except BlockError (BodyState × List ByteArray) := do
+def readRequestWith {fork : Fork} {M N : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    [Monad N] [MonadExceptOf BlockError N] (obs : BodyObserver M N fork)
+    (env : BlockEnvironment fork) (state : BodyState × List ByteArray)
+    (contract : UInt8 × Address) : N (BodyState × List ByteArray) := do
   -- EIP-7002: a call to `WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS` as `SYSTEM_ADDRESS`, with no data.
   --
   -- EIP-7251 and EIP-8282 call their contracts the same way.
-  let out ← checkedSystemCall env state.1.block contract.2 .empty
-  let body ← (state.1.join out.state).mapError .state
+  let out ← checkedSystemCallWith obs env state.1.block contract.2 .empty
+  let body ← liftExcept ((state.1.join out.state).mapError BlockError.state)
   -- EIP-7002: the requests come in the exact order in which the contract dequeues them.
   --
   -- EIP-7251 and EIP-8282 say the same of their queues.
@@ -364,18 +447,36 @@ def readRequest {fork : Fork} (env : BlockEnvironment fork)
   -- From Pectra, each contract returns the data of its requests, which follow its type byte.
   return (body, state.2 ++ requestList contract.1 out.output)
 
+/-- Call a request contract after the body and the requests so far, and add its requests.
+
+It is the call with no observer, in the monad of errors. -/
+def readRequest {fork : Fork} (env : BlockEnvironment fork)
+    (state : BodyState × List ByteArray) (contract : UInt8 × Address) :
+    Except BlockError (BodyState × List ByteArray) :=
+  readRequestWith .none env state contract
+
 /-- The withdrawal and consolidation requests of a block at `fork`, after its withdrawals.
+
+It runs in the monad `N`, with the runs of the observer.
 
 From Glamsterdam, the builder deposit and exit requests follow them.
 
 Before Pectra, there is no request contract, so there is no request. -/
-def readRequests {fork : Fork} (env : BlockEnvironment fork) (body : BodyState) :
-    Except BlockError (BodyState × List ByteArray) :=
+def readRequestsWith {fork : Fork} {M N : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    [Monad N] [MonadExceptOf BlockError N] (obs : BodyObserver M N fork)
+    (env : BlockEnvironment fork) (body : BodyState) : N (BodyState × List ByteArray) :=
   -- EIP-7002 and EIP-7251: at the end of each execution block, one call per contract.
   --
   -- EIP-7685: the lists come by ascending request type.
   --
   -- Each call joins the body at the current position.
-  (requestContracts fork).foldlM (readRequest env) (body, [])
+  (requestContracts fork).foldlM (readRequestWith obs env) (body, [])
+
+/-- The withdrawal and consolidation requests of a block at `fork`, after its withdrawals.
+
+They are the calls with no observer, in the monad of errors. -/
+def readRequests {fork : Fork} (env : BlockEnvironment fork) (body : BodyState) :
+    Except BlockError (BodyState × List ByteArray) :=
+  readRequestsWith .none env body
 
 end EthLib.Execution.Blocks

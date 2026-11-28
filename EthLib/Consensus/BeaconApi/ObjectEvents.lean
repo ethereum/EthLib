@@ -235,7 +235,8 @@ def receiveGossip (context : SubmitContext preset fork) (seen : Seen)
   -- The source: a message comes from P2P or API.
   --
   -- EthLib's choice: a message from a client takes the same path as one from a peer.
-  let (outcome, after) ← validateGossipMessage context.config context.checks context.setup seen
+  let (outcome, after) ← validateGossipMessage context.config context.checks context.setup
+      context.blockHashOf seen
     context.store context.statuses context.currentTimeMs message
   return (outcome, after, ← (eventsOfGossip outcome message).mapError .ssz)
 

@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Transactions.Replay
 public import EthLib.Execution.Proofs.Transactions.Signature
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: no transaction runs twice in a chain
@@ -194,7 +195,7 @@ theorem systemCall_nonceAbove {env : BlockEnvironment fork} {block : BlockState}
       (by simp [TransactionState.ofBlock]) (by simp [systemSubstate, Substate.empty])
       (fun hlt => (before hlt).elim)
     exact ⟨Nat.lt_of_lt_of_le above.1 this.1, fun hlt => (before hlt).elim⟩
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨call, hcall, h⟩ := bind_ok_iff.mp h
     cases h

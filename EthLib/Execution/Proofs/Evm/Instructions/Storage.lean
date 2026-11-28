@@ -22,10 +22,86 @@ open GasCosts
 
 variable {fork : Fork} {Meter : Type}
 
+/-- Before Istanbul, the price of a reset is 5000, as before Berlin. -/
+private theorem sstoreResetCost_of_lt_istanbul (h : ¬fork ≥ .istanbul) :
+    sstoreResetCost fork = COLD_STORAGE_WRITE := by
+  have : ¬fork ≥ .berlin := fun hb => h (Nat.le_trans (by decide) hb)
+  simp [sstoreResetCost, gasSchedule, this]
+
+/-- From Glamsterdam, the fork is also at least Istanbul. -/
+private theorem istanbul_le_of_glamsterdam (h : fork ≥ .glamsterdam) : fork ≥ .istanbul :=
+  Nat.le_trans (by decide) h
+
+/-- The price of SSTORE, fork by fork, from the three values of the slot. -/
+theorem sstoreCost_eq (original current new : U256) (cold : Bool) :
+    sstoreCost fork original current new cold =
+      if fork ≥ .glamsterdam then
+        (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) +
+          if original = current ∧ current ≠ new then STORAGE_WRITE else 0
+      else if fork ≥ .istanbul then
+        (if cold then COLD_STORAGE_ACCESS else 0) +
+          if original = current ∧ current ≠ new then
+            if original = 0 then STORAGE_SET else sstoreResetCost fork
+          else sstoreReadCost fork
+      else if new ≠ 0 ∧ current = 0 then STORAGE_SET
+      else COLD_STORAGE_WRITE := by
+  have hr := @sstoreResetCost_of_lt_istanbul fork
+  have hg := @istanbul_le_of_glamsterdam fork
+  unfold sstoreCost sstoreCase
+  by_cases h1 : fork ≥ .glamsterdam <;> by_cases h2 : fork ≥ .istanbul <;>
+    (try exact absurd (hg ‹_›) ‹_›) <;>
+    by_cases a : current = new <;> by_cases b : original = current <;>
+    by_cases z : original = 0 <;> by_cases z2 : new = 0 <;> by_cases z3 : current = 0 <;>
+    cases cold <;> simp_all <;> grind
+
+/-- The change of the refund counter by SSTORE, fork by fork, from the three values. -/
+theorem sstoreRefund_eq (original current new : U256) :
+    sstoreRefund fork original current new =
+      if fork ≥ .istanbul then
+        if current = new then 0 else
+          (if original ≠ 0 ∧ current ≠ 0 ∧ new = 0 then
+            ((gasSchedule fork).REFUND_STORAGE_CLEAR : Int) else 0) -
+          (if original ≠ 0 ∧ current = 0 then
+            ((gasSchedule fork).REFUND_STORAGE_CLEAR : Int) else 0) +
+          (if original = new then
+            if fork ≥ .glamsterdam then (STORAGE_WRITE : Int)
+            else if original = 0 then (STORAGE_SET : Int) - sstoreReadCost fork
+            else (sstoreResetCost fork : Int) - sstoreReadCost fork
+          else 0)
+      else if new = 0 ∧ current ≠ 0 then ((gasSchedule fork).REFUND_STORAGE_CLEAR : Int)
+      else 0 := by
+  have hg := @istanbul_le_of_glamsterdam fork
+  unfold sstoreRefund sstoreCase
+  by_cases h1 : fork ≥ .glamsterdam <;> by_cases h2 : fork ≥ .istanbul <;>
+    (try exact absurd (hg ‹_›) ‹_›) <;>
+    by_cases a : current = new <;> by_cases b : original = current <;>
+    by_cases z : original = 0 <;> by_cases z2 : new = 0 <;> by_cases z3 : current = 0 <;>
+    by_cases r : original = new <;> simp_all <;> grind
+
+/-- The state gas of SSTORE: from Glamsterdam, that of a new slot. -/
+theorem sstoreStateGas_eq (original current new : U256) :
+    sstoreStateGas fork original current new =
+      if fork ≥ .glamsterdam ∧ original = 0 ∧ current = 0 ∧ new ≠ 0 then STORAGE_SET_STATE_GAS
+      else 0 := by
+  have hg := @istanbul_le_of_glamsterdam fork
+  unfold sstoreStateGas sstoreCase
+  by_cases h1 : fork ≥ .glamsterdam <;> by_cases h2 : fork ≥ .istanbul <;>
+    (try exact absurd (hg ‹_›) ‹_›) <;> simp_all
+
+/-- The state gas that SSTORE refills: from Glamsterdam, that of a new slot cleared again. -/
+theorem sstoreStateRefill_eq (original current new : U256) :
+    sstoreStateRefill fork original current new =
+      if fork ≥ .glamsterdam ∧ original = 0 ∧ current ≠ 0 ∧ new = 0 then STORAGE_SET_STATE_GAS
+      else 0 := by
+  have hg := @istanbul_le_of_glamsterdam fork
+  unfold sstoreStateRefill sstoreCase
+  by_cases h1 : fork ≥ .glamsterdam <;> by_cases h2 : fork ≥ .istanbul <;>
+    (try exact absurd (hg ‹_›) ‹_›) <;> simp_all
+
 /-- From Istanbul, a write of the current value changes no refund. -/
 theorem sstoreRefund_noop (h : fork ≥ .istanbul) (original current : U256) :
     sstoreRefund fork original current current = 0 := by
-  simp [sstoreRefund, h]
+  simp [sstoreRefund_eq, h]
 
 /-- From Istanbul to BPO5, a write of the current value costs a read, and the cold surcharge. -/
 theorem sstoreCost_noop (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam)
@@ -33,7 +109,7 @@ theorem sstoreCost_noop (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam)
     sstoreCost fork original current current cold =
       (if cold then COLD_STORAGE_ACCESS else 0) + sstoreReadCost fork := by
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
-  simp [sstoreCost, h, hg]
+  simp [sstoreCost_eq, h, hg]
 
 /-- From Glamsterdam, a write of the current value costs one access, and no state gas. -/
 theorem sstore_noop_of_glamsterdam (h : fork ≥ .glamsterdam) (original current : U256)
@@ -42,8 +118,8 @@ theorem sstore_noop_of_glamsterdam (h : fork ≥ .glamsterdam) (original current
         (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) ∧
       sstoreStateGas fork original current current = 0 ∧
       sstoreStateRefill fork original current current = 0 := by
-  refine ⟨by simp [sstoreCost, h], ?_, ?_⟩ <;>
-    simp only [sstoreStateGas, sstoreStateRefill] <;> split <;> simp_all
+  refine ⟨by simp [sstoreCost_eq, h], ?_, ?_⟩ <;>
+    simp only [sstoreStateGas_eq, sstoreStateRefill_eq] <;> split <;> simp_all
 
 /-- From Istanbul to BPO5, a write and the write that restores the original value cost two reads.
 
@@ -61,7 +137,8 @@ theorem sstore_restore (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam) (ori
   have hne : original ≠ new := hne
   have hne' : new ≠ original := Ne.symm hne
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
-  unfold sstoreCost sstoreRefund sstoreResetCost sstoreReadCost
+  simp only [sstoreCost_eq, sstoreRefund_eq]
+  unfold sstoreResetCost sstoreReadCost
   simp only [gasSchedule, hg, ite_false]
   by_cases hb : fork ≥ .berlin <;> by_cases h0 : original = 0 <;> by_cases h1 : new = 0 <;>
     cases cold <;> simp [h, hb, h0, h1, hne, hne'] <;> simp_all <;> omega
@@ -72,7 +149,8 @@ theorem sstoreCost_le (h : fork ≥ .berlin) (hlt : fork < .glamsterdam)
     sstoreCost fork original current new cold ≤ COLD_STORAGE_ACCESS + STORAGE_SET := by
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
   have hi : fork ≥ .istanbul := Nat.le_trans (by decide) h
-  unfold sstoreCost sstoreResetCost sstoreReadCost
+  rw [sstoreCost_eq]
+  unfold sstoreResetCost sstoreReadCost
   simp only [gasSchedule, hg, hi, h, ite_false, ite_true]
   cases cold <;> simp only [ite_true, Bool.false_eq_true, ite_false, COLD_STORAGE_ACCESS,
     STORAGE_SET, COLD_STORAGE_WRITE, WARM_ACCESS] <;> split <;> (try split) <;> omega
@@ -86,7 +164,7 @@ theorem sstoreTotalCost_of_lt (hlt : fork < .glamsterdam) (original current new 
     (cold : Bool) :
     sstoreTotalCost fork original current new cold = sstoreCost fork original current new cold := by
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
-  simp [sstoreTotalCost, sstoreStateGas, hg]
+  simp [sstoreTotalCost, sstoreStateGas_eq, hg]
 
 /-- A factor for one-counter gas budgets: 1 before Glamsterdam, and 5 from Glamsterdam.
 
@@ -115,13 +193,13 @@ theorem sstoreTotalCost_le (hfork : fork ≥ .berlin) (original current new : U2
     sstoreTotalCost fork original current new cold ≤ 22100 * storageGasScale fork := by
   by_cases hglam : fork ≥ .glamsterdam
   · have he : sstoreCost fork original current new cold ≤ 12100 := by
-      rw [sstoreCost, ite_eq_left hglam]
+      rw [sstoreCost_eq, ite_eq_left hglam]
       have hw : (if original = current ∧ current ≠ new then STORAGE_WRITE else 0) ≤ 10000 := by
         split <;> decide
       cases cold <;> simp only [Bool.false_eq_true, ↓reduceIte, COLD_STORAGE_ACCESS,
         WARM_ACCESS] <;> omega
     have hs : sstoreStateGas fork original current new ≤ 97920 := by
-      unfold sstoreStateGas
+      rw [sstoreStateGas_eq]
       split <;> decide
     simp only [sstoreTotalCost, storageGasScale, hglam, ↓reduceIte, Nat.reduceMul]
     omega
@@ -155,7 +233,7 @@ theorem sstore_restore_of_glamsterdam (h : fork ≥ .glamsterdam) (original new 
     rw [c₁, c₂, g₁, r₁, sstoreRefund_noop hi]
     cases cold <;> simp
   have hne' : new ≠ original := Ne.symm hne
-  unfold sstoreCost sstoreRefund sstoreStateGas sstoreStateRefill
+  simp only [sstoreCost_eq, sstoreRefund_eq, sstoreStateGas_eq, sstoreStateRefill_eq]
   by_cases h0 : original = 0 <;> by_cases h1 : new = 0 <;>
     cases cold <;> simp [h, hi, h0, h1, hne, hne'] <;> simp_all <;> omega
 
@@ -163,7 +241,7 @@ theorem sstore_restore_of_glamsterdam (h : fork ≥ .glamsterdam) (original new 
 theorem sstoreStateGas_ne_zero {original current new : U256}
     (hs : sstoreStateGas fork original current new ≠ 0) :
     fork ≥ .glamsterdam ∧ original = 0 ∧ current = 0 ∧ new ≠ 0 := by
-  unfold sstoreStateGas at hs
+  rw [sstoreStateGas_eq] at hs
   split at hs
   · assumption
   · exact absurd rfl hs
@@ -172,7 +250,7 @@ theorem sstoreStateGas_ne_zero {original current new : U256}
 theorem sstoreStateRefill_ne_zero {original current new : U256}
     (hs : sstoreStateRefill fork original current new ≠ 0) :
     fork ≥ .glamsterdam ∧ original = 0 ∧ current ≠ 0 ∧ new = 0 := by
-  unfold sstoreStateRefill at hs
+  rw [sstoreStateRefill_eq] at hs
   split at hs
   · assumption
   · exact absurd rfl hs
@@ -187,7 +265,7 @@ theorem sstoreCost_of_lt_istanbul (h : fork < .istanbul) (original current new :
       if new ≠ 0 ∧ current = 0 then STORAGE_SET else COLD_STORAGE_WRITE := by
   have : ¬fork ≥ .istanbul := Nat.not_le_of_lt h
   have hg : ¬fork ≥ .glamsterdam := fun hg => this (Nat.le_trans (by decide) hg)
-  simp only [sstoreCost, this, hg, ite_false]
+  simp only [sstoreCost_eq, this, hg, ite_false]
 
 /-- Before Berlin, an access to a slot is warm and leaves the frame as it is. -/
 theorem accessStorageKey_of_lt_berlin (h : fork < .berlin) (evm : Evm fork Meter) (a : Address)

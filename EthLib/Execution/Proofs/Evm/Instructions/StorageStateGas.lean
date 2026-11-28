@@ -39,7 +39,7 @@ theorem sstoreStateGas_sub_sstoreStateRefill (h : fork ≥ .glamsterdam)
       sstoreStateRefill fork (tx.getStorageOriginal address key) (tx.getStorage address key) new =
       STORAGE_SET_STATE_GAS * ((tx'.freshSlots.card : Int) - tx.freshSlots.card) := by
   rw [State.TransactionState.card_freshSlots_setStorage hw]
-  simp only [sstoreStateGas, sstoreStateRefill, h, true_and]
+  simp only [sstoreStateGas_eq, sstoreStateRefill_eq, h, true_and]
   split_ifs <;> simp_all
   -- The state gas of a new slot is a number, so the rest is linear.
   all_goals

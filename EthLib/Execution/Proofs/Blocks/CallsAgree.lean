@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Blocks.SystemCall
 public import EthLib.Execution.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Transactions.Noninterference
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the system calls and withdrawals depend only on what they read
@@ -95,7 +96,7 @@ private theorem mem_accountReads_processMessageCall {Meter : Type} [GasMeter Met
 theorem mem_accountReads_systemCall {env : BlockEnvironment fork} {block : BlockState}
     {target : Address} {data : ByteArray} {out : SystemCallOutput}
     (h : systemCall env block target data = .ok out) : target ∈ out.state.accountReads := by
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨o, ho, h⟩ := bind_ok_iff.mp h
     cases h
@@ -114,7 +115,7 @@ theorem systemCall_agrees {env : BlockEnvironment fork} {block other : BlockStat
     ∃ out', systemCall env other target data = .ok out' ∧
       out' = { out with state := out'.state } ∧
       AgreesOn account slot code out.state out'.state := by
-  unfold systemCall at h ⊢
+  rw [systemCall_unfold] at h ⊢
   split at h <;>
   · rename_i hfork
     simp only [hfork, ↓reduceIte]
@@ -143,7 +144,7 @@ theorem checkedSystemCall_agrees {env : BlockEnvironment fork} {block other : Bl
     ∃ out', checkedSystemCall env other target data = .ok out' ∧
       out' = { out with state := out'.state } ∧
       AgreesOn account slot code out.state out'.state := by
-  unfold checkedSystemCall at h ⊢
+  rw [checkedSystemCall_unfold] at h ⊢
   obtain ⟨c, hc, h⟩ := bind_ok_iff.mp h
   dsimp only at h
   split at h

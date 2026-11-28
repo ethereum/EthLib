@@ -88,15 +88,15 @@ The report itself also prints the number of rules at each fork.
 <!-- generated: proof-coverage -->
 | Fork | Rules touched | Rules characterized |
 |------|------|------|
-| phase0 | 1327 | 11 |
-| altair | 1344 | 11 |
-| bellatrix | 1345 | 11 |
-| shapella | 1356 | 11 |
-| dencun | 1365 | 11 |
-| pectra | 1385 | 11 |
-| fusaka | 1392 | 11 |
-| glamsterdam | 1516 | 13 |
-| hegota | 1505 | 13 |
+| phase0 | 1328 | 11 |
+| altair | 1345 | 11 |
+| bellatrix | 1346 | 11 |
+| shapella | 1357 | 11 |
+| dencun | 1366 | 11 |
+| pectra | 1386 | 11 |
+| fusaka | 1393 | 11 |
+| glamsterdam | 1517 | 13 |
+| hegota | 1506 | 13 |
 <!-- end generated -->
 
 ### XMSS
