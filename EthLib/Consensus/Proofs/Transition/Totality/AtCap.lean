@@ -377,7 +377,6 @@ private theorem registry_atCap (before : fork < .pectra)
     (atCap : AtCap preset (getCurrentEpoch s) validator)
     (small : (getCurrentEpoch s).toNat + 1 < 2 ^ 64) :
     t.validators.data[i]? = some validator := by
-  have notElectra : ¬ Fork.pectra ≤ fork := Nat.not_le_of_lt before
   have notGloas : fork < .glamsterdam := Nat.lt_trans before (by decide)
   -- A write at another position keeps the validator at this one.
   have other {b : BeaconState preset fork} {j : Nat} (inside : j < b.validators.data.size)
@@ -385,9 +384,8 @@ private theorem registry_atCap (before : fork < .pectra)
       (b.putValidator j inside v).validators.data[i]? = b.validators.data[i]? := by
     simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set]
     exact Array.getElem?_set_ne inside different
-  unfold processRegistryUpdates at computed
-  simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra before computed
   -- The first pass neither queues nor ejects the validator, and leaves it as it is.
   have first : updated.validators.data[i]? = some validator := by
     refine foldlM_ok_invariant (fun b : BeaconState preset fork =>

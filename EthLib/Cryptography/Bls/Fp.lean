@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Bls.Constants
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Montgomery
@@ -15,16 +16,6 @@ The base field of BLS12-381, the integers mod the prime `p`.
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls
-
-/-- BLS12-381 base field modulus.
-
-In hexadecimal, `p` is the 96 digits of these two lines, joined:
-
-- `1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f624`
-- `1eabfffeb153ffffb9feffffffffaaab`
--/
-def Fp.modulus : Nat :=
-  0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab
 
 protected theorem Fp.modulus_pos : 0 < Fp.modulus := by decide
 

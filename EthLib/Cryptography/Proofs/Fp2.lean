@@ -85,7 +85,9 @@ protected theorem ext {a b : Fp2 F} (h0 : a.c0 = b.c0) (h1 : a.c1 = b.c1) : a = 
 @[simp] theorem neg_c0 (a : Fp2 F) : (-a).c0 = -a.c0 := rfl
 @[simp] theorem neg_c1 (a : Fp2 F) : (-a).c1 = -a.c1 := rfl
 @[simp] theorem mul_c0 (a b : Fp2 F) : (a * b).c0 = a.c0 * b.c0 - a.c1 * b.c1 := rfl
-@[simp] theorem mul_c1 (a b : Fp2 F) : (a * b).c1 = a.c0 * b.c1 + a.c1 * b.c0 := rfl
+-- Not a simp lemma: the cross form, proved below through an embedding into a field, is simpler.
+theorem mul_c1 (a b : Fp2 F) :
+    (a * b).c1 = (a.c0 + a.c1) * (b.c0 + b.c1) - a.c0 * b.c0 - a.c1 * b.c1 := rfl
 @[simp] theorem square_c0 (a : Fp2 F) : a.square.c0 = (a.c0 + a.c1) * (a.c0 - a.c1) := rfl
 @[simp] theorem square_c1 (a : Fp2 F) : a.square.c1 = a.c0 * a.c1 + a.c0 * a.c1 := rfl
 @[simp] theorem mulFp_c0 (a : Fp2 F) (x : F) : (a.mulFp x).c0 = a.c0 * x := rfl
@@ -165,6 +167,12 @@ protected theorem left_distrib (a b c : Fp2 F) : a * (b + c) = a * b + a * c := 
 
 protected theorem right_distrib (a b c : Fp2 F) : (a + b) * c = a * c + b * c := by
   apply Fp2.ext <;> apply e.injective <;> push_map <;> ring
+
+/-- The coefficient of `i` in a product is `a0 b1 + a1 b0`, through an embedding into a field. -/
+theorem mul_c1_eq (a b : Fp2 F) : (a * b).c1 = a.c0 * b.c1 + a.c1 * b.c0 := by
+  apply e.injective
+  push_map
+  ring
 
 /-- The square is the product of the element by itself. -/
 theorem square_eq (a : Fp2 F) : a.square = a * a := by

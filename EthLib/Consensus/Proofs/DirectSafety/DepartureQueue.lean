@@ -1809,9 +1809,8 @@ private theorem epoch_indexedTrace {fork : Fork} {s t : BeaconState preset fork}
         called.call.rate.toNat ≤ exitCap) ∧
       PartialsAppended electra s t calls := by
   obtain ⟨rewarded, registered, entriesOk, slot, same, cut⟩ := epoch_registry_cut electra early ok
-  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok] at entriesOk
-  obtain ⟨activation, computed, entries⟩ := entriesOk
-  simp only [liftArith, mapError_ok_iff] at computed
+  obtain ⟨activation, computed, entries⟩ :=
+    processRegistryUpdates_ok_of_electra electra early entriesOk
   have exactEpoch := (computeActivationExitEpoch_ok_iff.mp computed).2
   have later : (getCurrentEpoch rewarded).toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
       activation.toNat := by omega
@@ -2701,13 +2700,11 @@ private theorem epoch_consolidationFrame {fork : Fork} {s t : BeaconState preset
   have edge := EpochStage.action_cases.mp computed
   cases k
   case registry =>
-    simp only [EpochStage.Edge, processRegistryUpdates, electra, ↓reduceIte,
-      bind_ok_iff] at edge
-    obtain ⟨_, _, entries⟩ := edge
-    refine foldlM_ok_invariant
+    simp only [EpochStage.Edge] at edge
+    refine processRegistryUpdates_invariant_of_electra electra
       (fun t => (departureQueues electra t).2.2 = (departureQueues electra a).2.2)
-      ?_ rfl entries
-    intro c index d kept stepped
+      ?_ rfl edge
+    intro _ _ c index d kept stepped
     rcases registryEntry_departureQueues electra stepped with frame | ⟨_, initiated⟩
     · exact (congrArg (fun q => q.2.2) frame).trans kept
     · exact (initiateExit_consolidationFrame electra initiated).trans kept
@@ -3935,9 +3932,7 @@ private theorem CountedStep.registry {f : Fork} {s t : BeaconState preset f}
     (early : f < .pectra) (bound : Nat) (ok : processRegistryUpdates config s = .ok t) :
     CountedStep config bound s t := by
   refine ⟨activeStep_processRegistryUpdates early ok, fun counted => ?_⟩
-  have notElectra : ¬ .pectra ≤ f := Nat.not_le_of_lt early
-  simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff] at ok
-  obtain ⟨_, updated, _, _, activated⟩ := ok
+  obtain ⟨_, _, updated, _, activated⟩ := processRegistryUpdates_ok_of_lt_electra early ok
   exact ((CountedStep.fold (fun _ _ _ => CountedStep.registryEntry early bound) updated).2
     counted).trans (.fold (fun _ _ _ => CountCohortStep.activate bound) activated)
 
@@ -6536,10 +6531,7 @@ private theorem registry_updates_exit_rates
       ∀ called ∈ calls, ∀ n, called.call.first.toNat ≤ n → called.call.earliest.toNat < n →
         n ≤ called.call.epoch.toNat → called.call.rate.toNat ≤
           exitEnvelope (n - (getCurrentEpoch x.state).toNat) := by
-  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff,
-    liftAccessor_ok] at ok
-  obtain ⟨activation, computed, entries⟩ := ok
-  simp only [liftArith, mapError_ok_iff] at computed
+  obtain ⟨activation, computed, entries⟩ := processRegistryUpdates_ok_of_electra electra early ok
   have exactEpoch := (computeActivationExitEpoch_ok_iff.mp computed).2
   have later : (getCurrentEpoch s).toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
       activation.toNat := by omega

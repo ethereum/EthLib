@@ -80,19 +80,39 @@ def IsHashCollision (p : ByteArray × ByteArray) : Prop :=
 
 /-- The collision two openings at index `i` run into, with `H` in place of Keccak-256, if any.
 
-It is the two node inputs of the Merkle collision search, at the lowest level where one exists.
+It hashes each call with `H`, so an oracle can answer it and count its calls. -/
+def searchHashCollisionWith {m : Type → Type} [Monad m] (H : ByteArray → m Digest) (i : UInt32)
+    (o o' : Opening) : m (Option (ByteArray × ByteArray)) := do
+  let leaf ← H (leafInput o.secret)
+  let leaf' ← H (leafInput o'.secret)
+  -- The two node inputs of the Merkle collision search, at the lowest level where one exists.
+  let found ← Merkle.findCollision (nodeWith H) ⟨0, i.toNat⟩ leaf leaf' o.path.toList
+    o'.path.toList
+  return match found with
+    | some c => some (nodeInput c.x.1 c.x.2, nodeInput c.y.1 c.y.2)
+    | none =>
+      -- With none, the two leaf inputs, if the secrets differ but their leaves are equal.
+      if o.secret ≠ o'.secret ∧ leaf = leaf' then some (leafInput o.secret, leafInput o'.secret)
+      else none
 
-With none, it is the two leaf inputs, if the secrets differ but their leaves are equal. -/
+/-- The collision two openings at index `i` run into, with the function `H` as the hash, if any. -/
 def findHashCollisionWith (H : ByteArray → Digest) (i : UInt32) (o o' : Opening) :
     Option (ByteArray × ByteArray) :=
-  match Merkle.findCollision (m := Id) (fun _ left right => pure (H (nodeInput left right)))
-      ⟨0, i.toNat⟩ (H (leafInput o.secret)) (H (leafInput o'.secret)) o.path.toList
-      o'.path.toList with
-  | some c => some (nodeInput c.x.1 c.x.2, nodeInput c.y.1 c.y.2)
-  | none =>
-    if o.secret ≠ o'.secret ∧ H (leafInput o.secret) = H (leafInput o'.secret) then
-      some (leafInput o.secret, leafInput o'.secret)
-    else none
+  (searchHashCollisionWith (m := Id) (fun x => pure (H x)) i o o').run
+
+/-- With a function as the hash, the search is a match on the Merkle collision search. -/
+theorem findHashCollisionWith_eq (H : ByteArray → Digest) (i : UInt32) (o o' : Opening) :
+    findHashCollisionWith H i o o' =
+      match Merkle.findCollision (m := Id) (fun _ left right => pure (H (nodeInput left right)))
+          ⟨0, i.toNat⟩ (H (leafInput o.secret)) (H (leafInput o'.secret)) o.path.toList
+          o'.path.toList with
+      | some c => some (nodeInput c.x.1 c.x.2, nodeInput c.y.1 c.y.2)
+      | none =>
+        if o.secret ≠ o'.secret ∧ H (leafInput o.secret) = H (leafInput o'.secret) then
+          some (leafInput o.secret, leafInput o'.secret)
+        else none :=
+  -- In the identity monad each hash call is a value.
+  rfl
 
 /-- The Keccak-256 collision two openings at index `i` run into, if any. -/
 def findHashCollision (i : UInt32) (o o' : Opening) : Option (ByteArray × ByteArray) :=
@@ -117,7 +137,7 @@ theorem isHashCollision_of_collision {c : Merkle.Collision Digest} (h : c.Valid 
 theorem findHashCollisionWith_valid {H : ByteArray → Digest} {i : UInt32} {o o' : Opening}
     {p : ByteArray × ByteArray} (h : findHashCollisionWith H i o o' = some p) :
     IsHashCollisionWith H p := by
-  unfold findHashCollisionWith at h
+  rw [findHashCollisionWith_eq] at h
   split at h
   · -- A node collision, which the Merkle search proves valid.
     next c hc =>
@@ -166,7 +186,7 @@ theorem verify_index_binding {root root' : Digest} {i j : UInt32} (hij : i ≠ j
 
 /-- One opening compared with itself exposes no collision. -/
 theorem findHashCollision_self (i : UInt32) (o : Opening) : findHashCollision i o o = none := by
-  simp only [findHashCollision, findHashCollisionWith, Merkle.findCollision_self, ne_eq,
+  simp only [findHashCollision, findHashCollisionWith_eq, Merkle.findCollision_self, ne_eq,
     not_true_eq_false, false_and, ↓reduceIte]
 
 /-- Two openings at index `i` whose leaves climb to one node with `H` reveal one secret.
@@ -182,7 +202,7 @@ theorem secret_unique_of_climb_eq {H : ByteArray → Digest} {i : UInt32} {o o' 
   have binding := Merkle.climb_binding _ _ _ ⟨0, i.toNat⟩ _ _ (by simp) hroot
   -- The search succeeds unless the secrets are equal.
   have found : o.secret = o'.secret ∨ (findHashCollisionWith H i o o').isSome := by
-    unfold findHashCollisionWith
+    rw [findHashCollisionWith_eq]
     rcases binding with ⟨hleaf, -⟩ | hfound
     · -- Equal leaves come from equal secrets, or the leaf hash collides.
       by_cases hs : o.secret = o'.secret

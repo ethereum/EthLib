@@ -592,27 +592,233 @@ theorem recordPaymentWeight_weight {gloas : .glamsterdam ≤ fork} {data : Attes
     simp only [Except.ok.injEq] at weightOk
     simp [weighs, weightOk]
 
+/-- Writing the flags of an epoch keeps the proposer of the slot, which reads no flag. -/
+theorem getBeaconProposerIndex_setEpochParticipation (current : Bool)
+    (participation : EpochParticipation preset fork) :
+    getBeaconProposerIndex (setEpochParticipation state current participation) =
+      getBeaconProposerIndex state := by
+  cases current <;> rfl
+
+/-- From Altair, the attestation step is the one of Altair and later forks. -/
+theorem processAttestation_of_altair {state : BeaconState preset fork} {config : Config}
+    {checks : SignatureChecks} {attestation : Attestation preset fork} {parentSlot : Slot}
+    (altair : .altair ≤ fork) :
+    processAttestation config checks state parentSlot attestation =
+      processAttestationAltair config checks state attestation altair parentSlot := by
+  simp [processAttestation, altair]
+
+/-- From Altair, an attestation passes exactly when its checks pass and each step succeeds.
+
+It writes the flags of its target epoch, then raises the balance of the proposer.
+
+From Gloas it then weighs a builder payment. -/
+theorem processAttestationAltair_eq_ok_iff {attestation : Attestation preset fork}
+    {altair : .altair ≤ fork} :
+    processAttestationAltair config checks state attestation altair parentSlot = .ok after ↔
+      -- The checks are one conjunct, so a new check moves none of the reads after them.
+      --
+      -- Its target is the previous or the current epoch, and the epoch of its slot.
+      ((attestation.data.target.epoch = getPreviousEpoch state ∨
+          attestation.data.target.epoch = getCurrentEpoch state) ∧
+        attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+        -- It is included at least the least inclusion delay after its slot.
+        attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
+          state.slot.toNat ∧
+        -- It meets the inclusion deadline, and its bits fit its committees.
+        checkInclusionDeadline state attestation.data.slot = .ok () ∧
+        checkAttestationCommittees state attestation = .ok ()) ∧
+      ∃ earned indexed total attesters updated numerator proposer raised,
+        getAttestationParticipationFlagIndices state attestation.data
+          (state.slot - attestation.data.slot) parentSlot = .ok earned ∧
+        -- Its indexed form passes the signature check.
+        getIndexedAttestation state attestation = .ok indexed ∧
+        isValidIndexedAttestation config checks state indexed = .ok true ∧
+        getTotalActiveBalance state = .ok total ∧
+        getAttestingIndices state attestation = .ok attesters ∧
+        -- Each attester gets the flags it earned in the epoch of the target.
+        --
+        -- The numerator sums the rewards of the new flags.
+        attesters.foldlM (addAttesterFlags state total earned)
+          ((if attestation.data.target.epoch == getCurrentEpoch state then
+            state.currentEpochParticipation altair
+          else state.previousEpochParticipation altair), 0) = .ok (updated, numerator) ∧
+        -- The proposer earns the numerator over `(64 - 8) * 64 / 8 = 448`, rounded down.
+        getBeaconProposerIndex state = .ok proposer ∧
+        increaseBalance (setEpochParticipation state
+            (attestation.data.target.epoch == getCurrentEpoch state) updated) proposer
+          (numerator / ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR /
+            PROPOSER_WEIGHT)) = .ok raised ∧
+        -- From Gloas the new attesters weigh a builder payment.
+        --
+        -- Before Gloas the step ends with the proposer reward.
+        if gloas : .glamsterdam ≤ fork then
+          recordPaymentWeight raised gloas attestation.data
+            (attestation.data.target.epoch == getCurrentEpoch state)
+            (if attestation.data.target.epoch == getCurrentEpoch state then
+              state.currentEpochParticipation altair
+            else state.previousEpochParticipation altair) updated attesters = .ok after
+        else raised = after := by
+  unfold processAttestationAltair
+  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+    addChecked_ok_iff, getBeaconProposerIndex_setEpochParticipation, Prod.exists]
+  constructor
+  · rintro ⟨_, recent, _, slotEpoch, earliest, ⟨fits, sum⟩, _, early, _, deadline, _,
+      committees, earned, earnedOk, indexed, indexedOk, valid, validOk, _, validTrue, total,
+      totalOk, attesters, attestersOk, updated, numerator, folded, proposer, proposerOk,
+      raised, raisedOk, final⟩
+    -- The signature check returned true.
+    subst validTrue
+    refine ⟨⟨recent, slotEpoch, ?_, deadline, committees⟩, earned, indexed, total, attesters,
+      updated, numerator, proposer, raised, earnedOk, indexedOk, validOk, totalOk, attestersOk,
+      folded, proposerOk, raisedOk, ?_⟩
+    -- The earliest slot of inclusion is the sum without overflow.
+    · rw [← sum]
+      exact UInt64.le_iff_toNat_le.mp early
+    -- The last step is the weight of the payment from Gloas, and a plain return before.
+    · split at final
+      · rename_i gloas
+        simpa only [gloas, ↓reduceDIte] using final
+      · rename_i gloas
+        simp only [gloas, ↓reduceDIte]
+        simpa [pure, Except.pure] using final
+  · rintro ⟨⟨recent, slotEpoch, early, deadline, committees⟩, earned, indexed, total, attesters,
+      updated, numerator, proposer, raised, earnedOk, indexedOk, validOk, totalOk, attestersOk,
+      folded, proposerOk, raisedOk, final⟩
+    -- The earliest slot of inclusion is at most the slot of the state, so it fits in 64 bits.
+    have fits : attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat <
+        2 ^ 64 := Nat.lt_of_le_of_lt early state.slot.toNat_lt
+    refine ⟨(), recent, (), slotEpoch, _, ⟨fits, toNat_add_of_lt fits⟩, (), ?_, (), deadline, (),
+      committees, earned, earnedOk, indexed, indexedOk, true, validOk, (), rfl, total, totalOk,
+      attesters, attestersOk, updated, numerator, folded, proposer, proposerOk, raised, raisedOk,
+      ?_⟩
+    · exact UInt64.le_iff_toNat_le.mpr (by rwa [toNat_add_of_lt fits])
+    -- The last step is the weight of the payment from Gloas, and a plain return before.
+    · split
+      · rename_i gloas
+        simpa only [gloas, ↓reduceDIte] using final
+      · rename_i gloas
+        simp only [gloas, ↓reduceDIte] at final
+        simp [final, pure, Except.pure]
+
+/-- From Altair, an attestation that passes meets its checks, and each of its reads succeeds.
+
+After the proposer reward it writes only the pending payments of the builders. -/
+theorem processAttestationAltair_reads {attestation : Attestation preset fork}
+    {altair : .altair ≤ fork}
+    (computed :
+      processAttestationAltair config checks state attestation altair parentSlot = .ok after) :
+    -- The checks and the reads are those of the equivalence, in the same order.
+    ((attestation.data.target.epoch = getPreviousEpoch state ∨
+        attestation.data.target.epoch = getCurrentEpoch state) ∧
+      attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+      attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
+        state.slot.toNat ∧
+      checkInclusionDeadline state attestation.data.slot = .ok () ∧
+      checkAttestationCommittees state attestation = .ok ()) ∧
+    ∃ earned indexed total attesters updated numerator proposer raised,
+      getAttestationParticipationFlagIndices state attestation.data
+        (state.slot - attestation.data.slot) parentSlot = .ok earned ∧
+      getIndexedAttestation state attestation = .ok indexed ∧
+      isValidIndexedAttestation config checks state indexed = .ok true ∧
+      getTotalActiveBalance state = .ok total ∧
+      getAttestingIndices state attestation = .ok attesters ∧
+      attesters.foldlM (addAttesterFlags state total earned)
+        ((if attestation.data.target.epoch == getCurrentEpoch state then
+          state.currentEpochParticipation altair
+        else state.previousEpochParticipation altair), 0) = .ok (updated, numerator) ∧
+      getBeaconProposerIndex state = .ok proposer ∧
+      increaseBalance (setEpochParticipation state
+          (attestation.data.target.epoch == getCurrentEpoch state) updated) proposer
+        (numerator / ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR /
+          PROPOSER_WEIGHT)) = .ok raised ∧
+      -- The steps after the proposer reward write only the pending payments.
+      after = { raised with builderPendingPayments := after.builderPendingPayments } := by
+  obtain ⟨checked, earned, indexed, total, attesters, updated, numerator, proposer, raised,
+    earnedOk, indexedOk, validOk, totalOk, attestersOk, folded, proposerOk, raisedOk, final⟩ :=
+    processAttestationAltair_eq_ok_iff.mp computed
+  refine ⟨checked, earned, indexed, total, attesters, updated, numerator, proposer, raised,
+    earnedOk, indexedOk, validOk, totalOk, attestersOk, folded, proposerOk, raisedOk, ?_⟩
+  split at final
+  -- From Gloas the weight of a payment writes only the pending payments.
+  · exact recordPaymentWeight_eq final
+  -- Before Gloas the step ends with the proposer reward.
+  · subst final
+    rfl
+
+/-- From Altair, an attestation writes the flags of its target epoch and raises one balance.
+
+From Gloas it then writes the pending payments of the builders, and nothing else. -/
+theorem processAttestationAltair_writes {attestation : Attestation preset fork}
+    {altair : .altair ≤ fork}
+    (computed :
+      processAttestationAltair config checks state attestation altair parentSlot = .ok after) :
+    ∃ updated proposer reward raised,
+      increaseBalance (setEpochParticipation state
+          (attestation.data.target.epoch == getCurrentEpoch state) updated) proposer reward =
+        .ok raised ∧
+      after = { raised with builderPendingPayments := after.builderPendingPayments } := by
+  obtain ⟨-, _, _, _, _, updated, _, proposer, raised, -, -, -, -, -, -, -, raisedOk, written⟩ :=
+    processAttestationAltair_reads computed
+  exact ⟨updated, proposer, _, raised, raisedOk, written⟩
+
+/-- Before Gloas, an attestation that passes meets its checks, and each of its reads succeeds.
+
+It ends with the proposer reward, so a step that a later fork adds leaves this statement true. -/
+theorem processAttestationAltair_reads_of_lt_gloas {attestation : Attestation preset fork}
+    {altair : .altair ≤ fork} (early : fork < .glamsterdam)
+    (computed :
+      processAttestationAltair config checks state attestation altair parentSlot = .ok after) :
+    -- The checks and the reads are those of the equivalence, in the same order.
+    ((attestation.data.target.epoch = getPreviousEpoch state ∨
+        attestation.data.target.epoch = getCurrentEpoch state) ∧
+      attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+      attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
+        state.slot.toNat ∧
+      checkInclusionDeadline state attestation.data.slot = .ok () ∧
+      checkAttestationCommittees state attestation = .ok ()) ∧
+    ∃ earned indexed total attesters updated numerator proposer,
+      getAttestationParticipationFlagIndices state attestation.data
+        (state.slot - attestation.data.slot) parentSlot = .ok earned ∧
+      getIndexedAttestation state attestation = .ok indexed ∧
+      isValidIndexedAttestation config checks state indexed = .ok true ∧
+      getTotalActiveBalance state = .ok total ∧
+      getAttestingIndices state attestation = .ok attesters ∧
+      attesters.foldlM (addAttesterFlags state total earned)
+        ((if attestation.data.target.epoch == getCurrentEpoch state then
+          state.currentEpochParticipation altair
+        else state.previousEpochParticipation altair), 0) = .ok (updated, numerator) ∧
+      getBeaconProposerIndex state = .ok proposer ∧
+      -- The proposer reward is the last step.
+      increaseBalance (setEpochParticipation state
+          (attestation.data.target.epoch == getCurrentEpoch state) updated) proposer
+        (numerator / ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR /
+          PROPOSER_WEIGHT)) = .ok after := by
+  obtain ⟨checked, earned, indexed, total, attesters, updated, numerator, proposer, raised,
+    earnedOk, indexedOk, validOk, totalOk, attestersOk, folded, proposerOk, raisedOk, final⟩ :=
+    processAttestationAltair_eq_ok_iff.mp computed
+  -- Before Gloas the step returns the state after the proposer reward.
+  have notGloas : ¬.glamsterdam ≤ fork := Nat.not_le_of_lt early
+  rw [dite_eq_right notGloas] at final
+  subst final
+  exact ⟨checked, earned, indexed, total, attesters, updated, numerator, proposer, earnedOk,
+    indexedOk, validOk, totalOk, attestersOk, folded, proposerOk, raisedOk⟩
+
 /-- From Altair, an attestation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_processAttestationAltair {attestation : Attestation preset fork}
     {altair : .altair ≤ fork}
     (computed :
       processAttestationAltair config checks state attestation altair parentSlot = .ok after) :
     SameSizes state after := by
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, raised, final⟩ := computed
-  refine (sameSizes_setEpochParticipation _ _).trans ((sameSizes_increaseBalance raised).trans ?_)
-  split at final
-  · refine ⟨?_, ?_⟩ <;> rw [recordPaymentWeight_eq final]
-  · cases final
-    exact SameSizes.refl _
+  obtain ⟨_, _, _, _, raisedOk, written⟩ := processAttestationAltair_writes computed
+  have raised := (sameSizes_setEpochParticipation _ _).trans (sameSizes_increaseBalance raisedOk)
+  rw [written]
+  exact raised
 
 theorem sameSizes_processAttestation {attestation : Attestation preset fork}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     SameSizes state after := by
   by_cases altair : Fork.altair ≤ fork
-  · simp only [processAttestation, altair, ↓reduceDIte] at computed
+  · rw [processAttestation_of_altair altair] at computed
     exact sameSizes_processAttestationAltair computed
   · obtain ⟨_, _, _, _, _, recorded, _⟩ :=
       processAttestation_records (Nat.lt_of_not_le altair) computed
@@ -643,7 +849,8 @@ theorem applyDeposit_known {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32
     balanceSum after = balanceSum state + amount.toNat ∧ after.validators = state.validators := by
   have notElectra : ¬Fork.pectra ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
   simp only [applyDeposit, notElectra, ↓reduceDIte] at computed
-  exact applyPendingDeposit_known known computed
+  exact applyPendingDeposit_known (deposit := ⟨pubkey, withdrawalCredentials, amount, signature,
+    GENESIS_SLOT⟩) known computed
 
 /-- A set or an append adds one entry exactly when the index is the size of the list. -/
 theorem setOrAppendList_size {switch : Base.Fork} {α : Type} {limit : Nat}

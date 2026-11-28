@@ -503,13 +503,6 @@ theorem getAttestingIndices_nodup {attestation : Attestation preset fork}
   List.pairwise_map.mpr ((getAttestingIndices_sorted computed).imp fun less same =>
     UInt64.ne_of_lt less (UInt64.toNat_inj.mp same))
 
-/-- Writing the flags of an epoch keeps the proposer of the slot, which reads no flag. -/
-theorem getBeaconProposerIndex_setEpochParticipation (current : Bool)
-    (participation : EpochParticipation preset fork) :
-    getBeaconProposerIndex (setEpochParticipation state current participation) =
-      getBeaconProposerIndex state := by
-  cases current <;> rfl
-
 /-- The balances after an attestation, from Altair, at every fork.
 
 The proposer of the slot earns one reward, and every other balance stays.
@@ -548,12 +541,9 @@ theorem processAttestationAltair_balance {config : Config} {checks : SignatureCh
               ((WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) * WEIGHT_DENOMINATOR.toNat /
                 PROPOSER_WEIGHT.toNat)
           else 0 := by
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, earned, earnedOk, _, _, _, _, _, _, total, totalOk,
-    attesters, attestersOk, ⟨updated, numerator⟩, folded, proposer, proposerOk, raised, raisedOk,
-    computed⟩ := computed
-  rw [getBeaconProposerIndex_setEpochParticipation] at proposerOk
+  obtain ⟨-, earned, _, total, attesters, updated, numerator, proposer, raised, earnedOk, -, -,
+    totalOk, attestersOk, folded, proposerOk, raisedOk, written⟩ :=
+    processAttestationAltair_reads computed
   obtain ⟨-, shares, named, facts, sum⟩ :=
     foldlM_addAttesterFlags (getAttestingIndices_nodup attestersOk) folded
   refine ⟨earned, total, attesters, proposer, earnedOk, totalOk, attestersOk, proposerOk, shares,
@@ -566,10 +556,7 @@ theorem processAttestationAltair_balance {config : Config} {checks : SignatureCh
   --
   -- [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
   have balances : after.balances = raised.balances := by
-    split at computed
-    · rw [recordPaymentWeight_eq computed]
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      rw [computed]
+    rw [written]
   have written : (setEpochParticipation state
       (attestation.data.target.epoch == getCurrentEpoch state) updated).balances.data[j]? =
       some balance := by
@@ -583,12 +570,5 @@ theorem processAttestationAltair_balance {config : Config} {checks : SignatureCh
         WEIGHT_DENOMINATOR.toNat / PROPOSER_WEIGHT.toNat := by decide
   rw [denominator]
   simp
-
-/-- From Altair, the attestation step is the one of Altair and later forks. -/
-theorem processAttestation_of_altair {config : Config} {checks : SignatureChecks}
-    {attestation : Attestation preset fork} {parentSlot : Slot} (altair : .altair ≤ fork) :
-    processAttestation config checks state parentSlot attestation =
-      processAttestationAltair config checks state attestation altair parentSlot := by
-  simp [processAttestation, altair]
 
 end EthLib.Consensus

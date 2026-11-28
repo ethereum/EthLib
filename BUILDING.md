@@ -140,11 +140,17 @@ Lake compares content hashes, so it rebuilds a restored module whose inputs diff
 The manual workflow's `clean_build` input skips both restores, so the run builds EthLib and these packages from scratch.
 
 The cache saves the most time when a change rebuilds only the proofs that it affects.
-Because `EthLib` sets `precompileModules`, Lake loads the native shared library of all of `EthLib` into each proof that imports the specification.
-By default, Lake also adds that shared library to the trace of the proof, so a change to any specification module rebuilds every proof.
-The `Proofs` library sets `platformIndependent`, which keeps platform-dependent inputs such as this shared library out of the traces of its modules.
-A proof then does not rebuild for a change to a specification module that it does not import.
-It still rebuilds when the `.olean` files of a module that it imports change.
+`EthLib` does not set `precompileModules`, so a proof that imports the specification waits only for the `.olean` files of its imports.
+So a downstream package that imports one module builds the import closure of that module, and no native code of the specification, unless it precompiles its imports.
+A specification module that fails to elaborate also stops only the proofs that import it.
+The `Exports` library sets `precompileModules`, so Lake builds the objects of the exports and of the specification that `setup.py` links.
+By default, Lake adds the shared libraries of a precompiled library to the trace of each module that imports it.
+The `Proofs` and `Exports` libraries set `platformIndependent`, which keeps platform-dependent inputs such as these shared libraries out of the traces of their modules.
+A proof or an export then does not rebuild for a change to a specification module that it does not import.
+The shared libraries of the exports are still relinked, because they link against the specification's shared library.
+This is safe because no export runs compiled code of the specification while it is elaborated.
+`scripts/check_lean_commands.py` fails on a `#` command, such as `#eval`, in any module under `EthLib`.
+Review must still reject a `run_cmd`, an `initialize` or a `meta import` of a specification module in an export.
 
 Before saving, CI deletes the generated `*.setup.json` files from the build directory.
 These files contain absolute runner paths, and Lake regenerates them.

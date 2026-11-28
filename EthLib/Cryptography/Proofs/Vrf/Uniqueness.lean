@@ -178,7 +178,7 @@ theorem collision_of_extractOutputs {cache : HashSpec.QueryCache} {claim : Openi
   -- With the table as the hash, the win makes the search find a collision of the table.
   obtain ⟨pair, hpair, hdistinct, hequal⟩ :=
     findHashCollisionWith_of_outputsWin (H := fun x => f x) (claim := claim) hwins
-  unfold findHashCollisionWith at hpair
+  rw [findHashCollisionWith_eq] at hpair
   split at hpair
   · -- Two node inputs, each of a pair that its own climb hashes.
     next c hc =>
@@ -198,18 +198,17 @@ theorem collision_of_extractOutputs {cache : HashSpec.QueryCache} {claim : Openi
 It hashes the leaf, one node per sibling, and the output. -/
 theorem verifyWith_queryBound (root : Digest) (i : UInt32) (o : Opening) :
     IsQueryBoundP (verifyWith oracleHash root i o) (fun _ => True) (VRF_TREE_HEIGHT + 2) := by
-  have hcall : ∀ x, IsQueryBoundP (oracleHash x) (fun _ => True) 1 := fun x => by
-    simp [oracleHash]
   -- The climb makes one call per sibling, and the path has one sibling per level.
   have hclimb : ∀ leaf, IsQueryBoundP (Merkle.climb (nodeWith oracleHash) ⟨0, i.toNat⟩ leaf
       o.path.toList) (fun _ => True) VRF_TREE_HEIGHT := fun leaf =>
-    (Merkle.isQueryBoundP_climb (hash := nodeWith oracleHash) (fun _ _ _ => hcall _)
-      o.path.toList ⟨0, i.toNat⟩ leaf).mono (by simp)
+    (Merkle.isQueryBoundP_climb (hash := nodeWith oracleHash)
+      (fun _ _ _ => oracleHash_queryBound _) o.path.toList ⟨0, i.toNat⟩ leaf).mono (by simp)
   unfold verifyWith
-  refine (isQueryBoundP_bind (hcall _) fun leaf _ =>
+  refine (isQueryBoundP_bind (oracleHash_queryBound _) fun leaf _ =>
     isQueryBoundP_bind (m := 1) (hclimb leaf) fun top _ => ?_).mono (by omega)
   split
-  · exact (isQueryBoundP_bind (hcall _) fun _ _ => isQueryBoundP_pure _ _ 0).mono (by omega)
+  · exact (isQueryBoundP_bind (oracleHash_queryBound _) fun _ _ =>
+      isQueryBoundP_pure _ _ 0).mono (by omega)
   · exact isQueryBoundP_pure _ _ _
 
 /-- The extraction makes at most `2 (h + 2)` oracle calls, for a tree of height `h`. -/

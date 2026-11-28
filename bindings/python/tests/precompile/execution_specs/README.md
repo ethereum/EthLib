@@ -1,12 +1,12 @@
 # Precompile cases of execution-specs
 
-The ECRECOVER and alt_bn128 cases that the precompile tests read, taken from the test files of execution-specs.
+The ECRECOVER, alt_bn128 and MODEXP cases that the precompile tests read, taken from the test files of execution-specs.
 
 - Repository: [`ethereum/execution-specs`](https://github.com/ethereum/execution-specs)
 - Commit: `391d8a05d5cb182542ac7e7330c858b6ee03f990`
 - Licence: CC0-1.0
 
-`SHA256SUMS` pins both files.
+`SHA256SUMS` pins the three files.
 
 The repository holds these cases as `pytest.param` lists in Python test files, not as vector files.
 So each file here was written from those lists, without running the tests:
@@ -19,3 +19,9 @@ So each file here was written from those lists, without running the tests:
 ```text
 python -I extract_alt_bn128_cases.py <execution-specs>/tests/byzantium alt_bn128_cases.json
 ```
+
+`modexp_vectors.json` is the file `tests/osaka/eip7883_modexp_gas_increase/vector/vectors.json`, copied byte for byte.
+It holds 46 MODEXP calls, each with its output and two prices:
+
+- `GasOld`, the price of EIP-2565, from Berlin to Prague;
+- `GasNew`, the price of EIP-7883, from Fusaka.

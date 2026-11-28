@@ -186,6 +186,30 @@ theorem createdAccounts_rollbackOnError (snapshot : TransactionState) (evm : Evm
   unfold rollbackOnError
   split <;> exact ⟨rfl, rfl⟩
 
+/-- A deposit of code keeps the message of the frame. -/
+theorem message_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
+    (h : depositCode fork snapshot evm = .ok after) : after.message = evm.message := by
+  unfold depositCode at h
+  dsimp only at h
+  split at h
+  · cases h
+    rfl
+  split at h
+  · cases h
+    rfl
+  split at h
+  · cases h
+    rfl
+  split at h
+  · cases h
+    split <;> rfl
+  split at h
+  · cases h
+    rfl
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  rfl
+
 /-- A successful deposit of code keeps the created accounts and the substate of the frame. -/
 theorem createdAccounts_depositCode {snapshot : TransactionState} {evm after : Evm fork Meter}
     (h : depositCode fork snapshot evm = .ok after) :

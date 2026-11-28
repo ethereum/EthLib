@@ -12,6 +12,7 @@ public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Bls.Pairing
 public import EthLib.Cryptography.Bls.HashToCurve
 public import EthLib.Cryptography.Bls.MapToCurve
+public import EthLib.Cryptography.Bls.Types
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Bls.KeyGen
 public import EthLib.Cryptography.Bls.KeyDerivation

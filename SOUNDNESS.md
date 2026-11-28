@@ -517,6 +517,98 @@ A header from Deneb to Fulu at a slot before Deneb climbs from the root of its h
 Carrying the bound over to SHA-256 is the idealisation of A4, not a theorem.
 From Gloas the header carries the parent block hash instead, which climbs by a normalized branch, and no theorem composes that check with the branch bound.
 
+### RLP
+
+Recursive Length Prefix (RLP) is the encoding of the execution layer.
+Many hashes of the chain, such as the hash of a block header, are taken over RLP bytes.
+So every item must have one encoding, and every client must reject what is not an encoding.
+The source is Appendix B of the [Yellow Paper](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), Shanghai version.
+It defines the encoding, and of the decoding it asks only that a scalar with a leading zero byte be dismissed.
+EthLib's decoder accepts exactly the outputs of EthLib's encoder, and the theorems of `Proofs/Rlp/` prove it.
+
+Every length of 56 or more, and every scalar, is written as `BE(n)`, the bytes of `n` in base 256 with no leading zero byte.
+`bigEndian_value` and `bigEndian_head_ne_zero` (`Proofs/Rlp/Item.lean`) prove that `bigEndian n` has both properties.
+`bigEndian_unique` proves that no other bytes have them, so `bigEndian` computes the `BE` of the Yellow Paper.
+
+The Yellow Paper gives no encoding to a payload of `2^64` bytes or more.
+The payload of a byte string is its bytes, and the payload of a list is the encodings of its items.
+`encode_error` (`Proofs/Rlp/Bound.lean`) proves that the only failure of `encode` is `payloadTooLong`, with a length of at least `2^64`.
+`encode_bytes_succeeds_iff` proves that a byte string encodes exactly when it has fewer than `2^64` bytes.
+`encode_list_succeeds_iff` takes a list whose items encode.
+It proves that the list encodes exactly when the joined encodings of its items have fewer than `2^64` bytes.
+Below that bound, `lengthPrefix_first_byte_le` (`Proofs/Rlp/Encode.lean`) bounds the first byte of a long prefix by `0xbf` for a byte string and `0xff` for a list.
+So that byte never wraps around 256, and the long prefix of a byte string stays below `0xc0`, where lists start.
+
+`Proofs/Rlp/Bound.lean` also bounds the size of an encoding.
+A prefix has at most 9 bytes, and 1 byte for a length below 56 (`lengthPrefix_size_le`).
+So a byte string encodes to at most 9 more bytes than it has, and to at most 1 more below 56 bytes (`encode_bytes_size_le`).
+A list encodes to at most 9 more bytes than the joined encodings of its items (`encode_list_size_le`).
+Every encoding has at least 1 byte (`one_le_encode_size`).
+The encoding of a list has more bytes than the list has items, and each item encodes to fewer bytes than the list (`encode_list_size_gt`).
+
+`decode_encode` (`Proofs/Rlp/RoundTrip.lean`) proves that decoding undoes encoding: if `encode x = .ok b`, then `decode b = .ok x`.
+Its one hypothesis is that the encoding exists, and by `encode_error` it is missing only for a payload of `2^64` bytes or more.
+`encode_injective` follows: two items with one encoding are equal.
+`encode_prefix_free` proves that no encoding is a proper prefix of another, so a sequence of encodings splits into items in only one way.
+`decode_trailing` proves that an encoding followed by more bytes is rejected with `trailingBytes`, which carries the number of extra bytes.
+`decodeItem_encode` proves that the decoder reads an encoding at any position of a longer input, and stops right after it.
+
+The converse is `encode_decode` (`Proofs/Rlp/Canonical.lean`): if `decode b = .ok x`, then `encode x = .ok b`.
+It assumes nothing about `b` beyond its acceptance, so the decoder accepts only canonical input, including every item nested in a list.
+`decode_eq_ok_iff` joins the two directions, so `encode` is a bijection between the items that have an encoding and the inputs that `decode` accepts.
+`decode_isOk_iff` states that `decode` succeeds exactly on the encodings of items.
+For a stream, `decodeItem_append` proves that the decoder reads the same item, and stops at the same position, when more bytes follow.
+`encode_of_decodeItem` proves that the bytes it read are the encoding of that item.
+
+`Proofs/Rlp/Strict.lean` names the error of each of five non-canonical forms, in three groups, whatever bytes follow the form:
+
+- `81 x` with `x < 0x80` puts a prefix before a byte that is its own encoding, and fails with `singleByteWithPrefix` (`decodeItem_singleByteWithPrefix`).
+- `b8 l` or `f8 l` with `0 < l < 56` writes a short length in the long form, and fails with `longFormForShortLength` (`decodeItem_longFormForShortLength_bytes`, `decodeItem_longFormForShortLength_list`).
+- `b7 + k` or `f7 + k` with `1 <= k <= 8`, then `k` length bytes whose first is zero, fails with `leadingZeroInLength` (`decodeItem_leadingZero_bytes`, `decodeItem_leadingZero_list`).
+
+Each theorem holds for the form at any position of the input, and `decode_eq_error` lifts it to a whole input that starts with the form.
+No theorem of `Proofs/Rlp/Strict.lean` names the error of an input that ends before the bytes its prefix announces.
+`encode_decode` still covers such an input, as it covers every input: what the decoder accepts is an encoding.
+`RlpError.code_injective` (`Proofs/Rlp/Item.lean`) proves that two errors with one code come from one constructor.
+That code is the number that the C exports give for an error.
+
+A scalar is a non-negative integer, and its item is the byte string `BE(n)`.
+`decodeScalar_eq_ok_iff` (`Proofs/Rlp/Scalar.lean`) proves that `decodeScalar b = .ok n` exactly when `encode (.scalar n) = .ok b`.
+With `encode_decode`, `encode_injective` and `bigEndian_head_ne_zero`, it follows that the scalar decoder rejects every input whose byte string starts with a zero byte.
+For example, it rejects `00` and `82 00 01`.
+`toScalar_scalar` and `eq_scalar_of_toScalar` state the same on items, and `scalar_injective` proves that two scalars never share an item.
+`encode_scalar_succeeds_iff` proves that a scalar encodes exactly when `BE(n)` has fewer than `2^64` bytes.
+`encode_scalar_succeeds` proves that every scalar below `2^256` encodes, so every 256-bit word does.
+
+A codec writes a typed value as an item, and reads an item back as a value (`Rlp/Codec.lean`).
+`LawfulCodec` (`Proofs/Rlp/Codec.lean`) asks that the two directions undo each other.
+For every lawful codec, `Codec.decode_encode` and `Codec.encode_decode` carry the two directions above to typed values, and `Codec.decode_eq_ok_iff` joins them.
+So a typed decoder accepts a byte string for a value exactly when it is the encoding of that value.
+`Codec.encode_injective` proves that two values with one encoding are equal.
+
+The file proves the laws for `Nat`, `U256`, `UInt64`, `UInt32`, `UInt16`, `UInt8`, `Bool`, `ByteArray`, `Vector UInt8 n` and `Item`, and for a list of a lawful type.
+So each bounded integer type rejects a scalar too large for it, and `Vector UInt8 n` rejects a byte string of another length.
+An `Option α` is lawful when `α` is lawful and `NeverEmpty`: no value of `α` has the empty byte string as its item.
+Then `none` is written as the empty byte string, and `Codec.decode_eq_ok_none_iff` proves that `none` decodes exactly from the byte `80`.
+`not_neverEmpty_nat` proves that `Nat` is not `NeverEmpty`, since 0 is the empty byte string.
+`LawfulCodec.wrapper` carries the laws to a structure around one value, when its two conversions undo each other.
+The structures of the execution layer, such as the block header and the transactions, have their own `LawfulCodec` instances, proved under `Execution/Proofs/`.
+
+`listEncodings_of_encode` (`Proofs/Rlp/Encodings.lean`) proves that the encoding of a list splits into the encodings of its items, in order.
+An `Encoded` value keeps an item next to the bytes that the decoder read it from.
+Take a list kept with its own encoding.
+`Encoded.parts_of_encode` and `Encoded.parts_eq_ok_iff` prove that its parts are its items, each kept with its own encoding.
+So a caller can hash the bytes of each part in place of encoding its item again.
+
+The round trip and canonicity relate the decoder to the encoder, and both are EthLib's definitions.
+That the encoder is the `RLP` of Appendix B rests on its shape, case by case, which A1 covers.
+The cases of `RLPTests` in `ethereum/tests` also check it, both ways, as the RLP README says.
+Only `BE` is proved against the definition in the paper.
+`R_l`, the encoding of a list, has the guard `s(x) ≠ ∅`, where `s(x)` is the joined encodings of the items.
+The encoder reads that `∅` as no encoding, so the empty list encodes as `c0`.
+The paper also writes `∅` for an empty value, so this reading is EthLib's choice.
+No theorem covers the depth of nesting that the compiled code handles, which B1 records.
+
 ### leanSPHINCS
 
 The correctness theorem is `verify_keyGen_sign` (`Proofs/Sphincs/Correctness.lean`).
@@ -650,21 +742,45 @@ The output hashes its index with its secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) 
 `outputHash_binding` (`Proofs/Vrf/Verify.lean`) says that two equal outputs come from one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision.
 `verify_index_binding` applies it to two openings that verify at two different indices, under any roots.
 So one secret gives different outputs at different indices, unless Keccak-256 collides.
-That two such outputs behave as independent values is a random-oracle heuristic, which no theorem states.
-A holder can still grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
+In the random oracle model, `run_outputs_evalDistEq` (`Proofs/Vrf/OutputRandomOracle.lean`) shows that the outputs of one secret at distinct indices are independent uniform 32-byte values.
+It fixes the secret and the indices, and assumes that the initial cache holds no answer for any of their output inputs.
+`prEvent_outputs_pair_of_fresh` states the case of two different indices.
+Two events, one on each output, both hold with the product of their probabilities for two uniform values.
+`evalWithAnswerFn_outputs` shows that Keccak-256, answering in place of the oracle, gives the outputs of the specification.
+Carrying the independence over to Keccak-256 is an idealisation of A4, not a theorem.
+These theorems say nothing about a holder that chooses its secret after the oracle answered one of those inputs.
+Such a holder can grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
 
 A selection therefore compares `mixOutput`, the hash of the output with randomness revealed after the root is registered.
 `prEvent_selected_le` (`Proofs/Vrf/Selection.lean`) covers a holder that chooses every secret of its tree.
 The mix is a random oracle, and the tree hash is Keccak-256 itself.
 The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
 The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
-No theorem bounds that last chance.
-The uniqueness bound above takes the tree hash as a random oracle, while this theorem takes it as Keccak-256 itself.
+`Proofs/Vrf/SelectionRandomOracle.lean` bounds the chance that this search finds a pair in an experiment of its own, with the tree hash a random oracle, as in the uniqueness bound above.
+No theorem composes the two bounds, so no theorem bounds that last chance with Keccak-256 itself, which `prEvent_selected_le` takes as the tree hash.
 The theorem says nothing about a holder that registers a root without knowing a tree under it.
 That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
 It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
 The game is EthLib's own.
 `selected_iff_mixOutput` shows that, with `mixOutput` in place of the oracle, its event is exactly the protocol's check.
+
+`prEvent_extractCollision_isSome_le_two_pow` (`Proofs/Vrf/SelectionRandomOracle.lean`) bounds the probability that the search against the honest opening finds a pair, with the tree hash a random oracle.
+An adversary makes classical queries to that oracle, then outputs the secrets of a tree, an index and an opening.
+The experiment builds the honest opening at that index as `opening` does, with a query for each Keccak-256 call.
+It then runs the search on the two openings, again with a query for each Keccak-256 call.
+The search finds a pair with probability at most `Q^2 / 2^256`, where `Q` bounds the oracle queries of the whole experiment.
+`extractCollision_pure` shows that, with any function as the hash, this search is `findHashCollisionWith` on the opening and the honest opening that the function builds.
+`extractCollision_keccak256` shows that, with Keccak-256 in place of the oracle, it is `findHashCollision` on the opening and the honest opening.
+`Selection.Collides` is the event of the last term above.
+`Selection.collides_iff_extractCollision` shows that it holds for a run of the selection game exactly when this search, with Keccak-256, finds a pair.
+`collision_of_extractCollision` shows that every pair found leaves two different cached inputs with one answer.
+For the node inputs it uses `collision_of_replay_findCollision` (`Proofs/Merkle/RandomOracle/Collision.lean`).
+That theorem holds for any node hash whose replay reads the cache at one input that determines its two children.
+`extractCollision_queryBound` shows that the honest opening, the two leaf hashes and the search make at most `2^(h + 1) + 2 h` queries, for a tree of height `h`.
+The honest opening makes at most `2^(h + 1) - 2` of them (`openingWith_queryBound`), the two leaves make two, and the search makes at most two per level.
+`prEvent_extractCollision_isSome_le_of_adversary` states the bound with `Q = q + 2^(h + 1) + 2 h` for an adversary of at most `q` hash queries, which is `q + 2^33 + 64` at height 32.
+The adversary of this experiment outputs the secrets, the index and the opening directly, and no theorem turns a selection holder into such an adversary.
+Carrying this bound over to Keccak-256 is an idealisation of A4, not a theorem.
 
 [EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
 The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
@@ -1673,6 +1789,8 @@ Of the setup, they assume only that it decodes.
 The point evaluation precompile decodes `G2` point 1 of the embedded setup alone, with `TrustedSetup.g2MonomialOfHex`, and uses it as `[tau]_2`.
 `TrustedSetup.g2MonomialOfHex_eq` (`Proofs/Kzg/TrustedSetup.lean`) states that a point decoded alone is that point of the decoded setup.
 It also assumes only that the setup decodes.
+`pointEvaluation_eq_ok_iff_kzg` (`Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`) states, with that one assumption, that the precompile succeeds exactly when the KZG check of the cryptography layer accepts, once the length, the gas and the versioned hash pass.
+On a well-formed setup (assumption D3), `pointEvaluation_opening` in the same file gives the opening equation `c - y = w (τ - z)` of every successful call.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
 On a well-formed setup (assumption D3), `blobToKzgCommitment_binding` in the same file proves that two blobs whose decoded values differ share a commitment only when the secret is a root of `p - p'`.
@@ -2291,11 +2409,11 @@ A triple says about the state after a message only what its assumption says, so 
 It is the assumption `Logic.MeetsOk` of a triple, for that condition on the frame that ends the message.
 `R` holds from the state of the frame that sends the message to the state of the frame that ends it.
 `Logic.KeepsOn.mono` proves that a smaller set of messages and a weaker relation keep the assumption.
-`Logic.ReadsAs tx S` says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
+`State.TransactionState.ReadsAs tx S` (`State/Frame.lean`) says that `tx` has the account, the storage and the transient storage of `S` at every address, and its code at every hash.
 It leaves free the block before the transaction, the created accounts, the wiped storage and the read records.
-`Logic.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
-`Logic.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
-`Logic.ReadsAs.routeState` proves the same for the state once a call follows a route.
+`State.TransactionState.ReadsAs.recordAccountRead` proves that a record of an account read keeps this relation.
+`State.TransactionState.ReadsAs.recordStorageRead` proves the same for a record of a storage read.
+`State.TransactionState.ReadsAs.routeState` (`Logic/Keeps.lean`) proves the same for the state once a call follows a route.
 `Logic.Routes.of_readsAs` proves that a state that reads as `S` gives each code the route that `S` gives it.
 `Logic.SentVia message S to` names the CALLs with no value from the current account of `message` to `to`, from a frame that reads as `S`.
 Each such call runs the code that `to` holds in `S`, along its route, with any data, any gas and any reservoir.
@@ -2452,17 +2570,21 @@ The assumption under the state gas meter must give the one under one counter, fo
 Each call that runs that code at the account must keep the invariant, as a proof about the contract shows.
 The message must start where the account holds the code and its storage meets the invariant, run the code if it goes there, and return a frame.
 `Execution/Proofs/Transactions/StorageInvariant.lean` and `Execution/Proofs/Blocks/StorageInvariant.lean` carry it to transactions, system calls, blocks and chains.
-They need the account to have a nonce of at least 1, which leaves out a contract deployed before Spurious Dragon with nonce 0.
 The theorems over transactions, blocks and chains also need Cancun or later, where SELFDESTRUCT deletes only accounts that the transaction created.
 From Hegotá a transaction and a block fail, so those theorems hold there with nothing to show.
-Each of these theorems assumes that no other code has the Keccak-256 hash of that code (`CodeHyp.hashOnly`).
 The state keeps each code under its hash.
-So a creation that deploys a second preimage would change the code that a later call to the account runs.
-`CodeHyp.hashOnly` is not provable for any code, and is believed false for Keccak-256 as a function.
-Until a random-oracle bound on Keccak-256, like the bounds for the trie and state roots, replaces it, these theorems hold only under the assumption, and say nothing formally if it is false.
-That includes the theorem over chains, `BlockChain.Reaches.liveAt`.
-`HistoryStorage.ring_of_reaches` (`Execution/Proofs/Blocks/SystemCall/HistoryRing.lean`) applies it to the history storage contract of EIP-2935: from Cancun to BPO5, every slot at or above 8191 reads 0 in every state that a chain reaches from a state where the contract holds its code, a nonce of at least 1 and that property.
-It takes the assumption on the hash of that code as a named hypothesis, and covers no fork from Glamsterdam, whose gas meter needs its own proof about the code.
+So a code with the Keccak-256 hash of that code, stored by the run, would change the code that a later call to the account runs.
+Each theorem assumes that the runs it covers output and set no such code.
+A code that a run stores is the output of a frame of a creation, or the delegation code of an authorization.
+`NoCollision` says that no frame that the run reaches outputs a code other than that code with its hash (`Collides`).
+`CallApart`, `TransactionApart`, `SystemCallApart`, `BodyApart` and `BlockApart` add that no authorization sets such a code, for a transaction, a system call, a block and a block on a chain.
+For a block that passes its transition, each of these hypotheses names the runs that it performs, from the states where it performs them, and the authorizations that its transactions list.
+So it fails only if a frame of one of those runs outputs, or an authorization sets, a code other than that code with its hash: an explicit collision.
+When the code is fixed before the chain, as the code of EIP-2935 is, falsifying the hypothesis means finding a second preimage of its hash.
+No theorem bounds the probability of that; the theorems turn each failure into an explicit pair.
+The theorem over chains, `BlockChain.Reaches.goodAt`, takes it for each block through the predicate of `BlockChain.Reaches`.
+`HistoryStorage.ring_of_reaches` (`Execution/Proofs/Blocks/SystemCall/HistoryRing.lean`) applies it to the history storage contract of EIP-2935: from Cancun to BPO5, every slot at or above 8191 reads 0 in every state that a chain reaches from a state where the contract holds its code and that property.
+It covers no fork from Glamsterdam, whose gas meter needs its own proof about the code.
 
 ### SHA-256 precompile
 
@@ -3897,7 +4019,7 @@ It needs slots that last a positive time, and honest stores that start with no h
 A store built from an anchor starts with none, by `Store.getForkchoiceStore_equivocatingIndices`.
 In the model an honest validator signs a vote only after checking it against its own votes in its view.
 Each of its votes in a sent message stays in its view, so no two of them can be slashed together.
-`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
+`Execution.lt_two_mul_honest_supportersOf_of_isOneConfirmed` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) restates `Store.lt_two_mul_honest_supportersOf_of_isOneConfirmed` for such a store, without that assumption.
 
 `Execution.isSlashableAttestationData_honest` (`Consensus/Proofs/ForkChoice/HonestEquivocators.lean`) proves that no two votes of one honest validator in sent messages can be slashed together, when slots last a positive time.
 The check before signing that gives it is the last condition of `MaySign` (`Consensus/Proofs/ForkChoice/HonestDuties.lean`), a rule on the votes in the validator's view.
@@ -8410,7 +8532,15 @@ A gas limit can grow by a 1024th of the parent's in each block, with no maximum,
 A difficulty can grow by a 2048th in each block before Paris, though mining long before `2^256` is out of reach.
 The blob base fee needs an excess blob gas that a genesis or a fork sets, as the paragraphs below show.
 The gas price is at most a fee field of the transaction, which is a word.
-The base fee rises only above a block's target, and every transaction of that block pays it from a balance below `2^256`, so it stays below the bound on a chain.
+The base fee rises only after a block above its target, and that block burns its base fee for each unit of its gas out of the supply before it.
+So from London to before Glamsterdam, the base fee that a block passes on is at most its own, or the fee after a full block at `S / (t + 1)` (`stateTransition_expectedBaseFee_le`, `Proofs/Blocks/BaseFeeBound.lean`).
+Here `S` is the supply before the block plus the ether it creates, and `t` is its target, its gas limit over 2.
+It stays below `2^64` while `S / (t + 1)` stays below `2^63` (`stateTransition_expectedBaseFee_lt_two_pow_64`).
+The supply is a sum of balances with no bound of its own, so these bounds alone do not keep the base fee below `2^64`.
+A rise needs a block above its target, whose senders pay the base fee from balances below `2^256`, but that bound below `2^256` is not proved here.
+A genesis can also set any base fee, so the hypothesis on the base fee of BASEFEE stays.
+With a mainnet supply near `2^87` wei, `S / (t + 1)` is below `2^63` from a target of about 13 million gas, below the mainnet target.
+From Glamsterdam, the burn counts the gas of the fees rather than the gas used of the header, and no such bound is stated yet.
 The number of a block grows by one per block.
 GAS needs no such rule here: the gas limit of a transaction is a word, so the gas left of a frame stays below `2^256`.
 
@@ -8428,6 +8558,8 @@ Below it, when the block sets no blob price and has the schedule of its fork, th
 From it on, the instruction aborts (`environmentStep_blobbasefee_of_le`).
 A schedule that a chain sets itself has no such evaluation.
 Under any schedule, an excess of at most 161 update fractions gives a fee of at most `3^161`, below `2^256` (`getBaseFeePerBlobGas_lt_of_le`, `Proofs/Fees/BlobBaseFeeBound.lean`).
+Every accumulator of the blob fee loop, whose factor is 1, is at most `F * 3^c` for an update fraction `F` and `c` the ceiling of the excess over it (`accum_le`).
+With `F` at most `2^24`, as at every mainnet schedule, an excess of at most 46 update fractions keeps each accumulator, its product with the excess, each partial sum and the fee below `2^128` (`lt_two_pow_128_of_le`).
 
 A block raises the excess by at most `GAS_PER_BLOB * (max - target)`, and along valid headers whose parents stay within the maximum the rises add up (`excessBlobGas_le_of_checkHeader`, `Proofs/Blocks/ExcessBlobGas.lean`).
 So from an excess of 0, a chain needs at least 1507 full blocks under the Dencun schedule, and 2260 under each later one, to reach these values.
@@ -8750,6 +8882,8 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
 - VRF uniqueness: Keccak-256 is a random oracle on byte strings, shared by the leaves, the nodes and the outputs of the tree.
+  The same assumption carries the bound on the collision search of a selection, `prEvent_extractCollision_isSome_le_two_pow`.
+  There the oracle answers every Keccak-256 call of the honest opening and of the search.
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
@@ -8760,10 +8894,19 @@ The codeword searches of each scheme share the bullet of that scheme:
   The bound says nothing about an attack that uses the structure of Keccak-f[1600].
 - VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
   That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
+  The bound on the collision search of a selection takes the tree hash as a random oracle instead, under the VRF uniqueness assumption above.
+  A composed bound would take the tree hash as a random oracle in the selection theorem too.
+  One oracle on byte strings gives independent oracles on the disjoint input lengths of the mix and the tree, but no theorem states that composition.
   The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.
   No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
   The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
   The bound counts classical mix queries only, and says nothing about an attack that uses the structure of Keccak.
+- VRF output independence: Keccak-256 is a random oracle on byte strings, as for VRF uniqueness, but the initial cache need not be empty.
+  Each new input receives 32 independent uniform bytes, and repeated inputs receive the same answer.
+  The secret and the indices are fixed, and the initial cache holds no answer for any of their output inputs.
+  The theorems say nothing about a secret chosen after the oracle answered one of those inputs.
+  The oracle answers classical queries only, so the theorems say nothing about a holder that evaluates Keccak-256 in superposition.
+  They say nothing either about an attack that uses the structure of Keccak.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
@@ -8908,8 +9051,9 @@ No caller passes one: EXP reduces modulo `2 ^ 256`, X25519 modulo its prime, and
 
 ### B3. Native code during elaboration
 
-The `EthLib`, `Exports` and `PythonConversions` libraries set `precompileModules := true`.
+The `Exports` and `PythonConversions` libraries set `precompileModules := true`.
 So `#eval`, or a tactic that evaluates, in any module that imports them runs natively compiled code.
+In a module that imports only the specification, it runs the interpreter, unless that module's library or package precompiles its imports.
 A proof is unaffected unless it uses one of the tactics of C2.
 
 ### B4. The C boundary
