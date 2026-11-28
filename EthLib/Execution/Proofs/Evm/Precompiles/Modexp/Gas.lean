@@ -191,4 +191,90 @@ theorem gasCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (before : fork
   have hf : ¬fork ≥ .fusaka := Nat.not_le.mpr before
   simp [gasCost, complexity, h, hf, WORD_BYTES]
 
+/-- At every fork, the price is at least `x^2 / 320`, for the longer operand length `x`.
+
+- EIP-198 divides a complexity of at least `x^2 / 16` by 20.
+- EIP-2565 divides a complexity of at least `x^2 / 64` by 3.
+- EIP-7883 charges a complexity of at least `x^2 / 32` above 32 bytes, and at least 500. -/
+theorem sq_div_le_gasCost (fork : Fork) (b m e head : Nat) :
+    max b m ^ 2 / 320 ≤ gasCost fork b m e head := by
+  have hi := one_le_iterations fork e head
+  -- The words of the longer length, rounded up, cover it: `x ≤ 8 w`, so `x^2 ≤ 64 w^2`.
+  have hw : max b m ^ 2 ≤ 64 * ((max b m + WORD_BYTES - 1) / WORD_BYTES) ^ 2 := by
+    have h8 : max b m ≤ 8 * ((max b m + WORD_BYTES - 1) / WORD_BYTES) := by
+      unfold WORD_BYTES; omega
+    calc max b m ^ 2 ≤ (8 * ((max b m + WORD_BYTES - 1) / WORD_BYTES)) ^ 2 :=
+          Nat.pow_le_pow_left h8 2
+      _ = 64 * ((max b m + WORD_BYTES - 1) / WORD_BYTES) ^ 2 := by rw [Nat.mul_pow]
+  generalize hx : max b m = x at hw
+  generalize hW : ((x + WORD_BYTES - 1) / WORD_BYTES) ^ 2 = W at hw
+  have hWi : W ≤ W * iterations fork e head := Nat.le_mul_of_pos_right W hi
+  by_cases hf : fork ≥ .fusaka
+  · -- EIP-7883: `2 w^2` above 32 bytes, else 16, times the iterations, and at least 500.
+    simp only [gasCost, complexity, hf, ite_true, hx, hW, MIN_GAS]
+    refine Nat.le_trans ?_ (Nat.le_max_right _ _)
+    split
+    · rw [Nat.mul_assoc]
+      have : W ≤ 2 * (W * iterations fork e head) := by omega
+      omega
+    · next hs =>
+      unfold SMALL_LENGTH_BYTES at hs
+      have : x ^ 2 ≤ 32 ^ 2 := Nat.pow_le_pow_left (by omega) 2
+      have := Nat.le_mul_of_pos_right MIN_COMPLEXITY hi
+      unfold MIN_COMPLEXITY at *
+      omega
+  · by_cases hb : fork ≥ .berlin
+    · -- EIP-2565: `w^2` times the iterations, over 3, and at least 200.
+      simp only [gasCost, complexity, hf, hb, ite_true, ite_false, hx, hW]
+      refine Nat.le_trans ?_ (Nat.le_max_right _ _)
+      omega
+    · -- EIP-198: a complexity of at least `x^2 / 16`, times the iterations, over 20.
+      simp only [gasCost, complexity, hf, hb, ite_false, hx]
+      generalize hX : x ^ 2 = X at hw
+      have hc : X / 16 ≤ (if x ≤ 64 then X else if x ≤ 1024 then X / 4 + 96 * x - 3072
+          else X / 16 + 480 * x - 199680) := by
+        split
+        · omega
+        · split <;> omega
+      generalize (if x ≤ 64 then X else if x ≤ 1024 then X / 4 + 96 * x - 3072
+          else X / 16 + 480 * x - 199680) = C at hc
+      have := Nat.le_mul_of_pos_right C hi
+      omega
+
+/-- At every fork, a base or a modulus of at least `2^37` bytes costs at least `2^64`.
+
+So no gas below `2^64` pays for such a length.
+
+A length of `2^33` bytes is not enough: at Berlin, with one iteration, it costs `2^60 / 3`. -/
+theorem two_pow_64_le_gasCost (fork : Fork) {b m : Nat} (e head : Nat) (h : 2 ^ 37 ≤ max b m) :
+    2 ^ 64 ≤ gasCost fork b m e head := by
+  refine Nat.le_trans ?_ (sq_div_le_gasCost fork b m e head)
+  rw [Nat.le_div_iff_mul_le (by decide)]
+  calc 2 ^ 64 * 320 ≤ (2 ^ 37) ^ 2 := by decide
+    _ ≤ max b m ^ 2 := Nat.pow_le_pow_left h 2
+
+/-- Before Berlin, an empty base and modulus cost nothing, whatever the exponent.
+
+EIP-198: the complexity of the length 0 is 0. -/
+theorem gasCost_empty_of_lt_berlin {fork : Fork} (h : fork < .berlin) (e head : Nat) :
+    gasCost fork 0 0 e head = 0 := by
+  have hb : ¬fork ≥ .berlin := Nat.not_le.mpr h
+  have hf : ¬fork ≥ .fusaka := fun hf => hb (Nat.le_trans (by decide) hf)
+  simp [gasCost, complexity, hb, hf]
+
+/-- From Berlin to Prague, an empty base and modulus cost 200, whatever the exponent.
+
+EIP-2565: no word gives the complexity 0, raised to the least price. -/
+theorem gasCost_empty_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (before : fork < .fusaka)
+    (e head : Nat) : gasCost fork 0 0 e head = 200 := by
+  rw [gasCost_of_berlin_le h before]
+  simp
+
+/-- From Fusaka, an empty base and modulus cost 16 per iteration, and at least 500.
+
+EIP-7883: a length of at most 32 bytes has the complexity 16. -/
+theorem gasCost_empty_of_fusaka_le {fork : Fork} (h : fork ≥ .fusaka) (e head : Nat) :
+    gasCost fork 0 0 e head = max MIN_GAS (MIN_COMPLEXITY * iterations fork e head) := by
+  simp [gasCost, complexity, h, SMALL_LENGTH_BYTES]
+
 end EthLib.Execution.Evm.Precompiles.Modexp

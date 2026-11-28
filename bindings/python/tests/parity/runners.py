@@ -408,10 +408,12 @@ def _blockchain_test(root: Path, case: Case) -> None:
         try:
             item = rlp.decode(raw)
             fork = active_fork(activations, item[0])
-        except Exception:
-            # A block that is not even an RLP list of headers is invalid.
+        except (IndexError, TypeError, ValueError):
+            # A block whose header cannot be read is invalid.
             assert expected, block
-            continue
+            # The block has no readable number or timestamp, so it runs at the fork of the head.
+            # That fork sets how many parts the decoder expects, and so the error it reports.
+            fork = recent[-1][0]
         if expected:
             with pytest.raises(ValueError) as error:
                 blocks.state_transition(config, state, recent, fork, raw, seal)

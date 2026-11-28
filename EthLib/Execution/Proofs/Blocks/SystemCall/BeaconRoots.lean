@@ -232,7 +232,7 @@ private theorem get_returnG {idx : U256} (hfork : .shapella ≤ fork)
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (by evm_code [CODE, CODE_NUMBER]) (by evm_code [CODE, CODE_NUMBER])
     (Nat.le_trans (by omega) (Nat.sub_le_sub_left (sloadPrice_le _) _))) (fun _ h => h) ?_
-  exact fun evm h => h.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+  exact fun evm h => h.of_readsAs ((TransactionState.ReadsAs.refl _).recordStorageRead _ _)
 
 /-- From byte 53, the code returns the root when the word `v` of the slot is the timestamp `t`.
 
@@ -298,7 +298,7 @@ private theorem get_lookupG (hfork : .shapella ≤ fork) (hgas : 5000 ≤ gas) :
     refine SpecG.consequence (get_compareG hfork (Nat.le_trans (by omega)
       (Nat.sub_le_sub_left (sloadPrice_le _) _))) (fun _ h => h) ?_
     intro evm hans
-    have hans := hans.of_readsAs ((ReadsAs.refl _).recordStorageRead _ _)
+    have hans := hans.of_readsAs ((TransactionState.ReadsAs.refl _).recordStorageRead _ _)
     rw [mod_eq_timestampSlot, add_timestampSlot] at hans
     simp only [h, ite_false]
     exact hans

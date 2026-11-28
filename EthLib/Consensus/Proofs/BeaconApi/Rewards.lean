@@ -1889,11 +1889,7 @@ theorem blockRewards_of_lt_altair {config : Config} {checks : SignatureChecks}
     refine (foldlM_ok_steps (fun u v : BeaconState preset fork => v.balances = u.balances)
       (fun _ => rfl) (fun one two => two.trans one) (fun u attestation v ok => ?_)
       attestedOk).1
-    unfold processAttestation at ok
-    simp only [not, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure,
-      Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := ok
+    obtain ⟨_, _, _, _, _, recorded, _⟩ := processAttestation_records before ok
     have kept := recordPendingAttestation_ok recorded
     split at kept <;>
     · obtain ⟨_, rest⟩ := kept

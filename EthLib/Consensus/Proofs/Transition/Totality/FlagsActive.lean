@@ -252,23 +252,15 @@ private theorem voteStep_processAttestation {attestation : Attestation preset fo
     VoteStep state after := by
   refine ⟨(processAttestation_registry computed).1, (frame_processAttestation computed).slot,
     fun altair j value nonzero => ?_⟩
-  unfold processAttestation at computed
-  simp only [altair, ↓reduceDIte] at computed
-  unfold processAttestationAltair at computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, recent, _, slotEpoch, _, _, _, _, _, _, _, _, earned, earnedOk, indexed, indexedOk,
-    valid, validOk, _, checked, _, _, attesters, attestersOk, ⟨updated, _⟩, fold, _, _,
-    raised, raisedOk, final⟩ := computed
+  rw [processAttestation_of_altair altair] at computed
+  obtain ⟨⟨recent, slotEpoch, -⟩, _, _, _, attesters, updated, _, _, raised, -, -, -, -,
+    attestersOk, fold, -, raisedOk, written⟩ := processAttestationAltair_reads computed
   have kept : after.previousEpochParticipation altair = raised.previousEpochParticipation altair ∧
       after.currentEpochParticipation altair = raised.currentEpochParticipation altair := by
-    split at final
-    · rw [recordPaymentWeight_eq final]
-      exact ⟨rfl, rfl⟩
-    · cases final
-      exact ⟨rfl, rfl⟩
+    rw [written]
+    exact ⟨rfl, rfl⟩
   obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
   obtain ⟨_, rfl⟩ := setBalance_ok set
-  rw [ensure_ok_iff] at recent slotEpoch
   have active : ∀ attester ∈ attesters,
       isActiveAt state attestation.data.target.epoch attester.toNat = true := fun _ mem => by
     rw [slotEpoch]
@@ -276,7 +268,7 @@ private theorem voteStep_processAttestation {attestation : Attestation preset fo
   have positions := foldlM_addAttesterFlags_positions fold j value
   rw [kept.1, kept.2]
   simp only [BeaconState.putBalance]
-  clear kept final set raisedOk
+  clear kept written set raisedOk
   generalize chosen : (attestation.data.target.epoch == getCurrentEpoch state) = same
     at fold positions
   cases same

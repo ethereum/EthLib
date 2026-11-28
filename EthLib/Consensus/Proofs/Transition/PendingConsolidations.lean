@@ -266,16 +266,12 @@ private theorem attestation {attestation : Attestation preset fork} {parentSlot 
     (electra : .pectra ≤ fork)
     (ok : processAttestation config checks state parentSlot attestation = .ok after) :
     QueueKept state after := by
-  unfold processAttestation at ok
-  rw [dite_eq_left (show .altair ≤ fork from Nat.le_trans (by decide) electra)] at ok
-  unfold processAttestationAltair at ok
-  simp only [bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, final⟩ := ok
+  rw [processAttestation_of_altair (show .altair ≤ fork from Nat.le_trans (by decide) electra)]
+    at ok
+  obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes ok
   have last : QueueKept raised after := by
-    split at final
-    · rw [recordPaymentWeight_eq final]; rfl
-    · cases final; rfl
+    rw [written]
+    rfl
   have flagged : ∀ (current : Bool) (participation : EpochParticipation preset fork),
       QueueKept state (setEpochParticipation state current participation) := by
     intro current participation
@@ -784,15 +780,11 @@ private theorem registry_unassigned (electra : .pectra ≤ fork)
     WithdrawalKept state after ∧ WithdrawalExact state after ∧
       WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
         config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state after := by
-  unfold processRegistryUpdates at ok
-  rw [ite_eq_left electra] at ok
-  simp only [bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
-  have all := foldlM_ok_invariant
+  have all := processRegistryUpdates_invariant_of_electra electra
     (fun s => WithdrawalKept state s ∧ WithdrawalExact state s ∧ RegistryLifecycle state s ∧
       WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
         config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state s ∧ s.slot = state.slot)
-    (fun a _ b prior ok => by
+    (fun _ _ a _ b prior ok => by
       have life : RegistryLifecycle a b := by
         simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
         obtain ⟨v, found, ok⟩ := ok

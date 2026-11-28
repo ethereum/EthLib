@@ -205,18 +205,16 @@ private theorem pendingTail_processRegistryUpdatesElectra {config : Config}
     (boundary : epoch ≤ getCurrentEpoch state)
     (finalized : state.finalizedCheckpoint.epoch ≤ epoch) (tail : PendingTail count epoch state) :
     PendingTail count epoch after := by
-  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok] at run
-  obtain ⟨activation, _, folded⟩ := run
-  have result := foldlM_ok_invariant
+  have result := processRegistryUpdates_invariant_of_electra electra
     (fun s => PendingTail count epoch s ∧ s.slot = state.slot ∧
       s.finalizedCheckpoint = state.finalizedCheckpoint)
-    (fun s i t before ok => by
+    (fun _ _ s i t before ok => by
       have frame := frame_updateRegistryEntryElectra ok
       refine ⟨pendingTail_updateRegistryEntryElectra ok ?_ ?_ before.1,
         frame.slot.trans before.2.1, frame.finalized.trans before.2.2⟩
       · simpa only [getCurrentEpoch, before.2.1] using boundary
       · simpa only [before.2.2] using finalized)
-    ⟨tail, rfl, rfl⟩ folded
+    ⟨tail, rfl, rfl⟩ run
   exact result.1
 
 /-- The legacy first pass queues eligibility after the boundary and keeps activation unassigned. -/
@@ -256,8 +254,8 @@ private theorem pendingTail_processRegistryUpdates {config : Config}
     PendingTail count epoch after := by
   by_cases electra : .pectra ≤ fork
   · exact pendingTail_processRegistryUpdatesElectra electra run boundary finalized tail
-  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff] at run
-  obtain ⟨updated, first, _, _, activated⟩ := run
+  obtain ⟨updated, _, first, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) run
   have updatedFacts := foldlM_ok_invariant
     (fun s => PendingTail count epoch s ∧ s.slot = state.slot ∧
       s.finalizedCheckpoint = state.finalizedCheckpoint)

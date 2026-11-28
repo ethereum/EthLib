@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Kzg.Domain
+public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Checker
 
 /-!
 # Proofs: the roots and scalars of the three rounds, as naturals
@@ -24,30 +25,6 @@ open EthLib.Cryptography.Kzg.Constants
 
 /-- The inverse `ζ` of the root of the blob domain. -/
 def zeta : Fr := (domainRoot FIELD_ELEMENTS_PER_BLOB)⁻¹
-
-/-- The value of `ζ`. -/
-def zetaNat : Nat :=
-  25829815649260311651249373569448671287036547786131478959351418120540316250978
-
-/-- The value of `u = ζ^256`. -/
-def rootNat : Nat :=
-  26753076894533791554649012143113393549300550745003194222677083919072199473480
-
-/-- The value of `4096⁻¹`. -/
-def scaleNat : Nat :=
-  52423073447788513186850219087163459498374710080483563692275874603576291491841
-
-/-- The value of `u^i`; the rounds read it for `i < 16`. -/
-def rootPowNat (i : Nat) : Nat := Nat.powMod rootNat i Fr.modulus
-
-/-- The value of `ζ^e`; the rounds read it for `e < 4096`. -/
-def zetaPowNat (e : Nat) : Nat := Nat.powMod zetaNat e Fr.modulus
-
-/-- The value of `4096⁻¹ ζ^(16 j2 k1)`, the scalar of the second round. -/
-def scalarB (k1 j2 : Nat) : Nat := scaleNat * zetaPowNat (16 * j2 * k1) % Fr.modulus
-
-/-- The value of `ζ^(j3 (k1 + 16 k2))`, the scalar of the third round. -/
-def scalarC (k1 k2 j3 : Nat) : Nat := zetaPowNat (j3 * (k1 + 16 * k2))
 
 /-! ## The constants
 

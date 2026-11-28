@@ -499,6 +499,29 @@ theorem foldlM_activateValidator_activationEpochs {indices : List ValidatorIndex
         subst other
         exact ⟨epoch, calculated, by rw [unchanged index tail, epochs index, ite_eq_left rfl]⟩
 
+/-- Before Electra, the registry updates are a pass over the validators, then activations.
+
+The activations take the head of the queue after the first pass, as many as the limit allows.
+
+From Deneb that limit is capped, as [EIP-7514] specifies.
+
+[EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
+-/
+theorem processRegistryUpdates_ok_of_lt_electra {config : Config} (before : fork < .pectra)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ (updated : BeaconState preset fork) (limit : UInt64),
+      (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state =
+        .ok updated ∧
+      (if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
+        else getValidatorChurnLimit config updated) = .ok limit ∧
+      ((activationQueue updated).take limit.toNat).foldlM activateValidator updated =
+        .ok after := by
+  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
+  simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok]
+    at computed
+  obtain ⟨updated, first, limit, limitOk, last⟩ := computed
+  exact ⟨updated, limit, first, limitOk, last⟩
+
 /-- Before Electra, the registry writes activation epochs only in a bounded queue prefix.
 
 The queue and the limit are read after the first pass, as the step reads them.
@@ -531,10 +554,8 @@ theorem processRegistryUpdates_activationEpochs {config : Config}
           activationEpochAt after index = .ok epoch) ∧
       -- Each selected validator had the far-future activation epoch, 2^64 - 1, before the step.
       (∀ index, index ∈ selected → activationEpochAt state index = .ok FAR_FUTURE_EPOCH) := by
-  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok]
-    at computed
-  obtain ⟨updated, first, limit, limitOk, last⟩ := computed
+  obtain ⟨updated, limit, first, limitOk, last⟩ :=
+    processRegistryUpdates_ok_of_lt_electra before computed
   -- The activation limit reads the validator churn limit, so that limit succeeds too.
   obtain ⟨churn, churnOk, below⟩ : ∃ churn, getValidatorChurnLimit config updated = .ok churn ∧
       limit ≤ churn := by
@@ -642,18 +663,55 @@ theorem sameSizes_updateRegistryEntryElectra {config : Config} {activationEpoch 
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ SameSizes.refl _
 
+/-- From Electra, the registry updates are a pass over the validators. -/
+private theorem registryUpdates_ok_of_electra {config : Config} (electra : .pectra ≤ fork)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ activationEpoch,
+      computeActivationExitEpoch preset (getCurrentEpoch state) = .ok activationEpoch ∧
+      (List.range state.validators.data.size).foldlM
+        (updateRegistryEntryElectra config activationEpoch) state = .ok after := by
+  simp only [processRegistryUpdates, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok,
+    liftArith, mapError_ok_iff] at computed
+  exact computed
+
+/-- From Electra and before Gloas, the registry updates are a pass over the validators.
+
+The pass activates at the first epoch an activation may take, as [EIP-7251] specifies.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+-/
+theorem processRegistryUpdates_ok_of_electra {config : Config} (electra : .pectra ≤ fork)
+    -- A step that a later fork adds to the update does not run before Gloas.
+    (_early : fork < .glamsterdam)
+    (computed : processRegistryUpdates config state = .ok after) :
+    ∃ activationEpoch,
+      computeActivationExitEpoch preset (getCurrentEpoch state) = .ok activationEpoch ∧
+      (List.range state.validators.data.size).foldlM
+        (updateRegistryEntryElectra config activationEpoch) state = .ok after :=
+  registryUpdates_ok_of_electra electra computed
+
+/-- From Electra, the registry updates keep each property that every update of one entry keeps.
+
+The step must keep it for every index, at the first epoch an activation may take. -/
+theorem processRegistryUpdates_invariant_of_electra {config : Config} (electra : .pectra ≤ fork)
+    (P : BeaconState preset fork → Prop)
+    (step : ∀ activationEpoch,
+      computeActivationExitEpoch preset (getCurrentEpoch state) = .ok activationEpoch →
+      ∀ current index next, P current →
+        updateRegistryEntryElectra config activationEpoch current index = .ok next → P next)
+    (holds : P state) (computed : processRegistryUpdates config state = .ok after) : P after := by
+  obtain ⟨activationEpoch, epochOk, folded⟩ := registryUpdates_ok_of_electra electra computed
+  exact foldlM_ok_invariant P (step activationEpoch epochOk) holds folded
+
 /-- The registry updates keep the sizes. -/
 theorem sameSizes_processRegistryUpdates {config : Config}
     (computed : processRegistryUpdates config state = .ok after) : SameSizes state after := by
-  unfold processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    exact foldlM_ok_invariant (SameSizes state)
-      (fun _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntryElectra step))
+  by_cases electra : .pectra ≤ fork
+  · exact processRegistryUpdates_invariant_of_electra electra (SameSizes state)
+      (fun _ _ _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntryElectra step))
       (SameSizes.refl state) computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra (Nat.lt_of_not_le electra) computed
   have first := foldlM_ok_invariant (SameSizes state)
     (fun _ _ _ sizes step => sizes.trans (sameSizes_updateRegistryEntry step))
     (SameSizes.refl state) updatedOk

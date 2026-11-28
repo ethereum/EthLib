@@ -83,10 +83,8 @@ theorem processRegistryUpdates_registryKept {config : Config} {after : BeaconSta
       after.historicalSummaries = state.historicalSummaries ∧
       after.validators.data.map (·.effectiveBalance) =
         state.validators.data.map (·.effectiveBalance) := by
-  have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
-  unfold processRegistryUpdates at computed
-  simp only [notElectra, ↓reduceIte, bind_ok_iff] at computed
-  obtain ⟨updated, updatedOk, _, _, activated⟩ := computed
+  obtain ⟨updated, _, updatedOk, _, activated⟩ :=
+    processRegistryUpdates_ok_of_lt_electra before computed
   -- Each entry joins the queue, which sets only its eligibility epoch, and may start an exit.
   have first := foldlM_ok_invariant (RegistryKept state) (fun middle index next before ok => by
     refine before.trans ?_

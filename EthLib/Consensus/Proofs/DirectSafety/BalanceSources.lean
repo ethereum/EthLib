@@ -345,14 +345,11 @@ theorem attestation_proposer_bound {fork : Fork} (s t : BeaconState preset fork)
     ∃ credit, attestationCredit s att parent = .ok credit ∧
       balanceDebits s t = 0 ∧ balanceCredits s t ≤ credit := by
   by_cases altair : .altair ≤ fork
-  · simp only [processAttestation, altair, ↓reduceDIte, processAttestationAltair,
-      bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, earned, earnedOk, _, _, _, _, _, _, total,
-      totalOk, attesters, attestersOk, pair, flagsOk, proposer, _, u, raised, final⟩ := ok
-    have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-    simp only [notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at final
-    subst t
-    refine ⟨(pair.2 /
+  · rw [processAttestation_of_altair altair] at ok
+    -- Before Gloas the step ends with the proposer reward.
+    obtain ⟨-, earned, _, total, attesters, updated, numerator, _, earnedOk, -, -, totalOk,
+      attestersOk, flagsOk, -, raised⟩ := processAttestationAltair_reads_of_lt_gloas early ok
+    refine ⟨(numerator /
       ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR / PROPOSER_WEIGHT)).toNat,
       ?_, ?_⟩
     · simp only [attestationCredit, altair, ↓reduceDIte, liftAccessor, earnedOk, totalOk,
@@ -360,7 +357,7 @@ theorem attestation_proposer_bound {fork : Fork} (s t : BeaconState preset fork)
       rfl
     · have bounds := credits_increase raised
       have kept : (setEpochParticipation s
-          (att.data.target.epoch == getCurrentEpoch s) pair.1).balances = s.balances := by
+          (att.data.target.epoch == getCurrentEpoch s) updated).balances = s.balances := by
         unfold setEpochParticipation
         split <;> rfl
       simpa only [balanceCredits, balanceDebits, actualBalanceAt, kept]

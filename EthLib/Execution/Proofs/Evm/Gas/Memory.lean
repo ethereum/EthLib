@@ -14,6 +14,8 @@ A range of size 0 never grows memory, and nothing is paid when no range grows it
 
 The rounded size and the growth cover every range that is not empty.
 
+Memory grows to the largest of its rounded size and the rounded ends of the ranges not empty.
+
 A gas budget `g` bounds the words of memory by `w * w ≤ 512 * g`.
 -/
 
@@ -123,5 +125,107 @@ theorem wordCount_mul_self_le {sizeInBytes gas : Nat} (h : memoryGasCost sizeInB
     fun hw => by simp [hw]
   generalize wordCount sizeInBytes * wordCount sizeInBytes = square at h zero ⊢
   omega
+
+/-- The size after growing memory for each range in turn: the largest rounded end so far.
+
+A range of size 0 leaves the size. -/
+def grownSize (size : Nat) (ranges : List (U256 × U256)) : Nat :=
+  ranges.foldl (fun size range =>
+    if range.2 = 0 then size else max size (ceil32 (range.1.toNat + range.2.toNat))) size
+
+/-- Memory grows to the largest of its rounded size and the rounded ends of the ranges.
+
+Only the ranges that are not empty count. -/
+theorem ceil32_add_expandBy (currentSize : Nat) (ranges : List (U256 × U256)) :
+    ceil32 currentSize + (extendMemory currentSize ranges).expandBy =
+      grownSize (ceil32 currentSize) ranges := by
+  induction ranges generalizing currentSize with
+  | nil => simp [extendMemory, grownSize]
+  | cons p ranges ih =>
+    obtain ⟨start, size⟩ := p
+    unfold extendMemory
+    simp only [grownSize, List.foldl_cons] at ih ⊢
+    split
+    · exact ih currentSize
+    · split
+      · rename_i stays
+        rw [Nat.max_eq_left stays]
+        exact ih currentSize
+      · rename_i grows
+        -- The rest grows from the rounded end of the range, which is already rounded.
+        have hfix := ceil32_of_mod (ceil32_mod (start.toNat + size.toNat))
+        have hrest := ih (ceil32 (start.toNat + size.toNat))
+        rw [hfix] at hrest
+        rw [Nat.max_eq_right (Nat.le_of_lt (Nat.lt_of_not_le grows)), ← hrest]
+        dsimp only
+        omega
+
+/-- The grown size is at least the size, and at least the rounded end of each range not empty. -/
+private theorem le_grownSize (size : Nat) (ranges : List (U256 × U256)) :
+    size ≤ grownSize size ranges ∧
+      ∀ r ∈ ranges, r.2 ≠ 0 → ceil32 (r.1.toNat + r.2.toNat) ≤ grownSize size ranges := by
+  induction ranges generalizing size with
+  | nil => simp [grownSize]
+  | cons p ranges ih =>
+    simp only [grownSize, List.foldl_cons] at ih ⊢
+    -- The size after the first range is at least the size, and covers that range.
+    have hs : size ≤ if p.2 = 0 then size else max size (ceil32 (p.1.toNat + p.2.toNat)) := by
+      split <;> omega
+    have hp : p.2 ≠ 0 →
+        ceil32 (p.1.toNat + p.2.toNat) ≤
+          if p.2 = 0 then size else max size (ceil32 (p.1.toNat + p.2.toNat)) := by
+      intro hne
+      simp only [hne, ↓reduceIte]
+      omega
+    obtain ⟨h1, h2⟩ := ih (if p.2 = 0 then size else max size (ceil32 (p.1.toNat + p.2.toNat)))
+    generalize (if p.2 = 0 then size else max size (ceil32 (p.1.toNat + p.2.toNat))) = start
+      at hs hp h1 h2 ⊢
+    refine ⟨Nat.le_trans hs h1, fun r hr hne => ?_⟩
+    rcases List.mem_cons.mp hr with rfl | hr
+    · exact Nat.le_trans (hp hne) h1
+    · exact h2 r hr hne
+
+/-- The grown size is at most a bound on the size and on the rounded ends of the ranges. -/
+private theorem grownSize_le {size bound : Nat} {ranges : List (U256 × U256)} (hsize : size ≤ bound)
+    (hranges : ∀ r ∈ ranges, r.2 ≠ 0 → ceil32 (r.1.toNat + r.2.toNat) ≤ bound) :
+    grownSize size ranges ≤ bound := by
+  induction ranges generalizing size with
+  | nil => simpa [grownSize] using hsize
+  | cons p ranges ih =>
+    simp only [grownSize, List.foldl_cons] at ih ⊢
+    refine ih ?_ fun r hr hne => hranges r (List.mem_cons_of_mem _ hr) hne
+    split
+    · exact hsize
+    · exact Nat.max_le.mpr ⟨hsize, hranges p List.mem_cons_self ‹_›⟩
+
+/-- Growing memory for several ranges is growing it for the range with the largest end.
+
+That range must not be empty, and its end must be the largest among the ranges not empty. -/
+theorem extendMemory_eq_largest {currentSize : Nat} {ranges : List (U256 × U256)}
+    {r : U256 × U256} (hr : r ∈ ranges) (hne : r.2 ≠ 0)
+    (largest : ∀ q ∈ ranges, q.2 ≠ 0 → q.1.toNat + q.2.toNat ≤ r.1.toNat + r.2.toNat) :
+    extendMemory currentSize ranges = extendMemory currentSize [r] := by
+  -- Both lists grow memory to the larger of its rounded size and the rounded end of the range.
+  have hall := ceil32_add_expandBy currentSize ranges
+  have hone := ceil32_add_expandBy currentSize [r]
+  have heq : grownSize (ceil32 currentSize) ranges = grownSize (ceil32 currentSize) [r] := by
+    obtain ⟨a1, a2⟩ := le_grownSize (ceil32 currentSize) ranges
+    obtain ⟨b1, b2⟩ := le_grownSize (ceil32 currentSize) [r]
+    refine Nat.le_antisymm (grownSize_le b1 fun q hq hqne => ?_)
+      (grownSize_le a1 fun q hq hqne => ?_)
+    · exact Nat.le_trans (ceil32_mono (largest q hq hqne)) (b2 r List.mem_cons_self hne)
+    · rw [List.mem_singleton.mp hq]
+      exact a2 r hr hne
+  have hexp : (extendMemory currentSize ranges).expandBy =
+      (extendMemory currentSize [r]).expandBy := by
+    omega
+  -- The price follows from the growth.
+  have hcost := extendMemory_cost currentSize ranges
+  rw [hexp, ← extendMemory_cost] at hcost
+  cases h1 : extendMemory currentSize ranges
+  cases h2 : extendMemory currentSize [r]
+  rw [h1, h2] at hexp
+  rw [h1, h2] at hcost
+  simp_all
 
 end EthLib.Execution.Evm

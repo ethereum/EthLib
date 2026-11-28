@@ -424,20 +424,14 @@ private theorem processAttestation_kept {fork : Fork} (early : fork < .glamsterd
       t.pendingConsolidations = s.pendingConsolidations ∧
       t.earliestConsolidationEpoch = s.earliestConsolidationEpoch ∧
       t.consolidationBalanceToConsume = s.consolidationBalanceToConsume := by
-  unfold processAttestation at ok
-  simp only [altair, ↓reduceDIte] at ok
-  unfold processAttestationAltair at ok
-  simp only [bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised, raisedOk, final⟩ := ok
-  split at final
-  · rename_i gloas
-    exact absurd gloas (Nat.not_le_of_lt early)
-  · cases final
-    obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
-    obtain ⟨_, rfl⟩ := setBalance_ok set
-    unfold setEpochParticipation
-    split <;> exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  rw [processAttestation_of_altair altair] at ok
+  -- Before Gloas the step ends with the proposer reward.
+  obtain ⟨-, _, _, _, _, _, _, _, -, -, -, -, -, -, -, raisedOk⟩ :=
+    processAttestationAltair_reads_of_lt_gloas early ok
+  obtain ⟨_, set⟩ := increaseBalance_ok raisedOk
+  obtain ⟨_, rfl⟩ := setBalance_ok set
+  unfold setEpochParticipation
+  split <;> exact ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The attestations of a block replay as one operation, one rewards event each. -/
 private theorem guardedReplay_attestations {guard : Ownership → Prop}
