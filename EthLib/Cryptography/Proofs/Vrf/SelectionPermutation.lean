@@ -27,15 +27,6 @@ open EthLib.Cryptography.Hash.Keccak (State RATE_256 ShortMessage keccakF keccak
 
 /-! ## The reduction to a collision -/
 
-/-- A found pair as two messages of one block, when both inputs fit in one.
-
-Otherwise, and when no pair is found, it is the empty message twice, which is no collision. -/
-def shortPair : Option (ByteArray × ByteArray) → ShortMessage × ShortMessage
-  | some p =>
-    if h : p.1.size < RATE_256 ∧ p.2.size < RATE_256 then (⟨p.1, h.1⟩, ⟨p.2, h.2⟩)
-    else (⟨.empty, by simp [RATE_256]⟩, ⟨.empty, by simp [RATE_256]⟩)
-  | none => (⟨.empty, by simp [RATE_256]⟩, ⟨.empty, by simp [RATE_256]⟩)
-
 /-- A pair found with `H` as the hash makes every run of the reduction return a collision of `H`.
 
 It holds when each hash, run with the permutation, returns its value under `H`. -/
@@ -51,18 +42,7 @@ theorem shortPair_collision_of_extractCollision {π : Equiv.Perm State} {H : Byt
   rw [hp] at hr
   subst hr
   rw [extractCollision_pure] at hp
-  -- The pair is two node inputs or the two leaf inputs, of 75 or 43 bytes.
-  have hsize : p.1.size < RATE_256 ∧ p.2.size < RATE_256 := by
-    rw [findHashCollisionWith_eq] at hp
-    split at hp
-    · cases hp
-      simp [RATE_256]
-    · split at hp
-      · cases hp
-        simp [RATE_256]
-      · cases hp
-  simp only [shortPair, dite_eq_left hsize]
-  exact findHashCollisionWith_valid hp
+  exact shortPair_collision hp
 
 /-! ## The bound -/
 
