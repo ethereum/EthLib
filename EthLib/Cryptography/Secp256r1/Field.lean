@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Inverse
+public import EthLib.Cryptography.SafeGcd
 
 /-!
 # `Secp256r1.Field`
@@ -33,10 +33,10 @@ abbrev Fp := Fin Fp.modulus
 /-- An element of the scalar field. -/
 abbrev Fn := Fin Fn.modulus
 
-/-- The inverse in `Fp`, by the extended Euclidean algorithm, and 0 for 0. -/
-def Fp.inv (a : Fp) : Fp := Fin.inverse a
+/-- The inverse in `Fp`, by divsteps whose candidate is checked, and 0 for 0. -/
+def Fp.inv (a : Fp) : Fp := SafeGcd.inverseFin a
 
-/-- The inverse in `Fn`, by the extended Euclidean algorithm, and 0 for 0. -/
-def Fn.inv (a : Fn) : Fn := Fin.inverse a
+/-- The inverse in `Fn`, by divsteps whose candidate is checked, and 0 for 0. -/
+def Fn.inv (a : Fn) : Fn := SafeGcd.inverseFin a
 
 end EthLib.Cryptography.Secp256r1

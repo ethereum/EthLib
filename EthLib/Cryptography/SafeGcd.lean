@@ -1,11 +1,14 @@
 module
 
+public import EthLib.Cryptography.Inverse
 public import EthLib.Cryptography.Word64
 
 /-!
 # Inverses by the divsteps of Bernstein and Yang
 
 A candidate for `x^(-1) mod p`, for an odd modulus `p`, by jumps of 60 divsteps on words.
+
+A check keeps a candidate only when it is the inverse, else the Euclidean inverse is used.
 
 Source: [Bernstein and Yang][safegcd], §8.1 for the divstep, §12.1 for the jumps of divsteps.
 
@@ -387,5 +390,53 @@ instance : Signed Words7 where
     let r4 := mac p.w4 q x.w4 r3.hi
     let r5 := mac p.w5 q x.w5 r4.hi
     ⟨r0.lo, r1.lo, r2.lo, r3.lo, r4.lo, r5.lo, p.top * q + x.top + r5.hi⟩
+
+/-! ## Inverses mod an integer below `2^256`
+
+The five-word jumps give a candidate, which a check keeps only when it is the inverse.
+-/
+
+/-- `-m^(-1) mod 2^64` for an odd word `m`, by Newton's iteration. -/
+@[inline] def negInverseWord (m : UInt64) : UInt64 :=
+  -- An odd `m` has `m m = 1 mod 8`, so `x = m` is the inverse in the low 3 bits.
+  --
+  -- Each step `x <- x (2 - m x)` doubles the correct low bits: 6, 12, 24, 48, then 96.
+  let x := m * (2 - m * m)
+  let x := x * (2 - m * x)
+  let x := x * (2 - m * x)
+  let x := x * (2 - m * x)
+  0 - x * (2 - m * x)
+
+/-- A candidate for `a^(-1) mod m`, or `none` for `a = 0` or when the jumps run out.
+
+A modulus that is even or not below `2^256`, or an input not below it, may give a wrong one. -/
+@[inline] def candidate (m a : Nat) : Option Nat :=
+  -- `0` has no inverse.
+  if a = 0 then none
+  else
+    -- Theorem 11.2 needs `floor((49 * 256 + 57) / 17) = 741` divsteps for 256-bit inputs.
+    --
+    -- So thirteen jumps, 780 divsteps, always suffice.
+    Signed.inverse (fun w => rawToNat (Raw.fromWords w)) (rawOfNat m).words
+      (negInverseWord m.toUInt64) 13 (rawOfNat a).words
+
+/-- The candidate when it is the inverse of `a` mod `m`, or else the Euclidean inverse.
+
+A candidate below `m` whose product with `a` is `1` mod `m` is accepted. -/
+@[inline] def check {m : Nat} [NeZero m] (c : Option Nat) (a : Fin m) : Fin m :=
+  match c with
+  -- No candidate: the extended Euclidean algorithm gives the inverse.
+  | none => Fin.inverse a
+  | some v =>
+    -- Any other candidate, like no candidate, gives way to the extended Euclidean algorithm.
+    --
+    -- So the result never depends on the loop being right.
+    if h : v < m ∧ v * a.val % m = 1 then ⟨v, h.1⟩ else Fin.inverse a
+
+/-- The inverse of a nonzero `a` mod a prime `m`, and `0` for `0`.
+
+The divsteps give a candidate, and the Euclidean inverse replaces one that fails the check. -/
+@[inline] def inverseFin {m : Nat} [NeZero m] (a : Fin m) : Fin m :=
+  check (candidate m a.val) a
 
 end EthLib.Cryptography.SafeGcd
