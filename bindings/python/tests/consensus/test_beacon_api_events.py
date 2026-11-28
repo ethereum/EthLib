@@ -239,7 +239,7 @@ def test_published_block_already_held() -> None:
     message = meta["messages"][0]
     signed = read(case, message["message"])
     store = case_store("minimal", "capella", case, meta)
-    store["blocks"] = [*store["blocks"], (0, None, signed, b"")]
+    store["blocks"] = [*store["blocks"], (0, None, signed, b"", False)]
     answers = parsed(
         consensus.api_post(
             name="minimal",
