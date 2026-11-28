@@ -7,7 +7,7 @@ public import EthLib.Consensus.BuilderApi.GloasBid
 
 A Gloas builder serves a request exactly when its six rules hold.
 
-A proposer accepts a fetched bid exactly when its eight rules hold and the signature verifies.
+A proposer accepts a fetched bid exactly when its nine rules hold and the signature verifies.
 -/
 
 @[expose] public section
@@ -74,7 +74,7 @@ theorem isEligibleForBidGloas_proposer {state : BeaconState preset fork}
     isEligibleForBidGloas_ok_true_iff.1 served
   exact ⟨index, proposer, found, read, key, active⟩
 
-/-- A proposer accepts a fetched bid exactly when the eight rules hold and the signature verifies.
+/-- A proposer accepts a fetched bid exactly when the nine rules hold and the signature verifies.
 
 The builder's funds count only for a bid of positive value. -/
 theorem validateBid_ok_true_iff {config : Config} {checks : SignatureChecks}
@@ -87,6 +87,7 @@ theorem validateBid_ok_true_iff {config : Config} {checks : SignatureChecks}
       signed.message.slot = state.slot ∧
       signed.message.feeRecipient = feeRecipient ∧
       isParentBlockHash state gloas signed.message.parentBlockHash = true ∧
+      signed.message.blockHash ≠ signed.message.parentBlockHash ∧
       SszType.hashTreeRoot state.latestBlockHeader = .ok signed.message.parentBlockRoot ∧
       getRandaoMix state (getCurrentEpoch state) = .ok signed.message.prevRandao ∧
       isGasLimitTargetCompatible parentGasLimit signed.message.gasLimit
@@ -109,6 +110,7 @@ theorem validateBid_ok_true_iff {config : Config} {checks : SignatureChecks}
   by_cases h2 : signed.message.slot = state.slot <;>
   by_cases h3 : signed.message.feeRecipient = feeRecipient <;>
   by_cases h4 : isParentBlockHash state gloas signed.message.parentBlockHash = true <;>
+  by_cases hb : signed.message.blockHash = signed.message.parentBlockHash <;>
   rcases active with _ | (_ | _) <;> (try simp [*]) <;>
   rcases root with _ | root <;> (try simp [*]) <;>
   by_cases h5 : root = signed.message.parentBlockRoot <;> (try have h5' := Ne.symm h5) <;>
@@ -143,6 +145,7 @@ theorem validateBid_zero_value {config : Config} {checks : SignatureChecks}
   by_cases h3 : signed.message.feeRecipient = feeRecipient <;> (try simp [h3]) <;>
   by_cases h4 : isParentBlockHash state gloas signed.message.parentBlockHash = true <;>
   (try simp [h4]) <;>
+  by_cases hb : signed.message.blockHash = signed.message.parentBlockHash <;> (try simp [hb]) <;>
   rcases root with _ | root <;> (try simp) <;>
   by_cases h5 : signed.message.parentBlockRoot = root <;> (try simp [h5]) <;>
   rcases randao with _ | randao <;> (try simp) <;>

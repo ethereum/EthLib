@@ -655,13 +655,23 @@ def run_blockchain(root: Path, case: Case, *, transition: BlockTransition = adva
             item = rlp.decode(raw)
             header, ommers = item[0], item[2]
             number, parent = _number(header), chains.get(bytes(header[0]))
-        except Exception:
-            # A block that is not a list of a header, transactions and ommers is invalid.
+        except (IndexError, TypeError, ValueError):
+            # A block whose header, number or parent cannot be read is invalid.
             assert expected is not None, entry
+            # The block runs on the head of the chain, at the fork of the head.
+            # That fork sets how many parts the decoder expects, and so the error it reports.
+            state, recent_blocks, _ = chains[head]
+            with pytest.raises(BlockError) as error:
+                blocks.state_transition(
+                    config, state, recent_blocks, recent_blocks[-1][0], raw, sealed(test)
+                )
+            assert names(expected, str(error.value)), (expected, str(error.value))
             continue
         if parent is None:
-            # The parent of the block is missing or invalid.
-            assert expected is not None, entry
+            # The parent is missing or was rejected, so the test must name an unknown parent.
+            assert expected is not None and not UNKNOWN_PARENT.isdisjoint(expected.split("|")), (
+                entry
+            )
             continue
         state, recent_blocks, difficulty = parent
         fork = fork_at(network, number)

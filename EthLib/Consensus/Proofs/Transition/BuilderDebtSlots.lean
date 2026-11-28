@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.BlockRoots
 public import EthLib.Consensus.Proofs.Transition.BuilderDebtEpoch
 public import EthLib.Consensus.Proofs.Transition.Invariants
 
@@ -155,17 +156,9 @@ theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
   --
   -- It keeps the slot and the slot of the latest block too, which place the parent payment.
   have header : after.latestBlockHeader.slot = state.latestBlockHeader.slot := by
-    unfold processSlot at computed
-    simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, computed⟩ := computed
-    split at computed
-    · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
-      dsimp only
-      split <;> rfl
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      subst computed
-      dsimp only
-      split <;> rfl
+    obtain ⟨_, _, h⟩ := processSlot_latestBlockHeader computed
+    rw [h]
+    split <;> rfl
   obtain ⟨_, rfl⟩ := processSlot_ok computed
   exact ⟨rfl, header, rfl, rfl, rfl, rfl⟩
 

@@ -3,7 +3,7 @@ module
 public import EthLib.Base.Address
 public import EthLib.Base.Bytes
 public import EthLib.Base.Hex
-public import EthLib.Cryptography.Bls.Signatures
+public import EthLib.Cryptography.Bls.Types
 public import EthLib.Cryptography.Kzg.Types
 public import EthLib.Serialization.Ssz.Typed.Basic
 

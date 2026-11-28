@@ -105,7 +105,7 @@ A word returns its 32 bytes, and no word reverts with no output.
 The state reads as `state`: it has its storage, its accounts and its codes. -/
 def Answer {fork : Fork} (state : TransactionState) (result : Option U256) (evm : Evm fork Nat) :
     Prop :=
-  ReadsAs evm.state state ∧
+  TransactionState.ReadsAs evm.state state ∧
     match result with
     | some word => evm.error = none ∧ evm.output = wordBytes word
     | none => evm.error = some .revert ∧ evm.output = .empty
@@ -115,7 +115,8 @@ variable {fork : Fork} {code : ByteArray} {message : Message fork} {pc : Nat} {g
 
 /-- An answer from a state that reads as `state` is an answer from `state`. -/
 theorem Answer.of_readsAs {after : TransactionState} {result : Option U256} {evm : Evm fork Nat}
-    (reads : ReadsAs after state) (h : Answer after result evm) : Answer state result evm :=
+    (reads : TransactionState.ReadsAs after state) (h : Answer after result evm) :
+    Answer state result evm :=
   ⟨h.1.trans reads, h.2⟩
 
 /-- From Shapella, PUSH0, PUSH0 and REVERT revert with no output, and keep the state.
@@ -133,7 +134,7 @@ theorem revertEmptyG {stack : List U256} (hfork : .shapella ≤ fork)
     (by simp only [show pc + 1 + 1 = pc + 2 by omega]; exact h2)
     (by rw [extendMemory_of_length_eq_zero]; exact Nat.zero_le _)) (fun _ h => h) ?_
   rintro evm ⟨-, herr, hout, -, hst, -⟩
-  refine ⟨hst ▸ ReadsAs.refl _, by simpa using herr, ?_⟩
+  refine ⟨hst ▸ TransactionState.ReadsAs.refl _, by simpa using herr, ?_⟩
   rw [hout, extendMemory_of_length_eq_zero]
   rfl
 
@@ -175,7 +176,7 @@ theorem returnWordG {word : U256} (hfork : .shapella ≤ fork) (hlt : pc + 5 < c
     (by simp only [show pc + 1 + 1 + 2 + 1 = pc + 5 by omega]; exact h5)
     (by rw [hle]; exact Nat.zero_le _)) (fun _ h => h) ?_
   rintro evm ⟨-, herr, hout, -, hst, -⟩
-  refine ⟨hst ▸ ReadsAs.refl _, by simpa using herr, ?_⟩
+  refine ⟨hst ▸ TransactionState.ReadsAs.refl _, by simpa using herr, ?_⟩
   rw [hout, hle]
   dsimp only
   rw [memoryExtend_zero]

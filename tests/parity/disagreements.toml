@@ -230,228 +230,6 @@ class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_London]"'
 upstream = "As of 2026-11-11, ethereum/tests#1218 is open. It reports that the transition tool accepts the block, and its reply says that the program that fills the tests adds the check. No report says that no activated rule bounds the gas limit"
 
-# The fast confirmation cases of v1.7.0-beta.4 whose answer depends on the weight of the committees.
-# That release weighs the committees of a range of slots by an average per slot.
-# The average does not bound a given committee, so the rule could confirm a block that an attack reorgs.
-# EthLib weighs them exactly, as the paper and the later rule of consensus-specs do.
-# A later release with the exact rule replaces these cases.
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/altair/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/altair/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/bellatrix/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/bellatrix/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/capella/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/capella/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/deneb/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/deneb/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/electra/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/electra/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/fulu/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/fulu/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/heze/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_empty_slots.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/empty_slots/pyspec_tests/fcr_handles_multiple_consecutive_empty_slots]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_fails_recently_activated_validator_voting_in_empty_slot]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_large_validator_voting_in_empty_slot]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_1]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
-[[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2"
-reason = "The case was generated with an average estimate of the committee weight, and EthLib weighs the committees exactly, so it confirms another block"
-source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshold uses the exact weight of the committees, which Lemma 2 of Appendix A.1 needs. consensus-specs cc68498a51ceb7b1fb80b1c595ef5597ca4b3c2c, specs/phase0/fast-confirmation.md, compute_committee_weight_between_slots, replaces the estimate, and changes this case in test_is_one_confirmed.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
-upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-
 # A payload sent again once its parent is valid, while the head is still the grandparent.
 # The payload does not extend the canonical chain, so the source allows ACCEPTED.
 # EthLib answers ACCEPTED, and the case lists VALID only.
@@ -502,216 +280,659 @@ class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_forkchoice_behaviour.py::test_out_of_order_payload_delivery[fork_Shanghai-blockchain_test_engine_reorg]]"'
 upstream = "As of 2026-11-26, ethereum/execution-specs#4045 (b930236c, merged 2026-11-25) adds ACCEPTED to the outcomes that the case allows for the resent payload, and #4048 is closed. No release contains it: the latest release, tests@v21.0.3, predates it"
 
-# The envelope cases of v1.7.0-beta.4 that fill a payload with the most withdrawals.
-# The generator replaces the withdrawals of a valid payload, so they no longer match the state.
-# The later rule of consensus-specs rejects an envelope whose withdrawals differ from the expected ones.
-# EthLib follows that rule, so it rejects these envelopes.
-# A later release that keeps the expected withdrawals replaces these cases.
+# A fork choice compliance case of v1.7.0-beta.5 that the runner of the same release fails.
+# Its expected proposer boost differs from what the specification of the release computes.
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals"
-reason = "The case replaces the withdrawals of the payload, and EthLib rejects an envelope whose withdrawals are not those the state expects"
-source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merged 2026-11-12), specs/gloas/p2p-interface.md, validate_execution_payload_envelope_gossip, adds the reject check on the withdrawals root, and changes this case in test_gossip_execution_payload_envelope.py. The pinned v1.7.0-beta.4 archive predates that commit"
-class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
-upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+suite = "fork-choice-compliance"
+case = "tests/minimal/gloas/fork_choice_compliance/block_tree_test/pyspec_tests/block_tree_test_5_196133628_1"
+reason = "At step 119 the case expects no proposer boost, but the runner of the same release gives the boost to the timely block 0x9d93dd9c of slot 28, as EthLib does"
+source = "consensus-specs v1.7.0-beta.5, specs/gloas/fork-choice.md, update_proposer_boost_root; tests/generators/compliance_runners/fork_choice/runner/test_run.py run on the case fails with the same difference"
+class = "fixture-defect"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_compliance.py::test_case[tests/minimal/gloas/fork_choice_compliance/block_tree_test/pyspec_tests/block_tree_test_5_196133628_1]"'
+upstream = "As of 2026-11-28, ethereum/consensus-specs#5873 is open: the generator applies the messages of a block after its queued children, and the fix regenerates only this case"
+
+# A creation at an address that holds storage but no code and nonce 0.
+# These legacy cases were refilled with EIP-7610 at every fork, so they expect a collision.
+# No fork activates EIP-7610, so EthLib creates the contract and wipes the storage.
+# The Yellow Paper and execution-specs do the same.
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals"
-reason = "The case replaces the withdrawals of the payload, and EthLib rejects an envelope whose withdrawals are not those the state expects"
-source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merged 2026-11-12), specs/gloas/p2p-interface.md, validate_execution_payload_envelope_gossip, adds the reject check on the withdrawals root, and changes this case in test_gossip_execution_payload_envelope.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2_d0g0v0.json::RevertInCreateInInitCreate2_d0g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
-upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2_d0g0v0.json::RevertInCreateInInitCreate2_d0g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/gloas/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals"
-reason = "The case replaces the withdrawals of the payload, and EthLib rejects an envelope whose withdrawals are not those the state expects"
-source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merged 2026-11-12), specs/gloas/p2p-interface.md, validate_execution_payload_envelope_gossip, adds the reject check on the withdrawals root, and changes this case in test_gossip_execution_payload_envelope.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage_d0g0v0.json::create2collisionStorage_d0g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
-upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage_d0g0v0.json::create2collisionStorage_d0g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals"
-reason = "The case replaces the withdrawals of the payload, and EthLib rejects an envelope whose withdrawals are not those the state expects"
-source = "consensus-specs 44be32373afdb87496f3f68c1668f7e7d72aa662 (#5821, merged 2026-11-12), specs/gloas/p2p-interface.md, validate_execution_payload_envelope_gossip, adds the reject check on the withdrawals root, and changes this case in test_gossip_execution_payload_envelope.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage_d1g0v0.json::create2collisionStorage_d1g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/networking/gossip_execution_payload_envelope/pyspec_tests/gossip_execution_payload_envelope__valid_max_withdrawals]"'
-upstream = "As of 2026-11-25, consensus-specs #5821 (merged 2026-11-12) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
-# The fork cases of v1.7.0-beta.4 that route a deposit by the key of a validator at the fork to Gloas.
-# That release keeps a deposit for the key of a validator, or of a pending validator, in the queue first.
-# The later rule of consensus-specs routes a deposit by its withdrawal credentials first.
-# EthLib follows that rule, so these cases end with other builders and another queue.
-# A later release with that rule replaces these cases.
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage_d1g0v0.json::create2collisionStorage_d1g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_builder_deposit_followed_by_non_builder_credentials"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage_d2g0v0.json::create2collisionStorage_d2g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_builder_deposit_followed_by_non_builder_credentials]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage_d2g0v0.json::create2collisionStorage_d2g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_invalid_then_valid_validator_then_builder_deposit"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_d0g0v0.json::RevertInCreateInInit_d0g0v0_Byzantium"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_invalid_then_valid_validator_then_builder_deposit]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_d0g0v0.json::RevertInCreateInInit_d0g0v0_Byzantium]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_mixed_validity_validator_deposits_surrounding_builder_deposits"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_d0g0v0.json::RevertInCreateInInit_d0g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_mixed_validity_validator_deposits_surrounding_builder_deposits]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_d0g0v0.json::RevertInCreateInInit_d0g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_valid_then_invalid_validator_then_builder_deposit"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision_d0g0v0.json::InitCollision_d0g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_valid_then_invalid_validator_then_builder_deposit]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision_d0g0v0.json::InitCollision_d0g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision_d1g0v0.json::InitCollision_d1g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision_d1g0v0.json::InitCollision_d1g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_builder_deposit_followed_by_non_builder_credentials"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision_d2g0v0.json::InitCollision_d2g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_builder_deposit_followed_by_non_builder_credentials]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision_d2g0v0.json::InitCollision_d2g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_invalid_then_valid_validator_then_builder_deposit"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision_d3g0v0.json::InitCollision_d3g0v0_ConstantinopleFix"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_invalid_then_valid_validator_then_builder_deposit]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Constantinople/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision_d3g0v0.json::InitCollision_d3g0v0_ConstantinopleFix]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_mixed_validity_validator_deposits_surrounding_builder_deposits"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2.json::RevertInCreateInInitCreate2_d0g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_mixed_validity_validator_deposits_surrounding_builder_deposits]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2.json::RevertInCreateInInitCreate2_d0g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_valid_then_invalid_validator_then_builder_deposit"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2.json::RevertInCreateInInitCreate2_d0g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_valid_then_invalid_validator_then_builder_deposit]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2.json::RevertInCreateInInitCreate2_d0g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials"
-reason = "The case was generated with the onboarding that routes a deposit by the key of a validator first, and EthLib routes it by its withdrawal credentials first"
-source = "EIP-8282 section Motivation: the validator and builder registries are keyed independently. consensus-specs 8b374fa81b0918b84fe0063a56b4a482e1fa2c6f (#5736, merged 2026-10-26), specs/gloas/fork.md, onboard_builders_from_pending_deposits, routes by credentials first, and changes this case in test_gloas_fork_onboard_builders.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2.json::RevertInCreateInInitCreate2_d0g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/fork/fork/pyspec_tests/fork_validator_deposit_followed_by_builder_credentials]"'
-upstream = "As of 2026-11-25, consensus-specs #5736 (merged 2026-10-26) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it. EIP-7732 still states the earlier routing, and ethereum/EIPs#12627, open, aligns it"
-
-# The bid cases of v1.7.0-beta.4 that rest on one forwarded bid per builder, slot and parent.
-# The later rule of consensus-specs forwards up to a limit of bids that the balance of the builder sets.
-# EthLib follows that rule, so a second bid of a builder passes, and a poor builder reaches its limit first.
-# A later release with that rule replaces these cases.
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2.json::RevertInCreateInInitCreate2_d0g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder"
-reason = "The case expects a second bid of a builder for a slot and parent to be ignored, and EthLib forwards it while the builder is under its bid limit"
-source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2Paris.json::RevertInCreateInInitCreate2Paris_d0g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder]"'
-upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2Paris.json::RevertInCreateInInitCreate2Paris_d0g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover"
-reason = "The case leaves the builder with less than one ether it does not owe, and EthLib ignores the bid at the bid limit, before the check that the builder can cover it"
-source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2Paris.json::RevertInCreateInInitCreate2Paris_d0g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover]"'
-upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2Paris.json::RevertInCreateInInitCreate2Paris_d0g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder"
-reason = "The case expects a second bid of a builder for a slot and parent to be ignored, and EthLib forwards it while the builder is under its bid limit"
-source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2Paris.json::RevertInCreateInInitCreate2Paris_d0g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder]"'
-upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/RevertInCreateInInitCreate2Paris.json::RevertInCreateInInitCreate2Paris_d0g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover"
-reason = "The case leaves the builder with less than one ether it does not owe, and EthLib ignores the bid at the bid limit, before the check that the builder can cover it"
-source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d0g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover]"'
-upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d0g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder"
-reason = "The case expects a second bid of a builder for a slot and parent to be ignored, and EthLib forwards it while the builder is under its bid limit"
-source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d0g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder]"'
-upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d0g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover"
-reason = "The case leaves the builder with less than one ether it does not owe, and EthLib ignores the bid at the bid limit, before the check that the builder can cover it"
-source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d0g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/gloas/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover]"'
-upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d0g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder"
-reason = "The case expects a second bid of a builder for a slot and parent to be ignored, and EthLib forwards it while the builder is under its bid limit"
-source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d1g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_duplicate_from_builder]"'
-upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d1g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
 
 [[disagreement]]
-suite = "consensus-spec-tests"
-case = "tests/mainnet/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover"
-reason = "The case leaves the builder with less than one ether it does not owe, and EthLib ignores the bid at the bid limit, before the check that the builder can cover it"
-source = "consensus-specs 1a48161515966f9c843672fa500861845ddc75d8 (#5805, merged 2026-11-11), specs/gloas/p2p-interface.md, get_builder_bid_limit and validate_execution_payload_bid_gossip, replaces the first-bid check with the bid limit, and changes this case in test_gossip_execution_payload_bid.py. The pinned v1.7.0-beta.4 archive predates that commit"
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d1g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
 class = "sources-disagree"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/networking/gossip_execution_payload_bid/pyspec_tests/gossip_execution_payload_bid__ignore_builder_cannot_cover]"'
-upstream = "As of 2026-11-25, consensus-specs #5805 (merged 2026-11-11) changes the case, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d1g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d1g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d1g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d2g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d2g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d2g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d2g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d2g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorage.json::create2collisionStorage_d2g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d0g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d0g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d0g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d0g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d0g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d0g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d1g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d1g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d1g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d1g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d1g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d1g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d2g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d2g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d2g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d2g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d2g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stCreate2/create2collisionStorageParis.json::create2collisionStorageParis_d2g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit.json::RevertInCreateInInit_d0g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit.json::RevertInCreateInInit_d0g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit.json::RevertInCreateInInit_d0g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit.json::RevertInCreateInInit_d0g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit.json::RevertInCreateInInit_d0g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit.json::RevertInCreateInInit_d0g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_Paris.json::RevertInCreateInInit_Paris_d0g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_Paris.json::RevertInCreateInInit_Paris_d0g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_Paris.json::RevertInCreateInInit_Paris_d0g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_Paris.json::RevertInCreateInInit_Paris_d0g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_Paris.json::RevertInCreateInInit_Paris_d0g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stRevertTest/RevertInCreateInInit_Paris.json::RevertInCreateInInit_Paris_d0g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d0g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d0g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d0g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d0g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d0g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d0g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d1g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d1g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d1g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d1g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d1g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d1g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d2g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d2g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d2g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d2g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d2g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d2g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d3g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d3g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d3g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d3g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d3g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollision.json::InitCollision_d3g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d0g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d0g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d0g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d0g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d0g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d0g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d1g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d1g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d1g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d1g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d1g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d1g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d2g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d2g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d2g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d2g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d2g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d2g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d3g0v0_Berlin"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d3g0v0_Berlin]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d3g0v0_Istanbul"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d3g0v0_Istanbul]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d3g0v0_London"
+group = "legacy_blockchain"
+reason = "The fixture applies EIP-7610 and refuses a creation at an address with storage only; no fork activates EIP-7610, so EthLib creates the contract and wipes that storage"
+source = "EIP-684: a creation collides on a nonce or code only. Yellow Paper, Shanghai version, section 7: a new account has the empty trie as its storage. EIP-7610 is in Last Call, and EIP-7773 at f9976e68 lists it as Declined for Inclusion in Glamsterdam. execution-specs #3417 and #3508 removed the check at every fork and wipe the storage"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_legacy.py::test_case[legacy_blockchain:Cancun/BlockchainTests/GeneralStateTests/stSStoreTest/InitCollisionParis.json::InitCollisionParis_d3g0v0_London]"'
+upstream = "As of 2026-11-28, ethereum/legacytests#18, which restores the expectations from before EIP-7610, is open"

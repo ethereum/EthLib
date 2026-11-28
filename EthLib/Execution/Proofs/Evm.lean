@@ -11,6 +11,9 @@ public import EthLib.Execution.Proofs.Evm.Noninterference
 public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Execution.Proofs.Evm.Gas
 public import EthLib.Execution.Proofs.Evm.Op
+public import EthLib.Execution.Proofs.Evm.OpTables
+public import EthLib.Execution.Proofs.Evm.CodeKept
+public import EthLib.Execution.Proofs.Evm.Padding
 public import EthLib.Execution.Proofs.Evm.Machine.Stack
 public import EthLib.Execution.Proofs.Evm.Machine.Frame
 public import EthLib.Execution.Proofs.Evm.Step
@@ -24,6 +27,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.LogData
 public import EthLib.Execution.Proofs.Evm.Instructions.TransientStorage
 public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Instructions.StorageStateGas
+public import EthLib.Execution.Proofs.Evm.Instructions.StorageStatus
 public import EthLib.Execution.Proofs.Evm.Machine.JumpDest
 public import EthLib.Execution.Proofs.Evm.Instructions.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Interpreter

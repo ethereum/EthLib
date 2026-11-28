@@ -4,21 +4,14 @@ public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Blocks.AccessListFollow
 public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 public import EthLib.Execution.Proofs.Evm.Call.Rebuild
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the access-list builder follows the system calls
 
-The access-list builder follows a system call.
+A system call keeps the rebuild property, as a transaction does.
 
-The block state after the call can still be rebuilt.
-
-This needs the block state before the call to be rebuildable.
-
-Its code matches its hash, and no empty account holds storage.
-
-By [EIP-7610][eip7610], any creation inside the call fails at an address that already holds storage.
-
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
+The access-list builder follows it when each storage that it wipes held no word before the block.
 -/
 
 @[expose] public section
@@ -26,15 +19,20 @@ By [EIP-7610][eip7610], any creation inside the call fails at an address that al
 namespace EthLib.Execution.Blocks
 
 open EthLib.Base
+open EthLib.Cryptography.Hash.Keccak (keccak256)
 open EthLib.Execution.Evm
 open EthLib.Execution.State
 open EthLib.Execution.Transactions
 
-/-- The access-list builder follows every state with the rebuild property on its block. -/
-theorem _root_.EthLib.Execution.Evm.RebuildEnd.followable {block : BlockState}
-    {tx : TransactionState} (valid : RebuildEnd block tx) : Followable block tx :=
+/-- The access-list builder follows a state with the rebuild property on its block.
+
+The block state must be ready on `pre`, and each wipe of the state allowed there. -/
+theorem _root_.EthLib.Execution.Evm.RebuildEnd.followable {pre : State} {block : BlockState}
+    {tx : TransactionState} (valid : RebuildEnd block tx) (kept : PlainKept pre block)
+    (hwipes : ∀ address ∈ tx.storageClears, WipeAllowed pre address) : Followable block tx :=
   -- Unwritten storage words keep their block values, and each read code hashes to its key.
-  ⟨valid.parent, fun _ _ hslot => valid.getStorage_of_slot_eq_none hslot,
+  ⟨valid.parent,
+    fun _ _ hslot => valid.getStorage_of_slot_eq_none (valid.wipes_zero kept hwipes) hslot,
     fun _ _ code _ hread => valid.code _ code hread⟩
 
 /-- Preparing the first frame of a system message keeps the rebuild property and moves no value.
@@ -104,11 +102,13 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
     -- From Spurious Dragon, a created account starts at nonce 1, so it may hold storage.
     [LawfulGasMeter Meter] (hfork : .spuriousDragon ≤ fork) {env : BlockEnvironment fork}
     {block : BlockState} {target : Address} {data : ByteArray} {out : CallOutput}
-    (valid : Rebuildable block) (delegations : DelegationsHaveNonce (.ofBlock block))
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
+    (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
       (.ofBlock block) (systemSubstate env target) = .ok out) :
     RebuildState block out.state := by
-  have v0 := RebuildState.ofBlock valid delegations
+  have v0 := RebuildState.ofBlock code delegations
   rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) env.chainId.toNat
       (systemMessage env target data) (.ofBlock block) (systemSubstate env target) [] ∅
@@ -138,58 +138,40 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
 
 /-- From Spurious Dragon, a system call keeps the rebuild property of its block state.
 
-It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
+Each code read in the block state must have its hash.
+
+That state must hold no delegation at an account with nonce 0. -/
 theorem systemCall_rebuildState {fork : Fork} (hfork : .spuriousDragon ≤ fork)
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
-    {out : SystemCallOutput} (valid : Rebuildable block)
+    {out : SystemCallOutput}
+    (code : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash)
     (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : systemCall env block target data = .ok out) :
     RebuildState block out.state := by
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨call, hcall, hpure⟩ := bind_ok_iff.mp h
     cases hpure
-    exact processMessageCall_systemMessage hfork valid delegations hcall
+    exact processMessageCall_systemMessage hfork code delegations hcall
 
-/-- From Spurious Dragon, the access-list builder follows each system call.
-
-It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
-theorem systemCall_followable {fork : Fork} (hfork : .spuriousDragon ≤ fork)
-    {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
-    {out : SystemCallOutput} (valid : Rebuildable block)
-    (delegations : DelegationsHaveNonce (.ofBlock block))
-    (h : systemCall env block target data = .ok out) :
-    Followable block out.state :=
-  (systemCall_rebuildState hfork valid delegations h).followable
-
-/-- From Spurious Dragon, after a system call, the block state can still be rebuilt.
-
-It assumes that no account with nonce 0 in the block has the hash of a delegation indicator. -/
-theorem systemCall_rebuildable {fork : Fork} (hfork : .spuriousDragon ≤ fork)
-    {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
-    {out : SystemCallOutput} (valid : Rebuildable block)
-    (delegations : DelegationsHaveNonce (.ofBlock block))
-    (h : systemCall env block target data = .ok out) :
-    Rebuildable out.block :=
-  (systemCall_rebuildState hfork valid delegations
-    h).toRebuildInvariant.ofBlock_incorporateTxIntoBlock
-
-/-- From Paris, the empty block state can be rebuilt, and a system call on it succeeds.
+/-- From Paris, a system call on the empty block state succeeds, and the builder follows it.
 
 The call goes to the beacon roots address, which holds no code there.
 
-The builder follows the call, and the state after it can still be rebuilt. -/
-theorem exists_rebuildable_systemCall {fork : Fork} (hfork : .paris ≤ fork)
+The empty state is ready for the rebuild before and after the call. -/
+theorem exists_rebuildReady_systemCall {fork : Fork} (hfork : .paris ≤ fork)
     (env : BlockEnvironment fork) (data : ByteArray) :
     ∃ (block : BlockState) (out : SystemCallOutput),
-      Rebuildable block ∧
+      RebuildReady ⟨∅, ∅, ∅⟩ block ∧
       systemCall env block BEACON_ROOTS_ADDRESS data = .ok out ∧
       out.error = none ∧
       Followable block out.state ∧
-      Rebuildable out.block := by
+      RebuildReady ⟨∅, ∅, ∅⟩ out.block := by
   let block : BlockState := ⟨⟨∅, ∅, ∅⟩, ∅, ∅, ∅, ∅⟩
-  have hvalid : Rebuildable block := by
-    refine ⟨fun hash code hread => ?_, fun _ _ _ => rfl⟩
+  have hcodes : ∀ hash code, (TransactionState.ofBlock block).getCode hash = .ok code →
+      keccak256 code = hash := by
+    intro hash code hread
     unfold TransactionState.getCode TransactionState.ofBlock State.getCode at hread
     dsimp only [block] at hread
     have hnone : (∅ : Std.ExtTreeMap Hash32 ByteArray)[hash]? = none :=
@@ -228,21 +210,14 @@ theorem exists_rebuildable_systemCall {fork : Fork} (hfork : .paris ≤ fork)
   have hcall := SystemContract.systemCall_of_empty (env := env) (block := block)
     (target := BEACON_ROOTS_ADDRESS) (data := data) hfork hcode hpre
   have hsd : .spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
-  exact ⟨block, _, hvalid, hcall, rfl,
-    systemCall_followable hsd hvalid hdeleg hcall,
-    systemCall_rebuildable hsd hvalid hdeleg hcall⟩
-
-/-- From Spurious Dragon, a system call keeps the delegation property.
-
-No account with nonce 0 has the code hash of a delegation indicator.
-
-It assumes that the block state before the call can be rebuilt. -/
-theorem systemCall_delegationsHaveNonce {fork : Fork} (hfork : .spuriousDragon ≤ fork)
-    {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
-    {out : SystemCallOutput} (valid : Rebuildable block)
-    (delegations : DelegationsHaveNonce (.ofBlock block))
-    (h : systemCall env block target data = .ok out) :
-    DelegationsHaveNonce (.ofBlock out.block) :=
-  (systemCall_rebuildState hfork valid delegations h).delegations.ofBlock_incorporateTxIntoBlock
+  have ready : RebuildReady ⟨∅, ∅, ∅⟩ block := RebuildReady.start hcodes hdeleg
+  have valid := systemCall_rebuildState hsd hcodes hdeleg hcall
+  -- The empty state holds no storage, so every wipe is allowed.
+  have hwipes : ∀ address, WipeAllowed ⟨∅, ∅, ∅⟩ address := fun address =>
+    .inr fun key => by
+      unfold State.getStorage StorageMap.slot
+      simp
+  exact ⟨block, _, ready, hcall, rfl, valid.followable ready.plain fun address _ => hwipes address,
+    valid.rebuildReady ready⟩
 
 end EthLib.Execution.Blocks

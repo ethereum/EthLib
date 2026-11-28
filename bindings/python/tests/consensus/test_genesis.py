@@ -21,7 +21,7 @@ HANDLERS = {
 }
 
 # The release archive that holds the cases; the mainnet archive has none.
-ARCHIVE = "consensus-specs/v1.7.0-beta.4/minimal"
+ARCHIVE = "consensus-specs/v1.7.0-beta.5/minimal"
 
 
 def runs(fork: str, handler: str) -> bool:

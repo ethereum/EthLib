@@ -3,67 +3,67 @@
     time: 6
     head:
       slot: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
       payload_status: 0
     justified_checkpoint:
       epoch: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
     finalized_checkpoint:
       epoch: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
     proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
 - {block: 
-    block_0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4, 
+    block_0x9e730e250edfb8e490bf2aa43d8b5d0b82203a624cfb72ac0fedc4cb4a91bdb3, 
     valid: true}
 - checks:
     time: 6
     head:
       slot: 1
-      root: '0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4'
+      root: '0x9e730e250edfb8e490bf2aa43d8b5d0b82203a624cfb72ac0fedc4cb4a91bdb3'
       payload_status: 0
     justified_checkpoint:
       epoch: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
     finalized_checkpoint:
       epoch: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
-    proposer_boost_root: '0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
+    proposer_boost_root: '0x9e730e250edfb8e490bf2aa43d8b5d0b82203a624cfb72ac0fedc4cb4a91bdb3'
 - {tick: 12}
 - checks:
     time: 12
     head:
       slot: 1
-      root: '0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4'
+      root: '0x9e730e250edfb8e490bf2aa43d8b5d0b82203a624cfb72ac0fedc4cb4a91bdb3'
       payload_status: 0
     justified_checkpoint:
       epoch: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
     finalized_checkpoint:
       epoch: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
     proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
 - {block: 
-    block_0x675d134cc8bc5da1b92d0a0401f8aeefd08709552f6e34fe39d77105e5de352b, 
+    block_0xf01caa9dffc2a16233d31f6f022e21c437bad2da54d08f2a6aa24b7719fc7666, 
     valid: true}
 - checks:
     time: 12
     head:
       slot: 2
-      root: '0x675d134cc8bc5da1b92d0a0401f8aeefd08709552f6e34fe39d77105e5de352b'
+      root: '0xf01caa9dffc2a16233d31f6f022e21c437bad2da54d08f2a6aa24b7719fc7666'
       payload_status: 0
     justified_checkpoint:
       epoch: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
     finalized_checkpoint:
       epoch: 0
-      root: '0xde6ee16691ac31262a6bb5552e4854c07abb7a9ac8539c616ba4ed4e9aaa1adc'
-    proposer_boost_root: '0x675d134cc8bc5da1b92d0a0401f8aeefd08709552f6e34fe39d77105e5de352b'
+      root: '0x3c8bf4fdb3585537fc5d3d7241f1c1347c2d33b01eb8bc5cbefb9cd14340ce28'
+    proposer_boost_root: '0xf01caa9dffc2a16233d31f6f022e21c437bad2da54d08f2a6aa24b7719fc7666'
 - checks:
     payload_timeliness_vote:
-      block_root: '0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4'
+      block_root: '0x9e730e250edfb8e490bf2aa43d8b5d0b82203a624cfb72ac0fedc4cb4a91bdb3'
       votes: [true, true, true, null, null, true, true, null, true, true, true, 
           null, null, true, null, true]
     payload_data_availability_vote:
-      block_root: '0x29874e204fad82a30293db7910390d39dc70d4e7c5a7302cfbc10a1b8f17dcf4'
+      block_root: '0x9e730e250edfb8e490bf2aa43d8b5d0b82203a624cfb72ac0fedc4cb4a91bdb3'
       votes: [true, true, true, null, null, true, true, null, true, true, true, 
           null, null, true, null, true]

@@ -57,6 +57,19 @@ abbrev SlotWrites.apply (w : SlotWrites preset fork) (state : BeaconState preset
     latestBlockHeader := w.latestBlockHeader
     executionPayloadAvailability := w.executionPayloadAvailability }
 
+/-- The availability step of a slot changes only the availability bits. -/
+theorem processNextPayloadAvailability_ok
+    (computed : processNextPayloadAvailability state = .ok after) :
+    ∃ availability : Since .glamsterdam fork (ExecutionPayloadAvailability preset),
+      after = { state with executionPayloadAvailability := availability } := by
+  unfold processNextPayloadAvailability at computed
+  split at computed
+  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
+    exact ⟨_, rfl⟩
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨_, rfl⟩
+
 /-- The caching of a slot changes only the state and block roots, the header and the payload bits.
 
 The result is the state with those fields replaced. -/
@@ -65,12 +78,8 @@ theorem processSlot_ok (computed : processSlot state = .ok after) :
   unfold processSlot at computed
   simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, computed⟩ := computed
-  split at computed
-  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
-    exact ⟨⟨_, _, _, _⟩, rfl⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact ⟨⟨_, _, _, _⟩, rfl⟩
+  obtain ⟨availability, rfl⟩ := processNextPayloadAvailability_ok computed
+  exact ⟨⟨_, _, _, availability⟩, rfl⟩
 
 /-- The caching of a slot writes one block root, at the position of the slot.
 
@@ -83,12 +92,8 @@ theorem processSlot_blockRoots (computed : processSlot state = .ok after) :
   obtain ⟨_, _, _, _, root, hashed, _, written, computed⟩ := computed
   have elements := writeCircularRooted_elements state.blockRoots state.slot root
   rw [written] at elements
-  split at computed
-  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
-    exact ⟨root, hashed, elements.symm⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact ⟨root, hashed, elements.symm⟩
+  obtain ⟨_, rfl⟩ := processNextPayloadAvailability_ok computed
+  exact ⟨root, hashed, elements.symm⟩
 
 /-- The caching of a slot keeps the slot. -/
 theorem processSlot_slot (computed : processSlot state = .ok after) : after.slot = state.slot := by
@@ -105,6 +110,7 @@ theorem processSlot_nextPayloadUnavailable (gloas : .glamsterdam ≤ fork)
   unfold processSlot at computed
   simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, computed⟩ := computed
+  unfold processNextPayloadAvailability at computed
   split at computed
   · obtain ⟨next, bits, sum, written, rfl⟩ :=
       unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)

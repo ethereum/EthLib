@@ -90,11 +90,11 @@ theorem stepRules_keptOrWiped (address : Address) :
     (hab.2 hne).trans (hbc.2 (by rw [hab.1]; exact hne))⟩
   static h := ⟨h.message, fun _ => .of_sameOutside h.state List.not_mem_nil⟩
   -- SSTORE writes the storage of the account of the frame, which is another one.
-  sstore _ _ _ _ _ h := ⟨rfl, fun hne => keptOrWiped_setStorage h (Ne.symm hne)⟩
+  sstore _ _ _ _ h := ⟨rfl, fun hne => keptOrWiped_setStorage h (Ne.symm hne)⟩
   tstore _ _ _ _ := ⟨rfl, fun _ => .of_eq fun _ => rfl⟩
   log _ hs _ hm _ := ⟨hm, fun _ => by rw [hs]; exact .refl _ _⟩
   selfdestruct _ _ h := ⟨message_finishSelfdestruct h, fun _ => keptOrWiped_finishSelfdestruct h⟩
-  incrementNonce _ _ _ _ h := ⟨rfl, fun _ => keptOrWiped_incrementNonce h⟩
+  incrementNonce _ _ _ h := ⟨rfl, fun _ => keptOrWiped_incrementNonce h⟩
   incorporate h := ⟨message_incorporateChild _ _, fun hne => by
     rw [state_incorporateChild]
     exact h.2 hne⟩

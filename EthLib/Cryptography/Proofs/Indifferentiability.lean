@@ -384,6 +384,67 @@ theorem realProb_le_of_romProb_le [FinEnum A] [DecidableEq Msg] [SampleableType 
   obtain ⟨σ, s₀, S, hS, hgame⟩ := realProb_le_romProb_add h
   exact (hgame game N hN).trans (add_le_add (hδ σ s₀ S hS) le_rfl)
 
+/-! ## Computations of the hash alone
+
+Such a computation is a game whose image never asks the simulator.
+-/
+
+/-- A computation of the hash alone, as a game, costs what the computation costs. -/
+private theorem withinCost_liftComp {hashCost : Msg → ℕ} {α : Type}
+    {oa : OracleComp (Msg →ₒ Dg) α} {N : ℕ}
+    (hN : IsQueryBound oa N (fun m n => hashCost m ≤ n) fun m n => n - hashCost m) :
+    WithinCost hashCost (liftComp oa (GameSpec A Msg Dg)) N := by
+  rw [WithinCost, liftComp_add_right_eq_mapLens]
+  exact IsQueryBound.mapLens _ hN
+
+/-- The image of a computation of the hash alone is that computation, asking the random oracle. -/
+private theorem romGame_liftComp
+    (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg)))) (s₀ : σ)
+    (oa : OracleComp (Msg →ₒ Dg) Bool) :
+    romGame S s₀ (liftComp oa (GameSpec A Msg Dg)) = liftComp oa (RomSpec Msg Dg) := by
+  rw [romGame, QueryImpl.simulateQ_liftComp_right_eq_of_apply (idealImpl S)
+    ((QueryImpl.ofLift (Msg →ₒ Dg) (OracleComp (RomSpec Msg Dg))).liftTarget _) fun _ => rfl,
+    simulateQ_liftTarget]
+  -- The lifted computation leaves the state of the simulator as it was.
+  simp only [StateT.run'_eq, OracleComp.liftM_run_StateT, map_bind, map_pure, bind_pure]
+  rfl
+
+/-- **Indifferentiability for a computation of the hash alone.**
+
+Let `H` be indifferentiable with bound `ε`, and let the computation cost at most `N`.
+
+It runs with `H` over a uniform permutation, or with a random oracle from an empty cache.
+
+An event has chances in the two runs at most `ε N` apart. -/
+theorem Indifferentiable.prEvent_le_add [FinEnum A] [DecidableEq Msg] [SampleableType Dg]
+    {H : (A → A) → Msg → Dg} {hashCost : Msg → ℕ} {ε : ℕ → ℝ≥0∞}
+    (h : Indifferentiable H hashCost ε) {α : Type} {oa : OracleComp (Msg →ₒ Dg) α} {N : ℕ}
+    (hN : IsQueryBound oa N (fun m n => hashCost m ≤ n) fun m n => n - hashCost m)
+    (p : α → Prop) :
+    Pr{let π ← $ᵗ (Equiv.Perm A)
+       let a ← simulateQ (fun m => pure (H π m) : QueryImpl (Msg →ₒ Dg) ProbComp) oa}[p a] ≤
+        Pr{let a ← (simulateQ (Msg →ₒ Dg).randomOracle oa).run' ∅}[p a] + ε N ∧
+      Pr{let a ← (simulateQ (Msg →ₒ Dg).randomOracle oa).run' ∅}[p a] ≤
+        Pr{let π ← $ᵗ (Equiv.Perm A)
+           let a ← simulateQ (fun m => pure (H π m) : QueryImpl (Msg →ₒ Dg) ProbComp) oa}[p a] +
+          ε N := by
+  classical
+  obtain ⟨σ, s₀, S, -, hgame⟩ := h
+  -- The game runs the computation, then returns whether the event holds.
+  obtain ⟨hle, hge⟩ := hgame (liftComp ((fun a => decide (p a)) <$> oa) (GameSpec A Msg Dg)) N
+    (withinCost_liftComp ((isQueryBound_map_iff _ _ _ _ _).2 hN))
+  -- Over a fixed permutation, each hash call of the game returns its value under `H`.
+  have hrun : ∀ π : Equiv.Perm A,
+      simulateQ (realImpl H π) (liftComp ((fun a => decide (p a)) <$> oa) (GameSpec A Msg Dg)) =
+        (fun a => decide (p a)) <$>
+          simulateQ (fun m => pure (H π m) : QueryImpl (Msg →ₒ Dg) ProbComp) oa := fun π => by
+    rw [QueryImpl.simulateQ_liftComp_right_eq_of_apply (realImpl H π) (fun m => pure (H π m))
+      fun _ => rfl, simulateQ_map]
+  simp only [realProb, hrun, romGame_liftComp, romProb, OracleSpec.romImpl,
+    QueryImpl.simulateQ_add_liftComp_right, simulateQ_map, StateT.run'_eq, StateT.run_map,
+    Functor.map_map, decide_eq_true_eq] at hle hge ⊢
+  exact ⟨hle, hge⟩
+
 /-! ## Relabelling the states, the digests and the messages
 
 Indifferentiability does not depend on the names of the states, the digests or the messages.

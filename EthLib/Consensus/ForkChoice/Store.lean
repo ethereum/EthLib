@@ -483,7 +483,9 @@ structure Store where
   inclusionLists : Since .hegota fork InclusionListStore
   /-- From Heze: whether the payload of each block satisfied the inclusion lists of the slot before.
 
-  A verified payload of Heze has its answer recorded. -/
+  A verified payload of Heze has its answer recorded.
+
+  The anchor has one from the start. -/
   payloadInclusionListSatisfaction : Since .hegota fork (Std.TreeMap Root Bool)
 
 variable {preset fork}
@@ -492,7 +494,8 @@ variable {preset fork}
 
 From Gloas the anchor has no payload and no committee vote yet.
 
-From Heze the store holds no inclusion list and no answer on inclusion lists yet. -/
+From Heze the store holds no inclusion list yet, and records the anchor's payload as satisfying.
+-/
 def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     (anchorBlock : BeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
   -- The state root of the anchor block must be the root of the anchor state.
@@ -534,7 +537,10 @@ def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     payloadTimelinessVote := fun _ => noVotes
     payloadDataAvailabilityVote := fun _ => noVotes
     inclusionLists := fun _ => .empty
-    payloadInclusionListSatisfaction := fun _ => ∅ }
+    -- From Heze no inclusion list of the slot before the anchor can enter the store.
+    --
+    -- So no transaction constrains the anchor's payload, and the store records it as satisfying.
+    payloadInclusionListSatisfaction := fun _ => Std.TreeMap.empty.insert anchorRoot true }
 
 namespace Store
 

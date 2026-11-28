@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Bls.Constants
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Montgomery
+public import EthLib.Cryptography.SafeGcd
 public import EthLib.Cryptography.Word64.Six
 public import EthLib.Base.ByteOrder
 
@@ -142,6 +143,22 @@ theorem Fp.subWords_eq (a b : Limbs.T 12) (ha : Limbs.val (n := 12) a < modulus)
   rw [← hp] at ha hb ⊢
   exact (subCore_val ha hb).symm
 
+open Montgomery SafeGcd in
+/-- A candidate for the inverse mod `p` of the integer of the limbs, by the divsteps on words. -/
+def Fp.invCandidate (a : Limbs.T 12) : Option (Limbs.T 12) :=
+  -- The six words of `p`, with a zero sign word above them.
+  let p : Words7 := ⟨Fp.pLimbs.w0, Fp.pLimbs.w1, Fp.pLimbs.w2, Fp.pLimbs.w3, Fp.pLimbs.w4,
+    Fp.pLimbs.w5, 0⟩
+  -- Theorem 11.2 needs `floor((49 * 381 + 57) / 17) = 1101` divsteps, for `p` below `2^381`.
+  --
+  -- So nineteen jumps, 1140 divsteps, always suffice.
+  --
+  -- The result lies in `[0, p)`, so its six low words hold it.
+  --
+  -- The six words of `a` go in with a zero sign word above them.
+  Signed.inverse (fun w => ⟨w.w0, w.w1, w.w2, w.w3, w.w4, w.w5⟩) p Fp.pinvWord 19
+    ⟨a.w0, a.w1, a.w2, a.w3, a.w4, a.w5, 0⟩
+
 open Montgomery in
 /-- The modulus `p` with the constants of its Montgomery arithmetic, on twelve limbs.
 
@@ -156,19 +173,17 @@ The product, the sum and the difference run on six words of 64 bits. -/
     0x5c071a97a256ec6d, 0x15f65ec3fa80e493⟩
   r2 := ⟨0xf4df1f341c341746, 0x0a76e6a609d104f1, 0x8de5476c4c95b6d5, 0x67eb88a9939d83c0,
     0x9a793e85b519952d, 0x11988fe592cae3aa⟩
-  pm2 := ⟨0xb9feffffffffaaa9, 0x1eabfffeb153ffff, 0x6730d2a0f6b0f624, 0x64774b84f38512bf,
-    0x4b1ba7b6434bacd7, 0x1a0111ea397fe69a⟩
   pLimbs_spec := Fp.val_pLimbs
   pinv_spec := by decide
   r1_spec := by decide +kernel
   r2_spec := by decide +kernel
-  pm2_spec := by decide
   mul := Fp.mulWords
   mul_spec a b ha := Fp.mulWords_eq a b ha
   add := Fp.addWords
   add_spec := Fp.addWords_eq
   sub := Fp.subWords
   sub_spec := Fp.subWords_eq
+  invCandidate := Fp.invCandidate
 
 /-- An element of the BLS12-381 base field.
 
@@ -195,10 +210,16 @@ Proofs use its lemmas, never its unfolding, which runs a Montgomery reduction. -
 @[inline] def beq (a b : Fp) : Bool := a == b
 @[inline] def isZero (a : Fp) : Bool := a == zero
 
-/-- Square-and-multiply modular exponentiation. -/
-@[inline] def powNat (base : Fp) (e : Nat) : Fp := Montgomery.pow base e
+/-- Modular exponentiation.
 
-/-- Multiplicative inverse, by Fermat's little theorem: `a ^ (p - 2)`.
+An exponent below `p` is read as twelve limbs, four bits at a time. -/
+@[inline] def powNat (base : Fp) (e : Nat) : Fp :=
+  -- The window reads fixed limbs, so it never divides the exponent, a large integer, bit by bit.
+  if e < modulus then Montgomery.powLimbs base (Montgomery.Limbs.ofNat e : Montgomery.Limbs.T 12)
+  -- Larger exponents keep the square and multiply.
+  else Montgomery.pow base e
+
+/-- Multiplicative inverse, by the divsteps of Bernstein and Yang, checked.
 
 The inverse of `0` is `0`. -/
 @[inline] def inverse (a : Fp) : Fp := Montgomery.inv a
@@ -207,17 +228,23 @@ The inverse of `0` is `0`. -/
 instance : Div Fp := ⟨fun a b => a * b.inverse⟩
 
 open Montgomery in
-/-- The exponent `(p + 1) / 4` of the square root, as twelve 32-bit limbs, two to a word. -/
-@[inline] def sqrtExponent : Limbs.T 12 :=
-  ⟨0xee7fbfffffffeaab, 0x07aaffffac54ffff, 0xd9cc34a83dac3d89, 0xd91dd2e13ce144af,
+/-- The exponent `c1 = (p - 3) / 4` of [RFC 9380 Appendix F.2.1.2][ratio], as twelve 32-bit limbs.
+
+The limbs go two to a word.
+
+[ratio]: https://www.rfc-editor.org/rfc/rfc9380#appendix-F.2.1.2
+-/
+@[inline] def invSqrtExponent : Limbs.T 12 :=
+  ⟨0xee7fbfffffffeaaa, 0x07aaffffac54ffff, 0xd9cc34a83dac3d89, 0xd91dd2e13ce144af,
     0x92c6e9ed90d2eb35, 0x0680447a8e5ff9a6⟩
 
-open Montgomery in
-/-- The limbs of the exponent write `(p + 1) / 4`. -/
-theorem val_sqrtExponent : Limbs.val sqrtExponent = (modulus + 1) / 4 := by decide
+/-- The power `r = a^((p - 3) / 4)`: `a r` is a candidate root, and `a r r^2` is its inverse. -/
+@[inline] def invSqrtCandidate (a : Fp) : Fp := Montgomery.powLimbs a invSqrtExponent
 
 /-- The power `a^((p + 1) / 4)` of RFC 9380, Appendix I.1, before checking its square. -/
-@[inline] def sqrtCandidate (a : Fp) : Fp := Montgomery.powLimbs a sqrtExponent
+@[inline] def sqrtCandidate (a : Fp) : Fp :=
+  -- The power `(p + 1) / 4` is the power `(p - 3) / 4` times `a`.
+  a * invSqrtCandidate a
 
 /-- Square root, valid since `p = 3 mod 4`.
 
@@ -242,7 +269,7 @@ instance : BaseField Fp where
   inverse := inverse
   powNat := powNat
   sqrt a := (Fp.sqrt a).toOption
-  sqrtCandidate := Fp.sqrtCandidate
+  invSqrtCandidate := Fp.invSqrtCandidate
   sgn0 a := a.val % 2 == 1
 
 /-- Decode a 48-byte big-endian integer as an element of `Fp`.

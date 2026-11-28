@@ -73,12 +73,8 @@ instance : LawfulCodec (Header fork) where
     change Header.ofItem item = .ok h at hDecode
     unfold Header.ofItem at hDecode
     dsimp only at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
-    have hItem := Item.fields_eq_ok.mp hFields
-    -- Each read takes the items of one field from the front of the rest.
-    iterate 15
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
-      have := Item.eq_of_readField hRead
+    peel_decode_fields hDecode 15 with hItem hDecode
+    -- From its fork on, each field takes one item from the front of the rest, and none before.
     iterate 7
       obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readSince hRead
@@ -121,6 +117,92 @@ theorem hash_eq_ok_iff {h : Header fork} {digest : Hash32} :
     · rintro ⟨_, hb, rfl⟩
       cases hb
       rfl
+
+/-- A byte vector of fewer than `2^32` bytes encodes to at most `2^32 + 9` bytes. -/
+private theorem encode_vector_le {n : Nat} (v : Vector UInt8 n) (hn : n < 2 ^ 32) :
+    ∃ e, encode (Codec.toItem v) = .ok e ∧ e.size ≤ 2 ^ 32 + 9 := by
+  have hs : (⟨v.toArray⟩ : ByteArray).size = n := by
+    show v.toArray.size = n
+    rw [Vector.size_toArray]
+  obtain ⟨e, he, hle, -⟩ := encode_bytes_exists_ok ⟨v.toArray⟩ (by omega)
+  exact ⟨e, he, by omega⟩
+
+/-- A 64-bit number encodes to at most `2^32 + 9` bytes. -/
+private theorem encode_uint64_le (x : UInt64) :
+    ∃ e, encode (Codec.toItem x) = .ok e ∧ e.size ≤ 2 ^ 32 + 9 := by
+  obtain ⟨e, he, hle⟩ := encode_scalar_exists_ok x.toNat (by have := x.toNat_lt; omega)
+  exact ⟨e, he, by omega⟩
+
+/-- A field that appears at a fork has at most one item. -/
+private theorem length_ofSince_le {f : Fork} {α : Type} [Codec α] (x : Since f fork α) :
+    (Item.ofSince x).length ≤ 1 := by
+  unfold Item.ofSince
+  split <;> simp
+
+/-- Every item of a field that appears at a fork is the item of its value. -/
+private theorem forall_mem_ofSince {f : Fork} {α : Type} [Codec α] (x : Since f fork α)
+    (p : Item → Prop) (hp : ∀ h, p (Codec.toItem (x h))) : ∀ i ∈ Item.ofSince x, p i := by
+  unfold Item.ofSince
+  split <;> simp_all
+
+/-- A header has a hash when its numbers are below `2^256` and its extra data below `2^32` bytes.
+-/
+theorem hash_exists_ok (h : Header fork)
+    (numbers : ∀ n ∈ [h.difficulty, h.number, h.gasLimit, h.gasUsed], n < 2 ^ 256)
+    (baseFee : ∀ london, h.baseFeePerGas london < 2 ^ 256) (extra : h.extraData.size < 2 ^ 32) :
+    ∃ digest, h.hash = .ok digest := by
+  suffices hl : ∃ e, encode (Codec.toItem h) = .ok e from
+    hl.elim fun e he => ⟨keccak256 e, hash_eq_ok_iff.2 ⟨e, he, rfl⟩⟩
+  rw [toItem_eq]
+  refine (encode_list_exists_ok_of_size_le (2 ^ 32 + 9) _ ?_ ?_).imp fun _ h => h.1
+  · simp only [List.forall_mem_append, List.forall_mem_cons, List.not_mem_nil]
+    have hd := numbers h.difficulty (by simp)
+    have hn := numbers h.number (by simp)
+    have hg := numbers h.gasLimit (by simp)
+    have hu := numbers h.gasUsed (by simp)
+    refine ⟨⟨⟨⟨⟨⟨⟨⟨⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+      fun _ f => f.elim⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩
+    -- The hashes, the address, the Bloom filter and the nonce have a fixed count of bytes.
+    · exact encode_vector_le _ (by decide)
+    · exact encode_vector_le _ (by decide)
+    · exact encode_vector_le _ (by decide)
+    · exact encode_vector_le _ (by decide)
+    · exact encode_vector_le _ (by decide)
+    · exact encode_vector_le _ (by decide)
+    · exact encode_vector_le _ (by decide)
+    · obtain ⟨e, he, hle⟩ := encode_scalar_exists_ok _ hd
+      exact ⟨e, he, by omega⟩
+    · obtain ⟨e, he, hle⟩ := encode_scalar_exists_ok _ hn
+      exact ⟨e, he, by omega⟩
+    · obtain ⟨e, he, hle⟩ := encode_scalar_exists_ok _ hg
+      exact ⟨e, he, by omega⟩
+    · obtain ⟨e, he, hle⟩ := encode_scalar_exists_ok _ hu
+      exact ⟨e, he, by omega⟩
+    · obtain ⟨e, he, hle⟩ := encode_scalar_exists_ok _ h.timestamp.isLt
+      exact ⟨e, he, by omega⟩
+    · obtain ⟨e, he, hle, -⟩ := encode_bytes_exists_ok h.extraData (by omega)
+      exact ⟨e, he, by omega⟩
+    · exact encode_vector_le _ (by decide)
+    · exact encode_vector_le _ (by decide)
+    · exact forall_mem_ofSince _ _ fun l =>
+        (encode_scalar_exists_ok _ (baseFee l)).imp fun _ h => ⟨h.1, by have := h.2; omega⟩
+    · exact forall_mem_ofSince _ _ fun _ => encode_vector_le _ (by decide)
+    · exact forall_mem_ofSince _ _ fun _ => encode_uint64_le _
+    · exact forall_mem_ofSince _ _ fun _ => encode_uint64_le _
+    · exact forall_mem_ofSince _ _ fun _ => encode_vector_le _ (by decide)
+    · exact forall_mem_ofSince _ _ fun _ => encode_vector_le _ (by decide)
+    · exact forall_mem_ofSince _ _ fun _ => encode_vector_le _ (by decide)
+    · exact forall_mem_ofSince _ _ fun _ => encode_uint64_le _
+  · have := length_ofSince_le h.baseFeePerGas
+    have := length_ofSince_le h.withdrawalsRoot
+    have := length_ofSince_le h.blobGasUsed
+    have := length_ofSince_le h.excessBlobGas
+    have := length_ofSince_le h.parentBeaconBlockRoot
+    have := length_ofSince_le h.requestsHash
+    have := length_ofSince_le h.blockAccessListHash
+    have := length_ofSince_le h.slotNumber
+    simp only [List.length_append, List.length_cons, List.length_nil]
+    omega
 
 /-- The encodings of two headers, when the encodings differ and share one Keccak-256 hash. -/
 def findCollision (h₁ h₂ : Header fork) : Option (ByteArray × ByteArray) :=

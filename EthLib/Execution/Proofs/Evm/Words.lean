@@ -30,6 +30,10 @@ theorem ceil32_le {value bound : Nat} (multiple : bound % 32 = 0) (above : value
   unfold ceil32 WORD_BYTES
   split <;> omega
 
+/-- `ceil32` keeps the order. -/
+theorem ceil32_mono {a b : Nat} (h : a ≤ b) : ceil32 a ≤ ceil32 b :=
+  ceil32_le (ceil32_mod b) (Nat.le_trans h (le_ceil32 b))
+
 /-- The words cover the bytes. -/
 theorem le_wordCount (size : Nat) : size ≤ 32 * wordCount size := by
   have := ceil32_mod size

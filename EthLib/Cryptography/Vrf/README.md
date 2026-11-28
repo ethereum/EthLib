@@ -141,8 +141,14 @@ An opening verifies if and only if its path leads from its leaf to the root, and
 The output binds its index (`Verify.lean`).
 Two outputs are equal only for one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision (`outputHash_binding`).
 So two openings that verify at two different indices, under any roots and even with one secret, give two different outputs, or their output inputs collide (`verify_index_binding`).
+In the random oracle model, the outputs of one secret at distinct indices are also independent uniform values (`run_outputs_evalDistEq`, `OutputRandomOracle.lean`).
+That holds for a secret and indices fixed before the oracle answers any of their output inputs.
+Over a uniform permutation in place of Keccak-f[1600], events on two such outputs hold with the product chance, up to `2^-1600 + 6 / 2^512`, below `2^-509` (`prEvent_outputs_pair_keccak256With_le_add`, `OutputPermutation.lean`).
+Over that permutation, an event on `n` such outputs holds with its chance for independent uniform values, up to `n (n - 1) / 2^1601 + (n^2 + n) / 2^512`, below `2^-447` (`prEvent_outputs_keccak256With_le_add`, `OutputPermutation.lean`).
+Both bounds hold for a secret, the indices and the events, fixed before the permutation is drawn.
+A secret hashed from a seed depends on the permutation, so neither bound covers it.
 
-The same guarantees hold for a tree built from a seed (`KeyGen.lean`).
+The binding and uniqueness guarantees hold for a tree built from a seed (`KeyGen.lean`).
 That tree verifies at every index, with the output of that index's secret (`verify_prove`).
 Every valid opening of it gives that output, or `findHashCollision` returns a collision with the honest opening (`verify_keyGen_unique`).
 
@@ -210,6 +216,9 @@ Here `q` counts tree hash queries; it is not the `q` of mix queries above.
 With Keccak-256 in place of the oracle, the search of the experiment is exactly `findHashCollision` on the opening and the honest opening (`extractCollision_keccak256`).
 The adversary of this experiment outputs the secrets, the index and the opening directly, and no theorem turns a selection holder into such an adversary.
 This bound and the bound on two outputs take the tree hash as a random oracle, so no theorem composes them with `prEvent_selected_le`.
+Over a uniform permutation in place of Keccak-f[1600], an adversary makes at most `q` classical queries to the permutation and its inverse.
+The search then finds a pair with probability at most `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)` for `Q = q + 2^33 + 66` (`prEvent_extractCollision_isSome_keccak256With_le`, `SelectionPermutation.lean`).
+That is below `2^-128` at `q = 2^64`, and no theorem composes this bound with `prEvent_selected_le` either.
 
 ## Test vectors
 

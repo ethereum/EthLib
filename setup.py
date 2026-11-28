@@ -1,9 +1,12 @@
 """Build the `ethlib.cryptography._native` CPython extension from the Lean exports."""
 
 import json
+import os
 import platform
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 from setuptools import Extension, find_packages, setup
 from setuptools.command.build_ext import build_ext
@@ -65,6 +68,45 @@ def _collect_lean_objects() -> list[str]:
     return sorted(objects)
 
 
+def _should_run_lake() -> bool:
+    """Whether `setup.py` runs `lake build Exports` before collecting objects."""
+    return os.environ.get("ETHLIB_SKIP_LAKE") != "1"
+
+
+def _enable_parallel_compile(compiler: Any, workers: int) -> None:
+    """Compile independent C sources concurrently within one setuptools extension."""
+    if workers <= 1 or not hasattr(compiler, "_setup_compile") or not hasattr(compiler, "_compile"):
+        return
+
+    def parallel_compile(
+        sources,
+        output_dir=None,
+        macros=None,
+        include_dirs=None,
+        debug=0,
+        extra_preargs=None,
+        extra_postargs=None,
+        depends=None,
+    ):
+        macros, objects, extra_postargs, pp_opts, build = compiler._setup_compile(
+            output_dir, macros, include_dirs, sources, depends, extra_postargs
+        )
+        cc_args = compiler._get_cc_args(pp_opts, debug, extra_preargs)
+
+        def compile_one(obj: str) -> None:
+            try:
+                src, ext = build[obj]
+            except KeyError:
+                return
+            compiler._compile(obj, src, ext, cc_args, extra_postargs, pp_opts)
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(compile_one, objects))
+        return objects
+
+    compiler.compile = parallel_compile
+
+
 def _native_link_args(build_temp: Path) -> list[str]:
     """
     Discard unused EthLib compile-time and legacy initializers, keeping other native exports.
@@ -115,10 +157,17 @@ class LakeThenBuild(build_ext):
     Conversion proofs are checked while the exports elaborate, but only runtime objects link.
     """
 
+    def build_extensions(self):
+        """Compile C wrapper files in parallel across the available CPU cores."""
+        _enable_parallel_compile(self.compiler, os.cpu_count() or 1)
+        super().build_extensions()
+
     def run(self):
         """Build the Lean exports, then link their objects into each extension."""
         # Build the exports, their specification imports and their conversion proofs.
-        subprocess.check_call(["lake", "build", "Exports"], cwd=str(REPO_ROOT))
+        # CI jobs that download pre-built spec and export artifacts set `ETHLIB_SKIP_LAKE=1`.
+        if _should_run_lake():
+            subprocess.check_call(["lake", "build", "Exports"], cwd=str(REPO_ROOT))
         sysroot = _lean_sysroot()
         if sysroot is None:
             raise RuntimeError(

@@ -129,7 +129,7 @@ theorem ecmul_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : Byte
     ecmul fork data gas = .ok out ↔ ecmulGas fork ≤ gas ∧ ∃ p0,
       bytesToG1 (bufferRead data 0 64) = .ok p0 ∧
       out = ⟨(g1ToBytes
-        (Point.mulBits 256 (Base.ByteOrder.ofBE (bufferRead data 64 32)) p0)).toArray⟩ := by
+        (Point.mulNat (Base.ByteOrder.ofBE (bufferRead data 64 32)) p0)).toArray⟩ := by
   by_cases hgas : gas < ecmulGas fork
   · simp [ecmul_outOfGas fork data hgas, Nat.not_le.mpr hgas]
   · simp only [ecmul, hgas, bind, Except.bind, pure, Except.pure, throw, throwThe,

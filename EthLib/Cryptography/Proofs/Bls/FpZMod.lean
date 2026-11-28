@@ -375,26 +375,76 @@ theorem one_isZero : Fp.one.isZero = false :=
 /-- The square root that the extensions read from `Fp` is its own square root, as an option. -/
 theorem baseField_sqrt (a : Fp) : BaseField.sqrt a = (Fp.sqrt a).toOption := rfl
 
-/-- The candidate root that the extensions read from `Fp` is its own candidate. -/
-@[simp] theorem baseField_sqrtCandidate (a : Fp) :
-    BaseField.sqrtCandidate a = Fp.sqrtCandidate a := rfl
+/-- The candidate inverse root that the extensions read from `Fp` is its own candidate. -/
+@[simp] theorem baseField_invSqrtCandidate (a : Fp) :
+    BaseField.invSqrtCandidate a = Fp.invSqrtCandidate a := rfl
 
-/-- The square root's power by limbs is the power by `(p + 1) / 4`. -/
-theorem powLimbs_sqrtExponent (a : Fp) :
-    (Montgomery.powLimbs a sqrtExponent : Fp) = powNat a ((modulus + 1) / 4) := by
+/-- The candidate root is the input times its candidate inverse root. -/
+theorem mul_invSqrtCandidate (a : Fp) : a * Fp.invSqrtCandidate a = Fp.sqrtCandidate a := rfl
+
+-- The bound `2^384` of twelve limbs is a numeral that the elaborator compares.
+set_option exponentiation.threshold 400 in
+/-- The map to `ZMod p` sends a power to the power. -/
+theorem toZMod_powNat (a : Fp) (n : Nat) : toZMod (a.powNat n) = toZMod a ^ n := by
+  unfold powNat
+  split
+  · rename_i h
+    have hl := Montgomery.toZMod_powLimbs a (Montgomery.Limbs.ofNat n : Montgomery.Limbs.T 12)
+    rw [Montgomery.Limbs.val_ofNat, Nat.mod_eq_of_lt (Nat.lt_trans h Fp.params.lt_radix)] at hl
+    exact hl
+  · exact toZMod_pow a n
+
+/-- The limbs of the exponent write `(p - 3) / 4`. -/
+theorem val_invSqrtExponent : Montgomery.Limbs.val invSqrtExponent = (modulus - 3) / 4 := by
+  decide
+
+/-- The candidate inverse root is the power by `(p - 3) / 4`. -/
+theorem invSqrtCandidate_eq_powNat (a : Fp) :
+    Fp.invSqrtCandidate a = powNat a ((modulus - 3) / 4) := by
   apply toZMod_injective
-  rw [Montgomery.toZMod_powLimbs, val_sqrtExponent]
-  exact (toZMod_pow a _).symm
+  have hl := Montgomery.toZMod_powLimbs a invSqrtExponent
+  rw [val_invSqrtExponent] at hl
+  exact hl.trans (toZMod_powNat a _).symm
+
+/-- The candidate root is the power by `(p + 1) / 4`. -/
+theorem sqrtCandidate_eq_powNat (a : Fp) :
+    Fp.sqrtCandidate a = powNat a ((modulus + 1) / 4) := by
+  apply toZMod.injective
+  rw [← mul_invSqrtCandidate, toZMod_mul, invSqrtCandidate_eq_powNat, toZMod_powNat,
+    toZMod_powNat, ← pow_succ', show (modulus - 3) / 4 + 1 = (modulus + 1) / 4 by decide]
 
 /-! ## Bridge: spec operations = Mathlib operations -/
 
-/-- The map to `ZMod p` sends a power to the power. -/
-theorem toZMod_powNat (a : Fp) (n : Nat) : toZMod (a.powNat n) = toZMod a ^ n :=
-  toZMod_pow a n
-
-/-- The inverse `a ^ (p - 2)` is the inverse of `ZMod p`, and both send `0` to `0`. -/
+/-- The inverse is the inverse of `ZMod p`, and both send `0` to `0`. -/
 theorem toZMod_inverse (a : Fp) : toZMod a.inverse = (toZMod a)⁻¹ :=
   Montgomery.toZMod_inv a
+
+/-- The inverse of twice the candidate root takes no inversion but that of 2.
+
+With `r` the candidate inverse root of `a`, the inverse of `a r` is `a r r^2`, and zero for `0`. -/
+theorem inverse_two_mul_sqrtCandidate (a : Fp) :
+    (Fp.ofNat 2 * Fp.sqrtCandidate a).inverse =
+      Fp.sqrtCandidate a * (Fp.invSqrtCandidate a * Fp.invSqrtCandidate a) *
+        (Fp.ofNat 2).inverse := by
+  apply toZMod.injective
+  rw [← mul_invSqrtCandidate, invSqrtCandidate_eq_powNat]
+  simp only [toZMod_inverse, toZMod_mul, toZMod_powNat, mul_inv]
+  rw [mul_comm]
+  congr 1
+  -- `p - 1 = 4 k + 2` for the exponent `k = (p - 3) / 4`.
+  have hk : modulus - 1 = 4 * ((modulus - 3) / 4) + 2 := by decide
+  have hk0 : (modulus - 3) / 4 ≠ 0 := by decide
+  generalize (modulus - 3) / 4 = k at hk hk0
+  generalize toZMod a = x
+  by_cases hx : x = 0
+  · subst hx
+    simp [zero_pow hk0]
+  · -- `(x r) (x r r^2) = x^(4 k + 2) = x^(p - 1) = 1`.
+    have h1 : x * x ^ k * (x * x ^ k * (x ^ k * x ^ k)) = 1 := by
+      rw [← ZMod.pow_card_sub_one_eq_one hx, hk]
+      ring
+    rw [← mul_inv]
+    exact inv_eq_of_mul_eq_one_right h1
 
 /-- The field structure of `ZMod p`, carried to `Fp` by the isomorphism.
 
@@ -423,7 +473,8 @@ theorem ofNat_eq_natCast (n : Nat) : Fp.ofNat n = (n : Fp) := rfl
   map_ofNat toZMod n
 
 /-- The spec's `Fp.powNat` is Mathlib's monoid power. -/
-theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n := rfl
+theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n :=
+  toZMod_injective ((toZMod_powNat a n).trans (map_pow toZMod a n).symm)
 
 /-- The inverse of the specification is the field inverse, and both send `0` to `0`.
 

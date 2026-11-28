@@ -17,7 +17,6 @@ public import EthLib.Cryptography.Proofs.Bls.JacobianLaw
 public import EthLib.Cryptography.Proofs.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G1Msm
 public import EthLib.Cryptography.Proofs.Bls.G1Order
-public import EthLib.Cryptography.Proofs.Bls.G1TorsionCheck
 public import EthLib.Cryptography.Proofs.Bls.G1Cardinality
 public import EthLib.Cryptography.Proofs.Bls.G1Endomorphism
 public import EthLib.Cryptography.Proofs.Bls.G2Endomorphism
@@ -28,6 +27,7 @@ public import EthLib.Cryptography.Proofs.Bls.G2Equiv
 public import EthLib.Cryptography.Proofs.Bls.G2Order
 public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 public import EthLib.Cryptography.Proofs.Bls.G2Compress
+public import EthLib.Cryptography.Proofs.Bls.SqrtRatio
 public import EthLib.Cryptography.Proofs.Bls.HashToCurve
 public import EthLib.Cryptography.Proofs.Bls.ExpandMessage
 public import EthLib.Cryptography.Proofs.Bls.Isogeny
@@ -61,6 +61,7 @@ public import EthLib.Cryptography.Proofs.Bls.G1Rotation
 public import EthLib.Cryptography.Proofs.Bls.G1CofactorPoints
 public import EthLib.Cryptography.Proofs.Bls.G1CofactorClearing
 public import EthLib.Cryptography.Proofs.Bls.MapToCurve
+public import EthLib.Cryptography.Proofs.Bls.HashToCurveAffine
 public import EthLib.Cryptography.Proofs.Bls.Signatures
 public import EthLib.Cryptography.Proofs.Bls.KeyGen
 public import EthLib.Cryptography.Proofs.Bls.KeyDerivation

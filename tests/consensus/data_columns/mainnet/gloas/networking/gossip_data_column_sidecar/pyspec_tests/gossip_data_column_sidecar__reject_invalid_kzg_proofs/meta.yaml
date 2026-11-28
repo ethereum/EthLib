@@ -1,10 +1,10 @@
 topic: data_column_sidecar
 blocks:
 - {block: 
-    block_0xebac5acc92dd93a165d245cffb5838299e70e47813fad4947b8121605c928b7b}
+    block_0x00a92265b4ee452ce8521c7846bd243d6313baa45caef9d71a3ad6f8070f03fa}
 - {block: 
-    block_0x9ea479a1691988c6c2795b858b8749b9d8eebe6086a1fdd59952b41aa1d460ba}
+    block_0x1ec05cd500ecdd6dde5de85aad1c2abe78099efdcf82c1f152111f40a85eea5c}
 messages:
 - {subnet_id: 0, current_time_ms: 12500, message: 
-    data_column_sidecar_0x6101bab950289a57c30d84e6eba82af11a3ef181573dcfb926cad964040b5e79,
+    data_column_sidecar_0x05e066e5cf15a22c42c45c893027fa7464d4664a435779c8d2b083f8e09a7c9b,
   expected: reject, reason: invalid sidecar kzg proofs}

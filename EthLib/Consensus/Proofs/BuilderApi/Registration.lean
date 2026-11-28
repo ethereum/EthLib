@@ -43,18 +43,38 @@ theorem processRegistration_ok_iff {config : Config} {checks : SignatureChecks}
       -- The registration is signed.
       verifyRegistrationSignature config checks signed = .ok true := by
   unfold processRegistration
+  -- Peel off each check in order so failed branches close immediately instead of multiplying.
   cases hv : validatorOfPubkey? state signed.message.pubkey with
-  | none => simp [hv]
+  | none =>
+    simp [hv, throw, throwThe, MonadExceptOf.throw]
   | some validator =>
-    cases he : isEligibleForRegistration state validator <;>
-    by_cases hc : now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 <;>
-    by_cases ht : signed.message.timestamp.toNat ≤ now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat <;>
-    cases hp : registry.find? signed.message.pubkey <;>
-    (try rename_i previous; by_cases ho : previous.message.timestamp ≤ signed.message.timestamp) <;>
-    cases hs : verifyRegistrationSignature config checks signed <;>
-    (try rename_i b; cases b) <;>
-    simp [*, bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure,
-      Except.pure]
+    cases he : isEligibleForRegistration state validator with
+    | false =>
+      simp [hv, he, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+    | true =>
+      by_cases hc : now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64
+      · by_cases ht : signed.message.timestamp.toNat ≤ now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat
+        · cases hp : registry.find? signed.message.pubkey with
+          | none =>
+            cases hs : verifyRegistrationSignature config checks signed with
+            | error fault =>
+              simp [hv, he, hc, ht, hp, throw, throwThe, MonadExceptOf.throw]
+            | ok b =>
+              cases b <;>
+                simp [hv, he, hc, ht, hp, throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+          | some previous =>
+            by_cases ho : previous.message.timestamp ≤ signed.message.timestamp
+            · cases hs : verifyRegistrationSignature config checks signed with
+              | error fault =>
+                simp [hv, he, hc, ht, hp, ho, throw, throwThe, MonadExceptOf.throw]
+              | ok b =>
+                cases b <;>
+                  simp [hv, he, hc, ht, hp, ho, throw, throwThe, MonadExceptOf.throw, pure,
+                    Except.pure]
+            · simp [hv, he, hc, ht, hp, ho, bind, Except.bind, throw, throwThe,
+                MonadExceptOf.throw]
+        · simp [hv, he, hc, ht, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+      · simp [hv, he, hc, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A registration that passes carries the signature of its key. -/
 theorem processRegistration_signature {config : Config} {checks : SignatureChecks}

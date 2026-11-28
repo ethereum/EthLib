@@ -55,8 +55,8 @@ LAST = {"blob_sidecar": "electra"}
 
 # The release archives that hold the cases.
 ARCHIVES = {
-    "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
-    "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
+    "minimal": "consensus-specs/v1.7.0-beta.5/minimal",
+    "mainnet": "consensus-specs/v1.7.0-beta.5/mainnet",
 }
 
 _YAML = YAML(typ="safe")
@@ -127,7 +127,7 @@ class CaseStore(TypedDict):
     anchor_block: bytes
     verify: bool
     config: dict[str, Any] | None
-    blocks: list[tuple[int, int | None, bytes, bytes]]
+    blocks: list[tuple[int, int | None, bytes, bytes, bool]]
     finalized: tuple[int, bytes] | None
 
 
@@ -139,13 +139,16 @@ def case_store(preset: str, fork: str, case: Path, meta: dict) -> CaseStore:
             _STATUSES.get(entry.get("payload_status")),
             read(case, entry["block"]),
             read(case, entry["payload"]) if "payload" in entry else b"",
+            entry.get("late", False),
         )
         for entry in meta["blocks"][1:]
     ]
     # Kind 3 gives the anchor again, for the envelope of its payload.
     anchor = meta["blocks"][0]
     if "payload" in anchor:
-        blocks.insert(0, (3, None, read(case, anchor["block"]), read(case, anchor["payload"])))
+        blocks.insert(
+            0, (3, None, read(case, anchor["block"]), read(case, anchor["payload"]), False)
+        )
     finalized = meta.get("finalized_checkpoint")
     if finalized is not None:
         # A checkpoint names its root, or the signed block whose message has the root.
@@ -341,10 +344,14 @@ def test_message_of_another_shape():
     assert info.value.code == 0
 
 
-def test_block_of_another_shape():
+@pytest.mark.parametrize(
+    "block", [(0, None), (0, None, b"", None, False, 0)], ids=["too short", "too long"]
+)
+def test_block_of_another_shape(block: tuple):
     with raises(
         consensus.ForkChoiceError,
-        "a block is (kind, status, bytes) or (kind, status, bytes, envelope)",
+        "a block is (kind, status, bytes), (kind, status, bytes, envelope) or "
+        "(kind, status, bytes, envelope, late)",
     ) as info:
         consensus.gossip_validation(
             "minimal",
@@ -353,7 +360,7 @@ def test_block_of_another_shape():
             b"",
             "voluntary_exit",
             [],
-            blocks=[(0, None)],  # ty: ignore[invalid-argument-type]
+            blocks=[block],
         )
     assert info.value.code == 0
 

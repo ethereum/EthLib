@@ -58,7 +58,7 @@ def test_phase0_block_at_version_2() -> None:
 #
 # File: configs/mainnet.yaml
 # Repository: ethereum/consensus-specs
-# Commit: aa16bb4c156184e9548a997d53efaf2a228a6304
+# Commit: 36888ee87b0faa6ad7804b017a0184e8e6e6a1c6
 MAINNET_DIGEST_FORKS = [
     (0, "phase0"),
     (74240, "altair"),

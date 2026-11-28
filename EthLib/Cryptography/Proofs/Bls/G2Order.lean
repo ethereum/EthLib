@@ -16,7 +16,7 @@ The curve and the subgroup follow draft-04, §1.3 and Appendix A.
 The twist also matches draft-07, §4.2.1.
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-07>
 
-- The kernel checks `[r] g_2 = 0` in the model of `Fp`, by double and add on a fuel argument.
+- The kernel checks `[r] g_2 = 0` in the model of `Fp`, by running the scalar product.
 - Since `r` is prime and `g_2 ≠ 0`, the order of `g_2` is exactly `r`.
 - The map `s ↦ [s] g_2` is linear in `s` modulo `r`.
 -/
@@ -55,24 +55,23 @@ The listed definitions of points are unfolded, and the map is pushed down to the
 So the kernel computes in the model, on natural numbers. -/
 macro "decide_g2_at_model" "[" ids:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
   `(tactic| (simp only [isInfinity_model, projectiveEq_model]
-             simp only [map_mulNatAux, map_add_fn, map_neg_fn, map_add, map_neg, map_double,
+             simp only [map_mulNat, map_add_fn, map_neg_fn, map_add, map_neg, map_double,
                map_mk, map_generator, map_zero, Fp2.map_mk, Fp2.map_one, Fp2.map_zero,
                Fp.toModel_ofNat, Fp.toModel_zero, Fp.toModel_one, $ids,*]
              decide +kernel))
 
 /-- `[r]g_2` is the point at infinity.
 
-The kernel runs the ladder in the model, 255 doublings and additions on 381-bit integers. -/
+The kernel runs the scalar product in the model: at most 255 doublings and 60 additions. -/
 theorem modulus_smul_generator :
     Fr.modulus • toPoint generator = 0 := by
   rw [← toPoint_mulNat valid_generator]
   refine Point.toAffine_of_Z_eq_zero ?_
   rw [rep_z]
   apply (isZero_iff (a := (generator.mulNat Fr.modulus).z)).mp
-  rw [← mulNatAux_eq 256 generator Fr.modulus (by decide)]
-  have h : (mulNatAux 256 (generator : G2 Fp.Model) Fr.modulus).isInfinity = true := by
+  have h : ((generator : G2 Fp.Model).mulNat Fr.modulus).isInfinity = true := by
     decide +kernel
-  rw [← map_generator Fp.toModel, ← map_mulNatAux, map_isInfinity,
+  rw [← map_generator Fp.toModel, ← map_mulNat, map_isInfinity,
     show ∀ p : G2, p.isInfinity = p.z.isZero from fun _ => rfl] at h
   exact h
 

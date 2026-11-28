@@ -447,8 +447,7 @@ A secret that is not a BLS secret key fails too.
 -/
 def checkPubkey (secret : ByteArray) (metadata : Metadata) : Bool :=
   match metadata.pubkey, Bls.Signatures.SecretKey.fromBytes secret with
-  -- Comparing the bytes keeps the kernel from evaluating the derived key in the round-trip proof.
-  | some pubkey, .ok key => pubkey.bytes == (Bls.Signatures.skToPk key).bytes
+  | some pubkey, .ok key => pubkey == Bls.Signatures.skToPk key
   | _, _ => false
 
 end EthLib.Cryptography.Keystore

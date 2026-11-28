@@ -68,7 +68,9 @@ def Fp12.mulLine (f : Fp12 F) (c0 c2 c3 : Fp2 F) : Fp12 F :=
   -- The product of `Fp12`: `f0 l0 + v f1 l1`, and `(f0 + f1)(l0 + l1) - f0 l0 - f1 l1`.
   ⟨t0 + t1.mulByV, (f.c0 + f.c1).mulBy01 c0 (c2 + c3) - t0 - t1⟩
 
-/-- Doubling step: `(T, f) ↦ (2T, f^2 l)`, with `l` the tangent at `T`, at `(xp, yp)`.
+/-- Doubling step: `(T, f) ↦ (2T, f l)`, with `l` the tangent at `T`, at `(xp, yp)`.
+
+The loop squares `f` once per bit, before the steps of all its pairs.
 
 The line is the line derived above the line value, times `c w^3`.
 
@@ -90,7 +92,9 @@ def millerDouble (T : G2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
   let c2 := -(xx3 * zz).mulFp xp
   let c3 := ((T.y + T.y) * (zz * T.z)).mulFp yp
   -- A.2: `f := f^2 * g` and `T := T + T`, with `g` the tangent line at `T`, evaluated at `P`.
-  (T.double, f.square.mulLine c0 c2 c3)
+  --
+  -- The square `f^2` is taken by the loop.
+  (T.double, f.mulLine c0 c2 c3)
 
 /-- Addition step: `(T, f) ↦ (T + Q, f l)`, with `l` the line through `T` and `Q = (xq, yq)`.
 
@@ -115,28 +119,60 @@ def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12
   -- A.2: `f := f * g` and `T := T + Q`, with `g` the line through `T` and `Q`, evaluated at `P`.
   (G2.add T ⟨xq, yq, Fp2.one⟩, f.mulLine c0 c2 c3)
 
-/-- Walk bits `n - 1` down to `0` of `s` from `(T, f)`.
+/-- A pair of the Miller loop: `Q = (xq, yq)` on the twist, `P = (xp, yp)`, and the point `T`. -/
+structure MillerState (F : Type) [BaseField F] where
+  /-- The affine point `Q` of the twist. -/
+  q : Fp2 F × Fp2 F
+  /-- The affine point `P` of `G1`. -/
+  p : F × F
+  /-- The running point `T`, which the loop keeps a multiple of `Q`. -/
+  t : G2 F
 
-At each bit it doubles `T`, then adds `Q` if the bit is set. -/
-def millerSteps (s : Nat) (xq yq : Fp2 F) (xp yp : F) : Nat → G2 F → Fp12 F → Fp12 F
+/-- One bit of the loop for each pair, after the square of `f`.
+
+Each pair doubles its `T` and multiplies `f` by the tangent.
+
+When `add` holds, it then adds `Q` and multiplies `f` by the chord. -/
+def millerLines (add : Bool) : List (MillerState F) → Fp12 F → List (MillerState F) × Fp12 F
+  | [], f => ([], f)
+  | x :: xs, f =>
+    let (t, f) := millerDouble x.t x.p.1 x.p.2 f
+    let (t, f) := if add then millerAdd t x.q.1 x.q.2 x.p.1 x.p.2 f else (t, f)
+    let (xs, f) := millerLines add xs f
+    (⟨x.q, x.p, t⟩ :: xs, f)
+
+/-- Walk bits `n - 1` down to `0` of `s`, for all pairs at once.
+
+At each bit it squares `f` once, then doubles each `T`, and adds its `Q` if the bit is set. -/
+def millerSteps (s : Nat) : Nat → List (MillerState F) → Fp12 F → Fp12 F
   | 0, _, f => f
-  | n + 1, T, f =>
+  | n + 1, xs, f =>
     -- A.2: the loop runs `i` from `L - 1` down to 0; here `i = n`.
-    let (T, f) := millerDouble T xp yp f
+    --
+    -- A.2: `f := f^2`.
+    --
+    -- Here one square serves all pairs, since `(f g)^2 = f^2 g^2`.
+    --
     -- A.2: the addition step runs when `c_i = 1`, with `c_i` the bit `n` of `s`.
-    let (T, f) := if (s >>> n) &&& 1 = 1 then millerAdd T xq yq xp yp f else (T, f)
-    millerSteps s xq yq xp yp n T f
+    let (xs, f) := millerLines ((s >>> n) &&& 1 = 1) xs f.square
+    millerSteps s n xs f
 
-/-- The Miller loop of `s`, for the affine points `Q = (xq, yq)` of the twist and `P = (xp, yp)`.
+/-- The product of the Miller loops of `s` for the pairs `(Q, P)` of affine points.
+
+The loops share their squares, so the product costs one square of `Fp12` per bit.
 
 The initial `T = Q` and `f = 1` consume the leading bit of `s`.
 
 So the steps start one bit below it.
 
 `Nat.log2 0 = 0`, so `s = 0` takes no steps. -/
-def millerLoop (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F) : Fp12 F :=
+def millerLoopAll (s : Nat) (pairs : List ((Fp2 F × Fp2 F) × (F × F))) : Fp12 F :=
   -- A.2: `f := 1` and `T := Q`, then the loop from `L - 1`, with `L` the top bit index of `s`.
-  millerSteps s q.1 q.2 p.1 p.2 s.log2 ⟨q.1, q.2, Fp2.one⟩ Fp12.one
+  millerSteps s s.log2 (pairs.map fun qp => ⟨qp.1, qp.2, ⟨qp.1.1, qp.1.2, Fp2.one⟩⟩) Fp12.one
+
+/-- The Miller loop of `s`, for the affine points `Q = (xq, yq)` of the twist and `P = (xp, yp)`. -/
+def millerLoop (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F) : Fp12 F :=
+  millerLoopAll s [(q, p)]
 
 /-! ## Final exponentiation -/
 
@@ -176,11 +212,15 @@ def finalExponentiation (f : Fp12 F) : Fp12 F :=
   -- The exponents `|x|` and `(|x| + 1) / 3` have at most 64 bits.
   --
   -- `a = m^((x - 1)^2 / 3)`, which is `m^((|x| + 1)^2 / 3)`, since `3` divides `|x| + 1`.
-  let a := (m.cyclotomicPow ((blsX + 1) / 3)).cyclotomicPow (blsX + 1)
+  --
+  -- The powers by `|x|` and `|x| + 1`, with 6 and 7 set bits, square on four coefficients only.
+  --
+  -- `(|x| + 1) / 3` has 28 set bits, too many to decompress each power, so it squares in full.
+  let a := (m.cyclotomicPow ((blsX + 1) / 3)).compressedPow (blsX + 1)
   -- `b = a^(x + p)`, which is `a^p * conj(a^|x|)`.
-  let b := a.frobenius * (a.cyclotomicPow blsX).conjugate
+  let b := a.frobenius * (a.compressedPow blsX).conjugate
   -- `c = b^(x^2 + p^2 - 1)`, which is `(b^|x|)^|x| * b^(p^2) * conj(b)`.
-  let c := (b.cyclotomicPow blsX).cyclotomicPow blsX * b.frobenius.frobenius * b.conjugate
+  let c := (b.compressedPow blsX).compressedPow blsX * b.frobenius.frobenius * b.conjugate
   -- `m^h = c * m`, the `+ 1` of `h`.
   c * m
 
@@ -215,10 +255,15 @@ def pairing (P : G1 F) (Q : G2 F) : Fp12 F :=
 
 /-- Returns `true` iff `∏ e(P_i, Q_i) = 1`.
 
-The factors of the pairs are multiplied first, in the order of the pairs.
+One Miller loop runs over the pairs without a point at infinity.
 
-Then one final exponentiation applies to the whole product. -/
+A pair with a point at infinity adds no factor.
+
+Then one final exponentiation applies to the conjugate of its product. -/
 def pairingCheck (pairs : Array (G1 F × G2 F)) : Bool :=
-  (finalExponentiation ((pairs.filterMap pairFactor).foldl (· * ·) Fp12.one)).isOne
+  -- The conjugate of the product is the product of the factors of the pairs.
+  let finite := pairs.toList.filterMap fun pq =>
+    if pq.1.isInfinity || pq.2.isInfinity then none else some (pq.2.toAffine, pq.1.toAffine)
+  (finalExponentiation (millerLoopAll blsX finite).conjugate).isOne
 
 end EthLib.Cryptography.Bls

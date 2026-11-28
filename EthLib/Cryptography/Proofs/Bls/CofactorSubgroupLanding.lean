@@ -30,7 +30,7 @@ private noncomputable def landingKernel : AddSubgroup G2.curve.toAffine.Point :=
   (Fr.modulus • cofactorHom).ker
 
 private theorem mem_landing_of_clear_zero {P : G2} (hP : G2.Valid P)
-    (hc : (clearAux P).isInfinity = true) : G2.toPoint P ∈ landingKernel := by
+    (hc : (clearCofactor P).isInfinity = true) : G2.toPoint P ∈ landingKernel := by
   change Fr.modulus • cofactorHom (G2.toPoint P) = 0
   rw [cofactor_zero_cert P hP hc, nsmul_zero]
 

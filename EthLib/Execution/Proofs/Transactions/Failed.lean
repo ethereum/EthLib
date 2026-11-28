@@ -133,17 +133,17 @@ theorem createdAccounts_foldlM_applyAuthorization {chainId : Nat} :
 
 /-! ## The frame -/
 
-/-- A creation that ends with an error reads as the state it is sent from, at every address.
+/-- A creation that ends with an error reads as the state it is sent from, at every fork.
 
-That holds for the account, every word of storage and every word of transient storage.
+That holds for each account and each word of storage and transient storage.
 
-It holds at every fork, whatever the init code. -/
-theorem processCreateMessage_sameOutside_of_error [LawfulGasMeter Meter]
+It has the code of that state at each code hash. -/
+theorem processCreateMessage_reads_of_error [LawfulGasMeter Meter]
     {message : Message fork} {state : State.TransactionState} {substate : Substate}
     {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (h : processCreateMessage fork message state substate meter held = .ok ended)
     (herr : ended.val.error.isSome = true) :
-    SameOutside [] state ended.val.state := by
+    State.TransactionState.ReadsAs ended.val.state state := by
   rw [processCreateMessage_unfold] at h
   obtain ⟨prepared, hp, h⟩ := bind_ok_iff.mp h
   obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
@@ -157,7 +157,10 @@ theorem processCreateMessage_sameOutside_of_error [LawfulGasMeter Meter]
   simp only at herr ⊢
   unfold depositCode at hdeposit
   dsimp only at hdeposit
-  have restored := State.TransactionState.sameOutside_restoreTxState hparent
+  -- Each way the deposit fails rolls back to the snapshot, code included.
+  --
+  -- The one way that writes the code ends with no error.
+  have restored := State.TransactionState.readsAs_restoreTxState hparent
   split at hdeposit
   · cases hdeposit
     exact restored
@@ -181,6 +184,19 @@ theorem processCreateMessage_sameOutside_of_error [LawfulGasMeter Meter]
   obtain ⟨_, -, hdeposit⟩ := bind_ok_iff.mp hdeposit
   cases hdeposit
   exact absurd herr hok
+
+/-- A creation that ends with an error reads as the state it is sent from, at every address.
+
+That holds for the account, every word of storage and every word of transient storage.
+
+It holds at every fork, whatever the init code. -/
+theorem processCreateMessage_sameOutside_of_error [LawfulGasMeter Meter]
+    {message : Message fork} {state : State.TransactionState} {substate : Substate}
+    {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
+    (h : processCreateMessage fork message state substate meter held = .ok ended)
+    (herr : ended.val.error.isSome = true) :
+    SameOutside [] state ended.val.state :=
+  (processCreateMessage_reads_of_error h herr).1
 
 /-- The first frame of a transaction reads as the state before it, but at the authorities.
 
@@ -550,63 +566,6 @@ theorem processMessageCall_reads_of_error [LawfulGasMeter Meter] {chainId : Nat}
         ∃ first, prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
           .ok first ∧ SameOutside [] first.state output.state ∧
           ∀ codeHash, output.state.getCode codeHash = first.state.getCode codeHash) := by
-  have hcode_create : ∀ {m : Message fork} {s : State.TransactionState} {sub : Substate}
-      {meter : Meter} {held : GasMeter.gasHeld meter ≤ m.gas} {ended},
-      processCreateMessage fork m s sub meter held = .ok ended →
-      ended.val.error.isSome = true →
-      ∀ codeHash, ended.val.state.getCode codeHash = s.getCode codeHash := by
-    intro m s sub meter held ended hrun herr' codeHash
-    rw [processCreateMessage_unfold] at hrun
-    obtain ⟨prepared, hp, hrun⟩ := bind_ok_iff.mp hrun
-    obtain ⟨⟨evm, used⟩, hm, hrun⟩ := bind_ok_iff.mp hrun
-    have hparent : evm.state.parent = s.parent :=
-      (parent_processMessage hm).trans (parent_prepareCreation hp)
-    dsimp only at hrun
-    split at hrun
-    · cases hrun
-    rename_i after hdeposit
-    cases hrun
-    simp only at herr' ⊢
-    unfold depositCode at hdeposit
-    dsimp only at hdeposit
-    have restored := getCode_restoreTxState hparent codeHash
-    split at hdeposit
-    · cases hdeposit
-      exact restored
-    rename_i hok
-    split at hdeposit
-    · cases hdeposit
-      exact restored
-    split at hdeposit
-    · cases hdeposit
-      exact restored
-    split at hdeposit
-    · cases hdeposit
-      split
-      · exact restored
-      · rename_i hfork
-        simp only [hfork, ↓reduceIte] at herr'
-        exact absurd herr' hok
-    split at hdeposit
-    · cases hdeposit
-      exact restored
-    obtain ⟨_, -, hdeposit⟩ := bind_ok_iff.mp hdeposit
-    cases hdeposit
-    exact absurd herr' hok
-  have hcode_call : ∀ {m : Message fork} {s : State.TransactionState} {sub : Substate}
-      {meter : Meter} {held : GasMeter.gasHeld meter ≤ m.gas} {ended},
-      processMessage fork m s sub meter held = .ok ended →
-      ended.val.error.isSome = true →
-      ∀ codeHash, ended.val.state.getCode codeHash = s.getCode codeHash := by
-    intro m s sub meter held ended hrun herr' codeHash
-    have hp := parent_processMessage hrun
-    obtain ⟨last, hl⟩ := exists_rollbackOnError_processMessage hrun
-    rw [hl] at herr' hp ⊢
-    unfold rollbackOnError at herr' hp ⊢
-    split at herr'
-    · simp only [‹last.error.isSome = true›, ↓reduceIte] at hp ⊢
-      exact getCode_restoreTxState hp codeHash
-    · exact absurd herr' ‹_›
   rw [processMessageCall_unfold] at hout
   split at hout
   · rename_i e read hprep
@@ -621,8 +580,7 @@ theorem processMessageCall_reads_of_error [LawfulGasMeter Meter] {chainId : Nat}
       unfold CallOutput.ofFrame at herr ⊢
       split
       · rename_i herr'
-        exact ⟨rfl, rfl, rfl, .inr ⟨first, hfirst,
-          processCreateMessage_sameOutside_of_error hrun herr', hcode_create hrun herr'⟩⟩
+        exact ⟨rfl, rfl, rfl, .inr ⟨first, hfirst, processCreateMessage_reads_of_error hrun herr'⟩⟩
       · rename_i herr'
         simp [herr'] at herr
     · obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp hout
@@ -630,8 +588,7 @@ theorem processMessageCall_reads_of_error [LawfulGasMeter Meter] {chainId : Nat}
       unfold CallOutput.ofFrame at herr ⊢
       split
       · rename_i herr'
-        exact ⟨rfl, rfl, rfl, .inr ⟨first, hfirst,
-          processMessage_sameOutside_of_error hrun herr', hcode_call hrun herr'⟩⟩
+        exact ⟨rfl, rfl, rfl, .inr ⟨first, hfirst, processMessage_reads_of_error hrun herr'⟩⟩
       · rename_i herr'
         simp [herr'] at herr
 

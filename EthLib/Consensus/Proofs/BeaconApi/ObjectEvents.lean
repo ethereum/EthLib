@@ -51,10 +51,12 @@ theorem receiveGossip_accept {context : SubmitContext preset fork} {seen after :
     {message : GossipMessage preset fork} {outcome : ValidationResult}
     {event : ObjectEvent preset fork} {rest : List (ObjectEvent preset fork)}
     (received : receiveGossip context seen message = .ok (outcome, after, event :: rest)) :
-    outcome = .accept ∧ validateGossipMessage context.config context.checks context.setup seen
+    outcome = .accept ∧ validateGossipMessage context.config context.checks context.setup
+        context.blockHashOf seen
       context.store context.statuses context.currentTimeMs message = .ok (.accept, after) := by
   unfold receiveGossip at received
-  rcases gossip : validateGossipMessage context.config context.checks context.setup seen
+  rcases gossip : validateGossipMessage context.config context.checks context.setup
+      context.blockHashOf seen
     context.store context.statuses context.currentTimeMs message with error | ⟨judged, keys⟩
   · simp [gossip, bind, Except.bind] at received
   · rw [gossip] at received
@@ -74,7 +76,8 @@ theorem receiveGossip_of_pass {context : SubmitContext preset fork} {seen after 
     receiveGossip context seen message =
       ((objectEventOf message).mapError .ssz).map fun event => (.accept, after, event.toList) := by
   unfold messageFailure at passes
-  rcases gossip : validateGossipMessage context.config context.checks context.setup seen
+  rcases gossip : validateGossipMessage context.config context.checks context.setup
+      context.blockHashOf seen
     context.store context.statuses context.currentTimeMs message with error | ⟨judged, keys⟩
   · simp [gossip] at passes
   · simp only [gossip, Prod.mk.injEq] at passes

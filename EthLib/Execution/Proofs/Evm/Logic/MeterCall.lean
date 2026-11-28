@@ -724,20 +724,6 @@ theorem AsksMore.popCallOperands {low : Evm fork Nat} {high : Evm fork StateGasM
         congrArg Evm.gas (popCallOperands_eq_ok hq)]
       exact ahead
 
-/-- The access to a delegate keeps the gas. -/
-theorem gas_accessDelegation {Meter : Type} [GasMeter Meter] {evm after : Evm fork Meter}
-    {address : Base.Address} {known : Nat} {callee : Callee}
-    (h : Evm.accessDelegation evm address known = .ok (callee, after)) : after.gas = evm.gas := by
-  obtain ⟨code, -, h⟩ := EthLib.Base.bind_ok_iff.mp h
-  dsimp only at h
-  split at h
-  · obtain ⟨_, -, h⟩ := EthLib.Base.bind_ok_iff.mp h
-    obtain ⟨_, -, h⟩ := EthLib.Base.bind_ok_iff.mp h
-    cases h
-    exact (accessAddress_of_stack _ _ _).2
-  · cases h
-    rfl
-
 /-! ## The step of a call -/
 
 /-- The step of a call under one counter lifts to a frame that asks for more gas, within its excess.

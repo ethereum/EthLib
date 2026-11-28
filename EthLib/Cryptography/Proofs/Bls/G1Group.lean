@@ -109,7 +109,7 @@ theorem toPoint_add {P Q : G1} (hP : Valid P) (hQ : Valid Q) :
 theorem valid_mulNat {P : G1} (h : Valid P) (k : Nat) : Valid (mulNat P k) :=
   Law.valid_mulNat Fp.embedding 4 two_ne_zero' h k
 
-/-- The spec's double-and-add scalar multiplication is Mathlib's `ℕ` scalar action on the group.
+/-- The spec's scalar multiplication is Mathlib's `ℕ` scalar action on the group.
 
 The group is the curve group. -/
 theorem toPoint_mulNat {P : G1} (h : Valid P) (k : Nat) :
@@ -123,6 +123,15 @@ theorem toPoint_mul {P : G1} (h : Valid P) (s : Fr) :
 
 theorem valid_mul {P : G1} (h : Valid P) (s : Fr) : Valid (mul P s) :=
   valid_mulNat h s.val
+
+theorem valid_mulAdd {P Q : G1} (hP : Valid P) (hQ : Valid Q) (k l : Fr) :
+    Valid (mulAdd P k Q l) :=
+  Law.valid_mulAdd Fp.embedding 4 two_ne_zero' hP hQ k l
+
+/-- Two products with shared doublings give `k P + l Q` in the group. -/
+theorem toPoint_mulAdd {P Q : G1} (hP : Valid P) (hQ : Valid Q) (k l : Fr) :
+    toPoint (mulAdd P k Q l) = k.val • toPoint P + l.val • toPoint Q :=
+  Law.toPoint_mulAdd Fp.embedding 4 two_ne_zero' hP hQ k l
 
 /-- The chain `[t^2] ([t^2] P - P) + P` keeps a valid point valid. -/
 theorem valid_mulModulus {P : G1} (h : Valid P) : Valid (mulModulus P) :=

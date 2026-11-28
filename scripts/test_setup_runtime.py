@@ -2,12 +2,15 @@
 
 import ast
 import json
+import os
 import re
 import tempfile
 import unittest
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -23,11 +26,16 @@ class SetupRuntimeTests(unittest.TestCase):
         helpers: list[ast.stmt] = [
             node
             for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "_collect_lean_objects"
+            if isinstance(node, ast.FunctionDef)
+            and node.name
+            in ("_collect_lean_objects", "_should_run_lake", "_enable_parallel_compile")
         ]
-        self.assertEqual(len(helpers), 1)
+        self.assertEqual(len(helpers), 3)
         self.namespace: dict[str, Any] = {
             "json": json,
+            "os": os,
+            "Any": Any,
+            "ThreadPoolExecutor": ThreadPoolExecutor,
             "Path": Path,
             "REPO_ROOT": self.root,
             "LAKE_IR": self.ir,
@@ -121,6 +129,39 @@ class SetupRuntimeTests(unittest.TestCase):
                 message = f"unsupported or mismatched Lean import metadata: {metadata}"
                 with self.assertRaisesRegex(RuntimeError, rf"\A{re.escape(message)}\Z"):
                     self.collect()
+
+    def test_skip_lake_env_controls_lake_invocation(self) -> None:
+        should_run = self.namespace["_should_run_lake"]
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(should_run())
+        with patch.dict(os.environ, {"ETHLIB_SKIP_LAKE": "0"}, clear=True):
+            self.assertTrue(should_run())
+        with patch.dict(os.environ, {"ETHLIB_SKIP_LAKE": "1"}, clear=True):
+            self.assertFalse(should_run())
+
+    def test_parallel_compile_dispatches_every_source_object(self) -> None:
+        compiled: list[tuple[str, str]] = []
+
+        class FakeCompiler:
+            def _setup_compile(self, output_dir, macros, include_dirs, sources, depends, post):
+                objects = [f"{s}.o" for s in sources]
+                build = {f"{s}.o": (s, ".c") for s in sources}
+                return macros, objects, post, [], build
+
+            def _get_cc_args(self, pp_opts, debug, pre):
+                return []
+
+            def _compile(self, obj, src, ext, cc_args, post, pp_opts):
+                compiled.append((obj, src))
+
+            def compile(self, *args, **kwargs):
+                raise AssertionError("sequential compile must be replaced")
+
+        compiler = FakeCompiler()
+        self.namespace["_enable_parallel_compile"](compiler, 4)
+        result = compiler.compile(["a.c", "b.c", "c.c"])
+        self.assertEqual(result, ["a.c.o", "b.c.o", "c.c.o"])
+        self.assertEqual(sorted(compiled), [("a.c.o", "a.c"), ("b.c.o", "b.c"), ("c.c.o", "c.c")])
 
 
 if __name__ == "__main__":

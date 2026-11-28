@@ -1,10 +1,10 @@
 topic: data_column_sidecar
 blocks:
 - {block: 
-    block_0x145e890b76c2dceda51d95c60002772b9246660612c5bb44dfbe1d6914d50f03}
+    block_0x3c3e98d73e843eface0a30b3e95dc2744641284414eb8aba51a98d38c90500d9}
 - {block: 
-    block_0x6eaa3b30166405ab3d538bb94e040a1141dda999e64689cb4af0656114e14732}
+    block_0xd59d1aa1c459697be813bba58bbac170579bb5e3ed8d7ba7ea3a659d80d95c10}
 messages:
 - {subnet_id: 0, current_time_ms: 24500, message: 
-    data_column_sidecar_0x8bfd3bde30329ce6f5426100c18031097435edb20c29ee21bfe975a33c96caa8,
+    data_column_sidecar_0x36f5f1a7e446f4d7258ea955fefc6c55dd60aff36ea76c097374be2241c78ed5,
   expected: reject, reason: sidecar's slot does not match block's slot}

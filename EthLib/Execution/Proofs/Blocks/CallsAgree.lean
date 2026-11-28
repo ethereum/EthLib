@@ -4,13 +4,14 @@ public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Blocks.SystemCall
 public import EthLib.Execution.Blocks.Withdrawal
 public import EthLib.Execution.Proofs.Transactions.Noninterference
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the system calls and withdrawals depend only on what they read
 
-Run a system call, or the withdrawals, on two block states that agree on four sets.
+Run a system call, or the withdrawals, on two block states that agree on three sets.
 
-The sets name accounts, whole storages, slots and code hashes.
+The sets name accounts, slots and code hashes.
 
 When the first run ends with every read in the sets, the second gives the same output.
 
@@ -32,7 +33,7 @@ open EthLib.Execution.State.TransactionState (AgreesOn)
 open EthLib.Execution.Transactions (CallOutput prepareFirstFrame processMessageCall
   processMessageCall_unfold)
 
-variable {fork : Fork} {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+variable {fork : Fork} {account : Address → Prop} {slot : Address → Bytes32 → Prop}
   {code : Hash32 → Prop}
 
 /-! ## System calls -/
@@ -95,7 +96,7 @@ private theorem mem_accountReads_processMessageCall {Meter : Type} [GasMeter Met
 theorem mem_accountReads_systemCall {env : BlockEnvironment fork} {block : BlockState}
     {target : Address} {data : ByteArray} {out : SystemCallOutput}
     (h : systemCall env block target data = .ok out) : target ∈ out.state.accountReads := by
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨o, ho, h⟩ := bind_ok_iff.mp h
     cases h
@@ -107,14 +108,14 @@ The two outputs differ only in their states, which agree.
 
 The sets must cover the first block state. -/
 theorem systemCall_agrees {env : BlockEnvironment fork} {block other : BlockState}
-    {target : Address} {data : ByteArray} (covers : CoversBlock block account allStorage code)
-    (hagree : BlockState.AgreesOn account allStorage slot code block other)
+    {target : Address} {data : ByteArray} (covers : CoversBlock block account code)
+    (hagree : BlockState.AgreesOn account slot code block other)
     {out : SystemCallOutput} (h : systemCall env block target data = .ok out)
     (hreads : ReadsIn account slot out.state) :
     ∃ out', systemCall env other target data = .ok out' ∧
       out' = { out with state := out'.state } ∧
-      AgreesOn account allStorage slot code out.state out'.state := by
-  unfold systemCall at h ⊢
+      AgreesOn account slot code out.state out'.state := by
+  rw [systemCall_unfold] at h ⊢
   split at h <;>
   · rename_i hfork
     simp only [hfork, ↓reduceIte]
@@ -122,8 +123,8 @@ theorem systemCall_agrees {env : BlockEnvironment fork} {block other : BlockStat
     cases h
     -- A system call runs one message with no authorization, so the result for a message applies.
     obtain ⟨o', ho', hsame, hag⟩ := Transactions.processMessageCall_agrees covers
-      (AgreesOn.ofBlock hagree) rfl (CodeOrigin.ofBlock block)
-      (TransactionState.NoNewCandidate.ofBlock block) (fun _ ht => by cases ht; rfl) ho hreads
+      (AgreesOn.ofBlock hagree) rfl (CodeOrigin.ofBlock block) (fun _ ht => by cases ht; rfl) ho
+      hreads
     generalize o'.state = s' at hsame hag
     subst hsame
     exact ⟨_, by rw [ho']; rfl, rfl, hag⟩
@@ -136,14 +137,14 @@ The two outputs differ only in their states, which agree.
 
 The sets must cover the first block state. -/
 theorem checkedSystemCall_agrees {env : BlockEnvironment fork} {block other : BlockState}
-    {target : Address} {data : ByteArray} (covers : CoversBlock block account allStorage code)
-    (hagree : BlockState.AgreesOn account allStorage slot code block other)
+    {target : Address} {data : ByteArray} (covers : CoversBlock block account code)
+    (hagree : BlockState.AgreesOn account slot code block other)
     {out : SystemCallOutput} (h : checkedSystemCall env block target data = .ok out)
     (hreads : ReadsIn account slot out.state) :
     ∃ out', checkedSystemCall env other target data = .ok out' ∧
       out' = { out with state := out'.state } ∧
-      AgreesOn account allStorage slot code out.state out'.state := by
-  unfold checkedSystemCall at h ⊢
+      AgreesOn account slot code out.state out'.state := by
+  rw [checkedSystemCall_unfold] at h ⊢
   obtain ⟨c, hc, h⟩ := bind_ok_iff.mp h
   dsimp only at h
   split at h
@@ -189,11 +190,11 @@ private theorem readsLe_foldlM_createEther (amount : Withdrawal → U256) :
 /-- Credits with their reads in the sets give an agreeing state on an agreeing state. -/
 private theorem foldlM_createEther_agrees (amount : Withdrawal → U256) :
     ∀ (withdrawals : List Withdrawal) {tx other tx' : TransactionState},
-      AgreesOn account allStorage slot code tx other →
+      AgreesOn account slot code tx other →
       withdrawals.foldlM (fun tx w => tx.createEther fork w.address (amount w)) tx = .ok tx' →
       ReadsIn account slot tx' →
       ∃ other', withdrawals.foldlM (fun tx w => tx.createEther fork w.address (amount w))
-          other = .ok other' ∧ AgreesOn account allStorage slot code tx' other'
+          other = .ok other' ∧ AgreesOn account slot code tx' other'
   | [], _, _, _, hagree, h, _ => by
     cases h
     exact ⟨_, rfl, hagree⟩
@@ -216,11 +217,11 @@ private theorem foldlM_createEther_agrees (amount : Withdrawal → U256) :
 
 /-- Withdrawals with their reads in the sets give an agreeing state on an agreeing block state. -/
 theorem withdrawalState_agrees {block other : BlockState} {withdrawals : List Withdrawal}
-    (hagree : BlockState.AgreesOn account allStorage slot code block other)
+    (hagree : BlockState.AgreesOn account slot code block other)
     {tx : TransactionState} (h : withdrawalState fork block withdrawals = .ok tx)
     (hreads : ReadsIn account slot tx) :
     ∃ tx', withdrawalState fork other withdrawals = .ok tx' ∧
-      AgreesOn account allStorage slot code tx tx' :=
+      AgreesOn account slot code tx tx' :=
   -- The withdrawals only credit balances, and each credit reads the account it credits.
   foldlM_createEther_agrees _ withdrawals (AgreesOn.ofBlock hagree) h hreads
 

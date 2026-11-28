@@ -88,7 +88,7 @@ theorem stepRules_hasCodes :
     hasCodes_of_getCode h.tracker.getCode fun address => .inl (by rw [getAccount_of_staticStep h]),
     hasPreCodes_of_getCode h.tracker.getCode h.tracker.parent⟩
   -- A write of storage keeps every code hash.
-  sstore _ _ _ _ _ h := ⟨TransactionState.parent_setStorage h, hasCodes_setStorage h,
+  sstore _ _ _ _ h := ⟨TransactionState.parent_setStorage h, hasCodes_setStorage h,
     hasPreCodes_setStorage h⟩
   tstore _ _ _ _ := ⟨rfl, fun h => h, fun h => h⟩
   log _ hs _ _ _ := by
@@ -97,7 +97,7 @@ theorem stepRules_hasCodes :
   -- A move of a balance keeps every code hash.
   selfdestruct _ _ h := ⟨parent_finishSelfdestruct h, hasCodes_finishSelfdestruct h⟩
   -- A rise of a nonce keeps every code hash.
-  incrementNonce _ _ _ _ h := ⟨TransactionState.parent_incrementNonce h,
+  incrementNonce _ _ _ h := ⟨TransactionState.parent_incrementNonce h,
     hasCodes_incrementNonce h, hasPreCodes_modifyState h⟩
   incorporate h := by
     rw [state_incorporateChild]

@@ -28,8 +28,7 @@ open EthLib.Serialization.Rlp
 instance {α : Type} [Codec α] [LawfulCodec α] : LawfulCodec (RangeEntry α) where
   ofItem_toItem e := by
     show RangeEntry.ofItem (RangeEntry.toItem e) = _
-    simp only [RangeEntry.ofItem, RangeEntry.toItem, Item.fields, Item.toItems, List.length_cons,
-      List.length_nil, ↓reduceIte, Item.field_toItem, bind, Except.bind, pure, Except.pure]
+    simp_fixed_list_roundtrip RangeEntry.ofItem RangeEntry.toItem
   toItem_of_ofItem {item e} h := by
     change RangeEntry.ofItem item = .ok e at h
     unfold RangeEntry.ofItem at h

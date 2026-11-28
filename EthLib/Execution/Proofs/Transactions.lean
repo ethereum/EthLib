@@ -3,7 +3,6 @@ module
 public import EthLib.Execution.Proofs.Transactions.AccessListWarm
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Burn
-public import EthLib.Execution.Proofs.Transactions.Candidate
 public import EthLib.Execution.Proofs.Transactions.CodeOrigin
 public import EthLib.Execution.Proofs.Transactions.CodeRules
 public import EthLib.Execution.Proofs.Transactions.Codes
@@ -24,6 +23,8 @@ public import EthLib.Execution.Proofs.Transactions.Overflow
 public import EthLib.Execution.Proofs.Transactions.Overrides
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.Rebuild
+public import EthLib.Execution.Proofs.Transactions.Refund
+public import EthLib.Execution.Proofs.Transactions.RefundStack
 public import EthLib.Execution.Proofs.Transactions.Replay
 public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Proofs.Transactions.SettlementRebuild

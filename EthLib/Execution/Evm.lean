@@ -32,6 +32,7 @@ public import EthLib.Execution.Evm.Measure
 public import EthLib.Execution.Evm.Call
 public import EthLib.Execution.Evm.Instructions.SelfDestruct
 public import EthLib.Execution.Evm.Interpreter
+public import EthLib.Execution.Evm.OpTables
 
 /-!
 # `EthLib.Execution.Evm`

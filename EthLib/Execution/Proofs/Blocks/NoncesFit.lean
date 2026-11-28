@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.AccessListRebuild
 public import EthLib.Execution.Proofs.Blocks.Replay
 public import EthLib.Execution.Proofs.Transactions.NoncesFit
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the state transition keeps every nonce at most `2^64 - 1`
@@ -55,7 +56,7 @@ theorem applyTransactions_noncesFit {env : BlockEnvironment fork} {body : BodySt
 theorem systemCall_noncesFit {env : BlockEnvironment fork} {block : BlockState}
     {target : Address} {data : ByteArray} {out : SystemCallOutput} (hfit : block.NoncesFit)
     (h : systemCall env block target data = .ok out) : out.state.NoncesFit := by
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨call, hcall, h⟩ := bind_ok_iff.mp h
     cases h
@@ -197,10 +198,15 @@ The state before the block must also hold every nonce at most `2^64 - 1`.
 
 The list holds a nonce in 64 bits, and the bound before and after the block makes that lossless. -/
 theorem stateTransition_rebuild_nonce {chain : BlockChain} {block : Block fork Transaction}
-    {checkSeal : Bool} {post : State} {P : BlockState → Prop} (hFork : .glamsterdam ≤ fork)
+    {checkSeal : Bool} {post : State} {P : BlockState → Prop} {W : Address → Prop}
+    (hFork : .glamsterdam ≤ fork)
     (hkeep : ∀ hashes, recentHashes chain.recent = .ok hashes →
-      KeepsFollowable (blockEnvironment chain.config hashes block.header) P)
+      KeepsFollowable (blockEnvironment chain.config hashes block.header) P W)
     (hstart : P ⟨chain.state, ∅, ∅, ∅, ∅⟩) (hlength : block.transactions.length < 2 ^ 32 - 1)
+    (hwipes : ∀ hashes output, recentHashes chain.recent = .ok hashes →
+      applyBody chain.config (blockEnvironment chain.config hashes block.header) block
+        ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output →
+      ∀ address ∈ output.block.storageClears, W address)
     (hfit : chain.state.NoncesFit) (h : stateTransition chain block checkSeal = .ok post) :
     ∃ hashes output,
       recentHashes chain.recent = .ok hashes ∧
@@ -213,7 +219,7 @@ theorem stateTransition_rebuild_nonce {chain : BlockChain} {block : Block fork T
           UInt64.toNat (output.body.builder.build.nonceAfter address
             (UInt64.ofNat ((chain.state.getAccountOptional address).getD EMPTY_ACCOUNT).nonce)) :=
   let ⟨hashes, output, hHashes, hOutput, hHash, hall⟩ :=
-    stateTransition_rebuild hFork hkeep hstart hlength h
+    stateTransition_rebuild hFork hkeep hstart hlength hwipes h
   ⟨hashes, output, hHashes, hOutput, hHash, fun address =>
     (toNat_ofNat_nonce (stateTransition_noncesFit hfit h) address).trans
       (congrArg UInt64.toNat (hall address).2.1)⟩

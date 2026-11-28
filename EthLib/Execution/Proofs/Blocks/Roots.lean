@@ -6,6 +6,7 @@ public import EthLib.Execution.Proofs.Blocks.TypedRoots
 public import EthLib.Execution.Proofs.Blocks.WithdrawalCodec
 public import EthLib.Execution.Proofs.Trie.Binding
 public import EthLib.Execution.Proofs.Trie.Root
+public import EthLib.Execution.Proofs.Trie.Total
 public import EthLib.Serialization.Proofs.Rlp.Codec
 
 /-!
@@ -341,5 +342,84 @@ theorem receiptsRoot_binding {fork : Fork} {receipts₁ receipts₂ : List (UInt
     obtain ⟨rfl, rfl⟩ := encodeReceipt_injective (htypes₁ _ hx) (htypes₂ _ hy) hxb hyb
     rfl
   · exact .inr ⟨values₁, values₂, pair, hvalues₁, hvalues₂, hfound, hvalid⟩
+
+/-! ## Lists that have a root -/
+
+/-- A list of fewer than `2^32` items of under `2^32` bytes has a root exactly when none is empty.
+-/
+theorem indexedRoot_exists_ok_iff {values : List ByteArray} (few : values.length < 2 ^ 32)
+    (small : ∀ value ∈ values, value.size < 2 ^ 32) :
+    (∃ digest, indexedRoot values = .ok digest) ↔ ∀ value ∈ values, value.size ≠ 0 := by
+  obtain ⟨entries, hentries⟩ : ∃ entries, indexedEntries values = .ok entries := by
+    unfold indexedEntries
+    apply mapM_exists_ok
+    rintro ⟨index, value⟩ hmem
+    have hi := List.mem_range.1 (List.of_mem_zip hmem).1
+    obtain ⟨e, he, -⟩ := encode_scalar_exists_ok index (by omega)
+    exact ⟨(e, value), by
+      simp only [Codec.encode, Codec.toItem] at he ⊢
+      simp [he, bind, Except.bind, pure, Except.pure]⟩
+  have hlen := length_of_indexedEntries hentries
+  have hsnd : entries.map Prod.snd = values := by
+    apply List.ext_getElem (by simp [hlen])
+    intro i h1 h2
+    simp only [List.getElem_map]
+    exact (getElem_of_indexedEntries hentries ⟨i, by simpa using h1⟩).2
+  have hsmall : ∀ entry ∈ entries, entry.1.size < 2 ^ 32 ∧ entry.2.size < 2 ^ 32 := by
+    intro entry hmem
+    obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hmem
+    obtain ⟨hk, hv⟩ := getElem_of_indexedEntries hentries ⟨i, hi⟩
+    simp only [Fin.getElem_fin] at hk hv
+    obtain ⟨e, he, hle⟩ := encode_scalar_exists_ok i (by omega)
+    have hk' : encode (.scalar i) = .ok entries[i].1 := hk
+    rw [he] at hk'
+    cases hk'
+    exact ⟨by omega, hv ▸ small _ (List.getElem_mem _)⟩
+  have key : (∃ digest, indexedRoot values = .ok digest) ↔
+      ∃ digest, root keccak256 ⟨false, entries⟩ = .ok digest := by
+    constructor
+    · rintro ⟨digest, h⟩
+      obtain ⟨es, hes, hr⟩ := indexedRoot_eq_ok_iff.1 h
+      rw [hentries] at hes
+      cases hes
+      exact ⟨digest, hr⟩
+    · rintro ⟨digest, h⟩
+      exact ⟨digest, indexedRoot_eq_ok_iff.2 ⟨entries, hentries, h⟩⟩
+  rw [key, root_exists_ok_iff keccak256 _ hsmall, ← hsnd]
+  simp only [List.mem_map]
+  exact ⟨fun h _ ⟨entry, hmem, heq⟩ => heq ▸ h entry hmem,
+    fun h entry hmem => h _ ⟨entry, hmem, rfl⟩⟩
+
+/-- A withdrawal encodes to at most 141 bytes. -/
+private theorem encode_withdrawal_le (w : Withdrawal) :
+    ∃ e, Codec.encode w = .ok e ∧ e.size ≤ 33 * 4 + 9 := by
+  show ∃ e, encode (.list [Codec.toItem w.index, Codec.toItem w.validatorIndex,
+    Codec.toItem w.address, Codec.toItem w.amount]) = .ok e ∧ _
+  refine encode_list_exists_ok_of_size_le 33 _ ?_ (by simp)
+  intro i hi
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl | rfl | rfl | rfl
+  · exact encode_scalar_exists_ok _ (by have := w.index.toNat_lt; omega)
+  · exact encode_scalar_exists_ok _ (by have := w.validatorIndex.toNat_lt; omega)
+  · have hs : (⟨w.address.toArray⟩ : ByteArray).size = 20 := by
+      show w.address.toArray.size = 20
+      rw [Vector.size_toArray]
+    obtain ⟨e, he, -, hle⟩ := encode_bytes_exists_ok ⟨w.address.toArray⟩ (by omega)
+    exact ⟨e, he, by have := hle (by omega); omega⟩
+  · exact encode_scalar_exists_ok _ (by have := w.amount.toNat_lt; omega)
+
+/-- Fewer than `2^32` withdrawals have a root. -/
+theorem withdrawalsRoot_exists_ok {withdrawals : List Withdrawal}
+    (few : withdrawals.length < 2 ^ 32) : ∃ digest, withdrawalsRoot withdrawals = .ok digest := by
+  obtain ⟨values, hvalues, hsmall⟩ := mapM_exists_ok_forall
+    (holds := fun e : ByteArray => 1 ≤ e.size ∧ e.size < 2 ^ 32) withdrawals fun w _ => by
+      obtain ⟨e, he, hle⟩ := encode_withdrawal_le w
+      exact ⟨e, he, one_le_encode_size _ _ he, by omega⟩
+  have hlen := mapM_ok_length hvalues
+  obtain ⟨digest, hdigest⟩ := (indexedRoot_exists_ok_iff (by omega)
+    fun value hmem => (hsmall value hmem).2).2 fun value hmem => by
+      have := (hsmall value hmem).1
+      omega
+  exact ⟨digest, withdrawalsRoot_eq_ok_iff.2 ⟨values, hvalues, hdigest⟩⟩
 
 end EthLib.Execution.Blocks

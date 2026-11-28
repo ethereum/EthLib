@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.G1
 public import EthLib.Cryptography.Bls.G2
 public import EthLib.Cryptography.Proofs.Bls.BaseFieldMap
+public import EthLib.Cryptography.Proofs.ScalarProduct
 
 /-!
 # Proofs: the BLS12-381 curves under a map of base fields
@@ -92,18 +93,8 @@ theorem map_toAffine (f : FieldOps.Hom F G) (p : G1 F) :
 
 theorem map_mulNat (f : FieldOps.Hom F G) (p : G1 F) (k : Nat) :
     map f (mulNat p k) = mulNat (map f p) k := by
-  induction k using Nat.strongRecOn generalizing p with
-  | _ k ih =>
-    rw [mulNat.eq_1 p k, mulNat.eq_1 (map f p) k]
-    split
-    · exact map_zero f
-    · have h := ih (k / 2) (by omega) p.double
-      rw [map_double] at h
-      dsimp only
-      split
-      · rw [← h]
-        exact map_add f p _
-      · exact h
+  rw [mulNat, mulNat, ScalarProduct.map_naf (map f) (map_double f) (map_add_fn f), map_zero,
+    map_neg_fn]
 
 theorem map_mul (f : FieldOps.Hom F G) (p : G1 F) (s : Fr) : map f (p.mul s) = (map f p).mul s :=
   map_mulNat f p s.val
@@ -112,61 +103,6 @@ theorem map_mul (f : FieldOps.Hom F G) (p : G1 F) (s : Fr) : map f (p.mul s) = (
 theorem map_projectiveEq (f : FieldOps.Hom F G) (p q : G1 F) :
     projectiveEq (map f p) (map f q) = projectiveEq p q := by
   simp only [projectiveEq, map, f.map_isZero, ← f.map_mul, f.map_beq]
-
-/-! ### Double and add -/
-
-/-- Unfolding equation for the scalar multiplication, in the shape that the proofs rewrite with. -/
-theorem mulNat_def (p : G1 F) (k : Nat) :
-    mulNat p k = if k = 0 then zero
-      else if k % 2 = 1 then add p (mulNat (double p) (k / 2))
-      else mulNat (double p) (k / 2) := by
-  rw [mulNat]
-
-/-- Double and add on a fuel argument, structurally recursive so that the kernel can evaluate it.
-
-The scalar multiplication recurses on well-founded recursion, which does not reduce by definition.
-
-With enough fuel the two agree. -/
-def mulNatAux : Nat → G1 F → Nat → G1 F
-  | 0, _, _ => zero
-  | fuel + 1, p, k =>
-    if k = 0 then zero
-    else
-      let half := mulNatAux fuel (double p) (k / 2)
-      if k % 2 = 1 then add p half else half
-
-theorem mulNatAux_eq (fuel : Nat) (p : G1 F) (k : Nat)
-    (hk : k < 2 ^ fuel) : mulNatAux fuel p k = mulNat p k := by
-  induction fuel generalizing p k with
-  | zero =>
-    have : k = 0 := by simpa using hk
-    subst this
-    rw [mulNatAux, mulNat_def]
-    simp
-  | succ fuel ih =>
-    rw [mulNatAux, mulNat_def]
-    by_cases h0 : k = 0
-    · simp [h0]
-    · have h2 : k / 2 < 2 ^ fuel := by
-        rw [Nat.pow_succ] at hk
-        omega
-      rw [ite_eq_right h0, ite_eq_right h0, ih (double p) (k / 2) h2]
-
-/-- A map of the field operations commutes with the ladder. -/
-theorem map_mulNatAux (f : FieldOps.Hom F G)
-    (fuel : Nat) (p : G1 F) (k : Nat) :
-    map f (mulNatAux fuel p k) = mulNatAux fuel (map f p) k := by
-  induction fuel generalizing p k with
-  | zero => exact map_zero f
-  | succ fuel ih =>
-    rw [mulNatAux, mulNatAux]
-    split
-    · exact map_zero f
-    · dsimp only
-      rw [← map_double, ← ih]
-      split
-      · exact map_add f _ _
-      · rfl
 
 /-! ### Multi-scalar multiplication -/
 
@@ -327,14 +263,6 @@ theorem map_mulNat (f : Hom F G) (p : G2 F) (k : Nat) :
 
 theorem map_mul (f : Hom F G) (p : G2 F) (s : Fr) : map f (mul p s) = mul (map f p) s :=
   map_mulNat f p s.val
-
--- The double and add of `G1` keeps its names under `G2`.
-export G1 (mulNat_def mulNatAux mulNatAux_eq)
-
-/-- A map of base fields commutes with the ladder. -/
-theorem map_mulNatAux (f : Hom F G) (fuel : Nat) (p : G2 F) (k : Nat) :
-    map f (mulNatAux fuel p k) = mulNatAux fuel (map f p) k :=
-  G1.map_mulNatAux (Fp2.hom f) fuel p k
 
 end G2
 

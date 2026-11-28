@@ -56,14 +56,16 @@ class BaseField (F : Type) extends FieldOps F where
 
   Each instance states which of the two roots it returns. -/
   sqrt : F → Option F
-  /-- A candidate square root: its square is the input or the negation of the input.
+  /-- A candidate inverse square root `r`: `a r` is a candidate root, and `a r r^2` is its inverse.
 
-  For a field of order `q = 3 mod 4`, the power `a^((q + 1) / 4)` has this property.
+  For a field of order `q = 3 mod 4`, it is the power `r = a^((q - 3) / 4)`.
+
+  Then `a r` squares to `a` or `-a`, and `a r r^2` is zero for `a = 0`.
 
   The class states no law.
 
-  Without this property, the square root in the quadratic extension can return a non-root. -/
-  sqrtCandidate : F → F
+  Without these properties, the square root in the quadratic extension can return a non-root. -/
+  invSqrtCandidate : F → F
   /-- The sign `sgn0` of RFC 9380, §4.1: whether the canonical integer of the element is odd. -/
   sgn0 : F → Bool
 

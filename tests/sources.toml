@@ -21,8 +21,8 @@
 #     uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 
 [repositories."ethereum/consensus-specs"]
-commit = "aa16bb4c156184e9548a997d53efaf2a228a6304"
-release = "v1.7.0-beta.4"
+commit = "36888ee87b0faa6ad7804b017a0184e8e6e6a1c6"
+release = "v1.7.0-beta.5"
 directories = [
   "tests/consensus/data_columns",
   "tests/consensus/epoch_processing",
@@ -47,7 +47,7 @@ commit = "09256e18f0a575e0aef546e06ec773a35fc52938"
 directories = ["tests/consensus/beacon_api"]
 
 [repositories."ethereum/builder-specs"]
-commit = "0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7"
+commit = "bbd815eb08587ad382c0effb87705030b87854da"
 directories = ["tests/consensus/builder_api"]
 
 [repositories."flashbots/relay-specs"]
@@ -201,24 +201,24 @@ url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-alph
 size = 169611828
 sha256 = "329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf"
 
-[archives."consensus-specs/v1.7.0-beta.4/minimal"]
+[archives."consensus-specs/v1.7.0-beta.5/minimal"]
 repository = "ethereum/consensus-specs"
-url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/minimal.tar.gz"
-size = 468730308
-sha256 = "26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68"
+url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.5/minimal.tar.gz"
+size = 475996445
+sha256 = "d27cebe9faf09dc688abd6fd046434b45a13687e3b2c7bae18fe750ac58f3bc5"
 
-[archives."consensus-specs/v1.7.0-beta.4/mainnet"]
+[archives."consensus-specs/v1.7.0-beta.5/mainnet"]
 repository = "ethereum/consensus-specs"
-url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/mainnet.tar.gz"
-size = 967886924
-sha256 = "67762986572372a08d3b182535aa760433c86e174e14e0bbd756f350dd19398c"
+url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.5/mainnet.tar.gz"
+size = 982016782
+sha256 = "b11803f2fbbf5a01910c06d37e7001f32e8ce9c16d52ee78d2cb60ddfe52d775"
 
 # The fork choice compliance tests of the same release.
-[archives."consensus-specs/v1.7.0-beta.4/comptests"]
+[archives."consensus-specs/v1.7.0-beta.5/comptests"]
 repository = "ethereum/consensus-specs"
-url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/comptests.tar.gz"
-size = 313252208
-sha256 = "ccb3149d29e4179e852499f1a3d121424dbac22745375908cd9059350aece746"
+url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.5/comptests.tar.gz"
+size = 326116693
+sha256 = "4d569d66cbffb7df413649e192d4b9cc67ad162db2c2c36b7113b8f95193d4c8"
 
 [archives."bls12-381-tests/v0.1.2/bls_tests_yaml"]
 repository = "ethereum/bls12-381-tests"
@@ -281,16 +281,16 @@ size = 5404504
 sha256 = "bbdf6fa5ffd6ead8ca6714c60a17d14d48ccaabbb18622b8485f88b58633d620"
 
 # The KZG trusted setup of the mainnet presets, a file used as it is, for the embedded setup.
-[archives."consensus-specs@aa16bb4c/trusted_setup_4096.json"]
+[archives."consensus-specs@36888ee8/trusted_setup_4096.json"]
 repository = "ethereum/consensus-specs"
-url = "https://raw.githubusercontent.com/ethereum/consensus-specs/aa16bb4c156184e9548a997d53efaf2a228a6304/presets/mainnet/trusted_setups/trusted_setup_4096.json"
+url = "https://raw.githubusercontent.com/ethereum/consensus-specs/36888ee87b0faa6ad7804b017a0184e8e6e6a1c6/presets/mainnet/trusted_setups/trusted_setup_4096.json"
 size = 881553
 sha256 = "f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f"
 
 # The assets of a pinned release that no test reads, by download URL, each with its reason.
 # The release watcher fails on an asset of a pinned release that is neither here nor an archive.
 [unread_assets]
-"https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/general.tar.gz" = "Only the Altair BLS cases; the pinned general archive of v1.7.0-alpha.12 holds them too"
+"https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.5/general.tar.gz" = "Only the Altair BLS cases; the pinned general archive of v1.7.0-alpha.12 holds them too"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]

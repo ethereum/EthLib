@@ -39,6 +39,26 @@ theorem chargeGas_eq_ok_iff_charge {Meter : Type} [GasMeter Meter] {evm after : 
   simp only [chargeGas, Base.bind_ok_iff, pure, Except.pure, Except.ok.injEq]
   simp only [eq_comm]
 
+/-- A charge that succeeds keeps the program counter. -/
+theorem pc_chargeGas {Meter : Type} [GasMeter Meter] {evm after : Evm fork Meter}
+    {amount : Nat} (h : chargeGas evm amount = .ok after) : after.pc = evm.pc := by
+  obtain ⟨_, -, rfl⟩ := chargeGas_eq_ok_iff_charge.mp h
+  rfl
+
+/-- A charge fails only for lack of gas, with a lawful meter. -/
+theorem chargeGas_eq_error {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
+    {evm : Evm fork Meter} {amount : Nat} {e : EvmError} (h : chargeGas evm amount = .error e) :
+    e = .outOfGas := by
+  unfold chargeGas at h
+  cases hc : GasMeter.charge evm.gas amount with
+  | error e' =>
+    rw [hc] at h
+    cases h
+    exact LawfulGasMeter.charge_error hc
+  | ok g =>
+    rw [hc] at h
+    cases h
+
 /-- With one counter of gas, a charge within the gas left takes it from the gas left. -/
 theorem chargeGas_eq_ok_iff {evm after : Evm fork Nat} {amount : Nat} :
     chargeGas evm amount = .ok after ↔
@@ -54,6 +74,12 @@ theorem chargeGas_eq_ok_iff {evm after : Evm fork Nat} {amount : Nat} :
     · intro h
       exact ⟨by omega, h⟩
     · exact And.right
+
+/-- With the meter of state gas, a refill of nothing keeps the gas left. -/
+theorem gasLeft_refill_zero_stateGas (meter : StateGasMeter) :
+    GasMeter.gasLeft (GasMeter.refill meter 0) = GasMeter.gasLeft meter := by
+  simp only [GasMeter.gasLeft, GasMeter.refill, StateGasMeter.refill, Nat.zero_min,
+    Nat.add_zero]
 
 /-- From Glamsterdam, a call whose message never runs leaves the meter of the caller as before.
 

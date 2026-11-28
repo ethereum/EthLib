@@ -30,7 +30,10 @@ open EthLib.Execution.State.TransactionState
 theorem length_daoAccounts : DAO_ACCOUNTS.length = 116 := rfl
 
 /-- No account appears twice in the list. -/
-theorem daoAccounts_nodup : DAO_ACCOUNTS.Nodup := by decide +kernel
+theorem daoAccounts_nodup : DAO_ACCOUNTS.Nodup := by
+  -- Read each address as a number, so the kernel compares naturals instead of byte vectors.
+  have hnodup : (DAO_ACCOUNTS.map fun a => ByteOrder.ofBE a.toList).Nodup := by decide +kernel
+  exact List.Pairwise.of_map _ (fun _ _ hne heq => hne (heq ▸ rfl)) hnodup
 
 /-- The recovery contract is not in the list, so no account sends ether to itself. -/
 theorem daoRecovery_not_mem : DAO_RECOVERY ∉ DAO_ACCOUNTS := by decide

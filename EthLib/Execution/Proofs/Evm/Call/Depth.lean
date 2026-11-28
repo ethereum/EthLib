@@ -161,19 +161,23 @@ theorem depth_le_of_step_eq_child {evm caller : Evm fork Meter} {message : Messa
 
 /-! ## A run of a frame -/
 
-/-- An observed run of a frame within the depth limit keeps an invariant of the record.
+/-- An observed run of a frame whose message has a property `Q` keeps an invariant of the record.
 
-Each message that the frame runs must keep the invariant when it is within the limit. -/
-private theorem runFrameWith_inv (inv : σ → Prop)
+The record must keep the invariant at each frame whose message has `Q`, given its gas bound.
+
+Each message that such a frame sends must have `Q`, and keep the invariant when it runs. -/
+private theorem runFrameWith_inv (Q : Message fork → Prop) (inv : σ → Prop)
     (f : Evm fork Meter → Except EvmError (StepResult fork Meter) → σ → σ)
-    (keeps : ∀ evm result s, evm.message.depth ≤ STACK_DEPTH_LIMIT → inv s →
-      inv (f evm result s))
+    (keeps : ∀ evm result s, Q evm.message → GasMeter.gasHeld evm.gas ≤ evm.message.gas →
+      inv s → inv (f evm result s))
+    (closed : ∀ (evm caller : Evm fork Meter) message resume, Q evm.message →
+      GasMeter.gasHeld evm.gas ≤ evm.message.gas →
+      step fork evm = .ok (.child caller message resume) → Q message)
     {bound : Nat} {runChild : MessageRunnerIn (StateT σ (Except EvmError)) fork Meter bound}
     (children : ∀ caller (message : Message fork) lt s r,
-      message.depth ≤ STACK_DEPTH_LIMIT → inv s → runChild caller message lt s = .ok r →
-        inv r.2)
+      Q message → inv s → runChild caller message lt s = .ok r → inv r.2)
     (evm : Evm fork Meter) (within : GasMeter.gasHeld evm.gas ≤ bound)
-    (depth : evm.message.depth ≤ STACK_DEPTH_LIMIT) {s : σ} (start : inv s)
+    (hbound : evm.message.gas = bound) (holds : Q evm.message) {s : σ} (start : inv s)
     {r : { after : Evm fork Meter // GasMeter.gasHeld after.gas ≤ bound } × σ}
     (run : runFrameWith (fun evm result => modify (f evm result)) (step fork)
       (step_decreases fork) bound runChild evm within s = .ok r) :
@@ -181,6 +185,7 @@ private theorem runFrameWith_inv (inv : σ → Prop)
   induction h : measure evm using Nat.strongRecOn generalizing evm s r with
   | _ n ih =>
   subst h
+  have held : GasMeter.gasHeld evm.gas ≤ evm.message.gas := hbound ▸ within
   generalize hm : runFrameWith (fun evm result => modify (f evm result)) (step fork)
     (step_decreases fork) bound runChild evm within = m at run
   rw [runFrameWith] at hm
@@ -193,25 +198,25 @@ private theorem runFrameWith_inv (inv : σ → Prop)
           modifyGet, MonadStateOf.modifyGet, StateT.modifyGet, throw, throwThe,
           MonadExceptOf.throw, StateT.lift] at run
       subst run
-      exact keeps _ _ _ depth start
+      exact keeps _ _ _ holds held start
     · rename_i after
       simp only [bind, StateT.bind, modify, modifyGet, MonadStateOf.modifyGet,
         StateT.modifyGet, pure, Except.bind, Except.pure] at run
-      -- The next frame keeps the message, so its depth.
+      -- The next frame keeps the message.
       have kept : after.message = evm.message := (stepRules_messageCode.step hs).1
-      exact ih _ (step_decreases fork running hs) _ _ (kept ▸ depth) (keeps _ _ _ depth start)
-        run rfl
+      exact ih _ (step_decreases fork running hs) _ _ (kept ▸ hbound) (kept ▸ holds)
+        (keeps _ _ _ holds held start) run rfl
     · rename_i caller message resume
       simp only [bind, StateT.bind, modify, modifyGet, MonadStateOf.modifyGet,
         StateT.modifyGet, pure, Except.bind, Except.pure] at run
       generalize Nat.lt_of_lt_of_le (step_decreases fork running hs).1 within = lt at run
-      have mid := keeps evm (.ok (.child caller message resume)) s depth start
+      have mid := keeps evm (.ok (.child caller message resume)) s holds held start
       cases hr : runChild caller message lt (f evm (.ok (.child caller message resume)) s)
       all_goals rw [hr] at run
       · cases run
       rename_i a
       obtain ⟨⟨child, used⟩, s'⟩ := a
-      have back : inv s' := children _ _ _ _ _ (depth_le_of_step_eq_child hs) mid hr
+      have back : inv s' := children _ _ _ _ _ (closed _ _ _ _ holds held hs) mid hr
       dsimp only at run
       cases hres : resume child with
       | error e =>
@@ -227,8 +232,8 @@ private theorem runFrameWith_inv (inv : σ → Prop)
         have kept : after.message = evm.message := by
           rw [(sameContext_of_step_eq_child hs hres).message, message_incorporateChild]
           exact (stepRules_messageCode.step hs).1.1
-        exact ih _ ((step_decreases fork running hs).2 child _ used hres) _ _ (kept ▸ depth)
-          back run rfl
+        exact ih _ ((step_decreases fork running hs).2 child _ used hres) _ _ (kept ▸ hbound)
+          (kept ▸ holds) back run rfl
   · simp only [running] at hm
     subst hm
     cases run
@@ -254,14 +259,17 @@ private theorem deposit_match_state {α : Type} {x : Except EvmError (Evm fork M
     r.2 = s := by
   cases x <;> cases h <;> rfl
 
-/-- An observed run of a message or a creation within the depth limit keeps an invariant.
+/-- An observed run of a message or a creation with a property `Q` keeps an invariant.
 
 The message has gas `n`, the measure of the induction. -/
-private theorem process_inv (inv : σ → Prop)
+private theorem process_inv (Q : Message fork → Prop) (inv : σ → Prop)
     (f : Evm fork Meter → Except EvmError (StepResult fork Meter) → σ → σ)
-    (keeps : ∀ evm result s, evm.message.depth ≤ STACK_DEPTH_LIMIT → inv s →
-      inv (f evm result s)) (n : Nat) :
-    ∀ message : Message fork, message.gas = n → message.depth ≤ STACK_DEPTH_LIMIT →
+    (keeps : ∀ evm result s, Q evm.message → GasMeter.gasHeld evm.gas ≤ evm.message.gas →
+      inv s → inv (f evm result s))
+    (closed : ∀ (evm caller : Evm fork Meter) message resume, Q evm.message →
+      GasMeter.gasHeld evm.gas ≤ evm.message.gas →
+      step fork evm = .ok (.child caller message resume) → Q message) (n : Nat) :
+    ∀ message : Message fork, message.gas = n → Q message →
       (∀ state substate (meter : Meter) held s r, inv s →
         processMessageWith (M := StateT σ (Except EvmError)) fork
           (fun evm result => modify (f evm result)) message state substate meter held s =
@@ -297,8 +305,8 @@ private theorem process_inv (inv : σ → Prop)
     all_goals
       rcases hp : precompileAddress fork message with _ | address
       · simp only [hp] at run
-        refine runFrameWith_inv inv f keeps (fun caller child lt s' r'' depth st h => ?_) _ held
-          within start run
+        refine runFrameWith_inv (bound := message.gas) Q inv f keeps closed
+          (fun caller child lt s' r'' depth st h => ?_) _ held rfl within start run
         have lt' : child.gas < n := gas ▸ lt
         cases ht : child.target <;> simp only [ht] at h
         · exact (ih _ lt' child rfl depth).2 _ _ _ _ _ _ st h
@@ -348,7 +356,10 @@ theorem processMessageWith_inv_of_depth_le (inv : σ → Prop)
     (run : processMessageWith (M := StateT σ (Except EvmError)) fork
       (fun evm result => modify (f evm result)) message state substate meter held s = .ok r) :
     inv r.2 :=
-  (process_inv inv f keeps _ message rfl within).1 state substate meter held s r start run
+  (process_inv (fun message => message.depth ≤ STACK_DEPTH_LIMIT) inv f
+    (fun evm result s depth _ start => keeps evm result s depth start)
+    (fun _ _ _ _ _ _ h => depth_le_of_step_eq_child h) _ message rfl within).1
+    state substate meter held s r start run
 
 /-- From a creation within the depth limit, a run that succeeds keeps an invariant of its record.
 
@@ -364,6 +375,51 @@ theorem processCreateMessageWith_inv_of_depth_le (inv : σ → Prop)
     (run : processCreateMessageWith (M := StateT σ (Except EvmError)) fork
       (fun evm result => modify (f evm result)) message state substate meter held s = .ok r) :
     inv r.2 :=
-  (process_inv inv f keeps _ message rfl within).2 state substate meter held s r start run
+  (process_inv (fun message => message.depth ≤ STACK_DEPTH_LIMIT) inv f
+    (fun evm result s depth _ start => keeps evm result s depth start)
+    (fun _ _ _ _ _ _ h => depth_le_of_step_eq_child h) _ message rfl within).2
+    state substate meter held s r start run
+
+/-- From a message with a property `Q`, a run that succeeds keeps an invariant of its record.
+
+The record needs to keep the invariant only at frames whose message has `Q`.
+
+It may use that the frame holds at most the gas of its message.
+
+Each message that such a frame sends must have `Q`. -/
+theorem processMessageWith_inv_of (Q : Message fork → Prop) (inv : σ → Prop)
+    (f : Evm fork Meter → Except EvmError (StepResult fork Meter) → σ → σ)
+    (keeps : ∀ evm result s, Q evm.message → GasMeter.gasHeld evm.gas ≤ evm.message.gas →
+      inv s → inv (f evm result s))
+    (closed : ∀ (evm caller : Evm fork Meter) message resume, Q evm.message →
+      GasMeter.gasHeld evm.gas ≤ evm.message.gas →
+      step fork evm = .ok (.child caller message resume) → Q message)
+    {message : Message fork} (holds : Q message)
+    (state : TransactionState) (substate : Substate) (meter : Meter)
+    (held : GasMeter.gasHeld meter ≤ message.gas) {s : σ} (start : inv s)
+    {r : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } × σ}
+    (run : processMessageWith (M := StateT σ (Except EvmError)) fork
+      (fun evm result => modify (f evm result)) message state substate meter held s = .ok r) :
+    inv r.2 :=
+  (process_inv Q inv f keeps closed _ message rfl holds).1 state substate meter held s r start run
+
+/-- From a creation with a property `Q`, a run that succeeds keeps an invariant of its record.
+
+The rules are those of a message. -/
+theorem processCreateMessageWith_inv_of (Q : Message fork → Prop) (inv : σ → Prop)
+    (f : Evm fork Meter → Except EvmError (StepResult fork Meter) → σ → σ)
+    (keeps : ∀ evm result s, Q evm.message → GasMeter.gasHeld evm.gas ≤ evm.message.gas →
+      inv s → inv (f evm result s))
+    (closed : ∀ (evm caller : Evm fork Meter) message resume, Q evm.message →
+      GasMeter.gasHeld evm.gas ≤ evm.message.gas →
+      step fork evm = .ok (.child caller message resume) → Q message)
+    {message : Message fork} (holds : Q message)
+    (state : TransactionState) (substate : Substate) (meter : Meter)
+    (held : GasMeter.gasHeld meter ≤ message.gas) {s : σ} (start : inv s)
+    {r : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } × σ}
+    (run : processCreateMessageWith (M := StateT σ (Except EvmError)) fork
+      (fun evm result => modify (f evm result)) message state substate meter held s = .ok r) :
+    inv r.2 :=
+  (process_inv Q inv f keeps closed _ message rfl holds).2 state substate meter held s r start run
 
 end EthLib.Execution.Evm

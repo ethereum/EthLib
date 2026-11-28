@@ -126,7 +126,7 @@ def generatedMultiples (count : Nat) (p : Point) : Vector Coordinates count :=
   ⟨table.val.toArray, List.size_toArray.trans (table.property.trans raw.property)⟩
 
 /-- The generator multiplied by `2^128`. -/
-def generatorHighPoint : Point := Point.mulBits 129 (2^128) Point.generator
+def generatorHighPoint : Point := Point.mulNat (2^128) Point.generator
 
 /-- The generator's odd multiples for fourteen-bit windows. -/
 def generatorTable14 : Vector Coordinates 4096 := generatedMultiples 4096 Point.generator
@@ -636,7 +636,7 @@ decreasing_by all_goals omega
     -- The endomorphism gives those of `lambda P`.
     let (entries, z) := commonTable p
     -- The rare case where that denominator vanishes takes the shared chain of doublings.
-    if z = 0 then Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator) else
+    if z = 0 then Coords.mulAdd 0 k.val p l.val (Point.toMontgomeryCoords .generator) else
       let lw := Montgomery.rawOfNat l.val
       let split := splitScalarWords (Montgomery.rawOfNat k.val)
       let a := split.1
@@ -645,7 +645,7 @@ decreasing_by all_goals omega
         generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi
         lw.w0 lw.w1 lw.w2 lw.w3)
   -- Any other form takes the shared chain of doublings.
-  else Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator)
+  else Coords.mulAdd 0 k.val p l.val (Point.toMontgomeryCoords .generator)
 
 /-- `k P + l G` in Jacobian form, for a form `P` of a point on the curve. -/
 @[no_expose] def mulProjective (k : Fn) (p : Coordinates) (l : Fn) : Coordinates :=
@@ -706,7 +706,7 @@ def mulAdd (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
   else if p = generator ∧ q.isOnCurve = true then MulAdd.mulAddGenerator l q k
   else
     ofMontgomeryCoords
-      (Jacobian.Coords.mulAdd 0 256 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q))
+      (Jacobian.Coords.mulAdd 0 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q))
 
 end Point
 

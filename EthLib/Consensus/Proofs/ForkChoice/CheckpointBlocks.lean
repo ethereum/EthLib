@@ -1362,6 +1362,76 @@ theorem Store.ForwardReachable.finalized_add_two_le_or_anchor
   cases Except.ok.inj epochOk
   exact h.1.symm.imp id UInt64.le_iff_toNat_le.mpr
 
+/-- A reachable store finalized past the anchor epoch reads its finalized checkpoint at some root.
+
+The checkpoint comes from a held state or from its pull-up, whose block reads it on its chain.
+
+It assumes the anchor invariant, a nonzero state hash and an anchor block not after its state.
+
+It also needs a nonempty epoch, two epochs of root history and finality past the anchor epoch. -/
+theorem Store.Reachable.finalized_read {store : Store preset fork}
+    (reached : Store.Reachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (nonzero : hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0))
+    (later : getCurrentEpoch anchorState < store.finalizedCheckpoint.epoch) :
+    ∃ root, store.getCheckpointBlock root store.finalizedCheckpoint.epoch =
+      .ok store.finalizedCheckpoint.root := by
+  have known := fun {root : Root} {state : BeaconState preset fork}
+      (stored : store.blockStates[root]? = some state) member =>
+    reached.getCheckpointBlock_of_blockState sound anchorSlot positive window stored
+      (checkpoint := store.finalizedCheckpoint) member later
+  rcases reached.finalized_origins _ (Or.inl rfl) with ⟨root, -, same⟩ |
+      ⟨root, state, stored, same⟩ | ⟨root, state, pulled, stored, pulledOk, same⟩
+  · rw [same] at later
+    exact absurd later (UInt64.lt_irrefl _)
+  · rcases known stored (.inl (by simp [same])) with ⟨read, -⟩ | zero
+    · exact ⟨root, read⟩
+    · exact absurd zero nonzero
+  · rcases known stored (.inr ⟨pulled, pulledOk, by simp [same]⟩) with ⟨read, -⟩ | zero
+    · exact ⟨root, read⟩
+    · exact absurd zero nonzero
+
+/-- A finalized checkpoint other than the anchor's is two or more epochs before the current one.
+
+Its root's block epoch is at most its epoch, in a forward-reachable store.
+
+It assumes the anchor invariant, a nonzero state hash and an anchor block not after its state.
+
+It also needs a positive slot duration, a nonempty epoch and two epochs of root history. -/
+theorem Store.ForwardReachable.finalized_epoch_add_two_le
+    {config : Config} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store anchor : Store preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (nonzero : hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0))
+    (other : store.finalizedCheckpoint ≠ anchor.finalizedCheckpoint) {epoch : Epoch}
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch) :
+    ∃ rootEpoch, store.getBlockEpoch store.finalizedCheckpoint.root = .ok rootEpoch ∧
+      rootEpoch.toNat ≤ store.finalizedCheckpoint.epoch.toNat ∧
+      store.finalizedCheckpoint.epoch.toNat + 2 ≤ epoch.toNat := by
+  have reached := forward.reachable
+  obtain ⟨anchorRoot, anchorHash, -, -, -, anchorFinal, -⟩ := getForkchoiceStore_anchor anchored
+  -- At or below the anchor epoch the finality is the anchor's.
+  have later : getCurrentEpoch anchorState < store.finalizedCheckpoint.epoch := by
+    refine UInt64.not_le.mp fun atAnchor => other ?_
+    obtain ⟨epochEq, rootHash⟩ := reached.finalized_eq_anchor_of_epoch_le atAnchor
+    rw [anchorHash, Except.ok.injEq] at rootHash
+    rw [anchorFinal]
+    cases h : store.finalizedCheckpoint
+    simp_all
+  have lagged := (forward.finalized_add_two_le_or_anchor sound slots epochOk).resolve_right
+    (UInt64.not_le.mpr later)
+  -- Past the anchor epoch the finality is read at a held block of its epoch or before.
+  obtain ⟨root, read⟩ := reached.finalized_read sound anchorSlot positive window nonzero later
+  obtain ⟨block, found, below, -⟩ := Store.getCheckpointBlock_self positive read
+  refine ⟨computeEpochAtSlot preset block.slot, ?_, below, lagged⟩
+  simp [Store.getBlockEpoch, Store.block_ok_iff.mpr found, bind, Except.bind, pure, Except.pure]
+
 /-- A head's checkpoint read passes to another store, at each block above a block of its epoch.
 
 The block is on the head's chain, and the two stores agree on their blocks. -/

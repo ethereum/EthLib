@@ -200,22 +200,22 @@ theorem line_chord {T : G2} {xq yq : Fp2} (hT : G2.Valid T) (hz : T.z ≠ 0)
 
 private theorem two_ne_zero_fp2 : (2 : Fp2) ≠ 0 := by decide_eq_at_model []
 
-/-- After the final exponentiation, a doubling step multiplies by the square and by `g_{T,T}`. -/
+/-- After the final exponentiation, a doubling step multiplies by `g_{T,T}`. -/
 theorem finalExponentiation_millerDouble {T : G2} (hT : G2.Valid T) (hz : T.z ≠ 0)
     (hy : T.y ≠ 0) (h2 : T.double.z ≠ 0) (xp yp : Fp) {f f' : Fp12}
     (hf : finalExponentiation f = finalExponentiation f') :
     finalExponentiation (millerDouble T xp yp f).2 =
-      finalExponentiation (f' ^ 2 * Miller.lineRatio ambientCurve (g2Hom (G2.toPoint T))
+      finalExponentiation (f' * Miller.lineRatio ambientCurve (g2Hom (G2.toPoint T))
         (g2Hom (G2.toPoint T)) (fpToFp12 (Fp.toZMod xp)) (fpToFp12 (Fp.toZMod yp))) := by
   have hd := millerDouble_snd hz hy xp yp f
   have hc : 2 * T.y * T.z ^ 3 ≠ 0 :=
     mul_ne_zero (mul_ne_zero two_ne_zero_fp2 hy) (pow_ne_zero 3 hz)
   simp only at hd
   rw [hd, Miller.lineRatio, ← map_add, ← G2.toPoint_double hT, line_tangent hT hz hy,
-    finalExponentiation_mul (f * f), finalExponentiation_mul (fp2ToFp12 _ * w ^ 3),
+    finalExponentiation_mul f, finalExponentiation_mul (fp2ToFp12 _ * w ^ 3),
     finalExponentiation_fp2_mul_w_cube hc]
   simp only [finalExponentiation_mul, finalExponentiation_div, finalExponentiation_neg,
-    finalExponentiation_pow, finalExponentiation_vertical (G2.valid_double hT) h2, div_one, hf]
+    finalExponentiation_vertical (G2.valid_double hT) h2, div_one, hf]
   ring
 
 /-- After the final exponentiation, an addition step multiplies by `g_{T,Q}`. -/
@@ -246,23 +246,26 @@ private theorem nsmul_ne_zero_of_lt {P : G2.curve.toAffine.Point}
 private theorem z_ne_zero_of_toPoint {T : G2} (h : G2.toPoint T ≠ 0) : T.z ≠ 0 :=
   fun hz => h (WeierstrassCurve.Jacobian.Point.toAffine_of_Z_eq_zero hz)
 
-/-- One step of the loop: double, then add `Q` if the bit is set. -/
+/-- One step of the loop of one pair: square, double, then add `Q` if the bit is set. -/
 theorem millerSteps_succ (s : ℕ) (xq yq : Fp2) (xp yp : Fp) (n : ℕ) (T : G2) (f : Fp12) :
-    millerSteps s xq yq xp yp (n + 1) T f =
+    millerSteps s (n + 1) [⟨(xq, yq), (xp, yp), T⟩] f =
       if (s >>> n) &&& 1 = 1 then
-        millerSteps s xq yq xp yp n (millerAdd (millerDouble T xp yp f).1 xq yq xp yp
-          (millerDouble T xp yp f).2).1 (millerAdd (millerDouble T xp yp f).1 xq yq xp yp
-          (millerDouble T xp yp f).2).2
-      else millerSteps s xq yq xp yp n (millerDouble T xp yp f).1 (millerDouble T xp yp f).2 := by
-  rw [millerSteps]
-  generalize millerDouble T xp yp f = d
-  obtain ⟨T2, f2⟩ := d
+        millerSteps s n [⟨(xq, yq), (xp, yp), (millerAdd (millerDouble T xp yp f.square).1 xq yq
+          xp yp (millerDouble T xp yp f.square).2).1⟩] (millerAdd (millerDouble T xp yp
+          f.square).1 xq yq xp yp (millerDouble T xp yp f.square).2).2
+      else millerSteps s n [⟨(xq, yq), (xp, yp), (millerDouble T xp yp f.square).1⟩]
+        (millerDouble T xp yp f.square).2 := by
+  rw [millerSteps, millerLines.eq_2]
   dsimp only
-  split_ifs
-  · generalize millerAdd T2 xq yq xp yp f2 = a
+  generalize millerDouble T xp yp f.square = d
+  obtain ⟨T2, f2⟩ := d
+  by_cases h : (s >>> n) &&& 1 = 1
+  · simp only [h, decide_true, ↓reduceIte]
+    generalize millerAdd T2 xq yq xp yp f2 = a
     obtain ⟨T3, f3⟩ := a
     rfl
-  · rfl
+  · simp only [h, decide_false, Bool.false_eq_true, ↓reduceIte]
+    rfl
 
 private theorem bit_iff (s n : ℕ) : (s >>> n) &&& 1 = 1 ↔ s.testBit n = true := by
   rw [Nat.and_one_is_mod, Nat.testBit_eq_decide_div_mod_eq, Nat.shiftRight_eq_div_pow,
@@ -303,7 +306,7 @@ theorem finalExponentiation_millerSteps {s : ℕ} (hs : s < Fr.modulus) {xq yq :
     ∀ (n : ℕ) (T : G2) (f f' : Fp12), G2.Valid T →
       G2.toPoint T = (s >>> n) • G2.toPoint ⟨xq, yq, Fp2.one⟩ → 0 < s >>> n →
       finalExponentiation f = finalExponentiation f' →
-      finalExponentiation (millerSteps s xq yq xp yp n T f) =
+      finalExponentiation (millerSteps s n [⟨(xq, yq), (xp, yp), T⟩] f) =
         finalExponentiation (Miller.steps ambientCurve s (g2Hom (G2.toPoint ⟨xq, yq, Fp2.one⟩))
           (fpToFp12 (Fp.toZMod xp)) (fpToFp12 (Fp.toZMod yp)) n (g2Hom (G2.toPoint T)) f') := by
   intro n
@@ -334,10 +337,12 @@ theorem finalExponentiation_millerSteps {s : ℕ} (hs : s < Fr.modulus) {xq yq :
     have hk2 : G2.toPoint T.double = (2 * k) • G2.toPoint Q1 := by
       rw [G2.toPoint_double hT, hk, two_mul, add_nsmul]
     have hz2 : T.double.z ≠ 0 := z_ne_zero_of_toPoint (hk2 ▸ hne (2 * k) (by omega) (by omega))
-    have hD := finalExponentiation_millerDouble hT hz hy hz2 xp yp hf
+    have hsq : finalExponentiation f.square = finalExponentiation (f' ^ 2) := by
+      rw [Fp12.square_eq, finalExponentiation_mul, finalExponentiation_pow, hf, sq]
+    have hD := finalExponentiation_millerDouble hT hz hy hz2 xp yp hsq
     have hg2 : g2Hom (G2.toPoint T.double) = g2Hom (G2.toPoint T) + g2Hom (G2.toPoint T) := by
       rw [G2.toPoint_double hT, map_add]
-    have hd1 : (millerDouble T xp yp f).1 = T.double := rfl
+    have hd1 : (millerDouble T xp yp f.square).1 = T.double := rfl
     rw [millerSteps_succ, Miller.steps_succ, hd1]
     by_cases hb : s.testBit n = true
     · have hb' := (bit_iff s n).mpr hb
@@ -353,7 +358,7 @@ theorem finalExponentiation_millerSteps {s : ℕ} (hs : s < Fr.modulus) {xq yq :
       have hg3 : g2Hom (G2.toPoint (G2.add T.double Q1)) =
           g2Hom (G2.toPoint T) + g2Hom (G2.toPoint T) + g2Hom (G2.toPoint Q1) := by
         rw [G2.toPoint_add hT2 hQ, map_add, hg2]
-      have ha1 : (millerAdd T.double xq yq xp yp (millerDouble T xp yp f).2).1 =
+      have ha1 : (millerAdd T.double xq yq xp yp (millerDouble T xp yp f.square).2).1 =
           G2.add T.double Q1 := rfl
       rw [ha1, ← hg3, ← hg2]
       exact ih _ _ _ hT3 (by rw [hk3, hsplit]) (by omega) hA

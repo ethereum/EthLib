@@ -67,9 +67,7 @@ instance : LawfulCodec BlockId where
 instance : LawfulCodec HeaderRequest where
   ofItem_toItem r := by
     show HeaderRequest.ofItem (HeaderRequest.toItem r) = _
-    simp only [HeaderRequest.ofItem, HeaderRequest.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.field_toItem, bind, Except.bind, pure,
-      Except.pure]
+    simp_fixed_list_roundtrip HeaderRequest.ofItem HeaderRequest.toItem
   toItem_of_ofItem {item r} h := by
     change HeaderRequest.ofItem item = .ok r at h
     obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
@@ -84,9 +82,7 @@ instance : LawfulCodec HeaderRequest where
 instance : LawfulCodec BlockAnnouncement where
   ofItem_toItem a := by
     show BlockAnnouncement.ofItem (BlockAnnouncement.toItem a) = _
-    simp only [BlockAnnouncement.ofItem, BlockAnnouncement.toItem, Item.fields, Item.toItems,
-      List.length_cons, List.length_nil, ↓reduceIte, Item.field_toItem, bind, Except.bind, pure,
-      Except.pure]
+    simp_fixed_list_roundtrip BlockAnnouncement.ofItem BlockAnnouncement.toItem
   toItem_of_ofItem {item a} h := by
     change BlockAnnouncement.ofItem item = .ok a at h
     obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h

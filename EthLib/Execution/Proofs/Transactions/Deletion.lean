@@ -78,6 +78,40 @@ theorem substate_prepareFirstFrame {chainId : Nat} {message : Message fork}
           cases h
           exact ⟨rfl, rfl, rfl, rfl⟩
 
+/-- The first frame of a transaction keeps the refund counter of the substate it is given. -/
+theorem refundCounter_prepareFirstFrame {chainId : Nat} {message : Message fork}
+    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
+      .ok first) :
+    first.substate.refundCounter = substate.refundCounter := by
+  unfold prepareFirstFrame at h
+  split at h
+  · dsimp only at h
+    split at h
+    · split at h <;>
+      · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
+        cases h
+        rfl
+    · obtain ⟨m, h, -⟩ := bind_ok_iff.mp h
+      cases h
+  · dsimp only at h
+    obtain ⟨done, -, h⟩ := bind_ok_iff.mp h
+    generalize (if message.value ≠ 0 then _ else done.state) = read0 at h
+    split at h <;>
+    · obtain ⟨m, -, h⟩ := bind_ok_iff.mp h
+      obtain ⟨code, -, h⟩ := bind_ok_iff.mp h
+      generalize (if fork ≥ .pectra then delegatedAddress code else none) = delegate at h
+      rcases delegate with _ | delegate
+      · cases h
+        rfl
+      · dsimp only at h
+        split at h <;>
+        · obtain ⟨m', -, h⟩ := bind_ok_iff.mp h
+          obtain ⟨code', -, h⟩ := bind_ok_iff.mp h
+          cases h
+          rfl
+
 /-- The output of a frame has the state of that frame. -/
 theorem state_ofFrame (evm : Evm fork Meter) (refund : Nat) (touched : Std.ExtTreeSet Address) :
     (CallOutput.ofFrame evm refund touched).state = evm.state := by

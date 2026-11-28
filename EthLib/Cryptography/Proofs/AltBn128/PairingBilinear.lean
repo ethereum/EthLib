@@ -23,7 +23,7 @@ namespace EthLib.Cryptography.AltBn128
 /-- Bilinearity on the multiples of the generators: `e(a P1, b P2) = e(P1, P2)^(a b)`. -/
 def PairingBilinear : Prop :=
   ∀ a b : ZMod Fr.modulus,
-    pairing (Point.mulBits 256 a.val Point.generator) (Point2.mulBits 256 b.val Point2.generator) =
+    pairing (Point.mulNat a.val Point.generator) (Point2.mulNat b.val Point2.generator) =
       pairing Point.generator Point2.generator ^ (a.val * b.val)
 
 /-- The final exponentiation of 1 is 1. -/

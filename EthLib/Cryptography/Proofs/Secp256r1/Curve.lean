@@ -104,26 +104,30 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus}
       toPoint (ofJacobian p) = Jacobian.toPoint (Fp.toZMod a) (Fp.toZMod b) p :=
   ShortWeierstrass.Point.ofJacobian_spec embedding toZ_eq hp
 
-theorem isOnCurve_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true :=
-  ShortWeierstrass.Point.isOnCurve_mulBits embedding toZ_eq
-    ShortWeierstrass.Point.Representation.fin
-    toZ_a two_ne_zero' fuel k hp
+/-- `Fp` with its inverse is a representation of itself for the scalar product. -/
+private theorem representation : ShortWeierstrass.Point.Representation id Fp.inv id :=
+  ⟨Jacobian.Coords.Embedding.id, Fp.inv_eq_inverse, fun _ => rfl⟩
 
-/-- Double and add computes `k P`, when `k < 2^fuel`. -/
-theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint (mulBits fuel k p) = k • toPoint p :=
-  ShortWeierstrass.Point.toPoint_mulBits embedding toZ_eq
-    ShortWeierstrass.Point.Representation.fin
-    toZ_a two_ne_zero' fuel k hp hk
+theorem isOnCurve_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
+    (mulNat k p).isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_mulNat embedding toZ_eq
+    representation
+    toZ_a two_ne_zero' k hp
+
+/-- The scalar product computes `k P`. -/
+theorem toPoint_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
+    toPoint (mulNat k p) = k • toPoint p :=
+  ShortWeierstrass.Point.toPoint_mulNat embedding toZ_eq
+    representation
+    toZ_a two_ne_zero' k hp
 
 theorem isOnCurve_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) : (mul k p).isOnCurve = true :=
-  isOnCurve_mulBits 256 k.val hp
+  isOnCurve_mulNat k.val hp
 
 /-- Scalar multiplication computes `k P`, with the value of `k` below `n`. -/
 theorem toPoint_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mul k p) = k.val • toPoint p :=
-  toPoint_mulBits 256 k.val hp (Nat.lt_trans k.isLt (by decide))
+  toPoint_mulNat k.val hp
 
 /-! ## Points and group elements correspond -/
 
@@ -148,27 +152,21 @@ private theorem toFin_aMontgomery : Montgomery.toFin aMontgomery = a :=
 /-- The chain in Montgomery form is the shared chain on `Fp`, for every input. -/
 theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
     mulAdd k p l q =
-      ofJacobian (Jacobian.mulAdd a 256 k.val (toJacobian p) l.val (toJacobian q)) := by
+      ofJacobian (Jacobian.mulAdd a k.val (toJacobian p) l.val (toJacobian q)) := by
   have hf := Montgomery.toFin_embedding
-  have hk : (Word64.rawOfNat k.val).val = k.val :=
-    Word64.rawOfNat_val _ (Nat.lt_trans k.isLt (by decide))
-  have hl : (Word64.rawOfNat l.val).val = l.val :=
-    Word64.rawOfNat_val _ (Nat.lt_trans l.isLt (by decide))
   -- Reading back the encoded form of a point gives the form itself.
   have he : ∀ p : Point, ((toJacobian p).toCoords.map Montgomery.ofFin).map Montgomery.toFin =
       (toJacobian p).toCoords := fun p => by
     simp only [Jacobian.Coords.map, Montgomery.toFin_ofFin]
   simp only [mulAdd]
-  rw [Word64.Raw.bit_eq_testBit, Word64.Raw.bit_eq_testBit, hk, hl,
-    ← Jacobian.Coords.mulAddAux.eq_1, ← Jacobian.Coords.mulAdd.eq_1,
-    ShortWeierstrass.Point.ofCoords_map hf Montgomery.toFin_inv,
+  rw [ShortWeierstrass.Point.ofCoords_map hf Montgomery.toFin_inv,
     Jacobian.Coords.map_mulAdd hf, toFin_aMontgomery, he, he]
   rfl
 
 theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true := by
   rw [mulAdd_eq_jacobian]
-  exact (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
+  exact (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' k.val l.val
     (toJacobian_spec hp).1 (toJacobian_spec hq).1)).1
 
 /-- The shared chain computes `k P + l Q`, with the values of `k` and `l` below `n`. -/
@@ -177,10 +175,9 @@ theorem toPoint_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     toPoint (mulAdd k p l q) = k.val • toPoint p + l.val • toPoint q := by
   have hJp := toJacobian_spec hp
   have hJq := toJacobian_spec hq
-  rw [mulAdd_eq_jacobian, (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val
+  rw [mulAdd_eq_jacobian, (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' k.val
       l.val hJp.1 hJq.1)).2,
-    Jacobian.toPoint_mulAdd toZ_a two_ne_zero' 256 k.val l.val hJp.1 hJq.1
-      (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]
+    Jacobian.toPoint_mulAdd toZ_a two_ne_zero' k.val l.val hJp.1 hJq.1]
   exact congrArg₂ (k.val • · + l.val • ·) hJp.2 hJq.2
 
 /-- On points of the curve, the shared chain gives the sum of the two products. -/

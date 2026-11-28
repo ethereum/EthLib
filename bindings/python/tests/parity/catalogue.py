@@ -15,11 +15,11 @@ DEVNETS = {
     "tests-bogota-devnet": "execution-specs/tests-bogota-devnet@v2.0.0/fixtures",
 }
 CONSENSUS = {
-    "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
-    "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
+    "mainnet": "consensus-specs/v1.7.0-beta.5/mainnet",
+    "minimal": "consensus-specs/v1.7.0-beta.5/minimal",
 }
 # The fork choice compliance tests of the same release, at the minimal preset only.
-COMPLIANCE = "consensus-specs/v1.7.0-beta.4/comptests"
+COMPLIANCE = "consensus-specs/v1.7.0-beta.5/comptests"
 
 # The source of ethereum/legacytests at its pinned commit, and the directory that holds its files.
 LEGACY = "legacytests@1f581b8c/source"

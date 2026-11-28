@@ -141,7 +141,7 @@ lean_exe «check-decls» where
   -- The checker loads private proof bodies to inspect their dependencies.
   allowNonModules := true
 
-/-- Runs pinned test vectors through the compiled specification, with no export in between.
+/-- Runs pinned test vectors and checks the embedded setup, through the compiled specification.
 
 No default target builds it.
 
@@ -154,19 +154,12 @@ lean_exe «known-answers» where
 lean_lib «EvmGasCoverage» where
   srcDir := "scripts"
 
-/-- Replays pinned execution fixtures with an observer of their gas rules. -/
+/-- Answers requests from the Python gas coverage report.
+
+No default target builds it. -/
 lean_exe «gas-coverage» where
   srcDir := "scripts"
   root := `GasCoverage
-
-/-- Writes the tables of affine points that the kernel checks of the Lagrange setup read.
-
-No default target builds it.
-
-`lake exe gen-setup-tables` writes them, and with `--check` it fails when one is stale. -/
-lean_exe «gen-setup-tables» where
-  srcDir := "scripts"
-  root := `GenSetupTables
 
 /-- A library of known answers that the kernel checks.
 

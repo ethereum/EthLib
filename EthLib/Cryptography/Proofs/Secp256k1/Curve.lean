@@ -114,7 +114,7 @@ theorem toPoint_add {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = 
 
 /-! ## Scalar multiplication
 
-Double and add computes `k P`, and stays on the curve.
+The scalar product computes `k P`, and stays on the curve.
 -/
 
 private theorem toZ_eq (x : Fp) : Jacobian.toZ x = Fp.toZMod x :=
@@ -166,7 +166,7 @@ theorem map_toMontgomeryCoords (p : Point) :
   show Jacobian.Coords.mk _ _ _ = Jacobian.Coords.mk _ _ _
   congr 1 <;> exact Montgomery.toFin_ofFin _
 
-/-- The Montgomery form is a representation of `Fp` for double and add. -/
+/-- The Montgomery form is a representation of `Fp` for the scalar product. -/
 private theorem montgomery :
     ShortWeierstrass.Point.Representation Montgomery.ofFin Montgomery.inv Montgomery.toFin :=
   ⟨toFin_embedding, Montgomery.toFin_inv, Montgomery.toFin_ofFin⟩
@@ -174,27 +174,27 @@ private theorem montgomery :
 private theorem toZ_a : Jacobian.toZ (Montgomery.toFin (0 : Fp.Montgomery)) = 0 := by
   rw [toFin_embedding.map_zero, toZ_eq, map_zero]
 
-/-- Double and add in Montgomery form is double and add on `Fp`, for every input. -/
-theorem mulBits_eq_jacobian (fuel k : Nat) (p : Point) :
-    mulBits fuel k p = ofJacobian (Jacobian.mulBits 0 fuel k (toJacobian p)) := by
-  rw [mulBits, ShortWeierstrass.Point.mulBits_eq_jacobian montgomery, toFin_embedding.map_zero]
+/-- The scalar product in Montgomery form is the scalar product on `Fp`, for every input. -/
+theorem mulNat_eq_jacobian (k : Nat) (p : Point) :
+    mulNat k p = ofJacobian (Jacobian.mulNat 0 k (toJacobian p)) := by
+  rw [mulNat, ShortWeierstrass.Point.mulNat_eq_jacobian montgomery, toFin_embedding.map_zero]
 
-theorem isOnCurve_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true :=
-  ShortWeierstrass.Point.isOnCurve_mulBits embedding toZ_eq montgomery toZ_a two_ne_zero' fuel k hp
+theorem isOnCurve_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
+    (mulNat k p).isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_mulNat embedding toZ_eq montgomery toZ_a two_ne_zero' k hp
 
-/-- Double and add computes `k P`, when `k < 2^fuel`. -/
-theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint (mulBits fuel k p) = k • toPoint p :=
-  ShortWeierstrass.Point.toPoint_mulBits embedding toZ_eq montgomery toZ_a two_ne_zero' fuel k hp hk
+/-- The scalar product computes `k P`. -/
+theorem toPoint_mulNat (k : Nat) {p : Point} (hp : p.isOnCurve = true) :
+    toPoint (mulNat k p) = k • toPoint p :=
+  ShortWeierstrass.Point.toPoint_mulNat embedding toZ_eq montgomery toZ_a two_ne_zero' k hp
 
 theorem isOnCurve_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) : (mul k p).isOnCurve = true :=
-  isOnCurve_mulBits 256 k.val hp
+  isOnCurve_mulNat k.val hp
 
 /-- Scalar multiplication computes `k P`, with the value of `k` below `n`. -/
 theorem toPoint_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mul k p) = k.val • toPoint p :=
-  toPoint_mulBits 256 k.val hp (Nat.lt_trans k.isLt (by decide))
+  toPoint_mulNat k.val hp
 
 /-! ## Points and group elements correspond -/
 

@@ -138,24 +138,16 @@ private theorem loadKept_processAttestation {attestation : Attestation preset fo
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     LoadKept state after := by
   refine ⟨(sameSizes_processAttestation computed).1, ?_⟩
-  unfold processAttestation at computed
-  split at computed
-  · unfold processAttestationAltair at computed
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised, raisedOk, final⟩ := computed
+  by_cases altair : Fork.altair ≤ fork
+  · rw [processAttestation_of_altair altair] at computed
+    obtain ⟨_, _, _, raised, raisedOk, written⟩ := processAttestationAltair_writes computed
     have last : after.pendingDeposits = raised.pendingDeposits := by
-      split at final
-      · rw [recordPaymentWeight_eq final]
-      · cases final
-        rfl
+      rw [written]
     refine last.trans ((loadKeptLaws.increaseBalance raisedOk).2.trans ?_)
     unfold setEpochParticipation
     split <;> rfl
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, _, _, _, recorded, _⟩ :=
+    processAttestation_records (Nat.lt_of_not_le altair) computed
   have kept := recordPendingAttestation_ok recorded
   split at kept
   all_goals

@@ -240,6 +240,13 @@ theorem encode_bytes_succeeds_iff (data : ByteArray) :
       exact ⟨pre ++ data, by simp [hPre, bind, Except.bind, pure, Except.pure]⟩
     · exact ⟨data, by simp⟩
 
+/-- A byte string of fewer than `2^64` bytes encodes, with at most 9 more bytes, or 1 below 56. -/
+theorem encode_bytes_exists_ok (data : ByteArray) (h : data.size < 2 ^ 64) :
+    ∃ e, encode (.bytes data) = .ok e ∧ e.size ≤ data.size + 9 ∧
+      (data.size < 56 → e.size ≤ data.size + 1) := by
+  obtain ⟨e, he⟩ := (encode_bytes_succeeds_iff data).2 h
+  exact ⟨e, he, encode_bytes_size_le data e he⟩
+
 /-- A list whose items encode to `payload` encodes exactly when `payload` has under `2^64` bytes. -/
 theorem encode_list_succeeds_iff (items : List Item) (payload : ByteArray)
     (hJoin : joinEncodings items = .ok payload) :
@@ -253,6 +260,23 @@ theorem encode_list_succeeds_iff (items : List Item) (payload : ByteArray)
   · intro h
     obtain ⟨pre, hPre⟩ := lengthPrefix_ok .list payload.size h
     exact ⟨pre ++ payload, by simp [encode, hJoin, hPre, bind, Except.bind, pure, Except.pure]⟩
+
+/-- A list of items of at most `c` encoded bytes each encodes, when `c` times their count is small.
+
+That product stays below `2^64`.
+
+Its encoding then has at most 9 more bytes than `c` bytes per item. -/
+theorem encode_list_exists_ok_of_size_le (c : Nat) (items : List Item)
+    (each : ∀ i ∈ items, ∃ e, encode i = .ok e ∧ e.size ≤ c) (small : c * items.length < 2 ^ 64) :
+    ∃ e, encode (.list items) = .ok e ∧ e.size ≤ c * items.length + 9 := by
+  obtain ⟨payload, hJoin⟩ := joinEncodings_ok items fun i hi => (each i hi).imp fun _ h => h.1
+  have hle := joinEncodings_size_le c items payload (fun i hi e he => by
+    obtain ⟨e', he', hle⟩ := each i hi
+    rw [he] at he'
+    cases he'
+    exact hle) hJoin
+  obtain ⟨e, he⟩ := (encode_list_succeeds_iff items payload hJoin).2 (by omega)
+  exact ⟨e, he, by have := encode_list_size_le items payload e hJoin he; omega⟩
 
 /-- A list fails, with the same error, when one of its items fails. -/
 theorem encode_list_of_joinEncodings_error (items : List Item) (err : RlpError)

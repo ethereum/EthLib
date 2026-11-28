@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Bls.CurveMap
 public import EthLib.Cryptography.Proofs.BaseField
 public import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
-public import Mathlib.Tactic.Module
+public import EthLib.Cryptography.Proofs.ScalarProduct
 
 /-!
 # Proofs: the group law of the Jacobian formulas, over any field
@@ -493,40 +493,45 @@ theorem toPoint_add [DecidableEq K] (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Vali
 
 /-! ## Scalar multiplication -/
 
+/-- The scalar multiplication keeps validity, and it is the action of `ℕ` on the group. -/
+private theorem mulNat_spec [DecidableEq K] (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P)
+    (k : Nat) : Valid e b (mulNat P k) ∧ toPoint e b (mulNat P k) = k • toPoint e b P :=
+  ScalarProduct.naf_spec (Valid e b) (toPoint e b)
+    (fun _ hQ => ⟨valid_double e b hQ, toPoint_double e b hQ⟩)
+    (fun _ _ hQ hR => ⟨valid_add e b h2 hQ hR, toPoint_add e b h2 hQ hR⟩)
+    (valid_zero e b) (toPoint_zero e b) h (valid_neg e b h) (toPoint_neg e b h) k
+
 theorem valid_mulNat (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P) (k : Nat) :
     Valid e b (mulNat P k) := by
-  induction k using Nat.strongRecOn generalizing P with
-  | _ k ih =>
-    rw [mulNat_def]
-    by_cases hk : k = 0
-    · rw [ite_eq_left hk]
-      exact valid_zero e b
-    rw [ite_eq_right hk]
-    by_cases h2k : k % 2 = 1
-    · rw [ite_eq_left h2k]
-      exact valid_add e b h2 h (ih (k / 2) (by omega) (valid_double e b h))
-    · rw [ite_eq_right h2k]
-      exact ih (k / 2) (by omega) (valid_double e b h)
+  classical
+  exact (mulNat_spec e b h2 h k).1
 
-/-- The double-and-add scalar multiplication is the action of `ℕ` on the group. -/
+/-- The scalar multiplication is the action of `ℕ` on the group. -/
 theorem toPoint_mulNat [DecidableEq K] (h2 : (2 : K) ≠ 0) {P : G1 F} (h : Valid e b P) (k : Nat) :
-    toPoint e b (mulNat P k) = k • toPoint e b P := by
-  induction k using Nat.strongRecOn generalizing P with
-  | _ k ih =>
-    rw [mulNat_def]
-    by_cases hk : k = 0
-    · rw [ite_eq_left hk, toPoint_zero, hk, zero_nsmul]
-    rw [ite_eq_right hk]
-    by_cases h2k : k % 2 = 1
-    · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m + 1 := ⟨k / 2, by omega⟩
-      rw [ite_eq_left h2k, toPoint_add e b h2 h (valid_mulNat e b h2 (valid_double e b h) _),
-        show (2 * m + 1) / 2 = m by omega, ih m (by omega) (valid_double e b h),
-        toPoint_double e b h]
-      module
-    · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m := ⟨k / 2, by omega⟩
-      rw [ite_eq_right h2k, show 2 * m / 2 = m by omega, ih m (by omega) (valid_double e b h),
-        toPoint_double e b h]
-      module
+    toPoint e b (mulNat P k) = k • toPoint e b P :=
+  (mulNat_spec e b h2 h k).2
+
+/-- Two products with shared doublings keep validity, and they give `k P + l Q`. -/
+private theorem mulAdd_spec [DecidableEq K] (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Valid e b P)
+    (hQ : Valid e b Q) (k l : Fr) :
+    Valid e b (mulAdd P k Q l) ∧
+      toPoint e b (mulAdd P k Q l) = k.val • toPoint e b P + l.val • toPoint e b Q :=
+  ScalarProduct.joint_spec (Valid e b) (toPoint e b)
+    (fun _ hR => ⟨valid_double e b hR, toPoint_double e b hR⟩)
+    (fun _ _ hR hS => ⟨valid_add e b h2 hR hS, toPoint_add e b h2 hR hS⟩)
+    (valid_zero e b) (toPoint_zero e b) hP (valid_neg e b hP) (toPoint_neg e b hP) hQ
+    (valid_neg e b hQ) (toPoint_neg e b hQ) k.val l.val
+
+theorem valid_mulAdd (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Valid e b P) (hQ : Valid e b Q)
+    (k l : Fr) : Valid e b (mulAdd P k Q l) := by
+  classical
+  exact (mulAdd_spec e b h2 hP hQ k l).1
+
+/-- Two products with shared doublings give `k P + l Q` in the group. -/
+theorem toPoint_mulAdd [DecidableEq K] (h2 : (2 : K) ≠ 0) {P Q : G1 F} (hP : Valid e b P)
+    (hQ : Valid e b Q) (k l : Fr) :
+    toPoint e b (mulAdd P k Q l) = k.val • toPoint e b P + l.val • toPoint e b Q :=
+  (mulAdd_spec e b h2 hP hQ k l).2
 
 /-! ## Special values -/
 
@@ -550,13 +555,20 @@ theorem add_zero {P : G1 F} (hP : P.isInfinity = false) : add P zero = P := by
 
 /-- The product by zero is the point at infinity. -/
 theorem mulNat_zero (P : G1 F) : mulNat P 0 = zero := by
-  rw [mulNat_def, ite_eq_left rfl]
+  rw [mulNat, ScalarProduct.naf, ScalarProduct.joint,
+    show max (Nat.log2 (3 * 0)) (Nat.log2 (3 * 0)) = 0 by decide, ScalarProduct.jointSteps]
 
 include e in
-/-- The product of a finite triple by one is the triple. -/
-theorem mulNat_one {P : G1 F} (hP : P.isInfinity = false) : mulNat P 1 = P := by
-  rw [mulNat_def, ite_eq_right one_ne_zero, ite_eq_left rfl, mulNat_zero]
-  exact add_zero e hP
+/-- The product of a triple by one is the triple. -/
+theorem mulNat_one (P : G1 F) : mulNat P 1 = P := by
+  have hd : double (zero : G1 F) = zero := ite_eq_left ((e.isZero_iff _).mpr e.map_zero)
+  rw [mulNat, ScalarProduct.naf, ScalarProduct.joint,
+    show max (Nat.log2 (3 * 1)) (Nat.log2 (3 * 0)) = 0 + 1 by decide, ScalarProduct.jointSteps,
+    ScalarProduct.jointSteps, hd]
+  simp only [ScalarProduct.addDigit, ScalarProduct.bit_limbs,
+    show Nat.testBit (3 * 1) (0 + 1) = true by decide, show Nat.testBit 1 (0 + 1) = false by decide,
+    show Nat.testBit (3 * 0) (0 + 1) = false by decide]
+  exact zero_add e P
 
 include e in
 /-- A triple with `z = 1` is its own affine form. -/

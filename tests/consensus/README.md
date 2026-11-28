@@ -5,7 +5,7 @@ EthLib writes each list in Lean, and a typo in one value would change every rule
 So the Python suite compares the Lean values with the files that consensus-specs publishes.
 
 The directory `parameters/` holds those files: the mainnet and minimal presets from Phase 0 to Heze, and the mainnet and minimal configurations.
-They come from `ethereum/consensus-specs` at commit `aa16bb4c156184e9548a997d53efaf2a228a6304`, the release `v1.7.0-beta.4`.
+They come from `ethereum/consensus-specs` at commit `36888ee87b0faa6ad7804b017a0184e8e6e6a1c6`, the release `v1.7.0-beta.5`.
 Each file keeps its upstream bytes and its upstream path below `parameters/`, and `parameters/SHA256SUMS` records its digest.
 
 `bindings/python/tests/consensus/test_parameters.py` reads them and runs three comparisons:
@@ -21,7 +21,7 @@ A replacement carries the name of its fork as a suffix, such as `INACTIVITY_PENA
 One suffixed value is new rather than a replacement: `MAX_EFFECTIVE_BALANCE_ELECTRA`, the largest effective balance of a compounding validator.
 The suite fails on any other suffixed value, so a replacement that Lean does not hold cannot pass unnoticed.
 
-The directory `networking/` holds the custody vectors of Fulu from the test release `v1.7.0-beta.4` of `ethereum/consensus-specs`, built at the same commit.
+The directory `networking/` holds the custody vectors of Fulu from the test release `v1.7.0-beta.5` of `ethereum/consensus-specs`, built at the same commit.
 They are the cases of the handlers `get_custody_groups` and `compute_columns_for_custody_group`, copied byte for byte under their path in `mainnet.tar.gz` and `minimal.tar.gz`.
 The minimal cases hold the same values as the mainnet ones, because the two presets share every custody parameter.
 They still run the Lean definitions on the minimal preset.
@@ -173,7 +173,7 @@ At Fulu its `on_block` case is one whose block lacks the columns that the node s
 At Gloas and Heze it also keeps the smallest case of each fast confirmation suite.
 It also keeps two fork choice compliance cases of `block_cover_test`, from `comptests.tar.gz` of the same release, one at Altair and one at Gloas.
 A generator derives these cases from models of block trees.
-In the Altair case a block carries a vote for a block that the store does not know yet.
+In the Altair case the store must reject three of the blocks.
 In the Gloas case the members of the payload committee vote.
 `bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
 
@@ -227,10 +227,10 @@ The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 
 - `general.tar.gz`: `c4f395f71f606c28093500e32067990e430cc73a2277be6f3bf5090adcce3f67`, 3,228 bytes.
-- `mainnet.tar.gz`: `67762986572372a08d3b182535aa760433c86e174e14e0bbd756f350dd19398c`, 967,886,924 bytes.
-- `minimal.tar.gz`: `26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68`, 468,730,308 bytes.
+- `mainnet.tar.gz`: `b11803f2fbbf5a01910c06d37e7001f32e8ce9c16d52ee78d2cb60ddfe52d775`, 982,016,782 bytes.
+- `minimal.tar.gz`: `d27cebe9faf09dc688abd6fd046434b45a13687e3b2c7bae18fe750ac58f3bc5`, 475,996,445 bytes.
 
-The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7`.
+The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `bbd815eb08587ad382c0effb87705030b87854da`.
 They are SSZ examples and their JSON forms in `examples/<fork>/`, copied byte for byte under their fork.
 From Bellatrix to Fulu, they are the files `signed_*`: every fork has a signed bid and a signed blinded block.
 Bellatrix also has a signed validator registration.

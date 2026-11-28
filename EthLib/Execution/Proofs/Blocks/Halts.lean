@@ -5,6 +5,7 @@ public import EthLib.Execution.Proofs.Blocks.Failures
 public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Evm.Call.Halts
 public import EthLib.Execution.Proofs.Transactions.Process
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: a system call that must succeed fails only with an error that does not abort
@@ -63,7 +64,7 @@ theorem error_systemCall {env : BlockEnvironment fork} {block : State.BlockState
     {target : Address} {data : ByteArray} {out : SystemCallOutput}
     (h : systemCall env block target data = .ok out) {e : EvmError} (he : out.error = some e) :
     e.aborts = false := by
-  unfold systemCall at h
+  rw [systemCall_unfold] at h
   dsimp only at h
   split at h
   all_goals

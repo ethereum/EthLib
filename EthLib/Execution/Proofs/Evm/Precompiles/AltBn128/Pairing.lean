@@ -52,11 +52,11 @@ theorem decodePair_eq_ok_iff (data : ByteArray) (index : Nat) (p : Point) (q : P
     cases hq : bytesToG2 (bufferRead data (192 * index + 64) 128) with
     | error e => simp [bind, Except.bind]
     | ok q' =>
-      -- The code computes `q Q` by double and add.
+      -- The code computes `q Q` by its scalar product.
       --
       -- The result is `O` exactly when `q` kills the group element of `Q`.
-      have hq' := Point2.mulBits_order_eq_infinity_iff (bytesToG2_isOnCurve hq)
-      by_cases hsub : Point2.mulBits 256 Fr.modulus q' = .infinity
+      have hq' := Point2.mulNat_order_eq_infinity_iff (bytesToG2_isOnCurve hq)
+      by_cases hsub : Point2.mulNat Fr.modulus q' = .infinity
       · simp only [bind, Except.bind, pure, Except.pure, hsub, ne_eq, not_true_eq_false,
           ↓reduceIte, Except.ok.injEq, Prod.mk.injEq]
         constructor
@@ -70,14 +70,14 @@ theorem decodePair_eq_ok_iff (data : ByteArray) (index : Nat) (p : Point) (q : P
         exact fun h => hsub (hq'.mpr h)
 
 /-- Each pair that decodes holds `a P1` and `b P2`, for some `a < q` and `b < q`. -/
-theorem exists_mulBits_generator_of_decodePair {data : ByteArray} {index : Nat} {p : Point}
+theorem exists_mulNat_generator_of_decodePair {data : ByteArray} {index : Nat} {p : Point}
     {Q : Point2} (h : decodePair data index = .ok (p, Q)) :
-    (∃ a < Fr.modulus, p = Point.mulBits 256 a Point.generator) ∧
-      ∃ b < Fr.modulus, Q = Point2.mulBits 256 b Point2.generator := by
+    (∃ a < Fr.modulus, p = Point.mulNat a Point.generator) ∧
+      ∃ b < Fr.modulus, Q = Point2.mulNat b Point2.generator := by
   obtain ⟨hp, hq, hord⟩ := (decodePair_eq_ok_iff data index p Q).mp h
   have hon := bytesToG2_isOnCurve hq
-  exact ⟨Point.exists_eq_mulBits_generator (bytesToG1_isOnCurve hp),
-    (Point2.mulBits_order_eq_infinity_iff_exists hon).mp
-      ((Point2.mulBits_order_eq_infinity_iff hon).mpr hord)⟩
+  exact ⟨Point.exists_eq_mulNat_generator (bytesToG1_isOnCurve hp),
+    (Point2.mulNat_order_eq_infinity_iff_exists hon).mp
+      ((Point2.mulNat_order_eq_infinity_iff hon).mpr hord)⟩
 
 end EthLib.Execution.Evm.Precompiles.AltBn128

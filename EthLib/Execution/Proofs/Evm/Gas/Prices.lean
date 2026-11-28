@@ -84,6 +84,58 @@ theorem callBaseCost_le_cold (fork : Fork) (cold : Bool) :
     · exact Nat.le_refl _
   · exact Nat.le_refl _
 
+/-- A call to a cold account pays at least what it pays to a warm one. -/
+theorem callBaseCost_le (fork : Fork) (cold : Bool) :
+    callBaseCost fork false ≤ callBaseCost fork cold := by
+  cases cold
+  · exact Nat.le_refl _
+  · exact callBaseCost_le_cold fork false
+
+/-- A cold access to an account costs at least a warm one. -/
+theorem accountAccessCost_le (fork : Fork) (cold : Bool) :
+    accountAccessCost fork false ≤ accountAccessCost fork cold := by
+  cases cold
+  · exact Nat.le_refl _
+  · unfold accountAccessCost
+    simp only [Bool.false_eq_true, ↓reduceIte, gasSchedule]
+    split <;> decide
+
+/-- BALANCE of a cold account costs at least that of a warm one. -/
+theorem balanceCost_le (fork : Fork) (cold : Bool) :
+    balanceCost fork false ≤ balanceCost fork cold := by
+  unfold balanceCost
+  split
+  · exact accountAccessCost_le fork cold
+  · exact Nat.le_refl _
+
+/-- EXTCODESIZE and EXTCODECOPY of a cold account cost at least those of a warm one. -/
+theorem externalBaseCost_le (fork : Fork) (cold : Bool) :
+    externalBaseCost fork false ≤ externalBaseCost fork cold := by
+  have := accountAccessCost_le fork cold
+  unfold externalBaseCost
+  split
+  · omega
+  · split
+    · exact this
+    · exact Nat.le_refl _
+
+/-- EXTCODEHASH of a cold account costs at least that of a warm one. -/
+theorem extcodehashCost_le (fork : Fork) (cold : Bool) :
+    extcodehashCost fork false ≤ extcodehashCost fork cold := by
+  unfold extcodehashCost
+  split
+  · exact accountAccessCost_le fork cold
+  · exact Nat.le_refl _
+
+/-- SLOAD of a cold slot costs at least that of a warm one. -/
+theorem sloadCost_le (fork : Fork) (cold : Bool) : sloadCost fork false ≤ sloadCost fork cold := by
+  cases cold
+  · exact Nat.le_refl _
+  · unfold sloadCost
+    split
+    · decide
+    · exact Nat.le_refl _
+
 /-- From Istanbul, a byte of call data costs the standard price of its tokens.
 
 A zero byte is one token, and a nonzero byte is four, so EIP-7623 keeps the price of EIP-2028. -/

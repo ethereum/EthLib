@@ -19,9 +19,9 @@ The [builder specification] gives the builder's rules, and its [validator docume
 
 [`header.yaml`] gives the 200, 204, 400 and 500 responses to a request.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/builder.md#bidding
-[validator document]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/specs/bellatrix/validator.md#bid-processing
-[`header.yaml`]: https://github.com/ethereum/builder-specs/blob/0911550c65b1e4a326fe7fbd7d0ca52ff0b6a4b7/apis/builder/header.yaml
+[builder specification]: https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/specs/bellatrix/builder.md#bidding
+[validator document]: https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/specs/bellatrix/validator.md#bid-processing
+[`header.yaml`]: https://github.com/ethereum/builder-specs/blob/bbd815eb08587ad382c0effb87705030b87854da/apis/builder/header.yaml
 -/
 
 @[expose] public section

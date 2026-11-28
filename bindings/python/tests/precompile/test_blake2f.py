@@ -222,3 +222,19 @@ def test_high_offset(fork: str) -> None:
     m = list(struct.unpack("<16Q", block))
     assert struct.pack("<8Q", *compress(12, H, m, 3, 1, True)) == expected
     assert run(fork, ADDRESS, encode(12, block, 3, 1, 1), 12) == expected
+
+
+# Round counts past those of the vectors above.
+# The schedule of SIGMA wraps every 10 rounds, and these counts stop before, at and past a wrap.
+# A count of 13 tells the schedule from a table of 12 rows, which BLAKE2b keeps for its 12 rounds.
+# A count of 65537 sets two bytes of the big-endian rounds field.
+MANY_ROUNDS = [1, 2, 9, 10, 11, 13, 20, 1000, 65537]
+
+
+@pytest.mark.parametrize("rounds", MANY_ROUNDS)
+@pytest.mark.parametrize("fork", FORKS)
+def test_many_rounds(fork: str, rounds: int) -> None:
+    block = bytes(range(128))
+    m = list(struct.unpack("<16Q", block))
+    expected = struct.pack("<8Q", *compress(rounds, H, m, 128, 0, True))
+    assert run(fork, ADDRESS, encode(rounds, block, 128, 0, 1), rounds) == expected
