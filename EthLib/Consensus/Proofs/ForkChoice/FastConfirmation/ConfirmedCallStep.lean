@@ -818,9 +818,7 @@ private theorem finalized_start_anchor {Δ : ℕ}
   subst blockOk
   omega
 
-/-- A call that replaces its base holds the observed block, of the epoch before its slot.
-
-The call's slot starts its epoch. -/
+/-- A store whose call replaces its base holds the observed block, of the epoch before the slot. -/
 private theorem replaces_facts {store : Store preset fork} {after : FastConfirmationStore}
     {head base : Root} {slot : Slot} (slotOk : store.getCurrentSlot config = .ok slot)
     (replaces : store.ReplacesBase config after head base slot) :
@@ -828,12 +826,7 @@ private theorem replaces_facts {store : Store preset fork} {after : FastConfirma
       store.blocks[after.currentEpochObservedJustifiedCheckpoint.root]? = some observedBlock ∧
       (computeEpochAtSlot preset observedBlock.slot).toNat + 1 =
         (computeEpochAtSlot preset slot).toNat ∧
-      observedBlock.slot ≤ slot ∧
-      computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok slot := by
-  have slotMod : slot.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
-    have isStart := replaces.1
-    rw [isStartSlotAtEpoch_eq, Except.ok.injEq, decide_eq_true_eq] at isStart
-    exact isStart
+      observedBlock.slot ≤ slot := by
   obtain ⟨-, ⟨observedBlock, epoch, foundBlock, epochOk, epochAdd⟩, -, -⟩ := replaces
   obtain rfl := Store.getCurrentStoreEpoch_eq slotOk epochOk
   have observedNat := (addChecked_ok_iff.mp epochAdd).2
@@ -844,46 +837,33 @@ private theorem replaces_facts {store : Store preset fork} {after : FastConfirma
   have blockEpochNat : (computeEpochAtSlot preset observedBlock.slot).toNat =
       observedBlock.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
     simp only [computeEpochAtSlot, UInt64.toNat_div]
-  refine ⟨observedBlock, Store.block_ok_iff.mp foundBlock, observedNat.symm, ?_, ?_⟩
-  · -- The observed block is of the epoch before the call's, so before the call slot.
-    apply UInt64.le_iff_toNat_le.mpr
-    have lt : observedBlock.slot.toNat / preset.SLOTS_PER_EPOCH.toNat <
-        slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by omega
-    exact Nat.le_of_lt (Nat.lt_of_div_lt_div lt)
-  · -- The call slot starts its epoch.
-    apply computeStartSlotAtEpoch_ok_iff.mpr
-    have eq : slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat =
-        slot.toNat := Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero slotMod)
-    rw [slotEpochNat, eq]
-    exact ⟨slot.toNat_lt, rfl⟩
+  refine ⟨observedBlock, Store.block_ok_iff.mp foundBlock, observedNat.symm, ?_⟩
+  -- The observed block is of the epoch before the call's, so before the call slot.
+  apply UInt64.le_iff_toNat_le.mpr
+  have lt : observedBlock.slot.toNat / preset.SLOTS_PER_EPOCH.toNat <
+      slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by omega
+  exact Nat.le_of_lt (Nat.lt_of_div_lt_div lt)
 
-/-- From restart to limit, up-to-date honest heads descend from the observed root, barring evidence.
+/-- At a call that replaces its base, the observed root covers honest heads, barring evidence.
 
-It takes a genesis run, a slot-matched epoch-start anchor, synchrony, admission and fitting delays.
-
-It assumes preset parameters, multi-slot epochs, positive slot duration and store/stake bounds.
-
-It needs nonzero held roots, signed justifications and honest call timing with slot reads. -/
-theorem Execution.observedRestart_covers_or_evidence
-    {Δ limit : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
-    (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)
-    (parameters : DirectSafety.Parameters preset) (sync : e.Synchronous Δ)
-    (admitted : BlocksAdmitted e 0 Δ limit) (fits : DelayFits fork config genesisTimeMs Δ)
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
-    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (slots : 0 < config.SLOT_DURATION_MS) (long : 1 < preset.SLOTS_PER_EPOCH)
-    (roots : HeldBlockStateRootsNonzero (e := e) limit) (absent : AnchorParentAbsent (e := e) limit)
+The checkpoint agreement and the finality reads are given, or their evidence holds. -/
+private theorem observedRestart_core {Δ limit : ℕ} {anchor : Store preset fork}
+    {horizon : Epoch} {g : ForkedBeaconState preset}
+    (pre : Run config checks g ⟨fork, anchorState⟩) {u : ValidatorIndex} {events : List ℕ}
+    {firstSlot : Slot} (ctx : CallsCtx (e := e) anchor u events firstSlot limit)
+    (sync : e.Synchronous Δ) (admitted : BlocksAdmitted e 0 Δ limit)
+    (fits : DelayFits fork config genesisTimeMs Δ)
     (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
-    (heldEarly : HeldStatesBeforeUpgrade (e := e) limit)
-    (enough : HeldRunStakeFloor (e := e) pre horizon limit)
-    (terminal : HeldTerminalStakeFloor (e := e) horizon limit)
     (signedAll : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 limit)
-    {u : ValidatorIndex} (caller : u ∈ J) {events : List ℕ} {firstSlot : Slot}
-    (anchorBefore : getCurrentEpoch anchorState < computeEpochAtSlot preset firstSlot)
-    (atSlots : ∀ i n, events[i]? = some n → ∃ slot begin,
-      ((e.world n).state u).getCurrentSlot config = .ok slot ∧ slot.toNat = firstSlot.toNat + i ∧
-      computeTimeAtSlotMs config genesisTimeMs slot = .ok begin ∧ (e.world n).time = begin.toNat)
+    (agreement : SelectedCheckpointsAgree (e := e) horizon limit ∨
+      CrossStoreJustifiedEvidence (e := e) pre limit)
+    (finality : (∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ limit → (e.world j).time ≤ limit →
+      ((e.world i).state a).finalizedCheckpoint.epoch ≤
+        ((e.world j).state b).justifiedCheckpoint.epoch →
+      ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state a).finalizedCheckpoint.root) ∨
+      CrossStoreDirectSafetyEvidence (e := e) pre limit)
     {i n : ℕ} {fcr after : FastConfirmationStore}
     (calls : CallAt (e := e) u events (getFastConfirmationStore anchor) i n fcr after)
     (nBound : (e.world n).time ≤ limit) {head base : Root} {slot : Slot}
@@ -894,14 +874,8 @@ theorem Execution.observedRestart_covers_or_evidence
     HonestCollision (e := e) limit ∨ CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
     CrossStoreJustifiedEvidence (e := e) pre limit := by
   classical
-  have sound := (DirectSafety.run_justified_separated pre genesis).1
-  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
-  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
-    have := parameters.roots
-    omega
-  have ctx : CallsCtx (e := e) anchor u events firstSlot limit :=
-    ⟨anchored, sound, anchorSlot, anchorBoundary, start, slots, positive, long, window, roots,
-      absent, caller, anchorBefore, atSlots⟩
+  obtain ⟨anchored, -, anchorSlot, anchorBoundary, start, slots, positive, long, -, roots, absent,
+    caller, anchorBefore, atSlots⟩ := id ctx
   cases i with
   | zero =>
     -- The first call observes the anchor's finalized checkpoint.
@@ -910,13 +884,10 @@ theorem Execution.observedRestart_covers_or_evidence
     exact honestHeadsCover_mono (anchor_cover anchored start anchorSlot anchorBoundary absent)
       (Nat.zero_le _) le_rfl
   | succ j =>
-    -- Justified checkpoints agree, and finality reads across stores, unless evidence holds.
-    rcases e.selectedCheckpointsAgree_or_evidence anchored start anchorSlot roots absent
-        parameters genesis pre heldEarly enough terminal with agree | justified
+    rcases agreement with agree | justified
     swap
     · exact .inr (.inr (.inr justified))
-    rcases e.crossStoreFinality_or_evidence anchored start anchorSlot anchorBoundary slots bounded
-        roots absent parameters genesis pre heldEarly enough terminal with crossFinal | direct
+    rcases finality with crossFinal | direct
     swap
     · exact .inr (.inr (.inl direct))
     -- A later call observes an earlier call's unrealized justified checkpoint, of the epoch before.
@@ -935,8 +906,8 @@ theorem Execution.observedRestart_covers_or_evidence
     obtain ⟨slot', begin, slotOk', slotEq, beginOk, timeEq⟩ := atSlots (j + 1) n calls.1
     rw [slotOk, Except.ok.injEq] at slotOk'
     subst slot'
-    obtain ⟨observedBlock, callerHeld, observedNat, blockLe, callSlotOk⟩ :=
-      replaces_facts slotOk replaces
+    obtain ⟨observedBlock, callerHeld, observedNat, blockLe⟩ := replaces_facts slotOk replaces
+    have callSlotOk := computeStartSlotAtEpoch_of_isStartSlotAtEpoch positive replaces.1
     -- The anchor's justified epoch is before the call's.
     obtain ⟨anchorRoot, -, -, -, anchorJustified, -⟩ := getForkchoiceStore_anchor anchored
     have anchorNat : anchor.justifiedCheckpoint.epoch.toNat <
@@ -1017,6 +988,52 @@ theorem Execution.observedRestart_covers_or_evidence
           descends
     exact cover (limit + 1) le_rfl
 
+/-- From the restart through the limit, up-to-date honest heads descend from the observed root.
+
+Otherwise two honest stores collide, or cross-store direct-safety or justified evidence holds. -/
+theorem Execution.observedRestart_covers_or_evidence
+    {Δ limit : ℕ} {anchor : Store preset fork} {horizon : Epoch} {g : ForkedBeaconState preset}
+    (pre : Run config checks g ⟨fork, anchorState⟩) (genesis : Genesis config checks g)
+    (parameters : DirectSafety.Parameters preset) (sync : e.Synchronous Δ)
+    (admitted : BlocksAdmitted e 0 Δ limit) (fits : DelayFits fork config genesisTimeMs Δ)
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (slots : 0 < config.SLOT_DURATION_MS) (long : 1 < preset.SLOTS_PER_EPOCH)
+    (roots : HeldBlockStateRootsNonzero (e := e) limit) (absent : AnchorParentAbsent (e := e) limit)
+    (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) limit)
+    (enough : HeldRunStakeFloor (e := e) pre horizon limit)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon limit)
+    (signedAll : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 limit)
+    {u : ValidatorIndex} (caller : u ∈ J) {events : List ℕ} {firstSlot : Slot}
+    (anchorBefore : getCurrentEpoch anchorState < computeEpochAtSlot preset firstSlot)
+    (atSlots : ∀ i n, events[i]? = some n → ∃ slot begin,
+      ((e.world n).state u).getCurrentSlot config = .ok slot ∧ slot.toNat = firstSlot.toNat + i ∧
+      computeTimeAtSlotMs config genesisTimeMs slot = .ok begin ∧ (e.world n).time = begin.toNat)
+    {i n : ℕ} {fcr after : FastConfirmationStore}
+    (calls : CallAt (e := e) u events (getFastConfirmationStore anchor) i n fcr after)
+    (nBound : (e.world n).time ≤ limit) {head base : Root} {slot : Slot}
+    (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (replaces : ((e.world n).state u).ReplacesBase config after head base slot) :
+    HonestHeadsCover (e := e) after.currentEpochObservedJustifiedCheckpoint.root (e.world n).time
+      (limit + 1) ∨
+    HonestCollision (e := e) limit ∨ CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
+    CrossStoreJustifiedEvidence (e := e) pre limit := by
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := parameters.slots; omega
+  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+    have := parameters.roots
+    omega
+  have ctx : CallsCtx (e := e) anchor u events firstSlot limit :=
+    ⟨anchored, (DirectSafety.run_justified_separated pre genesis).1, anchorSlot, anchorBoundary,
+      start, slots, positive, long, window, roots, absent, caller, anchorBefore, atSlots⟩
+  -- Justified checkpoints agree, and finality reads across stores, unless evidence holds.
+  exact observedRestart_core pre ctx sync admitted fits bounded signedAll
+    (e.selectedCheckpointsAgree_or_evidence anchored start anchorSlot roots absent parameters
+      genesis pre heldEarly enough terminal)
+    (e.crossStoreFinality_or_evidence anchored start anchorSlot anchorBoundary slots bounded roots
+      absent parameters genesis pre heldEarly enough terminal) calls nBound slotOk replaces
+
 /-- At a call that replaces its base, the observed justified checkpoint covers honest heads.
 
 It keeps the call invariant, or one of the evidence alternatives holds. -/
@@ -1025,6 +1042,7 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
     {pre : Run config checks g ⟨fork, anchorState⟩} {u : ValidatorIndex} {events : List ℕ}
     {firstSlot : Slot}
     (ctx : StepCtx (e := e) pre Δ anchor limit horizon anchorEpoch u events firstSlot)
+    (good : Good (e := e) horizon limit)
     -- The first call observes the anchor's finalized checkpoint, whose invariant is given.
     (anchorInvariant : ∀ n ∈ events, (e.world n).time ≤ limit →
       CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n
@@ -1041,11 +1059,9 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
       HonestHeadsCover (e := e) after.currentEpochObservedJustifiedCheckpoint.root
         (e.world n).time (limit + 1)) ∨
     Bad (e := e) pre limit := by
-  rcases e.observedRestart_covers_or_evidence pre ctx.genesis ctx.parameters ctx.sync
-      ctx.admitted ctx.fits ctx.anchored ctx.start ctx.anchorSlot ctx.anchorBoundary ctx.slots
-      ctx.long ctx.roots ctx.absent ctx.bounded ctx.heldEarly ctx.enough ctx.terminal
-      (ctx.anchorEpochOk ▸ ctx.signedAll) ctx.caller ctx.anchorEpochBefore ctx.atSlots calls
-      nBound slotOk replaces with coverAll | collision | direct | justified
+  rcases observedRestart_core pre ctx.toCallsCtx ctx.sync ctx.admitted ctx.fits ctx.bounded
+      (ctx.anchorEpochOk ▸ ctx.signedAll) (.inl good.agree) (.inl good.finality) calls nBound
+      slotOk replaces with coverAll | collision | direct | justified
   rotate_left
   · exact .inr (.inl collision)
   · exact .inr (.inr (.inr (.inl direct)))
@@ -1060,8 +1076,8 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
     obtain ⟨slot', begin, slotOk', -, beginOk, timeEq⟩ := ctx.atSlots (j + 1) n calls.1
     rw [slotOk, Except.ok.injEq] at slotOk'
     subst slot'
-    obtain ⟨observedBlock, callerHeld, observedNat, -, callSlotOk⟩ :=
-      replaces_facts slotOk replaces
+    obtain ⟨observedBlock, callerHeld, observedNat, -⟩ := replaces_facts slotOk replaces
+    have callSlotOk := computeStartSlotAtEpoch_of_isStartSlotAtEpoch ctx.positive replaces.1
     refine ⟨?_, ?_, ?_⟩
     · -- From the next slot.
       intro slot2 next following slotOk2 nextOk followingOk
@@ -1237,8 +1253,8 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
           fun same => ?_⟩)
         rw [same]
         exact (anchorFacts n member nBound).2
-    · rcases observed_facts ctx (fun n member bound => (anchorFacts n member bound).1) calls nBound
-          slotOk replaces with facts | bad
+    · rcases observed_facts ctx good (fun n member bound => (anchorFacts n member bound).1) calls
+          nBound slotOk replaces with facts | bad
       · exact .inl facts
       · exact .inr (.inl bad)
   -- The call's stored root is its start, or a root on the walk from its head to that start.
