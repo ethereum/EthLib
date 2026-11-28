@@ -1,15 +1,19 @@
-"""The points of the embedded trusted setup match the pinned setup file and lie in the subgroup."""
+"""The embedded trusted setup matches the pinned file, lies in the subgroup, and its bases agree."""
 
 import json
 import re
 from pathlib import Path
 
 import pytest
+from py_ecc import optimized_bls12_381
+from py_ecc.bls.g2_primitives import G2_to_signature
 from ruamel.yaml import YAML
 
 import archives
-from ethlib.cryptography import bls
+from ethlib.cryptography import bls, kzg
 from raising import raises
+
+from . import fixtures
 
 ROOT = Path(__file__).resolve().parents[4]
 DATA = ROOT / "EthLib" / "Cryptography" / "Kzg" / "TrustedSetupData.lean"
@@ -89,3 +93,54 @@ def test_not_in_subgroup_rejected() -> None:
     with raises(bls.BlsError, "point not in subgroup") as error:
         bls.decode_g1(bytes.fromhex(pubkey))
     assert error.value.code == 7
+
+
+def _bit_reverse(index: int, bits: int) -> int:
+    """The `bits`-bit reversal of `index`."""
+    out = 0
+    for _ in range(bits):
+        out = (out << 1) | (index & 1)
+        index >>= 1
+    return out
+
+
+def _roots_of_unity_brp() -> list[int]:
+    """The roots of unity of the blob domain, in bit-reversed order."""
+    width = kzg.FIELD_ELEMENTS_PER_BLOB
+    omega = fixtures._root_of_unity(width)
+    roots = [pow(omega, i, fixtures.BLS_MODULUS) for i in range(width)]
+    return [roots[_bit_reverse(i, width.bit_length() - 1)] for i in range(width)]
+
+
+def test_lagrange_sum_is_generator() -> None:
+    # The Lagrange basis polynomials sum to 1, so the 4096 Lagrange points sum to [1]_1.
+    lagrange = points("g1LagrangeHex")
+    monomial = points("g1MonomialHex")
+    total = lagrange[0]
+    for point in lagrange[1:]:
+        total = bls.g1_add(total, point)
+    assert total == monomial[0]
+
+
+@pytest.mark.parametrize("degree", (0, 1, 2, 3, 7, 64, 512, 2048, 4095))
+def test_lagrange_matches_monomial_basis(degree: int) -> None:
+    # Committing to the evaluations of X^degree in Lagrange form reproduces [tau^degree]_1.
+    domain = _roots_of_unity_brp()
+    blob = b"".join(pow(w, degree, fixtures.BLS_MODULUS).to_bytes(32, "big") for w in domain)
+    assert kzg.blob_to_kzg_commitment(blob) == points("g1MonomialHex")[degree]
+
+
+def test_monomial_pairing_powers() -> None:
+    # Every G2 monomial step and sampled G1 monomial steps share the same secret tau.
+    g1 = points("g1MonomialHex")
+    g2 = points("g2MonomialHex")
+    for i in range(len(g2) - 1):
+        assert bls.pairing(g1[0], g2[i + 1]) == bls.pairing(g1[1], g2[i]), f"g2[{i}]"
+    for i in (0, 1, 2, 63, 64, 511, 2047, 4094):
+        assert bls.pairing(g1[i], g2[1]) == bls.pairing(g1[i + 1], g2[0]), f"g1[{i}]"
+
+
+def test_anchored_at_generators() -> None:
+    # Every check above is unchanged when the whole setup is scaled, so pin its first points.
+    assert points("g1MonomialHex")[0] == fixtures.G1
+    assert points("g2MonomialHex")[0] == G2_to_signature(optimized_bls12_381.G2)
