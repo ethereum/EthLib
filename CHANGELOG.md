@@ -104,6 +104,19 @@ Not yet released.
   `KeptOrWiped` (`Execution/Proofs/State/Wiped.lean`) names the writes that keep or wipe the storage of an address, and covers each write of the state but a write of storage.
   The reads lemmas of the end of a transaction in `Execution/Proofs/Transactions/NoninterferenceRun.lean` are public.
 
+- In Lean, `Execution.justified_eq_currentTarget_of_noConflictingCheckpoint` (`Consensus/Proofs/ForkChoice/FastConfirmation/CheckpointConsistency.lean`) gives equality of the receiver's justified checkpoint and the caller's current target at the same epoch, or an honest block collision or cross-store justified evidence.
+  It assumes a reserved count, a pin and coverage of an origin of that epoch (part of [#2058](https://github.com/ethereum/EthLib/issues/2058)).
+  Its premises are these.
+  - The anchor and its store: `anchored`, `start`, `anchorSlot` and `anchorBoundary`, with `genesis` and the run `pre` to the anchor state.
+  - The timing and the setting: `slots`, `fits` (`DelayFits`: a vote delayed by the bound from its deadline arrives before the next slot), `windows` (`AssignmentWindowAgreement`), `params`, `roots` (`HeldBlockStateRootsNonzero`) and `absent` (`AnchorParentAbsent`).
+  - The bounds through the limit `time`: `storeBound` (`HonestStoreEpochsBounded`), `enough` (`HeldRunStakeFloor`), `terminal` (`HeldTerminalStakeFloor`) and `early` (`HeldStatesBeforeUpgrade`).
+  - The call: the honest `caller`, its head (`headOk`), the no-conflict test (`check`), its current target (`targetOk`), the reserved count (`reserved`), a target epoch after the anchor's justified epoch (`afterAnchor`), and the call at a slot start (`callOk`, `callBeginOk`, `atCall`).
+  - The coverage: an origin of the target epoch on the caller's head chain (`originEpochOk`, `descends`), on every up-to-date honest head from the call through the start of the next epoch's first slot (`nextOk`, `firstOk`, `beginOk`, `covers`).
+  - The receiver: the honest `receiver`, up to date (`ready`), with a justified checkpoint of the target epoch (`sameEpoch`); both events are by the limit (`callBound`, `byTime`).
+  - The pin `pins` (`JustifiedPinned` at the anchor's justified epoch).
+  In `Consensus/Proofs/ForkChoice/FastConfirmation/PinJustified.lean`, `Execution.justified_eq_currentTarget_of_noConflictingCheckpoint_of_setting` derives the pin and the held-state fork bound from the setting from Fulu until Gloas.
+  It takes the same premises without `early` and `pins`, and adds `[DecidablePred (· ∈ J)]`, `bls`, `header` and `zero` (the anchor header matches the anchor block except for its zero state root), `delay` (a positive inclusion delay), `unslashed` (no honest slashing in counted states), `finality` (each honest justified chain reads each honest finalized checkpoint whose epoch it reaches), `guarded` (the pin guard), `preGloas`, `fusaka`, `forkWindow` (the horizon precedes the next scheduled fork), `bands` (the balance increment is positive and within the upward band), `caps` and `maxAligned` (the balance caps are ordered and increment-aligned), `exitWindow` (the maximum seed lookahead is at least three epochs), `long` (an epoch has more than one slot) and `facts` (the preset meets the pin's drift bounds).
+
 - In Lean, `Execution/Proofs/State/RandomOracle.lean` bounds the probability of finding two storages, or two states, with one root that differ, with the hash a random oracle.
   `prEvent_storageWins_le` and `prEvent_stateWins_le` give the bound `Q^2 / 2^256`, for `Q` hash calls of the experiment.
   `Execution/Proofs/Trie/RandomOracle.lean` gains `queryWitnesses`, the queries of the binding inputs of two tries at one key, which `extract` now runs after the two roots.
