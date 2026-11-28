@@ -5,6 +5,7 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Transactions.CodeOrigin
 public import EthLib.Execution.Proofs.Transactions.CodeRules
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: every code that a block changes meets the rules of its fork
@@ -274,7 +275,7 @@ private theorem keeps_systemCall {env : BlockEnvironment fork} {block : BlockSta
     {target : Address} {data : ByteArray} {out : SystemCallOutput}
     (h : systemCall env block target data = .ok out) :
     Keeps fork (TransactionState.ofBlock block) out.state := by
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨call, hcall, h⟩ := Base.bind_ok_iff.mp h
     cases h

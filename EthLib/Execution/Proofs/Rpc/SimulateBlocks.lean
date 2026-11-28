@@ -10,6 +10,7 @@ public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.StateGas
 public import EthLib.Execution.Proofs.Transactions.Unsigned
 import EthLib.Base.Proofs.ChainConfig
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the blocks of `eth_simulateV1`
@@ -608,7 +609,7 @@ theorem applyTransaction_ne_senderNotEoa {fork : Fork} {env : Evm.BlockEnvironme
     (address : Address) :
     applyTransaction env index before tx overrides ≠
       .error (.invalidTransaction i (.senderNotEoa address)) := by
-  unfold applyTransaction
+  rw [applyTransaction_unfold]
   rw [hs]
   cases hc : checkInclusion env.chainId env before.gas (.ofBlock before.block) tx (some sender)
       overrides.lifted with
@@ -664,7 +665,7 @@ theorem applyTransactions_ne_senderNotEoa {fork : Fork} {env : Evm.BlockEnvironm
     (address : Address) :
     applyTransactions env body txs overrides ≠
       .error (.invalidTransaction i (.senderNotEoa address)) := by
-  unfold applyTransactions
+  rw [applyTransactions_unfold]
   exact foldlM_ne_senderNotEoa i address txs 0 _ fun j _ hj => hs j (by simpa using hj)
 
 /-! ## Agreement with the state transition -/
@@ -737,7 +738,7 @@ private theorem applyTransaction_signed {fork : Fork} {env : Evm.BlockEnvironmen
     applyTransaction env index before tx = .ok after ∨
       ∃ e, applyTransaction env index before tx = .error (.invalidTransaction index e) ∧
         (e = .senderNotEoa sender ∨ ∃ codeHash, e = .missingCode codeHash) := by
-  unfold applyTransaction at h ⊢
+  rw [applyTransaction_unfold] at h ⊢
   rw [hs, hl, hp, checkInclusion_unsigned, checkInclusion_totalGasCap hGas] at h
   simp only [processTransaction_totalGasCap, processTransaction_unsigned,
     Transaction.type_unsigned] at h
@@ -802,7 +803,7 @@ private theorem applyBody_signed {fork : Fork} {config : ChainConfig}
       ∃ i e, applyBody config env ⟨header, txs, [], ws⟩ start = .error (.invalidTransaction i e) ∧
         ((∃ s, overrides.senders i = some s ∧ e = .senderNotEoa s)
           ∨ ∃ codeHash, e = .missingCode codeHash) := by
-  unfold applyBody at h ⊢
+  rw [applyBody_unfold] at h ⊢
   rw [hCap] at h
   obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
@@ -922,7 +923,7 @@ private theorem applyTransaction_simulated_gas {fork : Fork} {env : Evm.BlockEnv
     (hExecution : before.gas.execution ≤ env.gasLimit) (hState : before.gas.state ≤ env.gasLimit)
     (h : applyTransaction env index before tx overrides = .ok after) :
     after.gas.execution ≤ env.gasLimit ∧ after.gas.state ≤ env.gasLimit := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   rw [hs, hl, hp, checkInclusion_totalGasCap hGas] at h
   simp only [processTransaction_totalGasCap] at h
   obtain ⟨included, hIncluded, h⟩ := bind_ok_iff.mp h
@@ -959,7 +960,7 @@ private theorem applyTransactions_simulated_gas {fork : Fork} {env : Evm.BlockEn
     (hGas : ∀ tx ∈ txs, tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
     (h : applyTransactions env body txs overrides = .ok out) :
     out.gas.execution ≤ env.gasLimit ∧ out.gas.state ≤ env.gasLimit := by
-  unfold applyTransactions at h
+  rw [applyTransactions_unfold] at h
   refine foldlM_ok_invariant_of_mem (fun before : BodyOutput fork =>
     before.gas.execution ≤ env.gasLimit ∧ before.gas.state ≤ env.gasLimit) ?_
     ⟨Nat.zero_le _, Nat.zero_le _⟩ h
@@ -1192,7 +1193,7 @@ private theorem stateTransition_of_simulateBlock_or {chain chain' : BlockChain} 
         pure, Except.pure]
     obtain ⟨_, _, txsOut, _, _, _, _, hApply, _, _, _, _, _, _, hGasEq, _⟩ :=
       applyBody_eq_ok hReal
-    unfold applyTransactions at hApply
+    rw [applyTransactions_unfold] at hApply
     have hb : output.gas.blob < 2 ^ 64 := by
       rw [hGasEq, foldlM_blob txs 0 _ txsOut hApply]
       simpa [BlockGas.zero] using hBlob

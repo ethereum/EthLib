@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Blocks.AccessListRebuild
 public import EthLib.Execution.Proofs.Blocks.Replay
 public import EthLib.Execution.Proofs.Transactions.NoncesFit
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: the state transition keeps every nonce at most `2^64 - 1`
@@ -55,7 +56,7 @@ theorem applyTransactions_noncesFit {env : BlockEnvironment fork} {body : BodySt
 theorem systemCall_noncesFit {env : BlockEnvironment fork} {block : BlockState}
     {target : Address} {data : ByteArray} {out : SystemCallOutput} (hfit : block.NoncesFit)
     (h : systemCall env block target data = .ok out) : out.state.NoncesFit := by
-  simp only [systemCall] at h
+  simp only [systemCall_unfold] at h
   split at h <;>
   · obtain ⟨call, hcall, h⟩ := bind_ok_iff.mp h
     cases h

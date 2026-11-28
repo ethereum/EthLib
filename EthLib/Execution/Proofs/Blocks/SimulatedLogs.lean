@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Transactions.SimulatedLogs
+public import EthLib.Execution.Proofs.Blocks.Unfold
 
 /-!
 # Proofs: from Glamsterdam, a simulation reports the logs of each receipt
@@ -30,7 +31,7 @@ theorem applyTransaction_simulatedLogs {env : BlockEnvironment fork} {index : Na
       after.results = before.results ++ [result] ∧
       after.receipts = before.receipts ++ [(tx.type, receipt)] ∧
       result.simulatedLogs = receipt.logs := by
-  unfold applyTransaction at h
+  rw [applyTransaction_unfold] at h
   obtain ⟨included, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, -, h⟩ := bind_ok_iff.mp h
