@@ -747,8 +747,17 @@ It fixes the secret and the indices, and assumes that the initial cache holds no
 `prEvent_outputs_pair_of_fresh` states the case of two different indices.
 Two events, one on each output, both hold with the product of their probabilities for two uniform values.
 `evalWithAnswerFn_outputs` shows that Keccak-256, answering in place of the oracle, gives the outputs of the specification.
-Carrying the independence over to Keccak-256 is an idealisation of A4, not a theorem.
-These theorems say nothing about a holder that chooses its secret after the oracle answered one of those inputs.
+`prEvent_outputs_pair_keccak256With_le_add` (`Proofs/Vrf/OutputPermutation.lean`) states the case of two different indices with Keccak-256 over a uniform permutation of the `2^1600` states, in place of Keccak-f[1600].
+The permutation is drawn after the secret, the indices and the events are fixed.
+With Keccak-f[1600] itself, the two hashes are the outputs of the specification at the two indices, by definition.
+Over the permutation, the chance that both events hold is within `spongeIndiffBound (2 ^ 1600) (2 ^ 512) 2` of the product of their probabilities for two uniform values.
+That bound is `2^-1600 + 6 / 2^512`, below `2^-509`.
+It is the bound of `keccak256_indifferentiable` (`Proofs/Hash/Keccak/Sponge.lean`) at a cost of 2.
+An output input has 49 bytes (`size_outputInput`, `Proofs/Vrf/Hash.lean`), below the 136 bytes of one block, so each hash costs one block.
+The proof applies `Indifferentiable.prEvent_le_add` (`Proofs/Indifferentiability.lean`) to the two hash calls, then `prEvent_outputs_pair_of_fresh` with the empty cache.
+Over the permutation, no theorem covers more than two indices, or the two outputs together with other hashes, such as those of the tree.
+Carrying the permutation bound over to Keccak-f[1600] is an idealisation of A4, not a theorem.
+These theorems say nothing about a holder that chooses its secret after the oracle answered one of those inputs, or after the permutation was drawn.
 Such a holder can grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
 
 A selection therefore compares `mixOutput`, the hash of the output with randomness revealed after the root is registered.
@@ -1721,6 +1730,9 @@ The simulator of their §4.3, Algorithm 3, does so, adapted to a 256-bit oracle 
 Their §4 shows that the composition fails for multi-stage games.
 Let each hash call cost at least 1.
 `isQueryBoundP_romGame` proves that the random-oracle image of a game of cost `N` then asks the oracle at most `N` times.
+`Indifferentiable.prEvent_le_add` applies indifferentiability to a computation that calls only the hash, at a cost of at most `N`.
+It runs with the hash over the permutation, or with a random oracle from an empty cache.
+Each event has chances in the two runs at most the bound for `N` apart, since the image never asks the simulator.
 `Keccak256Indifferentiable` (`Proofs/Hash/Keccak/Indifferentiability.lean`) is the hypothesis for Keccak-256.
 Its bound is the closed form of equation (6) of Bertoni et al.
 For a cost `N`, it is `((1 - 2^-1088) N^2 + (1 + 2^-1088) N) / 2^513`.
@@ -1803,6 +1815,8 @@ Of the setup, they assume only that it decodes.
 The point evaluation precompile decodes `G2` point 1 of the embedded setup alone, with `TrustedSetup.g2MonomialOfHex`, and uses it as `[tau]_2`.
 `TrustedSetup.g2MonomialOfHex_eq` (`Proofs/Kzg/TrustedSetup.lean`) states that a point decoded alone is that point of the decoded setup.
 It also assumes only that the setup decodes.
+`pointEvaluation_eq_ok_iff_kzg` (`Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`) states, with that one assumption, that the precompile succeeds exactly when the KZG check of the cryptography layer accepts, once the length, the gas and the versioned hash pass.
+On a well-formed setup (assumption D3), `pointEvaluation_opening` in the same file gives the opening equation `c - y = w (τ - z)` of every successful call.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
 On a well-formed setup (assumption D3), `blobToKzgCommitment_binding` in the same file proves that two blobs whose decoded values differ share a commitment only when the secret is a root of `p - p'`.
@@ -4484,6 +4498,14 @@ It assumes only that the call succeeds.
 `Store.onFastConfirmation_checkpoints` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states how the same call sets the observed justified checkpoints at the epoch boundaries.
 These are tests that passed, not proofs that a checkpoint becomes justified or that a block stays in the chain of an honest head.
 No theorem here proves conditional or accountable safety of the confirmed block.
+
+`Store.ForwardReachable.finalized_epoch_add_two_le` in `Consensus/Proofs/ForkChoice/CheckpointBlocks.lean` states how old a finalized checkpoint other than the anchor's is ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+The store is forward reachable from the store initialized from the anchor state and block.
+Its finalized checkpoint differs from the anchor's.
+The block epoch of that checkpoint's root is at most its epoch, and its epoch plus two is at most the current epoch.
+It assumes the anchor invariant, a positive slot duration, and that an epoch has at least one slot.
+It also assumes that the anchor block is not after the anchor state, and that the anchor state does not hash to the zero root.
+It also assumes a history of at least two epochs of block roots, and that the store's current epoch can be read.
 
 `Store.blockShouldBeFinalized_eq_ok_iff` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) states when a block is due for finality.
 The next checkpoint is at the first epoch that starts at or after the slot of the block.
@@ -8544,7 +8566,15 @@ A gas limit can grow by a 1024th of the parent's in each block, with no maximum,
 A difficulty can grow by a 2048th in each block before Paris, though mining long before `2^256` is out of reach.
 The blob base fee needs an excess blob gas that a genesis or a fork sets, as the paragraphs below show.
 The gas price is at most a fee field of the transaction, which is a word.
-The base fee rises only above a block's target, and every transaction of that block pays it from a balance below `2^256`, so it stays below the bound on a chain.
+The base fee rises only after a block above its target, and that block burns its base fee for each unit of its gas out of the supply before it.
+So from London to before Glamsterdam, the base fee that a block passes on is at most its own, or the fee after a full block at `S / (t + 1)` (`stateTransition_expectedBaseFee_le`, `Proofs/Blocks/BaseFeeBound.lean`).
+Here `S` is the supply before the block plus the ether it creates, and `t` is its target, its gas limit over 2.
+It stays below `2^64` while `S / (t + 1)` stays below `2^63` (`stateTransition_expectedBaseFee_lt_two_pow_64`).
+The supply is a sum of balances with no bound of its own, so these bounds alone do not keep the base fee below `2^64`.
+A rise needs a block above its target, whose senders pay the base fee from balances below `2^256`, but that bound below `2^256` is not proved here.
+A genesis can also set any base fee, so the hypothesis on the base fee of BASEFEE stays.
+With a mainnet supply near `2^87` wei, `S / (t + 1)` is below `2^63` from a target of about 13 million gas, below the mainnet target.
+From Glamsterdam, the burn counts the gas of the fees rather than the gas used of the header, and no such bound is stated yet.
 The number of a block grows by one per block.
 GAS needs no such rule here: the gas limit of a transaction is a word, so the gas left of a frame stays below `2^256`.
 
@@ -8562,6 +8592,8 @@ Below it, when the block sets no blob price and has the schedule of its fork, th
 From it on, the instruction aborts (`environmentStep_blobbasefee_of_le`).
 A schedule that a chain sets itself has no such evaluation.
 Under any schedule, an excess of at most 161 update fractions gives a fee of at most `3^161`, below `2^256` (`getBaseFeePerBlobGas_lt_of_le`, `Proofs/Fees/BlobBaseFeeBound.lean`).
+Every accumulator of the blob fee loop, whose factor is 1, is at most `F * 3^c` for an update fraction `F` and `c` the ceiling of the excess over it (`accum_le`).
+With `F` at most `2^24`, as at every mainnet schedule, an excess of at most 46 update fractions keeps each accumulator, its product with the excess, each partial sum and the fee below `2^128` (`lt_two_pow_128_of_le`).
 
 A block raises the excess by at most `GAS_PER_BLOB * (max - target)`, and along valid headers whose parents stay within the maximum the rises add up (`excessBlobGas_le_of_checkHeader`, `Proofs/Blocks/ExcessBlobGas.lean`).
 So from an excess of 0, a chain needs at least 1507 full blocks under the Dencun schedule, and 2260 under each later one, to reach these values.
@@ -8913,6 +8945,13 @@ The codeword searches of each scheme share the bullet of that scheme:
   The theorems say nothing about a secret chosen after the oracle answered one of those inputs.
   The oracle answers classical queries only, so the theorems say nothing about a holder that evaluates Keccak-256 in superposition.
   They say nothing either about an attack that uses the structure of Keccak.
+- VRF output independence over a permutation: Keccak-f[1600] is a uniform permutation of the `2^1600` states, drawn once.
+  The Keccak-256 calls of both outputs use that permutation in place of Keccak-f[1600].
+  The secret, two different indices and an event on each output are fixed before the permutation is drawn.
+  No party evaluates the permutation beyond those two calls, and the events cannot depend on its other values, such as the root of the tree.
+  The theorem says nothing about a secret that depends on the permutation.
+  A secret chosen after the permutation was drawn, or hashed from a seed, is such a secret.
+  It says nothing either about an attack that uses the structure of Keccak-f[1600].
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.

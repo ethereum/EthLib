@@ -1,4 +1,7 @@
-"""The MODEXP precompile against the examples of EIP-198 and the prices of EIP-2565 and EIP-7883."""
+"""The MODEXP precompile against its EIPs and the EIP-7883 vectors of execution-specs."""
+
+import json
+from pathlib import Path
 
 import pytest
 
@@ -230,3 +233,86 @@ def test_nagydani_prices(
     else:
         expected = eip7883
     assert price(fork, 0x05, call(bytes(size), exponent, bytes(size))) == expected
+
+
+# The MODEXP calls of the EIP-7883 tests, with their outputs and their prices.
+# They include exponents of 33 to 216 bytes and operands of 1024 bytes.
+#
+# File: tests/osaka/eip7883_modexp_gas_increase/vector/vectors.json
+# Repository: ethereum/execution-specs
+# Commit: 391d8a05d5cb182542ac7e7330c858b6ee03f990
+# Licence: CC0-1.0
+VECTORS = json.loads(
+    (Path(__file__).resolve().parent / "execution_specs" / "modexp_vectors.json").read_text()
+)
+
+
+def eip_price(data: bytes, eip7883: bool) -> int:
+    """The price of a call by the formula of EIP-2565, or of EIP-7883 when `eip7883` is set."""
+    base, exponent, modulus = (
+        int.from_bytes(data[i : i + 32].ljust(32, b"\0"), "big") for i in (0, 32, 64)
+    )
+    head_bytes = data[96 + base : 96 + base + min(32, exponent)].ljust(min(32, exponent), b"\0")
+    head = int.from_bytes(head_bytes, "big")
+    # EIP-198: the index of the highest bit of the head, plus 8 per exponent byte past 32.
+    # EIP-7883 doubles the 8, raises the complexity and the least price, and drops the divisor.
+    per_byte = 16 if eip7883 else 8
+    iterations = max(head.bit_length() - 1, 0) + per_byte * max(exponent - 32, 0)
+    words = (max(base, modulus) + 7) // 8
+    if eip7883:
+        complexity = 16 if max(base, modulus) <= 32 else 2 * words**2
+        return max(500, complexity * max(iterations, 1))
+    return max(200, words**2 * max(iterations, 1) // 3)
+
+
+@pytest.mark.parametrize("vector", VECTORS, ids=[v["Name"] for v in VECTORS])
+def test_execution_specs_vector_prices(vector: dict) -> None:
+    # The prices of the file agree with the formulas of the EIPs.
+    data = bytes.fromhex(vector["Input"])
+    assert eip_price(data, eip7883=False) == vector["GasOld"]
+    assert eip_price(data, eip7883=True) == vector["GasNew"]
+
+
+@pytest.mark.parametrize("vector", VECTORS, ids=[v["Name"] for v in VECTORS])
+@pytest.mark.parametrize("fork", (*EIP_2565_FORKS, *EIP_7883_FORKS))
+def test_execution_specs_vectors(fork: str, vector: dict) -> None:
+    data = bytes.fromhex(vector["Input"])
+    cost = vector["GasOld"] if fork in EIP_2565_FORKS else vector["GasNew"]
+    assert price(fork, 0x05, data) == cost
+    assert run(fork, 0x05, data, cost) == bytes.fromhex(vector["Expected"])
+
+
+def eip198_price(length: int) -> int:
+    """The EIP-198 price of a base of `length` bytes, an empty exponent and an empty modulus."""
+    if length <= 64:
+        complexity = length**2
+    elif length <= 1024:
+        complexity = length**2 // 4 + 96 * length - 3072
+    else:
+        complexity = length**2 // 16 + 480 * length - 199680
+    return complexity // 20
+
+
+def eip2565_price(length: int) -> int:
+    """The EIP-2565 price of a base of `length` bytes, an empty exponent and an empty modulus."""
+    return max(200, ((length + 7) // 8) ** 2 // 3)
+
+
+@pytest.mark.parametrize(
+    "length, at_least_2_64",
+    [
+        # 2^33 bytes is not enough: at Berlin it costs (2^30)^2 / 3, below 2^64.
+        (2**33, False),
+        # From 2^37 bytes, the price is at least 2^64 at every fork before Fusaka.
+        (2**37, True),
+        (2**64, True),
+        (2**256 - 1, True),
+    ],
+)
+@pytest.mark.parametrize("fork", since("byzantium", "fusaka"))
+def test_huge_base_price(fork: str, length: int, at_least_2_64: bool) -> None:
+    # An empty exponent has one iteration, so the price is the complexity over the divisor.
+    data = word(length) + word(0) + word(0)
+    cost = eip198_price(length) if fork in EIP_198_FORKS else eip2565_price(length)
+    assert price(fork, 0x05, data) == cost
+    assert (cost >= 2**64) == at_least_2_64

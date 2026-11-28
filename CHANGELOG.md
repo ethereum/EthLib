@@ -123,6 +123,12 @@ Not yet released.
   They also assume that the voter's store reads the receiver's held finalized checkpoint as the checkpoint of the vote's block root.
   `Execution.data_eq_of_signed_of_target_epoch`, `Execution.latest_slot_floor_of_signed_rank` and `VoteAt.signed_sent` move to `Consensus/Proofs/ForkChoice/VoteDelivery.lean` from `Consensus/Proofs/ForkChoice/FastConfirmation/DutySupport.lean`, with their names and statements.
 
+- In Lean, `Store.ForwardReachable.finalized_epoch_add_two_le` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`) states the timing of a finalized checkpoint other than the anchor's ([#2059](https://github.com/ethereum/EthLib/issues/2059)).
+  The store is forward reachable from the store initialized from the anchor state and block, and it reads its current epoch.
+  Suppose its finalized checkpoint differs from the anchor's.
+  Then that checkpoint's root has a block epoch at most its epoch, and its epoch plus two is at most the current epoch.
+  It assumes the anchor invariant, that the anchor block is not after the anchor state and that the anchor state does not hash to the zero root, a positive slot duration and epoch length, and a history of at least two epochs of block roots.
+
 - In Lean, `Base.pairwise_zip_of_pairwise` (`Base/Proofs/List.lean`) states that a relation that holds pairwise on a list holds pairwise on the first items of its zip.
   `List.takeWhile_eq_take`, `List.dropWhile_eq_drop` and `List.findIdx?_eq_of_nodup` move to `Base/Proofs/List.lean` from `Networking/Proofs/Devp2p/ForkId.lean`.
   `Consensus.mem_array_foldl_insert` (`Consensus/Proofs/ForkChoice/FastConfirmation/Basic.lean`) is public.
@@ -1578,6 +1584,30 @@ Not yet released.
   The monadic forms let the random oracle experiments run these roots with a hash that queries the oracle.
   The roots are unchanged, but the three definitions unfold to the monadic forms.
   Migration: rewrite with `storageRoot_eq`, `stateEntries_eq` and `stateRoot_eq` (`Execution/Proofs/State/Root.lean`), which state the former bodies.
+
+- In Lean, `ConfirmedCalls.finalized_read` (`Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCalls.lean`) is now `Store.Reachable.finalized_read` (`Consensus/Proofs/ForkChoice/CheckpointBlocks.lean`), with the same statement.
+
+- In Lean, `DirectSafety.Apriori.withdrawalBudget` counts the exit capacity of a window only up to a withdrawal delay before its end (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+  A call scheduled after `horizonEnd x high - MIN_VALIDATOR_WITHDRAWABILITY_DELAY` is not withdrawable within the window, so it moves no balance there.
+  The capacity now starts at the epoch after the queue's start, where it started at the queue's start; the carry covers that epoch.
+  The exit carry and the capacity both count only if the queue's start plus the delay is in the window.
+  The due partial withdrawals and the gate before Electra are unchanged.
+  `withdrawalBudget`, `roundingBudget`, `gainBudget` and `drift` are each at most their former value, so `accountable_safety_apriori` keeps its statement and implies the former one.
+  Eleven declarations of `DirectSafety.Apriori.Internal` bound a quantity by the budget, or by `roundingBudget`, `gainBudget` or `drift`, in a premise or a field.
+  A caller outside this repository that builds or proves one must show the stronger bound; the builders in this repository needed no change.
+  The theorems that take these as premises also conclude the stronger bound, so a caller that only reads one gains.
+  Migration: show the bound at the new budget, as `run_partials_le_paid_of_endpoint_floor` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Ledger.lean`) now states it for the partials.
+  `DirectSafety.Apriori.dueExitCarry` is removed, since the new budget tests the carry itself and nothing else read it.
+  Migration: use `if exitQueueStart x ≤ horizonEnd x high then exitBalanceCarry x else 0`.
+  The eleven declarations:
+  - `LedgerCuts.roundLedger_regime` and `LedgerCuts.roundLedger_electra` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Cohorts.lean`), by `withdrawalBudget` in a premise.
+  - The structure `RoundLedger` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Ledger.lean`), by `withdrawalBudget` in its fields `pBound` and `sourcePBound`, and by `roundingBudget` in its rounding fields.
+  - The structure `NewCohortAllocation` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Cohorts.lean`), by `roundingBudget` in its field `debitBudget`.
+  - `StateProducer`, `DerivedProducer` and `CommonLedger` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Producers.lean`), by `drift`.
+  - `SelectedReleaseProducer` (`Consensus/Proofs/DirectSafety/Apriori/Contracts/Producers.lean`), by `gainBudget` and `roundingBudget`.
+  - `CumulativeFunding` (`Consensus/Proofs/DirectSafety/Apriori/Ownership.lean`), by `roundingBudget`.
+  - `nonreference_boundary_le` (`Consensus/Proofs/DirectSafety/Apriori/Common.lean`), by `gainBudget` in its premise `funded`.
+  - `composition_conditional_of_call_ledger` (`Consensus/Proofs/DirectSafety/Apriori/Common.lean`), by `drift` in its premise `callLedger`.
 
 - A part of a slot, given in basis points, rounds to the nearest millisecond, a half up, where it rounded down, as consensus-specs v1.7.0-beta.5 does ([#4145](https://github.com/ethereum/EthLib/issues/4145)).
   Before Gloas, on mainnet, an attestation and a sync committee message are due 4000 ms into the slot, up from 3999 ms.

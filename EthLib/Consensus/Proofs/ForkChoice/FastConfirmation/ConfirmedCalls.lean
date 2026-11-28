@@ -650,35 +650,6 @@ private theorem anchor_recent (ctx : CallsCtx (e := e) anchor u events firstSlot
   exact ⟨by omega, by omega, reached.getCheckpointBlock_anchor ctx.anchorSlot
     ctx.anchorBoundary (ctx.absent u ctx.caller n bound) aFound hashed⟩
 
-/-- A reachable store past the anchor epoch reads its finalized checkpoint at some root.
-
-The checkpoint comes from a held state or from its pull-up, whose block reads it on its chain.
-
-The anchor state must not hash to the zero root. -/
-theorem finalized_read {store : Store preset fork}
-    (reached : Store.Reachable config anchorState anchorBlock store)
-    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
-    (nonzero : hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0))
-    (later : getCurrentEpoch anchorState < store.finalizedCheckpoint.epoch) :
-    ∃ root, store.getCheckpointBlock root store.finalizedCheckpoint.epoch =
-      .ok store.finalizedCheckpoint.root := by
-  have known := fun {root : Root} {state : BeaconState preset fork}
-      (stored : store.blockStates[root]? = some state) member =>
-    reached.getCheckpointBlock_of_blockState sound anchorSlot positive window stored
-      (checkpoint := store.finalizedCheckpoint) member later
-  rcases reached.finalized_origins _ (Or.inl rfl) with ⟨root, -, same⟩ |
-      ⟨root, state, stored, same⟩ | ⟨root, state, pulled, stored, pulledOk, same⟩
-  · rw [same] at later
-    exact absurd later (UInt64.lt_irrefl _)
-  · rcases known stored (.inl (by simp [same])) with ⟨read, -⟩ | zero
-    · exact ⟨root, read⟩
-    · exact absurd zero nonzero
-  · rcases known stored (.inr ⟨pulled, pulledOk, by simp [same]⟩) with ⟨read, -⟩ | zero
-    · exact ⟨root, read⟩
-    · exact absurd zero nonzero
-
 /-- A finalized start within one epoch of the call is the anchor root.
 
 That is in the run's first epoch, where the observed checkpoint is the anchor's. -/
@@ -697,24 +668,15 @@ private theorem finalized_recent (ctx : CallsCtx (e := e) anchor u events firstS
     simp [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure]
   obtain ⟨anchorRoot, hashed, -, -, -, finEq, -, -⟩ := getForkchoiceStore_anchor ctx.anchored
   intro be beOk rec
-  by_cases lt : getCurrentEpoch anchorState <
-      ((e.world n).state u).finalizedCheckpoint.epoch
-  · exfalso
-    obtain ⟨root, r⟩ := finalized_read reached ctx.sound (UInt64.le_of_eq ctx.anchorSlot)
-      ctx.positive ctx.window nonzero lt
-    obtain ⟨b, bFound, bLe, -⟩ := Store.getCheckpointBlock_self ctx.positive r
-    obtain ⟨b', bFound', rfl⟩ := found_of_blockEpoch beOk
-    obtain rfl : b' = b := Option.some.inj (bFound'.symm.trans bFound)
-    rcases forward.finalized_add_two_le_or_anchor ctx.sound ctx.slots epochOk with lag | lag
-    · omega
-    · exact UInt64.not_lt.mpr lag lt
-  · have le := UInt64.not_lt.mp lt
-    obtain ⟨-, hash⟩ := reached.finalized_eq_anchor_of_epoch_le le
-    have rootEq : ((e.world n).state u).finalizedCheckpoint.root =
-        anchor.finalizedCheckpoint.root := by
-      rw [finEq]
-      exact Except.ok.inj (hash.symm.trans hashed)
-    rw [rootEq] at beOk ⊢
+  by_cases same : ((e.world n).state u).finalizedCheckpoint = anchor.finalizedCheckpoint
+  swap
+  · -- Another finalized checkpoint is at least two epochs old, too old to be recent.
+    exfalso
+    obtain ⟨be', read, below, lag⟩ := forward.finalized_epoch_add_two_le ctx.anchored ctx.sound
+      (UInt64.le_of_eq ctx.anchorSlot) ctx.slots ctx.positive ctx.window nonzero same epochOk
+    obtain rfl := Except.ok.inj (beOk.symm.trans read)
+    omega
+  · rw [same] at beOk ⊢
     have beEq := anchor_epoch reached ctx.anchorSlot hashed (by rw [finEq] at beOk; exact beOk)
     subst beEq
     rw [cAnchor (by omega)]

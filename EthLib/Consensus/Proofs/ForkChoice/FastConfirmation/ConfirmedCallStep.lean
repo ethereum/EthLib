@@ -732,28 +732,9 @@ private theorem finalized_old {Δ : ℕ} {anchor : Store preset fork} {limit : �
         rootEpoch.toNat ≤ ((e.world n).state u).finalizedCheckpoint.epoch.toNat ∧
         ((e.world n).state u).finalizedCheckpoint.epoch.toNat + 2 ≤ epoch.toNat := by
   intro epoch epochOk
-  have forward := e.forwardReachable
-    (fun x hx => (ctx.start x hx).symm ▸ Store.ForwardReachable.anchor ctx.anchored) n u
-    ctx.caller
-  have reached := forward.reachable
-  have aligned : anchorBlock.slot ≤ anchorState.slot := UInt64.le_of_eq ctx.anchorSlot
-  obtain ⟨anchorRoot, anchorHash, -, -, -, anchorFinal, -⟩ := getForkchoiceStore_anchor ctx.anchored
-  -- At or below the anchor epoch the finality is the anchor's.
-  have later : getCurrentEpoch anchorState < ((e.world n).state u).finalizedCheckpoint.epoch := by
-    refine UInt64.not_le.mp fun atAnchor => other ?_
-    obtain ⟨epochEq, rootHash⟩ := reached.finalized_eq_anchor_of_epoch_le atAnchor
-    rw [anchorHash, Except.ok.injEq] at rootHash
-    rw [anchorFinal]
-    cases h : ((e.world n).state u).finalizedCheckpoint
-    simp_all
-  have lagged := (forward.finalized_add_two_le_or_anchor ctx.sound ctx.slots epochOk).resolve_right
-    (UInt64.not_le.mpr later)
-  -- Past the anchor epoch the finality is read at a held block of its epoch or before.
-  obtain ⟨root, read⟩ := finalized_read reached ctx.sound aligned ctx.positive ctx.window
-    (anchorState_hash_nonzero ctx.anchored ctx.start ctx.roots ctx.caller nBound) later
-  obtain ⟨block, found, below, -⟩ := Store.getCheckpointBlock_self ctx.positive read
-  refine ⟨computeEpochAtSlot preset block.slot, ?_, below, lagged⟩
-  simp [Store.getBlockEpoch, Store.block_ok_iff.mpr found, bind, Except.bind, pure, Except.pure]
+  exact (ctx.forward n).finalized_epoch_add_two_le ctx.anchored ctx.sound
+    (UInt64.le_of_eq ctx.anchorSlot) ctx.slots ctx.positive ctx.window
+    (anchorState_hash_nonzero ctx.anchored ctx.start ctx.roots ctx.caller nBound) other epochOk
 
 /-- The caller's finalized root satisfies the call invariant.
 

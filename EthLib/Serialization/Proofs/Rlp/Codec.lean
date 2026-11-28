@@ -405,14 +405,24 @@ theorem Item.eq_of_readField {count : Nat} {items rest : List Item} {x : α}
     obtain ⟨rfl, rfl⟩ := h
     rw [hItem]
 
+/-- From the unfolded decode `h` of a record, peel the list check and its first `n` field reads. -/
+scoped macro "peel_decode_fields " h:ident n:num " with " hItem:ident hRest:ident : tactic =>
+  `(tactic| (
+    obtain ⟨items, hFields, hNext⟩ := bind_ok_iff.mp $h
+    -- The first given name records that the item is a list of the required length.
+    have $hItem := Item.fields_eq_ok.mp hFields
+    -- Each read takes the item of one field from the front of the rest.
+    iterate $n
+      obtain ⟨⟨_, _⟩, hRead, hNext⟩ := bind_ok_iff.mp hNext
+      -- Its equation stays unnamed, for `subst_vars`: the field's item, then the remaining items.
+      have := Item.eq_of_readField hRead
+    -- The second given name holds the decode of the remaining fields.
+    have $hRest := hNext
+    clear hNext))
+
 /-- Close `toItem c = item` from the unfolded decode `h` of `c`, which reads exactly `n` fields. -/
 scoped macro "decode_fields_toItem " h:ident n:num : tactic => `(tactic| (
-  obtain ⟨items, hFields, hRest⟩ := bind_ok_iff.mp $h
-  have hItem := Item.fields_eq_ok.mp hFields
-  -- Each read takes the item of one field from the front of the rest.
-  iterate $n
-    obtain ⟨⟨_, _⟩, hRead, hRest⟩ := bind_ok_iff.mp hRest
-    have := Item.eq_of_readField hRead
+  peel_decode_fields $h $n with hItem hRest
   obtain rfl := Except.ok.inj hRest
   obtain ⟨rfl, hLen⟩ := hItem
   subst_vars
@@ -421,6 +431,13 @@ scoped macro "decode_fields_toItem " h:ident n:num : tactic => `(tactic| (
   subst hLen
   -- The item of the record is the list of its field items.
   rfl))
+
+/-- Close `dec (enc c) = .ok c` for a record read field by field from the front of its items. -/
+scoped macro "simp_record_roundtrip " dec:ident enc:ident : tactic => `(tactic| (
+  -- Unfold the decoder and the encoder, then read each field back from its own item.
+  simp only [$dec:ident, $enc:ident, Item.fields, Item.toItems, List.length_cons, List.length_nil,
+    ↓reduceIte, Item.readField_cons, bind, Except.bind, pure, Except.pure]
+  done))
 
 omit [LawfulCodec α] in
 /-- A field that appears at a fork has one item from that fork on, and none before. -/
