@@ -77,7 +77,7 @@ theorem canonical_byteList {limit : Nat} {data : Bytes} {value : Value}
 
 private theorem byte_bit (byte : UInt8) (offset : Fin 8) :
     ((byte >>> UInt8.ofNat offset.val) &&& 1 == 1) = byte.toBitVec.getLsbD offset.val := by
-  -- Both sides test bit `offset` of `byte.toNat`: `(byte >>> offset) &&& 1 == 1`.
+  -- Both sides test whether bit `offset` of `byte.toNat` is set.
   have hshift : (byte >>> UInt8.ofNat offset.val).toNat = byte.toNat >>> offset.val := by
     rw [UInt8.toNat_shiftRight]
     have hlt : offset.val < 256 := Nat.lt_trans offset.isLt (by decide)
